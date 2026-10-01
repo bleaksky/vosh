@@ -1,0 +1,368 @@
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { followReplacedUiConfig, getUiConfig, type UiConfig } from './lib/session';
+import {
+  applyThemePrefs,
+  getCurrentThemeId,
+  subscribeThemeChanges,
+  subscribeThemePrefs,
+} from './lib/theme';
+import { showAfterThemePaint } from './lib/reveal';
+import { customToAppTheme, findTheme, setCustomThemes } from './lib/themes';
+import { loadFontStack } from './lib/fontLoader';
+import { parseHex, toRgba } from './lib/color';
+import { isMacPlatform, shortcutKey } from './lib/palette';
+import { HELP_TOPICS, type HelpTopic } from './lib/helpContent';
+import {
+  countMatches,
+  outlineFor,
+  rankTopics,
+  resolveHelpTarget,
+  type HelpTarget,
+} from './lib/helpNav';
+import { HELP_FIND_EVENT, HELP_GOTO_EVENT, HELP_PENDING_KEY } from './lib/helpLink';
+import { HelpSidebar } from './components/help/HelpSidebar';
+import { HelpArticle } from './components/help/HelpArticle';
+import { HelpOutline } from './components/help/HelpOutline';
+import { WindowControls } from './components/settings/WindowControls';
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ChevronUpIcon,
+  IconButton,
+} from './components/settings/ui';
+
+// The Help window (the approved Help boards), its own window like
+// Settings and in the same frame: a 280 px sidebar with search and the
+// nine sections, and a content column with the breadcrumb in the 32 px
+// band over the article. On macOS the native traffic lights sit over
+// the sidebar. Windows and Linux draw their controls at the right of
+// the band.
+//
+// Every way into Help names a target (src/lib/helpLink.ts): a topic from
+// a Settings book button or the palette, or words from `#help <words>`.
+
+/** The topic you read last, so Help opens on it again. */
+const LAST_TOPIC_KEY = 'vosh.help.topic';
+
+function topicById(id: string | null): HelpTopic | undefined {
+  return id === null ? undefined : HELP_TOPICS.find((t) => t.id === id);
+}
+
+function readStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** The target a cold open should land on, left by another window. */
+function takePendingTarget(): HelpTarget | null {
+  const pending = readStorage(HELP_PENDING_KEY);
+  clearPendingTarget();
+  return pending ? resolveHelpTarget(pending) : null;
+}
+
+function clearPendingTarget() {
+  try {
+    localStorage.removeItem(HELP_PENDING_KEY);
+  } catch {
+    // Storage unavailable. Nothing was left there.
+  }
+}
+
+/** The mark fill and its ring: the theme's ANSI yellow at 28%, the way
+ *  the find bar and the session logs page mark a match. */
+function markColors(themeId: string): { fill: string; ring: string } | null {
+  const yellow = parseHex(findTheme(themeId).xterm.yellow);
+  return yellow ? { fill: toRgba(yellow, 0.28), ring: toRgba(yellow, 1) } : null;
+}
+
+export function HelpApp() {
+  const mac = isMacPlatform();
+  const [landing] = useState(() => takePendingTarget());
+  const [topicId, setTopicId] = useState<string>(
+    () =>
+      (landing?.kind === 'topic' ? landing.topic.id : null) ??
+      topicById(readStorage(LAST_TOPIC_KEY))?.id ??
+      HELP_TOPICS[0].id,
+  );
+  const [query, setQuery] = useState(landing?.kind === 'search' ? landing.query : '');
+  const [active, setActive] = useState(0);
+  const [match, setMatch] = useState(0);
+  const [openSection, setOpenSection] = useState<string | null>(null);
+  const [titleGone, setTitleGone] = useState(false);
+  const [themeId, setThemeId] = useState(() => getCurrentThemeId());
+  const [config, setConfig] = useState<UiConfig | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+
+  const searching = query.trim().length > 0;
+  const results = useMemo(() => rankTopics(query), [query]);
+  // While the search holds words the article shows the result you are
+  // on, and keeps it once you clear the search.
+  const shown = (searching ? results[active] : undefined) ?? topicById(topicId) ?? HELP_TOPICS[0];
+  const matches = searching ? countMatches(shown, query) : 0;
+  const outline = useMemo(() => outlineFor(shown), [shown]);
+  const marks = useMemo(() => markColors(themeId), [themeId]);
+
+  const changeQuery = useCallback(
+    (next: string) => {
+      if (next.trim().length === 0) setTopicId(shown.id);
+      setQuery(next);
+      setActive(0);
+      setMatch(0);
+    },
+    [shown.id],
+  );
+
+  const land = useCallback((target: HelpTarget) => {
+    if (target.kind === 'topic') {
+      setQuery('');
+      setTopicId(target.topic.id);
+    } else {
+      setQuery(target.query);
+      setActive(0);
+      setMatch(0);
+      inputRef.current?.focus();
+    }
+  }, []);
+
+  // The section of the topic you read opens in the nav.
+  useEffect(() => {
+    setOpenSection(shown.section);
+    try {
+      localStorage.setItem(LAST_TOPIC_KEY, shown.id);
+    } catch {
+      // Storage unavailable. Help opens on the first topic next time.
+    }
+  }, [shown.id, shown.section]);
+
+  // A new topic starts at its top. While you search, the match you are
+  // on scrolls into view instead.
+  useLayoutEffect(() => {
+    const root = scrollRef.current;
+    if (!root) return;
+    const current = matches > 0 ? root.querySelector('[data-current]') : null;
+    if (current) current.scrollIntoView({ block: 'center' });
+    else root.scrollTop = 0;
+  }, [shown.id, query, match, matches]);
+
+  // Once the title scrolls under the band, the breadcrumb names it.
+  useEffect(() => {
+    const root = scrollRef.current;
+    const title = titleRef.current;
+    if (!root || !title || typeof IntersectionObserver === 'undefined') return;
+    setTitleGone(false);
+    const observer = new IntersectionObserver(
+      ([entry]) =>
+        setTitleGone(
+          !entry.isIntersecting && entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0),
+        ),
+      { root },
+    );
+    observer.observe(title);
+    return () => observer.disconnect();
+  }, [shown.id]);
+
+  // A link for a window that is already open. The window that asked
+  // also left the target in storage for a cold open, so clear it.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void listen<string>(HELP_GOTO_EVENT, (event) => {
+      if (typeof event.payload !== 'string') return;
+      clearPendingTarget();
+      const target = resolveHelpTarget(event.payload);
+      if (target) land(target);
+      void getCurrentWindow().setFocus();
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, [land]);
+
+  // Cmd+F on macOS, Ctrl+F elsewhere, and Find in the menu bar, focus
+  // the search.
+  useEffect(() => {
+    const focusSearch = () => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey || e.shiftKey) return;
+      const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (!mod || shortcutKey(e) !== 'f') return;
+      e.preventDefault();
+      focusSearch();
+    };
+    document.addEventListener('keydown', onKey);
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    listen(HELP_FIND_EVENT, focusSearch)
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [mac]);
+
+  // Load the theme and the font, and show the window once a frame with
+  // the theme has gone out. The startup paint usually has it on screen
+  // already.
+  useEffect(() => {
+    let revealed = false;
+    const reveal = () => {
+      if (revealed) return;
+      revealed = true;
+      const win = getCurrentWindow();
+      void win.show().then(() => win.setFocus());
+    };
+    const fallback = window.setTimeout(reveal, 500);
+    const take = (cfg: UiConfig) => {
+      setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
+      applyThemePrefs(cfg);
+      setThemeId(getCurrentThemeId());
+      setConfig(cfg);
+    };
+    getUiConfig()
+      .then(take)
+      .catch((e: unknown) => console.error('[help] reading the config failed', e))
+      .finally(() => showAfterThemePaint(reveal));
+    let cancelled = false;
+    const unsubs: Array<() => void> = [];
+    const keep = (p: Promise<() => void>) =>
+      p
+        .then((fn) => {
+          if (cancelled) fn();
+          else unsubs.push(fn);
+        })
+        .catch(() => {});
+    // A profile switch or an import replaces the config: the theme and
+    // the font may change with it.
+    void keep(
+      followReplacedUiConfig(take, (e) => console.error('[help] following the config failed', e)),
+    );
+    // Another window changed the theme. The repaint has run already. A
+    // custom theme Help has not read yet comes with the config.
+    void keep(
+      subscribeThemeChanges(() => {
+        setThemeId(getCurrentThemeId());
+        getUiConfig()
+          .then(take)
+          .catch(() => {});
+      }),
+    );
+    void keep(
+      subscribeThemePrefs((prefs) => {
+        applyThemePrefs(prefs);
+        setThemeId(getCurrentThemeId());
+      }),
+    );
+    return () => {
+      window.clearTimeout(fallback);
+      cancelled = true;
+      unsubs.forEach((fn) => fn());
+    };
+  }, []);
+
+  // Commands and codes use your terminal font through --font-mud, the
+  // way Settings and the main window do.
+  const fontFamily = config?.font_family;
+  useEffect(() => {
+    if (!fontFamily) return;
+    loadFontStack(fontFamily);
+    document.documentElement.style.setProperty('--app-font-family', fontFamily);
+  }, [fontFamily]);
+
+  const step = (by: 1 | -1) => {
+    if (matches === 0) return;
+    setMatch((m) => (m + by + matches) % matches);
+  };
+
+  return (
+    <div className="st-app hp-app">
+      <HelpSidebar
+        topic={shown}
+        openSection={openSection}
+        onToggleSection={(section) => setOpenSection((open) => (open === section ? null : section))}
+        onOpenTopic={(t) => setTopicId(t.id)}
+        query={query}
+        onQuery={changeQuery}
+        results={results}
+        active={active}
+        onActive={(index) => {
+          setActive(index);
+          setMatch(0);
+        }}
+        onStep={step}
+        inputRef={inputRef}
+        mac={mac}
+      />
+      <main className="st-main">
+        <header className="st-header" data-tauri-drag-region="">
+          <div className="st-crumb" data-tauri-drag-region="">
+            <span className="st-crumb-root" data-tauri-drag-region="">
+              Help
+            </span>
+            <ChevronRightIcon size={12} className="st-crumb-sep" />
+            {titleGone ? (
+              <>
+                <span className="st-crumb-root" data-tauri-drag-region="">
+                  {shown.section}
+                </span>
+                <ChevronRightIcon size={12} className="st-crumb-sep" />
+                <span className="st-crumb-title" data-tauri-drag-region="">
+                  {shown.title}
+                </span>
+              </>
+            ) : (
+              <span className="st-crumb-title" data-tauri-drag-region="">
+                {shown.section}
+              </span>
+            )}
+          </div>
+          {matches > 0 && (
+            <div className="hp-matches">
+              <span className="hp-match-count" role="status">
+                {match + 1} of {matches}
+              </span>
+              <IconButton
+                label="Previous match"
+                icon={<ChevronUpIcon />}
+                onClick={() => step(-1)}
+              />
+              <IconButton label="Next match" icon={<ChevronDownIcon />} onClick={() => step(1)} />
+            </div>
+          )}
+          {!mac && <WindowControls />}
+        </header>
+        <div ref={scrollRef} className="hp-scroll" tabIndex={-1}>
+          <div className="hp-page" data-outline={outline ? '' : undefined}>
+            <HelpArticle
+              ref={titleRef}
+              topic={shown}
+              query={searching ? query : ''}
+              current={match}
+              outline={outline}
+              markColors={marks}
+            />
+            {outline && <HelpOutline key={shown.id} entries={outline} scrollRef={scrollRef} />}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

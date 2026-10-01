@@ -30,6 +30,12 @@ pub(crate) const FLUSH_REQUEST_EVENT: &str = "vosh://flush-pending-writes";
 /// a slow write still gets its answer in.
 pub(crate) const WINDOW_FLUSH_WAIT: Duration = Duration::from_millis(1200);
 
+/// Whether quit asks the window `label` for the writes it holds. Help
+/// only reads, so it holds none, and quit never waits on it.
+pub(crate) fn holds_writes(label: &str) -> bool {
+    label != "help"
+}
+
 /// What an exit event asks the run loop to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ExitStep {
@@ -204,7 +210,11 @@ pub(crate) async fn ask_windows_to_flush<R: tauri::Runtime>(app: &AppHandle<R>) 
     use tauri::Manager;
     static ROUND: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let id = ROUND.fetch_add(1, std::sync::atomic::Ordering::AcqRel) + 1;
-    let labels: Vec<String> = app.webview_windows().into_keys().collect();
+    let labels: Vec<String> = app
+        .webview_windows()
+        .into_keys()
+        .filter(|label| holds_writes(label))
+        .collect();
     let rx = ANSWERS.start(id, labels.iter().cloned());
     crate::commands::broadcast(app, FLUSH_REQUEST_EVENT, &id);
     if wait_for_answers(rx, WINDOW_FLUSH_WAIT).await {
@@ -296,6 +306,13 @@ mod tests {
         answers.finish(1);
         // A late answer after the round ended is ignored.
         answers.answer("settings");
+    }
+
+    #[test]
+    fn quit_asks_every_window_but_help() {
+        assert!(holds_writes("main"));
+        assert!(holds_writes("settings"));
+        assert!(!holds_writes("help"));
     }
 
     #[tokio::test]

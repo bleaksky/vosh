@@ -1,11 +1,11 @@
 //! The ground and native appearance a new window opens on.
 //!
-//! Settings opens hidden and shows itself once its page has painted the
-//! theme. A frame the page has not painted yet shows the window's own
-//! background, so every theme paint in any window reports the theme's
-//! ground here (`window_backdrop_set`), and `open_settings_window`
-//! builds the window on it. An open Settings window takes each new
-//! ground as it arrives. The appearance pins the light or dark native
+//! Settings and Help open hidden and show themselves once their page has
+//! painted the theme. A frame the page has not painted yet shows the
+//! window's own background, so every theme paint in any window reports
+//! the theme's ground here (`window_backdrop_set`), and the window opener
+//! in commands.rs builds the window on it. An open Settings or Help
+//! window takes each new ground as it arrives. The appearance pins the light or dark native
 //! appearance while the theme is your pick, and is `None` while the
 //! theme follows the system, so the window follows the system too. A
 //! theme whose ground is not one solid color reports no ground, and the
@@ -126,9 +126,14 @@ fn record(background: Option<&str>, appearance: Option<&str>) -> Result<Backdrop
     Ok(backdrop)
 }
 
+/// The windows that open on the reported backdrop and take each new
+/// ground while open.
+const DRESSED_WINDOWS: [&str; 2] = ["settings", "help"];
+
 /// A theme paint in a window reports the ground and appearance a new
-/// window should open on. An open Settings window takes the ground now,
-/// so a theme change while it is open leaves no old color under it.
+/// window should open on. An open Settings or Help window takes the
+/// ground now, so a theme change while it is open leaves no old color
+/// under it.
 #[tauri::command]
 pub(crate) fn window_backdrop_set(
     app: AppHandle,
@@ -136,8 +141,10 @@ pub(crate) fn window_backdrop_set(
     appearance: Option<String>,
 ) -> Result<(), String> {
     let backdrop = record(background.as_deref(), appearance.as_deref())?;
-    if let Some(settings) = app.get_webview_window("settings") {
-        backdrop.redress(&settings.as_ref().window());
+    for label in DRESSED_WINDOWS {
+        if let Some(window) = app.get_webview_window(label) {
+            backdrop.redress(&window.as_ref().window());
+        }
     }
     Ok(())
 }

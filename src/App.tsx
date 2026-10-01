@@ -13,7 +13,6 @@ import { Input, type InputHandle } from './components/Input';
 import { Resizable } from './components/Resizable';
 import { UpdateNotice } from './components/UpdateNotice';
 import { Toasts } from './components/Toasts';
-import { HelpView } from './components/HelpView';
 import { FindToolbar, type FindToolbarHandle } from './components/FindToolbar';
 import { TerminalMenu } from './components/TerminalMenu';
 import { ScrollDepth } from './components/ScrollDepth';
@@ -84,7 +83,6 @@ import {
 } from './lib/palette';
 import {
   buildMenuState,
-  commandBlocked,
   commandRepeats,
   listenAppMenu,
   menuCopy,
@@ -96,6 +94,7 @@ import {
 import { getImmState, subscribeImmState } from './lib/immStore';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { openSettingsTab, openSettingsWindow } from './lib/settingsLink';
+import { openHelpWindow } from './lib/helpLink';
 import { showAfterThemePaint } from './lib/reveal';
 import { getNativeScroll, startNativeScroll, subscribeNativeScroll } from './lib/nativeScroll';
 import {
@@ -321,9 +320,6 @@ function App() {
   // live one and shows the same buffer scrolled back so you can read
   // earlier output while live combat keeps streaming below.
   const [splitOpen, setSplitOpen] = useState(false);
-  // In-client help modal. Opened with Mod+/ or from the palette;
-  // backdrop click, [close], and Esc all dismiss via setHelpOpen(false).
-  const [helpOpen, setHelpOpen] = useState(false);
   // Scrollback find toolbar. Opens on Cmd+F (macOS) or Ctrl+F (other
   // platforms). Drives xterm's SearchAddon. The live pane always owns
   // iteration (selection + cached search term live on its addon, so
@@ -808,7 +804,6 @@ function App() {
     setTerminalMenu(null);
     inputRef.current?.focus();
   });
-  useEscape(helpOpen, () => setHelpOpen(false));
 
   // Window shortcuts, in the capture phase so they fire before xterm's
   // own keybindings, the webview's find and reload, and the command
@@ -825,11 +820,9 @@ function App() {
   //   Mod+\        open or close the scrollback split
   // A key this handler takes never reaches the menu bar, and the menu
   // bar sends its commands through runCommand below too, so each press
-  // runs once. The help modal carries its own search, so Mod+F and
-  // Mod+K stand down while it is open, from either path. Keys match
-  // through shortcutKey, so a Cyrillic or Greek layout still reaches
-  // them by the physical key.
-  const shortcutState = useRef({ helpOpen, findOpen, paletteOpen, live: connection.live });
+  // runs once. Keys match through shortcutKey, so a Cyrillic or Greek
+  // layout still reaches them by the physical key.
+  const shortcutState = useRef({ findOpen, paletteOpen, live: connection.live });
   const runCommandRef = useRef<(id: string, opts?: { repeat?: boolean }) => void>(() => {});
 
   // Open or close the scrollback split, the keyboard twin of a middle
@@ -857,9 +850,6 @@ function App() {
       if (!primary || e.altKey) return;
       const hit = resolveShortcut(shortcutKey(e), e.shiftKey);
       if (!hit) return;
-      // A blocked command leaves the key alone, so help's own search
-      // gets it. The menu path blocks the same commands.
-      if (hit.id && commandBlocked(hit.id, shortcutState.current)) return;
       e.preventDefault();
       e.stopPropagation();
       if (hit.id) runCommandRef.current(hit.id, { repeat: e.repeat });
@@ -1589,7 +1579,7 @@ function App() {
     paneTypes: PANE_TYPES.filter((t) => offeredPaneTypes().includes(t) || shownPanes.includes(t)),
     paneVisible: (pane) => panelOpen && shownPanes.includes(pane),
     togglePane,
-    openHelp: () => setHelpOpen(true),
+    openHelp: openHelpWindow,
     openFind: () => setFindOpen(true),
     openSettings: openSettingsWindow,
     openSettingsTab,
@@ -1629,18 +1619,11 @@ function App() {
   };
 
   // One dispatcher for the window shortcuts and the macOS menu bar, by
-  // palette id. It keeps the shortcut gates: help blocks the palette and
-  // the find bar, a held key repeats only find and help, and Connect
-  // does nothing while a session is live. An id it does not own runs
-  // the palette entry of the same id.
+  // palette id. It keeps the shortcut gates: a held key repeats only
+  // find, and Connect does nothing while a session is live. An id it
+  // does not own runs the palette entry of the same id.
   const runCommand = (id: string, opts: { repeat?: boolean } = {}) => {
-    const {
-      helpOpen: inHelp,
-      findOpen: finding,
-      paletteOpen: inPalette,
-      live,
-    } = shortcutState.current;
-    if (commandBlocked(id, { helpOpen: inHelp })) return;
+    const { findOpen: finding, paletteOpen: inPalette, live } = shortcutState.current;
     if (opts.repeat && !commandRepeats(id)) return;
     switch (id) {
       case 'connect':
@@ -1664,7 +1647,7 @@ function App() {
         openSettingsWindow();
         return;
       case 'help':
-        setHelpOpen(true);
+        openHelpWindow();
         return;
       case 'split':
         toggleSplit();
@@ -1689,7 +1672,7 @@ function App() {
     if (entry) void entry.run();
   };
   useEffect(() => {
-    shortcutState.current = { helpOpen, findOpen, paletteOpen, live: connection.live };
+    shortcutState.current = { findOpen, paletteOpen, live: connection.live };
     runCommandRef.current = runCommand;
   });
 
@@ -1953,7 +1936,6 @@ function App() {
         />
       )}
       {paletteOpen && <CommandPalette deps={paletteDeps()} onClose={closePalette} />}
-      {helpOpen && <HelpView onClose={() => setHelpOpen(false)} />}
       {confirmClose && (
         <ConfirmDialog
           title="Close this window?"

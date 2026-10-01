@@ -2088,93 +2088,124 @@ pub(crate) async fn pane_layout_set(
     Ok(true)
 }
 
-/// The Settings window's default size, the approved boards' 880×600.
-const SETTINGS_SIZE: (f64, f64) = (880.0, 600.0);
-/// The smallest Settings window whose two column layouts still fit.
-const SETTINGS_MIN_SIZE: (f64, f64) = (820.0, 560.0);
+/// A window beside the main one that loads the same bundle with its own
+/// `?view=`, like Settings and Help. Each opens hidden on the theme's
+/// ground and shows itself once its page has painted your theme.
+struct AuxWindow {
+    /// The window label, which the capabilities and the menu name.
+    label: &'static str,
+    /// The page the bundle renders, `index.html?view=...`.
+    url: &'static str,
+    title: &'static str,
+    /// The default size, the approved boards' window.
+    size: (f64, f64),
+    /// The smallest size whose layout still fits.
+    min_size: (f64, f64),
+}
 
-/// The logical size a Settings window should take when the window state
-/// plugin restored it at `restored`, or None when it already fits. A
-/// side under the minimum, saved by an older and smaller Settings
-/// window, goes back to the default. The system does not apply the
-/// minimum to a size set from code, so this has to.
-fn settings_window_fit(restored: (f64, f64)) -> Option<(f64, f64)> {
+/// Settings, at the approved boards' 880×600. Under 820×560 its two
+/// column layouts no longer fit.
+const SETTINGS_WINDOW: AuxWindow = AuxWindow {
+    label: "settings",
+    url: "index.html?view=settings",
+    title: "Settings",
+    size: (880.0, 600.0),
+    min_size: (820.0, 560.0),
+};
+
+/// Help, at the approved Help boards' 1040×700. Under 860 wide the
+/// article no longer keeps its measure beside the 280 px sidebar.
+const HELP_WINDOW: AuxWindow = AuxWindow {
+    label: "help",
+    url: "index.html?view=help",
+    title: "Help",
+    size: (1040.0, 700.0),
+    min_size: (860.0, 560.0),
+};
+
+/// The logical size a window should take when the window state plugin
+/// restored it at `restored`, or None when it already fits. A side under
+/// the minimum, saved by an older and smaller window, goes back to the
+/// default. The system does not apply the minimum to a size set from
+/// code, so this has to.
+fn window_fit(window: &AuxWindow, restored: (f64, f64)) -> Option<(f64, f64)> {
     let (width, height) = restored;
-    let (min_width, min_height) = SETTINGS_MIN_SIZE;
+    let (min_width, min_height) = window.min_size;
     if width >= min_width && height >= min_height {
         return None;
     }
     Some((
         if width < min_width {
-            SETTINGS_SIZE.0
+            window.size.0
         } else {
             width
         },
         if height < min_height {
-            SETTINGS_SIZE.1
+            window.size.1
         } else {
             height
         },
     ))
 }
 
-/// Whether opening Settings again brings the open window forward now.
-/// A window neither on screen nor minimized is still loading. Its page
+/// Whether opening a window again brings the open one forward now. A
+/// window neither on screen nor minimized is still loading. Its page
 /// shows it once it has painted your theme, and showing it sooner would
 /// put a frame without your theme on screen.
-fn settings_shows_on_reopen(visible: bool, minimized: bool) -> bool {
+fn shows_on_reopen(visible: bool, minimized: bool) -> bool {
     visible || minimized
 }
 
-/// How long a Settings window may stay hidden after an open before the
-/// backend shows it anyway. The page shows it well before this, within
-/// its own 500 ms fallback once it runs. This covers a page that never
-/// gets that far, so Settings always opens.
-const SETTINGS_SHOW_BACKSTOP: std::time::Duration = std::time::Duration::from_secs(2);
+/// How long a window may stay hidden after an open before the backend
+/// shows it anyway. The page shows it well before this, within its own
+/// 500 ms fallback once it runs. This covers a page that never gets
+/// that far, so the window always opens.
+const SHOW_BACKSTOP: std::time::Duration = std::time::Duration::from_secs(2);
 
-/// Show the Settings window after [`SETTINGS_SHOW_BACKSTOP`] if its page
-/// has not shown it by then.
-fn show_settings_backstop(window: tauri::WebviewWindow) {
+/// Show `window` after [`SHOW_BACKSTOP`] if its page has not shown it by
+/// then.
+fn show_backstop(window: tauri::WebviewWindow) {
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(SETTINGS_SHOW_BACKSTOP).await;
+        tokio::time::sleep(SHOW_BACKSTOP).await;
         if !window.is_visible().unwrap_or(true) && !window.is_minimized().unwrap_or(false) {
-            warn!("settings: the page never showed its window, showing it now");
+            warn!(
+                window = window.label(),
+                "the page never showed its window, showing it now"
+            );
             let _ = window.show();
             let _ = window.set_focus();
         }
     });
 }
 
-/// Open (or focus, if already open) the standalone settings window.
-/// The settings window is a separate webview pointed at the same
-/// frontend bundle with `?view=settings`, so the React entry can
-/// branch and render the `SettingsApp` instead of the main `App`.
-/// Both windows share the same Rust backend state.
-#[tauri::command]
-pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
-    if let Some(existing) = app.get_webview_window("settings") {
+/// Open `spec`, or bring it forward when it is already open. The window
+/// is a separate webview on the same frontend bundle, and its `?view=`
+/// tells the React entry which page to render. Every window shares the
+/// one Rust backend state.
+fn open_aux_window(app: &AppHandle, spec: &AuxWindow) -> Result<(), String> {
+    if let Some(existing) = app.get_webview_window(spec.label) {
         let visible = existing.is_visible().unwrap_or(true);
         let minimized = existing.is_minimized().unwrap_or(false);
-        if settings_shows_on_reopen(visible, minimized) {
+        if shows_on_reopen(visible, minimized) {
             existing.show().map_err(|e| e.to_string())?;
             existing.set_focus().map_err(|e| e.to_string())?;
         }
         return Ok(());
     }
-    let builder = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("index.html?view=settings".into()))
-            .title("Settings")
-            .inner_size(SETTINGS_SIZE.0, SETTINGS_SIZE.1)
-            .min_inner_size(SETTINGS_MIN_SIZE.0, SETTINGS_MIN_SIZE.1)
-            .resizable(true)
-            .transparent(true)
-            // Stay hidden until the page has painted your theme and shows
-            // the window itself, so the first frame is never the dark
-            // stylesheet defaults.
-            .visible(false)
-            // Disable Tauri's OS file-drop handler. When enabled it
-            // intercepts HTML5 drag-and-drop inside the webview, which
-            // can break overlay drag interactions.
-            .disable_drag_drop_handler();
+    let builder = WebviewWindowBuilder::new(app, spec.label, WebviewUrl::App(spec.url.into()))
+        .title(spec.title)
+        .inner_size(spec.size.0, spec.size.1)
+        .min_inner_size(spec.min_size.0, spec.min_size.1)
+        .resizable(true)
+        .transparent(true)
+        // Stay hidden until the page has painted your theme and shows
+        // the window itself, so the first frame is never the dark
+        // stylesheet defaults.
+        .visible(false)
+        // Disable Tauri's OS file-drop handler. When enabled it
+        // intercepts HTML5 drag-and-drop inside the webview, which
+        // can break overlay drag interactions.
+        .disable_drag_drop_handler();
     // Open on the theme's appearance, which the last theme paint
     // reported, and on macOS on its ground as well, so even a frame the
     // page has not painted yet is in your theme. Windows and Linux keep
@@ -2184,7 +2215,7 @@ pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
         Some(backdrop) => backdrop.dress(builder),
         None => builder,
     };
-    // macOS gives Settings the main window's titled frame: native
+    // macOS gives the window the main window's titled frame: native
     // traffic lights over the sidebar at the same centers, a hidden
     // title, and the system's corners and rim. Windows and Linux stay
     // frameless, and the page draws its own window controls.
@@ -2196,14 +2227,29 @@ pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
     #[cfg(not(target_os = "macos"))]
     let builder = builder.decorations(false);
     let window = builder.build().map_err(|e| e.to_string())?;
-    show_settings_backstop(window.clone());
+    show_backstop(window.clone());
     if let (Ok(size), Ok(scale)) = (window.inner_size(), window.scale_factor()) {
         let current = size.to_logical::<f64>(scale);
-        if let Some((width, height)) = settings_window_fit((current.width, current.height)) {
+        if let Some((width, height)) = window_fit(spec, (current.width, current.height)) {
             let _ = window.set_size(tauri::LogicalSize::new(width, height));
         }
     }
     Ok(())
+}
+
+/// Open (or focus, if already open) the standalone settings window,
+/// where the React entry renders `SettingsApp`.
+#[tauri::command]
+pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
+    open_aux_window(&app, &SETTINGS_WINDOW)
+}
+
+/// Open (or focus, if already open) the Help window, where the React
+/// entry renders `HelpApp`. The page that asked leaves the topic or the
+/// search it should land on (src/lib/helpLink.ts).
+#[tauri::command]
+pub(crate) async fn open_help_window(app: AppHandle) -> Result<(), String> {
+    open_aux_window(&app, &HELP_WINDOW)
 }
 
 #[tauri::command]
@@ -4889,7 +4935,9 @@ pub(crate) async fn updater_install_and_relaunch(app: AppHandle) -> Result<(), S
 
 #[cfg(test)]
 mod tests {
-    use super::{settings_shows_on_reopen, settings_window_fit, ScrollbackLoad, UiConfigPayload};
+    use super::{
+        shows_on_reopen, window_fit, ScrollbackLoad, UiConfigPayload, HELP_WINDOW, SETTINGS_WINDOW,
+    };
     use crate::profile_config::{ProfileConfig, UiConfig};
     use crate::profile_set::tests::james_like_set;
     use crate::profile_set::{ProfileSet, DEFAULT_PROFILE_NAME};
@@ -6296,28 +6344,43 @@ mod tests {
 
     #[test]
     fn settings_window_keeps_a_size_that_fits() {
-        assert_eq!(settings_window_fit((880.0, 600.0)), None);
-        assert_eq!(settings_window_fit((820.0, 560.0)), None);
-        assert_eq!(settings_window_fit((1200.0, 900.0)), None);
+        let fit = |size| window_fit(&SETTINGS_WINDOW, size);
+        assert_eq!(fit((880.0, 600.0)), None);
+        assert_eq!(fit((820.0, 560.0)), None);
+        assert_eq!(fit((1200.0, 900.0)), None);
     }
 
     #[test]
-    fn reopening_settings_leaves_a_loading_window_to_its_page() {
+    fn reopening_a_window_leaves_a_loading_one_to_its_page() {
         // On screen, or minimized: bring it forward now.
-        assert!(settings_shows_on_reopen(true, false));
-        assert!(settings_shows_on_reopen(false, true));
-        assert!(settings_shows_on_reopen(true, true));
+        assert!(shows_on_reopen(true, false));
+        assert!(shows_on_reopen(false, true));
+        assert!(shows_on_reopen(true, true));
         // Neither: the page has not painted your theme yet, and shows
         // the window itself once it has.
-        assert!(!settings_shows_on_reopen(false, false));
+        assert!(!shows_on_reopen(false, false));
     }
 
     #[test]
     fn settings_window_grows_a_side_left_under_the_minimum() {
+        let fit = |size| window_fit(&SETTINGS_WINDOW, size);
         // The old Settings window opened at 780×640.
-        assert_eq!(settings_window_fit((780.0, 640.0)), Some((880.0, 640.0)));
-        assert_eq!(settings_window_fit((900.0, 420.0)), Some((900.0, 600.0)));
-        assert_eq!(settings_window_fit((520.0, 420.0)), Some((880.0, 600.0)));
+        assert_eq!(fit((780.0, 640.0)), Some((880.0, 640.0)));
+        assert_eq!(fit((900.0, 420.0)), Some((900.0, 600.0)));
+        assert_eq!(fit((520.0, 420.0)), Some((880.0, 600.0)));
+    }
+
+    #[test]
+    fn help_opens_at_the_board_size_on_its_own_page() {
+        assert_eq!(HELP_WINDOW.label, "help");
+        assert_eq!(HELP_WINDOW.url, "index.html?view=help");
+        assert_eq!(HELP_WINDOW.size, (1040.0, 700.0));
+        let fit = |size| window_fit(&HELP_WINDOW, size);
+        assert_eq!(fit((1040.0, 700.0)), None);
+        assert_eq!(fit((860.0, 560.0)), None);
+        // A side under the minimum goes back to the board size.
+        assert_eq!(fit((700.0, 800.0)), Some((1040.0, 800.0)));
+        assert_eq!(fit((900.0, 400.0)), Some((900.0, 700.0)));
     }
 
     #[test]

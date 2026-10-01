@@ -197,3 +197,58 @@ export function MaximizeIcon(props: IconProps) {
     </Glyph>
   );
 }
+
+// The Help section icons from the approved Help boards. Automate, Shape
+// the window, Make it yours, and Characters and data reuse BoltIcon,
+// LayoutIcon, AppearanceIcon, and UserIcon.
+
+/** A plug: Get connected. */
+export function PlugIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M6 1.75v3M10 1.75v3" />
+      <path d="M4.25 4.75h7.5v2.5a3.75 3.75 0 0 1-7.5 0z" />
+      <path d="M8 11v3.25" />
+    </Glyph>
+  );
+}
+
+/** A terminal with a prompt: Play. */
+export function TerminalIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" />
+      <path d="M4.75 6.25L6.75 8l-2 1.75M8.75 10h2.5" />
+    </Glyph>
+  );
+}
+
+/** The tick ring a third of the way round: Tick and target. */
+export function TickRingIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <circle cx="8" cy="8" r="6.25" opacity="0.4" />
+      <path d="M8 1.75A6.25 6.25 0 0 1 13.87 10.14" />
+    </Glyph>
+  );
+}
+
+/** A lifebuoy: Fix it. */
+export function LifebuoyIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <circle cx="8" cy="8" r="6.25" />
+      <circle cx="8" cy="8" r="2.75" />
+      <path d="M3.58 3.58l2.48 2.48M12.42 3.58L9.94 6.06M3.58 12.42l2.48-2.48M12.42 12.42L9.94 9.94" />
+    </Glyph>
+  );
+}
+
+/** An open book: Reference, and the Help button on a Settings section. */
+export function BookIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M2.25 3.25h4A1.75 1.75 0 0 1 8 5v8.25a1.5 1.5 0 0 0-1.5-1.5H2.25zM13.75 3.25h-4A1.75 1.75 0 0 0 8 5v8.25a1.5 1.5 0 0 1 1.5-1.5h4.25z" />
+    </Glyph>
+  );
+}

@@ -61,15 +61,9 @@ export function resolveShortcut(key: string, shift: boolean): { id: AppShortcutI
   return null;
 }
 
-/** Help carries its own search, so the palette and the find bar stand
- *  down while it is open, from the keyboard and the menu alike. */
-export function commandBlocked(id: string, state: { helpOpen: boolean }): boolean {
-  return state.helpOpen && (id === 'palette' || id === 'find');
-}
-
 /** Commands a held key repeats. The rest run once per press. */
 export function commandRepeats(id: string): boolean {
-  return id === 'find' || id === 'help';
+  return id === 'find';
 }
 
 // ── Menu state ───────────────────────────────────────────────────────

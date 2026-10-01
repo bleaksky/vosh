@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability set for the main and settings windows.",
-  "windows": ["main", "settings"],
+  "description": "Default capability set for the main, Settings, and Help windows.",
+  "windows": ["main", "settings", "help"],
   "permissions": [
     "core:default",
     "core:window:allow-show",

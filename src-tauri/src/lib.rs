@@ -115,15 +115,16 @@ use commands::{
     native_surface_ready, native_surface_scroll, native_surface_set_bounds,
     native_surface_set_bright_bold, native_surface_set_cell_metrics,
     native_surface_set_divider_color, native_surface_set_font, native_surface_set_theme,
-    native_surface_set_visible, native_surface_wheel, open_settings_window, plugins_list,
-    plugins_reload, plugins_set_enabled, presets_install, presets_remove, profile_create,
-    profile_delete, profile_duplicate, profile_export, profile_get_scope, profile_import,
-    profile_rename, profile_resolve_match, profile_set_metadata, profile_set_scope, profile_switch,
-    profiles_list, scrollback_load, session_connect, session_disconnect, session_send,
-    session_send_input, session_send_masked, session_set_window_size, target_get, tick_get_config,
-    tick_set_config, timers_delete, timers_list, timers_set, triggers_export, triggers_groups_list,
-    triggers_import, triggers_list, triggers_set_group_enabled, ui_get_config, ui_set_config,
-    updater_check, updater_install_and_relaunch, AppState, SharedState,
+    native_surface_set_visible, native_surface_wheel, open_help_window, open_settings_window,
+    plugins_list, plugins_reload, plugins_set_enabled, presets_install, presets_remove,
+    profile_create, profile_delete, profile_duplicate, profile_export, profile_get_scope,
+    profile_import, profile_rename, profile_resolve_match, profile_set_metadata, profile_set_scope,
+    profile_switch, profiles_list, scrollback_load, session_connect, session_disconnect,
+    session_send, session_send_input, session_send_masked, session_set_window_size, target_get,
+    tick_get_config, tick_set_config, timers_delete, timers_list, timers_set, triggers_export,
+    triggers_groups_list, triggers_import, triggers_list, triggers_set_group_enabled,
+    ui_get_config, ui_set_config, updater_check, updater_install_and_relaunch, AppState,
+    SharedState,
 };
 use fonts::{fonts_list, handle_font_uri};
 use map_state::MapState;
@@ -395,6 +396,7 @@ pub fn run() {
             plugins_set_enabled,
             plugins_reload,
             open_settings_window,
+            open_help_window,
             window_backdrop::window_backdrop_set,
             dock_layout_get,
             dock_layout_set,
@@ -472,7 +474,11 @@ pub fn run() {
                 tauri::RunEvent::ExitRequested { code, api, .. } => {
                     // Tauri does not let a restart be held.
                     let can_hold = code != Some(tauri::RESTART_EXIT_CODE);
-                    let windows = app_handle.webview_windows().len();
+                    let windows = app_handle
+                        .webview_windows()
+                        .into_keys()
+                        .filter(|label| exit_flush::holds_writes(label))
+                        .count();
                     match exit_flush::exit_requested(can_hold, windows) {
                         exit_flush::ExitStep::AskWindows => {
                             api.prevent_exit();

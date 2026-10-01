@@ -1,6 +1,7 @@
 //! The macOS menu bar (the approved `MenuBar` board). Rust owns the menu,
 //! so it is there before the page loads and survives a page reload, and
-//! Settings, Copy, and Close window work whichever window is in front.
+//! Settings, Help, Copy, and Close window work whichever window is in
+//! front.
 //!
 //! Vosh commands reach the main window as `vosh://app-menu` with the
 //! palette entry id as the payload, and App.tsx runs them through the
@@ -95,6 +96,10 @@ const APP_MENU_EVENT: &str = "vosh://app-menu";
 #[cfg(target_os = "macos")]
 const SETTINGS_FIND_EVENT: &str = "vosh://settings-find";
 
+/// Find, chosen while Help is in front, focuses the help search.
+#[cfg(target_os = "macos")]
+const HELP_FIND_EVENT: &str = "vosh://help-find";
+
 /// The shortcut specs the menu, the palette keycaps, and the page's
 /// keydown handler share, so they cannot drift apart.
 #[cfg(target_os = "macos")]
@@ -158,13 +163,15 @@ fn accelerator(id: &str) -> Option<&'static str> {
 enum Route {
     /// Open Settings, or bring it to the front.
     OpenSettings,
+    /// Open Help, or bring it to the front.
+    OpenHelp,
     /// Close the window in front. The main window asks first while you
     /// are connected.
     CloseWindow,
     /// Copy in the window in front.
     Copy,
-    /// Find in the window in front: settings search in Settings, the
-    /// find bar in the main window.
+    /// Find in the window in front: settings search in Settings, help
+    /// search in Help, the find bar in the main window.
     Find,
     /// Run in the main window, raising it first unless `raise` is off.
     Main { raise: bool },
@@ -182,6 +189,7 @@ fn route(id: &str) -> Route {
     match id {
         "quit" => Route::Quit,
         "settings" => Route::OpenSettings,
+        "help" => Route::OpenHelp,
         "close-window" => Route::CloseWindow,
         "copy" => Route::Copy,
         "find" => Route::Find,
@@ -249,7 +257,7 @@ mod mac {
 
     use super::{
         accelerator, connect_label, is_check_id, route, staff_listed, theme_rows, MenuState,
-        MenuTheme, Route, ThemeRow, APP_MENU_EVENT, PANE_ROWS, QUIT_ACCELERATOR,
+        MenuTheme, Route, ThemeRow, APP_MENU_EVENT, HELP_FIND_EVENT, PANE_ROWS, QUIT_ACCELERATOR,
         SETTINGS_FIND_EVENT,
     };
 
@@ -461,6 +469,14 @@ mod mac {
                     }
                 });
             }
+            Route::OpenHelp => {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = crate::commands::open_help_window(app).await {
+                        warn!(error = %e, "menu: opening help failed");
+                    }
+                });
+            }
             Route::Quit => app.exit(0),
             Route::CloseWindow => {
                 if is_front(app, "settings") {
@@ -469,6 +485,11 @@ mod mac {
                         // The page's close handler (useSettingsClose)
                         // sends the edits it holds back, then closes.
                         let _ = settings.close();
+                    }
+                } else if is_front(app, "help") {
+                    // Help holds no edits, so it closes at once.
+                    if let Some(help) = app.get_webview_window("help") {
+                        let _ = help.close();
                     }
                 } else if is_front(app, "main") {
                     emit_main(app, id);
@@ -486,6 +507,8 @@ mod mac {
             Route::Find => {
                 if is_front(app, "settings") {
                     let _ = app.emit_to("settings", SETTINGS_FIND_EVENT, ());
+                } else if is_front(app, "help") {
+                    let _ = app.emit_to("help", HELP_FIND_EVENT, ());
                 } else {
                     raise_main(app);
                     emit_main(app, id);
@@ -760,6 +783,9 @@ mod tests {
     #[test]
     fn routes_follow_the_board() {
         assert_eq!(route("settings"), Route::OpenSettings);
+        // Help opens its own window from wherever you are, so the main
+        // window never has to be in front for it.
+        assert_eq!(route("help"), Route::OpenHelp);
         assert_eq!(route("close-window"), Route::CloseWindow);
         assert_eq!(route("copy"), Route::Copy);
         assert_eq!(route("find"), Route::Find);

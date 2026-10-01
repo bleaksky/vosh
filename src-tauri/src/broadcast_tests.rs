@@ -21,11 +21,11 @@ use crate::input::LineEffects;
 use crate::list_events::{ListChanges, ALIASES_CHANGED, PROMPT_CONFIG_CHANGED, TRIGGERS_CHANGED};
 use crate::profile::Profile;
 
-/// The main window, and Settings open beside it.
-const WINDOWS: [&str; 2] = ["main", "settings"];
+/// The main window, and Settings and Help open beside it.
+const WINDOWS: [&str; 3] = ["main", "settings", "help"];
 
-/// A mock app with the main and Settings windows open and the app state
-/// managed, the way the app runs while you have Settings open.
+/// A mock app with the main, Settings, and Help windows open and the app
+/// state managed, the way the app runs while you have both open.
 fn app_with_settings_open() -> App<MockRuntime> {
     let app = mock_builder().build(mock_context(noop_assets())).unwrap();
     app.manage::<SharedState>(Arc::new(AppState::default()));
