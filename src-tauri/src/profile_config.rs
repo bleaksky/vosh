@@ -32,8 +32,6 @@ pub(crate) enum ConfigError {
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub(crate) struct ProfileConfig {
     #[serde(default)]
-    pub connection: ConnectionConfig,
-    #[serde(default)]
     pub aliases: Vec<Alias>,
     #[serde(default)]
     pub profile_vars: BTreeMap<String, String>,
@@ -1443,7 +1441,6 @@ impl ProfileConfig {
             profile.disabled_macro_groups.iter().cloned().collect();
 
         let mut config = Self {
-            connection: ConnectionConfig::default(),
             aliases,
             profile_vars,
             triggers,
@@ -2625,6 +2622,24 @@ fn prune_backups(path: &Path, keep: usize) {
 mod tests {
     use super::*;
     use vosh_trigger::{HighlightStyle, NamedColor, TriggerAction, TriggerPattern};
+
+    #[test]
+    fn a_saved_profile_leaves_out_the_connection_table() {
+        // Profile files used to carry [connection] with the default game
+        // address on every save, whatever they held. Nothing reads it:
+        // Vosh dials the target the window keeps, and a profile's world
+        // lives in profiles.toml.
+        let text = toml::to_string(&ProfileConfig::default()).unwrap();
+        assert!(!text.contains("[connection]"), "{text}");
+        assert!(!text.contains("theforsakenlands"), "{text}");
+        // A file an older build wrote still loads, and saving it drops
+        // the table.
+        let older =
+            "[connection]\nhost = \"mud.example\"\nport = 4000\n\n[tick]\ninterval_secs = 45\n";
+        let read: ProfileConfig = toml::from_str(older).unwrap();
+        assert_eq!(read.tick.interval_secs, 45);
+        assert!(!toml::to_string(&read).unwrap().contains("[connection]"));
+    }
 
     #[test]
     fn write_with_backup_creates_initial_file_without_backup() {

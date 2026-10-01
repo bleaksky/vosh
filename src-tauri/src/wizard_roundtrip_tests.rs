@@ -499,8 +499,6 @@ fn generate(seed: u64) -> Set {
         }
         config.ui.enabled_presets = list;
         // Settings that are not automation.
-        config.connection.host = format!("host{}.example", rng.below(1000));
-        config.connection.port = 4000 + rng.below(100) as u16;
         config
             .profile_vars
             .insert("target".into(), format!("orc {}", rng.below(100)));

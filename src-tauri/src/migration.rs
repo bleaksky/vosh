@@ -1878,8 +1878,6 @@ mod tests {
     #[test]
     fn a_loadout_leaves_vars_tick_and_connection_to_the_profile_file() {
         let mut cfg = profile_with(vec![], vec![], vec![]);
-        cfg.connection.host = "aabahran.example".into();
-        cfg.connection.port = 4000;
         cfg.tick.interval_secs = 45;
         cfg.profile_vars.insert("target".into(), "orc".into());
         let plan = analyze(&[("default".into(), cfg)]);
