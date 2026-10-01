@@ -673,6 +673,13 @@ fn write_value(value: &ValueRef, braced: bool) -> String {
     match (&value.format, braced) {
         (Format::Value, false) if plain => format!("%{}", field.name),
         (Format::Pct, false) if plain => format!("%pct_{}", field.name),
+        (
+            Format::Bar {
+                width,
+                color: BarColor::Auto,
+            },
+            false,
+        ) if plain => format!("%{}_bar:{width}", field.name),
         (format, _) => match format_body(format) {
             Some(body) => format!("%{{{field}:{body}}}"),
             None => format!("%{{{field}}}"),

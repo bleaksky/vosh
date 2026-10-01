@@ -322,7 +322,34 @@ fn a_bar_takes_its_color_as_its_own() {
             background: false,
         },
     );
-    assert_eq!(edited, "x %{hp:bar:6} y");
+    // A bar colored by how full has a short form, which a token the
+    // writer writes anew takes.
+    assert_eq!(edited, "x %hp_bar:6 y");
+}
+
+#[test]
+fn a_bar_by_how_full_writes_its_short_form_and_braces_before_a_name() {
+    let n = Template::parse("[%hp]").pieces().len();
+    let bar = |at: usize, template: &str| {
+        edit(
+            template,
+            &EditOp::InsertField {
+                at,
+                field: "hp".into(),
+                format: Some(FormatChoice {
+                    format: FormatName::Bar,
+                    width: Some(10),
+                    color: None,
+                    chars: None,
+                }),
+            },
+        )
+    };
+    assert_eq!(bar(n, "[%hp]"), "[%hp]%hp_bar:10");
+    // Before a digit or a colon the short form would read on, so it takes
+    // braces.
+    assert_eq!(bar(0, "5"), "%{hp:bar:10}5");
+    assert_eq!(bar(0, ":"), "%{hp:bar:10}:");
 }
 
 #[test]
