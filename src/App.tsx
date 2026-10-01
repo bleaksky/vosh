@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -111,7 +111,8 @@ import { useConnection, type ConnectionStatus } from './lib/useConnection';
 import { useEscape } from './lib/escapeStack';
 import { usePromptShow } from './lib/promptShow';
 import { PromptDock } from './components/prompt/PromptDock';
-import { PromptCard, type CardView, type PromptCardHost } from './components/prompt/PromptCard';
+import { PromptCard, type PromptCardHost } from './components/prompt/PromptCard';
+import { nextCardRequest, type CardRequest, type CardRequestView } from './lib/promptCard';
 import { getPinnedBand, notePageWrite, usePinnedDockRows } from './lib/stores/pinnedPromptStore';
 import { usePromptReach } from './lib/stores/promptReachStore';
 import { lentRows, type CellSize } from './lib/promptBand';
@@ -348,7 +349,12 @@ function App() {
   const [terminalMenu, setTerminalMenu] = useState<{ x: number; y: number } | null>(null);
   // The prompt card (Customize prompt…), open over your prompt, and the
   // view it opens on, or `point` to open on pointing at your game's line.
-  const [promptCard, setPromptCard] = useState<CardView | 'point' | null>(null);
+  const [promptCard, setPromptCard] = useState<CardRequest | null>(null);
+  // Every request counts, so the open card hears a repeat of one.
+  const openPromptCard = useCallback(
+    (view: CardRequestView) => setPromptCard((prev) => nextCardRequest(prev, view)),
+    [],
+  );
   // The card draws your design over the band of Lifted in the text.
   const [cardBand, setCardBand] = useState(false);
   // History pane readiness: flips true once the history Terminal has
@@ -423,7 +429,7 @@ function App() {
     let alive = true;
     let unlisten: (() => void) | undefined;
     void subscribePromptCardOpen((request) => {
-      setPromptCard(request.view ?? 'design');
+      openPromptCard(request.view ?? 'design');
       void getCurrentWindow()
         .setFocus()
         .catch(() => {});
@@ -437,7 +443,7 @@ function App() {
       alive = false;
       unlisten?.();
     };
-  }, []);
+  }, [openPromptCard]);
 
   // A dev run gives the Web Inspector __voshPromptPointer, which names the
   // piece of your prompt under each click, in the text or on the pinned
@@ -1583,7 +1589,7 @@ function App() {
     disconnect: () => void disconnectSession(),
     insertInput: (text) => inputRef.current?.insert(text),
     promptShow: promptShow?.capture ? promptShow.show : null,
-    openPromptCard: (view) => setPromptCard(view === 'text' ? 'text' : 'design'),
+    openPromptCard: (view) => openPromptCard(view === 'text' ? 'text' : 'design'),
     promptDraw: promptShow?.capture ? promptShow.draw : null,
     setPromptDraw: (on) => {
       void promptConfigGet()
@@ -1920,14 +1926,13 @@ function App() {
           termRef={termRef}
           inputRef={inputRef}
           onOpenFind={() => setFindOpen(true)}
-          onCustomizePrompt={() => setPromptCard('design')}
+          onCustomizePrompt={() => openPromptCard('design')}
           onClose={() => setTerminalMenu(null)}
         />
       )}
       {promptCard && (
         <PromptCard
-          initialView={promptCard === 'point' ? 'design' : promptCard}
-          startStep={promptCard === 'point' ? 'point' : undefined}
+          opening={promptCard}
           onBand={setCardBand}
           host={promptCardHost}
           show={promptShow}

@@ -12,6 +12,7 @@ import {
   matchSentences,
   matchTone,
   migratedNote,
+  nextCardRequest,
   moreItems,
   nameChoices,
   namesFor,
@@ -623,5 +624,16 @@ describe('Command Z', () => {
 
   it('keeps nothing for a change that changed nothing', () => {
     expect(undoEntry(table, { ...table })).toBeNull();
+  });
+});
+
+describe('a request to open the card', () => {
+  it('counts each one, so the open card hears the same request again', () => {
+    const first = nextCardRequest(null, 'design');
+    expect(first).toEqual({ view: 'design', at: 1 });
+    const text = nextCardRequest(first, 'text');
+    expect(text).toEqual({ view: 'text', at: 2 });
+    // Edit prompt as text… again, after you went back to the parts.
+    expect(nextCardRequest(text, 'text')).toEqual({ view: 'text', at: 3 });
   });
 });
