@@ -37,6 +37,30 @@ pub fn settle(pattern: &str) -> bool {
     starts(first.kind()) && ends(end.kind()) && matches!(last_item.kind(), HirKind::Literal(_))
 }
 
+/// True when a stored settle flag can hold for `pattern`: anchored at both
+/// ends, with a last item that is a literal or a literal one or more
+/// times, such as the run of spaces ` +` a line you point at ends in
+/// ([`crate::generic`]). Either way a match ends on that literal, so it
+/// cannot stop on a prefix of a longer line. [`settle`] derives the flag
+/// for a pattern you write, and only from a plain literal.
+fn can_settle(pattern: &str) -> bool {
+    let Ok(hir) = regex_syntax::parse(pattern) else {
+        return false;
+    };
+    let HirKind::Concat(items) = hir.kind() else {
+        return false;
+    };
+    let [first, .., last_item, end] = items.as_slice() else {
+        return false;
+    };
+    let literal = match last_item.kind() {
+        HirKind::Literal(_) => true,
+        HirKind::Repetition(rep) => rep.min >= 1 && matches!(rep.sub.kind(), HirKind::Literal(_)),
+        _ => false,
+    };
+    starts(first.kind()) && ends(end.kind()) && literal
+}
+
 fn starts(kind: &HirKind) -> bool {
     matches!(
         kind,
@@ -508,7 +532,7 @@ fn regex_reader(capture: &RegexCapture) -> Option<Reader> {
         .collect();
     // A stored flag holds only for a pattern that can settle, so an
     // unanchored pattern never settles on a prefix plus more text.
-    let settle = capture.settle && settle(pattern);
+    let settle = capture.settle && can_settle(pattern);
     Some(Reader::Regex {
         line,
         groups,
@@ -556,6 +580,14 @@ mod tests {
         assert!(settle(r"^<(\d+)hp (\d+)m (\d+)mv> $"));
         assert!(settle(r"\A> \z"));
         assert!(settle(r"(?m)^\[(\d+)hp\]$"));
+        // A run of spaces at the end can hold a stored flag, which a line
+        // you point at sets, but derives none.
+        assert!(!settle(r"^<(\d+)hp> +$"));
+        assert!(can_settle(r"^<(\d+)hp> +$"));
+        assert!(can_settle(r"^<(\d+)hp> $"));
+        assert!(!can_settle(r"^<(\d+)hp> *$"));
+        assert!(!can_settle(r"^<(\d+)hp> \d+$"));
+        assert!(!can_settle(r"<(\d+)hp> +$"));
     }
 
     #[test]

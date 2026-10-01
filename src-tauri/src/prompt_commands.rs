@@ -618,7 +618,8 @@ mod tests {
         p.prompt.record(Some((block.as_bytes(), block)), 2);
         let id = p.prompt.stage.ring().last().expect("the entry").id;
         let report = capture_from_line(&p, id, &[]).expect("the report");
-        assert_eq!(report.shapes[0].lines, [r"^<(?<hp>-?\d+)hp> $"]);
+        assert_eq!(report.shapes[0].lines, [r"^<(?<hp>-?\d+)hp> +$"]);
+        assert!(report.shapes[0].settle);
     }
 
     #[test]

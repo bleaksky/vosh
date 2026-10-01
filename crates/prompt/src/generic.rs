@@ -1,11 +1,14 @@
 //! A capture for a game Vosh has no codes for, built from the line you
 //! point at (section 3, generic capture for other games, and P15).
 //!
-//! Digit runs become `(-?\d+)`, runs of spaces inside the line become
-//! ` +`, everything else is escaped, and the line is anchored at both
-//! ends. Spaces that end the line stay as they are, so a prompt that ends
-//! on its own text or a space settles, and a partial split before its
-//! end waits for the rest.
+//! Digit runs become `(-?\d+)`, runs of spaces become ` +`, everything
+//! else is escaped, and the line is anchored at both ends. So a prompt the
+//! game pads to one width, whose spaces at the end shrink as a number
+//! grows, matches at every width. A line that ends on its own text or on
+//! spaces settles, as an Aabahran prompt that ends on its space does, so a
+//! partial that matches is your prompt at once, and a partial split before
+//! its end waits for the rest. One that ends on a number waits for a line
+//! end, GA or EOR, since a read could split the number.
 //!
 //! Each number takes a name from the letters right after it, or after the
 //! pair it ends, where `a/b` is a value and its max: `h`, `hp` and `hit`
@@ -54,8 +57,8 @@ pub struct Generic {
 enum Token {
     /// The number with this index.
     Number(usize),
-    /// A run of spaces, and whether it ends the line.
-    Spaces { len: usize, trailing: bool },
+    /// A run of spaces.
+    Spaces,
     /// Anything else, as a byte range of the line.
     Text(usize, usize),
 }
@@ -109,14 +112,10 @@ fn lex(line: &str) -> (Vec<Token>, Vec<Number>) {
         }
         if b == b' ' {
             flush(&mut tokens, &mut text_start, i);
-            let start = i;
             while i < bytes.len() && bytes[i] == b' ' {
                 i += 1;
             }
-            tokens.push(Token::Spaces {
-                len: i - start,
-                trailing: i == bytes.len(),
-            });
+            tokens.push(Token::Spaces);
             continue;
         }
         text_start.get_or_insert(i);
@@ -194,7 +193,8 @@ fn label(name: &str) -> String {
 /// with `names` for its numbers in order: a name reads the number into
 /// that value, and an empty name leaves it out. A number with no entry
 /// takes the name Vosh suggests. It settles when the line ends on its own
-/// text or on spaces, so a partial that matches is your prompt at once.
+/// text or on spaces, so a partial that matches is your prompt at once,
+/// and not when it ends on a number.
 pub fn from_line(line: &str, names: &[String]) -> Generic {
     let (tokens, mut numbers) = lex(line);
     let mut pattern = String::from("^");
@@ -231,18 +231,12 @@ pub fn from_line(line: &str, names: &[String]) -> Generic {
                 };
                 number.name = name;
             }
-            Token::Spaces {
-                trailing: false, ..
-            } => pattern.push_str(" +"),
-            Token::Spaces {
-                len,
-                trailing: true,
-            } => pattern.push_str(&" ".repeat(len)),
+            Token::Spaces => pattern.push_str(" +"),
             Token::Text(from, to) => pattern.push_str(&regex::escape(&line[from..to])),
         }
     }
     pattern.push('$');
-    let settle = crate::capture::settle(&pattern);
+    let settle = matches!(tokens.last(), Some(Token::Spaces | Token::Text(..)));
     Generic {
         capture: RegexCapture {
             lines: vec![pattern],

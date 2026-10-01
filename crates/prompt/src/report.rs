@@ -347,11 +347,15 @@ fn regex_report(
 
 /// The report for a capture built from `line`, the plain text of a line
 /// another game prints, with `names` for its numbers in order (see
-/// [`generic::from_line`]). Its shape holds the pattern, and its numbers
-/// say where each number sits in the line and what it reads into.
+/// [`generic::from_line`]). Its shape holds the pattern and whether it
+/// settles, as the line says, and its numbers say where each number sits
+/// in the line and what it reads into.
 pub fn line_report(line: &str, names: &[String], supplied: &dyn Fn(&str) -> bool) -> CompileReport {
     let built = generic::from_line(line, names);
     let mut report = regex_report(&built.capture.lines, &built.capture.names, supplied);
+    for shape in &mut report.shapes {
+        shape.settle = built.capture.settle;
+    }
     report.numbers = built.numbers;
     report
 }

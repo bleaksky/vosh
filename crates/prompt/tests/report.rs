@@ -265,7 +265,7 @@ fn a_line_another_game_prints_reports_its_numbers_and_the_names_it_reads() {
     assert_eq!(line.shapes[0].kind, "line");
     assert_eq!(
         line.shapes[0].lines,
-        [r"^<(?<hp>-?\d+)hp +(?<mana>-?\d+)m +(?<move>-?\d+)mv> $"]
+        [r"^<(?<hp>-?\d+)hp +(?<mana>-?\d+)m +(?<move>-?\d+)mv> +$"]
     );
     assert!(line.shapes[0].settle);
     assert_eq!(line.vars, ["hp", "mana", "move"]);

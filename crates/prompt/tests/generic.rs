@@ -61,13 +61,13 @@ fn numbers_take_their_names_from_the_letters_after_them() {
 fn the_line_becomes_one_anchored_pattern() {
     assert_eq!(
         pattern("<100hp 50m 30mv> ", &[]),
-        r"^<(?<hp>-?\d+)hp +(?<mana>-?\d+)m +(?<move>-?\d+)mv> $"
+        r"^<(?<hp>-?\d+)hp +(?<mana>-?\d+)m +(?<move>-?\d+)mv> +$"
     );
-    // Text is escaped, a sign belongs to its number, spaces inside the
-    // line match any run of spaces, and spaces at its end stay.
+    // Text is escaped, a sign belongs to its number, and every run of
+    // spaces matches any run of spaces, at the end of the line too.
     assert_eq!(
         pattern("[-5hp]  (x)  ", &[]),
-        r"^\[(?<hp>-?\d+)hp\] +\(x\)  $"
+        r"^\[(?<hp>-?\d+)hp\] +\(x\) +$"
     );
     // A minus sign after a digit or a letter is text.
     assert_eq!(pattern("3-4", &[]), r"^(?<n1>-?\d+)\-(?<n2>-?\d+)$");
@@ -98,11 +98,28 @@ fn the_capture_reads_the_values_and_settles_on_its_last_character() {
 }
 
 #[test]
+fn a_prompt_padded_to_one_width_matches_at_every_width() {
+    // The game pads the prompt, so the spaces at its end shrink as the
+    // number grows.
+    let line = generic("<99hp>  ", &[]);
+    assert_eq!(line.capture.lines[0], r"^<(?<hp>-?\d+)hp> +$");
+    // It ends on spaces, not on a number, so it settles.
+    assert!(line.capture.settle);
+    let reader = recognizer(&line);
+    for (prompt, hp) in [("<99hp>  ", "99"), ("<100hp> ", "100"), ("<9hp>   ", "9")] {
+        assert_eq!(reader.line(prompt).expect(prompt).values["hp"], hp);
+        assert!(reader.partial(prompt).is_some(), "{prompt:?}");
+    }
+    // A read split before the spaces still waits.
+    assert!(reader.partial("<100hp>").is_none());
+}
+
+#[test]
 fn names_you_give_rename_numbers_or_leave_them_out() {
     let line = generic("<100hp 50m 30mv> ", &["health", ""]);
     assert_eq!(
         line.capture.lines[0],
-        r"^<(?<health>-?\d+)hp +-?\d+m +(?<move>-?\d+)mv> $"
+        r"^<(?<health>-?\d+)hp +-?\d+m +(?<move>-?\d+)mv> +$"
     );
     assert_eq!(
         (
@@ -141,12 +158,12 @@ fn names_you_give_rename_numbers_or_leave_them_out() {
 #[test]
 fn a_line_with_no_number_read_only_recognizes_your_prompt() {
     let line = generic("> ", &[]);
-    assert_eq!(line.capture.lines[0], "^> $");
+    assert_eq!(line.capture.lines[0], "^> +$");
     assert!(line.capture.settle && line.numbers.is_empty());
     let read = recognizer(&line).line("> ").expect("it reads");
     assert!(read.values.is_empty());
     let line = generic("<100hp> ", &[""]);
-    assert_eq!(line.capture.lines[0], r"^<-?\d+hp> $");
+    assert_eq!(line.capture.lines[0], r"^<-?\d+hp> +$");
     assert!(fills(&line.capture).is_empty());
     assert!(recognizer(&line).line("<5hp> ").is_some());
 }
