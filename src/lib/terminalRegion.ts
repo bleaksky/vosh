@@ -33,6 +33,15 @@
 // for good and xterm would show nothing more. The same loop can parse
 // again what xterm had already parsed, callbacks included, so each wait
 // runs its callback once.
+//
+// That loop starts from the first write xterm still keeps, and xterm
+// keeps the writes it parsed in an earlier slice until it has parsed
+// them all. A resize between two slices of a long backlog showed the
+// backlog twice. So every resize goes through the writer too. Each write
+// counts until xterm calls back for it. While none is left, a resize
+// goes through at once, in the same task, as a drag of a divider needs.
+// Otherwise the resize waits until xterm has parsed them all, the writes
+// that come meanwhile wait behind it, and a later resize takes its place.
 
 /** The private OSC a region mark uses. */
 export const REGION_OSC = 7717;
@@ -59,6 +68,7 @@ export interface RegionTerminal {
     ): { dispose(): void };
   };
   write(data: string | Uint8Array, callback?: () => void): void;
+  resize(cols: number, rows: number): void;
 }
 
 /** Replace region `gen` with `text`. When the region is closed, a
@@ -220,6 +230,12 @@ export class RegionWriter {
   private erased: ((row: number, col: number) => void) | null = null;
   /** A write waits for xterm to parse what came before it. */
   private busy = false;
+  /** Writes xterm has not called back for yet. */
+  private held = 0;
+  /** xterm is calling back for a write, and still keeps it. */
+  private calling = false;
+  /** A size that waits for xterm to parse every write it holds. */
+  private size: { cols: number; rows: number } | null = null;
   private readonly queue: Item[] = [];
   private readonly osc: { dispose(): void };
   private disposed = false;
@@ -284,6 +300,14 @@ export class RegionWriter {
     this.push({ kind: 'parsed', then });
   }
 
+  /** Resize xterm to `cols` by `rows` once it has parsed every write it
+   *  holds, before anything written after. At once while it holds none. */
+  resize(cols: number, rows: number): void {
+    if (this.disposed) return;
+    this.size = { cols, rows };
+    if (this.held === 0 && !this.calling) this.resizeNow();
+  }
+
   dispose(): void {
     this.disposed = true;
     this.osc.dispose();
@@ -345,27 +369,60 @@ export class RegionWriter {
 
   private push(item: Item): void {
     if (this.disposed) return;
-    if (this.busy) this.queue.push(item);
+    if (this.busy || this.size) this.queue.push(item);
     else this.run(item);
   }
 
   private drain(): void {
-    while (!this.busy && this.queue.length > 0) {
+    while (!this.busy && !this.size && this.queue.length > 0) {
       const item = this.queue.shift();
       if (item) this.run(item);
     }
   }
 
   /** Call `then` once xterm has parsed every write so far. xterm may
-   *  call it from inside a resize, before the buffer takes the new size,
-   *  and may call it twice, so it runs only the first time. */
+   *  call it from inside a resize, before the buffer takes the new size. */
   private wait(then: () => void): void {
+    this.send(NOTHING, then);
+  }
+
+  /** Hand `data` to xterm, and count it until xterm calls back for it.
+   *  xterm may call back twice, so `then` runs only the first time. */
+  private send(data: string | Uint8Array, then?: () => void): void {
+    this.held += 1;
     let done = false;
-    this.term.write(NOTHING, () => {
+    this.term.write(data, () => {
       if (done) return;
       done = true;
-      then();
+      this.held -= 1;
+      this.calling = true;
+      try {
+        then?.();
+      } finally {
+        this.calling = false;
+      }
+      // xterm calls back before it lets go of the write, so a size that
+      // waits goes in once its loop is done.
+      if (this.held === 0 && this.size) {
+        queueMicrotask(() => {
+          if (this.held === 0) this.resizeNow();
+        });
+      }
     });
+  }
+
+  /** Take the size that waits, then let the writes behind it go. */
+  private resizeNow(): void {
+    const size = this.size;
+    this.size = null;
+    if (!size || this.disposed) return;
+    try {
+      this.term.resize(size.cols, size.rows);
+    } catch {
+      // xterm takes no size before its page lays it out. The next fit
+      // tries again.
+    }
+    this.drain();
   }
 
   /** Run `then` after xterm parses every write so far, holding the queue
@@ -494,7 +551,7 @@ export class RegionWriter {
    *  the one its last mark starts, so text with no mark closes it. */
   private write(text: string): void {
     if (text.length === 0) return;
-    this.term.write(text);
+    this.send(text);
     this.openGen = lastMark(text);
     this.openBreaks = this.openGen === null ? 0 : breaksAfterMark(text);
     if (this.restore && this.restore.gen !== this.openGen) this.restore = null;

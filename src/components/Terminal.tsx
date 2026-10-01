@@ -396,7 +396,9 @@ export function Terminal({
 
     // Every write to this xterm goes through one ordered writer, which
     // finds the regions the session marks and replaces them only while
-    // nothing was written after them (src/lib/terminalRegion.ts).
+    // nothing was written after them (src/lib/terminalRegion.ts). Every
+    // resize goes through it too, so xterm takes a size only once it has
+    // parsed what it holds.
     const writer = new RegionWriter(term);
     const localDecoder = new TextDecoder('utf-8', { fatal: false });
     // The newest output of the prompt stage the writer took, in the order
@@ -458,7 +460,7 @@ export function Terminal({
     const fitKept = () => {
       const dims = fit.proposeDimensions();
       if (!dims || Number.isNaN(dims.cols) || Number.isNaN(dims.rows)) return;
-      term.resize(dims.cols, keptRows(dims.rows, lentRef.current));
+      writer.resize(dims.cols, keptRows(dims.rows, lentRef.current));
       placeGrid();
     };
     fitKeptRef.current = fitKept;
@@ -917,11 +919,7 @@ export function Terminal({
       void listen<[number, number]>('vosh://native-grid-size', (event) => {
         const [cols, rows] = event.payload;
         if (cols > 0 && rows > 0 && (cols !== term.cols || rows !== term.rows)) {
-          try {
-            term.resize(cols, rows);
-          } catch {
-            // resize before the renderer is ready; the next emit retries
-          }
+          writer.resize(cols, rows);
         }
       }).then((un) => {
         unsubGridSize = un;
