@@ -719,17 +719,30 @@ describe('a resize while xterm parses a long backlog', () => {
     expect([term.cols, term.rows]).toEqual([30, 12]);
   });
 
-  it('takes the last size once xterm parsed its writes, before the writes after it', async () => {
+  it('resizes at once while xterm has parsed none of what it holds', async () => {
+    // xterm flushes from its first write, and parses each one once. The
+    // rows the pinned band lends go in before the page paints.
     const { term, writer } = setup(40, 10);
-    writer.local('You are hungry.\r\n');
-    writer.resize(30, 12);
-    writer.resize(20, 14);
-    expect([term.cols, term.rows]).toEqual([40, 10]);
-    const sizes: number[][] = [];
-    writer.whenParsed(() => sizes.push([term.cols, term.rows]));
-    writer.local('look\r\n');
+    writer.local('prompt> \r\n');
+    writer.resize(40, 9);
+    expect([term.cols, term.rows]).toEqual([40, 9]);
     await parsed(writer);
-    expect(sizes).toEqual([[20, 14]]);
-    expect(screen(term)).toEqual(['You are hungry.', 'look']);
+    expect(screen(term)).toEqual(['prompt> ']);
+  });
+
+  it('takes the last size once xterm parsed its writes, before the writes after it', async () => {
+    const sizes: number[][] = [];
+    const { rows } = await resizeBetweenSlices((term, writer) => {
+      writer.resize(30, 12);
+      writer.resize(20, 14);
+      sizes.push([term.cols, term.rows]);
+      writer.whenParsed(() => sizes.push([term.cols, term.rows]));
+      writer.local('look\r\n');
+    });
+    expect(sizes).toEqual([
+      [40, 10],
+      [20, 14],
+    ]);
+    expect(rows.slice(-3)).toEqual(['END', 'after', 'look']);
   });
 });
