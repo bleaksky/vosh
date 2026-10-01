@@ -19,6 +19,7 @@ import {
   promptDescribe,
   promptEdit,
   promptForms,
+  promptLineTriggers,
   promptPreviewSet,
   promptRender,
   promptRenderMany,
@@ -178,6 +179,8 @@ describe('the prompt editor commands', () => {
     });
     await promptForms('hp', 'low_health');
     expect(sent).toHaveBeenLastCalledWith('prompt_forms', { field: 'hp', preview: 'low_health' });
+    await promptLineTriggers({ kind: 'none' });
+    expect(sent).toHaveBeenLastCalledWith('prompt_line_triggers', { capture: { kind: 'none' } });
     await promptStateGet();
     expect(sent).toHaveBeenLastCalledWith('prompt_state_get');
     await promptWatch(true);
