@@ -90,6 +90,35 @@ pub const AT_A_GLANCE: &str = concat!(
     " ",
 );
 
+/// At a glance as it first shipped, before the review guarded each vital.
+const AT_A_GLANCE_FIRST: &str = concat!(
+    "%{if:fight}",
+    "%opponent %{opponent_hp:bar:10} %{opponent_hp:pct}%% ",
+    "%{c:245}%opponent_cond%c_default",
+    "%{if:group_size}%{if:tank}  %{c:245}tank %c_tank_hp%tank%c_default%{end}%{end}",
+    "%nl%{end}",
+    "%c_hp%hp%{c:245}/%{maxhp}hp%c_default ",
+    "%c_mana%mana%{c:245}/%{maxmana}mn%c_default ",
+    "%c_move%move%{c:245}/%{maxmove}mv%c_default",
+    "%{if:pos}  %{c:245}%pos%c_default%{end}",
+    "%{if:lang}%{ifnot:pos} %{end} %{c:245}%lang%c_default%{end}",
+    "%{if:exits}  %{c:245}[%c_default%exits%{c:245}]%c_default%{end}",
+    "%{if:gold}  %{gold:grouped}%{c:245}g%c_default%{end}",
+    "%{ifnot:fight}",
+    "%{if:wizi}  %{c:245}wizi %wizi%c_default%{end}",
+    "%{if:incog}%{ifnot:wizi} %{end} %{c:245}incog %incog%c_default%{end}",
+    "%{end}",
+    "%{if:missing}  %{c:245}missing %c_yellow%{missing:names}%c_default%{end}",
+    " ",
+);
+
+/// The designs earlier builds shipped as Vosh's default, byte for byte.
+/// You only ever got one from Vosh, at a fresh profile, by turning
+/// drawing on with no design, or with `#prompt default`, so a profile
+/// that holds one takes [`DEFAULT_DESIGN`] when it loads
+/// ([`crate::PromptConfig::upgrade_retired_default`]).
+pub const RETIRED_DEFAULTS: [&str; 2] = [AT_A_GLANCE, AT_A_GLANCE_FIRST];
+
 /// A design to start from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Preset {

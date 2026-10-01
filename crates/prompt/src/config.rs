@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::presets::DEFAULT_DESIGN;
+use crate::presets::{DEFAULT_DESIGN, RETIRED_DEFAULTS};
 
 /// How many earlier designs `previous_templates` keeps.
 pub const PREVIOUS_TEMPLATES: usize = 2;
@@ -152,6 +152,20 @@ impl PromptConfig {
             return false;
         }
         self.note_opened();
+        self.template = DEFAULT_DESIGN.to_string();
+        true
+    }
+
+    /// Put Vosh's default design, [`DEFAULT_DESIGN`], in place of one an
+    /// earlier build shipped as its default, [`RETIRED_DEFAULTS`], byte
+    /// for byte. You never typed that text, so it goes and is not kept
+    /// among the earlier designs. Any other design stays, and so do the
+    /// switch, the place, the capture and the earlier designs. Returns
+    /// whether the design changed.
+    pub fn upgrade_retired_default(&mut self) -> bool {
+        if !RETIRED_DEFAULTS.contains(&self.template.as_str()) {
+            return false;
+        }
         self.template = DEFAULT_DESIGN.to_string();
         true
     }
@@ -573,6 +587,44 @@ mod tests {
         assert!(config.use_default_design());
         assert_eq!(config.template, DEFAULT_DESIGN);
         assert!(config.previous_templates.is_empty());
+    }
+
+    #[test]
+    fn a_default_an_earlier_build_shipped_takes_todays_default() {
+        use crate::presets::RETIRED_DEFAULTS;
+        // At a glance as it last shipped, then as it first shipped.
+        assert_eq!(RETIRED_DEFAULTS.map(str::len), [884, 728]);
+        for old in RETIRED_DEFAULTS {
+            assert_ne!(old, DEFAULT_DESIGN);
+            let mut config = PromptConfig {
+                previous_templates: vec![JAMES.into()],
+                show: PromptShow::Pinned,
+                ..PromptConfig::from_legacy(true, old)
+            };
+            assert!(config.upgrade_retired_default());
+            assert_eq!(config.template, DEFAULT_DESIGN);
+            // Nobody chose the old text, so it is not kept as an earlier
+            // design. The switch, the place and yours stay.
+            assert_eq!(config.previous_templates, [JAMES]);
+            assert!(config.draw);
+            assert_eq!(config.show, PromptShow::Pinned);
+            // Again changes nothing.
+            assert!(!config.upgrade_retired_default());
+        }
+
+        // Any other design stays, even one a byte away from an old
+        // default, or today's.
+        for design in [
+            JAMES.to_string(),
+            RETIRED_DEFAULTS[0].trim_end().to_string(),
+            format!("{} ", RETIRED_DEFAULTS[1]),
+            DEFAULT_DESIGN.to_string(),
+            String::new(),
+        ] {
+            let mut config = PromptConfig::from_legacy(true, &design);
+            assert!(!config.upgrade_retired_default(), "{design}");
+            assert_eq!(config.template, design);
+        }
     }
 
     #[test]
