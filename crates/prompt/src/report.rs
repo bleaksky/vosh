@@ -83,6 +83,17 @@ pub struct CompileReport {
     /// space between them, for the card to show with Copy. Vosh never
     /// sends it.
     pub fixes: Vec<String>,
+    /// For a line another game prints, the values its GMCP sends that
+    /// Vosh has no name for, which the card offers as names.
+    pub gmcp_names: Vec<GmcpName>,
+}
+
+/// A value a game sends over GMCP that Vosh has no name for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GmcpName {
+    pub name: String,
+    /// The package it comes in, such as `Char.Vitals`.
+    pub package: String,
 }
 
 /// One row of the card's code legend.
@@ -281,6 +292,7 @@ fn codes_report(prompt: &str, fprompt: &str, typed: bool, who: Who) -> CompileRe
         shows: notes.shows,
         fix_note: notes.fix_note,
         fixes: notes.fixes,
+        gmcp_names: Vec::new(),
     }
 }
 
@@ -551,6 +563,7 @@ fn regex_report(
         shows: None,
         fix_note: None,
         fixes: Vec::new(),
+        gmcp_names: Vec::new(),
     };
     let pattern = match one_pattern(lines) {
         Ok(pattern) => pattern,
@@ -586,6 +599,7 @@ fn regex_report(
         shows: None,
         fix_note: None,
         fixes: Vec::new(),
+        gmcp_names: Vec::new(),
     }
 }
 

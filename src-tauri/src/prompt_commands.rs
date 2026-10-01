@@ -180,9 +180,33 @@ pub(crate) fn capture_from_line(
         .candidate(id)
         .ok_or_else(|| "Vosh no longer keeps that line. Pick another one.".to_string())?;
     let line = candidate.plain.lines().last().unwrap_or_default();
-    Ok(vosh_prompt::report::line_report(line, names, &|name| {
-        supplied(p, name)
-    }))
+    let mut report = vosh_prompt::report::line_report(line, names, &|name| supplied(p, name));
+    report.gmcp_names = unknown_vitals(p);
+    Ok(report)
+}
+
+/// The values in the latest Char.Vitals that Vosh has no name for, such
+/// as `mp` on a game that calls mana that, for the card's name menu.
+fn unknown_vitals(p: &Profile) -> Vec<vosh_prompt::report::GmcpName> {
+    const PACKAGE: &str = "Char.Vitals";
+    let Some(data) = p
+        .prompt
+        .vars
+        .gmcp()
+        .get(PACKAGE)
+        .and_then(|d| d.as_object())
+    else {
+        return Vec::new();
+    };
+    data.iter()
+        .filter(|(key, value)| {
+            *key != "hidden" && value.is_number() && vosh_prompt::vars::entry(key).is_none()
+        })
+        .map(|(key, _)| vosh_prompt::report::GmcpName {
+            name: key.clone(),
+            package: PACKAGE.to_string(),
+        })
+        .collect()
 }
 
 /// The candidates ring grouped by shape, with counts.
@@ -643,6 +667,21 @@ mod tests {
             ids(&report),
             ["default", "minimal", "how_full", "percent", "bars", "detailed", "empty"]
         );
+        // The vitals this game sends that Vosh has no name for are offered
+        // as names, each with its package.
+        assert!(report.gmcp_names.is_empty());
+        p.prompt.observe(
+            "Char.Vitals",
+            json!({"hp": 10, "maxhp": 20, "mp": 5, "mv": 9, "hidden": false}),
+            chrono::Local::now().fixed_offset(),
+        );
+        let named = capture_from_line(&p, id, &[]).expect("the report");
+        let names: Vec<(&str, &str)> = named
+            .gmcp_names
+            .iter()
+            .map(|n| (n.name.as_str(), n.package.as_str()))
+            .collect();
+        assert_eq!(names, [("mp", "Char.Vitals"), ("mv", "Char.Vitals")]);
         // A prompt of several lines gives its last.
         let mut out = vosh_prompt::stage::Output::new(false);
         p.prompt.stage.line(&mut out, b"x", "x", None, b"");
