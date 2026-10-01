@@ -227,6 +227,9 @@ interface StartsProps {
   /** You turned prompts off in the game, so the card at rest says so in
    *  place of its hint (P14). */
   promptsOff?: boolean;
+  /** The not matching sentence while no prompt has matched, which the
+   *  card at rest says in place of its hint after prompts off. */
+  notMatching?: string | null;
   /** What goes between the hint and the list on first use: the Line
    *  triggers that matched your prompt (D6). */
   children?: ReactNode;
@@ -247,6 +250,7 @@ export function Starts({
   onInsertValue,
   note = null,
   promptsOff = false,
+  notMatching = null,
   children,
 }: StartsProps) {
   const list = useMemo(() => startRows(presets, config, designs), [presets, config, designs]);
@@ -290,11 +294,13 @@ export function Starts({
   }
   return (
     <div className="pc-body">
-      {promptsOff ? (
+      {promptsOff || notMatching ? (
         <p className="pc-hint is-warn" role="status">
           <span className="pc-warn-dot" aria-hidden="true" />
           <span>
-            You turned prompts off in the game. Type prompt in the game to turn them back on.
+            {promptsOff
+              ? 'You turned prompts off in the game. Type prompt in the game to turn them back on.'
+              : notMatching}
           </span>
         </p>
       ) : (

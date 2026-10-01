@@ -48,9 +48,11 @@ import {
   type MoveMade,
   type Pointing,
 } from '../../lib/promptPieces';
+import { notMatchingLine } from '../../lib/promptSettings';
 import type { PromptShowState } from '../../lib/promptShow';
 import {
   onPromptState,
+  onPromptStatus,
   profilesList,
   promptCandidates,
   promptCardOpen,
@@ -331,6 +333,13 @@ export function PromptCard({
       onPromptState((next) => {
         setState(next);
         setRefresh((n) => n + 1);
+      }),
+    );
+    // Whether Vosh reads your prompt changes between prompts too, such as
+    // when three in a row did not match.
+    keep(
+      onPromptStatus((status) => {
+        setState((now) => (now ? { ...now, status } : now));
       }),
     );
     keep(
@@ -1043,6 +1052,11 @@ export function PromptCard({
               cellW={cellW}
               note={step === 'rest' && preview === 'lament' ? LAMENT_NOTE : null}
               promptsOff={state?.status.status === 'prompts_off' || (show?.promptsOff ?? false)}
+              notMatching={
+                state?.status.status === 'not_matching'
+                  ? notMatchingLine(state.status.last_match_at)
+                  : null
+              }
               onPick={(template) => {
                 setPointing(NOWHERE);
                 // Start empty keeps its empty design as drawing turns on.

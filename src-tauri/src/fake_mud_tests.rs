@@ -1152,6 +1152,71 @@ const DRAWN: &str = "[1020(100%)h 800(100%)m 930(100%)v]";
 const TYPED_NEW: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv (%K hp) %s [%S]>";
 const PROMPT_NEW: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv (%K hp) %s [%S]> ";
 
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_changed_prompt_the_pattern_misses_says_no_prompt_matched() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let mut done = Vec::new();
+    // On The Forsaken Lands three pulses miss, and elsewhere three sends.
+    for forsaken in [true, false] {
+        let h = Harness::new(Options::new(Build::New)).await;
+        if forsaken {
+            h.count_as_forsaken_lands();
+        }
+        h.set_prompt(no_capture()).await;
+        h.connect().await;
+        h.until_last_row("[1020/1020hp 800/800mn 930/930mv]").await;
+        h.type_line(&format!("#prompt {{{OLD_PATTERN}}}")).await;
+        h.until_shown("from your prompt with this pattern.").await;
+        h.type_line("look").await;
+        h.until_last_row("<1020>").await;
+        let status = |h: &Harness| {
+            h.events("session://prompt-status")
+                .last()
+                .map(|s| s["status"].as_str().unwrap_or_default().to_string())
+        };
+        assert_eq!(status(&h).as_deref(), Some("matching"), "{forsaken}");
+
+        // A new prompt in the game, which the pattern does not read.
+        h.type_line(&format!("prompt {TYPED_X}")).await;
+        h.until_last_row("<1020/1020hp 800/800mn>").await;
+        let rooms = |h: &Harness| {
+            h.screen()
+                .iter()
+                .filter(|r| r.as_str() == "[Exits: south]")
+                .count()
+        };
+        for _ in 0..3 {
+            let before = rooms(&h);
+            h.type_line("look").await;
+            h.until("the room", |h| rooms(h) > before).await;
+        }
+        h.until("no prompt matching", |h| {
+            status(h).as_deref() == Some("not_matching")
+        })
+        .await;
+        let last = h.events("session://prompt-status").pop().expect("a status");
+        assert!(last["last_match_at"].is_string(), "{forsaken}: {last}");
+        h.type_line("#prompt").await;
+        h.until_shown("If you changed it in the game, point at it again.")
+            .await;
+        // The prompt the pattern reads again clears it.
+        h.type_line(&format!("prompt {PROMPT}")).await;
+        h.until("matching again", |h| {
+            status(h).as_deref() == Some("matching")
+        })
+        .await;
+        h.disconnect().await;
+        done.push(h);
+    }
+    // Let the saves the commands marked land before the folders go.
+    drop(grid);
+    tokio::time::sleep(Duration::from_millis(2_500)).await;
+    drop(done);
+}
+
 /// A table as the move from the old capture trigger wrote it: the
 /// trigger's pattern, his design and drawing on.
 fn migrated() -> vosh_prompt::PromptConfig {

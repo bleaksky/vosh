@@ -349,7 +349,11 @@ describe('the D6 row', () => {
 });
 
 describe('the card at rest', () => {
-  const rest = (promptsOff: boolean, note: string | null = null) =>
+  const rest = (
+    promptsOff: boolean,
+    note: string | null = null,
+    notMatching: string | null = null,
+  ) =>
     renderToStaticMarkup(
       <Starts
         mode="rest"
@@ -370,6 +374,7 @@ describe('the card at rest', () => {
         onInsertValue={() => {}}
         note={note}
         promptsOff={promptsOff}
+        notMatching={notMatching}
       />,
     );
 
@@ -381,6 +386,16 @@ describe('the card at rest', () => {
     );
     expect(off).not.toContain('Click any part of your prompt');
     expect(rest(false)).toContain('Click any part of your prompt to change it.');
+  });
+
+  it('says no prompt matched in place of its hint, after prompts off', () => {
+    const line =
+      'No prompt has matched since 8:12. If you changed it in the game, point at it again.';
+    const html = rest(false, null, line);
+    expect(html).toContain('class="pc-hint is-warn" role="status"');
+    expect(html).toContain(line);
+    expect(html).not.toContain('Click any part of your prompt');
+    expect(rest(true, null, line)).not.toContain(line);
   });
 
   it('says what the Lament preview hides under its hint (P8c)', () => {
