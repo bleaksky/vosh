@@ -485,3 +485,47 @@ describe('the lines above a region on a change of where your prompt shows', () =
     ]);
   });
 });
+
+// The prompt card lays the open row out from where its region starts in
+// xterm's own buffer, to map a pointer to a piece.
+describe('where the open region starts', () => {
+  it('names the row and column of its first cell once xterm parsed its mark', async () => {
+    const { writer } = setup(40, 10);
+    writer.output({ text: `You are hungry.\r\n${mark(3)}Tank 100%\r\n<1020hp> ` });
+    await parsed(writer);
+    expect(writer.region()).toEqual({ gen: 3, row: 1, col: 0 });
+    // A region that starts mid row.
+    writer.output({ text: `\r\n<10hp> ${mark(4)}more` });
+    await parsed(writer);
+    expect(writer.region()).toEqual({ gen: 4, row: 3, col: 7 });
+  });
+
+  it('starts it on the next row when its mark came after a full row', async () => {
+    const { writer } = setup(10, 10);
+    writer.local('0123456789');
+    writer.output({ text: `${mark(5)}PROMPT` });
+    await parsed(writer);
+    expect(writer.region()).toEqual({ gen: 5, row: 1, col: 0 });
+  });
+
+  it('follows a replace and names nothing once anything lands after it', async () => {
+    const { writer } = setup(40, 10);
+    writer.output({ text: `room\r\n${mark(1)}<1020hp> ` });
+    writer.output(replace(1, `${mark(2)}Tank\r\n<1020hp> `));
+    await parsed(writer);
+    expect(writer.region()).toEqual({ gen: 2, row: 1, col: 0 });
+    writer.local('look');
+    await parsed(writer);
+    expect(writer.region()).toBeNull();
+    writer.output({ text: `\r\n${mark(3)}<1020hp> ` });
+    writer.output({ text: '\r\nYou are hungry.\r\n' });
+    await parsed(writer);
+    expect(writer.region()).toBeNull();
+  });
+
+  it('names nothing before xterm parsed the mark', () => {
+    const { writer } = setup(40, 10);
+    writer.output({ text: `${mark(1)}<1020hp> ` });
+    expect(writer.region()).toBeNull();
+  });
+});
