@@ -530,6 +530,470 @@ export async function hiddenGet(): Promise<HiddenPayload> {
   return invoke('hidden_get');
 }
 
+// Prompt
+//
+// The prompt editor's commands and events (section 6 of the prompt
+// editor build spec). The backend owns every byte decision: the card
+// reads the [prompt] table, asks what a capture compiles to, draws
+// designs through prompt_render, and writes template text only through
+// prompt_edit.
+
+/** Where a capture came from. */
+export type PromptCaptureSource = 'gmcp' | 'session' | 'log' | 'typed' | 'migrated';
+
+/** `[prompt.capture]`, how Vosh reads the game's prompt. */
+export type PromptCapture =
+  | { kind: 'none' }
+  | {
+      kind: 'aabahran';
+      prompt: string;
+      fprompt: string;
+      follow_game: boolean;
+      seen_at?: string | null;
+      source?: PromptCaptureSource | null;
+    }
+  | {
+      kind: 'regex';
+      lines: string[];
+      settle: boolean;
+      /** The variable each group feeds, where it differs from the group. */
+      names?: Record<string, string>;
+      seen_at?: string | null;
+      source?: PromptCaptureSource | null;
+    };
+
+/** The active profile's `[prompt]` table. */
+export interface PromptConfig {
+  draw: boolean;
+  template: string;
+  /** At most two designs the card opened with, newest first. */
+  previous_templates: string[];
+  capture: PromptCapture;
+  show: PromptShow;
+}
+
+interface RawPromptConfig {
+  draw?: unknown;
+  template?: unknown;
+  previous_templates?: unknown;
+  capture?: unknown;
+  show?: unknown;
+}
+
+/** A table from what the backend sent. It leaves out an empty list of
+ *  earlier designs, no capture and the text, so those come back as the
+ *  defaults. */
+export function normalizePromptConfig(raw: RawPromptConfig | null): PromptConfig {
+  const capture = raw?.capture as PromptCapture | undefined;
+  const kinds = ['none', 'aabahran', 'regex'];
+  return {
+    draw: raw?.draw === true,
+    template: typeof raw?.template === 'string' ? raw.template : '',
+    previous_templates: Array.isArray(raw?.previous_templates)
+      ? raw.previous_templates.filter((t): t is string => typeof t === 'string')
+      : [],
+    capture:
+      capture && typeof capture === 'object' && kinds.includes(capture.kind)
+        ? capture
+        : { kind: 'none' },
+    show: normalizePromptShow(raw?.show),
+  };
+}
+
+/** The active profile's `[prompt]` table. */
+export async function promptConfigGet(): Promise<PromptConfig> {
+  return normalizePromptConfig(await invoke<RawPromptConfig | null>('prompt_config_get'));
+}
+
+/** Save a `[prompt]` table for the active profile. It saves shortly,
+ *  repaints the open row and tells every window. A capture that does not
+ *  compile changes nothing, and the error is a sentence to show. */
+export async function promptConfigSet(config: PromptConfig): Promise<void> {
+  await invoke('prompt_config_set', { config });
+}
+
+/** A design another profile holds. */
+export interface PromptDesign {
+  profile: string;
+  display_name: string;
+  template: string;
+}
+
+/** The designs every other profile holds, for From another profile. */
+export async function promptDesignsList(): Promise<PromptDesign[]> {
+  return invoke('prompt_designs_list');
+}
+
+/** What `prompt_compile` reads. `typed` says you typed or pasted the
+ *  setting as you type it in the game, so Vosh stores it as the game
+ *  would first. */
+export type PromptCompileRequest =
+  | { kind: 'aabahran'; prompt: string; fprompt?: string; typed?: boolean }
+  | { kind: 'regex'; lines: string[]; names?: Record<string, string> };
+
+/** Which of your two settings a code, a shape or a warning is from. */
+export type PromptWhich = 'prompt' | 'fprompt';
+
+export type PromptWarningKind =
+  | 'run_together'
+  | 'short'
+  | 'pacify_mortal'
+  | 'lang_mobile'
+  | 'cut'
+  | 'lone_percent'
+  | 'twice';
+
+export type PromptPresetId =
+  | 'game'
+  | 'minimal'
+  | 'how_full'
+  | 'percent'
+  | 'bars'
+  | 'detailed'
+  | 'empty';
+
+/** A design to start from. */
+export interface PromptPreset {
+  id: PromptPresetId;
+  label: string;
+  template: string;
+}
+
+/** What a capture compiles to. Spans are byte ranges in the setting as
+ *  the game stores it. */
+export interface PromptCompileReport {
+  ok: boolean;
+  error: { message: string; which: PromptWhich | null; span: [number, number] | null } | null;
+  prompt: string;
+  fprompt: string;
+  shapes: {
+    label: string;
+    kind: 'normal' | 'tank' | 'either' | 'afk' | 'fallback' | 'line';
+    which: PromptWhich | null;
+    lines: string[];
+    settle: boolean;
+  }[];
+  vars: string[];
+  codes: {
+    code: string;
+    label: string;
+    field: string | null;
+    which: PromptWhich;
+    span: [number, number];
+    read: boolean;
+  }[];
+  warnings: {
+    kind: PromptWarningKind;
+    which: PromptWhich;
+    span: [number, number];
+    message: string;
+  }[];
+  presets: PromptPreset[];
+}
+
+/** What a capture compiles to. It changes nothing. */
+export async function promptCompile(capture: PromptCompileRequest): Promise<PromptCompileReport> {
+  return invoke('prompt_compile', { capture });
+}
+
+/** One entry of the candidates ring: what came right before a send or a
+ *  GA. `raw` keeps the game's colors. */
+export interface PromptCandidate {
+  id: number;
+  raw: string;
+  plain: string;
+  at_ms: number;
+  recognized: boolean;
+  draw: boolean;
+  capture: boolean;
+}
+
+/** Ring entries that share a shape, digits masked as `#`, newest first. */
+export interface PromptCandidateGroup {
+  shape: string;
+  count: number;
+  recognized: boolean;
+  entries: PromptCandidate[];
+}
+
+/** The candidates ring grouped by shape, the largest group first. */
+export async function promptCandidates(): Promise<PromptCandidateGroup[]> {
+  return invoke('prompt_candidates');
+}
+
+/** How a capture matches the ring and your scrollback, with the match
+ *  line the card shows. */
+export interface PromptCaptureCheck {
+  matched: number;
+  total: number;
+  fight_matched: number;
+  false_matches: number;
+  text: string;
+}
+
+/** Check a capture against the candidates ring and your scrollback. */
+export async function promptCaptureCheck(capture: PromptCapture): Promise<PromptCaptureCheck> {
+  return invoke('prompt_capture_check', { capture });
+}
+
+/** A color in a span. Palette indexes resolve through the active theme. */
+export type PromptSpanColor =
+  | { kind: 'default' }
+  | { kind: 'index'; index: number }
+  | { kind: 'rgb'; r: number; g: number; b: number };
+
+/** Where a piece of a design landed: `row` is the line from `%nl` and
+ *  `col` the cell in it before any wrap. The look is the one at the
+ *  piece's first cell. */
+export interface PromptSpan {
+  piece: number;
+  row: number;
+  col: number;
+  width: number;
+  fg: PromptSpanColor;
+  bg: PromptSpanColor;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+}
+
+/** A drawn design. */
+export interface PromptRendered {
+  ansi: string;
+  plain: string;
+  rows: number;
+  spans: PromptSpan[];
+}
+
+/** Values a preview draws in place of the live ones, by field in the
+ *  form the samples take. `"?"` draws a value hidden and `null` absent.
+ *  `lament` hides every value the song hides. */
+export interface PromptOverrides {
+  values?: Record<string, string | number | boolean | null>;
+  lament?: boolean;
+}
+
+/** One design to draw, with live or sample values. */
+export interface PromptRenderRequest {
+  template: string;
+  values?: 'live' | 'sample';
+  overrides?: PromptOverrides | null;
+  /** Draw each value with nothing to show as its label, as the open
+   *  card does. */
+  placeholders?: boolean;
+}
+
+/** Draw a design. */
+export async function promptRender(request: PromptRenderRequest): Promise<PromptRendered> {
+  return invoke('prompt_render', {
+    template: request.template,
+    values: request.values ?? 'live',
+    overrides: request.overrides ?? null,
+    placeholders: request.placeholders ?? false,
+  });
+}
+
+/** Draw several designs at once, such as the start list. */
+export async function promptRenderMany(requests: PromptRenderRequest[]): Promise<PromptRendered[]> {
+  return invoke('prompt_render_many', { requests });
+}
+
+export type PromptFormatName =
+  | 'value'
+  | 'cur_max'
+  | 'max'
+  | 'pct'
+  | 'percent'
+  | 'bar'
+  | 'game'
+  | 'word'
+  | 'name'
+  | 'grouped'
+  | 'short'
+  | 'unit'
+  | 'trunc'
+  | 'hm'
+  | 'hms'
+  | 'md'
+  | 'count'
+  | 'names'
+  | 'on'
+  | 'off';
+
+/** A color the card offers. By value with no field is the piece's own
+ *  value, by how full it is, or by the game's `%h` bands with `game`. */
+export type PromptColorChoice =
+  | { kind: 'default' }
+  | { kind: 'named'; index: number }
+  | { kind: 'index'; index: number }
+  | { kind: 'rgb'; r: number; g: number; b: number }
+  | { kind: 'by_value'; field?: string; game?: boolean };
+
+/** How a value shows. A bar takes a width of 1 to 80 cells and a color,
+ *  `trunc` how many characters it keeps. */
+export interface PromptFormatChoice {
+  format: PromptFormatName;
+  width?: number;
+  color?: PromptColorChoice;
+  chars?: number;
+}
+
+export type PromptStyleChoice = 'bold' | 'dim' | 'italic' | 'underline' | 'inverse' | 'strike';
+
+export type PromptWhen = 'always' | 'fight' | 'not_fight';
+
+/** One change to a design. `piece` indexes the template's pieces, as a
+ *  span names them. `at` and `to` are places between pieces, from 0
+ *  before the first to the number of pieces after the last. */
+export type PromptEditOp =
+  | { op: 'set_format'; piece: number; format: PromptFormatChoice }
+  | { op: 'set_color'; piece: number; color: PromptColorChoice; background?: boolean }
+  | { op: 'set_style'; piece: number; style: PromptStyleChoice; on: boolean }
+  | { op: 'set_when'; piece: number; when: PromptWhen }
+  | { op: 'set_text'; piece: number; text: string }
+  | { op: 'remove'; piece: number }
+  | { op: 'insert_field'; at: number; field: string; format?: PromptFormatChoice }
+  | { op: 'insert_text'; at: number; text: string }
+  | { op: 'insert_nl'; at: number }
+  | { op: 'move'; piece: number; to: number };
+
+/** A design after an edit, drawn with the live values and placeholders. */
+export interface PromptEdited {
+  template: string;
+  rendered: PromptRendered;
+}
+
+/** Apply one edit to a design. Every other piece keeps its look. Save
+ *  the result with promptConfigSet. */
+export async function promptEdit(template: string, op: PromptEditOp): Promise<PromptEdited> {
+  return invoke('prompt_edit', { template, op });
+}
+
+export type PromptFieldGroup =
+  | 'vitals'
+  | 'fight'
+  | 'group'
+  | 'character'
+  | 'worth'
+  | 'affects'
+  | 'room'
+  | 'time_and_sky'
+  | 'vosh'
+  | 'scripts'
+  | 'building'
+  | 'more';
+
+export type PromptFieldKind =
+  | 'gauge'
+  | 'num'
+  | 'pct'
+  | 'tank_pct'
+  | 'text'
+  | 'flag'
+  | 'count'
+  | 'position'
+  | 'lang'
+  | 'moon'
+  | 'exits'
+  | 'level'
+  | 'slot'
+  | 'hour'
+  | 'temp'
+  | 'seconds'
+  | 'clock'
+  | 'date'
+  | 'ticks'
+  | 'member'
+  | 'raw';
+
+export type PromptFormatId = Exclude<PromptFormatName, 'cur_max' | 'percent'>;
+
+/** One field the picker lists, with its state now. */
+export interface PromptFieldState {
+  name: string;
+  label: string;
+  aliases: string[];
+  kind: PromptFieldKind;
+  group: PromptFieldGroup;
+  gmcp: string | null;
+  package: string | null;
+  /** Only the new server build sends its package. */
+  new_build: boolean;
+  codes: string[];
+  search: string[];
+  /** Written with a parameter, `%{aff:sanctuary}`. */
+  param: boolean;
+  listed: boolean;
+  formats: PromptFormatId[];
+  state: 'value' | 'hidden' | 'absent' | 'missing';
+  source: 'script' | 'capture' | 'gmcp' | 'vosh' | null;
+  /** The value as the picker shows it, an enum as its word. */
+  value: string | null;
+  max: string | null;
+  /** Its package came this session, or it has none. */
+  sent: boolean;
+  /** Your prompt shows it. */
+  in_prompt: boolean;
+}
+
+export type PromptStatus = 'no_capture' | 'matching' | 'not_matching' | 'prompts_off';
+
+/** session://prompt-status, and the status in the prompt state.
+ *  `last_match_at` is RFC 3339 local time. */
+export interface PromptStatusPayload {
+  status: PromptStatus;
+  last_match_at: string | null;
+}
+
+/** Everything the card reads about your prompt now. `open_row` is the
+ *  drawn prompt while it is the last thing on screen, with where each
+ *  piece landed. */
+export interface PromptState {
+  catalog: PromptFieldState[];
+  status: PromptStatusPayload;
+  new_build: boolean;
+  open_row: { gen: number; spans: PromptSpan[] } | null;
+  /** The GMCP packages that came this session. */
+  packages: string[];
+}
+
+/** The catalog with live states and sources, the status, the new build
+ *  sign and the open row. */
+export async function promptStateGet(): Promise<PromptState> {
+  return invoke('prompt_state_get');
+}
+
+/** While on, session://prompt-state follows each prompt Vosh reads. */
+export async function promptWatch(on: boolean): Promise<void> {
+  await invoke('prompt_watch', { on });
+}
+
+/** The prompt state after each prompt, while the card watches. */
+export async function onPromptState(cb: (payload: PromptState) => void): Promise<UnlistenFn> {
+  return listen<PromptState>('session://prompt-state', (event) => {
+    cb(event.payload);
+  });
+}
+
+/** Whether Vosh reads your prompt, each time that changes. */
+export async function onPromptStatus(
+  cb: (payload: PromptStatusPayload) => void,
+): Promise<UnlistenFn> {
+  return listen<PromptStatusPayload>('session://prompt-status', (event) => {
+    cb(event.payload);
+  });
+}
+
+/** A trigger hid your prompt and set prompt values while this profile
+ *  draws nothing in its place, once per trigger per session. */
+export async function onPromptGagWithoutReader(
+  cb: (payload: { trigger: string }) => void,
+): Promise<UnlistenFn> {
+  return listen<{ trigger: string }>('session://prompt-gag-without-reader', (event) => {
+    cb(event.payload);
+  });
+}
+
 // Keyboard macro bindings. A Macro maps a canonical key string
 // (produced by canonicalKeyFromEvent below) to a command line that
 // the input layer will fire when that key combo is pressed.
@@ -1762,13 +2226,24 @@ export async function followReplacedUiConfig(
   };
 }
 
-/** Sent to every window when a command changed the active profile's
- *  `[prompt]` table, like `#prompt` or `#unprompt`. */
+/** Sent to every window when the active profile's `[prompt]` table
+ *  changed, by `#prompt`, `#unprompt`, the card or a Settings save. */
 export const PROMPT_CONFIG_CHANGED_EVENT = 'vosh://prompt-config-changed';
 
-/** Hear that a command changed the active profile's `[prompt]` table. */
-export async function subscribePromptConfigChanged(cb: () => void): Promise<UnlistenFn> {
-  return listen<unknown>(PROMPT_CONFIG_CHANGED_EVENT, () => cb());
+/** The payload of vosh://prompt-config-changed: the active profile
+ *  whose table changed, null before any profile loads. */
+export interface PromptConfigChangedPayload {
+  profile: string | null;
+}
+
+/** Hear that the active profile's `[prompt]` table changed. */
+export async function subscribePromptConfigChanged(
+  cb: (payload: PromptConfigChangedPayload) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(PROMPT_CONFIG_CHANGED_EVENT, (event) => {
+    const raw = event.payload as { profile?: unknown } | null;
+    cb({ profile: typeof raw?.profile === 'string' ? raw.profile : null });
+  });
 }
 
 /** The prompt switch and design, which Settings still holds in its
