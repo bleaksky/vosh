@@ -52,7 +52,9 @@ pub struct FieldState {
     pub value: Option<String>,
     /// A gauge's max, the same way.
     pub max: Option<String>,
-    /// Its package has come this session, or it has none.
+    /// Its package has come this session, or it has none. A package
+    /// older builds send too counts for a new build field only on the new
+    /// build.
     pub sent: bool,
     /// Your prompt shows it: the capture reads it.
     pub in_prompt: bool,
@@ -163,7 +165,12 @@ fn field_state(
         source,
         value,
         max,
-        sent: e.package.map_or(true, |p| vars.gmcp().has(p)),
+        // A package older builds send too feeds a new build field only
+        // on the new build: your tank in Char.Combat, Exits from
+        // Room.Info (D26).
+        sent: e.package.map_or(true, |p| {
+            vars.gmcp().has(p) && (!e.new_build || vars.new_build())
+        }),
         in_prompt: reads.iter().any(|r| vars::feeds(r) == e.name),
     }
 }

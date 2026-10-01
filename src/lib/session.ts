@@ -1202,7 +1202,8 @@ export interface PromptFieldState {
   /** The value as the picker shows it, an enum as its word. */
   value: string | null;
   max: string | null;
-  /** Its package came this session, or it has none. */
+  /** Its package came this session, or it has none. A package older
+   *  builds send too counts for a new build field only on the new build. */
   sent: boolean;
   /** Your prompt shows it. */
   in_prompt: boolean;
