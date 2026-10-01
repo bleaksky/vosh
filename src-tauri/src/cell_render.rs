@@ -22,7 +22,7 @@ use std::sync::Mutex;
 
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
 
-use crate::term_grid::{CellFlags, LiftSpan};
+use crate::term_grid::{CellFlags, LiftSpan, Underline};
 
 /// Linear-ish rgba in 0..1, ready for a wgpu vertex/instance buffer.
 pub(crate) type Rgba = [f32; 4];
@@ -687,6 +687,13 @@ fn styled_colors(fg: Color, bg: Color, flags: CellFlags) -> (Rgba, Rgba) {
     } else {
         (fg_rgba, bg_rgba)
     }
+}
+
+/// The underline's color. SGR 58 colors the line apart from the text,
+/// and without it the line takes `text`, the cell's drawn text color with
+/// dim and inverse already applied, the way xterm draws it.
+fn underline_color(flags: CellFlags, text: Rgba) -> Rgba {
+    flags.underline_color.map_or(text, color_to_rgba)
 }
 
 // ---------------------------------------------------------------------------
@@ -2318,8 +2325,10 @@ impl CellRenderer {
             if hovered {
                 fg_rgba = link;
             }
-            if flags.underline || hovered {
-                underlines.push((col, y_top, fg_rgba));
+            if hovered {
+                underlines.push((col, y_top, link));
+            } else if flags.underline != Underline::None {
+                underlines.push((col, y_top, underline_color(flags, fg_rgba)));
             }
             if flags.strikeout {
                 strikeouts.push((col, y_top, fg_rgba));
@@ -2714,6 +2723,40 @@ mod tests {
         assert_eq!(
             color_to_rgba(Color::Indexed(232)),
             rgb_to_rgba(Rgb { r: 8, g: 8, b: 8 })
+        );
+    }
+
+    #[test]
+    fn the_underline_takes_its_sgr_58_color_or_the_text_color() {
+        let text = color_to_rgba(Color::Named(NamedColor::Red));
+        let plain = CellFlags {
+            underline: Underline::Curly,
+            ..CellFlags::default()
+        };
+        assert_eq!(underline_color(plain, text), text);
+        let rose = Color::Spec(Rgb {
+            r: 191,
+            g: 97,
+            b: 106,
+        });
+        let colored = CellFlags {
+            underline_color: Some(rose),
+            ..plain
+        };
+        assert_eq!(underline_color(colored, text), color_to_rgba(rose));
+        // An inverse cell draws its text in the ground color, and so does
+        // its line when SGR 58 is unset.
+        let (inverse_text, _) = styled_colors(
+            Color::Named(NamedColor::Red),
+            Color::Named(NamedColor::Blue),
+            CellFlags {
+                inverse: true,
+                ..plain
+            },
+        );
+        assert_eq!(
+            underline_color(plain, inverse_text),
+            color_to_rgba(Color::Named(NamedColor::Blue))
         );
     }
 
