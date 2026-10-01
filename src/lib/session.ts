@@ -2209,7 +2209,9 @@ async function fetchUiConfig(): Promise<UiConfig> {
 }
 
 /** Fill gaps and coerce unknown values in a raw config so every window
- *  reads the same shape. */
+ *  reads the same shape. A gap takes the value Rust sends for a profile
+ *  that sets nothing, and fixtures/ui-config/defaults.json holds both
+ *  sides to those values. */
 export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
   const theme =
     typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : DEFAULT_THEME_ID;
