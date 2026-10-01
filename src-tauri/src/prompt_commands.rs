@@ -89,8 +89,10 @@ pub(crate) struct PromptDesign {
 }
 
 /// The designs every other profile holds, read from their files, each
-/// with a template that is not empty. A file Vosh cannot read is left
-/// out.
+/// with a template that is not empty. These are designs you made, so a
+/// template equal to Vosh's default design, [`vosh_prompt::DEFAULT_DESIGN`],
+/// is left out, as a profile that never saved a file holds it and At a
+/// glance already offers it. A file Vosh cannot read is left out.
 #[tauri::command]
 pub(crate) async fn prompt_designs_list(
     state: State<'_, SharedState>,
@@ -115,7 +117,7 @@ pub(crate) async fn designs(state: &SharedState) -> Result<Vec<PromptDesign>, St
             continue;
         };
         let template = config.prompt_config().template;
-        if template.is_empty() {
+        if template.is_empty() || template == vosh_prompt::DEFAULT_DESIGN {
             continue;
         }
         out.push(PromptDesign {
@@ -495,6 +497,8 @@ mod tests {
         set.create("Second").unwrap();
         set.create("Third").unwrap();
         set.create("Fourth").unwrap();
+        set.create("Fifth").unwrap();
+        set.create("Sixth").unwrap();
         let mut second = ProfileConfig::default();
         second.set_prompt(PromptConfig::from_legacy(false, "[%hp]"));
         second.save(&set.profile_path("Second")).unwrap();
@@ -502,7 +506,17 @@ mod tests {
         let mut third = ProfileConfig::default();
         third.ui.prompt_template = "%mana".into();
         third.save(&set.profile_path("Third")).unwrap();
-        // Fourth never saved a file.
+        // Fourth never saved a file, so it holds Vosh's default design,
+        // which At a glance already offers. Fifth saved that design.
+        let mut fifth = ProfileConfig::default();
+        fifth.set_prompt(PromptConfig::from_legacy(true, vosh_prompt::DEFAULT_DESIGN));
+        fifth.save(&set.profile_path("Fifth")).unwrap();
+        // Sixth changed the default design, so it holds a design of its
+        // own.
+        let sixth_design = vosh_prompt::DEFAULT_DESIGN.trim_end();
+        let mut sixth = ProfileConfig::default();
+        sixth.set_prompt(PromptConfig::from_legacy(true, sixth_design));
+        sixth.save(&set.profile_path("Sixth")).unwrap();
         let mut active = ProfileConfig::default();
         active.set_prompt(PromptConfig::from_legacy(true, "%move"));
         active
@@ -523,7 +537,11 @@ mod tests {
             .collect();
         assert_eq!(
             got,
-            [("Second", "Second", "[%hp]"), ("Third", "Third", "%mana")]
+            [
+                ("Second", "Second", "[%hp]"),
+                ("Third", "Third", "%mana"),
+                ("Sixth", "Sixth", sixth_design),
+            ]
         );
         let json = serde_json::to_value(&list[0]).unwrap();
         assert_eq!(
