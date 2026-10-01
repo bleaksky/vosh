@@ -4716,12 +4716,30 @@ pub(crate) async fn loadouts_get_state(
 /// a state-changed event so other windows (e.g. a future `TopBar`
 /// checklist) see the update.
 #[tauri::command]
-pub(crate) async fn loadouts_set_active(
-    app: AppHandle,
-    state: State<'_, SharedState>,
+pub(crate) async fn loadouts_set_active(app: AppHandle, active: Vec<String>) -> Result<(), String> {
+    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    set_active_loadouts(&app, &app_data, active).await?;
+    // The recomputed (or dormant) disabled lists live in the profile
+    // snapshot on disk; queue a persist so a crash before the exit
+    // flush cannot leave loadouts.toml and per-profile state
+    // disagreeing. Also clears any stale persist suppression — this is
+    // a durable change the user asked for.
+    mark_profile_dirty(&app);
+    let _ = app.emit("vosh://loadouts-changed", &());
+    Ok(())
+}
+
+/// The part of [`loadouts_set_active`] that runs under the loadout and
+/// profile locks: take the new active list, lay the group state it
+/// imposes over the live profile, and save loadouts.toml in `app_data`.
+/// The command looks up the app data folder and queues the profile
+/// save, so a test can run this against a mock app and a scratch folder.
+async fn set_active_loadouts<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    app_data: &std::path::Path,
     active: Vec<String>,
 ) -> Result<(), String> {
-    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let state: SharedState = app.state::<SharedState>().inner().clone();
     {
         let mut guard = state.loadout_set.lock().await;
         let Some(set) = guard.as_mut() else {
@@ -4743,17 +4761,10 @@ pub(crate) async fn loadouts_set_active(
         let snapshot = set.clone();
         let mut p = state.profile.lock().await;
         crate::loadout_store::apply_effective_state(&snapshot, &mut p);
-        if let Err(e) = crate::loadout_store::save_loadout_set(&app_data, &snapshot) {
+        if let Err(e) = crate::loadout_store::save_loadout_set(app_data, &snapshot) {
             warn!(error = %e, "loadouts.toml save failed");
         }
     }
-    // The recomputed (or dormant) disabled lists live in the profile
-    // snapshot on disk; queue a persist so a crash before the exit
-    // flush cannot leave loadouts.toml and per-profile state
-    // disagreeing. Also clears any stale persist suppression — this is
-    // a durable change the user asked for.
-    mark_profile_dirty(&app);
-    let _ = app.emit("vosh://loadouts-changed", &());
     Ok(())
 }
 
