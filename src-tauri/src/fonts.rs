@@ -1,22 +1,28 @@
-//! System font enumeration + `font://` URI scheme.
+//! System font enumeration + the `font` URI scheme.
 //!
 //! `WKWebView` on recent macOS refuses to match user-installed fonts by
 //! CSS family name (anti-fingerprinting). The only path that still
 //! works is `@font-face` with an explicit `src` URL. We expose the
 //! system font catalog through a Tauri command and serve the actual
 //! font bytes through a custom URI scheme; the frontend mints an
-//! `@font-face` block pointing at `font://<family>` whenever the user
-//! picks a system font, and the matched-by-CSS family name resolves
-//! to the file we serve here.
+//! `@font-face` block whenever the user picks a system font, with a
+//! URL from Tauri's `convertFileSrc` that carries the family in its
+//! path (`font://localhost/<family>` on macOS and Linux,
+//! `http://font.localhost/<family>` on Windows), and the
+//! matched-by-CSS family name resolves to the face we serve here.
 //!
-//! On macOS that scheme serves nothing yet. font-kit's CoreText source
-//! hands back in-memory handles, never file paths, so
-//! `font_path_for_family` returns `None` for every family and
-//! `font://` answers 404. Windows and Linux get file paths.
+//! The scheme serves the regular face of the family. On macOS that
+//! face comes from CoreText's font descriptors, the same faces the
+//! monospace flag reads, and its file from `kCTFontURLAttribute`.
+//! Windows and Linux serve the first face font-kit lists. A face that
+//! lives in a collection (`.ttc`) is cut out of it first, since `WebKit`
+//! renders the first face of a collection served whole, and that is
+//! the bold face of Avenir Next.
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
+#[cfg(not(target_os = "macos"))]
 use font_kit::handle::Handle;
 use font_kit::source::SystemSource;
 use serde::Serialize;
@@ -130,19 +136,31 @@ fn enumerate_fonts() -> Vec<FontEntry> {
 }
 
 /// The monospace flag of the regular face of `family`, read from
-/// CoreText's font descriptors. It builds the family query font-kit's
-/// `select_family_by_name` builds, then picks the face [`regular_face`]
-/// names: upright, with weight and width nearest normal. It loads no
-/// font, where font-kit read every file of the family and took about
-/// 2 s for the whole list. It reads the regular face, not the first one
-/// CoreText lists: `BerkeleyMono Nerd Font` lists Italic first, and only
-/// its Regular face says it is monospace, so the first face left it out
-/// of the Font list. Do not swap in
+/// CoreText's font descriptors through [`regular_descriptor`]. It loads
+/// no font, where font-kit read every file of the family and took
+/// about 2 s for the whole list. It reads the regular face, not the
+/// first one CoreText lists: `BerkeleyMono Nerd Font` lists Italic
+/// first, and only its Regular face says it is monospace, so the first
+/// face left it out of the Font list. An unknown family is not
+/// monospace.
+#[cfg(target_os = "macos")]
+fn is_family_monospace(family: &str) -> bool {
+    use core_text::font_descriptor::kCTFontMonoSpaceTrait;
+    regular_descriptor(family)
+        .is_some_and(|(_, face)| face.symbolic & i64::from(kCTFontMonoSpaceTrait) != 0)
+}
+
+/// The descriptor and traits of the regular face of `family`. It builds
+/// the family query font-kit's `select_family_by_name` builds, then
+/// picks the face [`regular_face`] names: upright, with weight and
+/// width nearest normal. It reads no font file. Do not swap in
 /// `CTFontDescriptorCreateMatchingFontDescriptor`, which picks Medium
-/// for that family. An unknown family is not monospace.
+/// for `BerkeleyMono Nerd Font`. None for an unknown family.
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)]
-fn is_family_monospace(family: &str) -> bool {
+fn regular_descriptor(
+    family: &str,
+) -> Option<(core_text::font_descriptor::CTFontDescriptor, FaceTraits)> {
     use core_foundation::array::CFArray;
     use core_foundation::base::{CFType, TCFType};
     use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
@@ -150,8 +168,8 @@ fn is_family_monospace(family: &str) -> bool {
     use core_foundation::string::CFString;
     use core_text::font_collection;
     use core_text::font_descriptor::{
-        self, kCTFontMonoSpaceTrait, kCTFontSymbolicTrait, kCTFontTraitsAttribute,
-        kCTFontWeightTrait, kCTFontWidthTrait, CTFontDescriptorCopyAttribute,
+        self, kCTFontSymbolicTrait, kCTFontTraitsAttribute, kCTFontWeightTrait, kCTFontWidthTrait,
+        CTFontDescriptorCopyAttribute,
     };
 
     let attributes: CFDictionary<CFString, CFType> = CFDictionary::from_CFType_pairs(&[(
@@ -160,9 +178,7 @@ fn is_family_monospace(family: &str) -> bool {
     )]);
     let query = font_descriptor::new_from_attributes(&attributes);
     let collection = font_collection::new_from_descriptors(&CFArray::from_CFTypes(&[query]));
-    let Some(descriptors) = collection.get_descriptors() else {
-        return false;
-    };
+    let descriptors = collection.get_descriptors()?;
     // SAFETY: each key is CoreText's own constant, and the get rule wrap
     // retains it for as long as the string lives.
     let (symbolic_key, weight_key, width_key) = unsafe {
@@ -172,7 +188,7 @@ fn is_family_monospace(family: &str) -> bool {
             CFString::wrap_under_get_rule(kCTFontWidthTrait),
         )
     };
-    let faces: Vec<FaceTraits> = descriptors
+    let mut faces: Vec<(font_descriptor::CTFontDescriptor, FaceTraits)> = descriptors
         .iter()
         .filter_map(|descriptor| {
             // SAFETY: the descriptor is a live CTFontDescriptor and the
@@ -199,14 +215,80 @@ fn is_family_monospace(family: &str) -> bool {
             };
             let number = |key: &CFString| traits.find(key).and_then(|n| n.downcast::<CFNumber>());
             let symbolic = number(&symbolic_key).and_then(|n| n.to_i64())?;
-            Some(FaceTraits {
+            let face = FaceTraits {
                 symbolic,
                 weight: number(&weight_key).and_then(|n| n.to_f64()).unwrap_or(0.0),
                 width: number(&width_key).and_then(|n| n.to_f64()).unwrap_or(0.0),
-            })
+            };
+            Some((descriptor.clone(), face))
         })
         .collect();
-    regular_face(&faces).is_some_and(|face| face.symbolic & i64::from(kCTFontMonoSpaceTrait) != 0)
+    let traits: Vec<FaceTraits> = faces.iter().map(|(_, face)| *face).collect();
+    let index = regular_face(&traits)?;
+    Some(faces.swap_remove(index))
+}
+
+/// The PostScript name of the face `descriptor` names, or None when
+/// CoreText gives it none.
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+fn postscript_name(descriptor: &core_text::font_descriptor::CTFontDescriptor) -> Option<String> {
+    use core_foundation::base::{CFType, TCFType};
+    use core_foundation::string::{CFString, CFStringRef};
+    use core_text::font_descriptor::{kCTFontNameAttribute, CTFontDescriptorCopyAttribute};
+    // SAFETY: the descriptor is live and the key is CoreText's own
+    // constant. The copy comes back retained, or null, and the create
+    // rule wrap releases it.
+    let value = unsafe {
+        let raw =
+            CTFontDescriptorCopyAttribute(descriptor.as_concrete_TypeRef(), kCTFontNameAttribute);
+        if raw.is_null() {
+            return None;
+        }
+        CFType::wrap_under_create_rule(raw)
+    };
+    if !value.instance_of::<CFString>() {
+        return None;
+    }
+    // SAFETY: the value is a CFString, checked above, and the get rule
+    // wrap retains it for as long as the string lives.
+    let name = unsafe { CFString::wrap_under_get_rule(value.as_CFTypeRef() as CFStringRef) };
+    Some(name.to_string())
+}
+
+/// The file of the regular face of `family` and the face's index in
+/// it, which is 0 unless the file is a collection. The file comes from
+/// the face's `kCTFontURLAttribute`. The index is the face's place
+/// among the faces CoreText reads from that file, matched by PostScript
+/// name, which is how `WebKit` picks a face out of a collection. None for
+/// an unknown family or a face with no file.
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+fn regular_face_file(family: &str) -> Option<(PathBuf, u32)> {
+    use core_foundation::array::{CFArray, CFArrayRef};
+    use core_foundation::base::TCFType;
+    use core_foundation::url::CFURL;
+    use core_text::font_descriptor::CTFontDescriptor;
+    use core_text::font_manager::CTFontManagerCreateFontDescriptorsFromURL;
+
+    let (descriptor, _) = regular_descriptor(family)?;
+    let path = descriptor.font_path()?;
+    let name = postscript_name(&descriptor)?;
+    let url = CFURL::from_path(&path, false)?;
+    // SAFETY: the URL is live. The array comes back retained, or null
+    // for a file CoreText cannot read, and the create rule wrap
+    // releases it. CoreText fills it with font descriptors.
+    let faces: CFArray<CTFontDescriptor> = unsafe {
+        let raw: CFArrayRef = CTFontManagerCreateFontDescriptorsFromURL(url.as_concrete_TypeRef());
+        if raw.is_null() {
+            return None;
+        }
+        CFArray::wrap_under_create_rule(raw)
+    };
+    let index = faces
+        .iter()
+        .position(|face| postscript_name(&face).as_deref() == Some(name.as_str()))?;
+    Some((path, u32::try_from(index).ok()?))
 }
 
 /// The traits of one face that pick the regular face of a family.
@@ -221,19 +303,23 @@ struct FaceTraits {
     width: f64,
 }
 
-/// The regular face of a family: upright before italic, then the
-/// weight nearest regular, then the width nearest normal, then the
-/// first listed. None for a family with no face.
+/// The index of the regular face of a family: upright before italic,
+/// then the weight nearest regular, then the width nearest normal, then
+/// the first listed. None for a family with no face.
 #[cfg(any(test, target_os = "macos"))]
-fn regular_face(faces: &[FaceTraits]) -> Option<&FaceTraits> {
+fn regular_face(faces: &[FaceTraits]) -> Option<usize> {
     // kCTFontItalicTrait, written out so the tests build on every system.
     const ITALIC: i64 = 1;
-    faces.iter().min_by(|a, b| {
-        let key = |f: &FaceTraits| (f.symbolic & ITALIC != 0, f.weight.abs(), f.width.abs());
-        let (ia, wa, da) = key(a);
-        let (ib, wb, db) = key(b);
-        ia.cmp(&ib).then(wa.total_cmp(&wb)).then(da.total_cmp(&db))
-    })
+    let key = |f: &FaceTraits| (f.symbolic & ITALIC != 0, f.weight.abs(), f.width.abs());
+    faces
+        .iter()
+        .enumerate()
+        .min_by(|(_, a), (_, b)| {
+            let (ia, wa, da) = key(a);
+            let (ib, wb, db) = key(b);
+            ia.cmp(&ib).then(wa.total_cmp(&wb)).then(da.total_cmp(&db))
+        })
+        .map(|(index, _)| index)
 }
 
 /// The monospace flag of the first face font-kit lists for `family`,
@@ -250,13 +336,20 @@ fn is_family_monospace_font_kit(source: &SystemSource, family: &str) -> bool {
         .is_some_and(|font| font.is_monospace())
 }
 
-/// Find the on-disk path of the first face font-kit lists for a
-/// family, which is not always the regular one. Returns `None` for
-/// unknown families and for memory-only handles. On macOS every handle
-/// is memory-only, since font-kit's CoreText source reads each font
-/// into memory, so this returns `None` for every family there and
-/// `font://` answers 404.
-pub(crate) fn font_path_for_family(family: &str) -> Option<(PathBuf, u32)> {
+/// The file of the face the font scheme serves for `family` and the
+/// face's index in it. On macOS that is the regular face, read from
+/// CoreText. None for an unknown family.
+#[cfg(target_os = "macos")]
+fn font_path_for_family(family: &str) -> Option<(PathBuf, u32)> {
+    regular_face_file(family)
+}
+
+/// The file of the face the font scheme serves for `family` and the
+/// face's index in it. Windows and Linux take the first face font-kit
+/// lists, which is not always the regular one. None for an unknown
+/// family or a face font-kit holds only in memory.
+#[cfg(not(target_os = "macos"))]
+fn font_path_for_family(family: &str) -> Option<(PathBuf, u32)> {
     let source = SystemSource::new();
     let handle_family = source.select_family_by_name(family).ok()?;
     let handle = handle_family.fonts().first()?.clone();
@@ -266,49 +359,93 @@ pub(crate) fn font_path_for_family(family: &str) -> Option<(PathBuf, u32)> {
     }
 }
 
-/// `font://<family>` URI handler. Family name is percent-decoded out
-/// of the URI path so spaces and Unicode round-trip cleanly. Serves
-/// the raw font bytes with a font/ttf or font/otf MIME based on the
-/// file extension. CSS @font-face will accept either.
-pub(crate) fn handle_font_uri(uri: &tauri::http::Uri) -> Response<Vec<u8>> {
+/// The family a font scheme URL asks for, percent-decoded out of its
+/// path. fontLoader.ts builds the URL with Tauri's `convertFileSrc`,
+/// which puts the encoded family in the path on every platform:
+/// `font://localhost/<family>` on macOS and Linux,
+/// `http://font.localhost/<family>` on Windows. None for an empty path
+/// or one that does not decode to UTF-8.
+fn family_from_uri(uri: &tauri::http::Uri) -> Option<String> {
     let raw = uri.path().trim_start_matches('/');
-    // Some webviews include the authority in the path; strip a leading
-    // `//host` form too.
-    let raw = raw.trim_start_matches('/');
-    let family = match urlencoding::decode(raw) {
-        Ok(s) => s.into_owned(),
-        Err(_) => raw.to_string(),
+    let family = urlencoding::decode(raw).ok()?.into_owned();
+    (!family.is_empty()).then_some(family)
+}
+
+/// The single face at `index` of the font file bytes in `data`. A file
+/// that holds one face comes back whole at index 0. A collection
+/// (`.ttc` or `.otc`) gets that face's table directory copied to the
+/// front, the way font-kit loads one, which makes it a font of that
+/// face alone, since each directory points at its tables by offset
+/// from the start of the file. The other faces' bytes stay behind,
+/// unused. None for an index the file does not have, or a collection
+/// with a table where the copied directory would land.
+fn face_bytes(mut data: Vec<u8>, index: u32) -> Option<Vec<u8>> {
+    fn be32(data: &[u8], at: usize) -> Option<usize> {
+        let bytes = data.get(at..at.checked_add(4)?)?;
+        usize::try_from(u32::from_be_bytes(bytes.try_into().ok()?)).ok()
+    }
+    if data.get(..4) != Some(b"ttcf") {
+        return (index == 0).then_some(data);
+    }
+    let index = usize::try_from(index).ok()?;
+    if index >= be32(&data, 8)? {
+        return None;
+    }
+    let directory = be32(&data, 12 + 4 * index)?;
+    let tables = data.get(directory + 4..directory + 6)?;
+    let tables = usize::from(u16::from_be_bytes(tables.try_into().ok()?));
+    let len = 12 + 16 * tables;
+    let end = directory.checked_add(len)?;
+    if end > data.len() {
+        return None;
+    }
+    for table in 0..tables {
+        if be32(&data, directory + 12 + 16 * table + 8)? < len {
+            return None;
+        }
+    }
+    data.copy_within(directory..end, 0);
+    Some(data)
+}
+
+/// The media type of single face font bytes, read from their first
+/// four bytes. `WebKit` reads the bytes whatever the header says.
+fn font_mime(bytes: &[u8]) -> &'static str {
+    match bytes.get(..4) {
+        Some(b"OTTO") => "font/otf",
+        Some(b"wOFF") => "font/woff",
+        Some(b"wOF2") => "font/woff2",
+        _ => "font/ttf",
+    }
+}
+
+/// The font scheme handler. Serves the face [`font_path_for_family`]
+/// names for the family in the URL path, cut out of its collection by
+/// [`face_bytes`], or 404 when there is none. It reads the font file
+/// and asks CoreText for the faces, so run it on the blocking pool,
+/// never on the main thread. lib.rs registers it that way.
+pub(crate) fn handle_font_uri(uri: &tauri::http::Uri) -> Response<Vec<u8>> {
+    let status = |code: StatusCode| Response::builder().status(code).body(Vec::new()).unwrap();
+    let Some(family) = family_from_uri(uri) else {
+        return status(StatusCode::NOT_FOUND);
     };
-    let Some((path, _index)) = font_path_for_family(&family) else {
-        return Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Vec::new())
-            .unwrap();
+    let Some((path, index)) = font_path_for_family(&family) else {
+        return status(StatusCode::NOT_FOUND);
     };
-    let bytes = match std::fs::read(&path) {
-        Ok(b) => b,
+    let data = match std::fs::read(&path) {
+        Ok(data) => data,
         Err(e) => {
             tracing::warn!(error = %e, family = %family, "failed to read font file");
-            return Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Vec::new())
-                .unwrap();
+            return status(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
-    let mime = match path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(str::to_lowercase)
-        .as_deref()
-    {
-        Some("otf") => "font/otf",
-        Some("woff") => "font/woff",
-        Some("woff2") => "font/woff2",
-        _ => "font/ttf",
+    let Some(bytes) = face_bytes(data, index) else {
+        tracing::warn!(family = %family, index, path = %path.display(), "no such face in font file");
+        return status(StatusCode::NOT_FOUND);
     };
     Response::builder()
         .status(StatusCode::OK)
-        .header("content-type", mime)
+        .header("content-type", font_mime(&bytes))
         .header("access-control-allow-origin", "*")
         .body(bytes)
         .unwrap()
@@ -438,16 +575,16 @@ mod tests {
             face(false, 0.0, 0.0, true),
             face(true, 0.4, 0.0, false),
         ];
-        assert_eq!(regular_face(&faces), Some(&faces[2]));
+        assert_eq!(regular_face(&faces), Some(2));
         // Nearest normal width among upright regular weight faces.
         let condensed = [face(false, 0.0, -0.2, false), face(false, 0.0, 0.0, true)];
-        assert_eq!(regular_face(&condensed), Some(&condensed[1]));
+        assert_eq!(regular_face(&condensed), Some(1));
         // A family of italics only takes the nearest regular weight.
         let italics = [face(true, 0.3, 0.0, false), face(true, -0.1, 0.0, true)];
-        assert_eq!(regular_face(&italics), Some(&italics[1]));
+        assert_eq!(regular_face(&italics), Some(1));
         // Equal faces keep the first listed.
         let same = [face(false, 0.0, 0.0, true), face(false, 0.0, 0.0, false)];
-        assert_eq!(regular_face(&same), Some(&same[0]));
+        assert_eq!(regular_face(&same), Some(0));
         assert_eq!(regular_face(&[]), None);
     }
 
@@ -469,5 +606,126 @@ mod tests {
         let again = tauri::async_runtime::block_on(fonts_list());
         assert!(same(&first, &enumerate_fonts()));
         assert!(same(&first, &again));
+    }
+
+    #[test]
+    fn the_family_comes_from_the_url_path_on_every_platform() {
+        let family = |url: &str| family_from_uri(&url.parse().unwrap());
+        // convertFileSrc on macOS and Linux, then on Windows.
+        assert_eq!(
+            family("font://localhost/Fira%20Code").as_deref(),
+            Some("Fira Code")
+        );
+        assert_eq!(
+            family("http://font.localhost/Fira%20Code").as_deref(),
+            Some("Fira Code")
+        );
+        let encoded = urlencoding::encode("游ゴシック");
+        assert_eq!(
+            family(&format!("https://font.localhost/{encoded}")).as_deref(),
+            Some("游ゴシック")
+        );
+        // The family in the host, the URL fontLoader.ts built before,
+        // names nothing.
+        assert_eq!(family("font://Menlo"), None);
+        assert_eq!(family("font://localhost/"), None);
+        assert_eq!(family("font://localhost/%FF"), None);
+    }
+
+    /// A font collection of `faces`, each a face with one table holding
+    /// `body`, laid out the way real collections are: the header, then
+    /// every table directory, then the tables.
+    fn collection(faces: &[(&[u8; 4], &[u8; 4], &[u8])]) -> Vec<u8> {
+        let be = |n: usize| u32::try_from(n).unwrap().to_be_bytes();
+        let header = 12 + 4 * faces.len();
+        let directory = 12 + 16;
+        let mut table_at = header + directory * faces.len();
+        let mut out = b"ttcf".to_vec();
+        out.extend_from_slice(&0x0001_0000u32.to_be_bytes());
+        out.extend_from_slice(&be(faces.len()));
+        for i in 0..faces.len() {
+            out.extend_from_slice(&be(header + directory * i));
+        }
+        let mut bodies = Vec::new();
+        for (version, tag, body) in faces {
+            out.extend_from_slice(*version);
+            out.extend_from_slice(&1u16.to_be_bytes());
+            out.extend_from_slice(&[0; 6]);
+            out.extend_from_slice(*tag);
+            out.extend_from_slice(&[0; 4]);
+            out.extend_from_slice(&be(table_at));
+            out.extend_from_slice(&be(body.len()));
+            table_at += body.len();
+            bodies.extend_from_slice(body);
+        }
+        out.extend_from_slice(&bodies);
+        out
+    }
+
+    #[test]
+    fn a_collection_face_comes_out_as_a_font_of_its_own() {
+        let ttc = collection(&[
+            (&[0, 1, 0, 0], b"bold", b"BOLD"),
+            (b"OTTO", b"regu", b"REGULAR!"),
+        ]);
+        let face = face_bytes(ttc.clone(), 1).expect("the second face");
+        // The second face's directory now opens the file, and its table
+        // offset still finds its table.
+        assert_eq!(&face[..4], b"OTTO");
+        assert_eq!(u16::from_be_bytes([face[4], face[5]]), 1);
+        assert_eq!(&face[12..16], b"regu");
+        let at = |range: std::ops::Range<usize>| {
+            u32::from_be_bytes(face[range].try_into().unwrap()) as usize
+        };
+        let (offset, length) = (at(20..24), at(24..28));
+        assert_eq!(&face[offset..offset + length], b"REGULAR!");
+        assert_eq!(font_mime(&face), "font/otf");
+
+        let first = face_bytes(ttc.clone(), 0).expect("the first face");
+        assert_eq!(&first[12..16], b"bold");
+        assert_eq!(font_mime(&first), "font/ttf");
+        assert!(face_bytes(ttc.clone(), 2).is_none());
+
+        // A table inside the bytes the directory would land on.
+        let mut overlapping = ttc.clone();
+        overlapping[40..44].copy_from_slice(&4u32.to_be_bytes());
+        assert!(face_bytes(overlapping, 0).is_none());
+        // A directory that runs past the end of the file.
+        assert!(face_bytes(ttc[..40].to_vec(), 0).is_none());
+        assert!(face_bytes(b"ttcf".to_vec(), 0).is_none());
+    }
+
+    #[test]
+    fn a_single_face_file_is_served_whole() {
+        let font = b"OTTO\x00\x01rest".to_vec();
+        assert_eq!(face_bytes(font.clone(), 0), Some(font.clone()));
+        assert!(face_bytes(font, 1).is_none());
+        assert_eq!(font_mime(b"wOF2...."), "font/woff2");
+        assert_eq!(font_mime(b"wOFF...."), "font/woff");
+        assert_eq!(font_mime(&[0, 1, 0, 0]), "font/ttf");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_font_scheme_serves_the_regular_face_of_a_family() {
+        // Menlo and Avenir Next live in collections, and Avenir Next
+        // lists Bold first. Geneva is a file of one face.
+        for (family, postscript) in [
+            ("Menlo", "Menlo-Regular"),
+            ("Avenir Next", "AvenirNext-Regular"),
+            ("Geneva", "Geneva"),
+        ] {
+            let url = format!("font://localhost/{}", urlencoding::encode(family));
+            let response = handle_font_uri(&url.parse().unwrap());
+            assert_eq!(response.status(), StatusCode::OK, "{family}");
+            let font = core_text::font::new_from_buffer(response.body())
+                .unwrap_or_else(|()| panic!("CoreText reads the {family} face"));
+            assert_eq!(font.postscript_name(), postscript);
+        }
+        let missing = "font://localhost/No%20Such%20Family%20Vosh%20Test";
+        assert_eq!(
+            handle_font_uri(&missing.parse().unwrap()).status(),
+            StatusCode::NOT_FOUND
+        );
     }
 }

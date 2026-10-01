@@ -1,7 +1,9 @@
 // Dynamic @font-face injection for system fonts that WKWebView refuses
-// to match by name. Backend exposes a font:// URI scheme that streams
-// font files by family name. We mint an @font-face block here pointing
-// at that URI so CSS font-family resolves to the served bytes.
+// to match by name. The backend font scheme serves the regular face of
+// a family named in the URL path. We mint an @font-face block here
+// pointing at that URL so CSS font-family resolves to the served bytes.
+
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 const STYLE_ID = 'vosh-dynamic-font-face';
 const loaded = new Set<string>();
@@ -16,24 +18,42 @@ function styleEl(): HTMLStyleElement {
   return el;
 }
 
+// The URL the backend font scheme serves `family` at. Tauri's
+// convertFileSrc encodes the family into the path, which is where the
+// backend reads it: font://localhost/<family> on macOS and Linux,
+// http://font.localhost/<family> on Windows. Null outside Tauri, where
+// no scheme answers.
+export function fontUrl(family: string): string | null {
+  try {
+    return convertFileSrc(family, 'font');
+  } catch {
+    return null;
+  }
+}
+
+// The @font-face block that names the face at `url` after `family`.
+export function fontFaceCss(family: string, url: string): string {
+  return `
+@font-face {
+  font-family: ${JSON.stringify(family)};
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url(${JSON.stringify(url)});
+}
+`;
+}
+
 // Inject (or no-op if already injected) an @font-face for the given
 // family. The CSS family name in the @font-face matches `family` so
 // downstream font-family rules can target it directly.
 export function loadSystemFont(family: string): void {
   if (!family) return;
   if (loaded.has(family)) return;
+  const url = fontUrl(family);
+  if (!url) return;
   loaded.add(family);
-  const encoded = encodeURIComponent(family);
-  const css = `
-@font-face {
-  font-family: ${JSON.stringify(family)};
-  font-style: normal;
-  font-weight: 400;
-  font-display: block;
-  src: url("font://${encoded}");
-}
-`;
-  styleEl().appendChild(document.createTextNode(css));
+  styleEl().appendChild(document.createTextNode(fontFaceCss(family, url)));
 }
 
 // Walk a font-family CSS value, pick out quoted or unquoted family

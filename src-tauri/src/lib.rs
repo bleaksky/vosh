@@ -146,11 +146,17 @@ pub fn run() {
         .on_menu_event(app_menu::on_event);
 
     builder
-        // Serves font files by family name. Frontend mints @font-face
-        // blocks pointing at font://<family> so the webview can render
-        // user-installed fonts WebKit otherwise refuses to match.
-        .register_uri_scheme_protocol("font", |_ctx, request| {
-            handle_font_uri(request.uri())
+        // Serves the regular face of a system font family. fontLoader.ts
+        // mints @font-face blocks whose URL carries the family in its
+        // path (font://localhost/<family>, or http://font.localhost/
+        // <family> on Windows) so the webview can render user-installed
+        // fonts WebKit otherwise refuses to match. The lookup and the
+        // file read run on the blocking pool, never on the main thread.
+        .register_asynchronous_uri_scheme_protocol("font", |_ctx, request, responder| {
+            let uri = request.uri().clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(handle_font_uri(&uri));
+            });
         })
         // Closing the main window should take every auxiliary window
         // (settings, etc.) down with it. Tauri only exits the process
