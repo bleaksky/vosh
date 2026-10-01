@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { BandEnv } from '../../lib/bandCells';
 import { menuPosition } from '../../lib/promptCard';
+import { MORE_STYLES_PLACE } from './PromptPiece';
 import type { PromptCheckRead } from '../../lib/session';
 import { CandidateBox, MatchRow } from './PromptCandidate';
 import { CodesEntry } from './PromptCodes';
@@ -235,6 +236,17 @@ describe('where a card menu opens', () => {
       left: 100,
       top: 97.5,
     });
+  });
+
+  it('opens More styles above its button, clear of the Underline row below', () => {
+    // The Style row's More styles button, with the Underline row 36 px
+    // under it while an underline is on.
+    const more = { left: 360, top: 520, right: 452, bottom: 548 };
+    const underlineRowTop = more.bottom + 8;
+    const menu = menuPosition(more, { width: 184, height: 112 }, MORE_STYLES_PLACE, viewport);
+    expect(menu.left).toBe(more.left);
+    expect(menu.top + 112).toBeLessThanOrEqual(more.top);
+    expect(menu.top + 112).toBeLessThan(underlineRowTop);
   });
 
   it('stays inside the window', () => {
