@@ -206,7 +206,7 @@ pub(crate) enum StatePayload {
 /// short keywords like "helg" won't equality-match
 /// "The Baron Helgardium" but the backend already resolved the
 /// pointer via substring.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct TargetPayload {
     pub name: Option<String>,
     pub room_idx: Option<usize>,
@@ -1403,11 +1403,68 @@ pub(crate) fn line_script_result(ran: input::Ran) -> ApplyResult {
     apply
 }
 
+/// What a line can change that shows outside the terminal text: the
+/// target display and how your prompt looks.
+struct Shown {
+    target: TargetPayload,
+    look: (bool, String, vosh_prompt::PromptShow),
+}
+
+impl Shown {
+    fn of(p: &Profile) -> Self {
+        Self {
+            target: TargetPayload {
+                name: p.target.name.clone(),
+                room_idx: p.target.room_idx,
+                quick_keys: p.target.quick_keys.clone(),
+            },
+            look: crate::commands::prompt_look(p),
+        }
+    }
+}
+
+/// What lines a timer, the tick command or Lua ran changed outside the
+/// terminal text. Typed input sends the same two things for a typed line.
+#[derive(Debug, Default, PartialEq)]
+struct ShownChanges {
+    /// The target display, sent on `session://target`.
+    target: Option<TargetPayload>,
+    /// Your prompt looks different, so the open row repaints.
+    repaint: bool,
+}
+
+impl ShownChanges {
+    /// What `p` changed since `before` was taken.
+    fn since(before: Shown, p: &Profile) -> Self {
+        let after = Shown::of(p);
+        Self {
+            repaint: after.look != before.look,
+            target: (after.target != before.target).then_some(after.target),
+        }
+    }
+
+    /// Ask for the repaint and send the target, as typed input does. The
+    /// repaint request goes through the session handle, as the typed one
+    /// does, from a task of its own, since `session_disconnect` holds the
+    /// handle's lock while it waits for this session to end.
+    fn send<R: tauri::Runtime>(self, app: &AppHandle<R>) {
+        if self.repaint {
+            let state = app.state::<crate::commands::SharedState>().inner().clone();
+            tokio::spawn(async move { crate::commands::request_prompt_repaint(&state).await });
+        }
+        if let Some(payload) = self.target {
+            let _ = app.emit("session://target", payload);
+        }
+    }
+}
+
 /// What lines from a timer, the tick or `mud.input` produced under the
 /// profile lock.
 struct FiredRun {
     /// What the lines ask for, with every list they changed.
     apply: ApplyResult,
+    /// What they changed outside the terminal text.
+    shown: ShownChanges,
     effects: input::LineEffects,
 }
 
@@ -1426,6 +1483,7 @@ fn run_lines_locked<'a>(
     shared: Option<&SharedLayer>,
 ) -> FiredRun {
     let lists_before = ListRevisions::of(p);
+    let shown_before = Shown::of(p);
     let mut effects = input::LineEffects::default();
     let mut apply = ApplyResult::default();
     for line in lines {
@@ -1433,7 +1491,11 @@ fn run_lines_locked<'a>(
         apply.append(line_script_result(ran));
     }
     apply.lists = ListChanges::since(lists_before, p);
-    FiredRun { apply, effects }
+    FiredRun {
+        apply,
+        shown: ShownChanges::since(shown_before, p),
+        effects,
+    }
 }
 
 /// Run one command produced by a timer (or any non-typed source) through
@@ -1454,11 +1516,16 @@ async fn run_fired_command<R: tauri::Runtime>(
     sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
     let shared = crate::commands::shared_layer_for_lines(app, [command]).await;
-    let FiredRun { apply, effects } = {
+    let FiredRun {
+        apply,
+        shown,
+        effects,
+    } = {
         let mut p = profile.lock().await;
         run_fired_locked(&mut p, command, shared.as_ref())
     };
     crate::commands::settle_line_effects(app, effects).await;
+    shown.send(app);
     let mut io = ScriptIo::Session(stream, sink);
     apply_script_result(app, &mut io, profile, timers, apply).await
 }
@@ -3237,6 +3304,7 @@ async fn apply_script_result<R: tauri::Runtime>(
                 .await;
         let FiredRun {
             apply: next,
+            shown,
             effects,
         } = {
             let mut p = profile.lock().await;
@@ -3247,6 +3315,7 @@ async fn apply_script_result<R: tauri::Runtime>(
             )
         };
         crate::commands::settle_line_effects(app, effects).await;
+        shown.send(app);
         apply = next;
     }
 }
@@ -3761,6 +3830,26 @@ mod tests {
         assert_eq!(p.tick.config.warn_at_secs, Some(10));
         let run = super::run_fired_locked(&mut p, "#tick", None);
         assert!(!run.effects.tick_changed);
+    }
+
+    #[test]
+    fn a_timer_command_says_what_it_changed_outside_the_text() {
+        let mut p = Profile::default();
+        // A plain command changes neither, so nothing goes out.
+        let run = super::run_fired_locked(&mut p, "look", None);
+        assert_eq!(run.shown, super::ShownChanges::default());
+
+        let run = super::run_fired_locked(&mut p, "tar goblin", None);
+        let target = run.shown.target.expect("the new target");
+        assert_eq!(target.name.as_deref(), Some("goblin"));
+        assert!(!run.shown.repaint);
+        // The same target again changes nothing.
+        let run = super::run_fired_locked(&mut p, "tar goblin", None);
+        assert_eq!(run.shown, super::ShownChanges::default());
+
+        let run = super::run_fired_locked(&mut p, "#prompt default", None);
+        assert!(run.shown.repaint);
+        assert!(run.shown.target.is_none());
     }
 
     #[test]
