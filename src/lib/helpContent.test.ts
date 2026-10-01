@@ -378,7 +378,10 @@ describe('the help on where your prompt shows', () => {
   it('names the row and each place it offers', () => {
     const text = topic().body;
     expect(topic().section).toBe('Shape the window');
-    expect(text).toContain('pick a place under `Where your prompt shows`');
+    expect(text).toContain(
+      'Open Settings, choose Input, and pick a place under `Where your prompt shows` in the Prompt section.',
+    );
+    expect(text).not.toContain('`Advanced`');
     expect(text).toContain('- `In the text` shows each prompt where the game sends it.');
     expect(text).toContain('- `Lifted` keeps every prompt in the text on a raised band');
     expect(text).toContain('- `Pinned` takes your prompts out of the text');
