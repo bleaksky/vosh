@@ -529,3 +529,63 @@ describe('where the open region starts', () => {
     expect(writer.region()).toBeNull();
   });
 });
+
+// A resize pads the screen so the cursor sits on its last row. A design
+// that lost a row leaves your prompt above that row, and padding written
+// after the open region would close it while the session still repaints
+// it, with the cursor on a row of its own below your prompt.
+describe('padding the screen down to its last row', () => {
+  const cursor = (term: Terminal) => [term.buffer.active.cursorY, term.buffer.active.cursorX];
+
+  it('writes the line ends while no region is open', async () => {
+    const { term, writer } = setup(40, 10);
+    writer.output({ text: 'You are hungry.\r\n' });
+    writer.pad('\r\n'.repeat(8));
+    await parsed(writer);
+    expect(cursor(term)).toEqual([9, 0]);
+  });
+
+  it('writes nothing after the open region, so a later replace still lands', async () => {
+    const { term, writer } = setup(40, 10);
+    writer.output({ text: `You are hungry.\r\n${mark(1)}Tank 100%\r\n<1020> ` });
+    writer.output(replace(1, `${mark(2)}SHORT> `));
+    await parsed(writer);
+    writer.pad('\r\n'.repeat(8));
+    await parsed(writer);
+    expect(cursor(term)).toEqual([1, 7]);
+    expect(writer.region()).toEqual({ gen: 2, row: 1, col: 0 });
+    writer.output(replace(2, `${mark(3)}EDITED> `));
+    writer.local('look\r\n');
+    await parsed(writer);
+    expect(screen(term)).toEqual(['You are hungry.', 'EDITED> look']);
+  });
+
+  it('replaces the open region after the screen grows or shrinks', async () => {
+    const { term, writer } = setup(40, 10);
+    writer.output({ text: `You are hungry.\r\n${mark(1)}<1020> ` });
+    await parsed(writer);
+    let gen = 1;
+    for (const rows of [14, 6]) {
+      term.resize(40, rows);
+      writer.pad('\r\n'.repeat(rows));
+      writer.output(replace(gen, `${mark(gen + 1)}[${rows}] `));
+      gen += 1;
+      await parsed(writer);
+      expect(screen(term).slice(-1), `${rows} rows`).toEqual([`[${rows}] `]);
+      expect(screen(term).join('\n')).not.toContain('1020');
+    }
+  });
+
+  it('keeps a preview on the open region until the session clears it', async () => {
+    const { term, writer } = setup(40, 10);
+    writer.output({ text: `You are hungry.\r\n${mark(1)}<180> `, restore: `${mark(1)}<1020> ` });
+    await parsed(writer);
+    writer.pad('\r\n'.repeat(8));
+    await parsed(writer);
+    expect(screen(term)).toEqual(['You are hungry.', '<180> ']);
+    writer.output(replace(1, `${mark(2)}<1020> `));
+    await parsed(writer);
+    expect(screen(term)).toEqual(['You are hungry.', '<1020> ']);
+    expect(writer.region()).toEqual({ gen: 2, row: 1, col: 0 });
+  });
+});

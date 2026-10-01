@@ -185,6 +185,7 @@ interface Mark {
 type Item =
   | { kind: 'output'; out: RegionOutput }
   | { kind: 'local'; text: string }
+  | { kind: 'pad'; text: string }
   | { kind: 'parsed'; then: () => void };
 
 /** Writes to one xterm in order, and applies the region rules. */
@@ -227,6 +228,16 @@ export class RegionWriter {
    *  lands after the open region, so it closes it. */
   local(text: string): void {
     if (text.length > 0) this.push({ kind: 'local', text });
+  }
+
+  /** Line ends that bring the cursor down to the last row, as padding
+   *  after a resize. While a region is open they write nothing. They
+   *  would land after it and close it while the session still repaints
+   *  it, and your echo would start on a row of its own below your
+   *  prompt. The region keeps its place, and the next output fills the
+   *  rows below it. */
+  pad(text: string): void {
+    if (text.length > 0) this.push({ kind: 'pad', text });
   }
 
   /** Call `then` with the buffer row and column each replace that writes
@@ -329,6 +340,10 @@ export class RegionWriter {
       this.wait(() => queueMicrotask(then));
       return;
     }
+    if (item.kind === 'pad') {
+      if (this.openGen === null) this.run({ kind: 'local', text: item.text });
+      return;
+    }
     // A preview goes back to the live render before anything lands after
     // it (rule d).
     if (this.restore && this.restore.gen === this.openGen && this.lands(item)) {
@@ -355,7 +370,7 @@ export class RegionWriter {
    *  region itself goes first and takes its place, restore and all. */
   private lands(item: Item): boolean {
     if (item.kind === 'local') return item.text.length > 0;
-    if (item.kind === 'parsed') return false;
+    if (item.kind === 'parsed' || item.kind === 'pad') return false;
     const { text, replace } = item.out;
     if (replace && replace.gen === this.openGen) return false;
     if (text.length > 0) return true;
