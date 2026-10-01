@@ -754,6 +754,24 @@ describe('a session output payload', () => {
     expect(text(out.replace?.bytes)).toBe('\x1b]7717;o;8\x07NEW> ');
     expect(text(out.restore)).toBe('LIVE> ');
   });
+
+  it('keeps where each piece of your design landed on the band', () => {
+    const span = {
+      piece: 1,
+      row: 1,
+      col: 1,
+      width: 3,
+      fg: { kind: 'default' as const },
+      bg: { kind: 'default' as const },
+      bold: false,
+      italic: false,
+      underline: false,
+    };
+    const out = decodeOutputPayload({ b64: '', pin: b64('tank\r\n<765>'), pin_spans: [span] });
+    expect(text(out.pin)).toBe('tank\r\n<765>');
+    expect(out.pinSpans).toEqual([span]);
+    expect(decodeOutputPayload({ b64: '', pin: b64('[765hp]') }).pinSpans).toBeUndefined();
+  });
 });
 
 describe('the prompt fields a command changed', () => {

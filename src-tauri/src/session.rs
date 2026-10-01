@@ -134,6 +134,11 @@ pub(crate) struct OutputPayload {
     /// Only the band reads it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pin: Option<String>,
+    /// Where each piece of your design landed on the band `pin` shows,
+    /// rows counted from the band's first. Absent when the band shows no
+    /// design. See `vosh_prompt::stage::Output::pin_spans`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pin_spans: Option<Vec<vosh_prompt::Span>>,
     /// Line ends at the end of this payload that each renderer keeps back
     /// until the next write lands on it, as base64. See
     /// `vosh_prompt::stage::Output::hold`.
@@ -2967,6 +2972,7 @@ impl OutputPayload {
             }),
             restore: out.restore.as_deref().map(base64_encode),
             pin: out.pin.as_deref().map(base64_encode),
+            pin_spans: out.pin_spans.clone(),
             hold: (!out.hold.is_empty()).then(|| base64_encode(&out.hold)),
             pin_row: out.pin_row,
         }
