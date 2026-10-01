@@ -21,8 +21,11 @@ import {
   openingStep,
   savedCapture,
   savedForName,
+  takeBackOnto,
+  undoEntry,
   type CardStep,
   type MoreItemId,
+  type UndoEntry,
 } from '../../lib/promptCard';
 import { needsCode, type LayoutId } from '../../lib/promptPicker';
 import {
@@ -225,7 +228,7 @@ export function PromptCard({
   const [lineTriggers, setLineTriggers] = useState<PromptLineTrigger[]>([]);
   const insertRef = useRef<((token: string) => void) | null>(null);
   const edits = useRef<Promise<unknown>>(Promise.resolve());
-  const undo = useRef<PromptConfig[]>([]);
+  const undo = useRef<UndoEntry[]>([]);
   const game = useGamePrompt();
   const env = useBandEnv(themeTerminalColors, brightBold, renderer);
   const cellW = useCellWidth(monoFamily);
@@ -469,7 +472,9 @@ export function PromptCard({
   const save = (next: PromptConfig, keepUndo = true, asIs = false) => {
     const before = latest.current;
     if (!before) return;
-    if (keepUndo) undo.current = [...undo.current, before].slice(-UNDO_DEPTH);
+    // Command Z takes back only what this change made.
+    const entry = keepUndo ? undoEntry(before, next) : null;
+    if (entry) undo.current = [...undo.current, entry].slice(-UNDO_DEPTH);
     take(next);
     void promptConfigSet(next, { asIs }).catch((e: unknown) => {
       take(before);
@@ -479,7 +484,8 @@ export function PromptCard({
 
   const takeBack = () => {
     const last = undo.current.pop();
-    if (last) save(last, false);
+    const now = latest.current;
+    if (last && now) save(takeBackOnto(now, last), false, true);
   };
 
   /** Make `ops` one after another on the design as it stands, save the

@@ -24,6 +24,8 @@ import {
   savedCapture,
   savedForName,
   startRows,
+  takeBackOnto,
+  undoEntry,
   type CardStep,
 } from './promptCard';
 import type {
@@ -587,5 +589,39 @@ describe('the legend and the box lines', () => {
       [{ from: 6, to: 8, warn: false }],
       [{ from: 3, to: 4, warn: false }],
     ]);
+  });
+});
+
+describe('Command Z', () => {
+  const table: PromptConfig = {
+    draw: true,
+    template: '[%hp]',
+    previous_templates: [],
+    capture: { kind: 'aabahran', prompt: '<%hhp> ', fprompt: '', follow_game: true },
+    show: 'text',
+  };
+
+  it('takes back only what your change made, onto the table as it stands now', () => {
+    const bold: PromptConfig = { ...table, template: '[%s_bold%hp]' };
+    const entry = undoEntry(table, bold);
+    expect(entry).toEqual({ template: '[%hp]' });
+    // The game sent new codes and you chose Pinned in Settings since.
+    const now: PromptConfig = {
+      ...bold,
+      capture: { kind: 'aabahran', prompt: '<%hhp %mm> ', fprompt: '', follow_game: true },
+      show: 'pinned',
+    };
+    expect(takeBackOnto(now, entry!)).toEqual({ ...now, template: '[%hp]' });
+  });
+
+  it('takes back the switch, and a preset with the switch it turned on', () => {
+    expect(undoEntry(table, { ...table, draw: false })).toEqual({ draw: true });
+    const off = { ...table, draw: false };
+    const preset = { ...off, template: '%hp ', draw: true };
+    expect(undoEntry(off, preset)).toEqual({ template: '[%hp]', draw: false });
+  });
+
+  it('keeps nothing for a change that changed nothing', () => {
+    expect(undoEntry(table, { ...table })).toBeNull();
   });
 });
