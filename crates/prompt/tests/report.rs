@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use vosh_prompt::aabahran::{WarningKind, Which, Who};
-use vosh_prompt::report::{report, CompileRequest};
+use vosh_prompt::report::{line_report, report, CompileRequest};
 use vosh_prompt::template::TokenKind;
 use vosh_prompt::Template;
 
@@ -254,4 +254,71 @@ fn a_pattern_that_does_not_read_says_so() {
         two.error.map(|e| e.message),
         Some("Vosh reads your prompt from one line.".to_string())
     );
+}
+
+#[test]
+fn a_line_another_game_prints_reports_its_numbers_and_the_names_it_reads() {
+    let text = "<100hp 50m 30mv> ";
+    let line = line_report(text, &[], &|_| false);
+    assert!(line.ok);
+    assert_eq!(line.shapes.len(), 1);
+    assert_eq!(line.shapes[0].kind, "line");
+    assert_eq!(
+        line.shapes[0].lines,
+        [r"^<(?<hp>-?\d+)hp +(?<mana>-?\d+)m +(?<move>-?\d+)mv> $"]
+    );
+    assert!(line.shapes[0].settle);
+    assert_eq!(line.vars, ["hp", "mana", "move"]);
+    assert!(line.names.is_empty());
+    let marks: Vec<(&str, &str, [usize; 2])> = line
+        .numbers
+        .iter()
+        .map(|n| (n.name.as_str(), n.label.as_str(), n.span))
+        .collect();
+    assert_eq!(
+        marks,
+        [
+            ("hp", "Health", [1, 4]),
+            ("mana", "Mana", [7, 9]),
+            ("move", "Moves", [11, 13])
+        ]
+    );
+    assert!(preset(&line, "how_full").is_some());
+    // Names you give, and a number you leave out.
+    let named = line_report(text, &["health".into(), String::new()], &|_| false);
+    assert_eq!(named.vars, ["health", "move"]);
+    assert_eq!(named.numbers[1].name, "");
+    assert_eq!(named.numbers[1].suggested, "mana");
+    // A name no group can carry goes by the number of its group.
+    let odd = line_report("1 2", &["9x".into()], &|_| false);
+    assert_eq!(odd.names, BTreeMap::from([("1".into(), "9x".into())]));
+    assert_eq!(odd.vars, ["9x", "n2"]);
+    // The card reads the report as JSON.
+    let json = serde_json::to_value(&line).expect("json");
+    assert_eq!(
+        json["numbers"][0],
+        serde_json::json!({
+            "span": [1, 4],
+            "text": "100",
+            "name": "hp",
+            "suggested": "hp",
+            "label": "Health",
+            "max": false,
+        })
+    );
+    assert_eq!(json["names"], serde_json::json!({}));
+    // Codes have neither.
+    let codes = codes(JAMES_PROMPT, "", false);
+    assert!(codes.numbers.is_empty() && codes.names.is_empty());
+    // A pattern reports the names it was handed.
+    let pattern = report(
+        &CompileRequest::Regex {
+            lines: vec![r"^<(\d+)hp> $".into()],
+            names: BTreeMap::from([("1".into(), "hp".into())]),
+        },
+        Who::default(),
+        &|_| false,
+    );
+    assert_eq!(pattern.names, BTreeMap::from([("1".into(), "hp".into())]));
+    assert_eq!(pattern.vars, ["hp"]);
 }

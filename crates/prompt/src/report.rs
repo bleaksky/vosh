@@ -3,7 +3,9 @@
 //! The report is pure. It says whether Vosh can read the prompt, the ways
 //! the game prints it, the values it reads, each code with its label, the
 //! warnings with the span of the setting each is about, and the designs
-//! the card offers to start from.
+//! the card offers to start from. [`line_report`] reports a capture built
+//! from a line another game prints, with each number in it, for
+//! `prompt_capture_from_line`.
 
 use std::collections::BTreeMap;
 
@@ -13,6 +15,7 @@ use crate::aabahran::lex::{self, Token as GameToken};
 use crate::aabahran::{self, Origin, ShapeKind, Which, Who};
 use crate::capture;
 use crate::config::{CaptureConfig, RegexCapture};
+use crate::generic;
 use crate::presets::{self, Preset};
 
 /// What `prompt_compile` reads.
@@ -59,6 +62,13 @@ pub struct CompileReport {
     pub codes: Vec<ReportCode>,
     pub warnings: Vec<ReportWarning>,
     pub presets: Vec<Preset>,
+    /// The value each group of a pattern feeds where it differs from the
+    /// group's own name, as `[prompt.capture] names` keeps it. Empty for
+    /// codes.
+    pub names: BTreeMap<String, String>,
+    /// Each number of a line you pointed at, with the name it reads into,
+    /// for the card to mark. Empty otherwise.
+    pub numbers: Vec<generic::Number>,
 }
 
 /// Why a capture does not compile.
@@ -227,6 +237,8 @@ fn codes_report(prompt: &str, fprompt: &str, typed: bool, who: Who) -> CompileRe
             })
             .collect(),
         presets: presets::aabahran(game),
+        names: BTreeMap::new(),
+        numbers: Vec::new(),
     }
 }
 
@@ -297,6 +309,8 @@ fn regex_report(
         codes: Vec::new(),
         warnings: Vec::new(),
         presets: presets::other(supplied),
+        names: names.clone(),
+        numbers: Vec::new(),
     };
     let pattern = match one_pattern(lines) {
         Ok(pattern) => pattern,
@@ -326,5 +340,18 @@ fn regex_report(
         codes: Vec::new(),
         warnings: Vec::new(),
         presets: presets::other(&reads),
+        names: names.clone(),
+        numbers: Vec::new(),
     }
+}
+
+/// The report for a capture built from `line`, the plain text of a line
+/// another game prints, with `names` for its numbers in order (see
+/// [`generic::from_line`]). Its shape holds the pattern, and its numbers
+/// say where each number sits in the line and what it reads into.
+pub fn line_report(line: &str, names: &[String], supplied: &dyn Fn(&str) -> bool) -> CompileReport {
+    let built = generic::from_line(line, names);
+    let mut report = regex_report(&built.capture.lines, &built.capture.names, supplied);
+    report.numbers = built.numbers;
+    report
 }
