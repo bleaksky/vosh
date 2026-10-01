@@ -2283,10 +2283,12 @@ async fn a_line_typed_after_the_game_closes_the_link_says_not_connected() {
             .any(|e| e["kind"] == "disconnected")
     })
     .await;
+    // An empty slot counts too, so a session that clears its own slot
+    // as it ends still passes this wait.
     h.until("the session ends", |h| {
         h.state.session.try_lock().is_ok_and(|s| {
             s.as_ref()
-                .is_some_and(crate::session::SessionHandle::has_ended)
+                .is_none_or(crate::session::SessionHandle::has_ended)
         })
     })
     .await;
