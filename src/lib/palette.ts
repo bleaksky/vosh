@@ -507,7 +507,7 @@ export async function chooseTheme(id: string): Promise<void> {
 }
 
 /** Fetch the user's aliases as palette rows. Parameterless aliases
- *  run immediately. Ones whose template references captures insert
+ *  run immediately. Ones whose expansion references captures insert
  *  the alias name into the input for the user to finish. */
 export async function buildAliasEntries(deps: PaletteDeps): Promise<PaletteEntry[]> {
   try {
@@ -517,17 +517,17 @@ export async function buildAliasEntries(deps: PaletteDeps): Promise<PaletteEntry
     const rows: PaletteEntry[] = [];
     for (const raw of parsed) {
       if (!raw || typeof raw !== 'object') continue;
-      const r = raw as { name?: unknown; template?: unknown; enabled?: unknown };
+      const r = raw as { name?: unknown; expansion?: unknown; enabled?: unknown };
       const name = typeof r.name === 'string' ? r.name.trim() : '';
       if (name.length === 0 || r.enabled === false) continue;
-      const template = typeof r.template === 'string' ? r.template : '';
-      const takesArgs = /%\d|\$\d/.test(template);
+      const expansion = typeof r.expansion === 'string' ? r.expansion : '';
+      const takesArgs = /%\d|\$\d/.test(expansion);
       rows.push({
         id: `alias-${name}`,
         section: 'aliases',
         title: name,
-        keywords: template,
-        ...(template ? { meta: template } : {}),
+        keywords: expansion,
+        ...(expansion ? { meta: expansion } : {}),
         metaMono: true,
         searchOnly: true,
         run: () => {
