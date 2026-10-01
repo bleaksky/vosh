@@ -2018,12 +2018,14 @@ async fn lua_you_type_starts_timers_runs_input_and_sets_prompt_values() {
     );
 
     // A line mud.input runs goes through the input pipeline, slash
-    // commands and the game alike.
+    // commands and the game alike. The game answers compact with a line
+    // nothing before it shows, so only a line that reached the game
+    // brings it.
     h.type_line("#lua mud.input('#echo ' .. 'input' .. ' ran')")
         .await;
     h.until_shown("input ran").await;
-    h.type_line("#lua mud.input('lo' .. 'ok')").await;
-    h.until_shown("[Exits: south]").await;
+    h.type_line("#lua mud.input('comp' .. 'act')").await;
+    h.until_shown("Compact mode set.").await;
 
     // Lua that keeps asking mud.input to run it again stops at the depth
     // an alias may go.
