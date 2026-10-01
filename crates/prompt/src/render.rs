@@ -22,7 +22,8 @@ use serde::Serialize;
 
 use crate::format::{h_band, how_full, p_band, tank_bar_cells, Band, Resolved, Value};
 use crate::template::{
-    BarColor, Code, ColorSpec, FieldRef, Format, PieceKind, Template, TokenKind, ValueRef,
+    BarColor, Code, ColorSpec, FieldRef, Format, PieceKind, Template, TokenKind, UnderlineStyle,
+    ValueRef,
 };
 
 /// Ends every non-empty render, so an unclosed color never bleeds into the
@@ -91,6 +92,11 @@ pub struct Span {
     pub bold: bool,
     pub italic: bool,
     pub underline: bool,
+    /// The whole look at the piece's first cell, dim, the underline's
+    /// kind and color, inverse and strike included, so a test can check
+    /// an edit kept it. The webview reads the fields above alone.
+    #[serde(skip)]
+    pub look: SgrState,
 }
 
 /// A drawn template.
@@ -131,12 +137,60 @@ impl Color {
         }
     }
 
+    /// The SGR parameters for the underline's color. SGR 58 has no short
+    /// form for a theme color, so one goes as its palette index, and a
+    /// true color names its empty color space as terminals expect.
+    fn underline_params(self) -> String {
+        match self {
+            Color::Default => "59".to_string(),
+            Color::Ansi(n) | Color::Index(n) => format!("58:5:{n}"),
+            Color::Rgb(r, g, b) => format!("58:2::{r}:{g}:{b}"),
+        }
+    }
+
+    fn layer_params(self, layer: Layer) -> String {
+        match layer {
+            Layer::Fg => self.params(false),
+            Layer::Bg => self.params(true),
+            Layer::Underline => self.underline_params(),
+        }
+    }
+
     fn span(self) -> SpanColor {
         match self {
             Color::Default => SpanColor::Default,
             Color::Ansi(index) | Color::Index(index) => SpanColor::Index { index },
             Color::Rgb(r, g, b) => SpanColor::Rgb { r, g, b },
         }
+    }
+}
+
+/// What a color code paints.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Layer {
+    Fg,
+    Bg,
+    Underline,
+}
+
+/// An extended color, `5;n` or `2;r;g;b`, from the numbers after a 38,
+/// 48 or 58. A colon form may name a color space first, `2::r:g:b`, and
+/// `colon` says the numbers came that way. Returns the color and how many
+/// numbers it took.
+fn extended_color(nums: &[u32], colon: bool) -> (Option<Color>, usize) {
+    let byte = |n: Option<&u32>| n.copied().unwrap_or(0).min(255) as u8;
+    match nums.first() {
+        Some(5) => (nums.get(1).map(|n| Color::Index(byte(Some(n)))), 2),
+        Some(2) => {
+            let at = if colon && nums.len() > 4 { 2 } else { 1 };
+            let rgb = Color::Rgb(
+                byte(nums.get(at)),
+                byte(nums.get(at + 1)),
+                byte(nums.get(at + 2)),
+            );
+            (Some(rgb), 4)
+        }
+        _ => (None, 1),
     }
 }
 
@@ -148,64 +202,86 @@ pub struct SgrState {
     pub bold: bool,
     pub dim: bool,
     pub italic: bool,
-    pub underline: bool,
+    /// The kind of underline, None with no underline.
+    pub underline: Option<UnderlineStyle>,
+    /// The underline's color, Default for the text's own.
+    pub underline_color: Color,
     pub inverse: bool,
     pub strike: bool,
 }
 
 impl SgrState {
-    /// Apply an SGR parameter list such as `0;1;31` or `38;5;240`.
+    /// Apply an SGR parameter list such as `0;1;31`, `38;5;240` or
+    /// `4:3;58:2::191:97:106`. A parameter with colons is one code with
+    /// its sub parameters, so `4:3` is a curly underline and never an
+    /// underline and an italic.
     pub fn apply(&mut self, params: &str) {
-        let mut nums = params.split([';', ':']).map(|p| {
+        let num = |p: &str| {
             if p.is_empty() {
                 0
             } else {
                 p.parse::<u32>().unwrap_or(u32::MAX)
             }
-        });
-        while let Some(n) = nums.next() {
+        };
+        let groups: Vec<Vec<u32>> = params
+            .split(';')
+            .map(|group| group.split(':').map(num).collect())
+            .collect();
+        let mut i = 0;
+        while i < groups.len() {
+            let n = groups[i][0];
+            let subs = &groups[i][1..];
             match n {
                 0 => *self = SgrState::default(),
                 1 => self.bold = true,
                 2 => self.dim = true,
                 3 => self.italic = true,
-                4 => self.underline = true,
+                4 => {
+                    self.underline = match subs.first() {
+                        Some(kind) => UnderlineStyle::from_sgr(*kind),
+                        None => Some(UnderlineStyle::Single),
+                    };
+                }
                 7 => self.inverse = true,
                 9 => self.strike = true,
+                21 => self.underline = Some(UnderlineStyle::Double),
                 22 => {
                     self.bold = false;
                     self.dim = false;
                 }
                 23 => self.italic = false,
-                24 => self.underline = false,
+                24 => self.underline = None,
                 27 => self.inverse = false,
                 29 => self.strike = false,
                 30..=37 => self.fg = Color::Ansi((n - 30) as u8),
                 39 => self.fg = Color::Default,
                 40..=47 => self.bg = Color::Ansi((n - 40) as u8),
                 49 => self.bg = Color::Default,
+                59 => self.underline_color = Color::Default,
                 90..=97 => self.fg = Color::Ansi((n - 90 + 8) as u8),
                 100..=107 => self.bg = Color::Ansi((n - 100 + 8) as u8),
-                38 | 48 => {
-                    let color = match nums.next() {
-                        Some(5) => nums.next().map(|i| Color::Index(i.min(255) as u8)),
-                        Some(2) => {
-                            let mut channel = || nums.next().unwrap_or(0).min(255) as u8;
-                            let (r, g, b) = (channel(), channel(), channel());
-                            Some(Color::Rgb(r, g, b))
-                        }
-                        _ => None,
+                38 | 48 | 58 => {
+                    let color = if subs.is_empty() {
+                        // The semicolon form: the color takes the
+                        // parameters after this one.
+                        let rest: Vec<u32> = groups[i + 1..].iter().map(|g| g[0]).collect();
+                        let (color, used) = extended_color(&rest, false);
+                        i += used.min(rest.len());
+                        color
+                    } else {
+                        extended_color(subs, true).0
                     };
                     if let Some(color) = color {
-                        if n == 38 {
-                            self.fg = color;
-                        } else {
-                            self.bg = color;
+                        match n {
+                            38 => self.fg = color,
+                            48 => self.bg = color,
+                            _ => self.underline_color = color,
                         }
                     }
                 }
                 _ => {}
             }
+            i += 1;
         }
     }
 
@@ -229,9 +305,13 @@ impl SgrState {
                 p.push("2".into());
             }
         }
+        if self.italic != to.italic {
+            p.push(if to.italic { "3" } else { "23" }.into());
+        }
+        if self.underline != to.underline {
+            p.push(to.underline.map_or("24", UnderlineStyle::sgr).into());
+        }
         for (from, want, on, off) in [
-            (self.italic, to.italic, "3", "23"),
-            (self.underline, to.underline, "4", "24"),
             (self.inverse, to.inverse, "7", "27"),
             (self.strike, to.strike, "9", "29"),
         ] {
@@ -244,6 +324,9 @@ impl SgrState {
         }
         if self.bg != to.bg {
             p.push(to.bg.params(true));
+        }
+        if self.underline_color != to.underline_color {
+            p.push(to.underline_color.underline_params());
         }
         p.join(";")
     }
@@ -405,7 +488,8 @@ impl Writer {
                 bg: look.bg.span(),
                 bold: look.bold,
                 italic: look.italic,
-                underline: look.underline,
+                underline: look.underline.is_some(),
+                look,
             });
         }
     }
@@ -522,13 +606,14 @@ fn write_code(w: &mut Writer, template: &Template, token: usize, values: &dyn Va
     let TokenKind::Code(code) = &template.tokens()[token].kind else {
         return;
     };
-    let (spec, background) = match code {
+    let (spec, layer) = match code {
         Code::Reset => return w.sgr("0"),
         Code::Style(style) => return w.sgr(style.sgr()),
-        Code::Fg(spec) => (spec, false),
-        Code::Bg(spec) => (spec, true),
+        Code::Fg(spec) => (spec, Layer::Fg),
+        Code::Bg(spec) => (spec, Layer::Bg),
+        Code::UnderlineColor(spec) => (spec, Layer::Underline),
     };
-    match color_params(spec, background, values) {
+    match color_params(spec, layer, values) {
         Some(params) => w.sgr(&params),
         None => w.text(template.token_text(token), false),
     }
@@ -537,16 +622,28 @@ fn write_code(w: &mut Writer, template: &Template, token: usize, values: &dyn Va
 /// The SGR parameters for a color spec. None when a color by value names
 /// a field nothing knows, or a value with no share, so the code prints as
 /// written as it always did.
-fn color_params(spec: &ColorSpec, background: bool, values: &dyn Values) -> Option<String> {
-    let color = |c: Color| Some(c.params(background));
+fn color_params(spec: &ColorSpec, layer: Layer, values: &dyn Values) -> Option<String> {
+    let color = |c: Color| Some(c.layer_params(layer));
     match spec {
         ColorSpec::Named(n) => color(Color::Ansi(*n)),
         ColorSpec::Index(n) => color(Color::Index(*n)),
         ColorSpec::Rgb(r, g, b) => color(Color::Rgb(*r, *g, *b)),
         ColorSpec::Default => color(Color::Default),
         ColorSpec::ByValue { field, game } => {
-            let band =
-                |band: Band| Some(if background { band.bg() } else { band.fg() }.to_string());
+            let band = |band: Band| {
+                Some(match layer {
+                    Layer::Fg => band.fg().to_string(),
+                    Layer::Bg => band.bg().to_string(),
+                    // The underline has no bold, so a band is its color.
+                    Layer::Underline => match band {
+                        Band::Plain => Color::Default,
+                        Band::Yellow | Band::BoldYellow => Color::Ansi(3),
+                        Band::Red | Band::BoldRed => Color::Ansi(1),
+                    }
+                    .underline_params(),
+                })
+            };
+
             match values.resolve(field) {
                 Resolved::Unknown => None,
                 Resolved::Value(value) if *game => value.game_percent().map(h_band).and_then(band),
@@ -651,9 +748,8 @@ fn write_bar(w: &mut Writer, value: &Value, width: usize, color: &BarColor, valu
                 .map_or(Band::Plain, p_band)
                 .fg()
                 .to_string(),
-            BarColor::Color(spec) => {
-                color_params(spec, false, values).unwrap_or_else(|| Color::Ansi(2).params(false))
-            }
+            BarColor::Color(spec) => color_params(spec, Layer::Fg, values)
+                .unwrap_or_else(|| Color::Ansi(2).params(false)),
         };
         w.sgr(&fill);
         w.text(&"█".repeat(filled), false);
