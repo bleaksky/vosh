@@ -1,11 +1,14 @@
 //! Default policy for telnet option negotiation. Decides which options to
 //! accept and produces response bytes for the session loop to send.
-
-use std::sync::atomic::{AtomicUsize, Ordering};
+//!
+//! Each option keeps the state RFC 1143 gives it, once for each side:
+//! what the server performs (its WILL and WONT, our DO and DONT) and what
+//! Vosh performs (its DO and DONT, our WILL and WONT). An answer goes out
+//! only when it changes a state, so a server that offers or asks for an
+//! option again, or answers every DO with WILL, never starts a loop.
 
 use crate::codes::{charset, new_environ, option, ttype, DO, DONT, IAC, SB, SE, WILL, WONT};
 use crate::parser::Event;
-
 /// Default first TTYPE response (slot 0). MTTS expects the client
 /// name plus version here, and MTTS-aware servers iterate to slot 1
 /// for the terminal emulation. But many ROM- and Diku-derived servers
@@ -42,7 +45,43 @@ fn default_ttype_responses() -> Vec<String> {
     ]
 }
 
-#[derive(Debug)]
+/// Where one side of one option stands (RFC 1143, the Q method). Vosh
+/// only ever asks to turn an option on, and never changes its mind while
+/// that request is out, so the method's WANTNO state and its queue never
+/// come up and are left out.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum Side {
+    #[default]
+    No,
+    Yes,
+    /// Vosh asked to turn the option on and waits for the answer.
+    WantYes,
+}
+
+/// The options the server may perform. Vosh answers an offer of these
+/// with DO.
+fn wants_server(opt: u8) -> bool {
+    matches!(
+        opt,
+        option::EOR | option::SUPPRESS_GO_AHEAD | option::ECHO | option::GMCP
+    )
+}
+
+/// The options Vosh performs when the server asks. Vosh answers a request
+/// for these with WILL.
+fn agrees_to(opt: u8) -> bool {
+    matches!(
+        opt,
+        option::TTYPE
+            | option::CHARSET
+            | option::SUPPRESS_GO_AHEAD
+            | option::GMCP
+            | option::NEW_ENVIRON
+            | option::NAWS
+    )
+}
+
+#[derive(Debug, Clone)]
 pub struct Negotiator {
     pub window_size: (u16, u16),
     /// Successive responses cycled per the MTTS standard. Slot 0 fires on
@@ -50,9 +89,12 @@ pub struct Negotiator {
     /// last slot is reached it keeps repeating (the spec says the cycle
     /// is complete when the server sees the same answer twice).
     pub ttype_responses: Vec<String>,
-    /// Index of the next response to send. Atomic so `handle` can stay
-    /// `&self` while still advancing the cycle across calls.
-    ttype_cycle: AtomicUsize,
+    /// Index of the next response to send.
+    ttype_cycle: usize,
+    /// What the server performs, by option.
+    server: [Side; 256],
+    /// What Vosh performs, by option.
+    vosh: [Side; 256],
 }
 
 impl Default for Negotiator {
@@ -60,17 +102,9 @@ impl Default for Negotiator {
         Self {
             window_size: (80, 24),
             ttype_responses: default_ttype_responses(),
-            ttype_cycle: AtomicUsize::new(0),
-        }
-    }
-}
-
-impl Clone for Negotiator {
-    fn clone(&self) -> Self {
-        Self {
-            window_size: self.window_size,
-            ttype_responses: self.ttype_responses.clone(),
-            ttype_cycle: AtomicUsize::new(self.ttype_cycle.load(Ordering::Relaxed)),
+            ttype_cycle: 0,
+            server: [Side::No; 256],
+            vosh: [Side::No; 256],
         }
     }
 }
@@ -82,7 +116,7 @@ impl Negotiator {
 
     /// Map a parser event to bytes that the session loop should send back to
     /// the server. Returns an empty Vec when no response is needed.
-    pub fn handle(&self, event: &Event) -> Vec<u8> {
+    pub fn handle(&mut self, event: &Event) -> Vec<u8> {
         match event {
             Event::Will(opt) => self.respond_will(*opt),
             Event::Wont(opt) => self.respond_wont(*opt),
@@ -95,6 +129,28 @@ impl Negotiator {
         }
     }
 
+    /// Ask the server to perform `opt`, as Vosh asks for EOR when it
+    /// connects. Returns the DO to send, or nothing when the option is on
+    /// already or a request for it is out.
+    pub fn ask(&mut self, opt: u8) -> Vec<u8> {
+        let side = &mut self.server[usize::from(opt)];
+        if *side != Side::No {
+            return Vec::new();
+        }
+        *side = Side::WantYes;
+        vec![IAC, DO, opt]
+    }
+
+    /// The server performs `opt`: it said WILL and Vosh agreed.
+    pub fn server_does(&self, opt: u8) -> bool {
+        self.server[usize::from(opt)] == Side::Yes
+    }
+
+    /// Vosh performs `opt`: the server said DO and Vosh agreed.
+    pub fn vosh_does(&self, opt: u8) -> bool {
+        self.vosh[usize::from(opt)] == Side::Yes
+    }
+
     /// Update the cached window size. Call when the renderer reports a resize
     /// after NAWS has been agreed.
     pub fn set_window_size(&mut self, cols: u16, rows: u16) {
@@ -104,8 +160,8 @@ impl Negotiator {
     /// Rewind the TTYPE cycle. Useful when a new session starts on an
     /// existing Negotiator and the server is about to re-request the
     /// terminal type from scratch.
-    pub fn reset_ttype_cycle(&self) {
-        self.ttype_cycle.store(0, Ordering::Relaxed);
+    pub fn reset_ttype_cycle(&mut self) {
+        self.ttype_cycle = 0;
     }
 
     /// Wrap a GMCP wire payload (`package <json>` bytes from
@@ -144,44 +200,70 @@ impl Negotiator {
         out
     }
 
-    fn respond_will(&self, opt: u8) -> Vec<u8> {
-        // Server says it WILL do something. Reply DO if we want it.
-        match opt {
-            option::EOR | option::SUPPRESS_GO_AHEAD | option::ECHO | option::GMCP => {
+    /// The server offers to perform `opt`. An offer of an option that is
+    /// on already, or one Vosh asked for, gets no answer.
+    fn respond_will(&mut self, opt: u8) -> Vec<u8> {
+        let side = &mut self.server[usize::from(opt)];
+        match *side {
+            Side::No if wants_server(opt) => {
+                *side = Side::Yes;
                 vec![IAC, DO, opt]
             }
-            _ => vec![IAC, DONT, opt],
+            Side::No => vec![IAC, DONT, opt],
+            Side::Yes => Vec::new(),
+            // The answer to Vosh's own DO.
+            Side::WantYes => {
+                *side = Side::Yes;
+                Vec::new()
+            }
         }
     }
 
-    fn respond_wont(&self, opt: u8) -> Vec<u8> {
-        // Server retracts. Acknowledge with DONT.
-        vec![IAC, DONT, opt]
+    /// The server will not perform `opt`, or stops. Only an option that
+    /// was on gets the DONT that agrees.
+    fn respond_wont(&mut self, opt: u8) -> Vec<u8> {
+        let was = std::mem::take(&mut self.server[usize::from(opt)]);
+        if was == Side::Yes {
+            vec![IAC, DONT, opt]
+        } else {
+            Vec::new()
+        }
     }
 
-    fn respond_do(&self, opt: u8) -> Vec<u8> {
-        // Server requests we DO an option.
-        match opt {
-            option::TTYPE
-            | option::CHARSET
-            | option::SUPPRESS_GO_AHEAD
-            | option::GMCP
-            | option::NEW_ENVIRON => vec![IAC, WILL, opt],
-            option::NAWS => {
-                let mut out = vec![IAC, WILL, option::NAWS];
-                out.extend(self.naws_subnegotiation());
+    /// The server asks Vosh to perform `opt`. A request for an option
+    /// that is on already gets no answer.
+    fn respond_do(&mut self, opt: u8) -> Vec<u8> {
+        let side = &mut self.vosh[usize::from(opt)];
+        match *side {
+            Side::No if agrees_to(opt) => {
+                *side = Side::Yes;
+                let mut out = vec![IAC, WILL, opt];
+                if opt == option::NAWS {
+                    out.extend(self.naws_subnegotiation());
+                }
                 out
             }
-            _ => vec![IAC, WONT, opt],
+            Side::No => vec![IAC, WONT, opt],
+            // Vosh never offers an option first, so it waits for no DO.
+            Side::Yes | Side::WantYes => {
+                *side = Side::Yes;
+                Vec::new()
+            }
         }
     }
 
-    fn respond_dont(&self, opt: u8) -> Vec<u8> {
-        // Server tells us not to. Acknowledge.
-        vec![IAC, WONT, opt]
+    /// The server tells Vosh not to perform `opt`. Only an option that
+    /// was on gets the WONT that agrees.
+    fn respond_dont(&mut self, opt: u8) -> Vec<u8> {
+        let was = std::mem::take(&mut self.vosh[usize::from(opt)]);
+        if was == Side::Yes {
+            vec![IAC, WONT, opt]
+        } else {
+            Vec::new()
+        }
     }
 
-    fn respond_subnegotiation(&self, opt: u8, payload: &[u8]) -> Vec<u8> {
+    fn respond_subnegotiation(&mut self, opt: u8, payload: &[u8]) -> Vec<u8> {
         match opt {
             option::TTYPE => self.respond_ttype(payload),
             option::CHARSET => self.respond_charset(payload),
@@ -190,14 +272,15 @@ impl Negotiator {
         }
     }
 
-    fn respond_ttype(&self, payload: &[u8]) -> Vec<u8> {
+    fn respond_ttype(&mut self, payload: &[u8]) -> Vec<u8> {
         if payload.first() != Some(&ttype::SEND) || self.ttype_responses.is_empty() {
             return Vec::new();
         }
         // Per MTTS: each SEND walks to the next slot; once exhausted,
         // keep returning the last (which signals the cycle is complete
         // when the server sees the same answer twice in a row).
-        let idx = self.ttype_cycle.fetch_add(1, Ordering::Relaxed);
+        let idx = self.ttype_cycle;
+        self.ttype_cycle += 1;
         let slot = idx.min(self.ttype_responses.len() - 1);
         let response = &self.ttype_responses[slot];
         let mut out = vec![IAC, SB, option::TTYPE, ttype::IS];
@@ -288,21 +371,21 @@ mod tests {
 
     #[test]
     fn refuses_unknown_will() {
-        let n = Negotiator::new();
+        let mut n = Negotiator::new();
         let bytes = n.handle(&Event::Will(option::MCCP2));
         assert_eq!(bytes, vec![IAC, DONT, option::MCCP2]);
     }
 
     #[test]
     fn accepts_will_gmcp() {
-        let n = Negotiator::new();
+        let mut n = Negotiator::new();
         let bytes = n.handle(&Event::Will(option::GMCP));
         assert_eq!(bytes, vec![IAC, DO, option::GMCP]);
     }
 
     #[test]
     fn accepts_do_gmcp() {
-        let n = Negotiator::new();
+        let mut n = Negotiator::new();
         let bytes = n.handle(&Event::Do(option::GMCP));
         assert_eq!(bytes, vec![IAC, WILL, option::GMCP]);
     }
@@ -325,21 +408,21 @@ mod tests {
 
     #[test]
     fn accepts_will_eor() {
-        let n = Negotiator::new();
+        let mut n = Negotiator::new();
         let bytes = n.handle(&Event::Will(option::EOR));
         assert_eq!(bytes, vec![IAC, DO, option::EOR]);
     }
 
     #[test]
     fn accepts_do_ttype() {
-        let n = Negotiator::new();
+        let mut n = Negotiator::new();
         let bytes = n.handle(&Event::Do(option::TTYPE));
         assert_eq!(bytes, vec![IAC, WILL, option::TTYPE]);
     }
 
     #[test]
     fn refuses_do_unknown() {
-        let n = Negotiator::new();
+        let mut n = Negotiator::new();
         let bytes = n.handle(&Event::Do(option::MCCP2));
         assert_eq!(bytes, vec![IAC, WONT, option::MCCP2]);
     }
@@ -353,7 +436,7 @@ mod tests {
 
     #[test]
     fn ttype_first_send_returns_client_signature() {
-        let n = Negotiator::new();
+        let mut n = Negotiator::new();
         let bytes = n.handle(&Event::Subnegotiation {
             option: option::TTYPE,
             payload: vec![ttype::SEND],
@@ -363,7 +446,7 @@ mod tests {
 
     #[test]
     fn ttype_cycles_through_mtts_then_repeats() {
-        let n = Negotiator::new();
+        let mut n = Negotiator::new();
         let send = Event::Subnegotiation {
             option: option::TTYPE,
             payload: vec![ttype::SEND],
@@ -383,7 +466,7 @@ mod tests {
 
     #[test]
     fn ttype_reset_replays_from_first_slot() {
-        let n = Negotiator::new();
+        let mut n = Negotiator::new();
         let send = Event::Subnegotiation {
             option: option::TTYPE,
             payload: vec![ttype::SEND],
@@ -455,7 +538,7 @@ mod tests {
 
     #[test]
     fn charset_request_accepts_utf8() {
-        let n = Negotiator::new();
+        let mut n = Negotiator::new();
         let mut payload = vec![charset::REQUEST, b' '];
         payload.extend_from_slice(b"UTF-8 LATIN-1");
         let bytes = n.handle(&Event::Subnegotiation {
@@ -470,14 +553,14 @@ mod tests {
 
     #[test]
     fn accepts_do_new_environ() {
-        let n = Negotiator::new();
+        let mut n = Negotiator::new();
         let bytes = n.handle(&Event::Do(option::NEW_ENVIRON));
         assert_eq!(bytes, vec![IAC, WILL, option::NEW_ENVIRON]);
     }
 
     #[test]
     fn new_environ_send_returns_color_env_vars() {
-        let n = Negotiator::new();
+        let mut n = Negotiator::new();
         let bytes = n.handle(&Event::Subnegotiation {
             option: option::NEW_ENVIRON,
             payload: vec![new_environ::SEND],
@@ -497,7 +580,7 @@ mod tests {
 
     #[test]
     fn new_environ_ignores_non_send_payloads() {
-        let n = Negotiator::new();
+        let mut n = Negotiator::new();
         let bytes = n.handle(&Event::Subnegotiation {
             option: option::NEW_ENVIRON,
             payload: vec![new_environ::IS],
@@ -506,8 +589,120 @@ mod tests {
     }
 
     #[test]
+    fn a_repeated_will_is_acknowledged_once() {
+        let mut n = Negotiator::new();
+        assert_eq!(
+            n.handle(&Event::Will(option::GMCP)),
+            vec![IAC, DO, option::GMCP]
+        );
+        assert!(n.handle(&Event::Will(option::GMCP)).is_empty());
+        assert!(n.handle(&Event::Will(option::ECHO)).len() == 3);
+        assert!(n.handle(&Event::Will(option::ECHO)).is_empty());
+    }
+
+    #[test]
+    fn a_repeated_do_is_acknowledged_once() {
+        let mut n = Negotiator::new();
+        assert_eq!(
+            n.handle(&Event::Do(option::TTYPE)),
+            vec![IAC, WILL, option::TTYPE]
+        );
+        assert!(n.handle(&Event::Do(option::TTYPE)).is_empty());
+    }
+
+    #[test]
+    fn a_refused_option_is_refused_each_time_it_is_offered() {
+        // Refusing changes no state, so the answer never loops.
+        let mut n = Negotiator::new();
+        assert_eq!(
+            n.handle(&Event::Will(option::MCCP2)),
+            vec![IAC, DONT, option::MCCP2]
+        );
+        assert_eq!(
+            n.handle(&Event::Will(option::MCCP2)),
+            vec![IAC, DONT, option::MCCP2]
+        );
+        assert_eq!(
+            n.handle(&Event::Do(option::MXP)),
+            vec![IAC, WONT, option::MXP]
+        );
+    }
+
+    #[test]
+    fn wont_and_dont_for_an_option_that_is_off_get_no_answer() {
+        let mut n = Negotiator::new();
+        assert!(n.handle(&Event::Wont(option::ECHO)).is_empty());
+        assert!(n.handle(&Event::Dont(option::NAWS)).is_empty());
+        assert!(n.handle(&Event::Wont(option::MCCP2)).is_empty());
+        assert!(n.handle(&Event::Dont(option::MXP)).is_empty());
+    }
+
+    #[test]
+    fn wont_and_dont_turn_an_option_off_with_one_answer() {
+        let mut n = Negotiator::new();
+        let _ = n.handle(&Event::Will(option::ECHO));
+        assert_eq!(
+            n.handle(&Event::Wont(option::ECHO)),
+            vec![IAC, DONT, option::ECHO]
+        );
+        assert!(n.handle(&Event::Wont(option::ECHO)).is_empty());
+        // The server can turn it on again, as a password prompt does.
+        assert_eq!(
+            n.handle(&Event::Will(option::ECHO)),
+            vec![IAC, DO, option::ECHO]
+        );
+        let _ = n.handle(&Event::Do(option::NAWS));
+        assert_eq!(
+            n.handle(&Event::Dont(option::NAWS)),
+            vec![IAC, WONT, option::NAWS]
+        );
+        assert!(n.handle(&Event::Dont(option::NAWS)).is_empty());
+    }
+
+    #[test]
+    fn a_server_that_answers_each_do_eor_once_ends_negotiation_in_one_round() {
+        // Vosh asks for EOR as it connects. A server that answers every
+        // DO EOR with WILL EOR hears nothing more, so the asking stops
+        // after one round instead of going back and forth.
+        let mut n = Negotiator::new();
+        assert_eq!(n.ask(option::EOR), vec![IAC, DO, option::EOR]);
+        assert!(!n.server_does(option::EOR));
+        assert!(n.handle(&Event::Will(option::EOR)).is_empty());
+        assert!(n.server_does(option::EOR));
+        // Asking again once it is on sends nothing.
+        assert!(n.ask(option::EOR).is_empty());
+        // A server that offered it before it read the ask, then answered
+        // the ask too, ends the same way.
+        let mut n = Negotiator::new();
+        let _ = n.ask(option::EOR);
+        assert!(n.handle(&Event::Will(option::EOR)).is_empty());
+        assert!(n.handle(&Event::Will(option::EOR)).is_empty());
+        // A server that will not, says so once and hears nothing back.
+        let mut n = Negotiator::new();
+        let _ = n.ask(option::EOR);
+        assert!(n.handle(&Event::Wont(option::EOR)).is_empty());
+        assert!(!n.server_does(option::EOR));
+    }
+
+    #[test]
+    fn the_state_of_each_side_follows_the_answers() {
+        let mut n = Negotiator::new();
+        assert!(!n.server_does(option::GMCP));
+        let _ = n.handle(&Event::Will(option::GMCP));
+        assert!(n.server_does(option::GMCP));
+        assert!(!n.vosh_does(option::NAWS));
+        let _ = n.handle(&Event::Do(option::NAWS));
+        assert!(n.vosh_does(option::NAWS));
+        let _ = n.handle(&Event::Dont(option::NAWS));
+        assert!(!n.vosh_does(option::NAWS));
+        // A refused offer leaves the option off.
+        let _ = n.handle(&Event::Will(option::MCCP2));
+        assert!(!n.server_does(option::MCCP2));
+    }
+
+    #[test]
     fn charset_request_rejects_when_no_utf8() {
-        let n = Negotiator::new();
+        let mut n = Negotiator::new();
         let mut payload = vec![charset::REQUEST, b' '];
         payload.extend_from_slice(b"LATIN-1 ASCII");
         let bytes = n.handle(&Event::Subnegotiation {
