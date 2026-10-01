@@ -30,9 +30,10 @@ import { findTheme } from '../../lib/themes';
 // waits above the band for a tank who is not there. Until 2026-10-01 the
 // dock kept the most rows any prompt could take, and James saw that row
 // standing empty out of a fight: "there should not be a blank line where
-// the tank is supposed to be when not fighting." Before your first
-// prompt, after you disconnect and while prompts are off it shows one
-// row, which holds the sentence that says prompts are off.
+// the tank is supposed to be when not fighting." Before your first prompt
+// and after you disconnect it keeps one row with nothing on it, so the
+// first prompt never moves the text, and while prompts are off that row
+// holds the sentence that says so.
 //
 // Its place under the terminal is always one row. The rows past the first
 // it borrows from the bottom of the terminal pane, reaching up over it
@@ -40,10 +41,14 @@ import { findTheme } from '../../lib/themes';
 // Terminal's lentRows: the pane keeps its size and the grid drops the
 // rows from its top, so the newest line stays right above the band, the
 // line at the top leaves for the scrollback and comes back when the band
-// shrinks, and the page lays out nothing new. App reads the same count
-// from the same store, so the band and the terminal change in one commit,
-// before the page paints. The game is told the rows the pane holds with
-// a one row band, so a fight sends it no new size (src/lib/terminalRows.ts).
+// shrinks, and the page lays out nothing new. While the dock shows, the
+// grid also keeps to the bottom of its pane (Terminal's anchorBottom), so
+// the pixels a window leaves over under whole rows sit above the text and
+// the newest line sits the 6 px gap over the band in any window. App
+// reads the same count from the same store, so the band and the terminal
+// change in one commit, before the page paints. The game is told the rows
+// the pane holds with a one row band, so a fight sends it no new size
+// (src/lib/terminalRows.ts).
 //
 // The band is drawn as the boards draw the edit band: --selrow, radius 4,
 // 4 px past the text on each side and 2 px above and below its rows, its

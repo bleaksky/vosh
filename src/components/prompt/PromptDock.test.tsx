@@ -15,7 +15,7 @@ import type { PromptShowState } from '../../lib/promptShow';
 import { dockPieceAt, type PieceSpan } from '../../lib/promptPointer';
 import { parseSgrCells, PLAIN, shownColumns } from '../../lib/sgrCells';
 import { RegionWriter } from '../../lib/terminalRegion';
-import { keptRows } from '../../lib/terminalRows';
+import { keptRows, spareAbove } from '../../lib/terminalRows';
 import { PinnedBand } from './PromptDock';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -378,52 +378,63 @@ describe('the text above the pinned band', () => {
     return new Promise((resolve) => writer.whenParsed(resolve));
   }
 
-  it('keeps the newest line right above the band as a fight grows it and shrinks it', async () => {
-    // The pane fits 20 rows with 9 px to spare under them.
-    const paneHeight = 20 * CELL.height + 9;
-    const fit = Math.floor(paneHeight / CELL.height);
-    const term = new Terminal({ cols: 60, rows: fit, scrollback: 100, allowProposedApi: true });
-    const writer = new RegionWriter(term);
-    // Forty lines, the line end before the pinned prompt held back as the
-    // session holds it, so the newest line is the last on screen.
-    const lines = Array.from({ length: 40 }, (_, i) => `line ${i + 1}`);
-    writer.output({ text: lines.join('\r\n'), hold: '\r\n' });
-    await parsed(writer);
-    // A fight starts and ends four times within a second.
-    const pins = [CALM, FIGHT, CALM, FIGHT, FIGHT, CALM, FIGHT, CALM, FIGHT, CALM];
-    const seen: { gap: number; first: string; last: string }[] = [];
-    for (const pin of pins) {
-      const html = draw(pin, { zone: 2 });
-      term.resize(60, keptRows(fit, lentRows(dockRows(pin, 2, false))));
+  // A pane with no pixels to spare, with some, and with most of a row.
+  for (const spare of [0, 9, 17.25]) {
+    it(`keeps the newest line 6 px over the band through four fights, ${spare} px over`, async () => {
+      const paneHeight = 20 * CELL.height + spare;
+      const fit = Math.floor(paneHeight / CELL.height);
+      const term = new Terminal({ cols: 60, rows: fit, scrollback: 100, allowProposedApi: true });
+      const writer = new RegionWriter(term);
+      // Forty lines, the line end before the pinned prompt held back as
+      // the session holds it, so the newest line is the last on screen.
+      const lines = Array.from({ length: 40 }, (_, i) => `line ${i + 1}`);
+      writer.output({ text: lines.join('\r\n'), hold: '\r\n' });
       await parsed(writer);
-      // The dock's place starts where the pane ends, and the dock
-      // reaches up over the pane by the rows it borrows.
-      const box = dockBox(html);
-      const band = style(html, 'data-prompt-band');
-      const bandTop = paneHeight - box.reach + box.height - px(band, 'bottom') - px(band, 'height');
-      const textBottom = term.rows * CELL.height;
-      const rows = screen(term);
-      seen.push({ gap: bandTop - textBottom, first: rows[0], last: rows[rows.length - 1] });
-    }
-    // The newest line never moves off the row right above the band: the
-    // gap under it is the pane's spare 9 px and the dock's 6 px each time.
-    for (const step of seen) {
-      expect(step.gap).toBeCloseTo(9 + DOCK_GAP, 6);
-      expect(step.last).toBe('line 40');
-    }
-    // The line the band's new row takes leaves at the top, and comes back
-    // when the fight ends. No line is lost or doubled.
-    expect(seen.map((s) => s.first)).toEqual(
-      pins.map((pin) => (pin === FIGHT ? 'line 22' : 'line 21')),
-    );
-    expect(term.rows).toBe(fit);
-    expect(screen(term)).toEqual(lines.slice(20));
-    // The held line end still goes first when the next text lands.
-    writer.output({ text: 'tell' });
-    await parsed(writer);
-    expect(screen(term).slice(-2)).toEqual(['line 40', 'tell']);
-    term.dispose();
-  });
+      // A fight starts and ends four times within a second.
+      const pins = [CALM, FIGHT, CALM, FIGHT, FIGHT, CALM, FIGHT, CALM, FIGHT, CALM];
+      const seen: { gap: number; first: string; last: string }[] = [];
+      for (const pin of pins) {
+        const html = draw(pin, { zone: 2 });
+        const lent = lentRows(dockRows(pin, 2, false));
+        term.resize(60, keptRows(fit, lent));
+        await parsed(writer);
+        // The dock's place starts where the pane ends, and the dock
+        // reaches up over the pane by the rows it borrows.
+        const box = dockBox(html);
+        const band = style(html, 'data-prompt-band');
+        const bandTop =
+          paneHeight - box.reach + box.height - px(band, 'bottom') - px(band, 'height');
+        // The grid keeps to the bottom of the pane, the pixels its rows
+        // leave over above its first row.
+        const gridTop = spareAbove(paneHeight, term.rows + lent, CELL.height, 2);
+        const textBottom = gridTop + term.rows * CELL.height;
+        const rows = screen(term);
+        seen.push({ gap: bandTop - textBottom, first: rows[0], last: rows[rows.length - 1] });
+      }
+      // The newest line never moves off the row right above the band,
+      // 6 px over it each time, whatever the pane leaves over. The grid
+      // moves on whole device pixels, so at 2x the gap can run half a
+      // pixel more, the same at every step.
+      for (const step of seen) {
+        expect(step.gap).toBeGreaterThanOrEqual(DOCK_GAP - 1e-9);
+        expect(step.gap).toBeLessThan(DOCK_GAP + 0.5);
+        expect(step.gap).toBeCloseTo(seen[0].gap, 9);
+        expect(step.last).toBe('line 40');
+      }
+      // The line the band's new row takes leaves at the top, and comes
+      // back when the fight ends. No line is lost or doubled.
+      expect(seen.map((s) => s.first)).toEqual(
+        pins.map((pin) => (pin === FIGHT ? 'line 22' : 'line 21')),
+      );
+      expect(term.rows).toBe(fit);
+      expect(screen(term)).toEqual(lines.slice(20));
+      // The held line end still goes first when the next text lands.
+      writer.output({ text: 'tell' });
+      await parsed(writer);
+      expect(screen(term).slice(-2)).toEqual(['line 40', 'tell']);
+      term.dispose();
+    });
+  }
 
   it('borrows every row of the band past its first', () => {
     expect(lentRows(1)).toBe(0);
