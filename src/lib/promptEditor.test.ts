@@ -20,6 +20,7 @@ import {
   promptStateGet,
   promptWatch,
   subscribePromptConfigChanged,
+  terminalCursor,
   type PromptConfig,
   type PromptConfigChangedPayload,
 } from './session';
@@ -192,5 +193,18 @@ describe('the prompt editor events', () => {
       'session://prompt-gag-without-reader',
     ]);
     vi.mocked(listen).mockImplementation(() => Promise.resolve(() => {}));
+  });
+
+  it('asks the native grid where its cursor and open region are', async () => {
+    const report = {
+      line: 1,
+      col: 9,
+      at_bottom: true,
+      cols: 40,
+      region: { gen: 3, line: 1, col: 0 },
+    };
+    vi.mocked(invoke).mockImplementation(() => Promise.resolve(report));
+    await expect(terminalCursor()).resolves.toEqual(report);
+    expect(vi.mocked(invoke).mock.calls).toEqual([['terminal_cursor']]);
   });
 });

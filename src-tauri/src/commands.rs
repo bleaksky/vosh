@@ -1710,6 +1710,24 @@ pub(crate) async fn terminal_local_write(
     Ok(())
 }
 
+/// Where the native grid's cursor sits and where the open region starts,
+/// so the webview can map a pointer to a piece of your prompt while the
+/// native renderer draws the terminal (section 6). Lines count from the
+/// top of the live screen. Null before the grid exists. xterm reads its
+/// own buffer and marker instead.
+#[cfg(native_surface)]
+#[tauri::command]
+pub(crate) fn terminal_cursor() -> Option<crate::term_grid::CursorReport> {
+    crate::term_grid::cursor_report()
+}
+
+/// No native grid on this build, so there is nothing to report.
+#[cfg(not(native_surface))]
+#[tauri::command]
+pub(crate) fn terminal_cursor() -> Option<()> {
+    None
+}
+
 /// Tier 3 native renderer (macOS): search the grid and step to the next (or
 /// previous) match, scrolling it into view and highlighting all matches.
 /// Returns `[current, total]` (1-based; `[0, 0]` when no match). A no-op
