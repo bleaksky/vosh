@@ -1646,6 +1646,23 @@ pub(crate) fn native_surface_set_prompt_bands(on: bool) {
     }
 }
 
+/// Tier 3 native renderer: widen the band under the open row by `px` CSS
+/// px, so it holds the prompt card's line break mark and caret past the
+/// row's last glyph. 0 while the card is closed.
+#[tauri::command]
+pub(crate) fn native_surface_set_prompt_reach(px: f64) {
+    #[cfg(native_surface)]
+    {
+        #[allow(clippy::cast_possible_truncation)]
+        crate::cell_render::set_prompt_reach(px as f32);
+        crate::native_surface::request_redraw();
+    }
+    #[cfg(not(native_surface))]
+    {
+        let _ = px;
+    }
+}
+
 /// Tier 3 native renderer (macOS): toggle drawing bright (ANSI 8-15) colored
 /// text with the bold font weight. A no-op elsewhere.
 #[tauri::command]
