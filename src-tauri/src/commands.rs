@@ -207,7 +207,6 @@ use crate::profile_config::{
     hand_out_shared, share_custom_themes, strip_global_fields, DockEntryPersist, GlobalConfig,
     HeldCustomThemes, PaneLayoutPersist, ProfileConfig, SharedLayer,
 };
-use crate::script_state;
 use crate::script_state::SharedTimers;
 use crate::session::{self, SessionHandle, TargetPayload};
 
@@ -795,7 +794,7 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
     } else {
         None
     };
-    let (mut result, target_after, script_apply, lists, look_changed) = {
+    let (result, target_after, lists, look_changed) = {
         let mut profile = state.profile.lock().await;
         let lists_before = ListRevisions::of(&profile);
         let look_before = prompt_look(&profile);
@@ -827,32 +826,9 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
         } else {
             None
         };
-        // Run any Lua bodies queued by script-bodied aliases that
-        // fired during expansion. The actions they produce (sends,
-        // echoes, var sets, etc.) fold into the same ScriptOutcome
-        // pipeline that the Lua-registered triggers use, and the
-        // resulting ApplyResult is appended to this input's
-        // bytes / echo so the user sees one coherent response.
-        let script_apply = if result.scripts.is_empty() {
-            None
-        } else {
-            let mut combined = vosh_script::ScriptOutcome::default();
-            for call in &result.scripts {
-                match profile
-                    .script
-                    .run_body(&call.body, &call.captures, "alias-script")
-                {
-                    Ok(o) => combined.actions.extend(o.actions),
-                    Err(err) => {
-                        tracing::warn!(error = %err, "alias script eval failed");
-                    }
-                }
-            }
-            Some(script_state::apply_actions(&mut profile, combined))
-        };
         let lists = ListChanges::since(lists_before, &profile);
         let look_changed = prompt_look(&profile) != look_before;
-        (result, payload, script_apply, lists, look_changed)
+        (result, payload, lists, look_changed)
     };
     // #trigger, #alias, and the Lua they run change the lists an open
     // Settings page shows, so tell it.
@@ -863,18 +839,7 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
         request_prompt_repaint(state.inner()).await;
     }
 
-    effects.note_script(script_apply.as_ref().is_some_and(|a| a.durable_changed));
     settle_line_effects(&app, effects).await;
-
-    if let Some(apply) = script_apply {
-        // Lua actions append AFTER the alias's template output (which
-        // is currently empty for script-bodied aliases since the
-        // body owns the response). Echoes go through the same local
-        // echo path as the alias's own echoes; send bytes append to
-        // the wire payload.
-        result.echo.extend(apply.echoes);
-        result.bytes.extend(apply.send_bytes);
-    }
 
     if let Some(payload) = target_after {
         let _ = app.emit("session://target", payload);

@@ -47,6 +47,25 @@ pub(crate) fn snapshot_vars(script: &ScriptEngine, vars: &VariableStore) {
     script.set_var_snapshot(snapshot);
 }
 
+/// Run the Lua body of a script alias with the words typed after its
+/// name, and apply what it asks of the profile. A body that fails is
+/// logged and asks for nothing.
+pub(crate) fn run_alias_body(
+    profile: &mut Profile,
+    call: &vosh_alias::AliasScriptCall,
+) -> ApplyResult {
+    match profile
+        .script
+        .run_body(&call.body, &call.captures, "alias-script")
+    {
+        Ok(outcome) => apply_actions(profile, outcome),
+        Err(err) => {
+            tracing::warn!(error = %err, "alias script eval failed");
+            ApplyResult::default()
+        }
+    }
+}
+
 /// Result of applying a [`ScriptOutcome`]: bytes to send, lines to echo,
 /// timers to schedule. The session loop owns the actual stream and event
 /// handle so it does the real IO.
@@ -70,6 +89,24 @@ pub(crate) struct ApplyResult {
     pub lists: ListChanges,
     pub new_timers: Vec<PendingTimer>,
     pub cancel_timers: Vec<u32>,
+}
+
+impl ApplyResult {
+    /// Add what `later` asks for after what this result asks for.
+    pub(crate) fn append(&mut self, later: ApplyResult) {
+        self.send_bytes.extend(later.send_bytes);
+        self.echoes.extend(later.echoes);
+        self.inputs.extend(later.inputs);
+        self.prompt_vars_changed |= later.prompt_vars_changed;
+        self.durable_changed |= later.durable_changed;
+        self.lists = ListChanges {
+            triggers: self.lists.triggers || later.lists.triggers,
+            aliases: self.lists.aliases || later.lists.aliases,
+            prompt: self.lists.prompt || later.lists.prompt,
+        };
+        self.new_timers.extend(later.new_timers);
+        self.cancel_timers.extend(later.cancel_timers);
+    }
 }
 
 /// Apply Lua-produced actions to the profile. The caller is responsible
