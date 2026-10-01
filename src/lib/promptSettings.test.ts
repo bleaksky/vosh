@@ -9,6 +9,7 @@ import {
   previewHeight,
   previewMeta,
   previewOptions,
+  previewRows,
   promptWorld,
   settingsMatchLine,
   type GameCodes,
@@ -220,6 +221,27 @@ describe('the meta under the game prompt', () => {
     });
   });
 
+  it('keeps to where the codes came from before Vosh reads them (P13)', () => {
+    const together = report({
+      warnings: [
+        { kind: 'run_together', which: 'prompt', span: [1, 5], message: 'Vosh cannot tell.' },
+      ],
+      fixes: ['prompt <%h %m %vmv>'],
+    });
+    expect(
+      codesMeta({
+        block: 'codes',
+        game: login,
+        seen: null,
+        capture: none,
+        check: null,
+        report: together,
+        promptsOff: false,
+        now,
+      }),
+    ).toEqual({ tone: 'normal', text: 'The game sent it when you logged in.', fixes: [] });
+  });
+
   it('says why no prompt arrives while prompts are off (P14)', () => {
     expect(
       codesMeta({
@@ -328,25 +350,22 @@ describe('the line another game prints', () => {
 });
 
 describe('the Draw your own prompt row', () => {
-  it('says what drawing does, and what it waits on', () => {
-    expect(
-      drawDescription({ capture: true, draw: true, gameSent: true, world: 'The Forsaken Lands' }),
-    ).toBe('It takes the place of the prompt The Forsaken Lands sends.');
-    expect(
-      drawDescription({ capture: true, draw: true, gameSent: false, world: 'mud.example.net' }),
-    ).toBe('It takes the place of the prompt mud.example.net sends.');
-    expect(drawDescription({ capture: true, draw: true, gameSent: false, world: null })).toBe(
+  it('says what drawing replaces, on or off, and what it waits on', () => {
+    expect(drawDescription({ capture: true, gameSent: true, world: 'The Forsaken Lands' })).toBe(
+      'It takes the place of the prompt The Forsaken Lands sends.',
+    );
+    expect(drawDescription({ capture: true, gameSent: false, world: 'mud.example.net' })).toBe(
+      'It takes the place of the prompt mud.example.net sends.',
+    );
+    expect(drawDescription({ capture: true, gameSent: false, world: null })).toBe(
       'It takes the place of the prompt the game sends.',
     );
-    expect(
-      drawDescription({ capture: true, draw: false, gameSent: true, world: 'The Forsaken Lands' }),
-    ).toBe("The game's prompt shows as it arrives. Your design stays saved.");
-    expect(
-      drawDescription({ capture: false, draw: false, gameSent: true, world: 'The Forsaken Lands' }),
-    ).toBe('Customize your prompt first.');
-    expect(
-      drawDescription({ capture: false, draw: true, gameSent: false, world: 'The Forsaken Lands' }),
-    ).toBe("Tell Vosh your game's prompt first.");
+    expect(drawDescription({ capture: false, gameSent: true, world: 'The Forsaken Lands' })).toBe(
+      'Customize your prompt first.',
+    );
+    expect(drawDescription({ capture: false, gameSent: false, world: 'The Forsaken Lands' })).toBe(
+      "Tell Vosh your game's prompt first.",
+    );
   });
 });
 
@@ -366,6 +385,14 @@ describe('the preview block', () => {
       'Lament',
     ]);
     expect(previewOptions(false).map((o) => o.value)).toEqual(['now', 'low_health', 'fight']);
+  });
+
+  it('reads the drawn design into rows, the trailing empty one left out', () => {
+    expect(previewRows(null)).toEqual([[]]);
+    expect(previewRows('a\r\nb\r\n').map((row) => row.map((c) => c.ch).join(''))).toEqual([
+      'a',
+      'b',
+    ]);
   });
 
   it('says where to change it, or that it draws samples offline', () => {

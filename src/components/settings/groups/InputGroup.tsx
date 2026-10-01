@@ -1,31 +1,20 @@
 import { useEffect, useId, useState } from 'react';
-import { promptPreviewChunks } from '../../../lib/promptPreview';
-import {
-  promptShowDisabledHelp,
-  usePromptShow,
-  type PromptShowState,
-} from '../../../lib/promptShow';
-import { styleToCss } from '../../../lib/ansi';
+import { setBaseAnsi } from '../../../lib/baseAnsi';
 import {
   INPUT_CURSOR_STYLES,
-  openPromptCard,
+  resolveThemeTerminalColors,
   type InputCursorStyle,
-  type PromptShow,
 } from '../../../lib/session';
 import type { SettingsTarget } from '../../../lib/settingsNav';
-import { useVitals } from '../../../lib/stores/vitalsStore';
 import { getCurrentThemeId } from '../../../lib/theme';
 import { findTheme } from '../../../lib/themes';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
-import { PromptShowField } from '../rows/PromptShowRow';
 import {
-  Button,
   Card,
   ColorField,
   Disclosure,
   DisclosurePanel,
-  Field,
   NumberField,
   Row,
   Section,
@@ -33,12 +22,13 @@ import {
   Toggle,
   type SegmentedOption,
 } from '../ui';
+import { PromptSection } from './InputPrompt';
 
-// Settings, Input (SettingsInput.dc.html). The Command line card holds
-// the caret shape, keep last command, chat spell check, the sent
-// command color, and macro echo. The Advanced card opens on paste
-// pacing and your own prompt, with a live preview of the template.
-// Every change saves on its own.
+// Settings, Input (P12). The Command line card holds the caret shape,
+// keep last command, chat spell check, the sent command color, and macro
+// echo. The Prompt section follows with your game's prompt, Draw your own
+// prompt and where it shows, and a preview of your design. Advanced opens
+// on paste pacing. Every change saves on its own.
 
 const CARET_NAMES: Record<InputCursorStyle, string> = {
   block: 'Block',
@@ -61,7 +51,7 @@ const CARETS: readonly SegmentedOption<InputCursorStyle>[] = INPUT_CURSOR_STYLES
 }));
 
 // Rows inside Advanced. A deep link or search hit on one opens it.
-const ADVANCED_ANCHORS: ReadonlySet<string> = new Set(['paste-delay', 'prompt', 'prompt-show']);
+const ADVANCED_ANCHORS: ReadonlySet<string> = new Set(['paste-delay']);
 
 function opensAdvanced(target: SettingsTarget): boolean {
   return (
@@ -74,7 +64,13 @@ export function InputGroup({ target, navSeq, config, setConfig, onError }: Setti
   const { update } = useSettingsAutoSave(setConfig, onError);
   const [advanced, setAdvanced] = useState(() => opensAdvanced(target));
   const advancedId = useId();
-  const promptShow = usePromptShow();
+  const baseAnsi = config?.terminal_base_ansi ?? null;
+
+  // The preview draws with the terminal's colors, the base palette among
+  // them while the theme's colors for MUD text are off.
+  useEffect(() => {
+    setBaseAnsi(baseAnsi);
+  }, [baseAnsi]);
 
   useEffect(() => {
     if (opensAdvanced(target)) setAdvanced(true);
@@ -135,11 +131,18 @@ export function InputGroup({ target, navSeq, config, setConfig, onError }: Setti
         </Row>
       </Section>
 
+      <PromptSection
+        fontFamily={config.font_family}
+        themeTerminalColors={resolveThemeTerminalColors(config.theme, config.theme_terminal_colors)}
+        brightBold={config.bright_bold}
+        onError={onError}
+      />
+
       <section className="st-section" aria-label="Advanced" data-st-anchor="advanced">
         <Card>
           <Disclosure
             label="Advanced"
-            description="Pace long pastes and draw your own prompt."
+            description="Pace long pastes."
             expanded={advanced}
             aria-controls={advanced ? advancedId : undefined}
             onClick={() => setAdvanced((open) => !open)}
@@ -157,100 +160,10 @@ export function InputGroup({ target, navSeq, config, setConfig, onError }: Setti
                   unitName="milliseconds"
                 />
               </Row>
-              <PromptBlock
-                enabled={config.prompt_template_enabled}
-                template={config.prompt_template}
-                show={config.prompt_show}
-                showState={promptShow}
-                textColor={terminalText}
-                onEnabled={(on) => update({ prompt_template_enabled: on })}
-                onTemplate={(text) => update({ prompt_template: text })}
-                onShow={(show) => update({ prompt_show: show })}
-              />
             </DisclosurePanel>
           )}
         </Card>
       </section>
     </>
-  );
-}
-
-/** Draw your own prompt: the toggle on the label line, then where your
- *  prompt shows, then the template in the terminal font, then the
- *  template drawn the way the terminal would with your vitals full, or
- *  nothing for a design with conditions or line breaks, such as Vosh's
- *  default, which only the terminal draws. Interim until the Prompt
- *  section replaces it. The switch, the place
- *  and the design save to the profile's [prompt] table, and SettingsApp
- *  reads them again when a command such as #prompt changes the table.
- *  Exported for its test. */
-export function PromptBlock({
-  enabled,
-  template,
-  show,
-  showState,
-  textColor,
-  onEnabled,
-  onTemplate,
-  onShow,
-}: {
-  enabled: boolean;
-  template: string;
-  show: PromptShow;
-  showState: PromptShowState | null;
-  textColor: string;
-  onEnabled: (on: boolean) => void;
-  onTemplate: (text: string) => void;
-  onShow: (show: PromptShow) => void;
-}) {
-  const fieldId = useId();
-  const previewId = useId();
-  const vitals = useVitals();
-  const chunks = promptPreviewChunks(template, vitals);
-  // Nothing draws until the profile reads a prompt, so the switch waits,
-  // and Customize… opens the card that reads it (P13).
-  const waiting = showState !== null && !showState.capture;
-  return (
-    <div className="st-block" data-st-anchor="prompt" data-st-flash="" data-interim="">
-      <Row
-        label="Draw your own prompt"
-        description={
-          waiting
-            ? promptShowDisabledHelp(showState.gameSent)
-            : "It takes the place of your MUD's prompt. Capture the prompt with #prompt first."
-        }
-        className={waiting ? 'st-draw-row is-waiting' : 'st-draw-row'}
-      >
-        <Button onClick={() => void openPromptCard()}>Customize…</Button>
-        <Toggle checked={enabled} disabled={waiting} onChange={onEnabled} />
-      </Row>
-      <PromptShowField value={show} state={showState} onChange={onShow} />
-      <label htmlFor={fieldId} className="st-visually-hidden">
-        Prompt template
-      </label>
-      <Field
-        id={fieldId}
-        mono
-        width="100%"
-        className="st-prompt-template"
-        value={template}
-        placeholder="[%hp_bar:10 %hp/%maxhp hp] > "
-        aria-describedby={previewId}
-        onChange={onTemplate}
-      />
-      <output
-        id={previewId}
-        htmlFor={fieldId}
-        aria-label="Preview"
-        className="st-prompt-preview"
-        style={{ color: textColor }}
-      >
-        {chunks.map((chunk, i) => (
-          <span key={i} style={styleToCss(chunk.style)}>
-            {chunk.text}
-          </span>
-        ))}
-      </output>
-    </div>
   );
 }
