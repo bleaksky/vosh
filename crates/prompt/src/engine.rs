@@ -701,7 +701,9 @@ impl PromptEngine {
     }
 
     /// A connection opened. It starts with no packets and no values.
-    /// `known_host` is whether the host is The Forsaken Lands.
+    /// `known_host` is whether the host is The Forsaken Lands. A preview
+    /// the open card set stays, since the card can be open as you
+    /// connect (D9), and the first prompt draws what it shows.
     pub fn connect(&mut self, known_host: bool) {
         self.vars.disconnect();
         self.stage.reset();
@@ -716,7 +718,6 @@ impl PromptEngine {
             ..Misses::default()
         };
         self.kept_pattern = None;
-        self.preview = None;
         self.apply_rules();
     }
 
@@ -931,6 +932,29 @@ mod tests {
         assert!(!engine.vars.new_build());
         assert!(engine.vars.prompt_vars().is_empty());
         assert!(!engine.forsaken());
+    }
+
+    #[test]
+    fn the_preview_the_card_set_offline_lasts_through_the_connect() {
+        use crate::overrides::{Preview, PromptPreview};
+        let mut engine = PromptEngine::default();
+        let placeholders = PromptPreview {
+            placeholders: true,
+            ..PromptPreview::default()
+        };
+        engine.set_preview(Some(placeholders.clone()));
+        // The card stays open as you connect, so the first prompt draws
+        // what it shows.
+        engine.connect(true);
+        assert_eq!(engine.preview(), Some(&placeholders));
+        let low = PromptPreview {
+            preview: Some(Preview::LowHealth),
+            ..PromptPreview::default()
+        };
+        engine.set_preview(Some(low));
+        // The connection going clears it.
+        engine.disconnect();
+        assert_eq!(engine.preview(), None);
     }
 
     #[test]
