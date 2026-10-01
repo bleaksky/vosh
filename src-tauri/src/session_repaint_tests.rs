@@ -41,8 +41,7 @@ fn read_then_wait(
     now: Instant,
 ) -> (Read, Option<Instant>) {
     let read = session.read(bytes);
-    let gmcp = bytes.windows(3).any(|w| w == [255, 250, 201]);
-    let next = late_repaint_after(&session.p, waiting, gmcp, read.out.writes_text(), now);
+    let next = late_repaint_after(&session.p, waiting, read.gmcp, read.out.writes_text(), now);
     (read, next)
 }
 
@@ -88,6 +87,50 @@ fn a_packet_with_no_text_after_it_repaints_the_open_row_late() {
             "{show:?}"
         );
     }
+}
+
+#[test]
+fn a_packet_after_the_prompt_in_its_read_repaints_it_late() {
+    for show in [PromptShow::Text, PromptShow::Lifted, PromptShow::Pinned] {
+        let mut session = Session::new(showing(profile(CODES, HOUR, true), show));
+        let now = Instant::now();
+        // The game sends the hour right after the prompt, in one read.
+        let mut bytes = wire_fixture("quiet");
+        bytes.extend(time(14));
+        let (read, waiting) = read_then_wait(&mut session, &bytes, None, now);
+        assert!(read.prompt, "{show:?}");
+        assert!(read.gmcp, "{show:?}: the packet came after the prompt");
+        assert_eq!(waiting, Some(now + LATE_REPAINT), "{show:?}");
+        let out = repaint_step(&mut session.p, false, now);
+        let shown = match show {
+            PromptShow::Pinned => out.pin.as_deref().map(plain),
+            _ => out.replace.as_ref().map(|r| plain(&r.bytes)),
+        };
+        assert!(
+            shown.as_deref().is_some_and(|s| s.starts_with("<1020> 14")),
+            "{show:?}: {shown:?}"
+        );
+    }
+
+    // Packets before the prompt in its read draw with it, so nothing waits.
+    for show in [PromptShow::Text, PromptShow::Lifted, PromptShow::Pinned] {
+        let mut session = Session::new(showing(profile(CODES, HOUR, true), show));
+        let now = Instant::now();
+        let mut bytes = time(14);
+        bytes.extend(wire_fixture("quiet"));
+        let (read, waiting) = read_then_wait(&mut session, &bytes, None, now);
+        assert!(!read.gmcp, "{show:?}");
+        assert_eq!(waiting, None, "{show:?}");
+    }
+
+    // Text after the packet still cancels it.
+    let now = Instant::now();
+    let mut session = Session::new(profile(CODES, HOUR, true));
+    let mut bytes = wire_fixture("quiet");
+    bytes.extend(time(14));
+    bytes.extend_from_slice(b"\n\rTarvik tells you 'back soon'\n\r");
+    let (_, waiting) = read_then_wait(&mut session, &bytes, None, now);
+    assert_eq!(waiting, None);
 }
 
 #[test]
