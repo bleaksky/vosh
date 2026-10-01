@@ -639,6 +639,9 @@ impl PromptEngine {
     /// clears it or the connection goes, and the next repaint shows it.
     pub fn set_preview(&mut self, preview: Option<PromptPreview>) {
         self.preview = preview.filter(|p| !p.is_live());
+        // The card shows a preview for as long as it is open, so the row
+        // that draws your design borrows the band while one is set.
+        self.stage.set_card(self.preview.is_some());
     }
 
     /// What the open card shows on your prompt, while it shows anything
@@ -749,6 +752,7 @@ impl PromptEngine {
         };
         self.kept_pattern = None;
         self.preview = None;
+        self.stage.set_card(false);
         self.apply_rules();
     }
 
@@ -933,6 +937,26 @@ mod tests {
         assert!(!engine.vars.new_build());
         assert!(engine.vars.prompt_vars().is_empty());
         assert!(!engine.forsaken());
+    }
+
+    #[test]
+    fn the_card_lends_the_band_while_its_preview_lasts() {
+        use crate::overrides::PromptPreview;
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        assert!(!engine.stage.card_open());
+        let labels = PromptPreview {
+            placeholders: true,
+            ..PromptPreview::default()
+        };
+        engine.set_preview(Some(labels.clone()));
+        assert!(engine.stage.card_open());
+        // A preview that draws the live prompt as it is counts as none.
+        engine.set_preview(Some(PromptPreview::default()));
+        assert!(!engine.stage.card_open());
+        engine.set_preview(Some(labels));
+        engine.disconnect();
+        assert!(!engine.stage.card_open());
     }
 
     #[test]
