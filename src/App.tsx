@@ -47,6 +47,7 @@ import {
   terminalLocalWrite,
   promptPreviewSet,
   promptStateGet,
+  subscribePromptCardOpen,
   TERMINAL_LINE_HEIGHTS,
   type StatePayload,
   type TerminalLineHeight,
@@ -108,6 +109,7 @@ import { useConnection, type ConnectionStatus } from './lib/useConnection';
 import { useEscape } from './lib/escapeStack';
 import { usePromptShow } from './lib/promptShow';
 import { PromptDock } from './components/prompt/PromptDock';
+import { PromptCard, type PromptCardHost } from './components/prompt/PromptCard';
 import { getPinnedBand, notePageWrite, usePinnedDockRows } from './lib/stores/pinnedPromptStore';
 import { lentRows, type CellSize } from './lib/promptBand';
 
@@ -341,6 +343,8 @@ function App() {
   // open; the value is the pointer's viewport position (the menu
   // clamps itself to the window edges).
   const [terminalMenu, setTerminalMenu] = useState<{ x: number; y: number } | null>(null);
+  // The prompt card (Customize prompt…), open over your prompt.
+  const [promptCard, setPromptCard] = useState(false);
   // History pane readiness: flips true once the history Terminal has
   // finished loading scrollback after its mount. We queue any pending
   // mirror search through pendingFindRef until the history is ready,
@@ -390,6 +394,42 @@ function App() {
     promptPreviewSet(null).catch((e: unknown) =>
       console.error('[main] clearing the prompt preview failed', e),
     );
+  }, []);
+
+  // The prompt card reaches the terminal it sits over through these.
+  const promptCardHost = useMemo<PromptCardHost>(
+    () => ({
+      terminal: () => termRef.current,
+      area: () => terminalAreaRef.current,
+      dock: () => document.querySelector<HTMLElement>('.prompt-dock'),
+    }),
+    [],
+  );
+  const closePromptCard = () => {
+    setPromptCard(false);
+    inputRef.current?.focus();
+  };
+
+  // Customize… in Settings, and anything else in another window, opens
+  // the card here and brings this window forward.
+  useEffect(() => {
+    let alive = true;
+    let unlisten: (() => void) | undefined;
+    void subscribePromptCardOpen(() => {
+      setPromptCard(true);
+      void getCurrentWindow()
+        .setFocus()
+        .catch(() => {});
+    })
+      .then((fn) => {
+        if (alive) unlisten = fn;
+        else fn();
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+      unlisten?.();
+    };
   }, []);
 
   // A dev run gives the Web Inspector __voshPromptPointer, which names the
@@ -1853,7 +1893,20 @@ function App() {
           termRef={termRef}
           inputRef={inputRef}
           onOpenFind={() => setFindOpen(true)}
+          onCustomizePrompt={() => setPromptCard(true)}
           onClose={() => setTerminalMenu(null)}
+        />
+      )}
+      {promptCard && (
+        <PromptCard
+          host={promptCardHost}
+          show={promptShow}
+          cell={cellSize}
+          monoFamily={fontFamily}
+          themeTerminalColors={themeTerminalColors}
+          brightBold={brightBold}
+          renderer={nativeSurfaceEnabled() ? 'native' : 'xterm'}
+          onClose={closePromptCard}
         />
       )}
       {paletteOpen && <CommandPalette deps={paletteDeps()} onClose={closePalette} />}
