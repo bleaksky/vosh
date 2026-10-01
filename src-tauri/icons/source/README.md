@@ -16,7 +16,6 @@ This folder holds every master of the icon and the script that turns them into t
 - `generator/` holds the Python that writes `vosh.icon` and the four large SVG masters. `masters.py` runs it. `cand.py` holds the approved parameters (`FINAL`), `gen.py` draws the art, `layout_dp.py` picks the line breaks and the lit run of every row, `glyphs.py` turns JetBrains Mono into path data, and `moon_all.txt` lists the moon echoes from the game. `ico.py` packs `icon.ico`.
 - `build-icons.sh` builds every generated file from the masters.
 - `OFL-JetBrainsMono.txt` is the licence of the font behind the lettering.
-- `vosh-blood.svg`, `vosh-bone.svg`, `blood-1024.png` and `bone-1024.png` are the old moons icon. Nothing reads them any more.
 
 The squircle in the tile, the legacy master and the small masters is the shape macOS 27 draws every app icon in, measured through Icon Services.
 

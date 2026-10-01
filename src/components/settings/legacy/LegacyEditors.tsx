@@ -144,62 +144,6 @@ export function LegacyCommandLine({ config, update }: LegacyConfigProps) {
   );
 }
 
-/** The prompt switch and design as the Settings config held them before
- *  the Prompt section moved them to the prompt commands. Only
- *  LegacyPrompt reads them. */
-interface LegacyPromptFields {
-  prompt_template_enabled: boolean;
-  prompt_template: string;
-}
-
-/** The old General tab's prompt section. Nothing renders it since the
- *  Prompt section of Input took its place. It stays for James to delete
- *  with the other orphans of the prompt editor. */
-export function LegacyPrompt({
-  config,
-  update,
-}: {
-  config: LegacyPromptFields;
-  update: (patch: Partial<LegacyPromptFields>) => void;
-}) {
-  return (
-    <div className="settings-sect settings-sect-first">
-      <div className="settings-frow">
-        <span className="settings-flabel">replace gagged</span>
-        <span className="settings-fctrl">
-          <label className="settings-checkbox">
-            <input
-              type="checkbox"
-              checked={config.prompt_template_enabled}
-              onChange={(e) => update({ prompt_template_enabled: e.target.checked })}
-            />
-            <span>render a template where the server prompt was</span>
-          </label>
-        </span>
-      </div>
-      <div className="settings-frow">
-        <span className="settings-flabel">template</span>
-        <span className="settings-fctrl">
-          <input
-            type="text"
-            className="settings-font-input"
-            spellCheck={false}
-            value={config.prompt_template}
-            placeholder="[%hp_bar:10 %hp/%maxhp hp] > "
-            onChange={(e) => update({ prompt_template: e.target.value })}
-            aria-label="custom prompt template"
-          />
-        </span>
-        <span className="settings-fhelp">
-          {
-            'tokens %hp %pct_hp %hp_bar:W:COLOR %c_hp (auto) %c_red %{c:255,128,0} %{bg:#330033} %s_bold %s_italic %s_underline %c_reset %time %date. needs a prompt-capture trigger that gags and emits vars.'
-          }
-        </span>
-      </div>
-    </div>
-  );
-}
-
 /** The old General tab's updates row. */
 export function LegacyUpdates({ config, update }: LegacyConfigProps) {
   const [updateStatus, setUpdateStatus] = useState<{

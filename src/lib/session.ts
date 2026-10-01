@@ -2817,30 +2817,6 @@ export async function subscribeSplitDividerChanged(
   });
 }
 
-/** The prompt switch and design Settings sent as it saved its whole
- *  config, before the Prompt section moved them to the prompt commands.
- *  Nothing sends vosh://prompt-template-changed any more, and nothing
- *  calls this. It stays for James to delete with the other orphans of
- *  the prompt editor. */
-export interface PromptTemplateConfig {
-  enabled: boolean;
-  template: string;
-}
-
-export async function subscribePromptTemplateChanged(
-  cb: (value: PromptTemplateConfig) => void,
-): Promise<UnlistenFn> {
-  return listen<{ enabled?: boolean; template?: string }>(
-    'vosh://prompt-template-changed',
-    (event) => {
-      cb({
-        enabled: Boolean(event.payload?.enabled),
-        template: typeof event.payload?.template === 'string' ? event.payload.template : '',
-      });
-    },
-  );
-}
-
 export async function subscribeBaseAnsiChanged(
   cb: (colors: string[] | null) => void,
 ): Promise<UnlistenFn> {

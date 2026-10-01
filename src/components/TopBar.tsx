@@ -48,9 +48,10 @@ interface Props {
 // with text-style chrome buttons on the right (settings, map, then
 // the window controls). Cross-platform substitute for native
 // traffic lights.
-// The moons mark, from icons/source/vosh-blood.svg minus its tile
-// background — the bar is already the dark ground. Authored colors
-// kept so the blood moon reads.
+// The moons mark, from the old moons app icon (vosh-blood.svg, removed
+// from icons/source with the icon redesign) minus its tile background,
+// since the bar is already the dark ground. Authored colors kept so the
+// blood moon reads.
 function VoshMark() {
   return (
     <svg width="18" height="18" viewBox="0 0 1024 1024" aria-hidden="true">

@@ -142,13 +142,6 @@ body {
   font-size: var(--app-font-size);
 }
 
-.chat-pane-body,
-.imm-body,
-.group-worth {
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
 .vitals-bar,
 .vitals-row-template {
   font-family: var(--font-mono);
@@ -836,15 +829,8 @@ body {
 /* Card identity tints. Consumed only by the card recipe above, so
    these are inert everywhere outside a side zone. Hues follow the
    chat-channel pastels in chatColors.ts. */
-.group-pane,
-.group-pane-pinned {
-  --zone-card-tint: #8fdaa8;
-}
 .vitals-bar {
   --zone-card-tint: #ecc985;
-}
-.imm-pane {
-  --zone-card-tint: var(--c-accent);
 }
 /* Inner vertical handles (chat, roomstrip) keep their 8px strip
    inside the wrapper, so a seam with a drag handle reads one step
@@ -6009,18 +5995,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   background: var(--c-surface);
 }
 
-/* Pinned group pane — standalone variant of GroupPane that sits in
-   the right column under the map. Reuses chat-pane-header /
-   chat-pane-body styling for visual consistency. */
-.group-pane-pinned {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--c-surface);
-  border-top: 1px solid var(--c-border);
-}
-
 /* The vertical resize handle between map and pinned group must sit
    above its siblings so its row-resize cursor catches drags, even
    if the chat row below has its own z-index stack. */
@@ -6353,138 +6327,8 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   text-align: center;
 }
 
-/* Header and body chrome from the May chat pane, which is gone. The
-   old GroupPane and ImmPane in src/components still borrow it. */
-
-.chat-pane-header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 14px 4px 14px;
-  border-bottom: 1px solid var(--c-border-soft);
-  color: var(--c-text-faint);
-  font-family: var(--font-chrome);
-  font-size: 11px;
-}
-
-.chat-pane-title {
-  color: var(--c-text-dim);
-  font-family: var(--font-label);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-}
-
-.chat-pane-count {
-  margin-left: auto;
-  color: var(--c-text-faint);
-  font-variant-numeric: tabular-nums;
-}
-
-.chat-pane-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 4px 12px 6px 12px;
-  line-height: 1.45;
-}
-
-.chat-pane-empty {
-  color: var(--c-text-dim);
-  padding: 8px 0;
-}
-
-/* Group roster — one Ember row per party member: mono name, 44px hp
-   mini-bar, hp%. Fill width and both colors come inline from the
-   health tier (success / warn / danger by thirds). The negative
-   margin backs the rows out of the body's 12px inset so their own
-   4px 14px padding lines up with the 14px pane-head grid. */
-.group-rows {
-  display: flex;
-  flex-direction: column;
-  margin: 0 -12px;
-}
-
-.group-row-ember {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 14px;
-}
-
-.group-row-name {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--c-text-muted);
-  flex: 1 1 auto;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* Your own row reads a notch brighter; the leader keeps the accent
    star treatment and wins when they are the same person. */
-.group-row-ember.is-self .group-row-name {
-  color: var(--c-text-strong);
-}
-
-.group-row-ember.is-leader .group-row-name {
-  color: var(--c-accent);
-}
-
-.group-row-ember.is-leader .group-row-name::before {
-  content: '\2605 ';
-  margin-right: 2px;
-}
-
-.group-row-bar {
-  flex: 0 0 auto;
-  width: 44px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--c-surface-emphasis);
-  overflow: hidden;
-}
-
-.group-row-fill {
-  display: block;
-  height: 100%;
-  /* width + tier color inline */
-}
-
-.group-row-hp {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  width: 28px;
-  flex: 0 0 auto;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  /* tier color inline */
-}
-
-/* Solo state — your own worth instead of a roster. */
-.group-worth {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  column-gap: 12px;
-  row-gap: 2px;
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.group-worth dt {
-  color: var(--c-text-faint);
-  text-transform: lowercase;
-  letter-spacing: 0.04em;
-}
-
-.group-worth dd {
-  margin: 0;
-  color: var(--c-text);
-}
 
 /* Loadouts tab. Path B-only section listing every loadout with an
    active checkbox, description, group chips, and the auto-match
@@ -7031,102 +6875,11 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   color: var(--c-text);
 }
 
-/* ---- imm pane: the staff duty board ------------------------------
-   A triage list. Only queues with work show; they sort worst-first
-   (overdue tier, then nearing, then plain pending, bigger backlog
-   first within a tier), so the eye lands on what is on fire and a
-   quiet board is nearly empty. The count carries the urgency color
-   and flashes once when it climbs (the number remounts on a strike
-   bump); a decrease stays quiet. */
-
-.imm-pane {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--c-surface);
-  /* Own both seams: neighbors like the map draw no top border of
-     their own, so the board separates itself whether it sits above
-     or below them. */
-  border-top: 1px solid var(--c-border);
-  border-bottom: 1px solid var(--c-border);
-}
-
 /* Adjacent panes that draw their own top border would double the
    seam right under the board; drop theirs. */
-.imm-pane + .group-pane-pinned {
-  border-top: none;
-}
-
-.imm-total-nearing {
-  color: var(--c-warn);
-}
-
-.imm-total-overdue {
-  color: var(--c-danger);
-}
-
-.imm-total-clear {
-  color: var(--c-text-faint);
-}
-
-.imm-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 4px 10px 6px;
-  display: flex;
-  flex-direction: column;
-}
-
-.imm-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.imm-row {
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
-  padding: 2px 2px;
-}
 
 /* Count is the hero: fixed-width and right-aligned so magnitudes line
    up down the column, colored by the queue's deadline tier. */
-.imm-row-count {
-  flex: 0 0 3.5ch;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: var(--c-text-strong);
-  animation: imm-strike 0.7s ease-out;
-}
-
-.imm-row-nearing .imm-row-count {
-  color: var(--c-warn);
-}
-
-.imm-row-overdue .imm-row-count {
-  color: var(--c-danger);
-}
-
-.imm-row-label {
-  color: var(--c-text-muted);
-  letter-spacing: 0.04em;
-}
-
-.imm-row-chips {
-  margin-left: auto;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0 8px;
-}
-
-.imm-chip {
-  font-size: 0.85em;
-  white-space: nowrap;
-}
 
 .imm-chip-sub {
   color: var(--c-text-faint);
@@ -7151,24 +6904,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   100% {
     filter: brightness(1);
   }
-}
-
-.imm-quiet {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 14px 8px;
-  text-align: center;
-}
-
-.imm-quiet-line {
-  color: var(--c-text-muted);
-}
-
-.imm-quiet-sub {
-  color: var(--c-text-faint);
-  font-size: 0.9em;
 }
 
 /* ═══ Command palette (⌘K) ══════════════════════════════════════════ */
