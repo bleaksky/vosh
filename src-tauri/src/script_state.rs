@@ -109,6 +109,7 @@ impl ApplyResult {
             triggers: self.lists.triggers || later.lists.triggers,
             aliases: self.lists.aliases || later.lists.aliases,
             prompt: self.lists.prompt || later.lists.prompt,
+            macro_groups: self.lists.macro_groups || later.lists.macro_groups,
         };
         self.new_timers.extend(later.new_timers);
         self.cancel_timers.extend(later.cancel_timers);
@@ -255,7 +256,9 @@ impl GroupToggleReport {
 /// stamp an empty group name into the macro disabled set. In loadout
 /// mode `name` is one of your folders, and each store turns on or off
 /// every catalog group the profile's folder map names for it, see
-/// [`crate::profile_config::GroupFolders`].
+/// [`crate::profile_config::GroupFolders`]. A macro group that turned
+/// on or off moves [`Profile::macro_group_toggles`], so the windows
+/// hear it through [`crate::list_events::ListChanges`].
 pub(crate) fn toggle_group(profile: &mut Profile, name: &str, enabled: bool) -> GroupToggleReport {
     let mut report = GroupToggleReport::default();
     let folders = &profile.group_folders;
@@ -276,10 +279,13 @@ pub(crate) fn toggle_group(profile: &mut Profile, name: &str, enabled: bool) -> 
     let macro_groups = macro_groups(profile);
     for group in folder_groups(&folders.macros, name) {
         if macro_groups.contains(group) {
-            if enabled {
-                profile.disabled_macro_groups.remove(group);
+            let turned = if enabled {
+                profile.disabled_macro_groups.remove(group)
             } else {
-                profile.disabled_macro_groups.insert(group.to_string());
+                profile.disabled_macro_groups.insert(group.to_string())
+            };
+            if turned {
+                profile.macro_group_toggles = profile.macro_group_toggles.wrapping_add(1);
             }
             report.macros = true;
         }

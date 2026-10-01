@@ -3553,6 +3553,26 @@ mod tests {
     }
 
     #[test]
+    fn a_timer_group_line_reports_a_macro_group_that_turned() {
+        // The command line keeps its own map of the macro keys that fire,
+        // so a timer or tick `#group` line that turns a macro group off
+        // has to reach it, or the keys go on firing.
+        let mut p = Profile::default();
+        p.macros.push(crate::profile::Macro {
+            key: "F1".into(),
+            command: "kick".into(),
+            group: Some("combat".into()),
+            enabled: true,
+        });
+        let run = super::run_fired_locked(&mut p, "#group combat off", None);
+        assert!(run.lists.macro_groups);
+        assert!(p.disabled_macro_groups.contains("combat"));
+        // Off already, so nothing turned.
+        let run = super::run_fired_locked(&mut p, "#group combat off", None);
+        assert!(!run.lists.macro_groups);
+    }
+
+    #[test]
     fn tick_and_lua_lines_note_what_they_ask_of_the_profile() {
         let mut p = Profile::default();
         let mut effects = LineEffects::default();

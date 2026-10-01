@@ -9,7 +9,9 @@ use vosh_log::{SearchHit, SearchOptions, SearchPage, SessionRow};
 use vosh_trigger::Trigger;
 
 use crate::input;
-use crate::list_events::{broadcast_list_changes, ListChanges, ListRevisions};
+use crate::list_events::{
+    broadcast_list_changes, ListChanges, ListRevisions, MACRO_GROUPS_CHANGED,
+};
 use crate::log_state::{SharedLogStore, SharedScrollback};
 
 /// Debounce generation for `mark_profile_dirty`: each mark bumps it, and
@@ -1314,7 +1316,7 @@ pub(crate) async fn macros_set_group_enabled(
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    broadcast(&app, "vosh://macro-groups-changed", &group);
+    broadcast(&app, MACRO_GROUPS_CHANGED, &group);
     Ok(())
 }
 
@@ -4734,13 +4736,16 @@ pub(crate) async fn loadouts_set_active(app: AppHandle, active: Vec<String>) -> 
 /// imposes over the live profile, and save loadouts.toml in `app_data`.
 /// The command looks up the app data folder and queues the profile
 /// save, so a test can run this against a mock app and a scratch folder.
+/// When the switch turned a macro group on or off, every window hears it
+/// once the locks are released, since the command line keeps its own map
+/// of the macro keys that fire.
 async fn set_active_loadouts<R: tauri::Runtime>(
     app: &AppHandle<R>,
     app_data: &std::path::Path,
     active: Vec<String>,
 ) -> Result<(), String> {
     let state: SharedState = app.state::<SharedState>().inner().clone();
-    {
+    let macro_groups_changed = {
         let mut guard = state.loadout_set.lock().await;
         let Some(set) = guard.as_mut() else {
             return Err("Path B not active".into());
@@ -4760,10 +4765,15 @@ async fn set_active_loadouts<R: tauri::Runtime>(
         set.dormant = set.active.is_empty();
         let snapshot = set.clone();
         let mut p = state.profile.lock().await;
+        let macro_groups_before = p.disabled_macro_groups.clone();
         crate::loadout_store::apply_effective_state(&snapshot, &mut p);
         if let Err(e) = crate::loadout_store::save_loadout_set(app_data, &snapshot) {
             warn!(error = %e, "loadouts.toml save failed");
         }
+        p.disabled_macro_groups != macro_groups_before
+    };
+    if macro_groups_changed {
+        broadcast(app, MACRO_GROUPS_CHANGED, &"");
     }
     Ok(())
 }

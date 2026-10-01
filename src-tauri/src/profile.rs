@@ -45,6 +45,14 @@ pub(crate) struct Profile {
     /// `TriggerStore` but lives here directly because there is no
     /// `MacroStore` wrapper.
     pub(crate) disabled_macro_groups: BTreeSet<String>,
+    /// Moves each time `#group` or a Lua `mud.set_group_enabled` turns a
+    /// macro group on or off, see [`crate::script_state::toggle_group`].
+    /// [`crate::list_events::ListRevisions`] reads it, so every path that
+    /// runs lines or Lua tells the command line, which keeps its own map
+    /// of the macro keys that fire. A Settings checkbox and a loadout
+    /// switch tell it themselves. A profile switch or replace leaves this
+    /// alone.
+    pub(crate) macro_group_toggles: u64,
     /// The catalog groups each of this profile's folders became in the
     /// shared catalog, which `#group` follows. See [`GroupFolders`].
     pub(crate) group_folders: GroupFolders,

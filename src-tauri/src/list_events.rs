@@ -11,6 +11,12 @@
 //! `#prompt` or `#unprompt` line tells Settings to read the prompt
 //! switch and design again. Settings saves its whole config, and a copy
 //! it read before would otherwise put the old ones back.
+//!
+//! So do the macro groups. The command line keeps its own map of the
+//! macro keys that fire, so a `#group` line or a Lua
+//! `mud.set_group_enabled` that turned a macro group on or off tells it
+//! to read the groups again, or the keys of a group that is off go on
+//! firing.
 
 use tauri::AppHandle;
 
@@ -26,6 +32,12 @@ pub(crate) const ALIASES_CHANGED: &str = "vosh://aliases-changed";
 /// changed. The payload names the profile, `{profile}`, see
 /// [`PromptConfigChanged`].
 pub(crate) const PROMPT_CONFIG_CHANGED: &str = "vosh://prompt-config-changed";
+/// Sent to every window when a macro group turned on or off: a Settings
+/// checkbox, a `#group` line, a Lua `mud.set_group_enabled`, or a
+/// loadout switch. The command line reads the groups again on it. The
+/// payload names the group a checkbox turned, and is an empty string
+/// otherwise.
+pub(crate) const MACRO_GROUPS_CHANGED: &str = "vosh://macro-groups-changed";
 
 /// The payload of [`PROMPT_CONFIG_CHANGED`]: the active profile whose
 /// table changed, None before any profile loads.
@@ -43,13 +55,14 @@ pub(crate) fn broadcast_prompt_config_changed<R: tauri::Runtime>(app: &AppHandle
     crate::commands::broadcast(app, PROMPT_CONFIG_CHANGED, &PromptConfigChanged { profile });
 }
 
-/// The trigger and alias list revisions, and the prompt table's, at one
-/// moment.
+/// The trigger and alias list revisions, the prompt table's, and the
+/// count of macro group toggles, at one moment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ListRevisions {
     triggers: u64,
     aliases: u64,
     prompt: u64,
+    macro_groups: u64,
 }
 
 impl ListRevisions {
@@ -58,16 +71,19 @@ impl ListRevisions {
             triggers: profile.triggers.revision(),
             aliases: profile.aliases.revision(),
             prompt: profile.prompt.revision(),
+            macro_groups: profile.macro_group_toggles,
         }
     }
 }
 
-/// Which lists a step changed, and whether it changed the prompt table.
+/// Which lists a step changed, whether it changed the prompt table, and
+/// whether it turned a macro group on or off.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct ListChanges {
     pub(crate) triggers: bool,
     pub(crate) aliases: bool,
     pub(crate) prompt: bool,
+    pub(crate) macro_groups: bool,
 }
 
 impl ListChanges {
@@ -76,6 +92,7 @@ impl ListChanges {
             triggers: before.triggers != after.triggers,
             aliases: before.aliases != after.aliases,
             prompt: before.prompt != after.prompt,
+            macro_groups: before.macro_groups != after.macro_groups,
         }
     }
 
@@ -90,6 +107,7 @@ impl ListChanges {
         triggers: false,
         aliases: false,
         prompt: true,
+        macro_groups: false,
     };
 
     /// The trigger list alone, for a step that only writes triggers.
@@ -97,6 +115,7 @@ impl ListChanges {
         triggers: true,
         aliases: false,
         prompt: false,
+        macro_groups: false,
     };
 
     /// The alias list alone.
@@ -104,6 +123,7 @@ impl ListChanges {
         triggers: false,
         aliases: true,
         prompt: false,
+        macro_groups: false,
     };
 
     /// The events these changes send, triggers first.
@@ -117,6 +137,9 @@ impl ListChanges {
         }
         if self.prompt {
             out.push(PROMPT_CONFIG_CHANGED);
+        }
+        if self.macro_groups {
+            out.push(MACRO_GROUPS_CHANGED);
         }
         out
     }
@@ -200,6 +223,29 @@ mod tests {
     }
 
     #[test]
+    fn group_toggles_report_a_macro_group_that_turned() {
+        let mut p = Profile::default();
+        p.macros.push(crate::profile::Macro {
+            key: "F1".into(),
+            command: "kick".into(),
+            group: Some("combat".into()),
+            enabled: true,
+        });
+        assert_eq!(
+            changes(&mut p, "#group combat off").events(),
+            [MACRO_GROUPS_CHANGED]
+        );
+        // Off already, so nothing turned.
+        assert!(changes(&mut p, "#group combat off").events().is_empty());
+        assert_eq!(
+            changes(&mut p, "#lua mud.set_group_enabled('combat', true)").events(),
+            [MACRO_GROUPS_CHANGED]
+        );
+        // A group nothing is in leaves the command line alone.
+        assert!(changes(&mut p, "#group nothing off").events().is_empty());
+    }
+
+    #[test]
     fn steps_that_leave_the_lists_alone_report_nothing() {
         let mut p = Profile::default();
         let _ = input::process(&mut p, "#alias greet wave");
@@ -217,10 +263,16 @@ mod tests {
             triggers: true,
             aliases: true,
             prompt: true,
+            macro_groups: true,
         };
         assert_eq!(
             all.events(),
-            [TRIGGERS_CHANGED, ALIASES_CHANGED, PROMPT_CONFIG_CHANGED]
+            [
+                TRIGGERS_CHANGED,
+                ALIASES_CHANGED,
+                PROMPT_CONFIG_CHANGED,
+                MACRO_GROUPS_CHANGED
+            ]
         );
         assert!(ListChanges::default().events().is_empty());
     }
@@ -236,5 +288,28 @@ mod tests {
         };
         let apply = crate::script_state::apply_actions(&mut p, outcome);
         assert_eq!(apply.lists, ListChanges::ALIASES);
+    }
+
+    #[test]
+    fn a_lua_group_toggle_reports_a_macro_group_that_turned() {
+        let mut p = Profile::default();
+        p.macros.push(crate::profile::Macro {
+            key: "F1".into(),
+            command: "kick".into(),
+            group: Some("combat".into()),
+            enabled: true,
+        });
+        let toggle = |enabled| vosh_script::ScriptOutcome {
+            actions: vec![vosh_script::Action::SetGroupEnabled {
+                name: "combat".into(),
+                enabled,
+            }],
+        };
+        let apply = crate::script_state::apply_actions(&mut p, toggle(false));
+        assert_eq!(apply.lists.events(), [MACRO_GROUPS_CHANGED]);
+        let apply = crate::script_state::apply_actions(&mut p, toggle(false));
+        assert!(apply.lists.events().is_empty());
+        let apply = crate::script_state::apply_actions(&mut p, toggle(true));
+        assert_eq!(apply.lists.events(), [MACRO_GROUPS_CHANGED]);
     }
 }
