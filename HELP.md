@@ -780,7 +780,7 @@ Your own prompt is a design of text and codes. Customize prompt writes the codes
 | `%s_italic` `%s_bold` `%s_underline` `%s_off`  | Turns a style on, or every style off.                             |
 | `%s_strike` `%s_dim` `%s_inverse`              | Strikes the text through, dims it, or swaps its color and ground. |
 | `%s_double` `%s_curly` `%s_dotted` `%s_dashed` | Underlines with two lines, a wave, dots or dashes.                |
-| `%{ul:#bf616a}` `%ul_default`                  | Colors the underline, or gives it the text color again.           |
+| `%{ul:#bf616a}` `%{ul:default}`                | Colors the underline, or gives it the text color again.           |
 | `%nl`                                          | Starts a new line.                                                |
 | `%{if:fight}` `%{ifnot:fight}` `%{end}`        | Shows what sits between them only in a fight, or only out of one. |
 | `%{raw}`                                       | Your prompt exactly as the game sent it.                          |

@@ -982,12 +982,16 @@ fn underline_kinds_and_their_color_write_their_own_sgr() {
         "\x1b[4:2m.\x1b[4:4m.\x1b[4:5m.\x1b[4m.\x1b[0m"
     );
     assert_eq!(
-        draw("%ul_red%s_curly.%ul_208.%{ul:1,2,3}.%ul_default.", &values).ansi,
+        draw(
+            "%{ul:red}%s_curly.%{ul:208}.%{ul:1,2,3}.%{ul:default}.",
+            &values
+        )
+        .ansi,
         "\x1b[58:5:1m\x1b[4:3m.\x1b[58:5:208m.\x1b[58:2::1:2:3m.\x1b[59m.\x1b[0m"
     );
     // By how full, and by the game's own bands.
     assert_eq!(
-        draw("%ul_hp", &vitals(300, 800, 930)).ansi,
+        draw("%{ul:hp}", &vitals(300, 800, 930)).ansi,
         "\x1b[58:5:1m\x1b[0m"
     );
     assert_eq!(
@@ -1000,7 +1004,21 @@ fn underline_kinds_and_their_color_write_their_own_sgr() {
     );
     assert_eq!(draw("%{ul:hp:game}", &values).ansi, "\x1b[59m\x1b[0m");
     // A field nothing knows prints as written, as a text color does.
-    assert_eq!(draw("%ul_nope", &values).ansi, "%ul_nope\x1b[0m");
+    assert_eq!(draw("%{ul:nope}", &values).ansi, "%{ul:nope}\x1b[0m");
+}
+
+#[test]
+fn a_value_whose_name_starts_with_ul_prints_as_before() {
+    // A script can name a value anything, so an underline color takes
+    // only the braced form and leaves every name to the values.
+    let map = vars(&[("ul_kills", "12"), ("ul_red", "3")]);
+    assert_eq!(
+        draw_map(
+            "kills %ul_kills %{ul_kills} %ul_red %{ul_red:trunc:1}",
+            &map
+        ),
+        "kills 12 12 3 3\x1b[0m"
+    );
 }
 
 #[test]
@@ -1041,7 +1059,7 @@ fn a_restore_writes_the_underline_kind_and_color_back_whole() {
     // A hidden mark puts the text color back and leaves the line alone.
     let values = Fixed::default().with("hp", Resolved::Hidden);
     assert_eq!(
-        draw("%s_dashed%ul_cyan%hp", &values).ansi,
+        draw("%s_dashed%{ul:cyan}%hp", &values).ansi,
         "\x1b[4:5m\x1b[58:5:6m\x1b[90m?\x1b[39m\x1b[0m"
     );
 }

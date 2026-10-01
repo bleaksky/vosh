@@ -73,7 +73,7 @@ export const PROMPT_DESIGN_CODES: readonly PromptDesignCode[] = [
     text: 'Underlines with two lines, a wave, dots or dashes.',
   },
   {
-    codes: ['%{ul:#bf616a}', '%ul_default'],
+    codes: ['%{ul:#bf616a}', '%{ul:default}'],
     text: 'Colors the underline, or gives it the text color again.',
   },
 
