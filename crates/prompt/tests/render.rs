@@ -933,3 +933,115 @@ fn spans_count_cells_as_the_webview_lays_them_out() {
     assert_eq!(vosh_prompt::wrap::cell_width('\u{2588}'), 1);
     assert_eq!(vosh_prompt::wrap::cell_width('\u{1f600}'), 2);
 }
+
+// The underline kinds, the underline color and the styles the card adds.
+
+#[test]
+fn the_sgr_state_reads_sub_parameters_as_one_code() {
+    use vosh_prompt::render::{Color, SgrState};
+    use vosh_prompt::template::UnderlineStyle;
+    let mut s = SgrState::default();
+    s.apply("4:3;58:2::191:97:106");
+    assert_eq!(s.underline, Some(UnderlineStyle::Curly));
+    assert!(!s.italic && !s.dim && !s.bold);
+    assert_eq!(s.underline_color, Color::Rgb(191, 97, 106));
+    s.apply("58;5;208");
+    assert_eq!(s.underline_color, Color::Index(208));
+    s.apply("58:5:9");
+    assert_eq!(s.underline_color, Color::Index(9));
+    s.apply("59");
+    assert_eq!(s.underline_color, Color::Default);
+    s.apply("38:2:1:2:3");
+    assert_eq!(s.fg, Color::Rgb(1, 2, 3));
+    s.apply("38:2::4:5:6;48:5:7");
+    assert_eq!((s.fg, s.bg), (Color::Rgb(4, 5, 6), Color::Index(7)));
+    s.apply("21");
+    assert_eq!(s.underline, Some(UnderlineStyle::Double));
+    s.apply("4:0");
+    assert_eq!(s.underline, None);
+    s.apply("4");
+    assert_eq!(s.underline, Some(UnderlineStyle::Single));
+    s.apply("4:5");
+    assert_eq!(s.underline, Some(UnderlineStyle::Dashed));
+    s.apply("24");
+    assert_eq!(s.underline, None);
+    assert!(!s.italic && !s.dim && !s.bold);
+    s.apply("4:4;58:5:1;0");
+    assert_eq!(s, SgrState::default());
+}
+
+#[test]
+fn underline_kinds_and_their_color_write_their_own_sgr() {
+    let values = vitals(1020, 800, 930);
+    assert_eq!(
+        draw("%s_curly%{ul:#bf616a}%hp", &values).ansi,
+        "\x1b[4:3m\x1b[58:2::191:97:106m1020\x1b[0m"
+    );
+    assert_eq!(
+        draw("%s_double.%s_dotted.%s_dashed.%s_underline.", &values).ansi,
+        "\x1b[4:2m.\x1b[4:4m.\x1b[4:5m.\x1b[4m.\x1b[0m"
+    );
+    assert_eq!(
+        draw("%ul_red%s_curly.%ul_208.%{ul:1,2,3}.%ul_default.", &values).ansi,
+        "\x1b[58:5:1m\x1b[4:3m.\x1b[58:5:208m.\x1b[58:2::1:2:3m.\x1b[59m.\x1b[0m"
+    );
+    // By how full, and by the game's own bands.
+    assert_eq!(
+        draw("%ul_hp", &vitals(300, 800, 930)).ansi,
+        "\x1b[58:5:1m\x1b[0m"
+    );
+    assert_eq!(
+        draw("%{ul:hp:game}", &vitals(214, 800, 930)).ansi,
+        "\x1b[58:5:1m\x1b[0m"
+    );
+    assert_eq!(
+        draw("%{ul:hp:game}", &vitals(418, 800, 930)).ansi,
+        "\x1b[58:5:3m\x1b[0m"
+    );
+    assert_eq!(draw("%{ul:hp:game}", &values).ansi, "\x1b[59m\x1b[0m");
+    // A field nothing knows prints as written, as a text color does.
+    assert_eq!(draw("%ul_nope", &values).ansi, "%ul_nope\x1b[0m");
+}
+
+#[test]
+fn style_off_ends_any_underline_and_keeps_its_color() {
+    let out = draw(
+        "%s_curly%{ul:#bf616a}%s_strike%s_dim%s_inverse.%s_off.",
+        &Fixed::default(),
+    );
+    assert_eq!(
+        out.ansi,
+        "\x1b[4:3m\x1b[58:2::191:97:106m\x1b[9m\x1b[2m\x1b[7m.\x1b[22;23;24;27;29m.\x1b[0m"
+    );
+    assert!(out.spans[0].underline);
+    assert!(!out.spans[1].underline);
+}
+
+#[test]
+fn a_restore_writes_the_underline_kind_and_color_back_whole() {
+    // The game's prompt resets the look, so what comes after it gets the
+    // curly line and its color back, and no style the colons would name.
+    let values = Fixed::default().value("raw", Value::Styled("x".to_string()));
+    let out = draw("%s_curly%{ul:#bf616a}%{raw}!", &values);
+    assert_eq!(
+        out.ansi,
+        "\x1b[4:3m\x1b[58:2::191:97:106mx\x1b[0m\x1b[4:3;58:2::191:97:106m!\x1b[0m"
+    );
+    // A semicolon color and a 4:0 from the game read as they are meant,
+    // so the italic after it comes back alone.
+    let values = Fixed::default().value(
+        "raw",
+        Value::Styled("\x1b[4:0;58;2;1;2;3mx\x1b[38:2::4:5:6;21my".to_string()),
+    );
+    let out = draw("%s_italic%{raw}!", &values);
+    assert_eq!(
+        out.ansi,
+        "\x1b[3m\x1b[4:0;58;2;1;2;3mx\x1b[38:2::4:5:6;21my\x1b[0m\x1b[3m!\x1b[0m"
+    );
+    // A hidden mark puts the text color back and leaves the line alone.
+    let values = Fixed::default().with("hp", Resolved::Hidden);
+    assert_eq!(
+        draw("%s_dashed%ul_cyan%hp", &values).ansi,
+        "\x1b[4:5m\x1b[58:5:6m\x1b[90m?\x1b[39m\x1b[0m"
+    );
+}

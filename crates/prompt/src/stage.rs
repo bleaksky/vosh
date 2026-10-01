@@ -2826,6 +2826,7 @@ mod tests {
             bold: false,
             italic: false,
             underline: false,
+            look: crate::render::SgrState::default(),
         }
     }
 

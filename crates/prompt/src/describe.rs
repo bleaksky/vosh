@@ -16,7 +16,7 @@
 
 use serde::Serialize;
 
-use crate::edit::{self, ColorChoice, Doc, EditOp, FormatChoice, FormatName, When};
+use crate::edit::{self, ColorChoice, Doc, EditOp, FormatChoice, FormatName, StyleChoice, When};
 use crate::format::{Resolved, Value};
 use crate::render::{render, RenderOptions, Rendered, Values};
 use crate::template::{BarColor, ColorSpec, FieldRef, Format, PieceKind, Template, TokenKind};
@@ -99,9 +99,20 @@ pub struct PieceView {
     /// The color the Color row checks: its text color at its first cell,
     /// or a bar's own color. By value with no field is its own value.
     pub color: ColorChoice,
+    /// The ground at its first cell, Default for the terminal's own.
+    pub background: ColorChoice,
     pub bold: bool,
+    pub dim: bool,
     pub italic: bool,
+    /// An underline of any kind is on.
     pub underline: bool,
+    /// The kind of underline, `underline` for the single line, None with
+    /// no underline.
+    pub underline_style: Option<StyleChoice>,
+    /// The underline's color, Default for the text's own.
+    pub underline_color: ColorChoice,
+    pub inverse: bool,
+    pub strike: bool,
     /// What a text piece prints.
     pub literal: Option<String>,
     /// What the value reads now, `1020 of 1020` or `60 percent`, with
@@ -205,9 +216,16 @@ pub fn describe(template: &Template, values: &dyn Values, preview: bool) -> Desc
                 when,
                 when_fixed,
                 color,
+                background: choice(look.bg.as_ref(), field.as_ref()),
                 bold: look.bold,
+                dim: look.dim,
                 italic: look.italic,
-                underline: look.underline,
+                underline: look.underline.is_some(),
+                underline_style: look.underline.map(edit::underline_choice),
+                underline_color: choice(look.underline_color.as_ref(), field.as_ref()),
+                inverse: look.inverse,
+                strike: look.strike,
+
                 literal,
                 meta: field.as_ref().and_then(|f| meta(f, values, preview)),
                 forms,

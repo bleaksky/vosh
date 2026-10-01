@@ -16,7 +16,10 @@
 //!                          name to color by how full it is
 //! %{c:hp:game}             foreground by the game's own %h bands
 //! %bg_<spec> %{bg:<spec>}  background, same specs
-//! %s_<style> %{s:<style>}  bold dim italic underline inverse strike off reset
+//! %ul_<spec> %{ul:<spec>}  the underline's color, same specs
+//! %s_<style> %{s:<style>}  bold dim italic underline inverse strike off
+//!                          reset, and the underline kinds double curly
+//!                          dotted dashed
 //! %{field:format:args}     a value in a format (see [`Format`])
 //! %{field:param:format}    for the fields that take a parameter, `aff`,
 //!                          `member_*`, `queue` and `gmcp`
@@ -108,13 +111,57 @@ pub enum ColorSpec {
     ByValue { field: FieldRef, game: bool },
 }
 
+/// The line an underline draws. One kind holds at a time, so turning one
+/// on replaces another.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum UnderlineStyle {
+    /// One straight line, SGR 4.
+    Single,
+    /// Two straight lines, SGR 4:2.
+    Double,
+    /// A wavy line, SGR 4:3.
+    Curly,
+    /// A dotted line, SGR 4:4.
+    Dotted,
+    /// A dashed line, SGR 4:5.
+    Dashed,
+}
+
+impl UnderlineStyle {
+    /// The SGR parameter the kind writes. Single stays the plain `4`
+    /// every terminal reads.
+    pub fn sgr(self) -> &'static str {
+        match self {
+            UnderlineStyle::Single => "4",
+            UnderlineStyle::Double => "4:2",
+            UnderlineStyle::Curly => "4:3",
+            UnderlineStyle::Dotted => "4:4",
+            UnderlineStyle::Dashed => "4:5",
+        }
+    }
+
+    /// The kind an SGR `4:n` names, None for `4:0`, which turns it off.
+    /// A kind no terminal names draws the single line, as terminals do.
+    pub fn from_sgr(n: u32) -> Option<UnderlineStyle> {
+        Some(match n {
+            0 => return None,
+            2 => UnderlineStyle::Double,
+            3 => UnderlineStyle::Curly,
+            4 => UnderlineStyle::Dotted,
+            5 => UnderlineStyle::Dashed,
+            _ => UnderlineStyle::Single,
+        })
+    }
+}
+
 /// A text style code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Style {
     Bold,
     Dim,
     Italic,
-    Underline,
+    /// An underline of one kind, `%s_underline` the single line.
+    Underline(UnderlineStyle),
     Inverse,
     Strike,
     /// Every style off, colors kept (SGR 22;23;24;27;29).
@@ -128,7 +175,7 @@ impl Style {
             Style::Bold => "1",
             Style::Dim => "2",
             Style::Italic => "3",
-            Style::Underline => "4",
+            Style::Underline(line) => line.sgr(),
             Style::Inverse => "7",
             Style::Strike => "9",
             Style::Off => "22;23;24;27;29",
@@ -141,6 +188,9 @@ impl Style {
 pub enum Code {
     Fg(ColorSpec),
     Bg(ColorSpec),
+    /// The color of the underline (SGR 58, or 59 for the text's own).
+    /// It shows only while an underline is on, and `%s_off` keeps it.
+    UnderlineColor(ColorSpec),
     Style(Style),
     /// Every color and style off (SGR 0), from `%c_reset`, `%bg_reset` or
     /// `%s_reset`.
@@ -335,7 +385,8 @@ impl Template {
                 }
                 TokenKind::Code(
                     Code::Fg(ColorSpec::ByValue { field, .. })
-                    | Code::Bg(ColorSpec::ByValue { field, .. }),
+                    | Code::Bg(ColorSpec::ByValue { field, .. })
+                    | Code::UnderlineColor(ColorSpec::ByValue { field, .. }),
                 )
                 | TokenKind::If(field)
                 | TokenKind::IfNot(field) => {
@@ -570,7 +621,7 @@ fn color_body(spec: &ColorSpec) -> String {
     }
 }
 
-/// A color spec as the short form writes it after `%c_` or `%bg_`, or
+/// A color spec as the short form writes it after `%c_`, `%bg_` or `%ul_`, or
 /// None when only the braced form reads it back.
 fn color_short(spec: &ColorSpec) -> Option<String> {
     match spec {
@@ -592,7 +643,11 @@ pub fn style_name(style: Style) -> &'static str {
         Style::Bold => "bold",
         Style::Dim => "dim",
         Style::Italic => "italic",
-        Style::Underline => "underline",
+        Style::Underline(UnderlineStyle::Single) => "underline",
+        Style::Underline(UnderlineStyle::Double) => "double",
+        Style::Underline(UnderlineStyle::Curly) => "curly",
+        Style::Underline(UnderlineStyle::Dotted) => "dotted",
+        Style::Underline(UnderlineStyle::Dashed) => "dashed",
         Style::Inverse => "inverse",
         Style::Strike => "strike",
         Style::Off => "off",
@@ -649,6 +704,7 @@ pub fn write_token(kind: &TokenKind, braced: bool) -> String {
         TokenKind::Code(Code::Style(style)) => format!("%s_{}", style_name(*style)),
         TokenKind::Code(Code::Fg(spec)) => write_color("c", spec, braced),
         TokenKind::Code(Code::Bg(spec)) => write_color("bg", spec, braced),
+        TokenKind::Code(Code::UnderlineColor(spec)) => write_color("ul", spec, braced),
         TokenKind::Value(value) => write_value(value, braced),
         TokenKind::If(field) => format!("%{{if:{field}}}"),
         TokenKind::IfNot(field) => format!("%{{ifnot:{field}}}"),
@@ -778,11 +834,20 @@ fn parse_color_spec(spec: &str) -> Option<Code> {
     })
 }
 
-fn color_code(spec: &str, background: bool) -> TokenKind {
-    match parse_color_spec(spec) {
-        Some(Code::Fg(spec)) if background => TokenKind::Code(Code::Bg(spec)),
-        Some(code) => TokenKind::Code(code),
-        None => TokenKind::Unknown,
+/// What a color code paints.
+#[derive(Clone, Copy)]
+enum Layer {
+    Fg,
+    Bg,
+    Underline,
+}
+
+fn color_code(spec: &str, layer: Layer) -> TokenKind {
+    match (parse_color_spec(spec), layer) {
+        (Some(Code::Fg(spec)), Layer::Bg) => TokenKind::Code(Code::Bg(spec)),
+        (Some(Code::Fg(spec)), Layer::Underline) => TokenKind::Code(Code::UnderlineColor(spec)),
+        (Some(code), _) => TokenKind::Code(code),
+        (None, _) => TokenKind::Unknown,
     }
 }
 
@@ -791,7 +856,11 @@ fn style_code(name: &str) -> TokenKind {
         "bold" => Style::Bold,
         "dim" => Style::Dim,
         "italic" => Style::Italic,
-        "underline" | "under" => Style::Underline,
+        "underline" | "under" => Style::Underline(UnderlineStyle::Single),
+        "double" => Style::Underline(UnderlineStyle::Double),
+        "curly" => Style::Underline(UnderlineStyle::Curly),
+        "dotted" => Style::Underline(UnderlineStyle::Dotted),
+        "dashed" => Style::Underline(UnderlineStyle::Dashed),
         "inverse" | "inv" => Style::Inverse,
         "strike" => Style::Strike,
         "off" => Style::Off,
@@ -816,10 +885,13 @@ fn parse_name(name: &str, source: &str, end: &mut usize) -> TokenKind {
         return value(FieldRef::new(base), Format::Bar { width, color });
     }
     if let Some(spec) = name.strip_prefix("c_") {
-        return color_code(spec, false);
+        return color_code(spec, Layer::Fg);
     }
     if let Some(spec) = name.strip_prefix("bg_") {
-        return color_code(spec, true);
+        return color_code(spec, Layer::Bg);
+    }
+    if let Some(spec) = name.strip_prefix("ul_") {
+        return color_code(spec, Layer::Underline);
     }
     if let Some(style) = name.strip_prefix("s_") {
         return style_code(style);
@@ -938,8 +1010,9 @@ fn parse_braced(body: &str, source: &str, end: &mut usize) -> TokenKind {
     }
     let rest = segs[1..].join(":").to_ascii_lowercase();
     match head.as_str() {
-        "c" => return color_code(&rest, false),
-        "bg" => return color_code(&rest, true),
+        "c" => return color_code(&rest, Layer::Fg),
+        "bg" => return color_code(&rest, Layer::Bg),
+        "ul" => return color_code(&rest, Layer::Underline),
         "s" => return style_code(&rest),
         "if" | "ifnot" => {
             return match parse_field(&segs[1..]) {
@@ -951,11 +1024,15 @@ fn parse_braced(body: &str, source: &str, end: &mut usize) -> TokenKind {
         _ => {}
     }
     if let Some(spec) = head.strip_prefix("c_") {
-        return color_code(&format!("{spec}:{rest}"), false);
+        return color_code(&format!("{spec}:{rest}"), Layer::Fg);
     }
     if let Some(spec) = head.strip_prefix("bg_") {
-        return color_code(&format!("{spec}:{rest}"), true);
+        return color_code(&format!("{spec}:{rest}"), Layer::Bg);
     }
+    if let Some(spec) = head.strip_prefix("ul_") {
+        return color_code(&format!("{spec}:{rest}"), Layer::Underline);
+    }
+
     let Some((field, format_segs)) = parse_field(&segs) else {
         return TokenKind::Unknown;
     };
@@ -1212,8 +1289,8 @@ mod tests {
             ("bold", Style::Bold),
             ("dim", Style::Dim),
             ("italic", Style::Italic),
-            ("underline", Style::Underline),
-            ("under", Style::Underline),
+            ("underline", Style::Underline(UnderlineStyle::Single)),
+            ("under", Style::Underline(UnderlineStyle::Single)),
             ("inverse", Style::Inverse),
             ("inv", Style::Inverse),
             ("strike", Style::Strike),
@@ -1227,6 +1304,117 @@ mod tests {
                 vec![TokenKind::Code(Code::Style(style))]
             );
         }
+    }
+
+    fn style(style: Style) -> TokenKind {
+        TokenKind::Code(Code::Style(style))
+    }
+
+    fn ul(spec: ColorSpec) -> TokenKind {
+        TokenKind::Code(Code::UnderlineColor(spec))
+    }
+
+    #[test]
+    fn underline_kinds_parse_as_styles() {
+        for (name, line) in [
+            ("double", UnderlineStyle::Double),
+            ("curly", UnderlineStyle::Curly),
+            ("dotted", UnderlineStyle::Dotted),
+            ("dashed", UnderlineStyle::Dashed),
+        ] {
+            assert_eq!(
+                kinds(&format!("%s_{name}")),
+                vec![style(Style::Underline(line))]
+            );
+            assert_eq!(
+                kinds(&format!("%{{S:{name}}}")),
+                vec![style(Style::Underline(line))]
+            );
+        }
+        assert_eq!(
+            kinds("%s_underline"),
+            vec![style(Style::Underline(UnderlineStyle::Single))]
+        );
+    }
+
+    #[test]
+    fn an_underline_color_takes_the_forms_of_a_text_color() {
+        assert_eq!(
+            kinds("%{ul:#BF616A}"),
+            vec![ul(ColorSpec::Rgb(191, 97, 106))]
+        );
+        assert_eq!(
+            kinds("%{ul:191,97,106}"),
+            vec![ul(ColorSpec::Rgb(191, 97, 106))]
+        );
+        assert_eq!(kinds("%ul_bf616a"), vec![ul(ColorSpec::Rgb(191, 97, 106))]);
+        assert_eq!(kinds("%{ul_red}"), vec![ul(ColorSpec::Named(1))]);
+        assert_eq!(kinds("%ul_red"), vec![ul(ColorSpec::Named(1))]);
+        assert_eq!(kinds("%ul_208"), vec![ul(ColorSpec::Index(208))]);
+        assert_eq!(kinds("%ul_default"), vec![ul(ColorSpec::Default)]);
+        assert_eq!(kinds("%ul_hp"), vec![ul(by_value("hp"))]);
+        assert_eq!(
+            kinds("%{ul:hp:game}"),
+            vec![ul(ColorSpec::ByValue {
+                field: FieldRef::new("hp"),
+                game: true
+            })]
+        );
+        assert_eq!(kinds("%ul_reset"), vec![TokenKind::Code(Code::Reset)]);
+        assert_eq!(kinds("%{ul:}"), vec![TokenKind::Unknown]);
+        assert_eq!(kinds("%{ul:1,2}"), vec![TokenKind::Unknown]);
+    }
+
+    #[test]
+    fn each_style_writes_its_own_sgr() {
+        let sgr = |s: Style| s.sgr();
+        assert_eq!(sgr(Style::Bold), "1");
+        assert_eq!(sgr(Style::Dim), "2");
+        assert_eq!(sgr(Style::Italic), "3");
+        assert_eq!(sgr(Style::Underline(UnderlineStyle::Single)), "4");
+        assert_eq!(sgr(Style::Underline(UnderlineStyle::Double)), "4:2");
+        assert_eq!(sgr(Style::Underline(UnderlineStyle::Curly)), "4:3");
+        assert_eq!(sgr(Style::Underline(UnderlineStyle::Dotted)), "4:4");
+        assert_eq!(sgr(Style::Underline(UnderlineStyle::Dashed)), "4:5");
+        assert_eq!(sgr(Style::Inverse), "7");
+        assert_eq!(sgr(Style::Strike), "9");
+        assert_eq!(sgr(Style::Off), "22;23;24;27;29");
+    }
+
+    #[test]
+    fn new_style_codes_write_back_as_they_read() {
+        for source in [
+            "%s_double",
+            "%s_curly",
+            "%s_dotted",
+            "%s_dashed",
+            "%s_strike",
+            "%s_dim",
+            "%s_inverse",
+            "%ul_red",
+            "%ul_default",
+            "%{ul:#bf616a}",
+            "%{ul:hp:game}",
+        ] {
+            let tokens = kinds(source);
+            assert_eq!(write_tokens(&tokens), source, "{source}");
+        }
+        assert_eq!(
+            write_token(&ul(ColorSpec::Rgb(191, 97, 106)), false),
+            "%{ul:#bf616a}"
+        );
+        assert_eq!(write_token(&ul(ColorSpec::Named(1)), true), "%{ul:red}");
+        assert_eq!(
+            write_token(&style(Style::Underline(UnderlineStyle::Curly)), true),
+            "%{s:curly}"
+        );
+    }
+
+    #[test]
+    fn reads_the_field_an_underline_color_follows() {
+        let template = Template::parse("%ul_hp%s_curly%{ul:mana:game}x");
+        let names: Vec<String> = template.reads().iter().map(ToString::to_string).collect();
+        assert_eq!(names, vec!["hp", "mana"]);
     }
 
     #[test]

@@ -6,6 +6,7 @@ use chrono::{NaiveDate, NaiveDateTime};
 use vosh_prompt::edit::{
     apply, ColorChoice, EditError, EditOp, FormatChoice, FormatName, StyleChoice, When,
 };
+use vosh_prompt::render::SgrState;
 use vosh_prompt::template::{PieceKind, TokenKind};
 use vosh_prompt::vars::Samples;
 use vosh_prompt::{render_str, FieldRef, RenderOptions, Resolved, SpanColor, Template, Values};
@@ -42,8 +43,10 @@ fn edit(template: &str, op: &EditOp) -> String {
     apply(template, op, &known).unwrap_or_else(|e| panic!("{op:?} on {template}: {e}"))
 }
 
-/// Each drawn piece's text and look, in the order the pieces draw.
-type Part = (String, SpanColor, SpanColor, bool, bool, bool);
+/// Each drawn piece's text and look, in the order the pieces draw. The
+/// last is the whole look, dim, inverse, strike and the underline's kind
+/// and color with the rest.
+type Part = (String, SpanColor, SpanColor, bool, bool, bool, SgrState);
 
 fn parts(template: &str, fight: bool) -> Vec<(usize, Part)> {
     let rendered = render_str(template, &Sampled { fight }, RenderOptions::default());
@@ -71,7 +74,10 @@ fn parts(template: &str, fight: bool) -> Vec<(usize, Part)> {
                 .filter(|(at, _)| (s.col..s.col + s.width).contains(at))
                 .map(|(_, c)| c)
                 .collect();
-            (s.piece, (text, s.fg, s.bg, s.bold, s.italic, s.underline))
+            (
+                s.piece,
+                (text, s.fg, s.bg, s.bold, s.italic, s.underline, s.look),
+            )
         })
         .collect()
 }
@@ -87,8 +93,8 @@ fn others(template: &str, fight: bool, skip: &[usize]) -> Vec<Part> {
         }
         match out.last_mut() {
             Some(last)
-                if (last.1, last.2, last.3, last.4, last.5)
-                    == (part.1, part.2, part.3, part.4, part.5) =>
+                if (last.1, last.2, last.3, last.4, last.5, last.6)
+                    == (part.1, part.2, part.3, part.4, part.5, part.6) =>
             {
                 last.0.push_str(&part.0);
             }
@@ -156,6 +162,92 @@ fn a_style_turned_on_is_turned_back_off_for_the_next_piece() {
     );
 }
 
+fn style(piece: usize, style: StyleChoice, on: bool) -> EditOp {
+    EditOp::SetStyle { piece, style, on }
+}
+
+#[test]
+fn the_styles_more_offers_turn_on_and_back_off_for_the_next_piece() {
+    for (choice, code) in [
+        (StyleChoice::Strike, "%s_strike"),
+        (StyleChoice::Dim, "%s_dim"),
+        (StyleChoice::Inverse, "%s_inverse"),
+    ] {
+        let edited = edit("hp %hp mn %mana", &style(1, choice, true));
+        assert_eq!(edited, format!("hp {code}%hp%s_off mn %mana"));
+        // Off again, every piece looks as it did before.
+        let off = edit(&edited, &style(1, choice, false));
+        assert_eq!(off, "hp %hp%s_off mn %mana");
+        assert_eq!(
+            others(&off, true, &[]),
+            others("hp %hp mn %mana", true, &[])
+        );
+    }
+}
+
+#[test]
+fn an_underline_kind_replaces_the_kind_the_piece_had() {
+    let edited = edit("hp %hp mn %mana", &style(1, StyleChoice::Curly, true));
+    assert_eq!(edited, "hp %s_curly%hp%s_off mn %mana");
+    // Another kind takes the place of the piece's own code.
+    let edited = edit(&edited, &style(1, StyleChoice::Dashed, true));
+    assert_eq!(edited, "hp %s_dashed%hp%s_off mn %mana");
+    // A kind it inherits stays on the pieces after it.
+    let edited = edit("%s_underline%hp x", &style(0, StyleChoice::Double, true));
+    assert_eq!(edited, "%s_double%hp%s_underline x");
+    assert_eq!(
+        others(&edited, true, &[0]),
+        others("%s_underline%hp x", true, &[0])
+    );
+    // Off is off for any kind, the one it inherits too, and the piece
+    // after it keeps the line.
+    let edited = edit("%s_curly[%hp]", &style(1, StyleChoice::Underline, false));
+    assert_eq!(edited, "%s_curly[%s_off%hp%s_curly]");
+    let edited = edit("x %s_dotted%hp", &style(1, StyleChoice::Underline, false));
+    assert_eq!(edited, "x %hp");
+}
+
+#[test]
+fn an_underline_takes_a_color_of_its_own() {
+    let rgb = ColorChoice::Rgb {
+        r: 191,
+        g: 97,
+        b: 106,
+    };
+    let underline = |piece: usize, color: ColorChoice| EditOp::SetColor {
+        piece,
+        color,
+        background: false,
+        underline: true,
+    };
+    let template = "x %s_curly%hp y";
+    let edited = edit(template, &underline(1, rgb.clone()));
+    assert_eq!(edited, "x %s_curly%{ul:#bf616a}%hp%ul_default y");
+    assert_eq!(others(&edited, true, &[1]), others(template, true, &[1]));
+    // The text's own color takes it back out, and every piece looks as it
+    // did before.
+    let back = edit(&edited, &underline(1, ColorChoice::Default));
+    assert_eq!(back, "x %s_curly%hp%ul_default y");
+    assert_eq!(others(&back, true, &[]), others(template, true, &[]));
+
+    // A theme color goes in its short form.
+    assert_eq!(
+        edit(
+            "%s_curly%hp",
+            &underline(0, ColorChoice::Named { index: 1 })
+        ),
+        "%s_curly%ul_red%hp"
+    );
+    // A color goes on one place at a time.
+    let both = EditOp::SetColor {
+        piece: 0,
+        color: rgb,
+        background: true,
+        underline: true,
+    };
+    assert!(apply("%hp", &both, &known).is_err());
+}
+
 #[test]
 fn a_color_keeps_the_pieces_after_it_in_theirs() {
     let template = "%c_red[%hp] %mana";
@@ -165,6 +257,7 @@ fn a_color_keeps_the_pieces_after_it_in_theirs() {
             piece: 1,
             color: ColorChoice::Named { index: 2 },
             background: false,
+            underline: false,
         },
     );
     assert_eq!(edited, "%c_red[%c_green%hp%c_red] %mana");
@@ -178,6 +271,7 @@ fn a_color_keeps_the_pieces_after_it_in_theirs() {
             piece: 0,
             color: ColorChoice::Default,
             background: false,
+            underline: false,
         },
     );
     assert_eq!(edited, "%hp");
@@ -190,6 +284,7 @@ fn a_color_keeps_the_pieces_after_it_in_theirs() {
                 game: false,
             },
             background: false,
+            underline: false,
         },
     );
     assert_eq!(edited, "x %c_hp%hp");
@@ -203,6 +298,7 @@ fn a_color_keeps_the_pieces_after_it_in_theirs() {
                 b: 255,
             },
             background: true,
+            underline: false,
         },
     );
     assert_eq!(edited, "x %{bg:#80c8ff}%hp%bg_default y");
@@ -219,6 +315,7 @@ fn text_takes_no_color_by_value() {
                 game: false,
             },
             background: false,
+            underline: false,
         },
         &known,
     );
@@ -308,6 +405,7 @@ fn a_bar_takes_its_color_as_its_own() {
             piece: 1,
             color: ColorChoice::Named { index: 4 },
             background: false,
+            underline: false,
         },
     );
     assert_eq!(edited, "x %{hp:bar:6:blue} y");
@@ -320,6 +418,7 @@ fn a_bar_takes_its_color_as_its_own() {
                 game: false,
             },
             background: false,
+            underline: false,
         },
     );
     // A bar colored by how full has a short form, which a token the
@@ -589,6 +688,33 @@ fn keeps_its_looks_through_every_op_on_every_piece(design: &str) {
             piece,
             color: ColorChoice::Index { index: 208 },
             background: false,
+            underline: false,
+        });
+        ops.push(EditOp::SetStyle {
+            piece,
+            style: StyleChoice::Curly,
+            on: true,
+        });
+        ops.push(EditOp::SetStyle {
+            piece,
+            style: StyleChoice::Strike,
+            on: true,
+        });
+        ops.push(EditOp::SetColor {
+            piece,
+            color: ColorChoice::Rgb {
+                r: 191,
+                g: 97,
+                b: 106,
+            },
+            background: false,
+            underline: true,
+        });
+        ops.push(EditOp::SetColor {
+            piece,
+            color: ColorChoice::Named { index: 4 },
+            background: true,
+            underline: false,
         });
         ops.push(EditOp::Remove { piece });
         ops.push(EditOp::InsertText {
@@ -651,6 +777,7 @@ fn a_look_set_inside_a_condition_comes_back_inside_it() {
         piece: 1,
         color: ColorChoice::Named { index: 4 },
         background: false,
+        underline: false,
     };
     let edited = edit(design, &blue);
     assert_eq!(edited, "%{if:fight}%c_blue%opponent%c_red%{end} %hp");
@@ -678,6 +805,7 @@ fn a_look_set_inside_a_condition_comes_back_inside_it() {
         piece: 0,
         color: ColorChoice::Named { index: 4 },
         background: false,
+        underline: false,
     };
     let edited = edit(design, &blue);
     assert_eq!(edited, "%c_blue%hp%c_red%{if:fight} %opponent%{end} X");

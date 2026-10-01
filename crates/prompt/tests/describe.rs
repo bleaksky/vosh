@@ -5,7 +5,7 @@
 
 use chrono::{NaiveDate, NaiveDateTime};
 use vosh_prompt::describe::{describe, forms, PieceKindName, PieceView, TokenKindName};
-use vosh_prompt::edit::{ColorChoice, FormatName, When};
+use vosh_prompt::edit::{ColorChoice, FormatName, StyleChoice, When};
 use vosh_prompt::presets::DEFAULT_DESIGN;
 use vosh_prompt::vars::Samples;
 use vosh_prompt::{FieldRef, Resolved, Template, Values};
@@ -48,6 +48,52 @@ fn piece<'a>(pieces: &'a [PieceView], text: &str) -> &'a PieceView {
 
 fn segments(piece: &PieceView) -> Vec<&str> {
     piece.forms.iter().map(|f| f.segment.as_str()).collect()
+}
+
+#[test]
+fn a_piece_reads_every_style_its_ground_and_its_underline() {
+    let template =
+        "%{bg:#3b4252}%s_dim%s_strike%s_inverse%s_curly%{ul:#bf616a}%hp%s_off%bg_default x";
+    let described = describe(&Template::parse(template), &Sampled { fight: false }, false);
+    let hp = &described.pieces[0];
+    assert_eq!(
+        hp.background,
+        ColorChoice::Rgb {
+            r: 0x3b,
+            g: 0x42,
+            b: 0x52
+        }
+    );
+    assert!(hp.dim && hp.strike && hp.inverse && hp.underline);
+    assert!(!hp.bold && !hp.italic);
+    assert_eq!(hp.underline_style, Some(StyleChoice::Curly));
+    assert_eq!(
+        hp.underline_color,
+        ColorChoice::Rgb {
+            r: 191,
+            g: 97,
+            b: 106
+        }
+    );
+    // `%s_off` ends every style and keeps the underline's color, and
+    // the terminal's ground reads as its own.
+    let x = &described.pieces[1];
+    assert_eq!(x.background, ColorChoice::Default);
+    assert!(!x.dim && !x.strike && !x.inverse && !x.underline);
+    assert_eq!(x.underline_style, None);
+    assert_eq!(x.underline_color, hp.underline_color);
+    // The single line reads as Underline, and a plain piece as nothing.
+    let described = describe(
+        &Template::parse("%s_underline%hp"),
+        &Sampled { fight: false },
+        false,
+    );
+    assert_eq!(
+        described.pieces[0].underline_style,
+        Some(StyleChoice::Underline)
+    );
+    assert_eq!(described.pieces[0].underline_color, ColorChoice::Default);
+    assert_eq!(described.pieces[0].background, ColorChoice::Default);
 }
 
 #[test]

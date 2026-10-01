@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::template::{
     runs_on, takes_param, write_token, BarColor, Code, ColorSpec, FieldRef, Format, PieceKind,
-    Style, Template, TokenKind, ValueRef, BAR_MAX_WIDTH,
+    Style, Template, TokenKind, UnderlineStyle, ValueRef, BAR_MAX_WIDTH,
 };
 use crate::vars::{self, Kind};
 
@@ -33,14 +33,18 @@ use crate::vars::{self, Kind};
 pub enum EditOp {
     /// Show a value another way (Show as), or set a bar's width.
     SetFormat { piece: usize, format: FormatChoice },
-    /// Color a piece, its text or its ground.
+    /// Color a piece: its text, its ground with `background`, or its
+    /// underline with `underline`.
     SetColor {
         piece: usize,
         color: ColorChoice,
         #[serde(default)]
         background: bool,
+        #[serde(default)]
+        underline: bool,
     },
-    /// Turn a style on or off for a piece.
+    /// Turn a style on or off for a piece. An underline kind replaces the
+    /// kind the piece had, and any underline turned off is off.
     SetStyle {
         piece: usize,
         style: StyleChoice,
@@ -152,14 +156,19 @@ pub enum ColorChoice {
     },
 }
 
-/// A style the card turns on or off.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+/// A style the card turns on or off. `Underline` is the single line, and
+/// `Double` to `Dashed` the other kinds of underline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StyleChoice {
     Bold,
     Dim,
     Italic,
     Underline,
+    Double,
+    Curly,
+    Dotted,
+    Dashed,
     Inverse,
     Strike,
 }
@@ -252,21 +261,37 @@ pub fn apply_at(
 pub(crate) struct Look {
     pub(crate) fg: Option<ColorSpec>,
     pub(crate) bg: Option<ColorSpec>,
+    /// The underline's color, None for the text's own.
+    pub(crate) underline_color: Option<ColorSpec>,
     pub(crate) bold: bool,
     pub(crate) dim: bool,
     pub(crate) italic: bool,
-    pub(crate) underline: bool,
+    /// The kind of underline, None with no underline.
+    pub(crate) underline: Option<UnderlineStyle>,
     pub(crate) inverse: bool,
     pub(crate) strike: bool,
 }
 
-const STYLES: [Style; 6] = [
-    Style::Bold,
-    Style::Dim,
-    Style::Italic,
-    Style::Underline,
-    Style::Inverse,
-    Style::Strike,
+/// The styles that are on or off, in the order the writer writes them.
+/// The underline sits between italic and inverse, as one slot that holds
+/// one kind at a time.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Slot {
+    Bold,
+    Dim,
+    Italic,
+    Underline,
+    Inverse,
+    Strike,
+}
+
+const SLOTS: [Slot; 6] = [
+    Slot::Bold,
+    Slot::Dim,
+    Slot::Italic,
+    Slot::Underline,
+    Slot::Inverse,
+    Slot::Strike,
 ];
 
 impl Look {
@@ -275,27 +300,59 @@ impl Look {
             Style::Bold => self.bold,
             Style::Dim => self.dim,
             Style::Italic => self.italic,
-            Style::Underline => self.underline,
+            Style::Underline(line) => self.underline == Some(line),
             Style::Inverse => self.inverse,
             Style::Strike => self.strike,
             Style::Off => false,
         }
     }
 
+    /// Turn a style on or off. An underline kind turned on replaces the
+    /// kind there was, and turned off leaves no underline of any kind.
     fn set_style(&mut self, style: Style, on: bool) {
         match style {
             Style::Bold => self.bold = on,
             Style::Dim => self.dim = on,
             Style::Italic => self.italic = on,
-            Style::Underline => self.underline = on,
+            Style::Underline(line) => self.underline = on.then_some(line),
             Style::Inverse => self.inverse = on,
             Style::Strike => self.strike = on,
             Style::Off => {
-                for style in STYLES {
-                    self.set_style(style, false);
+                for slot in SLOTS {
+                    self.set_slot(slot, &Look::default());
                 }
             }
         }
+    }
+
+    /// The style a slot holds, None while it is off.
+    fn slot(&self, slot: Slot) -> Option<Style> {
+        let on = |on: bool, style: Style| on.then_some(style);
+        match slot {
+            Slot::Bold => on(self.bold, Style::Bold),
+            Slot::Dim => on(self.dim, Style::Dim),
+            Slot::Italic => on(self.italic, Style::Italic),
+            Slot::Underline => self.underline.map(Style::Underline),
+            Slot::Inverse => on(self.inverse, Style::Inverse),
+            Slot::Strike => on(self.strike, Style::Strike),
+        }
+    }
+
+    /// Give a slot what it holds in `from`.
+    fn set_slot(&mut self, slot: Slot, from: &Look) {
+        match slot {
+            Slot::Bold => self.bold = from.bold,
+            Slot::Dim => self.dim = from.dim,
+            Slot::Italic => self.italic = from.italic,
+            Slot::Underline => self.underline = from.underline,
+            Slot::Inverse => self.inverse = from.inverse,
+            Slot::Strike => self.strike = from.strike,
+        }
+    }
+
+    /// The styles that are on, in the order the writer writes them.
+    fn styles(&self) -> impl Iterator<Item = Style> + '_ {
+        SLOTS.into_iter().filter_map(|slot| self.slot(slot))
     }
 
     fn code(&mut self, code: &Code) {
@@ -303,6 +360,7 @@ impl Look {
             Code::Reset => *self = Look::default(),
             Code::Fg(spec) => self.fg = color(spec),
             Code::Bg(spec) => self.bg = color(spec),
+            Code::UnderlineColor(spec) => self.underline_color = color(spec),
             Code::Style(style) => self.set_style(*style, *style != Style::Off),
         }
     }
@@ -336,9 +394,17 @@ fn bg(color: Option<&ColorSpec>) -> Item {
     code(Code::Bg(color.cloned().unwrap_or(ColorSpec::Default)))
 }
 
+fn underline_color(color: Option<&ColorSpec>) -> Item {
+    code(Code::UnderlineColor(
+        color.cloned().unwrap_or(ColorSpec::Default),
+    ))
+}
+
 /// The fewest codes that turn `from` into `to`: the colors and styles
 /// that differ, `%s_off` first when a style must go, or `%c_reset` and
-/// what `to` holds when that is shorter.
+/// what `to` holds when that is shorter. One underline kind turns into
+/// another with its own code alone, and `%s_off` keeps the underline's
+/// color.
 fn transition(from: &Look, to: &Look) -> Vec<Item> {
     if from == to {
         return Vec::new();
@@ -350,12 +416,17 @@ fn transition(from: &Look, to: &Look) -> Vec<Item> {
     if from.bg != to.bg {
         delta.push(bg(to.bg.as_ref()));
     }
-    let off = STYLES.iter().any(|s| from.style(*s) && !to.style(*s));
+    if from.underline_color != to.underline_color {
+        delta.push(underline_color(to.underline_color.as_ref()));
+    }
+    let off = SLOTS
+        .iter()
+        .any(|slot| from.slot(*slot).is_some() && to.slot(*slot).is_none());
     if off {
         delta.push(code(Code::Style(Style::Off)));
     }
-    for style in STYLES {
-        if to.style(style) && (off || !from.style(style)) {
+    for style in to.styles() {
+        if off || !from.style(style) {
             delta.push(code(Code::Style(style)));
         }
     }
@@ -366,10 +437,11 @@ fn transition(from: &Look, to: &Look) -> Vec<Item> {
     if to.bg.is_some() {
         reset.push(bg(to.bg.as_ref()));
     }
-    for style in STYLES {
-        if to.style(style) {
-            reset.push(code(Code::Style(style)));
-        }
+    if to.underline_color.is_some() {
+        reset.push(underline_color(to.underline_color.as_ref()));
+    }
+    for style in to.styles() {
+        reset.push(code(Code::Style(style)));
     }
     if reset.len() < delta.len() {
         reset
@@ -391,9 +463,12 @@ fn restore(state: &Look, want_in: &Look, want_at: &Look, codes: &[Item]) -> Vec<
     if from_state.bg == from_want.bg {
         target.bg.clone_from(&state.bg);
     }
-    for style in STYLES {
-        if from_state.style(style) == from_want.style(style) {
-            target.set_style(style, state.style(style));
+    if from_state.underline_color == from_want.underline_color {
+        target.underline_color.clone_from(&state.underline_color);
+    }
+    for slot in SLOTS {
+        if from_state.slot(slot) == from_want.slot(slot) {
+            target.set_slot(slot, state);
         }
     }
     let fix = transition(state, &target);
@@ -580,7 +655,18 @@ impl Doc {
                 piece,
                 color,
                 background,
-            } => self.set_color(*piece, color, *background).map(Some),
+                underline,
+            } => {
+                let layer = match (background, underline) {
+                    (false, false) => Layer::Text,
+                    (true, false) => Layer::Background,
+                    (false, true) => Layer::Underline,
+                    (true, true) => {
+                        return error("A color goes on the text, its ground, or its underline.")
+                    }
+                };
+                self.set_color(*piece, color, layer).map(Some)
+            }
             EditOp::SetStyle { piece, style, on } => {
                 self.set_style(*piece, style_of(*style), *on).map(Some)
             }
@@ -669,7 +755,7 @@ impl Doc {
         &mut self,
         index: usize,
         choice: &ColorChoice,
-        background: bool,
+        layer: Layer,
     ) -> Result<usize, EditError> {
         let piece = self.piece(index)?;
         if !piece.shows() {
@@ -679,7 +765,7 @@ impl Doc {
         let spec = color_spec(choice, own.as_ref())?;
         let uid = piece.uid;
         // A bar draws its cells in its own color.
-        if !background {
+        if layer == Layer::Text {
             if let [Item {
                 kind:
                     TokenKind::Value(ValueRef {
@@ -715,18 +801,24 @@ impl Doc {
         let piece = &mut self.pieces[index];
         piece.codes.retain(|item| {
             !matches!(
-                (&item.kind, background),
-                (TokenKind::Code(Code::Fg(_)), false) | (TokenKind::Code(Code::Bg(_)), true)
+                (&item.kind, layer),
+                (TokenKind::Code(Code::Fg(_)), Layer::Text)
+                    | (TokenKind::Code(Code::Bg(_)), Layer::Background)
+                    | (TokenKind::Code(Code::UnderlineColor(_)), Layer::Underline)
             )
         });
         let now = state.after(&piece.codes);
         let want = color(&spec);
-        let current = if background { now.bg } else { now.fg };
+        let current = match layer {
+            Layer::Text => now.fg,
+            Layer::Background => now.bg,
+            Layer::Underline => now.underline_color,
+        };
         if current != want {
-            piece.codes.push(if background {
-                bg(want.as_ref())
-            } else {
-                fg(want.as_ref())
+            piece.codes.push(match layer {
+                Layer::Text => fg(want.as_ref()),
+                Layer::Background => bg(want.as_ref()),
+                Layer::Underline => underline_color(want.as_ref()),
             });
         }
         Ok(uid)
@@ -741,18 +833,28 @@ impl Doc {
         let (before, at) = self.walk();
         let state = before[index].clone();
         let mut target = at[index].clone();
-        if target.style(style) == on {
+        let underline = matches!(style, Style::Underline(_));
+        // Off is off for an underline of any kind.
+        let has = if underline && !on {
+            target.underline.is_some()
+        } else {
+            target.style(style)
+        };
+        if has == on {
             return Ok(uid);
         }
         target.set_style(style, on);
         let piece = &mut self.pieces[index];
-        if on {
+        if on && !underline {
             piece.codes.push(code(Code::Style(style)));
             return Ok(uid);
         }
-        piece
-            .codes
-            .retain(|item| item.kind != TokenKind::Code(Code::Style(style)));
+        // The piece's own underline codes go, so one kind never stacks on
+        // another, and what the piece inherits is put right below.
+        piece.codes.retain(|item| match &item.kind {
+            TokenKind::Code(Code::Style(Style::Underline(_))) => !underline,
+            kind => *kind != TokenKind::Code(Code::Style(style)),
+        });
         let now = state.after(&piece.codes);
         if now != target {
             piece.codes.extend(transition(&now, &target));
@@ -1143,10 +1245,33 @@ fn style_of(style: StyleChoice) -> Style {
         StyleChoice::Bold => Style::Bold,
         StyleChoice::Dim => Style::Dim,
         StyleChoice::Italic => Style::Italic,
-        StyleChoice::Underline => Style::Underline,
+        StyleChoice::Underline => Style::Underline(UnderlineStyle::Single),
+        StyleChoice::Double => Style::Underline(UnderlineStyle::Double),
+        StyleChoice::Curly => Style::Underline(UnderlineStyle::Curly),
+        StyleChoice::Dotted => Style::Underline(UnderlineStyle::Dotted),
+        StyleChoice::Dashed => Style::Underline(UnderlineStyle::Dashed),
         StyleChoice::Inverse => Style::Inverse,
         StyleChoice::Strike => Style::Strike,
     }
+}
+
+/// The choice that names an underline kind, the reverse of [`style_of`].
+pub(crate) fn underline_choice(line: UnderlineStyle) -> StyleChoice {
+    match line {
+        UnderlineStyle::Single => StyleChoice::Underline,
+        UnderlineStyle::Double => StyleChoice::Double,
+        UnderlineStyle::Curly => StyleChoice::Curly,
+        UnderlineStyle::Dotted => StyleChoice::Dotted,
+        UnderlineStyle::Dashed => StyleChoice::Dashed,
+    }
+}
+
+/// What a color paints.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Layer {
+    Text,
+    Background,
+    Underline,
 }
 
 /// A field as the card names it, `hp`, `aff:sanctuary` or
