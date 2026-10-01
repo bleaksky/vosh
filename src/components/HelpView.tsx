@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { HELP_SECTIONS, HELP_TOPICS, searchTopics, type HelpTopic } from '../lib/helpContent';
+import {
+  HELP_SECTIONS,
+  HELP_TOPICS,
+  parseHelpBody,
+  searchTopics,
+  type HelpTopic,
+} from '../lib/helpContent';
 
 interface Props {
   /** Close the modal. Hooked to backdrop click, the [close] button,
@@ -178,35 +184,52 @@ function handleSearchKeyDown(
 
 /**
  * Render a help-body string into React nodes. The body uses a tiny
- * markdown subset:
+ * markdown subset, which parseHelpBody reads:
  *   - Paragraphs separate with a blank line.
  *   - A block whose lines all start with "- " renders as a bulleted list.
+ *   - A block whose lines all start with "|" renders as a table.
  *   - Inline backticks wrap code in a `<code>` span.
  * When `highlight` is set, every case-insensitive substring match wraps
  * in a `<mark>` element so search hits visibly stand out.
  */
 function renderBody(body: string, highlight: string | null): ReactNode {
-  const blocks = body
-    .split(/\n\n+/)
-    .map((b) => b.trim())
-    .filter((b) => b.length > 0);
-  return blocks.map((block, i) => {
-    const lines = block.split('\n');
-    const isList = lines.length > 0 && lines.every((l) => l.startsWith('- '));
-    if (isList) {
+  return parseHelpBody(body).map((block, i) => {
+    if (block.kind === 'list') {
       return (
         <ul key={i} className="help-modal-list">
-          {lines.map((line, j) => (
+          {block.items.map((item, j) => (
             <li key={j} className="help-modal-list-item">
-              {renderInline(line.slice(2), highlight)}
+              {renderInline(item, highlight)}
             </li>
           ))}
         </ul>
       );
     }
+    if (block.kind === 'table') {
+      return (
+        <table key={i} className="help-modal-table">
+          <thead>
+            <tr>
+              {block.head.map((cell, j) => (
+                <th key={j}>{renderInline(cell, highlight)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {block.rows.map((row, j) => (
+              <tr key={j}>
+                {row.map((cell, k) => (
+                  <td key={k}>{renderInline(cell, highlight)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+    }
     return (
       <p key={i} className="help-modal-p">
-        {renderInline(block, highlight)}
+        {renderInline(block.text, highlight)}
       </p>
     );
   });
