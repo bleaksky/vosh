@@ -40,6 +40,11 @@ const PERF_REPORT_INTERVAL: Duration = Duration::from_secs(1);
 /// Vosh repaints your prompt with it (section 4, the late GMCP repaint).
 const LATE_REPAINT: Duration = Duration::from_millis(60);
 
+/// How long after a clock piece turns to its next second Vosh repaints
+/// your prompt with it, so the render never lands a hair early and draws
+/// the second before (decision 6).
+const CLOCK_SLACK: Duration = Duration::from_millis(5);
+
 /// Hot-path performance counters owned by the single `io_loop` task.
 /// Plain `u64` fields are fine because nothing else writes to them.
 /// Rolled up once per second by `report_and_reset` and emitted as
@@ -615,6 +620,9 @@ async fn io_loop<R: tauri::Runtime>(
     // When a GMCP packet that changed your prompt, with no text after it,
     // repaints it.
     let mut late_until: Option<Instant> = None;
+    // When a clock piece in your design next shows another second, while
+    // your design draws one.
+    let mut clock_until: Option<Instant> = None;
 
     // Phase 1 audit instrumentation. See `PerfCounters` doc.
     let mut perf = PerfCounters::default();
@@ -751,8 +759,10 @@ async fn io_loop<R: tauri::Runtime>(
                     // be numbered anew.
                     let (out, state) = {
                         let mut p = profile.lock().await;
-                        let out =
-                            repaint_step(&mut p, output_count() != seen_output, Instant::now());
+                        let now = Instant::now();
+                        let out = repaint_step(&mut p, output_count() != seen_output, now);
+                        // The design may have gained or lost a clock piece.
+                        clock_until = clock_after(&p, now);
                         (out, watched_state(&app, &p))
                     };
                     if !out.is_empty() {
@@ -817,7 +827,7 @@ async fn io_loop<R: tauri::Runtime>(
                         })
                     });
                     let (gmcp, prompt, wrote) = (batch.gmcp, batch.prompt, batch.out.writes_text());
-                    finish_read(
+                    clock_until = finish_read(
                         &app,
                         &profile,
                         &logs,
@@ -900,7 +910,9 @@ async fn io_loop<R: tauri::Runtime>(
                                     hold_step(&mut p, &mut accumulator, &mut batch.out);
                                 }
                                 hold_until = None;
-                                finish_read(
+                                // The connection is going, so no clock
+                                // repaints after it.
+                                let _ = finish_read(
                                     &app,
                                     &profile,
                                     &logs,
@@ -935,6 +947,24 @@ async fn io_loop<R: tauri::Runtime>(
                     let mut p = profile.lock().await;
                     let out =
                         late_repaint_step(&mut p, output_count() != seen_output, Instant::now());
+                    let state = if out.is_empty() { None } else { watched_state(&app, &p) };
+                    (out, state)
+                };
+                if !out.is_empty() {
+                    emit_repaint(&app, &out);
+                }
+                emit_prompt_state(&app, state);
+            }
+            () = sleep_until_hold(clock_until), if clock_until.is_some() => {
+                // A clock piece shows another second. Your idle prompt
+                // repaints with it, unless you are selecting text or
+                // reading back, and then the next second tries again.
+                let reading = reader_busy(&app);
+                let (out, state) = {
+                    let mut p = profile.lock().await;
+                    let now = Instant::now();
+                    let out = clock_step(&mut p, output_count() != seen_output, reading, now);
+                    clock_until = clock_after(&p, now);
                     let state = if out.is_empty() { None } else { watched_state(&app, &p) };
                     (out, state)
                 };
@@ -2101,6 +2131,75 @@ fn late_repaint_step(p: &mut Profile, other: bool, now: Instant) -> Output {
     repaint_step(p, other, now)
 }
 
+/// When the next clock repaint looks at your prompt (decision 6): when a
+/// clock piece in your design next shows another second, or None while
+/// your design draws none, so a design without one never wakes the
+/// session. The tick turns on its own seconds, counted from its last
+/// restart, so the repaint lands on each of them and never skips one. The
+/// time and the date turn on the local clock's seconds. With both, the
+/// tick sets the pace, so your prompt repaints at most once a second.
+fn clock_after(p: &Profile, now: Instant) -> Option<Instant> {
+    let clock = p.prompt.clock()?;
+    let tick = clock
+        .tick
+        .then(|| p.tick.remaining(now))
+        .flatten()
+        .filter(|left| !left.is_zero());
+    let wait = match tick {
+        Some(left) => match left.as_nanos() % 1_000_000_000 {
+            0 => Duration::from_secs(1),
+            part => Duration::from_nanos(u64::try_from(part).unwrap_or(0)),
+        },
+        None => {
+            let into = chrono::Local::now().timestamp_subsec_nanos() % 1_000_000_000;
+            Duration::from_nanos(u64::from(1_000_000_000 - into))
+        }
+    };
+    Some(now + wait + CLOCK_SLACK)
+}
+
+/// A clock piece shows another second (decision 6): your prompt as it
+/// shows now, the open row while it is the last thing on screen or the
+/// band while pinned, and empty when the second changed nothing it
+/// shows. The open row waits while `reading`, which says you are
+/// selecting text or reading back, and the band does not, since it is not
+/// in the text (addendum item 7). It waits while the card shows a
+/// preview, whose render carries its own restore. Each repaint is a
+/// replace with nothing after it, so it never lands on your typed text
+/// and never reaches history. `other` says output from elsewhere landed
+/// since the session last wrote, which closed the row.
+fn clock_step(p: &mut Profile, other: bool, reading: bool, now: Instant) -> Output {
+    let pinned = p.prompt.show() == vosh_prompt::PromptShow::Pinned;
+    if p.prompt.clock().is_none()
+        || p.prompt.preview().is_some()
+        || (reading && !pinned)
+        || !p.prompt.stage.repaintable()
+    {
+        return Output::new(other);
+    }
+    repaint_step(p, other, now)
+}
+
+/// You are selecting text or reading back in the terminal. The webview
+/// says so for xterm (`terminal_reader_busy`), and the native grid holds
+/// its own selection and scroll.
+fn reader_busy<R: tauri::Runtime>(app: &AppHandle<R>) -> bool {
+    let webview = app
+        .try_state::<crate::commands::SharedState>()
+        .is_some_and(|state| state.reader_busy.load(std::sync::atomic::Ordering::Acquire));
+    webview || native_reader_busy()
+}
+
+#[cfg(native_surface)]
+fn native_reader_busy() -> bool {
+    crate::term_grid::reader_busy()
+}
+
+#[cfg(not(native_surface))]
+fn native_reader_busy() -> bool {
+    false
+}
+
 /// Wait until `until`, or forever with no deadline.
 async fn sleep_until_hold(until: Option<Instant>) {
     match until {
@@ -2431,7 +2530,9 @@ async fn emit_hidden_change<R: tauri::Runtime>(app: &AppHandle<R>, profile: &Arc
 /// its place, then the prompt vars when a prompt was read or they
 /// changed, and the hidden state when it changed. Once per read, so the
 /// packets of one pulse never show the panes a state between them.
-/// `seen` becomes the output count after this read's output.
+/// `seen` becomes the output count after this read's output. Returns when
+/// a clock piece in your design next shows another second, which the
+/// lock this takes anyway reads, so a read costs no other lock for it.
 async fn finish_read<R: tauri::Runtime>(
     app: &AppHandle<R>,
     profile: &Arc<Mutex<Profile>>,
@@ -2440,7 +2541,7 @@ async fn finish_read<R: tauri::Runtime>(
     batch: ReadBatch,
     seen: &mut u64,
     perf: &mut PerfCounters,
-) {
+) -> Option<Instant> {
     let ReadBatch {
         mut out,
         log,
@@ -2452,7 +2553,7 @@ async fn finish_read<R: tauri::Runtime>(
         gmcp: _,
     } = batch;
     let watched = prompt && watching_prompt(app);
-    let (vars, hidden, prompt_seen, status, prompt_state) = {
+    let (vars, hidden, prompt_seen, status, prompt_state, clock) = {
         let mut p = profile.lock().await;
         // Echoes the end of the read wrote close the open row.
         p.prompt.stage.finish(&mut out);
@@ -2462,6 +2563,7 @@ async fn finish_read<R: tauri::Runtime>(
             p.prompt.take_seen(),
             p.prompt.take_status_change(),
             watched.then(|| crate::prompt_commands::prompt_state(&p)),
+            clock_after(&p, Instant::now()),
         )
     };
     if !out.is_empty() {
@@ -2511,6 +2613,7 @@ async fn finish_read<R: tauri::Runtime>(
         }
     }
     emit_prompt_state(app, prompt_state);
+    clock
 }
 
 /// The prompt state while the card watches your prompt, for
@@ -5629,6 +5732,10 @@ mod preview_tests;
 #[cfg(test)]
 #[path = "session_repaint_tests.rs"]
 mod repaint_tests;
+
+#[cfg(test)]
+#[path = "session_clock_tests.rs"]
+mod clock_tests;
 
 #[cfg(test)]
 #[path = "session_pointer_tests.rs"]

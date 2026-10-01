@@ -781,4 +781,4 @@ Your own prompt is a design of text and codes. Customize prompt writes the codes
 | `%{raw}`                                      | Your prompt exactly as the game sent it.                          |
 | `%%`                                          | A percent sign.                                                   |
 
-Every value in `Insert value…` has codes of its own, and the picker shows them beside each form.
+Every value in `Insert value…` has codes of its own, and the picker shows them beside each form. Your tick, the time and the date keep counting while your prompt sits idle. Vosh draws it again each second they change, and waits while you select text or read back. Pinned, the band keeps counting through both.

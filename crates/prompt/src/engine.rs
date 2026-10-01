@@ -94,6 +94,27 @@ pub struct StatusReport {
     pub last_match_at: Option<String>,
 }
 
+/// The clock pieces a design reads (decision 6). While it reads one, the
+/// session repaints your idle prompt as what the piece shows changes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Clock {
+    /// The tick, which counts down a second at a time.
+    pub tick: bool,
+    /// The local time or the date.
+    pub wall: bool,
+}
+
+impl Clock {
+    /// The clock pieces among the fields a design reads.
+    fn of(reads: &std::collections::BTreeSet<crate::template::FieldRef>) -> Self {
+        let reads = |name: &str| reads.iter().any(|field| field.name == name);
+        Self {
+            tick: reads("tick"),
+            wall: reads("time") || reads("date"),
+        }
+    }
+}
+
 /// What counts misses between prompts (section 4).
 #[derive(Debug, Clone, Default)]
 struct Misses {
@@ -177,6 +198,8 @@ pub struct PromptEngine {
     /// The newest entry of the candidates ring and the pulse it came in,
     /// so a capture you choose reads the prompt already on screen.
     newest: Option<(u64, u64)>,
+    /// The clock pieces the design reads.
+    clock: Clock,
 }
 
 impl PromptEngine {
@@ -242,8 +265,9 @@ impl PromptEngine {
     fn compile(&mut self) {
         self.stage.set_show(self.config.show);
         self.stage.set_capture_for(&self.config.capture, self.who);
-        self.stage
-            .set_reads(&Template::parse(&self.config.template).reads());
+        let reads = Template::parse(&self.config.template).reads();
+        self.stage.set_reads(&reads);
+        self.clock = Clock::of(&reads);
     }
 
     /// Keep a GMCP packet. Char.Status and Char.State say who the prompt
@@ -783,6 +807,13 @@ impl PromptEngine {
     /// the design is not empty.
     pub fn draws(&self) -> bool {
         self.config.draw && !self.config.template.is_empty()
+    }
+
+    /// The clock pieces your design draws: None while it reads none, or
+    /// while Vosh draws no design.
+    pub fn clock(&self) -> Option<Clock> {
+        let clock = self.clock;
+        (self.draws() && (clock.tick || clock.wall)).then_some(clock)
     }
 
     /// Where your prompt shows, `[prompt] show`.
@@ -1756,6 +1787,44 @@ mod tests {
 
     fn vitals(engine: &mut PromptEngine) {
         engine.observe("Char.Vitals", json!({"hp": 10, "maxhp": 20}), at());
+    }
+
+    #[test]
+    fn a_design_reads_a_clock_only_with_a_clock_piece_and_drawing_on() {
+        let clock = |template: &str, draw: bool| {
+            let mut engine = PromptEngine::default();
+            engine.set_config(PromptConfig {
+                draw,
+                template: template.into(),
+                ..following("<%hhp> ")
+            });
+            engine.clock()
+        };
+        let tick = Clock {
+            tick: true,
+            wall: false,
+        };
+        let wall = Clock {
+            tick: false,
+            wall: true,
+        };
+        assert_eq!(clock("<%hp> %tick", true), Some(tick));
+        assert_eq!(clock("%{tick:bar:10} ", true), Some(tick));
+        // A color that follows the tick changes with it too.
+        assert_eq!(clock("%bg_tick%hp ", true), Some(tick));
+        assert_eq!(clock("%{time:hms} ", true), Some(wall));
+        assert_eq!(clock("%{date:md} ", true), Some(wall));
+        assert_eq!(
+            clock("%{if:tick}%tick%{end} %time", true),
+            Some(Clock {
+                tick: true,
+                wall: true
+            })
+        );
+        assert_eq!(clock("<%hp %mana %move> ", true), None);
+        assert_eq!(clock(crate::DEFAULT_DESIGN, true), None);
+        assert_eq!(clock("<%hp> %tick", false), None);
+        assert_eq!(clock("", true), None);
     }
 
     #[test]

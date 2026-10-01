@@ -279,6 +279,10 @@ pub(crate) struct AppState {
     /// The prompt card watches your prompt, so `session://prompt-state`
     /// follows each prompt Vosh reads.
     pub(crate) prompt_watch: std::sync::atomic::AtomicBool,
+    /// You are selecting text in xterm or reading back in its split, as
+    /// the webview last said. A clock repaint of your prompt waits while
+    /// it holds (decision 6).
+    pub(crate) reader_busy: std::sync::atomic::AtomicBool,
 }
 
 impl AppState {
@@ -354,6 +358,7 @@ impl Default for AppState {
             launch_notices: std::sync::Mutex::new(Vec::new()),
             active_profile: std::sync::Mutex::new(None),
             prompt_watch: std::sync::atomic::AtomicBool::new(false),
+            reader_busy: std::sync::atomic::AtomicBool::new(false),
         }
     }
 }
@@ -1741,6 +1746,18 @@ pub(crate) async fn terminal_local_write(
         let _ = handle.local_write(after.unwrap_or(taken));
     }
     Ok(())
+}
+
+/// You started or stopped selecting text or reading back in xterm. While
+/// you do, a clock piece in your design does not repaint your prompt in
+/// the text, so the row under your selection or above your reading never
+/// moves (decision 6). The native grid holds its own selection and scroll,
+/// which the session reads itself.
+#[tauri::command]
+pub(crate) fn terminal_reader_busy(state: State<'_, SharedState>, busy: bool) {
+    state
+        .reader_busy
+        .store(busy, std::sync::atomic::Ordering::Release);
 }
 
 /// Where the native grid's cursor sits and where the open region starts,

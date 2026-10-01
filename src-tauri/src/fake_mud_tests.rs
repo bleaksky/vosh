@@ -825,6 +825,87 @@ async fn the_older_build_reads_your_prompt_from_the_game_replies() {
     h.finish(grid).await;
 }
 
+/// The text of each repaint the session sent, oldest first: the region a
+/// replace with nothing after it writes, or the band it pins.
+fn repaints(h: &Harness) -> Vec<String> {
+    h.events("session://output")
+        .iter()
+        .map(|payload| output(&payload.to_string()))
+        .filter(|out| out.bytes.is_empty())
+        .filter_map(|out| {
+            let bytes = out.replace.map(|r| r.bytes)?;
+            Some(vosh_ansi::plain_text(&bytes).trim_end().to_string())
+        })
+        .collect()
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_tick_counts_down_in_your_idle_prompt_and_waits_while_you_read() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.set_prompt(codes(PROMPT)).await;
+    h.connect().await;
+    h.until_last_row("<1020>").await;
+    // A design with no clock piece never repaints an idle prompt.
+    let outputs = h.events("session://output").len();
+    tokio::time::sleep(Duration::from_millis(1_500)).await;
+    assert_eq!(h.events("session://output").len(), outputs);
+
+    // With the tick in the design, the next prompt counts down.
+    h.set_prompt(vosh_prompt::PromptConfig {
+        template: "<%hp> %tick".into(),
+        ..codes(PROMPT)
+    })
+    .await;
+    h.type_line("look").await;
+    h.until("the drawn tick", |h| h.last_row().starts_with("<1020> "))
+        .await;
+    h.until("three repaints of the tick", |h| repaints(h).len() >= 3)
+        .await;
+    // Each repaint shows the next second, with none skipped.
+    let seconds: Vec<i64> = repaints(&h)
+        .iter()
+        .map(|row| {
+            row.strip_prefix("<1020> ")
+                .and_then(|n| n.parse().ok())
+                .unwrap_or_else(|| panic!("a tick in {row:?}"))
+        })
+        .collect();
+    for pair in seconds.windows(2) {
+        assert_eq!(pair[1], pair[0] - 1, "{seconds:?}");
+    }
+    assert_eq!(
+        h.last_row(),
+        format!("<1020> {}", seconds[seconds.len() - 1])
+    );
+
+    // While you select text or read back, the row stays as it is.
+    h.state
+        .reader_busy
+        .store(true, std::sync::atomic::Ordering::Release);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let held = repaints(&h).len();
+    tokio::time::sleep(Duration::from_millis(1_500)).await;
+    assert_eq!(repaints(&h).len(), held);
+    // Once you let go it catches up within the second.
+    h.state
+        .reader_busy
+        .store(false, std::sync::atomic::Ordering::Release);
+    h.until("the tick again", |h| repaints(h).len() > held)
+        .await;
+
+    // Your line closes the row, and nothing repaints it after.
+    h.type_line("#help").await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let after = repaints(&h).len();
+    tokio::time::sleep(Duration::from_millis(1_200)).await;
+    assert_eq!(repaints(&h).len(), after);
+    h.finish(grid).await;
+}
+
 // The guard keeps other tests off the shared native grid, which every
 // session output also feeds. No task of the session takes it.
 #[allow(clippy::await_holding_lock)]

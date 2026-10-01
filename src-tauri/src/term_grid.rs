@@ -1177,6 +1177,21 @@ pub(crate) fn current_display_offset() -> usize {
         .unwrap_or(0)
 }
 
+/// You are selecting text in the shared grid or reading back in it, so a
+/// clock repaint of your prompt waits (decision 6). False with no grid.
+pub(crate) fn reader_busy() -> bool {
+    grid_slot().lock().ok().is_some_and(|slot| {
+        slot.as_ref().is_some_and(|grid| {
+            grid.display_offset() != 0
+                || grid
+                    .term
+                    .selection
+                    .as_ref()
+                    .is_some_and(|selection| !selection.is_empty())
+        })
+    })
+}
+
 /// Begin a text selection anchored at a grid cell.
 pub(crate) fn start_selection(line: i32, col: usize) {
     if let Ok(mut slot) = grid_slot().lock() {
@@ -2366,6 +2381,25 @@ mod tests {
         let g = slot.as_ref().unwrap();
         assert!(g.row_string(0).starts_with("the quick"));
         assert!(g.row_string(1).starts_with("brown fox"));
+    }
+
+    #[test]
+    fn a_selection_or_a_read_back_keeps_the_reader_busy() {
+        let _shared = lock_shared_grid_for_test();
+        blank_shared_grid_for_test(20, 4);
+        feed_session_output(&text(b"1\r\n2\r\n3\r\n4\r\n5\r\n6\r\n7"), None);
+        assert!(!reader_busy());
+        // A click with no drag selects nothing.
+        start_selection(1, 0);
+        assert!(!reader_busy());
+        update_selection(2, 1);
+        assert!(reader_busy());
+        clear_selection();
+        assert!(!reader_busy());
+        scroll(2);
+        assert!(reader_busy());
+        scroll(-2);
+        assert!(!reader_busy());
     }
 
     #[test]
