@@ -27,6 +27,7 @@ import {
   type MoreItemId,
   type UndoEntry,
 } from '../../lib/promptCard';
+import { followCardProfile } from '../../lib/promptCardSync';
 import { needsCode, type LayoutId } from '../../lib/promptPicker';
 import {
   caretAfter,
@@ -245,42 +246,72 @@ export function PromptCard({
 
   // The step the card was asked to open on, read once as it opens.
   const opensOn = useRef(startStep);
+  // Counts each time the card opens, for the profile active then. A
+  // read or a save begun for an earlier one never lands on this one.
+  const opens = useRef(0);
 
   // Open: keep the design among the earlier ones, read the state, and
-  // name who the card saves for.
+  // name who the card saves for. When another profile becomes active the
+  // card opens again for it, from its first step, with nothing to take
+  // back, and saves nothing until it has read that profile's table.
   useEffect(() => {
     let alive = true;
-    void Promise.all([
-      promptCardOpen(),
-      promptStateGet(),
-      sessionIdentityGet().catch(() => null),
-      profilesList().catch(() => null),
-    ])
-      .then(([opened, now, who, list]) => {
-        if (!alive) return;
-        const name = list?.active ?? who?.profile ?? 'default';
-        const entry = list?.profiles.find((p) => p.name === name);
-        const host = who?.host ?? entry?.auto_match?.host ?? '';
-        const known = knownWorld(host) !== undefined;
-        take(opened);
-        setState(now);
-        setIdentity(who);
-        setActive(name);
-        setKnownHost(known);
-        setStep(
-          opensOn.current ??
-            openingStep({
-              capture: opened.capture,
-              forsaken: now.forsaken || known || opened.capture.kind === 'aabahran',
-              gameSent: now.new_build,
-            }),
-        );
-      })
-      .catch((e: unknown) => console.error('[prompt card] opening failed', e));
+    const open = (first: boolean) => {
+      const at = ++opens.current;
+      if (!first) {
+        latest.current = null;
+        setConfig(null);
+        setStep(null);
+        undo.current = [];
+        setPointing(NOWHERE);
+        setView('design');
+        setRequest(null);
+        setEntryCodes(null);
+        setCodesChosen(false);
+        setPointed(null);
+        setLineTriggers([]);
+        setMoreAt(null);
+        setConfirmForget(false);
+      }
+      void Promise.all([
+        promptCardOpen(),
+        promptStateGet(),
+        sessionIdentityGet().catch(() => null),
+        profilesList().catch(() => null),
+      ])
+        .then(([opened, now, who, list]) => {
+          if (!alive || at !== opens.current) return;
+          const name = list?.active ?? who?.profile ?? 'default';
+          const entry = list?.profiles.find((p) => p.name === name);
+          const host = who?.host ?? entry?.auto_match?.host ?? '';
+          const known = knownWorld(host) !== undefined;
+          take(opened);
+          setState(now);
+          setIdentity(who);
+          setActive(name);
+          setKnownHost(known);
+          setStep(
+            (first ? opensOn.current : undefined) ??
+              openingStep({
+                capture: opened.capture,
+                forsaken: now.forsaken || known || opened.capture.kind === 'aabahran',
+                gameSent: now.new_build,
+              }),
+          );
+        })
+        .catch((e: unknown) => console.error('[prompt card] opening failed', e));
+    };
+    open(true);
     void promptWatch(true).catch(() => {});
     const unlisteners: (() => void)[] = [];
     const keep = (p: Promise<() => void>) =>
       void p.then((fn) => (alive ? unlisteners.push(fn) : fn())).catch(() => {});
+    keep(
+      followCardProfile({
+        reopen: () => open(false),
+        identity: (who) => setIdentity(who),
+      }),
+    );
     keep(
       onPromptState((next) => {
         setState(next);
@@ -472,12 +503,13 @@ export function PromptCard({
   const save = (next: PromptConfig, keepUndo = true, asIs = false) => {
     const before = latest.current;
     if (!before) return;
+    const at = opens.current;
     // Command Z takes back only what this change made.
     const entry = keepUndo ? undoEntry(before, next) : null;
     if (entry) undo.current = [...undo.current, entry].slice(-UNDO_DEPTH);
     take(next);
     void promptConfigSet(next, { asIs }).catch((e: unknown) => {
-      take(before);
+      if (at === opens.current) take(before);
       pushToast({ kind: 'error', message: String(e) });
     });
   };
@@ -495,6 +527,7 @@ export function PromptCard({
   const edit = (ops: PromptEditOp[], follow: 'pick' | 'caret' = 'pick') => {
     edits.current = edits.current.then(async () => {
       const base = latest.current;
+      const at = opens.current;
       if (!base || ops.length === 0) return;
       try {
         let text = base.template;
@@ -515,6 +548,9 @@ export function PromptCard({
         // the part it follows at once.
         const shown = previewRef.current;
         const data = await promptDescribe(text, shown === 'now' ? null : shown).catch(() => null);
+        // Another profile became active meanwhile, so the edit was for a
+        // table the card no longer shows.
+        if (at !== opens.current) return;
         if (text !== base.template) save({ ...base, template: text });
         if (data) setDescribed({ template: text, data });
         const first = ops[0];
