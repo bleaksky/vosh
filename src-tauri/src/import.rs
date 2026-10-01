@@ -934,18 +934,21 @@ fn cmud_enabled_attr(e: &BytesStart) -> bool {
 fn translate_cmud_wildcards(pattern: &str) -> String {
     let mut out = String::with_capacity(pattern.len() + 8);
     let bytes = pattern.as_bytes();
+    // `i` is a byte offset that always sits on a char boundary, so a
+    // letter like "é" passes through whole.
     let mut i = 0;
     while i < bytes.len() {
-        let ch = bytes[i] as char;
+        let ch = char_at(pattern, i);
         match ch {
             '~' if i + 1 < bytes.len() => {
+                let esc = char_at(pattern, i + 1);
                 out.push('\\');
-                out.push(bytes[i + 1] as char);
-                i += 2;
+                out.push(esc);
+                i += 1 + esc.len_utf8();
                 continue;
             }
             '%' if i + 1 < bytes.len() => {
-                let nxt = bytes[i + 1] as char;
+                let nxt = char_at(pattern, i + 1);
                 match nxt {
                     'w' | 'W' => out.push_str("(\\w+)"),
                     'd' | 'D' => out.push_str("(\\d+)"),
@@ -957,7 +960,7 @@ fn translate_cmud_wildcards(pattern: &str) -> String {
                         out.push(other);
                     }
                 }
-                i += 2;
+                i += 1 + nxt.len_utf8();
                 continue;
             }
             '*' => out.push_str("(.*)"),
@@ -989,9 +992,15 @@ fn translate_cmud_wildcards(pattern: &str) -> String {
             }
             other => out.push(other),
         }
-        i += 1;
+        i += ch.len_utf8();
     }
     out
+}
+
+/// The char that starts at byte offset `i`, which must be a char
+/// boundary inside `s`.
+fn char_at(s: &str, i: usize) -> char {
+    s[i..].chars().next().expect("offset inside the string")
 }
 
 fn find_matching_brace(bytes: &[u8], open: usize) -> Option<usize> {
@@ -1500,6 +1509,22 @@ mod tests {
         // {his|her|its} -> (?:his|her|its)
         let translated = translate_cmud_wildcards("{he|she|it} grabs");
         assert_eq!(translated, "(?:he|she|it) grabs");
+    }
+
+    #[test]
+    fn cmud_trigger_keeps_accented_letters_whole() {
+        // Casting each byte to a char turned "é" into "Ã©".
+        let xml = r"<cmud><window>
+          <trigger>
+            <pattern>%w says héllo to {Zoë|Chloé} at 5%ü</pattern>
+          </trigger>
+        </window></cmud>";
+        let r = parse_cmud(xml);
+        assert_eq!(r.triggers.len(), 1);
+        assert_eq!(
+            r.triggers[0].first_pattern(),
+            "(\\w+) says héllo to (?:Zoë|Chloé) at 5%ü"
+        );
     }
 
     #[test]

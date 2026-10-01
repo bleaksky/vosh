@@ -82,36 +82,33 @@ fn parse_braced_pair(input: &str) -> Option<(String, String)> {
 }
 
 fn read_braced(input: &str) -> Option<(String, &str)> {
-    let bytes = input.as_bytes();
-    if bytes.first() != Some(&b'{') {
+    // Walk chars, not bytes, so a letter like "é" stays whole.
+    let mut chars = input.char_indices().peekable();
+    if chars.next()?.1 != '{' {
         return None;
     }
     let mut depth = 1;
     let mut out = String::new();
-    let mut i = 1;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if b == b'\\' && i + 1 < bytes.len() {
-            let next = bytes[i + 1];
-            if next == b'}' || next == b'{' || next == b'\\' {
-                out.push(next as char);
-                i += 2;
+    while let Some((i, c)) = chars.next() {
+        if c == '\\' {
+            if let Some(&(_, next @ ('}' | '{' | '\\'))) = chars.peek() {
+                out.push(next);
+                chars.next();
                 continue;
             }
         }
-        if b == b'{' {
+        if c == '{' {
             depth += 1;
             out.push('{');
-        } else if b == b'}' {
+        } else if c == '}' {
             depth -= 1;
             if depth == 0 {
                 return Some((out, &input[i + 1..]));
             }
             out.push('}');
         } else {
-            out.push(b as char);
+            out.push(c);
         }
-        i += 1;
     }
     None
 }
@@ -165,6 +162,16 @@ mod tests {
         let r = parse("#alias {wrap} {echo {hello world}}");
         assert_eq!(r.aliases.len(), 1);
         assert_eq!(r.aliases[0].expansion, "echo {hello world}");
+    }
+
+    #[test]
+    fn keeps_accented_letters_whole() {
+        // Casting each byte to a char turned "é" into "Ã©".
+        let r = parse("#alias {grüß} {say héllo {to Zoë} \\}é}\n#variable {weapon} {épée}");
+        assert_eq!(r.aliases.len(), 1);
+        assert_eq!(r.aliases[0].name, "grüß");
+        assert_eq!(r.aliases[0].expansion, "say héllo {to Zoë} }é");
+        assert_eq!(r.vars, vec![("weapon".to_string(), "épée".to_string())]);
     }
 
     #[test]
