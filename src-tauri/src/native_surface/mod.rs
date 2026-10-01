@@ -185,6 +185,9 @@ static LAST_GAME_SIZE: AtomicU32 = AtomicU32::new(0);
 /// leaves them out. Either way the game is told the rows the pane holds
 /// with a one row band. A fight that grows the band by a row only moves
 /// the text, so the game hears of no new size and wraps as before.
+/// `keptRows` and `gameSize` in src/lib/terminalRows.ts do the same for
+/// xterm, and both run fixtures/terminal-rows/cases.json, so keep them in
+/// step.
 fn grid_and_game_rows(fit: usize, lent: usize, underlay: bool) -> (usize, usize) {
     if underlay {
         (fit.saturating_sub(lent).max(1), fit)
@@ -1417,5 +1420,96 @@ mod tests {
         assert_eq!(grid_and_game_rows(3, 5, true), (1, 3));
         assert_eq!(grid_and_game_rows(40, 0, true), (40, 40));
         assert_eq!(grid_and_game_rows(40, 0, false), (40, 40));
+    }
+
+    /// fixtures/terminal-rows/cases.json, which `keptRows`, `gameSize` and
+    /// `GameSizeReport` in src/lib/terminalRows.ts run too.
+    #[derive(serde::Deserialize)]
+    struct RowCases {
+        split: Vec<SplitCase>,
+        reports: Vec<ReportCase>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct SplitCase {
+        name: String,
+        fit: usize,
+        lent: usize,
+        grid: usize,
+        game: Option<usize>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct ReportCase {
+        name: String,
+        frames: Vec<(u16, usize, usize)>,
+        grid: Vec<usize>,
+        told: Vec<(u16, u16)>,
+    }
+
+    fn row_cases() -> RowCases {
+        let text = include_str!("../../../fixtures/terminal-rows/cases.json");
+        serde_json::from_str(text).expect("the row cases parse")
+    }
+
+    /// The device px a row takes in the cases.
+    const CASE_CELL: u32 = 35;
+
+    /// The grid rows and the game rows for a pane that fits `fit` rows
+    /// with `spare` px left over while the band borrows `lent`. Under the
+    /// underlay the grid gives the rows up itself. Elsewhere the surface
+    /// stops short of the band and the grid fits what is left, at least
+    /// one row, as `grid_size_for` counts it.
+    fn split(fit: usize, lent: usize, underlay: bool, spare: u32) -> (usize, usize) {
+        if underlay {
+            return grid_and_game_rows(fit, lent, true);
+        }
+        let full = u32::try_from(fit).unwrap() * CASE_CELL + spare;
+        let short = short_of_band(full, u32::try_from(lent).unwrap(), CASE_CELL);
+        let fits = usize::try_from(short / CASE_CELL).unwrap().max(1);
+        grid_and_game_rows(fits, lent, false)
+    }
+
+    /// Each way the surface can sit: under the page, and over it short of
+    /// the band with no px, some px, or almost a row left over.
+    const PLACES: [(bool, u32); 4] = [(true, 0), (false, 0), (false, 17), (false, CASE_CELL - 1)];
+
+    #[test]
+    fn rows_split_as_the_cases_xterm_runs() {
+        let cases = row_cases();
+        assert!(!cases.split.is_empty());
+        for case in &cases.split {
+            for (underlay, spare) in PLACES {
+                let (grid, game) = split(case.fit, case.lent, underlay, spare);
+                let at = format!("{}, underlay {underlay}, {spare} px spare", case.name);
+                assert_eq!(grid, case.grid, "{at}");
+                if let Some(want) = case.game {
+                    assert_eq!(game, want, "{at}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sizes_reach_the_game_as_the_cases_xterm_runs() {
+        let cases = row_cases();
+        assert!(!cases.reports.is_empty());
+        for case in &cases.reports {
+            for (underlay, spare) in PLACES {
+                let last = AtomicU32::new(0);
+                let (mut grid, mut told) = (Vec::new(), Vec::new());
+                for &(cols, fit, lent) in &case.frames {
+                    let (rows, game_rows) = split(fit, lent, underlay, spare);
+                    grid.push(rows);
+                    let game_rows = clamp_u16(game_rows);
+                    if changed(&last, cols, game_rows) {
+                        told.push((cols, game_rows));
+                    }
+                }
+                let at = format!("{}, underlay {underlay}, {spare} px spare", case.name);
+                assert_eq!(grid, case.grid, "{at}");
+                assert_eq!(told, case.told, "{at}");
+            }
+        }
     }
 }

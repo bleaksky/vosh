@@ -16,6 +16,9 @@
 // second would otherwise send a size each time. Aabahran reads only the
 // width, and a game that pages by the height keeps one page length for
 // the whole session.
+//
+// Both renderers run fixtures/terminal-rows/cases.json, so keep them in
+// step.
 
 /** The rows the live pane keeps when it fits `fit` and lends `lent` to
  *  the band, at least one. */

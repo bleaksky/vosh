@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import rowCases from '../../fixtures/terminal-rows/cases.json';
 import {
   GameSizeReport,
   gameSize,
@@ -117,5 +118,48 @@ describe('the size the game hears of', () => {
     // A narrower window wraps differently, so the game hears of it.
     expect(report.next(100, 42, 0)).toEqual({ cols: 100, rows: 42 });
     expect(report.next(100, 41, 1)).toBeNull();
+  });
+});
+
+// The native grid splits its rows the same way (grid_and_game_rows and
+// short_of_band in src-tauri/src/native_surface/mod.rs), and its test runs
+// these cases too.
+interface SplitCase {
+  name: string;
+  fit: number;
+  lent: number;
+  grid: number;
+  game: number | null;
+}
+
+interface ReportCase {
+  name: string;
+  frames: [number, number, number][];
+  grid: number[];
+  told: [number, number][];
+}
+
+describe('the row cases the native grid runs too', () => {
+  const split = rowCases.split as SplitCase[];
+  const reports = rowCases.reports as ReportCase[];
+
+  it.each(split.map((c) => [c.name, c] as const))('%s', (_name, c) => {
+    const kept = keptRows(c.fit, c.lent);
+    expect(kept).toBe(c.grid);
+    if (c.game !== null) expect(gameSize(120, kept, c.lent).rows).toBe(c.game);
+  });
+
+  it.each(reports.map((c) => [c.name, c] as const))('%s', (_name, c) => {
+    const report = new GameSizeReport();
+    const grid: number[] = [];
+    const told: [number, number][] = [];
+    for (const [cols, fit, lent] of c.frames) {
+      const kept = keptRows(fit, lent);
+      grid.push(kept);
+      const size = report.next(cols, kept, lent);
+      if (size) told.push([size.cols, size.rows]);
+    }
+    expect(grid).toEqual(c.grid);
+    expect(told).toEqual(c.told);
   });
 });
