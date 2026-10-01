@@ -21,6 +21,7 @@ import {
   numberButtons,
   openingStep,
   placeLabels,
+  placeNameButtons,
   prefixNote,
   readMarks,
   readRows,
@@ -518,6 +519,52 @@ describe('naming the numbers of another game', () => {
     expect(namesFor(numbers, 2, '')).toEqual(['hp', 'maxhp', '', '', 'n1']);
     expect(namesFor(numbers, 2, 'mp')).toEqual(['hp', 'maxhp', 'mp', 'maxmp', 'n1']);
     expect(namesFor(numbers, 4, 'gold')).toEqual(['hp', 'maxhp', 'mana', 'maxmana', 'gold']);
+  });
+
+  it('lays the buttons out as P15 draws them, and stacks the ones that would touch', () => {
+    // P15: three pairs far apart, one row 35.5 down a box 66 tall.
+    const width = (label: string) => ({ Health: 33.5, Mana: 26.4, Moves: 31 })[label] ?? 82;
+    const apart = placeNameButtons(
+      [
+        { index: 0, col: 1, label: 'Health' },
+        { index: 2, col: 13, label: 'Mana' },
+        { index: 4, col: 22, label: 'Moves' },
+      ],
+      7.8,
+      width,
+    );
+    expect(apart.height).toBe(66);
+    expect(apart.buttons.map((b) => [b.index, Number(b.left.toFixed(1)), b.top])).toEqual([
+      [0, 11.8, 35.5],
+      [2, 105.4, 35.5],
+      [4, 175.6, 35.5],
+    ]);
+    // An immortal's Wizi and Incog sit close to the health: the Incog
+    // button takes a second row 22 under the first, and the box grows.
+    const close = placeNameButtons(
+      [
+        { index: 0, col: 6, label: 'Name this number' },
+        { index: 1, col: 17, label: 'Name this number' },
+        { index: 2, col: 21, label: 'Health' },
+        { index: 4, col: 33, label: 'Mana' },
+      ],
+      7.8,
+      width,
+    );
+    expect(close.buttons.map((b) => [b.index, b.top])).toEqual([
+      [0, 35.5],
+      [1, 57.5],
+      [2, 35.5],
+      [4, 35.5],
+    ]);
+    expect(close.height).toBe(88);
+    // No two buttons on a row come within 4 px of each other.
+    const rows = new Map<number, { left: number; right: number }[]>();
+    for (const b of close.buttons) rows.set(b.top, [...(rows.get(b.top) ?? []), b]);
+    for (const row of rows.values()) {
+      for (let i = 1; i < row.length; i++)
+        expect(row[i].left).toBeGreaterThanOrEqual(row[i - 1].right + 4);
+    }
   });
 
   it('offers the vitals Vosh knows, then what the game sends, then a name of your own', () => {

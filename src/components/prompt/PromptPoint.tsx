@@ -6,6 +6,7 @@ import {
   nameChoices,
   namesFor,
   numberButtons,
+  placeNameButtons,
   type NameChoice,
 } from '../../lib/promptCard';
 import {
@@ -117,6 +118,8 @@ interface PointNameProps {
   refresh: number;
   env: BandEnv;
   cellW: number;
+  /** The width of a label in the buttons' 11 px type. */
+  measure: (label: string) => number;
   /** The line the box shows and which of its numbers carry a name, by
    *  their place among its numbers, so the terminal marks them too. */
   onShow?: (shown: { line: string; named: boolean[] } | null) => void;
@@ -137,6 +140,7 @@ export function PointName({
   refresh,
   env,
   cellW,
+  measure,
   onShow,
 }: PointNameProps) {
   const id = line.id;
@@ -218,6 +222,17 @@ export function PointName({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plain, namedKey, report === null, onShow]);
   const buttons = numberButtons(numbers);
+  // Each button under its number, on a row of its own when it would draw
+  // over the one before it.
+  const placed = placeNameButtons(
+    buttons.map((button) => ({
+      index: button.index,
+      col: cellsBefore(plain, charIndex(plain, numbers[button.index].span[0])),
+      label: button.label,
+    })),
+    cellW,
+    measure,
+  );
   const choose = (number: number, name: string) => {
     setNames(namesFor(numbers, number, name));
     setMenu(null);
@@ -236,7 +251,11 @@ export function PointName({
           Vosh named each number from the letters after it. Change any name that is wrong.
         </p>
         {
-          <div className="pc-box" aria-labelledby={`pc-naming-${id}`} style={{ height: 66 }}>
+          <div
+            className="pc-box"
+            aria-labelledby={`pc-naming-${id}`}
+            style={{ height: placed.height }}
+          >
             <CellLine
               className="pc-box-line"
               style={{ top: 12, left: BOX_TEXT_X }}
@@ -245,9 +264,8 @@ export function PointName({
               cellW={cellW}
               marks={marks}
             />
-            {buttons.map((button) => {
-              const number = numbers[button.index];
-              const col = cellsBefore(plain, charIndex(plain, number.span[0]));
+            {buttons.map((button, i) => {
+              const at = placed.buttons[i];
               const open = menu?.number === button.index;
               return (
                 <button
@@ -257,7 +275,7 @@ export function PointName({
                   aria-haspopup="menu"
                   aria-expanded={open}
                   aria-label={button.aria}
-                  style={{ left: BOX_TEXT_X + col * cellW - 6, top: 35.5 }}
+                  style={{ left: at.left, top: at.top }}
                   onClick={(e) =>
                     setMenu(open ? null : { number: button.index, anchor: e.currentTarget })
                   }

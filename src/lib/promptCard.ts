@@ -464,6 +464,58 @@ export function numberButtons(numbers: readonly PromptLineNumber[]): NumberButto
   return out;
 }
 
+/** The name buttons' geometry on P15: the first row 35.5 down the box,
+ *  each button 20 tall with its label 6 in from its left, a 2 px gap, a
+ *  12 px chevron and 4 at its right, in a box 66 tall. A further row
+ *  goes 2 under the one above, as the names of P3 do. */
+const NAME_BUTTON_TOP = 35.5;
+const NAME_BUTTON_H = 20;
+const NAME_BUTTON_ROW_GAP = 2;
+const NAME_BUTTON_INSET = 6;
+const NAME_BUTTON_CHROME = 6 + 2 + 12 + 4;
+const NAME_BOX_H = 66;
+/** A button closer than this to the one before it takes another row. Its
+ *  own padding keeps the labels 14 px or more apart past the chevron. */
+const NAME_BUTTON_SPACE = 4;
+
+export interface PlacedNameButton {
+  index: number;
+  left: number;
+  right: number;
+  top: number;
+}
+
+/** Where each name button goes under the number it names: its label
+ *  under the number's first cell, on the first row where it comes no
+ *  closer than 4 px to the button before it, so the buttons for a
+ *  Wizi, an Incog and the health beside them never draw over each other.
+ *  Returns the box's height for the rows they take. */
+export function placeNameButtons(
+  buttons: readonly { index: number; col: number; label: string }[],
+  cellW: number,
+  measure: (label: string) => number,
+): { buttons: PlacedNameButton[]; height: number } {
+  const rights: number[] = [];
+  const placed = buttons.map(({ index, col, label }) => {
+    const left = BOX_TEXT_X + col * cellW - NAME_BUTTON_INSET;
+    const right = left + measure(label) + NAME_BUTTON_CHROME;
+    let row = rights.findIndex((edge) => left >= edge + NAME_BUTTON_SPACE);
+    if (row < 0) row = rights.length;
+    rights[row] = right;
+    return {
+      index,
+      left,
+      right,
+      top: NAME_BUTTON_TOP + row * (NAME_BUTTON_H + NAME_BUTTON_ROW_GAP),
+    };
+  });
+  const rows = Math.max(1, rights.length);
+  return {
+    buttons: placed,
+    height: NAME_BOX_H + (rows - 1) * (NAME_BUTTON_H + NAME_BUTTON_ROW_GAP),
+  };
+}
+
 /** The names of every number after naming the one at `index`, with its
  *  max when it is the first of a pair. An empty name leaves both out. */
 export function namesFor(

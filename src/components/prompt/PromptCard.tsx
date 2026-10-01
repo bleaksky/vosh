@@ -968,6 +968,7 @@ export function PromptCard({
             refresh={refresh}
             env={env}
             cellW={cellW}
+            measure={measure}
             onShow={showNames}
           />
         ) : null;
