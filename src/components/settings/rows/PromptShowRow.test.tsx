@@ -98,6 +98,48 @@ describe('PromptBlock', () => {
     expect(html).toContain('data-interim=""');
   });
 
+  it('opens the prompt card from Customize… beside the switch', () => {
+    const html = renderToStaticMarkup(
+      <PromptBlock
+        enabled
+        template="%hp"
+        show="text"
+        showState={reads}
+        textColor="#fff"
+        onEnabled={() => undefined}
+        onTemplate={() => undefined}
+        onShow={() => undefined}
+      />,
+    );
+    const row = /<div class="st-row st-draw-row[^"]*"[\s\S]*?<\/div><\/div>/.exec(html)?.[0] ?? '';
+    expect(row).toContain('>Customize…</button>');
+    expect(row).not.toContain('is-waiting');
+    expect(row).not.toMatch(/<input(?=[^>]*role="switch")(?=[^>]*disabled="")[^>]*>/);
+  });
+
+  it('waits on a capture with Customize… still open to you (P13)', () => {
+    const draw = (gameSent: boolean) =>
+      renderToStaticMarkup(
+        <PromptBlock
+          enabled={false}
+          template="%hp"
+          show="text"
+          showState={{ ...reads, capture: false, gameSent }}
+          textColor="#fff"
+          onEnabled={() => undefined}
+          onTemplate={() => undefined}
+          onShow={() => undefined}
+        />,
+      );
+    const sent = draw(true);
+    expect(sent).toContain('st-row st-draw-row is-waiting');
+    expect(sent).toContain('Customize your prompt first.');
+    expect(sent).toMatch(/<button[^>]*>Customize…<\/button>/);
+    expect(sent).not.toMatch(/<button[^>]*disabled[^>]*>Customize…/);
+    expect(sent).toMatch(/<input(?=[^>]*role="switch")(?=[^>]*disabled="")[^>]*>/);
+    expect(draw(false)).toContain('Tell Vosh your game&#x27;s prompt first.');
+  });
+
   it('leaves the preview empty for a design only the terminal draws', () => {
     const block = (template: string) =>
       renderToStaticMarkup(
