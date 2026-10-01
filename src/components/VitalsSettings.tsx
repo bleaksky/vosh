@@ -23,20 +23,14 @@ import {
 } from '../lib/session';
 
 /** Quick-pick bar font stacks. Empty string means "inherit the app font"
- *  (the historical behavior). Berkeley and JetBrains are bundled with
- *  Vosh; MonoLisa, Menlo, Consolas, Courier are looked up from the
+ *  (the historical behavior). JetBrains is bundled with Vosh;
+ *  MonoLisa, Menlo, Consolas, Courier are looked up from the
  *  system font catalog and registered through the backend font scheme
  *  (font://localhost/<family>) on pick. Users can also paste a custom
  *  CSS font-family stack via the text input that shows when "custom"
  *  is selected. */
 const BAR_FONT_PRESETS: { key: string; label: string; stack: string }[] = [
   { key: '', label: 'use the app font', stack: '' },
-  {
-    key: 'berkeley',
-    label: 'Berkeley Mono (bundled)',
-    stack:
-      '"BerkeleyMono Bundled", "JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace',
-  },
   {
     key: 'jetbrains',
     label: 'JetBrains Mono (bundled)',

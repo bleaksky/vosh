@@ -279,15 +279,14 @@ function TabHead({ title, right }: { title: string; right?: ReactNode }) {
   );
 }
 
-// Quick-pick chips. The first two are bundled with the app via
-// @font-face in styles.css so they always render regardless of what
+// Quick-pick chips. The first is bundled with the app via
+// @font-face in styles.css so it always renders regardless of what
 // is or is not installed on the OS — WKWebView refuses to match user-
 // installed fonts by name on recent macOS. The rest are macOS system
 // fonts guaranteed to be present. Adding more bundled fonts is a
 // matter of dropping a .ttf into src/assets/fonts/, adding a matching
 // @font-face block in styles.css, and adding a chip here.
 const FONT_PICKS: { label: string; value: string }[] = [
-  { label: 'BerkeleyMono', value: '"BerkeleyMono Bundled", Menlo, monospace' },
   { label: 'JetBrainsMono', value: '"JetBrainsMono Bundled", Menlo, monospace' },
   { label: 'Menlo', value: 'Menlo, monospace' },
   { label: 'Monaco', value: 'Monaco, monospace' },
@@ -373,7 +372,7 @@ export function TypographyTab({ config, setConfig, onError }: TypographyProps) {
               className="settings-font-input"
               spellCheck={false}
               value={config.font_family}
-              placeholder='"BerkeleyMono Bundled", Menlo, monospace'
+              placeholder='"JetBrainsMono Bundled", Menlo, monospace'
               onChange={(e) => update({ font_family: e.target.value })}
             />
           </span>
