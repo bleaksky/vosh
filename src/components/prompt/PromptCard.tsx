@@ -13,6 +13,7 @@ import { moveTriggerToPrompts } from '../../lib/automationTriggers';
 import { BAND_OUTSET_Y, DOCK_GAP, type CellSize } from '../../lib/promptBand';
 import {
   cardAnchor,
+  type CardRequest,
   codeReaderStep,
   codesSourceLine,
   headerButtons,
@@ -143,11 +144,11 @@ interface PromptCardProps {
   themeTerminalColors: boolean;
   brightBold: boolean;
   renderer: 'xterm' | 'native';
-  /** Open on the design's text, as Edit prompt as text… asks. */
-  initialView?: CardView;
-  /** Open on pointing at the line your game prints, as Point at it
-   *  again… in Settings asks. */
-  startStep?: 'point' | undefined;
+  /** What the card was asked to open on: the design's parts, its text
+   *  as Edit prompt as text… asks, or pointing at the line your game
+   *  prints as Point at it again… in Settings asks. A request that comes
+   *  while the card is open takes it there. */
+  opening: CardRequest;
   /** The card draws your design over the band of Lifted in the text, so
    *  the page turns the band pass on while it does. */
   onBand?: (on: boolean) => void;
@@ -187,8 +188,7 @@ export function PromptCard({
   themeTerminalColors,
   brightBold,
   renderer,
-  initialView = 'design',
-  startStep,
+  opening,
   onBand,
   onClose,
 }: PromptCardProps) {
@@ -218,7 +218,7 @@ export function PromptCard({
   const [anchor, setAnchor] = useState<{ left: number; bottom: number; maxHeight: number } | null>(
     null,
   );
-  const [view, setView] = useState<CardView>(initialView);
+  const [view, setView] = useState<CardView>(opening.view === 'text' ? 'text' : 'design');
   // The view the picker goes back to, and adds into.
   const [pickerFor, setPickerFor] = useState<'design' | 'text'>('design');
   const [pointing, setPointing] = useState<Pointing>(NOWHERE);
@@ -253,7 +253,7 @@ export function PromptCard({
   };
 
   // The step the card was asked to open on, read once as it opens.
-  const opensOn = useRef(startStep);
+  const opensOn = useRef(opening.view === 'point' ? ('point' as const) : undefined);
   // Counts each time the card opens, for the profile active then. A
   // read or a save begun for an earlier one never lands on this one.
   const opens = useRef(0);
@@ -344,10 +344,18 @@ export function PromptCard({
     };
   }, []);
 
-  // Point at it again… in Settings while the card is open.
+  // A request while the card is open: Point at it again… in Settings,
+  // Edit prompt as text… in the palette, or Customize prompt… again.
+  const firstRequest = useRef(opening.at);
+  const asked = opening.view;
   useEffect(() => {
-    if (startStep) setStep((now) => (now === null ? now : startStep));
-  }, [startStep]);
+    if (opening.at === firstRequest.current) return;
+    if (asked === 'point') {
+      setStep((now) => (now === null ? now : 'point'));
+      return;
+    }
+    setView(asked);
+  }, [opening.at, asked]);
 
   // While the card reads your codes your prompt shows the line the game
   // sent, so its marks sit on it. Once it draws your design, each value

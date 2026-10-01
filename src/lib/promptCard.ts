@@ -596,3 +596,19 @@ export function undoEntry(before: PromptConfig, next: PromptConfig): UndoEntry |
 export function takeBackOnto(now: PromptConfig, entry: UndoEntry): PromptConfig {
   return { ...now, ...entry };
 }
+
+/** What a request to open the card asks for: the view to open on, the
+ *  design's parts or its text, or pointing at your game's line. */
+export type CardRequestView = 'design' | 'text' | 'point';
+
+/** A request to open the card, counted so the card, open already, hears
+ *  the same request again, such as Edit prompt as text… after you went
+ *  back to the parts. */
+export interface CardRequest {
+  view: CardRequestView;
+  at: number;
+}
+
+export function nextCardRequest(prev: CardRequest | null, view: CardRequestView): CardRequest {
+  return { view, at: (prev?.at ?? 0) + 1 };
+}
