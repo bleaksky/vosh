@@ -92,7 +92,9 @@ pub(crate) struct PromptDesign {
 /// with a template that is not empty. These are designs you made, so a
 /// template equal to Vosh's default design, [`vosh_prompt::DEFAULT_DESIGN`],
 /// is left out, as a profile that never saved a file holds it and the
-/// start list already offers it. A file Vosh cannot read is left out.
+/// start list already offers it. A file holding a default an earlier
+/// build shipped loads with today's, so it is left out too. A file Vosh
+/// cannot read is left out.
 #[tauri::command]
 pub(crate) async fn prompt_designs_list(
     state: State<'_, SharedState>,
@@ -499,6 +501,7 @@ mod tests {
         set.create("Fourth").unwrap();
         set.create("Fifth").unwrap();
         set.create("Sixth").unwrap();
+        set.create("Seventh").unwrap();
         let mut second = ProfileConfig::default();
         second.set_prompt(PromptConfig::from_legacy(false, "[%hp]"));
         second.save(&set.profile_path("Second")).unwrap();
@@ -507,7 +510,7 @@ mod tests {
         third.ui.prompt_template = "%mana".into();
         third.save(&set.profile_path("Third")).unwrap();
         // Fourth never saved a file, so it holds Vosh's default design,
-        // which At a glance already offers. Fifth saved that design.
+        // which the start list already offers. Fifth saved that design.
         let mut fifth = ProfileConfig::default();
         fifth.set_prompt(PromptConfig::from_legacy(true, vosh_prompt::DEFAULT_DESIGN));
         fifth.save(&set.profile_path("Fifth")).unwrap();
@@ -517,6 +520,14 @@ mod tests {
         let mut sixth = ProfileConfig::default();
         sixth.set_prompt(PromptConfig::from_legacy(true, sixth_design));
         sixth.save(&set.profile_path("Sixth")).unwrap();
+        // Seventh saved the default an earlier build shipped, which
+        // loads as today's.
+        let mut seventh = ProfileConfig::default();
+        seventh.set_prompt(PromptConfig::from_legacy(
+            false,
+            vosh_prompt::presets::RETIRED_DEFAULTS[0],
+        ));
+        seventh.save(&set.profile_path("Seventh")).unwrap();
         let mut active = ProfileConfig::default();
         active.set_prompt(PromptConfig::from_legacy(true, "%move"));
         active

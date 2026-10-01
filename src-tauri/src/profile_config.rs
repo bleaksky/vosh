@@ -1495,9 +1495,12 @@ impl ProfileConfig {
 
     /// What every load does before anything reads the file. A file with
     /// no `[prompt]` takes the switch and the design from `[ui]`, and a
-    /// file with one puts its copy in `[ui]` back in step.
+    /// file with one puts its copy in `[ui]` back in step. A design that
+    /// is a default an earlier build shipped becomes today's default, see
+    /// [`vosh_prompt::PromptConfig::upgrade_retired_default`].
     fn merge_legacy_prompt(&mut self) {
-        let prompt = self.prompt_config();
+        let mut prompt = self.prompt_config();
+        prompt.upgrade_retired_default();
         self.set_prompt(prompt);
     }
 
@@ -4295,6 +4298,49 @@ mod prompt_tests {
             let _ = load_at_launch(&set, &mut live);
             assert_eq!(live.prompt.config().template, design);
         }
+    }
+
+    #[test]
+    fn a_file_with_an_old_default_design_loads_todays() {
+        let dir = tempfile::tempdir().unwrap();
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        for old in vosh_prompt::presets::RETIRED_DEFAULTS {
+            // As a fresh profile saved it, drawing off.
+            let mut file = ProfileConfig::from_toml(&older_file()).unwrap();
+            file.set_prompt(PromptConfig {
+                show: vosh_prompt::PromptShow::Pinned,
+                previous_templates: vec![TEMPLATE.into()],
+                ..PromptConfig::from_legacy(false, old)
+            });
+            file.save(&set.active_path()).unwrap();
+            let mut live = Profile::default();
+            assert!(load_at_launch(&set, &mut live).is_empty());
+            let prompt = live.prompt.config();
+            assert_eq!(prompt.template, vosh_prompt::DEFAULT_DESIGN);
+            assert_eq!(live.ui.prompt_template, vosh_prompt::DEFAULT_DESIGN);
+            // Everything else in the table stays.
+            assert!(!prompt.draw);
+            assert_eq!(prompt.show, vosh_prompt::PromptShow::Pinned);
+            assert_eq!(prompt.previous_templates, [TEMPLATE]);
+
+            // A file older builds wrote, with the design only in [ui].
+            let older = format!(
+                "[ui]\nprompt_template_enabled = true\nprompt_template = {}\n",
+                toml::Value::String(old.to_string())
+            );
+            let config = ProfileConfig::from_toml(&older).unwrap();
+            assert_eq!(config.prompt_config().template, vosh_prompt::DEFAULT_DESIGN);
+            assert_eq!(config.ui.prompt_template, vosh_prompt::DEFAULT_DESIGN);
+            assert!(config.prompt_config().draw);
+        }
+
+        // A design of your own loads as you saved it.
+        let mut file = ProfileConfig::default();
+        file.set_prompt(PromptConfig::from_legacy(true, TEMPLATE));
+        file.save(&set.active_path()).unwrap();
+        let mut live = Profile::default();
+        let _ = load_at_launch(&set, &mut live);
+        assert_eq!(live.prompt.config().template, TEMPLATE);
     }
 
     #[test]
