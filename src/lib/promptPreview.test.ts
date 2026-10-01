@@ -6,6 +6,9 @@ import { promptPreviewChunks, promptPreviewVars, SAMPLE_VITALS } from './promptP
 const TEMPLATE =
   '%{c:100,100,100}[%c_reset%s_italic%hp(%c_hp%pct_hp%c_reset%s_italic%)h %mana(%{c:128,200,255}%pct_mana%c_reset%s_italic%)m %move(%{c:200,255,23}%pct_move%c_reset%s_italic%)v%c_reset%{c:100,100,100}] %c_reset';
 
+const DESIGN =
+  '%{if:fight}%opponent %{opponent_hp:bar:10} %{opponent_hp:pct}%% %{c:245}%opponent_cond%c_default%nl%{end}%{if:hp}%{if:maxhp}%c_hp%{end}%hp%{c:245}%{if:maxhp}/%{maxhp}%{end}hp%c_default%{end} ';
+
 describe('promptPreviewVars', () => {
   it('fills every vital to the sample when Vosh has not heard yours', () => {
     const vars = promptPreviewVars(null);
@@ -42,6 +45,23 @@ describe('promptPreviewChunks', () => {
 
   it('draws nothing for an empty template', () => {
     expect(promptPreviewChunks('', null)).toEqual([]);
+  });
+
+  it('draws nothing for a design with a condition, a line break or the raw prompt', () => {
+    // The start of Vosh's default design. Only the terminal draws these
+    // forms, and the preview would print them as typed.
+    expect(promptPreviewChunks(DESIGN, null)).toEqual([]);
+    expect(promptPreviewChunks('%hp%nl%mana', null)).toEqual([]);
+    expect(promptPreviewChunks('%hp%{nl}%mana', null)).toEqual([]);
+    expect(promptPreviewChunks('%{ifnot:fight}%hp%{end}', null)).toEqual([]);
+    expect(promptPreviewChunks('%{raw}', null)).toEqual([]);
+    // A name the preview does not know still prints as typed, so you spot
+    // the typo.
+    expect(
+      promptPreviewChunks('%hpp end', null)
+        .map((c) => c.text)
+        .join(''),
+    ).toBe('%hpp end');
   });
 });
 

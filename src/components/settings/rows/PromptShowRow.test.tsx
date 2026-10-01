@@ -96,6 +96,26 @@ describe('PromptBlock', () => {
     expect(labels(html)).toEqual(['Draw your own prompt', 'Where your prompt shows']);
     expect(html).toContain('data-interim=""');
   });
+
+  it('leaves the preview empty for a design only the terminal draws', () => {
+    const block = (template: string) =>
+      renderToStaticMarkup(
+        <PromptBlock
+          enabled={false}
+          template={template}
+          show="text"
+          showState={reads}
+          textColor="#fff"
+          onEnabled={() => undefined}
+          onTemplate={() => undefined}
+          onShow={() => undefined}
+        />,
+      );
+    const preview = (html: string) => /<output[^>]*>(.*?)<\/output>/.exec(html)?.[1];
+    // A fresh profile holds the default design with drawing off.
+    expect(preview(block('%{if:fight}%opponent%nl%{end}%c_hp%hp%{c:245}/%{maxhp}hp '))).toBe('');
+    expect(preview(block('%hp'))).toContain('1020');
+  });
 });
 
 describe('where your prompt shows, found and read', () => {

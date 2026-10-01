@@ -167,8 +167,10 @@ export function InputGroup({ target, navSeq, config, setConfig, onError }: Setti
 
 /** Draw your own prompt: the toggle on the label line, then where your
  *  prompt shows, then the template in the terminal font, then the
- *  template drawn the way the terminal would with your vitals full.
- *  Interim until the Prompt section replaces it. The switch, the place
+ *  template drawn the way the terminal would with your vitals full, or
+ *  nothing for a design with conditions or line breaks, such as Vosh's
+ *  default, which only the terminal draws. Interim until the Prompt
+ *  section replaces it. The switch, the place
  *  and the design save to the profile's [prompt] table, and SettingsApp
  *  reads them again when a command such as #prompt changes the table.
  *  Exported for its test. */
