@@ -3,6 +3,7 @@ import {
   boxHeight,
   cardAnchor,
   clockTime,
+  codeReaderStep,
   codesSourceLine,
   entryCopy,
   headerButtons,
@@ -63,6 +64,14 @@ describe('where the card opens', () => {
     expect(openingStep({ capture: migrated, forsaken: true, gameSent: true })).toBe('codes');
     // Elsewhere the pattern is all Vosh has, so the card rests on it.
     expect(openingStep({ capture: migrated, forsaken: false, gameSent: false })).toBe('rest');
+  });
+
+  it('reads the codes the game sent once you choose the code reader on another host', () => {
+    // A local server of The Forsaken Lands gets its rules from More. The
+    // game may have sent your codes already, which the card reads at
+    // once, as it does on the game's own host (D25).
+    expect(codeReaderStep(true)).toBe('codes');
+    expect(codeReaderStep(false)).toBe('codes-entry');
   });
 
   it('rests once the profile reads its prompt', () => {

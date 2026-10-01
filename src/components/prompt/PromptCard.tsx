@@ -13,6 +13,7 @@ import { moveTriggerToPrompts } from '../../lib/automationTriggers';
 import { BAND_OUTSET_Y, DOCK_GAP, type CellSize } from '../../lib/promptBand';
 import {
   cardAnchor,
+  codeReaderStep,
   codesSourceLine,
   headerButtons,
   localStamp,
@@ -547,7 +548,8 @@ export function PromptCard({
       case 'use-codes':
         setCodesChosen(true);
         setEntryCodes(null);
-        setStep('codes-entry');
+        setRequest(null);
+        setStep(codeReaderStep(gameSent && game !== null));
         return;
       case 'forget':
         setConfirmForget(true);

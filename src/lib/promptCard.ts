@@ -53,6 +53,13 @@ export function openingStep(input: {
   return gameSent ? 'codes' : 'codes-entry';
 }
 
+/** Where Use Forsaken Lands prompt codes… goes on another host: the
+ *  codes the game sent this session (P3), as on the game's own host, or
+ *  your setting when it sent none (P2). */
+export function codeReaderStep(gameSent: boolean): CardStep {
+  return openingStep({ capture: { kind: 'none' }, forsaken: true, gameSent });
+}
+
 export type MoreItemId = 'change-codes' | 'point' | 'use-codes' | 'forget';
 
 export type MoreItem = { id: MoreItemId; label: string; danger?: boolean } | 'separator';
