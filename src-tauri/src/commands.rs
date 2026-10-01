@@ -7217,9 +7217,6 @@ mod tests {
                 target: vosh_trigger::TriggerTarget::Line,
             };
             let mut config = ProfileConfig::default();
-            config.connection.host = format!("{}.example", name.to_lowercase());
-            config.connection.port = 4000 + n as u16;
-            config.connection.tls = n % 2 == 1;
             let mut combat = vosh_alias::Alias::new(format!("{name} bash"), "bash %1");
             combat.group = Some("combat".into());
             config.aliases = vec![
