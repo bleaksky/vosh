@@ -3,7 +3,7 @@ import type { BandEnv } from '../../lib/bandCells';
 import {
   BOX_TEXT_X,
   boxHeight,
-  matchSentences,
+  matchLines,
   matchTone,
   placeLabels,
   readMarks,
@@ -118,7 +118,7 @@ export function MatchRow({ check, index, onStep, warning }: MatchRowProps) {
         {tone === 'ok' && <CheckIcon className="pc-match-check" />}
         {tone === 'warn' && <span className="pc-warn-dot" aria-hidden="true" />}
         <p>
-          {matchSentences(check.text).map((sentence, i) => (
+          {matchLines(check).map((sentence, i) => (
             <span key={i}>
               {i > 0 && <br />}
               {sentence}

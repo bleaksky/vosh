@@ -370,6 +370,13 @@ export function matchSentences(text: string): string[] {
     .filter((s) => s.length > 0);
 }
 
+/** The lines of the match copy: each sentence on its own line, as P3c
+ *  puts the fight count under the match, but the empty ring copy as one
+ *  paragraph that wraps, as the P0 specimen sets it. */
+export function matchLines(check: PromptCaptureCheck): string[] {
+  return check.total === 0 ? [check.text] : matchSentences(check.text);
+}
+
 /** How the match line reads: a check for a clean match, a warn dot for a
  *  poor one, and nothing before the first prompt. */
 export function matchTone(check: PromptCaptureCheck): 'ok' | 'warn' | 'none' {
