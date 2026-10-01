@@ -4964,6 +4964,38 @@ mod tests {
         out
     }
 
+    #[test]
+    fn ui_defaults_match_the_ones_the_page_fills() {
+        // normalizeUiConfig in src/lib/session.ts reads the same file and
+        // fills a missing field with each of these values.
+        let text = include_str!("../../fixtures/ui-config/defaults.json");
+        let fixture: serde_json::Value = serde_json::from_str(text).unwrap();
+        let passed: Vec<&str> = fixture["passed_through"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|key| key.as_str().unwrap())
+            .collect();
+        // No [ui] table, an empty one, and an empty vitals table each take
+        // their defaults by another path.
+        for (from, ui) in [
+            ("no [ui]", ProfileConfig::from_toml("").unwrap().ui),
+            ("[ui]", ProfileConfig::from_toml("[ui]\n").unwrap().ui),
+            (
+                "[ui.vitals]",
+                ProfileConfig::from_toml("[ui.vitals]\n").unwrap().ui,
+            ),
+            ("UiConfig::default", UiConfig::default()),
+        ] {
+            let mut sent = serde_json::to_value(UiConfigPayload::from_ui(&ui)).unwrap();
+            let fields = sent.as_object_mut().unwrap();
+            for key in &passed {
+                assert!(fields.remove(*key).is_some(), "{from}: {key}");
+            }
+            assert_eq!(sent, fixture["defaults"], "{from}");
+        }
+    }
+
     /// Save `ui` to a profile file and read it back.
     fn through_toml(ui: &UiConfig) -> UiConfig {
         let config = ProfileConfig {

@@ -70,6 +70,9 @@ fixtures/
                grid_and_game_rows on the native grid. Hand written.
   themes/    One theme file per format the Appearance import reads (Ghostty,
              iTerm2, Kitty, Alacritty TOML, legacy Alacritty YAML).
+  ui-config/ defaults.json, the UI config Rust sends for a profile that
+             sets nothing, which normalizeUiConfig on the page fills in
+             for a field that arrives missing. Hand written.
   wrap/      Word wrap cases shared by the Rust wrap in crates/prompt and the
              TypeScript WordWrapper, so both renderers break lines alike.
 ```

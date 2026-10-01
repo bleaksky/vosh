@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type EventCallback } from '@tauri-apps/api/event';
+import uiDefaults from '../../fixtures/ui-config/defaults.json';
 import {
   AFFECTS_MARKERS,
   AFFECTS_STYLES,
@@ -859,5 +860,39 @@ describe('onGmcpPackage', () => {
       await onGmcpPackage(name, () => {});
       expect(vi.mocked(listen)).toHaveBeenCalledWith(event, expect.any(Function));
     }
+  });
+});
+
+// What Rust sends for a profile that sets nothing under [ui]
+// (UiConfigPayload in src-tauri/src/commands.rs, whose test reads the
+// same file).
+describe('the UI config defaults Rust sends', () => {
+  const defaults: Record<string, unknown> = uiDefaults.defaults;
+  const passedThrough: readonly string[] = uiDefaults.passed_through;
+
+  /** `ui` as plain fields, so each one reads by name. */
+  const fields = (ui: UiConfig): Record<string, unknown> => ({ ...ui });
+
+  /** Each default `got` holds as Rust sends it. Vitals may carry fields
+   *  only the page keeps. An empty dark theme reads as the theme. */
+  function expectDefaults(got: Record<string, unknown>) {
+    for (const [key, value] of Object.entries(defaults)) {
+      if (key === 'dark_theme') expect(got[key], key).toBe(defaults.theme);
+      else if (key === 'vitals') expect(got[key], key).toMatchObject(value as object);
+      else expect(got[key], key).toEqual(value);
+    }
+  }
+
+  it('keeps every default Rust sends', () => {
+    const sent = { ...defaults, auto_update: false, font_family: 'Menlo', font_size: 14 };
+    expectDefaults(fields(normalizeUiConfig(sent as RawUiConfig)));
+  });
+
+  it('fills each field Rust leaves out with the default Rust sends', () => {
+    const got = fields(normalizeUiConfig({} as RawUiConfig));
+    expectDefaults(got);
+    // The page has no value of its own for these, so Rust always sends
+    // them.
+    for (const key of passedThrough) expect(got[key], key).toBeUndefined();
   });
 });
