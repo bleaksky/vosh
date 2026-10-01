@@ -139,6 +139,16 @@ pub(crate) struct CursorReport {
     pub region: Option<RegionStart>,
 }
 
+/// The live screen as text for `terminal_screen_rows`: each row with
+/// trailing blanks gone and a wide character read once, the grid's width,
+/// and whether the screen shows the live tail.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct ScreenRows {
+    pub rows: Vec<String>,
+    pub cols: usize,
+    pub at_bottom: bool,
+}
+
 /// Where open region `gen` starts on the grid: the cell its first
 /// character lands in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -445,6 +455,27 @@ impl TermGrid {
             at_bottom: grid.display_offset() == 0,
             cols: self.columns(),
             region,
+        }
+    }
+
+    /// The live screen as text, as [`ScreenRows`] says.
+    pub(crate) fn screen_rows(&self) -> ScreenRows {
+        let grid = self.term.grid();
+        let rows = (0..self.size.screen_lines)
+            .map(|line| {
+                let row = &grid[Line(line as i32)];
+                let text: String = (0..self.size.columns)
+                    .map(|c| &row[Column(c)])
+                    .filter(|cell| !cell.flags.contains(Flags::WIDE_CHAR_SPACER))
+                    .map(|cell| if cell.c == '\0' { ' ' } else { cell.c })
+                    .collect();
+                text.trim_end().to_string()
+            })
+            .collect();
+        ScreenRows {
+            rows,
+            cols: self.columns(),
+            at_bottom: grid.display_offset() == 0,
         }
     }
 
@@ -1037,6 +1068,15 @@ pub(crate) fn cursor_report() -> Option<CursorReport> {
         .and_then(|slot| slot.as_ref().map(TermGrid::cursor_report))
 }
 
+/// The shared grid's live screen as text, under its lock. None before
+/// the grid exists. See [`TermGrid::screen_rows`].
+pub(crate) fn screen_rows() -> Option<ScreenRows> {
+    grid_slot()
+        .lock()
+        .ok()
+        .and_then(|slot| slot.as_ref().map(TermGrid::screen_rows))
+}
+
 /// Current (display offset, scrollback length) of the shared grid, for the
 /// scrollbar thumb geometry and drag mapping.
 pub(crate) fn scroll_metrics() -> (usize, usize) {
@@ -1507,6 +1547,27 @@ mod tests {
         );
         feed_local(b"look\r\n");
         assert_eq!(cursor_report().and_then(|r| r.region), None);
+    }
+
+    #[test]
+    fn terminal_screen_rows_reads_the_shared_screen_as_text() {
+        let _shared = lock_shared_grid_for_test();
+        *grid_slot().lock().unwrap() = None;
+        assert_eq!(crate::commands::terminal_screen_rows(), None, "no grid yet");
+        blank_shared_grid_for_test(20, 4);
+        let mut out = Output::new(false);
+        out.text("You rest.\r\n<1020hp> 中文 ".as_bytes());
+        feed_session_output(&out, Some(out.id()));
+        let report = serde_json::to_value(crate::commands::terminal_screen_rows()).expect("json");
+        // A wide character takes two cells and reads once.
+        assert_eq!(
+            report,
+            serde_json::json!({
+                "rows": ["You rest.", "<1020hp> 中文", "", ""],
+                "cols": 20,
+                "at_bottom": true,
+            })
+        );
     }
 
     #[test]
