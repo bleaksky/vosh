@@ -858,14 +858,19 @@ async fn deliver_script_result<R: tauri::Runtime>(
         return Ok(());
     }
 
-    let current = state.session.lock().await;
-    let Some(handle) = current.as_ref() else {
-        session::emit_output(app, NOT_CONNECTED.to_vec());
-        return Ok(());
-    };
-    if !handle.send(bytes) {
-        return Err("session task gone".to_string());
+    let mut current = state.session.lock().await;
+    if let Some(handle) = current.as_ref() {
+        if handle.send(bytes) {
+            return Ok(());
+        }
+        // The game closed the connection and the session ended, but its
+        // handle stayed here. A send fails only once the session loop has
+        // returned, so its teardown is done and nothing needs to wait on
+        // it. Take the handle out, so this line and every one after it
+        // finds no connection, as after a disconnect.
+        *current = None;
     }
+    session::emit_output(app, NOT_CONNECTED.to_vec());
     Ok(())
 }
 
