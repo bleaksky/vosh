@@ -527,8 +527,8 @@ fn detailed_keeps_its_looks_through_every_op_on_every_piece() {
     keeps_its_looks_through_every_op_on_every_piece(DETAILED);
 }
 
-/// Vosh's default design, At a glance (section 7.1), whose conditions
-/// nest.
+/// At a glance, Vosh's first default design as the review approved it,
+/// whose conditions nest.
 const AT_A_GLANCE: &str = "%{if:fight}%opponent %{opponent_hp:bar:10} %{opponent_hp:pct}%% %{c:245}%opponent_cond%c_default%{if:group_size}%{if:tank}  %{c:245}tank %c_tank_hp%tank%c_default%{end}%{end}%nl%{end}%c_hp%hp%{c:245}/%{maxhp}hp%c_default %c_mana%mana%{c:245}/%{maxmana}mn%c_default %c_move%move%{c:245}/%{maxmove}mv%c_default%{if:pos}  %{c:245}%pos%c_default%{end}%{if:lang}%{ifnot:pos} %{end} %{c:245}%lang%c_default%{end}%{if:exits}  %{c:245}[%c_default%exits%{c:245}]%c_default%{end}%{if:gold}  %{gold:grouped}%{c:245}g%c_default%{end}%{ifnot:fight}%{if:wizi}  %{c:245}wizi %wizi%c_default%{end}%{if:incog}%{ifnot:wizi} %{end} %{c:245}incog %incog%c_default%{end}%{end}%{if:missing}  %{c:245}missing %c_yellow%{missing:names}%c_default%{end} ";
 
 #[test]
@@ -544,6 +544,7 @@ fn every_preset_keeps_its_looks_through_every_op_on_every_piece() {
     }
     keeps_its_looks_through_every_op_on_every_piece(JAMES);
     keeps_its_looks_through_every_op_on_every_piece(AT_A_GLANCE);
+    keeps_its_looks_through_every_op_on_every_piece(vosh_prompt::DEFAULT_DESIGN);
 }
 
 /// Every style, color and removal on every piece of `design` keeps the

@@ -20,24 +20,46 @@ use crate::template::{
     write_tokens, Code, ColorSpec, FieldRef, Format, Style, TokenKind, ValueRef,
 };
 
-/// At a glance, the design Vosh draws for a profile that has none of its
-/// own.
+/// Vosh's default, the design Vosh draws for a profile that has none of
+/// its own. It mirrors the pinned band of the gallery mockup, with the
+/// tank in place of your opponent, as James asked on 2026-09-30.
 ///
-/// In a fight it draws two rows. The top row names your opponent, then a
-/// gauge ten cells wide, the percent and the game's own condition words,
-/// and in a group the tank, colored by the tank's health. The name and
-/// the gauge never move, and the percent always starts in the same cell.
-/// The bottom row, the only row out of a fight, holds your health, mana
-/// and moves as current over max, or current alone when nothing gives
-/// the max, then your position and language, the exits, your gold, Wizi
-/// and Incog out of a fight, and any tracked affect you are missing.
+/// Out of a fight it draws one row: your health, mana and moves as
+/// current over max, or current alone when nothing gives the max, then
+/// the exits in brackets and your gold. In a fight a row comes first
+/// with the tank's name, a colon and the tank's health as a gauge ten
+/// cells wide, the gauge the mockup gave your opponent. Solo you are the
+/// tank, so it names you.
 ///
-/// Only your three numbers, the gauge, the tank and the missing affects
-/// carry color, by one scale: green above two thirds, yellow above one
-/// third, red below. Every label, max and tag is 256 color 245, a middle
-/// gray. Since the design reads the tank, the game's tank line folds into
-/// the fight row, so the prompt takes two rows at most. It ends in a
-/// space, as the game's own prompt does, so your echo never touches it.
+/// Only your three numbers and the gauge carry color, by one scale:
+/// green above two thirds, yellow above one third, red below. Every
+/// label, max and bracket is 256 color 245, a middle gray, and the
+/// tank's name keeps the terminal's color. Since the design reads the
+/// tank, the game's tank line folds into the tank row, so the prompt
+/// takes two rows at most. It ends in a space, as the game's own prompt
+/// does, so your echo never touches it.
+pub const DEFAULT_DESIGN: &str = concat!(
+    // The tank row, only in a fight and only when Vosh knows the tank.
+    // The gauge draws only when it knows the tank's health, hidden
+    // included, so a PROMPT with %n and no %P never prints it as typed.
+    "%{if:fight}%{if:tank}%tank:%{if:tank_hp} %{tank_hp:bar:10}%{end}%nl%{end}%{end}",
+    // Your vitals, each current over max and colored by how full, or
+    // current alone in the terminal's color when nothing gives the max.
+    // One that does not apply, such as mana for a class with none on
+    // another game, draws nothing.
+    "%{if:hp}%{if:maxhp}%c_hp%{end}%hp%{c:245}%{if:maxhp}/%{maxhp}%{end}hp%c_default%{end}",
+    "%{if:mana} %{if:maxmana}%c_mana%{end}%mana%{c:245}%{if:maxmana}/%{maxmana}%{end}mn%c_default%{end}",
+    "%{if:move} %{if:maxmove}%c_move%{end}%move%{c:245}%{if:maxmove}/%{maxmove}%{end}mv%c_default%{end}",
+    "%{if:exits}  %{c:245}[%c_default%exits%{c:245}]%c_default%{end}",
+    "%{if:gold}  %{gold:grouped}%{c:245}g%c_default%{end}",
+    " ",
+);
+
+/// At a glance, Vosh's default from 2026-09-30 until James asked for the
+/// mockup's band. In a fight its top row named your opponent with a
+/// gauge, the percent and the game's condition words, then the tank in a
+/// group. Its vitals row added your position and language, Wizi and
+/// Incog, and the tracked affects you were missing.
 pub const AT_A_GLANCE: &str = concat!(
     // The fight row.
     "%{if:fight}",
@@ -67,9 +89,6 @@ pub const AT_A_GLANCE: &str = concat!(
     "%{if:missing}  %{c:245}missing %c_yellow%{missing:names}%c_default%{end}",
     " ",
 );
-
-/// Vosh's default design.
-pub const DEFAULT_DESIGN: &str = AT_A_GLANCE;
 
 /// A design to start from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

@@ -113,7 +113,9 @@ describe('PromptBlock', () => {
       );
     const preview = (html: string) => /<output[^>]*>(.*?)<\/output>/.exec(html)?.[1];
     // A fresh profile holds the default design with drawing off.
-    expect(preview(block('%{if:fight}%opponent%nl%{end}%c_hp%hp%{c:245}/%{maxhp}hp '))).toBe('');
+    expect(
+      preview(block('%{if:fight}%tank: %{tank_hp:bar:10}%nl%{end}%c_hp%hp%{c:245}/%{maxhp}hp ')),
+    ).toBe('');
     expect(preview(block('%hp'))).toContain('1020');
   });
 });
