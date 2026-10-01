@@ -33,7 +33,23 @@ export interface CellSize {
 /** What the band lays out: at most `zone` rows, the last ones, each cut
  *  to `cols` columns. */
 export function bandRows(pin: string, zone: number): Cell[][] {
+  return bandCut(pin, zone).rows;
+}
+
+/** The rows the band lays out, and which row of the pinned prompt is the
+ *  first of them, so the pieces of the design are cut the same way: rows
+ *  that show nothing at the end go, and of the rest only the last `zone`
+ *  stay. */
+export function bandCut(pin: string, zone: number): { rows: Cell[][]; first: number } {
   const rows = parseSgrCells(pin);
   while (rows.length > 0 && shownColumns(rows[rows.length - 1]) === 0) rows.pop();
-  return rows.slice(Math.max(0, rows.length - zone));
+  const first = Math.max(0, rows.length - zone);
+  return { rows: rows.slice(first), first };
+}
+
+/** The top of the band's first row, from the dock's top, while it shows
+ *  `rows` rows in a dock `zone` rows tall: the band's bottom sits
+ *  BAND_LIFT above the dock's, and its rows BAND_OUTSET_Y inside it. */
+export function bandRowsTop(zone: number, rows: number, cellH: number): number {
+  return dockHeight(zone, cellH) - BAND_LIFT - BAND_OUTSET_Y - rows * cellH;
 }
