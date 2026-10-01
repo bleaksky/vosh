@@ -55,7 +55,7 @@ const DEFAULT_MAX = 1200;
 
 // Reserve at least this many pixels of width for the terminal column
 // when used in horizontal mode — roughly 75 monospace columns at 14px
-// BerkeleyMono Nerd Font plus the terminal pane's own padding.
+// in the bundled JetBrains Mono plus the terminal pane's own padding.
 const RESERVE_FOR_TERMINAL = 700;
 // Reserve at least this many pixels of vertical space for the terminal
 // area when used in vertical mode. Smaller than the horizontal reserve

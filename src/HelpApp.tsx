@@ -10,7 +10,7 @@ import {
 } from './lib/theme';
 import { showAfterThemePaint } from './lib/reveal';
 import { customToAppTheme, findTheme, setCustomThemes } from './lib/themes';
-import { loadFontStack } from './lib/fontLoader';
+import { loadFontStack, renderFontStack } from './lib/fontLoader';
 import { parseHex, toRgba } from './lib/color';
 import { isMacPlatform, shortcutKey } from './lib/palette';
 import { HELP_TOPICS, type HelpTopic } from './lib/helpContent';
@@ -336,8 +336,9 @@ export function HelpApp() {
   const fontFamily = config?.font_family;
   useEffect(() => {
     if (!fontFamily) return;
-    loadFontStack(fontFamily);
-    document.documentElement.style.setProperty('--app-font-family', fontFamily);
+    const rendered = renderFontStack(fontFamily);
+    loadFontStack(rendered);
+    document.documentElement.style.setProperty('--app-font-family', rendered);
   }, [fontFamily]);
 
   const step = (by: 1 | -1) => {

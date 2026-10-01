@@ -1,0 +1,72 @@
+{
+  "cases": [
+    {
+      "name": "the retired bundled name tries an installed Berkeley Mono, then JetBrains Mono",
+      "stack": "\"BerkeleyMono Bundled\", Menlo, monospace",
+      "families": [
+        "BerkeleyMono Nerd Font",
+        "Berkeley Mono",
+        "JetBrainsMono Bundled",
+        "Menlo",
+        "monospace"
+      ]
+    },
+    {
+      "name": "the old page default keeps one JetBrains Mono",
+      "stack": "\"BerkeleyMono Bundled\", \"JetBrainsMono Bundled\", Menlo, Consolas, ui-monospace, monospace",
+      "families": [
+        "BerkeleyMono Nerd Font",
+        "Berkeley Mono",
+        "JetBrainsMono Bundled",
+        "Menlo",
+        "Consolas",
+        "ui-monospace",
+        "monospace"
+      ]
+    },
+    {
+      "name": "the old profile default falls to the bundled JetBrains Mono first",
+      "stack": "BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace",
+      "families": [
+        "BerkeleyMono Nerd Font",
+        "JetBrainsMono Bundled",
+        "JetBrains Mono",
+        "Fira Code",
+        "Menlo",
+        "Consolas",
+        "ui-monospace",
+        "monospace"
+      ]
+    },
+    {
+      "name": "an installed Berkeley Mono you picked keeps its place",
+      "stack": "\"Berkeley Mono\", Menlo, monospace",
+      "families": ["Berkeley Mono", "JetBrainsMono Bundled", "Menlo", "monospace"]
+    },
+    {
+      "name": "a Berkeley name last in the list still falls back",
+      "stack": "'Iosevka Term', \"Berkeley Mono Variable\"",
+      "families": ["Iosevka Term", "Berkeley Mono Variable", "JetBrainsMono Bundled"]
+    },
+    {
+      "name": "names match without case",
+      "stack": "\"berkeleymono bundled\", monospace",
+      "families": ["BerkeleyMono Nerd Font", "Berkeley Mono", "JetBrainsMono Bundled", "monospace"]
+    },
+    {
+      "name": "a list without Berkeley Mono passes through",
+      "stack": "\"Fira Code\", Menlo, monospace",
+      "families": ["Fira Code", "Menlo", "monospace"]
+    },
+    {
+      "name": "the default passes through",
+      "stack": "\"JetBrainsMono Bundled\", Menlo, Consolas, ui-monospace, monospace",
+      "families": ["JetBrainsMono Bundled", "Menlo", "Consolas", "ui-monospace", "monospace"]
+    },
+    {
+      "name": "an empty list stays empty",
+      "stack": "",
+      "families": []
+    }
+  ]
+}

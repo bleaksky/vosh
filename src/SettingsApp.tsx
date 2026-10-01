@@ -18,7 +18,7 @@ import {
 import { applyThemePrefs, subscribeThemeChanges, subscribeThemePrefs } from './lib/theme';
 import { showAfterThemePaint } from './lib/reveal';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
-import { loadFontStack } from './lib/fontLoader';
+import { loadFontStack, renderFontStack } from './lib/fontLoader';
 import { isMacPlatform } from './lib/palette';
 import {
   resolveSettingsTarget,
@@ -359,8 +359,9 @@ export function SettingsApp() {
   const fontFamily = config?.font_family;
   useEffect(() => {
     if (!fontFamily) return;
-    loadFontStack(fontFamily);
-    document.documentElement.style.setProperty('--app-font-family', fontFamily);
+    const rendered = renderFontStack(fontFamily);
+    loadFontStack(rendered);
+    document.documentElement.style.setProperty('--app-font-family', rendered);
   }, [fontFamily]);
 
   const group = nav.target.group;

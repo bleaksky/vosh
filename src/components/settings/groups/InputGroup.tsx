@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { setBaseAnsi } from '../../../lib/baseAnsi';
+import { renderFontStack } from '../../../lib/fontLoader';
 import {
   INPUT_CURSOR_STYLES,
   resolveThemeTerminalColors,
@@ -132,7 +133,7 @@ export function InputGroup({ target, navSeq, config, setConfig, onError }: Setti
       </Section>
 
       <PromptSection
-        fontFamily={config.font_family}
+        fontFamily={renderFontStack(config.font_family)}
         themeTerminalColors={resolveThemeTerminalColors(config.theme, config.theme_terminal_colors)}
         brightBold={config.bright_bold}
         onError={onError}

@@ -59,9 +59,8 @@ describe('fontLabel', () => {
 
 describe('fontChoices', () => {
   it('lists the bundled fonts, then installed monospace fonts by name', () => {
-    const choices = fontChoices(BUNDLED_FONTS[1].value, installed);
+    const choices = fontChoices(BUNDLED_FONTS[0].value, installed);
     expect(choices.map((c) => c.label)).toEqual([
-      'Berkeley Mono',
       'JetBrains Mono',
       'Courier New',
       'Fira Code',
@@ -88,11 +87,22 @@ describe('fontChoices', () => {
     const current = '"Helvetica", Menlo, monospace';
     const choices = fontChoices(current, installed);
     expect(choices[0]).toEqual({ label: 'Helvetica', value: current });
-    expect(choices).toHaveLength(6);
+    expect(choices).toHaveLength(5);
+  });
+
+  it('keeps a Berkeley Mono list saved while Vosh bundled it, by name', () => {
+    const saved = '"BerkeleyMono Bundled", Menlo, monospace';
+    expect(fontChoices(saved, installed)[0]).toEqual({ label: 'Berkeley Mono', value: saved });
+    // Where you have it installed, its entry carries your list.
+    const withBerkeley = [...installed, { family: 'Berkeley Mono', monospace: true }];
+    const choices = fontChoices(saved, withBerkeley);
+    expect(choices.filter((c) => c.label === 'Berkeley Mono')).toEqual([
+      { label: 'Berkeley Mono', value: saved },
+    ]);
   });
 
   it('works before the installed list loads', () => {
-    expect(fontChoices('', []).map((c) => c.label)).toEqual(['Berkeley Mono', 'JetBrains Mono']);
+    expect(fontChoices('', []).map((c) => c.label)).toEqual(['JetBrains Mono']);
   });
 });
 

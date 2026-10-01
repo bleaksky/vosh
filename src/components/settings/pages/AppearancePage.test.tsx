@@ -110,7 +110,6 @@ describe('AppearancePage', () => {
     expect(radios.length).toBe(BUILTIN_THEMES.length);
     expect(fontOptions(container)).toEqual([
       { label: 'PT Mono', value: CURRENT },
-      { label: 'Berkeley Mono', value: '"BerkeleyMono Bundled", Menlo, monospace' },
       { label: 'JetBrains Mono', value: '"JetBrainsMono Bundled", Menlo, monospace' },
     ]);
 
@@ -128,7 +127,6 @@ describe('AppearancePage', () => {
     // The monospace families join the bundled ones. The proportional
     // ones stay out, and your font keeps its exact list.
     expect(fontOptions(container)).toEqual([
-      { label: 'Berkeley Mono', value: '"BerkeleyMono Bundled", Menlo, monospace' },
       { label: 'JetBrains Mono', value: '"JetBrainsMono Bundled", Menlo, monospace' },
       { label: 'Menlo', value: '"Menlo", Menlo, monospace' },
       { label: 'PT Mono', value: CURRENT },

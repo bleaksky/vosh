@@ -21,8 +21,13 @@ export interface Choice {
 
 /** The fonts Vosh ships, which every install has. */
 export const BUNDLED_FONTS: readonly Choice[] = [
-  { label: 'Berkeley Mono', value: '"BerkeleyMono Bundled", Menlo, monospace' },
   { label: 'JetBrains Mono', value: '"JetBrainsMono Bundled", Menlo, monospace' },
+];
+
+/** Fonts Vosh once shipped, which saved font lists still name. The
+ *  Font select names them but no longer offers them. */
+const RETIRED_FONTS: readonly Choice[] = [
+  { label: 'Berkeley Mono', value: '"BerkeleyMono Bundled", Menlo, monospace' },
 ];
 
 /** The first family in a CSS font list, without its quotes. */
@@ -51,7 +56,7 @@ export function systemFontStack(family: string): string {
 /** The name the Font select shows for a font list. */
 export function fontLabel(stack: string): string {
   const family = primaryFontFamily(stack).replace(/\s+Bundled$/i, '');
-  const bundled = BUNDLED_FONTS.find(
+  const bundled = [...BUNDLED_FONTS, ...RETIRED_FONTS].find(
     (f) => fontKey(primaryFontFamily(f.value)) === fontKey(family),
   );
   if (bundled) return bundled.label;
