@@ -27,10 +27,10 @@ pub(crate) struct FontEntry {
     /// CSS family name. What the user picks from the settings list and
     /// what we mint into the `@font-face` block.
     pub family: String,
-    /// True when the first face the system lists for this family
-    /// advertises itself as monospace. That face is not always the
-    /// regular one. The settings UI uses this to default the picker to
-    /// monospaces, which is what makes sense for a terminal.
+    /// True when the regular face of this family advertises itself as
+    /// monospace (on macOS; Windows and Linux still read the first face
+    /// font-kit lists). The settings UI uses this to default the picker
+    /// to monospaces, which is what makes sense for a terminal.
     pub monospace: bool,
 }
 
@@ -129,15 +129,17 @@ fn enumerate_fonts() -> Vec<FontEntry> {
     entries
 }
 
-/// The monospace flag of the first face CoreText lists for `family`,
-/// read from its font descriptor. It builds the family query font-kit's
-/// `select_family_by_name` builds and reads the first match, which is
-/// the face font-kit's handle list starts with whenever font-kit can
-/// read its file. It loads no font, where font-kit read every file of
-/// the family and took about 2 s for the whole list. Do not swap in
-/// `CTFontDescriptorCreateMatchingFontDescriptor` or look at any other
-/// face. Both change the answer for some families. An unknown family
-/// is not monospace.
+/// The monospace flag of the regular face of `family`, read from
+/// CoreText's font descriptors. It builds the family query font-kit's
+/// `select_family_by_name` builds, then picks the face [`regular_face`]
+/// names: upright, with weight and width nearest normal. It loads no
+/// font, where font-kit read every file of the family and took about
+/// 2 s for the whole list. It reads the regular face, not the first one
+/// CoreText lists: `BerkeleyMono Nerd Font` lists Italic first, and only
+/// its Regular face says it is monospace, so the first face left it out
+/// of the Font list. Do not swap in
+/// `CTFontDescriptorCreateMatchingFontDescriptor`, which picks Medium
+/// for that family. An unknown family is not monospace.
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)]
 fn is_family_monospace(family: &str) -> bool {
@@ -149,7 +151,7 @@ fn is_family_monospace(family: &str) -> bool {
     use core_text::font_collection;
     use core_text::font_descriptor::{
         self, kCTFontMonoSpaceTrait, kCTFontSymbolicTrait, kCTFontTraitsAttribute,
-        CTFontDescriptorCopyAttribute,
+        kCTFontWeightTrait, kCTFontWidthTrait, CTFontDescriptorCopyAttribute,
     };
 
     let attributes: CFDictionary<CFString, CFType> = CFDictionary::from_CFType_pairs(&[(
@@ -161,42 +163,82 @@ fn is_family_monospace(family: &str) -> bool {
     let Some(descriptors) = collection.get_descriptors() else {
         return false;
     };
-    let Some(first) = descriptors.get(0) else {
-        return false;
+    // SAFETY: each key is CoreText's own constant, and the get rule wrap
+    // retains it for as long as the string lives.
+    let (symbolic_key, weight_key, width_key) = unsafe {
+        (
+            CFString::wrap_under_get_rule(kCTFontSymbolicTrait),
+            CFString::wrap_under_get_rule(kCTFontWeightTrait),
+            CFString::wrap_under_get_rule(kCTFontWidthTrait),
+        )
     };
-    // SAFETY: the descriptor is a live CTFontDescriptor and the key is
-    // CoreText's own constant. The copy comes back retained, or null
-    // when the face has no traits, and the create rule wrap releases it.
-    let value = unsafe {
-        let raw =
-            CTFontDescriptorCopyAttribute(first.as_concrete_TypeRef(), kCTFontTraitsAttribute);
-        if raw.is_null() {
-            return false;
-        }
-        CFType::wrap_under_create_rule(raw)
-    };
-    if !value.instance_of::<CFDictionary>() {
-        return false;
-    }
-    // SAFETY: the value is a CFDictionary, checked above, and the get
-    // rule wrap retains it for as long as `traits` lives. The key is
-    // CoreText's own constant.
-    let (traits, key) = unsafe {
-        let traits: CFDictionary<CFString, CFType> =
-            CFDictionary::wrap_under_get_rule(value.as_CFTypeRef() as CFDictionaryRef);
-        (traits, CFString::wrap_under_get_rule(kCTFontSymbolicTrait))
-    };
-    traits
-        .find(&key)
-        .and_then(|symbolic| symbolic.downcast::<CFNumber>())
-        .and_then(|symbolic| symbolic.to_i64())
-        .is_some_and(|bits| bits & i64::from(kCTFontMonoSpaceTrait) != 0)
+    let faces: Vec<FaceTraits> = descriptors
+        .iter()
+        .filter_map(|descriptor| {
+            // SAFETY: the descriptor is a live CTFontDescriptor and the
+            // key is CoreText's own constant. The copy comes back
+            // retained, or null when the face has no traits, and the
+            // create rule wrap releases it.
+            let value = unsafe {
+                let raw = CTFontDescriptorCopyAttribute(
+                    descriptor.as_concrete_TypeRef(),
+                    kCTFontTraitsAttribute,
+                );
+                if raw.is_null() {
+                    return None;
+                }
+                CFType::wrap_under_create_rule(raw)
+            };
+            if !value.instance_of::<CFDictionary>() {
+                return None;
+            }
+            // SAFETY: the value is a CFDictionary, checked above, and the
+            // get rule wrap retains it for as long as `traits` lives.
+            let traits: CFDictionary<CFString, CFType> = unsafe {
+                CFDictionary::wrap_under_get_rule(value.as_CFTypeRef() as CFDictionaryRef)
+            };
+            let number = |key: &CFString| traits.find(key).and_then(|n| n.downcast::<CFNumber>());
+            let symbolic = number(&symbolic_key).and_then(|n| n.to_i64())?;
+            Some(FaceTraits {
+                symbolic,
+                weight: number(&weight_key).and_then(|n| n.to_f64()).unwrap_or(0.0),
+                width: number(&width_key).and_then(|n| n.to_f64()).unwrap_or(0.0),
+            })
+        })
+        .collect();
+    regular_face(&faces).is_some_and(|face| face.symbolic & i64::from(kCTFontMonoSpaceTrait) != 0)
+}
+
+/// The traits of one face that pick the regular face of a family.
+#[cfg(any(test, target_os = "macos"))]
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct FaceTraits {
+    /// CoreText's symbolic traits, italic and monospace among them.
+    symbolic: i64,
+    /// Normalized weight, 0 for regular.
+    weight: f64,
+    /// Normalized width, 0 for normal.
+    width: f64,
+}
+
+/// The regular face of a family: upright before italic, then the
+/// weight nearest regular, then the width nearest normal, then the
+/// first listed. None for a family with no face.
+#[cfg(any(test, target_os = "macos"))]
+fn regular_face(faces: &[FaceTraits]) -> Option<&FaceTraits> {
+    // kCTFontItalicTrait, written out so the tests build on every system.
+    const ITALIC: i64 = 1;
+    faces.iter().min_by(|a, b| {
+        let key = |f: &FaceTraits| (f.symbolic & ITALIC != 0, f.weight.abs(), f.width.abs());
+        let (ia, wa, da) = key(a);
+        let (ib, wb, db) = key(b);
+        ia.cmp(&ib).then(wa.total_cmp(&wb)).then(da.total_cmp(&db))
+    })
 }
 
 /// The monospace flag of the first face font-kit lists for `family`,
-/// read by loading that face. Windows and Linux use it. On macOS the
-/// tests keep it to check the CoreText answer against.
-#[cfg(any(test, not(target_os = "macos")))]
+/// read by loading that face. Windows and Linux use it.
+#[cfg(not(target_os = "macos"))]
 fn is_family_monospace_font_kit(source: &SystemSource, family: &str) -> bool {
     let Ok(handle) = source.select_family_by_name(family) else {
         return false;
@@ -351,22 +393,74 @@ mod tests {
 
     // Slow, about 2 s in a debug build, since the font-kit side reads
     // every font file. Run it with --ignored after a change to either
-    // check or a macOS update.
+    // check or a macOS update. Both sides read the regular face.
     #[cfg(target_os = "macos")]
     #[test]
     #[ignore = "reads every installed font file"]
     fn core_text_agrees_with_font_kit_on_every_family() {
+        use font_kit::family_name::FamilyName;
+        use font_kit::properties::Properties;
         let source = SystemSource::new();
         let families = source.all_families().expect("font-kit lists the families");
+        let font_kit_regular = |family: &str| {
+            source
+                .select_best_match(&[FamilyName::Title(family.to_string())], &Properties::new())
+                .ok()
+                .and_then(|handle| handle.load().ok())
+                .is_some_and(|font| font.is_monospace())
+        };
         let differ: Vec<(&String, bool)> = families
             .iter()
             .map(|family| (family, is_family_monospace(family)))
-            .filter(|(family, mono)| *mono != is_family_monospace_font_kit(&source, family))
+            .filter(|(family, mono)| *mono != font_kit_regular(family))
             .collect();
         assert!(
             differ.is_empty(),
             "CoreText and font-kit disagree on {differ:?}"
         );
+    }
+
+    fn face(italic: bool, weight: f64, width: f64, mono: bool) -> FaceTraits {
+        FaceTraits {
+            symbolic: i64::from(italic) | if mono { 1 << 10 } else { 0 },
+            weight,
+            width,
+        }
+    }
+
+    #[test]
+    fn the_regular_face_is_upright_with_normal_weight_and_width() {
+        // BerkeleyMono Nerd Font lists Italic first, and only its Regular
+        // face says it is monospace.
+        let faces = [
+            face(true, 0.0, 0.0, false),
+            face(false, 0.4, 0.0, false),
+            face(false, 0.0, 0.0, true),
+            face(true, 0.4, 0.0, false),
+        ];
+        assert_eq!(regular_face(&faces), Some(&faces[2]));
+        // Nearest normal width among upright regular weight faces.
+        let condensed = [face(false, 0.0, -0.2, false), face(false, 0.0, 0.0, true)];
+        assert_eq!(regular_face(&condensed), Some(&condensed[1]));
+        // A family of italics only takes the nearest regular weight.
+        let italics = [face(true, 0.3, 0.0, false), face(true, -0.1, 0.0, true)];
+        assert_eq!(regular_face(&italics), Some(&italics[1]));
+        // Equal faces keep the first listed.
+        let same = [face(false, 0.0, 0.0, true), face(false, 0.0, 0.0, false)];
+        assert_eq!(regular_face(&same), Some(&same[0]));
+        assert_eq!(regular_face(&[]), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn berkeley_mono_nerd_font_lists_as_monospace_where_it_is_installed() {
+        let family = "BerkeleyMono Nerd Font";
+        let installed = SystemSource::new()
+            .all_families()
+            .is_ok_and(|families| families.iter().any(|f| f == family));
+        if installed {
+            assert!(is_family_monospace(family));
+        }
     }
 
     #[test]
