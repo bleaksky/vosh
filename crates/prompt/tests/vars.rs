@@ -10,7 +10,7 @@ use common::{
     capture, draw, draw_with, feed, now, num, packet, resolve, text, vosh, DETAILED, JAMES,
 };
 use serde_json::json;
-use vosh_prompt::format::Position;
+use vosh_prompt::format::{tank_bar_cells, Position};
 use vosh_prompt::vars::{is_sourced, known, Tick, CATALOG};
 use vosh_prompt::{
     render_str, FieldRef, MapValues, RenderOptions, Resolved, Value, Values, Vars, Vosh,
@@ -603,7 +603,8 @@ fn tank_and_tank_health_take_a_fresh_capture_first() {
     // The prompt names who the tank is when Char.Combat reads someone.
     capture(&mut vars, &[("tank", "Tarvik"), ("tank_pct", "40")]);
     assert_eq!(draw(&vars, "%tank %tank_hp"), "Tarvik 40");
-    // From %P the percent is the lowest that fills as many cells.
+    // A %P bar that Char.Combat's percent does not fill reads back to the
+    // highest percent that fills as many cells, since a fresh capture wins.
     capture(
         &mut vars,
         &[("tank", "Tarvik"), ("tank_bar", "===|=--|---|---")],
@@ -624,6 +625,53 @@ fn tank_and_tank_health_take_a_fresh_capture_first() {
     feed(&mut older, "char-combat.gmcp");
     assert_eq!(resolve(&older, "tank"), Resolved::Missing);
     assert_eq!(resolve(&older, "fight"), Resolved::Value(Value::Flag));
+}
+
+#[test]
+fn a_p_bar_takes_char_combats_exact_percent_when_it_fills_the_same_cells() {
+    // Char.Combat goes out on the same pulse as the prompt, with the
+    // percent %P was drawn from, so within the bar's twelfth the tank's
+    // health is that exact percent.
+    let bar = |pct: i64| {
+        let cells = tank_bar_cells(pct).map(|full| if full { '=' } else { '-' });
+        cells
+            .chunks(3)
+            .map(|c| c.iter().collect::<String>())
+            .collect::<Vec<_>>()
+            .join("|")
+    };
+    let mut vars = Vars::new(true);
+    feed(&mut vars, "char-prompt.gmcp");
+    feed(&mut vars, "char-vitals.gmcp");
+    feed(&mut vars, "char-combat-tank.gmcp");
+    capture(&mut vars, &[("tank", "Tester"), ("tank_bar", &bar(78))]);
+    assert_eq!(
+        draw(&vars, "%tank_hp %{tank_hp:game} %{tank_hp:bar:10}"),
+        "78 [===|===|===|=--] ████████░░"
+    );
+    for pct in 0..=100 {
+        packet(
+            &mut vars,
+            "Char.Combat",
+            json!({"target":"a Blackwatch guard","condition":"awful","hp_pct":10,
+                   "tank":{"name":"Tester","hp_pct":pct}}),
+        );
+        capture(&mut vars, &[("tank", "Tester"), ("tank_bar", &bar(pct))]);
+        assert_eq!(
+            resolve(&vars, "tank_hp"),
+            Resolved::Value(Value::TankHp(pct)),
+            "{pct}"
+        );
+    }
+    // With no percent from Char.Combat the bar reads back alone, as on
+    // an older build, whose Char.Combat names no tank.
+    let mut older = Vars::new(true);
+    feed(&mut older, "char-combat.gmcp");
+    capture(&mut older, &[("tank", "Tester"), ("tank_bar", &bar(78))]);
+    assert_eq!(
+        draw(&older, "%tank_hp %{tank_hp:game}"),
+        "83 [===|===|===|=--]"
+    );
 }
 
 #[test]

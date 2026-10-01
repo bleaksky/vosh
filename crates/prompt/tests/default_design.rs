@@ -414,9 +414,10 @@ fn states() -> Vec<(St, &'static str)> {
                 ..St::new("desperate")
             }
             .fight(you(150)),
-            // The game's %P shows 2 of 12 cells for 14 percent, and Vosh
-            // reads the tank's health from it first, as 16.
-            "Tester: ██░░░░░░░░\n\
+            // The game's %P shows 2 of 12 cells for 14 percent. Char.Combat
+            // sends that 14 on the same pulse, so the gauge fills 1 of 10,
+            // as the mockup's would.
+            "Tester: █░░░░░░░░░\n\
              150/1020hp 90/800mn 610/930mv  [S]  1,250g ",
         ),
         (
@@ -969,7 +970,7 @@ fn only_your_numbers_and_the_tank_gauge_carry_color() {
     let rows = cells(&draw(&st).ansi);
     // The tank's name in the terminal's color, then the gauge by how
     // full, red at 14 percent, its empty cells dim.
-    assert_eq!(runs(&rows[0]), "⟨39⟩Tester: ⟨31⟩██⟨90⟩░░░░░░░░");
+    assert_eq!(runs(&rows[0]), "⟨39⟩Tester: ⟨31⟩█⟨90⟩░░░░░░░░░");
     // Your three numbers by how full, and the quiet gray of every label,
     // max and tag.
     assert_eq!(
@@ -1158,6 +1159,52 @@ fn the_tank_gauge_draws_as_the_mockup_drew_the_dragon() {
         assert_eq!(ours[0].len(), "Ally: ".len() + 10, "{pct}");
         assert_eq!(ours[0][6..], theirs[0][dragon..dragon + 10], "{pct}");
     }
+}
+
+#[test]
+fn a_prompt_with_p_bar_still_draws_the_tank_gauge_as_the_dragons() {
+    // James's PROMPT and the gallery's both hold %P, which shows the
+    // tank's health in twelfths. Char.Combat goes out on the same pulse
+    // with the whole percent the bar was drawn from, so the gauge counts
+    // that percent and holds the cells the mockup gave the dragon at the
+    // same health, at every percent.
+    let dragon = "The Ancient Gold Dragon ".chars().count();
+    for prompt in [PROMPT, GALLERY_PROMPT] {
+        for pct in 0..=100 {
+            let st = St {
+                opp_pct: pct,
+                opponent: "The Ancient Gold Dragon",
+                ..St::new("gauge")
+            }
+            .fight(("Thalrin", pct, 100));
+            let ours = draw_with(DEFAULT_DESIGN, prompt, &st, no_state);
+            let theirs = draw_with(MOCKUP, prompt, &st, no_state);
+            assert_clean("gauge", &ours);
+            let (ours, theirs) = (cells(&ours.ansi), cells(&theirs.ansi));
+            let name = "Thalrin: ".len();
+            assert_eq!(ours[0].len(), name + 10, "{prompt} {pct}");
+            assert_eq!(
+                ours[0][name..],
+                theirs[0][dragon..dragon + 10],
+                "{prompt} {pct}"
+            );
+        }
+    }
+    // Thalrin at 54 fills 5 cells, not the 6 the game's 7 twelfths read
+    // back to. You at 92, solo, show damage, and a tank at 3 fills none.
+    let at = |name: &'static str, hit: i64, max: i64| {
+        let st = St {
+            hit: if name == "Tester" { hit } else { 1020 },
+            max_hit: if name == "Tester" { max } else { 1020 },
+            ..St::new("gauge")
+        }
+        .fight((name, hit, max));
+        let drawn = draw_with(DEFAULT_DESIGN, PROMPT, &st, no_state).plain;
+        drawn.lines().next().expect("a tank row").to_string()
+    };
+    assert_eq!(at("Thalrin", 54, 100), "Thalrin: █████░░░░░");
+    assert_eq!(at("Tester", 904, 982), "Tester: █████████░");
+    assert_eq!(at("Ally", 3, 100), "Ally: ░░░░░░░░░░");
 }
 
 #[test]

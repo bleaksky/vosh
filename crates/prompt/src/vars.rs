@@ -30,7 +30,7 @@ use serde::{Serialize, Serializer};
 use serde_json::Value as Json;
 
 use crate::aabahran;
-use crate::format::{lang_game, Position, Resolved, Value, MOON_CODES};
+use crate::format::{lang_game, tank_bar_cells, Position, Resolved, Value, MOON_CODES};
 use crate::gmcp::{
     self, Find, Observed, Snapshot, CHAR_COMBAT, CHAR_STATE, CHAR_STATUS, CHAR_VITALS, CHAR_WORTH,
     GROUP_INFO, IMM_QUEUES, ROOM_CHARS, ROOM_INFO, ROOM_ITEMS, ROOM_WEATHER, WORLD_MOONS,
@@ -2260,14 +2260,24 @@ impl<'a> Resolver<'a> {
             Some("") => Got::Blank,
             Some(t) => t.parse().map_or(Got::Nothing, |n| is(Value::TankHp(n))),
         };
-        // `%P` in twelfths, read back to the lowest percent that fills as
-        // many cells.
+        // `%P` in twelfths. Char.Combat goes out on the same pulse with the
+        // whole percent the bar was drawn from (`gmcp_send_combat`), so
+        // when its percent fills as many cells it is the tank's health.
+        // Otherwise the fresh bar wins, read back to the highest percent
+        // that fills as many cells.
         let from_bar = || match self.vars.var("tank_bar").map(str::trim) {
             None => Got::Nothing,
             Some("") => Got::Blank,
             Some(t) => {
-                let cells = t.chars().filter(|c| *c == '=').count() as i64;
-                is(Value::TankHp(cells * 25 / 3))
+                let cells = t.chars().filter(|c| *c == '=').count();
+                let fills =
+                    |pct: &i64| tank_bar_cells(*pct).iter().filter(|c| **c).count() == cells;
+                let exact = self
+                    .combat()
+                    .and_then(|k| k.tank)
+                    .and_then(|t| t.hp_pct)
+                    .filter(fills);
+                is(Value::TankHp(exact.unwrap_or(cells as i64 * 25 / 3)))
             }
         };
         let from_gmcp = || match self.combat() {
