@@ -609,6 +609,12 @@
   color: var(--tertiary);
 }
 
+/* Prompt codes in a toast read in the terminal's face (P14). */
+.ov-toast-meta.is-mono {
+  font-family: var(--font-mud);
+  font-variant-numeric: normal;
+}
+
 /* Confirm dialog. No scrim: the layer is clear and only catches a
    press outside the card. */
 .ov-confirm-layer {

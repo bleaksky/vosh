@@ -6,12 +6,16 @@ export interface Toast {
   message: string;
   /** Optional right-aligned mono detail (host:port, reason, file). */
   meta?: string;
+  /** The meta reads in the terminal's face, as prompt codes do (P14). */
+  metaMono?: boolean;
 }
 
 export interface ToastInput {
   kind: ToastKind;
   message: string;
   meta?: string;
+  /** The meta reads in the terminal's face, as prompt codes do (P14). */
+  metaMono?: boolean;
   /** Auto-dismiss delay override. Defaults below apply otherwise. */
   timeoutMs?: number;
   /** Stays up until you click it, for a notice that holds until you act. */
@@ -41,6 +45,7 @@ export function pushToast(input: ToastInput): number {
   const id = nextId++;
   const toast: Toast = { id, kind: input.kind, message: input.message };
   if (input.meta !== undefined) toast.meta = input.meta;
+  if (input.metaMono) toast.metaMono = true;
   toasts = [...toasts, toast];
   if (!input.sticky) {
     const delay =

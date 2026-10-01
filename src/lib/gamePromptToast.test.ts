@@ -7,6 +7,7 @@ describe('gamePromptToast', () => {
       kind: 'info',
       message: 'Vosh reads your new prompt.',
       meta: '%h %m ',
+      metaMono: true,
     });
     expect(
       gamePromptToast({ kind: 'prompt', text: '<%hhp> ', applied: true, lost: [] })?.meta,
