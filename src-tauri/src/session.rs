@@ -284,8 +284,9 @@ struct ReadBatch {
     /// The read ended on a partial that can still become your prompt, so
     /// it waits a moment for the next read instead of painting raw.
     hold: bool,
-    /// The read brought GMCP packets, which can change what your prompt
-    /// shows with no prompt after them.
+    /// The read brought GMCP packets after the last prompt Vosh read in
+    /// it, which can change what that prompt shows. Packets before a
+    /// prompt in the same read draw with it.
     gmcp: bool,
 }
 
@@ -1685,6 +1686,8 @@ fn prompt_block(
     let mut apply = script_state::apply_actions(p, outcome);
     batch.prompt_vars = true;
     batch.prompt = true;
+    // The prompt draws with the packets that came before it.
+    batch.gmcp = false;
 
     let mut before = Vec::new();
     let mut scrollback = Vec::new();
@@ -2031,14 +2034,15 @@ async fn capture_held_lines(
 }
 
 /// When the late GMCP repaint fires, after a read (section 4). `waiting`
-/// is when it was going to fire, `gmcp` says the read brought packets,
-/// and `wrote` says it wrote to the text. In the text and lifted, text
-/// cancels it, since the prompt that follows draws with the packets
-/// anyway. A read that brought packets and no text starts it when your
-/// prompt would show something else with them, and one already waiting
-/// keeps its time. Pinned, the band is not in the text, so text cancels
-/// nothing, and packets start it whenever the band would change
-/// (addendum item 7).
+/// is when it was going to fire, `gmcp` says the read brought packets
+/// after the last prompt it read, and `wrote` says it wrote to the text.
+/// In the text and lifted, text cancels a repaint an earlier read
+/// started, since what follows the packets draws with them. Packets
+/// after the read's last prompt start it when your prompt would show
+/// something else with them, and one already waiting keeps its time.
+/// Text after those packets closed the row, so they start nothing then.
+/// Pinned, the band is not in the text, so text cancels nothing, and
+/// packets start it whenever the band would change (addendum item 7).
 fn late_repaint_after(
     p: &Profile,
     waiting: Option<Instant>,
@@ -2047,9 +2051,7 @@ fn late_repaint_after(
     now: Instant,
 ) -> Option<Instant> {
     let pinned = p.prompt.show() == vosh_prompt::PromptShow::Pinned;
-    if wrote && !pinned {
-        return None;
-    }
+    let waiting = waiting.filter(|_| pinned || !wrote);
     if waiting.is_some() || !gmcp {
         return waiting;
     }

@@ -170,9 +170,7 @@ fn a_preview_set_on_the_open_row_gives_way_to_the_next_pulse_at_every_split() {
             }
             got.push(Read {
                 out: repaint,
-                log: Vec::new(),
-                kept: Vec::new(),
-                sends: Vec::new(),
+                ..Read::default()
             });
             got.extend(
                 vosh_prompt::testkit::reads(&fight, at)

@@ -67,13 +67,17 @@ pub(super) fn cuts(bytes: &[u8]) -> Vec<usize> {
 
 /// One read's worth of what the session hands on: the output, the log
 /// rows and the lines kept for scrollback, in order, and what triggers
-/// asked to send.
+/// asked to send. `gmcp` says GMCP packets came after the last prompt
+/// the read brought, and `prompt` that it brought one, as the session
+/// loop reads them for the late repaint.
 #[derive(Debug, Default)]
 pub(super) struct Read {
     pub(super) out: Output,
     pub(super) log: Vec<String>,
     pub(super) kept: Vec<Vec<u8>>,
     pub(super) sends: Vec<String>,
+    pub(super) gmcp: bool,
+    pub(super) prompt: bool,
 }
 
 /// The session's state for one connection, fed through its own steps.
@@ -139,6 +143,7 @@ impl Session {
                 TelnetEvent::Subnegotiation { option, payload }
                     if option == telnet_option::GMCP =>
                 {
+                    batch.gmcp = true;
                     let msg = vosh_gmcp::parse(&payload).expect("every packet parses");
                     let _ = gmcp_step(&mut self.p, &msg, now);
                 }
@@ -164,6 +169,8 @@ impl Session {
             log: batch.log.into_iter().map(|row| row.text).collect(),
             kept,
             sends,
+            gmcp: batch.gmcp,
+            prompt: batch.prompt,
         }
     }
 
@@ -181,7 +188,7 @@ impl Session {
             out: batch.out,
             log: batch.log.into_iter().map(|row| row.text).collect(),
             kept,
-            sends: Vec::new(),
+            ..Read::default()
         }
     }
 
