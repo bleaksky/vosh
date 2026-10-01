@@ -7,6 +7,7 @@ import { menuPosition, type MenuPlace } from '../../lib/promptCard';
 // (radius 16, padding 6, --raised, --shadow-float), placed 4 px from its
 // button and kept inside the window. Esc closes it before the card, a
 // press outside closes it, and the arrow keys move between its items.
+// Focus moves into it as it opens and back to its button as it closes.
 
 const ITEMS = '[role="menuitem"]:not(:disabled),[role="menuitemradio"]:not(:disabled)';
 
@@ -52,9 +53,26 @@ export function CardMenu({
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
+  // Focus moves into the menu once it is placed: until then it is
+  // hidden, and a hidden element takes no focus.
+  const focused = useRef(false);
   useEffect(() => {
+    if (!pos || focused.current) return;
+    focused.current = true;
     ref.current?.focus({ preventScroll: true });
-  }, []);
+  }, [pos]);
+
+  // Closing, by Esc, Tab, a press outside or a choice, hands focus back
+  // to the button the menu opened from, unless it went somewhere already.
+  useEffect(
+    () => () => {
+      const active = document.activeElement;
+      if ((!active || active === document.body) && anchor.isConnected) {
+        anchor.focus({ preventScroll: true });
+      }
+    },
+    [anchor],
+  );
 
   useEffect(() => {
     const onPointer = (e: PointerEvent) => {
