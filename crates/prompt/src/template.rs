@@ -1518,6 +1518,16 @@ mod tests {
                 (PieceKind::Text, ")".to_string()),
             ]
         );
+        // Text right after the sign stays its own piece.
+        assert_eq!(
+            piece_kinds("[%c_hp%pct_hp%%hp%c_default/"),
+            vec![
+                (PieceKind::Text, "[".to_string()),
+                (PieceKind::Percent, "%c_hp%pct_hp%%".to_string()),
+                (PieceKind::Text, "hp".to_string()),
+                (PieceKind::Text, "%c_default/".to_string()),
+            ]
+        );
         // A percent sign after anything but a percent value is text.
         assert_eq!(
             piece_kinds("%hp%%"),

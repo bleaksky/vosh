@@ -166,6 +166,13 @@ pub fn describe(template: &Template, values: &dyn Values, preview: bool) -> Desc
                 Some((field, format, width)) => (Some(field.clone()), Some(*format), *width),
                 None => (None, None, None),
             };
+            // A piece the parser folds shows in the form it folds into:
+            // `%hp/%{maxhp}` as Current and max, `%pct_hp%%` as Percent.
+            let format = match edited.kind {
+                PieceKind::CurMax => format.map(|_| FormatName::CurMax),
+                PieceKind::Percent => format.map(|_| FormatName::Percent),
+                _ => format,
+            };
             let (when, when_fixed) = when_of(&doc, index);
             let color = match edited.value().map(|v| &v.format) {
                 Some(Format::Bar { color, .. }) => bar_choice(color, field.as_ref()),
