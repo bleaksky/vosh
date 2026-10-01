@@ -165,36 +165,88 @@ fn redraw_now() {
     }
 }
 
-// Last (cols << 16 | rows) advertised to the MUD, so NAWS is pushed only
-// when the native grid size actually changes (i.e. on window resize).
-static LAST_GRID_SIZE: AtomicU32 = AtomicU32::new(0);
+// The rows at the bottom of the pane the pinned prompt band borrows while
+// your prompt takes more than one row, from the page's latest bounds
+// report. Stored with the bounds, so a frame never pairs new bounds with
+// an old count.
+static LENT_ROWS: AtomicU32 = AtomicU32::new(0);
 
-/// When the native surface owns the terminal, advertise its grid size to
-/// the MUD so lines wrap to fill the pane (instead of the xterm width).
-/// Only fires when the size changes.
-fn push_native_size_if_changed(cols: usize, rows: usize) {
-    let cols = cols.min(usize::from(u16::MAX)) as u16;
-    let rows = rows.min(usize::from(u16::MAX)) as u16;
+// Last (cols << 16 | rows) the grid took, which the page's hidden xterm
+// follows, and last the game was told through NAWS. Each goes out only
+// when it changes.
+static LAST_GRID_SIZE: AtomicU32 = AtomicU32::new(0);
+static LAST_GAME_SIZE: AtomicU32 = AtomicU32::new(0);
+
+/// The rows the grid takes and the rows the game is told, for a pane whose
+/// surface fits `fit` rows while the pinned prompt band borrows `lent`.
+/// Under the underlay the surface keeps the whole pane and the grid gives
+/// the rows up from its top, so its newest line sits right above the band.
+/// Elsewhere the surface itself stops short of the band, so `fit` already
+/// leaves them out. Either way the game is told the rows the pane holds
+/// with a one row band. A fight that grows the band by a row only moves
+/// the text, so the game hears of no new size and wraps as before.
+fn grid_and_game_rows(fit: usize, lent: usize, underlay: bool) -> (usize, usize) {
+    if underlay {
+        (fit.saturating_sub(lent).max(1), fit)
+    } else {
+        (fit, fit + lent)
+    }
+}
+
+/// The device pixels of a surface `full` tall that stops `lent` rows of
+/// `cell` px short of the pane's bottom, where the band reaches up. At
+/// least one.
+fn short_of_band(full: u32, lent: u32, cell: u32) -> u32 {
+    full.saturating_sub(lent.saturating_mul(cell)).max(1)
+}
+
+fn clamp_u16(n: usize) -> u16 {
+    u16::try_from(n).unwrap_or(u16::MAX)
+}
+
+/// Whether `cols` by `rows` differs from the size `last` holds, which then
+/// holds it. Packed as `cols << 16 | rows`.
+fn changed(last: &AtomicU32, cols: u16, rows: u16) -> bool {
     let packed = (u32::from(cols) << 16) | u32::from(rows);
-    if LAST_GRID_SIZE.swap(packed, Ordering::AcqRel) == packed {
+    last.swap(packed, Ordering::AcqRel) != packed
+}
+
+/// When the native surface owns the terminal, tell the page the grid size,
+/// so its hidden xterm matches the surface, and advertise the size to the
+/// MUD so lines wrap to fill the pane (instead of the xterm width). Each
+/// fires only when it changes, and the game's size leaves out the rows the
+/// pinned band borrows (`grid_and_game_rows`).
+fn report_sizes(cols: usize, rows: usize, game_rows: usize) {
+    let cols = clamp_u16(cols);
+    let rows = clamp_u16(rows);
+    let game_rows = clamp_u16(game_rows);
+    let grid_news = changed(&LAST_GRID_SIZE, cols, rows);
+    let game_news = changed(&LAST_GAME_SIZE, cols, game_rows);
+    if !grid_news && !game_news {
         return;
     }
     let Some(app) = APP.get() else {
         return;
     };
+    if grid_news {
+        // Tell the frontend so it can size hidden xterm to the same grid;
+        // when a DOM overlay reveals xterm it then matches the surface
+        // exactly.
+        let _ = app.emit("vosh://native-grid-size", (cols, rows));
+    }
+    if !game_news {
+        return;
+    }
     let state = app.state::<crate::commands::SharedState>();
     if let Ok(mut ws) = state.window_size.lock() {
-        *ws = (cols, rows);
+        *ws = (cols, game_rows);
     }
-    // Tell the frontend so it can size hidden xterm to the same grid; when a
-    // DOM overlay reveals xterm it then matches the surface exactly.
-    let _ = app.emit("vosh://native-grid-size", (cols, rows));
     // Bound to a named local (not a temporary) so the guard drops before
     // `state` at end of scope.
     let session_guard = state.session.try_lock();
     if let Ok(session) = session_guard {
         if let Some(handle) = session.as_ref() {
-            handle.set_window_size(cols, rows);
+            handle.set_window_size(cols, game_rows);
         }
     }
 }
@@ -838,8 +890,9 @@ pub(crate) fn install_probe(window: &tauri::WebviewWindow) -> Result<(), tauri::
 
 /// Reposition and resize the surface to the terminal pane. `x`/`y`/`w`/`h`
 /// are CSS pixels in the webview's top-left coordinate space; `dpr` is the
-/// device pixel ratio. Must run on the main thread.
-pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64) {
+/// device pixel ratio. `lent` is the rows at the pane's bottom the pinned
+/// prompt band borrows (`grid_and_game_rows`). Must run on the main thread.
+pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64, lent: u32) {
     let Ok(mut slot) = surface_slot().lock() else {
         return;
     };
@@ -852,6 +905,7 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64) {
     // The surface is now positioned and visible, so live output should
     // trigger repaints.
     ACTIVE.store(true, Ordering::Release);
+    LENT_ROWS.store(lent, Ordering::Release);
     store_f32(&DPR, dpr as f32);
     store_f32(&ORIGIN_X, x as f32);
     store_f32(&ORIGIN_Y, y as f32);
@@ -884,13 +938,17 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64) {
         render(&mut handle.gpu);
         return;
     }
+    // The surface sits over the page here, so it stops short of the rows
+    // the band borrows, or it would hide them.
+    let cell_px = handle.gpu.cell_renderer.cell_size_px().1.round() as u32;
+    let px_w = (width * dpr).max(1.0) as u32;
+    let px_h = short_of_band((height * dpr).max(1.0) as u32, lent, cell_px);
+    let height = f64::from(px_h) / dpr;
     platform::set_frame(&handle.platform, x, y, width, height, dpr);
     // Respect an active overlay suppression so a resize does not pop the
     // surface back over an open dropdown.
     platform::set_hidden(&handle.platform, SUPPRESSED.load(Ordering::Acquire));
 
-    let px_w = (width * dpr).max(1.0) as u32;
-    let px_h = (height * dpr).max(1.0) as u32;
     let (px_w, px_h) = clamp_to_device(&handle.gpu.device, px_w, px_h);
     if px_w != handle.gpu.config.width || px_h != handle.gpu.config.height {
         handle.gpu.config.width = px_w;
@@ -995,9 +1053,11 @@ fn render(state: &mut GpuState) {
     // 80x24 corner. Under the underlay the pane is a rect inside the
     // window-sized target; otherwise it is the whole target.
     let [pane_x, pane_y, pane_w, pane_h] = pane_rect(state.config.width, state.config.height);
-    let (cols, rows) = state.cell_renderer.grid_size_for(pane_w, pane_h);
+    let (cols, fit) = state.cell_renderer.grid_size_for(pane_w, pane_h);
+    let lent = LENT_ROWS.load(Ordering::Acquire) as usize;
+    let (rows, game_rows) = grid_and_game_rows(fit, lent, UNDERLAY);
     crate::term_grid::resize_grid(cols, rows);
-    push_native_size_if_changed(cols, rows);
+    report_sizes(cols, rows, game_rows);
     // Publish the cell size so the mouse handler can map points to cells.
     let (cw, ch) = state.cell_renderer.cell_size_px();
     store_f32(&CELL_W, cw);
@@ -1127,5 +1187,70 @@ mod tests {
     fn scroll_key_never_reaches_the_unset_marker() {
         assert_ne!(scroll_report_key(usize::MAX, usize::MAX - 1), u64::MAX);
         assert_ne!(scroll_report_key(1, usize::MAX), u64::MAX);
+    }
+
+    /// The grid rows and the rows the game hears of, frame by frame, for
+    /// a pane that fits `fit` rows while the band borrows `lent`.
+    fn reported(frames: &[(usize, usize)], underlay: bool) -> (Vec<u16>, Vec<u16>) {
+        let grid = AtomicU32::new(0);
+        let game = AtomicU32::new(0);
+        let (mut sized, mut told) = (Vec::new(), Vec::new());
+        for &(fit, lent) in frames {
+            let (rows, game_rows) = grid_and_game_rows(fit, lent, underlay);
+            let (rows, game_rows) = (clamp_u16(rows), clamp_u16(game_rows));
+            if changed(&grid, 120, rows) {
+                sized.push(rows);
+            }
+            if changed(&game, 120, game_rows) {
+                told.push(game_rows);
+            }
+        }
+        (sized, told)
+    }
+
+    #[test]
+    fn a_row_the_pinned_band_borrows_never_reaches_the_game() {
+        // A fight starts and ends three times in a second, then the
+        // window grows by two rows and a fight starts in it.
+        let frames = [
+            (40, 0),
+            (40, 1),
+            (40, 0),
+            (40, 1),
+            (40, 0),
+            (40, 1),
+            (40, 0),
+            (42, 0),
+            (42, 1),
+        ];
+        let (sized, told) = reported(&frames, true);
+        // The grid gives up its top row to the band and takes it back
+        // each time, so the page's hidden xterm follows it.
+        assert_eq!(sized, [40, 39, 40, 39, 40, 39, 40, 42, 41]);
+        // The game hears the rows the pane holds with a one row band,
+        // once, and again only when the window itself changes.
+        assert_eq!(told, [40, 42]);
+    }
+
+    #[test]
+    fn a_surface_that_stops_short_of_the_band_tells_the_game_the_same_rows() {
+        // Off the underlay the surface ends above the band, so the rows
+        // it fits already leave the borrowed ones out.
+        let frames = [(40, 0), (39, 1), (40, 0), (38, 2)];
+        let (sized, told) = reported(&frames, false);
+        assert_eq!(sized, [40, 39, 40, 38]);
+        assert_eq!(told, [40]);
+        // A pane 1415 device px tall fits 40 rows of 35 px. Cut short by
+        // one borrowed row it fits 39, never 38.
+        assert_eq!(short_of_band(1415, 1, 35) / 35, 39);
+        assert_eq!(short_of_band(1400, 1, 35) / 35, 39);
+        assert_eq!(short_of_band(30, 3, 35), 1);
+    }
+
+    #[test]
+    fn the_grid_keeps_a_row_whatever_the_band_borrows() {
+        assert_eq!(grid_and_game_rows(3, 5, true), (1, 3));
+        assert_eq!(grid_and_game_rows(40, 0, true), (40, 40));
+        assert_eq!(grid_and_game_rows(40, 0, false), (40, 40));
     }
 }

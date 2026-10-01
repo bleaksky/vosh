@@ -1420,7 +1420,10 @@ pub(crate) fn app_version() -> String {
 /// window) and device pixel ratio so the native wgpu surface can track
 /// it. NSView/Metal must be touched on the main thread, so the work is
 /// dispatched there. A no-op on other platforms and when the surface is
-/// not installed.
+/// not installed. `lent` is the rows at the pane's bottom the pinned
+/// prompt band borrows while your prompt takes more than one row: the
+/// grid gives them up, and the game keeps the size it was told. A page
+/// that sends none lends none.
 #[tauri::command]
 pub(crate) fn native_surface_set_bounds(
     app: AppHandle,
@@ -1429,16 +1432,18 @@ pub(crate) fn native_surface_set_bounds(
     width: f64,
     height: f64,
     dpr: f64,
+    lent: Option<u32>,
 ) {
     #[cfg(native_surface)]
     {
+        let lent = lent.unwrap_or(0);
         let _ = app.run_on_main_thread(move || {
-            crate::native_surface::set_bounds(x, y, width, height, dpr);
+            crate::native_surface::set_bounds(x, y, width, height, dpr, lent);
         });
     }
     #[cfg(not(native_surface))]
     {
-        let _ = (&app, x, y, width, height, dpr);
+        let _ = (&app, x, y, width, height, dpr, lent);
     }
 }
 
