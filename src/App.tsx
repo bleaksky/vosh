@@ -1565,7 +1565,10 @@ function App() {
     disconnect: () => void disconnectSession(),
     insertInput: (text) => inputRef.current?.insert(text),
     promptShow: promptShow?.capture ? promptShow.show : null,
-    openPromptCard: () => setPromptCard(true),
+    // Edit prompt as text… opens the design's text in Settings, as the
+    // card's Edit as text does, until the card has a text view of its own.
+    openPromptCard: (view) =>
+      view === 'text' ? openSettingsTab('input:advanced#prompt') : setPromptCard(true),
     promptDraw: promptShow?.capture ? promptShow.draw : null,
     setPromptDraw: (on) => {
       void promptConfigGet()
