@@ -26,7 +26,7 @@
 #![cfg_attr(target_os = "linux", allow(dead_code))]
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use tauri::{Emitter, Manager};
@@ -244,13 +244,32 @@ fn report_sizes(cols: usize, rows: usize, game_rows: usize) {
     if let Ok(mut ws) = state.window_size.lock() {
         *ws = (cols, game_rows);
     }
-    // Bound to a named local (not a temporary) so the guard drops before
-    // `state` at end of scope.
-    let session_guard = state.session.try_lock();
-    if let Ok(session) = session_guard {
-        if let Some(handle) = session.as_ref() {
-            handle.set_window_size(cols, game_rows);
-        }
+    tell_session(state.inner(), &LAST_GAME_SIZE);
+}
+
+/// Tell the live session the game's size that `newest` holds, packed as
+/// `changed` keeps it. The frame runs on the main thread, so it never
+/// waits on the session lock. When a command holds the lock, a task waits
+/// for it instead and then sends the size that is newest by then. The
+/// frames after this one see no new size, so without the task the game
+/// would wrap at the old width until the window changed again.
+fn tell_session(state: &crate::commands::SharedState, newest: &'static AtomicU32) {
+    if let Ok(session) = state.session.try_lock() {
+        send_game_size(session.as_ref(), newest);
+        return;
+    }
+    let state = Arc::clone(state);
+    tauri::async_runtime::spawn(async move {
+        let session = state.session.lock().await;
+        send_game_size(session.as_ref(), newest);
+    });
+}
+
+/// Hand the live session, if there is one, the size `newest` holds.
+fn send_game_size(session: Option<&crate::session::SessionHandle>, newest: &AtomicU32) {
+    if let Some(handle) = session {
+        let packed = newest.load(Ordering::Acquire);
+        handle.set_window_size((packed >> 16) as u16, packed as u16);
     }
 }
 
@@ -1534,6 +1553,104 @@ mod tests {
                 assert_eq!(grid, case.grid, "{at}");
                 assert_eq!(told, case.told, "{at}");
             }
+        }
+    }
+
+    /// Whether the game reads `want` from the client within `WAIT`.
+    /// `heard` keeps what it read so far across calls.
+    async fn game_hears(
+        game: &mut tokio::net::TcpStream,
+        heard: &mut Vec<u8>,
+        want: &[u8],
+    ) -> bool {
+        use tokio::io::AsyncReadExt;
+        let deadline = tokio::time::Instant::now() + WAIT;
+        let mut buf = [0u8; 4096];
+        loop {
+            if heard.windows(want.len()).any(|w| w == want) {
+                return true;
+            }
+            match tokio::time::timeout_at(deadline, game.read(&mut buf)).await {
+                Ok(Ok(n)) if n > 0 => heard.extend_from_slice(&buf[..n]),
+                _ => return false,
+            }
+        }
+    }
+
+    /// Bug 12. You widen the window while a command holds the session,
+    /// so the frame that sizes the grid finds the session busy. The
+    /// frames after it see no new size, yet the game still hears the new
+    /// width instead of wrapping at the old one.
+    #[tokio::test]
+    async fn a_resize_while_the_session_is_busy_still_reaches_the_game() {
+        use tauri::test::{mock_builder, mock_context, noop_assets};
+        use tokio::io::AsyncWriteExt;
+        use vosh_telnet::codes::{option::NAWS, DO, IAC, SB, SE};
+
+        use crate::commands::{AppState, SharedState};
+
+        // The game's size the frames last reported, as `LAST_GAME_SIZE`
+        // holds it in the app.
+        static LAST: AtomicU32 = AtomicU32::new(0);
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("a local port");
+        let port = listener.local_addr().expect("an address").port();
+        let state: SharedState = Arc::new(AppState::default());
+        let app = mock_builder()
+            .build(mock_context(noop_assets()))
+            .expect("a mock app");
+        app.manage::<SharedState>(state.clone());
+        let accept = tokio::spawn(async move { listener.accept().await.expect("a client").0 });
+        let handle = crate::session::spawn(
+            app.handle().clone(),
+            "127.0.0.1".into(),
+            port,
+            false,
+            state.profile.clone(),
+            state.map.clone(),
+            state.script_timers.clone(),
+            state.logs.clone(),
+            state.scrollback.clone(),
+            None,
+            (100, 40),
+        )
+        .await
+        .expect("the game answers");
+        *state.session.lock().await = Some(handle);
+        let mut game = accept.await.expect("the accept task");
+        let mut heard = Vec::new();
+
+        // The game asks for your window size and hears the one the
+        // session started with.
+        game.write_all(&[IAC, DO, NAWS]).await.expect("the ask");
+        let naws = |cols: u8| [IAC, SB, NAWS, 0, cols, 0, 40, IAC, SE];
+        assert!(game_hears(&mut game, &mut heard, &naws(100)).await);
+
+        // Frames report the game's size the way `report_sizes` does.
+        let frame = |cols: u16| {
+            if changed(&LAST, cols, 40) {
+                tell_session(&state, &LAST);
+            }
+        };
+        frame(100);
+        // You widen the window while a command holds the session.
+        {
+            let _busy = state.session.lock().await;
+            frame(120);
+        }
+        // Frames go on at the new size, which none of them reports.
+        frame(120);
+        frame(120);
+        assert!(
+            game_hears(&mut game, &mut heard, &naws(120)).await,
+            "the game kept wrapping at 100 columns"
+        );
+
+        let handle = state.session.lock().await.take();
+        if let Some(handle) = handle {
+            handle.shutdown().await;
         }
     }
 }
