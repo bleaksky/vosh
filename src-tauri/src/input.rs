@@ -180,10 +180,14 @@ pub(crate) fn may_replace_profile(line: &str) -> bool {
 /// One line run through the input pipeline.
 pub(crate) struct Ran {
     pub(crate) result: InputResult,
-    /// What the Lua bodies of the line's script aliases ask for besides
-    /// their sends and echo lines, which `result` holds in the order you
-    /// typed them: timers, `mud.input` lines, prompt values, and whether
-    /// they changed durable state, which [`LineEffects::note_ran`] notes.
+    /// What the Lua the line ran asks for, from `#lua`, `#script load`,
+    /// `#script reload` or the bodies of its script aliases: timers,
+    /// `mud.input` lines, prompt values, whether it changed durable
+    /// state, which [`LineEffects::note_ran`] notes, and the sends and
+    /// echo lines of the slash commands. A script alias body's sends and
+    /// echo lines sit in `result` instead, in the order you typed them.
+    /// The caller hands it to `session::apply_script_result` after the
+    /// line's own output.
     pub(crate) lua: script_state::ApplyResult,
     /// A `#profile reset`, or a `#profile load` that read its file,
     /// replaced the live profile.
@@ -193,8 +197,9 @@ pub(crate) struct Ran {
 }
 
 /// Run `line` through the input pipeline: what to send, what to echo,
-/// whether it replaced the live profile, and whether it changed the
-/// tick settings, for [`LineEffects::note_ran`].
+/// what the Lua it ran asks for, whether it replaced the live profile,
+/// and whether it changed the tick settings, for
+/// [`LineEffects::note_ran`].
 pub(crate) fn run_line(profile: &mut Profile, line: &str) -> Ran {
     let mut replaced = false;
     let mut lua = script_state::ApplyResult::default();
@@ -213,14 +218,15 @@ pub(crate) fn run_line(profile: &mut Profile, line: &str) -> Ran {
 /// runs a line through [`run_line`] notes each line here in order: typed
 /// input, a Settings timer command, the tick auto-fire command, and a
 /// Lua `mud.input` line. So `#alias` or `#trigger` from a timer reaches
-/// disk the way the same line typed at the prompt does.
+/// disk the way the same line typed at the prompt does. Lua that changed
+/// durable state marks the profile dirty where its result is applied,
+/// after these.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LineEffects {
     /// A `#profile reset` or `#profile load` replaced the live profile,
     /// which leaves it diverged from disk on purpose.
     pub(crate) replaced: bool,
-    /// A durable change came after the last replace, or with none: a
-    /// slash command, or Lua that changed durable state.
+    /// A slash command came after the last replace, or with none.
     pub(crate) dirty: bool,
     /// A `#tick` command changed the tick settings. The status line and
     /// the Settings Tick card show them, so every window hears the new
@@ -276,8 +282,8 @@ pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
 
 /// The body of [`run_line`]. Sets `replaced` when a `#profile reset` or a
 /// `#profile load` that read its file replaced the live profile, and adds
-/// to `lua` what the Lua bodies of script aliases ask for besides their
-/// sends and echo lines.
+/// to `lua` what the Lua the line ran asks for. A script alias body's
+/// sends and echo lines go in the result instead, where you typed it.
 fn process_line(
     profile: &mut Profile,
     line: &str,
@@ -288,7 +294,7 @@ fn process_line(
 
     // Slash commands target the local profile.
     if let Some(rest) = trimmed.strip_prefix('#') {
-        return handle_slash(profile, rest, replaced);
+        return handle_slash(profile, rest, replaced, lua);
     }
 
     // A bare Enter sends a blank line to the server. MUDs use this to
@@ -380,7 +386,12 @@ fn process_line(
     InputResult { bytes, echo }
 }
 
-fn handle_slash(profile: &mut Profile, rest: &str, replaced: &mut bool) -> InputResult {
+fn handle_slash(
+    profile: &mut Profile,
+    rest: &str,
+    replaced: &mut bool,
+    lua: &mut script_state::ApplyResult,
+) -> InputResult {
     let (cmd, args) = split_first_word(rest);
     match cmd {
         "alias" => slash_alias(profile, args),
@@ -397,9 +408,9 @@ fn handle_slash(profile: &mut Profile, rest: &str, replaced: &mut bool) -> Input
         "group" => slash_group(profile, args),
         "groups" => slash_groups_list(profile),
         "tick" => slash_tick(profile, args),
-        "script" => slash_script(profile, args),
+        "script" => slash_script(profile, args, lua),
         "scripts" => slash_scripts_list(profile),
-        "lua" => slash_lua(profile, args),
+        "lua" => slash_lua(profile, args, lua),
         "echo" | "showme" => slash_echo(profile, args),
         "profile" => slash_profile(profile, args, replaced),
         "import-tintin" => slash_import_tintin(profile, args),
@@ -1656,19 +1667,27 @@ fn expand_home(path: &str) -> std::path::PathBuf {
     std::path::PathBuf::from(path)
 }
 
-fn slash_script(profile: &mut Profile, args: &str) -> InputResult {
+fn slash_script(
+    profile: &mut Profile,
+    args: &str,
+    lua: &mut script_state::ApplyResult,
+) -> InputResult {
     let (cmd, rest) = split_first_word(args);
     match cmd {
-        "load" => slash_script_load(profile, rest),
-        "reload" => slash_script_reload(profile),
+        "load" => slash_script_load(profile, rest, lua),
+        "reload" => slash_script_reload(profile, lua),
         "" => error_echo("usage #script load <name> | #script reload".to_string()),
         other => error_echo(format!("unknown #script subcommand `{other}`")),
     }
 }
 
-fn slash_script_load(profile: &mut Profile, args: &str) -> InputResult {
+fn slash_script_load(
+    profile: &mut Profile,
+    args: &str,
+    lua: &mut script_state::ApplyResult,
+) -> InputResult {
     let app_data = APP_DATA_DIR.get().map(std::path::PathBuf::as_path);
-    slash_script_load_in(profile, args, app_data)
+    slash_script_load_in(profile, args, lua, app_data)
 }
 
 /// [`slash_script_load`] over the app data folder `app_data` in place of
@@ -1676,6 +1695,7 @@ fn slash_script_load(profile: &mut Profile, args: &str) -> InputResult {
 fn slash_script_load_in(
     profile: &mut Profile,
     args: &str,
+    lua: &mut script_state::ApplyResult,
     app_data: Option<&std::path::Path>,
 ) -> InputResult {
     let name = args.trim();
@@ -1695,28 +1715,18 @@ fn slash_script_load_in(
         Ok(o) => o,
         Err(e) => return error_echo(format!("script error: {e}")),
     };
-    let apply = script_state::apply_actions(profile, outcome);
-    let mut echoes = vec![format!("loaded {}", path.display())];
-    echoes.extend(apply.echoes);
-    InputResult {
-        bytes: apply.send_bytes,
-        echo: echoes,
-    }
+    lua.append(script_state::apply_actions(profile, outcome));
+    echo_one(format!("loaded {}", path.display()))
 }
 
-fn slash_script_reload(profile: &mut Profile) -> InputResult {
+fn slash_script_reload(profile: &mut Profile, lua: &mut script_state::ApplyResult) -> InputResult {
     script_state::snapshot_vars(&profile.script, &profile.vars);
     let outcome = match profile.script.reload_scripts() {
         Ok(o) => o,
         Err(e) => return error_echo(format!("reload error: {e}")),
     };
-    let apply = script_state::apply_actions(profile, outcome);
-    let mut echoes = vec!["scripts reloaded".to_string()];
-    echoes.extend(apply.echoes);
-    InputResult {
-        bytes: apply.send_bytes,
-        echo: echoes,
-    }
+    lua.append(script_state::apply_actions(profile, outcome));
+    echo_one("scripts reloaded".to_string())
 }
 
 fn slash_scripts_list(profile: &Profile) -> InputResult {
@@ -1747,7 +1757,11 @@ fn slash_scripts_list(profile: &Profile) -> InputResult {
     }
 }
 
-fn slash_lua(profile: &mut Profile, args: &str) -> InputResult {
+fn slash_lua(
+    profile: &mut Profile,
+    args: &str,
+    lua: &mut script_state::ApplyResult,
+) -> InputResult {
     let code = args.trim_start();
     if code.is_empty() {
         return error_echo("usage #lua <code>".to_string());
@@ -1757,10 +1771,10 @@ fn slash_lua(profile: &mut Profile, args: &str) -> InputResult {
         Ok(o) => o,
         Err(e) => return error_echo(format!("lua error: {e}")),
     };
-    let apply = script_state::apply_actions(profile, outcome);
+    lua.append(script_state::apply_actions(profile, outcome));
     InputResult {
-        bytes: apply.send_bytes,
-        echo: apply.echoes,
+        bytes: Vec::new(),
+        echo: Vec::new(),
     }
 }
 
@@ -2719,7 +2733,12 @@ mod tests {
         let script = app_data.join("scripts").join("greet.lua");
         std::fs::create_dir_all(script.parent().unwrap()).unwrap();
         std::fs::write(&script, "local greeting = 'hi'\n").unwrap();
-        let loaded = slash_script_load_in(&mut fresh, "greet", Some(app_data));
+        let loaded = slash_script_load_in(
+            &mut fresh,
+            "greet",
+            &mut script_state::ApplyResult::default(),
+            Some(app_data),
+        );
         assert_eq!(loaded.echo, [format!("loaded {}", script.display())]);
     }
 
@@ -2798,6 +2817,31 @@ mod tests {
         let ran = run_line(&mut p, "keep");
         effects.note_ran("keep", &ran);
         assert_eq!(effects, DIRTY);
+    }
+
+    #[test]
+    fn lua_a_line_runs_hands_on_all_it_asks_for() {
+        let mut p = Profile::default();
+        let ran = run_line(
+            &mut p,
+            "#lua mud.echo('hi') mud.send('look') mud.timer(1, function() end) \
+             mud.input('#echo again') mud.set_prompt_var('mark', 'on')",
+        );
+        assert!(ran.result.echo.is_empty());
+        assert!(ran.result.bytes.is_empty());
+        assert_eq!(ran.lua.echoes, ["hi"]);
+        assert_eq!(ran.lua.send_bytes, b"look\r\n");
+        assert_eq!(ran.lua.new_timers.len(), 1);
+        assert_eq!(ran.lua.inputs, ["#echo again"]);
+        assert!(ran.lua.prompt_vars_changed);
+
+        // A reload runs each loaded script again, timers and all.
+        p.script
+            .load_script("t", "mud.timer(1, function() end)".into())
+            .unwrap();
+        let ran = run_line(&mut p, "#script reload");
+        assert_eq!(ran.result.echo, ["scripts reloaded"]);
+        assert_eq!(ran.lua.new_timers.len(), 1);
     }
 
     #[test]

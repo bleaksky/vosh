@@ -24,11 +24,12 @@ use crate::commands::{AppState, SharedState};
 use crate::profile_set::{AutoMatch, ProfileSet, DEFAULT_PROFILE_NAME};
 
 /// The events the tests read, as the webview would hear them.
-const EVENTS: [&str; 8] = [
+const EVENTS: [&str; 9] = [
     "session://output",
     "session://game-prompt-seen",
     "session://prompt-status",
     "session://prompt-state",
+    "session://prompt-vars",
     "session://hidden",
     "session://state",
     crate::affect_full::AFFECT_FULL_CHANGED_EVENT,
@@ -1963,5 +1964,140 @@ async fn a_lua_alias_that_mud_input_names_runs_its_body() {
         !screen.iter().any(|row| row.contains("Huh?")),
         "{screen:#?}"
     );
+    h.finish(grid).await;
+}
+
+// Lua you type with #lua does all it asks, the way the Lua a trigger
+// runs does. Its timers fire, a timer it cancels never does, its
+// mud.input lines run, and the values it gives your prompt reach the
+// windows. Each text the Lua prints is split in the line you type, so
+// only the Lua itself shows it whole. The guard keeps other tests off
+// the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lua_you_type_starts_timers_runs_input_and_sets_prompt_values() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.set_prompt(codes(PROMPT)).await;
+    h.connect().await;
+    h.until_last_row("<1020>").await;
+
+    h.type_line("#lua mud.set_prompt_var('lua_mark', 'o' .. 'n')")
+        .await;
+    h.until("the value Lua gave your prompt", |h| {
+        h.events("session://prompt-vars")
+            .iter()
+            .any(|vars| vars["lua_mark"] == "on")
+    })
+    .await;
+
+    h.type_line("#lua mud.timer(0, function() mud.echo('timer' .. ' fired') end)")
+        .await;
+    h.until_shown("timer fired").await;
+
+    h.type_line(
+        "#lua slow = mud.timer(0.5, function() mud.echo('cancelled' .. ' timer fired') end)",
+    )
+    .await;
+    h.type_line("#lua mud.cancel_timer(slow)").await;
+    h.type_line("#lua mud.timer(1, function() mud.echo('later' .. ' timer fired') end)")
+        .await;
+    h.until_shown("later timer fired").await;
+    assert!(
+        !h.screen()
+            .iter()
+            .any(|row| row.contains("cancelled timer fired")),
+        "{:#?}",
+        h.screen()
+    );
+
+    // A line mud.input runs goes through the input pipeline, slash
+    // commands and the game alike.
+    h.type_line("#lua mud.input('#echo ' .. 'input' .. ' ran')")
+        .await;
+    h.until_shown("input ran").await;
+    h.type_line("#lua mud.input('lo' .. 'ok')").await;
+    h.until_shown("[Exits: south]").await;
+
+    // Lua that keeps asking mud.input to run it again stops at the depth
+    // an alias may go.
+    h.type_line("#lua function again() mud.input('#lua again()') end again()")
+        .await;
+    h.until_shown("[mud.input recursion limit hit (16)]").await;
+    h.finish(grid).await;
+}
+
+// A plugin's entry script does all it asks as it loads, the way the Lua
+// you type does. Here it starts a timer and runs a line through
+// mud.input. The guard keeps other tests off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    let plugins = h.dir.path().join("plugins");
+    let plugin = plugins.join("on_load");
+    std::fs::create_dir_all(&plugin).expect("the plugin folder");
+    std::fs::write(
+        plugin.join("manifest.toml"),
+        "[plugin]\nname = \"on_load\"\n",
+    )
+    .expect("the manifest");
+    std::fs::write(
+        plugin.join("main.lua"),
+        "mud.timer(0, function() mud.echo('the plugin timer fired') end)\n\
+         mud.input('#echo the plugin ran mud.input')\n",
+    )
+    .expect("the entry script");
+    {
+        let mut mgr = h.state.plugins.lock().await;
+        mgr.set_plugins_dir(plugins);
+        mgr.discover().expect("the plugins");
+    }
+    h.connect().await;
+
+    crate::commands::plugins_set_enabled(
+        h.app.handle().clone(),
+        h.app.state(),
+        "on_load".into(),
+        true,
+    )
+    .await
+    .expect("the plugin loads");
+    h.until_shown("the plugin ran mud.input").await;
+    h.until_shown("the plugin timer fired").await;
+    h.finish(grid).await;
+}
+
+// The command a Settings timer runs does all its Lua asks, as it does
+// when you type it. Here the Lua starts a timer of its own and runs a
+// line through mud.input. The guard keeps other tests off the shared
+// native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lua_a_settings_timer_runs_starts_timers_and_runs_input() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    {
+        let mut p = h.state.profile.lock().await;
+        for (id, command) in [
+            (
+                1,
+                "#lua mud.timer(0, function() mud.echo('the timer Lua started fired') end)",
+            ),
+            (2, "#lua mud.input('#echo the timer ran mud.input')"),
+        ] {
+            p.timers.push(crate::profile::Timer {
+                id,
+                name: String::new(),
+                interval_secs: 1,
+                command: command.into(),
+                enabled: true,
+            });
+        }
+    }
+    h.connect().await;
+    h.until_shown("the timer Lua started fired").await;
+    h.until_shown("the timer ran mud.input").await;
     h.finish(grid).await;
 }

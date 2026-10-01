@@ -285,6 +285,8 @@ pub fn run() {
                 seed_example_plugins(&plugins_dir);
                 let plugins_handle = state.plugins.clone();
                 let profile_handle = state.profile.clone();
+                let timers_handle = state.script_timers.clone();
+                let app_handle = app.handle().clone();
                 tauri::async_runtime::block_on(async move {
                     let mut mgr = plugins_handle.lock().await;
                     mgr.set_plugins_dir(plugins_dir.clone());
@@ -297,23 +299,44 @@ pub fn run() {
                     };
                     mgr.set_enabled(enabled.clone());
                     for name in &enabled {
-                        match mgr.read_entry(name) {
+                        let apply = match mgr.read_entry(name) {
                             Ok(code) => {
                                 let mut p = profile_handle.lock().await;
                                 crate::script_state::snapshot_vars(&p.script, &p.vars);
                                 match p.script.load_script(&format!("plugin:{name}"), code) {
                                     Ok(outcome) => {
-                                        let _ = crate::script_state::apply_actions(&mut p, outcome);
                                         info!(name = %name, "loaded plugin");
+                                        crate::script_state::apply_actions(&mut p, outcome)
                                     }
                                     Err(e) => {
                                         error!(name = %name, error = %e, "plugin script error");
+                                        continue;
                                     }
                                 }
                             }
                             Err(e) => {
                                 error!(name = %name, error = %e, "plugin entry missing");
+                                continue;
                             }
+                        };
+                        // Its timers, mud.input lines and prompt values
+                        // apply as on every other path. No terminal shows
+                        // and no game listens yet, so what it would print
+                        // or send goes to the log.
+                        let (bytes, echoes) = crate::session::collect_script_result(
+                            &app_handle,
+                            &profile_handle,
+                            &timers_handle,
+                            apply,
+                        )
+                        .await;
+                        if !bytes.is_empty() || !echoes.is_empty() {
+                            info!(
+                                name = %name,
+                                bytes = bytes.len(),
+                                echoes = echoes.len(),
+                                "plugin output at launch has nowhere to go"
+                            );
                         }
                     }
                 });
