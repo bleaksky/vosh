@@ -1462,6 +1462,15 @@ impl ProfileConfig {
         config
     }
 
+    /// What a profile that never saved a file stands for: the defaults,
+    /// with Vosh's default design ready for when you turn drawing on. A
+    /// switch to such a profile loads it, and its first save keeps it.
+    pub(crate) fn fresh() -> Self {
+        let mut config = Self::default();
+        config.set_prompt(vosh_prompt::PromptConfig::fresh());
+        config
+    }
+
     /// The `[prompt]` table this file stands for: its own, or for a file
     /// with none, the switch and the design older builds kept in `[ui]`.
     pub(crate) fn prompt_config(&self) -> vosh_prompt::PromptConfig {
@@ -2260,7 +2269,8 @@ impl GlobalConfig {
 /// holds none of its own. Call with the persist lock held and before
 /// global.toml drops those values. The active profile needs none of this,
 /// since the save that follows writes its live values into its own file.
-/// A profile that never saved a file gets one when it has values to take.
+/// A profile that never saved a file gets one when it has values to take,
+/// starting from what a switch to it loads, [`ProfileConfig::fresh`].
 /// Every file is read before any is written, so a file Vosh cannot read
 /// stops the move with nothing changed, and a file that does not save
 /// puts back every file written before it, so a failed save changes
@@ -2299,7 +2309,7 @@ fn hand_out_shared_with(
         };
         let mut config = match &before {
             Some(text) => ProfileConfig::from_toml(text).map_err(|e| unreadable(&e))?,
-            None => ProfileConfig::default(),
+            None => ProfileConfig::fresh(),
         };
         if shared.hand_out(&mut config.ui, &owner) {
             changed.push((owner, path, before, config));
@@ -2438,6 +2448,8 @@ pub(crate) const UNREAD_GLOBAL_NOTICE: &str = "Vosh could not read global.toml, 
 /// `profile` at launch. A file that does not read stays as it is on
 /// disk. Vosh holds it with [`hold_unread`], keeps the defaults in its
 /// place for this session, and returns the sentence that tells you so.
+/// With no file yet, the profile is fresh and takes Vosh's default
+/// design.
 pub(crate) fn load_at_launch(set: &ProfileSet, profile: &mut Profile) -> Vec<String> {
     let mut notices = Vec::new();
     profile.display_name = Some(crate::profile_set::display_name(set.active_name()));
@@ -2464,6 +2476,10 @@ pub(crate) fn load_at_launch(set: &ProfileSet, profile: &mut Profile) -> Vec<Str
                 notices.push(unread_profile_notice(set.active_name()));
             }
         }
+    } else {
+        // A profile that never saved a file is fresh, see
+        // [`ProfileConfig::fresh`].
+        profile.set_prompt_config(vosh_prompt::PromptConfig::fresh());
     }
     let global_path = set.global_path();
     match GlobalConfig::load_shared(&global_path, set.scope()) {
@@ -4228,6 +4244,57 @@ mod prompt_tests {
             Some(false)
         );
         assert_eq!(table["ui"]["prompt_template"].as_str(), Some(""));
+    }
+
+    #[test]
+    fn a_fresh_profile_file_keeps_the_default_design_with_drawing_off() {
+        let fresh = ProfileConfig::fresh();
+        assert_eq!(fresh.prompt_config(), PromptConfig::fresh());
+        let text = fresh.to_toml().unwrap();
+        let table: toml::Table = text.parse().unwrap();
+        assert_eq!(table["prompt"]["draw"].as_bool(), Some(false));
+        assert_eq!(
+            table["prompt"]["template"].as_str(),
+            Some(vosh_prompt::DEFAULT_DESIGN)
+        );
+        // The [ui] copy older builds read follows it.
+        assert_eq!(
+            table["ui"]["prompt_template"].as_str(),
+            Some(vosh_prompt::DEFAULT_DESIGN)
+        );
+
+        let mut live = Profile::default();
+        let _ = ProfileConfig::from_toml(&text).unwrap().apply_to(&mut live);
+        assert_eq!(*live.prompt.config(), PromptConfig::fresh());
+        assert!(!live.prompt.draws(), "it waits for you to turn it on");
+        // Everything else is the defaults.
+        let mut rest = ProfileConfig::fresh();
+        rest.set_prompt(PromptConfig::default());
+        assert_eq!(
+            rest.to_toml().unwrap(),
+            ProfileConfig::default().to_toml().unwrap()
+        );
+    }
+
+    #[test]
+    fn a_launch_with_no_profile_file_starts_fresh() {
+        let dir = tempfile::tempdir().unwrap();
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        assert!(!set.active_path().exists());
+        let mut live = Profile::default();
+        assert!(load_at_launch(&set, &mut live).is_empty());
+        assert_eq!(*live.prompt.config(), PromptConfig::fresh());
+        assert_eq!(live.ui.prompt_template, vosh_prompt::DEFAULT_DESIGN);
+
+        // A file of its own keeps what it says, a design or none.
+        for design in ["%hp", ""] {
+            let mut file = ProfileConfig::default();
+            file.set_prompt(PromptConfig::from_legacy(false, design));
+            file.save(&set.active_path()).unwrap();
+            let mut live = Profile::default();
+            let _ = load_at_launch(&set, &mut live);
+            assert_eq!(live.prompt.config().template, design);
+        }
     }
 
     #[test]

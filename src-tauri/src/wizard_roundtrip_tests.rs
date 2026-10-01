@@ -896,9 +896,10 @@ async fn round_trip(seed: u64) -> Result<(), String> {
                     return Err(format!("{name}: the legacy copy differs from the file"));
                 }
             }
+            // A new file holds what a switch to the profile loaded.
             None if path.exists() => {
                 let kept = ProfileConfig::load(&path).map_err(|e| e.to_string())?;
-                if settings(kept) != settings(ProfileConfig::default()) {
+                if settings(kept) != settings(ProfileConfig::fresh()) {
                     return Err(format!("{name}: the wizard gave a new file settings"));
                 }
             }

@@ -302,7 +302,7 @@ pub(crate) fn migrate(set: &ProfileSet, app_data: &Path, loadout: bool) -> Resul
             // writes over it.
             ProfileConfig::load(&path).map_err(|e| format!("{}: {e}", path.display()))?
         } else {
-            ProfileConfig::default()
+            ProfileConfig::fresh()
         };
         files.push(ProfileFile {
             name: entry.name.clone(),
