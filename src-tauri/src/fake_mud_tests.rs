@@ -495,6 +495,14 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
         .collect();
     assert_eq!(spans, [(0, 0, 1), (1, 1, 4), (2, 5, 1)]);
     assert_eq!(state["open_row"]["plain"], "<1020>");
+    // With them, the game's own line the drawn prompt replaced, for the
+    // card's marks while it reads your codes.
+    let raw = state["open_row"]["raw_lines"]
+        .as_array()
+        .expect("the lines");
+    assert_eq!(raw.len(), 1);
+    assert!(raw[0].as_str().is_some_and(|l| l.contains("hp")), "{raw:?}");
+    assert_eq!(state["open_row"]["raw_from"], 0);
     let hp = state["catalog"]
         .as_array()
         .expect("the catalog")

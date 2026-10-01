@@ -107,6 +107,8 @@ describe('the piece under a cell', () => {
   const open: PromptOpenRow = {
     gen: 4,
     plain: 'HP 765\n<800 mn>',
+    raw_lines: ['<765hp 800mn> '],
+    raw_from: 0,
     spans: [
       { ...span(0, 0, 0, 3), ...look },
       { ...span(1, 0, 3, 3), ...look },
@@ -144,6 +146,8 @@ describe('the piece under a cell', () => {
     const wide: PromptOpenRow = {
       gen: 4,
       plain: '日本 e\u0301 7',
+      raw_lines: [],
+      raw_from: 0,
       spans: [
         { ...span(0, 0, 0, 4), ...look },
         { ...span(1, 0, 4, 3), ...look },

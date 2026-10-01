@@ -467,10 +467,20 @@ impl PromptEngine {
             status: self.status_report(),
             new_build: self.vars.new_build(),
             forsaken: self.forsaken(),
-            open_row: self.stage.open_row().map(|open| OpenRowState {
-                gen: open.gen,
-                spans: open.spans.clone(),
-                plain: open.plain.clone(),
+            open_row: self.stage.open_row().map(|open| {
+                let block = self.stage.last_raw();
+                let replaced = block.map(|b| b.replaced.clone()).unwrap_or_default();
+                OpenRowState {
+                    gen: open.gen,
+                    spans: open.spans.clone(),
+                    plain: open.plain.clone(),
+                    raw_lines: replaced
+                        .iter()
+                        .filter_map(|i| block.and_then(|b| b.lines.get(*i)))
+                        .map(|line| line.plain.clone())
+                        .collect(),
+                    raw_from: replaced.first().copied().unwrap_or(0),
+                }
             }),
             packages: self.vars.gmcp().packages().map(str::to_string).collect(),
         }
