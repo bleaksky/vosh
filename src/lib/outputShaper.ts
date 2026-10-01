@@ -34,6 +34,20 @@ export class OutputShaper {
     return this.wrapper.process(text) + this.wrapper.flush();
   }
 
+  /** The output's text and its replace's text, decoded as `shape`
+   *  decodes them but not wrapped, for a terminal that writes nothing
+   *  and only hands the text to the recent names cache. */
+  text(out: SessionOutput): { text: string; replace: string | null } {
+    let replace: string | null = null;
+    if (out.replace) {
+      this.decoder.decode();
+      replace = this.replaceDecoder.decode(out.replace.bytes);
+    }
+    const text = this.decoder.decode(out.bytes, { stream: true });
+    if (out.hold) this.decoder.decode(out.hold, { stream: true });
+    return { text, replace };
+  }
+
   shape(out: SessionOutput): Shaped {
     let replace: RegionReplace | undefined;
     if (out.replace) {
