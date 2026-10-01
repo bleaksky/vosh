@@ -374,17 +374,18 @@ The buffer holds a rolling 500 lines, survives closing and reopening the pane, a
 
 ### 4.4 Configure the vitals readout
 
-The vitals readout shows hp, mana, and moves. Configure it in the `vitals` tab in Settings, where changes save automatically and you can drag the live preview's bars to scrub the numbers.
+The vitals sit at the bottom of the panel, under the panes. Health, Mana, and Moves each show the value with a thin meter under it. The meters stay quiet until a vital runs low. Under 20% its value and meter turn red, and they stay red until it climbs back to 25%. In a fight your opponent gets a row on top with its health.
 
-- Pick a layout. The options are `ember`, `stacked`, and `inline`. Ember draws a sidebar pane with a `vitals` head, the tick countdown beside it, and three fixed thin bars with mono current and max numbers.
-- Outside ember, choose columns with the `bar`, `percent`, `numeric`, and `delta` pills, set `bar style` to `solid`, `ramped`, or `track`, and pick bar glyphs and width.
-- Open the `advanced` disclosure to recolor hp, mana, and moves, or turn on `drain through red as bars empty`.
-- Tick `pulse red vignette under 30% hp` to pulse a red vignette when hp drops under 30%.
-- Turn on `custom template (overrides layout)` to write the readout yourself with tokens like `%hp`, `%pct_hp`, `%bar_hp`, `%tick`, and `%time`. Any `Char.Vitals` or `Char.Worth` field resolves as `%fieldname`, and `%%` prints a literal percent.
+- Open Settings and choose Layout.
+- Under Vitals, set `Density` to `Rows` for one row per vital, or to `One line` to fit Health, Mana, and Moves on a single row.
+- Set `Values` to `Current and max` to read `186 / 1020`, to `Current` to read `186`, or to `Percent` to read `18%`.
+- Set `Meter` to `Line` for the thin meter, to `Bar` for a thicker one you can read at a glance in a fight, or to `None` to keep only the numbers on tighter rows.
+- Turn on `Warn before you run low` and a vital turns yellow under two thirds and red under one third, the way the Group pane shows your group's health.
+- Leave `Hide vitals while your prompt is pinned` on and the panel drops its vitals while `Where your prompt shows` is `Pinned`, so the panes take their room. Turn it off to keep them, or pick another place for your prompt, and they come back at once.
 
-Place the bar in any zone from the `panels` tab. It ships in the right column, listed as `vitals (hp bar)`. Tracked affects live in Settings under Characters, then Tracked affects.
+Each default draws the panel you already know, so nothing changes until you pick something. One line drops the Health, Mana, and Moves labels only when they no longer fit beside the values, under about 360 pt with four digit health, and keeps the values and meters. `Current` and `Percent` keep the labels even on a narrow panel. A panel too narrow for even the values stacks them in rows.
 
-`reset vitals` restores the stock config.
+Turn off `Show the panel` under Layout and your vitals move to the status line. There they follow `Values` and `Warn before you run low` but never draw a meter. When the target you set is the one you are fighting, its health follows its name in yellow.
 
 When the game hides your vitals, as it does under lamented tears, every value reads `?` in dim text over an empty meter, in the panel and on the status line alike. Nothing turns yellow or red while they stay hidden. Your numbers come back with the next update the game sends. In a fight the opponent row reads `?` the same way when the game hides its health, and the status line drops the health of your target.
 
@@ -453,7 +454,7 @@ Once Vosh reads your prompt, you choose where it shows. Open Settings, choose In
 
 - `In the text` shows each prompt where the game sends it. The terminal reads as it always has.
 - `Lifted` keeps every prompt in the text on a raised band in the selected row color of your theme, scrollback included. A prompt that ends on a character gains one space after its band, so your echo never touches it.
-- `Pinned` takes your prompts out of the text and shows your latest one on a band above the command line. The band is only as tall as your prompt. When a fight adds a row, the text above gives up its top line to make room and gets it back when the fight ends, so one blank line always sits between your newest line and the band, as the game leaves one before each prompt. Every prompt still reaches the session log and your Prompts triggers.
+- `Pinned` takes your prompts out of the text and shows your latest one on a band above the command line. The band is only as tall as your prompt. When a fight adds a row, the text above gives up its top line to make room and gets it back when the fight ends, so one blank line always sits between your newest line and the band, as the game leaves one before each prompt. Every prompt still reaches the session log and your Prompts triggers. While your prompt is pinned, the panel hides its vitals and gives their room to the panes. Turn off `Hide vitals while your prompt is pinned` under Layout, then Vitals, to keep them.
 
 From the input bar, `#prompt show lifted` picks the same place, and `text` or `pinned` in its place picks the others. `#prompt` alone also says where your prompt shows.
 

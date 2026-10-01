@@ -127,3 +127,11 @@ export function targetHealthPercent(
 function sameName(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
+
+/** Whether the panel draws its vitals under the panes. While your
+ *  prompt is pinned above the command line and Hide vitals while your
+ *  prompt is pinned is on, the footer goes and the panes take its room.
+ *  Turning either off brings it back. */
+export function panelShowsVitals(promptPinned: boolean, hideWhenPinned: boolean): boolean {
+  return !(promptPinned && hideWhenPinned);
+}

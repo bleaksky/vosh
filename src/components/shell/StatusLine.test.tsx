@@ -47,7 +47,12 @@ const HIDDEN: Vitals = {
   hidden: true,
 };
 const GUARD: CombatHealth = { name: 'Blackwatch Guard', hp_pct: 38 };
-const DEFAULTS: VitalsOptions = { values: 'current-max', meter: 'line', warn_thirds: false };
+const DEFAULTS: VitalsOptions = {
+  values: 'current-max',
+  meter: 'line',
+  warn_thirds: false,
+  hide_when_pinned: true,
+};
 
 function draw(props: Partial<StatusVitalsProps> = {}, options: Partial<VitalsOptions> = {}) {
   return renderToStaticMarkup(

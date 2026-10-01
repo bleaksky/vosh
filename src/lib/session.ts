@@ -1745,30 +1745,38 @@ export function normalizeVitalsMeter(value: unknown): VitalsMeter {
 }
 
 /** The vitals rows that join Density under Layout, Vitals, as one
- *  event payload. The panel footer reads all three. The status line
- *  reads the values and the warning, never the meter. */
+ *  event payload. The panel footer reads the first three, and the panel
+ *  reads the last to drop the footer. The status line reads the values
+ *  and the warning, never the meter. */
 export interface VitalsOptions {
   values: VitalsValues;
   meter: VitalsMeter;
   /** Warn under two thirds and turn danger under one third, like the
    *  Group pane. Off keeps danger under 20 percent. */
   warn_thirds: boolean;
+  /** Hide the panel's vitals while your prompt is pinned. */
+  hide_when_pinned: boolean;
 }
 
 export const DEFAULT_VITALS_OPTIONS: VitalsOptions = {
   values: 'current-max',
   meter: 'line',
   warn_thirds: false,
+  hide_when_pinned: true,
 };
 
 /** The vitals options a config holds. */
 export function vitalsOptionsOf(
-  config: Pick<UiConfig, 'vitals_values' | 'vitals_meter' | 'vitals_warn_thirds'>,
+  config: Pick<
+    UiConfig,
+    'vitals_values' | 'vitals_meter' | 'vitals_warn_thirds' | 'vitals_hide_when_pinned'
+  >,
 ): VitalsOptions {
   return {
     values: config.vitals_values,
     meter: config.vitals_meter,
     warn_thirds: config.vitals_warn_thirds,
+    hide_when_pinned: config.vitals_hide_when_pinned,
   };
 }
 
@@ -1780,6 +1788,7 @@ export function normalizeVitalsOptions(raw: unknown): VitalsOptions {
     values: normalizeVitalsValues(o.values),
     meter: normalizeVitalsMeter(o.meter),
     warn_thirds: o.warn_thirds === true,
+    hide_when_pinned: o.hide_when_pinned !== false,
   };
 }
 
@@ -1937,6 +1946,9 @@ export interface UiConfig {
   vitals_meter: VitalsMeter;
   /** Warn before you run low, by the Group pane's thirds. */
   vitals_warn_thirds: boolean;
+  /** Hide the panel's vitals while your prompt is pinned, so the panes
+   *  take their room. On unless you turn it off. */
+  vitals_hide_when_pinned: boolean;
   /** Where to render the World.Moons phase glyphs in the status bar.
    *  `right-edge` is the historical placement; `before-time` and
    *  `after-time` dock the moons next to the centered tick + MUD
@@ -2147,6 +2159,7 @@ export interface RawUiConfig {
   vitals_values?: string;
   vitals_meter?: string;
   vitals_warn_thirds?: boolean;
+  vitals_hide_when_pinned?: boolean;
   moons_position?: string;
   chip_style?: string;
   tick_count?: string;
@@ -2217,6 +2230,7 @@ export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
     vitals_values: normalizeVitalsValues(cfg.vitals_values),
     vitals_meter: normalizeVitalsMeter(cfg.vitals_meter),
     vitals_warn_thirds: cfg.vitals_warn_thirds === true,
+    vitals_hide_when_pinned: cfg.vitals_hide_when_pinned !== false,
     moons_position:
       cfg.moons_position === 'before-time' || cfg.moons_position === 'after-time'
         ? cfg.moons_position
@@ -2700,6 +2714,7 @@ export async function setUiConfig(config: UiConfig): Promise<boolean> {
       vitals_values: config.vitals_values,
       vitals_meter: config.vitals_meter,
       vitals_warn_thirds: config.vitals_warn_thirds,
+      vitals_hide_when_pinned: config.vitals_hide_when_pinned,
       moons_position: config.moons_position,
       chip_style: config.chip_style,
       tick_count: config.tick_count,

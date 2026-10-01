@@ -3196,6 +3196,7 @@ pub(crate) struct UiConfigPayload {
     pub vitals_values: String,
     pub vitals_meter: String,
     pub vitals_warn_thirds: bool,
+    pub vitals_hide_when_pinned: bool,
     pub moons_position: String,
     pub chip_style: String,
     pub tick_count: String,
@@ -3240,6 +3241,7 @@ impl UiConfigPayload {
             vitals_values: ui.vitals_values.clone(),
             vitals_meter: ui.vitals_meter.clone(),
             vitals_warn_thirds: ui.vitals_warn_thirds,
+            vitals_hide_when_pinned: ui.vitals_hide_when_pinned,
             moons_position: ui.moons_position.clone(),
             chip_style: ui.chip_style.clone(),
             tick_count: ui.tick_count.clone(),
@@ -3284,6 +3286,7 @@ impl UiConfigPayload {
             vitals_values,
             vitals_meter,
             vitals_warn_thirds,
+            vitals_hide_when_pinned,
             moons_position,
             chip_style,
             tick_count,
@@ -3355,6 +3358,7 @@ impl UiConfigPayload {
         ui.vitals_values = crate::profile_config::coerce_vitals_values(vitals_values);
         ui.vitals_meter = crate::profile_config::coerce_vitals_meter(vitals_meter);
         ui.vitals_warn_thirds = vitals_warn_thirds;
+        ui.vitals_hide_when_pinned = vitals_hide_when_pinned;
         // Normalize vitals glyphs + width. Empty glyph strings would
         // render zero-width bars; collapse to the default in that case
         // so the user cannot accidentally hide the bar via a typo.
@@ -5076,6 +5080,16 @@ mod tests {
     }
 
     #[test]
+    fn vitals_hide_when_pinned_round_trips() {
+        let mut ui = UiConfig::default();
+        assert!(ui.vitals_hide_when_pinned);
+        assert!(through_payload(&ui).vitals_hide_when_pinned);
+        ui.vitals_hide_when_pinned = false;
+        assert!(!through_payload(&ui).vitals_hide_when_pinned);
+        assert!(!through_toml(&ui).vitals_hide_when_pinned);
+    }
+
+    #[test]
     fn tick_count_round_trips() {
         let mut ui = UiConfig::default();
         assert_eq!(ui.tick_count, "up");
@@ -5250,6 +5264,7 @@ mod tests {
         assert_eq!(ui.vitals_values, "current-max");
         assert_eq!(ui.vitals_meter, "line");
         assert!(!ui.vitals_warn_thirds);
+        assert!(ui.vitals_hide_when_pinned);
     }
 
     #[test]
@@ -7259,6 +7274,7 @@ mod tests {
             ui.vitals_meter = pick(&["line", "bar", "none"]);
             ui.vitals_density = pick(&["rows", "line"]);
             ui.vitals_warn_thirds = n % 2 == 1;
+            ui.vitals_hide_when_pinned = n % 2 == 0;
             ui.affects_style = pick(&["timers", "countdown", "chips"]);
             ui.affects_marker = pick(&["dot", "square", "plus_minus", "none"]);
             ui.affects_tint = n % 2 == 0;

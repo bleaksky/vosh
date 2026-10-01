@@ -32,11 +32,24 @@ function draw(patch: Partial<UiConfig> = {}): string {
 const pressed = (html: string) =>
   [...html.matchAll(/aria-pressed="true"[^>]*>([^<]*)</g)].map((m) => m[1]);
 
+/** Whether each switch is on, in order. */
+const switches = (html: string) =>
+  [...html.matchAll(/<input[^>]*role="switch"[^>]*>/g)].map((m) => m[0].includes('checked=""'));
+
 describe('VitalsSection', () => {
-  it('draws Density, Values, Meter, and the warning in the board order', () => {
+  it('draws Density, Values, Meter, the warning, and the pinned switch in the board order', () => {
     const html = draw();
     const labels = [...html.matchAll(/class="st-row-label"[^>]*>([^<]*)</g)].map((m) => m[1]);
-    expect(labels).toEqual(['Density', 'Values', 'Meter', 'Warn before you run low']);
+    expect(labels).toEqual([
+      'Density',
+      'Values',
+      'Meter',
+      'Warn before you run low',
+      'Hide vitals while your prompt is pinned',
+    ]);
+    expect(html).toContain(
+      'While your prompt is pinned, the panes take their room. Turn it off if your prompt leaves your vitals out.',
+    );
     expect(html).toContain('Current drops the maximum. Percent matches the Group pane.');
     expect(html).toContain('Bar is easier to read in a fight. None keeps only the numbers.');
     expect(html).toContain(
@@ -47,7 +60,9 @@ describe('VitalsSection', () => {
   it('presses the defaults, the panel you had before these rows', () => {
     const html = draw();
     expect(pressed(html)).toEqual(['Rows', 'Current and max', 'Line']);
-    expect(html).not.toMatch(/role="switch"[^>]*checked/);
+    // The warning starts off. Hiding the vitals under a pinned prompt
+    // starts on, as the recommended choice you can turn off.
+    expect(switches(html)).toEqual([false, true]);
   });
 
   it('shows the saved choices', () => {
@@ -56,9 +71,20 @@ describe('VitalsSection', () => {
       vitals_values: 'percent',
       vitals_meter: 'none',
       vitals_warn_thirds: true,
+      vitals_hide_when_pinned: false,
     });
     expect(pressed(html)).toEqual(['One line', 'Percent', 'None']);
-    expect(html).toMatch(/<input[^>]*checked=""[^>]*role="switch"|role="switch"[^>]*checked/);
+    expect(switches(html)).toEqual([true, false]);
+  });
+
+  it('saves the pinned switch alone when you flip it', () => {
+    const update = vi.fn();
+    const element = VitalsSection({ config: config(), update });
+    // The fifth row holds the switch. Its handler takes the new state.
+    const rows = (element.props as { children: { props: { children: unknown } }[] }).children;
+    const toggle = rows[4].props.children as { props: { onChange: (on: boolean) => void } };
+    toggle.props.onChange(false);
+    expect(update).toHaveBeenCalledWith({ vitals_hide_when_pinned: false });
   });
 
   it('renders every search anchor Layout, Vitals lists', () => {
@@ -66,7 +92,7 @@ describe('VitalsSection', () => {
     const anchors = SETTINGS_ROWS.filter(
       (r) => r.target.group === 'layout' && r.target.section === 'vitals',
     ).map((r) => r.target.anchor);
-    expect(anchors).toEqual(['density', 'values', 'meter', 'warn-low']);
+    expect(anchors).toEqual(['density', 'values', 'meter', 'warn-low', 'hide-pinned']);
     for (const anchor of anchors) {
       expect(html).toContain(`data-st-anchor="${anchor}"`);
     }
