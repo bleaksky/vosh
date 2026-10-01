@@ -950,6 +950,16 @@ async fn io_loop<R: tauri::Runtime>(
         }
     };
 
+    // A preview the card shows on your prompt goes with the connection,
+    // so the live render goes back on the row first.
+    let out = {
+        let mut p = profile.lock().await;
+        end_preview_step(&mut p, output_count() != seen_output, Instant::now())
+    };
+    if !out.is_empty() {
+        emit_repaint(&app, &out);
+    }
+
     // Capture the MUD's final partial line before teardown drops it. A
     // `quit` logout banner usually arrives without a trailing newline,
     // so it sits in the accumulator as a partial: painted at the end of
@@ -2136,6 +2146,19 @@ fn repaint_step(p: &mut Profile, other: bool, now: Instant) -> Output {
     let view = prompt_view(p, now);
     p.prompt.stage.repaint_view(&mut out, view.stage());
     out
+}
+
+/// The connection is going. A preview the card shows on your prompt goes
+/// with it (section 4), so a repaint puts the live render back on the
+/// row, or on the band while pinned, since nothing else may land to make
+/// the renderers write the restore they hold. Empty with no preview, and
+/// when no row or band is left to repaint.
+fn end_preview_step(p: &mut Profile, other: bool, now: Instant) -> Output {
+    if p.prompt.preview().is_none() {
+        return Output::new(other);
+    }
+    p.prompt.set_preview(None);
+    repaint_step(p, other, now)
 }
 
 /// A trigger hid a line or partial. When nothing reads your prompt in
