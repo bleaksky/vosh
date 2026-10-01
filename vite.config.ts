@@ -50,8 +50,9 @@ export default defineConfig(async () => ({
     exclude: ['**/node_modules/**', '**/dist/**', '.claude/**'],
     // Vitest hands back CSS as an empty string. The status line and
     // vitals footer tests read frame.css and panel.css as text to check
-    // the rule behind a class, the prompt band tests read prompt.css, and
-    // the prompt.css token test reads the stylesheets that define tokens.
+    // the rule behind a class, the prompt band tests read prompt.css, the
+    // prompt.css token test reads the stylesheets that define tokens, and
+    // the help article test reads help.css.
     css: {
       include: [
         /frame\.css/,
@@ -60,6 +61,7 @@ export default defineConfig(async () => ({
         /tokens\.css/,
         /settings\.css/,
         /overlays\.css/,
+        /help\.css/,
       ],
     },
   },

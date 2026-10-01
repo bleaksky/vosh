@@ -124,6 +124,11 @@
   margin-top: 6px;
 }
 
+/* Bullets sit back in the tertiary tone, behind the text. */
+.hp-article li::marker {
+  color: var(--tertiary);
+}
+
 /* A label you see in Vosh, like Edit as text. */
 .hp-label {
   font-weight: 600;
