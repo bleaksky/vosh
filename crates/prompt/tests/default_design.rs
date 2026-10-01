@@ -11,8 +11,8 @@
 //!
 //! The states are the ones the design was chosen on, the fight with a
 //! tank, a group, a long mob name, lamented tears, an immortal, the older
-//! server build and missing affects among them. Prompts that give no
-//! max, and other games, draw last.
+//! server build and missing affects among them, then meditating. Prompts
+//! that give no max, and other games, draw last.
 
 use chrono::{DateTime, FixedOffset, NaiveDate};
 use serde_json::{json, Value as Json};
@@ -60,6 +60,7 @@ const POSITIONS: [&str; 10] = [
 const FIGHTING: usize = 8;
 const RESTING: usize = 6;
 const SLEEPING: usize = 5;
+const MEDITATE: usize = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Room {
@@ -474,6 +475,23 @@ fn states() -> Vec<(St, &'static str)> {
                 ..St::new("sleeping")
             },
             "640/1020hp 220/800mn 930/930mv  slp common  [S]  1,250g ",
+        ),
+        (
+            St {
+                position: MEDITATE,
+                mana: 260,
+                ..St::new("meditate")
+            },
+            // The game's `%S` prints nothing while you meditate.
+            "1020/1020hp 260/800mn 930/930mv  med common  [S]  1,250g ",
+        ),
+        (
+            St {
+                build: Build::Older,
+                position: MEDITATE,
+                ..St::new("older-meditate")
+            },
+            "1020/1020hp 800/800mn 930/930mv  med common  1,250g ",
         ),
         (
             St {
