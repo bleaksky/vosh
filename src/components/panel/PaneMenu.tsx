@@ -201,6 +201,11 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
     const channel = chanOpen.which;
     const r = chanRow.getBoundingClientRect();
     const menu = chanRow.closest('menu')?.getBoundingClientRect() ?? r;
+    // With the panel at the window's right edge, Channel colors opens to
+    // the left of the pane menu, so a channel's colors keep going left
+    // instead of opening back over the pane menu.
+    const pane = rowRefs.current.colors?.closest('menu')?.getBoundingClientRect();
+    const leftward = pane !== undefined && menu.left < pane.left;
     chanSub = (
       <MenuSurface
         key={channel}
@@ -209,7 +214,13 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         nested
         autoFocus={chanOpen.focus}
         className="pane-menu-sub"
-        at={{ x: menu.right + 4, y: r.top - 6, flipX: menu.left - 4, flipY: r.bottom + 6 }}
+        at={{
+          x: menu.right + 4,
+          y: r.top - 6,
+          flipX: menu.left - 4,
+          flipY: r.bottom + 6,
+          preferFlip: leftward,
+        }}
         onClose={() => {
           setChanOpen(null);
           chanRefs.current[channel]?.focus();
