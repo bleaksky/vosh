@@ -19,6 +19,9 @@ pub(crate) struct StateInner {
     /// Registry keys keyed by callback id. The id is what travels in
     /// `Action::SetLuaTrigger`, `SubscribeGmcp`, and `Timer`.
     pub(crate) callbacks: HashMap<i64, RegistryKey>,
+    /// Callback id of each timer that has not fired yet, by timer id, so
+    /// `mud.cancel_timer` can free the callback it will never run.
+    pub(crate) timer_callbacks: HashMap<u32, i64>,
     /// Snapshot of session and profile variables, refreshed by the
     /// caller before each Lua entry. `mud.var(name)` reads from here.
     pub(crate) var_snapshot: HashMap<String, String>,
