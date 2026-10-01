@@ -460,6 +460,34 @@ fn prompt_bands() -> bool {
     PROMPT_BANDS.load(Ordering::Acquire)
 }
 
+// How far past its last glyph the newest lift's band reaches, in CSS px,
+// as f32 bits: the prompt card's ↵ and caret on the open row.
+static PROMPT_REACH: AtomicU32 = AtomicU32::new(0);
+
+/// Widen the newest lift's band by `px` CSS px, reported by the page while
+/// the prompt card draws a ↵ or its caret past the open row's last glyph
+/// (the 2026-09-30 addendum, item 3). 0 while the card is closed.
+pub(crate) fn set_prompt_reach(px: f32) {
+    PROMPT_REACH.store(px.max(0.0).to_bits(), Ordering::Release);
+}
+
+fn prompt_reach() -> f32 {
+    f32::from_bits(PROMPT_REACH.load(Ordering::Acquire))
+}
+
+/// Widen the band of the lift `newest` among `boxes` by `reach` device px.
+/// A band that steps in around your echo keeps its width.
+fn widen_newest(rects: &mut [BandRect], boxes: &[LiftBox], newest: Option<u64>, reach: f32) {
+    if reach <= 0.0 {
+        return;
+    }
+    for (rect, b) in rects.iter_mut().zip(boxes) {
+        if Some(b.id) == newest && rect.notch.is_none() {
+            rect.w += reach;
+        }
+    }
+}
+
 /// True when `fg` is a bright ANSI color (8-15), named or indexed.
 fn is_bright_ansi(fg: Color) -> bool {
     matches!(
@@ -2483,9 +2511,12 @@ impl CellRenderer {
             (placement.y - band_view[1]) as f32,
         ];
         let mut band_ranges: Vec<std::ops::Range<u32>> = Vec::new();
+        let newest = region_boxes.iter().flatten().map(|b| b.id).max();
+        let reach = prompt_reach() * placement.scale;
         for (reg, boxes) in regions.iter().zip(&region_boxes) {
             let start = instances.len() as u32;
-            let rects = band_rects(boxes, reg.y0, cell_w, cell_h, placement.scale);
+            let mut rects = band_rects(boxes, reg.y0, cell_w, cell_h, placement.scale);
+            widen_newest(&mut rects, boxes, newest, reach);
             instances.extend(band_instances(
                 &rects,
                 shift,
@@ -3061,6 +3092,29 @@ mod tests {
         // A row of ground between them keeps the full reach too.
         let rects = band_rects(&[lift(1, 4), lift(2, 6)], 0.0, 10.0, 20.0, 1.0);
         assert_eq!(rects[0].y + rects[0].h, 5.0 * 20.0 + 2.0);
+    }
+
+    #[test]
+    fn the_newest_band_reaches_past_its_glyphs_for_the_card() {
+        let lift = |id, row| LiftBox {
+            id,
+            top: row,
+            bottom: row,
+            left: 0,
+            right: 10,
+            notch: None,
+        };
+        let boxes = [lift(1, 4), lift(2, 6)];
+        let mut rects = band_rects(&boxes, 0.0, 10.0, 20.0, 1.0);
+        let widths: Vec<f32> = rects.iter().map(|r| r.w).collect();
+        widen_newest(&mut rects, &boxes, Some(2), 12.0);
+        assert_eq!(rects[0].w, widths[0]);
+        assert_eq!(rects[1].w, widths[1] + 12.0);
+        // Nothing to widen with no reach, or a newest lift out of view.
+        let mut same = band_rects(&boxes, 0.0, 10.0, 20.0, 1.0);
+        widen_newest(&mut same, &boxes, Some(9), 12.0);
+        widen_newest(&mut same, &boxes, Some(2), 0.0);
+        assert_eq!(same.iter().map(|r| r.w).collect::<Vec<_>>(), widths);
     }
 
     #[test]

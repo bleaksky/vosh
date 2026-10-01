@@ -334,6 +334,7 @@ pub fn run() {
             native_surface_set_divider_color,
             commands::native_surface_set_tokens,
             commands::native_surface_set_prompt_bands,
+            commands::native_surface_set_prompt_reach,
             session_connect,
             session_send,
             session_send_input,
