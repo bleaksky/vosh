@@ -3,6 +3,7 @@ import { HELP_SECTIONS, HELP_TOPICS, type HelpTopic } from './helpContent';
 import {
   countMatches,
   helpScrollKey,
+  landingOf,
   matchRanges,
   outlineFor,
   rankTopics,
@@ -115,6 +116,29 @@ describe('a link into help', () => {
   it('searches for anything else', () => {
     expect(resolveHelpTarget(' tick timer ')).toEqual({ kind: 'search', query: 'tick timer' });
     expect(resolveHelpTarget('  ')).toBeNull();
+  });
+
+  it('opens the section of the topic it lands on, with the search cleared', () => {
+    // Every landing opens the section, even on the topic you read with
+    // its section folded away.
+    const shown = topic('shape.prompt-show');
+    expect(landingOf({ kind: 'topic', topic: shown })).toEqual({
+      topicId: shown.id,
+      query: '',
+      section: shown.section,
+      focusSearch: false,
+    });
+  });
+
+  it('opens the section of the best result for words, with the caret in the search', () => {
+    const best = rankTopics('tick timer')[0];
+    expect(landingOf({ kind: 'search', query: 'tick timer' })).toEqual({
+      topicId: null,
+      query: 'tick timer',
+      section: best.section,
+      focusSearch: true,
+    });
+    expect(landingOf({ kind: 'search', query: 'zzqx' }).section).toBeNull();
   });
 });
 

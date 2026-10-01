@@ -17,6 +17,7 @@ import { HELP_TOPICS, type HelpTopic } from './lib/helpContent';
 import {
   countMatches,
   helpScrollKey,
+  landingOf,
   outlineFor,
   rankTopics,
   resolveHelpTarget,
@@ -121,6 +122,9 @@ export function HelpApp() {
   const [match, setMatch] = useState(0);
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [titleGone, setTitleGone] = useState(false);
+  /** Counts the links that landed, so each one starts its page at the
+   *  top. */
+  const [landed, setLanded] = useState(0);
   const [themeId, setThemeId] = useState(() => getCurrentThemeId());
   const [config, setConfig] = useState<UiConfig | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -146,16 +150,17 @@ export function HelpApp() {
     [shown.id],
   );
 
+  // A link opens its section in the sidebar and starts its page at the
+  // top, even when it lands on the topic you are reading.
   const land = useCallback((target: HelpTarget) => {
-    if (target.kind === 'topic') {
-      setQuery('');
-      setTopicId(target.topic.id);
-    } else {
-      setQuery(target.query);
-      setActive(0);
-      setMatch(0);
-      inputRef.current?.focus();
-    }
+    const next = landingOf(target);
+    if (next.topicId !== null) setTopicId(next.topicId);
+    setQuery(next.query);
+    setActive(0);
+    setMatch(0);
+    if (next.section !== null) setOpenSection(next.section);
+    setLanded((n) => n + 1);
+    if (next.focusSearch) inputRef.current?.focus();
   }, []);
 
   // Help that opens on words, from `#help <words>`, puts the caret in
@@ -174,15 +179,15 @@ export function HelpApp() {
     }
   }, [shown.id, shown.section]);
 
-  // A new topic starts at its top. While you search, the match you are
-  // on scrolls into view instead.
+  // A new topic, or a link that lands, starts at the top. While you
+  // search, the match you are on scrolls into view instead.
   useLayoutEffect(() => {
     const root = scrollRef.current;
     if (!root) return;
     const current = matches > 0 ? root.querySelector('[data-current]') : null;
     if (current) current.scrollIntoView({ block: 'center' });
     else root.scrollTop = 0;
-  }, [shown.id, query, match, matches]);
+  }, [shown.id, query, match, matches, landed]);
 
   // Once the title scrolls under the band, the breadcrumb names it.
   useEffect(() => {
