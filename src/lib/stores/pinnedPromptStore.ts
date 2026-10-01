@@ -1,13 +1,14 @@
 import { useSyncExternalStore } from 'react';
-import { onOutput, onState, type SessionOutput } from '../session';
+import { onOutput, onState, type PromptSpan, type SessionOutput } from '../session';
 import { closePinRow } from '../terminalRegion';
 import { createStore } from './store';
 
 // The prompt the session pinned above the command line, as the text the
-// band draws: the output's pin field, decoded. It listens from launch, so
-// the band shows the latest prompt even when it mounts after the output
-// that carried it, as it does when you choose Pinned. An empty pin and a
-// disconnect clear it.
+// band draws: the output's pin field, decoded, with where each piece of
+// your design landed on it. It listens from launch, so the band shows
+// the latest prompt even when it mounts after the output that carried
+// it, as it does when you choose Pinned. An empty pin and a disconnect
+// clear it.
 //
 // It also keeps whether the row the pinned prompt held is still where the
 // next thing lands, as each renderer keeps it. Enter on an empty line
@@ -15,9 +16,29 @@ import { createStore } from './store';
 // pager's [Hit Return to continue], stays in the text and closes the row,
 // so Enter there ends its row as it always did.
 
-const store = createStore<string | null>(null);
+/** What the band shows: its text, and where each piece of your design
+ *  landed on it, rows counted from the band's first. No pieces when it
+ *  shows no design, such as the game's prompt with drawing off. */
+export interface PinnedBand {
+  text: string;
+  spans: PromptSpan[];
+}
+
+const store = createStore<PinnedBand | null>(null);
 let started = false;
 let rowOpen = false;
+
+/** The band after `out`: what its pin says, or `band` as it was when it
+ *  carries none. An empty pin clears it. */
+export function bandAfterOutput(
+  band: PinnedBand | null,
+  out: SessionOutput,
+  decoder: TextDecoder,
+): PinnedBand | null {
+  if (!out.pin) return band;
+  if (out.pin.length === 0) return null;
+  return { text: decoder.decode(out.pin), spans: out.pinSpans ?? [] };
+}
 
 /** Whether the pinned prompt's row is open after `out`: as the payload
  *  says, else closed by anything it writes at the cursor. */
@@ -40,7 +61,7 @@ export function startPinnedPromptStore(): void {
   started = true;
   const decoder = new TextDecoder('utf-8', { fatal: false });
   void onOutput((out) => {
-    if (out.pin) store.set(out.pin.length > 0 ? decoder.decode(out.pin) : null);
+    store.set(bandAfterOutput(store.get(), out, decoder));
     rowOpen = pinRowAfterOutput(rowOpen, out);
   });
   void onState((state) => {
@@ -63,6 +84,11 @@ export function pinnedRowOpen(): boolean {
 }
 
 export function getPinnedPrompt(): string | null {
+  return store.get()?.text ?? null;
+}
+
+/** The band with the pieces of your design on it, or null. */
+export function getPinnedBand(): PinnedBand | null {
   return store.get();
 }
 

@@ -613,6 +613,17 @@ fn a_pinned_band_shows_the_design_or_the_game_prompt_with_its_tank_line() {
     );
     assert!(reads[0].out.bytes.ends_with(b"wounds. "));
     assert_eq!(reads[0].out.hold, b"\r\n\r\n");
+    // The band carries where each piece of the design landed on it,
+    // under the tank line, and so does the payload.
+    assert_eq!(
+        band_pieces(&reads[0].out),
+        Some(vec![(0, 1, 0, 1), (1, 1, 1, 3), (2, 1, 4, 1)])
+    );
+    let sent: serde_json::Value =
+        serde_json::from_str(&payload(&reads[0].out).expect("a payload")).expect("json");
+    assert_eq!(sent["pin_spans"][1]["piece"], 1);
+    assert_eq!(sent["pin_spans"][1]["row"], 1);
+    assert_eq!(sent["pin_spans"][1]["width"], 3);
     // A design that reads the tank takes the whole band.
     let make = || {
         showing(
@@ -623,13 +634,33 @@ fn a_pinned_band_shows_the_design_or_the_game_prompt_with_its_tank_line() {
     let reads = play_reads(&make, &fight, &[]);
     let pin = reads[0].out.pin.clone().expect("the band");
     assert_eq!(vosh_ansi::plain_text(&pin), "Tester 75% <765>");
-    // Drawing off, the band holds the game's lines as sent.
+    assert_eq!(
+        band_pieces(&reads[0].out).map(|pieces| pieces.iter().map(|p| p.1).max()),
+        Some(Some(0)),
+        "every piece on the first row"
+    );
+    // Drawing off, the band holds the game's lines as sent, with no
+    // pieces in it.
     let reads = play_reads(&|| pinned(false), &fight, &[]);
     let pin = reads[0].out.pin.clone().expect("the band");
     assert_eq!(
         vosh_ansi::plain_text(&pin),
         "Tester: [===|===|===|---]\r\n[765/1020hp 800/800mn 930/930mv]"
     );
+    assert_eq!(reads[0].out.pin_spans, None);
+    let sent: serde_json::Value =
+        serde_json::from_str(&payload(&reads[0].out).expect("a payload")).expect("json");
+    assert!(sent.get("pin_spans").is_none());
+}
+
+/// The pieces on the band `out` shows: piece, row, column and width.
+fn band_pieces(out: &Output) -> Option<Vec<(usize, usize, usize, usize)>> {
+    out.pin_spans.as_ref().map(|spans| {
+        spans
+            .iter()
+            .map(|s| (s.piece, s.row, s.col, s.width))
+            .collect()
+    })
 }
 
 #[test]
@@ -711,6 +742,10 @@ fn a_repaint_while_pinned_goes_to_the_band_and_a_change_of_place_moves_the_promp
     assert_eq!(
         out.pin.as_deref().map(vosh_ansi::plain_text).as_deref(),
         Some("hp 1020> ")
+    );
+    assert_eq!(
+        band_pieces(&out),
+        Some(vec![(0, 0, 0, 3), (1, 0, 3, 4), (2, 0, 7, 2)])
     );
     // Back to the text: the prompt comes back at the cursor.
     session.p = showing(std::mem::take(&mut session.p), PromptShow::Text);

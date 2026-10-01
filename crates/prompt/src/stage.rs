@@ -169,6 +169,12 @@ pub struct Output {
     /// prompt shows pinned: the prompt's rows joined by `\r\n`, with no
     /// line end after the last. Empty clears the band.
     pub pin: Option<Vec<u8>>,
+    /// Where each piece of your design landed on the band `pin` shows,
+    /// its rows counted from the band's first, so the lines above the
+    /// last one that show as sent come before them. None when the band
+    /// shows no design: drawing off, the away prompt, the game's own line
+    /// while the card reads your codes, or an empty band.
+    pub pin_spans: Option<Vec<Span>>,
     /// Line ends the renderer keeps back until the next write lands, so
     /// while you wait the text ends on its last line and not on the empty
     /// rows a pinned prompt left. It is always the tail of `bytes`, never
@@ -638,6 +644,14 @@ impl Block {
         out
     }
 
+    /// How many lines [`Block::heads_shown`] shows.
+    fn heads_shown_rows(&self) -> usize {
+        let last = self.lines.len().saturating_sub(1);
+        (0..last)
+            .filter(|index| !self.replaced.contains(index))
+            .count()
+    }
+
     /// The lines [`Block::heads_shown`] shows, with their plain text, or
     /// None when it shows none.
     fn heads_shown_with_text(&self) -> Option<(Vec<u8>, String)> {
@@ -951,6 +965,9 @@ pub struct Stage {
     shown_as: PromptShow,
     /// What the band shows while your prompt shows pinned.
     pinned: Option<Vec<u8>>,
+    /// Where each piece of the design landed on the band, as the band
+    /// last went out.
+    pinned_spans: Option<Vec<Span>>,
     /// A prompt pinned with drawing off, as Prompts triggers left it: what
     /// the band shows for it, and what the text would have shown, so a
     /// repaint of the band and a move back to the text keep what the
@@ -1486,7 +1503,8 @@ impl Stage {
         view: View,
     ) {
         let body = pin_body(&block, view.shown);
-        self.pin(out, block, painted, before, body);
+        let spans = band_spans(&block, view);
+        self.pin(out, block, painted, before, body, spans);
         self.pinned_shown = None;
     }
 
@@ -1513,10 +1531,11 @@ impl Stage {
             band: body.clone(),
             text,
         });
-        self.pin(out, block, painted, before, body);
+        self.pin(out, block, painted, before, body, None);
     }
 
-    /// Take `block` out of the text and put `body` on the band. `before`,
+    /// Take `block` out of the text and put `body` on the band, with the
+    /// pieces of the design it shows as `spans`. `before`,
     /// such as lines a Prompts trigger's script echoed, still goes to the
     /// text, over the region `painted` when an earlier read painted part
     /// of the prompt there. With nothing before, that region is erased,
@@ -1531,6 +1550,7 @@ impl Stage {
         painted: Option<u64>,
         before: &[u8],
         body: Vec<u8>,
+        spans: Option<Vec<Span>>,
     ) {
         self.sync(out);
         match painted {
@@ -1541,10 +1561,17 @@ impl Stage {
         self.open = None;
         self.swallow = (block.final_line().end != End::SettledLine).then(|| Swallow::at(out));
         out.row_open = self.swallow.is_some();
-        out.pin = Some(body.clone());
-        self.pinned = Some(body);
+        self.set_band(out, body, spans);
         self.shown_as = PromptShow::Pinned;
         self.note_recognized(block);
+    }
+
+    /// Put `body` on the band, with the pieces of the design it shows.
+    fn set_band(&mut self, out: &mut Output, body: Vec<u8>, spans: Option<Vec<Span>>) {
+        out.pin = Some(body.clone());
+        out.pin_spans.clone_from(&spans);
+        self.pinned = Some(body);
+        self.pinned_spans = spans;
     }
 
     /// Write a complete line that is not your prompt, as the Line pass
@@ -1698,10 +1725,8 @@ impl Stage {
     fn repaint_row(&mut self, out: &mut Output, view: View) {
         self.sync(out);
         match (self.shown_as, self.show) {
-            (PromptShow::Pinned, PromptShow::Pinned) => {
-                return self.repaint_pinned(out, view.shown)
-            }
-            (_, PromptShow::Pinned) => return self.move_to_pinned(out, view.shown),
+            (PromptShow::Pinned, PromptShow::Pinned) => return self.repaint_pinned(out, view),
+            (_, PromptShow::Pinned) => return self.move_to_pinned(out, view),
             (PromptShow::Pinned, _) => return self.move_from_pinned(out, view),
             _ => {}
         }
@@ -1766,23 +1791,24 @@ impl Stage {
     }
 
     /// Show the band as the `[prompt]` table now says. It never writes to
-    /// the text, so it never races your echo.
-    fn repaint_pinned(&mut self, out: &mut Output, shown: Option<&str>) {
+    /// the text, so it never races your echo. The same bytes go out again
+    /// when the pieces in them are numbered anew, such as after an edit.
+    fn repaint_pinned(&mut self, out: &mut Output, view: View) {
         let (Some(block), Some(pinned)) = (&self.last_raw, &self.pinned) else {
             return;
         };
-        let body = self.band_body(block, shown);
-        if body == *pinned {
+        let body = self.band_body(block, view.shown);
+        let spans = band_spans(block, view);
+        if body == *pinned && spans == self.pinned_spans {
             return;
         }
-        out.pin = Some(body.clone());
-        self.pinned = Some(body);
+        self.set_band(out, body, spans);
     }
 
     /// You chose Pinned. The open row, if any, is erased and its prompt
     /// goes to the band, and the next empty line writes nothing. Without
     /// one, the next prompt goes to the band.
-    fn move_to_pinned(&mut self, out: &mut Output, shown: Option<&str>) {
+    fn move_to_pinned(&mut self, out: &mut Output, view: View) {
         let Some(open) = self.open.take() else {
             self.shown_as = PromptShow::Pinned;
             return;
@@ -1790,7 +1816,8 @@ impl Stage {
         let Some(block) = &self.last_raw else {
             return;
         };
-        let body = pin_body(block, shown.filter(|_| !block.afk));
+        let body = pin_body(block, view.shown.filter(|_| !block.afk));
+        let spans = band_spans(block, view);
         let settled_line = block.final_line().end == End::SettledLine;
         // The lines above the region leave the text with it.
         let above = self.open_heads.take().map(|(_, plain)| Above {
@@ -1801,8 +1828,7 @@ impl Stage {
         self.open_lift = None;
         self.swallow = (!settled_line).then(|| Swallow::at(out));
         out.row_open = self.swallow.is_some();
-        out.pin = Some(body.clone());
-        self.pinned = Some(body);
+        self.set_band(out, body, spans);
         self.shown_as = PromptShow::Pinned;
     }
 
@@ -1812,7 +1838,9 @@ impl Stage {
     /// held line ends. Otherwise the next prompt shows in the text.
     fn move_from_pinned(&mut self, out: &mut Output, view: View) {
         out.pin = Some(Vec::new());
+        out.pin_spans = None;
         self.pinned = None;
+        self.pinned_spans = None;
         let pinned_shown = self.pinned_shown.take();
         self.shown_as = self.show;
         if self.swallow.take().is_none() {
@@ -2022,6 +2050,26 @@ fn pin_body(block: &Block, rendered: Option<&str>) -> Vec<u8> {
             trim_line_end(body)
         }
     }
+}
+
+/// Where each piece of the design landed on the band for `block` with
+/// `view`, its rows moved down past the lines above the last one that show
+/// as sent, which the band shows first. None when the band shows no
+/// design: drawing off, the game's own line, or the away prompt.
+fn band_spans(block: &Block, view: View) -> Option<Vec<Span>> {
+    if view.shown.is_none() || block.afk {
+        return None;
+    }
+    let heads = block.heads_shown_rows();
+    Some(
+        view.spans
+            .iter()
+            .map(|span| Span {
+                row: span.row + heads,
+                ..span.clone()
+            })
+            .collect(),
+    )
 }
 
 /// `bytes` without the line ends at its very end.
@@ -3500,6 +3548,112 @@ mod tests {
             values: BTreeMap::new(),
             afk: false,
         }
+    }
+
+    #[test]
+    fn the_band_carries_where_each_piece_of_the_design_landed_on_it() {
+        // Two pieces on the design's first row and one on its second.
+        let spans = [
+            span_at(0, 0, 3),
+            span_at(1, 3, 2),
+            Span {
+                row: 1,
+                ..span_at(2, 0, 3)
+            },
+        ];
+        let rows = |out: &Output| -> Option<Vec<(usize, usize, usize)>> {
+            out.pin_spans
+                .as_ref()
+                .map(|spans| spans.iter().map(|s| (s.piece, s.row, s.col)).collect())
+        };
+        // The tank line shows as sent above the design, so each piece
+        // sits a row lower on the band.
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        stage.pin_view(
+            &mut out,
+            tank_block(),
+            None,
+            b"",
+            drawn_view("HP 1>\r\nMN9", &spans),
+        );
+        assert_eq!(
+            out.pin.as_deref(),
+            Some(&b"Tester: [===|---]\r\nHP 1>\r\nMN9"[..])
+        );
+        assert_eq!(rows(&out), Some(vec![(0, 1, 0), (1, 1, 3), (2, 2, 0)]));
+        stage.finish(&mut out);
+
+        // A repaint that shows the same band with the same pieces sends
+        // nothing. Pieces numbered anew go out again, bytes and all.
+        let mut same = Output::new(false);
+        stage.repaint_view(&mut same, drawn_view("HP 1>\r\nMN9", &spans));
+        assert_eq!(same.pin, None);
+        let renumbered = [
+            span_at(0, 0, 5),
+            Span {
+                row: 1,
+                ..span_at(1, 0, 3)
+            },
+        ];
+        let mut again = Output::new(false);
+        stage.repaint_view(&mut again, drawn_view("HP 1>\r\nMN9", &renumbered));
+        assert!(again.pin.is_some());
+        assert_eq!(rows(&again), Some(vec![(0, 1, 0), (1, 2, 0)]));
+
+        // Drawing off and the game's own line under the card show no
+        // design, so the band carries no pieces.
+        let mut off = Output::new(false);
+        stage.repaint_view(&mut off, View::live(None));
+        assert_eq!(
+            off.pin.as_deref(),
+            Some(&b"Tester: [===|---]\r\n[1020/1020hp 800/800mn 930/930mv]"[..])
+        );
+        assert_eq!(off.pin_spans, None);
+        let mut raw = Output::new(false);
+        stage.repaint_view(
+            &mut raw,
+            View {
+                live: Some("HP 1>"),
+                spans: &spans,
+                plain: "HP 1>",
+                ..View::default()
+            },
+        );
+        assert_eq!(raw.pin, None, "the band already shows the game's lines");
+        let mut on = Output::new(false);
+        stage.repaint_view(&mut on, drawn_view("HP 2>", &spans[..2]));
+        assert_eq!(rows(&on), Some(vec![(0, 1, 0), (1, 1, 3)]));
+
+        // A prompt pinned with drawing off carries none.
+        let mut shown = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.pin_shown(&mut shown, block, None, b"", Some(PROMPT.as_bytes()));
+        assert!(shown.pin.is_some());
+        assert_eq!(shown.pin_spans, None);
+
+        // Choosing Pinned with the row open in the text sends the band
+        // with its pieces, and leaving Pinned clears both.
+        let mut stage = self::stage(JAMES, false);
+        let mut out = Output::new(false);
+        stage.draw_view(
+            &mut out,
+            tank_block(),
+            None,
+            b"",
+            drawn_view("HP 1>", &spans[..2]),
+        );
+        stage.finish(&mut out);
+        stage.set_show(PromptShow::Pinned);
+        let mut pin = Output::new(false);
+        stage.repaint_view(&mut pin, drawn_view("HP 1>", &spans[..2]));
+        assert_eq!(rows(&pin), Some(vec![(0, 1, 0), (1, 1, 3)]));
+        stage.finish(&mut pin);
+        stage.set_show(PromptShow::Text);
+        let mut back = Output::new(false);
+        stage.repaint_view(&mut back, drawn_view("HP 1>", &spans[..2]));
+        assert_eq!(back.pin.as_deref(), Some(&b""[..]));
+        assert_eq!(back.pin_spans, None);
     }
 
     #[test]

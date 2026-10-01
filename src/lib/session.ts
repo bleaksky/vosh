@@ -87,6 +87,9 @@ export interface OutputPayload {
   /** What the band above the command line shows from now on, as base64,
    *  while your prompt shows pinned. An empty string clears it. */
   pin?: string;
+  /** Where each piece of your design landed on the band `pin` shows,
+   *  rows counted from the band's first. Absent when it shows no design. */
+  pin_spans?: PromptSpan[];
   /** Line ends at the end of this payload that each renderer keeps back
    *  until the next write lands, as base64. */
   hold?: string;
@@ -108,6 +111,8 @@ export interface SessionOutput {
   };
   restore?: Uint8Array;
   pin?: Uint8Array;
+  /** Where each piece of your design landed on the band `pin` shows. */
+  pinSpans?: PromptSpan[];
   hold?: Uint8Array;
   pinRow?: boolean;
 }
@@ -134,6 +139,7 @@ export function decodeOutputPayload(payload: OutputPayload): SessionOutput {
   }
   if (typeof payload.restore === 'string') out.restore = base64Bytes(payload.restore);
   if (typeof payload.pin === 'string') out.pin = base64Bytes(payload.pin);
+  if (Array.isArray(payload.pin_spans)) out.pinSpans = payload.pin_spans;
   if (typeof payload.hold === 'string') out.hold = base64Bytes(payload.hold);
   if (typeof payload.pin_row === 'boolean') out.pinRow = payload.pin_row;
   return out;
