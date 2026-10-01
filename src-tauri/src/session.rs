@@ -440,12 +440,21 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
     let mut stream = connection::connect(&host, port, tls).await?;
     info!(%host, port, tls, "session connected");
 
+    // Seed the negotiator with the size we already know about so the
+    // first `DO NAWS` from the server gets a correct subneg, instead
+    // of the 80×24 default carrying through until the user nudges
+    // the window. Stale-NAWS was visible in `who` output wrapping
+    // mid-sentence before the user reported it.
+    let mut negotiator = Negotiator::new();
+    negotiator.set_window_size(initial_window_size.0, initial_window_size.1);
     // Proactively ask for end-of-record so the server marks each prompt.
     // Without this, ROM derivatives that gate EOR on negotiation never
     // send the byte, and we have to merge the prompt with the next room
-    // line. Other negotiations stay reactive in handle_event.
-    let initial = [vosh_telnet::IAC, telnet_codes::DO, telnet_option::EOR];
-    if let Err(e) = stream.write_all(&initial).await {
+    // line. Other negotiations stay reactive in handle_event. The
+    // negotiator keeps the ask, so the WILL EOR that answers it gets no
+    // answer back (RFC 1143).
+    let ask = negotiator.ask(telnet_option::EOR);
+    if let Err(e) = stream.write_all(&ask).await {
         warn!(error = %e, "failed to send initial DO EOR");
     }
     let _ = stream.flush().await;
@@ -488,7 +497,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         log_session_id,
         scrollback,
         scrollback_path,
-        initial_window_size,
+        negotiator,
         forsaken_host(&host, port),
     ));
 
@@ -565,24 +574,12 @@ async fn io_loop<R: tauri::Runtime>(
     log_session_id: Option<i64>,
     scrollback: crate::log_state::SharedScrollback,
     scrollback_path: Option<std::path::PathBuf>,
-    initial_window_size: (u16, u16),
+    mut negotiator: Negotiator,
     known_host: bool,
 ) {
     let mut parser = Parser::new();
-    let mut negotiator = Negotiator::new();
-    // Seed the negotiator with the size we already know about so the
-    // first `DO NAWS` from the server gets a correct subneg, instead
-    // of the 80×24 default carrying through until the user nudges
-    // the window. Stale-NAWS was visible in `who` output wrapping
-    // mid-sentence before the user reported it.
-    negotiator.set_window_size(initial_window_size.0, initial_window_size.1);
     let mut accumulator = LineAccumulator::new();
     let mut buf = vec![0u8; READ_BUFFER_BYTES];
-    // Track whether NAWS has been negotiated. Server sends DO NAWS,
-    // we respond WILL NAWS + initial subneg. From then on, every
-    // OutgoingMsg::WindowSize emits a fresh NAWS subneg so the MUD
-    // re-wraps its output at the new column count.
-    let mut naws_active = false;
     // Who echoes your input on this connection. Every read updates it
     // in wire order before the loop takes the next outgoing line, so
     // each send is logged by the state in force as its bytes leave.
@@ -699,7 +696,10 @@ async fn io_loop<R: tauri::Runtime>(
                         let mut p = profile.lock().await;
                         window_size_step(&mut p, &mut negotiator, cols, rows, watching_prompt(&app));
                     }
-                    if naws_active {
+                    // Once the server sent DO NAWS and Vosh agreed, every
+                    // new size goes out, so the game wraps at the new
+                    // column count.
+                    if negotiator.vosh_does(telnet_option::NAWS) {
                         let bytes = negotiator.naws_subnegotiation();
                         if let Err(e) = stream.write_all(&bytes).await {
                             error!(error = %e, "naws write failed");
@@ -776,18 +776,10 @@ async fn io_loop<R: tauri::Runtime>(
                     let events = parser.feed(&buf[..n]);
                     let mut batch = ReadBatch::new(seen_output);
                     for event in events {
-                        // Once the server sends DO NAWS we know NAWS is
-                        // active and future window-size changes can push
-                        // a fresh subneg.
-                        if let TelnetEvent::Do(opt) = &event {
-                            if *opt == telnet_option::NAWS {
-                                naws_active = true;
-                            }
-                        }
                         if let Err(e) = handle_event(
                             &app,
                             &mut stream,
-                            &negotiator,
+                            &mut negotiator,
                             &mut accumulator,
                             &profile,
                             &map,
@@ -866,7 +858,7 @@ async fn io_loop<R: tauri::Runtime>(
                                     if let Err(handle_err) = handle_event(
                                         &app,
                                         &mut stream,
-                                        &negotiator,
+                                        &mut negotiator,
                                         &mut accumulator,
                                         &profile,
                                         &map,
@@ -1280,7 +1272,7 @@ fn framed_echoes<S: AsRef<str>>(lines: &[S]) -> Vec<u8> {
 async fn handle_event<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
-    negotiator: &Negotiator,
+    negotiator: &mut Negotiator,
     accumulator: &mut LineAccumulator,
     profile: &Arc<Mutex<Profile>>,
     map: &SharedMap,
@@ -1366,11 +1358,15 @@ async fn handle_event<R: tauri::Runtime>(
         }
         TelnetEvent::Will(opt) if opt == telnet_option::GMCP => {
             // Accept GMCP via the negotiator, then immediately announce
-            // ourselves and the packages we want.
+            // ourselves and the packages we want. A WILL GMCP once it is
+            // on gets no answer and no second hello.
+            let was_on = negotiator.server_does(opt);
             let response = negotiator.handle(&TelnetEvent::Will(opt));
             stream.write_all(&response).await?;
-            stream.write_all(&hello_subnegotiation()).await?;
-            stream.write_all(&supports_subnegotiation()).await?;
+            if !was_on && negotiator.server_does(opt) {
+                stream.write_all(&hello_subnegotiation()).await?;
+                stream.write_all(&supports_subnegotiation()).await?;
+            }
             stream.flush().await?;
             Ok(())
         }
