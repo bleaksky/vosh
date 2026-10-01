@@ -73,6 +73,34 @@ pub(crate) fn set_config(p: &mut Profile, mut config: PromptConfig) -> Result<bo
     Ok(p.prompt.revision() != before)
 }
 
+/// The card opened. When the design differs from the newest earlier one,
+/// it goes first among the earlier designs, so trying a preset and
+/// closing never loses it (section 5). Returns the table as it now
+/// stands. It saves shortly and tells every window when it changed.
+#[tauri::command]
+pub(crate) async fn prompt_card_open<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+) -> Result<PromptConfig, String> {
+    let (config, changed) = card_open(&mut *state.profile.lock().await);
+    if changed {
+        mark_profile_dirty(&app);
+        broadcast_prompt_config_changed(&app);
+    }
+    Ok(config)
+}
+
+/// The body of [`prompt_card_open`]: the table as it now stands, and
+/// whether opening changed it.
+pub(crate) fn card_open(p: &mut Profile) -> (PromptConfig, bool) {
+    let mut config = p.prompt.config().clone();
+    if !config.note_opened() {
+        return (config, false);
+    }
+    p.set_prompt_config(config.clone());
+    (config, true)
+}
+
 /// Ask the session to repaint the open row as the table now says.
 async fn request_repaint(state: &SharedState) {
     if let Some(handle) = state.session.lock().await.as_ref() {
@@ -798,5 +826,37 @@ mod tests {
         assert_eq!(hp["state"], "missing");
         assert_eq!(hp["group"], "vitals");
         assert_eq!(hp["label"], "Health");
+    }
+
+    #[test]
+    fn opening_the_card_keeps_the_design_it_found_first() {
+        let mut p = Profile::default();
+        let config = PromptConfig {
+            previous_templates: vec!["older".into()],
+            ..PromptConfig::from_legacy(true, "%hp")
+        };
+        assert_eq!(set_config(&mut p, config), Ok(true));
+        let (opened, changed) = card_open(&mut p);
+        assert!(changed);
+        assert_eq!(opened.previous_templates, ["%hp", "older"]);
+        assert_eq!(p.prompt.config().previous_templates, ["%hp", "older"]);
+        // Opening again on the same design changes nothing.
+        let (again, changed) = card_open(&mut p);
+        assert!(!changed);
+        assert_eq!(again, opened);
+        // An empty design is never kept.
+        let empty = PromptConfig {
+            template: String::new(),
+            ..p.prompt.config().clone()
+        };
+        assert_eq!(set_config(&mut p, empty), Ok(true));
+        assert!(!card_open(&mut p).1);
+        // A third design pushes the oldest out.
+        let third = PromptConfig {
+            template: "%move".into(),
+            ..p.prompt.config().clone()
+        };
+        assert_eq!(set_config(&mut p, third), Ok(true));
+        assert_eq!(card_open(&mut p).0.previous_templates, ["%move", "%hp"]);
     }
 }
