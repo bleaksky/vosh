@@ -43,6 +43,11 @@ const packet = (name: string) => {
   gmcp(p.package, p.data);
 };
 const disconnect = () => fire('session://state', { kind: 'disconnected', reason: null });
+const connect = () => {
+  const at = { host: 'play.example', port: 4000, tls: false };
+  fire('session://state', { kind: 'connecting', ...at });
+  fire('session://state', { kind: 'connected', ...at });
+};
 
 // Let the listen and invoke promises settle.
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -377,15 +382,21 @@ describe('stores on the event bus', () => {
   });
 
   it('keep the prompt settings, your state and the weather until you disconnect', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-30T12:58:02-05:00'));
     const s = await load();
     expect(s.gamePrompt.getGamePrompt()).toBeNull();
+    connect();
     packet('char-prompt.gmcp');
     packet('char-state.gmcp');
     packet('room-weather.gmcp');
+    // The first settings since you connected came at login.
     expect(s.gamePrompt.getGamePrompt()).toEqual({
       enabled: true,
       prompt: '%n%P%C<%hhp %mm %vmv> ',
       fprompt: '',
+      receivedAt: Date.parse('2026-09-30T12:58:02-05:00'),
+      atLogin: true,
     });
     expect(s.charState.getCharState()).toEqual({ position: 'sitting', language: 'common' });
     expect(s.weather.getRoomWeather()).toMatchObject({ sky: 'rainy', temp: 60, unit: 'F' });
@@ -399,8 +410,13 @@ describe('stores on the event bus', () => {
     expect(s.charState.getCharState()).toBe(state);
     expect(s.weather.getRoomWeather()).toBe(weather);
 
+    vi.setSystemTime(new Date('2026-09-30T13:04:00-05:00'));
     packet('char-prompt-off.gmcp');
-    expect(s.gamePrompt.getGamePrompt()?.enabled).toBe(false);
+    expect(s.gamePrompt.getGamePrompt()).toMatchObject({
+      enabled: false,
+      receivedAt: Date.parse('2026-09-30T13:04:00-05:00'),
+      atLogin: false,
+    });
     packet('room-weather-indoors.gmcp');
     expect(s.weather.getRoomWeather()?.sky).toBe('indoors');
 
@@ -408,6 +424,21 @@ describe('stores on the event bus', () => {
     expect(s.gamePrompt.getGamePrompt()).toBeNull();
     expect(s.charState.getCharState()).toBeNull();
     expect(s.weather.getRoomWeather()).toBeNull();
+
+    // The next connection's first settings came at its login.
+    connect();
+    packet('char-prompt.gmcp');
+    expect(s.gamePrompt.getGamePrompt()?.atLogin).toBe(true);
+    packet('char-prompt-fight.gmcp');
+    expect(s.gamePrompt.getGamePrompt()?.atLogin).toBe(false);
+  });
+
+  it('take settings that come with no connect seen as later ones', async () => {
+    // A window that loads while you play hears no connect, so it never
+    // calls a packet the login one.
+    const s = await load();
+    packet('char-prompt.gmcp');
+    expect(s.gamePrompt.getGamePrompt()?.atLogin).toBe(false);
   });
 
   it('seed the tracked list and follow broadcasts and profile switches', async () => {
