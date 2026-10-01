@@ -1577,6 +1577,15 @@ mod tests {
         }
     }
 
+    /// Run `f` on a plain thread and wait for it. The app runs each frame
+    /// on the main thread, which has no tokio runtime, so a frame that
+    /// starts a task there must hand it to one that lives on its own.
+    fn on_a_plain_thread(f: impl FnOnce() + Send) {
+        std::thread::scope(|s| {
+            s.spawn(f).join().expect("the frame");
+        });
+    }
+
     /// Bug 12. You widen the window while a command holds the session,
     /// so the frame that sizes the grid finds the session busy. The
     /// frames after it see no new size, yet the game still hears the new
@@ -1628,11 +1637,14 @@ mod tests {
         let naws = |cols: u8| [IAC, SB, NAWS, 0, cols, 0, 40, IAC, SE];
         assert!(game_hears(&mut game, &mut heard, &naws(100)).await);
 
-        // Frames report the game's size the way `report_sizes` does.
+        // Frames report the game's size the way `report_sizes` does, on
+        // a thread outside any runtime, as the main thread runs them.
         let frame = |cols: u16| {
-            if changed(&LAST, cols, 40) {
-                tell_session(&state, &LAST);
-            }
+            on_a_plain_thread(|| {
+                if changed(&LAST, cols, 40) {
+                    tell_session(&state, &LAST);
+                }
+            });
         };
         frame(100);
         // You widen the window while a command holds the session.
