@@ -1,0 +1,152 @@
+{
+  "notes": "Hand written. The band under a lifted prompt, shared by layoutBands and widenNewest in src/lib/promptBands.ts and by band_rects and widen_newest in src-tauri/src/cell_render.rs, so xterm and the native grid draw the same bands. Rows are buffer rows, and viewport_y is the first row the viewport shows. Every length is in CSS px at 1x. The native grid draws in device px, so its test runs each case at 2x as well and expects every length doubled. reach is what the prompt card adds to the newest band, none when it is left out. constants holds the reaches both sides declare.",
+  "constants": {
+    "band_x": 4,
+    "band_y": 2,
+    "band_y_adjacent": -1,
+    "band_radius": 4,
+    "max_lift_rows": 64
+  },
+  "cases": [
+    {
+      "name": "a one row lift reaches 4 px past its glyphs and 2 px above and below",
+      "cell": { "w": 7.8, "h": 17.5 },
+      "viewport_y": 0,
+      "lifts": [
+        { "id": 1, "top": 3, "bottom": 3, "left": 0, "right": 35 }
+      ],
+      "bands": [
+        { "id": 1, "left": -4, "top": 50.5, "width": 281, "height": 21.5 }
+      ]
+    },
+    {
+      "name": "an indented lift starts its band 4 px before its first glyph",
+      "cell": { "w": 10, "h": 20 },
+      "viewport_y": 2,
+      "lifts": [
+        { "id": 1, "top": 6, "bottom": 6, "left": 4, "right": 9 }
+      ],
+      "bands": [
+        { "id": 1, "left": 36, "top": 78, "width": 58, "height": 24 }
+      ]
+    },
+    {
+      "name": "a lift that starts above the viewport keeps its rows past the edge",
+      "cell": { "w": 10, "h": 20 },
+      "viewport_y": 9,
+      "lifts": [
+        { "id": 1, "top": 8, "bottom": 10, "left": 2, "right": 6 }
+      ],
+      "bands": [
+        { "id": 1, "left": 16, "top": -22, "width": 48, "height": 64 }
+      ]
+    },
+    {
+      "name": "lifts on adjacent rows keep 2 px of ground between them",
+      "cell": { "w": 10, "h": 20 },
+      "viewport_y": 0,
+      "lifts": [
+        { "id": 1, "top": 4, "bottom": 4, "left": 0, "right": 10 },
+        { "id": 2, "top": 5, "bottom": 5, "left": 0, "right": 10 }
+      ],
+      "bands": [
+        { "id": 1, "left": -4, "top": 78, "width": 108, "height": 21 },
+        { "id": 2, "left": -4, "top": 101, "width": 108, "height": 21 }
+      ]
+    },
+    {
+      "name": "a row of ground between two lifts keeps the full reach",
+      "cell": { "w": 10, "h": 20 },
+      "viewport_y": 0,
+      "lifts": [
+        { "id": 1, "top": 4, "bottom": 4, "left": 0, "right": 10 },
+        { "id": 2, "top": 6, "bottom": 6, "left": 0, "right": 10 }
+      ],
+      "bands": [
+        { "id": 1, "left": -4, "top": 78, "width": 108, "height": 24 },
+        { "id": 2, "left": -4, "top": 118, "width": 108, "height": 24 }
+      ]
+    },
+    {
+      "name": "three stacked lifts stop short on both inner edges",
+      "cell": { "w": 8, "h": 16 },
+      "viewport_y": 0,
+      "lifts": [
+        { "id": 1, "top": 2, "bottom": 2, "left": 0, "right": 20 },
+        { "id": 2, "top": 3, "bottom": 3, "left": 0, "right": 24 },
+        { "id": 3, "top": 4, "bottom": 4, "left": 0, "right": 18 }
+      ],
+      "bands": [
+        { "id": 1, "left": -4, "top": 30, "width": 168, "height": 17 },
+        { "id": 2, "left": -4, "top": 49, "width": 200, "height": 14 },
+        { "id": 3, "left": -4, "top": 65, "width": 152, "height": 17 }
+      ]
+    },
+    {
+      "name": "lifts in any order lay out top first",
+      "cell": { "w": 10, "h": 20 },
+      "viewport_y": 1,
+      "lifts": [
+        { "id": 2, "top": 5, "bottom": 5, "left": 0, "right": 12 },
+        { "id": 1, "top": 3, "bottom": 4, "left": 2, "right": 20 }
+      ],
+      "bands": [
+        { "id": 1, "left": 16, "top": 38, "width": 188, "height": 41 },
+        { "id": 2, "left": -4, "top": 81, "width": 128, "height": 21 }
+      ]
+    },
+    {
+      "name": "the band steps in around your echo on the last row of the prompt",
+      "cell": { "w": 7.8, "h": 17.5 },
+      "viewport_y": 0,
+      "lifts": [
+        { "id": 1, "top": 3, "bottom": 5, "left": 0, "right": 52, "notch": 42 }
+      ],
+      "bands": [
+        {
+          "id": 1,
+          "left": -4,
+          "top": 50.5,
+          "width": 413.6,
+          "height": 56.5,
+          "notch": { "x": 335.6, "y": 37 }
+        }
+      ]
+    },
+    {
+      "name": "the newest band reaches past its glyphs for the prompt card",
+      "cell": { "w": 10, "h": 20 },
+      "viewport_y": 0,
+      "reach": 12,
+      "lifts": [
+        { "id": 1, "top": 4, "bottom": 4, "left": 0, "right": 10 },
+        { "id": 2, "top": 6, "bottom": 6, "left": 0, "right": 10 }
+      ],
+      "bands": [
+        { "id": 1, "left": -4, "top": 78, "width": 108, "height": 24 },
+        { "id": 2, "left": -4, "top": 118, "width": 120, "height": 24 }
+      ]
+    },
+    {
+      "name": "a newest band that steps in around your echo keeps its width",
+      "cell": { "w": 10, "h": 20 },
+      "viewport_y": 0,
+      "reach": 12,
+      "lifts": [
+        { "id": 1, "top": 1, "bottom": 1, "left": 0, "right": 10 },
+        { "id": 2, "top": 3, "bottom": 5, "left": 0, "right": 30, "notch": 20 }
+      ],
+      "bands": [
+        { "id": 1, "left": -4, "top": 18, "width": 108, "height": 24 },
+        {
+          "id": 2,
+          "left": -4,
+          "top": 58,
+          "width": 308,
+          "height": 64,
+          "notch": { "x": 208, "y": 42 }
+        }
+      ]
+    }
+  ]
+}

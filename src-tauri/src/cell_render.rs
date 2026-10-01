@@ -1670,6 +1670,7 @@ fn cell_in_selection(bounds: Option<(i32, usize, i32, usize)>, line: i32, col: u
 // and src/lib/promptBands.ts draws it on xterm. It reaches 4 past the text
 // on each side and 2 above and below, at radius 4. Lifts on adjacent rows
 // stop 1 inside their shared row edge, so 2 of ground stays between them.
+// Both sides run fixtures/prompt-bands/cases.json, so keep them in step.
 const BAND_X: f32 = 4.0;
 const BAND_Y: f32 = 2.0;
 const BAND_Y_ADJACENT: f32 = -1.0;
@@ -3778,6 +3779,142 @@ mod tests {
         widen_newest(&mut same, &boxes, Some(9), 12.0);
         widen_newest(&mut same, &boxes, Some(2), 0.0);
         assert_eq!(same.iter().map(|r| r.w).collect::<Vec<_>>(), widths);
+    }
+
+    /// fixtures/prompt-bands/cases.json, which layoutBands and widenNewest
+    /// in src/lib/promptBands.ts run too.
+    #[derive(serde::Deserialize)]
+    struct BandCases {
+        constants: BandConstants,
+        cases: Vec<BandCase>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct BandConstants {
+        band_x: f32,
+        band_y: f32,
+        band_y_adjacent: f32,
+        band_radius: f32,
+        max_lift_rows: i32,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct BandCase {
+        name: String,
+        cell: CaseCell,
+        viewport_y: i32,
+        #[serde(default)]
+        reach: f32,
+        lifts: Vec<CaseLift>,
+        bands: Vec<CaseBand>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct CaseCell {
+        w: f32,
+        h: f32,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct CaseLift {
+        id: u64,
+        top: i32,
+        bottom: i32,
+        left: usize,
+        right: usize,
+        notch: Option<usize>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct CaseBand {
+        id: u64,
+        left: f32,
+        top: f32,
+        width: f32,
+        height: f32,
+        notch: Option<CaseNotch>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct CaseNotch {
+        x: f32,
+        y: f32,
+    }
+
+    /// The spans the grid reports for `lift`: each row from its first
+    /// glyph to its widest, and its last row up to the notch with your
+    /// echo after it when it has one.
+    fn spans_of(lift: &CaseLift) -> Vec<LiftSpan> {
+        (lift.top..=lift.bottom)
+            .map(|line| {
+                let last = line == lift.bottom;
+                LiftSpan {
+                    id: lift.id,
+                    line,
+                    first: lift.left,
+                    end: if last {
+                        lift.notch.unwrap_or(lift.right)
+                    } else {
+                        lift.right
+                    },
+                    after: last && lift.notch.is_some(),
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn bands_match_the_cases_xterm_draws() {
+        let text = include_str!("../../fixtures/prompt-bands/cases.json");
+        let fixture: BandCases = serde_json::from_str(text).expect("the band cases parse");
+        let c = &fixture.constants;
+        assert_eq!(
+            (BAND_X, BAND_Y, BAND_Y_ADJACENT, BAND_RADIUS, MAX_LIFT_ROWS),
+            (
+                c.band_x,
+                c.band_y,
+                c.band_y_adjacent,
+                c.band_radius,
+                c.max_lift_rows
+            )
+        );
+        assert!(!fixture.cases.is_empty());
+        let close = |got: f32, want: f32| (got - want).abs() < 1e-3;
+        for case in &fixture.cases {
+            let name = &case.name;
+            // The region starts at the viewport's first row, as the page's
+            // viewport does, and shows every row a case uses.
+            let spans: Vec<LiftSpan> = case.lifts.iter().flat_map(spans_of).collect();
+            let boxes = lift_boxes(&spans, case.viewport_y, 1000);
+            let newest = boxes.iter().map(|b| b.id).max();
+            // The cases are CSS px. At 2x every length doubles, and a
+            // region lower on the surface moves every band down with it.
+            for (scale, y0) in [(1.0_f32, 0.0_f32), (2.0, 10.0)] {
+                let (cell_w, cell_h) = (case.cell.w * scale, case.cell.h * scale);
+                let mut rects = band_rects(&boxes, y0, cell_w, cell_h, scale);
+                widen_newest(&mut rects, &boxes, newest, case.reach * scale);
+                let ids: Vec<u64> = boxes.iter().map(|b| b.id).collect();
+                let want_ids: Vec<u64> = case.bands.iter().map(|b| b.id).collect();
+                assert_eq!(ids, want_ids, "{name}");
+                for (rect, want) in rects.iter().zip(&case.bands) {
+                    assert!(
+                        close(rect.x, want.left * scale)
+                            && close(rect.y, y0 + want.top * scale)
+                            && close(rect.w, want.width * scale)
+                            && close(rect.h, want.height * scale),
+                        "{name} at {scale}x: {rect:?}"
+                    );
+                    match (rect.notch, &want.notch) {
+                        (None, None) => {}
+                        (Some([x, y]), Some(n)) => assert!(
+                            close(x, n.x * scale) && close(y, n.y * scale),
+                            "{name} at {scale}x: {rect:?}"
+                        ),
+                        _ => panic!("{name} at {scale}x: notch {:?}", rect.notch),
+                    }
+                }
+            }
+        }
     }
 
     #[test]

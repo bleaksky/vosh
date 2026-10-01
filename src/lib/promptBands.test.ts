@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Terminal } from '@xterm/xterm';
+import bandCases from '../../fixtures/prompt-bands/cases.json';
 import promptCss from '../styles/prompt.css?raw';
+import promptBandsSource from './promptBands.ts?raw';
 import {
+  BAND_RADIUS,
   BAND_X,
   BAND_Y,
   BAND_Y_ADJACENT,
@@ -353,5 +356,62 @@ describe('dividerCut', () => {
   it('cuts nothing with the split closed or a pane above the layer', () => {
     expect(dividerCut(36, null)).toBe(0);
     expect(dividerCut(36, 20)).toBe(0);
+  });
+});
+
+// The native grid draws the same bands (band_rects and widen_newest in
+// src-tauri/src/cell_render.rs), and its test runs these cases too.
+interface BandCase {
+  name: string;
+  cell: { w: number; h: number };
+  viewport_y: number;
+  reach?: number;
+  lifts: { id: number; top: number; bottom: number; left: number; right: number; notch?: number }[];
+  bands: {
+    id: number;
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    notch?: { x: number; y: number };
+  }[];
+}
+
+describe('the band cases the native grid draws too', () => {
+  const { constants } = bandCases;
+  const cases = bandCases.cases as BandCase[];
+
+  it('reaches as far as the native grid does', () => {
+    expect({ BAND_X, BAND_Y, BAND_Y_ADJACENT, BAND_RADIUS }).toEqual({
+      BAND_X: constants.band_x,
+      BAND_Y: constants.band_y,
+      BAND_Y_ADJACENT: constants.band_y_adjacent,
+      BAND_RADIUS: constants.band_radius,
+    });
+    // The tracker keeps this bound to itself, and the native grid uses
+    // the same one to find the lifts that reach into a region.
+    expect(promptBandsSource).toMatch(
+      new RegExp(`\\nconst MAX_LIFT_ROWS = ${constants.max_lift_rows};\\n`),
+    );
+  });
+
+  it.each(cases.map((c) => [c.name, c] as const))('%s', (_name, c) => {
+    const extents: LiftExtent[] = c.lifts.map(({ notch, ...lift }) =>
+      notch === undefined ? lift : { ...lift, notch },
+    );
+    const got = widenNewest(layoutBands(extents, c.viewport_y, c.cell.w, c.cell.h), c.reach ?? 0);
+    expect(got.map((band) => band.id)).toEqual(c.bands.map((band) => band.id));
+    got.forEach((band, i) => {
+      const want = c.bands[i];
+      expect(band.left).toBeCloseTo(want.left, 6);
+      expect(band.top).toBeCloseTo(want.top, 6);
+      expect(band.width).toBeCloseTo(want.width, 6);
+      expect(band.height).toBeCloseTo(want.height, 6);
+      expect(band.notch === undefined).toBe(want.notch === undefined);
+      if (band.notch && want.notch) {
+        expect(band.notch.x).toBeCloseTo(want.notch.x, 6);
+        expect(band.notch.y).toBeCloseTo(want.notch.y, 6);
+      }
+    });
   });
 });

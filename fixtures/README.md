@@ -30,6 +30,10 @@ fixtures/
              test in src-tauri and by session.test.ts on the page.
   mccp/      MCCP compressed stream captures.
   pane-layout/  Pane tree cases shared by the Rust and TypeScript sanitize tests.
+  prompt-bands/ cases.json, the band under a lifted prompt for a few lifts
+               and cell sizes, shared by layoutBands on xterm and
+               band_rects on the native grid, so both renderers draw the
+               same bands. Hand written.
   prompt/
     aabahran/  Aabahran prompt lines as the game sends them, raw and plain,
                and PROMPT settings for the compiler in crates/prompt.

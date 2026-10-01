@@ -267,6 +267,9 @@ export function markLifted(
   area.toggleAttribute(LIFTED_ATTR, on);
 }
 
+// The native grid draws the same bands in src-tauri/src/cell_render.rs.
+// Both sides run fixtures/prompt-bands/cases.json, so keep them in step.
+
 /** The band outsets the prompt boards measure, and its corner radius. */
 export const BAND_X = 4;
 export const BAND_Y = 2;
