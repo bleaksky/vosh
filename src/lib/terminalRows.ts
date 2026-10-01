@@ -81,3 +81,25 @@ export class GameSizeReport {
     return size;
   }
 }
+
+// The live pane follows its newest rows, after each output and each
+// resize. xterm keeps a pane that shows them there through a row resize on
+// its own, the newest line on the last row. Its scrollbar takes the new
+// rows in only on the next frame, though, and a scroll asked of it before
+// then is measured on the old rows: at 2x it lands a row short and leaves
+// the newest line just under the screen. A fight that lends a row resizes
+// xterm in the same task its text lands in, so the pane asks for a scroll
+// only when it has really left its newest rows.
+
+/** The parts of xterm the live pane's tail needs. */
+export interface TailView {
+  buffer: { active: { viewportY: number; baseY: number } };
+  scrollToBottom(): void;
+}
+
+/** Brings the live pane back to its newest rows when it has left them,
+ *  and asks nothing of xterm while it shows them. */
+export function keepTail(view: TailView): void {
+  const b = view.buffer.active;
+  if (b.viewportY !== b.baseY) view.scrollToBottom();
+}

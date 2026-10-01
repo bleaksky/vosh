@@ -38,6 +38,7 @@ import { BandLayer, LiftTracker, markLifted } from '../lib/promptBands';
 import {
   GameSizeReport,
   gameSize,
+  keepTail,
   keptRows,
   nativeBottomBounds,
   spareAbove,
@@ -1019,13 +1020,17 @@ export function Terminal({
       // resolves even when no data is currently arriving (the user
       // dragged the divider, then waited — no write would have
       // otherwise unstuck the viewport until the next server line).
+      // Only a pane that left its tail snaps: xterm's scrollbar still
+      // has the old rows here, and a scroll asked of it now lands a
+      // row short, the newest line under the screen
+      // (src/lib/terminalRows.ts).
       if (!quietRef.current) {
         // When the viewport grows taller, the bottom-anchor pad
         // from mount no longer reaches the new last row, leaving
         // a gap below the cursor. Re-pad so the cursor lands on
         // the new bottom row before any subsequent content writes.
         padToBottom();
-        term.scrollToBottom();
+        keepTail(term);
       }
     });
     onOutput((out) => {
@@ -1045,9 +1050,11 @@ export function Terminal({
         // the visible region instead of advancing the tail. Forcing a
         // snap on every write makes the live pane behave like a true
         // live tail. The history pane (quiet=true) opts out so users
-        // can read past output in the split.
+        // can read past output in the split. A pane on its tail asks
+        // nothing, since a resize may have left xterm's scrollbar a
+        // frame behind (src/lib/terminalRows.ts).
         if (!quietRef.current) {
-          term.scrollToBottom();
+          keepTail(term);
         }
       }
       // Feed the decoded text into the recent-names cache so Tab

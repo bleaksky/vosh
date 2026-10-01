@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { GameSizeReport, gameSize, keptRows, nativeBottomBounds, spareAbove } from './terminalRows';
+import {
+  GameSizeReport,
+  gameSize,
+  keepTail,
+  keptRows,
+  nativeBottomBounds,
+  spareAbove,
+  type TailView,
+} from './terminalRows';
 
 // While your prompt shows pinned the grid keeps to the bottom of its
 // pane, so the pixels its whole rows leave over sit above its first row
@@ -38,6 +46,41 @@ describe('the rows the live pane keeps', () => {
     expect(keptRows(20, 1)).toBe(19);
     expect(keptRows(20, 5)).toBe(15);
     expect(keptRows(3, 5)).toBe(1);
+  });
+});
+
+// The live pane follows its newest rows. In a window xterm takes a row
+// resize into its scrollbar only on the next frame, and a scroll asked of
+// it before then is measured on the old rows, a row short at 2x. A pane
+// made with `lagging` set does what that scrollbar does.
+function pane(viewportY: number, baseY: number, lagging: boolean): TailView & { asked: number } {
+  const view = {
+    asked: 0,
+    buffer: { active: { viewportY, baseY } },
+    scrollToBottom() {
+      view.asked += 1;
+      const b = view.buffer.active;
+      b.viewportY = lagging ? b.baseY - 1 : b.baseY;
+    },
+  };
+  return view;
+}
+
+describe('the newest rows of the live pane', () => {
+  it('asks nothing of xterm while the pane shows them', () => {
+    // A fight just took a row: xterm moved the screen with the text, and
+    // its scrollbar has not caught up yet.
+    const view = pane(77, 77, true);
+    keepTail(view);
+    expect(view.asked).toBe(0);
+    expect(view.buffer.active.viewportY).toBe(77);
+  });
+
+  it('brings a pane that left them back', () => {
+    const view = pane(70, 77, false);
+    keepTail(view);
+    expect(view.asked).toBe(1);
+    expect(view.buffer.active.viewportY).toBe(77);
   });
 });
 
