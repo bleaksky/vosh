@@ -79,15 +79,16 @@ describe('the dev console probe of the pointer mapping', () => {
       text: 'Tester: [===]\r\n<765>',
       spans: [span(0, 1, 0, 1), span(1, 1, 1, 3)],
     });
-    // The band's second row starts 8 + 20 px down the dock.
-    const hit = await probePoint(16 + 2 * 8 + 4, 600 + 8 + 20 + 10, deps({ dock, band }));
+    // The band's second row starts the gap, the 2 px outset and a row
+    // down the dock: 26 + 2 + 20 px.
+    const hit = await probePoint(16 + 2 * 8 + 4, 600 + 28 + 20 + 10, deps({ dock, band }));
     expect(hit).toEqual({
       where: 'band',
       cell: { row: 1, col: 2 },
       piece: 1,
       text: '765',
     });
-    expect(await probePoint(16 + 4, 600 + 8 + 10, deps({ dock, band }))).toMatchObject({
+    expect(await probePoint(16 + 4, 600 + 28 + 10, deps({ dock, band }))).toMatchObject({
       where: 'band',
       piece: null,
     });

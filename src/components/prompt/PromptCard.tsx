@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { moveTriggerToPrompts } from '../../lib/automationTriggers';
-import { BAND_OUTSET_Y, DOCK_GAP, type CellSize } from '../../lib/promptBand';
+import { BAND_OUTSET_Y, dockGap, type CellSize } from '../../lib/promptBand';
 import {
   cardAnchor,
   type CardRequest,
@@ -464,7 +464,9 @@ export function PromptCard({
     }
     const pinned = show?.show === 'pinned' && show.capture;
     const dock = pinned ? host.dock() : null;
-    const bandRowTop = dock ? dock.getBoundingClientRect().top + DOCK_GAP + BAND_OUTSET_Y : null;
+    const bandRowTop = dock
+      ? dock.getBoundingClientRect().top + dockGap(cellH) + BAND_OUTSET_Y
+      : null;
     const placed = cardAnchor({
       pinned: Boolean(pinned),
       promptTop,

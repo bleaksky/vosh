@@ -2,13 +2,14 @@
 // P4 to P10: the band reaches 4 px past the text on each side and 2 px
 // above and below its rows, and its bottom sits 9.5 px above the input
 // band. The dock above the command line is as tall as the rows the band
-// shows now, plus a 6 px gap under the terminal's text. It takes one row
-// of room under the terminal and borrows the rows past the first from the
-// terminal's bottom (src/lib/terminalRows.ts).
+// shows now, plus a gap under the terminal's text of one blank line and
+// 6 px, as the game leaves a blank line before each prompt. It takes one
+// row and that gap of room under the terminal and borrows the rows past
+// the first from the terminal's bottom (src/lib/terminalRows.ts).
 
 import { parseSgrCells, shownColumns, type Cell } from './sgrCells';
 
-/** The gap between the terminal's text and the band's rows. */
+/** The space the boards keep between the terminal's text and a band. */
 export const DOCK_GAP = 6;
 /** The band's outset above and below its rows. */
 export const BAND_OUTSET_Y = 2;
@@ -19,9 +20,17 @@ export const BAND_OUTSET_X = 4;
  *  above the input band as the boards draw it. */
 export const BAND_LIFT = 3.5;
 
+/** The gap between the terminal's text and the band: one blank line,
+ *  the one the game leaves before each prompt, and DOCK_GAP. It stays the
+ *  same in a fight and out of one, so the prompt never sits right under
+ *  the last line of text. */
+export function dockGap(cellH: number): number {
+  return cellH + DOCK_GAP;
+}
+
 /** The dock's height for `rows` rows `cellH` tall. */
 export function dockHeight(rows: number, cellH: number): number {
-  return DOCK_GAP + BAND_OUTSET_Y + rows * cellH + BAND_OUTSET_Y + BAND_LIFT;
+  return dockGap(cellH) + BAND_OUTSET_Y + rows * cellH + BAND_OUTSET_Y + BAND_LIFT;
 }
 
 /** The rows the dock shows: the rows of the band, the last `zone` of
