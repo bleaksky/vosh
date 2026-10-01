@@ -43,6 +43,9 @@ interface PromptPickerProps {
   refresh: number;
   onInsert: (field: string, format: PromptFormatChoice) => void;
   onInsertLayout: (id: LayoutId) => void;
+  /** You opened it from the keyboard, so the search takes focus and you
+   *  can type at once. Opened with a click it rests, as P6 draws it. */
+  focusSearch?: boolean;
 }
 
 export function PromptPicker({
@@ -53,6 +56,7 @@ export function PromptPicker({
   refresh,
   onInsert,
   onInsertLayout,
+  focusSearch = false,
 }: PromptPickerProps) {
   const [query, setQuery] = useState('');
   const groups = useMemo(
@@ -69,8 +73,9 @@ export function PromptPicker({
   const listRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
+  const focusFirst = useRef(focusSearch);
   useEffect(() => {
-    searchRef.current?.focus({ preventScroll: true });
+    if (focusFirst.current) searchRef.current?.focus({ preventScroll: true });
   }, []);
 
   // The highlighted field's forms, drawn with the values the card shows.
