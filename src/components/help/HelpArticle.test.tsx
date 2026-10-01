@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { HELP_TOPICS, PROMPT_DESIGN_CODES, type HelpTopic } from '../../lib/helpContent';
 import { countMatches, outlineFor } from '../../lib/helpNav';
 import { HelpArticle } from './HelpArticle';
+import helpCss from '../../styles/help.css?raw';
 
 function topic(id: string): HelpTopic {
   const found = HELP_TOPICS.find((t) => t.id === id);
@@ -72,5 +73,16 @@ describe('a help topic', () => {
     const html = draw(topic('reference.slash-commands'));
     const ids = html.match(/<li id="hp-item-\d+-\d+">/g) ?? [];
     expect(ids).toHaveLength(outlineFor(topic('reference.slash-commands'))?.length ?? -1);
+  });
+});
+
+describe('the help article stylesheet', () => {
+  const rule = (selector: string) => {
+    const at = helpCss.indexOf(`${selector} {`);
+    return at < 0 ? '' : helpCss.slice(at, helpCss.indexOf('}', at));
+  };
+
+  it('draws list bullets in the tertiary tone, as the boards do', () => {
+    expect(rule('.hp-article li::marker')).toMatch(/color:\s*var\(--tertiary\)/);
   });
 });
