@@ -111,8 +111,9 @@ import { useConnection, type ConnectionStatus } from './lib/useConnection';
 import { useEscape } from './lib/escapeStack';
 import { usePromptShow } from './lib/promptShow';
 import { PromptDock } from './components/prompt/PromptDock';
-import { PromptCard, type PromptCardHost } from './components/prompt/PromptCard';
+import { PromptCard, type CardView, type PromptCardHost } from './components/prompt/PromptCard';
 import { getPinnedBand, notePageWrite, usePinnedDockRows } from './lib/stores/pinnedPromptStore';
+import { usePromptReach } from './lib/stores/promptReachStore';
 import { lentRows, type CellSize } from './lib/promptBand';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
@@ -345,8 +346,11 @@ function App() {
   // open; the value is the pointer's viewport position (the menu
   // clamps itself to the window edges).
   const [terminalMenu, setTerminalMenu] = useState<{ x: number; y: number } | null>(null);
-  // The prompt card (Customize prompt…), open over your prompt.
-  const [promptCard, setPromptCard] = useState(false);
+  // The prompt card (Customize prompt…), open over your prompt, and the
+  // view it opens on.
+  const [promptCard, setPromptCard] = useState<CardView | null>(null);
+  // The card draws your design over the band of Lifted in the text.
+  const [cardBand, setCardBand] = useState(false);
   // History pane readiness: flips true once the history Terminal has
   // finished loading scrollback after its mount. We queue any pending
   // mirror search through pendingFindRef until the history is ready,
@@ -408,7 +412,8 @@ function App() {
     [],
   );
   const closePromptCard = () => {
-    setPromptCard(false);
+    setPromptCard(null);
+    setCardBand(false);
     inputRef.current?.focus();
   };
 
@@ -417,8 +422,8 @@ function App() {
   useEffect(() => {
     let alive = true;
     let unlisten: (() => void) | undefined;
-    void subscribePromptCardOpen(() => {
-      setPromptCard(true);
+    void subscribePromptCardOpen((request) => {
+      setPromptCard(request.view === 'text' ? 'text' : 'design');
       void getCurrentWindow()
         .setFocus()
         .catch(() => {});
@@ -1139,11 +1144,24 @@ function App() {
   }, []);
 
   // The native grid draws a band under each lifted prompt while your
-  // prompt shows lifted.
+  // prompt shows lifted, and under your design while the prompt card
+  // draws it in the text (the 2026-09-30 addendum, item 2). xterm keeps
+  // its own ground while the card is open, so In the text stays as it
+  // is there and the card's marks still show.
   useEffect(() => {
     if (!nativeSurfaceEnabled()) return;
-    void invoke('native_surface_set_prompt_bands', { on: promptLifted === true }).catch(() => {});
-  }, [promptLifted]);
+    void invoke('native_surface_set_prompt_bands', {
+      on: promptLifted === true || cardBand,
+    }).catch(() => {});
+  }, [promptLifted, cardBand]);
+
+  // The band under the open row reaches past its last glyph for the
+  // prompt card's line break mark and caret.
+  const promptReach = usePromptReach();
+  useEffect(() => {
+    if (!nativeSurfaceEnabled()) return;
+    void invoke('native_surface_set_prompt_reach', { px: promptReach }).catch(() => {});
+  }, [promptReach]);
 
   // Keep the native surface's chrome colors on the theme. Every theme
   // apply, from this window, a broadcast, or a profile switch, writes
@@ -1565,10 +1583,7 @@ function App() {
     disconnect: () => void disconnectSession(),
     insertInput: (text) => inputRef.current?.insert(text),
     promptShow: promptShow?.capture ? promptShow.show : null,
-    // Edit prompt as text… opens the design's text in Settings, as the
-    // card's Edit as text does, until the card has a text view of its own.
-    openPromptCard: (view) =>
-      view === 'text' ? openSettingsTab('input:advanced#prompt') : setPromptCard(true),
+    openPromptCard: (view) => setPromptCard(view === 'text' ? 'text' : 'design'),
     promptDraw: promptShow?.capture ? promptShow.draw : null,
     setPromptDraw: (on) => {
       void promptConfigGet()
@@ -1905,12 +1920,14 @@ function App() {
           termRef={termRef}
           inputRef={inputRef}
           onOpenFind={() => setFindOpen(true)}
-          onCustomizePrompt={() => setPromptCard(true)}
+          onCustomizePrompt={() => setPromptCard('design')}
           onClose={() => setTerminalMenu(null)}
         />
       )}
       {promptCard && (
         <PromptCard
+          initialView={promptCard}
+          onBand={setCardBand}
           host={promptCardHost}
           show={promptShow}
           cell={cellSize}
