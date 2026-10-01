@@ -194,6 +194,10 @@ export interface TerminalHandle {
    *  visible screen, on the grid the renderer in use draws, or null
    *  before it has a size. The prompt card sits over your prompt by it. */
   rowTop: (row: number) => number | null;
+  /** The cell grid the renderer in use draws: the top left of its first
+   *  cell in client px and the size of a cell, or null before it has a
+   *  size. The prompt card puts its marks on your prompt by it. */
+  grid: () => { left: number; top: number; cellW: number; cellH: number } | null;
 }
 
 interface Props {
@@ -1260,6 +1264,26 @@ export function Terminal({
         const cell = term.dimensions?.css?.cell;
         if (!screen || !cell?.height) return null;
         return screen.getBoundingClientRect().top + row * cell.height;
+      },
+      grid: () => {
+        if (!quietRef.current && nativeSurfaceEnabled()) {
+          // The native grid, as cellAt reads it.
+          const device = term.dimensions?.device?.cell;
+          if (!sizer || !device?.width || !device?.height) return null;
+          const dpr = window.devicePixelRatio || 1;
+          const r = sizer.getBoundingClientRect();
+          return {
+            left: r.left,
+            top: r.top + nativeSpare,
+            cellW: Math.round(device.width) / dpr,
+            cellH: Math.round(device.height) / dpr,
+          };
+        }
+        const screen = host?.querySelector('.xterm-screen');
+        const cell = term.dimensions?.css?.cell;
+        if (!screen || !cell?.width || !cell?.height) return null;
+        const r = screen.getBoundingClientRect();
+        return { left: r.left, top: r.top, cellW: cell.width, cellH: cell.height };
       },
     };
     onReadyRef.current?.(handle);
