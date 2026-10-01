@@ -3,9 +3,12 @@
 //!
 //! The card shows a preview on the open row, and only live renders reach
 //! history: a preview left on while game text arrives, in one read or
-//! split at any byte, leaves the screen the live session leaves once your
-//! echo lands, on the native grid. The webview test replays the same
-//! payloads into xterm from a stored file.
+//! split at any byte, leaves the screen the live session leaves with the
+//! card open once your echo lands, on the native grid. In the text the
+//! open card lends the row Lifted's band, trailing space included (the
+//! 2026-09-30 addendum, item 2), so that screen keeps your echo a cell
+//! after a design that ends on a character. The webview test replays the
+//! same payloads into xterm from a stored file.
 
 use super::show_tests::{
     cuts, payload, pinned_streams, profile, rows_of, showing, wire_fixture, Read, Session, CODES,
@@ -33,6 +36,18 @@ fn replay_with(
 ) -> Vec<Read> {
     session.restart();
     session.p.prompt.set_preview(preview.cloned());
+    vosh_prompt::testkit::reads(bytes, at)
+        .into_iter()
+        .map(|read| session.read(read))
+        .collect()
+}
+
+/// `bytes` read on a new connection of `session`, cut at `at`, live with
+/// the card open: no preview, and in the text the band the card lends.
+fn replay_live_with_card(session: &mut Session, bytes: &[u8], at: &[usize]) -> Vec<Read> {
+    session.restart();
+    session.p.prompt.set_preview(None);
+    session.p.prompt.stage.set_card(true);
     vosh_prompt::testkit::reads(bytes, at)
         .into_iter()
         .map(|read| session.read(read))
@@ -77,9 +92,10 @@ fn a_prompt_drawn_with_a_preview_shows_it_until_something_lands_after_it() {
     assert!(String::from_utf8_lossy(&restore).contains("<1020>"));
     let rows = screen([&read.out], 80);
     assert_eq!(rows.last().map(String::as_str), Some("<180>"));
-    // Your echo puts the live render back first.
+    // Your echo puts the live render back first, with the card's band
+    // and the space after it.
     let rows = screen_after_echo([&read.out], 80);
-    assert_eq!(rows.last().map(String::as_str), Some("<1020>look"));
+    assert_eq!(rows.last().map(String::as_str), Some("<1020> look"));
     // The panes keep the live values.
     let vars = session.p.prompt.take_prompt_vars(true).expect("the vars");
     assert_eq!(vars.get("hp").map(String::as_str), Some("1020"));
@@ -97,7 +113,7 @@ fn a_preview_left_on_while_game_text_arrives_leaves_only_live_renders_at_every_s
             let mut splits = vec![Vec::new()];
             splits.extend(cuts(&bytes).into_iter().map(|at| vec![at]));
             for at in &splits {
-                let want = replay_with(&mut live, &bytes, at, None);
+                let want = replay_live_with_card(&mut live, &bytes, at);
                 let got = replay_with(&mut previewing, &bytes, at, Some(&low_health()));
                 let label = format!("{name} {show:?} cut {at:?}");
                 let flat = |reads: &[Read]| {
@@ -140,6 +156,13 @@ fn a_preview_set_on_the_open_row_gives_way_to_the_next_pulse_at_every_split() {
         for at in &splits {
             let label = format!("{show:?} cut {at:?}");
             let mut want = replay_with(&mut live, &quiet, &[], None);
+            // The card opens on the live row, lending it the band in the
+            // text.
+            live.p.prompt.stage.set_card(true);
+            want.push(Read {
+                out: live.repaint(),
+                ..Read::default()
+            });
             want.extend(
                 vosh_prompt::testkit::reads(&fight, at)
                     .into_iter()
@@ -198,12 +221,13 @@ fn the_card_closing_repaints_the_live_render_with_nothing_to_restore() {
         placeholders: true,
         ..PromptPreview::default()
     }));
+    // In the text it lends the row Lifted's band, and the space after it.
     let open = session.repaint();
     let replace = open.replace.as_ref().expect("the repaint");
-    assert_eq!(drawn_text(&replace.bytes), "<1020>Opponent");
+    assert_eq!(drawn_text(&replace.bytes), "<1020>Opponent ");
     assert_eq!(
         drawn_text(open.restore.as_ref().expect("restore")),
-        "<1020>"
+        "<1020> "
     );
     // It reads your codes: the row shows the line the game sent.
     session.p.prompt.set_preview(Some(PromptPreview {
@@ -216,7 +240,10 @@ fn the_card_closing_repaints_the_live_render_with_nothing_to_restore() {
         drawn_text(&replace.bytes),
         "[1020/1020hp 800/800mn 930/930mv]\r\n"
     );
-    assert_eq!(drawn_text(raw.restore.as_ref().expect("restore")), "<1020>");
+    assert_eq!(
+        drawn_text(raw.restore.as_ref().expect("restore")),
+        "<1020> "
+    );
     // A preview with values on top of Fight.
     session.p.prompt.set_preview(Some(PromptPreview {
         preview: Some(Preview::Fight),
@@ -229,14 +256,14 @@ fn the_card_closing_repaints_the_live_render_with_nothing_to_restore() {
     let fight = session.repaint();
     assert_eq!(
         drawn_text(&fight.replace.as_ref().expect("the repaint").bytes),
-        "<1020>a rat"
+        "<1020>a rat "
     );
     // The card closes.
     session.p.prompt.set_preview(None);
     let closed = session.repaint();
     assert_eq!(
         drawn_text(&closed.replace.as_ref().expect("the repaint").bytes),
-        "<1020>"
+        "<1020> "
     );
     assert_eq!(closed.restore, None);
     // With nothing to change, nothing goes out.
@@ -263,14 +290,14 @@ fn a_repaint_in_a_payload_carries_the_restore_to_the_webview() {
     let value: serde_json::Value = serde_json::from_str(&json).expect("json");
     let restore = value["restore"].as_str().expect("the restore");
     let bytes = super::show_tests::base64_decode(restore);
-    assert_eq!(drawn_text(&bytes), "<1020>");
+    assert_eq!(drawn_text(&bytes), "<1020> ");
     // The card lends the row the band of Lifted, so its live render ends
-    // the lift too.
+    // the lift too, with Lifted's space after it.
     let text = String::from_utf8_lossy(&bytes);
     let end = text
         .rfind("<1020>\x1b[0m\x1b]7717;e;")
         .expect("the lift ends");
-    assert!(text[end..].ends_with('\x07') && !text[end..].contains(' '));
+    assert!(text[end..].ends_with("\x07 "));
 }
 
 /// The payloads of every stream in [`pinned_streams`] with Low health on
@@ -300,7 +327,7 @@ fn preview_splits() -> serde_json::Value {
                         .collect()
                 })
                 .collect();
-            let whole = replay_with(&mut live, &bytes, &[], None);
+            let whole = replay_live_with_card(&mut live, &bytes, &[]);
             let screens: serde_json::Map<String, serde_json::Value> = [40, 12]
                 .into_iter()
                 .map(|columns| {

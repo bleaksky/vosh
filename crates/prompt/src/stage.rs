@@ -708,17 +708,17 @@ impl Block {
     }
 }
 
-/// The lift the open row carries while your prompt shows lifted, and
-/// whether its start mark sits inside the row's region, as it does when
-/// you chose Lifted with the row open, so a repaint writes it again.
+/// The lift the open row carries while your prompt shows lifted, or the
+/// open card borrows Lifted's band in the text, and whether its start
+/// mark sits inside the row's region, as it does when you chose Lifted
+/// with the row open, so a repaint writes it again. Its end keeps your
+/// echo a cell away, the card's borrowed lift too (the 2026-09-30
+/// addendum, item 2), so a row the card lifted keeps that space when you
+/// later choose Lifted, in the open row and in your scrollback alike.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct OpenLift {
     id: u64,
     start_inside: bool,
-    /// Lifted's lift, whose end keeps your echo a cell away. The card's
-    /// borrowed lift in the text ends with no space, so the row and your
-    /// echo after it sit where they would with the card closed.
-    spaced: bool,
 }
 
 /// The drawn prompt while it is the last thing on screen.
@@ -1486,7 +1486,6 @@ impl Stage {
         let lift = self.lifts_view(&view).then(|| OpenLift {
             id: self.next_gen(),
             start_inside: false,
-            spaced: self.lifts(),
         });
         let gen = self.next_gen();
         let (body, live) = row_bodies(&block, view);
@@ -1867,7 +1866,6 @@ impl Stage {
             None if lifting => Some(OpenLift {
                 id: self.next_gen(),
                 start_inside: true,
-                spaced: self.lifts(),
             }),
             None => None,
         };
@@ -1990,7 +1988,6 @@ impl Stage {
                 let lift = self.lifts_view(&view).then(|| OpenLift {
                     id: self.next_gen(),
                     start_inside: false,
-                    spaced: self.lifts(),
                 });
                 let gen = self.next_gen();
                 let (body, live) = row_bodies(&block, view);
@@ -2177,18 +2174,10 @@ fn region_bytes(gen: u64, lift: Option<OpenLift>, body: &[u8]) -> Vec<u8> {
     bytes
 }
 
-/// `body` with the end mark of `lift`: with Lifted's space after it, or
-/// for the card's borrowed lift with none, right before the line ends it
-/// finishes on.
+/// `body` with the end mark of `lift` and Lifted's space after it, right
+/// before the line ends it finishes on.
 fn end_lift(body: &[u8], lift: OpenLift) -> Vec<u8> {
-    if lift.spaced {
-        return with_lift_end(body, lift.id);
-    }
-    let (shown, ends) = body.split_at(trailing_line_ends(body));
-    let mut out = shown.to_vec();
-    out.extend(lift_end(lift.id));
-    out.extend_from_slice(ends);
-    out
+    with_lift_end(body, lift.id)
 }
 
 /// What the band shows for `block`: the lines above the last one that
@@ -4212,18 +4201,30 @@ mod tests {
             Some(with(&[&mark(2), PROMPT.as_bytes(), b"\r\n"]))
         );
         // Then it draws your design, and the row lifts from its start,
-        // the live render behind it too, with no space after the lift, so
-        // the row and your echo sit where they would with the card
-        // closed.
+        // the live render behind it too, with Lifted's space after the
+        // lift, trailing space included as the addendum says, so your
+        // echo stays a cell away from the band.
         let mut card = Output::new(false);
         stage.repaint_view(&mut card, preview("LABELS", "DRAWN"));
         assert_eq!(
             card.replace.map(|r| r.bytes),
-            Some(with(&[&mark(4), &lift_start(3), b"LABELS", &lift_end(3)]))
+            Some(with(&[
+                &mark(4),
+                &lift_start(3),
+                b"LABELS",
+                &lift_end(3),
+                b" "
+            ]))
         );
         assert_eq!(
             card.restore,
-            Some(with(&[&mark(4), &lift_start(3), b"DRAWN", &lift_end(3)]))
+            Some(with(&[
+                &mark(4),
+                &lift_start(3),
+                b"DRAWN",
+                &lift_end(3),
+                b" "
+            ]))
         );
         // A prompt that arrives while the card is open lifts too.
         let mut next = Output::new(false);
@@ -4231,7 +4232,7 @@ mod tests {
         stage.draw_view(&mut next, block, None, b"", preview("LABELS", "DRAWN"));
         assert_eq!(
             next.bytes,
-            with(&[&lift_start(5), &mark(6), b"LABELS", &lift_end(5)])
+            with(&[&lift_start(5), &mark(6), b"LABELS", &lift_end(5), b" "])
         );
         // The card closes. The row keeps its marks, its lift starting
         // before the region as that prompt drew it, and the next prompt
@@ -4241,7 +4242,7 @@ mod tests {
         stage.repaint_view(&mut closed, View::live(Some("DRAWN")));
         assert_eq!(
             closed.replace.map(|r| r.bytes),
-            Some(with(&[&mark(7), b"DRAWN", &lift_end(5)]))
+            Some(with(&[&mark(7), b"DRAWN", &lift_end(5), b" "]))
         );
         let mut after = Output::new(false);
         let block = read(&stage, PROMPT, End::Line);
@@ -4259,6 +4260,43 @@ mod tests {
         let block = read(&stage, PROMPT, End::Line);
         stage.show(&mut off, block, None, b"", Some(PROMPT.as_bytes()));
         assert!(!off.bytes.windows(7).any(|w| w == b"7717;l;"));
+    }
+
+    #[test]
+    fn a_row_the_card_lifted_keeps_lifteds_space_when_you_choose_lifted() {
+        // The card borrows Lifted's band in the text, trailing space
+        // included (the 2026-09-30 addendum, item 2), so a row it lifted
+        // keeps your echo a cell away once you choose Lifted.
+        let mut stage = stage(JAMES, false);
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        stage.set_card(true);
+        let mut card = Output::new(false);
+        stage.repaint_view(&mut card, preview("LABELS", "DRAWN"));
+        stage.set_card(false);
+        let mut closed = Output::new(false);
+        stage.repaint_view(&mut closed, View::live(Some("DRAWN")));
+        stage.set_show(PromptShow::Lifted);
+        let mut lifted = Output::new(false);
+        stage.repaint(&mut lifted, Some("DRAWN"));
+        let mut next = Output::new(false);
+        stage.repaint(&mut next, Some("NEW"));
+        let bytes = next.replace.map(|r| r.bytes).expect("a repaint");
+        assert!(
+            bytes.ends_with(&with(&[b"NEW", &lift_end(2), b" "])),
+            "{bytes:?}"
+        );
+        // A prompt drawn while the card was open keeps the space in your
+        // scrollback too.
+        stage.set_show(PromptShow::Text);
+        stage.set_card(true);
+        let mut during = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw_view(&mut during, block, None, b"", preview("LABELS", "DRAWN"));
+        let live = during.restore.expect("the live render");
+        assert!(live.ends_with(b" "), "{live:?}");
+        assert!(during.bytes.ends_with(b" "), "{:?}", during.bytes);
     }
 
     #[test]
