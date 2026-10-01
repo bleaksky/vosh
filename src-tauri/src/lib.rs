@@ -330,6 +330,7 @@ pub fn run() {
             native_surface_set_font,
             commands::terminal_local_write,
             commands::terminal_cursor,
+            commands::terminal_reader_busy,
             commands::terminal_screen_rows,
             native_surface_find,
             native_surface_find_clear,
