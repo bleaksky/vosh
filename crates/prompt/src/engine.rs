@@ -642,6 +642,12 @@ impl PromptEngine {
                 }
                 // Any `prompt` but `prompt off` turns prompts on.
                 self.prompts_off = false;
+                // After `prompt off` an older build shows the buffer it
+                // never filled, control bytes and all. That is no
+                // setting of yours, so the codes you have stay.
+                if leftover_buffer(&text) {
+                    return;
+                }
                 self.note_session_setting(Some(&text), None, at);
                 let applied = self.take_settings(Some(&text), None, CaptureSource::Session, at);
                 (SeenKind::Prompt, applied)
@@ -941,6 +947,13 @@ pub fn codes_from_game(
         seen_at: Some(stamp(at)),
         source: Some(source),
     })
+}
+
+/// A prompt setting the game showed that holds a control character.
+/// No PROMPT you type can, so it is the buffer an older build's
+/// `prompt off` left unfilled.
+fn leftover_buffer(setting: &str) -> bool {
+    setting.chars().any(char::is_control)
 }
 
 #[cfg(test)]
@@ -1621,6 +1634,27 @@ mod tests {
         assert!(engine.prompts_off());
         engine.note_prompt(at());
         assert!(!engine.prompts_off());
+    }
+
+    #[test]
+    fn prompt_after_prompt_off_keeps_your_codes_over_the_leftover_buffer() {
+        // An older build's prompt off stores a buffer it never filled,
+        // and prompt with no argument then shows it, control bytes and
+        // all. That is no setting of yours: prompts come back on and the
+        // codes you have stay.
+        for reply in ["Current prompt: \u{1}\u{2}", "Prompt set to \u{1}\u{2}"] {
+            let mut engine = older_build("<%hhp> ");
+            engine.note_send("prompt off\r\n", SENT);
+            line(&mut engine, "You will no longer see prompts.", 5);
+            line(&mut engine, "Prompt set to \u{1}\u{2}", 6);
+            assert!(engine.prompts_off());
+            engine.take_seen();
+            engine.note_send("prompt\r\n", SENT + 3_000);
+            line(&mut engine, reply, 3_010);
+            assert_eq!(codes(&engine).prompt, "<%hhp> ", "{reply:?}");
+            assert!(!engine.prompts_off(), "{reply:?} turns prompts on");
+            assert!(engine.take_seen().is_empty(), "{reply:?}");
+        }
     }
 
     #[test]
