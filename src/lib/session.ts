@@ -625,9 +625,10 @@ export async function promptCardOpen(): Promise<PromptConfig> {
   return normalizePromptConfig(await invoke<RawPromptConfig | null>('prompt_card_open'));
 }
 
-/** What the main window opens the card on: where it would open, or
- *  Edit as text. */
-export type PromptCardView = 'text' | null;
+/** What the main window opens the card on: where it would open, Edit as
+ *  text, or pointing at the line your game prints, which Point at it
+ *  again… in Settings asks for. */
+export type PromptCardView = 'text' | 'point' | null;
 
 export interface PromptCardRequest {
   view: PromptCardView;
@@ -647,7 +648,8 @@ export async function subscribePromptCardOpen(
 ): Promise<UnlistenFn> {
   return listen<unknown>(PROMPT_CARD_OPEN_EVENT, (event) => {
     const raw = event.payload as { view?: unknown } | null;
-    cb({ view: raw?.view === 'text' ? 'text' : null });
+    const view = raw?.view;
+    cb({ view: view === 'text' || view === 'point' ? view : null });
   });
 }
 

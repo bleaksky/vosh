@@ -347,8 +347,8 @@ function App() {
   // clamps itself to the window edges).
   const [terminalMenu, setTerminalMenu] = useState<{ x: number; y: number } | null>(null);
   // The prompt card (Customize prompt…), open over your prompt, and the
-  // view it opens on.
-  const [promptCard, setPromptCard] = useState<CardView | null>(null);
+  // view it opens on, or `point` to open on pointing at your game's line.
+  const [promptCard, setPromptCard] = useState<CardView | 'point' | null>(null);
   // The card draws your design over the band of Lifted in the text.
   const [cardBand, setCardBand] = useState(false);
   // History pane readiness: flips true once the history Terminal has
@@ -423,7 +423,7 @@ function App() {
     let alive = true;
     let unlisten: (() => void) | undefined;
     void subscribePromptCardOpen((request) => {
-      setPromptCard(request.view === 'text' ? 'text' : 'design');
+      setPromptCard(request.view ?? 'design');
       void getCurrentWindow()
         .setFocus()
         .catch(() => {});
@@ -1926,7 +1926,8 @@ function App() {
       )}
       {promptCard && (
         <PromptCard
-          initialView={promptCard}
+          initialView={promptCard === 'point' ? 'design' : promptCard}
+          startStep={promptCard === 'point' ? 'point' : undefined}
           onBand={setCardBand}
           host={promptCardHost}
           show={promptShow}
