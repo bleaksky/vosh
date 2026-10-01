@@ -1,11 +1,21 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import { Terminal } from '@xterm/xterm';
 import { resolveCell, type BandEnv } from '../../lib/bandCells';
 import { planSubmit } from '../../lib/maskedInput';
-import { bandRows, dockHeight, type CellSize } from '../../lib/promptBand';
+import {
+  bandRows,
+  DOCK_GAP,
+  dockHeight,
+  dockRows,
+  lentRows,
+  type CellSize,
+} from '../../lib/promptBand';
 import type { PromptShowState } from '../../lib/promptShow';
 import { dockPieceAt, type PieceSpan } from '../../lib/promptPointer';
 import { parseSgrCells, PLAIN, shownColumns } from '../../lib/sgrCells';
+import { RegionWriter } from '../../lib/terminalRegion';
+import { keptRows } from '../../lib/terminalRows';
 import { PinnedBand } from './PromptDock';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -63,17 +73,87 @@ const style = (html: string, marker: string): string => {
 };
 const px = (css: string, prop: string) =>
   Number(new RegExp(`${prop}:\\s*([\\d.-]+)px`).exec(css)?.[1]);
+/** A length the markup may leave out, or write as a bare 0. */
+const pxOr0 = (css: string, prop: string) =>
+  Number(new RegExp(`(?:^|;)${prop}:\\s*([\\d.-]+)(?:px)?(?:;|$)`).exec(css)?.[1] ?? 0);
 const glyphs = (html: string) =>
   [...html.matchAll(/class="prompt-band-glyph"[^>]*>([^<]*)</g)].map((m) => m[1]).join('');
 
+// The default design out of a fight and in one, where a row with the
+// tank's gauge comes above your vitals.
+const CALM = '\x1b[32m1020\x1b[39m/1020hp \x1b[36m800\x1b[39m/800mn ';
+const FIGHT = `Tamwell: \x1b[33m█████████\x1b[90m░\x1b[39m\r\n${CALM}`;
+
+/** The dock's box: its height, how far it reaches up over the terminal,
+ *  and the place it takes under the terminal, which is the two together. */
+function dockBox(html: string): { height: number; reach: number; place: number } {
+  const css = style(html, 'class="prompt-dock"');
+  const height = px(css, 'height');
+  const reach = 0 - pxOr0(css, 'margin-top');
+  return { height, reach, place: height - reach };
+}
+
 describe('the pinned band', () => {
-  it('keeps the rows the tallest prompt can take, whatever it shows', () => {
+  it('is one row tall out of a fight, with no empty row above the band', () => {
     expect(dockHeight(1, 17.5)).toBe(27.5 + 3.5);
     expect(dockHeight(2, 17.5)).toBe(45 + 3.5);
     expect(dockHeight(3, 17.5)).toBe(62.5 + 3.5);
-    const empty = draw(null);
-    expect(px(style(empty, 'class="prompt-dock"'), 'height')).toBe(48.5);
+    // The zone of the default design is two, the tank's row and yours.
+    const html = draw(CALM, { zone: 2 });
+    expect(dockBox(html)).toEqual({ height: 31, reach: 0, place: 31 });
+    // The band's top sits the 6 px gap under the dock's top, so nothing
+    // in the dock is empty but that gap.
+    const band = style(html, 'data-prompt-band');
+    expect(dockBox(html).height - px(band, 'bottom') - px(band, 'height')).toBe(DOCK_GAP);
+    expect(html).toContain('data-rows="1"');
+  });
+
+  it('grows a row in a fight, borrowed from the bottom of the terminal', () => {
+    const html = draw(FIGHT, { zone: 2 });
+    // Two rows tall, reaching one row up over the terminal, so its place
+    // under the terminal stays the one row place.
+    expect(dockBox(html)).toEqual({ height: 48.5, reach: 17.5, place: 31 });
+    const band = style(html, 'data-prompt-band');
+    expect(px(band, 'height')).toBe(2 * 17.5 + 4);
+    expect(dockBox(html).height - px(band, 'bottom') - px(band, 'height')).toBe(DOCK_GAP);
+    expect(glyphs(html).startsWith('Tamwell:')).toBe(true);
+    expect(html).toContain('data-rows="2"');
+  });
+
+  it('keeps its one row place before any prompt and after you disconnect', () => {
+    const empty = draw(null, { zone: 3 });
+    expect(dockBox(empty)).toEqual({ height: 31, reach: 0, place: 31 });
     expect(empty).not.toContain('data-prompt-band');
+  });
+
+  it('holds the prompts off sentence on its one row', () => {
+    const html = draw(FIGHT, { zone: 2, promptsOff: true });
+    expect(dockBox(html)).toEqual({ height: 31, reach: 0, place: 31 });
+    expect(html).not.toContain('data-prompt-band');
+    // The sentence sits on the row the band's text would take.
+    const note = style(html, 'data-prompt-dock-note');
+    expect(px(note, 'top')).toBe(31 - 3.5 - 2 - 17.5 + (17.5 - 16) / 2);
+  });
+
+  it('never takes more rows than the zone, and never fewer than one', () => {
+    const three = 'one\r\ntwo\r\nthree';
+    expect(dockRows(three, 2, false)).toBe(2);
+    expect(dockRows(three, 3, false)).toBe(3);
+    expect(dockRows(three, 6, false)).toBe(3);
+    expect(dockRows(FIGHT, 2, false)).toBe(2);
+    expect(dockRows(CALM, 2, false)).toBe(1);
+    // Rows that show nothing at the end take no room.
+    expect(dockRows(`${CALM}\r\n  \r\n`, 3, false)).toBe(1);
+    expect(dockRows(null, 2, false)).toBe(1);
+    expect(dockRows('', 2, false)).toBe(1);
+    expect(dockRows(FIGHT, 2, true)).toBe(1);
+    expect(dockBox(draw(three, { zone: 2 }))).toEqual({ height: 48.5, reach: 17.5, place: 31 });
+    // Whatever it shows, its place under the terminal stays the same.
+    for (const pin of [null, CALM, FIGHT, three]) {
+      for (const zone of [1, 2, 3, 6]) {
+        expect(dockBox(draw(pin, { zone })).place).toBe(31);
+      }
+    }
   });
 
   it('draws one row at the bottom of its zone, 4 px past the text and 2 px above and below', () => {
@@ -273,5 +353,81 @@ describe('Enter while your prompt shows pinned', () => {
   it('ends the row of a prompt left in the text, such as the pager', () => {
     const context = { masked: false, quickKey: false, echoColor: null, pinRowOpen: false };
     expect(planSubmit('', context).echo).toBe('\r\n');
+  });
+});
+
+// The terminal gives the dock the rows it borrows: xterm keeps the rows
+// its pane fits less those (keptRows), and the native grid does the same
+// in term_grid.rs. Each step here lays the dock out from its real markup
+// and sizes a real xterm as the live pane does, so the gap between the
+// newest line and the band's top is what the window shows.
+describe('the text above the pinned band', () => {
+  /** The screen's rows, trailing blanks trimmed, up to the last row that
+   *  shows anything. */
+  function screen(term: Terminal): string[] {
+    const buffer = term.buffer.active;
+    const rows: string[] = [];
+    for (let y = 0; y < term.rows; y++) {
+      rows.push(buffer.getLine(buffer.baseY + y)?.translateToString(true) ?? '');
+    }
+    while (rows.length > 0 && rows[rows.length - 1] === '') rows.pop();
+    return rows;
+  }
+
+  function parsed(writer: RegionWriter): Promise<void> {
+    return new Promise((resolve) => writer.whenParsed(resolve));
+  }
+
+  it('keeps the newest line right above the band as a fight grows it and shrinks it', async () => {
+    // The pane fits 20 rows with 9 px to spare under them.
+    const paneHeight = 20 * CELL.height + 9;
+    const fit = Math.floor(paneHeight / CELL.height);
+    const term = new Terminal({ cols: 60, rows: fit, scrollback: 100, allowProposedApi: true });
+    const writer = new RegionWriter(term);
+    // Forty lines, the line end before the pinned prompt held back as the
+    // session holds it, so the newest line is the last on screen.
+    const lines = Array.from({ length: 40 }, (_, i) => `line ${i + 1}`);
+    writer.output({ text: lines.join('\r\n'), hold: '\r\n' });
+    await parsed(writer);
+    // A fight starts and ends four times within a second.
+    const pins = [CALM, FIGHT, CALM, FIGHT, FIGHT, CALM, FIGHT, CALM, FIGHT, CALM];
+    const seen: { gap: number; first: string; last: string }[] = [];
+    for (const pin of pins) {
+      const html = draw(pin, { zone: 2 });
+      term.resize(60, keptRows(fit, lentRows(dockRows(pin, 2, false))));
+      await parsed(writer);
+      // The dock's place starts where the pane ends, and the dock
+      // reaches up over the pane by the rows it borrows.
+      const box = dockBox(html);
+      const band = style(html, 'data-prompt-band');
+      const bandTop = paneHeight - box.reach + box.height - px(band, 'bottom') - px(band, 'height');
+      const textBottom = term.rows * CELL.height;
+      const rows = screen(term);
+      seen.push({ gap: bandTop - textBottom, first: rows[0], last: rows[rows.length - 1] });
+    }
+    // The newest line never moves off the row right above the band: the
+    // gap under it is the pane's spare 9 px and the dock's 6 px each time.
+    for (const step of seen) {
+      expect(step.gap).toBeCloseTo(9 + DOCK_GAP, 6);
+      expect(step.last).toBe('line 40');
+    }
+    // The line the band's new row takes leaves at the top, and comes back
+    // when the fight ends. No line is lost or doubled.
+    expect(seen.map((s) => s.first)).toEqual(
+      pins.map((pin) => (pin === FIGHT ? 'line 22' : 'line 21')),
+    );
+    expect(term.rows).toBe(fit);
+    expect(screen(term)).toEqual(lines.slice(20));
+    // The held line end still goes first when the next text lands.
+    writer.output({ text: 'tell' });
+    await parsed(writer);
+    expect(screen(term).slice(-2)).toEqual(['line 40', 'tell']);
+    term.dispose();
+  });
+
+  it('borrows every row of the band past its first', () => {
+    expect(lentRows(1)).toBe(0);
+    expect(lentRows(2)).toBe(1);
+    expect(lentRows(0)).toBe(0);
   });
 });

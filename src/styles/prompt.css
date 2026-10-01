@@ -1,13 +1,21 @@
 /* Your prompt pinned above the command line (Where your prompt shows,
-   Pinned). The dock sits in the terminal area under the text and keeps
-   a fixed height, the rows the tallest prompt can take. The band is the
-   edit band of the prompt boards: --selrow at radius 4, reaching 4 px past
-   the text on each side and 2 px above and below its rows, its bottom
-   9.5 px above the input band. PromptDock.tsx sets its size and puts each
-   character on the terminal's cell grid. */
+   Pinned). The dock sits in the terminal area under the text and is as
+   tall as the band it draws now. It takes one row of room under the
+   terminal and reaches up over the terminal's bottom for the rows past
+   the first, which the terminal gives up. The band is the edit band of
+   the prompt boards: --selrow at radius 4, reaching 4 px past the text on
+   each side and 2 px above and below its rows, its bottom 9.5 px above
+   the input band. PromptDock.tsx sets its size and puts each character on
+   the terminal's cell grid.
+
+   z-index 9 paints the rows it borrows over everything the well holds:
+   the live (1) and history (2) panes of the scrollback split and xterm's
+   decorations, up to its overview ruler (8). The find toolbar (50) sits at
+   the top of the area and never meets it. */
 
 .prompt-dock {
   position: relative;
+  z-index: 9;
   flex: none;
   user-select: none;
   -webkit-user-select: none;
