@@ -1478,6 +1478,10 @@ fn describe_action(action: &TriggerAction) -> String {
 const PROFILE_MIGRATION_PENDING: &str =
     "Quit Vosh and open it again to finish the move to loadouts.";
 
+/// What `#profile save` answers while another profile write holds
+/// [`crate::commands::PERSIST_LOCK`].
+const PROFILE_SAVE_BUSY: &str = "Vosh is saving this profile. Try again.";
+
 fn slash_profile(profile: &mut Profile, args: &str, replaced: &mut bool) -> InputResult {
     let pending =
         crate::commands::MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
@@ -1523,7 +1527,7 @@ fn slash_profile_with(
                 // runs under the profile lock, which the persist takes
                 // after the persist lock, so it only tries.
                 let Ok(_persist_guard) = crate::commands::PERSIST_LOCK.try_lock() else {
-                    return error_echo("Vosh is saving this profile. Try again.".to_string());
+                    return error_echo(PROFILE_SAVE_BUSY.to_string());
                 };
                 if crate::profile_config::is_unread(&path) {
                     return error_echo(
@@ -2655,13 +2659,22 @@ mod tests {
     }
 
     /// `#profile save` over `app_data`, again while another test holds
-    /// the persist lock the save only tries.
+    /// the persist lock the save only tries. It compares against the
+    /// busy echo the save itself builds, so a new wording or format
+    /// cannot stop the retry, and it panics when the lock stays held for
+    /// 10 s, so a test that leaks a guard fails instead of hanging.
     fn save_profile_in(p: &mut Profile, app_data: &std::path::Path) -> InputResult {
+        let busy = error_echo(PROFILE_SAVE_BUSY.to_string()).echo;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         loop {
             let result = slash_profile_with(p, "save", &mut false, false, Some(app_data));
-            if result.echo != ["[Vosh is saving this profile. Try again.]"] {
+            if result.echo != busy {
                 return result;
             }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "PERSIST_LOCK held too long"
+            );
             std::thread::yield_now();
         }
     }
