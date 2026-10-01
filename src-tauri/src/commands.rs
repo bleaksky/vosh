@@ -6469,6 +6469,7 @@ mod tests {
             "loot_progression",
             "potion_labels",
             "herb_labels",
+            "sent_tells",
         ];
 
         #[test]
