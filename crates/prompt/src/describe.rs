@@ -269,8 +269,9 @@ fn form(
 }
 
 /// Each form a kind of field takes, its name, and whether Show as offers
-/// it. A gauge's max, grouped and short forms change what the piece reads
-/// or only matter in the thousands, so only the picker offers them.
+/// it. A gauge's max changes what the piece reads, so only the picker
+/// offers it. A gauge takes the five forms of P6 and flow 6a. Grouped
+/// and short are a number's forms (section 1.4).
 fn form_list(kind: Option<Kind>) -> &'static [(FormatName, &'static str, bool)] {
     use FormatName as F;
     let Some(kind) = kind else {
@@ -283,8 +284,6 @@ fn form_list(kind: Option<Kind>) -> &'static [(FormatName, &'static str, bool)] 
             (F::Max, "Max", false),
             (F::Percent, "Percent", true),
             (F::Bar, "Bar", true),
-            (F::Grouped, "Grouped", false),
-            (F::Short, "Short", false),
         ],
         Kind::Num => &[
             (F::Value, "Number", true),
