@@ -416,7 +416,7 @@ pub(crate) fn migration_refusal(app_data: &Path) -> Option<&'static str> {
 /// What `ui.enabled_presets` holds when you turned every preset off. An
 /// empty list means the defaults. Mirrors `PRESETS_OFF_MARKER` in
 /// src/lib/automationRecords.ts.
-const PRESETS_OFF: &str = "none";
+pub(crate) const PRESETS_OFF: &str = "none";
 
 /// The enabled preset lists of the profile files, for a catalog that
 /// takes the list for the first time. See [`profile_preset_lists`].

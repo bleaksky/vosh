@@ -334,10 +334,10 @@ describe('the help on the chat pane', () => {
     );
   });
 
-  it('says Vosh catches the tells you send with a preset, on from the start', () => {
+  it('says Vosh catches the tells you send with a preset it turns on once', () => {
     const text = body('shape.chat-pane');
     expect(text).toContain(
-      '- See the tells you send. The game sends no GMCP for them, so the `Tells you send` preset routes the line the game prints for each one, and it is on from the start.',
+      '- See the tells you send. The game sends no GMCP for them, so the `Tells you send` preset routes the line the game prints for each one. Vosh turns it on for every profile, once, unless you had turned every preset off.',
     );
     expect(text).toContain('Each one reads `[tell] to Selune: text`');
     expect(text).toContain(

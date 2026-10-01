@@ -25,7 +25,8 @@ pub(crate) struct Launch {
 /// Everything launch loads, in order. A shared catalog wizard run that
 /// stopped partway finishes first, so nothing loads a file it had yet to
 /// write. Then the prompt capture triggers move into the profiles, once,
-/// see [`crate::prompt_migration`]. Then the profiles load, see
+/// see [`crate::prompt_migration`], and each preset a build adds comes
+/// on once, see [`crate::preset_rollout`]. Then the profiles load, see
 /// [`load_profiles`], and loadout mode starts when catalog.toml is on
 /// disk, see [`load_loadout_mode`]. While the run stays unfinished, the
 /// move and loadout mode wait, since a profile file may still hold its
@@ -42,6 +43,7 @@ pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
         // as the move left them. It writes inactive profile files too.
         let _persist = crate::commands::PERSIST_LOCK.lock().await;
         state.add_launch_notices(crate::prompt_migration::run(app_data));
+        crate::preset_rollout::run(app_data);
     }
     load_profiles(state, app_data).await;
     if run == WizardRun::Unfinished {

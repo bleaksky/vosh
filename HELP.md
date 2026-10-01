@@ -369,7 +369,7 @@ The chat pane collects channel talk in its own buffer, one line per message. Add
 - Point at a message to see when it arrived.
 - Filter with the channel select beside the pane's name. `All` shows every channel. Each chat pane keeps its own filter, so you can split one off for tells alone.
 - Route trigger output in. Add a `route` effect to a trigger under Automation, then Triggers, and enter a pane name. Those lines land in the chat pane under that name, in their own words.
-- See the tells you send. The game sends no GMCP for them, so the `Tells you send` preset routes the line the game prints for each one, and it is on from the start. Each one reads `[tell] to Selune: text`, the tells a telepath projects too. The pane skips the `You tell your group` line, because your gtell already arrives over GMCP. Turn the preset off in Settings under Automation, then Presets.
+- See the tells you send. The game sends no GMCP for them, so the `Tells you send` preset routes the line the game prints for each one. Vosh turns it on for every profile, once, unless you had turned every preset off. Each one reads `[tell] to Selune: text`, the tells a telepath projects too. The pane skips the `You tell your group` line, because your gtell already arrives over GMCP. Turn the preset off in Settings under Automation, then Presets.
 
 The buffer holds a rolling 500 lines, survives closing and reopening the pane, and clears only on disconnect. The pane sticks to its tail. Scroll up to read back, and it sticks again once you come within 24px of the bottom.
 
