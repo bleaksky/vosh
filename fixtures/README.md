@@ -28,6 +28,11 @@ fixtures/
              VOSH_WRITE_IPC_NAMES=1 writes it again. gmcp-events.json,
              the event each GMCP package goes out on, read by a fake MUD
              test in src-tauri and by session.test.ts on the page.
+  links/     Golden lists of the ids that links name, taken from the code.
+             help-topics.json holds every help topic id with its number,
+             in rail order, for src/lib/helpTopicIds.test.ts. Change it
+             only in a commit tied to a numbered bug or a lettered
+             decision.
   mccp/      MCCP compressed stream captures.
   pane-layout/  Pane tree cases shared by the Rust and TypeScript sanitize tests.
   prompt-bands/ cases.json, the band under a lifted prompt for a few lifts
