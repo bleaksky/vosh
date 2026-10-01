@@ -1,8 +1,9 @@
 //! The prompt editor's commands (section 6 of the build spec): the active
 //! profile's `[prompt]` table, the designs other profiles hold, what a
 //! capture compiles to, the candidates ring and the capture check, renders
-//! with live or sample values and preview overrides, the edits the card
-//! makes, and the state the card watches.
+//! with live or sample values and preview overrides, the preview the card
+//! shows on your prompt, the edits the card makes, and the state the card
+//! watches.
 //!
 //! Every command reads or writes the live profile under its lock and lets
 //! go before it emits anything. A change to the table repaints the open
@@ -18,7 +19,7 @@ use vosh_prompt::candidates::{CandidateGroup, CaptureCheck};
 use vosh_prompt::capture::Recognizer;
 use vosh_prompt::config::PREVIOUS_TEMPLATES;
 use vosh_prompt::edit::EditOp;
-use vosh_prompt::overrides::{Overridden, Overrides};
+use vosh_prompt::overrides::{Overridden, Overrides, Preview, PromptPreview};
 use vosh_prompt::report::{CompileReport, CompileRequest};
 use vosh_prompt::state::PromptState;
 use vosh_prompt::vars::Samples;
@@ -192,6 +193,10 @@ pub(crate) struct RenderRequest {
     pub template: String,
     #[serde(default)]
     pub values: ValuesFrom,
+    /// One of the card's previews, Now, Low health, Fight or Lament.
+    #[serde(default)]
+    pub preview: Option<Preview>,
+    /// Values on top of the preview's.
     #[serde(default)]
     pub overrides: Option<Overrides>,
     /// Draw each value with nothing to show as its label, as the open
@@ -200,18 +205,21 @@ pub(crate) struct RenderRequest {
     pub placeholders: bool,
 }
 
-/// Draw a design with live or sample values, preview overrides on top.
+/// Draw a design with live or sample values, a preview and overrides on
+/// top.
 #[tauri::command]
 pub(crate) async fn prompt_render(
     state: State<'_, SharedState>,
     template: String,
     values: Option<ValuesFrom>,
+    preview: Option<Preview>,
     overrides: Option<Overrides>,
     placeholders: Option<bool>,
 ) -> Result<Rendered, String> {
     let request = RenderRequest {
         template,
         values: values.unwrap_or_default(),
+        preview,
         overrides,
         placeholders: placeholders.unwrap_or(false),
     };
@@ -244,14 +252,37 @@ pub(crate) fn render_all(p: &Profile, requests: &[RenderRequest]) -> Vec<Rendere
                 placeholders: request.placeholders,
             };
             let template = Template::parse(&request.template);
-            match request.overrides.as_ref().filter(|o| !o.is_empty()) {
-                Some(overrides) => {
-                    vosh_prompt::render(&template, &Overridden::new(base, overrides, now), options)
-                }
-                None => vosh_prompt::render(&template, base, options),
+            let overrides = PromptPreview {
+                preview: request.preview,
+                overrides: request.overrides.clone(),
+                ..PromptPreview::default()
+            }
+            .overrides(base);
+            if overrides.is_empty() {
+                vosh_prompt::render(&template, base, options)
+            } else {
+                vosh_prompt::render(&template, &Overridden::new(base, &overrides, now), options)
             }
         })
         .collect()
+}
+
+/// Show what the open card shows on your prompt in place of the live
+/// render, or the live render again with null: one of its previews,
+/// values on top, the labels of values with nothing to show, or the line
+/// the game sent while the card reads your codes. It repaints the open
+/// row, which carries the live render as its restore, so only live
+/// renders reach history. Nothing saves or goes to the game, and the
+/// panes keep the live values. It lasts until the card clears it, the
+/// main window loads again, or the connection goes.
+#[tauri::command]
+pub(crate) async fn prompt_preview_set(
+    state: State<'_, SharedState>,
+    preview: Option<PromptPreview>,
+) -> Result<(), String> {
+    state.profile.lock().await.prompt.set_preview(preview);
+    request_repaint(state.inner()).await;
+    Ok(())
 }
 
 /// A design after an edit, and how it draws with the live values and
@@ -466,13 +497,30 @@ mod tests {
             {"template": "%hp/%{maxhp}", "overrides": {"values": {"hp": 180}}},
             {"template": "%hp/%{maxhp}", "overrides": {"lament": true}},
             {"template": "[%gold]", "placeholders": true},
+            {"template": "%hp/%{maxhp}", "preview": "low_health"},
+            {"template": "%hp", "preview": "low_health", "overrides": {"values": {"hp": 7}}},
+            {"template": "%hp/%{maxhp}", "values": "sample", "preview": "lament"},
+            {"template": "%hp", "preview": "now"},
         ]))
         .unwrap();
         let plain: Vec<String> = render_all(&p, &requests)
             .into_iter()
             .map(|r| r.plain)
             .collect();
-        assert_eq!(plain, ["850/900", "1020/1020", "180/900", "?/?", "[Gold]"]);
+        assert_eq!(
+            plain,
+            [
+                "850/900",
+                "1020/1020",
+                "180/900",
+                "?/?",
+                "[Gold]",
+                "180/900",
+                "7",
+                "?/?",
+                "850"
+            ]
+        );
     }
 
     #[test]

@@ -9,15 +9,15 @@
 use super::*;
 
 /// The PROMPT the fake Aabahran prints, the one the wire fixtures carry.
-const CODES: &str = vosh_prompt::testkit::mud::PROMPT;
+pub(super) const CODES: &str = vosh_prompt::testkit::mud::PROMPT;
 /// The PROMPT with no line end that `prompt all` prints.
-const CODES_ALL: &str = vosh_prompt::testkit::mud::PROMPT_ALL;
+pub(super) const CODES_ALL: &str = vosh_prompt::testkit::mud::PROMPT_ALL;
 /// Draws the hp the capture read, so each byte of a draw is known.
-const HP: &str = "<%hp>";
+pub(super) const HP: &str = "<%hp>";
 
 /// A profile that reads Aabahran's codes `prompt` and draws `template`
 /// over them while `draw` is on, started the way a connection starts it.
-fn profile(prompt: &str, template: &str, draw: bool) -> Profile {
+pub(super) fn profile(prompt: &str, template: &str, draw: bool) -> Profile {
     let mut p = Profile::default();
     p.set_prompt_config(vosh_prompt::PromptConfig {
         draw,
@@ -33,7 +33,7 @@ fn profile(prompt: &str, template: &str, draw: bool) -> Profile {
 }
 
 /// A synthetic socket read from fixtures/prompt/aabahran/wire.
-fn wire_fixture(name: &str) -> Vec<u8> {
+pub(super) fn wire_fixture(name: &str) -> Vec<u8> {
     let path = format!(
         "{}/../fixtures/prompt/aabahran/wire/{name}.bin",
         env!("CARGO_MANIFEST_DIR")
@@ -43,7 +43,7 @@ fn wire_fixture(name: &str) -> Vec<u8> {
 
 /// Where to cut `bytes` in two: after every byte of text, and around and
 /// inside each GMCP packet, as the session tests cut them.
-fn cuts(bytes: &[u8]) -> Vec<usize> {
+pub(super) fn cuts(bytes: &[u8]) -> Vec<usize> {
     let mut cuts = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
@@ -69,16 +69,16 @@ fn cuts(bytes: &[u8]) -> Vec<usize> {
 /// rows and the lines kept for scrollback, in order, and what triggers
 /// asked to send.
 #[derive(Debug, Default)]
-struct Read {
-    out: Output,
-    log: Vec<String>,
-    kept: Vec<Vec<u8>>,
-    sends: Vec<String>,
+pub(super) struct Read {
+    pub(super) out: Output,
+    pub(super) log: Vec<String>,
+    pub(super) kept: Vec<Vec<u8>>,
+    pub(super) sends: Vec<String>,
 }
 
 /// The session's state for one connection, fed through its own steps.
-struct Session {
-    p: Profile,
+pub(super) struct Session {
+    pub(super) p: Profile,
     acc: LineAccumulator,
     parser: vosh_telnet::Parser,
     /// Output from elsewhere reached the terminal since the last read.
@@ -86,7 +86,7 @@ struct Session {
 }
 
 impl Session {
-    fn new(p: Profile) -> Self {
+    pub(super) fn new(p: Profile) -> Self {
         Self {
             p,
             acc: LineAccumulator::new(),
@@ -98,7 +98,7 @@ impl Session {
     /// Output from outside a read, as `emit_output` writes it: a tick
     /// warning, a timer's echo, a slash command's reply. The next read
     /// sees it landed.
-    fn emitted(&mut self, bytes: &[u8]) -> Output {
+    pub(super) fn emitted(&mut self, bytes: &[u8]) -> Output {
         self.other = true;
         let mut out = Output::new(false);
         out.text(bytes);
@@ -108,7 +108,7 @@ impl Session {
     /// A new connection on the same profile, which starts the prompt over
     /// the way a connect does. Cheaper than a new profile, whose script
     /// engine takes a while to start.
-    fn restart(&mut self) {
+    pub(super) fn restart(&mut self) {
         start_prompt(&mut self.p, false);
         self.acc = LineAccumulator::new();
         self.parser = vosh_telnet::Parser::new();
@@ -116,7 +116,7 @@ impl Session {
 
     /// One socket read of raw wire bytes, then the end of the read and
     /// the hold's deadline before the next one.
-    fn read(&mut self, data: &[u8]) -> Read {
+    pub(super) fn read(&mut self, data: &[u8]) -> Read {
         let mut batch = ReadBatch::new(0);
         batch.out = Output::new(std::mem::take(&mut self.other));
         let now = Instant::now();
@@ -168,7 +168,7 @@ impl Session {
     }
 
     /// You send `line`: held lines let go first, then the send step.
-    fn send(&mut self, line: &str) -> Read {
+    pub(super) fn send(&mut self, line: &str) -> Read {
         let mut batch = ReadBatch::new(0);
         batch.out = Output::new(false);
         let mut kept = Vec::new();
@@ -186,12 +186,12 @@ impl Session {
     }
 
     /// The webview wrote to the terminal itself, such as your echo.
-    fn local_write(&mut self) {
+    pub(super) fn local_write(&mut self) {
         self.p.prompt.stage.local_write();
     }
 
     /// The `[prompt]` table changed, so the open row repaints.
-    fn repaint(&mut self) -> Output {
+    pub(super) fn repaint(&mut self) -> Output {
         repaint_step(&mut self.p, false, Instant::now())
     }
 }
@@ -210,7 +210,7 @@ const FNV_START: u64 = 0xcbf2_9ce4_8422_2325;
 
 /// The JSON the webview gets for `out`, or nothing when the session
 /// would send nothing.
-fn payload(out: &Output) -> Option<String> {
+pub(super) fn payload(out: &Output) -> Option<String> {
     (!out.is_empty())
         .then(|| serde_json::to_string(&OutputPayload::from_output(out)).expect("it serializes"))
 }
@@ -467,7 +467,7 @@ fn in_the_text_every_payload_log_row_and_kept_line_stays_as_today() {
 }
 
 /// `p` with its prompt shown at `show`.
-fn showing(mut p: Profile, show: vosh_prompt::PromptShow) -> Profile {
+pub(super) fn showing(mut p: Profile, show: vosh_prompt::PromptShow) -> Profile {
     let mut config = p.prompt.config().clone();
     config.show = show;
     p.set_prompt_config(config);
@@ -752,7 +752,7 @@ fn grid_screen(reads: &[Read], columns: usize) -> (Vec<String>, (i32, usize)) {
 /// The streams the pinned screens are checked on: every wire fixture,
 /// and pulses the fake game writes back to back into one read, so two
 /// prompts pin in one read at many of the cuts.
-fn pinned_streams() -> Vec<(String, Vec<u8>, &'static str)> {
+pub(super) fn pinned_streams() -> Vec<(String, Vec<u8>, &'static str)> {
     use vosh_prompt::testkit::{Build, Mud, Options};
     let mut streams: Vec<(String, Vec<u8>, &'static str)> = vosh_prompt::testkit::wire::CASES
         .iter()
@@ -1001,7 +1001,7 @@ fn pinned_splits_path() -> std::path::PathBuf {
 }
 
 /// Standard base64 back to bytes, for the stored splits.
-fn base64_decode(text: &str) -> Vec<u8> {
+pub(super) fn base64_decode(text: &str) -> Vec<u8> {
     let value = |c: u8| -> u32 {
         match c {
             b'A'..=b'Z' => u32::from(c - b'A'),
@@ -1122,7 +1122,7 @@ fn lifted_prompts_stay_in_the_text_with_marks_that_take_no_room() {
 }
 
 /// The rows a grid shows, trimmed, up to the last row that shows anything.
-fn rows_of(grid: &crate::term_grid::TermGrid) -> Vec<String> {
+pub(super) fn rows_of(grid: &crate::term_grid::TermGrid) -> Vec<String> {
     let mut rows: Vec<String> = (0..grid.screen_lines())
         .map(|line| grid.row_string(line).trim_end().to_string())
         .collect();

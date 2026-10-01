@@ -1657,7 +1657,9 @@ fn prompt_block(
             before.extend_from_slice(echo.as_bytes());
             before.extend_from_slice(b"\r\n");
         }
-        let rendered = render_prompt(p, now);
+        // What the open card shows, a preview among them, with the live
+        // render behind it, which the region carries as its restore.
+        let view = prompt_view(p, now);
         // A line above the last one your design reads nothing on shows
         // as the game sent it (D7).
         let last_index = block.lines.len() - 1;
@@ -1670,12 +1672,12 @@ fn prompt_block(
         if pinned {
             p.prompt
                 .stage
-                .pin_drawn(&mut batch.out, block, painted, &before, &rendered.ansi);
+                .pin_view(&mut batch.out, block, painted, &before, view.stage());
         } else {
             p.prompt
                 .stage
-                .draw(&mut batch.out, block, painted, &before, &rendered.ansi);
-            p.prompt.stage.set_open_spans(rendered.spans);
+                .draw_view(&mut batch.out, block, painted, &before, view.stage());
+            p.prompt.stage.set_open_spans(view.spans());
         }
         for head in &heads_shown {
             keep_shown(batch, &mut scrollback, head, &head.raw, log_session_id);
@@ -2028,18 +2030,16 @@ fn window_size_step(p: &mut Profile, negotiator: &mut Negotiator, cols: u16, row
 
 /// Repaint the open row as the `[prompt]` table now says: your design
 /// while Vosh draws, else the lines the design replaced, as the game sent
-/// them, so turning drawing off shows the game's prompt at once. `other`
-/// says output from elsewhere landed since the session last wrote, which
-/// closed the row. Returns the repaint, empty when no row is open.
+/// them, so turning drawing off shows the game's prompt at once. A
+/// preview the open card shows draws in place of the live render, which
+/// the row carries as its restore. `other` says output from elsewhere
+/// landed since the session last wrote, which closed the row. Returns the
+/// repaint, empty when no row is open.
 fn repaint_step(p: &mut Profile, other: bool, now: Instant) -> Output {
     let mut out = Output::new(other);
-    let rendered = p.prompt.draws().then(|| render_prompt(p, now));
-    p.prompt
-        .stage
-        .repaint(&mut out, rendered.as_ref().map(|r| r.ansi.as_str()));
-    p.prompt
-        .stage
-        .set_open_spans(rendered.map(|r| r.spans).unwrap_or_default());
+    let view = prompt_view(p, now);
+    p.prompt.stage.repaint_view(&mut out, view.stage());
+    p.prompt.stage.set_open_spans(view.spans());
     out
 }
 
@@ -2084,6 +2084,78 @@ fn render_prompt(p: &Profile, now: Instant) -> vosh_prompt::Rendered {
         &p.prompt.vars.resolver(&vosh),
         vosh_prompt::RenderOptions::default(),
     )
+}
+
+/// What your prompt shows: the lines the game sent with drawing off, and
+/// with it on, your design as the open card shows it, with the live
+/// render behind it while that differs.
+struct PromptView {
+    /// What your prompt shows, or None for the lines the game sent.
+    shown: Option<vosh_prompt::Rendered>,
+    /// The live render while `shown` is a preview in its place.
+    live: Option<vosh_prompt::Rendered>,
+}
+
+impl PromptView {
+    /// The view the stage takes.
+    fn stage(&self) -> vosh_prompt::stage::View<'_> {
+        vosh_prompt::stage::View {
+            shown: self.shown.as_ref().map(|r| r.ansi.as_str()),
+            live: self.live.as_ref().map(|r| r.ansi.as_str()),
+        }
+    }
+
+    /// Where each piece of the design landed in what your prompt shows.
+    fn spans(self) -> Vec<vosh_prompt::Span> {
+        self.shown.map(|r| r.spans).unwrap_or_default()
+    }
+}
+
+/// What your prompt shows now (section 4, Live edits and previews). With
+/// drawing on and the open card showing a preview, the design draws with
+/// the preview's values, and with the labels of values that have nothing
+/// to show while the card asks for them, or the row shows the lines the
+/// game sent while the card reads your codes. The live render rides
+/// behind it. Overrides never reach `session://prompt-vars`, so the panes
+/// keep the live values.
+fn prompt_view(p: &Profile, now: Instant) -> PromptView {
+    if !p.prompt.draws() {
+        return PromptView {
+            shown: None,
+            live: None,
+        };
+    }
+    let live = render_prompt(p, now);
+    let Some(preview) = p.prompt.preview() else {
+        return PromptView {
+            shown: Some(live),
+            live: None,
+        };
+    };
+    if preview.raw {
+        return PromptView {
+            shown: None,
+            live: Some(live),
+        };
+    }
+    let vosh = prompt_supplies(p, now);
+    let resolver = p.prompt.vars.resolver(&vosh);
+    let overrides = preview.overrides(&resolver);
+    let shown = vosh_prompt::render_str(
+        &p.prompt.config().template,
+        &vosh_prompt::overrides::Overridden::new(
+            &resolver,
+            &overrides,
+            chrono::Local::now().naive_local(),
+        ),
+        vosh_prompt::RenderOptions {
+            placeholders: preview.placeholders,
+        },
+    );
+    PromptView {
+        shown: Some(shown),
+        live: Some(live),
+    }
 }
 
 /// Do what a line step left for after the profile lock: emit its routes,
@@ -5313,3 +5385,7 @@ mod tests {
 #[cfg(test)]
 #[path = "session_show_tests.rs"]
 mod show_tests;
+
+#[cfg(test)]
+#[path = "session_preview_tests.rs"]
+mod preview_tests;
