@@ -1055,8 +1055,9 @@
   color: var(--secondary);
 }
 
+/* 12 after Back as P6 draws it: Back's own 4 px margin and these 8. */
 .pc-title.is-picker {
-  margin-left: 12px;
+  margin-left: 8px;
 }
 
 /* Insert value… (P6, P6b): a list of 248 on the left, the highlighted
@@ -1134,10 +1135,6 @@
 .pc-picker-row:hover,
 .pc-picker-row.is-current {
   background: var(--ov-hl);
-}
-
-.pc-picker-row.is-dim .pc-picker-name {
-  color: var(--tertiary);
 }
 
 .pc-picker-name {
