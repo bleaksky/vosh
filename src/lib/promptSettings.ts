@@ -5,6 +5,7 @@
 // and choices. Pure, so the section stays about layout.
 
 import { clockTime, lastSeenLine } from './promptCard';
+import { parseSgrCells, type Cell } from './sgrCells';
 import type {
   PromptCapture,
   PromptCaptureCheck,
@@ -135,10 +136,13 @@ export function codesMeta(input: {
   const { block, game, seen, capture, check, report, promptsOff, now } = input;
   if (promptsOff) return { tone: 'warn', text: PROMPTS_OFF, fixes: [] };
   if (report?.error) return { tone: 'warn', text: report.error.message, fixes: [] };
-  const together = report?.warnings.find((w) => w.kind === 'run_together');
+  const reads = capture.kind !== 'none';
+  // Codes that run together need fixing once Vosh reads them (P0's
+  // Healer after P3b). Before that the block says only where they came
+  // from (P13).
+  const together = reads ? report?.warnings.find((w) => w.kind === 'run_together') : undefined;
   if (together) return { tone: 'warn', text: together.message, fixes: report?.fixes ?? [] };
 
-  const reads = capture.kind !== 'none';
   let source: string | null = null;
   if (block === 'codes' && game) {
     source = game.atLogin
@@ -167,18 +171,17 @@ export function lastReadLine(lastMatchAt: string | null): string | null {
 }
 
 /** The sentence under Draw your own prompt: what it waits on without a
- *  capture (P13), what turning it off keeps, or what it replaces. */
+ *  capture (P13), or what it replaces, on or off, as P0 draws the row off
+ *  for Healer once it has a capture. */
 export function drawDescription(input: {
   capture: boolean;
-  draw: boolean;
   gameSent: boolean;
   world: string | null;
 }): string {
-  const { capture, draw, gameSent, world } = input;
+  const { capture, gameSent, world } = input;
   if (!capture) {
     return gameSent ? 'Customize your prompt first.' : "Tell Vosh your game's prompt first.";
   }
-  if (!draw) return "The game's prompt shows as it arrives. Your design stays saved.";
   return `It takes the place of the prompt ${world ?? 'the game'} sends.`;
 }
 
@@ -206,4 +209,13 @@ export function previewMeta(connected: boolean): string {
   return connected
     ? 'Right click your prompt in the terminal to change it there.'
     : 'Sample values until you connect.';
+}
+
+/** A drawn design as rows of cells for the preview, its trailing empty
+ *  row left out. */
+export function previewRows(ansi: string | null): Cell[][] {
+  if (!ansi) return [[]];
+  const rows = parseSgrCells(ansi);
+  while (rows.length > 1 && rows[rows.length - 1].length === 0) rows.pop();
+  return rows;
 }

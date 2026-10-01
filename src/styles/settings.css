@@ -1941,30 +1941,6 @@
   color: var(--accent);
 }
 
-/* The prompt template, 12 under its label line, and the preview 8
-   under it: the template drawn on the terminal ground in the terminal
-   font with a hairline ring. */
-.st-prompt-template {
-  margin-top: 12px;
-}
-
-.st-prompt-preview {
-  display: flex;
-  align-items: center;
-  height: 28px;
-  margin-top: 8px;
-  padding: 0 10px;
-  overflow: hidden;
-  border-radius: var(--r-row);
-  background: var(--bg);
-  box-shadow: inset 0 0 0 1px var(--sep);
-  font-family: var(--font-mud);
-  font-size: 13px;
-  line-height: 17.5px;
-  font-variant-numeric: normal;
-  white-space: pre;
-}
-
 /* ── Interim blocks ────────────────────────────────────────────────── */
 
 /* General, Layout, and Input have no approved board yet, and the

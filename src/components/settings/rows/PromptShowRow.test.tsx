@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { normalizePromptShowState, type PromptShowState } from '../../../lib/promptShow';
 import type { PromptShow } from '../../../lib/session';
 import { SETTINGS_ROWS } from '../../../lib/settingsSearch';
-import { PromptBlock } from '../groups/InputGroup';
 import { PromptShowField } from './PromptShowRow';
 
 // The Input page's stores reach the Tauri bridge. The rows under test
@@ -13,9 +12,6 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
-// The preview reads the live vitals, which a static render cannot
-// subscribe to. None have come, as before you log in.
-vi.mock('../../../lib/stores/vitalsStore', () => ({ useVitals: () => null }));
 
 const reads: PromptShowState = {
   show: 'text',
@@ -77,89 +73,6 @@ describe('PromptShowField', () => {
     const html = draw('pinned', null);
     expect(disabled(html)).toBe(3);
     expect(html).not.toContain('is-disabled');
-  });
-});
-
-describe('PromptBlock', () => {
-  it('puts Where your prompt shows right after Draw your own prompt', () => {
-    const html = renderToStaticMarkup(
-      <PromptBlock
-        enabled
-        template="%hp"
-        show="lifted"
-        showState={reads}
-        textColor="#fff"
-        onEnabled={() => undefined}
-        onTemplate={() => undefined}
-        onShow={() => undefined}
-      />,
-    );
-    expect(labels(html)).toEqual(['Draw your own prompt', 'Where your prompt shows']);
-    expect(html).toContain('data-interim=""');
-  });
-
-  it('opens the prompt card from Customize… beside the switch', () => {
-    const html = renderToStaticMarkup(
-      <PromptBlock
-        enabled
-        template="%hp"
-        show="text"
-        showState={reads}
-        textColor="#fff"
-        onEnabled={() => undefined}
-        onTemplate={() => undefined}
-        onShow={() => undefined}
-      />,
-    );
-    const row = /<div class="st-row st-draw-row[^"]*"[\s\S]*?<\/div><\/div>/.exec(html)?.[0] ?? '';
-    expect(row).toContain('>Customize…</button>');
-    expect(row).not.toContain('is-waiting');
-    expect(row).not.toMatch(/<input(?=[^>]*role="switch")(?=[^>]*disabled="")[^>]*>/);
-  });
-
-  it('waits on a capture with Customize… still open to you (P13)', () => {
-    const draw = (gameSent: boolean) =>
-      renderToStaticMarkup(
-        <PromptBlock
-          enabled={false}
-          template="%hp"
-          show="text"
-          showState={{ ...reads, capture: false, gameSent }}
-          textColor="#fff"
-          onEnabled={() => undefined}
-          onTemplate={() => undefined}
-          onShow={() => undefined}
-        />,
-      );
-    const sent = draw(true);
-    expect(sent).toContain('st-row st-draw-row is-waiting');
-    expect(sent).toContain('Customize your prompt first.');
-    expect(sent).toMatch(/<button[^>]*>Customize…<\/button>/);
-    expect(sent).not.toMatch(/<button[^>]*disabled[^>]*>Customize…/);
-    expect(sent).toMatch(/<input(?=[^>]*role="switch")(?=[^>]*disabled="")[^>]*>/);
-    expect(draw(false)).toContain('Tell Vosh your game&#x27;s prompt first.');
-  });
-
-  it('leaves the preview empty for a design only the terminal draws', () => {
-    const block = (template: string) =>
-      renderToStaticMarkup(
-        <PromptBlock
-          enabled={false}
-          template={template}
-          show="text"
-          showState={reads}
-          textColor="#fff"
-          onEnabled={() => undefined}
-          onTemplate={() => undefined}
-          onShow={() => undefined}
-        />,
-      );
-    const preview = (html: string) => /<output[^>]*>(.*?)<\/output>/.exec(html)?.[1];
-    // A fresh profile holds the default design with drawing off.
-    expect(
-      preview(block('%{if:fight}%tank: %{tank_hp:bar:10}%nl%{end}%c_hp%hp%{c:245}/%{maxhp}hp ')),
-    ).toBe('');
-    expect(preview(block('%hp'))).toContain('1020');
   });
 });
 

@@ -351,10 +351,10 @@ function LegendRow({ row, tag }: { row: PromptLegendRow; tag: string | null }) {
 }
 
 /** The setting that fixes codes that run together, with Copy. Vosh never
- *  sends it. */
-function CommandBox({ command }: { command: string }) {
+ *  sends it. Settings draws it 600 wide under its block. */
+export function CommandBox({ command, className }: { command: string; className?: string }) {
   return (
-    <div className="pc-command">
+    <div className={className ? `pc-command ${className}` : 'pc-command'}>
       <span className="pc-command-text" aria-label="Command to type in the game">
         {command}
       </span>
