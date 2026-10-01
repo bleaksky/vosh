@@ -13,7 +13,8 @@ import { RegionWriter } from './terminalRegion';
 // replayed through the same decode, word wrap and writer Terminal.tsx
 // uses, into a real xterm, and then your echo lands. The preview the open
 // row showed has to give way to the live render first, so every screen is
-// the one the native grid shows for the live session after the echo.
+// the one the native grid shows for the live session with the card open
+// after the echo.
 
 interface Stream {
   name: string;
@@ -70,8 +71,10 @@ describe('a preview on your prompt, replayed into xterm at every split', () => {
     const term = new Terminal({ cols: 40, rows: 60, scrollback: 100, allowProposedApi: true });
     const before = await replay(term, quiet.splits[0], '');
     expect(before[before.length - 1]).toBe('<180>');
+    // The card lends the row Lifted's band in the text, with the space
+    // after it, so your echo lands a cell after the prompt.
     const after = await replay(term, quiet.splits[0], 'look\r\n');
-    expect(after[after.length - 1]).toBe('<1020>look');
+    expect(after[after.length - 1]).toBe('<1020> look');
     expect(after).toEqual(quiet.screens['40']);
     term.dispose();
   });
