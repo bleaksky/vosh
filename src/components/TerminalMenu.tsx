@@ -16,6 +16,8 @@ interface Props {
   termRef: RefObject<TerminalHandle | null>;
   inputRef: RefObject<InputHandle | null>;
   onOpenFind: () => void;
+  /** Open the prompt card over your prompt. */
+  onCustomizePrompt: () => void;
   onClose: () => void;
 }
 
@@ -34,12 +36,22 @@ const EDGE_MARGIN = 8;
 // Right-click menu for the terminal (SPEC 7 menus, Menus board): a
 // 232 wide floating surface with 6 of inner padding, 30 tall rows,
 // shortcut hints on the right in the platform's glyphs, and hairline
-// separators. Clear scrollback is the one destructive item and comes
+// separators. Customize prompt… comes first on every row, since Vosh
+// may not know yet which row is your prompt, and opens the prompt card
+// over it (P1). Clear scrollback is the one destructive item and comes
 // last. Every action routes through the same path the keyboard uses
 // (the native copy command, the input row's insert, the find bar), so
 // the menu never grows a second implementation. It takes focus while
 // open so the arrow keys and Enter drive it, then hands focus back.
-export function TerminalMenu({ x, y, termRef, inputRef, onOpenFind, onClose }: Props) {
+export function TerminalMenu({
+  x,
+  y,
+  termRef,
+  inputRef,
+  onOpenFind,
+  onCustomizePrompt,
+  onClose,
+}: Props) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState({ x, y });
   const [active, setActive] = useState(-1);
@@ -122,6 +134,7 @@ export function TerminalMenu({ x, y, termRef, inputRef, onOpenFind, onClose }: P
   // The native grid has no clear command, so the item hides where it
   // would visibly do nothing.
   const groups: Item[][] = [
+    [{ id: 'customize-prompt', label: 'Customize prompt…', run: onCustomizePrompt }],
     [
       { id: 'copy', label: 'Copy', keys: APP_SHORTCUTS.copy, run: runCopy },
       { id: 'paste', label: 'Paste', keys: 'Mod+V', run: runPaste },
