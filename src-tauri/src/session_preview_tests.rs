@@ -267,3 +267,99 @@ fn a_repaint_in_a_payload_carries_the_restore_to_the_webview() {
     let bytes = super::show_tests::base64_decode(restore);
     assert!(String::from_utf8_lossy(&bytes).ends_with("<1020>\x1b[0m"));
 }
+
+/// The payloads of every stream in [`pinned_streams`] with Low health on
+/// from the start, in the text and lifted, as one read and as two cut at
+/// every place [`cuts`] names, with the screen the native grid shows for
+/// the live session after your echo, 40 and 12 wide. The webview test
+/// replays them into xterm, then your echo, and holds each screen to the
+/// grid's.
+fn preview_splits() -> serde_json::Value {
+    let mut streams = Vec::new();
+    for (name, bytes, prompt) in pinned_streams() {
+        for show in [PromptShow::Text, PromptShow::Lifted] {
+            let mut live = Session::new(showing(profile(prompt, HP, true), show));
+            let mut previewing = Session::new(showing(profile(prompt, HP, true), show));
+            let mut splits = vec![Vec::new()];
+            splits.extend(cuts(&bytes).into_iter().map(|at| vec![at]));
+            let payloads: Vec<Vec<serde_json::Value>> = splits
+                .iter()
+                .map(|at| {
+                    replay_with(&mut previewing, &bytes, at, Some(&low_health()))
+                        .iter()
+                        .filter(|read| !read.out.is_empty())
+                        .map(|read| {
+                            serde_json::to_value(OutputPayload::from_output(&read.out))
+                                .expect("it serializes")
+                        })
+                        .collect()
+                })
+                .collect();
+            let whole = replay_with(&mut live, &bytes, &[], None);
+            let screens: serde_json::Map<String, serde_json::Value> = [40, 12]
+                .into_iter()
+                .map(|columns| {
+                    (
+                        columns.to_string(),
+                        serde_json::json!(screen_after_echo(outs(&whole), columns)),
+                    )
+                })
+                .collect();
+            streams.push(serde_json::json!({
+                "name": name,
+                "show": show,
+                "screens": screens,
+                "splits": payloads,
+            }));
+        }
+    }
+    serde_json::json!({ "streams": streams })
+}
+
+/// The file the webview test reads: the JSON of [`preview_splits`],
+/// gzipped, as base64 text.
+fn preview_splits_path() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../fixtures/prompt/aabahran/preview/splits.b64")
+}
+
+/// Write [`preview_splits`] for the webview test when
+/// `VOSH_WRITE_PREVIEW_SPLITS` is set. Nothing otherwise.
+#[test]
+fn write_the_preview_splits_for_the_webview() {
+    use std::io::Write as _;
+    if std::env::var("VOSH_WRITE_PREVIEW_SPLITS").is_err() {
+        return;
+    }
+    let text = serde_json::to_string(&preview_splits()).expect("json");
+    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::best());
+    gz.write_all(text.as_bytes()).expect("gzip");
+    let encoded = base64_encode(&gz.finish().expect("gzip"));
+    let mut lines: Vec<&str> = encoded
+        .as_bytes()
+        .chunks(100)
+        .map(|c| std::str::from_utf8(c).expect("ascii"))
+        .collect();
+    lines.push("");
+    let path = preview_splits_path();
+    std::fs::create_dir_all(path.parent().expect("a folder")).expect("the folder");
+    std::fs::write(&path, lines.join("\n")).expect("the file");
+}
+
+#[test]
+fn the_preview_splits_the_webview_replays_are_what_the_session_sends() {
+    use std::io::Read as _;
+    let stored = std::fs::read_to_string(preview_splits_path()).expect(
+        "fixtures/prompt/aabahran/preview/splits.b64, written with VOSH_WRITE_PREVIEW_SPLITS=1",
+    );
+    let bytes = super::show_tests::base64_decode(&stored);
+    let mut text = String::new();
+    flate2::read::GzDecoder::new(&bytes[..])
+        .read_to_string(&mut text)
+        .expect("gzip");
+    let stored: serde_json::Value = serde_json::from_str(&text).expect("json");
+    assert!(
+        stored == preview_splits(),
+        "the session changed, so write the file again with VOSH_WRITE_PREVIEW_SPLITS=1"
+    );
+}

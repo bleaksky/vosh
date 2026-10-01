@@ -27,6 +27,13 @@ fixtures/
                of a gzip so the webview test can import it as text. The
                session test holds it to what the session sends, and
                VOSH_WRITE_PINNED_SPLITS=1 writes it again.
+      preview/ splits.b64, the session's payloads with the prompt card's
+               Low health preview on, in the text and lifted, for the same
+               streams, as one read and as two cut at every place, with
+               the native grid's screen of the live session after your
+               echo. Generated and stored the way pinned/ is, held to the
+               session by its test, and written again with
+               VOSH_WRITE_PREVIEW_SPLITS=1.
   themes/    One theme file per format the Appearance import reads (Ghostty,
              iTerm2, Kitty, Alacritty TOML, legacy Alacritty YAML).
   wrap/      Word wrap cases shared by the Rust wrap in crates/prompt and the
