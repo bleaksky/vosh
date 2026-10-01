@@ -256,3 +256,51 @@ fn tokens_name_their_piece_in_utf16_units_and_mark_unknown_names() {
     );
     assert_eq!(described.tokens[3].name.as_deref(), Some("nope"));
 }
+
+const COLORED: &str = "[%c_hp%hp%c_default/%{maxhp}hp %c_mana%mana%c_default/%{maxmana}mn %c_move%move%c_default/%{maxmove}mv]";
+
+/// The design after Show as sets `format` on the piece whose text is
+/// `text`, as the card writes it.
+fn show_as(template: &str, text: &str, format: FormatName) -> String {
+    let described = describe(&Template::parse(template), &Sampled { fight: false }, false);
+    let at = piece(&described.pieces, text).piece;
+    vosh_prompt::edit::apply(
+        template,
+        &vosh_prompt::edit::EditOp::SetFormat {
+            piece: at,
+            format: vosh_prompt::edit::FormatChoice::of(format),
+        },
+        &|_: &FieldRef| true,
+    )
+    .expect("the edit")
+}
+
+/// The piece that shows `field` as `kind` in `template`.
+fn shown(template: &str, field: &str, kind: PieceKindName) -> PieceView {
+    describe(&Template::parse(template), &Sampled { fight: false }, false)
+        .pieces
+        .into_iter()
+        .find(|p| p.field.as_deref() == Some(field) && p.kind == kind)
+        .unwrap_or_else(|| panic!("no {kind:?} {field} in {template:?}"))
+}
+
+#[test]
+fn show_as_marks_current_and_max_and_percent_once_you_choose_them() {
+    // Colored by how full, the mana part shown as Current and max.
+    let cur_max = show_as(COLORED, "%c_mana%mana", FormatName::CurMax);
+    let mana = shown(&cur_max, "mana", PieceKindName::CurMax);
+    assert_eq!(mana.format, Some(FormatName::CurMax));
+    assert_eq!(segments(&mana), ["800", "800/800", "100%", "Bar"]);
+
+    // Then as Percent, with no fifth segment for a percent with no sign.
+    let percent = show_as(&cur_max, &mana.text, FormatName::Percent);
+    let mana = shown(&percent, "mana", PieceKindName::Percent);
+    assert_eq!(mana.format, Some(FormatName::Percent));
+    assert_eq!(segments(&mana), ["800", "800/800", "100%", "Bar"]);
+
+    // Health as Percent, with the label text hp right after its sign.
+    let hp = show_as(COLORED, "%c_hp%hp", FormatName::Percent);
+    let health = shown(&hp, "hp", PieceKindName::Percent);
+    assert_eq!(health.format, Some(FormatName::Percent));
+    assert_eq!(segments(&health), ["1020", "1020/1020", "100%", "Bar"]);
+}
