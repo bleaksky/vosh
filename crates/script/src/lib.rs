@@ -164,7 +164,7 @@ impl ScriptEngine {
     /// The captures reach Lua as a value, never as source text, so any
     /// bytes survive. The local sits on the body's first line, so an
     /// error names the line the body has it on. A `return` ends the body
-    /// early wherever Lua allows one, and whatever it returns is dropped.
+    /// as it ends any Lua chunk, and whatever it returns is dropped.
     pub fn run_body(
         &mut self,
         body: &str,
