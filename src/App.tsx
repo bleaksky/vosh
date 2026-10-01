@@ -45,6 +45,7 @@ import {
   subscribeTerminalLineHeightChanged,
   normalizeTerminalLineHeight,
   terminalLocalWrite,
+  promptPreviewSet,
   TERMINAL_LINE_HEIGHTS,
   type StatePayload,
   type TerminalLineHeight,
@@ -365,6 +366,15 @@ function App() {
     back: number;
     max: number;
   } | null>(null);
+
+  // A preview the prompt card left on before this window loaded again
+  // would go on drawing on your prompt, so the window clears it as it
+  // mounts.
+  useEffect(() => {
+    promptPreviewSet(null).catch((e: unknown) =>
+      console.error('[main] clearing the prompt preview failed', e),
+    );
+  }, []);
 
   // On quit the backend asks each window for the writes it holds back,
   // like a pane layout waiting out a splitter drag, before it writes

@@ -13,6 +13,7 @@ import {
   promptConfigSet,
   promptDesignsList,
   promptEdit,
+  promptPreviewSet,
   promptRender,
   promptRenderMany,
   promptStateGet,
@@ -110,21 +111,30 @@ describe('the prompt editor commands', () => {
     expect(sent).toHaveBeenLastCalledWith('prompt_render', {
       template: '%hp',
       values: 'live',
+      preview: null,
       overrides: null,
       placeholders: false,
     });
     await promptRender({
       template: '%hp',
       values: 'sample',
+      preview: 'fight',
       overrides: { values: { hp: 180 }, lament: false },
       placeholders: true,
     });
     expect(sent).toHaveBeenLastCalledWith('prompt_render', {
       template: '%hp',
       values: 'sample',
+      preview: 'fight',
       overrides: { values: { hp: 180 }, lament: false },
       placeholders: true,
     });
+    await promptPreviewSet({ preview: 'low_health', placeholders: true });
+    expect(sent).toHaveBeenLastCalledWith('prompt_preview_set', {
+      preview: { preview: 'low_health', placeholders: true },
+    });
+    await promptPreviewSet(null);
+    expect(sent).toHaveBeenLastCalledWith('prompt_preview_set', { preview: null });
     const requests = [{ template: '%hp' }, { template: '%mana', values: 'sample' as const }];
     await promptRenderMany(requests);
     expect(sent).toHaveBeenLastCalledWith('prompt_render_many', { requests });

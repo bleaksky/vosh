@@ -773,10 +773,15 @@ export interface PromptOverrides {
   lament?: boolean;
 }
 
-/** One design to draw, with live or sample values. */
+/** The previews the card's footer offers. */
+export type PromptPreviewName = 'now' | 'low_health' | 'fight' | 'lament';
+
+/** One design to draw, with live or sample values. `preview` draws one
+ *  of the card's previews, and `overrides` go on top of it. */
 export interface PromptRenderRequest {
   template: string;
   values?: 'live' | 'sample';
+  preview?: PromptPreviewName | null;
   overrides?: PromptOverrides | null;
   /** Draw each value with nothing to show as its label, as the open
    *  card does. */
@@ -788,6 +793,7 @@ export async function promptRender(request: PromptRenderRequest): Promise<Prompt
   return invoke('prompt_render', {
     template: request.template,
     values: request.values ?? 'live',
+    preview: request.preview ?? null,
     overrides: request.overrides ?? null,
     placeholders: request.placeholders ?? false,
   });
@@ -796,6 +802,24 @@ export async function promptRender(request: PromptRenderRequest): Promise<Prompt
 /** Draw several designs at once, such as the start list. */
 export async function promptRenderMany(requests: PromptRenderRequest[]): Promise<PromptRendered[]> {
   return invoke('prompt_render_many', { requests });
+}
+
+/** What the open card shows on your prompt in place of the live render:
+ *  one of its previews with values on top, the labels of values with
+ *  nothing to show (`placeholders`), or the line the game sent while it
+ *  reads your codes (`raw`). */
+export interface PromptPreview {
+  preview?: PromptPreviewName | null;
+  overrides?: PromptOverrides | null;
+  placeholders?: boolean;
+  raw?: boolean;
+}
+
+/** Show a preview on your prompt, or the live render again with null.
+ *  The open row carries the live render as its restore, so only live
+ *  renders reach history. Nothing saves or goes to the game. */
+export async function promptPreviewSet(preview: PromptPreview | null): Promise<void> {
+  await invoke('prompt_preview_set', { preview });
 }
 
 export type PromptFormatName =
