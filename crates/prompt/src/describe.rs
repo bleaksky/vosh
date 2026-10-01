@@ -20,7 +20,7 @@ use crate::edit::{self, ColorChoice, Doc, EditOp, FormatChoice, FormatName, When
 use crate::format::{Resolved, Value};
 use crate::render::{render, RenderOptions, Rendered, Values};
 use crate::template::{BarColor, ColorSpec, FieldRef, Format, PieceKind, Template, TokenKind};
-use crate::vars::{self, Group, Kind, Pair};
+use crate::vars::{self, Group, Kind};
 
 /// What a piece holds, as the card names it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -377,14 +377,11 @@ fn format_label(format: FormatName) -> &'static str {
 /// The field a value piece shows, how and how wide. `%{maxhp}` alone is
 /// Health in the form Max.
 fn shown_as(value: &crate::template::ValueRef) -> (FieldRef, FormatName, Option<u8>) {
-    let field = &value.field;
-    if value.format == Format::Value && field.param.is_none() {
-        if let Some(pair) = Pair::of(&field.name) {
-            if field.name != pair.cur() && field.name != pair.pct() {
-                return (FieldRef::new(pair.cur()), FormatName::Max, None);
-            }
-        }
+    let (gauge, max) = edit::gauge_of(value);
+    if max {
+        return (gauge, FormatName::Max, None);
     }
+    let field = &value.field;
     let (format, width) = match &value.format {
         Format::Value => (FormatName::Value, None),
         Format::Max => (FormatName::Max, None),
