@@ -660,6 +660,66 @@ fn a_pinned_band_shows_the_design_or_the_game_prompt_with_its_tank_line() {
     assert!(sent.get("pin_spans").is_none());
 }
 
+/// A design that draws the tank line itself, as Same as the game does.
+const TANK_DESIGN: &str = "%{if:tank}%tank: %{tank_hp:game}%nl%{end}<%hp>";
+
+/// Rows that show the tank line, drawn or as sent.
+fn tank_rows(rows: &[String]) -> usize {
+    rows.iter().filter(|r| r.starts_with("Tester:")).count()
+}
+
+/// Take `template` as the design, as the card saves an edit, and repaint.
+fn edit_design(session: &mut Session, template: &str) -> Output {
+    let mut config = session.p.prompt.config().clone();
+    config.template = template.to_string();
+    session.p.set_prompt_config(config);
+    session.repaint()
+}
+
+#[test]
+fn an_edit_that_starts_or_stops_reading_the_tank_line_shows_it_once() {
+    use vosh_prompt::PromptShow;
+    let fight = wire_fixture("fight-tank");
+    for show in [PromptShow::Text, PromptShow::Lifted] {
+        for (from, to) in [(HP, TANK_DESIGN), (TANK_DESIGN, HP)] {
+            let label = format!("{show:?} from {from:?} to {to:?}");
+            let mut session = Session::new(showing(profile(CODES, from, true), show));
+            let mut grid = crate::term_grid::TermGrid::new(80, 40);
+            grid.session_output(&session.read(&fight).out);
+            assert_eq!(tank_rows(&rows_of(&grid)), 1, "{label}");
+            let out = edit_design(&mut session, to);
+            grid.session_output(&out);
+            let rows = rows_of(&grid);
+            assert_eq!(tank_rows(&rows), 1, "{label}: {rows:?}");
+            assert_eq!(rows.last().map(String::as_str), Some("<765>"), "{label}");
+            // Your echo lands after it, and history keeps it once.
+            session.local_write();
+            grid.local_write(b"look\r\n");
+            assert_eq!(tank_rows(&rows_of(&grid)), 1, "{label}");
+            // The design the edit made reads the fight as a fresh read of
+            // the same prompt would.
+            let mut fresh = Session::new(showing(profile(CODES, to, true), show));
+            let mut want = crate::term_grid::TermGrid::new(80, 40);
+            want.session_output(&fresh.read(&fight).out);
+            assert_eq!(rows, rows_of(&want), "{label}");
+        }
+    }
+    // Pinned, the band shows it once.
+    for (from, to) in [(HP, TANK_DESIGN), (TANK_DESIGN, HP)] {
+        let label = format!("pinned from {from:?} to {to:?}");
+        let mut session = Session::new(showing(profile(CODES, from, true), PromptShow::Pinned));
+        let _ = session.read(&fight);
+        let out = edit_design(&mut session, to);
+        let band = vosh_ansi::plain_text(out.pin.as_deref().expect("the band"));
+        let rows: Vec<String> = band.split("\r\n").map(str::to_string).collect();
+        assert_eq!(tank_rows(&rows), 1, "{label}: {rows:?}");
+        let mut fresh = Session::new(showing(profile(CODES, to, true), PromptShow::Pinned));
+        let want = fresh.read(&fight).out;
+        assert_eq!(out.pin, want.pin, "{label}");
+        assert_eq!(out.pin_spans, want.pin_spans, "{label}");
+    }
+}
+
 /// The pieces on the band `out` shows: piece, row, column and width.
 fn band_pieces(out: &Output) -> Option<Vec<(usize, usize, usize, usize)>> {
     out.pin_spans.as_ref().map(|spans| {

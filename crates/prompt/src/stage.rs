@@ -610,6 +610,10 @@ pub struct Block {
     pub values: BTreeMap<String, String>,
     /// The game's away prompt. It shows as sent, even while Vosh draws.
     pub afk: bool,
+    /// The groups each line reads, top line first, so the lines the drawn
+    /// prompt replaces follow an edit that changes what your design
+    /// reads. Empty when not known, and then `replaced` stays as it is.
+    pub groups: Vec<Vec<String>>,
 }
 
 impl Block {
@@ -862,6 +866,15 @@ impl Hides {
                 .iter()
                 .any(|group| fields_of(group).iter().any(|f| self.fields.contains(*f)))
     }
+
+    /// The lines of a prompt of `count` lines that the drawn prompt
+    /// replaces, `groups` holding what each line reads: the last line,
+    /// and each line above it that carries a value your design reads.
+    fn replaced(&self, count: usize, groups: &[Vec<String>]) -> Vec<usize> {
+        (0..count)
+            .filter(|&i| i + 1 == count || self.line(groups.get(i).map_or(&[][..], |g| &g[..])))
+            .collect()
+    }
 }
 
 /// The fields a capture group feeds, so a line that reads the tank's
@@ -1002,9 +1015,16 @@ impl Stage {
     }
 
     /// Take the fields your design reads, which decide the lines above
-    /// the last one it hides (D7).
+    /// the last one it hides (D7). The last prompt read follows at once,
+    /// so a repaint after an edit shows a line above the last one as sent
+    /// exactly when the new design leaves it alone.
     pub fn set_reads(&mut self, reads: &BTreeSet<FieldRef>) {
         self.hides = Hides::of(reads);
+        if let Some(block) = self.last_raw.as_mut() {
+            if block.groups.len() == block.lines.len() {
+                block.replaced = self.hides.replaced(block.lines.len(), &block.groups);
+            }
+        }
     }
 
     /// Something reads your prompt. Without it Vosh recognizes nothing,
@@ -1361,20 +1381,12 @@ impl Stage {
                 end => end,
             };
         }
-        let count = lines.len();
-        let replaced = (0..count)
-            .filter(|&i| {
-                i + 1 == count
-                    || self
-                        .hides
-                        .line(read.lines.get(i).map_or(&[][..], |g| &g[..]))
-            })
-            .collect();
         Block {
+            replaced: self.hides.replaced(lines.len(), &read.lines),
             lines,
-            replaced,
             values: read.values,
             afk: read.afk,
+            groups: read.lines,
         }
     }
 
@@ -1732,7 +1744,9 @@ impl Stage {
                     return false;
                 }
                 let (body, live) = row_bodies(block, view);
-                body != open.body || live != open.live
+                body != open.body
+                    || live != open.live
+                    || block.heads_shown_with_text() != self.open_heads
             }
         }
     }
@@ -1755,8 +1769,12 @@ impl Stage {
         let Some(block) = &self.last_raw else {
             return;
         };
+        // An edit can change which lines above the last one your design
+        // reads, and so which of them show as sent (D7).
+        let heads = block.heads_shown_with_text();
+        let heads_moved = heads != self.open_heads;
         let (body, live) = row_bodies(block, view);
-        if body == open.body && live == open.live && !lifting {
+        if body == open.body && live == open.live && !lifting && !heads_moved {
             // The same bytes can come from pieces numbered anew, such as
             // after an edit, so the row keeps the latest render's.
             let same = view.open_row(open.gen, Vec::new(), None);
@@ -1766,6 +1784,12 @@ impl Stage {
         }
         let old = open.gen;
         let lift = match self.open_lift {
+            // The lift starts again from the lines that show above the
+            // region now, or from the region, so both renderers band them.
+            Some(lift) if heads_moved => Some(OpenLift {
+                start_inside: true,
+                ..lift
+            }),
             Some(lift) => Some(lift),
             None if lifting => Some(OpenLift {
                 id: self.next_gen(),
@@ -1774,27 +1798,47 @@ impl Stage {
             None => None,
         };
         let gen = self.next_gen();
-        let bytes = region_bytes(gen, lift, &body);
-        // Choosing Lifted lifts the lines above the region with it, from
-        // the first of them, where a renderer finds them.
-        let above = match (lifting, lift, &self.open_heads) {
-            (true, Some(lift), Some((heads, plain))) => {
-                let mut whole = lift_start(lift.id);
-                whole.extend_from_slice(heads);
-                whole.extend(mark(gen));
-                whole.extend(with_lift_end(&body, lift.id));
+        let region = region_bytes(gen, lift, &body);
+        // The lines above the region as they show now, from the first of
+        // them: the lift's start, the lines, then the region.
+        let whole = {
+            let mut whole = Vec::new();
+            if let Some(lift) = lift {
+                whole.extend(lift_start(lift.id));
+            }
+            if let Some((bytes, _)) = &heads {
+                whole.extend_from_slice(bytes);
+            }
+            whole.extend(mark(gen));
+            match lift {
+                Some(lift) => whole.extend(with_lift_end(&body, lift.id)),
+                None => whole.extend_from_slice(&body),
+            }
+            whole
+        };
+        let (bytes, above) = match &self.open_heads {
+            // Choosing Lifted lifts the lines above the region with it,
+            // and an edit that reads other lines rewrites them. A renderer
+            // finds the lines that showed by their text, erases them with
+            // the region and writes them as they show now.
+            Some((_, plain)) if lifting || heads_moved => (
+                region,
                 Some(Above {
                     plain: plain.clone(),
                     bytes: whole,
-                })
-            }
-            _ => None,
+                }),
+            ),
+            // No line showed above the region, so the lines that show now
+            // go at its start.
+            None if heads_moved => (whole, None),
+            _ => (region, None),
         };
         out.replace_above(old, bytes, above);
         out.restore = live.as_ref().map(|live| region_bytes(gen, lift, live));
         out.closed = false;
         self.open = Some(view.open_row(gen, body, live));
         self.open_lift = lift;
+        self.open_heads = heads;
     }
 
     /// What the band shows for `block` with `shown`: drawing off, what
@@ -3124,6 +3168,7 @@ mod tests {
             replaced: vec![1],
             values: BTreeMap::new(),
             afk: false,
+            groups: Vec::new(),
         };
         let mut stage = stage;
         let mut out = Output::new(false);
@@ -3441,6 +3486,7 @@ mod tests {
             replaced: vec![1],
             values: BTreeMap::new(),
             afk: false,
+            groups: Vec::new(),
         };
         stage.draw(&mut out, block.clone(), None, b"echo\r\n", "DRAWN");
         // Echoes stay outside, the tank line shown as sent inside.
@@ -3545,6 +3591,73 @@ mod tests {
         assert!(same.is_empty());
     }
 
+    #[test]
+    fn an_edit_that_reads_a_line_above_the_last_takes_it_over_or_gives_it_back() {
+        let hp: BTreeSet<FieldRef> = [FieldRef::new("hp")].into();
+        let tank: BTreeSet<FieldRef> = [FieldRef::new("tank"), FieldRef::new("hp")].into();
+        let mut stage = self::stage(JAMES, false);
+        stage.set_reads(&hp);
+        let mut out = Output::new(false);
+        stage.draw(&mut out, tank_block(), None, b"", "DRAWN");
+        stage.finish(&mut out);
+        assert!(!stage.stale(View::live(Some("DRAWN"))));
+        // The design starts reading the tank, so it draws the tank line
+        // itself, and the one the game sent goes with the region where a
+        // renderer finds it.
+        stage.set_reads(&tank);
+        assert!(stage.stale(View::live(Some("DRAWN"))));
+        let mut over = Output::new(false);
+        stage.repaint(&mut over, Some("TANK\r\nDRAWN"));
+        let replace = over.replace.expect("the repaint");
+        assert_eq!(replace.gen, 1);
+        assert_eq!(replace.bytes, with(&[&mark(2), b"TANK\r\nDRAWN"]));
+        assert_eq!(
+            replace.above,
+            Some(Above {
+                plain: "Tester: [===|---]".into(),
+                bytes: with(&[&mark(2), b"TANK\r\nDRAWN"]),
+            })
+        );
+        // It stops reading it, so the line shows as sent again, at the
+        // region's start, since nothing showed above the region.
+        stage.set_reads(&hp);
+        let mut back = Output::new(false);
+        stage.repaint(&mut back, Some("DRAWN"));
+        let replace = back.replace.expect("the repaint");
+        assert_eq!(
+            replace.bytes,
+            with(&[b"Tester: [===|---]\r\n", &mark(3), b"DRAWN"])
+        );
+        assert_eq!(replace.above, None);
+        // A later repaint rewrites only the region.
+        let mut again = Output::new(false);
+        stage.repaint(&mut again, Some("NEW"));
+        let replace = again.replace.expect("the repaint");
+        assert_eq!(replace.bytes, with(&[&mark(4), b"NEW"]));
+        assert_eq!(replace.above, None);
+
+        // Drawing off, the region holds the lines the design replaced as
+        // sent, and the line above it moves into it the same way.
+        let mut stage = self::stage(JAMES, false);
+        stage.set_reads(&hp);
+        let mut out = Output::new(false);
+        stage.draw(&mut out, tank_block(), None, b"", "DRAWN");
+        stage.set_reads(&tank);
+        let mut off = Output::new(false);
+        stage.repaint(&mut off, None);
+        let replace = off.replace.expect("the repaint");
+        let sent = with(&[
+            &mark(2),
+            b"Tester: [===|---]\r\n",
+            PROMPT.as_bytes(),
+            b"\r\n",
+        ]);
+        assert_eq!(
+            replace.above.map(|a| (a.plain, a.bytes)),
+            Some(("Tester: [===|---]".into(), sent))
+        );
+    }
+
     /// A block with a tank line above the prompt, which the design does
     /// not read, so it shows as sent.
     fn tank_block() -> Block {
@@ -3564,6 +3677,7 @@ mod tests {
             replaced: vec![1],
             values: BTreeMap::new(),
             afk: false,
+            groups: vec![vec!["tank".into(), "tank_bar".into()], Vec::new()],
         }
     }
 
