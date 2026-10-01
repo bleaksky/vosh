@@ -243,6 +243,12 @@ impl Output {
         self.untouched() && self.pin.is_none()
     }
 
+    /// It writes anything to the text: bytes, a replace, held line ends
+    /// or a restore. A pin alone writes nothing there.
+    pub fn writes_text(&self) -> bool {
+        !self.untouched()
+    }
+
     /// Nothing written to the text yet. Held line ends count as written,
     /// and the band does not count.
     fn untouched(&self) -> bool {
@@ -1641,6 +1647,34 @@ impl Stage {
     pub fn repaint_view(&mut self, out: &mut Output, view: View) {
         self.repaint_row(out, view);
         self.seal(out);
+    }
+
+    /// True when a repaint with `view` would change what your prompt
+    /// shows, the open row or the band, such as after a GMCP packet that
+    /// arrived with no prompt after it. False while there is nothing to
+    /// repaint, and while a change of where your prompt shows waits for
+    /// its own repaint.
+    pub fn stale(&self, view: View) -> bool {
+        let Some(block) = &self.last_raw else {
+            return false;
+        };
+        match (self.shown_as, self.show) {
+            (PromptShow::Pinned, PromptShow::Pinned) => self
+                .pinned
+                .as_ref()
+                .is_some_and(|pinned| self.band_body(block, view.shown) != *pinned),
+            (PromptShow::Pinned, _) | (_, PromptShow::Pinned) => false,
+            _ => {
+                let Some(open) = &self.open else {
+                    return false;
+                };
+                if self.open_lift.is_none() && self.lifts() {
+                    return false;
+                }
+                let (body, live) = row_bodies(block, view);
+                body != open.body || live != open.live
+            }
+        }
     }
 
     /// [`Stage::repaint_view`], before the renderers hear about the pinned
@@ -3768,5 +3802,65 @@ mod tests {
         );
         assert_eq!(raw.pin.as_deref(), Some(PROMPT.as_bytes()));
         assert!(raw.restore.is_none());
+    }
+
+    #[test]
+    fn a_repaint_is_due_only_when_it_would_change_what_your_prompt_shows() {
+        let mut stage = stage(JAMES, false);
+        assert!(!stage.stale(View::live(Some("NEW"))), "nothing drawn yet");
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        stage.finish(&mut out);
+        assert!(!stage.stale(View::live(Some("DRAWN"))));
+        assert!(stage.stale(View::live(Some("NEW"))));
+        assert!(stage.stale(View::live(None)), "drawing off");
+        // The live render behind a preview counts too.
+        assert!(stage.stale(preview("DRAWN", "LIVE")));
+        let mut low = Output::new(false);
+        stage.repaint_view(&mut low, preview("LOW", "DRAWN"));
+        assert!(!stage.stale(preview("LOW", "DRAWN")));
+        assert!(stage.stale(preview("LOW", "DRAWN2")));
+        // A closed row needs nothing.
+        stage.close();
+        assert!(!stage.stale(View::live(Some("NEW"))));
+
+        // The band, while pinned, whether or not text came after it.
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        pin_prompt(&mut stage, &mut out);
+        stage.finish(&mut out);
+        assert!(!stage.stale(View::live(Some("DRAWN"))));
+        assert!(stage.stale(View::live(Some("NEW"))));
+        let mut later = Output::new(false);
+        later.text(b"\r\nA guard arrives.\r\n");
+        stage.finish(&mut later);
+        assert!(stage.stale(View::live(Some("NEW"))));
+        // A change of where your prompt shows waits for its own repaint.
+        stage.set_show(PromptShow::Text);
+        assert!(!stage.stale(View::live(Some("NEW"))));
+        let mut stage = self::stage(JAMES, false);
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        stage.set_show(PromptShow::Lifted);
+        assert!(!stage.stale(View::live(Some("NEW"))));
+    }
+
+    #[test]
+    fn an_output_writes_text_when_anything_lands_in_the_text() {
+        assert!(!Output::new(false).writes_text());
+        assert!(!Output::new(true).writes_text());
+        let mut out = Output::new(false);
+        out.text(b"x");
+        assert!(out.writes_text());
+        // A pin alone writes nothing to the text.
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        pin_prompt(&mut stage, &mut out);
+        assert!(!out.writes_text());
+        let mut out = Output::new(false);
+        out.replace(3, Vec::new(), false);
+        assert!(out.writes_text());
     }
 }
