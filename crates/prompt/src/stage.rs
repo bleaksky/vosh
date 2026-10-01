@@ -1692,6 +1692,23 @@ impl Stage {
         self.seal(out);
     }
 
+    /// True when there is something a repaint of what your prompt shows
+    /// could change: the open row, or the band while your prompt shows
+    /// pinned. False while a change of where your prompt shows waits for
+    /// its own repaint. It draws nothing, so the session asks it after
+    /// every read that brought GMCP packets, and [`Stage::stale`] says
+    /// whether a repaint would change anything.
+    pub fn repaintable(&self) -> bool {
+        if self.last_raw.is_none() {
+            return false;
+        }
+        match (self.shown_as, self.show) {
+            (PromptShow::Pinned, PromptShow::Pinned) => self.pinned.is_some(),
+            (PromptShow::Pinned, _) | (_, PromptShow::Pinned) => false,
+            _ => self.open.is_some() && !(self.open_lift.is_none() && self.lifts()),
+        }
+    }
+
     /// True when a repaint with `view` would change what your prompt
     /// shows, the open row or the band, such as after a GMCP packet that
     /// arrived with no prompt after it. False while there is nothing to
@@ -4032,10 +4049,12 @@ mod tests {
     fn a_repaint_is_due_only_when_it_would_change_what_your_prompt_shows() {
         let mut stage = stage(JAMES, false);
         assert!(!stage.stale(View::live(Some("NEW"))), "nothing drawn yet");
+        assert!(!stage.repaintable());
         let mut out = Output::new(false);
         let block = read(&stage, PROMPT, End::Line);
         stage.draw(&mut out, block, None, b"", "DRAWN");
         stage.finish(&mut out);
+        assert!(stage.repaintable());
         assert!(!stage.stale(View::live(Some("DRAWN"))));
         assert!(stage.stale(View::live(Some("NEW"))));
         assert!(stage.stale(View::live(None)), "drawing off");
@@ -4047,6 +4066,7 @@ mod tests {
         assert!(stage.stale(preview("LOW", "DRAWN2")));
         // A closed row needs nothing.
         stage.close();
+        assert!(!stage.repaintable());
         assert!(!stage.stale(View::live(Some("NEW"))));
 
         // The band, while pinned, whether or not text came after it.
@@ -4054,20 +4074,24 @@ mod tests {
         let mut out = Output::new(false);
         pin_prompt(&mut stage, &mut out);
         stage.finish(&mut out);
+        assert!(stage.repaintable());
         assert!(!stage.stale(View::live(Some("DRAWN"))));
         assert!(stage.stale(View::live(Some("NEW"))));
         let mut later = Output::new(false);
         later.text(b"\r\nA guard arrives.\r\n");
         stage.finish(&mut later);
+        assert!(stage.repaintable());
         assert!(stage.stale(View::live(Some("NEW"))));
         // A change of where your prompt shows waits for its own repaint.
         stage.set_show(PromptShow::Text);
+        assert!(!stage.repaintable());
         assert!(!stage.stale(View::live(Some("NEW"))));
         let mut stage = self::stage(JAMES, false);
         let mut out = Output::new(false);
         let block = read(&stage, PROMPT, End::Line);
         stage.draw(&mut out, block, None, b"", "DRAWN");
         stage.set_show(PromptShow::Lifted);
+        assert!(!stage.repaintable());
         assert!(!stage.stale(View::live(Some("NEW"))));
     }
 
