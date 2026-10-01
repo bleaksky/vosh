@@ -5,6 +5,7 @@ import { startAffectFullStore } from './affectFullStore';
 import { startAffectsDisplayStore } from './affectsDisplayStore';
 import { startAffectsStore } from './affectsStore';
 import { startCharStateStore } from './charStateStore';
+import { startChatColorsStore } from './chatColorsStore';
 import { startChipStyleStore } from './chipStyleStore';
 import { startCombatStore } from './combatStore';
 import { startGamePromptStore } from './gamePromptStore';
@@ -32,6 +33,7 @@ export function startStores(): void {
   // listening.
   startHiddenStore();
   startChatStore();
+  startChatColorsStore();
   startGroupStore();
   startImmStore();
   startVitalsStore();

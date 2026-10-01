@@ -52,24 +52,26 @@ export function markerApplies(display: AffectsDisplay): boolean {
   return display.style !== 'chips';
 }
 
-/** The submenus of a pane's more menu. */
-export type PaneSubmenu = 'show' | 'style' | 'marker';
+/** The submenus of a pane's more menu. The chat pane's Channel colors
+ *  opens a list of channels, and each channel its own list of colors,
+ *  which opens and closes by the same rule with the channel as `which`. */
+export type PaneSubmenu = 'show' | 'style' | 'marker' | 'colors';
 
 /** The open submenu, and whether it opened from the keyboard and so
  *  takes focus. */
-export interface PaneSubmenuState {
-  which: PaneSubmenu;
+export interface PaneSubmenuState<K extends string = PaneSubmenu> {
+  which: K;
   focus: boolean;
 }
 
 /** Open `which`, which closes any other. Pointing at the row of a
  *  submenu the keyboard already opened leaves it as it is, so its focus
  *  stays where the arrow keys put it. */
-export function openPaneSubmenu(
-  prev: PaneSubmenuState | null,
-  which: PaneSubmenu,
+export function openPaneSubmenu<K extends string = PaneSubmenu>(
+  prev: PaneSubmenuState<K> | null,
+  which: K,
   focus: boolean,
-): PaneSubmenuState {
+): PaneSubmenuState<K> {
   if (prev && prev.which === which && !focus) return prev;
   return { which, focus };
 }

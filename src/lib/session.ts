@@ -2806,6 +2806,33 @@ export async function setAffectsDisplay(patch: Partial<AffectsDisplay>): Promise
   });
 }
 
+/** The chat pane's channel colors for the live profile, as the backend
+ *  holds them. chatColors.ts normalizeChatColors reads the table. */
+export async function getChatColorsTable(): Promise<unknown> {
+  return invoke<unknown>('ui_get_chat_colors');
+}
+
+/** Recolor one chat channel from the pane menu, or give it back its
+ *  default with null. The backend saves it alone, so no window writes a
+ *  stale copy of the rest of the config, and tells every window. */
+export async function setChatColor(channel: string, color: string | null): Promise<void> {
+  await invoke('ui_set_chat_color', { channel, color });
+}
+
+/** Give every chat channel its default color again. */
+export async function resetChatColors(): Promise<void> {
+  await invoke('ui_reset_chat_colors');
+}
+
+/** Hear the chat colors after a pick, a reset, or a profile switch. */
+export async function subscribeChatColorsChanged(
+  cb: (table: unknown) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>('vosh://chat-colors-changed', (event) => {
+    cb(event.payload);
+  });
+}
+
 /** Hear new vitals options (Values, Meter, Warn before you run low)
  *  saved from Settings, or the ones a profile switch brings. */
 export async function subscribeVitalsOptionsChanged(

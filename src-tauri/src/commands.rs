@@ -1929,6 +1929,7 @@ pub(crate) struct ProfileUiEvents {
     pub(crate) tick_count: String,
     pub(crate) chip_style: String,
     pub(crate) affects_display: AffectsDisplay,
+    pub(crate) chat_colors: std::collections::BTreeMap<String, String>,
     pub(crate) tick: TickConfigPayload,
 }
 
@@ -1943,6 +1944,7 @@ impl ProfileUiEvents {
             event_json("vosh://tick-count-changed", &self.tick_count),
             event_json("vosh://chip-style-changed", &self.chip_style),
             event_json(AFFECTS_DISPLAY_CHANGED_EVENT, &self.affects_display),
+            event_json(CHAT_COLORS_CHANGED_EVENT, &self.chat_colors),
             event_json(TICK_CONFIG_CHANGED_EVENT, &self.tick),
             Some((UI_CONFIG_REPLACED_EVENT, serde_json::Value::Null)),
         ]
@@ -1976,13 +1978,14 @@ pub(crate) fn profile_ui_events(p: &Profile) -> ProfileUiEvents {
         tick_count: p.ui.tick_count.clone(),
         chip_style: p.ui.chip_style.clone(),
         affects_display: AffectsDisplay::of(&p.ui),
+        chat_colors: p.ui.chat_colors.clone(),
         tick: tick_config_payload(&p.tick.config),
     }
 }
 
 /// Hand every window the active profile's panes, tracked affects, tick
-/// settings, chip style, and affects display, then say the UI config
-/// was replaced. For
+/// settings, chip style, affects display, and chat colors, then say the
+/// UI config was replaced. For
 /// the paths that replace the live UI config wholesale (a profile
 /// switch, an import, `#profile load` and `reset`), which must also bump
 /// the pane generation under the profile lock as they swap. Only a
@@ -3722,6 +3725,118 @@ fn apply_affects_display(
     (after != before).then_some(after)
 }
 
+/// Sent to every window with the chat pane's channel colors whenever
+/// they change: a pick or a reset from the pane menu, or a replace.
+pub(crate) const CHAT_COLORS_CHANGED_EVENT: &str = "vosh://chat-colors-changed";
+
+/// The 16 ANSI slots a chat channel can take, in the frontend's names.
+const CHAT_COLOR_SLOTS: [&str; 16] = [
+    "black",
+    "red",
+    "green",
+    "yellow",
+    "blue",
+    "magenta",
+    "cyan",
+    "white",
+    "brightBlack",
+    "brightRed",
+    "brightGreen",
+    "brightYellow",
+    "brightBlue",
+    "brightMagenta",
+    "brightCyan",
+    "brightWhite",
+];
+
+/// The chat pane's channel colors for the live profile.
+#[tauri::command]
+pub(crate) async fn ui_get_chat_colors(
+    state: State<'_, SharedState>,
+) -> Result<std::collections::BTreeMap<String, String>, String> {
+    let p = state.profile.lock().await;
+    Ok(p.ui.chat_colors.clone())
+}
+
+/// Recolor one chat channel from the pane menu, or give it back its
+/// default with no color. Like the affects display picks, it touches
+/// nothing else in the UI config. Nothing is saved or sent when the
+/// pick changes nothing.
+#[tauri::command]
+pub(crate) async fn ui_set_chat_color(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    channel: String,
+    color: Option<String>,
+) -> Result<(), String> {
+    let changed = {
+        let mut p = state.profile.lock().await;
+        apply_chat_color(&mut p.ui, channel, color)
+    };
+    send_chat_colors(&app, state.inner(), changed).await;
+    Ok(())
+}
+
+/// Give every chat channel its default color again.
+#[tauri::command]
+pub(crate) async fn ui_reset_chat_colors(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+) -> Result<(), String> {
+    let changed = {
+        let mut p = state.profile.lock().await;
+        reset_chat_colors(&mut p.ui)
+    };
+    send_chat_colors(&app, state.inner(), changed).await;
+    Ok(())
+}
+
+/// Save the profile and tell every window, when a chat color moved.
+async fn send_chat_colors(
+    app: &AppHandle,
+    state: &SharedState,
+    changed: Option<std::collections::BTreeMap<String, String>>,
+) {
+    let Some(colors) = changed else {
+        return;
+    };
+    let shared: SharedState = state.clone();
+    persist_profile(app, &shared).await;
+    broadcast(app, CHAT_COLORS_CHANGED_EVENT, &colors);
+}
+
+/// Write a chat color pick onto the live UI config. The channel matches
+/// in lowercase. A color that is not one of the 16 slots clears the
+/// channel back to its default. Returns the new table when anything
+/// changed.
+fn apply_chat_color(
+    ui: &mut crate::profile_config::UiConfig,
+    channel: String,
+    color: Option<String>,
+) -> Option<std::collections::BTreeMap<String, String>> {
+    let channel = channel.trim().to_lowercase();
+    if channel.is_empty() {
+        return None;
+    }
+    let color = color.filter(|c| CHAT_COLOR_SLOTS.contains(&c.as_str()));
+    let changed = match color {
+        Some(color) => ui.chat_colors.insert(channel, color.clone()).as_ref() != Some(&color),
+        None => ui.chat_colors.remove(&channel).is_some(),
+    };
+    changed.then(|| ui.chat_colors.clone())
+}
+
+/// Clear every chat color. Returns the empty table when there was any.
+fn reset_chat_colors(
+    ui: &mut crate::profile_config::UiConfig,
+) -> Option<std::collections::BTreeMap<String, String>> {
+    if ui.chat_colors.is_empty() {
+        return None;
+    }
+    ui.chat_colors.clear();
+    Some(std::collections::BTreeMap::new())
+}
+
 /// Bulk-install a set of preset triggers. Each trigger should already
 /// have its `preset` field set to the preset id; this command
 /// validates and inserts them so the engine starts matching
@@ -5232,6 +5347,96 @@ mod tests {
     }
 
     #[test]
+    fn chat_colors_stay_with_each_character_and_out_of_the_whole_config_save() {
+        let mut ui = UiConfig::default();
+        assert!(ui.chat_colors.is_empty());
+        // A profile with no recolor writes no table.
+        let plain = ProfileConfig {
+            ui: ui.clone(),
+            ..ProfileConfig::default()
+        }
+        .to_toml()
+        .unwrap();
+        assert!(!plain.contains("chat_colors"));
+
+        ui.chat_colors.insert("say".into(), "brightBlue".into());
+        assert_eq!(
+            through_toml(&ui).chat_colors.get("say").map(String::as_str),
+            Some("brightBlue")
+        );
+        // A whole config save from Settings carries no chat colors, so it
+        // never writes an old copy back over a pick from the pane menu.
+        let json = serde_json::to_value(UiConfigPayload::from_ui(&ui)).unwrap();
+        assert!(json.get("chat_colors").is_none());
+        let mut live = ui.clone();
+        UiConfigPayload::from_ui(&UiConfig::default()).apply_to(&mut live);
+        assert_eq!(
+            live.chat_colors.get("say").map(String::as_str),
+            Some("brightBlue")
+        );
+    }
+
+    #[test]
+    fn a_chat_color_pick_writes_only_its_channel() {
+        let mut ui = UiConfig::default();
+        let colors = super::apply_chat_color(&mut ui, " Say ".into(), Some("brightBlue".into()))
+            .expect("a new color changes the table");
+        assert_eq!(colors.get("say").map(String::as_str), Some("brightBlue"));
+        assert_eq!(colors.len(), 1);
+
+        // The same pick again changes nothing, so nothing is saved or sent.
+        assert_eq!(
+            super::apply_chat_color(&mut ui, "say".into(), Some("brightBlue".into())),
+            None
+        );
+
+        let colors = super::apply_chat_color(&mut ui, "tell".into(), Some("red".into()))
+            .expect("another channel joins");
+        assert_eq!(colors.len(), 2);
+
+        // Default, or a color that is not one of the 16, clears the channel.
+        let colors = super::apply_chat_color(&mut ui, "say".into(), None)
+            .expect("default clears the channel");
+        assert!(!colors.contains_key("say"));
+        let colors = super::apply_chat_color(&mut ui, "tell".into(), Some("sparkle".into()))
+            .expect("an unknown color clears the channel");
+        assert!(colors.is_empty());
+        assert_eq!(super::apply_chat_color(&mut ui, "tell".into(), None), None);
+
+        // A blank channel names nothing.
+        assert_eq!(
+            super::apply_chat_color(&mut ui, "  ".into(), Some("red".into())),
+            None
+        );
+    }
+
+    #[test]
+    fn reset_all_clears_every_chat_color_once() {
+        let mut ui = UiConfig::default();
+        assert_eq!(super::reset_chat_colors(&mut ui), None);
+        ui.chat_colors.insert("say".into(), "blue".into());
+        ui.chat_colors.insert("yell".into(), "red".into());
+        assert_eq!(
+            super::reset_chat_colors(&mut ui),
+            Some(std::collections::BTreeMap::new())
+        );
+        assert!(ui.chat_colors.is_empty());
+    }
+
+    #[test]
+    fn a_profile_load_hands_every_window_the_chat_colors() {
+        let mut profile = crate::profile::Profile::default();
+        let mut file = crate::profile_config::ProfileConfig::default();
+        file.ui.chat_colors.insert("gtell".into(), "cyan".into());
+        let _ = file.apply_to(&mut profile);
+        let events = super::profile_ui_events(&profile);
+        assert_eq!(
+            event_payload(&events, "vosh://chat-colors-changed"),
+            serde_json::json!({ "gtell": "cyan" })
+        );
+    }
+
+    #[test]
     fn a_profile_load_hands_every_window_the_affects_display() {
         let mut profile = crate::profile::Profile::default();
         let mut file = crate::profile_config::ProfileConfig::default();
@@ -5943,6 +6148,7 @@ mod tests {
                 "vosh://tick-count-changed",
                 "vosh://chip-style-changed",
                 "vosh://affects-display-changed",
+                "vosh://chat-colors-changed",
                 "vosh://tick-config-changed",
                 super::UI_CONFIG_REPLACED_EVENT,
             ]

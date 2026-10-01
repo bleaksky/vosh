@@ -60,6 +60,13 @@ describe('openPaneSubmenu', () => {
     });
   });
 
+  it('opens the Channel colors submenu, and one channel list in it at a time', () => {
+    expect(openPaneSubmenu(null, 'colors', true)).toEqual({ which: 'colors', focus: true });
+    const say = openPaneSubmenu<string>(null, 'say', false);
+    expect(openPaneSubmenu(say, 'tell', false)).toEqual({ which: 'tell', focus: false });
+    expect(openPaneSubmenu(say, 'say', false)).toBe(say);
+  });
+
   it('keeps a submenu the keyboard opened when the pointer passes over its row again', () => {
     const typed = { which: 'style', focus: true } as const;
     expect(openPaneSubmenu(typed, 'style', false)).toBe(typed);
