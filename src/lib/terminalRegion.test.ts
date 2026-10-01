@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Terminal } from '@xterm/xterm';
 import {
   closePinRow,
@@ -660,11 +660,18 @@ describe('padding the screen down to its last row', () => {
 });
 
 describe('a resize while xterm parses a long backlog', () => {
-  // xterm parses for about 12 ms at a time. A backlog this long fills a
-  // slice of its own, and the line after it waits for the next one.
-  // xterm flushes what it holds before a resize, and that flush starts
-  // from the first write it still keeps, the parsed backlog included.
+  // xterm parses for about 12 ms at a time. It ends a slice once a write
+  // it parsed takes the clock 12 ms past the start of the slice, and a
+  // warm parser takes this backlog in less. The clock below moves 12 ms
+  // each time xterm reads it, so the backlog always fills a slice of its
+  // own and the line after it waits for the next one. xterm flushes what
+  // it holds before a resize, and that flush starts from the first write
+  // it still keeps, the parsed backlog included.
   const backlog = ['BEGIN', ...Array.from({ length: 40_000 }, (_, i) => `line ${i}`), 'END'];
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   /** Every row xterm holds, scrollback included, trailing blanks
    *  trimmed. */
@@ -681,6 +688,8 @@ describe('a resize while xterm parses a long backlog', () => {
   /** Write the backlog and a line after it, and call `resize` between
    *  the slice that parses the backlog and the next. */
   async function resizeBetweenSlices(resize: (term: Terminal, writer: RegionWriter) => void) {
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += 12));
     const term = new Terminal({ cols: 40, rows: 10, scrollback: 100_000, allowProposedApi: true });
     const writer = new RegionWriter(term);
     const between = new Promise<void>((resolve) => {
