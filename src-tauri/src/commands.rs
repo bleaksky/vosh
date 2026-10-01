@@ -272,6 +272,10 @@ pub(crate) struct AppState {
     /// takes them through `launch_notices_take`, since launch runs before
     /// any window listens.
     pub(crate) launch_notices: std::sync::Mutex<Vec<String>>,
+    /// The active profile's name, kept beside the profile set so an event
+    /// can name it without waiting for that lock. Set at launch, on a
+    /// switch and on a rename. None before any profile loads.
+    pub(crate) active_profile: std::sync::Mutex<Option<String>>,
 }
 
 impl AppState {
@@ -284,6 +288,23 @@ impl AppState {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .extend(notices);
+    }
+
+    /// Note which profile is active, for the events that name it.
+    pub(crate) fn note_active_profile(&self, name: &str) {
+        *self
+            .active_profile
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(name.to_string());
+    }
+
+    /// The active profile's name, as [`AppState::note_active_profile`]
+    /// last kept it.
+    pub(crate) fn active_profile(&self) -> Option<String> {
+        self.active_profile
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// Hand over the notices kept so far, once. A second call gets none.
@@ -328,6 +349,7 @@ impl Default for AppState {
             global_catalog: Arc::new(Mutex::new(None)),
             loadout_set: Arc::new(Mutex::new(None)),
             launch_notices: std::sync::Mutex::new(Vec::new()),
+            active_profile: std::sync::Mutex::new(None),
         }
     }
 }
@@ -2286,6 +2308,9 @@ async fn rename_profile(
         };
         let renames_live = set.active_name() == old;
         set.rename(old, new).map_err(|e| e.to_string())?;
+        if renames_live {
+            state.note_active_profile(set.active_name());
+        }
         renames_live.then(|| crate::profile_set::display_name(set.active_name()))
     };
     // The custom prompt draws the live profile's new name.
@@ -2662,6 +2687,7 @@ async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), Stri
         // it the new profile's [prompt] table.
         p.prompt.switch_profile();
         p.display_name = Some(crate::profile_set::display_name(name));
+        state.note_active_profile(name);
         match per_profile {
             Some(snap) => {
                 snap.apply_to(&mut p);
@@ -5446,6 +5472,8 @@ mod tests {
 
         super::switch_live_profile(&state, "Healer").await.unwrap();
         assert_eq!(active(&state).await, "Healer");
+        // The events that name the active profile name the new one.
+        assert_eq!(state.active_profile().as_deref(), Some("Healer"));
         assert_eq!(live_affects(&state).await, ["Haste"]);
         let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         assert_eq!(reloaded.active_name(), "Healer");
@@ -8320,11 +8348,14 @@ mod tests {
                 shown(&*state.profile.lock().await).as_deref(),
                 Some("Cleric")
             );
+            // The events that name the active profile follow it too.
+            assert_eq!(state.active_profile().as_deref(), Some("Cleric"));
             let state = relaunch_as(dir.path(), "Scratch").await;
             assert_eq!(
                 shown(&*state.profile.lock().await).as_deref(),
                 Some("Scratch")
             );
+            assert_eq!(state.active_profile().as_deref(), Some("Scratch"));
         }
 
         #[tokio::test]
