@@ -1,0 +1,46 @@
+import { useEffect, useMemo, useState } from 'react';
+import { subscribeBaseAnsi } from './baseAnsi';
+import type { BandEnv } from './bandCells';
+import { ansi16Of, xtermThemeFor } from './terminalTheme';
+import { getCurrentThemeId } from './theme';
+import { findTheme } from './themes';
+
+// The colors terminal text outside the renderers draws with. The pinned
+// band and the prompt card read them, so a prompt looks there as it does
+// in the text.
+
+/** The colors the terminal draws with now: the theme's, or the base
+ *  palette while "Use the theme's colors for MUD text" is off. It follows
+ *  a theme change (every apply writes data-theme on the root) and an
+ *  edit to the base palette. */
+export function useBandEnv(
+  themeTerminalColors: boolean,
+  brightBold: boolean,
+  renderer: BandEnv['renderer'],
+): BandEnv {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((n) => n + 1);
+    const observer = new MutationObserver(bump);
+    observer.observe(document.documentElement, {
+      attributeFilter: ['data-theme', 'data-appearance'],
+    });
+    const unsubscribe = subscribeBaseAnsi(bump);
+    return () => {
+      observer.disconnect();
+      unsubscribe();
+    };
+  }, []);
+  return useMemo(() => {
+    const resolved = xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColors);
+    return {
+      palette: ansi16Of(resolved),
+      fg: resolved.foreground ?? '#cccccc',
+      bg: resolved.background ?? '#101218',
+      renderer,
+      brightBold,
+    };
+    // tick marks a theme or palette change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tick, themeTerminalColors, brightBold, renderer]);
+}
