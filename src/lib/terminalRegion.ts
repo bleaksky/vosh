@@ -242,6 +242,22 @@ export class RegionWriter {
     return (this.pendingHold.match(/\n/g) ?? []).length;
   }
 
+  /** Where the open region starts in xterm's buffer: the buffer row and
+   *  column of its first cell, with its generation. Null while no region
+   *  is open, once anything was written after it, and while xterm has not
+   *  parsed its mark yet. The prompt card lays the open row out from here
+   *  to map a pointer to a piece. */
+  region(): { gen: number; row: number; col: number } | null {
+    const mark = this.mark;
+    if (this.openGen === null || !mark || mark.gen !== this.openGen) return null;
+    if (mark.marker.isDisposed || mark.marker.line < 0) return null;
+    return {
+      gen: mark.gen,
+      row: mark.held ? mark.marker.line + 1 : mark.marker.line,
+      col: mark.held ? 0 : mark.col,
+    };
+  }
+
   /** Run `then` once xterm has parsed everything written before it, and
    *  after any resize that made xterm parse it. */
   whenParsed(then: () => void): void {
