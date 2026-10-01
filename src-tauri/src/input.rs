@@ -42,6 +42,8 @@ slash commands:
   #prompt                              say how Vosh reads your prompt
   #prompt game {setting}               read your prompt from its PROMPT codes
   #prompt fight {setting}              read your fight prompt from its codes
+  #prompt draw on|off                  draw your design in place of your
+                                       prompt, or show the game's own
   #prompt show text|lifted|pinned      choose where your prompt shows
   #prompt default                      use Vosh's default design and keep
                                        yours as an earlier design
@@ -823,6 +825,7 @@ fn slash_prompt(profile: &mut Profile, args: &str) -> InputResult {
         ("", _) => return prompt_status(profile, chrono::Local::now().fixed_offset()),
         ("game", rest) => return slash_prompt_codes(profile, rest, false),
         ("fight", rest) => return slash_prompt_codes(profile, rest, true),
+        ("draw", rest) => return slash_prompt_draw(profile, rest),
         ("show", rest) => return slash_prompt_show(profile, rest),
         ("default", rest) => return slash_prompt_default(profile, rest),
         _ => {}
@@ -929,6 +932,41 @@ fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputRe
             .chain(compiled.warnings.iter().filter(|w| w.which == which))
             .map(|w| w.text.clone()),
     );
+    InputResult {
+        bytes: Vec::new(),
+        echo,
+        scripts: Vec::new(),
+    }
+}
+
+/// `#prompt draw on|off`: draw your design in place of your prompt, or
+/// show the game's own prompt. Turning drawing on with no design draws
+/// Vosh's default, as Settings does. The design, the place and the
+/// capture stay. With no capture the echo says how to start, since Vosh
+/// draws only a prompt it reads.
+fn slash_prompt_draw(profile: &mut Profile, args: &str) -> InputResult {
+    let draw = match args.trim().to_ascii_lowercase().as_str() {
+        "on" => true,
+        "off" => false,
+        _ => return error_echo("usage #prompt draw on | off".to_string()),
+    };
+    let mut config = profile.prompt.config().clone();
+    if config.draw != draw {
+        config.draw = draw;
+        if draw && config.template.is_empty() {
+            config.template = vosh_prompt::DEFAULT_DESIGN.to_string();
+        }
+        profile.set_prompt_config(config);
+    }
+    let mut echo = vec![if draw {
+        "Drawing is on. Vosh draws your design in place of your prompt."
+    } else {
+        "Drawing is off. You see the game's own prompt again."
+    }
+    .to_string()];
+    if draw && profile.prompt.config().capture.is_none() {
+        echo.push(PROMPT_NONE.to_string());
+    }
     InputResult {
         bytes: Vec::new(),
         echo,
@@ -2308,6 +2346,53 @@ mod tests {
         assert_eq!(ran.result.echo, ["[usage #prompt default]"]);
         // The help names it.
         assert!(super::HELP_TEXT.contains("#prompt default "));
+    }
+
+    #[test]
+    fn prompt_draw_turns_drawing_on_and_off() {
+        use vosh_prompt::DEFAULT_DESIGN;
+        // No design and nothing reads the prompt yet.
+        let mut p = Profile::default();
+        p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(false, ""));
+        let ran = run_line(&mut p, "#prompt draw on");
+        assert_eq!(
+            ran.result.echo,
+            [
+                "Drawing is on. Vosh draws your design in place of your prompt.",
+                "Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start.",
+            ]
+        );
+        assert!(ran.result.bytes.is_empty());
+        let config = p.prompt.config();
+        assert!(config.draw);
+        // Drawing with no design draws Vosh's default, as Settings does.
+        assert_eq!(config.template, DEFAULT_DESIGN);
+        assert!(p.ui.prompt_template_enabled);
+
+        let _ = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
+        let ran = run_line(&mut p, "#prompt draw off");
+        assert_eq!(
+            ran.result.echo,
+            ["Drawing is off. You see the game's own prompt again."]
+        );
+        assert!(!p.prompt.config().draw);
+        assert_eq!(
+            p.prompt.config().template,
+            DEFAULT_DESIGN,
+            "the design stays"
+        );
+        let ran = run_line(&mut p, "#prompt draw ON");
+        assert_eq!(
+            ran.result.echo,
+            ["Drawing is on. Vosh draws your design in place of your prompt."]
+        );
+        for line in ["#prompt draw", "#prompt draw maybe"] {
+            let ran = run_line(&mut p, line);
+            assert_eq!(ran.result.echo, ["[usage #prompt draw on | off]"], "{line}");
+        }
+        assert!(p.prompt.config().draw);
+        // The help names it.
+        assert!(super::HELP_TEXT.contains("#prompt draw on|off"));
     }
 
     #[test]
