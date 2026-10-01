@@ -691,9 +691,16 @@ fn styled_colors(fg: Color, bg: Color, flags: CellFlags) -> (Rgba, Rgba) {
 
 /// The underline's color. SGR 58 colors the line apart from the text,
 /// and without it the line takes `text`, the cell's drawn text color with
-/// dim and inverse already applied, the way xterm draws it.
+/// dim and inverse already applied, the way xterm draws it. A bold cell
+/// moves an SGR 58 palette color 0 to 7 up to its bright twin, as xterm
+/// does for the line.
 fn underline_color(flags: CellFlags, text: Rgba) -> Rgba {
-    flags.underline_color.map_or(text, color_to_rgba)
+    flags.underline_color.map_or(text, |color| {
+        color_to_rgba(match color {
+            Color::Indexed(i) if flags.bold && i < 8 => Color::Indexed(i + 8),
+            other => other,
+        })
+    })
 }
 
 /// The glyph a cell draws. SGR 8 hides the text and keeps the cell's
@@ -3008,6 +3015,41 @@ mod tests {
             underline_color(plain, inverse_text),
             color_to_rgba(Color::Named(NamedColor::Blue))
         );
+    }
+
+    #[test]
+    fn a_bold_cell_brightens_a_low_palette_underline_color_as_xterm_does() {
+        let text = color_to_rgba(Color::Named(NamedColor::BrightRed));
+        let line = |bold: bool, color: Color| {
+            underline_color(
+                CellFlags {
+                    bold,
+                    underline: Underline::Dashed,
+                    underline_color: Some(color),
+                    ..CellFlags::default()
+                },
+                text,
+            )
+        };
+        // xterm moves palette 0 to 7 up to 8 to 15 on a bold cell.
+        for (index, bright) in [(0, 8), (1, 9), (7, 15)] {
+            assert_eq!(
+                line(true, Color::Indexed(index)),
+                color_to_rgba(Color::Indexed(bright))
+            );
+            assert_eq!(
+                line(false, Color::Indexed(index)),
+                color_to_rgba(Color::Indexed(index))
+            );
+        }
+        // Brighter indexes and true color keep their own color.
+        for color in [
+            Color::Indexed(8),
+            Color::Indexed(196),
+            Color::Spec(Rgb { r: 1, g: 2, b: 3 }),
+        ] {
+            assert_eq!(line(true, color), color_to_rgba(color));
+        }
     }
 
     #[test]
