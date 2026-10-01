@@ -978,7 +978,10 @@ fn slash_prompt_default(profile: &mut Profile, args: &str) -> InputResult {
         echo.push(PROMPT_NONE.to_string());
     }
     if !config.draw {
-        echo.push("Turn on Draw your own prompt in Settings under Input to see it.".to_string());
+        echo.push(
+            "Turn on Draw your own prompt in Settings under Input, then Advanced, to see it."
+                .to_string(),
+        );
     }
     if changed {
         profile.set_prompt_config(config);
@@ -2318,7 +2321,7 @@ mod tests {
             ran.result.echo,
             [
                 "Your design is now Vosh's default. Vosh keeps the one you had as an earlier design.",
-                "Turn on Draw your own prompt in Settings under Input to see it."
+                "Turn on Draw your own prompt in Settings under Input, then Advanced, to see it."
             ]
         );
         assert!(!p.prompt.config().draw);
@@ -2331,7 +2334,7 @@ mod tests {
             [
                 "Your design is now Vosh's default.",
                 "Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start.",
-                "Turn on Draw your own prompt in Settings under Input to see it."
+                "Turn on Draw your own prompt in Settings under Input, then Advanced, to see it."
             ]
         );
         assert_eq!(p.prompt.config().template, vosh_prompt::DEFAULT_DESIGN);
@@ -2347,7 +2350,7 @@ mod tests {
             [
                 "Your design is already Vosh's default.",
                 "Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start.",
-                "Turn on Draw your own prompt in Settings under Input to see it."
+                "Turn on Draw your own prompt in Settings under Input, then Advanced, to see it."
             ]
         );
         let _ = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
@@ -2356,7 +2359,7 @@ mod tests {
             ran.result.echo,
             [
                 "Your design is already Vosh's default.",
-                "Turn on Draw your own prompt in Settings under Input to see it."
+                "Turn on Draw your own prompt in Settings under Input, then Advanced, to see it."
             ]
         );
         assert_eq!(p.prompt.config().template, vosh_prompt::DEFAULT_DESIGN);
