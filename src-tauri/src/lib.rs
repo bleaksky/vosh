@@ -93,6 +93,7 @@ mod plugins;
 mod profile;
 mod profile_config;
 mod profile_set;
+mod prompt_commands;
 mod prompt_lookup;
 mod prompt_migration;
 mod script_state;
@@ -399,6 +400,17 @@ pub fn run() {
             commands::hidden_get,
             commands::prompt_show_get,
             prompt_lookup::prompt_last_seen,
+            prompt_commands::prompt_config_get,
+            prompt_commands::prompt_config_set,
+            prompt_commands::prompt_designs_list,
+            prompt_commands::prompt_compile,
+            prompt_commands::prompt_candidates,
+            prompt_commands::prompt_capture_check,
+            prompt_commands::prompt_render,
+            prompt_commands::prompt_render_many,
+            prompt_commands::prompt_edit,
+            prompt_commands::prompt_state_get,
+            prompt_commands::prompt_watch,
             characters::profile_export_file,
             commands::ui_set_theme,
             commands::ui_set_affects_display,

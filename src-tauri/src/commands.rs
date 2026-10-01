@@ -276,6 +276,9 @@ pub(crate) struct AppState {
     /// can name it without waiting for that lock. Set at launch, on a
     /// switch and on a rename. None before any profile loads.
     pub(crate) active_profile: std::sync::Mutex<Option<String>>,
+    /// The prompt card watches your prompt, so `session://prompt-state`
+    /// follows each prompt Vosh reads.
+    pub(crate) prompt_watch: std::sync::atomic::AtomicBool,
 }
 
 impl AppState {
@@ -350,6 +353,7 @@ impl Default for AppState {
             loadout_set: Arc::new(Mutex::new(None)),
             launch_notices: std::sync::Mutex::new(Vec::new()),
             active_profile: std::sync::Mutex::new(None),
+            prompt_watch: std::sync::atomic::AtomicBool::new(false),
         }
     }
 }

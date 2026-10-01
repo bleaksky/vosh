@@ -263,6 +263,9 @@ struct ReadBatch {
     /// A prompt var changed or a prompt was read, so the prompt vars go
     /// out after the output even when they read the same.
     prompt_vars: bool,
+    /// Vosh read your prompt in this read, so the prompt state goes out
+    /// after it while the card watches.
+    prompt: bool,
     /// Triggers that hid a prompt while nothing reads it, each named
     /// once a session.
     gag_without_reader: Vec<String>,
@@ -283,6 +286,7 @@ impl ReadBatch {
             out: Output::new(output_count() != seen),
             log: Vec::new(),
             prompt_vars: false,
+            prompt: false,
             gag_without_reader: Vec::new(),
             character: None,
             hold: false,
@@ -1639,6 +1643,7 @@ fn prompt_block(
     };
     let mut apply = script_state::apply_actions(p, outcome);
     batch.prompt_vars = true;
+    batch.prompt = true;
 
     let mut before = Vec::new();
     let mut scrollback = Vec::new();
@@ -2221,11 +2226,13 @@ async fn finish_read<R: tauri::Runtime>(
         mut out,
         log,
         prompt_vars,
+        prompt,
         gag_without_reader,
         character,
         hold: _,
     } = batch;
-    let (vars, hidden, prompt_seen, status) = {
+    let watched = prompt && watching_prompt(app);
+    let (vars, hidden, prompt_seen, status, prompt_state) = {
         let mut p = profile.lock().await;
         // Echoes the end of the read wrote close the open row.
         p.prompt.stage.finish(&mut out);
@@ -2234,6 +2241,7 @@ async fn finish_read<R: tauri::Runtime>(
             p.prompt.vars.take_hidden_change(),
             p.prompt.take_seen(),
             p.prompt.take_status_change(),
+            watched.then(|| crate::prompt_commands::prompt_state(&p)),
         )
     };
     if !out.is_empty() {
@@ -2282,6 +2290,22 @@ async fn finish_read<R: tauri::Runtime>(
             warn!(error = %e, "failed to emit the prompt status");
         }
     }
+    if let Some(state) = prompt_state {
+        if let Err(e) = app.emit("session://prompt-state", state) {
+            warn!(error = %e, "failed to emit the prompt state");
+        }
+    }
+}
+
+/// The prompt card watches your prompt (`prompt_watch`), so the prompt
+/// state follows each prompt Vosh reads.
+fn watching_prompt<R: tauri::Runtime>(app: &AppHandle<R>) -> bool {
+    app.try_state::<crate::commands::SharedState>()
+        .is_some_and(|state| {
+            state
+                .prompt_watch
+                .load(std::sync::atomic::Ordering::Acquire)
+        })
 }
 
 /// Tell the webview what the game said of your prompt settings, on
@@ -3896,7 +3920,8 @@ mod tests {
     #[test]
     fn the_open_row_keeps_where_each_piece_of_the_design_landed() {
         let mut wire = Wire::new(capture_profile("<%hp/%{maxhp}> %mana"));
-        let _ = wire.read(PROMPT_ROW);
+        let batch = wire.read_with(PROMPT_ROW, false, false);
+        assert!(batch.prompt, "the read brought a prompt");
         let spans = |wire: &Wire| -> Vec<(usize, usize, usize)> {
             wire.p
                 .prompt
@@ -3926,9 +3951,11 @@ mod tests {
         let _ = super::repaint_step(&mut wire.p, false, now);
         assert_eq!(spans(&wire), [(0, 0, 1), (1, 1, 4), (2, 5, 1)]);
 
-        // Other output closes the row, and its pieces go with it.
-        let _ = wire.read(b"You are hungry.\n\r");
+        // Other output closes the row, and its pieces go with it. A line
+        // that is no prompt leaves the flag down.
+        let batch = wire.read_with(b"You are hungry.\n\r", false, false);
         assert_eq!(wire.p.prompt.stage.open_row(), None);
+        assert!(!batch.prompt);
     }
 
     #[test]
