@@ -27,14 +27,50 @@ use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
 use regex::RegexBuilder;
 use vosh_prompt::stage::{close_pin_row, Output, MARK_OSC};
 
+/// How a cell is underlined: SGR 4 and its `4:x` sub parameter, where
+/// 1 is single, 2 double, 3 curly, 4 dotted, and 5 dashed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Underline {
+    #[default]
+    None,
+    Single,
+    Double,
+    Curly,
+    Dotted,
+    Dashed,
+}
+
+impl Underline {
+    /// The kind alacritty set on a cell. It keeps one kind at a time, so
+    /// a new SGR 4 replaces the last.
+    fn of(flags: Flags) -> Self {
+        if flags.contains(Flags::DOUBLE_UNDERLINE) {
+            Self::Double
+        } else if flags.contains(Flags::UNDERCURL) {
+            Self::Curly
+        } else if flags.contains(Flags::DOTTED_UNDERLINE) {
+            Self::Dotted
+        } else if flags.contains(Flags::DASHED_UNDERLINE) {
+            Self::Dashed
+        } else if flags.contains(Flags::UNDERLINE) {
+            Self::Single
+        } else {
+            Self::None
+        }
+    }
+}
+
 /// Render-relevant cell attributes, decoupled from alacritty's `Flags`.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct CellFlags {
     pub bold: bool,
     pub dim: bool,
     pub italic: bool,
     pub inverse: bool,
-    pub underline: bool,
+    pub underline: Underline,
+    /// The SGR 58 underline color. `None` draws the line in the text
+    /// color.
+    pub underline_color: Option<Color>,
     pub strikeout: bool,
 }
 
@@ -751,7 +787,8 @@ impl TermGrid {
             dim: flags.contains(Flags::DIM),
             italic: flags.contains(Flags::ITALIC),
             inverse: flags.contains(Flags::INVERSE),
-            underline: flags.intersects(Flags::ALL_UNDERLINES),
+            underline: Underline::of(flags),
+            underline_color: cell.underline_color(),
             strikeout: flags.contains(Flags::STRIKEOUT),
         };
         (cell.c, cell.fg, cell.bg, cell_flags)
@@ -1482,6 +1519,85 @@ mod tests {
                 b: 100
             })
         );
+    }
+
+    /// The underline kind of each of the first `n` cells on the top row.
+    fn underlines(g: &TermGrid, n: usize) -> Vec<Underline> {
+        (0..n)
+            .map(|col| g.cell_at_line(0, col).3.underline)
+            .collect()
+    }
+
+    #[test]
+    fn each_underline_kind_comes_through_from_the_sgr_bytes() {
+        let mut g = TermGrid::new(80, 24);
+        // SGR 4 and each 4:x sub parameter, then 4:0 and 24 to clear.
+        g.feed(b"\x1b[4mA\x1b[4:1mB\x1b[4:2mC\x1b[4:3mD\x1b[4:4mE\x1b[4:5mF");
+        g.feed(b"\x1b[4:0mG\x1b[4:3mH\x1b[24mI");
+        assert_eq!(
+            underlines(&g, 9),
+            vec![
+                Underline::Single,
+                Underline::Single,
+                Underline::Double,
+                Underline::Curly,
+                Underline::Dotted,
+                Underline::Dashed,
+                Underline::None,
+                Underline::Curly,
+                Underline::None,
+            ]
+        );
+    }
+
+    #[test]
+    fn a_new_underline_kind_replaces_the_last_one() {
+        let mut g = TermGrid::new(80, 24);
+        g.feed(b"\x1b[4:2m\x1b[4:4mA\x1b[0mB");
+        assert_eq!(underlines(&g, 2), vec![Underline::Dotted, Underline::None]);
+    }
+
+    #[test]
+    fn the_underline_color_comes_through_in_every_sgr_58_form() {
+        use alacritty_terminal::vte::ansi::Rgb;
+        let rose = Color::Spec(Rgb {
+            r: 191,
+            g: 97,
+            b: 106,
+        });
+        let mut g = TermGrid::new(80, 24);
+        // Colon true color with the empty color space id, semicolon true
+        // color, a 256 color index, 59 back to the text color, then a
+        // reset that drops the color with the underline.
+        g.feed(b"\x1b[4:3;58:2::191:97:106mA");
+        g.feed(b"\x1b[58;2;191;97;106mB");
+        g.feed(b"\x1b[58;5;196mC");
+        g.feed(b"\x1b[59mD");
+        g.feed(b"\x1b[58;2;1;2;3m\x1b[0mE");
+        let color = |col| g.cell_at_line(0, col).3.underline_color;
+        assert_eq!(color(0), Some(rose));
+        assert_eq!(color(1), Some(rose));
+        assert_eq!(color(2), Some(Color::Indexed(196)));
+        assert_eq!(color(3), None);
+        assert_eq!(color(4), None);
+        // The color rides with the curl it was set with.
+        assert_eq!(g.cell_at_line(0, 0).3.underline, Underline::Curly);
+    }
+
+    #[test]
+    fn blink_and_overline_leave_no_mark_on_the_cell() {
+        // alacritty_terminal drops SGR 5 and 6 and its parser has no SGR
+        // 53, so a blinking or overlined cell reads as plain text.
+        let mut g = TermGrid::new(80, 24);
+        g.feed(b"\x1b[5mA\x1b[6mB\x1b[53mC\x1b[0mD");
+        for col in 0..4 {
+            let (_, fg, bg, flags) = g.cell_at_line(0, col);
+            assert_eq!(fg, Color::Named(NamedColor::Foreground));
+            assert_eq!(bg, Color::Named(NamedColor::Background));
+            assert_eq!(flags.underline, Underline::None);
+            assert!(!flags.bold && !flags.inverse);
+        }
+        assert_eq!(&g.row_string(0)[..4], "ABCD");
     }
 
     #[test]
