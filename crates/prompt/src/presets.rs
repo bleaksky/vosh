@@ -122,8 +122,8 @@ pub const RETIRED_DEFAULTS: [&str; 2] = [AT_A_GLANCE, AT_A_GLANCE_FIRST];
 /// A design to start from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Preset {
-    /// `game`, `minimal`, `how_full`, `percent`, `bars`, `detailed` or
-    /// `empty`.
+    /// `default`, `game`, `minimal`, `how_full`, `percent`, `bars`,
+    /// `detailed` or `empty`.
     pub id: &'static str,
     pub label: &'static str,
     pub template: String,
@@ -144,10 +144,16 @@ fn preset(id: &'static str, label: &'static str, template: impl Into<String>) ->
     }
 }
 
-/// The presets for Aabahran's codes, `game` being Same as the game when
-/// your settings can be written that way.
+/// Vosh's default design, [`DEFAULT_DESIGN`], which leads every list of
+/// presets, for every game (section 7.1).
+fn default_design() -> Preset {
+    preset("default", "Vosh's default", DEFAULT_DESIGN)
+}
+
+/// The presets for Aabahran's codes: Vosh's default, then `game`, Same
+/// as the game, when your settings can be written that way.
 pub fn aabahran(game: Option<String>) -> Vec<Preset> {
-    let mut out = Vec::new();
+    let mut out = vec![default_design()];
     if let Some(game) = game {
         out.push(preset("game", "Same as the game", game));
     }
@@ -194,12 +200,13 @@ const VITALS: [Vital; 3] = [
 ];
 
 /// The presets for another game, from the values `supplied` says its
-/// capture and GMCP give. A preset that would draw no value is left out,
-/// so only Start empty is left when nothing is supplied.
+/// capture and GMCP give, after Vosh's default. A preset that would draw
+/// no value is left out, so only Vosh's default and Start empty are left
+/// when nothing is supplied.
 pub fn other(supplied: &dyn Fn(&str) -> bool) -> Vec<Preset> {
     let have: Vec<&Vital> = VITALS.iter().filter(|v| supplied(v.cur)).collect();
     let full: Vec<&Vital> = have.iter().copied().filter(|v| supplied(v.max)).collect();
-    let mut out = Vec::new();
+    let mut out = vec![default_design()];
     if !have.is_empty() {
         let minimal: Vec<String> = have
             .iter()

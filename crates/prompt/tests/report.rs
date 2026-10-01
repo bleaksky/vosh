@@ -99,12 +99,13 @@ fn same_as_the_game_writes_every_code_in_the_game_look() {
     let ids: Vec<&str> = report.presets.iter().map(|p| p.id).collect();
     assert_eq!(
         ids,
-        ["game", "minimal", "how_full", "percent", "bars", "detailed", "empty"]
+        ["default", "game", "minimal", "how_full", "percent", "bars", "detailed", "empty"]
     );
     let labels: Vec<&str> = report.presets.iter().map(|p| p.label).collect();
     assert_eq!(
         labels,
         [
+            "Vosh's default",
             "Same as the game",
             "Minimal",
             "Colored by how full",
@@ -215,7 +216,11 @@ fn a_pattern_reports_what_it_fills_and_presets_from_what_is_supplied() {
     assert!(report.shapes[0].settle);
     assert_eq!(report.shapes[0].kind, "line");
     let ids: Vec<&str> = report.presets.iter().map(|p| p.id).collect();
-    assert_eq!(ids, ["minimal", "how_full", "detailed", "empty"]);
+    assert_eq!(ids, ["default", "minimal", "how_full", "detailed", "empty"]);
+    assert_eq!(
+        preset(&report, "default"),
+        Some(vosh_prompt::DEFAULT_DESIGN)
+    );
     assert_eq!(preset(&report, "minimal"), Some("%{hp}h > "));
     assert_eq!(preset(&report, "how_full"), Some("[%{hp}hp] "));
 
@@ -225,7 +230,7 @@ fn a_pattern_reports_what_it_fills_and_presets_from_what_is_supplied() {
     let ids: Vec<&str> = full.presets.iter().map(|p| p.id).collect();
     assert_eq!(
         ids,
-        ["minimal", "how_full", "percent", "bars", "detailed", "empty"]
+        ["default", "minimal", "how_full", "percent", "bars", "detailed", "empty"]
     );
     for preset in &full.presets {
         assert_reads_clean(&preset.template);
@@ -235,10 +240,11 @@ fn a_pattern_reports_what_it_fills_and_presets_from_what_is_supplied() {
         Some("hp %hp_bar:6 mn %mana_bar:6 mv %move_bar:6 ")
     );
 
-    // Nothing supplied leaves Start empty.
+    // Nothing supplied leaves Vosh's default and Start empty.
     let none = regex(&["^> $"], &|_| false);
     assert!(none.ok);
-    assert_eq!(none.presets.len(), 1);
+    let ids: Vec<&str> = none.presets.iter().map(|p| p.id).collect();
+    assert_eq!(ids, ["default", "empty"]);
 }
 
 #[test]

@@ -578,7 +578,7 @@ mod tests {
         };
         assert_eq!(
             ids(&compile(&p, &request)),
-            ["minimal", "how_full", "detailed", "empty"]
+            ["default", "minimal", "how_full", "detailed", "empty"]
         );
         p.prompt.connect(false);
         p.prompt.observe(
@@ -588,7 +588,7 @@ mod tests {
         );
         assert_eq!(
             ids(&compile(&p, &request)),
-            ["minimal", "how_full", "percent", "bars", "detailed", "empty"]
+            ["default", "minimal", "how_full", "percent", "bars", "detailed", "empty"]
         );
         let codes: CompileRequest = serde_json::from_value(json!({
             "kind": "aabahran",
@@ -624,7 +624,10 @@ mod tests {
         let renamed =
             capture_from_line(&p, id, &["health".into(), String::new()]).expect("the report");
         assert_eq!(renamed.vars, ["health", "move"]);
-        assert_eq!(ids(&renamed), ["minimal", "how_full", "detailed", "empty"]);
+        assert_eq!(
+            ids(&renamed),
+            ["default", "minimal", "how_full", "detailed", "empty"]
+        );
         assert_eq!(
             capture_from_line(&p, id + 1, &[]),
             Err("Vosh no longer keeps that line. Pick another one.".into())
@@ -638,7 +641,7 @@ mod tests {
         let report = capture_from_line(&p, id, &[]).expect("the report");
         assert_eq!(
             ids(&report),
-            ["minimal", "how_full", "percent", "bars", "detailed", "empty"]
+            ["default", "minimal", "how_full", "percent", "bars", "detailed", "empty"]
         );
         // A prompt of several lines gives its last.
         let mut out = vosh_prompt::stage::Output::new(false);
