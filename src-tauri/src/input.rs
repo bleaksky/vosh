@@ -957,29 +957,32 @@ fn slash_prompt_show(profile: &mut Profile, args: &str) -> InputResult {
 /// `#prompt default`: put Vosh's default design in place of the one in
 /// this profile. The one you had goes first among the earlier designs,
 /// so the card can offer it back, and the switch, the place and the
-/// capture stay. The echo says what else it takes to see the design.
+/// capture stay. The echo says what else it takes to see the design,
+/// also when the design is the default already, as in a fresh profile.
 fn slash_prompt_default(profile: &mut Profile, args: &str) -> InputResult {
     if !args.trim().is_empty() {
         return error_echo("usage #prompt default".to_string());
     }
     let mut config = profile.prompt.config().clone();
     let had = !config.template.is_empty();
-    if !config.use_default_design() {
-        return echo_one("Your design is already Vosh's default.".to_string());
+    let changed = config.use_default_design();
+    let mut echo = vec![match (changed, had) {
+        (false, _) => "Your design is already Vosh's default.",
+        (true, true) => {
+            "Your design is now Vosh's default. Vosh keeps the one you had as an earlier design."
+        }
+        (true, false) => "Your design is now Vosh's default.",
     }
-    let mut echo = vec![if had {
-        "Your design is now Vosh's default. Vosh keeps the one you had as an earlier design."
-            .to_string()
-    } else {
-        "Your design is now Vosh's default.".to_string()
-    }];
+    .to_string()];
     if config.capture.is_none() {
         echo.push(PROMPT_NONE.to_string());
     }
     if !config.draw {
         echo.push("Turn on Draw your own prompt in Settings under Input to see it.".to_string());
     }
-    profile.set_prompt_config(config);
+    if changed {
+        profile.set_prompt_config(config);
+    }
     InputResult {
         bytes: Vec::new(),
         echo,
@@ -2328,6 +2331,31 @@ mod tests {
             [
                 "Your design is now Vosh's default.",
                 "Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start.",
+                "Turn on Draw your own prompt in Settings under Input to see it."
+            ]
+        );
+        assert_eq!(p.prompt.config().template, vosh_prompt::DEFAULT_DESIGN);
+        assert!(p.prompt.config().previous_templates.is_empty());
+
+        // A fresh profile already holds the default design, and still
+        // hears what else it takes.
+        let mut p = Profile::default();
+        p.set_prompt_config(vosh_prompt::PromptConfig::fresh());
+        let ran = run_line(&mut p, "#prompt default");
+        assert_eq!(
+            ran.result.echo,
+            [
+                "Your design is already Vosh's default.",
+                "Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start.",
+                "Turn on Draw your own prompt in Settings under Input to see it."
+            ]
+        );
+        let _ = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
+        let ran = run_line(&mut p, "#prompt default");
+        assert_eq!(
+            ran.result.echo,
+            [
+                "Your design is already Vosh's default.",
                 "Turn on Draw your own prompt in Settings under Input to see it."
             ]
         );
