@@ -9,6 +9,7 @@ import {
   TOKEN_ROWS,
   tokenTone,
   unknownTitle,
+  keptCaret,
 } from './promptText';
 import type { PromptToken } from './session';
 
@@ -64,5 +65,18 @@ describe('Edit as text', () => {
     expect(TOKEN_ROWS.map((r) => r.label)).toEqual(['Forms', 'Color', 'Style', 'Layout']);
     expect(TOKEN_ROWS[3].tokens).toEqual(['%nl', '%{if:fight}', '%{end}']);
     expect(TEXT_HELP).not.toMatch(/[;:–—]| - /);
+  });
+});
+
+describe('the caret Edit as text keeps', () => {
+  it('stays where you left it while Insert value… is open', () => {
+    // Insert value… unmounts the field, so the card keeps the caret.
+    expect(keptCaret('[%hp] %mana', { start: 3, end: 3 })).toEqual({ start: 3, end: 3 });
+    // A shorter design since then holds it at its end.
+    expect(keptCaret('[%hp]', { start: 3, end: 9 })).toEqual({ start: 3, end: 5 });
+  });
+
+  it('starts at the end of the design with none kept', () => {
+    expect(keptCaret('[%hp]', null)).toEqual({ start: 5, end: 5 });
   });
 });

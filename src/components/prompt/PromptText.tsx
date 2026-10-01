@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   fieldHtml,
   insertAt,
+  keptCaret,
   oneLine,
   pieceAtCaret,
   TEXT_HELP,
@@ -30,6 +31,9 @@ interface PromptTextProps {
   onInsertValue: () => void;
   /** The card hands the field the token a picked value writes. */
   insertRef: { current: ((token: string) => void) | null };
+  /** Where the caret is, which the card keeps while Insert value…
+   *  replaces the field, so the value goes in there. */
+  caretRef: { current: { start: number; end: number } | null };
 }
 
 /** The caret's offset in `el`'s text, or null when the caret is not in it. */
@@ -80,14 +84,17 @@ export function PromptText({
   onCaretPiece,
   onInsertValue,
   insertRef,
+  caretRef,
 }: PromptTextProps) {
   const fieldRef = useRef<HTMLDivElement | null>(null);
   const [text, setText] = useState(template);
   const sent = useRef(template);
-  const caret = useRef<{ start: number; end: number }>({
-    start: template.length,
-    end: template.length,
-  });
+  const caret = useRef<{ start: number; end: number }>(keptCaret(template, caretRef.current));
+  // The card keeps every move of the caret.
+  const moveCaret = (next: { start: number; end: number }) => {
+    caret.current = next;
+    caretRef.current = next;
+  };
   const [marked, setMarked] = useState<number | null>(null);
 
   // A change from elsewhere, an undo among them, replaces the text.
@@ -97,11 +104,12 @@ export function PromptText({
       setText(template);
       const end = Math.min(caret.current.end, template.length);
       caret.current = { start: end, end };
+      caretRef.current = caret.current;
     }
-  }, [template]);
+  }, [template, caretRef]);
 
   const follow = (next: { start: number; end: number }) => {
-    caret.current = next;
+    moveCaret(next);
     if (describedFor === text) {
       const piece = pieceAtCaret(tokens, next.end);
       setMarked(piece);
@@ -133,7 +141,7 @@ export function PromptText({
   }, [html]);
 
   const commit = (next: string, at: number) => {
-    caret.current = { start: at, end: at };
+    moveCaret({ start: at, end: at });
     setText(next);
     if (next !== sent.current) {
       sent.current = next;

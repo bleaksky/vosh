@@ -234,6 +234,8 @@ export function PromptCard({
   const [pointShown, setPointShown] = useState<ScreenAsk | null>(null);
   const [lineTriggers, setLineTriggers] = useState<PromptLineTrigger[]>([]);
   const insertRef = useRef<((token: string) => void) | null>(null);
+  // Where the caret was in Edit as text, kept while Insert value… is open.
+  const textCaret = useRef<{ start: number; end: number } | null>(null);
   const edits = useRef<Promise<unknown>>(Promise.resolve());
   const undo = useRef<UndoEntry[]>([]);
   const game = useGamePrompt();
@@ -930,6 +932,7 @@ export function PromptCard({
               onCaretPiece={(piece) => setPointing({ picked: piece, caret: null })}
               onInsertValue={() => openPicker('text')}
               insertRef={insertRef}
+              caretRef={textCaret}
             />
           );
         } else if (pickedPiece) {

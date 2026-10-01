@@ -112,3 +112,15 @@ export function fieldHtml(
   if (at < text.length) out += escapeHtml(text.slice(at));
   return out;
 }
+
+/** Where the field's caret starts: where you left it, kept by the card
+ *  while Insert value… replaced the field, held inside `template`, or at
+ *  its end. */
+export function keptCaret(
+  template: string,
+  kept: { start: number; end: number } | null,
+): { start: number; end: number } {
+  if (!kept) return { start: template.length, end: template.length };
+  const end = Math.min(kept.end, template.length);
+  return { start: Math.min(kept.start, end), end };
+}
