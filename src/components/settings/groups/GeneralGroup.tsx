@@ -62,7 +62,11 @@ function GeneralPage({ target, navSeq, config, setConfig, onError, navigate }: S
         disabled={config === null}
       />
       <ScopeSection onError={onError} />
-      <Section id="session-logs" title="Session logs">
+      <Section
+        id="session-logs"
+        title="Session logs"
+        help={{ topic: 'characters-and-data.search-logs', subject: 'session logs' }}
+      >
         <Row label="Saved sessions" description={<SavedSessionsCount onError={onError} />}>
           <Button onClick={() => navigate({ group: 'general', section: 'logs' })}>
             Search logs…

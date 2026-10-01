@@ -289,7 +289,10 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
       <div className="st-chars-detail">
         {detail && (
           <>
-            <Section title={detail.display_name || profileDisplayName(detail.name)}>
+            <Section
+              title={detail.display_name || profileDisplayName(detail.name)}
+              help={{ topic: 'characters-and-data.profiles', subject: 'characters' }}
+            >
               <Row label={loginLabel(character)} description={loginNote} anchor="login">
                 <Toggle
                   checked={detail.login_on}
