@@ -21,6 +21,9 @@
 //! - `--reconnect` plays a link dead reconnect, with no Char.Status and
 //!   no Char.Prompt.
 //! - `--no-ga` turns telnet GA off, and `--compact` turns compact on.
+//! - `--eor` answers each IAC DO EOR with IAC WILL EOR, as a game that
+//!   keeps no state for it would, and then ends each prompt with IAC EOR
+//!   in place of GA.
 //! - `--wizi N` and `--incog N` log you in as an immortal at those
 //!   levels, so `(Wizi N) ` and `(Incog N) ` come before each prompt.
 //!
@@ -37,7 +40,7 @@ use tokio::net::{TcpListener, TcpStream};
 use vosh_prompt::testkit::mud::{self, stored};
 use vosh_prompt::testkit::{Build, Mud, Options};
 
-const USAGE: &str = "usage: fake_mud [--port N] [--build new|243cac5c|older] [--name NAME] [--prompt TEXT] [--fprompt TEXT] [--reconnect] [--no-ga] [--compact] [--wizi N] [--incog N]";
+const USAGE: &str = "usage: fake_mud [--port N] [--build new|243cac5c|older] [--name NAME] [--prompt TEXT] [--fprompt TEXT] [--reconnect] [--no-ga] [--eor] [--compact] [--wizi N] [--incog N]";
 
 /// What the command line asked for.
 struct Args {
@@ -79,6 +82,7 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
             }
             "--reconnect" => options.reconnect = true,
             "--no-ga" => options.ga = false,
+            "--eor" => options.eor = true,
             "--compact" => options.compact = true,
             "--wizi" => {
                 options.wizi = value("--wizi")?

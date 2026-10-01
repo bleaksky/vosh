@@ -9,7 +9,8 @@
 //! when a song lands), then the prompt time packages. The text follows,
 //! with the game's `\n\r` line ends: the reply, the battle line in a
 //! fight, a blank line unless you play compact, the prompt that
-//! [`game::prompt`] prints for your PROMPT, and IAC GA.
+//! [`game::prompt`] prints for your PROMPT, and IAC GA, or IAC EOR once
+//! the client asked for it from a game that plays [`Options::eor`].
 //!
 //! Three server builds are played, as [`Build`] names them. Output that
 //! comes without a command, such as someone arriving, starts on a new line
@@ -51,10 +52,14 @@ pub mod telnet {
     pub const SB: u8 = 250;
     pub const GA: u8 = 249;
     pub const SE: u8 = 240;
+    pub const EOR: u8 = 239;
     pub const GMCP: u8 = 201;
+    /// The option a client asks for with IAC DO, which the game marks
+    /// prompts with once it agreed.
+    pub const TELOPT_EOR: u8 = 25;
 }
 
-use telnet::{DO, GA, GMCP, IAC, SB, SE, WILL};
+use telnet::{DO, EOR, GA, GMCP, IAC, SB, SE, TELOPT_EOR, WILL};
 
 /// The PROMPT the fake starts with, as `do_prompt` stores it: one line
 /// out of a fight, and a tank line above it while someone in your group
@@ -137,6 +142,11 @@ pub struct Options {
     pub reconnect: bool,
     /// `telnetga` is on, so each prompt ends in IAC GA.
     pub ga: bool,
+    /// The game plays server proposal S3 with no state kept: it answers
+    /// each IAC DO EOR it reads with IAC WILL EOR, and once it has, ends
+    /// each prompt with IAC EOR in place of GA. A client that answered
+    /// each WILL EOR with DO EOR would go back and forth with it forever.
+    pub eor: bool,
     /// `compact` is on, so no blank line comes before a prompt.
     pub compact: bool,
     /// Your wizi and incog levels, 0 for none. Either one makes you an
@@ -213,6 +223,7 @@ impl Options {
             fprompt: String::new(),
             reconnect: false,
             ga: true,
+            eor: false,
             compact: false,
             wizi: 0,
             incog: 0,
@@ -267,6 +278,10 @@ pub struct Mud {
     /// `COMM_PROMPT`: the game prints your prompt.
     pub prompt_on: bool,
     pub ga: bool,
+    /// The game answers each IAC DO EOR, see [`Options::eor`].
+    eor: bool,
+    /// The game answered IAC DO EOR, so each prompt ends in IAC EOR.
+    pub eor_on: bool,
     pub compact: bool,
     /// You cannot see, so the game withholds your opponent's health.
     pub blind: bool,
@@ -304,6 +319,8 @@ impl Mud {
             fprompt: options.fprompt,
             prompt_on: true,
             ga: options.ga,
+            eor: options.eor,
+            eor_on: false,
             compact: options.compact,
             blind: false,
             affects: options.affects,
@@ -372,6 +389,10 @@ impl Mud {
                             if !self.logged_in {
                                 writes.push(Write::now(self.login()));
                             }
+                        }
+                        if next == DO && option == TELOPT_EOR && self.eor {
+                            self.eor_on = true;
+                            writes.push(Write::now(vec![IAC, WILL, TELOPT_EOR]));
                         }
                         i += 3;
                     }
@@ -569,7 +590,9 @@ impl Mud {
             prompt_at = Some(out.len());
             out.extend(game::prompt(&self.prompt, &self.fprompt, &self.state));
         }
-        if self.ga {
+        if self.eor_on {
+            out.extend_from_slice(&[IAC, EOR]);
+        } else if self.ga {
             out.extend_from_slice(&[IAC, GA]);
         }
         Pulse {
