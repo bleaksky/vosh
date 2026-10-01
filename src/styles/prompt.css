@@ -30,7 +30,7 @@
 /* A white band on paper needs the light float ring to read, drawn inside
    the band so its size stays the board's. */
 :root[data-appearance='light'] .prompt-band {
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
+  box-shadow: inset 0 0 0 1px var(--edge-inset);
 }
 
 .prompt-band-row {
@@ -80,7 +80,7 @@
 }
 
 :root[data-appearance='light'] .prompt-lift-band {
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
+  box-shadow: inset 0 0 0 1px var(--edge-inset);
 }
 
 /* A band that steps in around your echo on its last row draws as one SVG
@@ -107,7 +107,7 @@
 }
 
 :root[data-appearance='light'] .prompt-lift-ring {
-  stroke: rgba(0, 0, 0, 0.14);
+  stroke: var(--edge-inset);
   stroke-width: 1;
 }
 
@@ -937,11 +937,7 @@
   border: 0;
   border-radius: var(--r-key);
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
-}
-
-:root[data-appearance='light'] .pc-swatch {
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
+  box-shadow: inset 0 0 0 1px var(--edge-inset);
 }
 
 .pc-swatch.is-by-value {
