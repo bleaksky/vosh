@@ -413,6 +413,8 @@ pub fn run() {
             prompt_commands::prompt_render_many,
             prompt_commands::prompt_preview_set,
             prompt_commands::prompt_edit,
+            prompt_commands::prompt_describe,
+            prompt_commands::prompt_forms,
             prompt_commands::prompt_state_get,
             prompt_commands::prompt_watch,
             commands::prompt_gags_without_reader,

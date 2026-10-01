@@ -1029,6 +1029,94 @@ export async function promptEdit(template: string, op: PromptEditOp): Promise<Pr
   return invoke('prompt_edit', { template, op });
 }
 
+/** What a piece of a design holds, as the card names it. */
+export type PromptPieceKind =
+  | 'codes'
+  | 'text'
+  | 'value'
+  | 'cur_max'
+  | 'percent'
+  | 'nl'
+  | 'raw'
+  | 'if'
+  | 'if_not'
+  | 'end'
+  | 'unknown';
+
+/** One form a value takes. `segment` is what its Show as segment reads,
+ *  the sample when it is short and else the name. */
+export interface PromptForm {
+  format: PromptFormatName;
+  label: string;
+  segment: string;
+  sample: PromptRendered;
+  /** Show as offers it. The picker offers every form. */
+  show_as: boolean;
+}
+
+/** One piece of a design as the card shows it. `text` is its template
+ *  text with its own codes. A max alone reads as its gauge's field in the
+ *  form `max`. The color and styles are its look at its first cell, a
+ *  bar's color its cells'. `when_fixed` says a fight condition outside
+ *  another one holds it. */
+export interface PromptPiece {
+  piece: number;
+  kind: PromptPieceKind;
+  text: string;
+  field: string | null;
+  label: string;
+  format: PromptFormatName | null;
+  width: number | null;
+  when: PromptWhen;
+  when_fixed: boolean;
+  color: PromptColorChoice;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  literal: string | null;
+  meta: string | null;
+  forms: PromptForm[];
+  by_value: boolean;
+  shows: boolean;
+}
+
+export type PromptTokenKind = 'text' | 'code' | 'value' | 'condition' | 'line' | 'raw' | 'unknown';
+
+/** One token of a design: where it sits in the text in UTF-16 units, the
+ *  piece it belongs to, and whether Vosh knows the name it reads. */
+export interface PromptToken {
+  start: number;
+  end: number;
+  piece: number;
+  kind: PromptTokenKind;
+  name: string | null;
+  known: boolean;
+}
+
+export interface PromptDescribed {
+  pieces: PromptPiece[];
+  tokens: PromptToken[];
+}
+
+/** What each piece and token of a design is, with what each value reads
+ *  in the preview the card shows. */
+export async function promptDescribe(
+  template: string,
+  preview: PromptPreviewName | null = null,
+  overrides: PromptOverrides | null = null,
+): Promise<PromptDescribed> {
+  return invoke('prompt_describe', { template, preview, overrides });
+}
+
+/** The forms a field takes, `hp` or `aff:sanctuary`, each drawn as the
+ *  card shows it, for the picker. */
+export async function promptForms(
+  field: string,
+  preview: PromptPreviewName | null = null,
+): Promise<PromptForm[]> {
+  return invoke('prompt_forms', { field, preview });
+}
+
 export type PromptFieldGroup =
   | 'vitals'
   | 'fight'

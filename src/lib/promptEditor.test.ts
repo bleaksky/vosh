@@ -16,7 +16,9 @@ import {
   promptConfigGet,
   promptConfigSet,
   promptDesignsList,
+  promptDescribe,
   promptEdit,
+  promptForms,
   promptPreviewSet,
   promptRender,
   promptRenderMany,
@@ -157,6 +159,25 @@ describe('the prompt editor commands', () => {
       template: '%hp',
       op: { op: 'set_style', piece: 0, style: 'italic', on: false },
     });
+    await promptDescribe('%hp');
+    expect(sent).toHaveBeenLastCalledWith('prompt_describe', {
+      template: '%hp',
+      preview: null,
+      overrides: null,
+    });
+    await promptDescribe('%hp', 'fight', { values: { hp: 7 } });
+    expect(sent).toHaveBeenLastCalledWith('prompt_describe', {
+      template: '%hp',
+      preview: 'fight',
+      overrides: { values: { hp: 7 } },
+    });
+    await promptForms('aff:sanctuary');
+    expect(sent).toHaveBeenLastCalledWith('prompt_forms', {
+      field: 'aff:sanctuary',
+      preview: null,
+    });
+    await promptForms('hp', 'low_health');
+    expect(sent).toHaveBeenLastCalledWith('prompt_forms', { field: 'hp', preview: 'low_health' });
     await promptStateGet();
     expect(sent).toHaveBeenLastCalledWith('prompt_state_get');
     await promptWatch(true);
