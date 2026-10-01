@@ -4,7 +4,7 @@
 //! profile rather than the connection.
 
 use tokio::time::Instant;
-use vosh_alias::ExpandError;
+use vosh_alias::{ExpandError, ExpandStep};
 use vosh_trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
 use vosh_vars::Scope;
 
@@ -20,11 +20,6 @@ pub(crate) struct InputResult {
     /// Local lines to echo back to the terminal pane (without CRLF added).
     /// The session layer wraps each line in CRLF before emitting.
     pub(crate) echo: Vec<String>,
-    /// Lua bodies queued by script-bodied aliases that fired during
-    /// expansion. The session loop runs each through its shared
-    /// `ScriptEngine` with `captures[1..]` bound to the alias args.
-    /// Empty for non-alias inputs and for template-only aliases.
-    pub(crate) scripts: Vec<vosh_alias::AliasScriptCall>,
 }
 
 const HELP_TEXT: &str = "\
@@ -179,6 +174,11 @@ pub(crate) fn may_replace_profile(line: &str) -> bool {
 /// One line run through the input pipeline.
 pub(crate) struct Ran {
     pub(crate) result: InputResult,
+    /// What the Lua bodies of the line's script aliases ask for besides
+    /// their sends and echo lines, which `result` holds in the order you
+    /// typed them: timers, `mud.input` lines, prompt values, and whether
+    /// they changed durable state, which [`LineEffects::note_ran`] notes.
+    pub(crate) lua: script_state::ApplyResult,
     /// A `#profile reset`, or a `#profile load` that read its file,
     /// replaced the live profile.
     pub(crate) replaced: bool,
@@ -191,11 +191,13 @@ pub(crate) struct Ran {
 /// tick settings, for [`LineEffects::note_ran`].
 pub(crate) fn run_line(profile: &mut Profile, line: &str) -> Ran {
     let mut replaced = false;
+    let mut lua = script_state::ApplyResult::default();
     let tick_before = profile.tick.config.clone();
-    let result = process_line(profile, line, &mut replaced);
+    let result = process_line(profile, line, &mut replaced, &mut lua);
     let tick_changed = profile.tick.config != tick_before;
     Ran {
         result,
+        lua,
         replaced,
         tick_changed,
     }
@@ -222,12 +224,16 @@ pub(crate) struct LineEffects {
 
 impl LineEffects {
     /// Note one line [`run_line`] ran: [`Self::note`] with whether it
-    /// replaced the live profile, and whether it changed the tick
-    /// settings.
+    /// replaced the live profile, whether it changed the tick settings,
+    /// and whether the Lua bodies of its script aliases changed durable
+    /// state.
     pub(crate) fn note_ran(&mut self, line: &str, ran: &Ran) {
         self.note(line, ran.replaced);
         if ran.tick_changed {
             self.tick_changed = true;
+        }
+        if ran.lua.durable_changed {
+            self.dirty = true;
         }
     }
 
@@ -252,14 +258,6 @@ impl LineEffects {
             self.dirty = true;
         }
     }
-
-    /// Note Lua that ran for these lines, such as the body of a script
-    /// alias.
-    pub(crate) fn note_script(&mut self, durable_changed: bool) {
-        if durable_changed {
-            self.dirty = true;
-        }
-    }
 }
 
 /// Run the input pipeline against the given profile and return what to send
@@ -271,8 +269,15 @@ pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
 }
 
 /// The body of [`run_line`]. Sets `replaced` when a `#profile reset` or a
-/// `#profile load` that read its file replaced the live profile.
-fn process_line(profile: &mut Profile, line: &str, replaced: &mut bool) -> InputResult {
+/// `#profile load` that read its file replaced the live profile, and adds
+/// to `lua` what the Lua bodies of script aliases ask for besides their
+/// sends and echo lines.
+fn process_line(
+    profile: &mut Profile,
+    line: &str,
+    replaced: &mut bool,
+    lua: &mut script_state::ApplyResult,
+) -> InputResult {
     let trimmed = line.trim_start();
 
     // Slash commands target the local profile.
@@ -286,7 +291,6 @@ fn process_line(profile: &mut Profile, line: &str, replaced: &mut bool) -> Input
         return InputResult {
             bytes: b"\r\n".to_vec(),
             echo: Vec::new(),
-            scripts: Vec::new(),
         };
     }
 
@@ -324,7 +328,7 @@ fn process_line(profile: &mut Profile, line: &str, replaced: &mut bool) -> Input
             return error_echo("no target — set one with `tar <name|index>` first".to_string());
         }
         let expansion = format!("{} {}", qk.verb, target);
-        let mut inner = process_line(profile, &expansion, replaced);
+        let mut inner = process_line(profile, &expansion, replaced, lua);
         // Echo the resolved line like any other typed command. The
         // frontend suppresses its own echo for quick-keys, so this is
         // the only echo that lands.
@@ -341,25 +345,33 @@ fn process_line(profile: &mut Profile, line: &str, replaced: &mut bool) -> Input
     }
 
     // Plain input. Interpolate variables, then expand aliases, then encode.
-    // An alias that runs Lua queues its body for the caller to run.
+    // An alias that runs Lua runs its body where it stands, so what the
+    // body sends goes out in the order you typed the line.
     let interpolated = profile.vars.interpolate(trimmed);
-    let expanded = match profile.aliases.expand_line_full(&interpolated) {
-        Ok(expanded) => expanded,
+    let steps = match profile.aliases.expand_line_full(&interpolated) {
+        Ok(steps) => steps,
         Err(ExpandError::RecursionLimit(depth)) => {
             return error_echo(format!("alias recursion limit hit ({depth})"));
         }
     };
 
     let mut bytes = Vec::new();
-    for cmd in expanded.commands {
-        bytes.extend_from_slice(cmd.as_bytes());
-        bytes.extend_from_slice(b"\r\n");
+    let mut echo = Vec::new();
+    for step in steps {
+        match step {
+            ExpandStep::Command(cmd) => {
+                bytes.extend_from_slice(cmd.as_bytes());
+                bytes.extend_from_slice(b"\r\n");
+            }
+            ExpandStep::Script(call) => {
+                let mut apply = script_state::run_alias_body(profile, &call);
+                bytes.append(&mut apply.send_bytes);
+                echo.append(&mut apply.echoes);
+                lua.append(apply);
+            }
+        }
     }
-    InputResult {
-        bytes,
-        echo: Vec::new(),
-        scripts: expanded.scripts,
-    }
+    InputResult { bytes, echo }
 }
 
 fn handle_slash(profile: &mut Profile, rest: &str, replaced: &mut bool) -> InputResult {
@@ -651,7 +663,6 @@ fn list_targets(profile: &Profile) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
-        scripts: Vec::new(),
     }
 }
 
@@ -734,7 +745,6 @@ fn slash_qkeys_list(profile: &Profile) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
-        scripts: Vec::new(),
     }
 }
 
@@ -764,7 +774,6 @@ fn slash_aliases_list(profile: &Profile) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
-        scripts: Vec::new(),
     }
 }
 
@@ -949,7 +958,6 @@ fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputRe
     InputResult {
         bytes: Vec::new(),
         echo,
-        scripts: Vec::new(),
     }
 }
 
@@ -984,7 +992,6 @@ fn slash_prompt_draw(profile: &mut Profile, args: &str) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo,
-        scripts: Vec::new(),
     }
 }
 
@@ -1041,7 +1048,6 @@ fn slash_prompt_default(profile: &mut Profile, args: &str) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo,
-        scripts: Vec::new(),
     }
 }
 
@@ -1120,7 +1126,6 @@ fn prompt_status(profile: &Profile, now: chrono::DateTime<chrono::FixedOffset>) 
     InputResult {
         bytes: Vec::new(),
         echo,
-        scripts: Vec::new(),
     }
 }
 
@@ -1209,7 +1214,6 @@ fn slash_group_show(profile: &Profile, name: &str) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
-        scripts: Vec::new(),
     }
 }
 
@@ -1280,7 +1284,6 @@ fn slash_groups_list(profile: &Profile) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
-        scripts: Vec::new(),
     }
 }
 
@@ -1321,7 +1324,6 @@ fn slash_triggers_list(profile: &Profile) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
-        scripts: Vec::new(),
     }
 }
 
@@ -1567,7 +1569,6 @@ fn load_profile_file(
     InputResult {
         bytes: Vec::new(),
         echo: lines,
-        scripts: Vec::new(),
     }
 }
 
@@ -1612,7 +1613,6 @@ fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
-        scripts: Vec::new(),
     }
 }
 
@@ -1690,7 +1690,6 @@ fn slash_script_load(profile: &mut Profile, args: &str) -> InputResult {
     InputResult {
         bytes: apply.send_bytes,
         echo: echoes,
-        scripts: Vec::new(),
     }
 }
 
@@ -1706,7 +1705,6 @@ fn slash_script_reload(profile: &mut Profile) -> InputResult {
     InputResult {
         bytes: apply.send_bytes,
         echo: echoes,
-        scripts: Vec::new(),
     }
 }
 
@@ -1735,7 +1733,6 @@ fn slash_scripts_list(profile: &Profile) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
-        scripts: Vec::new(),
     }
 }
 
@@ -1753,7 +1750,6 @@ fn slash_lua(profile: &mut Profile, args: &str) -> InputResult {
     InputResult {
         bytes: apply.send_bytes,
         echo: apply.echoes,
-        scripts: Vec::new(),
     }
 }
 
@@ -1767,7 +1763,6 @@ fn slash_echo(profile: &mut Profile, args: &str) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: vec![text],
-        scripts: Vec::new(),
     }
 }
 
@@ -1880,8 +1875,7 @@ fn slash_tick_warn(profile: &mut Profile, args: &str) -> InputResult {
             InputResult {
                 bytes: Vec::new(),
                 echo: lines,
-                scripts: Vec::new(),
-            }
+                    }
         }
         "at" => match rest.trim().parse::<u64>() {
             Ok(secs) if secs > 0 => {
@@ -1955,7 +1949,6 @@ fn slash_tick_show(profile: &Profile, now: Instant) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
-        scripts: Vec::new(),
     }
 }
 
@@ -1981,7 +1974,6 @@ fn slash_vars_list(profile: &Profile) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
-        scripts: Vec::new(),
     }
 }
 
@@ -2000,7 +1992,6 @@ fn error_echo(message: String) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: vec![format!("[{message}]")],
-        scripts: Vec::new(),
     }
 }
 
@@ -2008,7 +1999,6 @@ fn echo_one(message: String) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: vec![message],
-        scripts: Vec::new(),
     }
 }
 
@@ -2016,7 +2006,6 @@ fn echo_lines<'a>(lines: impl IntoIterator<Item = &'a str>) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines.into_iter().map(str::to_string).collect(),
-        scripts: Vec::new(),
     }
 }
 
@@ -2725,11 +2714,20 @@ mod tests {
     }
 
     #[test]
-    fn durable_lua_marks_the_profile_dirty() {
-        let mut effects = effects_of(&["greet"]);
-        effects.note_script(false);
+    fn a_lua_alias_body_that_changes_durable_state_marks_the_profile_dirty() {
+        let mut p = Profile::default();
+        p.aliases
+            .set(Alias::new("kk", "ignored").with_script("mud.send('kick')"));
+        p.aliases
+            .set(Alias::new("keep", "ignored").with_script("mud.alias('greet', 'wave')"));
+        let mut effects = LineEffects::default();
+        for line in ["kk", "look"] {
+            let ran = run_line(&mut p, line);
+            effects.note_ran(line, &ran);
+        }
         assert_eq!(effects, LineEffects::default());
-        effects.note_script(true);
+        let ran = run_line(&mut p, "keep");
+        effects.note_ran("keep", &ran);
         assert_eq!(effects, DIRTY);
     }
 
@@ -2765,22 +2763,39 @@ mod tests {
     }
 
     #[test]
-    fn a_lua_alias_queues_its_body_with_the_words_you_typed() {
+    fn a_lua_alias_runs_its_body_in_the_order_you_typed() {
         let mut p = Profile::default();
         p.vars.set(Scope::Session, "target", "goblin");
-        let body = "mud.send('kick ' .. captures[1])";
-        p.aliases.set(Alias::new("kk", "ignored").with_script(body));
-        let r = process(&mut p, "look;kk $target");
-        // The template part goes out, and the body waits for the caller
-        // to run it with the words after the alias name.
-        assert_eq!(r.bytes, b"look\r\n");
-        assert_eq!(
-            r.scripts,
-            [vosh_alias::AliasScriptCall {
-                body: body.into(),
-                captures: vec!["goblin".into()],
-            }]
+        p.aliases.set(
+            Alias::new("kk", "ignored")
+                .with_script("mud.send('kick ' .. captures[1])\nmud.echo('kicked')"),
         );
+        // The body runs where you typed the alias, with the words after
+        // its name, so what it sends goes out between the commands
+        // around it.
+        let r = process(&mut p, "look;kk $target;wave");
+        assert_eq!(r.bytes, b"look\r\nkick goblin\r\nwave\r\n");
+        assert_eq!(r.echo, ["kicked"]);
+        let r = process(&mut p, "kk dragon;wave");
+        assert_eq!(r.bytes, b"kick dragon\r\nwave\r\n");
+        assert_eq!(r.echo, ["kicked"]);
+    }
+
+    #[test]
+    fn what_else_a_lua_alias_body_asks_for_comes_back_with_the_line() {
+        let mut p = Profile::default();
+        p.aliases.set(Alias::new("later", "ignored").with_script(
+            "mud.timer(1, function() end)\nmud.input('#echo again')\n\
+             mud.set_prompt_var('mark', 'on')\nmud.send('now')",
+        ));
+        let ran = run_line(&mut p, "later;look");
+        assert_eq!(ran.result.bytes, b"now\r\nlook\r\n");
+        assert!(ran.lua.send_bytes.is_empty());
+        assert!(ran.lua.echoes.is_empty());
+        assert_eq!(ran.lua.new_timers.len(), 1);
+        assert_eq!(ran.lua.inputs, ["#echo again"]);
+        assert!(ran.lua.prompt_vars_changed);
+        assert!(!ran.lua.durable_changed);
     }
 
     #[test]

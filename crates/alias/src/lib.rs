@@ -81,11 +81,15 @@ pub struct AliasScriptCall {
     pub captures: Vec<String>,
 }
 
-/// Full expansion result combining send commands and script calls.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ExpandResult {
-    pub commands: Vec<String>,
-    pub scripts: Vec<AliasScriptCall>,
+/// One step of an expanded line. A line expands to its steps in the
+/// order you typed them, so a script alias runs between the commands
+/// around it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExpandStep {
+    /// A command to send to the game.
+    Command(String),
+    /// The Lua body of a script alias, to run at this point in the line.
+    Script(AliasScriptCall),
 }
 
 #[derive(Debug, Error)]
@@ -247,30 +251,37 @@ impl AliasStore {
     /// — for the full result including script bodies, call
     /// [`expand_line_full`](Self::expand_line_full).
     pub fn expand_line(&self, line: &str) -> Result<Vec<String>, ExpandError> {
-        Ok(self.expand_line_full(line)?.commands)
+        Ok(self
+            .expand_line_full(line)?
+            .into_iter()
+            .filter_map(|step| match step {
+                ExpandStep::Command(command) => Some(command),
+                ExpandStep::Script(_) => None,
+            })
+            .collect())
     }
 
-    /// Full expansion result: both the commands to send and any
-    /// `AliasScriptCall` invocations queued by script-bodied aliases.
-    /// The session loop dispatches scripts through the shared
-    /// `ScriptEngine` after the commands flush.
-    pub fn expand_line_full(&self, line: &str) -> Result<ExpandResult, ExpandError> {
-        let mut result = ExpandResult::default();
+    /// Full expansion result: the commands to send and the Lua bodies
+    /// script aliases queue, in the order you typed them. The input
+    /// pipeline runs each body where it stands, so what a body sends goes
+    /// out between the commands around it.
+    pub fn expand_line_full(&self, line: &str) -> Result<Vec<ExpandStep>, ExpandError> {
+        let mut steps = Vec::new();
         for raw in split_commands(line, self.separator) {
             let trimmed = raw.trim();
             if trimmed.is_empty() {
                 continue;
             }
-            self.expand_into(trimmed, 0, &mut result)?;
+            self.expand_into(trimmed, 0, &mut steps)?;
         }
-        Ok(result)
+        Ok(steps)
     }
 
     fn expand_into(
         &self,
         command: &str,
         depth: usize,
-        out: &mut ExpandResult,
+        out: &mut Vec<ExpandStep>,
     ) -> Result<(), ExpandError> {
         if depth >= self.max_depth {
             return Err(ExpandError::RecursionLimit(self.max_depth));
@@ -290,7 +301,7 @@ impl AliasStore {
                     .as_deref()
                     .map_or(true, |g| !self.disabled_groups.contains(g))
         }) else {
-            out.commands.push(command.to_string());
+            out.push(ExpandStep::Command(command.to_string()));
             return Ok(());
         };
 
@@ -298,10 +309,10 @@ impl AliasStore {
         // Lua reads the words after the name as `captures[1]`,
         // `captures[2]`, ..., the words `%1`, `%2`, ... would take.
         if let Some(body) = &alias.script {
-            out.scripts.push(AliasScriptCall {
+            out.push(ExpandStep::Script(AliasScriptCall {
                 body: body.clone(),
                 captures: rest.split_whitespace().map(str::to_string).collect(),
-            });
+            }));
             return Ok(());
         }
 
@@ -728,25 +739,31 @@ mod tests {
 
     #[test]
     fn a_script_alias_queues_its_body_with_the_words_after_its_name() {
-        let mut s = store(&[("hunt", "kk %1")]);
+        let mut s = store(&[("hunt", "kk %1;flee")]);
         let body = "mud.send('kick ' .. captures[1])";
         s.set(Alias::new("kk", "ignored").with_script(body));
-        let out = s
-            .expand_line_full("look;kk  big   dragon;hunt rat")
-            .unwrap();
-        assert_eq!(out.commands, vec!["look".to_string()]);
+        let kick = |captures: &[&str]| {
+            ExpandStep::Script(AliasScriptCall {
+                body: body.into(),
+                captures: captures.iter().map(|c| (*c).to_string()).collect(),
+            })
+        };
+        // Each body stands where its alias was typed, between the
+        // commands around it, at any depth.
         assert_eq!(
-            out.scripts,
+            s.expand_line_full("kk  big   dragon;look;hunt rat;wave")
+                .unwrap(),
             vec![
-                AliasScriptCall {
-                    body: body.into(),
-                    captures: vec!["big".into(), "dragon".into()],
-                },
-                AliasScriptCall {
-                    body: body.into(),
-                    captures: vec!["rat".into()],
-                },
+                kick(&["big", "dragon"]),
+                ExpandStep::Command("look".into()),
+                kick(&["rat"]),
+                ExpandStep::Command("flee".into()),
+                ExpandStep::Command("wave".into()),
             ]
+        );
+        assert_eq!(
+            s.expand_line("kk dragon;look;hunt rat").unwrap(),
+            vec!["look".to_string(), "flee".to_string()]
         );
     }
 

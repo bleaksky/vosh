@@ -1921,3 +1921,47 @@ async fn a_lua_alias_you_type_runs_its_body_and_the_game_hears_it() {
     );
     h.finish(grid).await;
 }
+
+// A trigger's Lua that hands a line to mud.input runs it as if you typed
+// it, so a Lua alias the line names runs its body and the game hears what
+// the body sends. The guard keeps other tests off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_lua_alias_that_mud_input_names_runs_its_body() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.set_prompt(codes(PROMPT)).await;
+    h.connect().await;
+    h.until_last_row("<1020>").await;
+    {
+        let mut p = h.state.profile.lock().await;
+        p.aliases
+            .set(vosh_alias::Alias::new("peer", "ignored").with_script("mud.send(captures[1])"));
+        p.triggers
+            .set(vosh_trigger::Trigger {
+                name: "exits".into(),
+                patterns: vec![vosh_trigger::TriggerPattern {
+                    pattern: r"^\[Exits: south\]$".into(),
+                    enabled: true,
+                }],
+                priority: 0,
+                enabled: true,
+                actions: vec![vosh_trigger::TriggerAction::Script {
+                    body: "mud.input('peer afk')".into(),
+                }],
+                preset: None,
+                group: None,
+                target: vosh_trigger::TriggerTarget::Line,
+            })
+            .expect("the trigger compiles");
+    }
+
+    h.type_line("look").await;
+    h.until_shown("You are now in AFK mode.").await;
+    let screen = h.screen();
+    assert!(
+        !screen.iter().any(|row| row.contains("Huh?")),
+        "{screen:#?}"
+    );
+    h.finish(grid).await;
+}

@@ -1380,35 +1380,15 @@ struct FiredRun {
 }
 
 /// The part of [`run_fired_command`] that runs under the profile lock:
-/// the input pipeline, then the Lua bodies of any script aliases it
-/// queued.
+/// the input pipeline, which runs the Lua bodies of any script aliases
+/// in the command where they stand.
 fn run_fired_locked(p: &mut Profile, command: &str, shared: Option<&SharedLayer>) -> FiredRun {
     let lists_before = ListRevisions::of(p);
     let mut effects = input::LineEffects::default();
     let result = process_fired_line(p, command, &mut effects, shared);
-    let mut echoes = result.echo;
-    let mut bytes = result.bytes;
-    // Evaluate any Lua bodies queued by script-bodied aliases and
-    // fold their sends / echoes in, same as the typed-input path.
-    if !result.scripts.is_empty() {
-        let mut outcome = vosh_script::ScriptOutcome::default();
-        for call in &result.scripts {
-            match p
-                .script
-                .run_body(&call.body, &call.captures, "timer-script")
-            {
-                Ok(o) => outcome.actions.extend(o.actions),
-                Err(err) => warn!(error = %err, "timer script eval failed"),
-            }
-        }
-        let apply = script_state::apply_actions(p, outcome);
-        effects.note_script(apply.durable_changed);
-        echoes.extend(apply.echoes);
-        bytes.extend(apply.send_bytes);
-    }
     FiredRun {
-        echoes,
-        bytes,
+        echoes: result.echo,
+        bytes: result.bytes,
         lists: ListChanges::since(lists_before, p),
         effects,
     }
@@ -1416,10 +1396,11 @@ fn run_fired_locked(p: &mut Profile, command: &str, shared: Option<&SharedLayer>
 
 /// Run one command produced by a timer (or any non-typed source) through
 /// the full input pipeline and deliver its results: echo lines to the
-/// terminal, queued alias-script Lua bodies evaluated and their actions
-/// applied, and the combined bytes sent to the server. Mirrors the
-/// typed-input handler so a timer command behaves exactly like the same
-/// line typed at the prompt, including `#lua` and script-bodied aliases.
+/// terminal and bytes to the server, with what the Lua bodies of its
+/// script aliases send among them in the order the command names them.
+/// Mirrors the typed-input handler so a timer command behaves exactly
+/// like the same line typed at the prompt, including `#lua` and
+/// script-bodied aliases.
 async fn run_fired_command<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
@@ -3534,6 +3515,11 @@ mod tests {
         assert_eq!(run.bytes, b"kick dragon\r\n");
         assert_eq!(run.echoes, ["kicked"]);
         assert_eq!(run.effects, LineEffects::default());
+        // What the body sends goes out where the command names the alias.
+        let run = super::run_fired_locked(&mut p, "kk dragon;wave", None);
+        assert_eq!(run.bytes, b"kick dragon\r\nwave\r\n");
+        let run = super::run_fired_locked(&mut p, "wave;kk dragon;bow", None);
+        assert_eq!(run.bytes, b"wave\r\nkick dragon\r\nbow\r\n");
     }
 
     #[test]
