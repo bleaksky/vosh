@@ -79,6 +79,8 @@ mod gmcp_bind;
 mod hidden_input;
 mod import;
 mod input;
+#[cfg(all(test, native_surface))]
+mod latency_tests;
 mod launch;
 mod line_accumulator;
 mod list_events;
