@@ -53,6 +53,7 @@ const NORD: BandEnv = {
 const pinned: PromptShowState = {
   show: 'pinned',
   capture: true,
+  draw: true,
   gameSent: true,
   zone: 2,
   promptsOff: false,
