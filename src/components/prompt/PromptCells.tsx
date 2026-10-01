@@ -46,6 +46,28 @@ function inMark(marks: readonly CellMark[], col: number): CellMark | null {
   return marks.find((m) => col >= m.from && col < m.to) ?? null;
 }
 
+const FULL_BLOCK = '\u2588';
+
+type Glyph = { col: number; cols: number; ch: string };
+
+/** A run's glyphs, with each stretch of full blocks side by side taken as
+ *  one bar. A font can leave a hairline between two full blocks set on
+ *  their own, which the terminal grid never shows. */
+function glyphParts(glyphs: readonly Glyph[]): (Glyph & { bar: boolean })[] {
+  const parts: (Glyph & { bar: boolean })[] = [];
+  for (const glyph of glyphs) {
+    const last = parts[parts.length - 1];
+    const block = glyph.ch === FULL_BLOCK;
+    if (block && last?.bar && last.col + last.cols === glyph.col) {
+      last.cols += glyph.cols;
+      last.ch += glyph.ch;
+    } else {
+      parts.push({ ...glyph, bar: block });
+    }
+  }
+  return parts;
+}
+
 export function CellLine({
   cells,
   env,
@@ -97,26 +119,30 @@ export function CellLine({
         />
       ))}
       {runs.map((run) =>
-        run.glyphs.map((glyph) =>
-          glyph.ch.trim().length === 0 ? null : (
+        glyphParts(run.glyphs).map((glyph) => {
+          if (glyph.ch.trim().length === 0) return null;
+          const color = face(run.look.color, glyph.col);
+          return (
             <span
               key={glyph.col}
-              className="pc-cells-glyph"
+              className={glyph.bar ? 'pc-cells-glyph pc-cells-block' : 'pc-cells-glyph'}
               aria-hidden="true"
               style={{
                 left: glyph.col * cellW,
                 width: glyph.cols * cellW,
-                color: face(run.look.color, glyph.col),
+                color,
                 fontWeight: run.look.bold ? 700 : 400,
                 fontStyle: run.look.italic ? 'italic' : 'normal',
                 background: run.look.background ?? undefined,
                 textDecorationLine: run.look.decoration ?? undefined,
               }}
             >
-              {glyph.ch}
+              {/* The bar's own color fills the font's height under its
+                  blocks, so they read as one bar. */}
+              {glyph.bar ? <span style={{ background: color }}>{glyph.ch}</span> : glyph.ch}
             </span>
-          ),
-        ),
+          );
+        }),
       )}
       {clipped && (
         <span

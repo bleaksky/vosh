@@ -350,6 +350,11 @@
   white-space: pre;
 }
 
+/* A bar of full blocks keeps to its cells, whatever font draws them. */
+.pc-cells-block {
+  overflow: hidden;
+}
+
 .pc-cells-token,
 .pc-cells-warn {
   position: absolute;
