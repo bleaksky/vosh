@@ -348,6 +348,34 @@ function parseTriggerList(text: string): TriggerRecord[] | null {
   }
 }
 
+/** Set the trigger named `name` to match Prompts, as Match does in the
+ *  Triggers editor. The prompt card offers it for a Line trigger that
+ *  matched your prompt as a line (D6), which no longer sees it once the
+ *  profile reads your prompt. It reads the store's list again and writes
+ *  it back with only that trigger's target changed, every other field as
+ *  the store wrote it. */
+export async function moveTriggerToPrompts(
+  name: string,
+  api: TriggerStoreApi = TRIGGER_STORE,
+): Promise<void> {
+  let list: unknown;
+  try {
+    list = JSON.parse(await api.exportTriggers());
+  } catch {
+    list = null;
+  }
+  if (!Array.isArray(list)) {
+    throw new Error('Vosh could not read your saved triggers, so it changed nothing.');
+  }
+  const at = list.findIndex(
+    (t: unknown) => t !== null && typeof t === 'object' && (t as { name?: unknown }).name === name,
+  );
+  if (at < 0) throw new Error(`Vosh no longer has a trigger named ${quote(name)}.`);
+  const next = [...list];
+  next[at] = { ...(list[at] as object), target: 'prompt' };
+  await api.importTriggers(JSON.stringify(next, null, 2));
+}
+
 /** Save the Triggers draft. The store takes a whole list, so Save reads
  *  it again first and writes it back with only the draft's additions,
  *  changes, and removals applied. A trigger #trigger or a script added

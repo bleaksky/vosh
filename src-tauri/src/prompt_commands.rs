@@ -276,6 +276,60 @@ pub(crate) async fn prompt_capture_check(
     ))
 }
 
+/// A Line trigger that matched your prompt as a line, for the card's row
+/// after it saves a capture (D6). `pattern` is its first pattern, and
+/// `preset` says a highlight preset installed it, which only the preset
+/// changes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct LineTrigger {
+    pub name: String,
+    pub pattern: String,
+    pub preset: bool,
+}
+
+/// The Line triggers that match a prompt `capture` reads in the
+/// candidates ring, which no longer see it once the profile reads it
+/// (D6). Each comes once, in the order they first match.
+#[tauri::command]
+pub(crate) async fn prompt_line_triggers(
+    state: State<'_, SharedState>,
+    capture: CaptureConfig,
+) -> Result<Vec<LineTrigger>, String> {
+    Ok(line_triggers(&*state.profile.lock().await, &capture))
+}
+
+/// The body of [`prompt_line_triggers`].
+pub(crate) fn line_triggers(p: &Profile, capture: &CaptureConfig) -> Vec<LineTrigger> {
+    let Some(recognizer) = Recognizer::compile_for(capture, p.prompt.who()) else {
+        return Vec::new();
+    };
+    let mut out: Vec<LineTrigger> = Vec::new();
+    for candidate in p.prompt.stage.ring() {
+        let lines: Vec<&str> = candidate.plain.split('\n').collect();
+        if recognizer
+            .read(&lines)
+            .or_else(|| recognizer.read_partial(&lines))
+            .is_none()
+        {
+            continue;
+        }
+        for line in &lines {
+            for trigger in vosh_trigger::matching(&p.triggers, line, vosh_trigger::MatchScope::Line)
+            {
+                if out.iter().any(|t| t.name == trigger.name) {
+                    continue;
+                }
+                out.push(LineTrigger {
+                    name: trigger.name.clone(),
+                    pattern: trigger.first_pattern().to_string(),
+                    preset: trigger.preset.is_some(),
+                });
+            }
+        }
+    }
+    out
+}
+
 /// Which values a render draws.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -944,6 +998,84 @@ mod tests {
             .map(|f| f.label)
             .collect();
         assert_eq!(labels, ["Time left", "Mark when on", "Mark when off"]);
+    }
+
+    fn line_trigger(
+        name: &str,
+        pattern: &str,
+        target: vosh_trigger::TriggerTarget,
+    ) -> vosh_trigger::Trigger {
+        vosh_trigger::Trigger {
+            name: name.into(),
+            patterns: vec![vosh_trigger::TriggerPattern {
+                pattern: pattern.into(),
+                enabled: true,
+            }],
+            priority: 5,
+            enabled: true,
+            actions: Vec::new(),
+            preset: None,
+            group: None,
+            target,
+        }
+    }
+
+    #[test]
+    fn line_triggers_that_match_a_prompt_the_capture_reads_are_named_once() {
+        use vosh_trigger::TriggerTarget::{Line, Prompt};
+        let mut p = Profile::default();
+        p.prompt.connect(true);
+        for trigger in [
+            line_trigger("Sleep when mana is low", r"\[\d+/\d+hp \d{1,2}/\d+mn", Line),
+            line_trigger("Flee below 20 percent", r"\[(\d+)/(\d+)hp", Line),
+            line_trigger("Already on prompts", r"hp", Prompt),
+            line_trigger("Room exits", r"^\[Exits:", Line),
+            vosh_trigger::Trigger {
+                enabled: false,
+                ..line_trigger("Turned off", r"hp", Line)
+            },
+            vosh_trigger::Trigger {
+                preset: Some("vitals".into()),
+                ..line_trigger("From a preset", r"mv\]", Line)
+            },
+        ] {
+            p.triggers.set(trigger).unwrap();
+        }
+        let mut out = vosh_prompt::stage::Output::new(false);
+        for (line, at) in [
+            ("[Exits: south]", 1),
+            ("[1020/1020hp 8/800mn 930/930mv] ", 2),
+            ("[1020/1020hp 800/800mn 930/930mv] ", 3),
+        ] {
+            p.prompt
+                .stage
+                .line(&mut out, line.as_bytes(), line, None, b"");
+            p.prompt.record(None, at);
+        }
+        let named = line_triggers(&p, &codes("[%h/%Hhp %m/%Mmn %v/%Vmv]"));
+        let names: Vec<(&str, &str, bool)> = named
+            .iter()
+            .map(|t| (t.name.as_str(), t.pattern.as_str(), t.preset))
+            .collect();
+        assert_eq!(
+            names,
+            [
+                (
+                    "Sleep when mana is low",
+                    r"\[\d+/\d+hp \d{1,2}/\d+mn",
+                    false
+                ),
+                ("Flee below 20 percent", r"\[(\d+)/(\d+)hp", false),
+                ("From a preset", r"mv\]", true),
+            ]
+        );
+        // No capture reads nothing, so nothing is named.
+        assert!(line_triggers(&p, &CaptureConfig::None).is_empty());
+        let json = serde_json::to_value(&named[1]).unwrap();
+        assert_eq!(
+            json,
+            json!({"name": "Flee below 20 percent", "pattern": r"\[(\d+)/(\d+)hp", "preset": false})
+        );
     }
 
     #[test]

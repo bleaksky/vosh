@@ -1098,6 +1098,20 @@ export interface PromptDescribed {
   tokens: PromptToken[];
 }
 
+/** A Line trigger that matched your prompt as a line (D6). `preset` says
+ *  a highlight preset installed it. */
+export interface PromptLineTrigger {
+  name: string;
+  pattern: string;
+  preset: boolean;
+}
+
+/** The Line triggers that match a prompt `capture` reads in the
+ *  candidates ring, which no longer see it once the profile reads it. */
+export async function promptLineTriggers(capture: PromptCapture): Promise<PromptLineTrigger[]> {
+  return invoke('prompt_line_triggers', { capture });
+}
+
 /** What each piece and token of a design is, with what each value reads
  *  in the preview the card shows. */
 export async function promptDescribe(

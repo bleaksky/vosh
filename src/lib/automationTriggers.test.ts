@@ -4,6 +4,7 @@ import type { TriggerAction, TriggerRecord } from './session';
 import {
   blankTrigger,
   loadTriggers,
+  moveTriggerToPrompts,
   saveTriggerDraft,
   effectOf,
   extraEffects,
@@ -259,5 +260,21 @@ describe('saving triggers', () => {
     const broken = { ...store.api, exportTriggers: () => Promise.resolve('not json') };
     await expect(saveTriggerDraft(draft, broken)).rejects.toThrow('saved nothing');
     expect(store.names()).toEqual(['rest']);
+  });
+
+  it('moves one trigger to Prompts and leaves the rest as the store wrote them', async () => {
+    const store = fakeStore([trigger('rest', 'sleep'), trigger('flee', 'flee')]);
+    await moveTriggerToPrompts('flee', store.api);
+    expect(store.list().map((t) => [t.name, t.target ?? 'line'])).toEqual([
+      ['rest', 'line'],
+      ['flee', 'prompt'],
+    ]);
+    expect(store.list()[1].actions).toEqual([{ kind: 'send', template: 'flee' }]);
+    await expect(moveTriggerToPrompts('gone', store.api)).rejects.toThrow(
+      'Vosh no longer has a trigger named “gone”.',
+    );
+    const broken = { ...store.api, exportTriggers: () => Promise.resolve('not json') };
+    await expect(moveTriggerToPrompts('rest', broken)).rejects.toThrow('changed nothing');
+    expect(store.list()[0].target).toBeUndefined();
   });
 });
