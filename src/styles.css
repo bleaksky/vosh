@@ -64,8 +64,7 @@
   --c-info: #6ec3eb;
   --c-success: #76cf8a;
 
-  --app-font-family:
-    'BerkeleyMono Bundled', 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+  --app-font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
   --app-font-size: 14px;
 
   /* Ember chrome type system. The terminal keeps --app-font-family;

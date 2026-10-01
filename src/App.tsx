@@ -219,8 +219,7 @@ function migrateMudclientKeys(): void {
 
 migrateMudclientKeys();
 
-const DEFAULT_FONT_FAMILY =
-  '"BerkeleyMono Bundled", "JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace';
+const DEFAULT_FONT_FAMILY = '"JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace';
 
 function App() {
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'idle' });
