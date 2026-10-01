@@ -69,6 +69,7 @@ async function load() {
     tickCount: await import('./tickCountStore'),
     vitalsOptions: await import('./vitalsOptionsStore'),
     affectsDisplay: await import('./affectsDisplayStore'),
+    chatColors: await import('./chatColorsStore'),
     affectFull: await import('./affectFullStore'),
     group: await import('../groupStore'),
     gamePrompt: await import('./gamePromptStore'),
@@ -671,6 +672,40 @@ describe('stores on the event bus', () => {
       marker: 'dot',
       tint: true,
     });
+  });
+
+  it('follow the chat colors the pane menu picks and each profile keeps', async () => {
+    commands.set('ui_get_chat_colors', { say: 'brightBlue' });
+    const s = await load();
+    const entries = () => [...s.chatColors.getChatColors().entries()];
+    expect(entries()).toEqual([['say', 'brightBlue']]);
+    fire('vosh://chat-colors-changed', { say: 'brightBlue', tell: 'red' });
+    const heard = s.chatColors.getChatColors();
+    expect(entries()).toEqual([
+      ['say', 'brightBlue'],
+      ['tell', 'red'],
+    ]);
+    // The same table again keeps the snapshot, so nothing renders.
+    fire('vosh://chat-colors-changed', { tell: 'red', say: 'brightBlue' });
+    expect(s.chatColors.getChatColors()).toBe(heard);
+    fire('vosh://chat-colors-changed', {});
+    expect(entries()).toEqual([]);
+    commands.set('ui_get_chat_colors', { gtell: 'cyan' });
+    fire('vosh://profile-switched', 'Erelei');
+    await settle();
+    expect(entries()).toEqual([['gtell', 'cyan']]);
+  });
+
+  it('keep the chat colors a pick sent over a slower read', async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    commands.set('ui_get_chat_colors', {});
+    const s = await load();
+    commands.set('ui_get_chat_colors', new Promise((resolve) => (answer = resolve)));
+    fire('vosh://profile-switched', 'Erelei');
+    fire('vosh://chat-colors-changed', { say: 'red' });
+    answer({ say: 'blue' });
+    await settle();
+    expect(s.chatColors.getChatColors().get('say')).toBe('red');
   });
 
   it('keep an affects display a pick sent over a slower config read', async () => {

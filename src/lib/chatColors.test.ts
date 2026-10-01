@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { chatChannelColor, chatChannelSlot } from './chatColors';
+import {
+  CHAT_CHANNELS,
+  chatChannelColor,
+  chatChannelSlot,
+  chatColorChoices,
+  normalizeChatColors,
+  sameChatColors,
+} from './chatColors';
 import { findTheme } from './themes';
 
 const kanso = findTheme('kanso-zen').xterm;
@@ -78,5 +85,92 @@ describe('chatChannelColor', () => {
     expect(chatChannelColor('say', vellum)).toBe('#b88226');
     expect(chatChannelColor('tell', vellum)).toBe('#4f7a3a');
     expect(chatChannelColor('immortal', vellum)).toBe('#c2574a');
+  });
+});
+
+describe('the colors you pick for a channel', () => {
+  const picked = normalizeChatColors({ say: 'brightBlue', Tell: 'red' });
+
+  it('lists the eleven channels the game sends, in the order the menu shows them', () => {
+    expect(CHAT_CHANNELS).toEqual([
+      'say',
+      'tell',
+      'gtell',
+      'yell',
+      'pray',
+      'cabal',
+      'clan',
+      'faction',
+      'newbie',
+      'immortal',
+      'imp',
+    ]);
+  });
+
+  it('takes the slot you picked over the one the game prints it in', () => {
+    expect(chatChannelSlot('say', picked)).toBe('brightBlue');
+    expect(chatChannelSlot(' TELL ', picked)).toBe('red');
+    expect(chatChannelSlot('yell', picked)).toBe('cyan');
+    expect(chatChannelColor('say', kanso, picked)).toBe(kanso.brightBlue);
+    expect(chatChannelColor('say', vellum, picked)).toBe(vellum.brightBlue);
+  });
+
+  it('reads only the sixteen slots, and never a key off the prototype', () => {
+    const colors = normalizeChatColors({
+      say: 'sparkle',
+      yell: 7,
+      '  ': 'red',
+      constructor: 'green',
+      Clan: 'brightCyan',
+    });
+    expect([...colors.entries()]).toEqual([
+      ['constructor', 'green'],
+      ['clan', 'brightCyan'],
+    ]);
+    expect(normalizeChatColors(null).size).toBe(0);
+    expect(normalizeChatColors(['red']).size).toBe(0);
+    expect(chatChannelSlot('toString', normalizeChatColors({}))).toBe(chatChannelSlot('tostring'));
+  });
+
+  it('offers Default and the theme colors, checking the current pick', () => {
+    const choices = chatColorChoices('say', picked, kanso);
+    expect(choices).toHaveLength(17);
+    expect(choices[0]).toEqual({
+      value: null,
+      label: 'Default',
+      swatch: kanso.brightYellow,
+      checked: false,
+    });
+    expect(choices.slice(1).map((c) => c.label)).toEqual([
+      'Black',
+      'Red',
+      'Green',
+      'Yellow',
+      'Blue',
+      'Magenta',
+      'Cyan',
+      'White',
+      'Bright black',
+      'Bright red',
+      'Bright green',
+      'Bright yellow',
+      'Bright blue',
+      'Bright magenta',
+      'Bright cyan',
+      'Bright white',
+    ]);
+    expect(choices.filter((c) => c.checked).map((c) => c.value)).toEqual(['brightBlue']);
+    expect(choices.find((c) => c.value === 'red')?.swatch).toBe(kanso.red);
+    // A channel you never recolored checks Default.
+    const plain = chatColorChoices('yell', picked, kanso);
+    expect(plain.filter((c) => c.checked).map((c) => c.value)).toEqual([null]);
+  });
+
+  it('tells two tables apart only by what they hold', () => {
+    expect(sameChatColors(picked, normalizeChatColors({ tell: 'red', say: 'brightBlue' }))).toBe(
+      true,
+    );
+    expect(sameChatColors(picked, normalizeChatColors({ say: 'brightBlue' }))).toBe(false);
+    expect(sameChatColors(picked, normalizeChatColors({ say: 'blue', tell: 'red' }))).toBe(false);
   });
 });

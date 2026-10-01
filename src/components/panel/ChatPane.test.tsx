@@ -5,6 +5,7 @@ import { findTheme } from '../../lib/themes';
 import panelCss from '../../styles/panel.css?raw';
 import { aabahranChatPacket } from '../../test/aabahranGmcp';
 import { ChatLog } from './ChatPane';
+import { normalizeChatColors } from '../../lib/chatColors';
 import { chatTime } from './paneText';
 
 // The chat store reaches the Tauri bridge when it starts. ChatLog, under
@@ -152,6 +153,15 @@ describe('ChatLog', () => {
       '#4f7a3a',
       '#b88226',
     ]);
+  });
+
+  it('draws a channel you recolored in the theme slot you picked', () => {
+    const picked = normalizeChatColors({ tell: 'brightRed' });
+    const html = renderToStaticMarkup(
+      <ChatLog lines={BOARD.slice(4, 7)} palette={kanso} colors={picked} />,
+    );
+    const colors = [...html.matchAll(/style="color:([^";]+)"/g)].map((m) => m[1]);
+    expect(colors).toEqual([kanso.brightRed, kanso.brightRed, '#e6c384']);
   });
 
   it('sets the tag apart and the whole speaker in bold', () => {

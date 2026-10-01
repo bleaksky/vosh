@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { chatChannelColor } from '../../lib/chatColors';
+import { chatChannelColor, NO_CHAT_COLORS, type ChatColors } from '../../lib/chatColors';
 import { getChatLines, subscribeChatLines, type ChatLine } from '../../lib/chatStore';
+import { useChatColors } from '../../lib/stores/chatColorsStore';
 import type { XtermPalette } from '../../lib/themes';
 import { useActiveTheme } from '../../lib/useActiveTheme';
 import { MenuItem, MenuSurface } from './MenuSurface';
@@ -12,7 +13,8 @@ import { chatTime } from './paneText';
 // Channel chat, the line you had from May to September on the theme
 // (the approved Chat A board). Messages sit at the bottom like the
 // terminal, one mono line each, [channel] Speaker: text in the color
-// the game prints that channel in. The channel filter lives in the
+// the game prints that channel in, or the theme color you picked for it
+// under Channel colors in the pane menu. The channel filter lives in the
 // pane's props, so it follows the profile and two chat panes can each
 // show a different channel.
 
@@ -25,6 +27,7 @@ export function ChatPane() {
   const channel = leaf?.props.channel ?? '';
   const [lines, setLines] = useState<ChatLine[]>(() => getChatLines());
   const palette = useActiveTheme().xterm;
+  const colors = useChatColors();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickyRef = useRef(true);
 
@@ -87,7 +90,7 @@ export function ChatPane() {
               : 'Chat appears when someone talks on a channel.'}
           </p>
         ) : (
-          <ChatLog lines={visible} palette={palette} />
+          <ChatLog lines={visible} palette={palette} colors={colors} />
         )}
       </div>
     </>
@@ -109,12 +112,25 @@ function lineKey(line: ChatLine): number {
 }
 
 /** The messages, oldest first, each in its channel's color on the
- *  theme whose terminal palette is given. */
-export function ChatLog({ lines, palette }: { lines: ChatLine[]; palette: XtermPalette }) {
+ *  theme whose terminal palette is given: the slot you picked under
+ *  Channel colors, or the one the game prints the channel in. */
+export function ChatLog({
+  lines,
+  palette,
+  colors = NO_CHAT_COLORS,
+}: {
+  lines: ChatLine[];
+  palette: XtermPalette;
+  colors?: ChatColors;
+}) {
   return (
     <ol className="pane-chat-log">
       {lines.map((line) => (
-        <ChatMessage key={lineKey(line)} line={line} color={chatChannelColor(line.pane, palette)} />
+        <ChatMessage
+          key={lineKey(line)}
+          line={line}
+          color={chatChannelColor(line.pane, palette, colors)}
+        />
       ))}
     </ol>
   );

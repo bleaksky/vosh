@@ -385,6 +385,14 @@ pub(crate) struct UiConfig {
     /// countdown layouts. Off by default. The chips layout always does.
     #[serde(default)]
     pub affects_tint: bool,
+    /// The chat pane's channel colors, picked from its own menu. Each
+    /// key is a channel name in lowercase and each value one of the
+    /// theme's 16 ANSI slots, like `brightBlue`. A channel left out takes
+    /// the color the game prints it in. Only the pane menu writes it,
+    /// through its own commands, so a whole config save from Settings
+    /// never carries an old copy back.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub chat_colors: BTreeMap<String, String>,
 }
 
 /// Vitals row appearance. Each `show_*` toggle controls whether the
@@ -1253,6 +1261,7 @@ impl Default for UiConfig {
             affects_style: default_affects_style(),
             affects_marker: default_affects_marker(),
             affects_tint: false,
+            chat_colors: BTreeMap::new(),
         }
     }
 }

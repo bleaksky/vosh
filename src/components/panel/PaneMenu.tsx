@@ -8,8 +8,18 @@ import {
   type PaneSubmenu,
   type PaneSubmenuState,
 } from '../../lib/affectsDisplay';
-import { profilesList, setAffectsDisplay } from '../../lib/session';
+import {
+  CHAT_CHANNELS,
+  chatChannelColor,
+  chatColorChoices,
+  type ChatColorChoice,
+  type ChatColors,
+} from '../../lib/chatColors';
+import { profilesList, resetChatColors, setAffectsDisplay, setChatColor } from '../../lib/session';
 import { useAffectsDisplay } from '../../lib/stores/affectsDisplayStore';
+import { useChatColors } from '../../lib/stores/chatColorsStore';
+import type { XtermPalette } from '../../lib/themes';
+import { useActiveTheme } from '../../lib/useActiveTheme';
 import { splitPane, type PaneLeaf, type SplitDir } from '../../lib/paneLayout';
 import { openSettingsTab } from '../../lib/settingsLink';
 import { formatSettingsTarget } from '../../lib/settingsNav';
@@ -31,10 +41,13 @@ import { PANE_LABELS, offeredPaneTypes } from './paneTypes';
 // The Affects pane adds Style and Marker, each a submenu with a check
 // on the current pick, and Edit tracked affects, which opens Settings
 // on that profile's Tracked affects in Characters. Marker goes quiet
-// while Grouped chips are chosen, since chips draw no marker. Closing a
-// pane loses nothing, so it carries no destructive color. A split the
-// panel has no room for, with every pane at its minimum, stays
-// unavailable.
+// while Grouped chips are chosen, since chips draw no marker. The Chat
+// pane adds Channel colors, a submenu of the eleven channels the game
+// sends, each opening Default and the theme's 16 ANSI colors with a
+// check on the current pick, then Reset all. A pick saves alone for the
+// profile and the pane follows at once. Closing a pane loses nothing,
+// so it carries no destructive color. A split the panel has no room
+// for, with every pane at its minimum, stays unavailable.
 
 interface Props {
   leaf: PaneLeaf;
@@ -51,10 +64,16 @@ const INSET = 8;
 export function PaneMenu({ leaf, anchor, onClose }: Props) {
   const [profile, setProfile] = useState<string | null>(null);
   const [subOpen, setSubOpen] = useState<PaneSubmenuState | null>(null);
+  // The channel whose colors show beside Channel colors.
+  const [chanOpen, setChanOpen] = useState<PaneSubmenuState<string> | null>(null);
   const rowRefs = useRef<Partial<Record<PaneSubmenu, HTMLButtonElement | null>>>({});
+  const chanRefs = useRef<Partial<Record<string, HTMLButtonElement | null>>>({});
   const display = useAffectsDisplay();
+  const chatColors = useChatColors();
+  const palette = useActiveTheme().xterm;
   const menuId = `pane-menu-${leaf.id}`;
   const subId = (which: PaneSubmenu) => `${menuId}-${which}`;
+  const chanId = (channel: string) => `${menuId}-colors-${channel}`;
 
   useEffect(() => {
     if (leaf.pane !== 'affects') return;
@@ -127,6 +146,40 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
       label: 'Marker',
       items: () => choices(affectsMarkerChoices(display), (marker) => pickDisplay({ marker })),
     },
+    colors: {
+      label: 'Channel colors',
+      items: () => (
+        <>
+          {CHAT_CHANNELS.map((channel) => (
+            <MenuItem
+              key={channel}
+              itemRef={(el) => {
+                chanRefs.current[channel] = el;
+              }}
+              submenu={{
+                open: chanOpen?.which === channel,
+                controls: chanId(channel),
+                onOpen: (focus) => setChanOpen((prev) => openPaneSubmenu(prev, channel, focus)),
+              }}
+              onFocus={() => setChanOpen((prev) => (prev && prev.which !== channel ? null : prev))}
+              trailing={<ChevronRightIcon className="pane-menu-chevron" />}
+            >
+              <Swatch color={chatChannelColor(channel, palette, chatColors)} />
+              {channel}
+            </MenuItem>
+          ))}
+          <MenuSeparator />
+          <MenuItem
+            disabled={chatColors.size === 0}
+            onHover={() => setChanOpen(null)}
+            onFocus={() => setChanOpen(null)}
+            onSelect={run(() => void resetChatColors().catch(() => undefined))}
+          >
+            Reset all
+          </MenuItem>
+        </>
+      ),
+    },
   };
 
   let sub: ReactNode = null;
@@ -147,6 +200,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         onClose={() => {
           // Escape or ArrowLeft: back to the row that opened it.
           setSubOpen(null);
+          setChanOpen(null);
           rowRefs.current[which]?.focus();
         }}
       >
@@ -155,7 +209,41 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
     );
   }
 
-  const closeSub = () => setSubOpen(null);
+  // A channel's colors, beside Channel colors.
+  let chanSub: ReactNode = null;
+  const chanRow = subOpen?.which === 'colors' && chanOpen ? chanRefs.current[chanOpen.which] : null;
+  if (chanOpen && chanRow) {
+    const channel = chanOpen.which;
+    const r = chanRow.getBoundingClientRect();
+    const menu = chanRow.closest('menu')?.getBoundingClientRect() ?? r;
+    chanSub = (
+      <MenuSurface
+        key={channel}
+        id={chanId(channel)}
+        label={`Color for ${channel}`}
+        nested
+        autoFocus={chanOpen.focus}
+        className="pane-menu-sub"
+        at={{ x: menu.right + 4, y: r.top - 6, flipX: menu.left - 4, flipY: r.bottom + 6 }}
+        onClose={() => {
+          setChanOpen(null);
+          chanRefs.current[channel]?.focus();
+        }}
+      >
+        <ChannelColorItems
+          channel={channel}
+          colors={chatColors}
+          palette={palette}
+          onPick={(color) => run(() => void setChatColor(channel, color).catch(() => undefined))()}
+        />
+      </MenuSurface>
+    );
+  }
+
+  const closeSub = () => {
+    setSubOpen(null);
+    setChanOpen(null);
+  };
   /** A row that opens `which`. Pointing at it or opening it from the
    *  keyboard opens its submenu and closes any other, and the arrow keys
    *  landing on it close any other too. */
@@ -165,11 +253,17 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         rowRefs.current[which] = el;
       }}
       disabled={disabled}
-      onFocus={() => setSubOpen((prev) => (prev && prev.which !== which ? null : prev))}
+      onFocus={() => {
+        setSubOpen((prev) => (prev && prev.which !== which ? null : prev));
+        if (which !== 'colors') setChanOpen(null);
+      }}
       submenu={{
         open: subOpen?.which === which,
         controls: subId(which),
-        onOpen: (focus) => setSubOpen((prev) => openPaneSubmenu(prev, which, focus)),
+        onOpen: (focus) => {
+          setSubOpen((prev) => openPaneSubmenu(prev, which, focus));
+          if (which !== 'colors') setChanOpen(null);
+        },
       }}
       trailing={<ChevronRightIcon className="pane-menu-chevron" />}
     >
@@ -226,12 +320,57 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
             </MenuItem>
           </>
         )}
+        {leaf.pane === 'chat' && (
+          <>
+            <MenuSeparator />
+            {submenuRow('colors', false)}
+          </>
+        )}
         <MenuSeparator />
         <MenuItem onHover={closeSub} onFocus={closeSub} onSelect={run(() => closeHere(leaf.id))}>
           Close pane
         </MenuItem>
       </MenuSurface>
       {sub}
+      {chanSub}
+    </>
+  );
+}
+
+/** A dot in a color, before a row's name. */
+function Swatch({ color }: { color: string }) {
+  return <span className="pane-menu-swatch" style={{ background: color }} aria-hidden="true" />;
+}
+
+/** Default, set apart, then the theme's 16 ANSI colors, each with its
+ *  swatch and a check on what the channel shows now. */
+function ChannelColorItems({
+  channel,
+  colors,
+  palette,
+  onPick,
+}: {
+  channel: string;
+  colors: ChatColors;
+  palette: XtermPalette;
+  onPick: (color: string | null) => void;
+}) {
+  const [fallback, ...slots] = chatColorChoices(channel, colors, palette);
+  const item = (choice: ChatColorChoice) => (
+    <MenuItem
+      key={choice.value ?? 'default'}
+      onSelect={() => onPick(choice.value)}
+      trailing={choice.checked ? <CheckIcon className="pane-menu-check" /> : null}
+    >
+      <Swatch color={choice.swatch} />
+      {choice.label}
+    </MenuItem>
+  );
+  return (
+    <>
+      {fallback && item(fallback)}
+      <MenuSeparator />
+      {slots.map(item)}
     </>
   );
 }

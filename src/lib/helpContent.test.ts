@@ -328,6 +328,12 @@ describe('the help on the chat pane', () => {
     expect(text).not.toContain('`visible/total`');
   });
 
+  it('says how to recolor a channel from the pane menu', () => {
+    expect(body('shape.chat-pane')).toContain(
+      "- Recolor a channel from the pane's menu. Choose `Channel colors`, then the channel, then `Default` or one of your theme's 16 terminal colors. The pane follows at once, each profile keeps its own picks, and a theme switch carries them along. `Reset all` gives every channel its default again.",
+    );
+  });
+
   it('says Vosh catches the tells you send with a preset, on from the start', () => {
     const text = body('shape.chat-pane');
     expect(text).toContain(
