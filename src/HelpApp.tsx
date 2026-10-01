@@ -16,9 +16,12 @@ import { isMacPlatform, shortcutKey } from './lib/palette';
 import { HELP_TOPICS, type HelpTopic } from './lib/helpContent';
 import {
   countMatches,
+  helpScrollKey,
   outlineFor,
   rankTopics,
   resolveHelpTarget,
+  type HelpFocus,
+  type HelpScroll,
   type HelpTarget,
 } from './lib/helpNav';
 import { HELP_FIND_EVENT, HELP_GOTO_EVENT, HELP_PENDING_KEY } from './lib/helpLink';
@@ -70,6 +73,30 @@ function clearPendingTarget() {
     localStorage.removeItem(HELP_PENDING_KEY);
   } catch {
     // Storage unavailable. Nothing was left there.
+  }
+}
+
+/** Where focus sits, for the keys that scroll the article. */
+function focusIn(scroller: HTMLElement): HelpFocus {
+  const el = document.activeElement;
+  if (!el || el === document.body || el === document.documentElement) return 'none';
+  if (scroller.contains(el)) return 'article';
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return 'field';
+  return 'control';
+}
+
+/** A line of the article, about two lines of body text. */
+const LINE_STEP = 40;
+
+/** Scroll the article the way the key would if it had focus. A page
+ *  keeps one line of the last page in view. */
+function scrollArticle(scroller: HTMLElement, move: HelpScroll) {
+  if (move.kind === 'edge') {
+    scroller.scrollTop = move.to === 'top' ? 0 : scroller.scrollHeight;
+  } else {
+    const step =
+      move.kind === 'page' ? Math.max(scroller.clientHeight - LINE_STEP, LINE_STEP) : LINE_STEP;
+    scroller.scrollBy({ top: step * move.by });
   }
 }
 
@@ -225,6 +252,21 @@ export function HelpApp() {
     };
   }, [mac]);
 
+  // The article takes focus from Tab and scrolls itself then. From the
+  // search or the sidebar, the keys that scroll a page still reach it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const scroller = scrollRef.current;
+      if (!scroller || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      const move = helpScrollKey(e.key, e.shiftKey, focusIn(scroller));
+      if (!move) return;
+      e.preventDefault();
+      scrollArticle(scroller, move);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
   // Load the theme and the font, and show the window once a frame with
   // the theme has gone out. The startup paint usually has it on screen
   // already.
@@ -355,7 +397,13 @@ export function HelpApp() {
           )}
           {!mac && <WindowControls />}
         </header>
-        <div ref={scrollRef} className="hp-scroll" tabIndex={-1}>
+        <div
+          ref={scrollRef}
+          className="hp-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label={shown.title}
+        >
           <div className="hp-page" data-outline={outline ? '' : undefined}>
             <HelpArticle
               ref={titleRef}

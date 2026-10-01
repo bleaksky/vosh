@@ -59,6 +59,13 @@
   outline: none;
 }
 
+/* Tab reaches the article so the keys scroll it. A click into it
+   draws no ring. */
+.hp-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 /* Prose keeps a 528 measure. A card runs the full column, up to 712,
    unless an outline sits beside it, 32 after the measure and 152
    wide. */
