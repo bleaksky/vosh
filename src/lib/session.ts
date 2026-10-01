@@ -1218,6 +1218,11 @@ export interface PromptOpenRow {
   gen: number;
   spans: PromptSpan[];
   plain: string;
+  /** The game's own lines the drawn prompt replaced, which the row shows
+   *  while the card reads your codes or drawing is off. */
+  raw_lines: string[];
+  /** The index in the prompt the game sent of the first of them. */
+  raw_from: number;
 }
 
 /** Everything the card reads about your prompt now. `open_row` is the

@@ -66,6 +66,13 @@ pub struct OpenRowState {
     pub gen: u64,
     pub spans: Vec<Span>,
     pub plain: String,
+    /// The game's own lines the drawn prompt replaced, as plain text,
+    /// which the row shows while the card reads your codes or drawing is
+    /// off, so the card's marks can sit on them.
+    pub raw_lines: Vec<String>,
+    /// The index in the prompt the game sent of the first of them, so a
+    /// mark that names a line of that prompt finds its row.
+    pub raw_from: usize,
 }
 
 /// `prompt_state_get`.

@@ -118,6 +118,10 @@
       "open_row": {
         "gen": 2,
         "plain": "<765>",
+        "raw_from": 1,
+        "raw_lines": [
+          "[765/1020hp 800/800mn 930/930mv]"
+        ],
         "spans": [
           {
             "bg": {
@@ -296,6 +300,10 @@
       "open_row": {
         "gen": 4,
         "plain": "<765>",
+        "raw_from": 1,
+        "raw_lines": [
+          "[765/1020hp 800/800mn 930/930mv]"
+        ],
         "spans": [
           {
             "bg": {
@@ -591,6 +599,10 @@
       "open_row": {
         "gen": 2,
         "plain": "[765/1020hp 800/800mn 930/930mv] ",
+        "raw_from": 1,
+        "raw_lines": [
+          "[765/1020hp 800/800mn 930/930mv]"
+        ],
         "spans": [
           {
             "bg": {
@@ -831,6 +843,10 @@
       "open_row": {
         "gen": 4,
         "plain": "[765/1020hp 800/800mn 930/930mv] ",
+        "raw_from": 1,
+        "raw_lines": [
+          "[765/1020hp 800/800mn 930/930mv]"
+        ],
         "spans": [
           {
             "bg": {
@@ -1308,6 +1324,10 @@
       "open_row": {
         "gen": 2,
         "plain": "HP 765\n<800 mn 930 mv> ",
+        "raw_from": 1,
+        "raw_lines": [
+          "[765/1020hp 800/800mn 930/930mv]"
+        ],
         "spans": [
           {
             "bg": {
@@ -1581,6 +1601,10 @@
       "open_row": {
         "gen": 4,
         "plain": "HP 765\n<800 mn 930 mv> ",
+        "raw_from": 1,
+        "raw_lines": [
+          "[765/1020hp 800/800mn 930/930mv]"
+        ],
         "spans": [
           {
             "bg": {
