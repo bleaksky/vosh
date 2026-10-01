@@ -42,9 +42,9 @@ const NORD: BandEnv = {
   brightBold: false,
 };
 
-const form = (format: PromptForm['format'], segment: string): PromptForm => ({
+const form = (format: PromptForm['format'], segment: string, label = segment): PromptForm => ({
   format,
-  label: segment,
+  label,
   segment,
   sample: { ansi: segment, plain: segment, rows: 1, spans: [] },
   show_as: true,
@@ -68,9 +68,9 @@ const HP: PromptPiece = {
   literal: null,
   meta: '1020 of 1020',
   forms: [
-    form('value', '1020'),
-    form('cur_max', '1020/1020'),
-    form('percent', '100%'),
+    form('value', '1020', 'Current'),
+    form('cur_max', '1020/1020', 'Current and max'),
+    form('percent', '100%', 'Percent'),
     form('bar', 'Bar'),
   ],
   by_value: true,
@@ -98,6 +98,9 @@ describe('a picked part', () => {
     expect(html).toContain('class="pc-piece-meta">1020 of 1020<');
     expect(html).toContain('class="pc-piece-code">%c_reset%s_italic%hp<');
     expect(pressed(html, 'Show as')).toEqual(['1020']);
+    // Each segment's name holds the text it shows, then the form's name.
+    expect(html).toContain('aria-label="1020/1020, Current and max"');
+    expect(html).not.toMatch(/aria-label="Current and max"/);
     expect(pressed(html, 'When')).toEqual(['Always']);
     // Its effective look: the terminal's text color and italic.
     expect(html).toMatch(/aria-label="Terminal text"[^>]*aria-pressed="true"/);

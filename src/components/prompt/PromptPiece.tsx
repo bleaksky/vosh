@@ -112,7 +112,13 @@ export function PromptPieceBody({ piece, env, onEdit, onInsertValue }: PromptPie
           <Segmented
             label="Show as"
             className="pc-seg"
-            options={piece.forms.map((f) => ({ value: f.format, label: f.segment, name: f.label }))}
+            options={piece.forms.map((f) => ({
+              value: f.format,
+              label: f.segment,
+              // The name holds the text the segment shows, then what it
+              // is, so you can say what you see to pick it.
+              ...(f.segment === f.label ? {} : { name: `${f.segment}, ${f.label}` }),
+            }))}
             value={piece.format}
             onChange={(format: PromptFormatName) =>
               onEdit({ op: 'set_format', piece: at, format: { format } })
