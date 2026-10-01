@@ -831,13 +831,17 @@ export function Terminal({
     // post-restore cursor position lands above the viewport bottom.
     // No-op when the cursor is already at the bottom (large
     // scrollback that overfilled).
+    //
+    // While your prompt is the open region it pads nothing, so the region
+    // stays open for the repaints the session still sends, and your echo
+    // follows your prompt (RegionWriter.pad).
     const padToBottom = () => {
       const cursorY = term.buffer.active.cursorY;
       // Line ends held back for a pinned prompt go out with the padding,
       // so they count toward it.
       const rowsBelow = term.rows - 1 - cursorY - writer.pendingRows();
       if (rowsBelow > 0) {
-        writer.local('\r\n'.repeat(rowsBelow));
+        writer.pad('\r\n'.repeat(rowsBelow));
       }
     };
 
