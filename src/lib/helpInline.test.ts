@@ -33,6 +33,7 @@ describe('a backticked span in help', () => {
       'a Blackwatch villager',
       'HH:MM',
       'TLS',
+      'You tell your group',
     ]) {
       expect(classifyInline(span), span).toBe('code');
     }
@@ -51,6 +52,10 @@ describe('a backticked span in help', () => {
       'Fn+Up',
       'F1',
       'Ctrl+Alt+Numpad7',
+      'Cmd+,',
+      'Cmd+/',
+      'Cmd+\\',
+      'Cmd+Shift+L',
       'Shift',
       'ArrowUp',
       '⌘K',
@@ -59,6 +64,10 @@ describe('a backticked span in help', () => {
     }
     expect(keyParts('Shift+Enter')).toEqual(['Shift', 'Enter']);
     expect(keyParts('Cmd+Shift+L')).toEqual(['Cmd', 'Shift', 'L']);
+    expect(keyParts('Cmd+\\')).toEqual(['Cmd', '\\']);
+    // A letter or a sign alone is no key, it is what you type.
+    expect(classifyInline(',')).toBe('code');
+    expect(classifyInline('a')).toBe('code');
   });
 
   it('keeps Up and Down labels unless a modifier comes first', () => {

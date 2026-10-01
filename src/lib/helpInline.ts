@@ -48,7 +48,7 @@ export function keyParts(span: string): string[] | null {
   const mods = parts.slice(0, -1);
   if (!mods.every((m) => MODIFIERS.has(m))) return null;
   if (isNamedKey(last) || MODIFIERS.has(last)) return parts;
-  if (mods.length > 0 && (/^[A-Z0-9]$/.test(last) || ARROWS.has(last))) return parts;
+  if (mods.length > 0 && (/^[A-Z0-9,./\\;=[\]-]$/.test(last) || ARROWS.has(last))) return parts;
   return null;
 }
 
@@ -74,10 +74,12 @@ export function keyGlyph(part: string): string {
 
 /** How to draw a backticked span. A key name is a key. A span that
  *  starts with a capital and holds only words, spaces, commas,
- *  apostrophes and an ellipsis is a label you see in Vosh. Anything
- *  else is MUD text or a code. */
+ *  apostrophes and an ellipsis is a label you see in Vosh, unless it
+ *  speaks to you the way the game does, like `You tell your group`.
+ *  Anything else is MUD text or a code. */
 export function classifyInline(span: string): InlineKind {
   if (keyParts(span) !== null) return 'key';
+  if (/^You /.test(span)) return 'code';
   if (/^[A-Z][A-Za-z0-9 ,'’]*(…)?$/.test(span) && /[a-z]/.test(span)) return 'label';
   return 'code';
 }
