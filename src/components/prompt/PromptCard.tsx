@@ -136,6 +136,9 @@ interface PromptCardProps {
   renderer: 'xterm' | 'native';
   /** Open on the design's text, as Edit prompt as text… asks. */
   initialView?: CardView;
+  /** Open on pointing at the line your game prints, as Point at it
+   *  again… in Settings asks. */
+  startStep?: 'point' | undefined;
   /** The card draws your design over the band of Lifted in the text, so
    *  the page turns the band pass on while it does. */
   onBand?: (on: boolean) => void;
@@ -179,6 +182,7 @@ export function PromptCard({
   brightBold,
   renderer,
   initialView = 'design',
+  startStep,
   onBand,
   onClose,
 }: PromptCardProps) {
@@ -235,6 +239,9 @@ export function PromptCard({
     setConfig(next);
   };
 
+  // The step the card was asked to open on, read once as it opens.
+  const opensOn = useRef(startStep);
+
   // Open: keep the design among the earlier ones, read the state, and
   // name who the card saves for.
   useEffect(() => {
@@ -257,11 +264,12 @@ export function PromptCard({
         setActive(name);
         setKnownHost(known);
         setStep(
-          openingStep({
-            capture: opened.capture,
-            forsaken: now.forsaken || known || opened.capture.kind === 'aabahran',
-            gameSent: now.new_build,
-          }),
+          opensOn.current ??
+            openingStep({
+              capture: opened.capture,
+              forsaken: now.forsaken || known || opened.capture.kind === 'aabahran',
+              gameSent: now.new_build,
+            }),
         );
       })
       .catch((e: unknown) => console.error('[prompt card] opening failed', e));
@@ -292,6 +300,11 @@ export function PromptCard({
       void promptPreviewSet(null).catch(() => {});
     };
   }, []);
+
+  // Point at it again… in Settings while the card is open.
+  useEffect(() => {
+    if (startStep) setStep((now) => (now === null ? now : startStep));
+  }, [startStep]);
 
   // While the card reads your codes your prompt shows the line the game
   // sent, so its marks sit on it. Once it draws your design, each value

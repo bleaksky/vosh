@@ -257,6 +257,8 @@ describe('opening the prompt card', () => {
     expect(emit).toHaveBeenLastCalledWith('vosh://prompt-card-open', { view: null });
     await openPromptCard('text');
     expect(emit).toHaveBeenLastCalledWith('vosh://prompt-card-open', { view: 'text' });
+    await openPromptCard('point');
+    expect(emit).toHaveBeenLastCalledWith('vosh://prompt-card-open', { view: 'point' });
     let handler: EventCallback<unknown> | undefined;
     vi.mocked(listen).mockImplementationOnce((event, cb) => {
       expect(event).toBe('vosh://prompt-card-open');
@@ -268,10 +270,17 @@ describe('opening the prompt card', () => {
     const send = (payload: unknown) =>
       handler?.({ event: 'vosh://prompt-card-open', id: 0, payload });
     send({ view: 'text' });
+    send({ view: 'point' });
     send({ view: null });
     // A view this build does not know opens the card where it would open.
     send({ view: 'telepathy' });
     send(null);
-    expect(heard).toEqual([{ view: 'text' }, { view: null }, { view: null }, { view: null }]);
+    expect(heard).toEqual([
+      { view: 'text' },
+      { view: 'point' },
+      { view: null },
+      { view: null },
+      { view: null },
+    ]);
   });
 });
