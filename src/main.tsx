@@ -4,6 +4,7 @@ import './prepaint';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { SettingsApp } from './SettingsApp';
+import { HelpApp } from './HelpApp';
 // Chrome typefaces for the Ember redesign. Bundled through Vite so the
 // app never fetches fonts at runtime. Inter carries chrome body text,
 // Rajdhani the uppercase pane labels, Roboto Slab the wordmark and
@@ -76,7 +77,7 @@ const params = new URLSearchParams(window.location.search);
 const view = params.get('view');
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 try {
-  root.render(view === 'settings' ? <SettingsApp /> : <App />);
+  root.render(view === 'settings' ? <SettingsApp /> : view === 'help' ? <HelpApp /> : <App />);
 } catch (e) {
   showBootError('render failed', e);
   throw e;

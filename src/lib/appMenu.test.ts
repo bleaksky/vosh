@@ -3,7 +3,6 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   APP_SHORTCUTS,
   buildMenuState,
-  commandBlocked,
   commandRepeats,
   pageHasSelection,
   resetAppMenuState,
@@ -47,18 +46,10 @@ describe('resolveShortcut', () => {
 });
 
 describe('command gates', () => {
-  it('stands the palette and the find bar down while help is open', () => {
-    expect(commandBlocked('palette', { helpOpen: true })).toBe(true);
-    expect(commandBlocked('find', { helpOpen: true })).toBe(true);
-    expect(commandBlocked('palette', { helpOpen: false })).toBe(false);
-    expect(commandBlocked('help', { helpOpen: true })).toBe(false);
-    expect(commandBlocked('connect', { helpOpen: true })).toBe(false);
-  });
-
-  it('repeats only find and help on a held key', () => {
+  it('repeats only find on a held key', () => {
     expect(commandRepeats('find')).toBe(true);
-    expect(commandRepeats('help')).toBe(true);
-    for (const id of ['palette', 'connect', 'panel', 'split', 'settings']) {
+    // Help is a window of its own, so a held key opens it once.
+    for (const id of ['help', 'palette', 'connect', 'panel', 'split', 'settings']) {
       expect(commandRepeats(id)).toBe(false);
     }
   });
