@@ -657,7 +657,8 @@ impl Doc {
         ) {
             return error("Only a value can change how it shows.");
         }
-        let (kind, content) = content_for(&value.field, choice, Some(&value.format))?;
+        let (field, _) = gauge_of(&value);
+        let (kind, content) = content_for(&field, choice, Some(&value.format))?;
         let piece = &mut self.pieces[index];
         piece.kind = kind;
         piece.content = content;
@@ -829,7 +830,10 @@ impl Doc {
     }
 
     fn set_when(&mut self, index: usize, when: When) -> Result<(), EditError> {
-        if !self.piece(index)?.shows() {
+        // A line break shows nothing, but it starts a row only when it
+        // draws, so it takes When as a part that shows does (P10).
+        let piece = self.piece(index)?;
+        if !piece.shows() && piece.kind != PieceKind::Nl {
             return error("Only a part that shows can change when it shows.");
         }
         let want = match when {
@@ -1180,6 +1184,21 @@ pub(crate) fn kind_of(field: &FieldRef) -> Option<Kind> {
     vars::entry_for(field).map(|e| e.kind)
 }
 
+/// The field a value shows and whether it is a gauge's max: `%{maxhp}`
+/// alone is Health in the form Max, so Show as turns it into any form of
+/// Health, as the card describes it.
+pub(crate) fn gauge_of(value: &ValueRef) -> (FieldRef, bool) {
+    let field = &value.field;
+    if value.format == Format::Value && field.param.is_none() {
+        if let Some(pair) = vars::Pair::of(&field.name) {
+            if field.name != pair.cur() && field.name != pair.pct() {
+                return (FieldRef::new(pair.cur()), true);
+            }
+        }
+    }
+    (field.clone(), false)
+}
+
 /// The name of a gauge's max as Current and max writes it.
 fn max_name(field: &FieldRef) -> String {
     match vars::Pair::of(&field.name) {
@@ -1252,6 +1271,13 @@ fn content_for(
         }))
     };
     let one = |format: Format| Ok((PieceKind::Value, vec![value(format)]));
+    // The game's prompt is a token of its own, `%{raw}`.
+    if kind == Some(Kind::Raw) {
+        return match choice.format {
+            FormatName::Value => Ok((PieceKind::Raw, vec![Item::new(TokenKind::Raw)])),
+            _ => error("Vosh cannot show that value that way."),
+        };
+    }
     match choice.format {
         FormatName::Value => one(Format::Value),
         FormatName::Max if vars::Pair::of(&field.name).is_some() && field.param.is_none() => {

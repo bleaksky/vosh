@@ -773,3 +773,124 @@ fn the_card_follows_the_piece_an_edit_acted_on() {
         None
     );
 }
+
+#[test]
+fn when_puts_a_line_break_in_a_fight_and_takes_it_out_again() {
+    // The card offers When on a line break (P10), and the picker's Line
+    // break in a fight sets it on the break it adds.
+    let template = "%hp%nl%mana";
+    let fight = edit(
+        template,
+        &EditOp::SetWhen {
+            piece: 1,
+            when: When::Fight,
+        },
+    );
+    assert_eq!(fight, "%hp%{if:fight}%nl%{end}%mana");
+    assert_eq!(
+        render_str(&fight, &Sampled { fight: false }, RenderOptions::default()).plain,
+        "1020800"
+    );
+    let always = edit(
+        &fight,
+        &EditOp::SetWhen {
+            piece: 2,
+            when: When::Always,
+        },
+    );
+    assert_eq!(always, template);
+
+    // Detailed's fight line break can show always.
+    let nl = Template::parse(DETAILED)
+        .pieces()
+        .iter()
+        .position(|p| p.kind == PieceKind::Nl)
+        .expect("Detailed breaks its fight line");
+    let out = edit(
+        DETAILED,
+        &EditOp::SetWhen {
+            piece: nl,
+            when: When::Always,
+        },
+    );
+    assert!(out.contains("%opponent_cond%{end}%nl%c_hp"), "{out}");
+    assert_eq!(others(&out, true, &[]), others(DETAILED, true, &[]));
+    assert_reads_clean(&out);
+
+    // A line break the picker adds, then In a fight on it, as the card
+    // sends them.
+    let (added, at) = edit_at("%hp %mana", &EditOp::InsertNl { at: 2 });
+    let at = at.expect("the break is picked");
+    let fight = edit(
+        &added,
+        &EditOp::SetWhen {
+            piece: at,
+            when: When::Fight,
+        },
+    );
+    assert_eq!(fight, "%hp %{if:fight}%nl%{end}%mana");
+}
+
+#[test]
+fn show_as_reads_a_max_as_a_form_of_its_gauge() {
+    // `%{maxhp}` after a color code stands alone, and the card shows it
+    // as Health in the form Max with every form of Health to choose.
+    let template = "[%c_hp%hp%c_default/%{maxhp}hp]";
+    let max = Template::parse(template)
+        .pieces()
+        .iter()
+        .position(|p| &template[p.start..p.end] == "%{maxhp}")
+        .expect("the max is its own piece");
+    let set = |format: FormatName| {
+        edit(
+            template,
+            &EditOp::SetFormat {
+                piece: max,
+                format: FormatChoice::of(format),
+            },
+        )
+    };
+    assert_eq!(set(FormatName::Value), "[%c_hp%hp%c_default/%{hp}hp]");
+    assert_eq!(
+        set(FormatName::CurMax),
+        "[%c_hp%hp%c_default/%hp/%{maxhp}hp]"
+    );
+    assert_eq!(set(FormatName::Max), template);
+    assert_eq!(set(FormatName::Percent), "[%c_hp%hp%c_default/%pct_hp%%hp]");
+    assert!(
+        set(FormatName::Bar).contains("/%{hp:bar:10}hp]"),
+        "{}",
+        set(FormatName::Bar)
+    );
+    for format in [
+        FormatName::Value,
+        FormatName::CurMax,
+        FormatName::Percent,
+        FormatName::Bar,
+    ] {
+        assert_reads_clean(&set(format));
+    }
+}
+
+#[test]
+fn the_games_prompt_goes_in_as_the_raw_token() {
+    let (text, at) = edit_at(
+        "%hp ",
+        &EditOp::InsertField {
+            at: 2,
+            field: "raw".into(),
+            format: None,
+        },
+    );
+    assert_eq!(text, "%hp %{raw}");
+    assert_eq!(at.map(|i| piece_text(&text, i)), Some("%{raw}".into()));
+    let (text, _) = edit_at(
+        "",
+        &EditOp::InsertField {
+            at: 0,
+            field: "raw".into(),
+            format: Some(FormatChoice::of(FormatName::Value)),
+        },
+    );
+    assert_eq!(text, "%{raw}");
+}
