@@ -16,7 +16,9 @@
 //!
 //! A page call whose name is built at run time cannot be read from the
 //! source. Each one sits on [`BUILT_AT_RUN_TIME`] with its reason, and a
-//! test fails when an entry there no longer matches a call.
+//! test fails when an entry there no longer matches a call. An entry
+//! names the page function that makes the call, not its file, so moving
+//! that function leaves the list as it is.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -49,12 +51,11 @@ const CALLEES: &[(&str, &str, Call, usize)] = &[
 
 /// A page call whose name is built at run time.
 struct BuiltAtRunTime {
-    /// The page file, from the repo root.
-    file: &'static str,
+    /// The page function that makes the call, wherever under `src` it is
+    /// defined, so a move to another file leaves the entry as it is.
+    function: &'static str,
     /// The Tauri function it calls.
     callee: &'static str,
-    /// The name argument as the source writes it.
-    arg: &'static str,
     /// Where its names come from.
     names: Names,
     /// Why the name is built at run time.
@@ -63,9 +64,10 @@ struct BuiltAtRunTime {
 
 /// Where the names of a call on [`BUILT_AT_RUN_TIME`] come from.
 enum Names {
-    /// The first argument of each call to this page function in the same
-    /// file. Those are checked like any other name.
-    PassedTo(&'static str),
+    /// The function passes on its parameter at this index as the name.
+    /// The argument there of each call to the function, in every page file
+    /// that defines or imports it, is checked like any other name.
+    Param(usize),
     /// A template that starts with this text, which the sender builds the
     /// same way.
     Family(&'static str),
@@ -74,19 +76,17 @@ enum Names {
 /// Every page call whose name is built at run time.
 const BUILT_AT_RUN_TIME: &[BuiltAtRunTime] = &[
     BuiltAtRunTime {
-        file: "src/lib/session.ts",
+        function: "onGmcpPackage",
         callee: "listen",
-        arg: "channel",
         names: Names::Family("session://gmcp/"),
         why: "onGmcpPackage hears one GMCP package. The app sends each package \
               on session://gmcp/ and the package name with its dots turned to \
               dashes, in session.rs.",
     },
     BuiltAtRunTime {
-        file: "src/lib/session.ts",
+        function: "emitChanged",
         callee: "emit",
-        arg: "event",
-        names: Names::PassedTo("emitChanged"),
+        names: Names::Param(0),
         why: "emitChanged tells the other windows about a Settings value only \
               when it changed. Its callers name the events.",
     },
@@ -117,6 +117,11 @@ struct PageCall {
     /// The page function on [`BUILT_AT_RUN_TIME`] that passes the name
     /// on to the Tauri one, for a name read from a call to that function.
     via: Option<&'static str>,
+    /// The innermost named page function the call sits in.
+    within: Option<String>,
+    /// Which parameter of that function the name argument is, when it is
+    /// no more than one.
+    param: Option<usize>,
 }
 
 impl PageCall {
@@ -264,57 +269,70 @@ fn unlisted_run_time_names(contract: &Contract, list: &[BuiltAtRunTime]) -> Vec<
         }
         let entry = list
             .iter()
-            .find(|e| e.file == call.file && e.callee == call.callee && e.arg == call.arg);
-        match (entry.map(|e| &e.names), &call.name) {
-            (None, _) => failures.push(format!(
-                "{} passes {} a name built at run time, {}. Add it to BUILT_AT_RUN_TIME \
-                 with where its names come from.",
+            .find(|e| call.within.as_deref() == Some(e.function) && e.callee == call.callee);
+        let Some(entry) = entry else {
+            let within = call
+                .within
+                .as_ref()
+                .map(|f| format!(" in {f}"))
+                .unwrap_or_default();
+            failures.push(format!(
+                "{} passes {} a name built at run time{within}, {}. Add it to \
+                 BUILT_AT_RUN_TIME with where its names come from.",
                 call.at(),
                 call.callee,
                 call.arg
-            )),
-            (Some(Names::Family(listed)), built)
-                if *built != Name::Family(String::from(*listed)) =>
-            {
+            ));
+            continue;
+        };
+        match entry.names {
+            Names::Family(listed) if call.name != Name::Family(listed.into()) => {
                 failures.push(format!(
-                    "BUILT_AT_RUN_TIME says the names {} passes start {listed}, and the \
-                     source builds {built:?}.",
+                    "BUILT_AT_RUN_TIME says the names {} passes {} start {listed}, and \
+                     {} builds {:?}.",
+                    entry.function,
+                    entry.callee,
                     call.at(),
+                    call.name
                 ));
             }
+            Names::Param(index) if call.param != Some(index) => failures.push(format!(
+                "BUILT_AT_RUN_TIME says {} passes {} its parameter {index}, and {} \
+                 passes {}.",
+                entry.function,
+                entry.callee,
+                call.at(),
+                call.arg
+            )),
             _ => {}
         }
     }
     for entry in list {
         if entry.why.trim().is_empty() {
             failures.push(format!(
-                "BUILT_AT_RUN_TIME lists {} in {} with no reason.",
-                entry.arg, entry.file
+                "BUILT_AT_RUN_TIME lists the {} in {} with no reason.",
+                entry.callee, entry.function
             ));
         }
         let matches = contract.calls.iter().any(|c| {
-            c.file == entry.file
+            c.within.as_deref() == Some(entry.function)
                 && c.callee == entry.callee
-                && c.arg == entry.arg
                 && c.via.is_none()
+                && !matches!(c.name, Name::Fixed(_))
         });
         if !matches {
             failures.push(format!(
-                "BUILT_AT_RUN_TIME lists {} in {}, and no {} there passes it. Remove the \
-                 entry.",
-                entry.arg, entry.file, entry.callee
+                "BUILT_AT_RUN_TIME lists the {} in {}, and no page function by that \
+                 name passes {} a name built at run time. Remove the entry.",
+                entry.callee, entry.function, entry.callee
             ));
         }
-        if let Names::PassedTo(helper) = entry.names {
-            let passed = contract
-                .calls
-                .iter()
-                .any(|c| c.file == entry.file && c.via == Some(helper));
-            if !passed {
+        if let Names::Param(_) = entry.names {
+            if !contract.calls.iter().any(|c| c.via == Some(entry.function)) {
                 failures.push(format!(
-                    "BUILT_AT_RUN_TIME says {helper} passes the names in {}, and nothing \
-                     there calls {helper} with one.",
-                    entry.file
+                    "BUILT_AT_RUN_TIME says {} passes on the names its callers give it, \
+                     and no page file calls it with one.",
+                    entry.function
                 ));
             }
         }
@@ -352,6 +370,8 @@ fn page_call(call: Call, arg: &str, name: Name) -> PageCall {
         arg: arg.into(),
         name,
         via: None,
+        within: None,
+        param: None,
     }
 }
 
@@ -376,6 +396,15 @@ fn assert_rejects(check: &str, failures: &[String], want: &[&str]) {
 #[test]
 fn each_check_rejects_the_case_it_guards() {
     let fixed = |s: &str| Name::Fixed(s.into());
+    let family = |s: &str| Name::Family(s.into());
+    let within = |function: &str, call: PageCall| PageCall {
+        within: Some(function.into()),
+        ..call
+    };
+    let via = |call: PageCall| PageCall {
+        via: Some("tell"),
+        ..call
+    };
     let contract = Contract {
         commands: BTreeSet::from(["registered".to_string()]),
         app_names: BTreeSet::from(["vosh://sent".to_string(), "vosh://built/{}".to_string()]),
@@ -387,13 +416,25 @@ fn each_check_rejects_the_case_it_guards() {
             page_call(Call::Emit, "'vosh://page'", fixed("vosh://page")),
             page_call(Call::Listen, "'vosh://page'", fixed("vosh://page")),
             page_call(Call::Listen, "'vosh://unsent'", fixed("vosh://unsent")),
-            page_call(Call::Listen, "built", Name::Family("vosh://built/".into())),
-            page_call(
-                Call::Listen,
-                "nobody",
-                Name::Family("vosh://nobody/".into()),
+            within(
+                "hear",
+                page_call(Call::Listen, "built", family("vosh://built/")),
             ),
-            page_call(Call::Listen, "unlisted", Name::Unknown),
+            within(
+                "hearNobody",
+                page_call(Call::Listen, "nobody", family("vosh://nobody/")),
+            ),
+            within("other", page_call(Call::Listen, "unlisted", Name::Unknown)),
+            PageCall {
+                param: Some(0),
+                ..within("tell", page_call(Call::Emit, "event", Name::Unknown))
+            },
+            via(page_call(Call::Emit, "'vosh://told'", fixed("vosh://told"))),
+            via(page_call(Call::Emit, "name", Name::Unknown)),
+            PageCall {
+                param: Some(1),
+                ..within("misled", page_call(Call::Emit, "other", Name::Unknown))
+            },
         ],
         problems: Vec::new(),
     };
@@ -407,35 +448,28 @@ fn each_check_rejects_the_case_it_guards() {
         &unsent_listens(&contract),
         &["listens for vosh://unsent,", "start vosh://nobody/,"],
     );
+    let entry = |function, callee, names| BuiltAtRunTime {
+        function,
+        callee,
+        names,
+        why: "A case.",
+    };
     let list = [
-        BuiltAtRunTime {
-            file: "src/page.ts",
-            callee: "listen",
-            arg: "built",
-            names: Names::Family("vosh://built/"),
-            why: "A family the app builds.",
-        },
-        BuiltAtRunTime {
-            file: "src/page.ts",
-            callee: "listen",
-            arg: "nobody",
-            names: Names::Family("vosh://nobody/"),
-            why: "A family nobody builds.",
-        },
-        BuiltAtRunTime {
-            file: "src/page.ts",
-            callee: "listen",
-            arg: "stale",
-            names: Names::Family("vosh://built/"),
-            why: "No call passes it.",
-        },
+        entry("hear", "listen", Names::Family("vosh://built/")),
+        entry("hearNobody", "listen", Names::Family("vosh://nobody/")),
+        entry("tell", "emit", Names::Param(0)),
+        entry("misled", "emit", Names::Param(0)),
+        entry("stale", "listen", Names::Family("vosh://built/")),
     ];
     assert_rejects(
         "unlisted_run_time_names",
         &unlisted_run_time_names(&contract, &list),
         &[
-            "a name built at run time, unlisted.",
-            "lists stale in src/page.ts",
+            "a name built at run time in other, unlisted.",
+            "passes tell a name the contract test cannot read, name.",
+            "says misled passes emit its parameter 0,",
+            "says misled passes on the names its callers give it,",
+            "lists the listen in stale,",
         ],
     );
 }
@@ -463,7 +497,7 @@ const typed = invoke<Record<string, (a: number) => void>>(
     let tokens = page_tokens(source, true).unwrap();
     let names: Vec<String> = calls_to(&tokens, "invoke")
         .into_iter()
-        .map(|(_, args)| render(args[0]))
+        .map(|c| render(c.args[0]))
         .collect();
     assert_eq!(
         names,
@@ -519,7 +553,7 @@ function inner() {
     assert_eq!(exported, ["SHARED_EVENT", "LATER_EVENT"]);
     let names: Vec<Name> = calls_to(&tokens, "listen")
         .into_iter()
-        .map(|(_, args)| classify(args[0], |id| consts.get(id).cloned().flatten()))
+        .map(|c| classify(c.args[0], |id| consts.get(id).cloned().flatten()))
         .collect();
     assert_eq!(
         names,
@@ -537,6 +571,78 @@ function inner() {
             Name::Unknown,
             Name::Unknown,
         ]
+    );
+}
+
+#[test]
+fn the_page_scan_finds_the_function_each_call_sits_in() {
+    let source = r"
+export async function onPackage<T = any>(
+  name: string,
+  cb: (data: T) => void,
+): Promise<UnlistenFn> {
+  const channel = `session://gmcp/${name}`;
+  return listen<T>(channel, (event) => cb(event.payload));
+}
+const tell = async <T,>(event: string, value: T): Promise<void> => {
+  await emit(event, value);
+};
+function typed(): { a: string } {
+  listen('vosh://typed', cb);
+}
+export const useEvent = (name: string, cb: Cb) =>
+  useEffect(() => {
+    listen(name, cb);
+  }, [name]);
+const EVENT = 'vosh://event';
+function hides(EVENT: string) {
+  listen(EVENT, cb);
+}
+LIST.forEach(({ EVENT }) => listen(EVENT, cb));
+listen(EVENT, cb);
+";
+    let tokens = page_tokens(source, false).unwrap();
+    let fns = page_functions(&tokens);
+    let (consts, _) = constants(&tokens);
+    let read = |callee| {
+        calls_to(&tokens, callee)
+            .iter()
+            .map(|c| {
+                let arg = read_arg(&fns, c, 0, |id| consts.get(id).cloned().flatten());
+                (arg.text, arg.name, arg.within, arg.param)
+            })
+            .collect::<Vec<_>>()
+    };
+    let some = |s: &str| Some(s.to_string());
+    assert_eq!(
+        read("listen"),
+        [
+            (
+                "channel".into(),
+                Name::Family("session://gmcp/".into()),
+                some("onPackage"),
+                None
+            ),
+            (
+                "'vosh://typed'".into(),
+                Name::Fixed("vosh://typed".into()),
+                some("typed"),
+                None
+            ),
+            ("name".into(), Name::Unknown, some("useEvent"), Some(0)),
+            ("EVENT".into(), Name::Unknown, some("hides"), Some(0)),
+            ("EVENT".into(), Name::Unknown, None, None),
+            (
+                "EVENT".into(),
+                Name::Fixed("vosh://event".into()),
+                None,
+                None
+            ),
+        ]
+    );
+    assert_eq!(
+        read("emit"),
+        [("event".into(), Name::Unknown, some("tell"), Some(0))]
     );
 }
 
@@ -1059,9 +1165,16 @@ fn open_paren(tokens: &[Token], at: usize) -> Option<usize> {
     (tokens.get(i)?.tok == Tok::Punct('(')).then_some(i)
 }
 
+/// A call the page code makes, by the index of the name it calls.
+struct Called<'t> {
+    at: usize,
+    line: usize,
+    args: Vec<&'t [Token]>,
+}
+
 /// The calls to the function `callee`, each with its line and its
 /// arguments. A method of the same name is not the function.
-fn calls_to<'t>(tokens: &'t [Token], callee: &str) -> Vec<(usize, Vec<&'t [Token]>)> {
+fn calls_to<'t>(tokens: &'t [Token], callee: &str) -> Vec<Called<'t>> {
     let mut found = Vec::new();
     for (i, token) in tokens.iter().enumerate() {
         if !is_word(&token.tok, callee) {
@@ -1073,7 +1186,11 @@ fn calls_to<'t>(tokens: &'t [Token], callee: &str) -> Vec<(usize, Vec<&'t [Token
             continue;
         }
         if let Some(open) = open_paren(tokens, i) {
-            found.push((token.line, arguments(&tokens[open + 1..])));
+            found.push(Called {
+                at: i,
+                line: token.line,
+                args: arguments(&tokens[open + 1..]),
+            });
         }
     }
     found
@@ -1261,6 +1378,259 @@ fn closing(tokens: &[Token], open: usize) -> Option<usize> {
     None
 }
 
+/// The index of the bracket that opens the one that closes at `close`.
+fn opening(tokens: &[Token], close: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    for i in (0..=close).rev() {
+        match tokens[i].tok {
+            Tok::Punct(')' | ']' | '}') => depth += 1,
+            Tok::Punct('(' | '[' | '{') => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// A function the page code defines, with `function` or with `=>`.
+struct PageFn {
+    /// Its name, for a function declaration or a function that a `const`,
+    /// `let` or `var` holds.
+    name: Option<String>,
+    /// Its parameters in order, each by its name, or None for one the
+    /// scan cannot name, such as a destructured one.
+    params: Vec<Option<String>>,
+    /// Every name its parameters bind, destructured ones too.
+    binds: BTreeSet<String>,
+    /// Its body, as token indexes.
+    body: std::ops::Range<usize>,
+}
+
+/// Every function a page file defines.
+fn page_functions(tokens: &[Token]) -> Vec<PageFn> {
+    let mut found = Vec::new();
+    for (i, token) in tokens.iter().enumerate() {
+        let (name, params, body) = match &token.tok {
+            Tok::Ident(w) if w == "function" => {
+                let name = match tokens.get(i + 1).map(|t| &t.tok) {
+                    Some(Tok::Ident(name)) => Some(name.clone()),
+                    _ => None,
+                };
+                let at = if name.is_some() { i + 1 } else { i };
+                let Some(open) = open_paren(tokens, at) else {
+                    continue;
+                };
+                let Some(close) = closing(tokens, open) else {
+                    continue;
+                };
+                let Some(body) = function_body(tokens, close + 1) else {
+                    continue;
+                };
+                let Some(end) = closing(tokens, body) else {
+                    continue;
+                };
+                let name = name.or_else(|| held_by(tokens, i));
+                (name, open + 1..close, body..end + 1)
+            }
+            Tok::Arrow => {
+                let Some((params, start)) = arrow_params(tokens, i) else {
+                    continue;
+                };
+                (held_by(tokens, start), params, arrow_body(tokens, i + 1))
+            }
+            _ => continue,
+        };
+        let (params, binds) = parameters(&tokens[params]);
+        found.push(PageFn {
+            name,
+            params,
+            binds,
+            body,
+        });
+    }
+    found
+}
+
+/// The `{` that opens a function body, from just past its parameters and
+/// past any return type.
+fn function_body(tokens: &[Token], from: usize) -> Option<usize> {
+    if tokens.get(from)?.tok != Tok::Punct(':') {
+        return (tokens.get(from)?.tok == Tok::Punct('{')).then_some(from);
+    }
+    let mut depth = 0usize;
+    let mut j = from + 1;
+    loop {
+        match tokens.get(j)?.tok {
+            Tok::Punct('<' | '(' | '[') => depth += 1,
+            Tok::Punct('>' | ')' | ']') => depth = depth.checked_sub(1)?,
+            // An object type follows `:`, `|`, `&` or `=>`, or sits inside
+            // brackets. Any other `{` opens the body.
+            Tok::Punct('{')
+                if depth > 0
+                    || matches!(tokens[j - 1].tok, Tok::Punct(':' | '|' | '&') | Tok::Arrow) =>
+            {
+                j = closing(tokens, j)?;
+            }
+            Tok::Punct('{') => return Some(j),
+            Tok::Punct(';') if depth == 0 => return None,
+            _ => {}
+        }
+        j += 1;
+    }
+}
+
+/// The parameters of the arrow function whose `=>` is at `arrow`, as the
+/// tokens between its parentheses or its one bare parameter, and the
+/// index where the function starts.
+fn arrow_params(tokens: &[Token], arrow: usize) -> Option<(std::ops::Range<usize>, usize)> {
+    let last = arrow.checked_sub(1)?;
+    let typed = last >= 2
+        && tokens[last - 1].tok == Tok::Punct(':')
+        && tokens[last - 2].tok == Tok::Punct(')');
+    let close = match tokens[last].tok {
+        Tok::Punct(')') => last,
+        Tok::Ident(_) if !typed => return Some((last..arrow, last)),
+        // A return type sits between the parameters and the `=>`, so walk
+        // back over it to the `:` that follows the `)`.
+        _ => {
+            let mut depth = 0usize;
+            let mut j = last;
+            loop {
+                match tokens[j].tok {
+                    Tok::Punct(')' | ']' | '}' | '>') => depth += 1,
+                    Tok::Punct('(' | '[' | '{' | '<') => depth = depth.checked_sub(1)?,
+                    Tok::Punct(':') if depth == 0 && tokens[j - 1].tok == Tok::Punct(')') => {
+                        break j - 1;
+                    }
+                    Tok::Punct(';' | '=' | ',') | Tok::Arrow if depth == 0 => return None,
+                    _ => {}
+                }
+                j = j.checked_sub(1)?;
+            }
+        }
+    };
+    let open = opening(tokens, close)?;
+    Some((open + 1..close, open))
+}
+
+/// The body of an arrow function from just past its `=>`, a block or an
+/// expression.
+fn arrow_body(tokens: &[Token], from: usize) -> std::ops::Range<usize> {
+    if tokens.get(from).map(|t| &t.tok) == Some(&Tok::Punct('{')) {
+        if let Some(close) = closing(tokens, from) {
+            return from..close + 1;
+        }
+    }
+    let mut depth = 0usize;
+    for (j, token) in tokens.iter().enumerate().skip(from) {
+        match token.tok {
+            Tok::Punct('(' | '[' | '{') | Tok::TplOpen(_) => depth += 1,
+            Tok::Punct(')' | ']' | '}') | Tok::TplClose => match depth.checked_sub(1) {
+                Some(d) => depth = d,
+                None => return from..j,
+            },
+            Tok::Punct(';' | ',') if depth == 0 => return from..j,
+            _ => {}
+        }
+    }
+    from..tokens.len()
+}
+
+/// The name a declaration gives the function that starts at `start`, as
+/// in `const name = async <T,>(value: T) => value`.
+fn held_by(tokens: &[Token], start: usize) -> Option<String> {
+    let mut j = start;
+    if j > 0 && tokens[j - 1].tok == Tok::Punct('>') {
+        let mut depth = 0usize;
+        loop {
+            j = j.checked_sub(1)?;
+            match tokens[j].tok {
+                Tok::Punct('>') => depth += 1,
+                Tok::Punct('<') => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    if j > 0 && is_word(&tokens[j - 1].tok, "async") {
+        j -= 1;
+    }
+    match tokens.get(j.checked_sub(3)?..j)? {
+        [decl, name, eq]
+            if eq.tok == Tok::Punct('=')
+                && ["const", "let", "var"]
+                    .iter()
+                    .any(|w| is_word(&decl.tok, w)) =>
+        {
+            match &name.tok {
+                Tok::Ident(name) => Some(name.clone()),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// The parameters between a function's parentheses, each by its name or
+/// None, and every name they bind.
+fn parameters(tokens: &[Token]) -> (Vec<Option<String>>, BTreeSet<String>) {
+    let mut params = Vec::new();
+    let mut binds = BTreeSet::new();
+    let mut depth = 0usize;
+    let mut each = Vec::new();
+    let mut start = 0;
+    for (j, token) in tokens.iter().enumerate() {
+        match token.tok {
+            Tok::Punct('(' | '[' | '{' | '<') => depth += 1,
+            Tok::Punct(')' | ']' | '}' | '>') => depth = depth.saturating_sub(1),
+            Tok::Punct(',') if depth == 0 => {
+                each.push(&tokens[start..j]);
+                start = j + 1;
+            }
+            _ => {}
+        }
+    }
+    each.push(&tokens[start..]);
+    for mut param in each {
+        while param.first().map(|t| &t.tok) == Some(&Tok::Punct('.')) {
+            param = &param[1..];
+        }
+        match param.first().map(|t| &t.tok) {
+            None => {}
+            Some(Tok::Ident(name)) => {
+                params.push(Some(name.clone()));
+                binds.insert(name.clone());
+            }
+            Some(Tok::Punct('{' | '[')) => {
+                params.push(None);
+                let end = closing(param, 0).unwrap_or(param.len());
+                for t in &param[..end] {
+                    if let Tok::Ident(name) = &t.tok {
+                        binds.insert(name.clone());
+                    }
+                }
+            }
+            Some(_) => params.push(None),
+        }
+    }
+    (params, binds)
+}
+
+/// The functions around the token at `at`, innermost first.
+fn around(fns: &[PageFn], at: usize) -> Vec<&PageFn> {
+    let mut found: Vec<&PageFn> = fns.iter().filter(|f| f.body.contains(&at)).collect();
+    found.sort_by_key(|f| f.body.len());
+    found
+}
+
 /// The specifiers of the `import { ... } from` that ends at the module
 /// string at `at`, or None for any other form.
 fn named_imports(tokens: &[Token], at: usize) -> Option<Vec<Vec<Tok>>> {
@@ -1337,6 +1707,80 @@ fn tauri_imports(file: &PageFile, problems: &mut Vec<String>) -> BTreeSet<&'stat
     imported
 }
 
+/// A name argument as the page scan reads it.
+struct Arg {
+    /// As the source writes it.
+    text: String,
+    name: Name,
+    /// The innermost named function the call sits in.
+    within: Option<String>,
+    /// Which parameter of that function the argument is, when it is no
+    /// more than one.
+    param: Option<usize>,
+}
+
+/// The argument at `index` of a call, read with the file's functions and
+/// `constant`. A parameter of a function around the call hides a
+/// constant of the same name.
+fn read_arg(
+    fns: &[PageFn],
+    called: &Called,
+    index: usize,
+    constant: impl Fn(&str) -> Option<Name>,
+) -> Arg {
+    let arg = called.args.get(index).copied().unwrap_or_default();
+    let around = around(fns, called.at);
+    let name = classify(arg, |id| {
+        if around.iter().any(|f| f.binds.contains(id)) {
+            None
+        } else {
+            constant(id)
+        }
+    });
+    let within = around.iter().find(|f| f.name.is_some());
+    let param = match arg {
+        [Token {
+            tok: Tok::Ident(id),
+            ..
+        }] => within.and_then(|f| f.params.iter().position(|p| p.as_ref() == Some(id))),
+        _ => None,
+    };
+    Arg {
+        text: render(arg),
+        name,
+        within: within.and_then(|f| f.name.clone()),
+        param,
+    }
+}
+
+/// Whether a page file defines the page function `name` or imports it
+/// under that name. An import under another name is a problem for the
+/// scan.
+fn reaches(file: &PageFile, fns: &[PageFn], name: &str, problems: &mut Vec<String>) -> bool {
+    let mut found = fns.iter().any(|f| f.name.as_deref() == Some(name));
+    for (i, token) in file.tokens.iter().enumerate() {
+        if !matches!(token.tok, Tok::Str(_)) {
+            continue;
+        }
+        for spec in named_imports(&file.tokens, i).unwrap_or_default() {
+            match spec.as_slice() {
+                [Tok::Ident(n)] if n == name => found = true,
+                [Tok::Ident(n), Tok::Ident(r#as), Tok::Ident(alias)]
+                    if n == name && r#as == "as" =>
+                {
+                    problems.push(format!(
+                        "{} line {} imports {name} as {alias}. The contract test reads \
+                         calls to {name} by that name, so import it under that name.",
+                        file.path, token.line
+                    ));
+                }
+                _ => {}
+            }
+        }
+    }
+    found
+}
+
 struct Page {
     calls: Vec<PageCall>,
     problems: Vec<String>,
@@ -1381,6 +1825,8 @@ fn read_page() -> Page {
     let mut calls = Vec::new();
     let mut problems = Vec::new();
     for file in &files {
+        let fns = page_functions(&file.tokens);
+        let imported = tauri_imports(file, &mut problems);
         let constant = |id: &str| match file.consts.get(id) {
             Some(name) => name.clone(),
             None => match exported.get(id).map(Vec::as_slice) {
@@ -1388,51 +1834,65 @@ fn read_page() -> Page {
                 _ => None,
             },
         };
-        let imported = tauri_imports(file, &mut problems);
-        let mut add = |line: usize,
+        let mut add = |called: &Called,
                        (callee, call): (&'static str, Call),
-                       arg: Option<&[Token]>,
+                       index: usize,
                        via: Option<&'static str>| {
-            let arg = arg.unwrap_or_default();
+            let arg = read_arg(&fns, called, index, constant);
             calls.push(PageCall {
                 file: file.path.clone(),
-                line,
+                line: called.line,
                 callee,
                 call,
-                arg: render(arg),
-                name: classify(arg, constant),
+                arg: arg.text,
+                name: arg.name,
                 via,
+                within: arg.within,
+                param: arg.param,
             });
         };
         for &(callee, _, call, index) in CALLEES {
             let found = calls_to(&file.tokens, callee);
             if !imported.contains(callee) {
-                for (line, _) in found {
+                for called in found {
                     problems.push(format!(
-                        "{} line {line} calls {callee} without importing it from Tauri. \
+                        "{} line {} calls {callee} without importing it from Tauri. \
                          The contract test reads only the Tauri function.",
-                        file.path
+                        file.path, called.line
                     ));
                 }
                 continue;
             }
-            for (line, args) in found {
-                add(line, (callee, call), args.get(index).copied(), None);
+            for called in &found {
+                add(called, (callee, call), index, None);
             }
         }
-        for entry in BUILT_AT_RUN_TIME.iter().filter(|e| e.file == file.path) {
-            if let Names::PassedTo(helper) = entry.names {
-                let &(callee, _, call, _) = CALLEES.iter().find(|c| c.0 == entry.callee).unwrap();
-                for (line, args) in calls_to(&file.tokens, helper) {
-                    add(line, (callee, call), args.first().copied(), Some(helper));
-                }
+        // The names a page function on the list passes on come from its
+        // callers, in every file that defines or imports it.
+        for entry in BUILT_AT_RUN_TIME {
+            let Names::Param(index) = entry.names else {
+                continue;
+            };
+            if !reaches(file, &fns, entry.function, &mut problems) {
+                continue;
+            }
+            let &(callee, _, call, _) = CALLEES.iter().find(|c| c.0 == entry.callee).unwrap();
+            for called in &calls_to(&file.tokens, entry.function) {
+                add(called, (callee, call), index, Some(entry.function));
             }
         }
         // A method such as a window's listen hears or sends a name the
         // scan cannot see.
         for (i, token) in file.tokens.iter().enumerate() {
             let method = match &token.tok {
-                Tok::Ident(w) if CALLEES.iter().any(|c| c.0 == w) => w,
+                Tok::Ident(w)
+                    if CALLEES.iter().any(|c| c.0 == w)
+                        || BUILT_AT_RUN_TIME
+                            .iter()
+                            .any(|e| matches!(e.names, Names::Param(_)) && e.function == w) =>
+                {
+                    w
+                }
                 _ => continue,
             };
             if i > 0
