@@ -723,13 +723,19 @@ async fn io_loop<R: tauri::Runtime>(
                     p.prompt.stage.local_write();
                 }
                 Some(OutgoingMsg::PromptRepaint) => {
-                    let out = {
+                    // The card asked for it, so its state follows even when
+                    // the bytes stay the same, since the pieces in them can
+                    // be numbered anew.
+                    let (out, state) = {
                         let mut p = profile.lock().await;
-                        repaint_step(&mut p, output_count() != seen_output, Instant::now())
+                        let out =
+                            repaint_step(&mut p, output_count() != seen_output, Instant::now());
+                        (out, watched_state(&app, &p))
                     };
                     if !out.is_empty() {
                         emit_repaint(&app, &out);
                     }
+                    emit_prompt_state(&app, state);
                 }
                 None => {
                     debug!("outgoing channel closed; shutting down session");
@@ -909,13 +915,16 @@ async fn io_loop<R: tauri::Runtime>(
             }
             () = sleep_until_hold(late_until), if late_until.is_some() => {
                 late_until = None;
-                let out = {
+                let (out, state) = {
                     let mut p = profile.lock().await;
-                    repaint_step(&mut p, output_count() != seen_output, Instant::now())
+                    let out = repaint_step(&mut p, output_count() != seen_output, Instant::now());
+                    let state = if out.is_empty() { None } else { watched_state(&app, &p) };
+                    (out, state)
                 };
                 if !out.is_empty() {
                     emit_repaint(&app, &out);
                 }
+                emit_prompt_state(&app, state);
             }
             _ = tick_interval.tick() => {
                 if let Err(e) = handle_tick(&app, &mut stream, &profile).await {
@@ -2422,7 +2431,24 @@ async fn finish_read<R: tauri::Runtime>(
             warn!(error = %e, "failed to emit the prompt status");
         }
     }
-    if let Some(state) = prompt_state {
+    emit_prompt_state(app, prompt_state);
+}
+
+/// The prompt state while the card watches your prompt, for
+/// `session://prompt-state` after a repaint. None while it does not.
+fn watched_state<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    p: &Profile,
+) -> Option<vosh_prompt::state::PromptState> {
+    watching_prompt(app).then(|| crate::prompt_commands::prompt_state(p))
+}
+
+/// Send `state` on `session://prompt-state`, when there is one.
+fn emit_prompt_state<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: Option<vosh_prompt::state::PromptState>,
+) {
+    if let Some(state) = state {
         if let Err(e) = app.emit("session://prompt-state", state) {
             warn!(error = %e, "failed to emit the prompt state");
         }

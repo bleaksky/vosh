@@ -73,6 +73,14 @@ fn a_packet_with_no_text_after_it_repaints_the_open_row_late() {
             "{show:?}: {:?}",
             plain(&replace.bytes)
         );
+        // The open row the card reads holds the new pieces.
+        let state = crate::prompt_commands::prompt_state(&session.p);
+        let open = state.open_row.expect("the open row");
+        assert_eq!(open.plain, "<1020> 15", "{show:?}");
+        assert_eq!(
+            open.gen,
+            session.p.prompt.stage.open_row().expect("the row").gen
+        );
         // Nothing is left to change.
         assert_eq!(
             late_repaint_after(&session.p, None, true, false, later),
