@@ -12,7 +12,10 @@
 //! An event counts as sent by the app when its name is a string in the
 //! app code outside tests. Names reach `emit` through constants, helpers
 //! and lists, so the scan reads the strings and not the calls. That holds
-//! while the app hears no page event, which the scan checks.
+//! while the app hears no page event, which the scan checks. A string
+//! with a `format!` placeholder builds a family of names. Each family
+//! sits on [`APP_FAMILIES`] with its reason, so a template the app adds
+//! never passes a listen without review.
 //!
 //! A page call whose name is built at run time cannot be read from the
 //! source. Each one sits on [`BUILT_AT_RUN_TIME`] with its reason, and a
@@ -92,6 +95,25 @@ const BUILT_AT_RUN_TIME: &[BuiltAtRunTime] = &[
     },
 ];
 
+/// A family of event names the app builds at run time.
+struct AppFamily {
+    /// The text every name in the family starts with, up to the first
+    /// placeholder of the app's `format!`.
+    prefix: &'static str,
+    /// Why the app builds the names and who hears them.
+    why: &'static str,
+}
+
+/// Every family of event names the app builds at run time. A name the
+/// page listens for counts as sent by the app when it starts with one of
+/// these, so an entry has to name a scheme and more.
+const APP_FAMILIES: &[AppFamily] = &[AppFamily {
+    prefix: "session://gmcp/",
+    why: "The session sends each GMCP package on session://gmcp/ and the \
+          package name with its dots turned to dashes. onGmcpPackage on the \
+          page builds the same names.",
+}];
+
 /// A name argument, as far as the source tells it.
 #[derive(Clone, Debug, PartialEq)]
 enum Name {
@@ -134,8 +156,9 @@ impl PageCall {
 struct Contract {
     /// The commands registered in `generate_handler!`.
     commands: BTreeSet<String>,
-    /// The strings in the app code outside tests that hold `://`.
-    app_names: BTreeSet<String>,
+    /// The strings in the app code outside tests that hold `://`, each
+    /// with the files that hold it.
+    app_names: BTreeMap<String, BTreeSet<String>>,
     /// Every call the page makes with a name.
     calls: Vec<PageCall>,
     /// Code the scan cannot follow.
@@ -143,20 +166,27 @@ struct Contract {
 }
 
 impl Contract {
-    /// The start of each event name the app builds with `format!`.
-    fn app_families(&self) -> impl Iterator<Item = &str> {
+    /// Whether the app builds names that start `prefix` with `format!`.
+    fn builds(&self, prefix: &str) -> bool {
         self.app_names
-            .iter()
-            .filter_map(|name| name.split_once('{').map(|(head, _)| head))
+            .keys()
+            .any(|n| template_head(n) == Some(prefix))
+    }
+
+    /// The prefixes of the families on `families` that the app builds.
+    /// A family off the list never counts, so a template such as
+    /// `{scheme}://{host}` cannot pass every name the page listens for.
+    fn app_families<'a>(&'a self, families: &'a [AppFamily]) -> impl Iterator<Item = &'a str> {
+        families.iter().map(|f| f.prefix).filter(|p| self.builds(p))
     }
 
     /// Whether the app or the page sends `name`.
-    fn sent(&self, name: &Name) -> bool {
+    fn sent(&self, name: &Name, families: &[AppFamily]) -> bool {
         let page = || self.calls.iter().filter(|c| c.call == Call::Emit);
         match name {
             Name::Fixed(event) => {
-                self.app_names.contains(event)
-                    || self.app_families().any(|p| event.starts_with(p))
+                self.app_names.contains_key(event)
+                    || self.app_families(families).any(|p| event.starts_with(p))
                     || page().any(|c| match &c.name {
                         Name::Fixed(sent) => sent == event,
                         Name::Family(p) => event.starts_with(p.as_str()),
@@ -164,11 +194,27 @@ impl Contract {
                     })
             }
             Name::Family(prefix) => {
-                self.app_families().any(|p| p == prefix) || page().any(|c| c.name == *name)
+                self.app_families(families).any(|p| p == prefix) || page().any(|c| c.name == *name)
             }
             Name::Unknown => false,
         }
     }
+}
+
+/// The text of a `format!` string before its first placeholder, or None
+/// when it has none.
+fn template_head(text: &str) -> Option<&str> {
+    let mut chars = text.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if c == '{' {
+            if chars.peek().map(|&(_, n)| n) == Some('{') {
+                chars.next();
+            } else {
+                return Some(&text[..i]);
+            }
+        }
+    }
+    None
 }
 
 fn contract() -> &'static Contract {
@@ -216,20 +262,67 @@ fn unregistered_invokes(contract: &Contract) -> Vec<String> {
 }
 
 /// Every event the page listens for has a sender.
-fn unsent_listens(contract: &Contract) -> Vec<String> {
+fn unsent_listens(contract: &Contract, families: &[AppFamily]) -> Vec<String> {
     let mut failures = Vec::new();
     for call in contract.calls.iter().filter(|c| c.call == Call::Listen) {
         match &call.name {
-            Name::Fixed(event) if !contract.sent(&call.name) => failures.push(format!(
+            Name::Fixed(event) if !contract.sent(&call.name, families) => failures.push(format!(
                 "{} listens for {event}, and neither the app nor the page sends it.",
                 call.at()
             )),
-            Name::Family(prefix) if !contract.sent(&call.name) => failures.push(format!(
+            Name::Family(prefix) if !contract.sent(&call.name, families) => failures.push(format!(
                 "{} listens for names that start {prefix}, and neither the app nor the \
                  page builds one.",
                 call.at()
             )),
             _ => {}
+        }
+    }
+    failures
+}
+
+/// Every family of names the app builds is on `families`, each entry
+/// there names a scheme and more, and each matches a family the app
+/// builds.
+fn unlisted_app_families(contract: &Contract, families: &[AppFamily]) -> Vec<String> {
+    let mut failures = Vec::new();
+    for (name, files) in &contract.app_names {
+        let Some(head) = template_head(name) else {
+            continue;
+        };
+        if !families.iter().any(|f| f.prefix == head) {
+            failures.push(format!(
+                "{} builds the name {name:?} at run time, and APP_FAMILIES lists no \
+                 family that starts {head:?}. Add it with who hears those names, or \
+                 spell the names out.",
+                files.iter().cloned().collect::<Vec<_>>().join(", ")
+            ));
+        }
+    }
+    for family in families {
+        let named = family
+            .prefix
+            .split_once("://")
+            .is_some_and(|(scheme, rest)| !scheme.is_empty() && !rest.is_empty());
+        if !named {
+            failures.push(format!(
+                "APP_FAMILIES lists {:?}, which ends at or before its ://, so it would \
+                 pass every name in the scheme. List the family by more of its names.",
+                family.prefix
+            ));
+        }
+        if family.why.trim().is_empty() {
+            failures.push(format!(
+                "APP_FAMILIES lists {:?} with no reason.",
+                family.prefix
+            ));
+        }
+        if !contract.builds(family.prefix) {
+            failures.push(format!(
+                "APP_FAMILIES lists {:?}, and the app builds no name that starts with \
+                 it. Remove the entry.",
+                family.prefix
+            ));
         }
     }
     failures
@@ -242,7 +335,12 @@ fn every_command_the_page_invokes_is_registered() {
 
 #[test]
 fn every_event_the_page_listens_for_has_a_sender() {
-    fail_with(unsent_listens(contract()));
+    fail_with(unsent_listens(contract(), APP_FAMILIES));
+}
+
+#[test]
+fn every_family_the_app_builds_is_on_the_list() {
+    fail_with(unlisted_app_families(contract(), APP_FAMILIES));
 }
 
 #[test]
@@ -356,7 +454,7 @@ fn the_scan_follows_every_page_call_and_app_file() {
         );
     }
     assert!(contract.commands.contains("session_connect"));
-    assert!(contract.app_names.contains("session://output"));
+    assert!(contract.app_names.contains_key("session://output"));
 }
 
 /// A page call in `src/page.ts` for a contract built by hand.
@@ -407,7 +505,20 @@ fn each_check_rejects_the_case_it_guards() {
     };
     let contract = Contract {
         commands: BTreeSet::from(["registered".to_string()]),
-        app_names: BTreeSet::from(["vosh://sent".to_string(), "vosh://built/{}".to_string()]),
+        app_names: [
+            "vosh://sent",
+            "vosh://built/{}",
+            "vosh://unlisted/{}",
+            "{scheme}://{host}",
+        ]
+        .into_iter()
+        .map(|n| {
+            (
+                n.to_string(),
+                BTreeSet::from(["src-tauri/src/app.rs".to_string()]),
+            )
+        })
+        .collect(),
         calls: vec![
             page_call(Call::Invoke, "'registered'", fixed("registered")),
             page_call(Call::Invoke, "'unregistered'", fixed("unregistered")),
@@ -443,10 +554,30 @@ fn each_check_rejects_the_case_it_guards() {
         &unregistered_invokes(&contract),
         &["invokes unregistered,"],
     );
+    let family = |prefix| AppFamily {
+        prefix,
+        why: "A case.",
+    };
+    let families = [
+        family("vosh://built/"),
+        family("vosh://"),
+        family("vosh://stale/"),
+    ];
     assert_rejects(
         "unsent_listens",
-        &unsent_listens(&contract),
+        &unsent_listens(&contract, &families),
         &["listens for vosh://unsent,", "start vosh://nobody/,"],
+    );
+    assert_rejects(
+        "unlisted_app_families",
+        &unlisted_app_families(&contract, &families),
+        &[
+            "the name \"vosh://unlisted/{}\" at run time",
+            "the name \"{scheme}://{host}\" at run time",
+            "lists \"vosh://\", which ends at or before its ://",
+            "lists \"vosh://\", and the app builds no name",
+            "lists \"vosh://stale/\", and the app builds no name",
+        ],
     );
     let entry = |function, callee, names| BuiltAtRunTime {
         function,
@@ -656,6 +787,8 @@ fn pick<'a>(x: &'a str) -> char {
     let _ = '"';
     app.emit("vosh://inline", ());
     let _ = format!("session://family/{}", x);
+    let _ = format!("{scheme}://{host}");
+    let _ = format!("vosh://{{literal}}");
     '\''
 }
 #[cfg(test)]
@@ -691,8 +824,14 @@ const KEPT: &str = "vosh://kept";
             "vosh://kept",
             "vosh://raw",
             "vosh://sent",
+            "vosh://{{literal}}",
+            "{scheme}://{host}",
         ])
     );
+    // A family starts at the first placeholder. One before the :// leaves
+    // a head that names no scheme, which the family check rejects.
+    let heads: BTreeSet<&str> = names.iter().filter_map(|n| template_head(n)).collect();
+    assert_eq!(heads, BTreeSet::from(["session://family/", ""]));
     let mods: Vec<(&str, Option<&str>, bool)> = code
         .mods
         .iter()
@@ -2288,7 +2427,7 @@ fn registered(t: &[RustTok]) -> Result<BTreeSet<String>, String> {
 
 struct App {
     commands: BTreeSet<String>,
-    names: BTreeSet<String>,
+    names: BTreeMap<String, BTreeSet<String>>,
     problems: Vec<String>,
 }
 
@@ -2300,7 +2439,7 @@ fn read_app() -> App {
     let mut seen = BTreeSet::new();
     let mut app = App {
         commands: BTreeSet::new(),
-        names: BTreeSet::new(),
+        names: BTreeMap::new(),
         problems: Vec::new(),
     };
     while let Some((file, test)) = queue.pop() {
@@ -2321,7 +2460,7 @@ fn read_app() -> App {
         for (i, tok) in code.tokens.iter().enumerate() {
             match tok {
                 RustTok::Str(s) if s.contains("://") => {
-                    app.names.insert(s.clone());
+                    app.names.entry(s.clone()).or_default().insert(rel.clone());
                 }
                 RustTok::Ident(w)
                     if matches!(w.as_str(), "listen" | "listen_any" | "once" | "once_any")
