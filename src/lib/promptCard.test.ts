@@ -9,6 +9,7 @@ import {
   headerButtons,
   lastSeenLine,
   legendColumns,
+  matchLines,
   matchSentences,
   matchTone,
   migratedNote,
@@ -388,6 +389,19 @@ describe('the match line', () => {
     expect(matchSentences('Matches your last prompt and no other line.')).toEqual([
       'Matches your last prompt and no other line.',
     ]);
+  });
+
+  it('wraps the empty ring copy as one paragraph (P0)', () => {
+    const empty =
+      'Vosh has not seen your prompt since you connected. Send a command and Vosh checks again.';
+    expect(matchLines(check({ matched: 0, total: 0, text: empty }))).toEqual([empty]);
+    expect(
+      matchLines(
+        check({
+          text: 'Matches your last 14 prompts and no other line. 3 of them are from a fight.',
+        }),
+      ),
+    ).toEqual(['Matches your last 14 prompts and no other line.', '3 of them are from a fight.']);
   });
 
   it('checks a clean match, warns about a poor one, and marks nothing with no prompt yet', () => {
