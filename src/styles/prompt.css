@@ -1034,6 +1034,20 @@
   margin-top: 16px;
 }
 
+/* P14: you turned prompts off in the game, in place of the hint, with
+   the status dot 4 px either side and 6 before the sentence. */
+.pc-hint.is-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--warn);
+  white-space: nowrap;
+}
+
+.pc-hint.is-warn .pc-warn-dot {
+  margin: 4px 4px 0;
+}
+
 /* P8c: what the Lament preview hides, under the hint at rest. */
 .pc-rest-note {
   margin: 4px 0 0;

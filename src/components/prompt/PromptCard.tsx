@@ -822,6 +822,7 @@ export function PromptCard({
               env={env}
               cellW={cellW}
               note={step === 'rest' && preview === 'lament' ? LAMENT_NOTE : null}
+              promptsOff={state?.status.status === 'prompts_off' || (show?.promptsOff ?? false)}
               onPick={(template) => {
                 setPointing(NOWHERE);
                 save({ ...config, template, draw: true });

@@ -225,6 +225,9 @@ interface StartsProps {
   /** A line under the hint at rest, such as what the Lament preview
    *  hides (P8c). */
   note?: string | null;
+  /** You turned prompts off in the game, so the card at rest says so in
+   *  place of its hint (P14). */
+  promptsOff?: boolean;
   /** What goes between the hint and the list on first use: the Line
    *  triggers that matched your prompt (D6). */
   children?: ReactNode;
@@ -244,6 +247,7 @@ export function Starts({
   onPick,
   onInsertValue,
   note = null,
+  promptsOff = false,
   children,
 }: StartsProps) {
   const list = useMemo(() => startRows(presets, config, designs), [presets, config, designs]);
@@ -287,7 +291,16 @@ export function Starts({
   }
   return (
     <div className="pc-body">
-      <p className="pc-hint">Click any part of your prompt to change it.</p>
+      {promptsOff ? (
+        <p className="pc-hint is-warn" role="status">
+          <span className="pc-warn-dot" aria-hidden="true" />
+          <span>
+            You turned prompts off in the game. Type prompt in the game to turn them back on.
+          </span>
+        </p>
+      ) : (
+        <p className="pc-hint">Click any part of your prompt to change it.</p>
+      )}
       {note && <p className="pc-rest-note">{note}</p>}
       <div className="pc-actions">
         {insert}

@@ -7,6 +7,7 @@ import type { PromptFieldState, PromptForm, PromptPiece, PromptState } from '../
 import { LineTriggers } from './PromptCodes';
 import { PromptPicker } from './PromptPicker';
 import { PromptPieceBody } from './PromptPiece';
+import { Starts } from './PromptStarts';
 import { PromptText } from './PromptText';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve([])) }));
@@ -325,5 +326,46 @@ describe('the D6 row', () => {
     expect(
       renderToStaticMarkup(<LineTriggers triggers={[]} onMove={() => Promise.resolve()} />),
     ).toBe('');
+  });
+});
+
+describe('the card at rest', () => {
+  const rest = (promptsOff: boolean, note: string | null = null) =>
+    renderToStaticMarkup(
+      <Starts
+        mode="rest"
+        config={{
+          draw: true,
+          template: '%hp',
+          previous_templates: [],
+          capture: { kind: 'none' },
+          show: 'text',
+        }}
+        presets={[]}
+        designs={[]}
+        values="live"
+        refresh={0}
+        env={NORD}
+        cellW={7.8}
+        onPick={() => {}}
+        onInsertValue={() => {}}
+        note={note}
+        promptsOff={promptsOff}
+      />,
+    );
+
+  it('says you turned prompts off in place of its hint (P14)', () => {
+    const off = rest(true);
+    expect(off).toContain('class="pc-hint is-warn" role="status"');
+    expect(off).toContain(
+      'You turned prompts off in the game. Type prompt in the game to turn them back on.',
+    );
+    expect(off).not.toContain('Click any part of your prompt');
+    expect(rest(false)).toContain('Click any part of your prompt to change it.');
+  });
+
+  it('says what the Lament preview hides under its hint (P8c)', () => {
+    const html = rest(false, 'Lament hides your vitals.');
+    expect(html).toContain('class="pc-rest-note">Lament hides your vitals.<');
   });
 });
