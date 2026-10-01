@@ -785,12 +785,10 @@ pub(crate) struct GlyphAtlas {
 }
 
 impl GlyphAtlas {
-    /// Build an atlas from the first loadable family in the CSS
-    /// `family_stack` (falling back to the system monospace) at `px`
-    /// pixels. Returns `None` if no font can be loaded.
-    pub(crate) fn new(family_stack: &str, px: f32) -> Option<Self> {
+    /// Build an atlas from loaded `fonts` at `px` pixels.
+    pub(crate) fn from_fonts(fonts: AtlasFonts, px: f32) -> Self {
         Self::with_reported(
-            family_stack,
+            fonts,
             px,
             crate::native_surface::reported_cell(),
             crate::native_surface::reported_char_height(),
@@ -801,13 +799,15 @@ impl GlyphAtlas {
     /// height, or against the font's own metrics when the page has not
     /// reported yet.
     fn with_reported(
-        family_stack: &str,
+        fonts: AtlasFonts,
         px: f32,
         reported: Option<(u32, u32)>,
         char_h: Option<u32>,
-    ) -> Option<Self> {
-        let font = load_font(family_stack, false)?;
-        let bold_font = load_font(family_stack, true).or_else(|| load_font(family_stack, false))?;
+    ) -> Self {
+        let AtlasFonts {
+            regular: font,
+            bold: bold_font,
+        } = fonts;
         let metrics = font.metrics();
         let scale = px / metrics.units_per_em as f32;
         let ascent = metrics.ascent * scale;
@@ -859,7 +859,7 @@ impl GlyphAtlas {
             }
         }
         let solid_uv = rect_to_uv(qx + qw / 2, qy + qh / 2, 0, 0, atlas_w, atlas_h);
-        Some(Self {
+        Self {
             font,
             bold_font,
             px,
@@ -876,7 +876,7 @@ impl GlyphAtlas {
             solid_uv,
             slots: HashMap::new(),
             next: 0,
-        })
+        }
     }
 
     pub(crate) fn cell_w(&self) -> u32 {
@@ -1170,6 +1170,27 @@ fn font_from_handle(handle: &font_kit::handle::Handle) -> Option<Font> {
     let kit_font = handle.load().ok()?;
     tracing::info!(font = %kit_font.full_name(), "native-surface: atlas font (system)");
     Some(kit_font)
+}
+
+/// The regular and bold faces an atlas rasterizes from. Loading them
+/// resolves the family through font-kit and reads every face of it,
+/// which took 3 to 27 ms for a typical family and 300 to 665 ms for a
+/// large CJK family, so a font change loads them on the blocking pool
+/// and leaves the main thread only the atlas swap.
+pub(crate) struct AtlasFonts {
+    regular: Font,
+    bold: Font,
+}
+
+impl AtlasFonts {
+    /// The faces of the first loadable family in the CSS
+    /// `family_stack`, falling back to the system monospace. The bold
+    /// face falls back to the regular one. None if no font loads.
+    pub(crate) fn load(family_stack: &str) -> Option<Self> {
+        let regular = load_font(family_stack, false)?;
+        let bold = load_font(family_stack, true).unwrap_or_else(|| regular.clone());
+        Some(Self { regular, bold })
+    }
 }
 
 fn load_font(family_stack: &str, bold: bool) -> Option<Font> {
@@ -1730,8 +1751,10 @@ pub(crate) struct CellRenderer {
 }
 
 impl CellRenderer {
-    /// Build the atlas (printable ASCII pre-rasterized and uploaded once),
-    /// the bind group, and the pipeline. `None` if no font loads.
+    /// Load the fonts of `font_stack` and build the renderer from them.
+    /// `None` if no font loads. It blocks while the fonts load, so a
+    /// font change uses [`Self::with_fonts`] with fonts loaded on the
+    /// blocking pool.
     pub(crate) fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -1739,7 +1762,21 @@ impl CellRenderer {
         font_stack: &str,
         font_px: f32,
     ) -> Option<Self> {
-        let mut atlas = GlyphAtlas::new(font_stack, font_px)?;
+        let fonts = AtlasFonts::load(font_stack)?;
+        Some(Self::with_fonts(device, queue, format, fonts, font_px))
+    }
+
+    /// Build the atlas from loaded `fonts` (printable ASCII
+    /// pre-rasterized and uploaded once), the bind group, and the
+    /// pipeline.
+    pub(crate) fn with_fonts(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        fonts: AtlasFonts,
+        font_px: f32,
+    ) -> Self {
+        let mut atlas = GlyphAtlas::from_fonts(fonts, font_px);
         for code in 0x20u8..0x7f {
             let _ = atlas.glyph_uv(code as char, false, false);
         }
@@ -1967,7 +2004,7 @@ impl CellRenderer {
             mapped_at_creation: false,
         });
 
-        Some(Self {
+        Self {
             atlas,
             texture,
             space_uv,
@@ -1979,7 +2016,7 @@ impl CellRenderer {
             band_pipeline,
             band_bind_group,
             band_uniform_buffer,
-        })
+        }
     }
 
     /// Columns and rows that fill a surface of the given pixel size at the
@@ -2700,9 +2737,10 @@ mod tests {
     #[test]
     fn atlas_rasterizes_glyph_coverage() {
         // Skip gracefully if the test host has no loadable monospace font.
-        let Some(mut atlas) = GlyphAtlas::new("monospace", 16.0) else {
+        let Some(fonts) = AtlasFonts::load("monospace") else {
             return;
         };
+        let mut atlas = GlyphAtlas::from_fonts(fonts, 16.0);
         assert!(atlas.cell_w() > 0 && atlas.cell_h() > 0);
         let _ = atlas.glyph_uv('A', false, false);
         let _ = atlas.glyph_uv(' ', false, false);
@@ -2786,17 +2824,14 @@ mod tests {
         };
         // Berkeley Mono at 14 px on a 2x screen: a 34 px glyph box in the
         // 40 px cell xterm reports at the default line height.
-        let Some(mut flat) = GlyphAtlas::with_reported("BerkeleyMono", 28.0, Some((17, 40)), None)
-        else {
-            return;
-        };
-        let mut centered =
-            GlyphAtlas::with_reported("BerkeleyMono", 28.0, Some((17, 40)), Some(34)).unwrap();
+        let berkeley = || AtlasFonts::load("BerkeleyMono").expect("Vosh bundles BerkeleyMono");
+        let mut flat = GlyphAtlas::with_reported(berkeley(), 28.0, Some((17, 40)), None);
+        let mut centered = GlyphAtlas::with_reported(berkeley(), 28.0, Some((17, 40)), Some(34));
         assert_eq!(centered.glyph_top, 3);
         assert_eq!(centered.baseline(), flat.baseline() + 3);
         assert_eq!(lowest_ink(&mut centered), lowest_ink(&mut flat) + 3);
         // No report yet means the font's own cell and no drop.
-        let unreported = GlyphAtlas::with_reported("BerkeleyMono", 28.0, None, Some(34)).unwrap();
+        let unreported = GlyphAtlas::with_reported(berkeley(), 28.0, None, Some(34));
         assert_eq!(unreported.glyph_top, 0);
     }
 
