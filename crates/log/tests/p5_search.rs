@@ -14,12 +14,20 @@
 //! A dev build runs it too, many times slower, since `SQLite` and the
 //! regex engine build there without optimization.
 //!
-//! Every number is a search with the file in the system cache. A fresh
-//! search opens the log again first, as the view does at launch, so
-//! `SQLite` starts with no pages of its own. Warm is the median of
-//! [`REPS`] more on that connection. To time a cold search, set
-//! `VOSH_P5_DB` to a file path, run once to write the week there, run
-//! `sudo purge`, and run again. The test then reuses that file.
+//! A fresh search opens the log again first, as the view does at
+//! launch, so `SQLite` starts with no pages of its own. Warm is the
+//! median of [`REPS`] more on that connection. A run that writes the
+//! week leaves the whole file in the system cache, so every number it
+//! prints is a cached read.
+//!
+//! To time cold reads, set `VOSH_P5_DB` to a file path and run once to
+//! write the week there. A later run reuses that file and checks it
+//! without reading the lines or their index. After `sudo purge`, a whole
+//! run times only the session list and the first search cold, since
+//! that search reads every line into the cache. To time any one step
+//! cold, run `sudo purge` and then run with `VOSH_P5_ONLY` set to its
+//! name as the run prints it, such as `rare name` or `common word, page
+//! 2`. The test then times that step alone.
 //!
 //! The numbers alone guard nothing, so each search is also held to what
 //! a plain scan of the week finds. The newest 500 matches, oldest first,
@@ -30,6 +38,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use regex::RegexBuilder;
+use rusqlite::{Connection, OpenFlags};
 use vosh_log::{LogEntry, LogStore, SearchOptions, SearchPage};
 
 /// Searches of each query on the connection after the fresh one.
@@ -37,6 +46,12 @@ const REPS: usize = 5;
 
 /// What the view asks for in a page, `LOG_PAGE_SIZE` in `logView.ts`.
 const PAGE: usize = 500;
+
+/// The step that times the session list.
+const SESSION_LIST: &str = "session list";
+
+/// The step that times the page before the first `common word` page.
+const PAGE_2: &str = "common word, page 2";
 
 /// The Phase 10 check's seed and week.
 const SEED: u64 = 0xA5A5_1234;
@@ -767,6 +782,22 @@ fn time_page(
     (Times { fresh, warm }, page)
 }
 
+/// True when the log at `path` holds `week`. It reads the session count
+/// and the newest line id only, so the lines and their index stay out of
+/// the system cache for the timed reads.
+fn holds(path: &Path, week: &Week) -> bool {
+    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .expect("the log, read only");
+    let (sessions, last): (i64, Option<i64>) = conn
+        .query_row(
+            "SELECT (SELECT COUNT(*) FROM sessions), (SELECT MAX(id) FROM log_lines)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("the sizes");
+    sessions == week.sessions.len() as i64 && last == Some(week.rows.len() as i64)
+}
+
 /// Removes the temporary folder when the test ends, passed or not.
 struct TempDir(PathBuf);
 
@@ -791,13 +822,24 @@ fn p5_search_a_heavy_week() {
         dir.join("logs.sqlite")
     };
 
+    // With VOSH_P5_ONLY, the one step it names.
+    let only = std::env::var("VOSH_P5_ONLY").ok();
+    let steps: Vec<&str> = std::iter::once(SESSION_LIST)
+        .chain(SUITE.iter().map(|q| q.name))
+        .chain(std::iter::once(PAGE_2))
+        .collect();
+    if let Some(name) = only.as_deref() {
+        assert!(
+            steps.contains(&name),
+            "VOSH_P5_ONLY names no step. The steps are {steps:?}."
+        );
+    }
+    let runs = |step: &str| only.is_none() || only.as_deref() == Some(step);
+
     let week = if path.exists() {
         let week = generate(None);
-        let store = LogStore::open(&path).expect("the log");
-        let sessions = store.list_sessions(0, false).expect("the sessions");
-        let lines: i64 = sessions.iter().map(|s| s.line_count).sum();
         assert!(
-            sessions.len() == week.sessions.len() && lines == week.rows.len() as i64,
+            holds(&path, &week),
             "{} holds another log. Remove it and run again.",
             path.display()
         );
@@ -822,20 +864,40 @@ fn p5_search_a_heavy_week() {
         size as f64 / 1e6
     );
 
-    // The session list the view loads when it opens.
-    let (fresh, newest) = {
+    // The newest session the view lists, the last game session of the
+    // week, since each local one starts before the game session of its
+    // day. The scoped searches take it from the week, so a step timed
+    // alone reads nothing of the log before it.
+    let newest = week
+        .sessions
+        .iter()
+        .rev()
+        .find(|s| !s.1)
+        .expect("a game session")
+        .0;
+
+    // The session list the view loads when it opens, newest first, with
+    // each session's line count.
+    if runs(SESSION_LIST) {
         let store = LogStore::open(&path).expect("the log");
         let (took, rows) = timed(|| store.list_sessions(0, true).expect("the sessions"));
-        assert_eq!(
-            rows.len(),
-            week.sessions.len() - local,
-            "the sessions shown"
-        );
-        (took, rows[0].id)
-    };
-    println!("P5 {:<28} fresh {:>7.1} ms", "session list", ms(fresh));
+        let got: Vec<(i64, i64)> = rows.iter().map(|r| (r.id, r.line_count)).collect();
+        let want: Vec<(i64, i64)> = week
+            .sessions
+            .iter()
+            .rev()
+            .filter(|s| !s.1)
+            .map(|&(id, _)| {
+                let lines = week.rows.iter().filter(|r| r.session == id).count();
+                (id, lines as i64)
+            })
+            .collect();
+        assert_eq!(got, want, "the sessions shown");
+        assert_eq!(rows[0].id, newest, "the newest session");
+        println!("P5 {SESSION_LIST:<28} fresh {:>7.1} ms", ms(took));
+    }
 
-    for q in &SUITE {
+    for q in SUITE.iter().filter(|q| runs(q.name)) {
         let o = options(q.case_sensitive, q.scoped.then_some(newest), None);
         let (times, page) = time_page(&path, q.pattern, &o, true);
         check(&week, q.name, q.pattern, &o, true, &page);
@@ -843,15 +905,15 @@ fn p5_search_a_heavy_week() {
     }
 
     // The page before, as the view loads it when you scroll up, with no
-    // count.
-    let first = options(false, None, None);
-    let store = LogStore::open(&path).expect("the log");
-    let page = store.search_page("guard", &first, false).expect("a page");
-    let before = page.hits.first().map(|h| h.line_id);
-    drop(store);
-    let o = options(false, None, before);
-    let (times, page) = time_page(&path, "guard", &o, false);
-    check(&week, "common word, page 2", "guard", &o, false, &page);
-    assert_eq!(page.hits.len(), PAGE, "a full page before the first");
-    println!("{}", times.line("common word, page 2", &page));
+    // count. The first page comes from the week, which the `common word`
+    // step holds the log to, so the file stays cold for this one.
+    if runs(PAGE_2) {
+        let first = options(false, None, None);
+        let before = scan(&week, "guard", &first, false).0.first().map(|h| h.0);
+        let o = options(false, None, before);
+        let (times, page) = time_page(&path, "guard", &o, false);
+        check(&week, PAGE_2, "guard", &o, false, &page);
+        assert_eq!(page.hits.len(), PAGE, "a full page before the first");
+        println!("{}", times.line(PAGE_2, &page));
+    }
 }
