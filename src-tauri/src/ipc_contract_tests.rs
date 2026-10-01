@@ -7,7 +7,9 @@
 //! and hold the names together, the way the preset tests read
 //! presets.ts. Every command the page invokes is registered in
 //! `generate_handler!` in lib.rs. Every event the page listens for has a
-//! sender, the app or the page itself.
+//! sender, the app or the page itself. Every name either side sends has
+//! a page listener, or sits on [`UNHEARD`] with its reason, so a rename
+//! at one of several senders fails too.
 //!
 //! An event counts as sent by the app when its name is a string in the
 //! app code outside tests. Names reach `emit` through constants, helpers
@@ -114,6 +116,35 @@ const APP_FAMILIES: &[AppFamily] = &[AppFamily {
           page builds the same names.",
 }];
 
+/// A name the app or the page sends that no page listen hears.
+struct Unheard {
+    /// The name, or the prefix of a family.
+    name: &'static str,
+    /// Why nothing listens for it.
+    why: &'static str,
+}
+
+/// Every name sent with no page listener. Everything else the app or the
+/// page sends must have one, so a rename at one sender alone fails even
+/// while another sender keeps the old name.
+const UNHEARD: &[Unheard] = &[
+    Unheard {
+        name: r"https?://[^\s<>()\[\]]+",
+        why: "The terminal grid's pattern for a web address in the game output. \
+              It is no event.",
+    },
+    Unheard {
+        name: "vosh://moons-position-changed",
+        why: "broadcastUiConfigChanges sends it with every other Settings field, \
+              and no window listens for it. It goes with the dead events.",
+    },
+    Unheard {
+        name: "vosh://vitals-config-changed",
+        why: "broadcastUiConfigChanges sends it with every other Settings field, \
+              and no window listens for it. It goes with the dead events.",
+    },
+];
+
 /// A name argument, as far as the source tells it.
 #[derive(Clone, Debug, PartialEq)]
 enum Name {
@@ -178,6 +209,55 @@ impl Contract {
     /// `{scheme}://{host}` cannot pass every name the page listens for.
     fn app_families<'a>(&'a self, families: &'a [AppFamily]) -> impl Iterator<Item = &'a str> {
         families.iter().map(|f| f.prefix).filter(|p| self.builds(p))
+    }
+
+    /// Whether a page listen hears `name`.
+    fn heard(&self, name: &Name) -> bool {
+        self.calls
+            .iter()
+            .filter(|c| c.call == Call::Listen)
+            .any(|c| match (&c.name, name) {
+                (Name::Fixed(heard), Name::Fixed(sent)) => heard == sent,
+                (Name::Fixed(heard), Name::Family(sent)) => heard.starts_with(sent.as_str()),
+                (Name::Family(heard), Name::Fixed(sent) | Name::Family(sent)) => {
+                    sent.starts_with(heard.as_str())
+                }
+                _ => false,
+            })
+    }
+
+    /// Every name the app or the page sends, by its text or the prefix of
+    /// its family, with who sends it. A family the app builds off
+    /// `families` is left to the family check.
+    fn sends(&self, families: &[AppFamily]) -> BTreeMap<String, (Name, BTreeSet<String>)> {
+        let mut sends: BTreeMap<String, (Name, BTreeSet<String>)> = BTreeMap::new();
+        let mut add = |name: Name, who: String| {
+            let key = match &name {
+                Name::Fixed(text) | Name::Family(text) => text.clone(),
+                Name::Unknown => return,
+            };
+            sends
+                .entry(key)
+                .or_insert_with(|| (name, BTreeSet::new()))
+                .1
+                .insert(who);
+        };
+        for (text, files) in &self.app_names {
+            let name = match template_head(text) {
+                None => Name::Fixed(text.clone()),
+                Some(head) if families.iter().any(|f| f.prefix == head) => {
+                    Name::Family(head.into())
+                }
+                Some(_) => continue,
+            };
+            for file in files {
+                add(name.clone(), file.clone());
+            }
+        }
+        for call in self.calls.iter().filter(|c| c.call == Call::Emit) {
+            add(call.name.clone(), call.at());
+        }
+        sends
     }
 
     /// Whether the app or the page sends `name`.
@@ -328,6 +408,44 @@ fn unlisted_app_families(contract: &Contract, families: &[AppFamily]) -> Vec<Str
     failures
 }
 
+/// Every name the app or the page sends has a page listener, or sits on
+/// `unheard` with its reason, and every entry there is sent and unheard.
+fn unheard_sends(contract: &Contract, families: &[AppFamily], unheard: &[Unheard]) -> Vec<String> {
+    let mut failures = Vec::new();
+    let sends = contract.sends(families);
+    for (key, (name, who)) in &sends {
+        if contract.heard(name) || unheard.iter().any(|u| u.name == key) {
+            continue;
+        }
+        let who = who.iter().cloned().collect::<Vec<_>>().join(", ");
+        let what = match name {
+            Name::Family(prefix) => format!("names that start {prefix}"),
+            _ => key.clone(),
+        };
+        failures.push(format!(
+            "{who} sends {what}, and no page listen hears it. Fix the name, or add \
+             it to UNHEARD with why nothing listens."
+        ));
+    }
+    for entry in unheard {
+        if entry.why.trim().is_empty() {
+            failures.push(format!("UNHEARD lists {} with no reason.", entry.name));
+        }
+        match sends.get(entry.name) {
+            None => failures.push(format!(
+                "UNHEARD lists {}, and nothing sends it. Remove the entry.",
+                entry.name
+            )),
+            Some((name, _)) if contract.heard(name) => failures.push(format!(
+                "UNHEARD lists {}, and a page listen hears it. Remove the entry.",
+                entry.name
+            )),
+            Some(_) => {}
+        }
+    }
+    failures
+}
+
 #[test]
 fn every_command_the_page_invokes_is_registered() {
     fail_with(unregistered_invokes(contract()));
@@ -336,6 +454,11 @@ fn every_command_the_page_invokes_is_registered() {
 #[test]
 fn every_event_the_page_listens_for_has_a_sender() {
     fail_with(unsent_listens(contract(), APP_FAMILIES));
+}
+
+#[test]
+fn every_name_sent_has_a_listener() {
+    fail_with(unheard_sends(contract(), APP_FAMILIES, UNHEARD));
 }
 
 #[test]
@@ -507,6 +630,7 @@ fn each_check_rejects_the_case_it_guards() {
         commands: BTreeSet::from(["registered".to_string()]),
         app_names: [
             "vosh://sent",
+            "vosh://lost",
             "vosh://built/{}",
             "vosh://unlisted/{}",
             "{scheme}://{host}",
@@ -525,6 +649,7 @@ fn each_check_rejects_the_case_it_guards() {
             page_call(Call::Listen, "'vosh://sent'", fixed("vosh://sent")),
             page_call(Call::Listen, "'vosh://built/x'", fixed("vosh://built/x")),
             page_call(Call::Emit, "'vosh://page'", fixed("vosh://page")),
+            page_call(Call::Emit, "'vosh://quiet'", fixed("vosh://quiet")),
             page_call(Call::Listen, "'vosh://page'", fixed("vosh://page")),
             page_call(Call::Listen, "'vosh://unsent'", fixed("vosh://unsent")),
             within(
@@ -577,6 +702,28 @@ fn each_check_rejects_the_case_it_guards() {
             "lists \"vosh://\", which ends at or before its ://",
             "lists \"vosh://\", and the app builds no name",
             "lists \"vosh://stale/\", and the app builds no name",
+        ],
+    );
+    let unheard = |name| Unheard {
+        name,
+        why: "A case.",
+    };
+    assert_rejects(
+        "unheard_sends",
+        &unheard_sends(
+            &contract,
+            &families,
+            &[
+                unheard("vosh://quiet"),
+                unheard("vosh://sent"),
+                unheard("vosh://stale"),
+            ],
+        ),
+        &[
+            "src-tauri/src/app.rs sends vosh://lost,",
+            "src/page.ts line 1 sends vosh://told,",
+            "lists vosh://sent, and a page listen hears it.",
+            "lists vosh://stale, and nothing sends it.",
         ],
     );
     let entry = |function, callee, names| BuiltAtRunTime {
