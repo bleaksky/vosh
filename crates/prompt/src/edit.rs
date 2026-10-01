@@ -199,12 +199,47 @@ pub fn apply(
     op: &EditOp,
     known: &dyn Fn(&FieldRef) -> bool,
 ) -> Result<String, EditError> {
+    apply_at(template, op, known).map(|(text, _)| text)
+}
+
+/// [`apply`], with where the piece the edit acted on sits in the new
+/// template: the piece it changed or moved, or the one it added. A When
+/// that adds a condition before the piece moves it on by one, and text
+/// added next to text joins it, so the card follows the piece by this.
+/// None after a removal, or when nothing was added.
+pub fn apply_at(
+    template: &str,
+    op: &EditOp,
+    known: &dyn Fn(&FieldRef) -> bool,
+) -> Result<(String, Option<usize>), EditError> {
     let parsed = Template::parse(template);
     let mut doc = Doc::of(&parsed);
     let before = doc.looks();
+    let target = match op {
+        EditOp::SetFormat { piece, .. }
+        | EditOp::SetColor { piece, .. }
+        | EditOp::SetStyle { piece, .. }
+        | EditOp::SetWhen { piece, .. }
+        | EditOp::SetText { piece, .. }
+        | EditOp::Move { piece, .. } => doc.pieces.get(*piece).map(|p| p.uid),
+        EditOp::Remove { .. } => None,
+        EditOp::InsertField { .. } | EditOp::InsertText { .. } | EditOp::InsertNl { .. } => {
+            Some(doc.next_uid)
+        }
+    };
     let edited = doc.run(op, known)?;
     doc.repair(&before, edited);
-    doc.write()
+    let (text, starts) = doc.write()?;
+    let at = target
+        .and_then(|uid| doc.pieces.iter().position(|p| p.uid == uid))
+        .and_then(|index| starts.get(index).copied())
+        .and_then(|offset| {
+            Template::parse(&text)
+                .pieces()
+                .iter()
+                .position(|p| p.start <= offset && offset < p.end)
+        });
+    Ok((text, at))
 }
 
 // ---------------------------------------------------------------------
@@ -1017,8 +1052,20 @@ impl Doc {
     }
 
     /// The template text, each token as it was written unless it now
-    /// needs braces or a doubled `%` to read the same.
-    fn write(&self) -> Result<String, EditError> {
+    /// needs braces or a doubled `%` to read the same, with where each
+    /// piece's content starts in it, or its codes for a piece with no
+    /// content.
+    fn write(&self) -> Result<(String, Vec<usize>), EditError> {
+        let mut first_content = Vec::with_capacity(self.pieces.len());
+        let mut count = 0;
+        for piece in &self.pieces {
+            first_content.push(if piece.content.is_empty() {
+                count
+            } else {
+                count + piece.codes.len()
+            });
+            count += piece.codes.len() + piece.content.len();
+        }
         let items: Vec<&Item> = self
             .pieces
             .iter()
@@ -1033,7 +1080,9 @@ impl Doc {
             })
             .collect();
         let mut out = String::new();
+        let mut offsets = Vec::with_capacity(items.len());
         for (index, item) in items.iter().enumerate() {
+            offsets.push(out.len());
             let next = texts.get(index + 1).and_then(|t| t.chars().next());
             let mut text = texts[index].clone();
             if runs_on(&item.kind, &text, next) {
@@ -1058,7 +1107,11 @@ impl Doc {
         if wanted != got {
             return error("Vosh could not write that change to your design.");
         }
-        Ok(out)
+        let starts = first_content
+            .into_iter()
+            .map(|item| offsets.get(item).copied().unwrap_or(out.len()))
+            .collect();
+        Ok((out, starts))
     }
 }
 

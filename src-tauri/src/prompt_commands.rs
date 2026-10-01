@@ -522,6 +522,9 @@ pub(crate) async fn prompt_preview_set(
 pub(crate) struct Edited {
     pub template: String,
     pub rendered: Rendered,
+    /// Where the piece the edit acted on sits now, so the card keeps it
+    /// picked: the piece it changed or moved, or the one it added.
+    pub piece: Option<usize>,
 }
 
 /// Apply one edit to a design. It writes nothing to the profile, so the
@@ -540,9 +543,13 @@ pub(crate) fn edit(p: &Profile, template: &str, op: &EditOp) -> Result<Edited, S
     let vosh = crate::session::prompt_supplies(p, Instant::now());
     let live = p.prompt.vars.resolver(&vosh);
     let known = |field: &FieldRef| !matches!(live.resolve(field), Resolved::Unknown);
-    let template = vosh_prompt::edit::apply(template, op, &known).map_err(|e| e.0)?;
+    let (template, piece) = vosh_prompt::edit::apply_at(template, op, &known).map_err(|e| e.0)?;
     let rendered = vosh_prompt::render_str(&template, &live, RenderOptions { placeholders: true });
-    Ok(Edited { template, rendered })
+    Ok(Edited {
+        template,
+        rendered,
+        piece,
+    })
 }
 
 /// The catalog with each field's live state and source, the status, the
@@ -936,6 +943,7 @@ mod tests {
         assert_eq!(edited.template, "[%gold");
         assert_eq!(edited.rendered.plain, "[Gold");
         assert_eq!(edited.rendered.spans.len(), 2);
+        assert_eq!(edited.piece, Some(1));
         let unknown: EditOp = serde_json::from_value(json!({
             "op": "insert_field",
             "at": 0,
