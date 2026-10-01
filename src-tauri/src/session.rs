@@ -1665,11 +1665,12 @@ fn prompt_block(
         if pinned {
             p.prompt
                 .stage
-                .pin_drawn(&mut batch.out, block, painted, &before, &rendered);
+                .pin_drawn(&mut batch.out, block, painted, &before, &rendered.ansi);
         } else {
             p.prompt
                 .stage
-                .draw(&mut batch.out, block, painted, &before, &rendered);
+                .draw(&mut batch.out, block, painted, &before, &rendered.ansi);
+            p.prompt.stage.set_open_spans(rendered.spans);
         }
         for head in &heads_shown {
             keep_shown(batch, &mut scrollback, head, &head.raw, log_session_id);
@@ -2028,7 +2029,12 @@ fn window_size_step(p: &mut Profile, negotiator: &mut Negotiator, cols: u16, row
 fn repaint_step(p: &mut Profile, other: bool, now: Instant) -> Output {
     let mut out = Output::new(other);
     let rendered = p.prompt.draws().then(|| render_prompt(p, now));
-    p.prompt.stage.repaint(&mut out, rendered.as_deref());
+    p.prompt
+        .stage
+        .repaint(&mut out, rendered.as_ref().map(|r| r.ansi.as_str()));
+    p.prompt
+        .stage
+        .set_open_spans(rendered.map(|r| r.spans).unwrap_or_default());
     out
 }
 
@@ -2064,14 +2070,15 @@ fn hides_and_reads_prompt(trigger: &vosh_trigger::Trigger) -> bool {
 /// Your design drawn from the live values. The vosh-prompt resolver reads
 /// the values the capture and scripts set, then the latest GMCP packets,
 /// then what Vosh itself knows, and draws `?` for a value the game hides.
-fn render_prompt(p: &Profile, now: Instant) -> String {
+/// The spans say where each piece landed, which the open row keeps for
+/// the prompt card.
+fn render_prompt(p: &Profile, now: Instant) -> vosh_prompt::Rendered {
     let vosh = prompt_supplies(p, now);
     vosh_prompt::render_str(
         &p.prompt.config().template,
         &p.prompt.vars.resolver(&vosh),
         vosh_prompt::RenderOptions::default(),
     )
-    .ansi
 }
 
 /// Do what a line step left for after the profile lock: emit its routes,
@@ -2139,7 +2146,7 @@ async fn end_read<R: tauri::Runtime>(
 /// What Vosh itself supplies to the custom prompt: the tick timer, your
 /// target, the profile's name and the affects you track. The clock reads
 /// the local time.
-fn prompt_supplies(p: &Profile, now: Instant) -> vosh_prompt::Vosh {
+pub(crate) fn prompt_supplies(p: &Profile, now: Instant) -> vosh_prompt::Vosh {
     let tick = p.tick.remaining(now).map(|left| vosh_prompt::vars::Tick {
         remaining: i64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(i64::MAX),
         interval: i64::try_from(p.tick.config.interval.as_secs()).ok(),
@@ -3884,6 +3891,44 @@ mod tests {
             wire.p.prompt.stage.line_trigger_notice(),
             Some(vec!["hp-watch".to_string()])
         );
+    }
+
+    #[test]
+    fn the_open_row_keeps_where_each_piece_of_the_design_landed() {
+        let mut wire = Wire::new(capture_profile("<%hp/%{maxhp}> %mana"));
+        let _ = wire.read(PROMPT_ROW);
+        let spans = |wire: &Wire| -> Vec<(usize, usize, usize)> {
+            wire.p
+                .prompt
+                .stage
+                .open_row()
+                .map(|o| o.spans.iter().map(|s| (s.piece, s.col, s.width)).collect())
+                .unwrap_or_default()
+        };
+        assert_eq!(spans(&wire), [(0, 0, 1), (1, 1, 9), (2, 10, 2), (3, 12, 3)]);
+
+        // Drawing off shows the game's own line, which has no pieces, and
+        // drawing on again brings them back with the repaint.
+        let now = tokio::time::Instant::now();
+        let config = vosh_prompt::PromptConfig {
+            draw: false,
+            ..wire.p.prompt.config().clone()
+        };
+        wire.p.set_prompt_config(config);
+        let _ = super::repaint_step(&mut wire.p, false, now);
+        assert!(spans(&wire).is_empty());
+        let config = vosh_prompt::PromptConfig {
+            draw: true,
+            template: "[%hp]".into(),
+            ..wire.p.prompt.config().clone()
+        };
+        wire.p.set_prompt_config(config);
+        let _ = super::repaint_step(&mut wire.p, false, now);
+        assert_eq!(spans(&wire), [(0, 0, 1), (1, 1, 4), (2, 5, 1)]);
+
+        // Other output closes the row, and its pieces go with it.
+        let _ = wire.read(b"You are hungry.\n\r");
+        assert_eq!(wire.p.prompt.stage.open_row(), None);
     }
 
     #[test]
