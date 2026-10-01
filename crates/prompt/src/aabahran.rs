@@ -163,15 +163,10 @@ impl fmt::Display for CompileError {
 
 impl std::error::Error for CompileError {}
 
-/// What `#prompt game` and `#prompt fight` say Vosh reads from a
-/// setting, as a sentence or two: the vitals first, each with its max
-/// when the setting shows it, then any other value.
-pub fn reads_sentence(names: &[&str], fight: bool) -> String {
-    let what = if fight {
-        "this fight prompt"
-    } else {
-        "this prompt"
-    };
+/// The vitals a setting reads as a phrase, `Health, Mana, and Moves
+/// with their maxes`, and the labels of every other value it reads, each
+/// once. A max with no value of its own counts as another value.
+fn vitals_and_others(names: &[&str]) -> (Option<String>, Vec<String>, usize) {
     let pairs = [
         ("hp", "maxhp", "Health"),
         ("mana", "maxmana", "Mana"),
@@ -197,28 +192,45 @@ pub fn reads_sentence(names: &[&str], fight: bool) -> String {
             others.push(label);
         }
     }
+    if vitals.is_empty() {
+        return (None, others, 0);
+    }
+    let every_max = vitals.iter().all(|(_, max)| *max);
+    let items: Vec<String> = vitals
+        .iter()
+        .map(|(label, max)| {
+            if *max && !every_max {
+                format!("{label} with its max")
+            } else {
+                (*label).to_string()
+            }
+        })
+        .collect();
+    let tail = match (every_max, items.len()) {
+        (true, 1) => " with its max",
+        (true, _) => " with their maxes",
+        (false, _) => "",
+    };
+    (
+        Some(format!("{}{tail}", and_list(&items))),
+        others,
+        items.len(),
+    )
+}
+
+/// What `#prompt game` and `#prompt fight` say Vosh reads from a
+/// setting, as a sentence or two: the vitals first, each with its max
+/// when the setting shows it, then any other value.
+pub fn reads_sentence(names: &[&str], fight: bool) -> String {
+    let what = if fight {
+        "this fight prompt"
+    } else {
+        "this prompt"
+    };
+    let (vitals, others, _) = vitals_and_others(names);
     let mut out = Vec::new();
-    if !vitals.is_empty() {
-        let every_max = vitals.iter().all(|(_, max)| *max);
-        let items: Vec<String> = vitals
-            .iter()
-            .map(|(label, max)| {
-                if *max && !every_max {
-                    format!("{label} with its max")
-                } else {
-                    (*label).to_string()
-                }
-            })
-            .collect();
-        let tail = match (every_max, items.len()) {
-            (true, 1) => " with its max",
-            (true, _) => " with their maxes",
-            (false, _) => "",
-        };
-        out.push(format!(
-            "Vosh reads {}{tail} from {what}.",
-            and_list(&items)
-        ));
+    if let Some(vitals) = vitals {
+        out.push(format!("Vosh reads {vitals} from {what}."));
         if !others.is_empty() {
             out.push(format!("It also reads {}.", and_list(&others)));
         }
@@ -230,6 +242,60 @@ pub fn reads_sentence(names: &[&str], fight: bool) -> String {
         ));
     }
     out.join(" ")
+}
+
+/// What the card says a setting shows, the vitals first, then any other
+/// value, then your tank, as one phrase: `Health, Mana, and Moves with
+/// their maxes, and your tank and its health in a fight`. None when it
+/// reads no value. The immortal prefix's levels are left out, since the
+/// card names them in a note of their own.
+fn shows_phrase(names: &[&str]) -> Option<String> {
+    let tank = names.contains(&"tank");
+    let tank_hp = names.iter().any(|n| *n == "tank_pct" || *n == "tank_bar");
+    let rest: Vec<&str> = names
+        .iter()
+        .copied()
+        .filter(|n| !matches!(*n, "tank" | "tank_pct" | "tank_bar" | "wizi" | "incog"))
+        .collect();
+    let (vitals, others, listed) = vitals_and_others(&rest);
+    let mut parts: Vec<String> = vitals.into_iter().collect();
+    parts.extend(others);
+    match (tank, tank_hp) {
+        (true, true) => parts.push("your tank and its health in a fight".into()),
+        (true, false) => parts.push("your tank in a fight".into()),
+        (false, true) => parts.push("your tank's health in a fight".into()),
+        (false, false) => {}
+    }
+    match parts.as_slice() {
+        [] => None,
+        // A list of vitals before one more part takes a comma, so the
+        // last `and` reads as the list's own.
+        [first, second] if listed > 1 => Some(format!("{first}, and {second}")),
+        _ => Some(and_list(&parts)),
+    }
+}
+
+/// What the card says a setting shows, `It shows Health, Mana, and
+/// Moves.`, or None when it reads no value.
+pub fn shows_sentence(names: &[&str]) -> Option<String> {
+    shows_phrase(names).map(|phrase| format!("It shows {phrase}."))
+}
+
+/// What the card says while codes run together: what Vosh still reads,
+/// then which values the game supplies until you fix the prompt.
+pub fn fix_sentence(names: &[&str], unread: &[String]) -> String {
+    let reads = match shows_phrase(names) {
+        Some(phrase) => format!("Vosh reads {phrase}."),
+        None => "Vosh reads no value from this prompt.".to_string(),
+    };
+    if unread.is_empty() {
+        return reads;
+    }
+    let verb = if unread.len() == 1 { "comes" } else { "come" };
+    format!(
+        "{reads} {} {verb} from the game until you fix the prompt.",
+        and_list(unread)
+    )
 }
 
 /// The label a value a setting reads goes by.
