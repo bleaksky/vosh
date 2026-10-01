@@ -13,6 +13,7 @@ import {
   insertPlace,
   layoutMarks,
   moveOp,
+  pickAnnouncement,
   pickable,
   rawLayout,
   rawMarks,
@@ -343,5 +344,15 @@ describe('the marks on the game own line', () => {
     expect(marks.picked).toEqual([]);
     expect(marks.values).toEqual([{ left: 16 + 9 * 7.8, top: 703, width: 3 * 7.8, height: 17.5 }]);
     expect(marks.warn).toEqual([{ left: 16 + 7.8, top: 703, width: 7 * 7.8, height: 17.5 }]);
+  });
+});
+
+describe('what a reader hears as you pick a part', () => {
+  it('names the part and what it reads, or its words', () => {
+    const hp = { ...piece(1, 'value'), label: 'Health', meta: '1020 of 1020' };
+    expect(pickAnnouncement(hp)).toBe('Health, 1020 of 1020');
+    expect(pickAnnouncement({ ...piece(0, 'text', '['), label: 'Text' })).toBe('Text, [');
+    expect(pickAnnouncement({ ...piece(4, 'nl'), label: 'Line break' })).toBe('Line break');
+    expect(pickAnnouncement(null)).toBe('');
   });
 });

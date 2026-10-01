@@ -498,3 +498,12 @@ export function rawLayout(raw: readonly RawMark[], mapper: CellMapper): MarkLayo
     raw.filter((m) => m.warn === warn).flatMap((m) => mapper.boxes(m.row, m.col, m.width));
   return { picked: [], values: boxes(false), warn: boxes(true), returns: [], caret: null };
 }
+
+/** What a reader hears as you pick a part of your prompt, which the card
+ *  says in a live region: its name, then what it reads now or its words.
+ *  Empty with no part picked. */
+export function pickAnnouncement(piece: PromptPiece | null): string {
+  if (!piece) return '';
+  const detail = piece.meta ?? (piece.kind === 'text' ? piece.literal : null);
+  return detail ? `${piece.label}, ${detail}` : piece.label;
+}

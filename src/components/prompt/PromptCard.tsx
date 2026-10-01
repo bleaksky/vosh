@@ -38,6 +38,7 @@ import {
   insertOps,
   insertPlace,
   moveOp,
+  pickAnnouncement,
   pickable,
   rawMarks,
   step as stepPick,
@@ -1115,6 +1116,11 @@ export function PromptCard({
         {header}
         <div className="pc-rule" aria-hidden="true" />
         {body}
+        {/* The part you pick on your prompt, for a reader, since the marks
+            on the terminal are pictures. */}
+        <p className="st-visually-hidden" aria-live="polite">
+          {pickAnnouncement(pickedPiece)}
+        </p>
       </div>
       {moreAt && more.length > 0 && (
         <CardMenu
