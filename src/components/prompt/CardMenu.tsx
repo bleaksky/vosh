@@ -129,6 +129,10 @@ export function CardMenu({
           e.preventDefault();
           onClose();
         }
+        // A menu inside the card keeps its keys, so Delete, Return, the
+        // arrows and typing never reach the part picked behind it. Esc
+        // closes it from the window, and Cmd and Ctrl shortcuts pass.
+        if (e.key !== 'Escape' && !e.metaKey && !e.ctrlKey) e.stopPropagation();
       }}
     >
       {children}
