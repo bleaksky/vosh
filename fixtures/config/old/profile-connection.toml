@@ -1,0 +1,28 @@
+triggers = []
+autoload_scripts = []
+macros = []
+
+[[aliases]]
+name = "another"
+expansion = "say Another"
+enabled = true
+
+[connection]
+host = "play.theforsakenlands.com"
+port = 1848
+tls = false
+
+[profile_vars]
+target = "orc"
+
+[tick]
+enabled = true
+interval_secs = 45
+sound = true
+
+[ui]
+theme = "kanso-zen"
+theme_terminal_colors = true
+
+[plugins]
+enabled = []

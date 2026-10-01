@@ -1,0 +1,29 @@
+aliases = []
+triggers = []
+macros = []
+
+[ui]
+theme = "vellum"
+
+[[ui.dock_layout]]
+id = "map"
+zone = "right"
+align = "top"
+
+[[ui.dock_layout]]
+id = "group"
+zone = "right"
+
+[[ui.dock_layout]]
+id = "vitals"
+zone = "right"
+align = "bottom"
+
+[[ui.dock_layout]]
+id = "affects"
+zone = "right"
+align = "bottom"
+
+[[ui.dock_layout]]
+id = "chat"
+zone = "hidden"

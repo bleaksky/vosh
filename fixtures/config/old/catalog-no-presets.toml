@@ -1,0 +1,21 @@
+macros = []
+
+[[aliases]]
+name = "another"
+expansion = "say Another"
+enabled = true
+
+[[triggers]]
+name = "combat.outgoing_miss"
+pattern = "^(You(?:r .+?)? )(misses|miss)( .+[!.])$"
+priority = 7
+enabled = true
+preset = "combat_outgoing"
+
+[[triggers.patterns]]
+pattern = "^(You(?:r .+?)? )(misses|miss)( .+[!.])$"
+enabled = true
+
+[[triggers.actions]]
+kind = "replace"
+template = "$1$2$3"

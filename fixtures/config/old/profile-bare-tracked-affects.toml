@@ -1,0 +1,10 @@
+aliases = []
+triggers = []
+macros = []
+
+[ui]
+theme = "kanso-zen"
+tracked_affects = ["sanctuary", "haste", "Field of Discord"]
+
+[plugins]
+enabled = []

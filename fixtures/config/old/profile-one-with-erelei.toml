@@ -1,0 +1,6 @@
+aliases = []
+triggers = []
+
+[ui.vitals]
+layout = "stacked"
+one_with_erelei = true

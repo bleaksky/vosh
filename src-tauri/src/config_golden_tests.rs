@@ -13,13 +13,16 @@
 //! `profiles/default.toml` as `default-profile.toml`, since .gitignore
 //! leaves out every `profiles/` folder.
 //!
+//! `old` holds files older builds wrote. They never change, and each
+//! still loads with what it says.
+//!
 //! The golden rule: a golden changes only in a commit tied to a numbered
 //! bug or a lettered decision, and that commit shows the byte diff. Run
 //! with `VOSH_WRITE_CONFIG=1` to write the goldens again, then read the
-//! diff.
+//! diff. The old inputs are never written.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use vosh_alias::Alias;
@@ -43,7 +46,7 @@ use crate::profile_config::{
 };
 use crate::profile_set::{AutoMatch, ProfileEntry, ProfileSet, ProfilesIndex, Scope, ScopeConfig};
 
-/// The folder that holds the goldens.
+/// The folder that holds the goldens and the old inputs.
 const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/config");
 
 /// The switch that writes the goldens again.
@@ -66,6 +69,22 @@ const GOLDENS: [&str; 15] = [
     "first-save/global.toml",
     "first-save/profiles.toml",
     "first-save/default-profile.toml",
+];
+
+/// Every old input, by its path under `fixtures/config`, with the FNV-1a
+/// digest of its bytes. An old input never changes, so its digest never
+/// does either.
+const OLD_INPUTS: [(&str, u64); 7] = [
+    (
+        "old/profile-bare-tracked-affects.toml",
+        0x69a9_7976_173d_2eb4,
+    ),
+    ("old/profiles-character.toml", 0x538c_aadd_e3ce_f277),
+    ("old/profile-one-with-erelei.toml", 0x7545_3b90_6ab8_88e0),
+    ("old/profile-connection.toml", 0xaf40_ce71_f6ff_f648),
+    ("old/profile-no-prompt.toml", 0xf0ec_4748_02e9_8e84),
+    ("old/profile-dock-no-panes.toml", 0xfbb5_fe86_4607_e7bd),
+    ("old/catalog-no-presets.toml", 0x14b5_7fe9_05dc_d105),
 ];
 
 fn writing() -> bool {
@@ -758,7 +777,187 @@ fn the_config_folder_holds_only_the_listed_files() {
         // The goldens are still being written alongside.
         return;
     }
-    let mut want: Vec<String> = GOLDENS.iter().map(|s| (*s).to_string()).collect();
+    let mut want: Vec<String> = GOLDENS
+        .iter()
+        .map(|s| (*s).to_string())
+        .chain(OLD_INPUTS.iter().map(|(n, _)| (*n).to_string()))
+        .collect();
     want.sort();
     assert_eq!(written_files(Path::new(DIR)), want);
+}
+
+// ---- Old inputs.
+
+/// FNV-1a over `bytes`, a digest that never changes between builds.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| {
+        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
+
+fn old_input(name: &str) -> String {
+    assert!(
+        OLD_INPUTS.iter().any(|(n, _)| *n == name),
+        "{name} is not listed in OLD_INPUTS"
+    );
+    read(&Path::new(DIR).join(name))
+}
+
+/// Put the old input `name` at `rel` in a fresh app data folder.
+fn place(name: &str, rel: &str) -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join(rel);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, old_input(name)).unwrap();
+    (dir, path)
+}
+
+fn load_old_profile(name: &str) -> ProfileConfig {
+    let (_dir, path) = place(name, "profiles/default.toml");
+    ProfileConfig::load(&path).unwrap_or_else(|e| panic!("{name} still loads: {e}"))
+}
+
+#[test]
+fn the_old_inputs_never_change() {
+    for (name, digest) in OLD_INPUTS {
+        let bytes = std::fs::read(Path::new(DIR).join(name)).unwrap();
+        assert_eq!(
+            fnv1a(&bytes),
+            digest,
+            "fixtures/config/{name} changed. Old inputs stand for files older builds wrote, and \
+             they never change. Add a new one instead."
+        );
+    }
+}
+
+#[test]
+fn bare_tracked_affects_still_load() {
+    let config = load_old_profile("old/profile-bare-tracked-affects.toml");
+    assert_eq!(
+        config.ui.tracked_affects,
+        [
+            TrackedAffect {
+                name: "sanctuary".into(),
+                label: None,
+            },
+            TrackedAffect {
+                name: "haste".into(),
+                label: None,
+            },
+            TrackedAffect {
+                name: "Field of Discord".into(),
+                label: None,
+            },
+        ]
+    );
+    assert_eq!(config.ui.theme, "kanso-zen");
+}
+
+#[test]
+fn an_index_with_character_still_loads() {
+    let (dir, _path) = place("old/profiles-character.toml", "profiles.toml");
+    let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+    assert_eq!(set.active_name(), "default");
+    let claim = |name: &str| {
+        let entry = set.get(name).unwrap_or_else(|| panic!("{name} is listed"));
+        entry.auto_match.clone().expect("a claim")
+    };
+    let default = claim("default");
+    assert_eq!(default.characters, ["Tester"]);
+    assert_eq!(default.host.as_deref(), Some("play.theforsakenlands.com"));
+    assert_eq!(default.port, Some(1848));
+    assert!(default.enabled);
+    // The old name goes first, ahead of the list.
+    assert_eq!(claim("Healer").characters, ["Testhealer", "Testalt"]);
+    assert_eq!(
+        set.resolve_match("play.theforsakenlands.com", 1848, Some("tester"))
+            .as_deref(),
+        Some("default")
+    );
+    assert_eq!(
+        set.resolve_match("play.theforsakenlands.com", 1848, Some("Testalt"))
+            .as_deref(),
+        Some("Healer")
+    );
+}
+
+#[test]
+fn one_with_erelei_still_loads_as_the_low_hp_vignette() {
+    let config = load_old_profile("old/profile-one-with-erelei.toml");
+    assert!(config.ui.vitals.low_hp_vignette);
+    assert_eq!(config.ui.vitals.layout, "stacked");
+}
+
+#[test]
+fn a_profile_file_with_a_connection_table_still_loads() {
+    let config = load_old_profile("old/profile-connection.toml");
+    assert_eq!(config.tick.interval_secs, 45);
+    assert!(config.tick.enabled);
+    assert_eq!(
+        config.profile_vars.get("target").map(String::as_str),
+        Some("orc")
+    );
+    assert_eq!(config.ui.theme, "kanso-zen");
+    assert_eq!(config.ui.theme_terminal_colors, Some(true));
+    assert_eq!(config.aliases.len(), 1);
+    assert_eq!(config.aliases[0].expansion, "say Another");
+}
+
+#[test]
+fn a_profile_file_with_no_prompt_table_still_loads_its_design() {
+    let config = load_old_profile("old/profile-no-prompt.toml");
+    let prompt = config.prompt_config();
+    assert!(prompt.draw);
+    assert_eq!(prompt.template, "%hp/%maxhp hp %mana/%maxmana mn > ");
+    assert!(prompt.capture.is_none());
+    assert_eq!(prompt.show, PromptShow::Text);
+    // The [ui] copy stays in step.
+    assert!(config.ui.prompt_template_enabled);
+    assert_eq!(config.ui.prompt_template, prompt.template);
+}
+
+#[test]
+fn a_dock_layout_with_no_panes_still_loads_its_panel() {
+    let config = load_old_profile("old/profile-dock-no-panes.toml");
+    assert!(config.ui.panes.is_none());
+    assert_eq!(config.ui.dock_layout.len(), 5);
+    let leaf = |pane: &str, weight: f64| PaneNode {
+        id: pane.into(),
+        pane: Some(pane.into()),
+        split: None,
+        weight,
+        children: Vec::new(),
+        props: BTreeMap::new(),
+    };
+    assert_eq!(
+        config.ui.pane_layout(),
+        PaneLayoutPersist {
+            version: 1,
+            panel_open: true,
+            panel_width: None,
+            root: PaneNode {
+                id: "root".into(),
+                pane: None,
+                split: Some("column".into()),
+                weight: 1.0,
+                children: vec![leaf("map", 0.45), leaf("group", 0.25), leaf("affects", 0.3)],
+                props: BTreeMap::new(),
+            },
+        }
+    );
+}
+
+#[test]
+fn a_catalog_without_enabled_presets_still_loads() {
+    let (dir, _path) = place("old/catalog-no-presets.toml", "catalog.toml");
+    let catalog = load_global_catalog(dir.path()).unwrap();
+    assert_eq!(catalog.enabled_presets, None);
+    assert_eq!(catalog.aliases.len(), 1);
+    assert_eq!(catalog.aliases[0].name, "another");
+    assert_eq!(catalog.triggers.len(), 1);
+    assert_eq!(
+        catalog.triggers[0].preset.as_deref(),
+        Some("combat_outgoing")
+    );
+    assert!(catalog.macros.is_empty());
 }

@@ -15,6 +15,8 @@ fixtures/
              on its first save. Generated and synthetic. A golden changes
              only in a commit tied to a numbered bug or a lettered
              decision, and VOSH_WRITE_CONFIG=1 writes them again.
+    old/     Files in the shapes older builds wrote, written by hand. They
+             never change, and each one still loads.
   gmcp/      GMCP message captures.
     aabahran/  Hand written Aabahran packets, one payload per file, for the
                new server build and the two older builds. Its README lists
