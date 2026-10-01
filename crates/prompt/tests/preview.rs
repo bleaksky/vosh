@@ -343,7 +343,9 @@ fn the_engine_keeps_the_preview_until_the_connection_goes() {
     // The connection takes it.
     engine.disconnect();
     assert_eq!(engine.preview(), None);
+    // One the card sets while you are offline lasts as you connect, since
+    // the card is still open.
     engine.set_preview(Some(named(Preview::LowHealth)));
     engine.connect(false);
-    assert_eq!(engine.preview(), None);
+    assert_eq!(engine.preview(), Some(&named(Preview::LowHealth)));
 }
