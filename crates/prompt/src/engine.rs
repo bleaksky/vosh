@@ -174,6 +174,9 @@ pub struct PromptEngine {
     /// What the open card shows on your prompt in place of the live
     /// render.
     preview: Option<PromptPreview>,
+    /// The newest entry of the candidates ring and the pulse it came in,
+    /// so a capture you choose reads the prompt already on screen.
+    newest: Option<(u64, u64)>,
 }
 
 impl PromptEngine {
@@ -189,7 +192,8 @@ impl PromptEngine {
         if self.config != config {
             self.revision += 1;
         }
-        if self.config.capture != config.capture {
+        let recaptured = self.config.capture != config.capture;
+        if recaptured {
             // A new capture starts with no misses, and a reason the old
             // one kept its pattern no longer holds.
             self.misses.count = 0;
@@ -198,6 +202,39 @@ impl PromptEngine {
         self.config = config;
         self.compile();
         self.apply_rules();
+        if recaptured {
+            self.read_newest();
+        }
+    }
+
+    /// Read the newest prompt in the candidates ring with the capture just
+    /// taken, when it came in this pulse. On first use the game's prompt
+    /// came before the profile read any, and the values only it shows,
+    /// such as Wizi, then read at once rather than at the next prompt.
+    /// They last the pulse, as any capture does.
+    fn read_newest(&mut self) {
+        let Some((id, pulse)) = self.newest else {
+            return;
+        };
+        if pulse != self.vars.gmcp().pulse() {
+            return;
+        }
+        let block = self
+            .stage
+            .ring()
+            .last()
+            .filter(|entry| entry.id == id)
+            .and_then(|entry| {
+                self.stage
+                    .recognize(&entry.raw, &entry.plain, crate::stage::End::Line)
+            });
+        if let Some(block) = block {
+            let raw = block.raw_text();
+            self.vars.capture(crate::vars::Capture {
+                values: block.values,
+                raw: Some(raw),
+            });
+        }
     }
 
     /// Compile the table for the stage: the capture for who you are, and
@@ -761,6 +798,11 @@ impl PromptEngine {
         let draw = self.draws();
         let capture = !self.config.capture.is_none();
         self.stage.record(partial, at_ms, draw, capture);
+        if let Some(entry) = self.stage.ring().last() {
+            if self.newest.map(|(id, _)| id) != Some(entry.id) {
+                self.newest = Some((entry.id, self.vars.gmcp().pulse()));
+            }
+        }
     }
 
     /// The fresh prompt vars for `session://prompt-vars`, when they
@@ -853,6 +895,9 @@ impl PromptEngine {
     pub fn switch_profile(&mut self) {
         // The card opens again for the new profile, from its first step.
         self.reader = false;
+        // The new profile starts with no values read, so its capture
+        // reads nothing from the prompt already on screen.
+        self.newest = None;
         let forsaken = self.rules();
         self.vars.switch_profile(forsaken);
         self.kept_pattern = None;
@@ -1121,6 +1166,49 @@ mod tests {
         // A disconnect forgets what the webview heard, since it clears.
         engine.disconnect();
         assert_eq!(engine.take_prompt_vars(false), None);
+    }
+
+    #[test]
+    fn a_first_capture_reads_the_prompt_already_on_screen() {
+        // First use on a profile that read nothing: the game's prompt came
+        // and went into the ring before you chose its codes. The values
+        // only the prompt shows, such as Wizi, read from it at once, so
+        // the start list draws them without waiting for the next prompt.
+        let line = "(Wizi 60) [1020/1020hp] ";
+        let first = || {
+            let mut engine = PromptEngine::default();
+            engine.connect(true);
+            engine.observe("Char.Vitals", json!({"hp": 1020, "maxhp": 1020}), at());
+            // The prompt shows as sent, and its GA puts it in the ring.
+            let mut out = crate::stage::Output::new(false);
+            let _ = engine.stage.paint_partial(&mut out, line.as_bytes(), None);
+            engine.record(Some((line.as_bytes(), line)), 5);
+            engine
+        };
+        let mut engine = first();
+        engine.set_config(following("[%h/%Hhp] "));
+        let vars = engine.vars.prompt_vars();
+        assert_eq!(vars.get("wizi").map(String::as_str), Some("60"));
+        assert_eq!(vars.get("hp").map(String::as_str), Some("1020"));
+
+        // A pulse after it means the line is older than what the game
+        // sent since, so it reads nothing.
+        let mut engine = first();
+        engine.observe("Char.Vitals", json!({"hp": 900, "maxhp": 1020}), at());
+        engine.set_config(following("[%h/%Hhp] "));
+        assert_eq!(engine.vars.prompt_vars().get("wizi"), None);
+
+        // Codes that do not read the line read nothing from it either.
+        let mut engine = first();
+        engine.set_config(following("<%hhp> "));
+        assert_eq!(engine.vars.prompt_vars().get("wizi"), None);
+
+        // Another profile taking over starts with no values read, even
+        // when its codes read the line (section 5).
+        let mut engine = first();
+        engine.switch_profile();
+        engine.set_config(following("[%h/%Hhp] "));
+        assert_eq!(engine.vars.prompt_vars().get("wizi"), None);
     }
 
     #[test]
