@@ -90,6 +90,7 @@ mod migration;
 #[cfg(native_surface)]
 mod native_surface;
 mod plugins;
+mod preset_rollout;
 mod profile;
 mod profile_config;
 mod profile_set;

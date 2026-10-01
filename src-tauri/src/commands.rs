@@ -6747,15 +6747,19 @@ mod tests {
             relaunch(dir, name).await.0
         }
 
-        /// [`relaunch_as`] with what the launch found.
+        /// [`relaunch_as`] with what the launch found. The folder has
+        /// had every preset rollout already, as one this build opened
+        /// before has, so each list stays as the test wrote it. The
+        /// rollouts have tests of their own in `preset_rollout`.
         async fn relaunch(
             dir: &std::path::Path,
             name: &str,
         ) -> (super::super::SharedState, crate::launch::Launch) {
-            ProfileSet::load_or_migrate(dir.to_path_buf())
-                .unwrap()
-                .switch(name)
-                .unwrap();
+            let mut set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
+            for (id, _) in crate::preset_rollout::ROLLOUTS {
+                set.record_migration(id).unwrap();
+            }
+            set.switch(name).unwrap();
             let state: super::super::SharedState =
                 std::sync::Arc::new(super::super::AppState::default());
             let launched = crate::launch::load(&state, dir).await;
