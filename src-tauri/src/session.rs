@@ -281,7 +281,7 @@ pub(crate) enum OutgoingMsg {
 struct ReadBatch {
     /// The terminal output, with the regions the prompt stage marks.
     out: Output,
-    /// Log rows, flushed in one transaction.
+    /// Log rows, written in one transaction once the socket is quiet.
     log: Vec<vosh_log::LogEntry>,
     /// A prompt var changed or a prompt was read, so the prompt vars go
     /// out after the output even when they read the same.
@@ -318,6 +318,78 @@ impl ReadBatch {
             character: None,
             hold: false,
             gmcp: false,
+        }
+    }
+}
+
+/// How long a burst of reads can go on with no frame. A game that never
+/// pauses still shows its output this often.
+const FRAME_BUDGET: Duration = Duration::from_millis(16);
+
+/// The test event a frame request sends, so a test can count frames.
+#[cfg(test)]
+pub(crate) const TEST_FRAME_EVENT: &str = "test://frame";
+
+/// Ask the native renderer for a frame of what the grid holds now.
+fn request_frame<R: tauri::Runtime>(app: &AppHandle<R>) {
+    #[cfg(native_surface)]
+    crate::native_surface::request_redraw();
+    #[cfg(test)]
+    let _ = app.emit(TEST_FRAME_EVENT, ());
+    #[cfg(not(test))]
+    let _ = app;
+}
+
+/// What the reads of a burst owe once the socket has nothing more for
+/// now: one frame for all their output, then their log rows and the rows
+/// of the lines you sent between them, in the order they passed. An
+/// answer the game's writes cut into reads, such as a prompt whose GA
+/// comes in the next read, shows in one frame, and the log write never
+/// sits between those reads or ahead of the frame.
+#[derive(Default)]
+struct Settle {
+    /// Output went to the grid since the last frame was asked for.
+    frame: bool,
+    /// When the first output with no frame yet went to the grid.
+    since: Option<Instant>,
+    /// Log rows waiting for the log, oldest first.
+    log: Vec<vosh_log::LogEntry>,
+}
+
+impl Settle {
+    /// Output went to the grid.
+    fn drew(&mut self) {
+        self.frame = true;
+        self.since.get_or_insert_with(Instant::now);
+    }
+
+    /// Ask for the frame the output so far owes, if any.
+    fn frame_now<R: tauri::Runtime>(&mut self, app: &AppHandle<R>) {
+        if std::mem::take(&mut self.frame) {
+            self.since = None;
+            request_frame(app);
+        }
+    }
+
+    /// Whether the burst went on so long it shows a frame and writes its
+    /// rows now, before the socket runs dry.
+    fn overdue(&self) -> bool {
+        self.since.is_some_and(|t| t.elapsed() >= FRAME_BUDGET)
+    }
+
+    /// Write the waiting rows to the log, in one transaction.
+    fn write_log(&mut self, store: Option<&mut vosh_log::LogStore>, perf: &mut PerfCounters) {
+        let rows = std::mem::take(&mut self.log);
+        if rows.is_empty() {
+            return;
+        }
+        if let Some(store) = store {
+            let append_t0 = std::time::Instant::now();
+            perf.log_appends += rows.len() as u64;
+            if let Err(e) = store.append_batch(&rows) {
+                warn!(error = %e, "log append_batch failed");
+            }
+            perf.log_append_ns += append_t0.elapsed().as_nanos() as u64;
         }
     }
 }
@@ -624,6 +696,10 @@ async fn io_loop<R: tauri::Runtime>(
     // your design draws one.
     let mut clock_until: Option<Instant> = None;
 
+    // The frame and the log rows the reads since the socket was last
+    // quiet owe.
+    let mut settle = Settle::default();
+
     // Phase 1 audit instrumentation. See `PerfCounters` doc.
     let mut perf = PerfCounters::default();
     let mut perf_report_interval = tokio::time::interval(PERF_REPORT_INTERVAL);
@@ -637,7 +713,14 @@ async fn io_loop<R: tauri::Runtime>(
                     // A partial waiting for the next read paints before
                     // your line leaves, so it never goes unseen.
                     if hold_until.take().is_some() {
-                        flush_hold(&app, &profile, &mut accumulator, &mut seen_output).await;
+                        flush_hold(
+                            &app,
+                            &profile,
+                            &mut accumulator,
+                            &mut seen_output,
+                            &mut settle,
+                        )
+                        .await;
                     }
                     // Lines held for the rest of a prompt let go as they
                     // show, before your line leaves, since it follows them.
@@ -650,6 +733,7 @@ async fn io_loop<R: tauri::Runtime>(
                         &logs,
                         &mut log_session,
                         &mut seen_output,
+                        &mut settle,
                         &mut perf,
                     )
                     .await
@@ -680,9 +764,10 @@ async fn io_loop<R: tauri::Runtime>(
                     // masked field, each line is logged as `> (hidden)`
                     // and its text never reaches the store. See
                     // `hidden_input::sent_log_rows`. The rows and their
-                    // time are taken as the line leaves, and the log
-                    // writes them once the line is on the wire, so a
-                    // slow log write never holds your line back.
+                    // time are taken as the line leaves, and they wait
+                    // behind the rows before them for the log, which
+                    // writes them once the socket is quiet, so a log
+                    // write never holds your line or its answer back.
                     let sent = log_session_id.map(|sid| {
                         let rows =
                             hidden_input::sent_log_rows(&bytes, server_echo.hides(masked));
@@ -693,12 +778,7 @@ async fn io_loop<R: tauri::Runtime>(
                         Ok(()) => stream.flush().await.map_err(|e| ("flush failed", e)),
                     };
                     if let Some((sid, at, rows)) = sent {
-                        if !rows.is_empty() {
-                            let mut guard = logs.lock().await;
-                            if let Some(store) = guard.as_mut() {
-                                hidden_input::append_sent_rows(store, sid, at, &rows);
-                            }
-                        }
+                        settle.log.extend(hidden_input::sent_log_entries(sid, at, rows));
                     }
                     if let Err((what, e)) = wrote {
                         error!(error = %e, "{what}");
@@ -735,8 +815,14 @@ async fn io_loop<R: tauri::Runtime>(
                     let landed_last = !profile.lock().await.prompt.stage.wrote_after(after);
                     if landed_last {
                         if hold_until.take().is_some() {
-                            flush_hold(&app, &profile, &mut accumulator, &mut seen_output)
-                                .await;
+                            flush_hold(
+                                &app,
+                                &profile,
+                                &mut accumulator,
+                                &mut seen_output,
+                                &mut settle,
+                            )
+                            .await;
                         }
                         // Your typed echo follows the lines held for the
                         // rest of a prompt, so they let go as they show.
@@ -749,6 +835,7 @@ async fn io_loop<R: tauri::Runtime>(
                             &logs,
                             &mut log_session,
                             &mut seen_output,
+                            &mut settle,
                             &mut perf,
                         )
                         .await
@@ -840,6 +927,7 @@ async fn io_loop<R: tauri::Runtime>(
                         &mut log_session,
                         batch,
                         &mut seen_output,
+                        &mut settle,
                         &mut perf,
                     )
                     .await;
@@ -847,6 +935,13 @@ async fn io_loop<R: tauri::Runtime>(
                         let p = profile.lock().await;
                         late_until =
                             late_repaint_after(&p, late_until, gmcp, prompt, wrote, Instant::now());
+                    }
+                    // A game that never pauses still shows a frame and
+                    // gets its rows written every FRAME_BUDGET.
+                    if settle.overdue() {
+                        settle.frame_now(&app);
+                        let mut guard = logs.lock().await;
+                        settle.write_log(guard.as_mut(), &mut perf);
                     }
                 }
                 Err(e) => {
@@ -925,6 +1020,7 @@ async fn io_loop<R: tauri::Runtime>(
                                     &mut log_session,
                                     batch,
                                     &mut seen_output,
+                                    &mut settle,
                                     &mut perf,
                                 )
                                 .await;
@@ -945,7 +1041,7 @@ async fn io_loop<R: tauri::Runtime>(
             },
             () = sleep_until_hold(hold_until), if hold_until.is_some() => {
                 hold_until = None;
-                flush_hold(&app, &profile, &mut accumulator, &mut seen_output).await;
+                flush_hold(&app, &profile, &mut accumulator, &mut seen_output, &mut settle).await;
             }
             () = sleep_until_hold(late_until), if late_until.is_some() => {
                 late_until = None;
@@ -997,6 +1093,17 @@ async fn io_loop<R: tauri::Runtime>(
             _ = perf_report_interval.tick() => {
                 perf.report_and_reset();
             }
+            // Nothing else is ready, so the socket has nothing more for
+            // now and the burst of reads that just ended shows in one
+            // frame.
+            () = std::future::ready(()), if settle.frame => {
+                settle.frame_now(&app);
+            }
+            // Then the log takes the burst's rows once it is free, so a
+            // busy log never holds the loop.
+            mut guard = logs.lock(), if !settle.log.is_empty() => {
+                settle.write_log(guard.as_mut(), &mut perf);
+            }
         }
     };
 
@@ -1018,8 +1125,19 @@ async fn io_loop<R: tauri::Runtime>(
     // Flush it now, ahead of the scrollback dump and log close below, so
     // the goodbye is captured like every other client captures it.
     if hold_until.is_some() {
-        flush_hold(&app, &profile, &mut accumulator, &mut seen_output).await;
+        flush_hold(
+            &app,
+            &profile,
+            &mut accumulator,
+            &mut seen_output,
+            &mut settle,
+        )
+        .await;
     }
+    // The last burst still owes its frame and its rows, which go in the
+    // log before the lines the session captures as it ends.
+    settle.frame_now(&app);
+    settle.write_log(logs.lock().await.as_mut(), &mut perf);
     capture_held_lines(&profile, &logs, log_session_id, &scrollback).await;
     capture_pending_line(&app, &logs, log_session_id, &scrollback, &mut accumulator).await;
 
@@ -1342,7 +1460,7 @@ async fn handle_event<R: tauri::Runtime>(
             // and tick-reset bookkeeping still run per-line because
             // they have ordering semantics (a `gag` action mutates the
             // line's display before it lands in the batch). Log rows
-            // flush in one transaction at the end of the read.
+            // flush in one transaction once the socket is quiet.
             for line in accumulator.feed(&bytes) {
                 perf.lines_processed += 1;
                 let plain = vosh_ansi::plain_text(&line.bytes);
@@ -1678,8 +1796,8 @@ fn text_line_step(
             Some(bytes.clone())
         }
     };
-    // A line that shows is logged, in one transaction at the end of the
-    // read, and kept in the ring buffer that becomes scrollback on the
+    // A line that shows is logged, in one transaction once the socket is
+    // quiet, and kept in the ring buffer that becomes scrollback on the
     // next launch. The raw bytes carry ANSI, and the plain text drives
     // the regex search.
     let mut scrollback = Vec::new();
@@ -1832,8 +1950,8 @@ fn prompt_block(
     }
 }
 
-/// A line of your prompt that shows: logged, in one transaction at the
-/// end of the read, and kept in the ring buffer that becomes scrollback,
+/// A line of your prompt that shows: logged, in one transaction once the
+/// socket is quiet, and kept in the ring buffer that becomes scrollback,
 /// as `shown`, what the terminal shows of it.
 fn keep_shown(
     batch: &mut ReadBatch,
@@ -2028,6 +2146,7 @@ async fn flush_hold<R: tauri::Runtime>(
     profile: &Arc<Mutex<Profile>>,
     accumulator: &mut LineAccumulator,
     seen: &mut u64,
+    settle: &mut Settle,
 ) {
     let out = {
         let mut p = profile.lock().await;
@@ -2036,7 +2155,7 @@ async fn flush_hold<R: tauri::Runtime>(
         out
     };
     if !out.is_empty() {
-        *seen = emit_session_output(app, &out);
+        *seen = emit_session_output(app, &out, settle);
     }
 }
 
@@ -2054,6 +2173,7 @@ async fn let_go_held_lines<R: tauri::Runtime>(
     logs: &crate::log_state::SharedLogStore,
     log_session: &mut LogSession,
     seen: &mut u64,
+    settle: &mut Settle,
     perf: &mut PerfCounters,
 ) -> std::io::Result<()> {
     let mut batch = ReadBatch::new(*seen);
@@ -2070,7 +2190,7 @@ async fn let_go_held_lines<R: tauri::Runtime>(
         )
         .await?;
     }
-    finish_read(app, profile, logs, log_session, batch, seen, perf).await;
+    finish_read(app, profile, logs, log_session, batch, seen, settle, perf).await;
     Ok(())
 }
 
@@ -2531,14 +2651,16 @@ async fn emit_hidden_change<R: tauri::Runtime>(app: &AppHandle<R>, profile: &Arc
     }
 }
 
-/// Send what one socket read gathered: its output, its log rows in one
-/// transaction, the triggers that hid a prompt with nothing to draw in
-/// its place, then the prompt vars when a prompt was read or they
-/// changed, and the hidden state when it changed. Once per read, so the
-/// packets of one pulse never show the panes a state between them.
-/// `seen` becomes the output count after this read's output. Returns when
-/// a clock piece in your design next shows another second, which the
-/// lock this takes anyway reads, so a read costs no other lock for it.
+/// Send what one socket read gathered: its output, the triggers that hid
+/// a prompt with nothing to draw in its place, then the prompt vars when
+/// a prompt was read or they changed, and the hidden state when it
+/// changed. Once per read, so the packets of one pulse never show the
+/// panes a state between them. Its frame and its log rows wait in
+/// `settle` for the end of the burst of reads. `seen` becomes the output
+/// count after this read's output. Returns when a clock piece in your
+/// design next shows another second, which the lock this takes anyway
+/// reads, so a read costs no other lock for it.
+#[allow(clippy::too_many_arguments)]
 async fn finish_read<R: tauri::Runtime>(
     app: &AppHandle<R>,
     profile: &Arc<Mutex<Profile>>,
@@ -2546,6 +2668,7 @@ async fn finish_read<R: tauri::Runtime>(
     log_session: &mut LogSession,
     batch: ReadBatch,
     seen: &mut u64,
+    settle: &mut Settle,
     perf: &mut PerfCounters,
 ) -> Option<Instant> {
     let ReadBatch {
@@ -2577,22 +2700,9 @@ async fn finish_read<R: tauri::Runtime>(
         perf.output_emit_bytes +=
             (out.bytes.len() + out.hold.len() + out.replace.as_ref().map_or(0, |r| r.bytes.len()))
                 as u64;
-        *seen = emit_session_output(app, &out);
+        *seen = emit_session_output(app, &out, settle);
     }
-    if !log.is_empty() {
-        let lock_t0 = std::time::Instant::now();
-        let mut guard = logs.lock().await;
-        perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
-        perf.mutex_acquires += 1;
-        if let Some(store) = guard.as_mut() {
-            let append_t0 = std::time::Instant::now();
-            perf.log_appends += log.len() as u64;
-            if let Err(e) = store.append_batch(&log) {
-                warn!(error = %e, "log append_batch failed");
-            }
-            perf.log_append_ns += append_t0.elapsed().as_nanos() as u64;
-        }
-    }
+    settle.log.extend(log);
     if let Some(character) = character {
         log_session.name(logs, &character).await;
     }
@@ -3217,18 +3327,25 @@ fn output_count() -> u64 {
 pub(crate) fn emit_output<R: tauri::Runtime>(app: &AppHandle<R>, bytes: Vec<u8>) {
     let mut out = Output::new(false);
     out.text(&bytes);
-    emit_counted(app, &out, true, false);
+    emit_counted(app, &out, true, false, true);
 }
 
-/// Send one read's output. Returns the output count after it.
-fn emit_session_output<R: tauri::Runtime>(app: &AppHandle<R>, out: &Output) -> u64 {
-    emit_counted(app, out, true, true)
+/// Send one read's output. Returns the output count after it. It asks
+/// for no frame, since the session asks for one through `settle` when
+/// the burst of reads it came in ends.
+fn emit_session_output<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    out: &Output,
+    settle: &mut Settle,
+) -> u64 {
+    settle.drew();
+    emit_counted(app, out, true, true, false)
 }
 
 /// Send a repaint of the open row. It leaves the output count alone,
 /// since the row it writes is still the last thing on screen.
 fn emit_repaint<R: tauri::Runtime>(app: &AppHandle<R>, out: &Output) {
-    let _ = emit_counted(app, out, false, true);
+    let _ = emit_counted(app, out, false, true, true);
 }
 
 /// Send `out` to both renderers under [`OUTPUT_ORDER`]. `count` moves the
@@ -3237,12 +3354,14 @@ fn emit_repaint<R: tauri::Runtime>(app: &AppHandle<R>, out: &Output) {
 /// renderer keeps as the newest it took. The session task makes and
 /// sends those in order. Output from elsewhere can take an id before an
 /// output of the session and still go out after it, so it carries none.
-/// Returns the count after it.
+/// `frame` asks the native renderer for a frame at once. Returns the
+/// count after it.
 fn emit_counted<R: tauri::Runtime>(
     app: &AppHandle<R>,
     out: &Output,
     count: bool,
     staged: bool,
+    frame: bool,
 ) -> u64 {
     let id = staged.then(|| out.id());
     let payload = OutputPayload {
@@ -3263,13 +3382,13 @@ fn emit_counted<R: tauri::Runtime>(
     // Tier 3: feed the native terminal grid the same bytes xterm receives,
     // for every output path, then repaint. This is the single choke point
     // so nothing reaches xterm without also reaching the grid.
+    // Word wrapped at the grid width, matching the frontend WordWrapper
+    // that xterm receives this same stream through. The grid finds each
+    // region in its own rows, as xterm does (D22).
     #[cfg(native_surface)]
-    {
-        // Word wrapped at the grid width, matching the frontend
-        // WordWrapper that xterm receives this same stream through. The
-        // grid finds each region in its own rows, as xterm does (D22).
-        crate::term_grid::feed_session_output(out, id);
-        crate::native_surface::request_redraw();
+    crate::term_grid::feed_session_output(out, id);
+    if frame {
+        request_frame(app);
     }
     if let Err(e) = app.emit("session://output", payload) {
         warn!(error = %e, "failed to emit session output");

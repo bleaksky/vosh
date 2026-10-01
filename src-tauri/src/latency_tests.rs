@@ -8,6 +8,7 @@
 //! folder.
 
 use std::fmt::Write as _;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
@@ -34,6 +35,8 @@ struct Harness {
     state: SharedState,
     /// Every `session://output` payload, oldest first.
     outputs: Arc<StdMutex<Vec<serde_json::Value>>>,
+    /// How many frames the session asked the native renderer for.
+    frames: Arc<AtomicUsize>,
     /// What the game read from the client, as it came.
     from_client: mpsc::UnboundedReceiver<Vec<u8>>,
     heard: Vec<u8>,
@@ -64,6 +67,13 @@ impl Harness {
             app.listen_any("session://output", move |event| {
                 let payload = serde_json::from_str(event.payload()).expect("a JSON payload");
                 outputs.lock().expect("the outputs").push(payload);
+            });
+        }
+        let frames = Arc::new(AtomicUsize::new(0));
+        {
+            let frames = frames.clone();
+            app.listen_any(crate::session::TEST_FRAME_EVENT, move |_| {
+                frames.fetch_add(1, Ordering::SeqCst);
             });
         }
 
@@ -105,6 +115,7 @@ impl Harness {
             app,
             state,
             outputs,
+            frames,
             from_client,
             heard: Vec::new(),
             to_client,
@@ -204,6 +215,22 @@ impl Harness {
             }
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
+    }
+
+    /// How many frames the session asked for so far.
+    fn frames(&self) -> usize {
+        self.frames.load(Ordering::SeqCst)
+    }
+
+    /// Wait until the session asked for `count` frames in all, then a
+    /// little longer, so a frame too many has time to come.
+    async fn settled_frames(&self, count: usize) -> usize {
+        let deadline = tokio::time::Instant::now() + WAIT;
+        while self.frames() < count && tokio::time::Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        self.frames()
     }
 
     async fn disconnect(&self) {
@@ -416,5 +443,63 @@ async fn your_line_reaches_the_game_before_its_log_row() {
     drop(busy);
     assert!(heard, "the game heard nothing while the log was busy");
     assert_eq!(h.log_rows(1).await, vec!["> look".to_string()]);
+    h.disconnect().await;
+}
+
+/// A room with wide lines, its prompt and GA, long enough that the
+/// socket hands it over in two reads with the prompt in the second.
+fn wide_room(name: &str, lines: usize) -> Vec<u8> {
+    let mut text = format!("\r\n{name}\r\n");
+    for i in 0..lines {
+        let _ = write!(text, "  Line {i:03} of {name}, {}\r\n", "x".repeat(70));
+    }
+    text.push_str("\r\n[329h 9999m 9999v] ");
+    let mut bytes = text.into_bytes();
+    bytes.extend_from_slice(&GA);
+    bytes
+}
+
+/// An answer shows in one frame however the socket cuts it: a room with
+/// its prompt and GA in one read, and a room the socket hands over in two
+/// reads, the prompt and its GA in the second. The log writes the rows
+/// once the socket is quiet, so a busy log holds neither read back.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_answer_shows_in_one_frame_however_the_reads_cut_it() {
+    let _grid = crate::term_grid::lock_shared_grid_for_test();
+    crate::term_grid::blank_shared_grid_for_test(100, 40);
+    let mut h = Harness::new().await;
+    let mut greeting = b"Welcome.\r\n\r\n[329h 9999m 9999v] ".to_vec();
+    greeting.extend_from_slice(&GA);
+    h.game_writes(&greeting).await;
+    h.until_shown("Welcome.").await;
+    let before = h.settled_frames(1).await;
+
+    h.game_writes(&room("Market Street", 3)).await;
+    h.until_shown("Line 2 of the description of Market Street.")
+        .await;
+    assert_eq!(h.settled_frames(before + 1).await, before + 1);
+
+    let hall = wide_room("The Wide Hall", 100);
+    assert!(hall.len() > 8 * 1024, "the hall fits in one read");
+    let log = h.state.logs.clone();
+    let busy = log.lock().await;
+    let before = h.frames();
+    let reads_before = h.outputs.lock().expect("the outputs").len();
+    h.game_writes(&hall).await;
+    h.until_shown("Line 099 of The Wide Hall").await;
+    assert_eq!(h.settled_frames(before + 1).await, before + 1);
+    let reads = h.outputs.lock().expect("the outputs").len() - reads_before;
+    assert!(reads >= 2, "the hall came in {reads} read");
+    drop(busy);
+
+    let rows = h.log_rows(100).await;
+    let hall_rows: Vec<_> = rows
+        .iter()
+        .filter(|r| r.contains("of The Wide Hall"))
+        .collect();
+    assert_eq!(hall_rows.len(), 100, "the log lost rows: {rows:#?}");
+    assert!(hall_rows[0].starts_with("  Line 000"));
+    assert!(hall_rows[99].starts_with("  Line 099"));
     h.disconnect().await;
 }
