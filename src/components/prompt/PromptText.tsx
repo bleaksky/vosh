@@ -34,6 +34,11 @@ interface PromptTextProps {
   /** Where the caret is, which the card keeps while Insert value…
    *  replaces the field, so the value goes in there. */
   caretRef: { current: { start: number; end: number } | null };
+  /** Above 0 while Edit prompt as text… asks for the field, so what you
+   *  type goes to your design. The field takes focus with the caret where
+   *  it was, then calls `onFocusTaken`. */
+  focusRequest?: number;
+  onFocusTaken?: () => void;
 }
 
 /** The caret's offset in `el`'s text, or null when the caret is not in it. */
@@ -85,6 +90,8 @@ export function PromptText({
   onInsertValue,
   insertRef,
   caretRef,
+  focusRequest = 0,
+  onFocusTaken,
 }: PromptTextProps) {
   const fieldRef = useRef<HTMLDivElement | null>(null);
   const [text, setText] = useState(template);
@@ -139,6 +146,17 @@ export function PromptText({
     if (el.innerHTML !== html) el.innerHTML = html;
     if (document.activeElement === el) placeCaret(el, caret.current.end);
   }, [html]);
+
+  // Edit prompt as text… puts you in the field.
+  const focusTaken = useRef(onFocusTaken);
+  focusTaken.current = onFocusTaken;
+  useEffect(() => {
+    const el = fieldRef.current;
+    if (focusRequest <= 0 || !el) return;
+    el.focus({ preventScroll: true });
+    placeCaret(el, caret.current.end);
+    focusTaken.current?.();
+  }, [focusRequest]);
 
   const commit = (next: string, at: number) => {
     moveCaret({ start: at, end: at });
