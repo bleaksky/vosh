@@ -169,3 +169,25 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
 
     assert_eq!(heard, want);
 }
+
+#[test]
+fn the_prompt_table_event_names_the_active_profile() {
+    let app = app_with_settings_open();
+    let handle = app.handle();
+    let payloads = Arc::new(Mutex::new(Vec::new()));
+    let heard = payloads.clone();
+    let id = app.listen_any(PROMPT_CONFIG_CHANGED, move |event| {
+        heard.lock().unwrap().push(event.payload().to_string());
+    });
+    // Before any profile loads it names none.
+    crate::list_events::broadcast_list_changes(handle, ListChanges::PROMPT);
+    let state: SharedState = app.state::<SharedState>().inner().clone();
+    state.note_active_profile("Second");
+    crate::list_events::broadcast_prompt_config_changed(handle);
+    app.unlisten(id);
+    assert_eq!(
+        *payloads.lock().unwrap(),
+        [r#"{"profile":null}"#, r#"{"profile":"Second"}"#]
+    );
+    assert_eq!(state.active_profile().as_deref(), Some("Second"));
+}

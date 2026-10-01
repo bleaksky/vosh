@@ -23,8 +23,25 @@ pub(crate) const TRIGGERS_CHANGED: &str = "vosh://triggers-changed";
 /// empty string.
 pub(crate) const ALIASES_CHANGED: &str = "vosh://aliases-changed";
 /// Sent to every window when the active profile's `[prompt]` table
-/// changed. The payload is an empty string.
+/// changed. The payload names the profile, `{profile}`, see
+/// [`PromptConfigChanged`].
 pub(crate) const PROMPT_CONFIG_CHANGED: &str = "vosh://prompt-config-changed";
+
+/// The payload of [`PROMPT_CONFIG_CHANGED`]: the active profile whose
+/// table changed, None before any profile loads.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct PromptConfigChanged {
+    pub(crate) profile: Option<String>,
+}
+
+/// Tell every window the active profile's `[prompt]` table changed.
+pub(crate) fn broadcast_prompt_config_changed<R: tauri::Runtime>(app: &AppHandle<R>) {
+    use tauri::Manager;
+    let profile = app
+        .try_state::<crate::commands::SharedState>()
+        .and_then(|state| state.active_profile());
+    crate::commands::broadcast(app, PROMPT_CONFIG_CHANGED, &PromptConfigChanged { profile });
+}
 
 /// The trigger and alias list revisions, and the prompt table's, at one
 /// moment.
@@ -109,7 +126,11 @@ impl ListChanges {
 /// after the profile lock is released.
 pub(crate) fn broadcast_list_changes<R: tauri::Runtime>(app: &AppHandle<R>, changes: ListChanges) {
     for event in changes.events() {
-        crate::commands::broadcast(app, event, &"");
+        if event == PROMPT_CONFIG_CHANGED {
+            broadcast_prompt_config_changed(app);
+        } else {
+            crate::commands::broadcast(app, event, &"");
+        }
     }
 }
 

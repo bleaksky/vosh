@@ -92,6 +92,7 @@ pub(crate) async fn load_profiles(state: &SharedState, app_data: &Path) {
         profile_config::load_at_launch(&set, &mut p)
     };
     state.add_launch_notices(notices);
+    state.note_active_profile(set.active_name());
     *state.profile_set.lock().await = Some(set);
 }
 
