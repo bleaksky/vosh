@@ -1,0 +1,11 @@
+theme = "obsidian-ember"
+auto_update = false
+keep_last_command = false
+font_family = "BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace"
+font_size = 14
+follow_system_appearance = false
+light_theme = "vellum"
+dark_theme = ""
+terminal_line_height = "default"
+dock_layout = []
+custom_themes = []

@@ -1,0 +1,15 @@
+active = "default"
+migrations = [
+    "prompt-capture-to-profile",
+    "preset-sent-tells-on",
+]
+
+[[profile]]
+name = "default"
+
+[scope]
+theme = "global"
+font = "global"
+dock_layout = "global"
+keep_last_command = "global"
+auto_update = "global"

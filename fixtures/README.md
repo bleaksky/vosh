@@ -8,6 +8,13 @@ Captured byte streams used by parser tests.
 fixtures/
   telnet/    Raw telnet negotiation captures (IAC sequences).
   ansi/      ANSI escape sequence captures, including 256 color and truecolor.
+  config/    The exact bytes Vosh writes for each config file, through its
+             own save functions. A default and a full profile file,
+             global.toml, loadouts.toml, catalog.toml and profiles.toml,
+             and first-save/ with the three files a fresh install writes
+             on its first save. Generated and synthetic. A golden changes
+             only in a commit tied to a numbered bug or a lettered
+             decision, and VOSH_WRITE_CONFIG=1 writes them again.
   gmcp/      GMCP message captures.
     aabahran/  Hand written Aabahran packets, one payload per file, for the
                new server build and the two older builds. Its README lists
