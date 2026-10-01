@@ -843,8 +843,8 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
     // #trigger, #alias, and the Lua they run change the lists an open
     // Settings page shows, so tell it.
     broadcast_list_changes(&app, lists);
-    // `#prompt show` moves the prompt on screen at once, and `#prompt
-    // default` draws the new design there.
+    // `#prompt draw` and `#prompt show` change the prompt on screen at
+    // once, and `#prompt default` draws the new design there.
     if look_changed {
         request_prompt_repaint(state.inner()).await;
     }

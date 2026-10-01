@@ -293,6 +293,7 @@ Slash commands drive Vosh from the input bar without opening settings. Vosh hand
 - Manage variables with `#var <name> [value]`, `#unvar <name>`, and `#vars`.
 - Manage triggers with `#trigger <name> {pattern} <action>`, `#untrigger <name>`, and `#triggers`.
 - Tell Vosh how to read your prompt with `#prompt game {setting}` and `#prompt fight {setting}`, the codes you type in the game, or with `#prompt {regex}`, each named group like `(?<hp>\d+)` a value. `#prompt` alone says how Vosh reads it, and `#unprompt` stops.
+- Turn drawing your design on or off with `#prompt draw on|off`. With drawing off you see the game's own prompt, and your design stays.
 - Pick where your prompt shows with `#prompt show text|lifted|pinned`.
 - Use Vosh's default prompt design with `#prompt default`. It takes the place of the design in this profile, and Vosh keeps yours as an earlier design.
 - Flip whole folders with `#group <name> on|off` and inspect them with `#groups`.
@@ -711,6 +712,7 @@ This is every slash command Vosh understands today.
 - `#var <name> [value]` sets or shows a session variable, `#unvar <name>` removes it from both scopes, `#vars` lists.
 - `#trigger <name> {pattern} <action> [args]` defines, `#untrigger <name>` removes, `#triggers` lists by priority.
 - `#prompt game {setting}` and `#prompt fight {setting}` read your prompt in this profile from the codes of your PROMPT and fight prompt, `#prompt {regex}` reads it with a pattern, `#prompt` says how Vosh reads it, and `#unprompt` stops reading it.
+- `#prompt draw on|off` draws your design in place of your prompt in this profile, or shows the game's own prompt.
 - `#prompt show text|lifted|pinned` shows your prompt in this profile in the text, lifted on a band in the text, or pinned above the command line.
 - `#prompt default` puts Vosh's default design in place of the design in this profile and keeps yours as an earlier design.
 - `#group <name> on|off` toggles a group, `#group <name>` shows state, `#groups` lists.
