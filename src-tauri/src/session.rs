@@ -673,30 +673,36 @@ async fn io_loop<R: tauri::Runtime>(
                         emit_hidden_change(&app, &profile).await;
                         emit_prompt_vars(&app, &profile, false).await;
                     }
-                    // Append the input line(s) to the same log session
-                    // as server output so transcripts include both
+                    // The input line(s) go in the same log session as
+                    // server output so transcripts include both
                     // directions. While the server holds echo (a
                     // password prompt), and for any line typed into the
                     // masked field, each line is logged as `> (hidden)`
                     // and its text never reaches the store. See
-                    // `hidden_input::sent_log_rows`.
-                    if let Some(sid) = log_session_id {
+                    // `hidden_input::sent_log_rows`. The rows and their
+                    // time are taken as the line leaves, and the log
+                    // writes them once the line is on the wire, so a
+                    // slow log write never holds your line back.
+                    let sent = log_session_id.map(|sid| {
                         let rows =
                             hidden_input::sent_log_rows(&bytes, server_echo.hides(masked));
+                        (sid, now_ms(), rows)
+                    });
+                    let wrote = match stream.write_all(&bytes).await {
+                        Err(e) => Err(("write failed", e)),
+                        Ok(()) => stream.flush().await.map_err(|e| ("flush failed", e)),
+                    };
+                    if let Some((sid, at, rows)) = sent {
                         if !rows.is_empty() {
                             let mut guard = logs.lock().await;
                             if let Some(store) = guard.as_mut() {
-                                hidden_input::append_sent_rows(store, sid, now_ms(), &rows);
+                                hidden_input::append_sent_rows(store, sid, at, &rows);
                             }
                         }
                     }
-                    if let Err(e) = stream.write_all(&bytes).await {
-                        error!(error = %e, "write failed");
-                        break Some(format!("write failed: {e}"));
-                    }
-                    if let Err(e) = stream.flush().await {
-                        error!(error = %e, "flush failed");
-                        break Some(format!("flush failed: {e}"));
+                    if let Err((what, e)) = wrote {
+                        error!(error = %e, "{what}");
+                        break Some(format!("{what}: {e}"));
                     }
                 }
                 Some(OutgoingMsg::WindowSize { cols, rows }) => {

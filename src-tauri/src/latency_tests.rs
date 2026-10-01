@@ -398,3 +398,23 @@ async fn your_echo_sits_between_the_prompt_and_the_reply_on_screen() {
     assert!(echo < reply, "the reply came before the echo: {rows:#?}");
     h.disconnect().await;
 }
+
+/// Your line reaches the game before its log row is written. The test
+/// holds the log the way a slow write would, and the game still hears
+/// the line. The row lands once the log is free.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn your_line_reaches_the_game_before_its_log_row() {
+    let _grid = crate::term_grid::lock_shared_grid_for_test();
+    crate::term_grid::blank_shared_grid_for_test(100, 40);
+    let mut h = Harness::new().await;
+
+    let log = h.state.logs.clone();
+    let busy = log.lock().await;
+    h.type_line("look").await;
+    let heard = h.game_hears(b"look\r\n", Duration::from_secs(2)).await;
+    drop(busy);
+    assert!(heard, "the game heard nothing while the log was busy");
+    assert_eq!(h.log_rows(1).await, vec!["> look".to_string()]);
+    h.disconnect().await;
+}
