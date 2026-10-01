@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import commandsSource from '../../src-tauri/src/commands.rs?raw';
+import loadoutStoreSource from '../../src-tauri/src/loadout_store.rs?raw';
+import presetRolloutSource from '../../src-tauri/src/preset_rollout.rs?raw';
+import { PRESETS_OFF_MARKER } from './automationRecords';
 import { parseRoutedLine } from './chatStore';
-import { defaultEnabledIds, PRESET_CATEGORIES, presetById, presetTriggers } from './presets';
+import {
+  defaultEnabledIds,
+  PRESET_CATEGORIES,
+  PRESETS,
+  presetById,
+  presetTriggers,
+} from './presets';
 
 // The preset that puts the tells you send in the chat pane, run against
 // every line the game prints when you talk to one person or your group
@@ -66,5 +76,51 @@ describe('the Tells you send preset', () => {
     ]) {
       expect(matches(text), text).toBe(false);
     }
+  });
+});
+
+// The library lives only here, and the Rust side leans on what it holds.
+// Launch takes the defaults as every preset there is (presets_on_in_any
+// in loadout_store.rs), a rollout turns a preset on by its id
+// (preset_rollout.rs), and the shared catalog tests in commands.rs list
+// every id. Three Rust tests read this file as text, and these read the
+// Rust side against the library itself.
+describe('the library as the Rust side reads it', () => {
+  const ids = PRESETS.map((p) => p.id);
+
+  /** The quoted strings in the Rust array that `decl` finds in `source`. */
+  function rustArray(source: string, decl: RegExp): string[] {
+    const body = decl.exec(source)?.[1];
+    expect(body, decl.source).toBeDefined();
+    return [...(body ?? '').matchAll(/"([^"]*)"/g)].map((m) => m[1]);
+  }
+
+  it('turns every preset on by default', () => {
+    expect(PRESETS.filter((p) => !p.defaultEnabled).map((p) => p.id)).toEqual([]);
+    expect(defaultEnabledIds()).toEqual(ids);
+  });
+
+  it('gives each preset an id of its own that is never the off marker', () => {
+    expect(new Set(ids).size).toBe(ids.length);
+    const rustMarker = /pub\(crate\) const PRESETS_OFF: &str = "([^"]*)";/.exec(
+      loadoutStoreSource,
+    )?.[1];
+    expect(rustMarker).toBe(PRESETS_OFF_MARKER);
+    expect(ids).not.toContain(PRESETS_OFF_MARKER);
+  });
+
+  it('holds every preset a rollout turns on', () => {
+    const table = rustArray(
+      presetRolloutSource,
+      /const ROLLOUTS: &\[\(&str, &str\)\] = &\[(.*?)\];/s,
+    );
+    // Each entry is a step id and then the preset it turns on.
+    const rolled = table.filter((_, i) => i % 2 === 1);
+    expect(rolled.length).toBeGreaterThan(0);
+    for (const id of rolled) expect(ids).toContain(id);
+  });
+
+  it('lists the ids the shared catalog tests name, in order', () => {
+    expect(rustArray(commandsSource, /const LIBRARY: &\[&str\] = &\[(.*?)\];/s)).toEqual(ids);
   });
 });
