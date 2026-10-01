@@ -39,8 +39,8 @@ pub(crate) async fn prompt_config_get(
     Ok(state.profile.lock().await.prompt.config().clone())
 }
 
-/// Take a `[prompt]` table for the active profile. A capture that does not
-/// compile changes nothing, and the error says why in a sentence. A table
+/// Take a `[prompt]` table for the active profile. A new capture that does
+/// not compile changes nothing, and the error says why in a sentence. A table
 /// that changes anything saves shortly, repaints the open row and tells
 /// every window.
 #[tauri::command]
@@ -59,9 +59,14 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
 }
 
 /// The body of [`prompt_config_set`]: check and take the table. Returns
-/// whether it changed anything.
+/// whether it changed anything. Only a capture that differs from the one
+/// the profile holds is checked, since the game can hand the profile
+/// codes that do not compile (`follow_game`), and the card sends that
+/// capture back with every other change it saves.
 pub(crate) fn set_config(p: &mut Profile, mut config: PromptConfig) -> Result<bool, String> {
-    vosh_prompt::report::check_capture(&config.capture, p.prompt.who())?;
+    if config.capture != p.prompt.config().capture {
+        vosh_prompt::report::check_capture(&config.capture, p.prompt.who())?;
+    }
     config.previous_templates.truncate(PREVIOUS_TEMPLATES);
     let before = p.prompt.revision();
     p.set_prompt_config(config);
@@ -411,6 +416,58 @@ mod tests {
             set_config(&mut p, pattern),
             Err("Vosh cannot read that pattern.".into())
         );
+    }
+
+    #[test]
+    fn codes_the_game_sent_that_do_not_compile_still_take_a_new_design() {
+        let mut p = Profile::default();
+        let follows = PromptConfig {
+            capture: CaptureConfig::Aabahran(AabahranCapture {
+                prompt: "<%hhp> ".into(),
+                follow_game: true,
+                ..AabahranCapture::default()
+            }),
+            ..PromptConfig::from_legacy(true, "%hp")
+        };
+        assert_eq!(set_config(&mut p, follows), Ok(true));
+        // The game sends codes where a color runs into a code, and the
+        // capture follows them as they are.
+        let at = chrono::DateTime::parse_from_rfc3339("2026-09-30T12:00:00-05:00").unwrap();
+        let _ = p.prompt.observe(
+            "Char.Prompt",
+            json!({"enabled": true, "prompt": "<`%hhp> ", "fprompt": ""}),
+            at,
+        );
+        let CaptureConfig::Aabahran(sent) = &p.prompt.config().capture else {
+            panic!("the capture reads codes");
+        };
+        assert_eq!(sent.prompt, "<`%hhp> ");
+        assert!(!p.prompt.stage.has_recognizer());
+        // The card saves a new design with the capture it read back.
+        let edited = PromptConfig {
+            template: "[%hp]".into(),
+            ..p.prompt.config().clone()
+        };
+        assert_eq!(set_config(&mut p, edited), Ok(true));
+        assert_eq!(p.prompt.config().template, "[%hp]");
+        // So does the switch.
+        let off = PromptConfig {
+            draw: false,
+            ..p.prompt.config().clone()
+        };
+        assert_eq!(set_config(&mut p, off), Ok(true));
+        assert!(!p.prompt.config().draw);
+        // Other codes that do not compile still change nothing.
+        let other = PromptConfig {
+            capture: codes("<`%mm> "),
+            template: "[%mana]".into(),
+            ..p.prompt.config().clone()
+        };
+        assert_eq!(
+            set_config(&mut p, other),
+            Err("A color code runs into %m. Put a space between them in the game.".into())
+        );
+        assert_eq!(p.prompt.config().template, "[%hp]");
     }
 
     #[test]
