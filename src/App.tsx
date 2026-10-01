@@ -264,11 +264,17 @@ function App() {
   // Write text the page draws itself (your typed echo, error notices) to
   // xterm, and through terminal_local_write to the native grid and the
   // session on either renderer. The session closes the open row, since
-  // the text now follows it, so it never repaints over your echo.
+  // the text now follows it, so it never repaints over your echo. Your
+  // line goes out by its own call, so the session can hear of the echo
+  // after the reply. It closes only the rows that came before the newest
+  // output the renderer that shows took: xterm names it here, and the
+  // native grid names its own as it takes the text.
   const writeLive = (text: string) => {
     notePageWrite(text);
-    termRef.current?.write(text);
-    void terminalLocalWrite(text).catch(() => {});
+    const term = termRef.current;
+    term?.write(text);
+    const after = nativeSurfaceEnabled() ? null : (term?.outputTaken() ?? 0);
+    void terminalLocalWrite(text, after).catch(() => {});
   };
   const handleError = (message: string) => {
     setStatus({ kind: 'error', message });

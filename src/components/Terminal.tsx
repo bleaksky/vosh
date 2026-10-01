@@ -108,6 +108,10 @@ export interface FindOptions {
 
 export interface TerminalHandle {
   write: (data: Uint8Array | string) => void;
+  /** The newest output of the prompt stage this terminal took, 0 before
+   *  the first. Text written after it follows it, which the session reads
+   *  to tell which prompt the text closes. */
+  outputTaken: () => number;
   fit: () => void;
   focus: () => void;
   clear: () => void;
@@ -346,6 +350,9 @@ export function Terminal({
     // nothing was written after them (src/lib/terminalRegion.ts).
     const writer = new RegionWriter(term);
     const localDecoder = new TextDecoder('utf-8', { fatal: false });
+    // The newest output of the prompt stage the writer took, in the order
+    // the session sent them.
+    let outputTaken = 0;
     // Lifted prompts. The tracker registers after the writer, so xterm
     // hands it the lift marks first and the region marks pass on.
     const lifts = !quietRef.current && !nativeSurfaceEnabled() ? new LiftTracker(term) : null;
@@ -862,7 +869,7 @@ export function Terminal({
             // seeded the grid: after a reload the grid already holds the
             // history and its first banner, and another would stack.
             if (seededNative) {
-              void terminalLocalWrite(banner).catch(() => {});
+              void terminalLocalWrite(banner, null).catch(() => {});
             }
           }
         }
@@ -925,6 +932,7 @@ export function Terminal({
       }
     });
     onOutput((out) => {
+      if (out.id !== undefined && out.id > outputTaken) outputTaken = out.id;
       // Decoded across outputs and word wrapped (src/lib/outputShaper.ts).
       const { output, text } = shaper.shape(out);
       if (output) {
@@ -1020,6 +1028,7 @@ export function Terminal({
 
     const handle: TerminalHandle = {
       write: (data) => writer.local(typeof data === 'string' ? data : localDecoder.decode(data)),
+      outputTaken: () => outputTaken,
       fit: () => fit.fit(),
       focus: () => term.focus(),
       clear: () => term.clear(),

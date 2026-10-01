@@ -97,6 +97,9 @@ export interface OutputPayload {
    *  still where the next thing lands after this payload, so the line
    *  end that would end that row writes nothing. */
   pin_row?: boolean;
+  /** Which output of the prompt stage this is. Absent on output from
+   *  elsewhere, such as a slash command's echo. */
+  id?: number;
 }
 
 /** One session write, decoded: the replace goes first, then `bytes`,
@@ -115,6 +118,10 @@ export interface SessionOutput {
   pinSpans?: PromptSpan[];
   hold?: Uint8Array;
   pinRow?: boolean;
+  /** Which output of the prompt stage this is. A terminal keeps the
+   *  newest it took, so text it writes itself can tell the session
+   *  which output it follows. */
+  id?: number;
 }
 
 /** Standard base64 to bytes. `atob` yields a binary string, one char per
@@ -142,6 +149,7 @@ export function decodeOutputPayload(payload: OutputPayload): SessionOutput {
   if (Array.isArray(payload.pin_spans)) out.pinSpans = payload.pin_spans;
   if (typeof payload.hold === 'string') out.hold = base64Bytes(payload.hold);
   if (typeof payload.pin_row === 'boolean') out.pinRow = payload.pin_row;
+  if (typeof payload.id === 'number') out.id = payload.id;
   return out;
 }
 
@@ -1265,9 +1273,13 @@ export async function onOutput(cb: (out: SessionOutput) => void): Promise<Unlist
 
 /** Write text the webview drew itself, such as your typed echo or an
  *  error notice, into the native grid too, and tell the session, which
- *  closes the open row, since the text now follows it. */
-export async function terminalLocalWrite(text: string): Promise<void> {
-  await invoke('terminal_local_write', { text });
+ *  closes the open row, since the text now follows it. `after` is the
+ *  newest output of the prompt stage xterm took before the text while
+ *  xterm shows, and null while the native grid shows, which names its
+ *  own. The session can hear of your echo after the reply to your line,
+ *  and the prompt that came after the echo stays open. */
+export async function terminalLocalWrite(text: string, after: number | null): Promise<void> {
+  await invoke('terminal_local_write', { text, after });
 }
 
 /** Where the native grid's cursor sits and where its open region

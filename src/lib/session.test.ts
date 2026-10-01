@@ -33,6 +33,7 @@ import {
   sendMaskedInput,
   setAffectsDisplay,
   setUiConfig,
+  terminalLocalWrite,
   TERMINAL_LINE_HEIGHTS,
   TICK_COUNTS,
   type CustomTheme,
@@ -771,6 +772,27 @@ describe('a session output payload', () => {
     expect(text(out.pin)).toBe('tank\r\n<765>');
     expect(out.pinSpans).toEqual([span]);
     expect(decodeOutputPayload({ b64: '', pin: b64('[765hp]') }).pinSpans).toBeUndefined();
+  });
+
+  it('keeps which output of the prompt stage it is', () => {
+    expect(decodeOutputPayload({ b64: b64('<1020> '), id: 42 }).id).toBe(42);
+    expect(decodeOutputPayload({ b64: b64('[not connected]\r\n') }).id).toBeUndefined();
+  });
+});
+
+describe('text the page writes to the terminal itself', () => {
+  it('tells the session which output xterm took before it', async () => {
+    const sent = vi.mocked(invoke);
+    sent.mockClear();
+    await terminalLocalWrite('look\r\n', 42);
+    expect(sent).toHaveBeenCalledWith('terminal_local_write', { text: 'look\r\n', after: 42 });
+  });
+
+  it('leaves it to the native grid while that renderer shows', async () => {
+    const sent = vi.mocked(invoke);
+    sent.mockClear();
+    await terminalLocalWrite('look\r\n', null);
+    expect(sent).toHaveBeenCalledWith('terminal_local_write', { text: 'look\r\n', after: null });
   });
 });
 
