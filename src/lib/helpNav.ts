@@ -169,3 +169,33 @@ export function helpSearchKey(
   if (key === 'Escape') return query.length > 0 ? { kind: 'clear' } : { kind: 'blur' };
   return null;
 }
+
+/** Where focus sits when you press a key in Help: in the article
+ *  column, in the search, on another control like a topic in the
+ *  sidebar, or nowhere. */
+export type HelpFocus = 'article' | 'field' | 'control' | 'none';
+
+/** How a key moves the article: a page, a line, or to an end. */
+export type HelpScroll =
+  | { kind: 'page'; by: 1 | -1 }
+  | { kind: 'line'; by: 1 | -1 }
+  | { kind: 'edge'; to: 'top' | 'bottom' };
+
+/** A key that scrolls the article from outside it, or null to leave
+ *  the key alone. The article scrolls itself once it has focus. From
+ *  the search only PageUp and PageDown scroll it, since the arrows move
+ *  through the results and the rest edit the words. A control in the
+ *  sidebar keeps Space to press it. With nothing focused, every
+ *  scrolling key reaches the article. */
+export function helpScrollKey(key: string, shift: boolean, focus: HelpFocus): HelpScroll | null {
+  if (focus === 'article') return null;
+  if (key === 'PageDown') return { kind: 'page', by: 1 };
+  if (key === 'PageUp') return { kind: 'page', by: -1 };
+  if (focus === 'field') return null;
+  if (key === 'ArrowDown') return { kind: 'line', by: 1 };
+  if (key === 'ArrowUp') return { kind: 'line', by: -1 };
+  if (key === 'Home') return { kind: 'edge', to: 'top' };
+  if (key === 'End') return { kind: 'edge', to: 'bottom' };
+  if (focus === 'none' && key === ' ') return { kind: 'page', by: shift ? -1 : 1 };
+  return null;
+}

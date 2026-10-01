@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { HELP_SECTIONS, HELP_TOPICS, type HelpTopic } from './helpContent';
 import {
   countMatches,
+  helpScrollKey,
   matchRanges,
   outlineFor,
   rankTopics,
@@ -114,5 +115,37 @@ describe('a link into help', () => {
   it('searches for anything else', () => {
     expect(resolveHelpTarget(' tick timer ')).toEqual({ kind: 'search', query: 'tick timer' });
     expect(resolveHelpTarget('  ')).toBeNull();
+  });
+});
+
+describe('a key that scrolls the article', () => {
+  it('pages from the search, where the other keys edit the words', () => {
+    expect(helpScrollKey('PageDown', false, 'field')).toEqual({ kind: 'page', by: 1 });
+    expect(helpScrollKey('PageUp', false, 'field')).toEqual({ kind: 'page', by: -1 });
+    for (const key of ['ArrowDown', 'ArrowUp', 'Home', 'End', ' ']) {
+      expect(helpScrollKey(key, false, 'field'), key).toBeNull();
+    }
+  });
+
+  it('pages, steps and jumps from a sidebar control, and leaves Space to press it', () => {
+    expect(helpScrollKey('PageDown', false, 'control')).toEqual({ kind: 'page', by: 1 });
+    expect(helpScrollKey('ArrowDown', false, 'control')).toEqual({ kind: 'line', by: 1 });
+    expect(helpScrollKey('ArrowUp', false, 'control')).toEqual({ kind: 'line', by: -1 });
+    expect(helpScrollKey('Home', false, 'control')).toEqual({ kind: 'edge', to: 'top' });
+    expect(helpScrollKey('End', false, 'control')).toEqual({ kind: 'edge', to: 'bottom' });
+    expect(helpScrollKey(' ', false, 'control')).toBeNull();
+  });
+
+  it('takes Space too when nothing has focus', () => {
+    expect(helpScrollKey(' ', false, 'none')).toEqual({ kind: 'page', by: 1 });
+    expect(helpScrollKey(' ', true, 'none')).toEqual({ kind: 'page', by: -1 });
+    expect(helpScrollKey('End', false, 'none')).toEqual({ kind: 'edge', to: 'bottom' });
+  });
+
+  it('leaves every key to the article once it has focus', () => {
+    for (const key of ['PageDown', 'PageUp', 'ArrowDown', 'Home', 'End', ' ']) {
+      expect(helpScrollKey(key, false, 'article'), key).toBeNull();
+    }
+    expect(helpScrollKey('a', false, 'none')).toBeNull();
   });
 });
