@@ -77,3 +77,25 @@ describe('the triggers that hide your prompt with nothing drawn', () => {
     expect(store.getPromptGags().size).toBe(0);
   });
 });
+
+describe('a trigger the mark names no longer hides your prompt', () => {
+  it('asks again when the profile reads a prompt, or another profile takes over', async () => {
+    named = [];
+    const store = await load();
+    gag('my-capture');
+    expect([...store.getPromptGags()]).toEqual(['my-capture']);
+    // You told Vosh your prompt in Customize prompt, so the session
+    // forgot the trigger.
+    fire('vosh://prompt-config-changed', { profile: 'default' });
+    await settle();
+    expect(store.getPromptGags().size).toBe(0);
+    gag('my-capture');
+    fire('vosh://profile-switched', 'Healer');
+    await settle();
+    expect(store.getPromptGags().size).toBe(0);
+    named = ['other-capture'];
+    fire('vosh://ui-config-replaced', null);
+    await settle();
+    expect([...store.getPromptGags()]).toEqual(['other-capture']);
+  });
+});

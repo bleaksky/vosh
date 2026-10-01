@@ -1030,6 +1030,11 @@ impl Stage {
     /// decides what Aabahran's `%u` and `%s` print.
     pub fn set_capture_for(&mut self, capture: &CaptureConfig, who: Who) {
         self.recognizer = Recognizer::compile_for(capture, who);
+        // Once something reads your prompt, no trigger hides it with
+        // nothing drawn in its place.
+        if self.recognizer.is_some() {
+            self.forget_gags_without_reader();
+        }
     }
 
     /// The compiled capture.
@@ -2111,6 +2116,12 @@ impl Stage {
         self.gag_reported.insert(trigger.to_string())
     }
 
+    /// Start the list of triggers that hid a prompt with nothing reading
+    /// it over, as a profile that reads one or another profile does.
+    pub fn forget_gags_without_reader(&mut self) {
+        self.gag_reported.clear();
+    }
+
     /// The triggers that hid a prompt this session while nothing read
     /// it, in name order.
     pub fn gags_without_reader(&self) -> impl Iterator<Item = &str> {
@@ -2993,6 +3004,19 @@ mod tests {
             stage.gags_without_reader().collect::<Vec<_>>(),
             ["my-capture", "prompt-capture"]
         );
+        // Once the profile reads your prompt, no trigger hides it with
+        // nothing drawn, so the list starts over.
+        stage.set_capture(&CaptureConfig::Regex(RegexCapture {
+            lines: vec![JAMES.to_string()],
+            ..RegexCapture::default()
+        }));
+        assert_eq!(stage.gags_without_reader().count(), 0);
+        // A profile that reads none again hears of each trigger anew.
+        stage.set_capture(&CaptureConfig::None);
+        assert!(stage.gag_without_reader("my-capture"));
+        // Another profile starts its own list.
+        stage.forget_gags_without_reader();
+        assert_eq!(stage.gags_without_reader().count(), 0);
     }
 
     #[test]

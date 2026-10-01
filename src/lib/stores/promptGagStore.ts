@@ -1,5 +1,12 @@
 import { useSyncExternalStore } from 'react';
-import { onPromptGagWithoutReader, onState, promptGagsWithoutReader } from '../session';
+import {
+  onPromptGagWithoutReader,
+  onState,
+  promptGagsWithoutReader,
+  subscribeProfileSwitched,
+  subscribePromptConfigChanged,
+  subscribeUiConfigReplaced,
+} from '../session';
 import { createStore } from './store';
 
 // The triggers that hid your prompt this session while the profile reads
@@ -7,7 +14,10 @@ import { createStore } from './store';
 // them. The session names each one once on
 // session://prompt-gag-without-reader, and Settings may open later, so
 // the store also asks for the list when it starts. A connection that
-// opens or closes starts the list over, as the session does.
+// opens or closes starts the list over, as the session does. Once the
+// profile reads your prompt, or another profile takes over, the session
+// forgets them, so the store asks for the list again then and takes it
+// whole.
 
 const NONE: ReadonlySet<string> = new Set();
 
@@ -23,6 +33,21 @@ function add(names: readonly string[]): void {
   if (missing.length > 0) store.set(new Set([...now, ...missing]));
 }
 
+/** Ask the session for the list and take it whole, unless a connection
+ *  opened or closed or another ask began meanwhile. */
+function reread(): void {
+  resets += 1;
+  const mine = resets;
+  void promptGagsWithoutReader()
+    .then((names) => {
+      if (mine !== resets) return;
+      const now = store.get();
+      const same = names.length === now.size && names.every((name) => now.has(name));
+      if (!same) store.set(names.length > 0 ? new Set(names) : NONE);
+    })
+    .catch(() => undefined);
+}
+
 export function startPromptGagStore(): void {
   if (started) return;
   started = true;
@@ -34,7 +59,12 @@ export function startPromptGagStore(): void {
     resets += 1;
     store.set(NONE);
   });
-  void Promise.all([named, states])
+  const changes = [
+    subscribePromptConfigChanged(reread),
+    subscribeProfileSwitched(reread),
+    subscribeUiConfigReplaced(reread),
+  ];
+  void Promise.all([named, states, ...changes])
     .then(() => {
       const mine = resets;
       return promptGagsWithoutReader().then((names) => {
