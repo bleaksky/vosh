@@ -37,11 +37,13 @@ import {
   deleteOp,
   insertOps,
   insertPlace,
+  moveBack,
   moveOp,
   pickAnnouncement,
   pickable,
   rawMarks,
   step as stepPick,
+  type MoveMade,
   type Pointing,
 } from '../../lib/promptPieces';
 import type { PromptShowState } from '../../lib/promptShow';
@@ -240,6 +242,9 @@ export function PromptCard({
   const textCaret = useRef<{ start: number; end: number } | null>(null);
   const edits = useRef<Promise<unknown>>(Promise.resolve());
   const undo = useRef<UndoEntry[]>([]);
+  // The moves Option with Left or Right made, newest last, which the
+  // opposite key takes back exactly.
+  const moves = useRef<MoveMade[]>([]);
   const game = useGamePrompt();
   const env = useBandEnv(themeTerminalColors, brightBold, renderer);
   const cellW = useCellWidth(monoFamily);
@@ -273,6 +278,7 @@ export function PromptCard({
         setConfig(null);
         setStep(null);
         undo.current = [];
+        moves.current = [];
         setPointing(NOWHERE);
         setView('design');
         setRequest(null);
@@ -557,9 +563,14 @@ export function PromptCard({
 
   /** Make `ops` one after another on the design as it stands, save the
    *  result once, and follow the part the first one acted on: pick it,
-   *  or with `caret`, put the caret past it. Edits queue, so typing fast
-   *  loses no character. */
-  const edit = (ops: PromptEditOp[], follow: 'pick' | 'caret' = 'pick') => {
+   *  or with `caret`, put the caret past it. `made` hears the design
+   *  before and after, and where that part landed. Edits queue, so typing
+   *  fast loses no character. */
+  const edit = (
+    ops: PromptEditOp[],
+    follow: 'pick' | 'caret' = 'pick',
+    made?: (change: { before: string; after: string; landed: number | null }) => void,
+  ) => {
     edits.current = edits.current.then(async () => {
       const base = latest.current;
       const at = opens.current;
@@ -588,6 +599,7 @@ export function PromptCard({
         if (at !== opens.current) return;
         if (text !== base.template) save({ ...base, template: text });
         if (data) setDescribed({ template: text, data });
+        made?.({ before: base.template, after: text, landed });
         const first = ops[0];
         if (landed === null || first.op === 'remove') {
           setPointing({ picked: null, caret: caretAfter(first, null) });
@@ -599,6 +611,44 @@ export function PromptCard({
       } catch (e) {
         pushToast({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
       }
+    });
+  };
+
+  /** Put the design back as it was before move `back`, with the part it
+   *  moved picked where it was. Only while the design is still what the
+   *  move made. */
+  const takeMoveBack = (back: MoveMade) => {
+    edits.current = edits.current.then(async () => {
+      const base = latest.current;
+      const at = opens.current;
+      if (!base || base.template !== back.after) return;
+      const shown = previewRef.current;
+      const data = await promptDescribe(back.before, shown === 'now' ? null : shown).catch(
+        () => null,
+      );
+      if (at !== opens.current) return;
+      save({ ...base, template: back.before });
+      if (data) setDescribed({ template: back.before, data });
+      setPointing({ picked: back.from, caret: null });
+    });
+  };
+
+  /** Option with Left or Right: take the last move back when the key goes
+   *  the other way, or move the part you picked past its neighbor. */
+  const movePicked = (dir: -1 | 1) => {
+    const back = moveBack(moves.current, latest.current?.template ?? '', pointing.picked, dir);
+    if (back) {
+      moves.current = moves.current.slice(0, -1);
+      takeMoveBack(back);
+      return;
+    }
+    const op = moveOp(pieces, pointing.picked, dir);
+    if (!op || op.op !== 'move') return;
+    edit([op], 'pick', ({ before, after, landed }) => {
+      if (landed === null || before === after) return;
+      moves.current = [...moves.current, { before, after, from: op.piece, landed, dir }].slice(
+        -UNDO_DEPTH,
+      );
     });
   };
 
@@ -758,8 +808,7 @@ export function PromptCard({
     if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !mod) {
       const dir = e.key === 'ArrowLeft' ? -1 : 1;
       if (e.altKey) {
-        const op = moveOp(pieces, pointing.picked, dir);
-        if (op) edit([op]);
+        movePicked(dir);
       } else {
         setPointing(stepPick(pieces, pointing, dir));
       }

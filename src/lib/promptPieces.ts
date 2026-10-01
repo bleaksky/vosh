@@ -70,6 +70,32 @@ export function moveOp(
   return { op: 'move', piece: picked, to: dir < 0 ? past : past + 1 };
 }
 
+/** A move Option with Left or Right made: the design before and after it,
+ *  where the part was and where it landed, and the way it went. */
+export interface MoveMade {
+  before: string;
+  after: string;
+  from: number;
+  landed: number;
+  dir: -1 | 1;
+}
+
+/** The move the opposite key takes back, so Option with Right then
+ *  Option with Left puts a part back exactly where it was, even when the
+ *  move ran two texts together into one part. It is the newest move,
+ *  while the design is still what it made, the part it moved is still
+ *  picked, and the key goes the other way. */
+export function moveBack(
+  made: readonly MoveMade[],
+  template: string,
+  picked: number | null,
+  dir: -1 | 1,
+): MoveMade | null {
+  const last = made[made.length - 1];
+  if (!last || last.after !== template || last.landed !== picked || last.dir === dir) return null;
+  return last;
+}
+
 /** The place right after the last part that shows, before the codes a
  *  design may end on, such as the `%c_reset` after your prompt's trailing
  *  space. A click past the end of your prompt puts the caret there, as
