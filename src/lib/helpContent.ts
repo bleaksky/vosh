@@ -5,6 +5,8 @@
 // writing style. Bodies use the lightweight format HelpView parses:
 //   - Paragraphs separated by a blank line (\n\n).
 //   - Lines starting with "- " render as bullet list items.
+//   - A block whose lines all start with "|" renders as a table, its
+//     first row the head and its row of dashes left out.
 //   - Backticks delimit inline code.
 
 export interface HelpTopic {
@@ -32,6 +34,49 @@ export const HELP_SECTIONS: string[] = [
   'Fix it',
   'Reference',
 ];
+
+/** One row of the prompt design codes: the codes as you write them, and
+ *  what they do in one sentence (section 7.1 of the prompt build spec). */
+export interface PromptDesignCode {
+  codes: string[];
+  text: string;
+}
+
+/** The codes a prompt design is written in, for the Reference topic. */
+export const PROMPT_DESIGN_CODES: readonly PromptDesignCode[] = [
+  { codes: ['%hp', '%mana', '%move'], text: 'Your current Health, Mana or Moves.' },
+  { codes: ['%maxhp', '%maxmana', '%maxmove'], text: 'The most you can have.' },
+  { codes: ['%pct_hp'], text: 'Health as a percent with no sign. Add %% for the sign.' },
+  { codes: ['%hp_bar:10:auto'], text: 'A bar ten cells wide, colored by how full it is.' },
+  { codes: ['%{gold:grouped}'], text: 'Any value from the picker, in any of its forms.' },
+  { codes: ['%c_green', '%c_hp'], text: "A theme color, or Health's color by how full it is." },
+  { codes: ['%c_default'], text: 'Back to the terminal text color. Bold and italic stay on.' },
+  { codes: ['%c_reset'], text: 'Back to plain text with every color and style off.' },
+  {
+    codes: ['%s_italic', '%s_bold', '%s_underline', '%s_off'],
+    text: 'Turns a style on, or every style off.',
+  },
+  { codes: ['%nl'], text: 'Starts a new line.' },
+  {
+    codes: ['%{if:fight}', '%{ifnot:fight}', '%{end}'],
+    text: 'Shows what sits between them only in a fight, or only out of one.',
+  },
+  { codes: ['%{raw}'], text: 'Your prompt exactly as the game sent it.' },
+  { codes: ['%%'], text: 'A percent sign.' },
+];
+
+/** The codes as a table in the help body format, each column padded to
+ *  its widest cell as Prettier sets the same table in HELP.md. */
+function promptCodesTable(): string {
+  const rows = [
+    ['Code', 'What it does'],
+    ...PROMPT_DESIGN_CODES.map((row) => [row.codes.map((c) => `\`${c}\``).join(' '), row.text]),
+  ];
+  const widths = [0, 1].map((i) => Math.max(...rows.map((row) => row[i].length)));
+  const line = (cells: string[]) => `| ${cells.map((c, i) => c.padEnd(widths[i])).join(' | ')} |`;
+  const [head, ...body] = rows;
+  return [line(head), line(widths.map((w) => '-'.repeat(w))), ...body.map(line)].join('\n');
+}
 
 export const HELP_TOPICS: HelpTopic[] = [
   {
@@ -342,7 +387,50 @@ export const HELP_TOPICS: HelpTopic[] = [
     section: 'Reference',
     body: 'This is every built in key Vosh binds, grouped by where it works.\n\nIn the command input.\n\n- `Enter` submits. `Shift+Enter` inserts a newline for multi line compose, and in password mode it submits instead.\n- `Tab` and `Shift+Tab` cycle tab completion through your history words, room characters, and recently seen names.\n- `ArrowUp` and `ArrowDown` recall history, filtered by whatever prefix you already typed.\n- `PageUp` and `PageDown` page the scrollback. On macOS press `Fn+Up` and `Fn+Down`.\n- `Escape` cancels an in flight paste burst, closes the scrollback split, and snaps the terminal to its tail.\n- `Home` and `End` jump the caret, also reachable as `Cmd+Left` and `Cmd+Right` or `Fn+Left` and `Fn+Right` on macOS. Add `Shift` to extend the selection.\n- `Cmd+C` or `Ctrl+C` with nothing selected in the input copies the native surface selection.\n\nAnywhere in the window.\n\n- `Cmd+F` or `Ctrl+F` opens the find toolbar.\n- `Cmd+K` or `Ctrl+K` toggles the command palette.\n\nIn the find toolbar. `Enter` finds the next match, `Shift+Enter` the previous, `Escape` closes and clears.\n\nIn the command palette. `ArrowUp` and `ArrowDown` move the selection, `Enter` runs the entry, `Tab` and `Shift+Tab` cycle the scope filter, `Escape` closes.\n\nMouse on the terminal. Wheel up opens the scrollback split on the xterm renderer, the native surface scrolls its own grid. Middle click closes the split and snaps to bottom. Right click opens the terminal menu.\n\nBind your own keys as macros in Settings under Automation, then Macros. Canonical names look like `F1`, `Ctrl+N`, `Shift+F5`, and `Ctrl+Alt+Numpad7`.',
   },
+  {
+    id: 'reference.prompt-codes',
+    number: '9.3',
+    title: 'Prompt design codes',
+    section: 'Reference',
+    body: `Your own prompt is a design of text and codes. Customize prompt writes the codes for you as you click the parts of your prompt and pick values. Choose \`Edit as text\` there to read them or type your own.\n\n${promptCodesTable()}\n\nEvery value in \`Insert value…\` has codes of its own, and the picker shows them beside each form.`,
+  },
 ];
+
+/** One block of a help body. */
+export type HelpBlock =
+  | { kind: 'paragraph'; text: string }
+  | { kind: 'list'; items: string[] }
+  | { kind: 'table'; head: string[]; rows: string[][] };
+
+/** The cells of a table line, `| a | b |` as `a` and `b`. */
+function tableCells(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim());
+}
+
+/** Read a help body into its blocks, in the format at the top of this
+ *  file. */
+export function parseHelpBody(body: string): HelpBlock[] {
+  return body
+    .split(/\n\n+/)
+    .map((b) => b.trim())
+    .filter((b) => b.length > 0)
+    .map((block): HelpBlock => {
+      const lines = block.split('\n');
+      if (lines.every((l) => l.startsWith('- '))) {
+        return { kind: 'list', items: lines.map((l) => l.slice(2)) };
+      }
+      if (lines.every((l) => l.startsWith('|'))) {
+        const rows = lines.filter((l) => !/^\|[\s|:-]+\|?$/.test(l)).map(tableCells);
+        return { kind: 'table', head: rows[0] ?? [], rows: rows.slice(1) };
+      }
+      return { kind: 'paragraph', text: block };
+    });
+}
 
 export function searchTopics(query: string, topics: HelpTopic[] = HELP_TOPICS): HelpTopic[] {
   const q = query.trim().toLowerCase();

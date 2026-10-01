@@ -6856,6 +6856,29 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   margin: 0 0 6px;
 }
 
+/* A table of codes, like the prompt design codes: the code column
+   keeps to its codes and the sentence takes the rest. */
+.help-modal-table {
+  margin: 0 0 14px;
+  border-collapse: collapse;
+}
+
+.help-modal-table th,
+.help-modal-table td {
+  padding: 4px 16px 4px 0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.help-modal-table th {
+  color: var(--c-text-faint);
+  font-weight: 600;
+}
+
+.help-modal-table td:first-child {
+  white-space: nowrap;
+}
+
 .help-modal-code {
   background: var(--c-surface-emphasis);
   border: 1px solid var(--c-border);

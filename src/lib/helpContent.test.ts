@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import helpMd from '../../HELP.md?raw';
 import { parseRoutedLine } from './chatStore';
-import { HELP_TOPICS } from './helpContent';
+import { HELP_TOPICS, parseHelpBody, PROMPT_DESIGN_CODES } from './helpContent';
 
 function body(id: string): string {
   const topic = HELP_TOPICS.find((t) => t.id === id);
@@ -412,5 +412,83 @@ describe('the help on where your prompt shows', () => {
       if (!found) throw new Error(`no help topic ${id}`);
       expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
     }
+  });
+});
+
+describe('the help on prompt design codes', () => {
+  // Section 7.1 of the prompt build spec: each row a code and one
+  // sentence.
+  const ROWS: [string[], string][] = [
+    [['%hp', '%mana', '%move'], 'Your current Health, Mana or Moves.'],
+    [['%maxhp', '%maxmana', '%maxmove'], 'The most you can have.'],
+    [['%pct_hp'], 'Health as a percent with no sign. Add %% for the sign.'],
+    [['%hp_bar:10:auto'], 'A bar ten cells wide, colored by how full it is.'],
+    [['%{gold:grouped}'], 'Any value from the picker, in any of its forms.'],
+    [['%c_green', '%c_hp'], "A theme color, or Health's color by how full it is."],
+    [['%c_default'], 'Back to the terminal text color. Bold and italic stay on.'],
+    [['%c_reset'], 'Back to plain text with every color and style off.'],
+    [['%s_italic', '%s_bold', '%s_underline', '%s_off'], 'Turns a style on, or every style off.'],
+    [['%nl'], 'Starts a new line.'],
+    [
+      ['%{if:fight}', '%{ifnot:fight}', '%{end}'],
+      'Shows what sits between them only in a fight, or only out of one.',
+    ],
+    [['%{raw}'], 'Your prompt exactly as the game sent it.'],
+    [['%%'], 'A percent sign.'],
+  ];
+
+  const topic = () => {
+    const found = HELP_TOPICS.find((t) => t.id === 'reference.prompt-codes');
+    if (!found) throw new Error('no prompt codes topic');
+    return found;
+  };
+
+  it('lists every code with its one sentence', () => {
+    expect(PROMPT_DESIGN_CODES.map((row) => [row.codes, row.text])).toEqual(ROWS);
+  });
+
+  it('draws them as a table under Reference', () => {
+    const { number, title, section, body: text } = topic();
+    expect([number, title, section]).toEqual(['9.3', 'Prompt design codes', 'Reference']);
+    expect(text).toMatch(/^\| Code +\| What it does +\|\n\| -+ \| -+ \|$/m);
+    expect(text).toMatch(
+      /^\| `%hp` `%mana` `%move` +\| Your current Health, Mana or Moves\. +\|$/m,
+    );
+    expect(text).toMatch(/^\| `%%` +\| A percent sign\. +\|$/m);
+    const blocks = parseHelpBody(text);
+    const table = blocks.find((b) => b.kind === 'table');
+    expect(table).toEqual({
+      kind: 'table',
+      head: ['Code', 'What it does'],
+      rows: ROWS.map(([codes, sentence]) => [codes.map((c) => `\`${c}\``).join(' '), sentence]),
+    });
+    // The writing style keeps colons and semicolons out of the prose.
+    for (const block of blocks) {
+      if (block.kind === 'paragraph') expect(block.text).not.toMatch(/[;:] /);
+    }
+  });
+
+  it('matches HELP.md word for word', () => {
+    const { number, title, body: text } = topic();
+    expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
+  });
+});
+
+describe('the help body format', () => {
+  it('reads paragraphs, lists and tables', () => {
+    expect(
+      parseHelpBody('One line.\n\n- a\n- b\n\n| A | B |\n|---|---|\n| `x` | y. |\n| z | w |'),
+    ).toEqual([
+      { kind: 'paragraph', text: 'One line.' },
+      { kind: 'list', items: ['a', 'b'] },
+      {
+        kind: 'table',
+        head: ['A', 'B'],
+        rows: [
+          ['`x`', 'y.'],
+          ['z', 'w'],
+        ],
+      },
+    ]);
   });
 });
