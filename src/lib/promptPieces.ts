@@ -360,6 +360,9 @@ export function dockMapper(input: {
 export interface MarkLayout {
   /** The part you picked: the selection token and a 1 px accent ring. */
   picked: Box[];
+  /** Each value Vosh reads on the game's own line, or the whole line,
+   *  while the card reads your codes: the selection token alone (P2, P3). */
+  values: Box[];
   /** Parts Vosh cannot fill: a 1 px warn ring. */
   warn: Box[];
   /** A ↵ after each row a line break ends, two cells wide. */
@@ -431,6 +434,7 @@ export function layoutMarks(input: {
   return {
     picked:
       pointing.picked === null || lineBreaks.has(pointing.picked) ? [] : boxesOf(pointing.picked),
+    values: [],
     warn: [...warn].flatMap(boxesOf),
     returns,
     caret,
@@ -484,4 +488,13 @@ export function rawMarks(
     if (width > 0) out.push({ row, col, width, warn: mark.warn });
   }
   return out;
+}
+
+/** The marks on the game's own line through `mapper`: each value in the
+ *  selection token alone, and a run Vosh cannot read in the warn ring
+ *  (P2, P3, P3b). */
+export function rawLayout(raw: readonly RawMark[], mapper: CellMapper): MarkLayout {
+  const boxes = (warn: boolean) =>
+    raw.filter((m) => m.warn === warn).flatMap((m) => mapper.boxes(m.row, m.col, m.width));
+  return { picked: [], values: boxes(false), warn: boxes(true), returns: [], caret: null };
 }

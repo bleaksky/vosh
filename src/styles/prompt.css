@@ -1360,10 +1360,17 @@
 }
 
 .pc-mark-token,
+.pc-mark-value,
 .pc-mark-warn,
 .pc-mark-caret {
   position: fixed;
   pointer-events: none;
+}
+
+/* A value Vosh reads on the game's own line while the card reads your
+   codes: the selection token alone (P2, P3). */
+.pc-mark-value {
+  background: var(--selection);
 }
 
 .pc-mark-token {
