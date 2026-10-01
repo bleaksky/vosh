@@ -1,0 +1,35 @@
+[
+  {
+    "name": "cs",
+    "expansion": "cast %1",
+    "enabled": true,
+    "group": "magic"
+  },
+  {
+    "name": "k",
+    "expansion": "kill %1",
+    "enabled": true
+  },
+  {
+    "name": "lk",
+    "expansion": "kill %1",
+    "enabled": true,
+    "script": "mud.send(\"look\")"
+  },
+  {
+    "name": "lt",
+    "expansion": "look",
+    "enabled": true,
+    "script": "mud.send(\"look \" .. captures[1])\nmud.echo(\"looked\")"
+  },
+  {
+    "name": "off",
+    "expansion": "say off",
+    "enabled": false
+  },
+  {
+    "name": "rec",
+    "expansion": "recall",
+    "enabled": true
+  }
+]

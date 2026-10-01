@@ -1352,7 +1352,14 @@ pub(crate) async fn triggers_import(
 #[tauri::command]
 pub(crate) async fn aliases_export(state: State<'_, SharedState>) -> Result<String, String> {
     let p = state.profile.lock().await;
-    let aliases: Vec<vosh_alias::Alias> = p.aliases.list().into_iter().cloned().collect();
+    aliases_json(&p.aliases)
+}
+
+/// The JSON `aliases_export` sends, sorted by name. The page reads it in
+/// the palette and the Aliases editor, and its tests read
+/// `fixtures/ipc/aliases_export.json`, which a test here holds to it.
+fn aliases_json(store: &vosh_alias::AliasStore) -> Result<String, String> {
+    let aliases: Vec<vosh_alias::Alias> = store.list().into_iter().cloned().collect();
     serde_json::to_string_pretty(&aliases).map_err(|e| e.to_string())
 }
 
@@ -5572,6 +5579,34 @@ mod tests {
         assert_eq!(
             super::auto_switch_line("default"),
             "\r\n\x1b[33mVosh switched to the Default profile.\x1b[0m\r\n"
+        );
+    }
+
+    #[test]
+    fn aliases_export_sends_the_shared_alias_fixture() {
+        // The page tests read this file as the reply to aliases_export,
+        // so renaming a field fails here instead of leaving the page to
+        // read nothing.
+        use vosh_alias::{Alias, AliasStore};
+        let mut store = AliasStore::new();
+        store.set(Alias::new("rec", "recall"));
+        store.set(Alias::new("k", "kill %1"));
+        store.set(Alias::new("cs", "cast %1").with_group("magic"));
+        store.set(Alias::new("lk", "kill %1").with_script("mud.send(\"look\")"));
+        store.set(
+            Alias::new("lt", "look")
+                .with_script("mud.send(\"look \" .. captures[1])\nmud.echo(\"looked\")"),
+        );
+        let mut off = Alias::new("off", "say off");
+        off.enabled = false;
+        store.set(off);
+        let json = super::aliases_json(&store).unwrap();
+        // The file ends in a newline, and the reply does not.
+        let fixture = include_str!("../../fixtures/ipc/aliases_export.json");
+        assert_eq!(
+            fixture.strip_suffix('\n'),
+            Some(json.as_str()),
+            "fixtures/ipc/aliases_export.json no longer matches aliases_export"
         );
     }
 

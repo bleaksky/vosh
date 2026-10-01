@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
+import aliasesExport from '../../fixtures/ipc/aliases_export.json?raw';
 import {
   buildAliasEntries,
   buildPaletteEntries,
@@ -299,25 +300,11 @@ describe('settings rows', () => {
 });
 
 describe('alias rows', () => {
-  // What aliases_export sends. The Rust Alias struct names the command
-  // expansion, a disabled alias stays in the list, and a Lua alias
-  // keeps the expansion it had before Lua was turned on.
-  const exported = JSON.stringify(
-    [
-      { name: 'k', expansion: 'kill %1', enabled: true },
-      { name: 'lk', expansion: 'kill %1', enabled: true, script: 'mud.send("look")' },
-      {
-        name: 'lt',
-        expansion: 'look',
-        enabled: true,
-        script: 'mud.send("look " .. captures[1])\nmud.echo("looked")',
-      },
-      { name: 'off', expansion: 'say off', enabled: false },
-      { name: 'rec', expansion: 'recall', enabled: true },
-    ],
-    null,
-    2,
-  );
+  // The reply to aliases_export, which a Rust test in commands.rs holds
+  // to the Alias serialization byte for byte. A disabled alias stays in
+  // the list, and a Lua alias keeps the expansion it had before Lua was
+  // turned on.
+  const exported = aliasesExport.trimEnd();
 
   async function aliasRows(over: Partial<PaletteDeps> = {}) {
     vi.mocked(invoke).mockClear();
@@ -336,6 +323,7 @@ describe('alias rows', () => {
     const rows = await aliasRows();
     expect(invoke).toHaveBeenCalledWith('aliases_export');
     expect(rows.map((r) => [r.title, r.meta ?? null])).toEqual([
+      ['cs', 'cast %1'],
       ['k', 'kill %1'],
       ['lk', 'mud.send("look")'],
       ['lt', 'mud.send("look " .. captures[1])'],
@@ -352,13 +340,14 @@ describe('alias rows', () => {
     const rows = await aliasRows({ insertInput: (text) => inserted.push(text) });
     void row(rows, 'k').run();
     void row(rows, 'lt').run();
-    expect(inserted).toEqual(['k ', 'lt ']);
+    void row(rows, 'cs').run();
+    expect(inserted).toEqual(['k ', 'lt ', 'cs ']);
     expect(invoke).not.toHaveBeenCalledWith('session_send_input', expect.anything());
     // A Lua alias that never reads its captures runs at once, whatever
     // its old expansion held.
     void row(rows, 'lk').run();
     void row(rows, 'rec').run();
-    expect(inserted).toEqual(['k ', 'lt ']);
+    expect(inserted).toEqual(['k ', 'lt ', 'cs ']);
     expect(invoke).toHaveBeenCalledWith('session_send_input', { line: 'lk' });
     expect(invoke).toHaveBeenCalledWith('session_send_input', { line: 'rec' });
   });

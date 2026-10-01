@@ -28,6 +28,10 @@ fixtures/
              VOSH_WRITE_IPC_NAMES=1 writes it again. gmcp-events.json,
              the event each GMCP package goes out on, read by a fake MUD
              test in src-tauri and by session.test.ts on the page.
+             aliases_export.json is the reply to aliases_export plus a
+             final newline. A test in src-tauri/src/commands.rs holds it
+             to that command byte for byte, and the palette and
+             Automation tests read it as the reply.
   links/     Golden lists of the ids that links name, taken from the code.
              help-topics.json holds every help topic id with its number,
              in rail order, for src/lib/helpTopicIds.test.ts.
