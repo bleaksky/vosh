@@ -191,10 +191,14 @@ fn the_picker_offers_every_form_with_a_live_sample() {
             ("Max", "1020".to_string()),
             ("Percent", "100%".to_string()),
             ("Bar", "██████████".to_string()),
-            ("Grouped", "1,020".to_string()),
-            ("Short", "1k".to_string()),
         ]
     );
+    // Gold, a number, groups its thousands and shortens.
+    let gold: Vec<&str> = forms(&FieldRef::new("gold"), &values)
+        .iter()
+        .map(|f| f.label)
+        .collect();
+    assert_eq!(gold, ["Number", "Grouped", "Short"]);
     // The bar draws in theme green at full.
     let bar = &forms(&FieldRef::new("hp"), &values)[4];
     assert!(
