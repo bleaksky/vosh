@@ -174,7 +174,9 @@ impl PromptConfig {
     /// only when it differs from what this table holds, so a save that
     /// carries them unchanged leaves the table alone. Turning drawing on
     /// with no design takes Vosh's default, [`DEFAULT_DESIGN`]. Returns
-    /// whether either changed.
+    /// whether either changed. Nothing calls it since the Settings
+    /// payload dropped the prompt fields, and it is listed for James with
+    /// the prompt editor's orphans.
     pub fn take_switch_and_template(&mut self, draw: bool, template: &str) -> bool {
         let turned_on = draw && !self.draw;
         let mut changed = false;
@@ -194,7 +196,9 @@ impl PromptConfig {
 
     /// Take where your prompt shows from a Settings save, when it differs
     /// from what this table holds. A name this build does not know
-    /// changes nothing. Returns whether it changed.
+    /// changes nothing. Returns whether it changed. Nothing calls it since
+    /// the Settings payload dropped the prompt fields, and it is listed
+    /// for James with the prompt editor's orphans.
     pub fn take_show(&mut self, show: &str) -> bool {
         match PromptShow::parse(show) {
             Some(show) if show != self.show => {

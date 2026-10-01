@@ -1,15 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { createDebouncedWrite, pendingWrites } from '../../../lib/pendingWrites';
 import {
-  changedPromptFields,
   isOwnAffectsDisplayEcho,
   isOwnThemeEcho,
-  primeUiConfigPrompt,
-  promptFieldsOf,
   setUiConfig,
   subscribeAffectsDisplayChanged,
   subscribeUiConfigReplaced,
-  type PromptFields,
   type UiConfig,
 } from '../../../lib/session';
 import { applyThemePrefs, subscribeThemeChanges, subscribeThemePrefs } from '../../../lib/theme';
@@ -43,7 +39,6 @@ const autoSave = createDebouncedWrite<AutoSave>(async (job) => {
     // The backend turns a save away when it replaced the config after
     // this copy was read, and the window reads the new one instead.
     if (!(await setUiConfig(job.cfg))) return;
-    notePromptFields(job.cfg);
     applyThemePrefs(job.cfg);
     job.saved();
   } catch (e) {
@@ -51,29 +46,6 @@ const autoSave = createDebouncedWrite<AutoSave>(async (job) => {
   }
 });
 pendingWrites.register(() => autoSave.flush());
-
-// The prompt switch and design as this window last read or saved them.
-// The backend holds the same until a command changes them.
-let knownPrompt: PromptFields | null = null;
-
-/** Note the prompt switch and design this window read. */
-export function notePromptFields(config: UiConfig): void {
-  knownPrompt = promptFieldsOf(config);
-}
-
-/** Take the prompt switch and design the backend holds now, where a
- *  command such as `#prompt` changed them since this window read or
- *  saved them. The window's copy and a save waiting on the debounce take
- *  them, so no later save puts the old ones back. Interim until the
- *  Prompt section replaces PromptBlock. */
-export function adoptPromptFields(fresh: UiConfig, setConfig: SetUiConfig): void {
-  const patch = changedPromptFields(knownPrompt, promptFieldsOf(fresh));
-  knownPrompt = promptFieldsOf(fresh);
-  if (Object.keys(patch).length === 0) return;
-  setConfig((prev) => (prev ? { ...prev, ...patch } : prev));
-  autoSave.patch((job) => ({ ...job, cfg: { ...job.cfg, ...patch } }));
-  primeUiConfigPrompt(patch);
-}
 
 // Debounced auto-save shared by the config-backed editors. Text inputs
 // can fire many updates in a row while the user types; the debounce

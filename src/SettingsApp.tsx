@@ -13,13 +13,8 @@ import {
   subscribeAffectsDisplayChanged,
   subscribeLoadoutsChanged,
   subscribeProfilesChanged,
-  subscribePromptConfigChanged,
   type UiConfig,
 } from './lib/session';
-import {
-  adoptPromptFields,
-  notePromptFields,
-} from './components/settings/legacy/useSettingsAutoSave';
 import { applyThemePrefs, subscribeThemeChanges, subscribeThemePrefs } from './lib/theme';
 import { showAfterThemePaint } from './lib/reveal';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
@@ -208,7 +203,6 @@ export function SettingsApp() {
       .then((cfg) => {
         setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
         setConfig(cfg);
-        notePromptFields(cfg);
         // The main window owns sending OS appearance flips. This window
         // follows them on its own listener.
         applyThemePrefs(cfg);
@@ -231,36 +225,12 @@ export function SettingsApp() {
         if (cancelled) return;
         setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
         setConfig(cfg);
-        notePromptFields(cfg);
         applyThemePrefs(cfg);
       },
       (e) => {
         if (!cancelled) setError(String(e));
       },
     ).then((fn) => {
-      if (cancelled) fn();
-      else unsub = fn;
-    });
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, []);
-
-  // A command such as #prompt can change the prompt switch and design
-  // while this window is open. Every save sends the whole snapshot, so
-  // take the new ones, or the next edit on any page puts the old ones
-  // back. Interim until the Prompt section replaces PromptBlock.
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    void subscribePromptConfigChanged(() => {
-      getUiConfig()
-        .then((cfg) => {
-          if (!cancelled) adoptPromptFields(cfg, setConfig);
-        })
-        .catch((e) => setError(String(e)));
-    }).then((fn) => {
       if (cancelled) fn();
       else unsub = fn;
     });

@@ -144,8 +144,24 @@ export function LegacyCommandLine({ config, update }: LegacyConfigProps) {
   );
 }
 
-/** The old General tab's prompt section. */
-export function LegacyPrompt({ config, update }: LegacyConfigProps) {
+/** The prompt switch and design as the Settings config held them before
+ *  the Prompt section moved them to the prompt commands. Only
+ *  LegacyPrompt reads them. */
+interface LegacyPromptFields {
+  prompt_template_enabled: boolean;
+  prompt_template: string;
+}
+
+/** The old General tab's prompt section. Nothing renders it since the
+ *  Prompt section of Input took its place. It stays for James to delete
+ *  with the other orphans of the prompt editor. */
+export function LegacyPrompt({
+  config,
+  update,
+}: {
+  config: LegacyPromptFields;
+  update: (patch: Partial<LegacyPromptFields>) => void;
+}) {
   return (
     <div className="settings-sect settings-sect-first">
       <div className="settings-frow">
