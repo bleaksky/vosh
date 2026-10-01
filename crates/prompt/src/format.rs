@@ -91,6 +91,15 @@ impl Position {
         }
     }
 
+    /// Vosh's three letters, what `%S` prints and `med` while you
+    /// meditate, where `%S` prints nothing.
+    pub fn short(self) -> &'static str {
+        match self {
+            Position::Meditate => "med",
+            p => p.abbrev(),
+        }
+    }
+
     pub fn from_word(word: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|p| p.word() == word)
     }
@@ -496,7 +505,7 @@ impl Value {
             Value::Flag => label.to_string(),
             Value::List(names) => names.len().to_string(),
             Value::Moon { phase, active, .. } => moon_code(*phase, *active).to_string(),
-            Value::Position(p) => p.abbrev().to_string(),
+            Value::Position(p) => p.short().to_string(),
             Value::Exits { letters, .. } => letters.clone(),
             Value::Hour(h) => h.to_string(),
             Value::Seconds { secs, .. } => secs.to_string(),
@@ -527,6 +536,7 @@ impl Value {
                 Value::Exits { game, .. } => game.clone(),
                 Value::Lang(lang) => lang_game(lang),
                 Value::Level { word, level } => format!("({word} {level})"),
+                Value::Position(p) => p.abbrev().to_string(),
                 _ => self.value_text(label),
             }),
             Format::Word => match self {
@@ -805,6 +815,9 @@ mod tests {
         assert_eq!(text(&pos, Format::Game).as_deref(), Some("fgt"));
         assert_eq!(text(&pos, Format::Word).as_deref(), Some("fighting"));
         let meditate = Value::Position(Position::Meditate);
+        // The game's `%S` prints nothing while you meditate, and Vosh's
+        // own three letters say so.
+        assert_eq!(text(&meditate, Format::Value).as_deref(), Some("med"));
         assert_eq!(text(&meditate, Format::Game).as_deref(), Some(""));
         assert_eq!(text(&meditate, Format::Word).as_deref(), Some("meditate"));
 
