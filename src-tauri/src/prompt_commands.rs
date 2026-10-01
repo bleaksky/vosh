@@ -18,6 +18,7 @@ use tokio::time::Instant;
 use vosh_prompt::candidates::{CandidateGroup, CaptureCheck};
 use vosh_prompt::capture::Recognizer;
 use vosh_prompt::config::PREVIOUS_TEMPLATES;
+use vosh_prompt::describe::{Described, FormView};
 use vosh_prompt::edit::EditOp;
 use vosh_prompt::overrides::{Overridden, Overrides, Preview, PromptPreview};
 use vosh_prompt::report::{CompileReport, CompileRequest};
@@ -364,6 +365,83 @@ pub(crate) fn render_all(p: &Profile, requests: &[RenderRequest]) -> Vec<Rendere
             }
         })
         .collect()
+}
+
+/// Draw with the live values, or a preview's on top of them, as the card
+/// shows them.
+fn with_values<T>(
+    p: &Profile,
+    preview: Option<Preview>,
+    overrides: Option<Overrides>,
+    then: impl FnOnce(&dyn Values, bool) -> T,
+) -> T {
+    let vosh = crate::session::prompt_supplies(p, Instant::now());
+    let live = p.prompt.vars.resolver(&vosh);
+    let now = chrono::Local::now().naive_local();
+    let over = PromptPreview {
+        preview,
+        overrides,
+        ..PromptPreview::default()
+    }
+    .overrides(&live);
+    if over.is_empty() {
+        then(&live, false)
+    } else {
+        then(&Overridden::new(&live, &over, now), true)
+    }
+}
+
+/// What each piece and token of a design is, as the card shows it, with
+/// what each value reads in the preview the card shows.
+#[tauri::command]
+pub(crate) async fn prompt_describe(
+    state: State<'_, SharedState>,
+    template: String,
+    preview: Option<Preview>,
+    overrides: Option<Overrides>,
+) -> Result<Described, String> {
+    Ok(describe(
+        &*state.profile.lock().await,
+        &template,
+        preview,
+        overrides,
+    ))
+}
+
+/// The body of [`prompt_describe`].
+pub(crate) fn describe(
+    p: &Profile,
+    template: &str,
+    preview: Option<Preview>,
+    overrides: Option<Overrides>,
+) -> Described {
+    let template = Template::parse(template);
+    with_values(p, preview, overrides, |values, previewed| {
+        vosh_prompt::describe::describe(&template, values, previewed)
+    })
+}
+
+/// The forms a field takes, each drawn as the card shows it, for the
+/// picker. `field` is written as a template names it, `hp` or
+/// `aff:sanctuary`.
+#[tauri::command]
+pub(crate) async fn prompt_forms(
+    state: State<'_, SharedState>,
+    field: String,
+    preview: Option<Preview>,
+) -> Result<Vec<FormView>, String> {
+    Ok(forms(&*state.profile.lock().await, &field, preview))
+}
+
+/// The body of [`prompt_forms`].
+pub(crate) fn forms(p: &Profile, field: &str, preview: Option<Preview>) -> Vec<FormView> {
+    let field = match field.split_once(':') {
+        Some((name, param)) => FieldRef::with_param(name, param),
+        None => FieldRef::new(field),
+    };
+    with_values(p, preview, None, |values, _| {
+        vosh_prompt::describe::forms(&field, values)
+    })
 }
 
 /// Show what the open card shows on your prompt in place of the live
@@ -828,6 +906,44 @@ mod tests {
         ] {
             serde_json::from_value::<EditOp>(op.clone()).unwrap_or_else(|e| panic!("{op}: {e}"));
         }
+    }
+
+    #[test]
+    fn a_design_is_described_with_the_values_the_card_shows() {
+        let mut p = Profile::default();
+        p.prompt.connect(false);
+        p.prompt.observe(
+            "Char.Vitals",
+            json!({"hp": 850, "maxhp": 900}),
+            chrono::Local::now().fixed_offset(),
+        );
+        let live = describe(&p, "[%hp]", None, None);
+        let hp = &live.pieces[1];
+        assert_eq!(hp.label, "Health");
+        assert_eq!(hp.meta.as_deref(), Some("850 of 900"));
+        let low = describe(&p, "[%hp]", Some(Preview::LowHealth), None);
+        assert_eq!(
+            low.pieces[1].meta.as_deref(),
+            Some("180 of 900 in this preview")
+        );
+        assert_eq!(low.tokens.len(), 3);
+        let json = serde_json::to_value(&live).unwrap();
+        assert_eq!(json["pieces"][1]["format"], "value");
+        assert_eq!(json["pieces"][1]["color"], json!({"kind": "default"}));
+        assert_eq!(json["pieces"][1]["when"], "always");
+        assert_eq!(json["tokens"][1]["kind"], "value");
+        // The picker's forms, a field with a parameter among them.
+        let hp_forms = forms(&p, "hp", None);
+        assert_eq!(hp_forms[1].sample.plain, "850/900");
+        assert_eq!(hp_forms[1].label, "Current and max");
+        let json = serde_json::to_value(&hp_forms[0]).unwrap();
+        assert_eq!(json["format"], "value");
+        assert_eq!(json["segment"], "850");
+        let labels: Vec<&str> = forms(&p, "aff:sanctuary", None)
+            .iter()
+            .map(|f| f.label)
+            .collect();
+        assert_eq!(labels, ["Time left", "Mark when on", "Mark when off"]);
     }
 
     #[test]
