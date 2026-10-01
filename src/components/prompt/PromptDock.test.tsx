@@ -178,6 +178,21 @@ describe('the pinned band', () => {
     expect(px(band, 'width')).toBeCloseTo(17 * 7.8 + 8, 5);
   });
 
+  it('reaches past its widest row for the card s line break mark and caret', () => {
+    const html = renderToStaticMarkup(
+      <PinnedBand
+        state={pinned}
+        pin={'\x1b[32m1020\x1b[39m/1020hp '}
+        cell={CELL}
+        fontSize={13}
+        env={NORD}
+        reach={9.8}
+      />,
+    );
+    const band = style(html, 'data-prompt-band');
+    expect(px(band, 'width')).toBeCloseTo(11 * 7.8 + 8 + 9.8, 5);
+  });
+
   it('keeps the last rows when a prompt has more than the zone', () => {
     const rows = bandRows('one\r\ntwo\r\nthree', 2);
     expect(rows.map((r) => r.map((c) => c.ch).join(''))).toEqual(['two', 'three']);

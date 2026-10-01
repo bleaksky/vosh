@@ -19,6 +19,7 @@
 // under xterm's text, repositioned in xterm's own render frame so band and
 // text land in the same composite.
 
+import { getPromptReach, subscribePromptReach } from './stores/promptReachStore';
 import type { IBufferCell, IDisposable, IMarker, Terminal } from '@xterm/xterm';
 import { REGION_OSC } from './terminalRegion';
 
@@ -304,6 +305,18 @@ export function layoutBands(
   });
 }
 
+/** `boxes` with the newest lift's band `reach` px wider: the prompt card
+ *  adds a ↵ after a row a line break ends and a caret past the last
+ *  glyph, and the band grows to hold both (the 2026-09-30 addendum, item
+ *  3). A band that steps in around your echo keeps its width. */
+export function widenNewest(boxes: BandBox[], reach: number): BandBox[] {
+  if (reach <= 0 || boxes.length === 0) return boxes;
+  const newest = boxes.reduce((a, b) => (b.id > a.id ? b : a));
+  return boxes.map((box) =>
+    box === newest && box.notch === undefined ? { ...box, width: box.width + reach } : box,
+  );
+}
+
 /** The outline of a band `width` by `height` whose part right of `nx` and
  *  below `ny` is left out, as an SVG path: radius `r` on each outer
  *  corner, square where the rows above meet the last row. `inset` draws it
@@ -400,6 +413,9 @@ export class BandLayer implements IDisposable {
     // bands move with the text, scrolling and reflowing included.
     this.subs.push(term.onRender(() => this.place()));
     this.subs.push(term.onResize(() => (this.frame = null)));
+    // The prompt card's marks reach past the open row's last glyph.
+    const unsubscribe = subscribePromptReach(() => this.place());
+    this.subs.push({ dispose: unsubscribe });
     this.observer =
       typeof ResizeObserver === 'undefined'
         ? null
@@ -499,11 +515,14 @@ export class BandLayer implements IDisposable {
     const cut = dividerCut(frame.y - BAND_Y, this.historyBottom);
     layer.style.clipPath = cut > 0 ? `inset(${cut}px 0 0 0)` : '';
     const viewportY = this.term.buffer.active.viewportY;
-    const boxes = layoutBands(
-      this.tracker.extents(viewportY - 1, viewportY + this.term.rows),
-      viewportY,
-      cell.width,
-      cell.height,
+    const boxes = widenNewest(
+      layoutBands(
+        this.tracker.extents(viewportY - 1, viewportY + this.term.rows),
+        viewportY,
+        cell.width,
+        cell.height,
+      ),
+      getPromptReach(),
     );
     while (layer.children.length > boxes.length) layer.lastElementChild?.remove();
     while (layer.children.length < boxes.length) {

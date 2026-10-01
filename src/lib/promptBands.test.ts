@@ -11,6 +11,7 @@ import {
   LiftTracker,
   markLifted,
   notchedPath,
+  widenNewest,
   type LiftExtent,
 } from './promptBands';
 import { RegionWriter } from './terminalRegion';
@@ -200,6 +201,28 @@ describe('LiftTracker with your echo after a prompt of several rows', () => {
 
 describe('layoutBands', () => {
   const cell = { w: 7.8, h: 17.5 };
+
+  it('widens the newest band to hold the card s caret, past the last glyph (P6)', () => {
+    const boxes = layoutBands(
+      [
+        { id: 1, top: 1, bottom: 1, left: 0, right: 35 },
+        { id: 4, top: 3, bottom: 3, left: 0, right: 35 },
+      ],
+      0,
+      cell.w,
+      cell.h,
+    );
+    // The caret waits a cell past the last glyph, 2 px wide, and the band
+    // reaches 4 px past it: 16 + 36 x 7.8 + 2 + 4 - 12 = 290.8.
+    const reach = cell.w + 2;
+    const [old, open] = widenNewest(boxes, reach);
+    expect(open.width).toBeCloseTo(290.8, 6);
+    expect(old.width).toBe(boxes[0].width);
+    expect(widenNewest(boxes, 0)).toBe(boxes);
+    // A band that steps in around your echo keeps its width.
+    const notched = [{ ...boxes[1], notch: { x: 10, y: 17.5 } }];
+    expect(widenNewest(notched, reach)[0].width).toBe(boxes[1].width);
+  });
 
   it('reaches 4 px past the text and 2 px above and below, as the boards draw it', () => {
     const [band] = layoutBands(
