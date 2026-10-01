@@ -162,8 +162,9 @@ pub(crate) fn logs_command(line: &str) -> Option<LogsCommand> {
 pub(crate) fn help_query(line: &str) -> Option<String> {
     let rest = line.trim_start().strip_prefix('#')?;
     let (cmd, words) = split_first_word(rest);
-    let words = words.trim();
-    (cmd == "help" && !words.is_empty()).then(|| words.to_string())
+    // The search reads a phrase, so a run of spaces reads as one.
+    let words = words.split_whitespace().collect::<Vec<_>>().join(" ");
+    (cmd == "help" && !words.is_empty()).then_some(words)
 }
 
 /// True when `line` may replace the live profile: a `#profile reset` or
@@ -3154,9 +3155,14 @@ mod tests {
     #[test]
     fn help_with_words_opens_help_on_them() {
         assert_eq!(help_query("#help prompt"), Some("prompt".to_string()));
+        // A run of spaces between the words reads as one.
         assert_eq!(
             help_query("  #help   tick  timer "),
-            Some("tick  timer".to_string())
+            Some("tick timer".to_string())
+        );
+        assert_eq!(
+            help_query("#help prompt \t show"),
+            Some("prompt show".to_string())
         );
         assert_eq!(help_query("# help map"), Some("map".to_string()));
     }

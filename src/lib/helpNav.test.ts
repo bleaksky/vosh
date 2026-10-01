@@ -46,6 +46,16 @@ describe('the help search', () => {
     expect(countMatches(shown, 'PROMPT')).toBe(countMatches(shown, 'prompt'));
   });
 
+  it('reads a run of spaces in the words as one', () => {
+    // Words typed or sent with #help may hold a doubled space.
+    expect(rankTopics('tick  timer').length).toBeGreaterThan(0);
+    expect(rankTopics('tick  timer')).toEqual(rankTopics('tick timer'));
+    expect(rankTopics('tick \t timer')).toEqual(rankTopics('tick timer'));
+    const shown = topic('reference.slash-commands');
+    expect(countMatches(shown, 'tick  timer')).toBe(countMatches(shown, 'tick timer'));
+    expect(matchRanges('the tick timer', 'tick  timer')).toEqual([[4, 14]]);
+  });
+
   it('marks matches that never overlap', () => {
     expect(matchRanges('aaaa', 'aa')).toEqual([
       [0, 2],
