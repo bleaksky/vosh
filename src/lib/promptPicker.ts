@@ -86,6 +86,8 @@ export function sourceLine(f: PromptFieldState): string {
     return 'From your prompt, and from the game when your prompt leaves it out.';
   }
   if (fromPrompt) return 'From your prompt only. The game sends it nowhere else.';
+  // The game's prompt is the game's own line, which Vosh keeps.
+  if (f.kind === 'raw') return 'From the game. Vosh keeps your last prompt as it came.';
   if (f.group === 'scripts') return 'From your scripts.';
   if (f.group === 'vosh') return 'From Vosh.';
   return 'From the game.';
