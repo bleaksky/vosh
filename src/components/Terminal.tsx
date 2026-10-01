@@ -15,12 +15,25 @@ import { listen } from '@tauri-apps/api/event';
 
 import '@xterm/xterm/css/xterm.css';
 import { subscribeBaseAnsi } from '../lib/baseAnsi';
-import { loadScrollback, onOutput, setWindowSize, terminalLocalWrite } from '../lib/session';
+import {
+  loadScrollback,
+  onOutput,
+  setWindowSize,
+  terminalCursor,
+  terminalLocalWrite,
+} from '../lib/session';
 import { findTheme } from '../lib/themes';
 import { ansi16Of, xtermThemeFor } from '../lib/terminalTheme';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
 import { OutputShaper } from '../lib/outputShaper';
 import { RegionWriter } from '../lib/terminalRegion';
+import {
+  cellInGrid,
+  regionFromCursor,
+  regionFromXterm,
+  type RegionOnScreen,
+  type ScreenCell,
+} from '../lib/promptPointer';
 import { BandLayer, LiftTracker, markLifted } from '../lib/promptBands';
 import { ingestRecentNames } from '../lib/recentNames';
 
@@ -154,6 +167,14 @@ export interface TerminalHandle {
   getSelection: () => string;
   /** Select the whole buffer, scrollback included. */
   selectAll: () => void;
+  /** Where the open region starts on this pane's screen, as the renderer
+   *  that draws it holds it: the native grid through terminal_cursor, or
+   *  xterm from its own marker. Null while no region is open. The prompt
+   *  card lays your prompt out from it to map a pointer to a piece. */
+  promptRegion: () => Promise<RegionOnScreen | null>;
+  /** The screen cell under a point in client px, on the grid the
+   *  renderer in use draws, or null outside it. */
+  cellAt: (clientX: number, clientY: number) => ScreenCell | null;
 }
 
 interface Props {
@@ -1063,6 +1084,29 @@ export function Terminal({
       onSelectionChange: (cb) => {
         const disposable = term.onSelectionChange(cb);
         return () => disposable.dispose();
+      },
+      promptRegion: async () => {
+        if (!quietRef.current && nativeSurfaceEnabled()) {
+          return regionFromCursor(await terminalCursor().catch(() => null));
+        }
+        return regionFromXterm(writer.region(), term.buffer.active, term.cols);
+      },
+      cellAt: (clientX, clientY) => {
+        const dpr = window.devicePixelRatio || 1;
+        if (!quietRef.current && nativeSurfaceEnabled()) {
+          // The native grid draws from the pane's top left, each cell
+          // xterm's device cell rounded to whole pixels.
+          const device = term.dimensions?.device?.cell;
+          if (!sizer || !device?.width || !device?.height) return null;
+          return cellInGrid(clientX, clientY, sizer.getBoundingClientRect(), {
+            width: Math.round(device.width) / dpr,
+            height: Math.round(device.height) / dpr,
+          });
+        }
+        const screen = host?.querySelector('.xterm-screen');
+        const cell = term.dimensions?.css?.cell;
+        if (!screen || !cell?.width || !cell?.height) return null;
+        return cellInGrid(clientX, clientY, screen.getBoundingClientRect(), cell);
       },
     };
     onReadyRef.current?.(handle);

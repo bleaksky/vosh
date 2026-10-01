@@ -3,11 +3,17 @@ import { Terminal } from '@xterm/xterm';
 import fixture from '../../fixtures/prompt/aabahran/pointer/cases.json';
 import { OutputShaper } from './outputShaper';
 import {
+  bandPlain,
   cellAtPoint,
+  cellInGrid,
+  dockCellAt,
   dockPieceAt,
   layoutPrompt,
   pieceAt,
   pieceAtCell,
+  pieceText,
+  regionFromCursor,
+  regionFromXterm,
   type PieceSpan,
   type RegionOnScreen,
 } from './promptPointer';
@@ -346,6 +352,15 @@ describe('a pointer on the pinned band', () => {
     expect(dockPieceAt(null, 1, cell, 4, 18)).toBeNull();
   });
 
+  it('names the row and column under a point, the row from the first shown', () => {
+    const cell = { width: 8, height: 20, cols: 120 };
+    expect(dockCellAt(band.text, 3, cell, 3 * 8 + 1, 8 + 20 + 1)).toEqual({ row: 1, col: 3 });
+    expect(dockCellAt(band.text, 2, cell, 3 * 8 + 1, 8 + 20 + 1)).toEqual({ row: 1, col: 3 });
+    expect(dockCellAt(band.text, 3, cell, 1, 7)).toBeNull();
+    expect(dockCellAt(band.text, 3, cell, -1, 9)).toBeNull();
+    expect(bandPlain('\x1b[32mHP\x1b[39m 765\r\n日本')).toBe('HP 765\n日本');
+  });
+
   it('counts a wide character as two cells and one character', () => {
     const cell = { width: 8, height: 20, cols: 120 };
     const wide = { text: '日本 7', spans: [span(0, 0, 0, 2), span(1, 0, 3, 1)] };
@@ -380,4 +395,53 @@ describe('a pointer on the pinned band', () => {
       }
     });
   }
+});
+
+describe('the region and the cell as each renderer gives them', () => {
+  it('reads the native grid report, lines being screen rows at the bottom', () => {
+    expect(
+      regionFromCursor({
+        line: 9,
+        col: 5,
+        at_bottom: true,
+        cols: 80,
+        region: { gen: 2, line: 8, col: 0 },
+      }),
+    ).toEqual({ gen: 2, row: 8, col: 0, cols: 80, atBottom: true });
+    expect(
+      regionFromCursor({ line: 9, col: 5, at_bottom: true, cols: 80, region: null }),
+    ).toBeNull();
+    expect(regionFromCursor(null)).toBeNull();
+  });
+
+  it('reads xterm from the buffer row less the top of the viewport', () => {
+    const buffer = { viewportY: 100, baseY: 100 };
+    expect(regionFromXterm({ gen: 4, row: 121, col: 0 }, buffer, 40)).toEqual({
+      gen: 4,
+      row: 21,
+      col: 0,
+      cols: 40,
+      atBottom: true,
+    });
+    expect(
+      regionFromXterm({ gen: 4, row: 121, col: 0 }, { viewportY: 90, baseY: 100 }, 40),
+    ).toEqual({ gen: 4, row: 31, col: 0, cols: 40, atBottom: false });
+    expect(regionFromXterm(null, buffer, 40)).toBeNull();
+  });
+
+  it('finds the cell under a point inside the grid and nothing outside it', () => {
+    const rect = { left: 16, top: 50, width: 800, height: 420 };
+    const cell = { width: 8, height: 20 };
+    expect(cellInGrid(16, 50, rect, cell)).toEqual({ row: 0, col: 0 });
+    expect(cellInGrid(16 + 8 * 3 + 1, 50 + 20 * 2 + 19, rect, cell)).toEqual({ row: 2, col: 3 });
+    expect(cellInGrid(15, 60, rect, cell)).toBeNull();
+    expect(cellInGrid(100, 50 + 420, rect, cell)).toBeNull();
+  });
+
+  it('names the characters a piece covers', () => {
+    const spans = [span(0, 0, 0, 3), span(1, 0, 3, 3), span(1, 1, 0, 2)];
+    expect(pieceText('HP 765\nmn', spans, 1)).toBe('765\nmn');
+    expect(pieceText('HP 765\nmn', spans, 0)).toBe('HP ');
+    expect(pieceText('HP 765\nmn', spans, 7)).toBe('');
+  });
 });

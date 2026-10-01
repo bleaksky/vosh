@@ -21,8 +21,8 @@
 // draws an ellipsis, maps to nothing.
 
 import { bandCut, bandRowsTop, type CellSize } from './promptBand';
-import { isWide, shownColumns, type Cell } from './sgrCells';
-import type { PromptSpan } from './session';
+import { isWide, parseSgrCells, shownColumns, type Cell } from './sgrCells';
+import type { PromptSpan, TerminalCursor } from './session';
 import { wrapBreaks } from './wordWrap';
 
 /** The part of a span the mapping reads: the piece, the row from `%nl`,
@@ -161,6 +161,68 @@ export function cellAtPoint(
   return { row: Math.floor(y / cell.height), col: Math.floor(x / cell.width) };
 }
 
+/** The cell under a point in client px, from the top left of a grid
+ *  `rect` whose cells are `cell` in size, or null outside the grid. */
+export function cellInGrid(
+  clientX: number,
+  clientY: number,
+  rect: { left: number; top: number; width: number; height: number },
+  cell: { width: number; height: number },
+): ScreenCell | null {
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  if (x < 0 || y < 0 || x >= rect.width || y >= rect.height) return null;
+  if (cell.width <= 0 || cell.height <= 0) return null;
+  return cellAtPoint(x, y, cell);
+}
+
+/** The open region on screen as the native grid reports it. Its lines
+ *  count from the top of the live screen, which is the screen's own top
+ *  while you are at the bottom. */
+export function regionFromCursor(cursor: TerminalCursor | null): RegionOnScreen | null {
+  if (!cursor?.region) return null;
+  return {
+    gen: cursor.region.gen,
+    row: cursor.region.line,
+    col: cursor.region.col,
+    cols: cursor.cols,
+    atBottom: cursor.at_bottom,
+  };
+}
+
+/** The open region on screen as xterm holds it: its buffer row less the
+ *  top of the viewport. */
+export function regionFromXterm(
+  start: { gen: number; row: number; col: number } | null,
+  buffer: { viewportY: number; baseY: number },
+  cols: number,
+): RegionOnScreen | null {
+  if (!start) return null;
+  return {
+    gen: start.gen,
+    row: start.row - buffer.viewportY,
+    col: start.col,
+    cols,
+    atBottom: buffer.viewportY === buffer.baseY,
+  };
+}
+
+/** The characters piece `piece` covers in `plain`, the rows of a drawn
+ *  prompt joined by `\n`, a line break between rows it spans. Empty for
+ *  a piece that drew nothing. */
+export function pieceText(plain: string, spans: readonly PieceSpan[], piece: number): string {
+  const rows = plain.split('\n').map((row) => Array.from(row));
+  const own = spans.filter((s) => s.piece === piece).sort((a, b) => a.row - b.row || a.col - b.col);
+  let out = '';
+  let last: number | null = null;
+  for (const span of own) {
+    if (last !== null && span.row !== last) out += '\n';
+    out += (rows[span.row] ?? []).slice(span.col, span.col + span.width).join('');
+    last = span.row;
+  }
+  return out;
+}
+
 /** The character the cell in column `col` of a band row shows, counted as
  *  the spans count it, or null past the row. */
 function charAtColumn(row: Cell[], col: number): number | null {
@@ -173,6 +235,24 @@ function charAtColumn(row: Cell[], col: number): number | null {
     chars += Array.from(cell.ch).length;
   }
   return null;
+}
+
+/** The row and column of the pinned band under a point `x` and `y` from
+ *  the dock's top left, the row counted from the band's first shown row,
+ *  or null off its rows. `zone` is the dock's rows and `cell` the
+ *  terminal's cell. */
+export function dockCellAt(
+  text: string,
+  zone: number,
+  cell: CellSize,
+  x: number,
+  y: number,
+): ScreenCell | null {
+  const rows = Math.max(1, zone);
+  const shown = bandCut(text, rows).rows.length;
+  if (shown === 0 || x < 0) return null;
+  const at = cellAtPoint(x, y - bandRowsTop(rows, shown, cell.height), cell);
+  return at.row >= 0 && at.row < shown ? at : null;
 }
 
 /** The piece of your design on the pinned band under a point `x` and `y`
@@ -188,17 +268,26 @@ export function dockPieceAt(
   y: number,
 ): number | null {
   if (!band) return null;
-  const rows = Math.max(1, zone);
-  const { rows: shown, first } = bandCut(band.text, rows);
-  if (shown.length === 0) return null;
-  const top = bandRowsTop(rows, shown.length, cell.height);
-  const row = Math.floor((y - top) / cell.height);
-  if (row < 0 || row >= shown.length) return null;
-  const col = Math.floor(x / cell.width);
+  const at = dockCellAt(band.text, zone, cell, x, y);
+  if (!at) return null;
+  const { rows: shown, first } = bandCut(band.text, Math.max(1, zone));
   const limit = Math.max(1, cell.cols);
   // A row too wide for the terminal ends on an ellipsis in its last cell.
-  const usable = shownColumns(shown[row]) > limit ? limit - 1 : limit;
-  if (col < 0 || col >= usable) return null;
-  const char = charAtColumn(shown[row], col);
-  return char === null ? null : pieceAt(band.spans, first + row, char);
+  const usable = shownColumns(shown[at.row]) > limit ? limit - 1 : limit;
+  if (at.col >= usable) return null;
+  const char = charAtColumn(shown[at.row], at.col);
+  return char === null ? null : pieceAt(band.spans, first + at.row, char);
+}
+
+/** The band's rows as plain text joined by `\n`, with one character for
+ *  each the spans count, for naming what a piece covers. */
+export function bandPlain(text: string): string {
+  return parseSgrCells(text)
+    .map((row) =>
+      row
+        .filter((c) => c.ch !== '')
+        .map((c) => c.ch)
+        .join(''),
+    )
+    .join('\n');
 }
