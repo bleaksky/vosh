@@ -29,7 +29,8 @@ import {
 } from '../../lib/promptCard';
 import { followCardProfile } from '../../lib/promptCardSync';
 import { numberMarks, wholeMarks, type ScreenAsk } from '../../lib/promptScreen';
-import { needsCode, type LayoutId } from '../../lib/promptPicker';
+import { warnedPieces } from '../../lib/promptWarn';
+import { type LayoutId } from '../../lib/promptPicker';
 import {
   caretAfter,
   deleteOp,
@@ -170,9 +171,6 @@ const LAMENT_NOTE =
 
 const UNDO_DEPTH = 50;
 const NOWHERE: Pointing = { picked: null, caret: null };
-
-/** The part a field of a piece names, `aff:sanctuary` as `aff`. */
-const baseName = (field: string) => field.split(':')[0];
 
 /** A capture saved for the first time in this profile: before it the
  *  profile read nothing, or only the pattern the old trigger left. */
@@ -428,20 +426,10 @@ export function PromptCard({
 
   // Parts no value fills: a code your prompt in the game does not show,
   // or a name Vosh has no value for.
-  const warn = useMemo(() => {
-    const out = new Set<number>();
-    const unknown = new Set(
-      (described?.data.tokens ?? []).filter((t) => !t.known).map((t) => t.piece),
-    );
-    for (const piece of pieces) {
-      if (!piece.shows) continue;
-      if (unknown.has(piece.piece)) out.add(piece.piece);
-      const field = piece.field ? baseName(piece.field) : null;
-      const entry = field ? state?.catalog.find((f) => f.name === field) : undefined;
-      if (entry && entry.state !== 'value' && needsCode(entry)) out.add(piece.piece);
-    }
-    return out;
-  }, [pieces, described, state?.catalog]);
+  const warn = useMemo(
+    () => warnedPieces(pieces, described?.data.tokens ?? [], state?.catalog ?? []),
+    [pieces, described, state?.catalog],
+  );
 
   // Sit over your prompt, and follow it.
   const relayout = useCallback(async () => {

@@ -508,13 +508,20 @@ export interface GamePromptSeenPayload {
   kind: 'gmcp' | 'prompt' | 'fprompt' | 'off';
   text: string;
   applied: boolean;
+  /** The catalog names of the parts of your design the capture fed
+   *  before and nothing feeds now. */
+  lost: string[];
 }
 
 export async function onGamePromptSeen(
   cb: (payload: GamePromptSeenPayload) => void,
 ): Promise<UnlistenFn> {
   return listen<GamePromptSeenPayload>('session://game-prompt-seen', (event) => {
-    cb(event.payload);
+    const lost = (event.payload as { lost?: unknown }).lost;
+    cb({
+      ...event.payload,
+      lost: Array.isArray(lost) ? lost.filter((n): n is string => typeof n === 'string') : [],
+    });
   });
 }
 

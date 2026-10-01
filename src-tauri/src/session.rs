@@ -5505,6 +5505,7 @@ mod tests {
                 kind: vosh_prompt::SeenKind::Gmcp,
                 text: CODES.into(),
                 applied: true,
+                lost: Vec::new(),
             }]
         );
         // A profile that reads no prompt keeps the setting for the card.
