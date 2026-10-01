@@ -72,6 +72,8 @@ pub(crate) struct CellFlags {
     /// color.
     pub underline_color: Option<Color>,
     pub strikeout: bool,
+    /// SGR 8: the cell keeps its place and background but shows no glyph.
+    pub hidden: bool,
 }
 
 /// `Term` requires an event listener for bell, title, clipboard, and
@@ -790,6 +792,7 @@ impl TermGrid {
             underline: Underline::of(flags),
             underline_color: cell.underline_color(),
             strikeout: flags.contains(Flags::STRIKEOUT),
+            hidden: flags.contains(Flags::HIDDEN),
         };
         (cell.c, cell.fg, cell.bg, cell_flags)
     }
@@ -1585,6 +1588,16 @@ mod tests {
     }
 
     #[test]
+    fn the_strike_and_hidden_flags_come_through_and_clear() {
+        let mut g = TermGrid::new(80, 24);
+        g.feed(b"\x1b[9mS\x1b[29m\x1b[8mH\x1b[28mV");
+        let flags = |col| g.cell_at_line(0, col).3;
+        assert!(flags(0).strikeout && !flags(0).hidden);
+        assert!(flags(1).hidden && !flags(1).strikeout);
+        assert!(!flags(2).hidden && !flags(2).strikeout);
+    }
+
+    #[test]
     fn blink_and_overline_leave_no_mark_on_the_cell() {
         // alacritty_terminal drops SGR 5 and 6 and its parser has no SGR
         // 53, so a blinking or overlined cell reads as plain text.
@@ -1595,7 +1608,7 @@ mod tests {
             assert_eq!(fg, Color::Named(NamedColor::Foreground));
             assert_eq!(bg, Color::Named(NamedColor::Background));
             assert_eq!(flags.underline, Underline::None);
-            assert!(!flags.bold && !flags.inverse);
+            assert!(!flags.bold && !flags.inverse && !flags.hidden);
         }
         assert_eq!(&g.row_string(0)[..4], "ABCD");
     }
