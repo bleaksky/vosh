@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   breakHint,
   BY_VALUE_HINT,
+  byValueName,
   caretAfter,
   colorHex,
   colorHint,
@@ -10,7 +11,6 @@ import {
   deleteOp,
   dockMapper,
   endPlace,
-  groundSwatchOf,
   insertOps,
   insertPlace,
   layoutMarks,
@@ -197,6 +197,13 @@ describe('the rows of a part', () => {
   it('says what By value does while it is on', () => {
     expect(colorHint({ kind: 'by_value' })).toBe(BY_VALUE_HINT);
     expect(colorHint({ kind: 'default' })).toBe(THEME_HINT);
+    // A ground by value, and a color by another value, follow the same
+    // rule, so the hint says it too. The game's own colors follow the
+    // game's.
+    expect(colorHint({ kind: 'default' }, { kind: 'by_value' })).toBe(BY_VALUE_HINT);
+    expect(colorHint({ kind: 'by_value', field: 'mana' })).toBe(BY_VALUE_HINT);
+    expect(colorHint({ kind: 'default' }, { kind: 'by_value', field: 'mana' })).toBe(BY_VALUE_HINT);
+    expect(colorHint({ kind: 'by_value', game: true })).toBe(THEME_HINT);
     expect(breakHint('fight')).toBe(
       'The line above shows only in a fight, so out of a fight your prompt is one line.',
     );
@@ -268,11 +275,13 @@ describe('the rows of a part', () => {
     );
   });
 
-  it('checks the ground swatch a background names, By value as custom', () => {
-    expect(groundSwatchOf({ kind: 'default' })).toBe('default');
-    expect(groundSwatchOf({ kind: 'named', index: 4 })).toBe(4);
-    expect(groundSwatchOf({ kind: 'by_value' })).toBe('custom');
-    expect(groundSwatchOf({ kind: 'rgb', r: 1, g: 2, b: 3 })).toBe('custom');
+  it('names a color by value that a field shows, since no hex can', () => {
+    expect(byValueName({ kind: 'by_value' })).toBe('By value');
+    expect(byValueName({ kind: 'by_value', field: 'mana' })).toBe('By mana');
+    expect(byValueName({ kind: 'by_value', game: true })).toBe('By game');
+    expect(byValueName({ kind: 'by_value', field: 'hp', game: true })).toBe('By game');
+    expect(byValueName({ kind: 'default' })).toBeNull();
+    expect(byValueName({ kind: 'rgb', r: 1, g: 2, b: 3 })).toBeNull();
   });
 
   it('shows the underline color as hex, theme colors too, and empty for the text color', () => {

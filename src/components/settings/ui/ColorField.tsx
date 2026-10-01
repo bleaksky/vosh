@@ -27,7 +27,8 @@ export interface ColorFieldProps {
    *  field. */
   width?: number | string;
   /** What the swatch shows while the field is empty, like the theme
-   *  color the setting falls back to. Any CSS color, var() included. */
+   *  color the setting falls back to. Any CSS color, var() included, or
+   *  a gradient for a color that changes, like By value's three. */
   emptySwatch?: string;
   /** The accessible name of the swatch's color picker, like `Choose
    *  the divider color`. */

@@ -3,15 +3,16 @@ import type { BandEnv } from '../../lib/bandCells';
 import { indexedRgb } from '../../lib/bandCells';
 import {
   breakHint,
+  byValueName,
   colorHex,
   colorHint,
   customColor,
   customText,
-  groundSwatchOf,
   MORE_STYLES,
   moreLabel,
   rowsOf,
   swatchOf,
+  THEME_HINT,
   THEME_SWATCHES,
   UNDERLINE_KINDS,
   WHEN_FIXED_HINT,
@@ -48,10 +49,12 @@ import { CardMenu } from './CardMenu';
 // every other part's look.
 //
 // The colors and styles follow the styles board: Color and Background
-// each take the terminal's own, a theme color or any true color. Style
-// keeps B, I and U, and More styles holds strikethrough, dim and reverse.
-// While an underline is on, the Underline row picks its kind, each drawn
-// in its own line, and its color, empty for the text color.
+// each take the terminal's own, By value on a value, a theme color or any
+// true color. Style keeps B, I and U, and More styles holds
+// strikethrough, dim and reverse. While an underline is on, the Underline
+// row picks its kind, each drawn in its own line, and its color, empty
+// for the text color. A color by value that no swatch shows, such as one
+// typed in Edit as text, names itself in the Custom field.
 
 const WHEN_OPTIONS: SegmentedOption<PromptWhen>[] = [
   { value: 'always', label: 'Always' },
@@ -103,11 +106,8 @@ function PieceRow({
 export function PromptPieceBody({ piece, env, onEdit, onInsertValue }: PromptPieceProps) {
   const rows = rowsOf(piece);
   const at = piece.piece;
-  const swatch = swatchOf(piece.color);
-  const ground = groundSwatchOf(piece.background);
   const palette = (index: number) => rgbHex(indexedRgb(index, env.palette));
-  const custom = customText(piece.color, palette);
-  const groundCustom = customText(piece.background, palette);
+  const hint = colorHint(piece.color, piece.background);
   const paint = (layer: Layer) => (color: PromptColorChoice) =>
     onEdit({
       op: 'set_color',
@@ -116,12 +116,10 @@ export function PromptPieceBody({ piece, env, onEdit, onInsertValue }: PromptPie
       ...(layer === 'background' ? { background: true } : {}),
       ...(layer === 'underline' ? { underline: true } : {}),
     });
-  const setColor = paint('text');
-  const setGround = paint('background');
   const setStyle = (style: PromptStyleChoice, on: boolean) =>
     onEdit({ op: 'set_style', piece: at, style, on });
   const breaks = piece.kind === 'nl';
-  const hint = breaks ? breakHint(piece.when) : null;
+  const whenHint = breaks ? breakHint(piece.when) : null;
   let first = true;
   const isFirst = () => {
     const was = first;
@@ -166,7 +164,7 @@ export function PromptPieceBody({ piece, env, onEdit, onInsertValue }: PromptPie
         />
       </PieceRow>
       {piece.when_fixed && <p className="pc-piece-hint">{WHEN_FIXED_HINT}</p>}
-      {hint && <p className="pc-piece-hint is-nowrap">{hint}</p>}
+      {whenHint && <p className="pc-piece-hint is-nowrap">{whenHint}</p>}
       {rows.width && (
         <PieceRow label="Width" htmlFor={`pc-width-${at}`}>
           <NumberField
@@ -183,111 +181,30 @@ export function PromptPieceBody({ piece, env, onEdit, onInsertValue }: PromptPie
       )}
       {rows.color && (
         <>
-          <PieceRow label="Color">
-            <span className="pc-swatches">
-              <button
-                type="button"
-                className="pc-swatch"
-                aria-label="Terminal text"
-                title="Terminal text"
-                aria-pressed={swatch === 'default'}
-                style={{ background: env.fg }}
-                onClick={() => setColor({ kind: 'default' })}
-              />
-              {piece.by_value && (
-                <button
-                  type="button"
-                  className="pc-swatch is-by-value"
-                  aria-label="By value"
-                  title="By value"
-                  aria-pressed={swatch === 'by_value'}
-                  onClick={() => setColor({ kind: 'by_value' })}
-                >
-                  <span style={{ background: env.palette[2] }} />
-                  <span style={{ background: env.palette[3] }} />
-                  <span style={{ background: env.palette[1] }} />
-                </button>
-              )}
-            </span>
-            <span className="pc-swatches is-theme">
-              {THEME_SWATCHES.map((s) => (
-                <button
-                  key={s.index}
-                  type="button"
-                  className="pc-swatch"
-                  aria-label={s.label}
-                  title={s.label}
-                  aria-pressed={swatch === s.index}
-                  style={{ background: env.palette[s.index] }}
-                  onClick={() => setColor({ kind: 'named', index: s.index })}
-                />
-              ))}
-            </span>
-            <ColorField
-              className={cx('pc-custom', swatch === 'custom' && 'is-on')}
-              value={custom}
-              width={112}
-              placeholder="Custom"
-              aria-label="Custom color"
-              pickerLabel="Choose a custom color"
-              hexOnly
-              allowEmpty
-              onChange={(hex) => {
-                const color = customColor(hex);
-                if (color) setColor(color);
-              }}
-            />
-          </PieceRow>
-          {/* The hint stays right under Color, as P5 draws it, since By
-              value's rule is the Color row's alone. */}
-          <p className={cx('pc-piece-hint', swatchOf(piece.color) !== 'by_value' && 'is-nowrap')}>
-            {colorHint(piece.color)}
-          </p>
+          <ColorRow
+            label="Color"
+            color={piece.color}
+            byValue={piece.by_value}
+            own={{ label: 'Terminal text', color: env.fg }}
+            field={{ label: 'Custom color', picker: 'Choose a custom color' }}
+            env={env}
+            palette={palette}
+            onColor={paint('text')}
+          />
+          {/* The hint stays right under Color, as P5 draws it. By value's
+              rule holds for the ground too, so it also shows for one. */}
+          <p className={cx('pc-piece-hint', hint === THEME_HINT && 'is-nowrap')}>{hint}</p>
           {rows.background && (
-            <PieceRow label="Background">
-              <span className="pc-swatches">
-                <button
-                  type="button"
-                  className="pc-swatch"
-                  aria-label="Terminal background"
-                  title="Terminal background"
-                  aria-pressed={ground === 'default'}
-                  style={{ background: env.bg }}
-                  onClick={() => setGround({ kind: 'default' })}
-                />
-                {/* Holds By value's place, so the theme colors line up
-                    with the Color row's. */}
-                {piece.by_value && <span className="pc-swatch-slot" aria-hidden="true" />}
-              </span>
-              <span className="pc-swatches is-theme">
-                {THEME_SWATCHES.map((s) => (
-                  <button
-                    key={s.index}
-                    type="button"
-                    className="pc-swatch"
-                    aria-label={s.label}
-                    title={s.label}
-                    aria-pressed={ground === s.index}
-                    style={{ background: env.palette[s.index] }}
-                    onClick={() => setGround({ kind: 'named', index: s.index })}
-                  />
-                ))}
-              </span>
-              <ColorField
-                className={cx('pc-custom', ground === 'custom' && 'is-on')}
-                value={groundCustom}
-                width={112}
-                placeholder="Custom"
-                aria-label="Custom background"
-                pickerLabel="Choose a custom background"
-                hexOnly
-                allowEmpty
-                onChange={(hex) => {
-                  const color = customColor(hex);
-                  if (color) setGround(color);
-                }}
-              />
-            </PieceRow>
+            <ColorRow
+              label="Background"
+              color={piece.background}
+              byValue={piece.by_value}
+              own={{ label: 'Terminal background', color: env.bg }}
+              field={{ label: 'Custom background', picker: 'Choose a custom background' }}
+              env={env}
+              palette={palette}
+              onColor={paint('background')}
+            />
           )}
         </>
       )}
@@ -329,6 +246,7 @@ export function PromptPieceBody({ piece, env, onEdit, onInsertValue }: PromptPie
         <UnderlineRow
           piece={piece}
           text={textHex(piece.color, env, palette)}
+          env={env}
           palette={palette}
           onStyle={(style) => setStyle(style, true)}
           onColor={paint('underline')}
@@ -343,6 +261,118 @@ export function PromptPieceBody({ piece, env, onEdit, onInsertValue }: PromptPie
         </Button>
       </div>
     </div>
+  );
+}
+
+/** By value's green, yellow and red side by side, for the swatch of a
+ *  color field too small to hold three of its own. */
+function byValueGround(env: BandEnv): string {
+  const [red, green, yellow] = [env.palette[1], env.palette[2], env.palette[3]];
+  return `linear-gradient(90deg, ${green} 0 33.333%, ${yellow} 0 66.667%, ${red} 0)`;
+}
+
+/** By value's swatch: its green, yellow and red side by side. */
+function ByValueSwatch({
+  env,
+  pressed,
+  onClick,
+}: {
+  env: BandEnv;
+  pressed: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="pc-swatch is-by-value"
+      aria-label="By value"
+      title="By value"
+      aria-pressed={pressed}
+      onClick={onClick}
+    >
+      <span style={{ background: env.palette[2] }} />
+      <span style={{ background: env.palette[3] }} />
+      <span style={{ background: env.palette[1] }} />
+    </button>
+  );
+}
+
+/** A row of colors (P5, styles board): the terminal's own, By value on a
+ *  value, the theme's seven, then Custom for any true color. The Color
+ *  and Background rows are each one, so their swatches line up. A color
+ *  by value no swatch shows, such as by another value, names itself in
+ *  Custom. */
+function ColorRow({
+  label,
+  color,
+  byValue,
+  own,
+  field,
+  env,
+  palette,
+  onColor,
+}: {
+  label: string;
+  color: PromptColorChoice;
+  byValue: boolean;
+  own: { label: string; color: string };
+  field: { label: string; picker: string };
+  env: BandEnv;
+  palette: (index: number) => string;
+  onColor: (color: PromptColorChoice) => void;
+}) {
+  const swatch = swatchOf(color);
+  const named = swatch === 'custom' ? byValueName(color) : null;
+  return (
+    <PieceRow label={label}>
+      <span className="pc-swatches">
+        <button
+          type="button"
+          className="pc-swatch"
+          aria-label={own.label}
+          title={own.label}
+          aria-pressed={swatch === 'default'}
+          style={{ background: own.color }}
+          onClick={() => onColor({ kind: 'default' })}
+        />
+        {byValue && (
+          <ByValueSwatch
+            env={env}
+            pressed={swatch === 'by_value'}
+            onClick={() => onColor({ kind: 'by_value' })}
+          />
+        )}
+      </span>
+      <span className="pc-swatches is-theme">
+        {THEME_SWATCHES.map((s) => (
+          <button
+            key={s.index}
+            type="button"
+            className="pc-swatch"
+            aria-label={s.label}
+            title={s.label}
+            aria-pressed={swatch === s.index}
+            style={{ background: env.palette[s.index] }}
+            onClick={() => onColor({ kind: 'named', index: s.index })}
+          />
+        ))}
+      </span>
+      <ColorField
+        className={cx('pc-custom', swatch === 'custom' && 'is-on')}
+        value={customText(color, palette)}
+        width={112}
+        placeholder={named ?? 'Custom'}
+        {...(named ? { emptySwatch: byValueGround(env) } : {})}
+        aria-label={field.label}
+        pickerLabel={field.picker}
+        hexOnly
+        allowEmpty
+        onChange={(hex) => {
+          const next = customColor(hex);
+          if (next) onColor(next);
+        }}
+      />
+    </PieceRow>
   );
 }
 
@@ -440,17 +470,23 @@ export function MoreStyleItems({
 function UnderlineRow({
   piece,
   text,
+  env,
   palette,
   onStyle,
   onColor,
 }: {
   piece: PromptPiece;
   text: string;
+  env: BandEnv;
   palette: (index: number) => string;
   onStyle: (style: PromptUnderlineStyle) => void;
   onColor: (color: PromptColorChoice) => void;
 }) {
   const hex = colorHex(piece.underline_color, palette);
+  // A color by value has no hex, so the field names it, and the kinds
+  // draw in its full color, as the text's own By value does.
+  const named = byValueName(piece.underline_color);
+  const line = named ? textHex(piece.underline_color, env, palette) : hex;
   return (
     <PieceRow label="Underline">
       <Segmented
@@ -461,7 +497,7 @@ function UnderlineRow({
           label: (
             <span
               className="pc-line"
-              style={{ textDecorationStyle: k.line, textDecorationColor: hex || undefined }}
+              style={{ textDecorationStyle: k.line, textDecorationColor: line || undefined }}
             >
               {k.label}
             </span>
@@ -471,11 +507,11 @@ function UnderlineRow({
         onChange={onStyle}
       />
       <ColorField
-        className={cx('pc-custom', hex !== '' && 'is-on')}
+        className={cx('pc-custom', (hex !== '' || named !== null) && 'is-on')}
         value={hex}
         width={112}
-        placeholder="Text color"
-        emptySwatch={text}
+        placeholder={named ?? 'Text color'}
+        emptySwatch={named ? byValueGround(env) : text}
         aria-label="Underline color"
         pickerLabel="Choose the underline color"
         hexOnly

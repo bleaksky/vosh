@@ -211,16 +211,20 @@ export function customText(color: PromptColorChoice, palette: (index: number) =>
   return swatchOf(color) === 'custom' ? colorHex(color, palette) : '';
 }
 
-/** The swatch the Background row checks. It offers no By value, so a
- *  ground by how full a value is reads as custom. */
-export function groundSwatchOf(color: PromptColorChoice): Swatch {
-  const swatch = swatchOf(color);
-  return swatch === 'by_value' ? 'custom' : swatch;
+/** What a color field says for a color by how full a value is, which no
+ *  hex can show: By value for the part's own, By and the name for
+ *  another value, and By game for the game's own bands. Null for any
+ *  other color. */
+export function byValueName(color: PromptColorChoice): string | null {
+  if (color.kind !== 'by_value') return null;
+  if (color.game) return 'By game';
+  return color.field ? `By ${color.field}` : 'By value';
 }
 
 /** A color as #rrggbb, a theme color through `palette` too, for a field
  *  that offers no swatches, as the underline color. Empty for the text's
- *  own color and for a color by how full a value is. */
+ *  own color and for a color by how full a value is, which byValueName
+ *  names. */
 export function colorHex(color: PromptColorChoice, palette: (index: number) => string): string {
   switch (color.kind) {
     case 'rgb':
@@ -250,9 +254,15 @@ export const THEME_HINT =
 export const BY_VALUE_HINT =
   "By value uses your theme's green, yellow, and red. It turns yellow below two thirds and red below one third.";
 
-/** The line under the Color row: By value's rule while it is on. */
-export function colorHint(color: PromptColorChoice): string {
-  return swatchOf(color) === 'by_value' ? BY_VALUE_HINT : THEME_HINT;
+/** The line under the Color row: By value's rule while the text or its
+ *  ground follows how full a value is, its own or another's. The game's
+ *  own bands follow the game's rule instead. */
+export function colorHint(
+  color: PromptColorChoice,
+  background: PromptColorChoice = { kind: 'default' },
+): string {
+  const byValue = (c: PromptColorChoice) => c.kind === 'by_value' && !c.game;
+  return byValue(color) || byValue(background) ? BY_VALUE_HINT : THEME_HINT;
 }
 
 /** The line under a line break's When row (P10), or none while it shows
