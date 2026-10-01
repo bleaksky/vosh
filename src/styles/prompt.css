@@ -650,7 +650,7 @@
   width: 100%;
   min-height: 46px;
   margin: 0;
-  padding: 5px 12px 5.5px 34px;
+  padding: 7.75px 12px 2.75px 34px;
   border: 0;
   border-radius: var(--r-row);
   outline: none;
@@ -700,13 +700,16 @@
   white-space: nowrap;
 }
 
+/* The sample's glyphs are placed cells with no baseline, so the tag sits
+   from the top, 3 px under the sample's as P4 sets it. */
 .pc-start-sample {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   height: 17.5px;
 }
 
 .pc-start-tag {
+  margin-top: 2px;
   margin-left: 8px;
   font-size: 11px;
   line-height: 15px;
