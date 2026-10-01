@@ -1,12 +1,17 @@
 //! The order launch runs its upgrades in (R2 of the refactor plan).
 //!
-//! The setup hook in lib.rs copies the app data of an older
-//! `com.aabahran.mudclient` install first. Then `launch::load` finishes a
-//! shared catalog wizard run that stopped, moves the prompt capture
-//! triggers into the profiles, turns on the presets a build adds, and
-//! only then loads the profiles. Each step reads what the steps before it
-//! wrote, so the order is part of what a refactor keeps. R13 gathers the
-//! steps into one list, and this order holds there too.
+//! The setup hook in lib.rs opens the map store first, which creates
+//! maps.sqlite. Then it copies the app data of an older
+//! `com.aabahran.mudclient` install, but only into a folder that holds
+//! none of the core files, so on a normal launch the copy finds
+//! maps.sqlite and skips. It copies only when the map store did not open.
+//! Then `launch::load` finishes a shared catalog wizard run that stopped,
+//! moves the prompt capture triggers into the profiles, turns on the
+//! presets a build adds, and only then loads the profiles. Each step reads
+//! what the steps before it wrote, so the order is part of what a refactor
+//! keeps. R12 gathers the steps into one list, and this order holds there
+//! too. R8 retires the map store and the copy (D3, D15), and its commit
+//! changes the copy cases here on purpose.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -15,6 +20,7 @@ use vosh_prompt::config::CaptureSource;
 use vosh_prompt::CaptureConfig;
 
 use crate::commands::{AppState, SharedState};
+use crate::launch::Launch;
 use crate::loadout_store::{
     journal_path, load_global_catalog, save_wizard_journal, JournalFile, WizardJournal,
     WIZARD_FINISHED_NOTICE, WIZARD_UNFINISHED_NOTICE,
@@ -103,35 +109,49 @@ fn migrations(app_data: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Launch the way the setup hook in lib.rs does, over `app_data`.
-async fn launch(app_data: &Path) -> (SharedState, crate::launch::Launch) {
-    crate::migrate_from_mudclient_dir(app_data);
+/// Open the map store over `app_data` the way `open_map_store` in lib.rs
+/// does, which creates maps.sqlite.
+fn open_map_store(app_data: &Path) {
+    std::fs::create_dir_all(app_data).unwrap();
+    vosh_map::MapStore::open(&app_data.join("maps.sqlite")).unwrap();
+}
+
+/// Run `launch::load` over `app_data` on a fresh state.
+async fn load(app_data: &Path) -> (SharedState, Launch) {
     let state: SharedState = Arc::new(AppState::default());
     let launched = crate::launch::load(&state, app_data).await;
     (state, launched)
 }
 
+/// Launch the way the setup hook in lib.rs does, over `app_data`. The map
+/// store opens, then the mudclient copy runs, then `launch::load`.
+async fn launch(app_data: &Path) -> (SharedState, Launch) {
+    open_map_store(app_data);
+    crate::migrate_from_mudclient_dir(app_data);
+    load(app_data).await
+}
+
+/// Launch the way the setup hook does when the map store did not open, so
+/// no maps.sqlite stops the mudclient copy.
+async fn launch_without_map_store(app_data: &Path) -> (SharedState, Launch) {
+    crate::migrate_from_mudclient_dir(app_data);
+    load(app_data).await
+}
+
 #[tokio::test]
 async fn launch_runs_the_upgrades_in_order() {
     let dir = tempfile::tempdir().unwrap();
-    // An older install whose wizard run stopped before it wrote any file,
-    // and no Vosh folder yet.
-    let old = dir.path().join("com.example.mudclient");
+    // A wizard run that stopped before it wrote any file.
     let app_data = dir.path().join("com.example.vosh");
-    save_wizard_journal(&old, &journal()).unwrap();
+    save_wizard_journal(&app_data, &journal()).unwrap();
     let profile_path = app_data.join("profiles").join("default.toml");
 
     let (state, launched) = launch(&app_data).await;
     assert!(launched.loadout_mode);
     assert!(!launched.wizard_unfinished);
 
-    // 1. The mudclient copy ran first, so the wizard finish found the
-    //    journal the older folder held and wrote every file it names.
-    assert!(app_data.join(".migrated-from-mudclient").exists());
-    assert!(
-        journal_path(&old).exists(),
-        "the copy leaves the older folder"
-    );
+    // 1. The wizard finish ran first and wrote every file the journal
+    //    names.
     assert!(!journal_path(&app_data).exists(), "the run finished");
 
     // 2. The wizard finish ran before the prompt upgrade. The upgrade kept
@@ -220,14 +240,66 @@ async fn an_unfinished_wizard_run_holds_the_upgrades_after_it() {
     );
 }
 
+/// On a normal launch the map store has created maps.sqlite by the time
+/// the copy looks, so the copy skips and leaves the older folder where it
+/// is. A wizard run the older folder holds never reaches Vosh.
+#[tokio::test]
+async fn a_normal_launch_skips_the_mudclient_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    let old = dir.path().join("com.example.mudclient");
+    let app_data = dir.path().join("com.example.vosh");
+    save_wizard_journal(&old, &journal()).unwrap();
+
+    let (state, launched) = launch(&app_data).await;
+    assert_eq!(
+        read(&app_data.join(".migrated-from-mudclient")),
+        "skipped: new dir already populated\n"
+    );
+    assert!(journal_path(&old).exists(), "the older folder stays");
+    assert!(!journal_path(&app_data).exists(), "nothing was copied");
+    assert!(!app_data.join("catalog.toml").exists(), "no wizard run");
+    assert!(!launched.loadout_mode);
+    assert!(!launched.wizard_unfinished);
+    assert!(state.take_launch_notices().is_empty());
+}
+
+/// When the map store does not open, no maps.sqlite stops the copy. It
+/// brings the older folder over before `launch::load` runs, so the wizard
+/// finish reads the journal the older folder held.
+#[tokio::test]
+async fn a_launch_without_the_map_store_copies_the_mudclient_folder_first() {
+    let dir = tempfile::tempdir().unwrap();
+    let old = dir.path().join("com.example.mudclient");
+    let app_data = dir.path().join("com.example.vosh");
+    save_wizard_journal(&old, &journal()).unwrap();
+
+    let (state, launched) = launch_without_map_store(&app_data).await;
+    assert!(read(&app_data.join(".migrated-from-mudclient")).starts_with("copied "));
+    assert!(
+        journal_path(&old).exists(),
+        "the copy leaves the older folder"
+    );
+    assert!(!journal_path(&app_data).exists(), "the run finished");
+    assert!(launched.loadout_mode);
+    assert!(!launched.wizard_unfinished);
+    assert_eq!(
+        state.take_launch_notices(),
+        [WIZARD_FINISHED_NOTICE, MOVED_INTO_DEFAULT]
+    );
+}
+
 /// The setup hook cannot run without a Tauri app, so this reads lib.rs to
-/// pin that it copies the mudclient folder before `launch::load` runs.
-/// D3 keeps or retires the copy and its guard in one commit, and this test
-/// changes in that commit too.
+/// pin its order. The map store opens first and creates maps.sqlite, which
+/// makes the mudclient copy skip. Then the copy runs, then `launch::load`.
+/// D3 and D15 retire the map store and the copy, or give the copy its own
+/// guard, and this test changes in that commit too.
 #[test]
-fn the_setup_hook_copies_the_mudclient_folder_before_launch_loads() {
+fn the_setup_hook_opens_the_map_store_then_copies_then_loads() {
     let src = include_str!("lib.rs");
     let hook = &src[src.find(".setup(move |app|").expect("the setup hook")..];
+    let map = hook
+        .find("open_map_store(app)")
+        .expect("the setup hook opens the map store");
     let copy = hook
         .find("migrate_from_mudclient_dir(&path);")
         .expect("the setup hook copies the mudclient folder");
@@ -235,7 +307,21 @@ fn the_setup_hook_copies_the_mudclient_folder_before_launch_loads() {
         .find("launch::load(&state, &path)")
         .expect("the setup hook runs launch::load");
     assert!(
+        map < copy,
+        "the map store opens before the mudclient folder copy, so the copy skips"
+    );
+    assert!(
         copy < load,
         "the mudclient folder copy runs before launch::load"
+    );
+    // The file the map store opens is the one the copy reads as a folder
+    // in use.
+    let opener = &src[src
+        .find("fn open_map_store(")
+        .expect("the map store opener")..];
+    let opener = &opener[..opener.find("\n}\n").expect("the end of the opener")];
+    assert!(
+        opener.contains(r#"dir.join("maps.sqlite")"#),
+        "the map store creates maps.sqlite"
     );
 }
