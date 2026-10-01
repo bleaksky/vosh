@@ -448,7 +448,7 @@ The header sums the board as `N overdue`, `N nearing`, or `clear`. A count flash
 
 ### 4.9 Choose where your prompt shows
 
-Once Vosh reads your prompt, you choose where it shows. Open Settings, choose Input, open `Advanced`, and pick a place under `Where your prompt shows`.
+Once Vosh reads your prompt, you choose where it shows. Open Settings, choose Input, and pick a place under `Where your prompt shows` in the Prompt section.
 
 - `In the text` shows each prompt where the game sends it. The terminal reads as it always has.
 - `Lifted` keeps every prompt in the text on a raised band in the selected row color of your theme, scrollback included. A prompt that ends on a character gains one space after its band, so your echo never touches it.
