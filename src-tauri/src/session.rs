@@ -2132,12 +2132,15 @@ fn send_step(p: &mut Profile, accumulator: &LineAccumulator, sent: &[u8], at_ms:
     p.prompt.note_send(&String::from_utf8_lossy(sent), at_ms)
 }
 
-/// A window size message. While the card is closed, a new size closes the
-/// open row, since each renderer wraps it again at its new width, and
-/// nothing repaints until the next prompt (D21). While the card is open,
-/// which `card_open` says when it watches your prompt and a preview on
-/// the row says too, the row stays open: each renderer finds its region
-/// again in its own buffer, so edits and previews keep repainting it and
+/// A window size message. While the card is closed, a new width closes
+/// the open row, since each renderer wraps it again at that width, and
+/// nothing repaints until the next prompt (D21). A new height wraps
+/// nothing, such as when your prompt leaves the pinned band for the text
+/// and the terminal grows, so the row stays open and each renderer finds
+/// its region where it was. While the card is open, which `card_open`
+/// says when it watches your prompt and a preview on the row says too,
+/// the row stays open at any size: each renderer finds its region again
+/// in its own buffer, so edits and previews keep repainting it and
 /// clearing a preview puts the live render back. The size the session
 /// already holds, which the webview sends again on every connect, leaves
 /// the row open. Pinned, the band is not in the text, so no size closes
@@ -2150,7 +2153,7 @@ fn window_size_step(
     card_open: bool,
 ) {
     let card_open = card_open || p.prompt.preview().is_some();
-    if negotiator.window_size != (cols, rows) && !card_open {
+    if negotiator.window_size.0 != cols && !card_open {
         p.prompt.stage.close();
     }
     negotiator.set_window_size(cols, rows);
@@ -4274,7 +4277,7 @@ mod tests {
     }
 
     #[test]
-    fn only_a_new_window_size_closes_the_open_row() {
+    fn only_a_new_width_closes_the_open_row() {
         let mut wire = Wire::new(capture_profile(HP));
         let mut negotiator = vosh_telnet::Negotiator::new();
         negotiator.set_window_size(94, 41);
@@ -4295,9 +4298,27 @@ mod tests {
             Some(with(&[&wire.mark(2), PROMPT_ROW_SHOWN]))
         );
 
-        // A new size closes it, and nothing repaints.
-        super::window_size_step(&mut wire.p, &mut negotiator, 94, 40, false);
-        assert_eq!(negotiator.window_size, (94, 40));
+        // A new height wraps nothing again, such as when your prompt
+        // leaves the band for the text and the terminal grows, so the
+        // row stays open and each change of drawing repaints it.
+        super::window_size_step(&mut wire.p, &mut negotiator, 94, 43, false);
+        assert_eq!(negotiator.window_size, (94, 43));
+        assert!(wire.p.prompt.stage.open_row().is_some());
+        for draw in [true, false] {
+            let open = wire.p.prompt.stage.open_row().map(|r| r.gen);
+            let config = vosh_prompt::PromptConfig {
+                draw,
+                ..wire.p.prompt.config().clone()
+            };
+            wire.p.set_prompt_config(config);
+            let repaint = super::repaint_step(&mut wire.p, false, now);
+            assert_eq!(repaint.replace.map(|r| r.gen), open, "draw {draw}");
+        }
+
+        // A new width wraps the row again, so it closes, and nothing
+        // repaints (D21).
+        super::window_size_step(&mut wire.p, &mut negotiator, 80, 43, false);
+        assert_eq!(negotiator.window_size, (80, 43));
         assert!(wire.p.prompt.stage.open_row().is_none());
         let config = vosh_prompt::PromptConfig {
             draw: true,
