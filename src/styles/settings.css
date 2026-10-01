@@ -2104,6 +2104,12 @@
   box-shadow: var(--st-selrow-ring);
 }
 
+/* A row that needs you, like a trigger that hides your prompt with
+   nothing drawn in its place, carries a 1 px warn ring, selected too. */
+.st-auto-row.is-warn {
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+
 /* The list scrolls, so the ring sits inside the row. */
 .st-auto-row:focus-visible {
   outline: 2px solid var(--accent);
@@ -2250,6 +2256,24 @@
   color: var(--secondary);
   font-size: 11px;
   line-height: 15px;
+}
+
+/* What needs you about this item, in warn with the pane status dot. */
+.st-auto-cardnote.is-warn {
+  display: flex;
+  gap: 6px;
+  padding: 10px 16px;
+  color: var(--warn);
+}
+
+.st-auto-warndot {
+  display: block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 3.5px;
+  border-radius: 4px;
+  background: var(--warn);
 }
 
 .st-auto-value {

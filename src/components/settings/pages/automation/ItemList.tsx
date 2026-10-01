@@ -23,6 +23,8 @@ interface RowProps {
   monoName: boolean;
   monoMeta: boolean;
   anchor: string | undefined;
+  /** Carries the warn ring. */
+  warn: boolean;
   onSelect: (uid: string) => void;
 }
 
@@ -40,13 +42,14 @@ const ListRow = memo(function ListRow({
   monoName,
   monoMeta,
   anchor,
+  warn,
   onSelect,
 }: RowProps) {
   return (
     <div className="st-auto-rowwrap">
       <button
         type="button"
-        className="st-auto-row"
+        className={cx('st-auto-row', warn && 'is-warn')}
         aria-current={selected ? 'true' : undefined}
         tabIndex={tabbable ? 0 : -1}
         data-uid={uid}
@@ -90,6 +93,9 @@ export interface ItemListProps {
   monoMeta: boolean;
   /** Quiet content under the list, like Edit all as JSON…. */
   footer?: ReactNode;
+  /** Names of rows that carry the warn ring while they are on, like a
+   *  trigger that hides your prompt with nothing drawn in its place. */
+  warnNames?: ReadonlySet<string> | undefined;
 }
 
 /** The Automation list: the filter field, then the rows under their
@@ -110,6 +116,7 @@ export function ItemList({
   monoName,
   monoMeta,
   footer,
+  warnNames,
 }: ItemListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const order: string[] = [];
@@ -175,6 +182,7 @@ export function ItemList({
               monoName={false}
               monoMeta={false}
               anchor={pinned.anchor}
+              warn={false}
               onSelect={onSelect}
             />
           )}
@@ -199,6 +207,7 @@ export function ItemList({
                   monoName={monoName}
                   monoMeta={monoMeta}
                   anchor={undefined}
+                  warn={entry.enabled && (warnNames?.has(entry.name) ?? false)}
                   onSelect={onSelect}
                 />
               ))}

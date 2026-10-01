@@ -48,6 +48,7 @@ import {
   Toggle,
   type SelectOption,
 } from '../../ui';
+import { usePromptGags } from '../../../../lib/stores/promptGagStore';
 import { CardNote, CodeRow, GroupField, NumberField } from './fields';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, EditorProps, KindSpec } from './types';
@@ -87,8 +88,17 @@ const TRIGGERS_SPEC: KindSpec<TriggerRecord> = {
 };
 
 export function TriggersEditor(props: EditorProps) {
-  return <DraftEditor spec={TRIGGERS_SPEC} {...props} />;
+  // A trigger that hid your prompt this session while the profile reads
+  // no prompt carries the warn ring in the list.
+  const gags = usePromptGags();
+  return <DraftEditor spec={TRIGGERS_SPEC} {...props} warnNames={gags} />;
 }
+
+/** Why a trigger carries the warn ring: it hid your prompt this session
+ *  while the profile reads no prompt, so Vosh drew nothing in its place
+ *  (section 7 step 13 of the prompt build spec). */
+export const HIDES_PROMPT_NOTE =
+  "This trigger hides your prompt, and this profile draws nothing in its place. Turn it off, or tell Vosh your game's prompt in Customize prompt.";
 
 const COLOR_OPTIONS: readonly SelectOption[] = [
   { value: '', label: 'Default' },
@@ -119,6 +129,8 @@ function TriggerDetail({ value: t, update, fresh, revealInList }: DetailProps<Tr
   const nameRef = useRef<HTMLInputElement | null>(null);
   const locked = Boolean(t.preset);
   const style = triggerStyle(t.actions);
+  const gags = usePromptGags();
+  const hidesPrompt = t.enabled && gags.has(t.name);
 
   useEffect(() => {
     if (fresh) nameRef.current?.focus();
@@ -130,6 +142,12 @@ function TriggerDetail({ value: t, update, fresh, revealInList }: DetailProps<Tr
 
   return (
     <Card className="st-auto-card">
+      {hidesPrompt && (
+        <p className="st-auto-cardnote is-warn">
+          <span className="st-auto-warndot" aria-hidden="true" />
+          <span>{HIDES_PROMPT_NOTE}</span>
+        </p>
+      )}
       {locked && (
         <CardNote>
           This trigger comes from a preset, so only its group changes here. Turn the preset off

@@ -1167,6 +1167,12 @@ export async function onPromptGagWithoutReader(
   });
 }
 
+/** The triggers that hid your prompt this session with nothing drawn in
+ *  its place, for a window that opens after the session named them. */
+export async function promptGagsWithoutReader(): Promise<string[]> {
+  return invoke('prompt_gags_without_reader');
+}
+
 // Keyboard macro bindings. A Macro maps a canonical key string
 // (produced by canonicalKeyFromEvent below) to a command line that
 // the input layer will fire when that key combo is pressed.

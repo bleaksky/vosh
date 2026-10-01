@@ -415,6 +415,7 @@ pub fn run() {
             prompt_commands::prompt_edit,
             prompt_commands::prompt_state_get,
             prompt_commands::prompt_watch,
+            commands::prompt_gags_without_reader,
             characters::profile_export_file,
             commands::ui_set_theme,
             commands::ui_set_affects_display,

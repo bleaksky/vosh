@@ -3578,6 +3578,23 @@ fn prompt_show_state(p: &crate::profile::Profile) -> PromptShowState {
     }
 }
 
+/// The triggers that hid your prompt this session while the profile
+/// reads no prompt, so Vosh drew nothing in its place. The session names
+/// each one once on `session://prompt-gag-without-reader`, so a window
+/// that opens later, Settings among them, reads the list here. Empty
+/// with no connection.
+#[tauri::command]
+pub(crate) async fn prompt_gags_without_reader(
+    state: State<'_, SharedState>,
+) -> Result<Vec<String>, String> {
+    let p = state.profile.lock().await;
+    Ok(p.prompt
+        .stage
+        .gags_without_reader()
+        .map(str::to_string)
+        .collect())
+}
+
 /// Replace a profile's tracked affects without touching the rest of
 /// its UI config, so an editor outside Settings cannot write a stale
 /// snapshot over other fields. Returns the normalized list.
