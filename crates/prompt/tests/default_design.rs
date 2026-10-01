@@ -11,11 +11,12 @@
 //!
 //! The states are the ones the design was chosen on, the fight with a
 //! tank, a group, a long mob name, lamented tears, an immortal, the older
-//! server build and missing affects among them.
+//! server build and missing affects among them. Prompts that give no
+//! max, and other games, draw last.
 
 use chrono::{DateTime, FixedOffset, NaiveDate};
 use serde_json::{json, Value as Json};
-use vosh_prompt::config::AabahranCapture;
+use vosh_prompt::config::{AabahranCapture, RegexCapture};
 use vosh_prompt::stage::{End, Offer};
 use vosh_prompt::template::{Code, ColorSpec, Format, TokenKind};
 use vosh_prompt::testkit::{game, shown, Build};
@@ -175,8 +176,9 @@ impl St {
         }
     }
 
-    /// The packets that reach Vosh before the prompt, in wire order.
-    fn packets(&self) -> Vec<(&'static str, Json)> {
+    /// The packets that reach Vosh before the prompt, in wire order, for
+    /// the PROMPT setting `prompt`.
+    fn packets(&self, prompt: &str) -> Vec<(&'static str, Json)> {
         let new = self.build == Build::New;
         let level = self.level();
         let mut out = vec![(
@@ -186,7 +188,7 @@ impl St {
         if new {
             out.push((
                 "Char.Prompt",
-                json!({"enabled": true, "prompt": PROMPT, "fprompt": ""}),
+                json!({"enabled": true, "prompt": prompt, "fprompt": ""}),
             ));
         }
         let affects: Vec<Json> = [
@@ -541,21 +543,29 @@ fn lines(bytes: &[u8]) -> Vec<Vec<u8>> {
 
 /// Draw `template` for `st` the way the session does.
 fn draw_as(template: &str, st: &St) -> Drawn {
+    draw_with(template, PROMPT, st, |_| true)
+}
+
+/// Draw `template` for `st` the way the session does, with `prompt` as
+/// the PROMPT setting and only the packets `sent` lets through.
+fn draw_with(template: &str, prompt: &str, st: &St, sent: fn(&str) -> bool) -> Drawn {
     let mut engine = PromptEngine::default();
     engine.set_config(PromptConfig {
         draw: true,
         template: template.into(),
         capture: CaptureConfig::Aabahran(AabahranCapture {
-            prompt: PROMPT.into(),
+            prompt: prompt.into(),
             ..AabahranCapture::default()
         }),
         ..PromptConfig::default()
     });
     engine.connect(true);
-    for (package, data) in st.packets() {
-        engine.observe(package, data, at());
+    for (package, data) in st.packets(prompt) {
+        if sent(package) {
+            engine.observe(package, data, at());
+        }
     }
-    let game_lines = lines(&game::prompt(PROMPT, "", &st.game()));
+    let game_lines = lines(&game::prompt(prompt, "", &st.game()));
     let last = game_lines.len() - 1;
     let mut block = None;
     for (i, raw) in game_lines.iter().enumerate() {
@@ -570,19 +580,9 @@ fn draw_as(template: &str, st: &St) -> Drawn {
         values: block.values.clone(),
         raw: Some(block.raw_text()),
     });
-    let vosh = Vosh {
-        tick: Some(Tick {
-            remaining: 14,
-            interval: Some(30),
-        }),
-        target: None,
-        profile: Some("Default".into()),
-        now: NaiveDate::from_ymd_opt(2026, 9, 30).and_then(|d| d.and_hms_opt(20, 14, 0)),
-        tracked: TRACKED.map(String::from).to_vec(),
-    };
     let rendered = render_str(
         template,
-        &engine.vars.resolver(&vosh),
+        &engine.vars.resolver(&vosh()),
         RenderOptions::default(),
     );
     Drawn {
@@ -593,6 +593,89 @@ fn draw_as(template: &str, st: &St) -> Drawn {
         lines: block.lines.len(),
         replaced: block.replaced.len(),
         afk: block.afk,
+    }
+}
+
+/// What Vosh itself supplies in every state.
+fn vosh() -> Vosh {
+    Vosh {
+        tick: Some(Tick {
+            remaining: 14,
+            interval: Some(30),
+        }),
+        target: None,
+        profile: Some("Default".into()),
+        now: NaiveDate::from_ymd_opt(2026, 9, 30).and_then(|d| d.and_hms_opt(20, 14, 0)),
+        tracked: TRACKED.map(String::from).to_vec(),
+    }
+}
+
+/// Draw the default design on a game other than The Forsaken Lands,
+/// whose prompt `line` a pattern reads, after `packets`.
+fn draw_elsewhere(pattern: &str, line: &str, packets: &[(&str, Json)]) -> Drawn {
+    let mut engine = PromptEngine::default();
+    engine.set_config(PromptConfig {
+        draw: true,
+        template: DEFAULT_DESIGN.into(),
+        capture: CaptureConfig::Regex(RegexCapture {
+            lines: vec![pattern.into()],
+            settle: vosh_prompt::capture::settle(pattern),
+            ..RegexCapture::default()
+        }),
+        ..PromptConfig::default()
+    });
+    engine.connect(false);
+    assert!(!engine.forsaken());
+    for (package, data) in packets {
+        engine.observe(package, data.clone(), at());
+    }
+    let raw = line.as_bytes();
+    let Offer::Prompt(block, _) = engine
+        .stage
+        .offer(raw, &shown(raw), None, End::Marker)
+        .offer
+    else {
+        panic!("the stage read no prompt in {line:?}");
+    };
+    engine.vars.capture(Capture {
+        values: block.values.clone(),
+        raw: Some(block.raw_text()),
+    });
+    let rendered = render_str(
+        DEFAULT_DESIGN,
+        &engine.vars.resolver(&vosh()),
+        RenderOptions::default(),
+    );
+    Drawn {
+        ansi: rendered.ansi,
+        plain: rendered.plain,
+        rows: rendered.rows,
+        zone: engine.zone(),
+        lines: block.lines.len(),
+        replaced: block.replaced.len(),
+        afk: block.afk,
+    }
+}
+
+/// The drawn text holds no code left raw, no bare slash and no SGR
+/// sequence the text does not account for, and ends in a reset.
+fn assert_clean(name: &str, drawn: &Drawn) {
+    let text = strip_sgr(&drawn.ansi).unwrap_or_else(|e| panic!("{name}: {e}"));
+    assert_eq!(text, drawn.plain.replace('\n', "\r\n"), "{name}");
+    assert!(drawn.ansi.ends_with("\x1b[0m"), "{name}");
+    assert!(
+        !drawn.plain.contains(['%', '{', '}']),
+        "{name}: {:?}",
+        drawn.plain
+    );
+    // A slash sits between a value and its max, hidden or not.
+    let value = |c: Option<char>| c.is_some_and(|c| c.is_ascii_digit() || c == '?');
+    for (i, _) in drawn.plain.match_indices('/') {
+        assert!(
+            value(drawn.plain[..i].chars().last()) && value(drawn.plain[i + 1..].chars().next()),
+            "{name}: a slash with no value beside it in {:?}",
+            drawn.plain
+        );
     }
 }
 
@@ -844,4 +927,58 @@ fn the_vitals_row_moves_only_by_how_many_digits_change() {
         }
     }
     assert_eq!(seen, 63);
+}
+
+#[test]
+fn a_prompt_with_no_max_draws_each_value_alone() {
+    // A PROMPT with no max codes, on a build that sends no Char.Vitals,
+    // so Vosh reads your health, mana and moves but no max.
+    let st = St {
+        build: Build::Older,
+        ..St::new("no-max")
+    };
+    let no_vitals = |package: &str| package != "Char.Vitals";
+    let drawn = draw_with(DEFAULT_DESIGN, "<%hhp %mm %vmv> ", &st, no_vitals);
+    assert_eq!(drawn.plain, "1020hp 800mn 930mv  1,250g ");
+    assert_clean("no-max", &drawn);
+    // With no share to color by, the numbers keep the terminal's color
+    // and the labels their gray.
+    assert!(
+        drawn.ansi.starts_with("1020\x1b[38;5;245mhp\x1b[39m 800"),
+        "{:?}",
+        drawn.ansi
+    );
+    // Health alone.
+    let drawn = draw_with(DEFAULT_DESIGN, "%hhp> ", &st, no_vitals);
+    assert_eq!(drawn.plain, "1020hp  1,250g ");
+    assert_clean("health alone", &drawn);
+}
+
+#[test]
+fn on_another_game_each_vital_draws_with_what_it_has() {
+    // A max of 0 there means the pair does not apply, as for a class
+    // with no mana, so neither the value nor its slash shows.
+    let vitals = json!({"hp": 500, "maxhp": 500, "mana": 0, "maxmana": 0,
+                        "move": 100, "maxmove": 100});
+    let drawn = draw_elsewhere(
+        r"^<(?<hp>\d+)hp (?<move>\d+)mv> $",
+        "<480hp 100mv> ",
+        &[("Char.Vitals", vitals)],
+    );
+    assert_eq!(drawn.plain, "480/500hp 100/100mv ");
+    assert_clean("no mana", &drawn);
+    assert!(drawn.ansi.starts_with("\x1b[32m480"), "{:?}", drawn.ansi);
+
+    // A pattern that reads no max, on a game that sends no Char.Vitals.
+    let drawn = draw_elsewhere(
+        r"^<(?<hp>\d+)hp (?<mana>\d+)m (?<move>\d+)mv> $",
+        "<1020hp 800m 930mv> ",
+        &[],
+    );
+    assert_eq!(drawn.plain, "1020hp 800mn 930mv ");
+    assert_clean("no max", &drawn);
+    // Health alone.
+    let drawn = draw_elsewhere(r"^<(?<hp>\d+)hp> $", "<1020hp> ", &[]);
+    assert_eq!(drawn.plain, "1020hp ");
+    assert_clean("health alone", &drawn);
 }
