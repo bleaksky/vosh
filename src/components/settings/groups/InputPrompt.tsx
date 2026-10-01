@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { listen } from '@tauri-apps/api/event';
 import type { BandEnv } from '../../../lib/bandCells';
 import { localStamp, savedForName } from '../../../lib/promptCard';
 import {
@@ -35,6 +34,7 @@ import {
   subscribeProfileSwitched,
   subscribePromptConfigChanged,
   subscribeSessionIdentity,
+  subscribeUiConfigReplaced,
   type PromptCapture,
   type PromptCaptureCheck,
   type PromptCheckRead,
@@ -104,17 +104,19 @@ function usePromptData(): PromptData | null {
       promptLastSeen().catch(() => null),
       sessionIdentityGet().catch(() => null),
       profilesList().catch(() => null),
-    ]).then(([table, now, last, who, list]) => {
-      if (!alive) return;
-      const name = list?.active ?? who?.profile ?? 'default';
-      const entry = list?.profiles.find((p) => p.name === name);
-      setConfig(table);
-      setState(now);
-      setSeen(last);
-      setIdentity(who);
-      setActive(name);
-      setHost(who?.host ?? entry?.auto_match?.host ?? '');
-    });
+    ])
+      .then(([table, now, last, who, list]) => {
+        if (!alive) return;
+        const name = list?.active ?? who?.profile ?? 'default';
+        const entry = list?.profiles.find((p) => p.name === name);
+        setConfig(table);
+        setState(now);
+        setSeen(last);
+        setIdentity(who);
+        setActive(name);
+        setHost(who?.host ?? entry?.auto_match?.host ?? '');
+      })
+      .catch((e: unknown) => console.error('[settings prompt] reading the table failed', e));
     return () => {
       alive = false;
     };
@@ -158,7 +160,7 @@ function usePromptData(): PromptData | null {
     keep(onGamePromptSeen(refresh));
     keep(onPromptStatus(refresh));
     keep(onState(refresh));
-    keep(listen<unknown>('vosh://ui-config-replaced', refresh));
+    keep(subscribeUiConfigReplaced(refresh));
     // Coming back to the window counts your newest prompts again.
     window.addEventListener('focus', refresh);
     return () => {
@@ -398,26 +400,33 @@ export function CodesText({ prompt, fprompt, description, meta }: CodesTextProps
   );
 }
 
-/** Compile codes as the game would show them, or null while there are
- *  none. */
-function useCompiled(prompt: string, fprompt: string, typed: boolean) {
-  const [report, setReport] = useState<PromptCompileReport | null>(null);
+/** What codes compile to, null while there are none. The newest report
+ *  stays while the next compiles, so the meta never blinks, and `fresh`
+ *  says it is the report of the codes as they stand. */
+function useCompiled(
+  prompt: string,
+  fprompt: string,
+  typed: boolean,
+): { report: PromptCompileReport | null; fresh: boolean } {
+  const key = JSON.stringify([prompt, fprompt, typed]);
+  const [held, setHeld] = useState<{ key: string; report: PromptCompileReport } | null>(null);
   useEffect(() => {
     if (prompt.trim().length === 0) {
-      setReport(null);
+      setHeld(null);
       return;
     }
     let alive = true;
     void promptCompile({ kind: 'aabahran', prompt, fprompt, typed })
-      .then((next) => {
-        if (alive) setReport(next);
+      .then((report) => {
+        if (alive) setHeld({ key, report });
       })
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [prompt, fprompt, typed]);
-  return report;
+  }, [key, prompt, fprompt, typed]);
+  if (prompt.trim().length === 0) return { report: null, fresh: true };
+  return { report: held?.report ?? null, fresh: held?.key === key };
 }
 
 interface CodesBlockProps {
@@ -432,7 +441,7 @@ interface CodesBlockProps {
 function CodesBlock({ codes, capture, check, promptsOff, description }: CodesBlockProps) {
   const prompt = codes?.prompt ?? (capture.kind === 'aabahran' ? capture.prompt : '');
   const fprompt = codes?.fprompt ?? (capture.kind === 'aabahran' ? capture.fprompt : '');
-  const report = useCompiled(prompt, fprompt, false);
+  const { report } = useCompiled(prompt, fprompt, false);
   const meta = codesMeta({
     block: 'codes',
     game: codes,
@@ -475,11 +484,12 @@ function FieldsBlock({ capture, seen, check, promptsOff, description, onSave }: 
     setPrompt(saved?.prompt ?? '');
     setFprompt(saved?.fprompt ?? '');
   }, [saved?.prompt, saved?.fprompt, dirty]);
-  const report = useCompiled(prompt, fprompt, dirty);
+  const { report, fresh } = useCompiled(prompt, fprompt, dirty);
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
+  // Codes you typed save once they compile and typing settles.
   useEffect(() => {
-    if (!dirty || !report?.ok) return;
+    if (!dirty || !fresh || !report?.ok) return;
     const id = window.setTimeout(() => {
       setDirty(false);
       if (saved && saved.prompt === report.prompt && saved.fprompt === report.fprompt) return;
@@ -493,7 +503,7 @@ function FieldsBlock({ capture, seen, check, promptsOff, description, onSave }: 
       });
     }, SAVE_AFTER_MS);
     return () => window.clearTimeout(id);
-  }, [dirty, report, saved]);
+  }, [dirty, fresh, report, saved]);
   const edit = (set: (value: string) => void) => (value: string) => {
     set(value);
     setDirty(true);
