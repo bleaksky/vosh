@@ -150,6 +150,13 @@ pub(crate) struct OutputPayload {
     /// `vosh_prompt::stage::close_pin_row`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pin_row: Option<bool>,
+    /// Which output of the prompt stage this is (`Output::id`). Each
+    /// renderer keeps the newest it took, so text the webview writes
+    /// itself can tell the session which output it follows. Absent on
+    /// output from elsewhere, such as a slash command's echo, which the
+    /// stage never sees.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<u64>,
 }
 
 /// `OutputPayload.replace`: region `gen`, its new bytes as base64, and
@@ -256,8 +263,10 @@ pub(crate) enum OutgoingMsg {
     PromptRepaint,
     /// The webview wrote to the terminal itself, such as your typed echo
     /// or an error notice, so the open row is no longer the last thing on
-    /// screen.
-    LocalWrite,
+    /// screen. `after` is the newest output of the prompt stage that the
+    /// renderer that shows took before the text (`Output::id`), since
+    /// the session can hear of the text after it wrote more.
+    LocalWrite { after: u64 },
 }
 
 /// Everything one socket read writes to the terminal and reports, kept
@@ -375,11 +384,14 @@ impl SessionHandle {
             .is_ok()
     }
 
-    /// Tell the session the webview wrote to the terminal itself, which
-    /// closes the open row. Returns false when the session has already
-    /// been torn down.
-    pub(crate) fn local_write(&self) -> bool {
-        self.tx_outgoing.send(OutgoingMsg::LocalWrite).is_ok()
+    /// Tell the session the webview wrote to the terminal itself, on a
+    /// renderer whose newest output of the prompt stage was `after`. That
+    /// closes the open row when the row came no later. Returns false when
+    /// the session has already been torn down.
+    pub(crate) fn local_write(&self, after: u64) -> bool {
+        self.tx_outgoing
+            .send(OutgoingMsg::LocalWrite { after })
+            .is_ok()
     }
 
     /// Repaint the open row as the `[prompt]` table now says. Returns
@@ -699,29 +711,39 @@ async fn io_loop<R: tauri::Runtime>(
                         }
                     }
                 }
-                Some(OutgoingMsg::LocalWrite) => {
-                    if hold_until.take().is_some() {
-                        flush_hold(&app, &profile, &mut accumulator, &mut seen_output).await;
-                    }
-                    // Your typed echo follows the lines held for the rest
-                    // of a prompt, so they let go as they show.
-                    if let Err(e) = let_go_held_lines(
-                        &app,
-                        &mut stream,
-                        &profile,
-                        &timers,
-                        &scrollback,
-                        &logs,
-                        &mut log_session,
-                        &mut seen_output,
-                        &mut perf,
-                    )
-                    .await
-                    {
-                        warn!(error = %e, "letting go of held lines failed");
+                Some(OutgoingMsg::LocalWrite { after }) => {
+                    // The webview echoes your line and sends it with two
+                    // calls, so the session can hear of the echo after the
+                    // game answered. Text that landed before output the
+                    // session already sent leaves that output alone: its
+                    // open row, its pinned prompt and what it holds all
+                    // came after the text.
+                    let landed_last = !profile.lock().await.prompt.stage.wrote_after(after);
+                    if landed_last {
+                        if hold_until.take().is_some() {
+                            flush_hold(&app, &profile, &mut accumulator, &mut seen_output)
+                                .await;
+                        }
+                        // Your typed echo follows the lines held for the
+                        // rest of a prompt, so they let go as they show.
+                        if let Err(e) = let_go_held_lines(
+                            &app,
+                            &mut stream,
+                            &profile,
+                            &timers,
+                            &scrollback,
+                            &logs,
+                            &mut log_session,
+                            &mut seen_output,
+                            &mut perf,
+                        )
+                        .await
+                        {
+                            warn!(error = %e, "letting go of held lines failed");
+                        }
                     }
                     let mut p = profile.lock().await;
-                    p.prompt.stage.local_write();
+                    p.prompt.stage.local_write(after);
                 }
                 Some(OutgoingMsg::PromptRepaint) => {
                     // The card asked for it, so its state follows even when
@@ -3059,6 +3081,7 @@ impl OutputPayload {
             pin_spans: out.pin_spans.clone(),
             hold: (!out.hold.is_empty()).then(|| base64_encode(&out.hold)),
             pin_row: out.pin_row,
+            id: None,
         }
     }
 }
@@ -3086,25 +3109,38 @@ fn output_count() -> u64 {
 pub(crate) fn emit_output<R: tauri::Runtime>(app: &AppHandle<R>, bytes: Vec<u8>) {
     let mut out = Output::new(false);
     out.text(&bytes);
-    emit_counted(app, &out, true);
+    emit_counted(app, &out, true, false);
 }
 
 /// Send one read's output. Returns the output count after it.
 fn emit_session_output<R: tauri::Runtime>(app: &AppHandle<R>, out: &Output) -> u64 {
-    emit_counted(app, out, true)
+    emit_counted(app, out, true, true)
 }
 
 /// Send a repaint of the open row. It leaves the output count alone,
 /// since the row it writes is still the last thing on screen.
 fn emit_repaint<R: tauri::Runtime>(app: &AppHandle<R>, out: &Output) {
-    let _ = emit_counted(app, out, false);
+    let _ = emit_counted(app, out, false, true);
 }
 
 /// Send `out` to both renderers under [`OUTPUT_ORDER`]. `count` moves the
-/// output count, which a repaint of the open row never does. Returns the
-/// count after it.
-fn emit_counted<R: tauri::Runtime>(app: &AppHandle<R>, out: &Output, count: bool) -> u64 {
-    let payload = OutputPayload::from_output(out);
+/// output count, which a repaint of the open row never does. `staged`
+/// says the prompt stage made `out`, so it carries its id, which each
+/// renderer keeps as the newest it took. The session task makes and
+/// sends those in order. Output from elsewhere can take an id before an
+/// output of the session and still go out after it, so it carries none.
+/// Returns the count after it.
+fn emit_counted<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    out: &Output,
+    count: bool,
+    staged: bool,
+) -> u64 {
+    let id = staged.then(|| out.id());
+    let payload = OutputPayload {
+        id,
+        ..OutputPayload::from_output(out)
+    };
     // The session loop and the command handlers write from different
     // tasks. Without the lock, two writes could reach the grid in one
     // order and xterm in the other.
@@ -3124,7 +3160,7 @@ fn emit_counted<R: tauri::Runtime>(app: &AppHandle<R>, out: &Output, count: bool
         // Word wrapped at the grid width, matching the frontend
         // WordWrapper that xterm receives this same stream through. The
         // grid finds each region in its own rows, as xterm does (D22).
-        crate::term_grid::feed_session_output(out);
+        crate::term_grid::feed_session_output(out, id);
         crate::native_surface::request_redraw();
     }
     if let Err(e) = app.emit("session://output", payload) {

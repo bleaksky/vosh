@@ -85,6 +85,10 @@ pub(crate) struct TermGrid {
     /// The row a pinned prompt left is where the next write lands, so the
     /// line end that would end it writes nothing.
     pin_row: bool,
+    /// The newest output of the prompt stage the grid took, by its id
+    /// (`Output::id`), 0 before the first. Text the webview writes lands
+    /// after it, which the session reads to tell what the text follows.
+    taken: u64,
 }
 
 /// A lift the grid saw the start mark of, while your prompt shows lifted:
@@ -184,7 +188,19 @@ impl TermGrid {
             pending_hold: Vec::new(),
             lift_tracks: Vec::new(),
             pin_row: false,
+            taken: 0,
         }
+    }
+
+    /// Note that the grid took output `id` of the prompt stage.
+    pub(crate) fn took(&mut self, id: u64) {
+        self.taken = self.taken.max(id);
+    }
+
+    /// The newest output of the prompt stage the grid took, 0 before the
+    /// first.
+    pub(crate) fn taken(&self) -> u64 {
+        self.taken
     }
 
     /// Write one session output, as `session://output` carries it to
@@ -984,25 +1000,31 @@ pub(crate) fn claim_seed() -> bool {
 /// Write text the webview wrote itself into the shared grid, creating it
 /// on first use: your typed echo, a notice, the restored scrollback. See
 /// [`TermGrid::local_write`]. Lock guarded, and the renderer reads the
-/// same grid.
-pub(crate) fn feed_local(bytes: &[u8]) {
+/// same grid. Returns the newest output of the prompt stage the grid took
+/// before the text, which the text follows.
+pub(crate) fn feed_local(bytes: &[u8]) -> u64 {
     let Ok(mut slot) = grid_slot().lock() else {
-        return;
+        return 0;
     };
     let grid = slot.get_or_insert_with(|| TermGrid::new(80, 24));
     grid.local_write(bytes);
+    grid.taken()
 }
 
 /// Write one session output into the shared grid under its lock, word
 /// wrapped at the grid width, with its replace and restore. See
 /// [`TermGrid::session_output`]. Every `session://output` goes through
-/// here as well, so the grid holds what xterm holds.
-pub(crate) fn feed_session_output(out: &Output) {
+/// here as well, so the grid holds what xterm holds. `id` names the
+/// output when the prompt stage made it.
+pub(crate) fn feed_session_output(out: &Output, id: Option<u64>) {
     let Ok(mut slot) = grid_slot().lock() else {
         return;
     };
     let grid = slot.get_or_insert_with(|| TermGrid::new(80, 24));
     grid.session_output(out);
+    if let Some(id) = id {
+        grid.took(id);
+    }
 }
 
 /// Where the shared grid's cursor sits and where its open region starts,
@@ -1443,6 +1465,26 @@ mod tests {
     }
 
     #[test]
+    fn a_local_write_names_the_newest_output_of_the_stage_the_grid_took() {
+        let _shared = lock_shared_grid_for_test();
+        blank_shared_grid_for_test(40, 10);
+        assert_eq!(feed_local(b"restored\r\n"), 0, "none yet");
+        let mut first = Output::new(false);
+        first.text(&marked(1, b"<1020hp> "));
+        feed_session_output(&first, Some(first.id()));
+        // Output from elsewhere, such as a slash command's echo, is none
+        // of the stage's.
+        let mut other = Output::new(false);
+        other.text(b"[not connected]\r\n");
+        feed_session_output(&other, None);
+        assert_eq!(feed_local(b"look\r\n"), first.id());
+        let mut next = Output::new(false);
+        next.text(&marked(2, b"<1000hp> "));
+        feed_session_output(&next, Some(next.id()));
+        assert_eq!(feed_local(b"x"), next.id());
+    }
+
+    #[test]
     fn terminal_cursor_reports_the_shared_grid() {
         let _shared = lock_shared_grid_for_test();
         *grid_slot().lock().unwrap() = None;
@@ -1451,7 +1493,7 @@ mod tests {
         let mut out = Output::new(false);
         out.text(b"You are hungry.\r\n");
         out.text(&marked(3, b"<1020hp> "));
-        feed_session_output(&out);
+        feed_session_output(&out, Some(out.id()));
         let report = serde_json::to_value(crate::commands::terminal_cursor()).expect("json");
         assert_eq!(
             report,
@@ -2197,7 +2239,7 @@ mod tests {
         };
         *slot = Some(TermGrid::new(10, 24));
         drop(slot);
-        feed_session_output(&text(b"the quick brown fox\r\n"));
+        feed_session_output(&text(b"the quick brown fox\r\n"), None);
         let slot = grid_slot().lock().unwrap();
         let g = slot.as_ref().unwrap();
         assert!(g.row_string(0).starts_with("the quick"));

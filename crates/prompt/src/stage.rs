@@ -244,6 +244,13 @@ impl Output {
         }
     }
 
+    /// Which output this is, in the order the session made them. Each
+    /// renderer keeps the newest it took, so text it writes itself can say
+    /// which output it follows (see [`Stage::local_write`]).
+    pub fn id(&self) -> u64 {
+        self.id.0
+    }
+
     /// Nothing to write and nothing for the band.
     pub fn is_empty(&self) -> bool {
         self.untouched() && self.pin.is_none()
@@ -946,6 +953,14 @@ pub struct Stage {
     /// from an earlier connection never shares a number with a new one.
     gen: u64,
     open: Option<OpenRow>,
+    /// The output that first wrote the open row's region. A repaint
+    /// keeps it, since a renderer drops a repaint of a region that text
+    /// landed after, so text that landed after this output closes the
+    /// row.
+    open_since: u64,
+    /// The newest output the stage finished with something to write,
+    /// which the session sent.
+    sent: u64,
     /// The last recognized prompt, as sent.
     last_raw: Option<Block>,
     ring: VecDeque<Candidate>,
@@ -1132,12 +1147,27 @@ impl Stage {
         self.open = None;
     }
 
-    /// The webview wrote to the terminal itself, such as your typed echo.
+    /// The webview wrote to the terminal itself, such as your typed echo,
+    /// on a renderer whose newest output was `after` (see [`Output::id`]).
     /// It closes the open row and lands where a pinned prompt's row would
-    /// have been, so the next empty line writes again.
-    pub fn local_write(&mut self) {
-        self.open = None;
-        self.swallow = None;
+    /// have been, so the next empty line writes again. Your echo reaches
+    /// the session by a call apart from your line, so the session can
+    /// hear of it after it sent the reply. A row or a pinned prompt that
+    /// later output brought came after the text, so it stays.
+    pub fn local_write(&mut self, after: u64) {
+        if self.open_since <= after {
+            self.open = None;
+        }
+        if self.swallow.is_some_and(|swallow| swallow.output <= after) {
+            self.swallow = None;
+        }
+    }
+
+    /// True when the stage finished output newer than `after` with
+    /// something to write, so text a renderer wrote after it took `after`
+    /// landed before that output.
+    pub fn wrote_after(&self, after: u64) -> bool {
+        self.sent > after
     }
 
     /// Catch up with `out` before it goes out, so bytes written after
@@ -1147,6 +1177,14 @@ impl Stage {
     pub fn finish(&mut self, out: &mut Output) {
         self.sync(out);
         self.seal(out);
+        self.note_sent(out);
+    }
+
+    /// `out` goes out next when it has anything to write.
+    fn note_sent(&mut self, out: &Output) {
+        if !out.is_empty() {
+            self.sent = self.sent.max(out.id.0);
+        }
     }
 
     /// While your prompt shows pinned, or leaves Pinned, tell the
@@ -1441,6 +1479,7 @@ impl Stage {
         }
         out.closed = false;
         self.open = Some(view.open_row(gen, body, live));
+        self.open_since = out.id.0;
         self.open_lift = lift;
         self.open_heads = block.heads_shown_with_text();
         self.shown_as = self.show;
@@ -1702,6 +1741,7 @@ impl Stage {
     pub fn repaint_view(&mut self, out: &mut Output, view: View) {
         self.repaint_row(out, view);
         self.seal(out);
+        self.note_sent(out);
     }
 
     /// True when there is something a repaint of what your prompt shows
@@ -1933,6 +1973,7 @@ impl Stage {
                 }
                 out.closed = false;
                 self.open = Some(view.open_row(gen, body, live));
+                self.open_since = out.id.0;
                 self.open_lift = lift;
                 self.open_heads = block.heads_shown_with_text();
             }
@@ -2648,6 +2689,50 @@ mod tests {
         assert!(stage.open_row().is_some());
     }
 
+    #[test]
+    fn a_local_write_closes_only_a_row_drawn_before_the_text_landed() {
+        let block_of = |stage: &Stage| read(stage, PROMPT, End::Line);
+        let mut stage = stage(JAMES, false);
+        let mut first = Output::new(false);
+        stage.draw(&mut first, block_of(&stage), None, b"", "FIRST");
+        stage.finish(&mut first);
+
+        // Your echo landed after the first prompt, but the session hears
+        // of it only after it sent the next one, which follows the echo.
+        stage.close();
+        let mut next = Output::new(false);
+        next.text(b"reply\r\n");
+        stage.draw(&mut next, block_of(&stage), None, b"", "NEXT");
+        stage.finish(&mut next);
+        assert!(stage.wrote_after(first.id()));
+        stage.local_write(first.id());
+        assert_eq!(stage.open_row().map(|r| r.gen), Some(2));
+
+        // A repaint keeps the output the row came in, since a renderer
+        // drops a repaint of a row text landed after.
+        let mut repaint = Output::new(false);
+        stage.repaint(&mut repaint, Some("EDITED"));
+        assert_eq!(repaint.replace.as_ref().map(|r| r.gen), Some(2));
+        assert!(stage.wrote_after(next.id()));
+        stage.local_write(first.id());
+        assert!(stage.open_row().is_some());
+        stage.local_write(next.id());
+        assert_eq!(stage.open_row(), None);
+
+        // Text that landed after the newest output closes the row.
+        let mut last = Output::new(false);
+        stage.draw(&mut last, block_of(&stage), None, b"", "LAST");
+        stage.finish(&mut last);
+        assert!(!stage.wrote_after(last.id()));
+        stage.local_write(last.id());
+        assert_eq!(stage.open_row(), None);
+
+        // An output with nothing to write never reaches a renderer.
+        let mut nothing = Output::new(false);
+        stage.finish(&mut nothing);
+        assert!(!stage.wrote_after(last.id()));
+    }
+
     /// A span of piece `piece` on the first row, `width` cells from
     /// `col`.
     fn span_at(piece: usize, col: usize, width: usize) -> Span {
@@ -3044,12 +3129,28 @@ mod tests {
     }
 
     #[test]
+    fn a_local_write_that_landed_before_a_pin_leaves_its_row_open() {
+        let mut stage = pinned_stage();
+        let mut first = Output::new(false);
+        pin_prompt(&mut stage, &mut first);
+        stage.finish(&mut first);
+        let mut next = Output::new(false);
+        next.text(b"reply\r\n");
+        pin_prompt(&mut stage, &mut next);
+        stage.finish(&mut next);
+        stage.local_write(first.id());
+        assert!(stage.swallows());
+        stage.local_write(next.id());
+        assert!(!stage.swallows());
+    }
+
+    #[test]
     fn a_local_write_and_other_output_end_the_swallow() {
         let mut stage = pinned_stage();
         let mut out = Output::new(false);
         pin_prompt(&mut stage, &mut out);
         stage.finish(&mut out);
-        stage.local_write();
+        stage.local_write(out.id());
         let mut next = Output::new(false);
         stage.line(&mut next, b"", "", None, b"\r\n");
         assert_eq!(next.bytes, b"\r\n");
@@ -3221,7 +3322,7 @@ mod tests {
         stage.repaint(&mut off, None);
         assert_eq!(off.pin.as_deref(), Some(PROMPT.as_bytes()));
         // Your echo after it changes nothing about that.
-        stage.local_write();
+        stage.local_write(off.id());
         let mut later = Output::new(false);
         stage.repaint(&mut later, Some("LATER"));
         assert_eq!(later.pin.as_deref(), Some(&b"LATER"[..]));
@@ -3282,7 +3383,7 @@ mod tests {
         let mut out = Output::new(false);
         pin_prompt(&mut stage, &mut out);
         stage.finish(&mut out);
-        stage.local_write();
+        stage.local_write(out.id());
         stage.set_show(PromptShow::Text);
         let mut back = Output::new(false);
         stage.repaint(&mut back, Some("DRAWN"));
