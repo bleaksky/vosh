@@ -154,6 +154,10 @@ describe('what each row reads', () => {
     expect(sourceLine(AREA_NUM)).toBe('Add %b to your prompt in the game to use it.');
     expect(sourceLine(OPPONENT)).toBe('From the game.');
     expect(sourceLine(field('tick', { group: 'vosh' }))).toBe('From Vosh.');
+    // The game's prompt is the game's own line, which Vosh keeps.
+    expect(sourceLine(field('raw', { group: 'vosh', kind: 'raw' }))).toBe(
+      'From the game. Vosh keeps your last prompt as it came.',
+    );
     expect(sourceLine(field('mine', { group: 'scripts' }))).toBe('From your scripts.');
   });
 });
