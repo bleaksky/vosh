@@ -840,3 +840,636 @@
 .pc-name-field {
   padding: 3px 6px;
 }
+
+/* A part you picked (P5, P7, P8a, P8b, P10). The name line, then rows
+   on a label column of 88: Show as, When, Width or Style, Color with its
+   hint, and the actions 16 below. Rows sit 8 apart and the first 12 under
+   the name line. */
+.pc-piece-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  height: 18px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.pc-piece-title {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pc-piece-meta {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+}
+
+.pc-piece-code {
+  overflow: hidden;
+  min-width: 0;
+  font-family: var(--font-mud);
+  font-variant-ligatures: none;
+  font-size: 11.5px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--tertiary);
+  white-space: pre;
+  text-overflow: ellipsis;
+}
+
+.pc-piece-row {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  margin-top: 8px;
+}
+
+.pc-piece-row.is-first {
+  margin-top: 12px;
+}
+
+.pc-piece-label {
+  flex: none;
+  width: 88px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--secondary);
+}
+
+.pc-seg .st-seg-item {
+  font-variant-numeric: tabular-nums;
+}
+
+.pc-piece-hint {
+  margin: 4px 0 0 88px;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--secondary);
+}
+
+.pc-piece-hint.is-nowrap {
+  white-space: nowrap;
+}
+
+.pc-swatches {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pc-swatches.is-theme {
+  margin-left: 12px;
+}
+
+.pc-swatch {
+  display: flex;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-key);
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+:root[data-appearance='light'] .pc-swatch {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
+}
+
+.pc-swatch.is-by-value {
+  background: transparent;
+}
+
+.pc-swatch.is-by-value > span {
+  display: block;
+  flex: 1;
+  height: 20px;
+}
+
+.pc-swatch[aria-pressed='true'],
+:root[data-appearance='light'] .pc-swatch[aria-pressed='true'] {
+  box-shadow:
+    0 0 0 2px var(--raised),
+    0 0 0 3px var(--accent);
+}
+
+.pc-swatch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.st-color.pc-custom {
+  margin-left: 12px;
+}
+
+.st-color.pc-custom.is-on {
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.pc-styles {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pc-style {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--tertiary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.pc-style.is-bold {
+  font-weight: 700;
+}
+
+.pc-style.is-italic {
+  font-style: italic;
+}
+
+.pc-style.is-underline span {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.pc-style:hover {
+  background: var(--hover);
+}
+
+.pc-style[aria-pressed='true'],
+.pc-style[aria-pressed='true']:hover {
+  background: var(--selrow);
+  color: var(--text);
+  box-shadow: var(--st-selrow-ring);
+}
+
+.pc-style:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pc-piece-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+/* P8c: what the Lament preview hides, under the hint at rest. */
+.pc-rest-note {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--secondary);
+}
+
+.pc-title.is-picker {
+  margin-left: 12px;
+}
+
+/* Insert value… (P6, P6b): a list of 248 on the left, the highlighted
+   field's forms in 264 on the right, 16 apart. */
+.pc-body.pc-picker {
+  display: flex;
+  gap: 16px;
+  height: 428px;
+  padding: 12px 16px;
+  overflow: hidden;
+}
+
+.pc-picker-list {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 248px;
+  min-height: 0;
+}
+
+.pc-picker-rows {
+  flex: 1;
+  min-height: 0;
+  margin-top: 8px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.pc-picker-rows::-webkit-scrollbar {
+  display: none;
+}
+
+.pc-picker-rows ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pc-picker-group {
+  height: 24px;
+  padding: 5px 12px 4px;
+  box-sizing: border-box;
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 600;
+  color: var(--tertiary);
+}
+
+.pc-picker-sep {
+  height: 1px;
+  margin: 6px 12px;
+  background: var(--divider);
+}
+
+.pc-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 248px;
+  height: 30px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.pc-picker-row:hover,
+.pc-picker-row.is-current {
+  background: var(--ov-hl);
+}
+
+.pc-picker-row.is-dim .pc-picker-name {
+  color: var(--tertiary);
+}
+
+.pc-picker-name {
+  flex: none;
+  white-space: nowrap;
+}
+
+.pc-picker-value {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pc-picker-none {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+}
+
+.pc-picker-forms {
+  flex: none;
+  width: 264px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.pc-picker-title {
+  margin: 0;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.pc-picker-source {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--secondary);
+}
+
+.pc-picker-param {
+  margin-top: 12px;
+}
+
+.pc-picker-packages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.pc-forms {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pc-forms.is-dim {
+  opacity: 0.45;
+}
+
+.pc-forms > li {
+  padding: 1px 0;
+}
+
+.pc-form {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 264px;
+  height: 34px;
+  margin: 0;
+  padding: 0 6px 0 12px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.pc-form.is-on {
+  background: var(--ov-hl);
+}
+
+/* A sample sits on the terminal's ground, as it draws in the text. */
+.pc-form-sample {
+  display: block;
+  flex: none;
+  padding: 2px 6px;
+  border-radius: var(--r-key);
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--sep);
+}
+
+.pc-form-sample.is-glyph,
+.pc-form-empty {
+  font-family: var(--font-mud);
+  font-size: 13px;
+  line-height: 17.5px;
+  color: var(--tertiary);
+}
+
+.pc-chip {
+  height: 20px;
+  margin: 0;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--r-key);
+  background: var(--st-fill);
+  box-shadow: var(--st-fill-ring);
+  color: var(--secondary);
+  font-family: var(--font-mud);
+  font-variant-ligatures: none;
+  font-size: 11.5px;
+  line-height: 16px;
+  font-weight: 500;
+  white-space: pre;
+}
+
+.pc-chip:hover {
+  color: var(--text);
+}
+
+/* Edit as text (P9): the design in the terminal's face, wrapping only
+   between tokens, then the help, the token rows, and Insert value…. */
+.pc-text-field {
+  width: 528px;
+  min-height: 86px;
+  max-height: 156px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow-y: auto;
+  border-radius: var(--r-row);
+  outline: none;
+  background: var(--st-fill);
+  box-shadow: var(--st-fill-ring);
+  font-family: var(--font-mud);
+  font-variant-ligatures: none;
+  font-size: 13px;
+  line-height: 17.5px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  box-sizing: border-box;
+  caret-color: var(--accent);
+}
+
+.pc-tok {
+  white-space: pre;
+}
+
+.pc-tok.is-code {
+  color: var(--tertiary);
+}
+
+.pc-tok.is-value {
+  color: var(--accent);
+}
+
+.pc-tok.is-unknown {
+  text-decoration: underline dotted var(--warn);
+  text-underline-offset: 3px;
+}
+
+.pc-text-mark {
+  border-radius: 2px;
+  background: var(--selection);
+}
+
+.pc-text-help {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--secondary);
+}
+
+.pc-text-rows {
+  margin-top: 12px;
+}
+
+.pc-text-row {
+  display: flex;
+  align-items: center;
+  height: 24px;
+}
+
+.pc-text-row-label {
+  flex: none;
+  width: 64px;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--tertiary);
+}
+
+.pc-text-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pc-body.pc-text .pc-piece-actions {
+  justify-content: flex-start;
+}
+
+/* The card's marks on your prompt, over the terminal and under the card:
+   the picked part in the selection token with a 1 px accent ring at
+   radius 2, the warn ring at radius 4, the 2 by 17 caret, and a ↵ two
+   cells wide after each row a line break ends. */
+.pc-marks {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 850;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.pc-mark-token,
+.pc-mark-warn,
+.pc-mark-caret {
+  position: fixed;
+  pointer-events: none;
+}
+
+.pc-mark-token {
+  border-radius: 2px;
+  background: var(--selection);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.pc-mark-warn {
+  border-radius: var(--r-key);
+  box-shadow: 0 0 0 1px var(--warn);
+}
+
+.pc-mark-caret {
+  background: var(--accent);
+}
+
+.pc-mark-return {
+  position: fixed;
+  z-index: 850;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--tertiary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 17px;
+  font-style: normal;
+  text-align: center;
+  cursor: default;
+}
+
+.pc-mark-return[aria-pressed='true'] {
+  background: var(--selection);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* The D6 row: Line triggers that matched your prompt, in the start list
+   on first use. */
+.pc-d6 {
+  margin: 12px 16px 4px;
+}
+
+.pc-d6-text {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--secondary);
+}
+
+.pc-d6-text .pc-warn-dot {
+  margin: 4px 0 0;
+}
+
+.pc-d6-list {
+  margin: 8px 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.pc-d6-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 48px;
+}
+
+.pc-d6-row + .pc-d6-row::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--divider);
+  content: '';
+}
+
+.pc-d6-what {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pc-d6-name {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.pc-d6-pattern {
+  overflow: hidden;
+  font-family: var(--font-mud);
+  font-variant-ligatures: none;
+  font-size: 11.5px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--tertiary);
+  white-space: pre;
+  text-overflow: ellipsis;
+}
