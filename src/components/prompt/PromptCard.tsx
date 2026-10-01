@@ -368,9 +368,10 @@ export function PromptCard({
     ).catch(() => {});
   }, [step, reading, preview]);
 
-  // Past the capture steps, with drawing on, the card works on your
-  // design.
-  const designing = (step === 'start' || step === 'rest') && (config?.draw ?? false);
+  // Past the capture steps the card works on your design: as text even
+  // with drawing off (P11), and on your prompt while drawing is on.
+  const editing = step === 'start' || step === 'rest';
+  const designing = editing && (config?.draw ?? false);
 
   // The card draws your design over the band of Lifted in the text.
   useEffect(() => {
@@ -380,8 +381,8 @@ export function PromptCard({
 
   // The text view needs a design to work on.
   useEffect(() => {
-    if (step !== null && !designing && view !== 'design') setView('design');
-  }, [step, designing, view]);
+    if (step !== null && !editing && view !== 'design') setView('design');
+  }, [step, editing, view]);
 
   // The designs to start from, for the capture the profile holds.
   const capture = config?.capture;
@@ -907,7 +908,9 @@ export function PromptCard({
         break;
       case 'start':
       case 'rest': {
-        const drawOff = !config.draw && step === 'rest';
+        // With drawing off the card says so at rest, and Edit as text
+        // still works on the design you keep (P11).
+        const drawOff = !config.draw && step === 'rest' && view === 'design';
         let content: ReactNode;
         if (drawOff) {
           content = (
@@ -1028,7 +1031,7 @@ export function PromptCard({
         : null;
 
   const header =
-    view === 'picker' && designing ? (
+    view === 'picker' && editing ? (
       <div className="pc-head">
         <Button onClick={() => setView(pickerFor)}>Back</Button>
         <h2 className="pc-title is-picker">Insert value</h2>
@@ -1040,7 +1043,7 @@ export function PromptCard({
         <h2 className="pc-title">Customize prompt</h2>
         <span className="pc-saved">{saved}</span>
         <span className="pc-spacer" />
-        {buttons.editAsText && designing && (
+        {buttons.editAsText && editing && (
           <Button onClick={() => setView(view === 'text' ? 'design' : 'text')}>
             {view === 'text' ? 'Edit pieces' : 'Edit as text'}
           </Button>
