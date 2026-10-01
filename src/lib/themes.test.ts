@@ -63,6 +63,7 @@ const NORD: CanvasSheet = {
     danger: '#bf616a',
     dangerText: '#dc8a92',
     warn: '#ebcb8b',
+    warnText: '#ebcb8b',
     success: '#a3be8c',
     selection: 'rgba(136, 192, 208, 0.22)',
   },
@@ -89,6 +90,7 @@ const EMBER: CanvasSheet = {
     danger: '#ea8f80',
     dangerText: '#ea8f80',
     warn: '#ecc985',
+    warnText: '#ecc985',
     success: '#8fdaa8',
     selection: 'rgba(239, 143, 47, 0.20)',
   },
@@ -115,6 +117,7 @@ const VELLUM: CanvasSheet = {
     danger: '#a8453a',
     dangerText: '#a8453a',
     warn: '#94661a',
+    warnText: '#8f6213',
     success: '#4f7a3a',
     selection: 'rgba(63, 102, 144, 0.18)',
   },
@@ -159,6 +162,7 @@ describe('contrast floors', () => {
       expect(on('danger', panel), 'danger').toBeGreaterThanOrEqual(STATUS_CONTRAST);
       expect(on('dangerText', panel), 'dangerText').toBeGreaterThanOrEqual(STATUS_TEXT_CONTRAST);
       expect(on('warn', panel), 'warn').toBeGreaterThanOrEqual(STATUS_CONTRAST);
+      expect(on('warnText', panel), 'warnText').toBeGreaterThanOrEqual(STATUS_TEXT_CONTRAST);
       expect(on('success', panel), 'success').toBeGreaterThanOrEqual(STATUS_CONTRAST);
       // Menus, the palette, and dialogs draw the same tiers on raised.
       const raised = hex(t.raised);
@@ -231,6 +235,7 @@ describe('custom theme chrome', () => {
     accent: '#ff3399',
     accentSoft: 'rgba(255, 51, 153, 0.13)',
     warn: '#e5c057',
+    warnText: '#e5c057',
     danger: '#e3645e',
     info: '#6ec3eb',
     success: '#76cf8a',

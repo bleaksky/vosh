@@ -76,7 +76,10 @@ export interface ChromeTokens {
   danger: string;
   /// Words drawn in the danger tone, 4.5:1 on the panel.
   dangerText: string;
+  /// Markers, dots, and rings that warn, 3:1 on the panel.
   warn: string;
+  /// Words drawn in the warn tone, 4.5:1 on the panel.
+  warnText: string;
   success: string;
   /// Terminal selection, the accent with alpha.
   selection: string;
@@ -103,6 +106,7 @@ export const CHROME_COLOR_KEYS = [
   'danger',
   'dangerText',
   'warn',
+  'warnText',
   'success',
   'selection',
 ] as const satisfies readonly (keyof ChromeTokens)[];
@@ -246,6 +250,10 @@ export function deriveChrome(x: XtermPalette, overrides: ChromeOverrides = {}): 
   // A danger that clears 3:1 as a dot can still be too dim to read as
   // words (Nord's red sits near 3:1), so text takes its own tier.
   const dangerText = pick(o.dangerText, floor(danger.rgb, STATUS_TEXT_CONTRAST));
+  // The same for the warn tone: Vellum's yellow reads as a dot but only
+  // 4.23:1 as words on its panel.
+  const warn = pick(o.warn, status(x.yellow, x.brightYellow, { r: 229, g: 192, b: 123 }));
+  const warnText = pick(o.warnText, floor(warn.rgb, STATUS_TEXT_CONTRAST));
 
   return {
     appearance,
@@ -265,7 +273,8 @@ export function deriveChrome(x: XtermPalette, overrides: ChromeOverrides = {}): 
     onAccent: onAccent.css,
     danger: danger.css,
     dangerText: dangerText.css,
-    warn: pick(o.warn, status(x.yellow, x.brightYellow, { r: 229, g: 192, b: 123 })).css,
+    warn: warn.css,
+    warnText: warnText.css,
     success: pick(o.success, status(x.green, x.brightGreen, { r: 152, g: 195, b: 121 })).css,
     selection: o.selection ?? toRgba(accent.rgb, r.selection),
   };
