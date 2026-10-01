@@ -101,8 +101,11 @@ export function mapThemeSignature(): string {
   return THEME_VARS.map((name) => style.getPropertyValue(name).trim()).join('|');
 }
 
-// Aabahran's GMCP Map.Tiles sector codes are characters: 0..9, a, b, c.
-// Map them to our sector index.
+// Aabahran's sector codes: 0..9, then a, b and c for desert, lava and
+// snow in older data. Map.Tiles sends the sector as a JSON number
+// (gmcp.c, "s":%d), so those three arrive as 10, 11 and 12, which
+// sectorCodeOf in ServerMapView.tsx turns into "10", "11" and "12".
+// Both spellings map to our sector index.
 const SERVER_CODE_TO_SECTOR: Record<string, number> = {
   '0': 0, // Inside
   '1': 1, // City
@@ -117,6 +120,9 @@ const SERVER_CODE_TO_SECTOR: Record<string, number> = {
   a: 10, // Desert
   b: 11, // Lava
   c: 12, // Snow
+  '10': 10, // Desert, as Map.Tiles sends it
+  '11': 11, // Lava
+  '12': 12, // Snow
 };
 
 export function sectorForCode(code: string | undefined): SectorTheme {
