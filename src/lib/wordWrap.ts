@@ -69,84 +69,92 @@ export class WordWrapper {
     return out;
   }
 
-  /** Walk `line` once, tracking visible column position with ANSI
-   *  escape sequences contributing zero width. When the column count
-   *  exceeds the configured width, insert a CRLF at the last
-   *  whitespace position so the wrap lands between words. If the
-   *  current word itself is wider than the terminal, fall through to
-   *  a hard wrap at the column boundary so the line still terminates. */
+  /** Wrap one line at the configured width. Each break from
+   *  wrapBreaks becomes a CRLF, in place of the whitespace it takes or
+   *  before the character it moves down. */
   private wrapLine(line: string): string {
+    const breaks = wrapBreaks(line, this.cols);
+    if (breaks.length === 0) return line;
     let output = '';
-    let visibleCol = 0;
-    // Position in `output` of the most recent whitespace on this line.
-    // -1 means no whitespace has been seen yet (the line starts with a
-    // word).
-    let lastWsOutputPos = -1;
-    let visibleColAtLastWs = 0;
-    let state: AnsiState = 'normal';
+    let from = 0;
+    for (const { at, replaced } of breaks) {
+      output += line.slice(from, at) + '\r\n';
+      from = replaced ? at + 1 : at;
+    }
+    return output + line.slice(from);
+  }
+}
 
-    const handleAnsi = (ch: string, code: number) => {
-      output += ch;
+/** A place `wrapBreaks` breaks a line: before the character at index
+ *  `at`, or in place of it when `replaced`, which it is for the
+ *  whitespace a break between words takes. */
+export interface WrapBreak {
+  at: number;
+  replaced: boolean;
+}
+
+/** Where WordWrapper breaks `line`, one line with no line ends, at
+ *  `cols` wide. Walk it once, tracking the visible column with escape
+ *  sequences at zero width. When the column passes the width, break at
+ *  the last whitespace so the wrap lands between words. A word wider
+ *  than the width breaks at the edge, before the character that went
+ *  past it, so the line still ends. Breaks come in the order of the
+ *  line. The prompt card lays a drawn prompt out with them to find the
+ *  cell each piece landed in. */
+export function wrapBreaks(line: string, cols: number): WrapBreak[] {
+  const width = Math.max(1, cols);
+  const breaks: WrapBreak[] = [];
+  let visibleCol = 0;
+  // Index in `line` of the most recent whitespace since the last break,
+  // with its visible column. -1 when the segment starts with a word.
+  let lastWs = -1;
+  let visibleColAtLastWs = 0;
+  let state: AnsiState = 'normal';
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    const code = line.charCodeAt(i);
+
+    if (state !== 'normal') {
       if (state === 'esc') {
-        if (ch === '[') state = 'csi';
-        else if (ch === ']') state = 'osc';
-        else state = 'normal';
-        return;
-      }
-      if (state === 'csi') {
+        state = ch === '[' ? 'csi' : ch === ']' ? 'osc' : 'normal';
+      } else if (state === 'csi') {
         if (code >= 0x40 && code <= 0x7e) state = 'normal';
-        return;
-      }
-      if (state === 'osc') {
-        if (code === 0x07 || code === 0x9c) state = 'normal';
-        else if (code === 0x1b) state = 'esc';
-        return;
-      }
-    };
-
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      const code = line.charCodeAt(i);
-
-      if (state !== 'normal') {
-        handleAnsi(ch, code);
-        continue;
-      }
-
-      if (code === 0x1b) {
-        output += ch;
+      } else if (code === 0x07 || code === 0x9c) {
+        state = 'normal';
+      } else if (code === 0x1b) {
         state = 'esc';
-        continue;
       }
+      continue;
+    }
 
-      output += ch;
-      visibleCol += 1;
+    if (code === 0x1b) {
+      state = 'esc';
+      continue;
+    }
 
-      if (ch === ' ' || ch === '\t') {
-        lastWsOutputPos = output.length - 1;
-        visibleColAtLastWs = visibleCol;
-      }
+    visibleCol += 1;
 
-      if (visibleCol > this.cols) {
-        if (lastWsOutputPos >= 0) {
-          // Replace the whitespace at lastWsOutputPos with \r\n so the
-          // wrap lands between words. Characters after the whitespace
-          // become the start of the next line.
-          const before = output.slice(0, lastWsOutputPos);
-          const after = output.slice(lastWsOutputPos + 1);
-          output = before + '\r\n' + after;
-          visibleCol = visibleCol - visibleColAtLastWs;
-          lastWsOutputPos = -1;
-          visibleColAtLastWs = 0;
-        } else {
-          // Single token wider than the terminal. Emit a hard wrap so
-          // the terminal does not paper over with character wrap. The
-          // current char stays on the new line.
-          output = output.slice(0, output.length - 1) + '\r\n' + ch;
-          visibleCol = 1;
-        }
+    if (ch === ' ' || ch === '\t') {
+      lastWs = i;
+      visibleColAtLastWs = visibleCol;
+    }
+
+    if (visibleCol > width) {
+      if (lastWs >= 0) {
+        // The whitespace becomes the break, and what follows it starts
+        // the next line.
+        breaks.push({ at: lastWs, replaced: true });
+        visibleCol -= visibleColAtLastWs;
+        lastWs = -1;
+        visibleColAtLastWs = 0;
+      } else {
+        // A single token wider than the terminal. The current character
+        // starts the next line.
+        breaks.push({ at: i, replaced: false });
+        visibleCol = 1;
       }
     }
-    return output;
   }
+  return breaks;
 }
