@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import type { BandEnv } from '../../../lib/bandCells';
 import { localStamp, savedForName } from '../../../lib/promptCard';
 import {
@@ -209,6 +218,16 @@ export function PromptSection({
   const cellW = useCellWidth(fontFamily);
   const [preview, setPreview] = useState<PromptPreviewName>('now');
   const [confirmForget, setConfirmForget] = useState(false);
+  // Forget takes the row with More away, so focus goes on to Customize…
+  // once the profile reads no prompt, and never falls to the page.
+  const customizeRef = useRef<HTMLButtonElement | null>(null);
+  const [refocus, setRefocus] = useState(false);
+  const reading = (data?.config.capture.kind ?? 'none') !== 'none';
+  useEffect(() => {
+    if (!refocus || reading) return;
+    customizeRef.current?.focus({ preventScroll: true });
+    setRefocus(false);
+  }, [refocus, reading]);
 
   const fail = useCallback(
     (e: unknown) => onError(e instanceof Error ? e.message : String(e)),
@@ -245,6 +264,7 @@ export function PromptSection({
 
   const forget = () => {
     setConfirmForget(false);
+    setRefocus(true);
     save((c) => ({ ...c, capture: { kind: 'none' } }));
   };
 
@@ -283,6 +303,7 @@ export function PromptSection({
         capture={reads}
         draw={config.draw}
         description={drawDescription({ capture: reads, gameSent, world })}
+        customizeRef={customizeRef}
         onCustomize={() => void openPromptCard().catch(fail)}
         onDraw={(on) => save((c) => ({ ...c, draw: on }))}
       />
@@ -681,6 +702,8 @@ interface DrawRowProps {
   capture: boolean;
   draw: boolean;
   description: string;
+  /** Customize…, which takes focus after Forget your game's prompt. */
+  customizeRef?: Ref<HTMLButtonElement>;
   onCustomize: () => void;
   onDraw: (on: boolean) => void;
 }
@@ -688,14 +711,23 @@ interface DrawRowProps {
 /** Draw your own prompt with Customize… and the switch. Customize…
  *  stays open to you without a capture, since the card reads your
  *  prompt. */
-export function DrawRow({ capture, draw, description, onCustomize, onDraw }: DrawRowProps) {
+export function DrawRow({
+  capture,
+  draw,
+  description,
+  customizeRef,
+  onCustomize,
+  onDraw,
+}: DrawRowProps) {
   return (
     <Row
       label="Draw your own prompt"
       description={description}
       className={capture ? 'st-draw-row' : 'st-draw-row is-waiting'}
     >
-      <Button onClick={onCustomize}>Customize…</Button>
+      <Button ref={customizeRef} onClick={onCustomize}>
+        Customize…
+      </Button>
       <Toggle checked={capture && draw} disabled={!capture} onChange={onDraw} />
     </Row>
   );
