@@ -19,14 +19,17 @@
 // terminal area coordinates that is col = floor((x - 16) / cellW), the
 // area's padding being 16. A cell past the last whole one, where the dock
 // draws an ellipsis, maps to nothing.
+//
+// Spans count cells, as the band does: a wide character takes two and a
+// combining mark none (cellWidth in sgrCells.ts).
 
 import { bandCut, bandRowsTop, type CellSize } from './promptBand';
-import { isWide, parseSgrCells, shownColumns, type Cell } from './sgrCells';
+import { cellWidth, parseSgrCells, shownColumns } from './sgrCells';
 import type { PromptSpan, TerminalCursor } from './session';
 import { wrapBreaks } from './wordWrap';
 
 /** The part of a span the mapping reads: the piece, the row from `%nl`,
- *  and the characters it covers in that row before any wrap. */
+ *  and the cells it covers in that row before any wrap. */
 export type PieceSpan = Pick<PromptSpan, 'piece' | 'row' | 'col' | 'width'>;
 
 /** A cell on screen: its row from the top of the visible screen, and its
@@ -51,19 +54,21 @@ export interface RegionOnScreen {
 
 /** Where one character of a drawn prompt landed: its row from the
  *  region's first, its column, and the cells it takes. A space the word
- *  wrap broke at takes none, and neither does a combining mark. */
+ *  wrap broke at takes none, and neither does a combining mark. `cell` is
+ *  its cell in its row before any wrap, as the spans count cells, a
+ *  combining mark on the cell it joins. */
 export interface Placed {
   row: number;
   col: number;
   width: number;
+  cell: number;
 }
 
 /** Lay out `plain`, the rows of a drawn prompt joined by `\n`, from
- *  column `startCol` of a terminal `cols` wide: one entry per character,
- *  as the spans count them. Each row is word wrapped as the renderers wrap
- *  it, counting from the region's start, and the terminal moves a
- *  character that does not fit to the next row. A row after a line break
- *  starts at the first column. */
+ *  column `startCol` of a terminal `cols` wide: one entry per character.
+ *  Each row is word wrapped as the renderers wrap it, counting from the
+ *  region's start, and the terminal moves a character that does not fit
+ *  to the next row. A row after a line break starts at the first column. */
 export function layoutPrompt(plain: string, startCol: number, cols: number): Placed[][] {
   const width = Math.max(1, cols);
   let row = 0;
@@ -76,9 +81,16 @@ export function layoutPrompt(plain: string, startCol: number, cols: number): Pla
     const breaks = wrapBreaks(text, width);
     let next = 0;
     const placed: Placed[] = [];
+    // The row's cells before any wrap, as the spans count them.
+    let logical = 0;
+    let joined = 0;
     for (let i = 0; i < text.length; ) {
       const code = text.codePointAt(i) ?? 0;
       const units = code > 0xffff ? 2 : 1;
+      const cells = cellWidth(code);
+      const cell = cells === 0 ? joined : logical;
+      joined = cell;
+      logical += cells;
       let gone = false;
       // The word wrap's CRLF goes before this character, or in its place.
       while (next < breaks.length && breaks[next].at < i + units) {
@@ -88,23 +100,21 @@ export function layoutPrompt(plain: string, startCol: number, cols: number): Pla
         col = 0;
       }
       if (gone) {
-        placed.push({ row, col, width: 0 });
+        placed.push({ row, col, width: 0, cell });
         i += units;
         continue;
       }
-      const glyph = String.fromCodePoint(code);
-      if (/\p{M}/u.test(glyph)) {
+      if (cells === 0) {
         // A combining mark joins the cell before it.
-        placed.push({ row, col: Math.max(0, col - 1), width: 0 });
+        placed.push({ row, col: Math.max(0, col - 1), width: 0, cell });
         i += units;
         continue;
       }
-      const cells = isWide(code) ? 2 : 1;
       if (col + cells > width) {
         row += 1;
         col = 0;
       }
-      placed.push({ row, col, width: cells });
+      placed.push({ row, col, width: cells, cell });
       col += cells;
       i += units;
     }
@@ -112,10 +122,11 @@ export function layoutPrompt(plain: string, startCol: number, cols: number): Pla
   });
 }
 
-/** The piece whose span covers character `char` of row `row`, or null. */
-export function pieceAt(spans: readonly PieceSpan[], row: number, char: number): number | null {
+/** The piece whose span covers cell `cell` of row `row`, counted before
+ *  any wrap, or null. */
+export function pieceAt(spans: readonly PieceSpan[], row: number, cell: number): number | null {
   for (const span of spans) {
-    if (span.row === row && char >= span.col && char < span.col + span.width) return span.piece;
+    if (span.row === row && cell >= span.col && cell < span.col + span.width) return span.piece;
   }
   return null;
 }
@@ -140,11 +151,9 @@ export function pieceAtCell(
   if (row < 0) return null;
   const layout = layoutPrompt(open.plain, region.col, region.cols);
   for (let r = 0; r < layout.length; r++) {
-    const placed = layout[r];
-    for (let char = 0; char < placed.length; char++) {
-      const p = placed[char];
+    for (const p of layout[r]) {
       if (p.width > 0 && p.row === row && cell.col >= p.col && cell.col < p.col + p.width) {
-        return pieceAt(open.spans, r, char);
+        return pieceAt(open.spans, r, p.cell);
       }
     }
   }
@@ -211,30 +220,30 @@ export function regionFromXterm(
  *  prompt joined by `\n`, a line break between rows it spans. Empty for
  *  a piece that drew nothing. */
 export function pieceText(plain: string, spans: readonly PieceSpan[], piece: number): string {
-  const rows = plain.split('\n').map((row) => Array.from(row));
+  const rows = plain.split('\n').map((row) => {
+    // Each character with its cell before any wrap, a combining mark on
+    // the cell it joins.
+    let logical = 0;
+    let joined = 0;
+    return Array.from(row).map((ch) => {
+      const cells = cellWidth(ch.codePointAt(0) ?? 0);
+      const cell = cells === 0 ? joined : logical;
+      joined = cell;
+      logical += cells;
+      return { ch, cell };
+    });
+  });
   const own = spans.filter((s) => s.piece === piece).sort((a, b) => a.row - b.row || a.col - b.col);
   let out = '';
   let last: number | null = null;
   for (const span of own) {
     if (last !== null && span.row !== last) out += '\n';
-    out += (rows[span.row] ?? []).slice(span.col, span.col + span.width).join('');
+    for (const { ch, cell } of rows[span.row] ?? []) {
+      if (cell >= span.col && cell < span.col + span.width) out += ch;
+    }
     last = span.row;
   }
   return out;
-}
-
-/** The character the cell in column `col` of a band row shows, counted as
- *  the spans count it, or null past the row. */
-function charAtColumn(row: Cell[], col: number): number | null {
-  let chars = 0;
-  for (let c = 0; c < row.length; c++) {
-    const cell = row[c];
-    // The right half of a wide character.
-    if (cell.ch === '') continue;
-    if (col >= c && col < c + cell.width) return chars;
-    chars += Array.from(cell.ch).length;
-  }
-  return null;
 }
 
 /** The row and column of the pinned band under a point `x` and `y` from
@@ -275,12 +284,13 @@ export function dockPieceAt(
   // A row too wide for the terminal ends on an ellipsis in its last cell.
   const usable = shownColumns(shown[at.row]) > limit ? limit - 1 : limit;
   if (at.col >= usable) return null;
-  const char = charAtColumn(shown[at.row], at.col);
-  return char === null ? null : pieceAt(band.spans, first + at.row, char);
+  // The band puts each cell at its own column, so a column is a cell of
+  // the row before any wrap, as the spans count them.
+  return pieceAt(band.spans, first + at.row, at.col);
 }
 
-/** The band's rows as plain text joined by `\n`, with one character for
- *  each the spans count, for naming what a piece covers. */
+/** The band's rows as plain text joined by `\n`, combining marks with the
+ *  character they join, for naming what a piece covers. */
 export function bandPlain(text: string): string {
   return parseSgrCells(text)
     .map((row) =>

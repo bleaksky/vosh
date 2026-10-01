@@ -47,16 +47,30 @@ type Part = (String, SpanColor, SpanColor, bool, bool, bool);
 
 fn parts(template: &str, fight: bool) -> Vec<(usize, Part)> {
     let rendered = render_str(template, &Sampled { fight }, RenderOptions::default());
-    let rows: Vec<Vec<char>> = rendered
+    // Each character with the cell it starts at, since spans count cells.
+    let rows: Vec<Vec<(usize, char)>> = rendered
         .plain
         .split('\n')
-        .map(|l| l.chars().collect())
+        .map(|l| {
+            let mut cell = 0;
+            l.chars()
+                .map(|c| {
+                    let at = cell;
+                    cell += vosh_prompt::wrap::cell_width(c);
+                    (at, c)
+                })
+                .collect()
+        })
         .collect();
     rendered
         .spans
         .iter()
         .map(|s| {
-            let text: String = rows[s.row][s.col..s.col + s.width].iter().collect();
+            let text: String = rows[s.row]
+                .iter()
+                .filter(|(at, _)| (s.col..s.col + s.width).contains(at))
+                .map(|(_, c)| c)
+                .collect();
             (s.piece, (text, s.fg, s.bg, s.bold, s.italic, s.underline))
         })
         .collect()

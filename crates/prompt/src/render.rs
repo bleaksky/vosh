@@ -76,8 +76,10 @@ pub enum SpanColor {
 }
 
 /// Where a piece landed. `row` is the line from `%nl`, `col` the cell in
-/// that line before any wrap. A piece that spans rows has one span per
-/// row. The look is the effective SGR state at the piece's first cell.
+/// that line before any wrap, and `width` the cells it takes, a wide
+/// character two and a combining mark none ([`crate::wrap::cell_width`]).
+/// A piece that spans rows has one span per row. The look is the
+/// effective SGR state at the piece's first cell.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Span {
     pub piece: usize,
@@ -303,7 +305,7 @@ impl Writer {
         if let Some(row) = self.rows.last_mut() {
             row.push(c);
         }
-        self.col += 1;
+        self.col += crate::wrap::cell_width(c);
     }
 
     fn line_break(&mut self, bytes: &str) {

@@ -777,9 +777,10 @@ export type PromptSpanColor =
   | { kind: 'index'; index: number }
   | { kind: 'rgb'; r: number; g: number; b: number };
 
-/** Where a piece of a design landed: `row` is the line from `%nl` and
- *  `col` the cell in it before any wrap. The look is the one at the
- *  piece's first cell. */
+/** Where a piece of a design landed: `row` is the line from `%nl`, `col`
+ *  the cell in it before any wrap, and `width` the cells it takes, a wide
+ *  character two and a combining mark none (`cellWidth` in sgrCells.ts).
+ *  The look is the one at the piece's first cell. */
 export interface PromptSpan {
   piece: number;
   row: number;

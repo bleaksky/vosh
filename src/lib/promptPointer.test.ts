@@ -73,10 +73,10 @@ describe('laying a drawn prompt out from its region', () => {
   it('breaks between words where the word wrap does, the space gone', () => {
     const layout = layoutPrompt('[1020/1020hp 800/800mn] ', 0, 12);
     // The first word fills the row, and the space after it is the break.
-    expect(layout[0][11]).toEqual({ row: 0, col: 11, width: 1 });
-    expect(layout[0][12].width).toBe(0);
-    expect(layout[0][13]).toEqual({ row: 1, col: 0, width: 1 });
-    expect(layout[0][22]).toEqual({ row: 1, col: 9, width: 1 });
+    expect(layout[0][11]).toEqual({ row: 0, col: 11, width: 1, cell: 11 });
+    expect(layout[0][12]).toMatchObject({ width: 0, cell: 12 });
+    expect(layout[0][13]).toEqual({ row: 1, col: 0, width: 1, cell: 13 });
+    expect(layout[0][22]).toEqual({ row: 1, col: 9, width: 1, cell: 22 });
   });
 
   it('wraps at the edge when the region starts partway along a row', () => {
@@ -96,9 +96,9 @@ describe('laying a drawn prompt out from its region', () => {
 
   it('gives a wide character two cells and moves it down whole at the edge', () => {
     expect(layoutPrompt('ab日', 0, 3)[0]).toEqual([
-      { row: 0, col: 0, width: 1 },
-      { row: 0, col: 1, width: 1 },
-      { row: 1, col: 0, width: 2 },
+      { row: 0, col: 0, width: 1, cell: 0 },
+      { row: 0, col: 1, width: 1, cell: 1 },
+      { row: 1, col: 0, width: 2, cell: 2 },
     ]);
   });
 });
@@ -138,6 +138,29 @@ describe('the piece under a cell', () => {
     expect(pieceAtCell(open, { ...region, atBottom: false }, { row: 10, col: 0 })).toBeNull();
     expect(pieceAtCell(null, region, { row: 10, col: 0 })).toBeNull();
     expect(pieceAtCell(open, null, { row: 10, col: 0 })).toBeNull();
+  });
+
+  it('reads span columns as cells, a wide character two and a combining mark none', () => {
+    const wide: PromptOpenRow = {
+      gen: 4,
+      plain: '日本 e\u0301 7',
+      spans: [
+        { ...span(0, 0, 0, 4), ...look },
+        { ...span(1, 0, 4, 3), ...look },
+        { ...span(2, 0, 7, 1), ...look },
+      ],
+    };
+    // Each character's cell in its row before any wrap, a mark on the
+    // cell it joins.
+    expect(layoutPrompt(wide.plain, 0, 80)[0].map((p) => p.cell)).toEqual([0, 2, 4, 5, 5, 6, 7]);
+    // 日 takes cells 0 and 1, 本 2 and 3.
+    expect(pieceAtCell(wide, region, { row: 10, col: 3 })).toBe(0);
+    expect(pieceAtCell(wide, region, { row: 10, col: 5 })).toBe(1);
+    expect(pieceAtCell(wide, region, { row: 10, col: 7 })).toBe(2);
+    expect(pieceAtCell(wide, region, { row: 10, col: 8 })).toBeNull();
+    expect(pieceText(wide.plain, wide.spans, 0)).toBe('日本');
+    expect(pieceText(wide.plain, wide.spans, 1)).toBe(' e\u0301 ');
+    expect(pieceText(wide.plain, wide.spans, 2)).toBe('7');
   });
 
   it('takes the cell under a point from the cell size', () => {
@@ -198,13 +221,12 @@ function expected(
   const cells = new Map<string, number>();
   const chars = new Map<string, string>();
   for (const s of open.spans) {
-    for (let k = s.col; k < s.col + s.width; k++) {
-      const p = layout[s.row][k];
-      if (p.width === 0) continue;
+    layout[s.row].forEach((p, k) => {
+      if (p.width === 0 || p.cell < s.col || p.cell >= s.col + s.width) return;
       const key = `${region.row + p.row},${p.col}`;
       cells.set(key, s.piece);
       chars.set(key, rows[s.row][k]);
-    }
+    });
   }
   return { cells, chars };
 }
@@ -361,10 +383,11 @@ describe('a pointer on the pinned band', () => {
     expect(bandPlain('\x1b[32mHP\x1b[39m 765\r\n日本')).toBe('HP 765\n日本');
   });
 
-  it('counts a wide character as two cells and one character', () => {
+  it('counts a wide character as two cells, as the spans do', () => {
     const cell = { width: 8, height: 20, cols: 120 };
-    const wide = { text: '日本 7', spans: [span(0, 0, 0, 2), span(1, 0, 3, 1)] };
+    const wide = { text: '日本 7', spans: [span(0, 0, 0, 4), span(1, 0, 5, 1)] };
     expect(dockPieceAt(wide, 1, cell, 3 * 8 + 4, 18)).toBe(0);
+    expect(dockPieceAt(wide, 1, cell, 4 * 8 + 4, 18)).toBeNull();
     expect(dockPieceAt(wide, 1, cell, 5 * 8 + 4, 18)).toBe(1);
   });
 
