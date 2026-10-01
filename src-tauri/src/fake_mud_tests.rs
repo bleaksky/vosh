@@ -510,6 +510,19 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
         h.events(crate::list_events::PROMPT_CONFIG_CHANGED),
         [serde_json::json!({"profile": DEFAULT_PROFILE_NAME})]
     );
+    // The state follows the repaint too, so the card maps a pointer with
+    // the pieces the row shows now.
+    h.until("the state after the repaint", |h| {
+        h.events("session://prompt-state")
+            .last()
+            .is_some_and(|s| s["open_row"]["plain"] == "<1020>800")
+    })
+    .await;
+    let state = h
+        .events("session://prompt-state")
+        .pop()
+        .expect("the prompt state");
+    assert_eq!(state["open_row"]["spans"][3]["col"], 6);
 
     // Once the card stops watching, no state follows the prompts.
     crate::prompt_commands::prompt_watch(h.app.state(), false);
