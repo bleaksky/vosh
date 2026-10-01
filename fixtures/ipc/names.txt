@@ -1,0 +1,205 @@
+command affect_full_get()
+command affects_snapshot_get()
+command aliases_export()
+command aliases_groups_list()
+command aliases_import(json)
+command aliases_set_group_enabled(group, enabled)
+command app_quit()
+command app_version()
+command dock_layout_get()
+command dock_layout_set(entries)
+command fonts_list()
+command hidden_get()
+command import_apply(format, text)
+command import_detect(text)
+command launch_notices_take()
+command loadouts_get_state()
+command loadouts_set_active(active)
+command logs_export(sessionId, withAnsi)
+command logs_list_sessions(limit, hideLocal?)
+command logs_search(pattern, caseSensitive, maxResults, sessionId?)
+command logs_search_page(pattern, caseSensitive, maxResults, sessionId?, beforeLineId?, hideLocal, withTotal)
+command macros_delete(key)
+command macros_groups_list()
+command macros_list()
+command macros_set(key, command, group?, enabled?)
+command macros_set_group_enabled(group, enabled)
+command map_set_avoid(roomId, avoid)
+command map_set_note(roomId, notes)
+command map_walk_to(targetId)
+command menu_copy(terminal)
+command menu_set_state(state)
+command migration_analyze(library)
+command migration_apply(resolutions, library)
+command native_surface_copy()
+command native_surface_find(query, regex, caseSensitive, wholeWord, forward)
+command native_surface_find_clear()
+command native_surface_pointer(kind, x, y, open)
+command native_surface_ready()
+command native_surface_scroll(kind)
+command native_surface_select_all()
+command native_surface_set_bounds(x, y, width, height, dpr, lent?)
+command native_surface_set_bright_bold(on)
+command native_surface_set_cell_metrics(width, height, charHeight?)
+command native_surface_set_divider_color(color?)
+command native_surface_set_font(family, size)
+command native_surface_set_prompt_bands(on)
+command native_surface_set_prompt_reach(px)
+command native_surface_set_theme(background, foreground, selection, ansi)
+command native_surface_set_tokens(divider?, selection?, findMatch?, currentMatch?, link?, scrollbar?, selrow?, appearance?)
+command native_surface_set_visible(visible)
+command native_surface_wheel(deltaY)
+command open_help_window()
+command open_settings_window()
+command pane_layout_get(profile?)
+command pane_layout_reset(profile?)
+command pane_layout_set(layout, generation?)
+command pending_writes_flushed()
+command plugins_list()
+command plugins_reload(name)
+command plugins_set_enabled(name, enabled)
+command presets_install(triggers)
+command presets_remove(presetId)
+command profile_create(name, copyFrom?, autoMatch?)
+command profile_delete(name)
+command profile_detail_get(name)
+command profile_duplicate(source, new)
+command profile_export()
+command profile_export_file(name)
+command profile_get_scope()
+command profile_import(toml)
+command profile_rename(old, new)
+command profile_resolve_match(host, port, character?)
+command profile_set_login(name, character, on)
+command profile_set_metadata(name, description?, autoMatch?)
+command profile_set_scope(scope)
+command profile_set_world(name, host?, port?)
+command profile_switch(name)
+command profiles_list()
+command prompt_candidates()
+command prompt_capture_check(capture)
+command prompt_capture_from_line(id, names?)
+command prompt_card_open()
+command prompt_code_reader_set(on)
+command prompt_compile(capture)
+command prompt_config_get()
+command prompt_config_set(config, asIs?)
+command prompt_describe(template, preview?, overrides?)
+command prompt_designs_list()
+command prompt_edit(template, op)
+command prompt_forms(field, preview?)
+command prompt_gags_without_reader()
+command prompt_last_seen()
+command prompt_line_triggers(capture)
+command prompt_preview_set(preview?)
+command prompt_render(template, values?, preview?, overrides?, placeholders?)
+command prompt_render_many(requests)
+command prompt_show_get()
+command prompt_state_get()
+command prompt_watch(on)
+command scrollback_load(feedNative)
+command session_connect(host, port, tls)
+command session_disconnect()
+command session_identity_get()
+command session_send(bytes)
+command session_send_input(line)
+command session_send_masked(line)
+command session_set_window_size(cols, rows)
+command target_get()
+command terminal_cursor()
+command terminal_local_write(text, after?)
+command terminal_reader_busy(busy)
+command terminal_screen_rows()
+command tick_get_config()
+command tick_set_config(config)
+command timers_delete(id)
+command timers_list()
+command timers_set(id?, name, intervalSecs, command, enabled)
+command tracked_affects_set(list, profile?)
+command triggers_export()
+command triggers_groups_list()
+command triggers_import(json)
+command triggers_list()
+command triggers_set_group_enabled(group, enabled)
+command ui_get_chat_colors()
+command ui_get_config()
+command ui_reset_chat_colors()
+command ui_set_affects_display(style?, marker?, tint?)
+command ui_set_chat_color(channel, color?)
+command ui_set_config(config)
+command ui_set_theme(theme, lightTheme?, darkTheme?)
+command updater_check()
+command updater_install_and_relaunch()
+command window_backdrop_set(background?, appearance?)
+event session://game-prompt-seen app heard
+event session://gmcp/* app heard
+event session://hidden app heard
+event session://input-mode app heard
+event session://output app heard
+event session://prompt-gag-without-reader app heard
+event session://prompt-state app heard
+event session://prompt-status app heard
+event session://prompt-vars app heard
+event session://routed app heard
+event session://state app heard
+event session://target app heard
+event session://tick app heard
+event vosh://affect-full-changed app heard
+event vosh://affects-display-changed app page heard
+event vosh://alias-groups-changed app heard
+event vosh://aliases-changed app heard
+event vosh://app-menu app heard
+event vosh://base-ansi-changed page heard
+event vosh://bright-bold-changed page heard
+event vosh://chat-colors-changed app heard
+event vosh://chip-style-changed app page heard
+event vosh://connection-target-changed page heard
+event vosh://custom-themes-changed app page heard
+event vosh://dock-layout-changed app heard
+event vosh://echo-macros-changed page heard
+event vosh://flush-pending-writes app heard
+event vosh://font-changed page heard
+event vosh://help-find app heard
+event vosh://help-goto page heard
+event vosh://help-open app heard
+event vosh://input-cursor-style-changed page heard
+event vosh://input-echo-color-changed page heard
+event vosh://keep-last-changed page heard
+event vosh://loadouts-changed app heard
+event vosh://macro-groups-changed app heard
+event vosh://macros-changed app heard
+event vosh://migration-applied app heard
+event vosh://moons-position-changed page unheard
+event vosh://native-copied app heard
+event vosh://native-grid-size app heard
+event vosh://native-scroll app heard
+event vosh://pane-layout-changed app heard
+event vosh://paste-line-delay-changed page heard
+event vosh://profile-changed app heard
+event vosh://profile-switched app heard
+event vosh://profiles-changed app heard
+event vosh://prompt-card-open page heard
+event vosh://prompt-config-changed app heard
+event vosh://session-identity-changed app heard
+event vosh://settings-find app heard
+event vosh://settings-goto-tab page heard
+event vosh://side-panels-fill-height-changed page heard
+event vosh://spellcheck-prompt-changed page heard
+event vosh://split-divider-changed page heard
+event vosh://terminal-clicked app heard
+event vosh://terminal-context-menu app heard
+event vosh://terminal-cursor app heard
+event vosh://terminal-line-height-changed page heard
+event vosh://theme-changed page heard
+event vosh://theme-prefs-changed page heard
+event vosh://theme-terminal-colors-changed page heard
+event vosh://tick-config-changed app heard
+event vosh://tick-count-changed app page heard
+event vosh://timers-changed app heard
+event vosh://tracked-affects-changed app page heard
+event vosh://trigger-groups-changed app heard
+event vosh://triggers-changed app heard
+event vosh://ui-config-replaced app heard
+event vosh://vitals-config-changed page unheard
+event vosh://vitals-density-changed page heard
+event vosh://vitals-options-changed page heard
