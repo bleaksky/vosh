@@ -21,6 +21,22 @@ describe('a backticked span in help', () => {
     }
   });
 
+  it('is a label when it is a line Vosh shows you, even one that names you', () => {
+    // The Updates section of Settings, which the game never says.
+    for (const span of [
+      'Checking for updates…',
+      'Vosh is up to date.',
+      'You have Vosh <version>.',
+      'Vosh <version> is ready.',
+    ]) {
+      expect(classifyInline(span), span).toBe('label');
+    }
+    // The game speaks to you, and never names Vosh.
+    expect(classifyInline('You tell your group')).toBe('code');
+    expect(classifyInline('You are hungry.')).toBe('code');
+    expect(classifyInline('<file>.bak.<timestamp>')).toBe('code');
+  });
+
   it('is code when it is MUD text, a command, a code or a file', () => {
     for (const span of [
       '#prompt show',
