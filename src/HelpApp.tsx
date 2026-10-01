@@ -131,6 +131,12 @@ export function HelpApp() {
     }
   }, []);
 
+  // Help that opens on words, from `#help <words>`, puts the caret in
+  // the search that holds them, so Enter steps through the matches.
+  useEffect(() => {
+    if (landing?.kind === 'search') inputRef.current?.focus();
+  }, [landing]);
+
   // The section of the topic you read opens in the nav.
   useEffect(() => {
     setOpenSection(shown.section);
