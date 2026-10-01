@@ -328,7 +328,7 @@
 }
 
 .pc-box-name.is-warn {
-  color: var(--warn);
+  color: var(--warn-text);
 }
 
 .pc-cells {
@@ -409,7 +409,7 @@
 }
 
 .pc-match-text.is-warn {
-  color: var(--warn);
+  color: var(--warn-text);
 }
 
 .pc-warn-dot {
@@ -551,7 +551,7 @@
   margin: 4px 0 0;
   font-size: 11px;
   line-height: 15px;
-  color: var(--warn);
+  color: var(--warn-text);
 }
 
 .pc-legend-warning .pc-warn-dot {
@@ -1044,7 +1044,7 @@
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  color: var(--warn);
+  color: var(--warn-text);
   white-space: nowrap;
 }
 
@@ -1563,7 +1563,7 @@
 .st-prompt-meta.is-warn {
   display: flex;
   gap: 6px;
-  color: var(--warn);
+  color: var(--warn-text);
   white-space: normal;
 }
 
