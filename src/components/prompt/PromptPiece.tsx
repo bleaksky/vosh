@@ -384,6 +384,10 @@ function textHex(color: PromptColorChoice, env: BandEnv, palette: (index: number
   return colorHex(color, palette) || env.fg;
 }
 
+/** More styles opens above its button. Below, it covers the Underline
+ *  row, so the underline kind you picked hides while you choose. */
+export const MORE_STYLES_PLACE = 'above-start' as const;
+
 /** The Style row's More styles button and its menu: strikethrough, dim
  *  and reverse, each drawn in its own look with a check while it is on.
  *  The button reads the ones that are on, in the pressed look of B, I
@@ -414,7 +418,7 @@ function MoreStyles({
       {anchor && (
         <CardMenu
           anchor={anchor}
-          place="below-start"
+          place={MORE_STYLES_PLACE}
           width={184}
           label="More styles"
           onClose={() => setAnchor(null)}
