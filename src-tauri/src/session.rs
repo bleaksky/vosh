@@ -937,11 +937,13 @@ async fn io_loop<R: tauri::Runtime>(
                             late_repaint_after(&p, late_until, gmcp, prompt, wrote, Instant::now());
                     }
                     // A game that never pauses still shows a frame and
-                    // gets its rows written every FRAME_BUDGET.
+                    // gets its rows written every FRAME_BUDGET. A busy
+                    // log keeps them for the next quiet moment instead.
                     if settle.overdue() {
                         settle.frame_now(&app);
-                        let mut guard = logs.lock().await;
-                        settle.write_log(guard.as_mut(), &mut perf);
+                        if let Ok(mut guard) = logs.try_lock() {
+                            settle.write_log(guard.as_mut(), &mut perf);
+                        }
                     }
                 }
                 Err(e) => {
@@ -5865,3 +5867,40 @@ mod clock_tests;
 #[cfg(test)]
 #[path = "session_pointer_tests.rs"]
 mod pointer_tests;
+
+#[cfg(test)]
+mod settle_tests {
+    use super::{PerfCounters, Settle, FRAME_BUDGET};
+
+    #[test]
+    fn a_burst_that_never_pauses_owes_its_frame_once_the_budget_runs_out() {
+        let mut settle = Settle::default();
+        assert!(!settle.overdue(), "nothing drew yet");
+        settle.drew();
+        assert!(!settle.overdue());
+        std::thread::sleep(FRAME_BUDGET);
+        assert!(settle.overdue());
+    }
+
+    #[test]
+    fn the_waiting_rows_go_in_once_in_the_order_they_came() {
+        let mut store = vosh_log::LogStore::in_memory().expect("a log");
+        let id = store.start_session("h", 1, 0).expect("a session");
+        let mut settle = Settle::default();
+        for text in ["a room", "> east", "the next room"] {
+            settle.log.push(vosh_log::LogEntry {
+                session_id: id,
+                ts_ms: 0,
+                text: text.to_string(),
+                raw: None,
+            });
+        }
+        settle.write_log(Some(&mut store), &mut PerfCounters::default());
+        assert!(settle.log.is_empty());
+        settle.write_log(Some(&mut store), &mut PerfCounters::default());
+        assert_eq!(
+            store.export_session(id, false).expect("the rows"),
+            "a room\n> east\nthe next room\n"
+        );
+    }
+}
