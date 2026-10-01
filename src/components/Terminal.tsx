@@ -1510,12 +1510,10 @@ export function Terminal({
       // ignore
     }
     if (nativeSurfaceEnabled()) {
-      const primary = fontFamily
-        .split(',')[0]
-        .trim()
-        .replace(/^["']|["']$/g, '');
+      // The whole list, so the atlas falls back through it the way
+      // xterm does.
       void invoke('native_surface_set_font', {
-        family: primary,
+        family: fontFamily,
         size: Math.round(fontSize),
       }).catch(() => {});
     }
