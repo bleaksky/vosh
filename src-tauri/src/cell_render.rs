@@ -752,7 +752,9 @@ struct Decor {
 /// The lines for a `cell_w` by `cell_h` cell whose baseline sits on row
 /// `baseline`, at `scale` device pixels per CSS pixel. The underline sits
 /// three CSS pixels under the baseline when the cell has room, and a
-/// line that would hang past the cell's bottom rises until it fits.
+/// line that would hang past the cell's bottom rises until it fits. The
+/// curl, the tallest line, shrinks before it rises, so it keeps a CSS
+/// pixel of room under the letters at every line height.
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn decor(cell_w: u32, cell_h: u32, baseline: u32, scale: f32) -> Decor {
     let scale = if scale.is_finite() && scale > 0.0 {
@@ -768,15 +770,18 @@ fn decor(cell_w: u32, cell_h: u32, baseline: u32, scale: f32) -> Decor {
     // board's double at 2x as two 2 px lines 1 px apart.
     let gap = (t / 2).max(1);
     let double_top = fit(2 * t + gap);
-    let curl_h = ((CURL_HEIGHT * scale).round() as u32)
-        .max(t + 2)
-        .min(cell_h);
+    // The curl keeps a CSS pixel of room under the letters, giving up
+    // band height first, down to the least that still reads as a wave.
+    let full_curl = ((CURL_HEIGHT * scale).round() as u32).max(t + 2);
+    let least_curl = (t + 2).min(cell_h);
+    let curl_top = fit(full_curl).max(baseline + t).min(cell_h - least_curl);
+    let curl_h = full_curl.min(cell_h - curl_top);
     let dash_w = ((cell_w as f32 * DASH_SHARE).round() as u32).clamp(1, cell_w.max(2) - 1);
     Decor {
         t,
         under: fit(t),
         double: [double_top, double_top + t + gap],
-        curl_top: fit(curl_h),
+        curl_top,
         curl_h,
         strike: (cell_h / 2).saturating_sub(t / 2),
         dash_x: cell_w.saturating_sub(dash_w) / 2,
@@ -3106,8 +3111,8 @@ mod tests {
                 t: 2,
                 under: 32,
                 double: [29, 32],
-                curl_top: 27,
-                curl_h: 7,
+                curl_top: 28,
+                curl_h: 6,
                 strike: 16,
                 dash_x: 2,
                 dash_w: 9,
@@ -3122,6 +3127,32 @@ mod tests {
             assert!(d.double[1] > d.double[0] + d.t);
             assert!(d.curl_top + d.curl_h <= cell_h);
         }
+    }
+
+    #[test]
+    fn the_curl_keeps_a_css_pixel_clear_of_the_letters() {
+        // Berkeley Mono at 12 CSS px: line heights 1, 1.1, and 1.2 at 1x
+        // and 2x, as (cell width, cell height, baseline, scale).
+        for (cell_w, cell_h, baseline, scale) in [
+            (7, 15, 11, 1.0),
+            (7, 16, 12, 1.0),
+            (7, 18, 13, 1.0),
+            (14, 29, 23, 2.0),
+            (14, 31, 24, 2.0),
+            (14, 34, 26, 2.0),
+        ] {
+            let d = decor(cell_w, cell_h, baseline, scale);
+            let at = format!("{cell_h} px cell at {scale}x");
+            assert!(d.curl_top >= baseline + d.t, "{at}: {d:?}");
+            assert!(d.curl_top + d.curl_h <= cell_h, "{at}: {d:?}");
+            assert!(d.curl_h >= d.t + 2, "{at}: {d:?}");
+        }
+        // Compact at 2x: the band gives up height before it gives up room.
+        let d = decor(14, 31, 24, 2.0);
+        assert_eq!((d.curl_top, d.curl_h), (26, 5));
+        // A tall cell keeps the board's full band, three CSS px down.
+        let d = decor(14, 44, 26, 2.0);
+        assert_eq!((d.curl_top, d.curl_h), (32, 7));
     }
 
     #[test]
@@ -3793,8 +3824,8 @@ mod tests {
         let strike = [(4, 68.0, red, Underline::None)];
         let quads = line_instances(&under, &strike, &d, 14, solid, curl);
         assert_eq!(quads.len(), 4);
-        assert_eq!(quads[0].offset, [28.0, 34.0 + 27.0]);
-        assert_eq!(quads[0].size, [14.0, 7.0]);
+        assert_eq!(quads[0].offset, [28.0, 34.0 + 28.0]);
+        assert_eq!(quads[0].size, [14.0, 6.0]);
         assert_eq!((quads[0].uv_min, quads[0].uv_max), curl);
         assert_eq!(quads[1].offset, [42.0, 34.0 + 29.0]);
         assert_eq!(quads[2].offset, [42.0, 34.0 + 32.0]);
@@ -3919,8 +3950,14 @@ mod tests {
     }
 
     /// Render `bytes` on a `cols` by `rows` grid at `scale`, in Berkeley
-    /// Mono at 12 CSS px and line height 1.2 with the cell xterm reports.
-    fn render_offscreen(bytes: &[u8], cols: usize, rows: usize, scale: f32) -> Option<Frame> {
+    /// Mono at 12 CSS px and `line_height` with the cell xterm reports.
+    fn render_offscreen(
+        bytes: &[u8],
+        cols: usize,
+        rows: usize,
+        scale: f32,
+        line_height: f32,
+    ) -> Option<Frame> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::default(),
@@ -3935,7 +3972,7 @@ mod tests {
         // box times the line height.
         let probe = GlyphAtlas::with_reported(AtlasFonts::load("Berkeley Mono")?, px, None, None);
         let (cell_w, char_h) = (probe.cell_w(), probe.cell_h());
-        let cell_h = (char_h as f32 * 1.2).floor() as u32;
+        let cell_h = (char_h as f32 * line_height).floor() as u32;
         let atlas = GlyphAtlas::with_reported(
             AtlasFonts::load("Berkeley Mono")?,
             px,
@@ -4062,7 +4099,7 @@ mod tests {
         const NORD_BG: [i32; 3] = [46, 52, 64];
         const MAGENTA: [i32; 3] = [255, 0, 255];
         for scale in [1.0_f32, 2.0] {
-            let Some(frame) = render_offscreen(&styles_specimen(), 64, 4, scale) else {
+            let Some(frame) = render_offscreen(&styles_specimen(), 64, 4, scale, 1.2) else {
                 return;
             };
             if let Some(dir) = std::env::var_os("VOSH_TEXT_STYLE_RENDERS") {
@@ -4133,6 +4170,46 @@ mod tests {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn the_curl_clears_the_letters_at_every_line_height() {
+        // Nord text over the Nord ground, with a magenta curl. Text ink
+        // lifts the green channel off the ground and the curl drops it.
+        // The letters count from a third of the way to the text color,
+        // which leaves out the faint overshoot of a round bottom (C, u)
+        // on the baseline row.
+        const GROUND_G: i32 = 52;
+        const TEXT_G: i32 = 233;
+        let bytes = [NORD, b"\x1b[4:3;58:2::255:0:255mCurl\x1b[0m".as_slice()].concat();
+        for scale in [1.0_f32, 2.0] {
+            for line_height in [1.0_f32, 1.1, 1.2] {
+                let Some(frame) = render_offscreen(&bytes, 4, 1, scale, line_height) else {
+                    return;
+                };
+                if let Some(dir) = std::env::var_os("VOSH_TEXT_STYLE_RENDERS") {
+                    let name = format!("grid_curl_{}x_lh{}.png", scale as u32, line_height);
+                    write_png(&std::path::Path::new(&dir).join(name), &frame);
+                }
+                let (rgba, w) = (&frame.rgba, frame.w);
+                let green =
+                    |y: u32| (0..w).map(move |x| i32::from(rgba[((y * w + x) * 4 + 1) as usize]));
+                let rows = 0..frame.cell.1;
+                let text_last = rows
+                    .clone()
+                    .filter(|&y| green(y).any(|g| g > GROUND_G + (TEXT_G - GROUND_G) / 3))
+                    .max();
+                let curl_first = rows.filter(|&y| green(y).any(|g| g < GROUND_G - 8)).min();
+                let (Some(text_last), Some(curl_first)) = (text_last, curl_first) else {
+                    panic!("no ink at {scale}x, line height {line_height}");
+                };
+                assert!(
+                    curl_first > text_last + frame.decor.t,
+                    "{scale}x, line height {line_height}: letters end on row {text_last}, \
+                     the curl starts on row {curl_first}"
+                );
             }
         }
     }
