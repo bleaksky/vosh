@@ -1414,10 +1414,10 @@ const JETBRAINS_REGULAR: &[u8] =
 const JETBRAINS_BOLD: &[u8] =
     include_bytes!("../../src/assets/fonts/JetBrainsMonoNerdFont-Bold.ttf");
 
-fn font_from_handle(handle: &font_kit::handle::Handle) -> Option<Font> {
+fn font_from_handle(handle: font_kit::handle::Handle) -> Option<(Font, font_kit::handle::Handle)> {
     let kit_font = handle.load().ok()?;
     tracing::info!(font = %kit_font.full_name(), "native-surface: atlas font (system)");
-    Some(kit_font)
+    Some((kit_font, handle))
 }
 
 /// The regular and bold faces an atlas rasterizes from. Loading them
@@ -1441,7 +1441,76 @@ impl AtlasFonts {
     }
 }
 
+/// The faces of a font change on their way from the blocking pool to the
+/// main thread. A `CoreText` font may cross threads, so on macOS the faces
+/// load on the pool. `DirectWrite` and `FreeType` fonts may not, so on
+/// Windows and Linux each face crosses as its file bytes and loads again on
+/// the main thread, which only parses them.
+#[cfg(target_os = "macos")]
+pub(crate) struct FontsInTransit(AtlasFonts);
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) struct FontsInTransit {
+    regular: font_kit::handle::Handle,
+    bold: font_kit::handle::Handle,
+}
+
+impl FontsInTransit {
+    /// Resolve and load the faces of `family_stack`, as
+    /// [`AtlasFonts::load`] does. Runs on the blocking pool.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn load(family_stack: &str) -> Option<Self> {
+        AtlasFonts::load(family_stack).map(Self)
+    }
+
+    /// Resolve and load the faces of `family_stack`, as
+    /// [`AtlasFonts::load`] does, and keep the bytes they loaded from.
+    /// Runs on the blocking pool.
+    #[cfg(not(target_os = "macos"))]
+    pub(crate) fn load(family_stack: &str) -> Option<Self> {
+        let (_, regular) = load_face(family_stack, false)?;
+        let bold = load_face(family_stack, true).map_or_else(|| regular.clone(), |(_, h)| h);
+        Some(Self {
+            regular: in_memory(regular)?,
+            bold: in_memory(bold)?,
+        })
+    }
+
+    /// The faces, ready for an atlas. Runs on the main thread.
+    #[cfg(target_os = "macos")]
+    #[allow(clippy::unnecessary_wraps)] // Windows and Linux can fail here.
+    pub(crate) fn arrive(self) -> Option<AtlasFonts> {
+        Some(self.0)
+    }
+
+    /// The faces, ready for an atlas. Runs on the main thread.
+    #[cfg(not(target_os = "macos"))]
+    pub(crate) fn arrive(self) -> Option<AtlasFonts> {
+        Some(AtlasFonts {
+            regular: self.regular.load().ok()?,
+            bold: self.bold.load().ok()?,
+        })
+    }
+}
+
+/// `handle` with its file read, so loading it again reads no disk.
+#[cfg(not(target_os = "macos"))]
+fn in_memory(handle: font_kit::handle::Handle) -> Option<font_kit::handle::Handle> {
+    match handle {
+        font_kit::handle::Handle::Path { path, font_index } => std::fs::read(path)
+            .ok()
+            .map(|bytes| font_kit::handle::Handle::from_memory(Arc::new(bytes), font_index)),
+        memory @ font_kit::handle::Handle::Memory { .. } => Some(memory),
+    }
+}
+
 fn load_font(family_stack: &str, bold: bool) -> Option<Font> {
+    load_face(family_stack, bold).map(|(font, _)| font)
+}
+
+/// The first face of `family_stack` that loads, with the handle it
+/// loaded from.
+fn load_face(family_stack: &str, bold: bool) -> Option<(Font, font_kit::handle::Handle)> {
     let source = font_kit::source::SystemSource::new();
     let weight = if bold { 700.0 } else { 400.0 };
 
@@ -1468,9 +1537,10 @@ fn load_font(family_stack: &str, bold: bool) -> Option<Font> {
             } else {
                 BERKELEY_REGULAR
             };
-            if let Ok(font) = Font::from_bytes(Arc::new(bytes.to_vec()), 0) {
+            let handle = font_kit::handle::Handle::from_memory(Arc::new(bytes.to_vec()), 0);
+            if let Ok(font) = handle.load() {
                 tracing::info!(bold, "native-surface: atlas font = bundled BerkeleyMono");
-                return Some(font);
+                return Some((font, handle));
             }
         }
         if lower.contains("jetbrains") {
@@ -1479,17 +1549,15 @@ fn load_font(family_stack: &str, bold: bool) -> Option<Font> {
             } else {
                 JETBRAINS_REGULAR
             };
-            if let Ok(font) = Font::from_bytes(Arc::new(bytes.to_vec()), 0) {
+            let handle = font_kit::handle::Handle::from_memory(Arc::new(bytes.to_vec()), 0);
+            if let Ok(font) = handle.load() {
                 tracing::info!(bold, "native-surface: atlas font = bundled JetBrainsMono");
-                return Some(font);
+                return Some((font, handle));
             }
         }
         // Otherwise a system font, upright face closest to the weight.
-        if let Some(font) = weighted_face(&source, name, weight)
-            .as_ref()
-            .and_then(font_from_handle)
-        {
-            return Some(font);
+        if let Some(face) = weighted_face(&source, name, weight).and_then(font_from_handle) {
+            return Some(face);
         }
     }
 
@@ -1498,7 +1566,6 @@ fn load_font(family_stack: &str, bold: bool) -> Option<Font> {
     weighted_face(&source, "Menlo", weight)
         .or_else(|| weighted_face(&source, "Consolas", weight))
         .or_else(|| weighted_face(&source, "Courier New", weight))
-        .as_ref()
         .and_then(font_from_handle)
 }
 

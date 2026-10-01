@@ -1327,6 +1327,8 @@ mod tests {
         assert!(!journal_path(dir.path()).exists());
     }
 
+    // Read only folders are a Unix permission bit.
+    #[cfg(unix)]
     #[test]
     fn a_journal_that_will_not_go_leaves_the_run_unfinished() {
         use std::os::unix::fs::PermissionsExt;
