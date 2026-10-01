@@ -30,8 +30,12 @@ fixtures/
              test in src-tauri and by session.test.ts on the page.
   links/     Golden lists of the ids that links name, taken from the code.
              help-topics.json holds every help topic id with its number,
-             in rail order, for src/lib/helpTopicIds.test.ts. Change it
-             only in a commit tied to a numbered bug or a lettered
+             in rail order, for src/lib/helpTopicIds.test.ts.
+             settings-anchors.json holds every Settings link that search,
+             the palette and other windows open, where each lands, the
+             anchors each page draws and the help topics the pages open,
+             for src/components/settings/settingsAnchors.test.tsx. Change
+             either only in a commit tied to a numbered bug or a lettered
              decision.
   mccp/      MCCP compressed stream captures.
   pane-layout/  Pane tree cases shared by the Rust and TypeScript sanitize tests.

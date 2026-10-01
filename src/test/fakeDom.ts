@@ -112,6 +112,13 @@ export class FakeElement extends FakeNode {
   get options(): FakeElement[] {
     return findAll(this, (el) => el.nodeName === 'OPTION');
   }
+  /** React focuses a field with autoFocus when it mounts. */
+  focus(): void {
+    if (this.ownerDocument) this.ownerDocument.activeElement = this;
+  }
+  blur(): void {
+    if (this.ownerDocument?.activeElement === this) this.ownerDocument.activeElement = null;
+  }
 }
 
 export class FakeDocument extends FakeNode {
