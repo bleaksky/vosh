@@ -361,3 +361,70 @@ fn the_preview_splits_the_webview_replays_are_what_the_session_sends() {
         "the session changed, so write the file again with VOSH_WRITE_PREVIEW_SPLITS=1"
     );
 }
+
+/// The native grid `columns` wide after `outputs`, as its rows.
+fn grid_after<'a>(
+    grid: &mut crate::term_grid::TermGrid,
+    outputs: impl IntoIterator<Item = &'a Output>,
+) -> Vec<String> {
+    for out in outputs {
+        grid.session_output(out);
+    }
+    rows_of(grid)
+}
+
+#[test]
+fn the_open_row_stays_open_across_a_resize_while_the_card_is_open() {
+    for show in [PromptShow::Text, PromptShow::Lifted] {
+        let label = format!("{show:?}");
+        let mut session = Session::new(showing(profile(CODES, HP, true), show));
+        let mut negotiator = vosh_telnet::Negotiator::new();
+        negotiator.set_window_size(80, 40);
+        let mut grid = crate::term_grid::TermGrid::new(80, 40);
+        let quiet = session.read(&wire_fixture("quiet"));
+        let _ = grid_after(&mut grid, [&quiet.out]);
+
+        // The card shows Low health, then the panel opens and the
+        // terminal narrows.
+        session.p.prompt.set_preview(Some(low_health()));
+        let low = session.repaint();
+        assert_eq!(
+            grid_after(&mut grid, [&low]).last().map(String::as_str),
+            Some("<180>"),
+            "{label}"
+        );
+        window_size_step(&mut session.p, &mut negotiator, 60, 40, false);
+        grid.resize(60, 40);
+        assert!(session.p.prompt.stage.open_row().is_some(), "{label}");
+
+        // Clearing the preview puts the live render back.
+        session.p.prompt.set_preview(None);
+        let live = session.repaint();
+        assert!(live.restore.is_none(), "{label}");
+        assert_eq!(
+            grid_after(&mut grid, [&live]).last().map(String::as_str),
+            Some("<1020>"),
+            "{label}"
+        );
+
+        // With no preview, the open card keeps the row open too, so an
+        // edit repaints it.
+        window_size_step(&mut session.p, &mut negotiator, 70, 40, true);
+        grid.resize(70, 40);
+        assert!(session.p.prompt.stage.open_row().is_some(), "{label}");
+        let mut config = session.p.prompt.config().clone();
+        config.template = "[%hp]".into();
+        session.p.set_prompt_config(config);
+        let edited = session.repaint();
+        assert_eq!(
+            grid_after(&mut grid, [&edited]).last().map(String::as_str),
+            Some("[1020]"),
+            "{label}"
+        );
+
+        // With the card closed, a new size closes the row (D21).
+        window_size_step(&mut session.p, &mut negotiator, 80, 40, false);
+        assert!(session.p.prompt.stage.open_row().is_none(), "{label}");
+        assert!(session.repaint().is_empty(), "{label}");
+    }
+}
