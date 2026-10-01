@@ -8,6 +8,9 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscape } from '../../lib/escapeStack';
+import { placeMenu, type MenuPlacement } from './menuPlacement';
+
+export type { MenuPlacement } from './menuPlacement';
 
 // A floating menu in the One Window recipe (SPEC 3 and 7): raised
 // ground, radius 16, the floating shadow, 6 px padding, 30 px rows.
@@ -21,22 +24,7 @@ import { useEscape } from '../../lib/escapeStack';
 // resize, or the window losing focus. What the rows do is up to the
 // caller.
 
-/** Where the menu wants to sit, in viewport pixels. */
-export interface MenuPlacement {
-  /** Left edge. */
-  x: number;
-  /** Top edge. */
-  y: number;
-  /** Right edge to use instead when the menu does not fit at `x`. */
-  flipX?: number;
-  /** Bottom edge to use instead when the menu does not fit at `y`. */
-  flipY?: number;
-}
-
 export type MenuCloseReason = 'escape' | 'outside' | 'left';
-
-// Space kept between a menu and the window edge.
-const EDGE = 8;
 
 const ITEM_SELECTOR = ':scope > li > [role="menuitem"]:not([aria-disabled="true"])';
 
@@ -79,18 +67,19 @@ export function MenuSurface({
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const w = el.offsetWidth;
-    const h = el.offsetHeight;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    let left = at.x;
-    if (left + w > vw - EDGE && at.flipX !== undefined) left = at.flipX - w;
-    left = Math.max(EDGE, Math.min(left, vw - EDGE - w));
-    let top = at.y;
-    if (top + h > vh - EDGE && at.flipY !== undefined) top = at.flipY - h;
-    top = Math.max(EDGE, Math.min(top, vh - EDGE - h));
-    setPos({ left: Math.round(left), top: Math.round(top) });
-  }, [at.x, at.y, at.flipX, at.flipY]);
+    // Read field by field, so a new object with the same numbers does not
+    // place the menu again.
+    const placement: MenuPlacement = {
+      x: at.x,
+      y: at.y,
+      ...(at.flipX !== undefined && { flipX: at.flipX }),
+      ...(at.flipY !== undefined && { flipY: at.flipY }),
+      ...(at.preferFlip !== undefined && { preferFlip: at.preferFlip }),
+    };
+    setPos(
+      placeMenu(placement, el.offsetWidth, el.offsetHeight, window.innerWidth, window.innerHeight),
+    );
+  }, [at.x, at.y, at.flipX, at.flipY, at.preferFlip]);
 
   // Focus the first row once placed, the way a native menu opens with
   // its first item ready for Return.
