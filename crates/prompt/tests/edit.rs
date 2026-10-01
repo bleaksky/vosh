@@ -222,21 +222,21 @@ fn an_underline_takes_a_color_of_its_own() {
     };
     let template = "x %s_curly%hp y";
     let edited = edit(template, &underline(1, rgb.clone()));
-    assert_eq!(edited, "x %s_curly%{ul:#bf616a}%hp%ul_default y");
+    assert_eq!(edited, "x %s_curly%{ul:#bf616a}%hp%{ul:default} y");
     assert_eq!(others(&edited, true, &[1]), others(template, true, &[1]));
     // The text's own color takes it back out, and every piece looks as it
     // did before.
     let back = edit(&edited, &underline(1, ColorChoice::Default));
-    assert_eq!(back, "x %s_curly%hp%ul_default y");
+    assert_eq!(back, "x %s_curly%hp%{ul:default} y");
     assert_eq!(others(&back, true, &[]), others(template, true, &[]));
 
-    // A theme color goes in its short form.
+    // A theme color goes braced too, since no short form reads it.
     assert_eq!(
         edit(
             "%s_curly%hp",
             &underline(0, ColorChoice::Named { index: 1 })
         ),
-        "%s_curly%ul_red%hp"
+        "%s_curly%{ul:red}%hp"
     );
     // A color goes on one place at a time.
     let both = EditOp::SetColor {

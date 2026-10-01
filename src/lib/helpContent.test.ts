@@ -432,7 +432,7 @@ describe('the help on prompt design codes', () => {
       ['%s_double', '%s_curly', '%s_dotted', '%s_dashed'],
       'Underlines with two lines, a wave, dots or dashes.',
     ],
-    [['%{ul:#bf616a}', '%ul_default'], 'Colors the underline, or gives it the text color again.'],
+    [['%{ul:#bf616a}', '%{ul:default}'], 'Colors the underline, or gives it the text color again.'],
 
     [['%nl'], 'Starts a new line.'],
     [

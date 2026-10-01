@@ -16,7 +16,8 @@
 //!                          name to color by how full it is
 //! %{c:hp:game}             foreground by the game's own %h bands
 //! %bg_<spec> %{bg:<spec>}  background, same specs
-//! %ul_<spec> %{ul:<spec>}  the underline's color, same specs
+//! %{ul:<spec>}             the underline's color, same specs. Braced only,
+//!                          so a value named `ul_...` stays a value
 //! %s_<style> %{s:<style>}  bold dim italic underline inverse strike off
 //!                          reset, and the underline kinds double curly
 //!                          dotted dashed
@@ -621,7 +622,7 @@ fn color_body(spec: &ColorSpec) -> String {
     }
 }
 
-/// A color spec as the short form writes it after `%c_`, `%bg_` or `%ul_`, or
+/// A color spec as the short form writes it after `%c_` or `%bg_`, or
 /// None when only the braced form reads it back.
 fn color_short(spec: &ColorSpec) -> Option<String> {
     match spec {
@@ -704,7 +705,8 @@ pub fn write_token(kind: &TokenKind, braced: bool) -> String {
         TokenKind::Code(Code::Style(style)) => format!("%s_{}", style_name(*style)),
         TokenKind::Code(Code::Fg(spec)) => write_color("c", spec, braced),
         TokenKind::Code(Code::Bg(spec)) => write_color("bg", spec, braced),
-        TokenKind::Code(Code::UnderlineColor(spec)) => write_color("ul", spec, braced),
+        // The underline color has no short form, so it always goes braced.
+        TokenKind::Code(Code::UnderlineColor(spec)) => write_color("ul", spec, true),
         TokenKind::Value(value) => write_value(value, braced),
         TokenKind::If(field) => format!("%{{if:{field}}}"),
         TokenKind::IfNot(field) => format!("%{{ifnot:{field}}}"),
@@ -890,9 +892,6 @@ fn parse_name(name: &str, source: &str, end: &mut usize) -> TokenKind {
     if let Some(spec) = name.strip_prefix("bg_") {
         return color_code(spec, Layer::Bg);
     }
-    if let Some(spec) = name.strip_prefix("ul_") {
-        return color_code(spec, Layer::Underline);
-    }
     if let Some(style) = name.strip_prefix("s_") {
         return style_code(style);
     }
@@ -1028,9 +1027,6 @@ fn parse_braced(body: &str, source: &str, end: &mut usize) -> TokenKind {
     }
     if let Some(spec) = head.strip_prefix("bg_") {
         return color_code(&format!("{spec}:{rest}"), Layer::Bg);
-    }
-    if let Some(spec) = head.strip_prefix("ul_") {
-        return color_code(&format!("{spec}:{rest}"), Layer::Underline);
     }
 
     let Some((field, format_segs)) = parse_field(&segs) else {
@@ -1347,12 +1343,14 @@ mod tests {
             kinds("%{ul:191,97,106}"),
             vec![ul(ColorSpec::Rgb(191, 97, 106))]
         );
-        assert_eq!(kinds("%ul_bf616a"), vec![ul(ColorSpec::Rgb(191, 97, 106))]);
-        assert_eq!(kinds("%{ul_red}"), vec![ul(ColorSpec::Named(1))]);
-        assert_eq!(kinds("%ul_red"), vec![ul(ColorSpec::Named(1))]);
-        assert_eq!(kinds("%ul_208"), vec![ul(ColorSpec::Index(208))]);
-        assert_eq!(kinds("%ul_default"), vec![ul(ColorSpec::Default)]);
-        assert_eq!(kinds("%ul_hp"), vec![ul(by_value("hp"))]);
+        assert_eq!(
+            kinds("%{ul:bf616a}"),
+            vec![ul(ColorSpec::Rgb(191, 97, 106))]
+        );
+        assert_eq!(kinds("%{ul:red}"), vec![ul(ColorSpec::Named(1))]);
+        assert_eq!(kinds("%{ul:208}"), vec![ul(ColorSpec::Index(208))]);
+        assert_eq!(kinds("%{ul:default}"), vec![ul(ColorSpec::Default)]);
+        assert_eq!(kinds("%{ul:hp}"), vec![ul(by_value("hp"))]);
         assert_eq!(
             kinds("%{ul:hp:game}"),
             vec![ul(ColorSpec::ByValue {
@@ -1360,9 +1358,26 @@ mod tests {
                 game: true
             })]
         );
-        assert_eq!(kinds("%ul_reset"), vec![TokenKind::Code(Code::Reset)]);
+        assert_eq!(kinds("%{ul:reset}"), vec![TokenKind::Code(Code::Reset)]);
         assert_eq!(kinds("%{ul:}"), vec![TokenKind::Unknown]);
         assert_eq!(kinds("%{ul:1,2}"), vec![TokenKind::Unknown]);
+    }
+
+    #[test]
+    fn a_name_that_starts_with_ul_stays_a_value() {
+        // A script names its values freely, so the underline color has no
+        // short form to take `ul_` from them.
+        assert_eq!(kinds("%ul_kills"), vec![val("ul_kills")]);
+        assert_eq!(kinds("%ul_red"), vec![val("ul_red")]);
+        assert_eq!(kinds("%{ul_red}"), vec![val("ul_red")]);
+        assert_eq!(
+            kinds("%{ul_red:pct}"),
+            vec![TokenKind::Value(ValueRef {
+                field: FieldRef::new("ul_red"),
+                format: Format::Pct,
+            })]
+        );
+        assert_eq!(kinds("%ul"), vec![val("ul")]);
     }
 
     #[test]
@@ -1391,8 +1406,8 @@ mod tests {
             "%s_strike",
             "%s_dim",
             "%s_inverse",
-            "%ul_red",
-            "%ul_default",
+            "%{ul:red}",
+            "%{ul:default}",
             "%{ul:#bf616a}",
             "%{ul:hp:game}",
         ] {
@@ -1403,6 +1418,9 @@ mod tests {
             write_token(&ul(ColorSpec::Rgb(191, 97, 106)), false),
             "%{ul:#bf616a}"
         );
+        assert_eq!(write_token(&ul(ColorSpec::Named(1)), false), "%{ul:red}");
+        assert_eq!(write_token(&ul(ColorSpec::Default), false), "%{ul:default}");
+        assert_eq!(write_token(&ul(by_value("hp")), false), "%{ul:hp}");
         assert_eq!(write_token(&ul(ColorSpec::Named(1)), true), "%{ul:red}");
         assert_eq!(
             write_token(&style(Style::Underline(UnderlineStyle::Curly)), true),
@@ -1459,7 +1477,7 @@ mod tests {
 
     #[test]
     fn reads_the_field_an_underline_color_follows() {
-        let template = Template::parse("%ul_hp%s_curly%{ul:mana:game}x");
+        let template = Template::parse("%{ul:hp}%s_curly%{ul:mana:game}x");
         let names: Vec<String> = template.reads().iter().map(ToString::to_string).collect();
         assert_eq!(names, vec!["hp", "mana"]);
     }
