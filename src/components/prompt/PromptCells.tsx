@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { bandRuns, type BandEnv } from '../../lib/bandCells';
+import { bandRuns, decorationLine, type BandEnv } from '../../lib/bandCells';
 import { contrast, parseHex } from '../../lib/color';
 import { sampleCut } from '../../lib/promptCard';
 import type { Cell } from '../../lib/sgrCells';
@@ -134,7 +134,7 @@ export function CellLine({
                 fontWeight: run.look.bold ? 700 : 400,
                 fontStyle: run.look.italic ? 'italic' : 'normal',
                 background: run.look.background ?? undefined,
-                textDecorationLine: run.look.decoration ?? undefined,
+                textDecorationLine: decorationLine(run.look),
               }}
             >
               {/* The bar's own color fills the font's height under its

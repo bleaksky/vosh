@@ -1,5 +1,5 @@
 import { useMemo, type CSSProperties } from 'react';
-import { bandRuns, type BandEnv } from '../../lib/bandCells';
+import { bandRuns, type BandEnv, type UnderlineLine } from '../../lib/bandCells';
 import type { PromptShowState } from '../../lib/promptShow';
 import {
   BAND_LIFT,
@@ -168,6 +168,43 @@ export function PinnedBand({ state, pin, cell, fontSize, env, reach: extra = 0 }
   );
 }
 
+/** One line across a run, drawn on the run's text in clear. */
+function Line({
+  run,
+  face,
+  left,
+  width,
+  line,
+  style,
+  color,
+}: {
+  run: ReturnType<typeof bandRuns>[number];
+  face: CSSProperties;
+  left: number;
+  width: number;
+  line: 'underline' | 'line-through';
+  style: UnderlineLine;
+  color: string;
+}) {
+  return (
+    <span
+      className="prompt-band-glyph"
+      aria-hidden="true"
+      style={{
+        ...face,
+        left,
+        width,
+        color: 'transparent',
+        textDecorationLine: line,
+        textDecorationStyle: style,
+        textDecorationColor: color,
+      }}
+    >
+      {run.text}
+    </span>
+  );
+}
+
 function Run({
   run,
   cell,
@@ -194,22 +231,30 @@ function Run({
           style={{ left, width, height: cell.height, background: look.background }}
         />
       )}
-      {look.decoration && (
-        <span
-          className="prompt-band-glyph"
-          aria-hidden="true"
-          style={{
-            ...face,
-            left,
-            width,
-            color: 'transparent',
-            textDecorationLine: look.decoration,
-            textDecorationStyle: look.decorationStyle,
-            textDecorationColor: look.decorationColor ?? look.color,
-          }}
-        >
-          {run.text}
-        </span>
+      {/* The underline and the strike each draw on a run of their own,
+          since CSS gives the lines of one box one style and one color,
+          and the strike is always straight in the text color. */}
+      {look.underline && (
+        <Line
+          run={run}
+          face={face}
+          left={left}
+          width={width}
+          line="underline"
+          style={look.underline.style}
+          color={look.underline.color ?? look.color}
+        />
+      )}
+      {look.strike && (
+        <Line
+          run={run}
+          face={face}
+          left={left}
+          width={width}
+          line="line-through"
+          style="solid"
+          color={look.color}
+        />
       )}
       {run.glyphs.map((glyph) =>
         glyph.ch.trim().length === 0 ? null : (

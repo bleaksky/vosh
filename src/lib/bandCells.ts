@@ -24,11 +24,22 @@ export interface BandCellLook {
   background: string | null;
   bold: boolean;
   italic: boolean;
-  /** CSS text-decoration-line, or null. */
-  decoration: string | null;
-  /** CSS text-decoration-style for an underline. */
-  decorationStyle: 'solid' | 'double' | 'wavy' | 'dotted' | 'dashed';
-  decorationColor: string | null;
+  /** The underline, or null: its CSS line style, and its own color, or
+   *  null for the text color. */
+  underline: { style: UnderlineLine; color: string | null } | null;
+  /** A strikethrough, which every renderer draws as one straight line in
+   *  the text color, whatever the underline's kind and color. */
+  strike: boolean;
+}
+
+/** A CSS text-decoration-style an underline draws in. */
+export type UnderlineLine = 'solid' | 'double' | 'wavy' | 'dotted' | 'dashed';
+
+/** The CSS text-decoration-line of a look's lines together, for a view
+ *  that draws them plain, or undefined with none. */
+export function decorationLine(look: BandCellLook): string | undefined {
+  const lines = [look.underline && 'underline', look.strike && 'line-through'].filter(Boolean);
+  return lines.length > 0 ? lines.join(' ') : undefined;
 }
 
 type Rgb = [number, number, number];
@@ -87,7 +98,14 @@ function brightened(color: CellColor | null, bold: boolean): CellColor | null {
   return color;
 }
 
-const UNDERLINE_STYLES = ['solid', 'solid', 'double', 'wavy', 'dotted', 'dashed'] as const;
+const UNDERLINE_STYLES: readonly UnderlineLine[] = [
+  'solid',
+  'solid',
+  'double',
+  'wavy',
+  'dotted',
+  'dashed',
+];
 
 export function resolveCell(attrs: CellAttrs, env: BandEnv): BandCellLook {
   const fgColor = brightened(attrs.fg, attrs.bold);
@@ -112,9 +130,6 @@ export function resolveCell(attrs: CellAttrs, env: BandEnv): BandCellLook {
   // xterm hides concealed text. The native grid draws it.
   if (attrs.hidden && env.renderer === 'xterm') color = 'transparent';
   const bold = env.renderer === 'native' && isBright(fgColor) ? env.brightBold : attrs.bold;
-  const lines: string[] = [];
-  if (attrs.underline > 0) lines.push('underline');
-  if (attrs.strike) lines.push('line-through');
   // The native grid draws one solid underline in the text color.
   const styled = env.renderer === 'xterm';
   return {
@@ -122,10 +137,17 @@ export function resolveCell(attrs: CellAttrs, env: BandEnv): BandCellLook {
     background,
     bold,
     italic: attrs.italic,
-    decoration: lines.length > 0 ? lines.join(' ') : null,
-    decorationStyle: styled ? UNDERLINE_STYLES[attrs.underline] : 'solid',
-    decorationColor:
-      styled && attrs.underlineColor ? hexOf(colorRgb(attrs.underlineColor, env.palette)) : null,
+    underline:
+      attrs.underline > 0
+        ? {
+            style: styled ? UNDERLINE_STYLES[attrs.underline] : 'solid',
+            color:
+              styled && attrs.underlineColor
+                ? hexOf(colorRgb(attrs.underlineColor, env.palette))
+                : null,
+          }
+        : null,
+    strike: attrs.strike,
   };
 }
 
