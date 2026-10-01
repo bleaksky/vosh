@@ -742,6 +742,9 @@ pub(crate) async fn shared_layer_for_lines<'a, R: tauri::Runtime>(
     read_shared_layer(&state).await
 }
 
+/// The main window hears `#help <words>` here, with the words.
+pub(crate) const HELP_OPEN_EVENT: &str = "vosh://help-open";
+
 /// What the terminal prints when you send a line with no connection.
 const NOT_CONNECTED: &[u8] = b"\r\n[not connected]\r\n";
 
@@ -766,6 +769,14 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
     state: State<'_, SharedState>,
     line: String,
 ) -> Result<(), String> {
+    // `#help <words>` opens Help on those words. The topics live in the
+    // page, so the main window searches them, opens Help on the best
+    // match, or says in the terminal that none matched.
+    if let Some(words) = crate::input::help_query(&line) {
+        return app
+            .emit_to("main", HELP_OPEN_EVENT, words)
+            .map_err(|e| e.to_string());
+    }
     // `#logs` works on the log store, not the profile, and can take a
     // while on a large log, so it runs on its own task and echoes when
     // done.
