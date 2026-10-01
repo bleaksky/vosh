@@ -185,10 +185,20 @@ describe('targetHealthPercent', () => {
 });
 
 describe('panelShowsVitals', () => {
+  const pinned = { show: 'pinned', capture: true, promptsOff: false } as const;
+
   it('drops the footer only while your prompt is pinned and the switch is on', () => {
-    expect(panelShowsVitals(true, true)).toBe(false);
-    expect(panelShowsVitals(true, false)).toBe(true);
-    expect(panelShowsVitals(false, true)).toBe(true);
-    expect(panelShowsVitals(false, false)).toBe(true);
+    expect(panelShowsVitals(pinned, true)).toBe(false);
+    expect(panelShowsVitals(pinned, false)).toBe(true);
+    expect(panelShowsVitals({ ...pinned, show: 'text' }, true)).toBe(true);
+    expect(panelShowsVitals({ ...pinned, show: 'lifted' }, true)).toBe(true);
+    expect(panelShowsVitals(null, true)).toBe(true);
+  });
+
+  it('keeps the footer while the pinned band has no prompt to show', () => {
+    // No capture: the band never draws.
+    expect(panelShowsVitals({ ...pinned, capture: false }, true)).toBe(true);
+    // Prompts off in the game: the band only says so, with no vitals.
+    expect(panelShowsVitals({ ...pinned, promptsOff: true }, true)).toBe(true);
   });
 });
