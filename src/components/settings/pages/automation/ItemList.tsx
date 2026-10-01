@@ -25,6 +25,8 @@ interface RowProps {
   anchor: string | undefined;
   /** Carries the warn ring. */
   warn: boolean;
+  /** Why it carries it, which a reader hears as the row's description. */
+  warnNote: string | undefined;
   onSelect: (uid: string) => void;
 }
 
@@ -43,14 +45,17 @@ const ListRow = memo(function ListRow({
   monoMeta,
   anchor,
   warn,
+  warnNote,
   onSelect,
 }: RowProps) {
+  const noteId = warn && warnNote ? `st-auto-warn-${uid}` : undefined;
   return (
     <div className="st-auto-rowwrap">
       <button
         type="button"
         className={cx('st-auto-row', warn && 'is-warn')}
         aria-current={selected ? 'true' : undefined}
+        aria-describedby={noteId}
         tabIndex={tabbable ? 0 : -1}
         data-uid={uid}
         data-st-anchor={anchor}
@@ -69,6 +74,11 @@ const ListRow = memo(function ListRow({
         {meta && <span className={cx('st-auto-row-meta', monoMeta && 'st-auto-mono')}>{meta}</span>}
         <span className={cx('st-auto-dot', !enabled && 'is-off')} aria-hidden="true" />
         <VisuallyHidden>{enabled ? 'On' : 'Off'}</VisuallyHidden>
+        {noteId && (
+          <span id={noteId} hidden>
+            {warnNote}
+          </span>
+        )}
       </button>
     </div>
   );
@@ -96,6 +106,9 @@ export interface ItemListProps {
   /** Names of rows that carry the warn ring while they are on, like a
    *  trigger that hides your prompt with nothing drawn in its place. */
   warnNames?: ReadonlySet<string> | undefined;
+  /** Why a row carries the warn ring, which a reader hears as its
+   *  description, since the ring is a picture. */
+  warnNote?: string | undefined;
 }
 
 /** The Automation list: the filter field, then the rows under their
@@ -117,6 +130,7 @@ export function ItemList({
   monoMeta,
   footer,
   warnNames,
+  warnNote,
 }: ItemListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const order: string[] = [];
@@ -183,6 +197,7 @@ export function ItemList({
               monoMeta={false}
               anchor={pinned.anchor}
               warn={false}
+              warnNote={undefined}
               onSelect={onSelect}
             />
           )}
@@ -208,6 +223,7 @@ export function ItemList({
                   monoMeta={monoMeta}
                   anchor={undefined}
                   warn={entry.enabled && (warnNames?.has(entry.name) ?? false)}
+                  warnNote={warnNote}
                   onSelect={onSelect}
                 />
               ))}

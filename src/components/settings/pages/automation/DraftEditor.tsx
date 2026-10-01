@@ -61,6 +61,8 @@ interface DraftEditorProps<T> {
   barExtra?: (draft: Draft<T>, setDraft: (next: Draft<T>) => void) => ReactNode;
   /** Names of list rows that carry the warn ring while they are on. */
   warnNames?: ReadonlySet<string>;
+  /** Why a row carries the warn ring, for a reader. */
+  warnNote?: string;
   /** The kind lives in the active profile. A profile switch then loads
    *  the new profile's list even over unsaved changes, since saving
    *  them would write one profile's items into another. */
@@ -86,6 +88,7 @@ export function DraftEditor<T>({
   barExtra,
   profileScoped = false,
   warnNames,
+  warnNote,
 }: DraftEditorProps<T>) {
   const [draft, setDraftState] = useState<Draft<T> | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -501,6 +504,7 @@ export function DraftEditor<T>({
               monoName={spec.monoName ?? false}
               monoMeta={spec.monoMeta ?? false}
               warnNames={warnNames}
+              warnNote={warnNote}
               footer={
                 spec.json ? (
                   <Button
