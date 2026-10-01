@@ -91,7 +91,9 @@ export function TriggersEditor(props: EditorProps) {
   // A trigger that hid your prompt this session while the profile reads
   // no prompt carries the warn ring in the list.
   const gags = usePromptGags();
-  return <DraftEditor spec={TRIGGERS_SPEC} {...props} warnNames={gags} />;
+  return (
+    <DraftEditor spec={TRIGGERS_SPEC} {...props} warnNames={gags} warnNote={HIDES_PROMPT_NOTE} />
+  );
 }
 
 /** Why a trigger carries the warn ring: it hid your prompt this session

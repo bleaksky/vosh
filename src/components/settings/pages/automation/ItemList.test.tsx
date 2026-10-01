@@ -12,7 +12,7 @@ const entry = (uid: string, name: string, enabled: boolean): ListEntry => ({
   text: name,
 });
 
-function render(warnNames?: ReadonlySet<string>): string {
+function render(warnNames?: ReadonlySet<string>, warnNote?: string): string {
   return renderToStaticMarkup(
     <ItemList
       noun={{ one: 'trigger', many: 'triggers' }}
@@ -33,6 +33,7 @@ function render(warnNames?: ReadonlySet<string>): string {
       monoName={false}
       monoMeta={false}
       warnNames={warnNames}
+      {...(warnNote ? { warnNote } : {})}
     />,
   );
 }
@@ -54,6 +55,17 @@ describe('the warn ring in the Automation list', () => {
   it('rings nothing without names', () => {
     const html = render();
     expect(html).not.toContain('is-warn');
+  });
+
+  it('tells a reader why a ringed row carries it, as its description', () => {
+    const html = render(new Set(['my-capture']), HIDES_PROMPT_NOTE);
+    const row = /<button[^>]*data-uid="a"[^>]*>/.exec(html)?.[0] ?? '';
+    const described = /aria-describedby="([^"]+)"/.exec(row)?.[1];
+    expect(described).toBeTruthy();
+    expect(html).toMatch(new RegExp(`id="${described}"[^>]*>This trigger hides your prompt`));
+    // A row with no ring has no description.
+    const flee = /<button[^>]*data-uid="c"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(flee).not.toContain('aria-describedby');
   });
 
   it('says why a trigger carries it in plain sentences', () => {
