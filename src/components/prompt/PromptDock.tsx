@@ -13,6 +13,7 @@ import {
 } from '../../lib/promptBand';
 import { shownColumns } from '../../lib/sgrCells';
 import { usePinnedPrompt } from '../../lib/stores/pinnedPromptStore';
+import { usePromptReach } from '../../lib/stores/promptReachStore';
 import { useBandEnv } from '../../lib/useBandEnv';
 
 // Your prompt pinned above the command line (Where your prompt shows,
@@ -70,8 +71,11 @@ export function PromptDock({
   renderer,
 }: PromptDockProps) {
   const pin = usePinnedPrompt();
+  const reach = usePromptReach();
   const env = useBandEnv(themeTerminalColors, brightBold, renderer);
-  return <PinnedBand state={state} pin={pin} cell={cell} fontSize={fontSize} env={env} />;
+  return (
+    <PinnedBand state={state} pin={pin} cell={cell} fontSize={fontSize} env={env} reach={reach} />
+  );
 }
 
 interface PinnedBandProps {
@@ -80,10 +84,13 @@ interface PinnedBandProps {
   cell: CellSize;
   fontSize: number;
   env: BandEnv;
+  /** How far past its widest row the band reaches for the prompt card's
+   *  ↵ and caret, in px. */
+  reach?: number;
 }
 
 /** The dock drawn from what it is handed. Exported for its test. */
-export function PinnedBand({ state, pin, cell, fontSize, env }: PinnedBandProps) {
+export function PinnedBand({ state, pin, cell, fontSize, env, reach: extra = 0 }: PinnedBandProps) {
   const zone = Math.max(1, state.zone);
   const rows = useMemo(() => (pin ? bandRows(pin, zone) : []), [pin, zone]);
   const shown = dockRows(pin, zone, state.promptsOff);
@@ -96,7 +103,7 @@ export function PinnedBand({ state, pin, cell, fontSize, env }: PinnedBandProps)
   const band: CSSProperties = {
     left: -BAND_OUTSET_X,
     bottom: BAND_LIFT,
-    width: cols * cell.width + 2 * BAND_OUTSET_X,
+    width: cols * cell.width + 2 * BAND_OUTSET_X + extra,
     height: rows.length * cell.height + 2 * BAND_OUTSET_Y,
   };
   const text: CSSProperties = {
