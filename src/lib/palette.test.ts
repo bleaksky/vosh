@@ -300,12 +300,20 @@ describe('settings rows', () => {
 
 describe('alias rows', () => {
   // What aliases_export sends. The Rust Alias struct names the command
-  // expansion, and a disabled alias stays in the list.
+  // expansion, a disabled alias stays in the list, and a Lua alias
+  // keeps the expansion it had before Lua was turned on.
   const exported = JSON.stringify(
     [
       { name: 'k', expansion: 'kill %1', enabled: true },
-      { name: 'rec', expansion: 'recall', enabled: true },
+      { name: 'lk', expansion: 'kill %1', enabled: true, script: 'mud.send("look")' },
+      {
+        name: 'lt',
+        expansion: 'look',
+        enabled: true,
+        script: 'mud.send("look " .. captures[1])\nmud.echo("looked")',
+      },
       { name: 'off', expansion: 'say off', enabled: false },
+      { name: 'rec', expansion: 'recall', enabled: true },
     ],
     null,
     2,
@@ -318,25 +326,40 @@ describe('alias rows', () => {
     return buildAliasEntries(deps(over));
   }
 
+  const row = (rows: Awaited<ReturnType<typeof aliasRows>>, name: string) => {
+    const found = rows.find((r) => r.title === name);
+    if (!found) throw new Error(`no row for ${name}`);
+    return found;
+  };
+
   it('shows the command each alias sends', async () => {
     const rows = await aliasRows();
     expect(invoke).toHaveBeenCalledWith('aliases_export');
     expect(rows.map((r) => [r.title, r.meta ?? null])).toEqual([
       ['k', 'kill %1'],
+      ['lk', 'mud.send("look")'],
+      ['lt', 'mud.send("look " .. captures[1])'],
       ['rec', 'recall'],
     ]);
-    // Typing part of the command finds the alias.
+    // Typing part of the command finds the alias, and a Lua alias
+    // answers to its script, never to the expansion it ignores.
     expect(flat(paletteSections(rows, 'kill', [])).map((r) => r.id)).toEqual(['alias-k']);
+    expect(flat(paletteSections(rows, 'looked', [])).map((r) => r.id)).toEqual(['alias-lt']);
   });
 
   it('fills the command line for an alias that takes arguments', async () => {
     const inserted: string[] = [];
     const rows = await aliasRows({ insertInput: (text) => inserted.push(text) });
-    void rows[0].run();
-    expect(inserted).toEqual(['k ']);
+    void row(rows, 'k').run();
+    void row(rows, 'lt').run();
+    expect(inserted).toEqual(['k ', 'lt ']);
     expect(invoke).not.toHaveBeenCalledWith('session_send_input', expect.anything());
-    void rows[1].run();
-    expect(inserted).toEqual(['k ']);
+    // A Lua alias that never reads its captures runs at once, whatever
+    // its old expansion held.
+    void row(rows, 'lk').run();
+    void row(rows, 'rec').run();
+    expect(inserted).toEqual(['k ', 'lt ']);
+    expect(invoke).toHaveBeenCalledWith('session_send_input', { line: 'lk' });
     expect(invoke).toHaveBeenCalledWith('session_send_input', { line: 'rec' });
   });
 });

@@ -507,8 +507,10 @@ export async function chooseTheme(id: string): Promise<void> {
 }
 
 /** Fetch the user's aliases as palette rows. Parameterless aliases
- *  run immediately. Ones whose expansion references captures insert
- *  the alias name into the input for the user to finish. */
+ *  run immediately. Ones that read what you type after the name insert
+ *  the alias name into the input for the user to finish. A Lua alias
+ *  runs its script and ignores its expansion, so its row shows and
+ *  searches the script, the way the Aliases list in Settings does. */
 export async function buildAliasEntries(deps: PaletteDeps): Promise<PaletteEntry[]> {
   try {
     const json = await exportAliases();
@@ -517,17 +519,21 @@ export async function buildAliasEntries(deps: PaletteDeps): Promise<PaletteEntry
     const rows: PaletteEntry[] = [];
     for (const raw of parsed) {
       if (!raw || typeof raw !== 'object') continue;
-      const r = raw as { name?: unknown; expansion?: unknown; enabled?: unknown };
+      const r = raw as { name?: unknown; expansion?: unknown; script?: unknown; enabled?: unknown };
       const name = typeof r.name === 'string' ? r.name.trim() : '';
       if (name.length === 0 || r.enabled === false) continue;
-      const expansion = typeof r.expansion === 'string' ? r.expansion : '';
-      const takesArgs = /%\d|\$\d/.test(expansion);
+      const script = typeof r.script === 'string' ? r.script : null;
+      const body = script ?? (typeof r.expansion === 'string' ? r.expansion : '');
+      const meta = body.split('\n')[0];
+      // A script reads the words after the name from its captures
+      // table. Any use of it counts, whatever index the words start at.
+      const takesArgs = script !== null ? /\bcaptures\b/.test(script) : /%\d|\$\d/.test(body);
       rows.push({
         id: `alias-${name}`,
         section: 'aliases',
         title: name,
-        keywords: expansion,
-        ...(expansion ? { meta: expansion } : {}),
+        keywords: body,
+        ...(meta ? { meta } : {}),
         metaMono: true,
         searchOnly: true,
         run: () => {
