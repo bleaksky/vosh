@@ -31,6 +31,21 @@ describe('a line drawn cell by cell', () => {
     expect(glyphs.every((g) => g.includes('aria-hidden="true"'))).toBe(true);
   });
 
+  it('draws a run of full blocks as one bar with no seam between its cells', () => {
+    // A bar six cells full, then four empty, as the Bars preset draws it.
+    const html = line(`hp \x1b[32m${'█'.repeat(6)}\x1b[90m${'░'.repeat(4)}\x1b[0m`);
+    const blocks = [...html.matchAll(/<span class="pc-cells-glyph pc-cells-block"[^>]*>/g)];
+    expect(blocks).toHaveLength(1);
+    const block = blocks[0][0];
+    expect(block).toContain('left:23.4px');
+    expect(block).toContain('width:46.8px');
+    // The run's own color fills the font's height under its glyphs.
+    expect(html).toMatch(/pc-cells-block"[^>]*><span style="background:#888888">██████<\/span>/);
+    // Each empty cell stays a glyph of its own.
+    const shades = [...html.matchAll(/<span class="pc-cells-glyph"[^>]*>░<\/span>/g)];
+    expect(shades).toHaveLength(4);
+  });
+
   it('reads as far as a cut sample shows, its ellipsis too', () => {
     const html = line('1020/1020hp 800/800mn 930/930mv', 100);
     expect(html).toContain('<span class="st-visually-hidden">1020/1020hp…</span>');
