@@ -6804,11 +6804,14 @@ mod tests {
         #[test]
         fn the_library_here_is_the_one_presets_ts_holds() {
             let library = include_str!("../../src/lib/presets.ts");
-            for id in LIBRARY {
-                assert!(library.contains(&format!("id: '{id}',")), "{id}");
-            }
-            // Each preset opens with its id, four spaces in.
-            assert_eq!(library.matches("\n    id: '").count(), LIBRARY.len());
+            // Each preset opens with its id, four spaces in, in the order
+            // the page lists them.
+            let ids: Vec<&str> = library
+                .split("\n    id: '")
+                .skip(1)
+                .map(|rest| &rest[..rest.find('\'').expect("the id closes")])
+                .collect();
+            assert_eq!(ids, LIBRARY);
         }
 
         const LOADOUT_SESSION_REFUSAL: &str =
