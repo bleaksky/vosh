@@ -139,12 +139,15 @@ export function shortcutKey(e: { key: string; code: string }): string {
  *  last so Disconnect is the final row. With nothing typed the palette
  *  shows Recent, View, and Session (SPEC 7). Aliases, settings, help,
  *  and find surface as you type or through Recent. */
-export type PaletteSection = 'view' | 'aliases' | 'session';
+export type PaletteSection = 'input' | 'view' | 'aliases' | 'session';
 
-export const SECTION_ORDER: PaletteSection[] = ['view', 'aliases', 'session'];
+/** Input holds the prompt card's rows, which show only as you type, so
+ *  the palette still opens on View and Session. */
+export const SECTION_ORDER: PaletteSection[] = ['input', 'view', 'aliases', 'session'];
 
 export const SECTION_LABELS: Record<PaletteSection | 'recent', string> = {
   recent: 'Recent',
+  input: 'Input',
   view: 'View',
   aliases: 'Aliases',
   session: 'Session',
@@ -209,6 +212,13 @@ export interface PaletteDeps {
   /** Where your prompt shows. The three rows that pick it appear only
    *  while the profile reads a prompt, so the shell passes it then. */
   promptShow?: PromptShow | null;
+  /** Open the prompt card, or Edit as text with `text`. The Input rows
+   *  appear when the shell passes it. */
+  openPromptCard?: (view?: 'text') => void;
+  /** Whether the profile draws its prompt, or null while it reads none,
+   *  which leaves Draw your prompt out. */
+  promptDraw?: boolean | null;
+  setPromptDraw?: (on: boolean) => void;
 }
 
 const PROMPT_SHOW_ROWS: { show: PromptShow; title: string }[] = [
@@ -271,6 +281,40 @@ const SETTINGS_TABS: { id: string; title: string; keywords: string }[] = [
 
 export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
   const entries: PaletteEntry[] = [];
+
+  // The prompt card's rows (P0's palette specimen), found as you type.
+  if (deps.openPromptCard) {
+    const open = deps.openPromptCard;
+    entries.push({
+      id: 'prompt-customize',
+      section: 'input',
+      title: 'Customize prompt…',
+      keywords: 'prompt design codes capture template',
+      searchOnly: true,
+      run: () => open(),
+    });
+    if (deps.promptDraw !== null && deps.promptDraw !== undefined && deps.setPromptDraw) {
+      const draw = deps.promptDraw;
+      const setDraw = deps.setPromptDraw;
+      entries.push({
+        id: 'prompt-draw',
+        section: 'input',
+        title: 'Draw your prompt',
+        keywords: 'prompt design custom own',
+        checked: draw,
+        searchOnly: true,
+        run: () => setDraw(!draw),
+      });
+    }
+    entries.push({
+      id: 'prompt-text',
+      section: 'input',
+      title: 'Edit prompt as text…',
+      keywords: 'prompt design template codes',
+      searchOnly: true,
+      run: () => open('text'),
+    });
+  }
 
   if (deps.togglePanel) {
     const toggle = deps.togglePanel;
