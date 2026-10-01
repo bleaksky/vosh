@@ -2,7 +2,8 @@ import { onGmcpPackage, onRouted, onState, type RoutedPayload } from './session'
 
 /** Which way a tell went. Aabahran marks a tell you receive
  *  `received`. It sends nothing for a tell you send, so a `sent` line
- *  comes from a trigger that routes the terminal line (parseRoutedLine). */
+ *  comes from a trigger that routes the terminal line (parseRoutedLine),
+ *  the Tells you send preset out of the box. */
 export type ChatDirection = 'sent' | 'received';
 
 export interface ChatLine {
@@ -75,7 +76,7 @@ const SENT_TELL_RE = /^You (?:tell|project to) (.+?)(?: in ([A-Z][\w']*))? '([\s
  *  send, which reads as your side of the tell. The line for a group tell
  *  you send is skipped, because the game echoes that message back to you
  *  as a gtell packet (act_comm.c do_gtell) and the pane already has it.
- *  The trigger the chat help gives for sent tells catches both lines. */
+ *  The Tells you send preset catches both lines. */
 export function parseRoutedLine(payload: RoutedPayload, ts: number = Date.now()): ChatLine | null {
   const text = stripAnsi(payload.text).trimEnd();
   const sent = SENT_TELL_RE.exec(text);

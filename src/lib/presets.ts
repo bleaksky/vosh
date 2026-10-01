@@ -19,7 +19,14 @@
 import type { HighlightStyle, TriggerRecord } from './session';
 import { colorize } from './colorTokens';
 
-export type PresetCategory = 'healing' | 'defensive' | 'disarm_buff' | 'events' | 'loot' | 'labels';
+export type PresetCategory =
+  | 'healing'
+  | 'defensive'
+  | 'disarm_buff'
+  | 'events'
+  | 'loot'
+  | 'labels'
+  | 'chat';
 
 export interface Preset {
   id: string;
@@ -38,6 +45,7 @@ export const PRESET_CATEGORIES: Record<PresetCategory, string> = {
   events: 'Combat and spell events',
   loot: 'Loot and progress',
   labels: 'Potion and herb labels',
+  chat: 'Chat',
 };
 
 // Helper to build a highlight trigger compactly. Default priority of 5
@@ -556,6 +564,31 @@ export const PRESETS: Preset[] = [
         'some sand colored leaves {fg:248}(stone skin){reset}',
       ),
       replace('herb.spearmint', 'some spearmint', 'some spearmint {fg:248}(giant strength){reset}'),
+    ],
+  },
+
+  // ── CHAT ─────────────────────────────────────────────────────────
+  // The game sends a Comm.Channel packet for a tell you receive and
+  // none for one you send, so this routes the line it prints instead
+  // (languages.c compose_tell): `You tell Selune 'text'`, with
+  // ` in Elvish` before the quote outside common, and `You project to`
+  // for a telepath. The chat store reads the line as your side of the
+  // tell and skips `You tell your group`, whose gtell packet the pane
+  // already has (chatStore.ts parseRoutedLine).
+  {
+    id: 'sent_tells',
+    category: 'chat',
+    name: 'Tells you send',
+    description: 'Puts each tell you send in the chat pane, beside the ones you get.',
+    defaultEnabled: true,
+    triggers: [
+      {
+        name: 'chat.sent_tells',
+        patterns: [{ pattern: "^You (tell|project to) .+ '", enabled: true }],
+        priority: 5,
+        enabled: true,
+        actions: [{ kind: 'route', pane: 'tell' }],
+      },
     ],
   },
 ];

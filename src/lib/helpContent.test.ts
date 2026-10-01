@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import helpMd from '../../HELP.md?raw';
-import { parseRoutedLine } from './chatStore';
 import { HELP_TOPICS, parseHelpBody, PROMPT_DESIGN_CODES } from './helpContent';
 
 function body(id: string): string {
@@ -329,56 +328,19 @@ describe('the help on the chat pane', () => {
     expect(text).not.toContain('`visible/total`');
   });
 
-  // The recipe the help gives for the tells you send, run against every
-  // line the game prints when you talk to one person or your group
-  // (languages.c compose_tell and compose_grouptell_open).
-  describe('the trigger it gives for the tells you send', () => {
-    const recipe = /A trigger on `([^`]+)` with a route to `tell`/.exec(body('shape.chat-pane'));
-    const pattern = new RegExp(recipe?.[1] ?? '(?!)');
-    const caught = (text: string) =>
-      pattern.test(text) ? parseRoutedLine({ pane: 'tell', text }) : undefined;
-
-    it('is in the help', () => {
-      expect(recipe).not.toBeNull();
-      expect(body('shape.chat-pane')).toContain('makes each one read `[tell] to Selune: text`.');
-    });
-
-    it('catches a tell you speak or project, in any language', () => {
-      for (const text of [
-        "You tell Selune 'omw'",
-        "You tell a city guard in Tol'khan 'it is me'",
-        "You project to Selune 'omw'",
-        "You project to Selune in Elvish 'omw'",
-      ]) {
-        expect(caught(text), text).toMatchObject({ direction: 'sent', text: expect.any(String) });
-      }
-    });
-
-    it('puts no line for a group tell in the pane', () => {
-      for (const text of [
-        "You tell your group 'one tick, waiting on mana'",
-        "You tell your group in Elvish 'one tick'",
-        "You broadcast 'one tick'",
-      ]) {
-        expect(caught(text) ?? null, text).toBeNull();
-      }
-    });
-
-    it('leaves the tells you receive to their packet', () => {
-      for (const text of [
-        "Selune tells you 'are you still at the bank?'",
-        "[Selune] 'omw'",
-        'You project your image away from your body.',
-      ]) {
-        expect(pattern.test(text), text).toBe(false);
-      }
-    });
-
-    it('says why the pane skips a group tell', () => {
-      expect(body('shape.chat-pane')).toContain(
-        'The pane skips the `You tell your group` line the trigger also catches, because your gtell already arrives over GMCP.',
-      );
-    });
+  it('says Vosh catches the tells you send with a preset, on from the start', () => {
+    const text = body('shape.chat-pane');
+    expect(text).toContain(
+      '- See the tells you send. The game sends no GMCP for them, so the `Tells you send` preset routes the line the game prints for each one, and it is on from the start.',
+    );
+    expect(text).toContain('Each one reads `[tell] to Selune: text`');
+    expect(text).toContain(
+      'The pane skips the `You tell your group` line, because your gtell already arrives over GMCP.',
+    );
+    expect(text).toContain('Turn the preset off in Settings under Automation, then Presets.');
+    // No help still asks you to build the trigger yourself.
+    expect(text).not.toContain('A trigger on `^You (tell|project to) `');
+    expect(helpMd).not.toContain('A trigger on `^You (tell|project to) `');
   });
 
   it('matches HELP.md word for word', () => {
