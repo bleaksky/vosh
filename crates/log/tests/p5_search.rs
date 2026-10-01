@@ -1,0 +1,857 @@
+//! P5 of the perf set, searching a week of logs. A heavy week of play
+//! goes into a fresh log file through the real `LogStore`, and the test
+//! times the searches the Settings log view runs over it.
+//!
+//! The week comes from the generator the Phase 10 check wrote, with its
+//! seed and its size. Seven days of two four hour sessions, each hour
+//! 30 minutes of fighting, 15 of walking and 15 idle with chat, plus a
+//! short session to 127.0.0.1 every third day, which the view hides.
+//! That is 702,987 lines in an 83.5 MB file, the heavy week the plan
+//! reckons with.
+//!
+//! Skipped by default. Run it with
+//! `cargo test -p vosh-log --release --test p5_search -- --ignored --nocapture`.
+//! A dev build runs it too, many times slower, since `SQLite` and the
+//! regex engine build there without optimization.
+//!
+//! Every number is a search with the file in the system cache. A fresh
+//! search opens the log again first, as the view does at launch, so
+//! `SQLite` starts with no pages of its own. Warm is the median of
+//! [`REPS`] more on that connection. To time a cold search, set
+//! `VOSH_P5_DB` to a file path, run once to write the week there, run
+//! `sudo purge`, and run again. The test then reuses that file.
+//!
+//! The numbers alone guard nothing, so each search is also held to what
+//! a plain scan of the week finds. The newest 500 matches, oldest first,
+//! with their line ids, the count in scope, the local sessions left
+//! out, and the page before the first.
+
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+use regex::RegexBuilder;
+use vosh_log::{LogEntry, LogStore, SearchOptions, SearchPage};
+
+/// Searches of each query on the connection after the fresh one.
+const REPS: usize = 5;
+
+/// What the view asks for in a page, `LOG_PAGE_SIZE` in `logView.ts`.
+const PAGE: usize = 500;
+
+/// The Phase 10 check's seed and week.
+const SEED: u64 = 0xA5A5_1234;
+const DAYS: u64 = 7;
+const SESSIONS_PER_DAY: u64 = 2;
+const HOURS_PER_SESSION: u64 = 4;
+
+const GAME_HOST: &str = "play.theforsakenlands.com";
+const GAME_PORT: u16 = 9009;
+
+// ---------- the Phase 10 check's generator ----------
+
+/// splitmix64, so the week is the same on every run.
+struct Rng(u64);
+
+impl Rng {
+    fn next(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+    fn below(&mut self, n: u64) -> u64 {
+        self.next() % n
+    }
+    fn pick<'a>(&mut self, xs: &[&'a str]) -> &'a str {
+        xs[self.below(xs.len() as u64) as usize]
+    }
+    fn chance(&mut self, per_million: u64) -> bool {
+        self.below(1_000_000) < per_million
+    }
+}
+
+const MOBS: &[&str] = &[
+    "a Blackwatch guard",
+    "the city cityguard",
+    "a scruffy mercenary",
+    "a hungry wolf",
+    "a cave troll",
+    "an orc warrior",
+    "the temple acolyte",
+    "a giant spider",
+    "a skeletal knight",
+    "a wandering merchant",
+    "a frost giant",
+    "a black bear",
+    "a goblin shaman",
+    "an elven ranger",
+    "the harbor master",
+    "a sewer rat",
+    "a dark priestess",
+    "a drunken sailor",
+    "a sand serpent",
+    "a ghostly figure",
+];
+const VERBS: &[&str] = &[
+    "scratches",
+    "grazes",
+    "hits",
+    "injures",
+    "wounds",
+    "mauls",
+    "decimates",
+    "devastates",
+    "maims",
+    "MUTILATES",
+    "DISEMBOWELS",
+    "DISMEMBERS",
+    "MASSACRES",
+    "misses",
+    "=== OBLITERATES ===",
+];
+const ATTACKS: &[&str] = &[
+    "slash", "pierce", "bite", "punch", "claw", "crush", "stab", "blast",
+];
+const CONDS: &[&str] = &[
+    "is in excellent condition.",
+    "has a few scratches.",
+    "has some small wounds and bruises.",
+    "has quite a few wounds.",
+    "has some big nasty wounds and scratches.",
+    "looks pretty hurt.",
+    "is in awful condition.",
+];
+const ROOMS: &[&str] = &[
+    "The Bank of Aabahran",
+    "Market Square",
+    "A Narrow Alley",
+    "The Temple Steps",
+    "Before the City Gates",
+    "A Dusty Road",
+    "Deep in the Forest",
+    "A Dark Cave",
+    "The Harbor Docks",
+    "A Mountain Pass",
+    "The Guild Hall",
+    "Inside the Tavern",
+    "A Muddy Trail",
+    "The Old Bridge",
+    "A Sandy Beach",
+    "Ruins of a Watchtower",
+];
+const WORDS: &[&str] = &[
+    "the",
+    "a",
+    "of",
+    "and",
+    "stone",
+    "walls",
+    "rise",
+    "above",
+    "you",
+    "while",
+    "torches",
+    "flicker",
+    "in",
+    "iron",
+    "sconces",
+    "worn",
+    "path",
+    "leads",
+    "north",
+    "toward",
+    "distant",
+    "hills",
+    "smell",
+    "smoke",
+    "drifts",
+    "from",
+    "nearby",
+    "hearth",
+    "cobbles",
+    "underfoot",
+    "are",
+    "slick",
+    "with",
+    "rain",
+    "merchants",
+    "call",
+    "their",
+    "wares",
+    "ancient",
+    "trees",
+    "loom",
+    "overhead",
+    "branches",
+    "creak",
+    "wind",
+    "moss",
+    "covers",
+    "roots",
+    "faint",
+    "light",
+    "filters",
+    "through",
+    "canopy",
+    "heavy",
+    "wooden",
+    "door",
+    "stands",
+    "open",
+    "east",
+    "west",
+    "south",
+    "marble",
+    "counters",
+    "line",
+    "hall",
+    "clerk",
+    "nods",
+    "at",
+    "waves",
+    "crash",
+    "against",
+    "rocks",
+    "below",
+    "gulls",
+    "circle",
+    "dark",
+    "water",
+];
+const EXITS: &[&str] = &[
+    "[Exits: north south]",
+    "[Exits: east west]",
+    "[Exits: north east south west]",
+    "[Exits: south]",
+    "[Exits: north up]",
+    "[Exits: down]",
+    "[Exits: east south west]",
+];
+const PLAYERS: &[&str] = &[
+    "Tester", "Healer", "Aldric", "Brennan", "Corwyn", "Dalia", "Elsbeth", "Fenrik",
+];
+const CHANNELS: &[&str] = &["gossips", "says", "tells you", "tells the group", "cabal"];
+const TICKS: &[&str] = &[
+    "You are hungry.",
+    "You are thirsty.",
+    "The sun rises in the east.",
+    "The day has begun.",
+    "The sun slowly disappears in the west.",
+    "The night has begun.",
+    "It starts to rain.",
+    "The rain stopped.",
+    "You feel less tired.",
+];
+const COMMANDS: &[&str] = &[
+    "> n",
+    "> s",
+    "> e",
+    "> w",
+    "> u",
+    "> d",
+    "> look",
+    "> kick",
+    "> bash",
+    "> c 'cure light'",
+    "> c 'armor'",
+    "> score",
+    "> inv",
+    "> eq",
+    "> rest",
+    "> stand",
+    "> gt heading back",
+    "> get all corpse",
+    "> sac corpse",
+    "> aff",
+];
+
+fn desc_line(r: &mut Rng) -> String {
+    let mut s = String::from("  ");
+    let target = 58 + r.below(18) as usize;
+    while s.len() < target {
+        if s.len() > 2 {
+            s.push(' ');
+        }
+        s.push_str(r.pick(WORDS));
+    }
+    s.push('.');
+    s
+}
+
+fn chat(r: &mut Rng, rare_name: bool) -> (String, Vec<u8>) {
+    let who = if rare_name {
+        "Morwenna"
+    } else {
+        r.pick(PLAYERS)
+    };
+    let ch = r.pick(CHANNELS);
+    let mut msg = String::new();
+    let n = 4 + r.below(10);
+    for i in 0..n {
+        if i > 0 {
+            msg.push(' ');
+        }
+        msg.push_str(r.pick(WORDS));
+    }
+    if r.chance(40_000) {
+        msg.push_str(if r.chance(500_000) { " sell" } else { " buy" });
+        msg.push_str(" sword");
+    }
+    let plain = format!("{who} {ch} '{msg}'");
+    let raw = format!("\x1b[0;35m{who} {ch} \x1b[1;37m'{msg}'\x1b[0m");
+    (plain, raw.into_bytes())
+}
+
+fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+        None => String::new(),
+    }
+}
+
+/// One line of the week, kept to check what each search finds. Its line
+/// id is its place in the week plus one.
+struct Row {
+    session: i64,
+    text: String,
+}
+
+/// The week as it went into the log, or would have.
+struct Week {
+    rows: Vec<Row>,
+    /// Each session's id and whether it went to this machine.
+    sessions: Vec<(i64, bool)>,
+}
+
+/// Where the week's rows go. With no store it only keeps them, for a
+/// log a run before wrote.
+struct Writer {
+    store: Option<LogStore>,
+    batch: Vec<LogEntry>,
+    week: Week,
+}
+
+impl Writer {
+    fn start_session(&mut self, host: &str, port: u16, at: i64) -> i64 {
+        let id = self.week.sessions.len() as i64 + 1;
+        if let Some(store) = self.store.as_mut() {
+            let made = store.start_session(host, port, at).expect("a session");
+            assert_eq!(made, id, "the log was not empty");
+        }
+        self.week.sessions.push((id, host == "127.0.0.1"));
+        id
+    }
+
+    fn set_character(&mut self, id: i64, name: &str) {
+        if let Some(store) = self.store.as_mut() {
+            store.set_session_character(id, name).expect("a character");
+        }
+    }
+
+    fn end_session(&mut self, id: i64, at: i64) {
+        self.flush(1);
+        if let Some(store) = self.store.as_mut() {
+            store.end_session(id, at).expect("the end");
+        }
+    }
+
+    fn push(&mut self, entry: LogEntry) {
+        self.week.rows.push(Row {
+            session: entry.session_id,
+            text: entry.text.clone(),
+        });
+        if self.store.is_some() {
+            self.batch.push(entry);
+        }
+    }
+
+    /// Write the rows waiting once there are `at_least`.
+    fn flush(&mut self, at_least: usize) {
+        if self.batch.len() < at_least || self.batch.is_empty() {
+            return;
+        }
+        if let Some(store) = self.store.as_mut() {
+            store.append_batch(&self.batch).expect("the rows");
+        }
+        self.batch.clear();
+    }
+}
+
+/// One session of play.
+struct Play<'a> {
+    w: &'a mut Writer,
+    r: Rng,
+    sid: i64,
+    ts: i64,
+    hp: i64,
+}
+
+impl Play<'_> {
+    fn out(&mut self, plain: String, raw: Vec<u8>) {
+        self.w.push(LogEntry {
+            session_id: self.sid,
+            ts_ms: self.ts,
+            text: plain,
+            raw: Some(raw),
+        });
+    }
+    fn plain(&mut self, s: &str) {
+        self.out(s.to_string(), s.as_bytes().to_vec());
+    }
+    fn colored(&mut self, s: &str, code: &str) {
+        let raw = format!("\x1b[{code}m{s}\x1b[0m");
+        self.out(s.to_string(), raw.into_bytes());
+    }
+    fn sent(&mut self, s: &str) {
+        self.w.push(LogEntry {
+            session_id: self.sid,
+            ts_ms: self.ts,
+            text: s.to_string(),
+            raw: None,
+        });
+    }
+    fn prompt(&mut self) {
+        // Real prompt lines run about 55 raw bytes for 29 plain
+        // (fixtures/prompt/aabahran/lines.json).
+        let plain = format!("[{}/1020hp 800/800mn 930/930mv]", self.hp);
+        let raw = format!(
+            "\x1b[0;37m[\x1b[1;32m{}\x1b[0;37m/1020hp \x1b[1;36m800\x1b[0;37m/800mn \x1b[1;33m930\x1b[0;37m/930mv]\x1b[0m",
+            self.hp
+        );
+        self.out(plain, raw.into_bytes());
+    }
+    fn round(&mut self, mob: &str) {
+        if self.r.chance(500_000) {
+            let c = self.r.pick(&COMMANDS[7..11]);
+            self.sent(c);
+        }
+        // fight-tank.bin: attack, condition, blank, tank line, vitals.
+        // Heavy play adds your extra attacks and a groupmate's, so 3 to 5
+        // damage lines a round.
+        let n = 3 + self.r.below(3);
+        for _ in 0..n {
+            let att = self.r.pick(ATTACKS);
+            let verb = self.r.pick(VERBS);
+            if self.r.chance(500_000) {
+                self.colored(&format!("Your {att} {verb} {mob}!"), "1;33");
+            } else {
+                let cap = capitalize(mob);
+                self.colored(&format!("{cap}'s {att} {verb} you."), "1;31");
+            }
+        }
+        let cond = self.r.pick(CONDS);
+        self.plain(&format!("{} {}", capitalize(mob), cond));
+        self.plain("");
+        self.colored("Tester: [===|===|===|---]", "1;32");
+        self.hp = 300 + self.r.below(720) as i64;
+        self.prompt();
+        self.ts += 3000; // PULSE_VIOLENCE, 12 pulses of 250 ms
+        self.w.flush(1000);
+    }
+    fn room(&mut self) {
+        let c = self.r.pick(&COMMANDS[0..6]);
+        self.sent(c);
+        let title = self.r.pick(ROOMS);
+        self.colored(title, "1;36");
+        let n = 3 + self.r.below(3);
+        for _ in 0..n {
+            let d = desc_line(&mut self.r);
+            self.plain(&d);
+        }
+        let ex = self.r.pick(EXITS);
+        self.colored(ex, "0;32");
+        for _ in 0..self.r.below(3) {
+            let mob = capitalize(self.r.pick(MOBS));
+            self.colored(&format!("{mob} is here."), "0;33");
+        }
+        self.plain("");
+        self.prompt();
+        self.ts += 1500;
+        self.w.flush(1000);
+    }
+    fn idle(&mut self) {
+        let k = self.r.below(10);
+        if k < 5 {
+            let rare = self.r.chance(2_000);
+            let (p, raw) = chat(&mut self.r, rare);
+            self.out(p, raw);
+        } else if k < 7 {
+            let t = self.r.pick(TICKS);
+            self.plain(t);
+        } else if k < 9 {
+            let mob = capitalize(self.r.pick(MOBS));
+            let dir = self.r.pick(&["north", "south", "east", "west"]);
+            self.plain(&format!("{mob} arrives from the {dir}."));
+        } else {
+            let c = self.r.pick(&COMMANDS[6..]);
+            self.sent(c);
+        }
+        self.plain("");
+        self.prompt();
+        self.ts += 2000;
+        self.w.flush(1000);
+    }
+
+    /// One heavy hour. 30 minutes fighting (600 rounds of 3 s), 15
+    /// walking (600 rooms at 1.5 s) and 15 idle (450 events at 2 s),
+    /// interleaved.
+    fn hour(&mut self) {
+        let (fights, rooms, idles) = (600, 600, 450);
+        let (mut f, mut ro, mut id) = (0, 0, 0);
+        while f < fights || ro < rooms || id < idles {
+            // A block of walking, then a fight, then some idle.
+            for _ in 0..20 {
+                if ro < rooms {
+                    self.room();
+                    ro += 1;
+                }
+            }
+            let mob = self.r.pick(MOBS);
+            for _ in 0..20 {
+                if f < fights {
+                    self.round(mob);
+                    f += 1;
+                }
+            }
+            for _ in 0..15 {
+                if id < idles {
+                    self.idle();
+                    id += 1;
+                }
+            }
+        }
+    }
+}
+
+/// Play the week into `store`, or only keep it when `store` is None.
+fn generate(store: Option<LogStore>) -> Week {
+    let mut w = Writer {
+        store,
+        batch: Vec::new(),
+        week: Week {
+            rows: Vec::new(),
+            sessions: Vec::new(),
+        },
+    };
+    let start_ms: i64 = 1_790_000_000_000;
+    for day in 0..DAYS {
+        for s in 0..SESSIONS_PER_DAY {
+            let begin = start_ms + (day as i64) * 86_400_000 + (s as i64) * 6 * 3_600_000;
+            // A short local test session now and then, which the log
+            // view hides.
+            if day % 3 == 0 && s == 0 {
+                let at = begin - 600_000;
+                let sid = w.start_session("127.0.0.1", 4000, at);
+                let mut play = Play {
+                    w: &mut w,
+                    r: Rng(SEED ^ (day * 977 + 13)),
+                    sid,
+                    ts: at,
+                    hp: 1020,
+                };
+                for _ in 0..200 {
+                    play.room();
+                }
+                w.end_session(sid, begin - 1);
+            }
+            let sid = w.start_session(GAME_HOST, GAME_PORT, begin);
+            w.set_character(sid, "Tester");
+            let mut play = Play {
+                w: &mut w,
+                r: Rng(SEED ^ (day * 31 + s * 7 + 1)),
+                sid,
+                ts: begin,
+                hp: 1020,
+            };
+            for _ in 0..HOURS_PER_SESSION {
+                play.hour();
+            }
+            let end = play.ts;
+            w.end_session(sid, end);
+        }
+    }
+    w.week
+}
+
+// ---------- the searches ----------
+
+/// One search the view runs. `scoped` searches the newest session only.
+struct Query {
+    name: &'static str,
+    pattern: &'static str,
+    case_sensitive: bool,
+    scoped: bool,
+}
+
+/// The Phase 10 check's suite. Each one is a first page with its count,
+/// as the view asks when you type.
+const SUITE: [Query; 9] = [
+    Query {
+        name: "rare name",
+        pattern: "Morwenna",
+        case_sensitive: false,
+        scoped: false,
+    },
+    Query {
+        name: "common word",
+        pattern: "guard",
+        case_sensitive: false,
+        scoped: false,
+    },
+    Query {
+        name: "regex",
+        pattern: "tells you '.*(sell|buy) sword",
+        case_sensitive: false,
+        scoped: false,
+    },
+    Query {
+        name: "every prompt",
+        pattern: r"^\[\d+/\d+hp",
+        case_sensitive: false,
+        scoped: false,
+    },
+    Query {
+        name: "no match",
+        pattern: "xyzzyplugh",
+        case_sensitive: false,
+        scoped: false,
+    },
+    Query {
+        name: "case sensitive",
+        pattern: "DISEMBOWELS",
+        case_sensitive: true,
+        scoped: false,
+    },
+    Query {
+        name: "every line",
+        pattern: "",
+        case_sensitive: false,
+        scoped: false,
+    },
+    Query {
+        name: "rare name, newest session",
+        pattern: "Morwenna",
+        case_sensitive: false,
+        scoped: true,
+    },
+    Query {
+        name: "no match, newest session",
+        pattern: "xyzzyplugh",
+        case_sensitive: false,
+        scoped: true,
+    },
+];
+
+/// What the view sends for a page.
+fn options(case_sensitive: bool, session_id: Option<i64>, before: Option<i64>) -> SearchOptions {
+    SearchOptions {
+        case_sensitive,
+        max_results: PAGE,
+        session_id,
+        before_line_id: before,
+        hide_local: true,
+    }
+}
+
+/// What a plain scan of the week finds for one page: the newest matches
+/// in scope as (line id, text), oldest first, and with `with_total` the
+/// count of every match in scope.
+fn scan(
+    week: &Week,
+    pattern: &str,
+    o: &SearchOptions,
+    with_total: bool,
+) -> (Vec<(i64, String)>, Option<u64>) {
+    let regex = RegexBuilder::new(pattern)
+        .case_insensitive(!o.case_sensitive)
+        .build()
+        .expect("the pattern");
+    let local = |session: i64| week.sessions[(session - 1) as usize].1;
+    let mut hits = Vec::new();
+    let mut matched = 0u64;
+    for (at, row) in week.rows.iter().enumerate().rev() {
+        let id = at as i64 + 1;
+        if o.session_id.is_some_and(|s| s != row.session)
+            || o.before_line_id.is_some_and(|b| id >= b)
+            || (o.hide_local && local(row.session))
+            || !regex.is_match(&row.text)
+        {
+            continue;
+        }
+        matched += 1;
+        if hits.len() < o.max_results {
+            hits.push((id, row.text.clone()));
+        }
+    }
+    hits.reverse();
+    (hits, with_total.then_some(matched))
+}
+
+/// Hold `page` to what the scan finds.
+fn check(
+    week: &Week,
+    what: &str,
+    pattern: &str,
+    o: &SearchOptions,
+    with_total: bool,
+    page: &SearchPage,
+) {
+    let (want, total) = scan(week, pattern, o, with_total);
+    let got: Vec<(i64, String)> = page
+        .hits
+        .iter()
+        .map(|h| (h.line_id, h.text.clone()))
+        .collect();
+    assert_eq!(got.len(), want.len(), "{what}: how many hits");
+    if let Some(at) = got.iter().zip(&want).position(|(g, w)| g != w) {
+        panic!(
+            "{what}: hit {at} is {:?}, the scan finds {:?}",
+            got[at], want[at]
+        );
+    }
+    assert_eq!(page.total, total, "{what}: the count");
+    for hit in &page.hits {
+        let row = &week.rows[(hit.line_id - 1) as usize];
+        assert_eq!(hit.session_id, row.session, "{what}: a hit's session");
+        assert_ne!(hit.host, "127.0.0.1", "{what}: a local hit");
+    }
+}
+
+/// How long `f` took, and what it returned.
+fn timed<T>(f: impl FnOnce() -> T) -> (Duration, T) {
+    let t = Instant::now();
+    let out = f();
+    (t.elapsed(), out)
+}
+
+fn ms(d: Duration) -> f64 {
+    d.as_secs_f64() * 1e3
+}
+
+/// The fresh search and the warm ones, in ms.
+struct Times {
+    fresh: Duration,
+    warm: Vec<Duration>,
+}
+
+impl Times {
+    fn line(&self, what: &str, page: &SearchPage) -> String {
+        let mut warm = self.warm.clone();
+        warm.sort_unstable();
+        format!(
+            "P5 {what:<28} fresh {:>7.1} ms  warm {:>7.1} ms (min {:.1}, max {:.1})  hits {:>3}  count {}",
+            ms(self.fresh),
+            ms(warm[warm.len() / 2]),
+            ms(warm[0]),
+            ms(warm[warm.len() - 1]),
+            page.hits.len(),
+            page.total.map_or_else(|| "-".to_string(), |t| t.to_string()),
+        )
+    }
+}
+
+/// Time one page: once on a fresh connection, then [`REPS`] more on it.
+fn time_page(
+    path: &Path,
+    pattern: &str,
+    o: &SearchOptions,
+    with_total: bool,
+) -> (Times, SearchPage) {
+    let store = LogStore::open(path).expect("the log");
+    let (fresh, page) = timed(|| store.search_page(pattern, o, with_total).expect("a page"));
+    let warm = (0..REPS)
+        .map(|_| timed(|| store.search_page(pattern, o, with_total).expect("a page")).0)
+        .collect();
+    (Times { fresh, warm }, page)
+}
+
+/// Removes the temporary folder when the test ends, passed or not.
+struct TempDir(PathBuf);
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+#[allow(clippy::cast_precision_loss)]
+#[ignore = "P5 benchmark, run with --ignored"]
+#[test]
+fn p5_search_a_heavy_week() {
+    let kept = std::env::var_os("VOSH_P5_DB").map(PathBuf::from);
+    let _temp;
+    let path = if let Some(path) = kept.clone() {
+        path
+    } else {
+        let dir = std::env::temp_dir().join(format!("vosh-p5-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("a temporary folder");
+        _temp = TempDir(dir.clone());
+        dir.join("logs.sqlite")
+    };
+
+    let week = if path.exists() {
+        let week = generate(None);
+        let store = LogStore::open(&path).expect("the log");
+        let sessions = store.list_sessions(0, false).expect("the sessions");
+        let lines: i64 = sessions.iter().map(|s| s.line_count).sum();
+        assert!(
+            sessions.len() == week.sessions.len() && lines == week.rows.len() as i64,
+            "{} holds another log. Remove it and run again.",
+            path.display()
+        );
+        println!("P5 reused {}", path.display());
+        week
+    } else {
+        let store = LogStore::open(&path).expect("the log");
+        let (took, week) = timed(|| generate(Some(store)));
+        println!(
+            "P5 wrote the week in {:.1} s, {:.0} rows/s",
+            took.as_secs_f64(),
+            week.rows.len() as f64 / took.as_secs_f64()
+        );
+        week
+    };
+    let size = std::fs::metadata(&path).map_or(0, |m| m.len());
+    let local = week.sessions.iter().filter(|s| s.1).count();
+    println!(
+        "P5 the week: {} rows, {} sessions ({local} local), {:.1} MB",
+        week.rows.len(),
+        week.sessions.len(),
+        size as f64 / 1e6
+    );
+
+    // The session list the view loads when it opens.
+    let (fresh, newest) = {
+        let store = LogStore::open(&path).expect("the log");
+        let (took, rows) = timed(|| store.list_sessions(0, true).expect("the sessions"));
+        assert_eq!(
+            rows.len(),
+            week.sessions.len() - local,
+            "the sessions shown"
+        );
+        (took, rows[0].id)
+    };
+    println!("P5 {:<28} fresh {:>7.1} ms", "session list", ms(fresh));
+
+    for q in &SUITE {
+        let o = options(q.case_sensitive, q.scoped.then_some(newest), None);
+        let (times, page) = time_page(&path, q.pattern, &o, true);
+        check(&week, q.name, q.pattern, &o, true, &page);
+        println!("{}", times.line(q.name, &page));
+    }
+
+    // The page before, as the view loads it when you scroll up, with no
+    // count.
+    let first = options(false, None, None);
+    let store = LogStore::open(&path).expect("the log");
+    let page = store.search_page("guard", &first, false).expect("a page");
+    let before = page.hits.first().map(|h| h.line_id);
+    drop(store);
+    let o = options(false, None, before);
+    let (times, page) = time_page(&path, "guard", &o, false);
+    check(&week, "common word, page 2", "guard", &o, false, &page);
+    assert_eq!(page.hits.len(), PAGE, "a full page before the first");
+    println!("{}", times.line("common word, page 2", &page));
+}
