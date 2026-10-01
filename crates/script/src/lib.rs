@@ -682,6 +682,9 @@ mod tests {
             "t",
         )
         .unwrap();
+        // A run that claimed handlers it did not make would drop them on
+        // the next reload, so reload twice.
+        e.reload_scripts().unwrap();
         e.reload_scripts().unwrap();
         let mut echoes = e
             .dispatch_gmcp("Char.Vitals", &serde_json::json!({}))
