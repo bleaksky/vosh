@@ -619,6 +619,38 @@ export async function promptConfigGet(): Promise<PromptConfig> {
   return normalizePromptConfig(await invoke<RawPromptConfig | null>('prompt_config_get'));
 }
 
+/** Tell the backend the card opened, which keeps the design it found
+ *  among the earlier designs, and read the table as it now stands. */
+export async function promptCardOpen(): Promise<PromptConfig> {
+  return normalizePromptConfig(await invoke<RawPromptConfig | null>('prompt_card_open'));
+}
+
+/** What the main window opens the card on: where it would open, or
+ *  Edit as text. */
+export type PromptCardView = 'text' | null;
+
+export interface PromptCardRequest {
+  view: PromptCardView;
+}
+
+export const PROMPT_CARD_OPEN_EVENT = 'vosh://prompt-card-open';
+
+/** Ask the main window to open the prompt card, from any window, such as
+ *  Customize… in Settings. */
+export async function openPromptCard(view: PromptCardView = null): Promise<void> {
+  await emit(PROMPT_CARD_OPEN_EVENT, { view });
+}
+
+/** Hear a window ask for the prompt card. */
+export async function subscribePromptCardOpen(
+  cb: (request: PromptCardRequest) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(PROMPT_CARD_OPEN_EVENT, (event) => {
+    const raw = event.payload as { view?: unknown } | null;
+    cb({ view: raw?.view === 'text' ? 'text' : null });
+  });
+}
+
 /** Save a `[prompt]` table for the active profile. It saves shortly,
  *  repaints the open row and tells every window. A capture that does not
  *  compile changes nothing, and the error is a sentence to show. */
@@ -658,6 +690,7 @@ export type PromptWarningKind =
   | 'twice';
 
 export type PromptPresetId =
+  | 'default'
   | 'game'
   | 'minimal'
   | 'how_full'
@@ -721,6 +754,38 @@ export interface PromptCompileReport {
   names: Record<string, string>;
   /** Each number of a line you pointed at. Empty otherwise. */
   numbers: PromptLineNumber[];
+  /** The card's code legend: every code and line end in the order the
+   *  settings print them. Empty for a pattern. */
+  legend: PromptLegendRow[];
+  /** What the prompt shows, as the card says it, or null when codes run
+   *  together or it reads no value. */
+  shows: string | null;
+  /** While codes run together, what Vosh still reads and which values
+   *  the game supplies until you fix the prompt. */
+  fix_note: string | null;
+  /** While codes run together, the command that fixes each setting. */
+  fixes: string[];
+  /** For a line another game prints, the values its GMCP sends that
+   *  Vosh has no name for. */
+  gmcp_names: { name: string; package: string }[];
+}
+
+/** One row of the card's code legend. */
+export interface PromptLegendRow {
+  /** As you write it, `%h`, or a run of codes that run together. Empty
+   *  for a warning about the whole setting. */
+  code: string;
+  label: string;
+  which: PromptWhich;
+  span: [number, number];
+  /** It prints only in a fight, which the card tags while the prompt it
+   *  shows is not from one. */
+  fight: boolean;
+  tag: string | null;
+  /** The code carries the warn ring. */
+  warn: boolean;
+  /** The warning's sentence, shown under the row. */
+  warning: string | null;
 }
 
 /** What a capture compiles to. It changes nothing. */
@@ -761,6 +826,33 @@ export interface PromptCaptureCheck {
   fight_matched: number;
   false_matches: number;
   text: string;
+  /** Each ring entry the capture reads, newest first, with its values
+   *  marked. */
+  reads: PromptCheckRead[];
+}
+
+/** What one value printed in a prompt: its line, top line first, and its
+ *  characters in that line, counted by code point. `field` is null for
+ *  codes that run together, which `warn` marks. */
+export interface PromptMark {
+  line: number;
+  start: number;
+  end: number;
+  field: string | null;
+  label: string;
+  warn: boolean;
+}
+
+/** A ring entry a capture reads. */
+export interface PromptCheckRead {
+  id: number;
+  /** As the game sent it, colors included, lines joined by `\r\n`. */
+  raw: string;
+  /** Lines joined by `\n`. */
+  plain: string;
+  at_ms: number;
+  fight: boolean;
+  marks: PromptMark[];
 }
 
 /** What a capture built from one ring entry reads, the line another game
@@ -1030,6 +1122,9 @@ export interface PromptState {
   catalog: PromptFieldState[];
   status: PromptStatusPayload;
   new_build: boolean;
+  /** The Forsaken Lands rules hold: the host is The Forsaken Lands or the
+   *  capture reads its codes. */
+  forsaken: boolean;
   open_row: PromptOpenRow | null;
   /** The GMCP packages that came this session. */
   packages: string[];

@@ -22,6 +22,8 @@ export interface PromptShowState {
   show: PromptShow;
   /** The profile has a capture that reads a prompt. */
   capture: boolean;
+  /** Draw your prompt is on. */
+  draw: boolean;
   /** The game sent Char.Prompt this session. */
   gameSent: boolean;
   /** The rows the pinned band keeps, the most any prompt the capture
@@ -34,6 +36,7 @@ export interface PromptShowState {
 interface RawPromptShowState {
   show?: unknown;
   capture?: unknown;
+  draw?: unknown;
   game_sent?: unknown;
   zone?: unknown;
   prompts_off?: unknown;
@@ -46,6 +49,7 @@ export function normalizePromptShowState(raw: RawPromptShowState | null): Prompt
   return {
     show: normalizePromptShow(raw?.show),
     capture: raw?.capture === true,
+    draw: raw?.draw === true,
     gameSent: raw?.game_sent === true,
     zone: Math.min(6, Math.max(1, Math.round(zone))),
     promptsOff: raw?.prompts_off === true,

@@ -20,6 +20,7 @@ vi.mock('../../../lib/stores/vitalsStore', () => ({ useVitals: () => null }));
 const reads: PromptShowState = {
   show: 'text',
   capture: true,
+  draw: true,
   gameSent: true,
   zone: 1,
   promptsOff: false,
@@ -133,14 +134,23 @@ describe('where your prompt shows, found and read', () => {
       normalizePromptShowState({
         show: 'pinned',
         capture: true,
+        draw: true,
         game_sent: false,
         zone: 3,
         prompts_off: true,
       }),
-    ).toEqual({ show: 'pinned', capture: true, gameSent: false, zone: 3, promptsOff: true });
+    ).toEqual({
+      show: 'pinned',
+      capture: true,
+      draw: true,
+      gameSent: false,
+      zone: 3,
+      promptsOff: true,
+    });
     expect(normalizePromptShowState(null)).toEqual({
       show: 'text',
       capture: false,
+      draw: false,
       gameSent: false,
       zone: 1,
       promptsOff: false,

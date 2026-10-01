@@ -4,6 +4,9 @@ import { listen, type EventCallback } from '@tauri-apps/api/event';
 import {
   normalizePromptConfig,
   onPromptGagWithoutReader,
+  openPromptCard,
+  promptCardOpen,
+  subscribePromptCardOpen,
   onPromptState,
   onPromptStatus,
   promptCandidates,
@@ -23,7 +26,9 @@ import {
   terminalCursor,
   type PromptConfig,
   type PromptConfigChangedPayload,
+  type PromptCardRequest,
 } from './session';
+import { emit } from '@tauri-apps/api/event';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -206,5 +211,43 @@ describe('the prompt editor events', () => {
     vi.mocked(invoke).mockImplementation(() => Promise.resolve(report));
     await expect(terminalCursor()).resolves.toEqual(report);
     expect(vi.mocked(invoke).mock.calls).toEqual([['terminal_cursor']]);
+  });
+});
+
+describe('opening the prompt card', () => {
+  it('tells the backend the card opened and reads the table it keeps', async () => {
+    vi.mocked(invoke).mockImplementation(((command: string) =>
+      Promise.resolve(
+        command === 'prompt_card_open'
+          ? { draw: true, template: '%hp', previous_templates: ['%hp'] }
+          : undefined,
+      )) as typeof invoke);
+    const config = await promptCardOpen();
+    expect(invoke).toHaveBeenLastCalledWith('prompt_card_open');
+    expect(config.previous_templates).toEqual(['%hp']);
+    expect(config.capture).toEqual({ kind: 'none' });
+  });
+
+  it('asks the main window to open the card from any window', async () => {
+    await openPromptCard();
+    expect(emit).toHaveBeenLastCalledWith('vosh://prompt-card-open', { view: null });
+    await openPromptCard('text');
+    expect(emit).toHaveBeenLastCalledWith('vosh://prompt-card-open', { view: 'text' });
+    let handler: EventCallback<unknown> | undefined;
+    vi.mocked(listen).mockImplementationOnce((event, cb) => {
+      expect(event).toBe('vosh://prompt-card-open');
+      handler = cb as EventCallback<unknown>;
+      return Promise.resolve(() => {});
+    });
+    const heard: PromptCardRequest[] = [];
+    await subscribePromptCardOpen((request) => heard.push(request));
+    const send = (payload: unknown) =>
+      handler?.({ event: 'vosh://prompt-card-open', id: 0, payload });
+    send({ view: 'text' });
+    send({ view: null });
+    // A view this build does not know opens the card where it would open.
+    send({ view: 'telepathy' });
+    send(null);
+    expect(heard).toEqual([{ view: 'text' }, { view: null }, { view: null }, { view: null }]);
   });
 });
