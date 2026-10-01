@@ -2079,6 +2079,12 @@ impl Stage {
         self.gag_reported.insert(trigger.to_string())
     }
 
+    /// The triggers that hid a prompt this session while nothing read
+    /// it, in name order.
+    pub fn gags_without_reader(&self) -> impl Iterator<Item = &str> {
+        self.gag_reported.iter().map(String::as_str)
+    }
+
     /// Note Line triggers that matched a line Vosh read as your prompt,
     /// which they no longer see (D6).
     pub fn line_triggers_matched<'a>(&mut self, names: impl IntoIterator<Item = &'a str>) {
@@ -2945,6 +2951,10 @@ mod tests {
         assert!(stage.gag_without_reader("prompt-capture"));
         assert!(!stage.gag_without_reader("prompt-capture"));
         assert!(stage.gag_without_reader("my-capture"));
+        assert_eq!(
+            stage.gags_without_reader().collect::<Vec<_>>(),
+            ["my-capture", "prompt-capture"]
+        );
     }
 
     #[test]
