@@ -16,7 +16,9 @@ fixtures/
              with the keys its function reads and each event with who
              sends it and whether the page hears it. The IPC contract
              test in src-tauri holds it to the sources, and
-             VOSH_WRITE_IPC_NAMES=1 writes it again.
+             VOSH_WRITE_IPC_NAMES=1 writes it again. gmcp-events.json,
+             the event each GMCP package goes out on, read by a fake MUD
+             test in src-tauri and by session.test.ts on the page.
   mccp/      MCCP compressed stream captures.
   pane-layout/  Pane tree cases shared by the Rust and TypeScript sanitize tests.
   prompt/

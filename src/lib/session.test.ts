@@ -26,6 +26,7 @@ import {
   normalizeVitalsMeter,
   normalizeVitalsOptions,
   normalizeVitalsValues,
+  onGmcpPackage,
   primeUiConfigThemePrefs,
   seedDarkTheme,
   sendInput,
@@ -39,6 +40,7 @@ import {
   type RawUiConfig,
   type UiConfig,
 } from './session';
+import gmcpEvents from '../../fixtures/ipc/gmcp-events.json';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -843,6 +845,19 @@ describe('where your prompt shows', () => {
     } as RawUiConfig);
     for (const key of ['prompt_template_enabled', 'prompt_template', 'prompt_show']) {
       expect(key in config).toBe(false);
+    }
+  });
+});
+
+// The session sends each GMCP package on the event this shared file
+// names for it. The fake MUD test in src-tauri reads the same file, so a
+// change to the encoding on one side alone fails one of the two.
+describe('onGmcpPackage', () => {
+  it('listens on the event the session sends each package on', async () => {
+    for (const { package: name, event } of gmcpEvents.cases) {
+      vi.mocked(listen).mockClear();
+      await onGmcpPackage(name, () => {});
+      expect(vi.mocked(listen)).toHaveBeenCalledWith(event, expect.any(Function));
     }
   });
 });
