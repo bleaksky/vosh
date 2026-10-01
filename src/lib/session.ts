@@ -1516,6 +1516,13 @@ export async function terminalLocalWrite(text: string, after: number | null): Pr
   await invoke('terminal_local_write', { text, after });
 }
 
+/** You started or stopped selecting text or reading back in xterm. While
+ *  you do, a clock piece in your design leaves your prompt in the text as
+ *  it is. */
+export async function terminalReaderBusy(busy: boolean): Promise<void> {
+  await invoke('terminal_reader_busy', { busy });
+}
+
 /** Where the native grid's cursor sits and where its open region
  *  starts. Lines count from the top of the live screen, negative in
  *  history, so while `at_bottom` holds a line is the screen row the grid

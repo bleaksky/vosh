@@ -44,6 +44,7 @@ import {
   nativeBottomBounds,
   spareAbove,
 } from '../lib/terminalRows';
+import { noteReader } from '../lib/readerBusy';
 import { ingestRecentNames } from '../lib/recentNames';
 
 /** Session flag set when the native surface never came up, so the page
@@ -1329,6 +1330,18 @@ export function Terminal({
     };
     const scrollDisposable = term.onScroll(onScrollClearStaleSelection);
 
+    // A clock piece in your design leaves your prompt as it is while you
+    // select text here, or while the live pane is off its newest rows.
+    const selectionPart = quietRef.current ? 'historySelection' : 'liveSelection';
+    const readerSelection = term.onSelectionChange(() =>
+      noteReader(selectionPart, term.hasSelection()),
+    );
+    const readerBack = quietRef.current
+      ? null
+      : term.onScroll(() =>
+          noteReader('liveBack', term.buffer.active.viewportY !== term.buffer.active.baseY),
+        );
+
     // Ctrl/Cmd + C or X copies the xterm selection. The keystroke
     // almost always lands while focus is in the Input box (the user
     // drag-selects xterm output, then hits the shortcut without
@@ -1380,6 +1393,11 @@ export function Terminal({
       lifts?.dispose();
       resultsSub.dispose();
       scrollDisposable.dispose();
+      readerSelection.dispose();
+      readerBack?.dispose();
+      // A pane that goes takes its selection and its place with it.
+      noteReader(selectionPart, false);
+      if (readerBack) noteReader('liveBack', false);
       searchAddon.dispose();
       // WebglAddon's dispose reads `_terminal._core._store._isDisposed`
       // and throws when xterm has already torn down its core. The
