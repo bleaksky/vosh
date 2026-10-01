@@ -529,6 +529,21 @@ pub(crate) async fn prompt_preview_set(
     Ok(())
 }
 
+/// The open card chose Aabahran's code reader on a host Vosh does not
+/// know (More > Use Forsaken Lands prompt codes…), or let it go as it
+/// closed. While it holds, the Forsaken Lands rules hold, so the game's
+/// reply to `prompt` fills the card's fields on an older build (D17). It
+/// lasts until the card lets it go, the main window loads again, or
+/// another profile takes over.
+#[tauri::command]
+pub(crate) async fn prompt_code_reader_set(
+    state: State<'_, SharedState>,
+    on: bool,
+) -> Result<(), String> {
+    state.profile.lock().await.prompt.set_reader(on);
+    Ok(())
+}
+
 /// A design after an edit, and how it draws with the live values and
 /// placeholders, as the open card shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

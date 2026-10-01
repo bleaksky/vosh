@@ -50,6 +50,7 @@ import {
   profilesList,
   promptCandidates,
   promptCardOpen,
+  promptCodeReaderSet,
   promptCompile,
   promptConfigGet,
   promptConfigSet,
@@ -357,6 +358,14 @@ export function PromptCard({
     }
     setView(asked);
   }, [opening.at, asked]);
+
+  // The code reader you chose on another host gives it the Forsaken Lands
+  // rules while the card stays open, so the game's reply to prompt fills
+  // P2's fields (D17). Closing the card lets it go.
+  useEffect(() => {
+    void promptCodeReaderSet(codesChosen).catch(() => {});
+  }, [codesChosen]);
+  useEffect(() => () => void promptCodeReaderSet(false).catch(() => {}), []);
 
   // While the card reads your codes your prompt shows the line the game
   // sent, so its marks sit on it. Once it draws your design, each value

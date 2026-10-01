@@ -147,6 +147,12 @@ pub struct PromptEngine {
     pub stage: Stage,
     /// The connection is to The Forsaken Lands. False with no connection.
     known_host: bool,
+    /// The open card chose Aabahran's code reader on a host Vosh does not
+    /// know, with More > Use Forsaken Lands prompt codes…, so the Forsaken
+    /// Lands rules hold until the card lets it go or another profile takes
+    /// over (D17). A connection keeps it, since the card stays open across
+    /// one.
+    reader: bool,
     /// The prompt vars the webview last heard.
     reported_vars: Option<BTreeMap<String, String>>,
     /// Moves each time the table changes, so a step can tell whether it
@@ -774,9 +780,18 @@ impl PromptEngine {
     }
 
     /// Whether the Forsaken Lands rules hold (D17): the host is The
-    /// Forsaken Lands, or the capture reads Aabahran's codes.
+    /// Forsaken Lands, the capture reads Aabahran's codes, or the open
+    /// card chose the code reader.
     pub fn forsaken(&self) -> bool {
         self.vars.forsaken()
+    }
+
+    /// The open card chose Aabahran's code reader, or let it go (D17).
+    /// While it holds, the Forsaken Lands rules hold, so the observer
+    /// reads the game's replies to `prompt` for the card's fields.
+    pub fn set_reader(&mut self, on: bool) {
+        self.reader = on;
+        self.apply_rules();
     }
 
     /// A connection opened. It starts with no packets and no values.
@@ -836,6 +851,8 @@ impl PromptEngine {
     /// and the values the last profile's prompt read go. The next
     /// [`PromptEngine::set_config`] hands over the new profile's table.
     pub fn switch_profile(&mut self) {
+        // The card opens again for the new profile, from its first step.
+        self.reader = false;
         let forsaken = self.rules();
         self.vars.switch_profile(forsaken);
         self.kept_pattern = None;
@@ -845,7 +862,7 @@ impl PromptEngine {
     }
 
     fn rules(&self) -> bool {
-        forsaken_lands(self.known_host, self.config.capture.is_aabahran())
+        self.reader || forsaken_lands(self.known_host, self.config.capture.is_aabahran())
     }
 
     fn apply_rules(&mut self) {
@@ -1574,6 +1591,45 @@ mod tests {
             Some("%h ")
         );
         assert!(!engine.take_seen()[0].applied);
+    }
+
+    #[test]
+    fn the_code_reader_the_card_chose_reads_the_replies_on_another_host() {
+        // A local server of The Forsaken Lands, with no capture yet. More
+        // > Use Forsaken Lands prompt codes… gives it the rules (D17), so
+        // the reply to prompt fills the card's fields.
+        let mut engine = PromptEngine::default();
+        engine.connect(false);
+        engine.set_reader(true);
+        assert!(engine.forsaken());
+        engine.note_send("prompt\r\n", SENT);
+        line(
+            &mut engine,
+            "Current prompt: %n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c",
+            40,
+        );
+        let seen = engine.take_seen();
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].kind, SeenKind::Prompt);
+        assert_eq!(seen[0].text, "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c");
+        assert!(!seen[0].applied, "no capture takes it before you save");
+
+        // The card stays open across a connection, and the rules with it.
+        engine.disconnect();
+        engine.connect(false);
+        assert!(engine.forsaken());
+
+        // Once the card lets it go, the host plays by its own rules.
+        engine.set_reader(false);
+        assert!(!engine.forsaken());
+        engine.note_send("prompt\r\n", SENT + 3_000);
+        line(&mut engine, "Current prompt: %h ", 3_040);
+        assert!(engine.take_seen().is_empty());
+
+        // Another profile taking over lets it go too.
+        engine.set_reader(true);
+        engine.switch_profile();
+        assert!(!engine.forsaken());
     }
 
     fn vitals(engine: &mut PromptEngine) {

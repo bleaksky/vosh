@@ -406,6 +406,7 @@ pub fn run() {
             prompt_commands::prompt_config_get,
             prompt_commands::prompt_config_set,
             prompt_commands::prompt_card_open,
+            prompt_commands::prompt_code_reader_set,
             prompt_commands::prompt_designs_list,
             prompt_commands::prompt_compile,
             prompt_commands::prompt_candidates,
