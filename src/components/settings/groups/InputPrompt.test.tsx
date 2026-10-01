@@ -218,6 +218,26 @@ describe('the preview', () => {
     expect(html).not.toContain('prompt-band');
   });
 
+  it('rings a part your prompt no longer feeds (P14)', () => {
+    const html = renderToStaticMarkup(
+      <PreviewView
+        rows={previewRows('Tester: Tank health\r\n[1020/1020hp]')}
+        preview="fight"
+        options={previewOptions(true)}
+        onPreview={() => undefined}
+        band={false}
+        env={NORD}
+        cellW={7.8}
+        meta="Right click your prompt in the terminal to change it there."
+        rings={[{ left: 72.4, top: 5.25, width: 85.8, height: 17.5 }]}
+      />,
+    );
+    expect(html).toContain(
+      'class="st-prompt-preview-warn" aria-hidden="true" style="left:72.4px;top:5.25px;width:85.8px;height:17.5px"',
+    );
+    expect(view('[1020/1020hp]')).not.toContain('st-prompt-preview-warn');
+  });
+
   it('grows 17.5 for each line past the first', () => {
     const html = view('Tester: \x1b[32m█████████\x1b[90m░\x1b[0m\r\n1020/1020hp ');
     expect(html).toContain('height:45.5px');

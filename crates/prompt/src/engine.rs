@@ -45,6 +45,13 @@ pub struct GamePromptSeen {
     pub text: String,
     /// The active profile's capture took it, which raises the toast.
     pub applied: bool,
+    /// The catalog names of the parts of your design the capture fed
+    /// before it took the settings and nothing feeds now: no code in the
+    /// new settings, and no package that sends it this session. Vosh says
+    /// so once, and the card and Settings ring those parts (P14). Left
+    /// out of the event when empty.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub lost: Vec<String>,
 }
 
 /// How long after one of your own sends the game's reply to `prompt` or
@@ -232,7 +239,7 @@ impl PromptEngine {
                 text.clone_from(&prompt.fprompt);
             }
         }
-        let applied = self.take_settings(
+        let (applied, lost) = self.take_settings(
             Some(&prompt.prompt),
             Some(&prompt.fprompt),
             CaptureSource::Gmcp,
@@ -242,6 +249,7 @@ impl PromptEngine {
             kind: SeenKind::Gmcp,
             text,
             applied,
+            lost,
         }
     }
 
@@ -249,8 +257,64 @@ impl PromptEngine {
     /// that follows the game takes them when they differ from the ones it
     /// holds. A migrated capture switches to them (see
     /// [`PromptEngine::switch_migrated`]). Any other capture takes
-    /// nothing. Returns whether the capture took them.
+    /// nothing. Returns whether the capture took them, and the parts of
+    /// your design nothing feeds since (see [`GamePromptSeen::lost`]).
     fn take_settings(
+        &mut self,
+        prompt: Option<&str>,
+        fprompt: Option<&str>,
+        source: CaptureSource,
+        at: DateTime<FixedOffset>,
+    ) -> (bool, Vec<String>) {
+        let before = self.fed();
+        let applied = self.take_settings_from(prompt, fprompt, source, at);
+        let lost = if applied {
+            self.lost_since(&before)
+        } else {
+            Vec::new()
+        };
+        (applied, lost)
+    }
+
+    /// The catalog names the capture fills now.
+    fn fed(&self) -> Vec<String> {
+        self.stage
+            .recognizer()
+            .map(capture::Recognizer::reads)
+            .unwrap_or_default()
+            .iter()
+            .map(|name| vars::feeds(name).to_string())
+            .collect()
+    }
+
+    /// The parts of your design that `before`, what the capture filled
+    /// then, fed and nothing feeds now: no code of the capture, and no
+    /// package that sends it this session. A package only the new build
+    /// sends feeds it only on the new build.
+    fn lost_since(&self, before: &[String]) -> Vec<String> {
+        let now = self.fed();
+        let mut lost: Vec<String> = Vec::new();
+        for field in Template::parse(&self.config.template).reads() {
+            let Some(entry) = vars::entry_for(&field).filter(|e| !e.param) else {
+                continue;
+            };
+            let name = entry.name;
+            let sent = entry.package.is_some_and(|package| {
+                self.vars.gmcp().has(package) && (!entry.new_build || self.vars.new_build())
+            });
+            if before.iter().any(|n| n == name)
+                && !now.iter().any(|n| n == name)
+                && !sent
+                && !lost.iter().any(|n| n == name)
+            {
+                lost.push(name.to_string());
+            }
+        }
+        lost
+    }
+
+    /// The body of [`PromptEngine::take_settings`].
+    fn take_settings_from(
         &mut self,
         prompt: Option<&str>,
         fprompt: Option<&str>,
@@ -522,11 +586,11 @@ impl PromptEngine {
             return;
         };
         let text = observer::setting(reply, raw);
-        let (kind, applied) = match reply.kind {
+        let (kind, (applied, lost)) = match reply.kind {
             ReplyKind::Off => {
                 self.observer.off_line = true;
                 self.prompts_off = true;
-                (SeenKind::Off, false)
+                (SeenKind::Off, (false, Vec::new()))
             }
             ReplyKind::Prompt => {
                 if self.observer.sent_off || self.observer.off_line {
@@ -560,6 +624,7 @@ impl PromptEngine {
             kind,
             text,
             applied,
+            lost,
         });
     }
 
@@ -1138,6 +1203,7 @@ mod tests {
                 kind: SeenKind::Gmcp,
                 text: "%n%P%C<%hhp %mm %vmv> ".into(),
                 applied: true,
+                lost: Vec::new(),
             }]
         );
         assert!(engine.take_seen().is_empty());
@@ -1161,6 +1227,7 @@ mod tests {
                 kind: SeenKind::Gmcp,
                 text: "%n%P%C<%hhp %mm %vmv> ".into(),
                 applied: false,
+                lost: Vec::new(),
             }]
         );
 
@@ -1332,6 +1399,7 @@ mod tests {
                     kind: SeenKind::Prompt,
                     text: "%h %m ".into(),
                     applied: true,
+                    lost: Vec::new(),
                 }]
             );
             let seen = engine.session_setting().expect("noted for the card");
@@ -1346,6 +1414,62 @@ mod tests {
         assert_eq!(engine.take_seen()[0].kind, SeenKind::Fprompt);
         line(&mut engine, "Fight prompt cleared.", 20);
         assert_eq!(codes(&engine).fprompt, "");
+    }
+
+    #[test]
+    fn a_new_prompt_names_the_parts_of_your_design_nothing_feeds_any_more() {
+        // Same as the game reads your tank's health. On an older build
+        // only %P sends it, so dropping %P in the game leaves that part
+        // blank, and Vosh says so once (P14).
+        let mut engine = older_build("%n%P%C[%h/%Hhp]%c");
+        let mut config = engine.config().clone();
+        config.template = "%{if:tank}%tank: %{tank_hp:game}%nl%{end}[%hp/%{maxhp}hp]".into();
+        engine.set_config(config);
+        engine.observe(
+            "Char.Vitals",
+            json!({"hp": 1020, "maxhp": 1020, "mana": 800, "maxmana": 800, "move": 930, "maxmove": 930}),
+            at_ms(SENT),
+        );
+        engine.note_send("prompt %n%C[%h/%Hhp]%c\r\n", SENT);
+        line(&mut engine, "Prompt set to %n%C[%h/%Hhp]%c", 40);
+        let seen = engine.take_seen();
+        assert_eq!(seen.len(), 1);
+        assert!(seen[0].applied);
+        // Health still comes from Char.Vitals, so only the tank's health
+        // is lost.
+        assert_eq!(seen[0].lost, ["tank_hp"]);
+        // A change that keeps every part fed names none.
+        engine.note_send("prompt %n%P%C[%h/%Hhp]%c\r\n", SENT + 100);
+        line(&mut engine, "Prompt set to %n%P%C[%h/%Hhp]%c", 140);
+        assert!(engine.take_seen()[0].lost.is_empty());
+    }
+
+    #[test]
+    fn on_the_new_build_char_combat_keeps_your_tanks_health() {
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        let mut config = following("%n%P%C[%h/%Hhp]%c");
+        config.template = "%{if:tank}%tank: %{tank_hp:game}%nl%{end}[%hp]".into();
+        engine.set_config(config);
+        engine.observe(
+            "Char.Prompt",
+            char_prompt(true, "%n%P%C[%h/%Hhp]%c", ""),
+            at(),
+        );
+        engine.observe(
+            "Char.Combat",
+            json!({"target": "a rat", "hp_pct": 80, "condition": "fine", "tank": {"name": "Tester", "hp_pct": 90}}),
+            at(),
+        );
+        let _ = engine.take_seen();
+        engine.observe(
+            "Char.Prompt",
+            char_prompt(true, "%n%C[%h/%Hhp]%c", ""),
+            at(),
+        );
+        let seen = engine.take_seen();
+        assert!(seen[0].applied);
+        assert!(seen[0].lost.is_empty(), "{:?}", seen[0].lost);
     }
 
     #[test]
@@ -1624,6 +1748,7 @@ mod tests {
                 kind: SeenKind::Gmcp,
                 text: OLD.into(),
                 applied: true,
+                lost: Vec::new(),
             }],
             "the toast follows"
         );
@@ -1787,6 +1912,7 @@ mod tests {
                 kind: SeenKind::Prompt,
                 text: "<%hhp %mm> ".into(),
                 applied: true,
+                lost: Vec::new(),
             }]
         );
 

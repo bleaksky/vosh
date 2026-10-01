@@ -1632,3 +1632,12 @@
   position: absolute;
   left: 10px;
 }
+
+/* A part of your design no value fills, ringed in the Settings preview as
+   the card rings it on your prompt (P14). */
+.st-prompt-preview-warn {
+  position: absolute;
+  border-radius: var(--r-key);
+  box-shadow: 0 0 0 1px var(--warn);
+  pointer-events: none;
+}

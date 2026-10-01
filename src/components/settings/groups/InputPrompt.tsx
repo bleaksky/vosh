@@ -27,6 +27,7 @@ import {
   promptCompile,
   promptConfigGet,
   promptConfigSet,
+  promptDescribe,
   promptLastSeen,
   promptRender,
   promptStateGet,
@@ -40,6 +41,7 @@ import {
   type PromptCheckRead,
   type PromptCompileReport,
   type PromptConfig,
+  type PromptFieldState,
   type PromptLastSeen,
   type PromptPreviewName,
   type PromptShow,
@@ -47,6 +49,7 @@ import {
   type SessionIdentity,
 } from '../../../lib/session';
 import { shownColumns, type Cell } from '../../../lib/sgrCells';
+import { warnBoxes, warnedPieces } from '../../../lib/promptWarn';
 import { useGamePrompt } from '../../../lib/stores/gamePromptStore';
 import { useBandEnv } from '../../../lib/useBandEnv';
 import { CARD_ROW_PX, useCellWidth } from '../../../lib/useCellWidth';
@@ -291,6 +294,7 @@ export function PromptSection({
       {reads && (
         <PreviewBlock
           template={config.template}
+          catalog={data.state?.catalog ?? NO_FIELDS}
           live={connected}
           preview={shown}
           options={previews}
@@ -698,6 +702,9 @@ export function DrawRow({ capture, draw, description, onCustomize, onDraw }: Dra
 // The preview
 // ---------------------------------------------------------------------
 
+/** No catalog yet, before the prompt state is read. */
+const NO_FIELDS: readonly PromptFieldState[] = [];
+
 /** The text inset of the preview output, as P12 draws it. */
 const OUT_X = 10;
 const OUT_W = 600;
@@ -708,6 +715,8 @@ const BAND_Y = 2;
 
 interface PreviewBlockProps {
   template: string;
+  /** What each value reads now, to ring a part no value fills. */
+  catalog: readonly PromptFieldState[];
   /** Draw live values, or samples while you are offline. */
   live: boolean;
   preview: PromptPreviewName;
@@ -729,6 +738,7 @@ interface PreviewBlockProps {
  *  on screen. */
 function PreviewBlock({
   template,
+  catalog,
   live,
   preview,
   options,
@@ -739,28 +749,50 @@ function PreviewBlock({
   meta,
   tick,
 }: PreviewBlockProps) {
-  const [ansi, setAnsi] = useState<string | null>(null);
+  const [drawn, setDrawn] = useState<{ ansi: string; rings: Box[] } | null>(null);
   useEffect(() => {
     let alive = true;
-    void promptRender({
-      template,
-      values: live ? 'live' : 'sample',
-      preview: preview === 'now' ? null : preview,
-    })
-      .then((rendered) => {
-        if (alive) setAnsi(rendered.ansi);
+    const shown = preview === 'now' ? null : preview;
+    // A part no value fills draws its label in the ring, as the card
+    // draws it, so you see which part stays blank (P14). Only live
+    // values leave a part blank.
+    const ringed = live
+      ? promptDescribe(template, shown)
+          .then((d) => warnedPieces(d.pieces, d.tokens, catalog))
+          .catch(() => new Set<number>())
+      : Promise.resolve(new Set<number>());
+    void ringed
+      .then((warn) =>
+        promptRender({
+          template,
+          values: live ? 'live' : 'sample',
+          preview: shown,
+          placeholders: warn.size > 0,
+        }).then((rendered) => ({
+          ansi: rendered.ansi,
+          rings: warnBoxes(rendered.spans, warn, {
+            x: OUT_X,
+            y: (28 - CARD_ROW_PX) / 2,
+            cellW,
+            rowH: CARD_ROW_PX,
+          }),
+        })),
+      )
+      .then((next) => {
+        if (alive) setDrawn(next);
       })
       .catch(() => {
-        if (alive) setAnsi(null);
+        if (alive) setDrawn(null);
       });
     return () => {
       alive = false;
     };
-  }, [template, live, preview, tick]);
-  const rows = useMemo(() => previewRows(ansi), [ansi]);
+  }, [template, catalog, live, preview, cellW, tick]);
+  const rows = useMemo(() => previewRows(drawn?.ansi ?? null), [drawn]);
   return (
     <PreviewView
       rows={rows}
+      rings={drawn?.rings ?? []}
       preview={preview}
       options={options}
       onPreview={onPreview}
@@ -772,8 +804,18 @@ function PreviewBlock({
   );
 }
 
+/** A ring's place in the preview output, in px. */
+interface Box {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 interface PreviewViewProps {
   rows: Cell[][];
+  /** The rings round parts no value fills. */
+  rings?: readonly Box[];
   preview: PromptPreviewName;
   options: { value: PromptPreviewName; label: string }[];
   onPreview: (preview: PromptPreviewName) => void;
@@ -786,6 +828,7 @@ interface PreviewViewProps {
 /** The preview as drawn. Exported for its test. */
 export function PreviewView({
   rows,
+  rings = [],
   preview,
   options,
   onPreview,
@@ -830,6 +873,9 @@ export function PreviewView({
             }}
           />
         )}
+        {rings.map((ring, i) => (
+          <span key={i} className="st-prompt-preview-warn" aria-hidden="true" style={ring} />
+        ))}
         {rows.map((cells, i) => (
           <CellLine
             key={i}
