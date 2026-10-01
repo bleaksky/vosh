@@ -34,8 +34,8 @@ pub struct LineResult {
     pub display: Option<String>,
     /// Commands to send to the server, in priority order.
     pub sends: Vec<String>,
-    /// Pane names to route the line to. Phase 5 wires the panes; until then
-    /// the session loop logs these.
+    /// Pane names to route the line to, each once, in the order the
+    /// first trigger routing there fired.
     pub routes: Vec<String>,
     /// Lua script bodies queued by `TriggerAction::Script` actions,
     /// each paired with the positional regex captures from the
@@ -162,7 +162,11 @@ pub fn process_with_plain(
                         }
                     }
                     TriggerAction::Route { pane } => {
-                        routes.push(pane.clone());
+                        // Each pane takes the line once, however many
+                        // triggers route it there.
+                        if !routes.contains(pane) {
+                            routes.push(pane.clone());
+                        }
                     }
                     TriggerAction::Script { body } => {
                         let caps_list =
@@ -572,6 +576,29 @@ mod tests {
         }]);
         let r = process(&s, b"Bob tells you 'hi'");
         assert_eq!(r.routes, vec!["chat".to_string()]);
+    }
+
+    #[test]
+    fn route_sends_a_line_to_each_pane_once() {
+        // A trigger you built and a preset that route the same line to
+        // the same pane show it there once, not twice.
+        let route = |name: &str, pane: &str, priority: i32| Trigger {
+            name: name.into(),
+            patterns: single_pattern(r"^You tell "),
+            priority,
+            enabled: true,
+            actions: vec![TriggerAction::Route { pane: pane.into() }],
+            preset: None,
+            group: None,
+            target: TriggerTarget::Line,
+        };
+        let s = store(vec![
+            route("mine", "tell", 2),
+            route("log", "chat", 1),
+            route("preset", "tell", 0),
+        ]);
+        let r = process(&s, b"You tell Selune 'hi'");
+        assert_eq!(r.routes, vec!["tell".to_string(), "chat".to_string()]);
     }
 
     #[test]
