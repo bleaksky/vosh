@@ -36,6 +36,10 @@ const READ_BUFFER_BYTES: usize = 8 * 1024;
 
 const PERF_REPORT_INTERVAL: Duration = Duration::from_secs(1);
 
+/// How long a GMCP packet that changes your prompt waits for text before
+/// Vosh repaints your prompt with it (section 4, the late GMCP repaint).
+const LATE_REPAINT: Duration = Duration::from_millis(60);
+
 /// Hot-path performance counters owned by the single `io_loop` task.
 /// Plain `u64` fields are fine because nothing else writes to them.
 /// Rolled up once per second by `report_and_reset` and emitted as
@@ -275,6 +279,9 @@ struct ReadBatch {
     /// The read ended on a partial that can still become your prompt, so
     /// it waits a moment for the next read instead of painting raw.
     hold: bool,
+    /// The read brought GMCP packets, which can change what your prompt
+    /// shows with no prompt after them.
+    gmcp: bool,
 }
 
 impl ReadBatch {
@@ -290,6 +297,7 @@ impl ReadBatch {
             gag_without_reader: Vec::new(),
             character: None,
             hold: false,
+            gmcp: false,
         }
     }
 }
@@ -589,6 +597,9 @@ async fn io_loop<R: tauri::Runtime>(
     // When a partial that can still become your prompt stops waiting for
     // the next read and paints raw.
     let mut hold_until: Option<Instant> = None;
+    // When a GMCP packet that changed your prompt, with no text after it,
+    // repaints it.
+    let mut late_until: Option<Instant> = None;
 
     // Phase 1 audit instrumentation. See `PerfCounters` doc.
     let mut perf = PerfCounters::default();
@@ -779,6 +790,7 @@ async fn io_loop<R: tauri::Runtime>(
                             Instant::now() + Duration::from_millis(vosh_prompt::stage::HOLD_MS)
                         })
                     });
+                    let (gmcp, wrote) = (batch.gmcp, batch.out.writes_text());
                     finish_read(
                         &app,
                         &profile,
@@ -789,6 +801,10 @@ async fn io_loop<R: tauri::Runtime>(
                         &mut perf,
                     )
                     .await;
+                    if gmcp || late_until.is_some() {
+                        let p = profile.lock().await;
+                        late_until = late_repaint_after(&p, late_until, gmcp, wrote, Instant::now());
+                    }
                 }
                 Err(e) => {
                     error!(error = %e, "read failed");
@@ -885,6 +901,16 @@ async fn io_loop<R: tauri::Runtime>(
             () = sleep_until_hold(hold_until), if hold_until.is_some() => {
                 hold_until = None;
                 flush_hold(&app, &profile, &mut accumulator, &mut seen_output).await;
+            }
+            () = sleep_until_hold(late_until), if late_until.is_some() => {
+                late_until = None;
+                let out = {
+                    let mut p = profile.lock().await;
+                    repaint_step(&mut p, output_count() != seen_output, Instant::now())
+                };
+                if !out.is_empty() {
+                    emit_repaint(&app, &out);
+                }
             }
             _ = tick_interval.tick() => {
                 if let Err(e) = handle_tick(&app, &mut stream, &profile).await {
@@ -1267,6 +1293,7 @@ async fn handle_event<R: tauri::Runtime>(
         }
         TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
             perf.gmcp_packets += 1;
+            batch.gmcp = true;
             handle_gmcp(app, profile, map, timers, stream, &payload, batch, perf).await?;
             Ok(())
         }
@@ -1990,6 +2017,36 @@ async fn capture_held_lines(
     }
 }
 
+/// When the late GMCP repaint fires, after a read (section 4). `waiting`
+/// is when it was going to fire, `gmcp` says the read brought packets,
+/// and `wrote` says it wrote to the text. In the text and lifted, text
+/// cancels it, since the prompt that follows draws with the packets
+/// anyway. A read that brought packets and no text starts it when your
+/// prompt would show something else with them, and one already waiting
+/// keeps its time. Pinned, the band is not in the text, so text cancels
+/// nothing, and packets start it whenever the band would change
+/// (addendum item 7).
+fn late_repaint_after(
+    p: &Profile,
+    waiting: Option<Instant>,
+    gmcp: bool,
+    wrote: bool,
+    now: Instant,
+) -> Option<Instant> {
+    let pinned = p.prompt.show() == vosh_prompt::PromptShow::Pinned;
+    if wrote && !pinned {
+        return None;
+    }
+    if waiting.is_some() || !gmcp {
+        return waiting;
+    }
+    let view = prompt_view(p, now);
+    p.prompt
+        .stage
+        .stale(view.stage())
+        .then(|| now + LATE_REPAINT)
+}
+
 /// Wait until `until`, or forever with no deadline.
 async fn sleep_until_hold(until: Option<Instant>) {
     match until {
@@ -2302,6 +2359,7 @@ async fn finish_read<R: tauri::Runtime>(
         gag_without_reader,
         character,
         hold: _,
+        gmcp: _,
     } = batch;
     let watched = prompt && watching_prompt(app);
     let (vars, hidden, prompt_seen, status, prompt_state) = {
@@ -5389,3 +5447,7 @@ mod show_tests;
 #[cfg(test)]
 #[path = "session_preview_tests.rs"]
 mod preview_tests;
+
+#[cfg(test)]
+#[path = "session_repaint_tests.rs"]
+mod repaint_tests;
