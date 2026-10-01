@@ -6,6 +6,7 @@ import { planSubmit } from '../../lib/maskedInput';
 import {
   bandRows,
   DOCK_GAP,
+  dockGap,
   dockHeight,
   dockRows,
   lentRows,
@@ -95,17 +96,21 @@ function dockBox(html: string): { height: number; reach: number; place: number }
 }
 
 describe('the pinned band', () => {
-  it('is one row tall out of a fight, with no empty row above the band', () => {
-    expect(dockHeight(1, 17.5)).toBe(27.5 + 3.5);
-    expect(dockHeight(2, 17.5)).toBe(45 + 3.5);
-    expect(dockHeight(3, 17.5)).toBe(62.5 + 3.5);
+  it('is one row tall out of a fight, a blank line and 6 px under the text', () => {
+    // The gap is one blank line, as the game leaves before each prompt,
+    // and the 6 px the boards keep: "there's no space between prompt and
+    // last line now."
+    expect(dockGap(17.5)).toBe(17.5 + DOCK_GAP);
+    expect(dockHeight(1, 17.5)).toBe(23.5 + 27.5 + 3.5 - 6);
+    expect(dockHeight(2, 17.5)).toBe(23.5 + 45 + 3.5 - 6);
+    expect(dockHeight(3, 17.5)).toBe(23.5 + 62.5 + 3.5 - 6);
     // The zone of the default design is two, the tank's row and yours.
     const html = draw(CALM, { zone: 2 });
-    expect(dockBox(html)).toEqual({ height: 31, reach: 0, place: 31 });
-    // The band's top sits the 6 px gap under the dock's top, so nothing
-    // in the dock is empty but that gap.
+    expect(dockBox(html)).toEqual({ height: 48.5, reach: 0, place: 48.5 });
+    // The band's top sits the gap under the dock's top, so nothing in the
+    // dock is empty but that gap.
     const band = style(html, 'data-prompt-band');
-    expect(dockBox(html).height - px(band, 'bottom') - px(band, 'height')).toBe(DOCK_GAP);
+    expect(dockBox(html).height - px(band, 'bottom') - px(band, 'height')).toBe(dockGap(17.5));
     expect(html).toContain('data-rows="1"');
   });
 
@@ -113,27 +118,28 @@ describe('the pinned band', () => {
     const html = draw(FIGHT, { zone: 2 });
     // Two rows tall, reaching one row up over the terminal, so its place
     // under the terminal stays the one row place.
-    expect(dockBox(html)).toEqual({ height: 48.5, reach: 17.5, place: 31 });
+    expect(dockBox(html)).toEqual({ height: 66, reach: 17.5, place: 48.5 });
     const band = style(html, 'data-prompt-band');
     expect(px(band, 'height')).toBe(2 * 17.5 + 4);
-    expect(dockBox(html).height - px(band, 'bottom') - px(band, 'height')).toBe(DOCK_GAP);
+    // The same blank line and 6 px over the band as out of a fight.
+    expect(dockBox(html).height - px(band, 'bottom') - px(band, 'height')).toBe(dockGap(17.5));
     expect(glyphs(html).startsWith('Tamwell:')).toBe(true);
     expect(html).toContain('data-rows="2"');
   });
 
   it('keeps its one row place before any prompt and after you disconnect', () => {
     const empty = draw(null, { zone: 3 });
-    expect(dockBox(empty)).toEqual({ height: 31, reach: 0, place: 31 });
+    expect(dockBox(empty)).toEqual({ height: 48.5, reach: 0, place: 48.5 });
     expect(empty).not.toContain('data-prompt-band');
   });
 
   it('holds the prompts off sentence on its one row', () => {
     const html = draw(FIGHT, { zone: 2, promptsOff: true });
-    expect(dockBox(html)).toEqual({ height: 31, reach: 0, place: 31 });
+    expect(dockBox(html)).toEqual({ height: 48.5, reach: 0, place: 48.5 });
     expect(html).not.toContain('data-prompt-band');
     // The sentence sits on the row the band's text would take.
     const note = style(html, 'data-prompt-dock-note');
-    expect(px(note, 'top')).toBe(31 - 3.5 - 2 - 17.5 + (17.5 - 16) / 2);
+    expect(px(note, 'top')).toBe(48.5 - 3.5 - 2 - 17.5 + (17.5 - 16) / 2);
   });
 
   it('never takes more rows than the zone, and never fewer than one', () => {
@@ -148,11 +154,11 @@ describe('the pinned band', () => {
     expect(dockRows(null, 2, false)).toBe(1);
     expect(dockRows('', 2, false)).toBe(1);
     expect(dockRows(FIGHT, 2, true)).toBe(1);
-    expect(dockBox(draw(three, { zone: 2 }))).toEqual({ height: 48.5, reach: 17.5, place: 31 });
+    expect(dockBox(draw(three, { zone: 2 }))).toEqual({ height: 66, reach: 17.5, place: 48.5 });
     // Whatever it shows, its place under the terminal stays the same.
     for (const pin of [null, CALM, FIGHT, three]) {
       for (const zone of [1, 2, 3, 6]) {
-        expect(dockBox(draw(pin, { zone })).place).toBe(31);
+        expect(dockBox(draw(pin, { zone })).place).toBe(48.5);
       }
     }
   });
@@ -422,7 +428,7 @@ describe('the text above the pinned band', () => {
 
   // A pane with no pixels to spare, with some, and with most of a row.
   for (const spare of [0, 9, 17.25]) {
-    it(`keeps the newest line 6 px over the band through four fights, ${spare} px over`, async () => {
+    it(`keeps the newest line a blank line and 6 px over the band through four fights, ${spare} px over`, async () => {
       const paneHeight = 20 * CELL.height + spare;
       const fit = Math.floor(paneHeight / CELL.height);
       const term = new Terminal({ cols: 60, rows: fit, scrollback: 100, allowProposedApi: true });
@@ -461,12 +467,12 @@ describe('the text above the pinned band', () => {
         live.frame();
       }
       // The newest line never moves off the row right above the band,
-      // 6 px over it each time, whatever the pane leaves over. The grid
+      // the gap over it each time, whatever the pane leaves over. The grid
       // moves on whole device pixels, so at 2x the gap can run half a
       // pixel more, the same at every step.
       for (const step of seen) {
-        expect(step.gap).toBeGreaterThanOrEqual(DOCK_GAP - 1e-9);
-        expect(step.gap).toBeLessThan(DOCK_GAP + 0.5);
+        expect(step.gap).toBeGreaterThanOrEqual(dockGap(CELL.height) - 1e-9);
+        expect(step.gap).toBeLessThan(dockGap(CELL.height) + 0.5);
         expect(step.gap).toBeCloseTo(seen[0].gap, 9);
         expect(step.last).toBe('line 40');
       }

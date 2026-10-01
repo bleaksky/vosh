@@ -23,9 +23,9 @@ import { useBandEnv } from '../../lib/useBandEnv';
 // same over xterm and over the native grid.
 //
 // The dock is exactly as tall as the band it draws now: its rows, the
-// outsets and the lift, and the 6 px gap over them. Out of a fight the
+// outsets and the lift, and the gap over them. Out of a fight the
 // default design draws one row and in a fight two, so no empty row ever
-// waits above the band for a tank who is not there. Until 2026-10-01 the
+// waits inside the band for a tank who is not there. Until 2026-10-01 the
 // dock kept the most rows any prompt could take, and James saw that row
 // standing empty out of a fight: "there should not be a blank line where
 // the tank is supposed to be when not fighting." Before your first prompt
@@ -33,7 +33,10 @@ import { useBandEnv } from '../../lib/useBandEnv';
 // first prompt never moves the text, and while prompts are off that row
 // holds the sentence that says so.
 //
-// Its place under the terminal is always one row. The rows past the first
+// Above the band it keeps one blank line and 6 px of space, in a fight
+// and out of one, as the game leaves a blank line before each prompt:
+// "there's no space between prompt and last line now." Its place under
+// the terminal is always that gap and one row. The rows past the first
 // it borrows from the bottom of the terminal pane, reaching up over it
 // with a negative top margin, and the pane gives them up through
 // Terminal's lentRows: the pane keeps its size and the grid drops the
@@ -42,7 +45,7 @@ import { useBandEnv } from '../../lib/useBandEnv';
 // shrinks, and the page lays out nothing new. While the dock shows, the
 // grid also keeps to the bottom of its pane (Terminal's anchorBottom), so
 // the pixels a window leaves over under whole rows sit above the text and
-// the newest line sits the 6 px gap over the band in any window. App
+// the newest line sits the same gap over the band in any window. App
 // reads the same count from the same store, so the band and the terminal
 // change in one commit, before the page paints. The game is told the rows
 // the pane holds with a one row band, so a fight sends it no new size

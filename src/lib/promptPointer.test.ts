@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Terminal } from '@xterm/xterm';
 import fixture from '../../fixtures/prompt/aabahran/pointer/cases.json';
 import { OutputShaper } from './outputShaper';
+import { dockGap } from './promptBand';
 import {
   bandPlain,
   cellAtPoint,
@@ -335,8 +336,8 @@ describe('a pointer on the pinned band', () => {
   ]) {
     it(`maps the dock's own cells to pieces, ${cell.width} by ${cell.height}`, () => {
       // Three rows in a zone of three: the band's first row sits at the
-      // top of the zone.
-      const top = 6 + 2;
+      // top of the zone, under the dock's gap and the band's outset.
+      const top = dockGap(cell.height) + 2;
       const at = (row: number, col: number) =>
         dockPieceAt(
           band,
@@ -361,7 +362,7 @@ describe('a pointer on the pinned band', () => {
   it('cuts the spans where the zone cuts the band', () => {
     const cell = { width: 8, height: 20, cols: 120 };
     // A zone of two keeps the last two rows, so the tank line goes.
-    const top = 6 + 2;
+    const top = dockGap(cell.height) + 2;
     expect(dockPieceAt(band, 2, cell, 4, top + 10)).toBe(0);
     expect(dockPieceAt(band, 2, cell, 4, top + 30)).toBe(3);
     // A shorter band sits at the bottom of its zone.
@@ -373,26 +374,29 @@ describe('a pointer on the pinned band', () => {
   it('maps nothing on the clipped last cell or without a band', () => {
     const cell = { width: 8, height: 20, cols: 6 };
     const long = { text: 'abcdefghij', spans: [span(0, 0, 0, 10)] };
-    expect(dockPieceAt(long, 1, cell, 4 * 8 + 4, 8 + 10)).toBe(0);
-    expect(dockPieceAt(long, 1, cell, 5 * 8 + 4, 8 + 10)).toBeNull();
-    expect(dockPieceAt(null, 1, cell, 4, 18)).toBeNull();
+    const top = dockGap(cell.height) + 2;
+    expect(dockPieceAt(long, 1, cell, 4 * 8 + 4, top + 10)).toBe(0);
+    expect(dockPieceAt(long, 1, cell, 5 * 8 + 4, top + 10)).toBeNull();
+    expect(dockPieceAt(null, 1, cell, 4, top + 10)).toBeNull();
   });
 
   it('names the row and column under a point, the row from the first shown', () => {
     const cell = { width: 8, height: 20, cols: 120 };
-    expect(dockCellAt(band.text, 3, cell, 3 * 8 + 1, 8 + 20 + 1)).toEqual({ row: 1, col: 3 });
-    expect(dockCellAt(band.text, 2, cell, 3 * 8 + 1, 8 + 20 + 1)).toEqual({ row: 1, col: 3 });
-    expect(dockCellAt(band.text, 3, cell, 1, 7)).toBeNull();
-    expect(dockCellAt(band.text, 3, cell, -1, 9)).toBeNull();
+    const top = dockGap(cell.height) + 2;
+    expect(dockCellAt(band.text, 3, cell, 3 * 8 + 1, top + 20 + 1)).toEqual({ row: 1, col: 3 });
+    expect(dockCellAt(band.text, 2, cell, 3 * 8 + 1, top + 20 + 1)).toEqual({ row: 1, col: 3 });
+    expect(dockCellAt(band.text, 3, cell, 1, top - 1)).toBeNull();
+    expect(dockCellAt(band.text, 3, cell, -1, top + 1)).toBeNull();
     expect(bandPlain('\x1b[32mHP\x1b[39m 765\r\n日本')).toBe('HP 765\n日本');
   });
 
   it('counts a wide character as two cells, as the spans do', () => {
     const cell = { width: 8, height: 20, cols: 120 };
     const wide = { text: '日本 7', spans: [span(0, 0, 0, 4), span(1, 0, 5, 1)] };
-    expect(dockPieceAt(wide, 1, cell, 3 * 8 + 4, 18)).toBe(0);
-    expect(dockPieceAt(wide, 1, cell, 4 * 8 + 4, 18)).toBeNull();
-    expect(dockPieceAt(wide, 1, cell, 5 * 8 + 4, 18)).toBe(1);
+    const top = dockGap(cell.height) + 2;
+    expect(dockPieceAt(wide, 1, cell, 3 * 8 + 4, top + 10)).toBe(0);
+    expect(dockPieceAt(wide, 1, cell, 4 * 8 + 4, top + 10)).toBeNull();
+    expect(dockPieceAt(wide, 1, cell, 5 * 8 + 4, top + 10)).toBe(1);
   });
 
   for (const c of cases.filter((c) => c.show === 'pinned')) {
@@ -406,7 +410,7 @@ describe('a pointer on the pinned band', () => {
       const rows = text.replace(/\x1b\[[0-9;:]*m/g, '').split('\r\n');
       const shown = rows.slice(Math.max(0, rows.length - c.zone));
       const first = rows.length - shown.length;
-      const top = 6 + 2 + (c.zone - shown.length) * cell.height;
+      const top = dockGap(cell.height) + 2 + (c.zone - shown.length) * cell.height;
       for (const s of pin.pin_spans) {
         const row = s.row - first;
         if (row < 0) continue;
