@@ -746,6 +746,14 @@ describe('a resize while xterm parses a long backlog', () => {
     expect(rows.slice(-3)).toEqual(['END', 'after', 'look']);
   });
 
+  it('keeps the size xterm has when a later resize asks for it back', async () => {
+    const { term } = await resizeBetweenSlices((_, writer) => {
+      writer.resize(30, 12);
+      writer.resize(40, 10);
+    });
+    expect([term.cols, term.rows]).toEqual([40, 10]);
+  });
+
   it('stops counting a write xterm refused', () => {
     // xterm throws a write away while it holds too much it has not
     // parsed yet.
