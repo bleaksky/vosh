@@ -2659,8 +2659,9 @@ async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), Stri
                 snap.apply_to(&mut p);
             }
             None => {
-                let default = ProfileConfig::default();
-                default.apply_to(&mut p);
+                // A profile that never saved a file is fresh.
+                let fresh = ProfileConfig::fresh();
+                fresh.apply_to(&mut p);
             }
         }
         if let Some(g) = global {
@@ -3997,7 +3998,8 @@ struct MigrationFile {
 /// Every profile in index order with what its file holds, for the shared
 /// catalog wizard, the enabled preset list of each profile that saved a
 /// file, and the text of each file. A profile that never saved a file
-/// brings the defaults and no preset list, the way launch leaves it out.
+/// brings what a switch to it loads, [`ProfileConfig::fresh`], and no
+/// preset list, the way launch leaves it out.
 /// A file that does not read stops the wizard, since the catalog would
 /// miss its items. So does a file Vosh could not read at launch, since
 /// the wizard rewrites every profile file and Vosh never saves over one
@@ -4043,7 +4045,7 @@ fn migration_sources(
                 sources.preset_lists.push(cfg.ui.enabled_presets.clone());
                 cfg
             }
-            None => ProfileConfig::default(),
+            None => ProfileConfig::fresh(),
         };
         sources.profiles.push((entry.name.clone(), cfg));
         sources.files.push(MigrationFile {
@@ -4253,7 +4255,7 @@ async fn apply_migration_with(
     for file in &sources.files {
         let mut config = match &file.text {
             Some(text) => ProfileConfig::from_toml(text).map_err(|e| e.to_string())?,
-            None => ProfileConfig::default(),
+            None => ProfileConfig::fresh(),
         };
         crate::migration::profile_file_for_catalog(&mut config, &file.name, &plan);
         let lists = !config.disabled_alias_groups.is_empty()
@@ -5519,14 +5521,63 @@ mod tests {
             assert!(p.prompt.vars.prompt_vars().is_empty());
         }
 
-        // Back to a profile with no file, which holds no table.
+        // On to a profile that never saved a file, a fresh one, which
+        // holds Vosh's default design and draws nothing until you turn
+        // drawing on.
         super::switch_live_profile(&state, "Test-Prompt")
             .await
             .unwrap();
         let p = state.profile.lock().await;
-        assert!(p.prompt.config().is_default());
+        assert_eq!(*p.prompt.config(), vosh_prompt::PromptConfig::fresh());
+        assert!(!p.prompt.draws());
         assert!(!p.prompt.forsaken());
         assert!(p.prompt.vars.gmcp().get("Char.Vitals").is_some());
+    }
+
+    #[tokio::test]
+    async fn a_profile_you_create_starts_with_the_default_design_and_keeps_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = switch_state(dir.path()).await;
+        {
+            let mut guard = state.profile_set.lock().await;
+            let set = guard.as_mut().unwrap();
+            set.create_from("Fresh", None, None).unwrap();
+            // A profile whose file holds no design keeps none.
+            set.create_from("Mortal", None, None).unwrap();
+            let mut file = ProfileConfig::default();
+            file.ui.tracked_affects = vec![affect("Haste")];
+            file.save(&set.profile_path("Mortal")).unwrap();
+        }
+
+        super::switch_live_profile(&state, "Fresh").await.unwrap();
+        {
+            let p = state.profile.lock().await;
+            assert_eq!(*p.prompt.config(), vosh_prompt::PromptConfig::fresh());
+            assert_eq!(p.ui.prompt_template, vosh_prompt::DEFAULT_DESIGN);
+        }
+        // The first save writes it into the file, so the profile keeps it
+        // from then on.
+        persist(&state, dir.path()).await;
+        let path = state
+            .profile_set
+            .lock()
+            .await
+            .as_ref()
+            .unwrap()
+            .profile_path("Fresh");
+        assert_eq!(
+            ProfileConfig::load(&path).unwrap().prompt_config(),
+            vosh_prompt::PromptConfig::fresh()
+        );
+
+        super::switch_live_profile(&state, "Mortal").await.unwrap();
+        let p = state.profile.lock().await;
+        assert!(p.prompt.config().is_default());
+        assert_eq!(live_names(&p.ui.tracked_affects), ["Haste"]);
+    }
+
+    fn live_names(list: &[crate::profile_config::TrackedAffect]) -> Vec<&str> {
+        list.iter().map(|t| t.name.as_str()).collect()
     }
 
     #[tokio::test]

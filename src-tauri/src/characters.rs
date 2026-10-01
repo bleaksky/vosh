@@ -102,12 +102,12 @@ fn apply_global_dock(set: &ProfileSet, ui: &mut UiConfig) {
     }
 }
 
-/// Load `name`'s file, or the defaults for a profile that never saved
-/// one, the way a switch to it would.
+/// Load `name`'s file, or for a profile that never saved one what a
+/// switch to it loads, see [`ProfileConfig::fresh`].
 fn load_profile_file(set: &ProfileSet, name: &str) -> Result<ProfileConfig, String> {
     let path = set.profile_path(name);
     if !path.exists() {
-        return Ok(ProfileConfig::default());
+        return Ok(ProfileConfig::fresh());
     }
     ProfileConfig::load(&path).map_err(|e| {
         warn!(error = %e, path = %path.display(), "profile file unreadable");
@@ -638,6 +638,10 @@ mod tests {
         let detail = profile_detail(&state, "Test-Prompt").await.unwrap();
         assert_eq!(names(&detail.tracked_affects), ["Fly"]);
         assert_eq!(detail.panes, PaneLayoutPersist::default_layout());
+        // The file starts the way a switch would, with the default design.
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let file = ProfileConfig::load(&set.profile_path("Test-Prompt")).unwrap();
+        assert_eq!(file.prompt_config(), vosh_prompt::PromptConfig::fresh());
     }
 
     #[tokio::test]
@@ -767,10 +771,12 @@ mod tests {
         let back = ProfileConfig::from_toml(&live).unwrap();
         assert_eq!(names(&back.ui.tracked_affects), ["Sanctuary"]);
 
-        // Test-Prompt never saved a file, so it exports the defaults.
+        // Test-Prompt never saved a file, so it exports what a switch to
+        // it loads, the defaults with Vosh's default design.
         let blank = profile_toml(&state, "Test-Prompt").await.unwrap();
         let back = ProfileConfig::from_toml(&blank).unwrap();
         assert!(back.ui.tracked_affects.is_empty());
+        assert_eq!(back.prompt_config(), vosh_prompt::PromptConfig::fresh());
 
         assert!(profile_toml(&state, "Nobody").await.is_err());
     }

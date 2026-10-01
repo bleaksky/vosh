@@ -113,6 +113,16 @@ impl PromptConfig {
         }
     }
 
+    /// The table a fresh profile starts with: Vosh's default design,
+    /// [`DEFAULT_DESIGN`], with drawing off and your prompt in the text,
+    /// so turning drawing on draws it.
+    pub fn fresh() -> Self {
+        Self {
+            template: DEFAULT_DESIGN.to_string(),
+            ..Self::default()
+        }
+    }
+
     /// True when the table says nothing a default one does not, so a
     /// profile file leaves it out.
     pub fn is_default(&self) -> bool {
@@ -483,6 +493,30 @@ mod tests {
         let mut yours = PromptConfig::from_legacy(false, JAMES);
         assert!(yours.take_switch_and_template(true, JAMES));
         assert_eq!(yours.template, JAMES);
+    }
+
+    #[test]
+    fn a_fresh_profile_holds_the_default_design_and_draws_nothing_yet() {
+        let fresh = PromptConfig::fresh();
+        assert!(!fresh.draw);
+        assert_eq!(fresh.template, DEFAULT_DESIGN);
+        assert!(fresh.previous_templates.is_empty());
+        assert!(fresh.capture.is_none());
+        assert_eq!(fresh.show, PromptShow::Text);
+        // The file keeps it from the first save.
+        assert!(!fresh.is_default());
+        let json = serde_json::to_value(&fresh).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({"draw": false, "template": DEFAULT_DESIGN})
+        );
+        let back: PromptConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(back, fresh);
+
+        // Turning drawing on draws it.
+        let mut on = fresh.clone();
+        assert!(on.take_switch_and_template(true, DEFAULT_DESIGN));
+        assert_eq!(on.template, DEFAULT_DESIGN);
     }
 
     #[test]

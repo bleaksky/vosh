@@ -693,8 +693,8 @@ impl ProfileSet {
     }
 
     /// Create an empty entry. The per-profile file is created on the
-    /// next save (so a brand-new profile inherits whatever defaults
-    /// `ProfileConfig::default()` produces on first persist). A test
+    /// next save (so a brand-new profile inherits whatever
+    /// `ProfileConfig::fresh()` produces on first persist). A test
     /// shorthand for `create_from` with no source and no claim.
     #[cfg(test)]
     pub(crate) fn create(&mut self, name: &str) -> Result<(), ProfileSetError> {
