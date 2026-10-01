@@ -190,6 +190,10 @@ export interface TerminalHandle {
   /** The screen cell under a point in client px, on the grid the
    *  renderer in use draws, or null outside it. */
   cellAt: (clientX: number, clientY: number) => ScreenCell | null;
+  /** The client y of the top of screen row `row`, from the top of the
+   *  visible screen, on the grid the renderer in use draws, or null
+   *  before it has a size. The prompt card sits over your prompt by it. */
+  rowTop: (row: number) => number | null;
 }
 
 interface Props {
@@ -1239,6 +1243,23 @@ export function Terminal({
         const cell = term.dimensions?.css?.cell;
         if (!screen || !cell?.width || !cell?.height) return null;
         return cellInGrid(clientX, clientY, screen.getBoundingClientRect(), cell);
+      },
+      rowTop: (row) => {
+        if (!quietRef.current && nativeSurfaceEnabled()) {
+          // The native grid, as cellAt reads it.
+          const device = term.dimensions?.device?.cell;
+          if (!sizer || !device?.height) return null;
+          const dpr = window.devicePixelRatio || 1;
+          return (
+            sizer.getBoundingClientRect().top +
+            nativeSpare +
+            row * (Math.round(device.height) / dpr)
+          );
+        }
+        const screen = host?.querySelector('.xterm-screen');
+        const cell = term.dimensions?.css?.cell;
+        if (!screen || !cell?.height) return null;
+        return screen.getBoundingClientRect().top + row * cell.height;
       },
     };
     onReadyRef.current?.(handle);
