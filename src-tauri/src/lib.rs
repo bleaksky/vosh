@@ -224,6 +224,9 @@ pub fn run() {
             }
             if let Ok(path) = app.path().app_data_dir() {
                 migrate_from_mudclient_dir(&path);
+                // Where `#profile save`, `#profile load` and `#script
+                // load` find their files.
+                let _ = crate::input::APP_DATA_DIR.set(path.clone());
                 // How full each affect was cast, per character, for the
                 // Affects pane's gauges. Read when the game names you.
                 state

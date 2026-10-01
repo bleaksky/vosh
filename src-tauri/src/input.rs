@@ -106,6 +106,12 @@ trigger captures: $0 full match, $1..$9 positional groups, ${name} named group\
 pub(crate) static PATH_B_ACTIVE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
+/// The app data folder, set once at startup from Tauri's `app_data_dir`,
+/// the folder that holds every other file Vosh keeps. `#profile save`,
+/// `#profile load` and `#script load` find their files under it.
+pub(crate) static APP_DATA_DIR: std::sync::OnceLock<std::path::PathBuf> =
+    std::sync::OnceLock::new();
+
 /// True when `line` is `#profile reset` or `#profile load`, tokenized
 /// exactly like the slash dispatcher, so the persist-suppression
 /// decision in `session_send_input` cannot drift from what actually
@@ -1475,17 +1481,21 @@ const PROFILE_MIGRATION_PENDING: &str =
 fn slash_profile(profile: &mut Profile, args: &str, replaced: &mut bool) -> InputResult {
     let pending =
         crate::commands::MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
-    slash_profile_with(profile, args, replaced, pending)
+    let app_data = APP_DATA_DIR.get().map(std::path::PathBuf::as_path);
+    slash_profile_with(profile, args, replaced, pending, app_data)
 }
 
 /// [`slash_profile`] with `migration_pending` in place of
-/// [`crate::commands::MIGRATION_RELAUNCH_PENDING`], so a test can run it
-/// after the wizard without touching the flag every other test reads.
+/// [`crate::commands::MIGRATION_RELAUNCH_PENDING`] and `app_data` in
+/// place of [`APP_DATA_DIR`], so a test can run it after the wizard, or
+/// over a folder of its own, without touching what every other test
+/// reads.
 fn slash_profile_with(
     profile: &mut Profile,
     args: &str,
     replaced: &mut bool,
     migration_pending: bool,
+    app_data: Option<&std::path::Path>,
 ) -> InputResult {
     let (cmd, _rest) = split_first_word(args);
     if migration_pending && matches!(cmd, "save" | "load" | "reset") {
@@ -1507,7 +1517,7 @@ fn slash_profile_with(
         };
     }
     match cmd {
-        "save" => match profile_path() {
+        "save" => match app_data.and_then(profile_path) {
             Some(path) => {
                 // Every profile file write holds the persist lock. This
                 // runs under the profile lock, which the persist takes
@@ -1530,7 +1540,7 @@ fn slash_profile_with(
             }
             None => error_echo("could not resolve profile path".to_string()),
         },
-        "load" => match profile_path() {
+        "load" => match app_data.and_then(profile_path) {
             Some(path) => load_profile_file(profile, &path, replaced),
             None => error_echo("could not resolve profile path".to_string()),
         },
@@ -1616,36 +1626,21 @@ fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputResult {
     }
 }
 
-/// Resolve the active profile's on-disk path. Reads the profile
-/// index (`profiles.toml`) to learn which profile is active and
-/// returns `<app_data>/profiles/<active>.toml`. Falls back to the
-/// legacy `<app_data>/profile.toml` only when no `profiles.toml`
-/// index exists — which is the pre-multi-profile layout.
+/// The active profile's file under the app data folder `app_data`,
+/// `<app_data>/profiles/<active>.toml`, whether or not it exists yet.
+/// Reads the profile index (`profiles.toml`) to learn which profile is
+/// active, and returns `None` when the index does not read or names no
+/// active profile.
 ///
-/// Before this resolver, `#profile load` and `#profile save`
-/// silently routed to the legacy single-file path even after
-/// migration, so a "load" overwrote in-memory state with whatever
-/// the empty legacy file had (and a "save" wrote the active
-/// profile's state into the wrong file). Now they hit the file the
-/// user is actually editing.
-fn profile_path() -> Option<std::path::PathBuf> {
-    let home = std::env::var_os("HOME")?;
-    let app_data = std::path::PathBuf::from(home)
-        .join("Library")
-        .join("Application Support")
-        .join("com.aabahran.vosh");
-    let index = app_data.join("profiles.toml");
-    if let Ok(body) = std::fs::read_to_string(&index) {
-        if let Ok(value) = body.parse::<toml::Value>() {
-            if let Some(active) = value.get("active").and_then(|v| v.as_str()) {
-                let path = app_data.join("profiles").join(format!("{active}.toml"));
-                if path.exists() {
-                    return Some(path);
-                }
-            }
-        }
-    }
-    Some(app_data.join("profile.toml"))
+/// It never falls back to the legacy `<app_data>/profile.toml`. Launch
+/// writes the index on every install, so that file would only ever be
+/// a stray, and a later launch without an index would move it over the
+/// default profile.
+fn profile_path(app_data: &std::path::Path) -> Option<std::path::PathBuf> {
+    let body = std::fs::read_to_string(app_data.join("profiles.toml")).ok()?;
+    let value = body.parse::<toml::Value>().ok()?;
+    let active = value.get("active")?.as_str()?;
+    Some(app_data.join("profiles").join(format!("{active}.toml")))
 }
 
 fn expand_home(path: &str) -> std::path::PathBuf {
@@ -1668,13 +1663,25 @@ fn slash_script(profile: &mut Profile, args: &str) -> InputResult {
 }
 
 fn slash_script_load(profile: &mut Profile, args: &str) -> InputResult {
+    let app_data = APP_DATA_DIR.get().map(std::path::PathBuf::as_path);
+    slash_script_load_in(profile, args, app_data)
+}
+
+/// [`slash_script_load`] over the app data folder `app_data` in place of
+/// [`APP_DATA_DIR`], so a test can load from a folder of its own.
+fn slash_script_load_in(
+    profile: &mut Profile,
+    args: &str,
+    app_data: Option<&std::path::Path>,
+) -> InputResult {
     let name = args.trim();
     if name.is_empty() {
         return error_echo("usage #script load <name>".to_string());
     }
-    let Some(path) = script_path_for(name) else {
+    let Some(app_data) = app_data else {
         return error_echo("could not resolve scripts directory".to_string());
     };
+    let path = script_path_for(app_data, name);
     let code = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(e) => return error_echo(format!("read failed: {e} ({})", path.display())),
@@ -1766,25 +1773,18 @@ fn slash_echo(profile: &mut Profile, args: &str) -> InputResult {
     }
 }
 
-fn script_path_for(name: &str) -> Option<std::path::PathBuf> {
-    let home = std::env::var_os("HOME")?;
-    let base = std::path::PathBuf::from(home);
-    // macOS specific for the demo. Phase 9 will move to the OS-aware app
-    // data dir Tauri already exposes for the map store.
-    let dir = base
-        .join("Library")
-        .join("Application Support")
-        .join("com.aabahran.vosh")
-        .join("scripts");
-    let with_lua = if std::path::Path::new(name)
+/// The file `#script load <name>` reads, `<app_data>/scripts/<name>.lua`
+/// under the app data folder `app_data`.
+fn script_path_for(app_data: &std::path::Path, name: &str) -> std::path::PathBuf {
+    let dir = app_data.join("scripts");
+    if std::path::Path::new(name)
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("lua"))
     {
         dir.join(name)
     } else {
         dir.join(format!("{name}.lua"))
-    };
-    Some(with_lua)
+    }
 }
 
 fn slash_tick(profile: &mut Profile, args: &str) -> InputResult {
@@ -2643,7 +2643,7 @@ mod tests {
         p.aliases.set(vosh_alias::Alias::new("kk", "kick %1"));
         for sub in ["save", "load", "reset"] {
             let mut replaced = false;
-            let result = slash_profile_with(&mut p, sub, &mut replaced, true);
+            let result = slash_profile_with(&mut p, sub, &mut replaced, true, None);
             assert_eq!(
                 result.echo,
                 ["[Quit Vosh and open it again to finish the move to loadouts.]"],
@@ -2652,6 +2652,62 @@ mod tests {
             assert!(!replaced, "{sub}");
             assert!(p.aliases.get("kk").is_some(), "{sub}");
         }
+    }
+
+    /// `#profile save` over `app_data`, again while another test holds
+    /// the persist lock the save only tries.
+    fn save_profile_in(p: &mut Profile, app_data: &std::path::Path) -> InputResult {
+        loop {
+            let result = slash_profile_with(p, "save", &mut false, false, Some(app_data));
+            if result.echo != ["[Vosh is saving this profile. Try again.]"] {
+                return result;
+            }
+            std::thread::yield_now();
+        }
+    }
+
+    #[test]
+    fn profile_and_script_commands_use_the_app_data_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let app_data = dir.path();
+        let mut p = Profile::default();
+        p.aliases.set(vosh_alias::Alias::new("kk", "kick %1"));
+        // With no index there is no active profile to save.
+        let saved = save_profile_in(&mut p, app_data);
+        assert_eq!(saved.echo, ["[could not resolve profile path]"]);
+        assert!(!app_data.join("profile.toml").exists());
+
+        // A fresh profile. The index names it, and its first save
+        // writes its file.
+        std::fs::write(
+            app_data.join("profiles.toml"),
+            "active = \"Healer\"\n\n[[profiles]]\nname = \"Healer\"\n",
+        )
+        .unwrap();
+        let healer = app_data.join("profiles").join("Healer.toml");
+        let saved = save_profile_in(&mut p, app_data);
+        assert_eq!(
+            saved.echo,
+            [format!("profile saved to {}", healer.display())]
+        );
+        assert!(healer.exists());
+        assert!(!app_data.join("profile.toml").exists());
+
+        let mut fresh = Profile::default();
+        let mut replaced = false;
+        let loaded = slash_profile_with(&mut fresh, "load", &mut replaced, false, Some(app_data));
+        assert_eq!(
+            loaded.echo[0],
+            format!("profile loaded from {}", healer.display())
+        );
+        assert!(replaced);
+        assert!(fresh.aliases.get("kk").is_some());
+
+        let script = app_data.join("scripts").join("greet.lua");
+        std::fs::create_dir_all(script.parent().unwrap()).unwrap();
+        std::fs::write(&script, "local greeting = 'hi'\n").unwrap();
+        let loaded = slash_script_load_in(&mut fresh, "greet", Some(app_data));
+        assert_eq!(loaded.echo, [format!("loaded {}", script.display())]);
     }
 
     #[test]
