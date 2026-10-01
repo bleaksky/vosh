@@ -12,6 +12,11 @@ fixtures/
     aabahran/  Hand written Aabahran packets, one payload per file, for the
                new server build and the two older builds. Its README lists
                what each one stands for.
+  ipc/       names.txt, every name the page and the app share, each command
+             with the keys its function reads and each event with who
+             sends it and whether the page hears it. The IPC contract
+             test in src-tauri holds it to the sources, and
+             VOSH_WRITE_IPC_NAMES=1 writes it again.
   mccp/      MCCP compressed stream captures.
   pane-layout/  Pane tree cases shared by the Rust and TypeScript sanitize tests.
   prompt/

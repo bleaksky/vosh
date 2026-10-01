@@ -20,6 +20,10 @@
 //! sits on [`APP_FAMILIES`] with its reason, so a template the app adds
 //! never passes a listen without review.
 //!
+//! `fixtures/ipc/names.txt` lists every shared name, so a name that
+//! changes on both sides in one commit still shows as a diff there.
+//! `VOSH_WRITE_IPC_NAMES=1` writes it again.
+//!
 //! A page call whose name is built at run time cannot be read from the
 //! source. Each one sits on [`BUILT_AT_RUN_TIME`] with its reason, and a
 //! test fails when an entry there no longer matches a call. An entry
@@ -257,14 +261,7 @@ impl Contract {
                 .1
                 .insert(who);
         };
-        for (text, files) in &self.app_names {
-            let name = match template_head(text) {
-                None => Name::Fixed(text.clone()),
-                Some(head) if families.iter().any(|f| f.prefix == head) => {
-                    Name::Family(head.into())
-                }
-                Some(_) => continue,
-            };
+        for (name, files) in self.app_sends(families) {
             for file in files {
                 add(name.clone(), file.clone());
             }
@@ -273,6 +270,24 @@ impl Contract {
             add(call.name.clone(), call.at());
         }
         sends
+    }
+
+    /// The names the app sends, each with the files that hold it. A
+    /// family the app builds off `families` is left to the family check.
+    fn app_sends<'a>(
+        &'a self,
+        families: &'a [AppFamily],
+    ) -> impl Iterator<Item = (Name, &'a BTreeSet<String>)> + 'a {
+        self.app_names.iter().filter_map(|(text, files)| {
+            let name = match template_head(text) {
+                None => Name::Fixed(text.clone()),
+                Some(head) if families.iter().any(|f| f.prefix == head) => {
+                    Name::Family(head.into())
+                }
+                Some(_) => return None,
+            };
+            Some((name, files))
+        })
     }
 
     /// Whether the app or the page sends `name`.
@@ -509,6 +524,110 @@ fn unheard_sends(contract: &Contract, families: &[AppFamily], unheard: &[Unheard
         }
     }
     failures
+}
+
+/// The list of every name the page and the app share, so a change to one
+/// shows as a diff in the commit that makes it.
+const NAMES_FILE: &str = "fixtures/ipc/names.txt";
+
+/// Every name the page and the app share, one to a line. Each registered
+/// command with the keys its fn reads, `?` marking one the page may leave
+/// out. Each event with who sends it and whether a page listen hears it,
+/// a family of names ending in `*`. Events are the names in a scheme the
+/// page listens or sends in.
+fn shared_names(contract: &Contract, families: &[AppFamily]) -> String {
+    let mut lines = Vec::new();
+    for (command, params) in &contract.commands {
+        let keys = match params {
+            Some(params) => params
+                .iter()
+                .map(|p| format!("{}{}", p.key, if p.optional { "?" } else { "" }))
+                .collect::<Vec<_>>()
+                .join(", "),
+            None => "unread".into(),
+        };
+        lines.push(format!("command {command}({keys})"));
+    }
+    let key = |name: &Name| match name {
+        Name::Fixed(text) => Some(text.clone()),
+        Name::Family(prefix) => Some(format!("{prefix}*")),
+        Name::Unknown => None,
+    };
+    let schemes: BTreeSet<&str> = contract
+        .calls
+        .iter()
+        .filter(|c| c.call != Call::Invoke)
+        .filter_map(|c| match &c.name {
+            Name::Fixed(text) | Name::Family(text) => text.split_once("://").map(|(s, _)| s),
+            Name::Unknown => None,
+        })
+        .collect();
+    // Each event by its key, with its name and whether the app and the
+    // page send it.
+    let mut events: BTreeMap<String, (Name, bool, bool)> = BTreeMap::new();
+    let mut add = |name: &Name, app: bool, page: bool| {
+        let Some(key) = key(name) else {
+            return;
+        };
+        let entry = events.entry(key).or_insert((name.clone(), false, false));
+        entry.1 |= app;
+        entry.2 |= page;
+    };
+    for (name, _) in contract.app_sends(families) {
+        add(&name, true, false);
+    }
+    for call in &contract.calls {
+        match call.call {
+            Call::Emit => add(&call.name, false, true),
+            Call::Listen => add(&call.name, false, false),
+            Call::Invoke => {}
+        }
+    }
+    for (key, (name, app, page)) in &events {
+        let scheme = key.split_once("://").map(|(s, _)| s);
+        if !scheme.is_some_and(|s| schemes.contains(s)) {
+            continue;
+        }
+        let from = match (app, page) {
+            (true, true) => "app page",
+            (true, false) => "app",
+            (false, true) => "page",
+            (false, false) => "nobody",
+        };
+        let heard = if contract.heard(name) {
+            "heard"
+        } else {
+            "unheard"
+        };
+        lines.push(format!("event {key} {from} {heard}"));
+    }
+    lines.push(String::new());
+    lines.join("\n")
+}
+
+#[test]
+fn every_shared_name_is_on_the_list_in_fixtures() {
+    let names = shared_names(contract(), APP_FAMILIES);
+    let path = repo().join(NAMES_FILE);
+    if std::env::var_os("VOSH_WRITE_IPC_NAMES").is_some() {
+        fs::write(&path, &names).unwrap_or_else(|e| panic!("{NAMES_FILE} does not write, {e}"));
+        return;
+    }
+    let saved = fs::read_to_string(&path).unwrap_or_default();
+    if saved == names {
+        return;
+    }
+    let saved: BTreeSet<&str> = saved.lines().collect();
+    let now: BTreeSet<&str> = names.lines().collect();
+    let gone = saved.difference(&now).map(|line| format!("- {line}"));
+    let new = now.difference(&saved).map(|line| format!("+ {line}"));
+    panic!(
+        "\nThe names the page and the app share are not the ones {NAMES_FILE} lists.\n{}\n\
+         A shared name changes only in a commit tied to a numbered bug or a lettered \
+         decision, or with the dead code it belongs to. Write the list again with \
+         VOSH_WRITE_IPC_NAMES=1 and commit its diff with that change.\n",
+        gone.chain(new).collect::<Vec<_>>().join("\n")
+    );
 }
 
 #[test]
