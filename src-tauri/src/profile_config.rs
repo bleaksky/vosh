@@ -1341,8 +1341,19 @@ pub(crate) fn coerce_vitals_meter(value: String) -> String {
 }
 
 fn default_font_family() -> String {
-    "BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace"
-        .to_string()
+    "\"JetBrainsMono Bundled\", Menlo, Consolas, ui-monospace, monospace".to_string()
+}
+
+/// The default font list while Vosh bundled Berkeley Mono. Profile files
+/// saved then hold it where you never picked a font, and it keeps
+/// rendering as Berkeley Mono where you have it installed.
+const RETIRED_DEFAULT_FONT_FAMILY: &str =
+    "BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace";
+
+/// Whether `family` is the default font list, this one or the one before
+/// Vosh stopped bundling Berkeley Mono.
+fn is_default_font_family(family: &str) -> bool {
+    family == default_font_family() || family == RETIRED_DEFAULT_FONT_FAMILY
 }
 
 fn default_font_size() -> u32 {
@@ -2247,7 +2258,7 @@ impl GlobalConfig {
             }
         }
         if let Some(family) = &self.font_family {
-            let own_font = ui.font_family != defaults.font_family
+            let own_font = !is_default_font_family(&ui.font_family)
                 || ui.font_size != defaults.font_size
                 || ui.terminal_line_height != defaults.terminal_line_height;
             if !own_font {
@@ -4032,6 +4043,27 @@ name = "haste"
         // The font is still shared, so it stays.
         assert_eq!(live.ui.font_size, 16);
         assert_eq!(live.ui.font_family, "Iosevka");
+    }
+
+    #[test]
+    fn a_file_with_the_default_from_before_takes_the_shared_font() {
+        let shared = GlobalConfig::from_profile(&shared_profile(), &ScopeConfig::default());
+        // Saved while Vosh bundled Berkeley Mono, with no font picked.
+        let mut ui = UiConfig {
+            font_family: RETIRED_DEFAULT_FONT_FAMILY.to_string(),
+            ..UiConfig::default()
+        };
+        assert!(shared.hand_out(&mut ui, "alt"));
+        assert_eq!(ui.font_family, "Iosevka");
+        assert_eq!(ui.font_size, 16);
+        // A Berkeley Mono you picked is your own and stays.
+        let picked = "\"BerkeleyMono Bundled\", Menlo, monospace";
+        let mut own = UiConfig {
+            font_family: picked.to_string(),
+            ..UiConfig::default()
+        };
+        shared.hand_out(&mut own, "alt");
+        assert_eq!(own.font_family, picked);
     }
 
     #[test]
