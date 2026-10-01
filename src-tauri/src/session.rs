@@ -519,6 +519,14 @@ impl SessionHandle {
         self.tx_outgoing.send(OutgoingMsg::PromptRepaint).is_ok()
     }
 
+    /// True once the session loop has ended, so nothing sent reaches the
+    /// game. The loop says it disconnected just before it ends, so a test
+    /// waits on this to know the session is gone.
+    #[cfg(test)]
+    pub(crate) fn has_ended(&self) -> bool {
+        self.tx_outgoing.is_closed()
+    }
+
     pub(crate) async fn shutdown(self) {
         drop(self.tx_outgoing);
         let _ = self.task.await;

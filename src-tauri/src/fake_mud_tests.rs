@@ -2262,3 +2262,47 @@ async fn a_line_from_mud_input_moves_the_target_display_and_repaints_your_prompt
     until_goblin_and_the_default_band(&h).await;
     h.finish(grid).await;
 }
+
+// Bug 9. The game closing the link ends the session, and a line you type
+// after it says [not connected], as it does after you disconnect.
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_line_typed_after_the_game_closes_the_link_says_not_connected() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.connect().await;
+    h.until_shown("Welcome to the fake Aabahran").await;
+    h.type_line("quit").await;
+    h.until_shown("Alas, all good things must come to an end.")
+        .await;
+    h.until("the game closes the link", |h| {
+        h.events("session://state")
+            .iter()
+            .any(|e| e["kind"] == "disconnected")
+    })
+    .await;
+    h.until("the session ends", |h| {
+        h.state.session.try_lock().is_ok_and(|s| {
+            s.as_ref()
+                .is_some_and(crate::session::SessionHandle::has_ended)
+        })
+    })
+    .await;
+
+    h.echo("look");
+    let sent = crate::commands::session_send_input(
+        h.app.handle().clone(),
+        h.app.state(),
+        "look".to_string(),
+    )
+    .await;
+    assert_eq!(sent, Ok(()), "look finds no session to send to");
+    h.until_shown("[not connected]").await;
+    assert!(
+        h.state.session.lock().await.is_none(),
+        "the ended session leaves the app state"
+    );
+    h.finish(grid).await;
+}
