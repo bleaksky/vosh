@@ -223,6 +223,9 @@ export function PromptCard({
     null,
   );
   const [view, setView] = useState<CardView>(opening.view === 'text' ? 'text' : 'design');
+  // Edit prompt as text… asks for the text field, so what you type goes to
+  // your design, as the card opens or while it is open.
+  const [textFocus, setTextFocus] = useState(opening.view === 'text' ? 1 : 0);
   // The view the picker goes back to, and adds into.
   const [pickerFor, setPickerFor] = useState<'design' | 'text'>('design');
   const [pointing, setPointing] = useState<Pointing>(NOWHERE);
@@ -363,6 +366,7 @@ export function PromptCard({
       return;
     }
     setView(asked);
+    if (asked === 'text') setTextFocus((n) => n + 1);
   }, [opening.at, asked]);
 
   // The code reader you chose on another host gives it the Forsaken Lands
@@ -510,9 +514,13 @@ export function PromptCard({
     };
   }, [host, relayout]);
 
-  // Focus moves into the card so the keyboard reaches it.
+  // Focus moves into the card so the keyboard reaches it, unless a field
+  // in it took focus first.
   useEffect(() => {
-    if (step !== null) cardRef.current?.focus({ preventScroll: true });
+    const card = cardRef.current;
+    if (step !== null && card && !card.contains(document.activeElement)) {
+      card.focus({ preventScroll: true });
+    }
   }, [step === null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // And stays there when the control that had it goes away, as a part's
@@ -1012,6 +1020,8 @@ export function PromptCard({
               onInsertValue={() => openPicker('text')}
               insertRef={insertRef}
               caretRef={textCaret}
+              focusRequest={textFocus}
+              onFocusTaken={() => setTextFocus(0)}
             />
           );
         } else if (pickedPiece) {
