@@ -34,6 +34,16 @@ fixtures/
                echo. Generated and stored the way pinned/ is, held to the
                session by its test, and written again with
                VOSH_WRITE_PREVIEW_SPLITS=1.
+      pointer/ cases.json, two pulses as the session plays them (a quiet
+               prompt the fight leaves in history, then the fight's prompt
+               with its tank line) for three designs, in the text, lifted
+               and pinned: the payloads, the open row the prompt card
+               reads, the band's zone, and the native grid's screen and
+               cursor report at 80, 30 and 12 wide. Generated and
+               synthetic. The session test holds it to what the session
+               sends, VOSH_WRITE_POINTER_CASES=1 writes it again, and the
+               webview test maps a pointer with it on xterm, the native
+               grid and the dock.
   themes/    One theme file per format the Appearance import reads (Ghostty,
              iTerm2, Kitty, Alacritty TOML, legacy Alacritty YAML).
   wrap/      Word wrap cases shared by the Rust wrap in crates/prompt and the
