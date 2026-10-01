@@ -1269,6 +1269,26 @@ export async function terminalLocalWrite(text: string): Promise<void> {
   await invoke('terminal_local_write', { text });
 }
 
+/** Where the native grid's cursor sits and where its open region
+ *  starts. Lines count from the top of the live screen, negative in
+ *  history, so while `at_bottom` holds a line is the screen row the grid
+ *  draws it on. `region` is null once anything lands after the region. */
+export interface TerminalCursor {
+  line: number;
+  col: number;
+  at_bottom: boolean;
+  cols: number;
+  region: { gen: number; line: number; col: number } | null;
+}
+
+/** The native grid's cursor and open region, for mapping a pointer to a
+ *  piece of your prompt while the native renderer draws the terminal.
+ *  Null before the grid exists and on a build without it. xterm reads its
+ *  own buffer instead. */
+export async function terminalCursor(): Promise<TerminalCursor | null> {
+  return invoke('terminal_cursor');
+}
+
 export async function onState(cb: (state: StatePayload) => void): Promise<UnlistenFn> {
   return listen<StatePayload>('session://state', (event) => {
     cb(event.payload);

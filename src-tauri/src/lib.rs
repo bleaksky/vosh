@@ -322,6 +322,7 @@ pub fn run() {
             native_surface_set_theme,
             native_surface_set_font,
             commands::terminal_local_write,
+            commands::terminal_cursor,
             native_surface_find,
             native_surface_find_clear,
             native_surface_set_visible,

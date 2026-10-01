@@ -117,6 +117,33 @@ pub(crate) struct LiftSpan {
     pub after: bool,
 }
 
+/// Where the grid's cursor sits and where the open region starts, for
+/// `terminal_cursor` (section 6). Lines count from the top of the live
+/// screen, negative in history, as alacritty counts them, so while you are
+/// at the bottom a line is the screen row the renderer draws it on. The
+/// webview maps a pointer to a piece of your prompt from it: the cell under
+/// the pointer, then the span there once the design is laid out from the
+/// region's start at `cols` wide.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct CursorReport {
+    pub line: i32,
+    pub col: usize,
+    /// The screen shows the live tail, not history you scrolled back to.
+    pub at_bottom: bool,
+    pub cols: usize,
+    /// The open region, None once anything was written after it.
+    pub region: Option<RegionStart>,
+}
+
+/// Where open region `gen` starts on the grid: the cell its first
+/// character lands in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct RegionStart {
+    pub gen: u64,
+    pub line: i32,
+    pub col: usize,
+}
+
 /// A region Vosh may replace later, such as the drawn prompt, as this
 /// grid holds it (D22). It starts at a mark `ESC ] 7717 ; o ; G BEL` and
 /// stays open while nothing else is written after it. The grid keeps
@@ -373,6 +400,36 @@ impl TermGrid {
             line -= 1;
         }
         None
+    }
+
+    /// Where the cursor sits and where the open region starts, the start
+    /// counted back from the cursor through the region's bytes at the
+    /// grid's width now, as a replace counts it.
+    pub(crate) fn cursor_report(&self) -> CursorReport {
+        let grid = self.term.grid();
+        let cursor = &grid.cursor;
+        let (line, col) = (cursor.point.line.0, cursor.point.column.0);
+        let region = self.region.as_ref().and_then(|region| {
+            let (start, at) = match region_extent(self.columns(), region)? {
+                // Nothing moved the cursor on from the mark, so the region
+                // starts where the next character lands.
+                Extent::Nothing if region.wrap_pending => (line + 1, 0),
+                Extent::Nothing => (line, region.col),
+                Extent::Rows { above, col } => (line - i32::try_from(above).ok()?, col),
+            };
+            Some(RegionStart {
+                gen: region.gen,
+                line: start,
+                col: at,
+            })
+        });
+        CursorReport {
+            line,
+            col,
+            at_bottom: grid.display_offset() == 0,
+            cols: self.columns(),
+            region,
+        }
     }
 
     /// The cursor sits at the start of a row with nothing held.
@@ -948,6 +1005,16 @@ pub(crate) fn feed_session_output(out: &Output) {
     grid.session_output(out);
 }
 
+/// Where the shared grid's cursor sits and where its open region starts,
+/// under its lock. None before the grid exists. See
+/// [`TermGrid::cursor_report`].
+pub(crate) fn cursor_report() -> Option<CursorReport> {
+    grid_slot()
+        .lock()
+        .ok()
+        .and_then(|slot| slot.as_ref().map(TermGrid::cursor_report))
+}
+
 /// Current (display offset, scrollback length) of the shared grid, for the
 /// scrollbar thumb geometry and drag mapping.
 pub(crate) fn scroll_metrics() -> (usize, usize) {
@@ -1373,6 +1440,31 @@ mod tests {
         let slot = grid_slot().lock().unwrap();
         let g = slot.as_ref().expect("grid created on first feed");
         assert!(g.row_string(0).starts_with("shared"));
+    }
+
+    #[test]
+    fn terminal_cursor_reports_the_shared_grid() {
+        let _shared = lock_shared_grid_for_test();
+        *grid_slot().lock().unwrap() = None;
+        assert_eq!(crate::commands::terminal_cursor(), None, "no grid yet");
+        blank_shared_grid_for_test(40, 10);
+        let mut out = Output::new(false);
+        out.text(b"You are hungry.\r\n");
+        out.text(&marked(3, b"<1020hp> "));
+        feed_session_output(&out);
+        let report = serde_json::to_value(crate::commands::terminal_cursor()).expect("json");
+        assert_eq!(
+            report,
+            serde_json::json!({
+                "line": 1,
+                "col": 9,
+                "at_bottom": true,
+                "cols": 40,
+                "region": {"gen": 3, "line": 1, "col": 0},
+            })
+        );
+        feed_local(b"look\r\n");
+        assert_eq!(cursor_report().and_then(|r| r.region), None);
     }
 
     #[test]
@@ -1897,6 +1989,122 @@ mod tests {
         g.session_output(&text(&marked(3, b"")));
         g.session_output(&replace(3, &marked(4, b"HERE"), false));
         assert_eq!(screen(&g), ["0123456789", "NEW", "0123456789", "HERE"]);
+    }
+
+    /// The open region's start in a cursor report, as (gen, line, col).
+    fn region_at(g: &TermGrid) -> Option<(u64, i32, usize)> {
+        g.cursor_report().region.map(|r| (r.gen, r.line, r.col))
+    }
+
+    #[test]
+    fn the_cursor_report_names_where_the_open_region_starts() {
+        // One row, under a line of text.
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&text(b"You are hungry.\r\n"));
+        g.session_output(&text(&marked(7, b"[1020/1020hp]")));
+        assert_eq!(
+            g.cursor_report(),
+            CursorReport {
+                line: 1,
+                col: 13,
+                at_bottom: true,
+                cols: 40,
+                region: Some(RegionStart {
+                    gen: 7,
+                    line: 1,
+                    col: 0
+                }),
+            }
+        );
+
+        // Two rows, as a line break in the design draws them.
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&text(b"You are hungry.\r\n"));
+        g.session_output(&text(&marked(2, b"Tank 100%\r\n[1020/1020hp]")));
+        assert_eq!(region_at(&g), Some((2, 1, 0)));
+        assert_eq!(cursor(&g), (2, 13));
+
+        // Word wrapped at a narrow width, the region still starts on its
+        // first row.
+        let mut g = TermGrid::new(12, 10);
+        g.session_output(&text(b"You are hungry.\r\n"));
+        g.session_output(&text(&marked(3, b"[1020/1020hp 800/800mn 930/930mv]")));
+        assert_eq!(
+            screen(&g),
+            [
+                "You are",
+                "hungry.",
+                "[1020/1020hp",
+                "800/800mn",
+                "930/930mv]"
+            ]
+        );
+        assert_eq!(region_at(&g), Some((3, 2, 0)));
+
+        // A region that starts mid row, and one that wrote nothing yet.
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&text(b"<10hp> "));
+        g.session_output(&text(&marked(4, b"more")));
+        assert_eq!(region_at(&g), Some((4, 0, 7)));
+        g.session_output(&text(&marked(5, b"")));
+        assert_eq!(region_at(&g), Some((5, 0, 11)));
+        // A mark after a full row starts its region on the next.
+        let mut g = TermGrid::new(10, 10);
+        g.local_write(b"0123456789");
+        g.session_output(&text(&marked(6, b"")));
+        assert_eq!(region_at(&g), Some((6, 1, 0)));
+
+        // Lift marks inside a region take no room.
+        let mut g = TermGrid::new(12, 10);
+        g.session_output(&text(b"room\r\n"));
+        g.session_output(&text(&marked(8, &lift(1, b"[1020/1020hp 800/800mn]"))));
+        assert_eq!(screen(&g), ["room", "[1020/1020hp", "800/800mn]"]);
+        assert_eq!(region_at(&g), Some((8, 1, 0)));
+    }
+
+    #[test]
+    fn the_cursor_report_has_no_region_once_anything_lands_after_it() {
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&text(&marked(1, b"<1020hp> ")));
+        assert_eq!(region_at(&g), Some((1, 0, 0)));
+        // Your echo.
+        g.local_write(b"look\r\n");
+        assert_eq!(region_at(&g), None);
+        // Game text after the next prompt.
+        g.session_output(&text(&marked(2, b"<1020hp> ")));
+        g.session_output(&text(b"\r\nYou are hungry.\r\n"));
+        assert_eq!(region_at(&g), None);
+        // A replace keeps it open at its new start.
+        g.session_output(&text(&marked(3, b"<1020hp> ")));
+        g.session_output(&replace(3, &marked(4, b"Tank\r\n<1020hp> "), false));
+        assert_eq!(region_at(&g), Some((4, 3, 0)));
+    }
+
+    #[test]
+    fn the_cursor_report_follows_a_resize_and_says_when_you_scrolled_back() {
+        // The card keeps the row open through a resize, and the start is
+        // counted again at the new width.
+        let mut g = TermGrid::new(40, 6);
+        g.session_output(&text(b"one\r\ntwo\r\n"));
+        g.session_output(&text(&marked(1, b"[1020/1020hp 800/800mn 930/930mv]")));
+        assert_eq!(region_at(&g), Some((1, 2, 0)));
+        g.resize(12, 6);
+        let report = g.cursor_report();
+        assert_eq!(report.cols, 12);
+        let start = report.region.expect("still open");
+        assert_eq!(report.line - start.line, 2, "three rows at 12 wide");
+
+        // Scrolled back into history, the report says so.
+        let mut g = TermGrid::new(20, 3);
+        for n in 0..10 {
+            g.session_output(&text(format!("line {n}\r\n").as_bytes()));
+        }
+        g.session_output(&text(&marked(9, b"<1020hp> ")));
+        assert!(g.cursor_report().at_bottom);
+        g.scroll(4);
+        let report = g.cursor_report();
+        assert!(!report.at_bottom);
+        assert_eq!(report.region.map(|r| r.line), Some(2));
     }
 
     #[test]
