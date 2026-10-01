@@ -802,7 +802,7 @@ async fn io_loop<R: tauri::Runtime>(
                             Instant::now() + Duration::from_millis(vosh_prompt::stage::HOLD_MS)
                         })
                     });
-                    let (gmcp, wrote) = (batch.gmcp, batch.out.writes_text());
+                    let (gmcp, prompt, wrote) = (batch.gmcp, batch.prompt, batch.out.writes_text());
                     finish_read(
                         &app,
                         &profile,
@@ -815,7 +815,8 @@ async fn io_loop<R: tauri::Runtime>(
                     .await;
                     if gmcp || late_until.is_some() {
                         let p = profile.lock().await;
-                        late_until = late_repaint_after(&p, late_until, gmcp, wrote, Instant::now());
+                        late_until =
+                            late_repaint_after(&p, late_until, gmcp, prompt, wrote, Instant::now());
                     }
                 }
                 Err(e) => {
@@ -918,7 +919,8 @@ async fn io_loop<R: tauri::Runtime>(
                 late_until = None;
                 let (out, state) = {
                     let mut p = profile.lock().await;
-                    let out = repaint_step(&mut p, output_count() != seen_output, Instant::now());
+                    let out =
+                        late_repaint_step(&mut p, output_count() != seen_output, Instant::now());
                     let state = if out.is_empty() { None } else { watched_state(&app, &p) };
                     (out, state)
                 };
@@ -2035,31 +2037,40 @@ async fn capture_held_lines(
 
 /// When the late GMCP repaint fires, after a read (section 4). `waiting`
 /// is when it was going to fire, `gmcp` says the read brought packets
-/// after the last prompt it read, and `wrote` says it wrote to the text.
-/// In the text and lifted, text cancels a repaint an earlier read
-/// started, since what follows the packets draws with them. Packets
-/// after the read's last prompt start it when your prompt would show
-/// something else with them, and one already waiting keeps its time.
-/// Text after those packets closed the row, so they start nothing then.
-/// Pinned, the band is not in the text, so text cancels nothing, and
-/// packets start it whenever the band would change (addendum item 7).
+/// after the last prompt it read, `prompt` that it read one, and `wrote`
+/// that it wrote to the text. What follows the packets draws with them,
+/// so in the text and lifted text cancels a repaint an earlier read
+/// started, and pinned a prompt does, since the band is not in the text.
+/// Packets after the read's last prompt start it while there is an open
+/// row or a band to repaint, and one already waiting keeps its time.
+/// Whether the packets changed what your prompt shows is decided when it
+/// fires, so deciding here draws nothing, and a pulse whose packets and
+/// text come in two reads costs no render (addendum item 7).
 fn late_repaint_after(
     p: &Profile,
     waiting: Option<Instant>,
     gmcp: bool,
+    prompt: bool,
     wrote: bool,
     now: Instant,
 ) -> Option<Instant> {
     let pinned = p.prompt.show() == vosh_prompt::PromptShow::Pinned;
-    let waiting = waiting.filter(|_| pinned || !wrote);
+    let cancel = if pinned { prompt } else { wrote };
+    let waiting = waiting.filter(|_| !cancel);
     if waiting.is_some() || !gmcp {
         return waiting;
     }
-    let view = prompt_view(p, now);
-    p.prompt
-        .stage
-        .stale(view.stage())
-        .then(|| now + LATE_REPAINT)
+    p.prompt.stage.repaintable().then(|| now + LATE_REPAINT)
+}
+
+/// The late GMCP repaint fires: your prompt as it shows now, when there is
+/// still a row or a band to repaint, which is empty when nothing changed.
+/// `other` says output from elsewhere landed since the session last wrote.
+fn late_repaint_step(p: &mut Profile, other: bool, now: Instant) -> Output {
+    if !p.prompt.stage.repaintable() {
+        return Output::new(other);
+    }
+    repaint_step(p, other, now)
 }
 
 /// Wait until `until`, or forever with no deadline.
@@ -2143,12 +2154,21 @@ fn hides_and_reads_prompt(trigger: &vosh_trigger::Trigger) -> bool {
             .any(|a| matches!(a, TriggerAction::Script { body } if body.contains("set_prompt_var")))
 }
 
+#[cfg(test)]
+thread_local! {
+    /// How many times this thread drew your design from the live values,
+    /// so a test can tell what a step costs.
+    static RENDERS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
 /// Your design drawn from the live values. The vosh-prompt resolver reads
 /// the values the capture and scripts set, then the latest GMCP packets,
 /// then what Vosh itself knows, and draws `?` for a value the game hides.
 /// The spans say where each piece landed, which the open row keeps for
 /// the prompt card.
 fn render_prompt(p: &Profile, now: Instant) -> vosh_prompt::Rendered {
+    #[cfg(test)]
+    RENDERS.with(|n| n.set(n.get() + 1));
     let vosh = prompt_supplies(p, now);
     vosh_prompt::render_str(
         &p.prompt.config().template,

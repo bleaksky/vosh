@@ -1,6 +1,7 @@
 //! The late GMCP repaint (section 4, and addendum item 7), played through
-//! the session's own steps. A packet that changes a value your design
-//! reads, with no text after it, repaints your prompt 60 ms later: the
+//! the session's own steps. A packet after the last prompt of its read,
+//! with no text after it, starts a repaint 60 ms later, which writes your
+//! prompt again when the packet changed a value your design reads: the
 //! open row in the text and lifted, and the band while pinned, which no
 //! text cancels, since it is not in the text.
 
@@ -41,12 +42,56 @@ fn read_then_wait(
     now: Instant,
 ) -> (Read, Option<Instant>) {
     let read = session.read(bytes);
-    let next = late_repaint_after(&session.p, waiting, read.gmcp, read.out.writes_text(), now);
+    let next = late_repaint_after(
+        &session.p,
+        waiting,
+        read.gmcp,
+        read.prompt,
+        read.out.writes_text(),
+        now,
+    );
     (read, next)
 }
 
 fn plain(bytes: &[u8]) -> String {
     vosh_ansi::plain_text(bytes)
+}
+
+/// What `f` gives, and how many times the session drew your design while
+/// it ran.
+fn drawing<T>(f: impl FnOnce() -> T) -> (T, u64) {
+    let before = RENDERS.with(std::cell::Cell::get);
+    let out = f();
+    (out, RENDERS.with(std::cell::Cell::get) - before)
+}
+
+/// Whether the late repaint waits after `read`, as the session loop
+/// decides, and how many times deciding drew your design.
+fn wait_after(
+    session: &Session,
+    read: &Read,
+    waiting: Option<Instant>,
+    now: Instant,
+) -> (Option<Instant>, u64) {
+    drawing(|| {
+        late_repaint_after(
+            &session.p,
+            waiting,
+            read.gmcp,
+            read.prompt,
+            read.out.writes_text(),
+            now,
+        )
+    })
+}
+
+/// Where the last GMCP packet of `bytes` ends.
+fn after_packets(bytes: &[u8]) -> usize {
+    bytes
+        .windows(2)
+        .rposition(|w| w == [255, 240])
+        .expect("the pulse has packets")
+        + 2
 }
 
 #[test]
@@ -64,7 +109,7 @@ fn a_packet_with_no_text_after_it_repaints_the_open_row_late() {
         let (_, again) = read_then_wait(&mut session, &time(15), waiting, later);
         assert_eq!(again, waiting, "{show:?}");
         // It fires: a replace of the open row with nothing after it.
-        let out = repaint_step(&mut session.p, false, later);
+        let out = late_repaint_step(&mut session.p, false, later);
         let replace = out.replace.as_ref().expect("the repaint");
         assert!(out.bytes.is_empty(), "{show:?}");
         assert!(
@@ -81,9 +126,8 @@ fn a_packet_with_no_text_after_it_repaints_the_open_row_late() {
             session.p.prompt.stage.open_row().expect("the row").gen
         );
         // Nothing is left to change.
-        assert_eq!(
-            late_repaint_after(&session.p, None, true, false, later),
-            None,
+        assert!(
+            late_repaint_step(&mut session.p, false, later).is_empty(),
             "{show:?}"
         );
     }
@@ -101,7 +145,7 @@ fn a_packet_after_the_prompt_in_its_read_repaints_it_late() {
         assert!(read.prompt, "{show:?}");
         assert!(read.gmcp, "{show:?}: the packet came after the prompt");
         assert_eq!(waiting, Some(now + LATE_REPAINT), "{show:?}");
-        let out = repaint_step(&mut session.p, false, now);
+        let out = late_repaint_step(&mut session.p, false, now);
         let shown = match show {
             PromptShow::Pinned => out.pin.as_deref().map(plain),
             _ => out.replace.as_ref().map(|r| plain(&r.bytes)),
@@ -134,6 +178,54 @@ fn a_packet_after_the_prompt_in_its_read_repaints_it_late() {
 }
 
 #[test]
+fn deciding_whether_to_wait_draws_nothing() {
+    let now = Instant::now();
+    for show in [PromptShow::Text, PromptShow::Lifted, PromptShow::Pinned] {
+        let mut session = Session::new(showing(profile(CODES, HOUR, true), show));
+        let _ = session.read(&wire_fixture("quiet"));
+        // A pulse the link split, its packets in one read and its text
+        // and prompt in the next.
+        let pulse = wire_fixture("quiet");
+        let split = after_packets(&pulse);
+        let read = session.read(&pulse[..split]);
+        let (waiting, drawn) = wait_after(&session, &read, None, now);
+        assert_eq!(drawn, 0, "{show:?}");
+        assert_eq!(waiting, Some(now + LATE_REPAINT), "{show:?}");
+        // The prompt that follows draws with the packets, so it cancels
+        // the repaint, pinned too.
+        let read = session.read(&pulse[split..]);
+        let (after, drawn) = wait_after(&session, &read, waiting, now);
+        assert_eq!(drawn, 0, "{show:?}");
+        assert_eq!(after, None, "{show:?}");
+        // A whole pulse in one read waits for nothing.
+        let read = session.read(&pulse);
+        assert_eq!(
+            wait_after(&session, &read, None, now),
+            (None, 0),
+            "{show:?}"
+        );
+    }
+
+    // With no open row, a packet starts nothing.
+    let mut session = Session::new(profile(CODES, HOUR, true));
+    let _ = session.read(&wire_fixture("quiet"));
+    let _ = session.send("look");
+    let read = session.read(&time(14));
+    assert_eq!(wait_after(&session, &read, None, now), (None, 0));
+
+    // It draws only when it fires, and then only while the row is open.
+    let mut session = Session::new(profile(CODES, HOUR, true));
+    let _ = session.read(&wire_fixture("quiet"));
+    let (out, drawn) = drawing(|| late_repaint_step(&mut session.p, false, now));
+    assert!(out.is_empty());
+    assert_eq!(drawn, 1);
+    let _ = session.send("look");
+    let (out, drawn) = drawing(|| late_repaint_step(&mut session.p, false, now));
+    assert!(out.is_empty());
+    assert_eq!(drawn, 0);
+}
+
+#[test]
 fn text_after_the_packet_cancels_the_late_repaint() {
     let now = Instant::now();
     let mut session = Session::new(profile(CODES, HOUR, true));
@@ -144,7 +236,7 @@ fn text_after_the_packet_cancels_the_late_repaint() {
     let (_, after) = read_then_wait(&mut session, tell, waiting, now);
     assert_eq!(after, None);
     // The text closed the row, so a repaint changes nothing.
-    assert!(repaint_step(&mut session.p, false, now).is_empty());
+    assert!(late_repaint_step(&mut session.p, false, now).is_empty());
 
     // Text in the same read as the packet cancels it before it starts.
     let mut session = Session::new(profile(CODES, HOUR, true));
@@ -154,12 +246,15 @@ fn text_after_the_packet_cancels_the_late_repaint() {
     let (_, waiting) = read_then_wait(&mut session, &bytes, None, now);
     assert_eq!(waiting, None);
 
-    // A packet that changes nothing your design reads starts nothing.
+    // A packet that changes nothing your design reads waits, and writes
+    // nothing when it fires.
     let mut session = Session::new(profile(CODES, "<%hp>", true));
     let _ = session.read(&wire_fixture("quiet"));
     let (_, waiting) = read_then_wait(&mut session, &time(14), None, now);
-    assert_eq!(waiting, None);
-    // Nor does one with drawing off, which shows the game prompt as sent.
+    assert!(waiting.is_some());
+    assert!(late_repaint_step(&mut session.p, false, now).is_empty());
+    // With drawing off, the game prompt shows as sent and leaves no open
+    // row, so a packet starts nothing.
     let mut session = Session::new(profile(CODES, HOUR, false));
     let _ = session.read(&wire_fixture("quiet"));
     let (_, waiting) = read_then_wait(&mut session, &time(14), None, now);
@@ -179,7 +274,7 @@ fn the_pinned_band_repaints_late_whatever_text_came() {
     // Text that comes while it waits keeps it waiting.
     let (_, still) = read_then_wait(&mut session, b"\n\rA guard arrives.\n\r", waiting, now);
     assert_eq!(still, waiting);
-    let out = repaint_step(&mut session.p, false, now);
+    let out = late_repaint_step(&mut session.p, false, now);
     assert!(out.replace.is_none() && out.bytes.is_empty() && out.restore.is_none());
     assert_eq!(out.pin.as_deref().map(plain).as_deref(), Some("<1020> 14"));
 }
@@ -196,7 +291,7 @@ fn a_late_repaint_keeps_the_preview_and_carries_the_new_live_render() {
     let _ = session.repaint();
     let (_, waiting) = read_then_wait(&mut session, &time(14), None, now);
     assert!(waiting.is_some());
-    let out = repaint_step(&mut session.p, false, now);
+    let out = late_repaint_step(&mut session.p, false, now);
     let replace = out.replace.as_ref().expect("the repaint");
     assert!(plain(&replace.bytes).starts_with("<180> 14"));
     let restore = out.restore.as_ref().expect("the live render");
@@ -211,5 +306,5 @@ fn output_from_elsewhere_before_it_fires_leaves_the_row_alone() {
     let (_, waiting) = read_then_wait(&mut session, &time(14), None, now);
     assert!(waiting.is_some());
     // A slash command echoed in the meantime.
-    assert!(repaint_step(&mut session.p, true, now).is_empty());
+    assert!(late_repaint_step(&mut session.p, true, now).is_empty());
 }
