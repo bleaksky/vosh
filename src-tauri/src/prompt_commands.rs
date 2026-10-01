@@ -134,13 +134,46 @@ pub(crate) async fn prompt_compile(
 /// The body of [`prompt_compile`]. Another game's presets read only the
 /// values whose packages came this session.
 pub(crate) fn compile(p: &Profile, request: &CompileRequest) -> CompileReport {
-    let gmcp = p.prompt.vars.gmcp();
-    let supplied = |name: &str| {
-        vosh_prompt::vars::entry(name)
-            .and_then(|e| e.package)
-            .is_some_and(|package| gmcp.has(package))
-    };
-    vosh_prompt::report::report(request, p.prompt.who(), &supplied)
+    vosh_prompt::report::report(request, p.prompt.who(), &|name| supplied(p, name))
+}
+
+/// True when GMCP supplied `name` this session: its package came.
+fn supplied(p: &Profile, name: &str) -> bool {
+    vosh_prompt::vars::entry(name)
+        .and_then(|e| e.package)
+        .is_some_and(|package| p.prompt.vars.gmcp().has(package))
+}
+
+/// What a capture built from one entry of the candidates ring reads: the
+/// line another game prints before each command (P15). `names` names its
+/// numbers in order, an empty name leaves one out, and the rest take the
+/// names Vosh suggests from the letters after them. It changes nothing.
+#[tauri::command]
+pub(crate) async fn prompt_capture_from_line(
+    state: State<'_, SharedState>,
+    id: u64,
+    names: Option<Vec<String>>,
+) -> Result<CompileReport, String> {
+    capture_from_line(&*state.profile.lock().await, id, &names.unwrap_or_default())
+}
+
+/// The body of [`prompt_capture_from_line`]. A ring entry that holds a
+/// prompt of several lines gives its last, the one right before your
+/// send, since Vosh reads another game's prompt from one line.
+pub(crate) fn capture_from_line(
+    p: &Profile,
+    id: u64,
+    names: &[String],
+) -> Result<CompileReport, String> {
+    let candidate = p
+        .prompt
+        .stage
+        .candidate(id)
+        .ok_or_else(|| "Vosh no longer keeps that line. Pick another one.".to_string())?;
+    let line = candidate.plain.lines().last().unwrap_or_default();
+    Ok(vosh_prompt::report::line_report(line, names, &|name| {
+        supplied(p, name)
+    }))
 }
 
 /// The candidates ring grouped by shape, with counts.
@@ -480,6 +513,55 @@ mod tests {
         let report = compile(&p, &codes);
         assert!(report.ok);
         assert_eq!(report.prompt, "[%h/%Hhp] ");
+    }
+
+    #[test]
+    fn a_ring_entry_becomes_a_capture_with_the_names_vosh_suggests() {
+        let mut p = Profile::default();
+        p.prompt.connect(false);
+        let mut out = vosh_prompt::stage::Output::new(false);
+        let line = "<100hp 50m 30mv> ";
+        p.prompt
+            .stage
+            .line(&mut out, line.as_bytes(), line, None, b"");
+        p.prompt.record(None, 1);
+        let id = p.prompt.stage.ring().last().expect("the entry").id;
+        let report = capture_from_line(&p, id, &[]).expect("the report");
+        assert!(report.ok);
+        assert_eq!(report.vars, ["hp", "mana", "move"]);
+        assert_eq!(report.numbers.len(), 3);
+        // Before Char.Vitals comes, the presets draw only what the line
+        // reads.
+        let ids = |report: &CompileReport| -> Vec<&'static str> {
+            report.presets.iter().map(|preset| preset.id).collect()
+        };
+        let renamed =
+            capture_from_line(&p, id, &["health".into(), String::new()]).expect("the report");
+        assert_eq!(renamed.vars, ["health", "move"]);
+        assert_eq!(ids(&renamed), ["minimal", "how_full", "detailed", "empty"]);
+        assert_eq!(
+            capture_from_line(&p, id + 1, &[]),
+            Err("Vosh no longer keeps that line. Pick another one.".into())
+        );
+        // Once Char.Vitals came, the presets draw every vital.
+        p.prompt.observe(
+            "Char.Vitals",
+            json!({"hp": 10, "maxhp": 20, "mana": 5, "maxmana": 9, "move": 1, "maxmove": 2}),
+            chrono::Local::now().fixed_offset(),
+        );
+        let report = capture_from_line(&p, id, &[]).expect("the report");
+        assert_eq!(
+            ids(&report),
+            ["minimal", "how_full", "percent", "bars", "detailed", "empty"]
+        );
+        // A prompt of several lines gives its last.
+        let mut out = vosh_prompt::stage::Output::new(false);
+        p.prompt.stage.line(&mut out, b"x", "x", None, b"");
+        let block = "Tester: [===|---]\n<5hp> ";
+        p.prompt.record(Some((block.as_bytes(), block)), 2);
+        let id = p.prompt.stage.ring().last().expect("the entry").id;
+        let report = capture_from_line(&p, id, &[]).expect("the report");
+        assert_eq!(report.shapes[0].lines, [r"^<(?<hp>-?\d+)hp> $"]);
     }
 
     #[test]

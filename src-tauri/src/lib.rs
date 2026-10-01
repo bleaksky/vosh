@@ -406,6 +406,7 @@ pub fn run() {
             prompt_commands::prompt_compile,
             prompt_commands::prompt_candidates,
             prompt_commands::prompt_capture_check,
+            prompt_commands::prompt_capture_from_line,
             prompt_commands::prompt_render,
             prompt_commands::prompt_render_many,
             prompt_commands::prompt_preview_set,
