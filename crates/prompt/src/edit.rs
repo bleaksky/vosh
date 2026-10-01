@@ -983,7 +983,12 @@ impl Doc {
     /// Give every piece from before the edit the look it had, but the one
     /// the edit changed on purpose, by writing codes right before it.
     /// A line break keeps the look it had too, so a color never runs on
-    /// into the next row where it did not before.
+    /// into the next row where it did not before. So does a condition and
+    /// its end: codes that put a look back after a piece inside a
+    /// condition go before its end, inside it, and after a piece before a
+    /// condition they go before the condition, so they apply exactly when
+    /// the piece's own codes do and a piece after the condition looks as
+    /// it did whether the condition holds or not.
     fn repair(&mut self, before: &Looks, edited: Option<usize>) {
         let mut state = Look::default();
         let pieces = std::mem::take(&mut self.pieces);
@@ -998,7 +1003,7 @@ impl Doc {
                         piece.codes.splice(0..0, fix);
                     }
                 }
-                Some(origin) if piece.kind == PieceKind::Nl && state != before.before[origin] => {
+                Some(origin) if piece.marker() && state != before.before[origin] => {
                     let fix = transition(&state, &before.before[origin]);
                     state = state.after(&fix);
                     out.push(self.new_piece(PieceKind::Codes, fix, Vec::new()));
