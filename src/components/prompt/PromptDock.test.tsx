@@ -343,7 +343,7 @@ describe('cells and colors on the band', () => {
     // The native grid draws concealed text and one solid underline.
     const hidden = resolveCell({ ...PLAIN, hidden: true, underline: 3 }, native);
     expect(hidden.color).toBe(NORD.fg);
-    expect(hidden.decorationStyle).toBe('solid');
+    expect(hidden.underline).toEqual({ style: 'solid', color: null });
     expect(resolveCell({ ...PLAIN, hidden: true }, NORD).color).toBe('transparent');
   });
 
@@ -355,6 +355,26 @@ describe('cells and colors on the band', () => {
       '#ff0000',
     );
     expect(resolveCell({ ...PLAIN, fg: { kind: 'indexed', n: 244 } }, NORD).color).toBe('#808080');
+  });
+
+  it('draws a strike straight in the text color, apart from a styled underline', () => {
+    const curly = { kind: 'rgb', r: 191, g: 97, b: 106 } as const;
+    const look = resolveCell({ ...PLAIN, underline: 3, underlineColor: curly, strike: true }, NORD);
+    expect(look.underline).toEqual({ style: 'wavy', color: '#bf616a' });
+    expect(look.strike).toBe(true);
+    expect(resolveCell({ ...PLAIN, strike: true }, NORD).underline).toBeNull();
+    // The band draws each as a line of its own, as xterm does: the wave
+    // under the digits in its color, the strike through them straight in
+    // the text color.
+    const html = draw('\x1b[4:3m\x1b[58:2::191:97:106m\x1b[9m1020\x1b[0m');
+    const lines = [...html.matchAll(/style="([^"]*text-decoration-line:[^"]*)"/g)].map((m) => m[1]);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('text-decoration-line:underline;');
+    expect(lines[0]).toContain('text-decoration-style:wavy;');
+    expect(lines[0]).toContain('text-decoration-color:#bf616a');
+    expect(lines[1]).toContain('text-decoration-line:line-through;');
+    expect(lines[1]).toContain('text-decoration-style:solid;');
+    expect(lines[1]).toContain(`text-decoration-color:${NORD.fg}`);
   });
 
   it('swaps the colors of an inverse cell and draws its ground over the band', () => {
