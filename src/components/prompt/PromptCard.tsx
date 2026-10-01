@@ -466,12 +466,12 @@ export function PromptCard({
     onClose();
   });
 
-  const save = (next: PromptConfig, keepUndo = true) => {
+  const save = (next: PromptConfig, keepUndo = true, asIs = false) => {
     const before = latest.current;
     if (!before) return;
     if (keepUndo) undo.current = [...undo.current, before].slice(-UNDO_DEPTH);
     take(next);
-    void promptConfigSet(next).catch((e: unknown) => {
+    void promptConfigSet(next, { asIs }).catch((e: unknown) => {
       take(before);
       pushToast({ kind: 'error', message: String(e) });
     });
@@ -840,7 +840,8 @@ export function PromptCard({
               promptsOff={state?.status.status === 'prompts_off' || (show?.promptsOff ?? false)}
               onPick={(template) => {
                 setPointing(NOWHERE);
-                save({ ...config, template, draw: true });
+                // Start empty keeps its empty design as drawing turns on.
+                save({ ...config, template, draw: true }, true, template === '');
               }}
               onInsertValue={() => openPicker('design')}
             >

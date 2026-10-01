@@ -527,7 +527,7 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
         template: edited.template,
         ..h.prompt_table().await
     };
-    crate::prompt_commands::prompt_config_set(h.app.handle().clone(), h.app.state(), config)
+    crate::prompt_commands::prompt_config_set(h.app.handle().clone(), h.app.state(), config, None)
         .await
         .expect("the table saves");
     h.until_last_row("<1020>800").await;
@@ -593,7 +593,7 @@ async fn an_echo_the_session_hears_of_late_leaves_the_prompt_after_it_open() {
         template: "<%hp>%mana".into(),
         ..h.prompt_table().await
     };
-    crate::prompt_commands::prompt_config_set(h.app.handle().clone(), h.app.state(), config)
+    crate::prompt_commands::prompt_config_set(h.app.handle().clone(), h.app.state(), config, None)
         .await
         .expect("the table saves");
     h.until_last_row("<1020>800").await;

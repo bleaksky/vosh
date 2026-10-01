@@ -101,6 +101,10 @@ describe('the prompt editor commands', () => {
     const next: PromptConfig = { ...config, template: '[%hp]' };
     await promptConfigSet(next);
     expect(invoke).toHaveBeenLastCalledWith('prompt_config_set', { config: next });
+    // Start empty keeps its empty design as drawing turns on.
+    const empty: PromptConfig = { ...config, template: '', draw: true };
+    await promptConfigSet(empty, { asIs: true });
+    expect(invoke).toHaveBeenLastCalledWith('prompt_config_set', { config: empty, asIs: true });
   });
 
   it('sends each command its arguments as the backend reads them', async () => {

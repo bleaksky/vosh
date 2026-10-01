@@ -655,9 +655,14 @@ export async function subscribePromptCardOpen(
 
 /** Save a `[prompt]` table for the active profile. It saves shortly,
  *  repaints the open row and tells every window. A capture that does not
- *  compile changes nothing, and the error is a sentence to show. */
-export async function promptConfigSet(config: PromptConfig): Promise<void> {
-  await invoke('prompt_config_set', { config });
+ *  compile changes nothing, and the error is a sentence to show. Turning
+ *  drawing on with no design draws Vosh's default, unless `asIs` keeps
+ *  the design exactly as sent, as Start empty does. */
+export async function promptConfigSet(
+  config: PromptConfig,
+  options?: { asIs?: boolean },
+): Promise<void> {
+  await invoke('prompt_config_set', options?.asIs ? { config, asIs: true } : { config });
 }
 
 /** A design another profile holds. */
