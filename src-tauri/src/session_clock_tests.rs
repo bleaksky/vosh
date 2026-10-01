@@ -174,3 +174,44 @@ fn text_after_your_prompt_ends_the_repaints_of_its_row() {
         Some("<1020> 29")
     );
 }
+
+#[test]
+fn a_band_repaint_between_your_echo_and_its_word_keeps_the_next_line_end() {
+    // You type look while pinned. The webview writes your echo, which
+    // closes the row the prompt left, and tells the session in a call of
+    // its own. A band repaint that goes out in between leaves the row as
+    // the renderer has it, so the blank line the game sends next shows.
+    let mut session = Session::new(showing(profile(CODES, TICK, true), PromptShow::Pinned));
+    let t0 = Instant::now();
+    session.p.tick.start_session(t0);
+    let mut grid = crate::term_grid::TermGrid::new(60, 30);
+    let read = session.read(&wire_fixture("quiet"));
+    assert!(read.prompt);
+    grid.session_output(&read.out);
+    let _ = session.send("look");
+    grid.local_write(b"look\r\n");
+    let band = clock_step(
+        &mut session.p,
+        false,
+        false,
+        t0 + Duration::from_millis(1_500),
+    );
+    assert_eq!(
+        shown(&band, PromptShow::Pinned).as_deref(),
+        Some("<1020> 29")
+    );
+    assert_eq!(band.pin_row, None, "a band repaint leaves the row alone");
+    // Nothing in it reaches the text, so xterm writes nothing and leaves
+    // a live pane you scrolled back where it is.
+    let payload = OutputPayload::from_output(&band);
+    assert!(payload.b64.is_empty() && payload.replace.is_none());
+    assert!(payload.restore.is_none() && payload.hold.is_none() && payload.pin_row.is_none());
+    grid.session_output(&band);
+    session.local_write();
+    grid.session_output(&session.read(b"\r\nSomeone arrives from the south.\r\n").out);
+    let rows = super::show_tests::rows_of(&grid);
+    assert_eq!(
+        rows[rows.len() - 3..],
+        ["look", "", "Someone arrives from the south."]
+    );
+}
