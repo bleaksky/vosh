@@ -64,6 +64,10 @@ fixtures/
                sends, VOSH_WRITE_POINTER_CASES=1 writes it again, and the
                webview test maps a pointer with it on xterm, the native
                grid and the dock.
+  terminal-rows/ cases.json, the rows the terminal keeps and the rows the
+               game is told while your pinned prompt band borrows rows,
+               shared by keptRows and gameSize on xterm and
+               grid_and_game_rows on the native grid. Hand written.
   themes/    One theme file per format the Appearance import reads (Ghostty,
              iTerm2, Kitty, Alacritty TOML, legacy Alacritty YAML).
   wrap/      Word wrap cases shared by the Rust wrap in crates/prompt and the

@@ -1,0 +1,49 @@
+{
+  "notes": "Hand written. The rows the terminal keeps and the rows the game is told while your pinned prompt band borrows rows at the bottom of the pane, shared by keptRows, gameSize and GameSizeReport in src/lib/terminalRows.ts and by grid_and_game_rows, short_of_band and the size report in src-tauri/src/native_surface/mod.rs. fit is the rows the pane fits and lent the rows the band borrows. grid is the rows the terminal keeps and game the rows the game is told. A frame is the columns, fit and lent, and told lists each size the game hears, as columns and rows. A game of null marks a pane no taller than what the band borrows, where the two sides tell the game different rows today.",
+  "split": [
+    { "name": "with no band borrowing the pane keeps every row", "fit": 40, "lent": 0, "grid": 40, "game": 40 },
+    { "name": "a fight lends a row and the game still hears the whole pane", "fit": 40, "lent": 1, "grid": 39, "game": 40 },
+    { "name": "a three row band lends two rows", "fit": 40, "lent": 2, "grid": 38, "game": 40 },
+    { "name": "a pane one row taller than the band keeps that row", "fit": 3, "lent": 2, "grid": 1, "game": 3 },
+    { "name": "a one row pane keeps its row", "fit": 1, "lent": 0, "grid": 1, "game": 1 },
+    { "name": "a pane as tall as the band borrows still keeps one row", "fit": 3, "lent": 3, "grid": 1, "game": null },
+    { "name": "a pane shorter than the band borrows still keeps one row", "fit": 3, "lent": 5, "grid": 1, "game": null }
+  ],
+  "reports": [
+    {
+      "name": "a fight that starts and ends three times tells the game nothing new",
+      "frames": [
+        [120, 40, 0],
+        [120, 40, 1],
+        [120, 40, 0],
+        [120, 40, 1],
+        [120, 40, 0],
+        [120, 40, 1],
+        [120, 40, 0],
+        [120, 42, 0],
+        [120, 42, 1]
+      ],
+      "grid": [40, 39, 40, 39, 40, 39, 40, 42, 41],
+      "told": [
+        [120, 40],
+        [120, 42]
+      ]
+    },
+    {
+      "name": "a narrower window in a fight tells the game its new width once",
+      "frames": [
+        [120, 40, 1],
+        [100, 40, 1],
+        [100, 40, 0],
+        [100, 38, 0],
+        [100, 38, 2]
+      ],
+      "grid": [39, 39, 40, 38, 36],
+      "told": [
+        [120, 40],
+        [100, 40],
+        [100, 38]
+      ]
+    }
+  ]
+}
