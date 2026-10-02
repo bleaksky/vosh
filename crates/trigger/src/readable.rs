@@ -1,19 +1,22 @@
 //! Keep the colors triggers paint text in readable on the terminal ground.
 //!
-//! A trigger can paint text a true color: a `{#8fa7d9}` token in a Replace
-//! template goes out as `38;2;143;167;217`. A fixed color reads on some
-//! grounds and fades on others. #8fa7d9 holds about 5:1 on Nord and drops
-//! to about 2.2:1 on Vellum. [`lift_to_contrast`] measures a color against
-//! the ground it lands on and, when it falls short of [`READABLE_CONTRAST`],
-//! moves only its lightness until it reads, darker on a light ground and
-//! lighter on a dark one. Its OKLCH hue holds, and its chroma drops only
-//! where the sRGB gamut forces it. A color that already reads comes back
-//! as it was.
+//! A trigger can paint text a fixed color: a `{#8fa7d9}` token in a Replace
+//! template goes out as `38;2;143;167;217`, and a `{fg:244}` token goes out
+//! as `38;5;244`, a 256 color index past the 16 that draws the same on every
+//! theme. A fixed color reads on some grounds and fades on others. #8fa7d9
+//! holds about 5:1 on Nord and drops to about 2.2:1 on Vellum.
+//! [`lift_to_contrast`] measures a color against the ground it lands on and,
+//! when it falls short of [`READABLE_CONTRAST`], moves only its lightness
+//! until it reads, darker on a light ground and lighter on a dark one. Its
+//! OKLCH hue holds, and its chroma drops only where the sRGB gamut forces
+//! it. A color that already reads comes back as it was.
 //!
 //! [`lift_sgr`] applies that to the escapes in a line the triggers built.
-//! It changes true color text and underline colors and never a background.
-//! The engine runs it only on a line a trigger rebuilt, whose escapes all
-//! came from triggers, so the colors the game sends never reach it.
+//! It changes fixed text and underline colors and never a background or one
+//! of the theme's 16 colors. A 256 color that needs a lift goes out as a
+//! true color. The engine runs it only on a line a trigger rebuilt, whose
+//! escapes all came from triggers, so the colors the game sends never reach
+//! it.
 
 use std::borrow::Cow;
 
@@ -232,7 +235,7 @@ enum Under {
     Palette,
 }
 
-/// A true color the triggers asked for and the one the line draws.
+/// A fixed color the triggers asked for and the one the line draws.
 #[derive(Clone, Copy, Debug)]
 struct Paint {
     asked: Rgb,
@@ -246,6 +249,12 @@ enum At {
     Semicolons(usize),
     /// `38:2::r:g:b` in one item, its index.
     Colons(usize),
+    /// `38;5;n`, the index of the `38`. A lift rewrites it to `38;2;r;g;b`
+    /// in the same items.
+    IndexedSemicolons(usize),
+    /// `38:5:n` in one item, its index. A lift rewrites it to
+    /// `38:2::r:g:b`.
+    IndexedColons(usize),
 }
 
 /// The attributes the line's escapes have set so far.
@@ -273,7 +282,7 @@ fn channels(r: &str, g: &str, b: &str) -> Option<Rgb> {
 
 impl Pen {
     /// Take one SGR sequence's parameters, and return them rewritten when
-    /// a true color in force after it needs another lightness to read.
+    /// a fixed color in force after it needs another lightness to read.
     fn sgr(&mut self, params: &str, ground: Rgb) -> Option<String> {
         let mut items: Vec<String> = params.split(';').map(str::to_string).collect();
         // Where this sequence sets each color still in force at its end.
@@ -297,9 +306,11 @@ impl Pen {
                     }
                     (code @ ("38" | "48" | "58"), Some("5")) => {
                         let index = subs.get(2).and_then(|s| s.parse().ok());
+                        let fixed = index.and_then(xterm256).map(paint);
+                        let at = fixed.map(|_| At::IndexedColons(k));
                         match code {
-                            "38" => (self.fg, set_text) = (None, None),
-                            "58" => (self.underline, set_underline) = (None, None),
+                            "38" => (self.fg, set_text) = (fixed, at),
+                            "58" => (self.underline, set_underline) = (fixed, at),
                             _ => self.under = indexed_under(index),
                         }
                     }
@@ -335,9 +346,11 @@ impl Pen {
                     }
                     Some("5") if k + 2 < items.len() => {
                         let index = items[k + 2].parse().ok();
+                        let fixed = index.and_then(xterm256).map(paint);
+                        let at = fixed.map(|_| At::IndexedSemicolons(k));
                         match code {
-                            38 => (self.fg, set_text) = (None, None),
-                            58 => (self.underline, set_underline) = (None, None),
+                            38 => (self.fg, set_text) = (fixed, at),
+                            58 => (self.underline, set_underline) = (fixed, at),
                             _ => self.under = indexed_under(index),
                         }
                         k += 2;
@@ -443,6 +456,21 @@ fn settle(
             items[i] = subs.join(":");
             true
         }
+        // The index becomes a true color in the same items: `38;5;n` turns
+        // into `38;2;r;g;b`, the channels in one item that the join spells
+        // out with semicolons.
+        Some(At::IndexedSemicolons(i)) => {
+            let (r, g, b) = want;
+            items[i + 1] = "2".to_string();
+            items[i + 2] = format!("{r};{g};{b}");
+            true
+        }
+        Some(At::IndexedColons(i)) => {
+            let (r, g, b) = want;
+            let code = items[i].split(':').next().unwrap_or("38").to_string();
+            items[i] = format!("{code}:2::{r}:{g}:{b}");
+            true
+        }
         None if want == paint.drawn => false,
         None => {
             let (r, g, b) = want;
@@ -457,14 +485,16 @@ fn settle(
     changed
 }
 
-/// Rewrite the true color text and underline colors in `text`, a line the
+/// Rewrite the fixed text and underline colors in `text`, a line the
 /// triggers built, so each holds [`READABLE_CONTRAST`] on what it draws
 /// on: `ground`, the terminal background, unless the line set a fixed
-/// background of its own. Text on one of the theme's 16 background colors
-/// keeps the color asked for, since that background is the theme's to
-/// know, and text on a wash changes only to a color that reads under both
-/// renderers. Backgrounds never change, and neither does anything but SGR
-/// sequences. Borrows `text` back when nothing needed a change.
+/// background of its own. A fixed color is a true color or a 256 color
+/// past the 16, and a 256 color that needs a lift goes out as a true color.
+/// The theme's 16 colors stay. Text on one of the theme's 16 background
+/// colors keeps the color asked for, since that background is the theme's
+/// to know, and text on a wash changes only to a color that reads under
+/// both renderers. Backgrounds never change, and neither does anything but
+/// SGR sequences. Borrows `text` back when nothing needed a change.
 pub fn lift_sgr(text: &str, ground: Rgb) -> Cow<'_, str> {
     if !text.contains("\x1b[") {
         return Cow::Borrowed(text);
@@ -527,12 +557,14 @@ mod tests {
     const VELLUM: Rgb = (0xf7, 0xf4, 0xee);
     const NORD: Rgb = (0x2e, 0x34, 0x40);
 
-    /// The shared fixture: every built in theme's terminal background and
-    /// the colors the presets and a true color highlight paint text in.
+    /// The shared fixture: every built in theme's terminal background, the
+    /// fixed colors the presets and a true color highlight paint text in,
+    /// and every Replace template of the presets.
     #[derive(serde::Deserialize)]
     struct Fixture {
         grounds: Vec<Ground>,
         colors: Colors,
+        templates: Vec<String>,
     }
 
     #[derive(serde::Deserialize)]
@@ -545,7 +577,6 @@ mod tests {
     struct Colors {
         true_color: Vec<String>,
         indexed: Vec<u8>,
-        named: Vec<String>,
     }
 
     fn fixture() -> Fixture {
@@ -560,9 +591,6 @@ mod tests {
         }
         for &n in &f.colors.indexed {
             out.push((format!("fg:{n}"), xterm256(n).unwrap()));
-        }
-        for name in &f.colors.named {
-            out.push((name.clone(), NamedColor::parse(name).unwrap().rgb()));
         }
         out
     }
@@ -696,6 +724,96 @@ mod tests {
                 // Rounding to bytes can add a hair of chroma.
                 assert!(now.c <= was.c + 0.005, "{at} gains no chroma");
             }
+        }
+    }
+
+    /// A store with one Replace trigger that saves `template` and matches a
+    /// line of four words, so `$0` to `$4` all fill.
+    fn replace_store(template: &str) -> crate::TriggerStore {
+        let mut store = crate::TriggerStore::new();
+        store
+            .set(crate::Trigger {
+                name: "preset".into(),
+                patterns: vec![crate::TriggerPattern {
+                    pattern: r"^(\S+) (\S+) (\S+) (\S+)$".into(),
+                    enabled: true,
+                }],
+                priority: 0,
+                enabled: true,
+                actions: vec![crate::TriggerAction::Replace {
+                    template: template.into(),
+                }],
+                preset: None,
+                group: None,
+                target: crate::TriggerTarget::Line,
+            })
+            .unwrap();
+        store
+    }
+
+    /// Each run of visible text in `line` that draws in a fixed color, with
+    /// that color. The session's ANSI parser reads the line, so the check
+    /// does not lean on the scan it checks.
+    fn fixed_runs(line: &str) -> Vec<(String, Rgb)> {
+        vosh_ansi::AnsiParser::new()
+            .feed(line.as_bytes())
+            .into_iter()
+            .filter_map(|span| {
+                let rgb = match span.attrs.fg {
+                    vosh_ansi::Color::Rgb { r, g, b } => Some((r, g, b)),
+                    vosh_ansi::Color::Indexed256(n) => xterm256(n),
+                    _ => None,
+                }?;
+                (!span.text.trim().is_empty()).then_some((span.text, rgb))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn every_preset_template_draws_text_that_reads_on_every_built_in_ground() {
+        let f = fixture();
+        assert!(
+            f.templates.len() >= 40,
+            "the fixture lists every preset template"
+        );
+        let line = b"alpha beta gamma delta";
+        let plain = vosh_ansi::plain_text(line);
+        for template in &f.templates {
+            let store = replace_store(template);
+            let draw = |ground| {
+                crate::process_on_ground(&store, line, &plain, crate::MatchScope::Line, ground)
+                    .display
+                    .unwrap()
+            };
+            let as_set = draw(None);
+            assert!(
+                !fixed_runs(&as_set).is_empty(),
+                "{template:?} paints a fixed color"
+            );
+            let mut lifted = false;
+            for ground in &f.grounds {
+                let bg = parse_hex(&ground.background).unwrap();
+                let out = draw(Some(bg));
+                assert_eq!(
+                    vosh_ansi::plain_text(out.as_bytes()),
+                    vosh_ansi::plain_text(as_set.as_bytes()),
+                    "{template:?} on {} keeps its text",
+                    ground.theme
+                );
+                for (text, rgb) in fixed_runs(&out) {
+                    assert!(
+                        contrast(rgb, bg) >= READABLE_CONTRAST,
+                        "{text:?} from {template:?} on {} reads {:.2}:1",
+                        ground.theme,
+                        contrast(rgb, bg)
+                    );
+                }
+                lifted |= out != as_set;
+            }
+            // Every preset color fades on some built in ground, the light
+            // ones on Vellum and the dark gray 240 on the darkest grounds,
+            // so the check above saw a lift for every template.
+            assert!(lifted, "{template:?} needs a lift on some ground");
         }
     }
 
@@ -840,9 +958,55 @@ mod tests {
     }
 
     #[test]
-    fn palette_and_256_text_colors_stay() {
-        let line = "\x1b[38;5;253mrain\x1b[0m \x1b[93mbolt\x1b[0m";
-        assert_eq!(lift_sgr(line, VELLUM), line);
+    fn a_256_color_past_the_16_lifts_and_the_16_stay() {
+        // 253 is a fixed light gray, about 1.3:1 on Vellum. 93 is the
+        // theme's bright yellow, the theme's to keep readable.
+        let line = "\x1b[38;5;253mrain\x1b[0m \x1b[93mbolt\x1b[0m \x1b[38;5;11mzap";
+        let gray = xterm256(253).unwrap();
+        assert!(contrast(gray, VELLUM) < 1.5);
+        let (r, g, b) = lift_to_contrast(gray, VELLUM);
+        assert_eq!(
+            lift_sgr(line, VELLUM),
+            format!("\x1b[38;2;{r};{g};{b}mrain\x1b[0m \x1b[93mbolt\x1b[0m \x1b[38;5;11mzap")
+        );
+        // On Nord the gray reads, and the index stays as it was.
+        assert_eq!(lift_sgr(line, NORD), line);
+    }
+
+    #[test]
+    fn a_256_color_lifts_beside_other_attributes_and_in_colon_form() {
+        let gray = xterm256(253).unwrap();
+        let (r, g, b) = lift_to_contrast(gray, VELLUM);
+        assert_eq!(
+            lift_sgr("\x1b[1;38;5;253;4mrain", VELLUM),
+            format!("\x1b[1;38;2;{r};{g};{b};4mrain")
+        );
+        assert_eq!(
+            lift_sgr("\x1b[38:5:253mrain", VELLUM),
+            format!("\x1b[38:2::{r}:{g}:{b}mrain")
+        );
+        assert_eq!(
+            lift_sgr("\x1b[4;58;5;253mrain", VELLUM),
+            format!("\x1b[4;58;2;{r};{g};{b}mrain")
+        );
+        assert_eq!(
+            lift_sgr("\x1b[4;58:5:253mrain", VELLUM),
+            format!("\x1b[4;58:2::{r}:{g}:{b}mrain")
+        );
+    }
+
+    #[test]
+    fn a_256_color_set_earlier_lifts_again_on_a_later_background() {
+        // 240 reads on Vellum. On a black background it fades, so the line
+        // gets it again as a true color that reads there.
+        let line = "\x1b[38;5;240mdry \x1b[48;5;16mwet\x1b[49m dry";
+        let (r, g, b) = lift_to_contrast(xterm256(240).unwrap(), (0, 0, 0));
+        assert_eq!(
+            lift_sgr(line, VELLUM),
+            format!(
+                "\x1b[38;5;240mdry \x1b[48;5;16;38;2;{r};{g};{b}mwet\x1b[49;38;2;88;88;88m dry"
+            )
+        );
     }
 
     #[test]

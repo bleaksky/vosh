@@ -1,5 +1,5 @@
 {
-  "notes": "Hand written from the page sources. grounds holds the terminal background of every built in theme, in BUILTIN_THEMES order from src/lib/themes.ts. colors holds the text colors Keep highlight colors readable is tested with. true_color holds #8fa7d9, a weather highlight in true color, and indexed and named hold every 256 color index and every ANSI color name the trigger presets in src/lib/presets.ts paint text in. src/lib/readableGrounds.test.ts holds both lists to those sources, and the tests in crates/trigger/src/readable.rs lift every color on every ground.",
+  "notes": "Written from the page sources. grounds holds the terminal background of every built in theme, in BUILTIN_THEMES order from src/lib/themes.ts. colors holds the fixed text colors Keep highlight colors readable is tested with. true_color holds #8fa7d9, a weather highlight in true color, and indexed holds every 256 color index the trigger presets in src/lib/presets.ts paint text in, all past the 16 and so the same on every theme. templates holds every Replace template of the presets once, in the order the presets list them, as the escapes they save. src/lib/readableGrounds.test.ts holds the grounds, the indexes and the templates to those sources. The tests in crates/trigger/src/readable.rs lift every color on every ground, and run every template through the trigger engine on every ground and measure each color it draws.",
   "grounds": [
     { "theme": "obsidian-ember", "background": "#050403" },
     { "theme": "vellum", "background": "#f7f4ee" },
@@ -19,7 +19,50 @@
   ],
   "colors": {
     "true_color": ["#8fa7d9"],
-    "indexed": [120, 152, 178, 210, 214, 230, 240, 244, 248, 249, 253],
-    "named": ["bright_green", "bright_red", "red"]
-  }
+    "indexed": [120, 152, 178, 210, 214, 230, 240, 244, 248, 249, 253]
+  },
+  "templates": [
+    "\u001b[38;5;240m$0\u001b[0m",
+    "\u001b[38;5;253m$0\u001b[0m",
+    "\u001b[1;31m##\u001b[0m \u001b[38;5;178m$1 disarms you and sends your SECONDARY weapon flying!\u001b[0m",
+    "\u001b[1;31m##\u001b[0m \u001b[38;5;178m$1 disarms you and sends your PRIMARY weapon flying!\u001b[0m",
+    "\u001b[1;31m##\u001b[0m \u001b[38;5;178m$1 protective shield dissipates.\u001b[0m",
+    "\u001b[1;31m##\u001b[0m \u001b[38;5;178mThe protective aura around your body fades.\u001b[0m",
+    "\u001b[1;31m##\u001b[0m \u001b[38;5;178mThe shards of metal protecting you fall to the ground.\u001b[0m",
+    "\u001b[1;31m##\u001b[0m \u001b[38;5;178mThe white aura around $1 fades.\u001b[0m",
+    "\u001b[1;31m##\u001b[0m \u001b[38;5;178mYour shield of spell turning collapses.\u001b[0m",
+    "\u001b[38;5;253m$1\u001b[0m\u001b[38;5;214m$2\u001b[0m\u001b[38;5;253m$3\u001b[0m",
+    "\u001b[38;5;253m$1\u001b[0m\u001b[38;5;152m$2\u001b[0m\u001b[38;5;253m$3\u001b[0m",
+    "\u001b[38;5;244m$1\u001b[0m\u001b[38;5;210m$2\u001b[0m\u001b[38;5;244m$3\u001b[0m",
+    "\u001b[38;5;244m$1\u001b[0m\u001b[38;5;152m$2\u001b[0m\u001b[38;5;244m$3\u001b[0m",
+    "\u001b[38;5;249mYou get \u001b[38;5;230m$1 \u001b[38;5;249mgold coins from $2.\u001b[0m",
+    "\u001b[38;5;120mYou have become better at \u001b[38;5;230m$1\u001b[38;5;120m!\u001b[0m",
+    "\u001b[38;5;120mYou raise a level!! You gain \u001b[38;5;230m$1 hp\u001b[38;5;120m, \u001b[38;5;230m$2 mn\u001b[38;5;120m, \u001b[38;5;230m$3 mv\u001b[38;5;120m and \u001b[38;5;230m$4 practices.\u001b[0m",
+    "\u001b[38;5;248mYou receive \u001b[38;5;230m$1 \u001b[38;5;248mexperience points.\u001b[0m",
+    "a bubbly brown potion \u001b[38;5;248m(cure serious)\u001b[0m",
+    "a bubbly clear potion \u001b[38;5;248m(invisibility)\u001b[0m",
+    "a bubbly crimson potion \u001b[38;5;248m(fireball)\u001b[0m",
+    "a bubbly green potion \u001b[38;5;248m(haste)\u001b[0m",
+    "a bubbly grey potion \u001b[38;5;248m(flesh armor)\u001b[0m",
+    "a bubbly red potion \u001b[38;5;248m(cure blind)\u001b[0m",
+    "a bubbly white potion \u001b[38;5;248m(sanctuary)\u001b[0m",
+    "a dried purple seaweed \u001b[38;5;248m(fly)\u001b[0m",
+    "a mandrake root \u001b[38;5;248m(stone skin)\u001b[0m",
+    "a small red herb \u001b[38;5;248m(detect invis)\u001b[0m",
+    "some Magenta Leaves \u001b[38;5;248m(frenzy)\u001b[0m",
+    "some cinnamon \u001b[38;5;248m(armor)\u001b[0m",
+    "some damiana leaves \u001b[38;5;248m(cure serious)\u001b[0m",
+    "some dark black leaves \u001b[38;5;248m(sanctuary)\u001b[0m",
+    "some dried catnip \u001b[38;5;248m(frenzy)\u001b[0m",
+    "some fermenting raspberry leaves \u001b[38;5;248m(shield)\u001b[0m",
+    "some finely cut opium \u001b[38;5;248m(frenzy)\u001b[0m",
+    "some ginger \u001b[38;5;248m(faerie fog)\u001b[0m",
+    "some greyish herbs \u001b[38;5;248m(bless)\u001b[0m",
+    "some mugwort \u001b[38;5;248m(slow)\u001b[0m",
+    "some mullein \u001b[38;5;248m(pass door)\u001b[0m",
+    "some purified coca \u001b[38;5;248m(endorphins)\u001b[0m",
+    "some rosemary \u001b[38;5;248m(protection)\u001b[0m",
+    "some sand colored leaves \u001b[38;5;248m(stone skin)\u001b[0m",
+    "some spearmint \u001b[38;5;248m(giant strength)\u001b[0m"
+  ]
 }

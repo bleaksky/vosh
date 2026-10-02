@@ -302,12 +302,12 @@ pub(crate) struct UiConfig {
     /// unless the system asks to reduce motion. Your choice always wins.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blink_text: Option<bool>,
-    /// Keep highlight colors readable. While on, a true color a trigger
-    /// paints text in that fades on the theme's terminal background draws
-    /// at a lightness that reads (see `highlight_ground`). On by default,
-    /// and a file written before this switch reads it on. Written only
-    /// while off, so a profile that never turns it off saves the bytes it
-    /// saved before.
+    /// Keep highlight colors readable. While on, a fixed color a trigger
+    /// paints text in, a true color or a 256 color past the 16, that fades
+    /// on the theme's terminal background draws at a lightness that reads
+    /// (see `highlight_ground`). On by default, and a file written before
+    /// this switch reads it on. Written only while off, so a profile that
+    /// never turns it off saves the bytes it saved before.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub readable_highlights: bool,
     /// Custom base terminal palette: 16 CSS colors (ANSI 0-15 order)
