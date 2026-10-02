@@ -1,10 +1,13 @@
 //! Match the trigger store against a single line and produce the resulting
 //! display text plus any side effects.
 
+use std::borrow::Cow;
+
 use regex::Regex;
 use vosh_ansi::{plain_text, PieceKind};
 
 use crate::action::{HighlightStyle, TriggerAction};
+use crate::readable;
 use crate::store::{Trigger, TriggerStore, TriggerTarget};
 
 /// Which dispatch lane the engine is running. Mirrors
@@ -90,6 +93,22 @@ pub fn process_with_plain(
     original: &[u8],
     plain: &str,
     scope: MatchScope,
+) -> LineResult {
+    process_on_ground(store, original, plain, scope, None)
+}
+
+/// Like [`process_with_plain`], and with `ground`, the terminal
+/// background, every true color the triggers paint text or an underline
+/// in holds [`readable::READABLE_CONTRAST`] on what it draws on (see
+/// [`readable::lift_sgr`]). `None` leaves each color as the trigger set
+/// it. A line no trigger matched keeps the bytes the game sent either
+/// way, so the game's own colors never change.
+pub fn process_on_ground(
+    store: &TriggerStore,
+    original: &[u8],
+    plain: &str,
+    scope: MatchScope,
+    ground: Option<readable::Rgb>,
 ) -> LineResult {
     if store.is_empty() {
         return LineResult {
@@ -267,6 +286,13 @@ pub fn process_with_plain(
             // native renderer extends the field to the full width. The
             // final reset keeps the following line clean.
             text = format!("{open}{text}\x1b[0m");
+        }
+        // The rebuild started from the plain text, so every escape in the
+        // line now came from a trigger.
+        if let Some(ground) = ground {
+            if let Cow::Owned(lifted) = readable::lift_sgr(&text, ground) {
+                text = lifted;
+            }
         }
         text
     };
@@ -1554,5 +1580,96 @@ mod tests {
             .export_json()
             .unwrap();
         assert!(!line.contains("\"target\""), "{line}");
+    }
+
+    const VELLUM: readable::Rgb = (0xf7, 0xf4, 0xee);
+    const NORD: readable::Rgb = (0x2e, 0x34, 0x40);
+    const WEATHER: readable::Rgb = (0x8f, 0xa7, 0xd9);
+
+    /// A weather trigger that paints the line #8fa7d9, the way a
+    /// `{#8fa7d9}$0{reset}` Replace template saves.
+    fn weather_store() -> TriggerStore {
+        store(vec![Trigger {
+            name: "weather".into(),
+            patterns: single_pattern("^It starts to rain\\.$"),
+            priority: 0,
+            enabled: true,
+            actions: vec![TriggerAction::Replace {
+                template: "\x1b[38;2;143;167;217m$0\x1b[0m".into(),
+            }],
+            preset: None,
+            group: None,
+            target: TriggerTarget::Line,
+        }])
+    }
+
+    fn on_ground(s: &TriggerStore, line: &[u8], ground: Option<readable::Rgb>) -> String {
+        let plain = plain_text(line);
+        process_on_ground(s, line, &plain, MatchScope::Line, ground)
+            .display
+            .unwrap()
+    }
+
+    #[test]
+    fn a_true_color_highlight_reads_on_a_light_ground() {
+        let s = weather_store();
+        let (r, g, b) = readable::lift_to_contrast(WEATHER, VELLUM);
+        assert_ne!((r, g, b), WEATHER);
+        assert!(readable::contrast((r, g, b), VELLUM) >= readable::READABLE_CONTRAST);
+        assert_eq!(
+            on_ground(&s, b"It starts to rain.", Some(VELLUM)),
+            format!("\x1b[38;2;{r};{g};{b}mIt starts to rain.\x1b[0m")
+        );
+    }
+
+    #[test]
+    fn a_true_color_highlight_that_reads_stays_on_a_dark_ground() {
+        let s = weather_store();
+        assert_eq!(
+            on_ground(&s, b"It starts to rain.", Some(NORD)),
+            "\x1b[38;2;143;167;217mIt starts to rain.\x1b[0m"
+        );
+    }
+
+    #[test]
+    fn no_ground_leaves_the_trigger_color_as_set() {
+        let s = weather_store();
+        let set = "\x1b[38;2;143;167;217mIt starts to rain.\x1b[0m";
+        assert_eq!(on_ground(&s, b"It starts to rain.", None), set);
+        assert_eq!(
+            process(&s, b"It starts to rain.").display.as_deref(),
+            Some(set)
+        );
+    }
+
+    #[test]
+    fn game_true_color_passes_through_untouched() {
+        // The game paints its own line #8fa7d9. No trigger matches it, so
+        // it keeps its bytes even on a ground it fades on.
+        let s = weather_store();
+        let line = b"\x1b[38;2;143;167;217mThe sky clears.\x1b[0m";
+        assert_eq!(
+            on_ground(&s, line, Some(VELLUM)).as_bytes(),
+            line.as_slice()
+        );
+        // Nor does an empty store touch it.
+        let empty = TriggerStore::new();
+        assert_eq!(
+            on_ground(&empty, line, Some(VELLUM)).as_bytes(),
+            line.as_slice()
+        );
+    }
+
+    #[test]
+    fn palette_highlights_and_washes_stay_on_a_light_ground() {
+        // A named highlight and a wash draw in the theme's own colors, which
+        // the theme keeps readable, so the ground changes neither.
+        let mut washed = highlight("w", "storm", NamedColor::BrightCyan);
+        if let TriggerAction::Highlight { style } = &mut washed.actions[0] {
+            style.wash = true;
+        }
+        let s = store(vec![washed]);
+        let plain = process(&s, b"a storm rolls in").display.unwrap();
+        assert_eq!(on_ground(&s, b"a storm rolls in", Some(VELLUM)), plain);
     }
 }

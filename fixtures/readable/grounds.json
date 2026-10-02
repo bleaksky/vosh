@@ -1,0 +1,25 @@
+{
+  "notes": "Hand written from the page sources. grounds holds the terminal background of every built in theme, in BUILTIN_THEMES order from src/lib/themes.ts. colors holds the text colors Keep highlight colors readable is tested with. true_color holds #8fa7d9, a weather highlight in true color, and indexed and named hold every 256 color index and every ANSI color name the trigger presets in src/lib/presets.ts paint text in. src/lib/readableGrounds.test.ts holds both lists to those sources, and the tests in crates/trigger/src/readable.rs lift every color on every ground.",
+  "grounds": [
+    { "theme": "obsidian-ember", "background": "#050403" },
+    { "theme": "vellum", "background": "#f7f4ee" },
+    { "theme": "kanso-zen", "background": "#090e13" },
+    { "theme": "tokyo-night", "background": "#1a1b26" },
+    { "theme": "nord", "background": "#2e3440" },
+    { "theme": "rose-pine", "background": "#191724" },
+    { "theme": "gruvbox", "background": "#282828" },
+    { "theme": "catppuccin", "background": "#1e1e2e" },
+    { "theme": "dracula", "background": "#1a1c23" },
+    { "theme": "monokai", "background": "#272822" },
+    { "theme": "one-dark", "background": "#282c34" },
+    { "theme": "one-half-dark", "background": "#282c34" },
+    { "theme": "tango-dark", "background": "#2e3436" },
+    { "theme": "classic-vivid", "background": "#0a0a0a" },
+    { "theme": "high-contrast", "background": "#0d0d0d" }
+  ],
+  "colors": {
+    "true_color": ["#8fa7d9"],
+    "indexed": [120, 152, 178, 210, 214, 230, 240, 244, 248, 249, 253],
+    "named": ["bright_green", "bright_red", "red"]
+  }
+}
