@@ -33,6 +33,7 @@ use crate::design::{
 use crate::values::format::{
     h_band, how_full, p_band, step_color, tank_bar_cells, Band, Resolved, Value,
 };
+use crate::values::Values;
 
 /// Ends every non-empty render, so an unclosed color never bleeds into the
 /// game output that follows.
@@ -47,17 +48,6 @@ const HIDDEN_CELL: &str = "·";
 /// The dim color of hidden marks, placeholders and a bar's empty cells,
 /// SGR 90, the theme's bright black.
 const DIM_FG: &str = "90";
-
-/// What the renderer asks about each field.
-pub trait Values {
-    fn resolve(&self, field: &FieldRef) -> Resolved;
-
-    /// The field's label, drawn as a placeholder and by the `on` and `off`
-    /// formats.
-    fn label(&self, field: &FieldRef) -> String {
-        field.to_string()
-    }
-}
 
 /// How to draw.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -706,15 +696,4 @@ fn write_percent(
             w.text("%", false);
         }
     }
-}
-
-/// The names a prompt var's max goes by, in the order the first renderer
-/// tried them: `mhp`, `hp_max`, `max_hp`, `maxhp`.
-pub(crate) fn max_spellings(name: &str) -> [String; 4] {
-    [
-        format!("m{name}"),
-        format!("{name}_max"),
-        format!("max_{name}"),
-        format!("max{name}"),
-    ]
 }

@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 use chrono::NaiveDateTime;
 
 use crate::design::FieldRef;
-use crate::render::{max_spellings, Values};
 use crate::values::format::{Resolved, Value};
+use crate::values::{max_spellings, Values};
 
 /// Values from a plain map of prompt vars, the way the first renderer read
 /// them. A number with a max under any of its spellings (`mhp`, `hp_max`,

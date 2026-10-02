@@ -5,7 +5,8 @@
 //! [`Vars`] holds what feeds them in a session: script values, the last
 //! recognized prompt (the capture), the GMCP snapshot, and whether the
 //! Forsaken Lands rules hold. [`Resolver`] answers the renderer with each
-//! field's state.
+//! field's state. [`Values`] is what the renderer asks, of the resolver,
+//! the samples and a preview's overrides alike.
 //!
 //! Sources, first fresh one wins.
 //!
@@ -42,9 +43,37 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, FixedOffset, NaiveDateTime};
 use serde_json::Value as Json;
 
+use crate::design::FieldRef;
+use crate::values::format::Resolved;
 use crate::values::gmcp::{Observed, Snapshot, ROOM_INFO, ROOM_WEATHER};
 
 use catalog::capture_keys;
+
+// ---------------------------------------------------------------------
+// What the renderer asks
+// ---------------------------------------------------------------------
+
+/// What the renderer asks about each field.
+pub trait Values {
+    fn resolve(&self, field: &FieldRef) -> Resolved;
+
+    /// The field's label, drawn as a placeholder and by the `on` and `off`
+    /// formats.
+    fn label(&self, field: &FieldRef) -> String {
+        field.to_string()
+    }
+}
+
+/// The names a prompt var's max goes by, in the order the first renderer
+/// tried them: `mhp`, `hp_max`, `max_hp`, `maxhp`.
+pub(crate) fn max_spellings(name: &str) -> [String; 4] {
+    [
+        format!("m{name}"),
+        format!("{name}_max"),
+        format!("max_{name}"),
+        format!("max{name}"),
+    ]
+}
 
 // ---------------------------------------------------------------------
 // The session's variables

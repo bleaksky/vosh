@@ -6,9 +6,9 @@ use serde::Serialize;
 
 use crate::design::{FieldRef, Format};
 use crate::engine::{PromptEngine, StatusReport};
-use crate::render::{Span, Values};
+use crate::render::Span;
 use crate::values::format::{Resolved, Value};
-use crate::values::{self, Entry, Group, Kind, Source, Vars, Vosh, CATALOG};
+use crate::values::{self, Entry, Group, Kind, Source, Values, Vars, Vosh, CATALOG};
 
 /// A field's state now (D4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

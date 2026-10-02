@@ -63,9 +63,9 @@ pub mod wrap;
 pub use config::{CaptureConfig, PromptConfig, PromptShow, DEFAULT_DESIGN};
 pub use design::{FieldRef, Template};
 pub use engine::{GamePromptSeen, PromptEngine, Status};
-pub use render::{render, render_str, RenderOptions, Rendered, Span, Values};
+pub use render::{render, render_str, RenderOptions, Rendered, Span};
 pub use values::format::{Resolved, Value};
-pub use values::{Capture, Vosh};
+pub use values::{Capture, Values, Vosh};
 
 // The tests in `tests/` import these from the root.
 #[cfg(feature = "testkit")]
