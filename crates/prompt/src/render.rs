@@ -945,11 +945,6 @@ impl<'a> MapValues<'a> {
         Self { vars, now }
     }
 
-    /// Read the local clock now.
-    pub fn now(vars: &'a BTreeMap<String, String>) -> Self {
-        Self::new(vars, chrono::Local::now().naive_local())
-    }
-
     fn number(&self, key: &str) -> Option<Value> {
         Value::parse_number(self.vars.get(key)?)
     }
