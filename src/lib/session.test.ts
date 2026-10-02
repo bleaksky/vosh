@@ -377,6 +377,34 @@ describe('vitals density', () => {
   });
 });
 
+describe('Keep highlight colors readable', () => {
+  it('reads on for a config saved before it existed, and keeps it off once off', () => {
+    expect(normalizeUiConfig(raw()).readable_highlights).toBe(true);
+    expect(normalizeUiConfig(raw({ readable_highlights: false })).readable_highlights).toBe(false);
+  });
+
+  it('saves with the rest of the config and tells every window when it changes', async () => {
+    const invoked = vi.mocked(invoke);
+    invoked.mockClear();
+    const off = { ...normalizeUiConfig(raw()), readable_highlights: false };
+    await setUiConfig(off);
+    const [command, args] = invoked.mock.calls[0] as [string, { config: Record<string, unknown> }];
+    expect(command).toBe('ui_set_config');
+    expect(args.config).toMatchObject({ readable_highlights: false });
+
+    const sent = vi.mocked(emit);
+    await broadcastUiConfigChanges(off);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...off, readable_highlights: true });
+    expect(sent).toHaveBeenCalledWith('vosh://readable-highlights-changed', true);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...off, readable_highlights: true });
+    expect(sent.mock.calls.map(([event]) => event)).not.toContain(
+      'vosh://readable-highlights-changed',
+    );
+  });
+});
+
 describe('vitals options', () => {
   it('reads the defaults for a config saved before they existed', () => {
     const ui = normalizeUiConfig(raw());

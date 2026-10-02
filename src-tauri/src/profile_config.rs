@@ -302,6 +302,14 @@ pub(crate) struct UiConfig {
     /// unless the system asks to reduce motion. Your choice always wins.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blink_text: Option<bool>,
+    /// Keep highlight colors readable. While on, a true color a trigger
+    /// paints text in that fades on the theme's terminal background draws
+    /// at a lightness that reads (see `highlight_ground`). On by default,
+    /// and a file written before this switch reads it on. Written only
+    /// while off, so a profile that never turns it off saves the bytes it
+    /// saved before.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub readable_highlights: bool,
     /// Custom base terminal palette: 16 CSS colors (ANSI 0-15 order)
     /// used whenever tint-output-with-theme resolves off. None means
     /// the canonical xterm-256 chart. The frontend owns validation.
@@ -1280,6 +1288,7 @@ impl Default for UiConfig {
             theme_terminal_colors: None,
             bright_bold: false,
             blink_text: None,
+            readable_highlights: true,
             terminal_base_ansi: None,
             custom_themes: Vec::new(),
             split_divider_color: None,
@@ -1450,6 +1459,11 @@ fn default_interval() -> u64 {
 
 fn default_true() -> bool {
     true
+}
+
+/// Leave a switch that is on by default out of the file while it is on.
+fn is_true(on: &bool) -> bool {
+    *on
 }
 
 impl ProfileConfig {

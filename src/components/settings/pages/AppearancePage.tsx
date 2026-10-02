@@ -34,8 +34,9 @@ import { ThemeGallery } from './appearance/ThemeGallery';
 // Appearance, from the approved board (SettingsAppearance.dc.html).
 // Theme holds Import… and the gallery of every theme, then follow
 // system appearance and the light and dark pair it switches between.
-// Terminal text holds the font, size, line height, and whether MUD
-// text takes the theme's colors. A quiet Advanced row at the end holds
+// Terminal text holds the font, size, line height, whether MUD text
+// takes the theme's colors, and whether Vosh keeps the colors your
+// triggers set readable on the theme. A quiet Advanced row at the end holds
 // what the board leaves out. Every change saves on its own.
 
 const LINE_HEIGHTS = [
@@ -264,6 +265,16 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           <Toggle
             checked={resolveThemeTerminalColors(config.theme, config.theme_terminal_colors)}
             onChange={(on) => update({ theme_terminal_colors: on }, { now: true })}
+          />
+        </Row>
+        <Row
+          anchor="readable-highlights"
+          label="Keep highlight colors readable"
+          description="Vosh darkens or lightens a color your triggers set when the theme would make it faint."
+        >
+          <Toggle
+            checked={config.readable_highlights}
+            onChange={(on) => update({ readable_highlights: on }, { now: true })}
           />
         </Row>
       </Section>

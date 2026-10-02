@@ -2987,6 +2987,7 @@ pub(crate) struct UiConfigPayload {
     /// None until you choose.
     #[serde(default)]
     pub blink_text: Option<bool>,
+    pub readable_highlights: bool,
     pub terminal_base_ansi: Option<Vec<String>>,
     pub custom_themes: Vec<crate::profile_config::CustomTheme>,
     pub split_divider_color: Option<String>,
@@ -3037,6 +3038,7 @@ impl UiConfigPayload {
             theme_terminal_colors: ui.theme_terminal_colors,
             bright_bold: ui.bright_bold,
             blink_text: ui.blink_text,
+            readable_highlights: ui.readable_highlights,
             terminal_base_ansi: ui.terminal_base_ansi.clone(),
             custom_themes: ui.custom_themes.clone(),
             split_divider_color: ui.split_divider_color.clone(),
@@ -3083,6 +3085,7 @@ impl UiConfigPayload {
             theme_terminal_colors,
             bright_bold,
             blink_text,
+            readable_highlights,
             terminal_base_ansi,
             custom_themes,
             split_divider_color,
@@ -3130,6 +3133,7 @@ impl UiConfigPayload {
         ui.theme_terminal_colors = theme_terminal_colors;
         ui.bright_bold = bright_bold;
         ui.blink_text = blink_text;
+        ui.readable_highlights = readable_highlights;
         ui.terminal_base_ansi = terminal_base_ansi;
         ui.custom_themes = custom_themes;
         // Empty strings get normalized to None so the picker can clear
@@ -4938,6 +4942,30 @@ mod tests {
         ui.vitals_warn_thirds = true;
         assert!(through_payload(&ui).vitals_warn_thirds);
         assert!(through_toml(&ui).vitals_warn_thirds);
+    }
+
+    #[test]
+    fn readable_highlights_round_trips() {
+        let mut ui = UiConfig::default();
+        assert!(ui.readable_highlights);
+        assert!(through_payload(&ui).readable_highlights);
+        assert!(through_toml(&ui).readable_highlights);
+        ui.readable_highlights = false;
+        assert!(!through_payload(&ui).readable_highlights);
+        assert!(!through_toml(&ui).readable_highlights);
+    }
+
+    #[test]
+    fn readable_highlights_is_written_only_while_off() {
+        let mut config = ProfileConfig::default();
+        let on = config.to_toml().unwrap();
+        assert!(!on.contains("readable_highlights"), "{on}");
+        config.ui.readable_highlights = false;
+        let off = config.to_toml().unwrap();
+        assert!(off.contains("readable_highlights = false"), "{off}");
+        // A file from before the switch reads it on.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert!(old.ui.readable_highlights);
     }
 
     #[test]

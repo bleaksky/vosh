@@ -172,4 +172,42 @@ describe('AppearancePage', () => {
       root.unmount();
     });
   });
+
+  it('draws Keep highlight colors readable under Terminal text, on unless you turn it off', async () => {
+    const readableSwitch = async (cfg: UiConfig) => {
+      const container = doc.createElement('div');
+      doc.body.appendChild(container);
+      const root = createRoot(container as unknown as HTMLElement);
+      await act(async () => {
+        root.render(
+          createElement(AppearancePage, {
+            target: { group: 'appearance' },
+            navSeq: 0,
+            config: cfg,
+            setConfig: () => undefined,
+            onError: () => undefined,
+            pathB: false,
+            navigate: () => undefined,
+            setLeaveGuard: () => undefined,
+          }),
+        );
+      });
+      const [row] = findAll(
+        container,
+        (el) => el.getAttribute('data-st-anchor') === 'readable-highlights',
+      );
+      const [input] = findAll(row, (el) => el.getAttribute('role') === 'switch');
+      const checked = (input as unknown as { checked: boolean }).checked;
+      await act(async () => {
+        root.unmount();
+      });
+      return { label: row.textContent, checked };
+    };
+
+    const on = await readableSwitch(config());
+    expect(on.label).toContain('Keep highlight colors readable');
+    expect(on.checked).toBe(true);
+    const off = await readableSwitch({ ...config(), readable_highlights: false });
+    expect(off.checked).toBe(false);
+  });
 });
