@@ -307,7 +307,12 @@ export function TerminalMenu({
         data-occludes-surface="true"
         style={{ left: pos.x, top: pos.y }}
         onKeyDown={onKeyDown}
-        onPointerLeave={() => setActive(-1)}
+        // Settings stays the active row while its list is open, so the
+        // pointer can cross into the list, or leave both, and Enter,
+        // the arrows and the highlight still agree on where you are.
+        onPointerLeave={() => {
+          if (!sub) setActive(-1);
+        }}
         // Keep the window's click-to-type handler from pulling focus to
         // the command line when you press the menu's padding.
         onMouseUp={(e) => e.stopPropagation()}
@@ -318,8 +323,9 @@ export function TerminalMenu({
             {group.map((item) => {
               index += 1;
               const i = index;
-              // Settings stays lit while its list is open.
-              const lit = i === active || (item.submenu === true && sub !== null);
+              // The active row is the one lit. While the Settings list
+              // is open, that row is Settings.
+              const lit = i === active;
               return (
                 <button
                   key={item.id}
