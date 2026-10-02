@@ -94,6 +94,7 @@ pub enum FormatId {
     Name,
     Grouped,
     Short,
+    Thousands,
     Unit,
     Trunc,
     Hm,
@@ -110,8 +111,16 @@ impl Kind {
     pub fn formats(self) -> &'static [FormatId] {
         use FormatId as F;
         match self {
-            Kind::Gauge => &[F::Value, F::Max, F::Pct, F::Bar, F::Grouped, F::Short],
-            Kind::Num => &[F::Value, F::Grouped, F::Short],
+            Kind::Gauge => &[
+                F::Value,
+                F::Max,
+                F::Pct,
+                F::Bar,
+                F::Grouped,
+                F::Short,
+                F::Thousands,
+            ],
+            Kind::Num => &[F::Value, F::Grouped, F::Short, F::Thousands],
             Kind::Pct => &[F::Value, F::Pct, F::Bar],
             Kind::TankPct => &[F::Value, F::Pct, F::Bar, F::Game],
             Kind::Text | Kind::Raw => &[F::Value, F::Trunc],

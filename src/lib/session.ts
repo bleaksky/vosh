@@ -983,6 +983,7 @@ export type PromptFormatName =
   | 'name'
   | 'grouped'
   | 'short'
+  | 'thousands'
   | 'unit'
   | 'trunc'
   | 'hm'

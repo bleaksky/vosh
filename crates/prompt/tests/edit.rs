@@ -373,11 +373,16 @@ fn show_as_writes_the_forms_the_card_names() {
         set("x %{pos} y", FormatChoice::of(FormatName::Word)),
         "x %{pos:word} y"
     );
+    assert_eq!(
+        set("x %gold y", FormatChoice::of(FormatName::Thousands)),
+        "x %{gold:thousands} y"
+    );
     for template in [
         "[%c_hp%{hp}hp]",
         "[%c_hp%pct_hp%%hp]",
         "[%c_hp%{hp:bar:6}hp]",
         "x %{pos:word} y",
+        "x %{gold:thousands} y",
     ] {
         assert_reads_clean(template);
     }
@@ -486,6 +491,17 @@ fn inserts_use_braces_when_the_next_character_would_extend_a_name() {
             }
         ),
         "%{gold}hp"
+    );
+    assert_eq!(
+        edit(
+            "$%c_red",
+            &EditOp::InsertField {
+                at: 1,
+                field: "gold".into(),
+                format: Some(FormatChoice::of(FormatName::Thousands)),
+            }
+        ),
+        "$%{gold:thousands}%c_red"
     );
     assert_eq!(
         edit("%c_red%hp", &EditOp::InsertNl { at: 0 }),

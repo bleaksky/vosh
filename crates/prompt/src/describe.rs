@@ -297,8 +297,8 @@ fn form(
 
 /// Each form a kind of field takes, its name, and whether Show as offers
 /// it. A gauge's max changes what the piece reads, so only the picker
-/// offers it. A gauge takes the five forms of P6 and flow 6a. Grouped
-/// and short are a number's forms (section 1.4).
+/// offers it. A gauge takes the five forms of P6 and flow 6a. Grouped,
+/// short and thousands are a number's forms (section 1.4).
 fn form_list(kind: Option<Kind>) -> &'static [(FormatName, &'static str, bool)] {
     use FormatName as F;
     let Some(kind) = kind else {
@@ -316,6 +316,7 @@ fn form_list(kind: Option<Kind>) -> &'static [(FormatName, &'static str, bool)] 
             (F::Value, "Number", true),
             (F::Grouped, "Grouped", true),
             (F::Short, "Short", true),
+            (F::Thousands, "Thousands", true),
         ],
         Kind::Pct => &[(F::Percent, "Percent", true), (F::Bar, "Bar", true)],
         Kind::TankPct => &[
@@ -388,6 +389,7 @@ fn format_label(format: FormatName) -> &'static str {
         FormatName::Name => "Name",
         FormatName::Grouped => "Grouped",
         FormatName::Short => "Short",
+        FormatName::Thousands => "Thousands",
         FormatName::Unit => "With unit",
         FormatName::Trunc => "Shortened",
         FormatName::Hm => "Hours and minutes",
@@ -418,6 +420,7 @@ fn shown_as(value: &crate::template::ValueRef) -> (FieldRef, FormatName, Option<
         Format::Name => (FormatName::Name, None),
         Format::Grouped => (FormatName::Grouped, None),
         Format::Short => (FormatName::Short, None),
+        Format::Thousands => (FormatName::Thousands, None),
         Format::Unit => (FormatName::Unit, None),
         Format::Trunc(_) => (FormatName::Trunc, None),
         Format::Hm => (FormatName::Hm, None),
