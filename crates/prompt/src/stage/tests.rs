@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use super::output::shows_anything;
 use super::*;
 use crate::config::RegexCapture;
 
