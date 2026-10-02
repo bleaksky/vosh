@@ -73,8 +73,6 @@ async function load() {
     affectFull: await import('./affectFullStore'),
     group: await import('../groupStore'),
     gamePrompt: await import('./gamePromptStore'),
-    charState: await import('./charStateStore'),
-    weather: await import('./weatherStore'),
   };
 }
 
@@ -382,15 +380,13 @@ describe('stores on the event bus', () => {
     expect(seen).toHaveBeenCalledTimes(4);
   });
 
-  it('keep the prompt settings, your state and the weather until you disconnect', async () => {
+  it('keep the prompt settings until you disconnect', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-09-30T12:58:02-05:00'));
     const s = await load();
     expect(s.gamePrompt.getGamePrompt()).toBeNull();
     connect();
     packet('char-prompt.gmcp');
-    packet('char-state.gmcp');
-    packet('room-weather.gmcp');
     // The first settings since you connected came at login.
     expect(s.gamePrompt.getGamePrompt()).toEqual({
       enabled: true,
@@ -399,17 +395,6 @@ describe('stores on the event bus', () => {
       receivedAt: Date.parse('2026-09-30T12:58:02-05:00'),
       atLogin: true,
     });
-    expect(s.charState.getCharState()).toEqual({ position: 'sitting', language: 'common' });
-    expect(s.weather.getRoomWeather()).toMatchObject({ sky: 'rainy', temp: 60, unit: 'F' });
-
-    // Char.State and Room.Weather ride every prompt, so a repeat keeps
-    // the snapshot.
-    const state = s.charState.getCharState();
-    const weather = s.weather.getRoomWeather();
-    packet('char-state.gmcp');
-    packet('room-weather.gmcp');
-    expect(s.charState.getCharState()).toBe(state);
-    expect(s.weather.getRoomWeather()).toBe(weather);
 
     vi.setSystemTime(new Date('2026-09-30T13:04:00-05:00'));
     packet('char-prompt-off.gmcp');
@@ -418,13 +403,9 @@ describe('stores on the event bus', () => {
       receivedAt: Date.parse('2026-09-30T13:04:00-05:00'),
       atLogin: false,
     });
-    packet('room-weather-indoors.gmcp');
-    expect(s.weather.getRoomWeather()?.sky).toBe('indoors');
 
     disconnect();
     expect(s.gamePrompt.getGamePrompt()).toBeNull();
-    expect(s.charState.getCharState()).toBeNull();
-    expect(s.weather.getRoomWeather()).toBeNull();
 
     // The next connection's first settings came at its login.
     connect();
