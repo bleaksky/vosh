@@ -3027,12 +3027,6 @@ export async function trackedAffectsSet(
   return normalizeTrackedAffects(Array.isArray(saved) ? saved : []);
 }
 
-/** A profile's pane tree. An inactive profile's tree has no
- *  generation, since no pane layout write can target it. */
-export async function paneLayoutGet(profile?: string | null): Promise<PaneLayout> {
-  return sanitizeLayout(await invoke<unknown>('pane_layout_get', { profile: profile ?? null }));
-}
-
 /** Put a profile's panes back to the stock map over affects tree,
  *  keeping whether its panel shows and how wide it is. Returns the new
  *  layout. The live profile saves it at once and every window hears it

@@ -19,7 +19,6 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 const {
-  paneLayoutGet,
   paneLayoutReset,
   profileCreate,
   profileDetailGet,
@@ -106,10 +105,7 @@ describe('per profile edits', () => {
     });
   });
 
-  it('reads and resets panes for the named profile', async () => {
-    tauri.invoke.mockResolvedValue(defaultLayout());
-    expect(await paneLayoutGet('Healer')).toEqual(defaultLayout());
-    expect(tauri.invoke).toHaveBeenLastCalledWith('pane_layout_get', { profile: 'Healer' });
+  it('resets the panes of the live profile', async () => {
     tauri.invoke.mockResolvedValue({ ...defaultLayout(), generation: 4 });
     expect(await paneLayoutReset()).toEqual({ ...defaultLayout(), generation: 4 });
     expect(tauri.invoke).toHaveBeenLastCalledWith('pane_layout_reset', { profile: null });
