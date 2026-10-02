@@ -120,11 +120,9 @@ describe('Mark your commands', () => {
     );
   });
 
-  it('leaves a password, a bare Enter, a quick key and a pinned empty line alone', () => {
+  it('leaves a password and a quick key alone', () => {
     expect(planSubmit(SECRET, marked({ masked: true })).echo).toBe('\r\n');
-    expect(planSubmit('', marked()).echo).toBe('\r\n');
     expect(planSubmit('gg', marked({ quickKey: true })).echo).toBeNull();
-    expect(planSubmit('', marked({ pinRowOpen: true })).echo).toBeNull();
     expect(macroEcho('stand', { ...marked({ masked: true }), enabled: true })).toBeNull();
   });
 

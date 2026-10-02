@@ -23,10 +23,10 @@ export function colorizeEcho(line: string, color: string | null): string {
 export const ECHO_CARET = '\x1b[90m\u203a \x1b[0m';
 
 /** The echo of one command, with its line end: the caret first when
- *  `caret` is on, then the command in the echo color. An empty line
- *  takes no caret, so a bare Enter echoes only its line end. */
+ *  `caret` is on, then the command in the echo color. A bare Enter
+ *  echoes the caret alone, so you see each blank line you send. */
 export function commandEcho(line: string, color: string | null, caret: boolean): string {
-  const mark = caret && line.length > 0 ? ECHO_CARET : '';
+  const mark = caret ? ECHO_CARET : '';
   return `${mark}${colorizeEcho(line, color)}\r\n`;
 }
 
@@ -56,10 +56,6 @@ export interface SubmitContext {
   /** Mark your commands from Settings, a grey `›` before each echo. Off
    *  when left out. */
   echoCaret?: boolean;
-  /** The row your pinned prompt held is where the next thing lands, so
-   *  the text holds no prompt row for an empty line's echo to end. False
-   *  at a prompt left in the text, such as the pager. */
-  pinRowOpen?: boolean;
 }
 
 /** Whether a key press or a submitted line belongs to the masked field.
@@ -104,14 +100,14 @@ export function draftAfterMaskChange(wasMasked: boolean, masked: boolean, draft:
  *  break, stays out of history, and goes to the server as typed, past
  *  aliases, variables, and `#` commands. Every other line echoes in your
  *  echo color, after the caret while Mark your commands is on, unless a
- *  quick key echoes it, and joins history. At your
- *  pinned prompt an empty line echoes nothing, so Enter on an empty line
- *  moves nothing in the text. */
+ *  quick key echoes it, and joins history. A bare Enter echoes too, the
+ *  caret alone or an empty line, as a telnet client shows each line you
+ *  send, pinned prompt or not. */
 export function planSubmit(line: string, context: SubmitContext): SubmitPlan {
   if (context.masked) {
     return { echo: '\r\n', remember: false, local: false, masked: true };
   }
-  const silent = context.quickKey || (context.pinRowOpen === true && line.length === 0);
+  const silent = context.quickKey;
   return {
     echo: silent ? null : commandEcho(line, context.echoColor, context.echoCaret === true),
     remember: line.length > 0,
