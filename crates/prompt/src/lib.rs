@@ -61,9 +61,9 @@ pub mod vars;
 pub mod wrap;
 
 pub use config::{CaptureConfig, PromptConfig, PromptShow};
-pub use engine::{Clock, GamePromptSeen, PromptEngine, SeenKind, Status, StatusReport};
-pub use format::{Position, Resolved, Value};
+pub use engine::{GamePromptSeen, PromptEngine, Status};
+pub use format::{Resolved, Value};
 pub use presets::DEFAULT_DESIGN;
 pub use render::{render, render_str, MapValues, RenderOptions, Rendered, Span, SpanColor, Values};
-pub use template::{FieldRef, Format, Template};
-pub use vars::{Capture, Hidden, Resolver, Vars, Vosh};
+pub use template::{FieldRef, Template};
+pub use vars::{Capture, Vars, Vosh};

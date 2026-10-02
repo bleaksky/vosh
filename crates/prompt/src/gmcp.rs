@@ -40,8 +40,6 @@ pub struct Packet {
     /// The package name as the game spelled it.
     pub package: String,
     pub data: Value,
-    /// Arrival order this session, from 1.
-    pub seq: u64,
 }
 
 /// The game's prompt settings, from Char.Prompt.
@@ -73,7 +71,6 @@ pub struct Observed {
 #[derive(Debug, Clone, Default)]
 pub struct Snapshot {
     packets: BTreeMap<String, Packet>,
-    seq: u64,
     pulse: u64,
     vitals_seen: bool,
     prompt: Option<CharPrompt>,
@@ -87,7 +84,6 @@ impl Snapshot {
     /// Keep a packet, replacing the last one of its package. A Char.Vitals
     /// starts a pulse. A Char.Prompt is parsed and kept with `at`.
     pub fn observe(&mut self, package: &str, data: Value, at: DateTime<FixedOffset>) -> Observed {
-        self.seq += 1;
         let mut observed = Observed::default();
         if package.eq_ignore_ascii_case(CHAR_VITALS) {
             self.pulse += 1;
@@ -118,7 +114,6 @@ impl Snapshot {
             Packet {
                 package: package.to_string(),
                 data,
-                seq: self.seq,
             },
         );
         observed
@@ -577,7 +572,6 @@ mod tests {
         assert_eq!(s.combat().and_then(|c| c.hp_pct), None);
         assert!(s.has("CHAR.COMBAT"));
         assert!(!s.has("Char.Vitals"));
-        assert_eq!(s.packet("Char.Combat").map(|p| p.seq), Some(2));
     }
 
     #[test]

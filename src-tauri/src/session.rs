@@ -6209,7 +6209,7 @@ mod tests {
         assert_eq!(
             seen,
             [vosh_prompt::GamePromptSeen {
-                kind: vosh_prompt::SeenKind::Gmcp,
+                kind: vosh_prompt::engine::SeenKind::Gmcp,
                 text: CODES.into(),
                 applied: true,
                 lost: Vec::new(),
