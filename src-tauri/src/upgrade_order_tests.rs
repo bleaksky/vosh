@@ -1,20 +1,15 @@
 //! The order launch runs its upgrades in (R2 of the refactor plan).
 //!
-//! The setup hook in lib.rs makes the scripts folder first. Then it copies
-//! the app data of an older `com.aabahran.mudclient` install, but only
-//! into a folder that holds none of the core files, and the scripts folder
-//! counts as one, so on a normal launch the copy skips. It copies only
-//! when the scripts folder could not be made. Until D3 retired the map
-//! store, maps.sqlite, which its opener made at the same step, did this.
-//! Then `launch::load` finishes a shared catalog wizard run that stopped,
+//! The setup hook in lib.rs makes the scripts folder, then runs
+//! `launch::load`. It finishes a shared catalog wizard run that stopped,
 //! moves the prompt capture triggers into the profiles, turns on the
 //! presets a build adds, and loads the profile set. Then it moves the
 //! custom themes older profile files hold into global.toml, and only then
 //! loads the active profile. Each step reads what the steps before it
 //! wrote, so the order is part of what a refactor keeps. R12 gathers the
-//! steps into one list, and this order holds there too. D15 decides
-//! whether the copy stays, and its commit changes the copy cases here on
-//! purpose.
+//! steps into one list, and this order holds there too. D15 retired the
+//! copy of the app data an install under the old name left behind, so the
+//! run starts at the wizard finish.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -148,27 +143,13 @@ fn create_scripts_dir(app_data: &Path) {
     std::fs::create_dir_all(app_data.join("scripts")).unwrap();
 }
 
-/// Run `launch::load` over `app_data` on a fresh state.
-async fn load(app_data: &Path) -> (SharedState, Launch) {
+/// Launch the way the setup hook in lib.rs does, over `app_data` on a fresh
+/// state. The scripts folder is made, then `launch::load` runs.
+async fn launch(app_data: &Path) -> (SharedState, Launch) {
+    create_scripts_dir(app_data);
     let state: SharedState = Arc::new(AppState::default());
     let launched = crate::launch::load(&state, app_data).await;
     (state, launched)
-}
-
-/// Launch the way the setup hook in lib.rs does, over `app_data`. The
-/// scripts folder is made, then the mudclient copy runs, then
-/// `launch::load`.
-async fn launch(app_data: &Path) -> (SharedState, Launch) {
-    create_scripts_dir(app_data);
-    crate::migrate_from_mudclient_dir(app_data);
-    load(app_data).await
-}
-
-/// Launch the way the setup hook does when the scripts folder could not be
-/// made, so nothing stops the mudclient copy.
-async fn launch_without_scripts_dir(app_data: &Path) -> (SharedState, Launch) {
-    crate::migrate_from_mudclient_dir(app_data);
-    load(app_data).await
 }
 
 #[tokio::test]
@@ -307,20 +288,20 @@ async fn an_unfinished_wizard_run_holds_the_upgrades_after_it() {
     );
 }
 
-/// On a normal launch the scripts folder exists by the time the copy
-/// looks, so the copy skips and leaves the older folder where it
-/// is. A wizard run the older folder holds never reaches Vosh.
+/// A launch leaves the app data an older `com.aabahran.mudclient` install
+/// left behind where it is, and writes no marker of a copy. A wizard run
+/// that folder holds never reaches Vosh.
 #[tokio::test]
-async fn a_normal_launch_skips_the_mudclient_folder() {
+async fn a_launch_leaves_an_older_mudclient_folder_alone() {
     let dir = tempfile::tempdir().unwrap();
     let old = dir.path().join("com.example.mudclient");
     let app_data = dir.path().join("com.example.vosh");
     save_wizard_journal(&old, &journal()).unwrap();
 
     let (state, launched) = launch(&app_data).await;
-    assert_eq!(
-        read(&app_data.join(".migrated-from-mudclient")),
-        "skipped: new dir already populated\n"
+    assert!(
+        !app_data.join(".migrated-from-mudclient").exists(),
+        "no copy marker"
     );
     assert!(journal_path(&old).exists(), "the older folder stays");
     assert!(!journal_path(&app_data).exists(), "nothing was copied");
@@ -329,72 +310,4 @@ async fn a_normal_launch_skips_the_mudclient_folder() {
     assert!(!launched.wizard_unfinished);
     let leftover = &state.take_launch_notices();
     assert!(leftover.is_empty(), "{leftover:?}");
-}
-
-/// When the scripts folder could not be made, nothing stops the copy. It
-/// brings the older folder over before `launch::load` runs, so the wizard
-/// finish reads the journal the older folder held.
-#[tokio::test]
-async fn a_launch_without_the_scripts_folder_copies_the_mudclient_folder_first() {
-    let dir = tempfile::tempdir().unwrap();
-    let old = dir.path().join("com.example.mudclient");
-    let app_data = dir.path().join("com.example.vosh");
-    save_wizard_journal(&old, &journal()).unwrap();
-
-    let (state, launched) = launch_without_scripts_dir(&app_data).await;
-    assert!(read(&app_data.join(".migrated-from-mudclient")).starts_with("copied "));
-    assert!(
-        journal_path(&old).exists(),
-        "the copy leaves the older folder"
-    );
-    assert!(!journal_path(&app_data).exists(), "the run finished");
-    assert!(launched.loadout_mode);
-    assert!(!launched.wizard_unfinished);
-    assert_eq!(
-        state.take_launch_notices(),
-        [WIZARD_FINISHED_NOTICE, MOVED_INTO_DEFAULT]
-    );
-}
-
-/// The setup hook cannot run without a Tauri app, so this reads lib.rs to
-/// pin its order. The scripts folder comes first, and the copy guard reads
-/// it as a folder in use, which makes the mudclient copy skip. Then the
-/// copy runs, then `launch::load`. D15 retires the copy, and this test
-/// changes in that commit too.
-#[test]
-fn the_setup_hook_makes_the_scripts_folder_then_copies_then_loads() {
-    let src = include_str!("lib.rs");
-    let hook = &src[src.find(".setup(move |app|").expect("the setup hook")..];
-    let scripts = hook
-        .find("create_scripts_dir(app)")
-        .expect("the setup hook makes the scripts folder");
-    let copy = hook
-        .find("migrate_from_mudclient_dir(&path);")
-        .expect("the setup hook copies the mudclient folder");
-    let load = hook
-        .find("launch::load(&state, &path)")
-        .expect("the setup hook runs launch::load");
-    assert!(
-        scripts < copy,
-        "the scripts folder comes before the mudclient folder copy, so the copy skips"
-    );
-    assert!(
-        copy < load,
-        "the mudclient folder copy runs before launch::load"
-    );
-    // The folder the step makes is one the copy reads as a folder in use.
-    let maker = &src[src
-        .find("fn create_scripts_dir(")
-        .expect("the scripts folder step")..];
-    let maker = &maker[..maker.find("\n}\n").expect("the end of the step")];
-    assert!(
-        maker.contains("dir.join(SCRIPTS_DIR)"),
-        "the step makes the scripts folder"
-    );
-    let guard = &src[src.find("let occupied = [").expect("the copy guard")..];
-    let guard = &guard[..guard.find(']').expect("the end of the guard list")];
-    assert!(
-        guard.contains("SCRIPTS_DIR"),
-        "the guard reads the scripts folder"
-    );
 }
