@@ -26,11 +26,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use vosh_automation::alias::Alias;
-use vosh_prompt::config::{AabahranCapture, CaptureSource, RegexCapture};
-use vosh_prompt::{CaptureConfig, PromptConfig, PromptShow};
-use vosh_trigger::{
+use vosh_automation::trigger::{
     HighlightStyle, NamedColor, Trigger, TriggerAction, TriggerPattern, TriggerTarget,
 };
+use vosh_prompt::config::{AabahranCapture, CaptureSource, RegexCapture};
+use vosh_prompt::{CaptureConfig, PromptConfig, PromptShow};
 
 use crate::commands::{AppState, SharedState, PERSIST_LOCK};
 use crate::loadout::{GlobalCatalog, Loadout, LoadoutSet};

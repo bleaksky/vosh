@@ -1,7 +1,7 @@
 //! The SGR model, which only the test kit carries. [`AnsiParser`] splits
 //! bytes into [`Span`]s of text that share one set of [`Attributes`], and
 //! [`Sgr`] tracks the foreground, the background and the common flags
-//! across SGR sequences. The readable highlight tests in vosh-trigger
+//! across SGR sequences. The readable highlight tests in vosh-automation
 //! read the color of each span, with a parser apart from the scan they
 //! check.
 

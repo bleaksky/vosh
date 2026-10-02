@@ -330,8 +330,11 @@ pub(crate) fn line_triggers(p: &Profile, capture: &CaptureConfig) -> Vec<LineTri
             continue;
         }
         for line in &lines {
-            for trigger in vosh_trigger::matching(&p.triggers, line, vosh_trigger::MatchScope::Line)
-            {
+            for trigger in vosh_automation::trigger::matching(
+                &p.triggers,
+                line,
+                vosh_automation::trigger::MatchScope::Line,
+            ) {
                 if out.iter().any(|t| t.name == trigger.name) {
                     continue;
                 }
@@ -1083,11 +1086,11 @@ mod tests {
     fn line_trigger(
         name: &str,
         pattern: &str,
-        target: vosh_trigger::TriggerTarget,
-    ) -> vosh_trigger::Trigger {
-        vosh_trigger::Trigger {
+        target: vosh_automation::trigger::TriggerTarget,
+    ) -> vosh_automation::trigger::Trigger {
+        vosh_automation::trigger::Trigger {
             name: name.into(),
-            patterns: vec![vosh_trigger::TriggerPattern {
+            patterns: vec![vosh_automation::trigger::TriggerPattern {
                 pattern: pattern.into(),
                 enabled: true,
             }],
@@ -1102,7 +1105,7 @@ mod tests {
 
     #[test]
     fn line_triggers_that_match_a_prompt_the_capture_reads_are_named_once() {
-        use vosh_trigger::TriggerTarget::{Line, Prompt};
+        use vosh_automation::trigger::TriggerTarget::{Line, Prompt};
         let mut p = Profile::default();
         p.prompt.connect(true);
         for trigger in [
@@ -1110,11 +1113,11 @@ mod tests {
             line_trigger("Flee below 20 percent", r"\[(\d+)/(\d+)hp", Line),
             line_trigger("Already on prompts", r"hp", Prompt),
             line_trigger("Room exits", r"^\[Exits:", Line),
-            vosh_trigger::Trigger {
+            vosh_automation::trigger::Trigger {
                 enabled: false,
                 ..line_trigger("Turned off", r"hp", Line)
             },
-            vosh_trigger::Trigger {
+            vosh_automation::trigger::Trigger {
                 preset: Some("vitals".into()),
                 ..line_trigger("From a preset", r"mv\]", Line)
             },

@@ -7,6 +7,9 @@
 //! stands for.
 //! [`vars`] keeps variables in profile and session scope and fills in
 //! `$name`.
+//! [`trigger`] matches server lines and fires highlight, gag, replace,
+//! send, route and script actions.
 
 pub mod alias;
+pub mod trigger;
 pub mod vars;

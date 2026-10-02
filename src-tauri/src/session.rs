@@ -12,11 +12,11 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
+use vosh_automation::trigger::{LineResult, MatchScope};
 use vosh_prompt::stage::{Block, BlockLine, End, Offer, Output};
 use vosh_protocol::telnet::{
     codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Negotiator, Parser,
 };
-use vosh_trigger::{LineResult, MatchScope};
 
 use crate::connection::{self, ConnectionError, Stream};
 use crate::gmcp_bind;
@@ -1709,8 +1709,13 @@ fn line_pass(
     scope: MatchScope,
     now: Instant,
 ) -> LinePass {
-    let result =
-        vosh_trigger::process_on_ground(&p.triggers, bytes, plain, scope, highlight_ground::get());
+    let result = vosh_automation::trigger::process_on_ground(
+        &p.triggers,
+        bytes,
+        plain,
+        scope,
+        highlight_ground::get(),
+    );
     let tick_step = tick_reset(p, plain, now);
     script_state::snapshot_vars(&p.script, &p.vars);
     let mut outcome = match p.script.match_line(plain) {
@@ -2078,14 +2083,15 @@ fn prompt_block(
         }
         // Line triggers no longer see it. Note the ones that would have
         // fired, for the one-time notice (D6).
-        let matched = vosh_trigger::matching(&p.triggers, &line.plain, MatchScope::Line);
+        let matched =
+            vosh_automation::trigger::matching(&p.triggers, &line.plain, MatchScope::Line);
         p.prompt
             .stage
             .line_triggers_matched(matched.into_iter().map(|t| t.name.as_str()));
     }
 
     let last = block.final_line().clone();
-    let result = vosh_trigger::process_on_ground(
+    let result = vosh_automation::trigger::process_on_ground(
         &p.triggers,
         &last.raw,
         &last.plain,
@@ -2213,7 +2219,7 @@ fn unread_partial(
     partial: &Partial,
     plain: &str,
 ) -> LineStep {
-    let result = vosh_trigger::process_on_ground(
+    let result = vosh_automation::trigger::process_on_ground(
         &p.triggers,
         &partial.bytes,
         plain,
@@ -2672,7 +2678,7 @@ fn note_gag_without_reader(p: &mut Profile, batch: &mut ReadBatch, plain: &str, 
     if p.prompt.stage.has_recognizer() {
         return;
     }
-    for trigger in vosh_trigger::matching(&p.triggers, plain, scope) {
+    for trigger in vosh_automation::trigger::matching(&p.triggers, plain, scope) {
         if hides_and_reads_prompt(trigger) && p.prompt.stage.gag_without_reader(&trigger.name) {
             batch.gag_without_reader.push(trigger.name.clone());
         }
@@ -2681,8 +2687,8 @@ fn note_gag_without_reader(p: &mut Profile, batch: &mut ReadBatch, plain: &str, 
 
 /// The trigger hides what it matches and its script sets prompt values,
 /// the shape of a capture trigger.
-fn hides_and_reads_prompt(trigger: &vosh_trigger::Trigger) -> bool {
-    use vosh_trigger::TriggerAction;
+fn hides_and_reads_prompt(trigger: &vosh_automation::trigger::Trigger) -> bool {
+    use vosh_automation::trigger::TriggerAction;
     trigger
         .actions
         .iter()
@@ -3871,16 +3877,16 @@ mod tests {
         // trigger that reads hp from captures[2] keeps reading it.
         let mut p = Profile::default();
         p.triggers
-            .set(vosh_trigger::Trigger::new(
+            .set(vosh_automation::trigger::Trigger::new(
                 "says",
                 r"^(\w+) says (\w+)",
-                vosh_trigger::TriggerAction::Script {
+                vosh_automation::trigger::TriggerAction::Script {
                     body: "mud.send(captures[1] .. '|' .. captures[2] .. '|' .. captures[3])"
                         .into(),
                 },
             ))
             .expect("the trigger compiles");
-        let result = vosh_trigger::process(&p.triggers, b"Bob says hi");
+        let result = vosh_automation::trigger::process(&p.triggers, b"Bob says hi");
         assert_eq!(
             super::run_trigger_scripts(&mut p, &result, "t"),
             [vosh_script::Action::Send("Bob says hi|Bob|hi".into())]
@@ -4746,23 +4752,23 @@ mod tests {
         // The trigger older builds wrote for `#prompt`.
         let mut p = Profile::default();
         p.triggers
-            .set(vosh_trigger::Trigger {
+            .set(vosh_automation::trigger::Trigger {
                 name: "prompt-capture".into(),
-                patterns: vec![vosh_trigger::TriggerPattern {
+                patterns: vec![vosh_automation::trigger::TriggerPattern {
                     pattern: CAPTURE.into(),
                     enabled: true,
                 }],
                 priority: 100,
                 enabled: true,
                 actions: vec![
-                    vosh_trigger::TriggerAction::Gag,
-                    vosh_trigger::TriggerAction::Script {
+                    vosh_automation::trigger::TriggerAction::Gag,
+                    vosh_automation::trigger::TriggerAction::Script {
                         body: "mud.set_prompt_var(\"hp\", captures[2])".into(),
                     },
                 ],
                 preset: None,
                 group: None,
-                target: vosh_trigger::TriggerTarget::Line,
+                target: vosh_automation::trigger::TriggerTarget::Line,
             })
             .expect("the trigger compiles");
         p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, HP));
@@ -4795,12 +4801,12 @@ mod tests {
             ..p.prompt.config().clone()
         });
         p.triggers
-            .set(vosh_trigger::Trigger {
-                target: vosh_trigger::TriggerTarget::Prompt,
-                ..vosh_trigger::Trigger::new(
+            .set(vosh_automation::trigger::Trigger {
+                target: vosh_automation::trigger::TriggerTarget::Prompt,
+                ..vosh_automation::trigger::Trigger::new(
                     "mark",
                     "hp",
-                    vosh_trigger::TriggerAction::Replace {
+                    vosh_automation::trigger::TriggerAction::Replace {
                         template: "HP".into(),
                     },
                 )
@@ -4814,14 +4820,30 @@ mod tests {
     #[test]
     fn line_triggers_that_matched_a_read_prompt_are_noted() {
         let mut p = capture_profile(HP);
-        let highlight = |name: &str, pattern: &str, target| vosh_trigger::Trigger {
+        let highlight = |name: &str, pattern: &str, target| vosh_automation::trigger::Trigger {
             target,
-            ..vosh_trigger::Trigger::new(name, pattern, vosh_trigger::TriggerAction::Gag)
+            ..vosh_automation::trigger::Trigger::new(
+                name,
+                pattern,
+                vosh_automation::trigger::TriggerAction::Gag,
+            )
         };
         for trigger in [
-            highlight("hp-watch", r"\d+hp", vosh_trigger::TriggerTarget::Line),
-            highlight("prompt-look", "hp", vosh_trigger::TriggerTarget::Prompt),
-            highlight("hungry", "hungry", vosh_trigger::TriggerTarget::Line),
+            highlight(
+                "hp-watch",
+                r"\d+hp",
+                vosh_automation::trigger::TriggerTarget::Line,
+            ),
+            highlight(
+                "prompt-look",
+                "hp",
+                vosh_automation::trigger::TriggerTarget::Prompt,
+            ),
+            highlight(
+                "hungry",
+                "hungry",
+                vosh_automation::trigger::TriggerTarget::Line,
+            ),
         ] {
             p.triggers.set(trigger).expect("the trigger compiles");
         }
@@ -5457,10 +5479,10 @@ mod tests {
     fn a_held_line_your_send_lets_go_runs_the_line_pass_and_is_logged() {
         let mut p = codes_profile(CODES, HP);
         p.triggers
-            .set(vosh_trigger::Trigger::new(
+            .set(vosh_automation::trigger::Trigger::new(
                 "answer",
                 "^Bob says: ",
-                vosh_trigger::TriggerAction::Send {
+                vosh_automation::trigger::TriggerAction::Send {
                     template: "nod".into(),
                 },
             ))
@@ -5502,23 +5524,23 @@ mod tests {
     fn a_held_line_a_script_hides_still_shows_and_its_echo_follows() {
         let mut p = codes_profile(CODES, HP);
         p.triggers
-            .set(vosh_trigger::Trigger {
+            .set(vosh_automation::trigger::Trigger {
                 name: "swap".into(),
-                patterns: vec![vosh_trigger::TriggerPattern {
+                patterns: vec![vosh_automation::trigger::TriggerPattern {
                     pattern: "^Bob says: ".into(),
                     enabled: true,
                 }],
                 priority: 0,
                 enabled: true,
                 actions: vec![
-                    vosh_trigger::TriggerAction::Gag,
-                    vosh_trigger::TriggerAction::Script {
+                    vosh_automation::trigger::TriggerAction::Gag,
+                    vosh_automation::trigger::TriggerAction::Script {
                         body: "mud.echo('Bob speaks.')".into(),
                     },
                 ],
                 preset: None,
                 group: None,
-                target: vosh_trigger::TriggerTarget::Line,
+                target: vosh_automation::trigger::TriggerTarget::Line,
             })
             .unwrap();
         let mut wire = Wire::new(p);
@@ -5613,10 +5635,10 @@ mod tests {
     fn a_released_line_runs_the_line_pass_and_is_logged() {
         let mut p = codes_profile(CODES, HP);
         p.triggers
-            .set(vosh_trigger::Trigger::new(
+            .set(vosh_automation::trigger::Trigger::new(
                 "hush",
                 "^Tester: ",
-                vosh_trigger::TriggerAction::Gag,
+                vosh_automation::trigger::TriggerAction::Gag,
             ))
             .unwrap();
         let mut batch = super::ReadBatch::new(super::output_count());
@@ -5715,9 +5737,13 @@ mod tests {
         // A Prompts trigger hides the final line. The tank line still
         // shows, so it is still logged and kept.
         p.triggers
-            .set(vosh_trigger::Trigger {
-                target: vosh_trigger::TriggerTarget::Prompt,
-                ..vosh_trigger::Trigger::new("hide-prompt", "hp ", vosh_trigger::TriggerAction::Gag)
+            .set(vosh_automation::trigger::Trigger {
+                target: vosh_automation::trigger::TriggerTarget::Prompt,
+                ..vosh_automation::trigger::Trigger::new(
+                    "hide-prompt",
+                    "hp ",
+                    vosh_automation::trigger::TriggerAction::Gag,
+                )
             })
             .unwrap();
         let (logged, kept, shown) = logged_and_kept(&mut p, &block);

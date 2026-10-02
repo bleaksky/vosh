@@ -10,8 +10,8 @@
 //!
 //! The `testkit` feature adds the SGR model in `sgr.rs` and `color.rs`.
 //! Its `AnsiParser` splits a line into spans that each carry their SGR
-//! attributes, and the readable highlight tests in vosh-trigger read the
-//! color of each span. Nothing in the app reads attributes, so the
+//! attributes, and the readable highlight tests in vosh-automation read
+//! the color of each span. Nothing in the app reads attributes, so the
 //! release build leaves the model out.
 
 #[cfg(any(test, feature = "testkit"))]

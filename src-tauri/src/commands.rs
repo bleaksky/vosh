@@ -5,8 +5,8 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::Mutex;
 use tracing::warn;
+use vosh_automation::trigger::Trigger;
 use vosh_log::{SearchOptions, SearchPage, SessionRow};
-use vosh_trigger::Trigger;
 
 use crate::input;
 use crate::list_events::{
@@ -2515,7 +2515,7 @@ fn lay_catalog_over(
     }
     aliases.set_disabled_groups(alias_disabled);
     p.aliases = aliases;
-    let mut triggers = vosh_trigger::TriggerStore::new();
+    let mut triggers = vosh_automation::trigger::TriggerStore::new();
     for t in &catalog.triggers {
         if let Err(e) = triggers.set(t.clone()) {
             warn!(error = %e, "catalog trigger rejected during profile switch");
@@ -7569,15 +7569,17 @@ mod tests {
         fn character(name: &str, n: u32, presets: &[&str]) -> ProfileConfig {
             use crate::profile_config::{CustomTheme, PaneLayoutPersist, TrackedAffect};
             let pick = |options: &[&str]| options[n as usize % options.len()].to_string();
-            let trigger = |what: &str, pattern: &str, group: Option<&str>| vosh_trigger::Trigger {
-                group: group.map(String::from),
-                ..vosh_trigger::Trigger::new(
-                    format!("{name} {what}"),
-                    pattern,
-                    vosh_trigger::TriggerAction::Send {
-                        template: format!("say {what} {n}"),
-                    },
-                )
+            let trigger = |what: &str, pattern: &str, group: Option<&str>| {
+                vosh_automation::trigger::Trigger {
+                    group: group.map(String::from),
+                    ..vosh_automation::trigger::Trigger::new(
+                        format!("{name} {what}"),
+                        pattern,
+                        vosh_automation::trigger::TriggerAction::Send {
+                            template: format!("say {what} {n}"),
+                        },
+                    )
+                }
             };
             let mut config = ProfileConfig::default();
             let mut combat = vosh_automation::alias::Alias::new(format!("{name} bash"), "bash %1");
@@ -7717,7 +7719,7 @@ mod tests {
         /// line each, sorted. The item types do not implement `PartialEq`.
         fn item_rows(
             aliases: &[vosh_automation::alias::Alias],
-            triggers: &[vosh_trigger::Trigger],
+            triggers: &[vosh_automation::trigger::Trigger],
             macros: &[crate::profile::Macro],
         ) -> Vec<String> {
             let mut rows: Vec<String> = aliases
@@ -8116,7 +8118,7 @@ mod tests {
             ] {
                 let state = relaunch_as(dir.path(), name).await;
                 let p = state.profile.lock().await;
-                let line = vosh_trigger::process(&p.triggers, b"Bob arrives");
+                let line = vosh_automation::trigger::process(&p.triggers, b"Bob arrives");
                 assert_eq!(line.sends, [sent], "{name}");
             }
         }
@@ -8149,7 +8151,7 @@ mod tests {
                 let state = state.clone();
                 async move {
                     let p = state.profile.lock().await;
-                    vosh_trigger::process(&p.triggers, b"You are knocked down!").sends
+                    vosh_automation::trigger::process(&p.triggers, b"You are knocked down!").sends
                 }
             };
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
@@ -8173,11 +8175,15 @@ mod tests {
         }
 
         /// A trigger that sends `command` on lines matching `pattern`.
-        fn send_trigger(name: &str, pattern: &str, command: &str) -> vosh_trigger::Trigger {
-            vosh_trigger::Trigger::new(
+        fn send_trigger(
+            name: &str,
+            pattern: &str,
+            command: &str,
+        ) -> vosh_automation::trigger::Trigger {
+            vosh_automation::trigger::Trigger::new(
                 name,
                 pattern,
-                vosh_trigger::TriggerAction::Send {
+                vosh_automation::trigger::TriggerAction::Send {
                     template: command.into(),
                 },
             )
@@ -8255,8 +8261,8 @@ mod tests {
         }
 
         /// The healing basics trigger as the preset library holds it.
-        fn heal_preset() -> vosh_trigger::Trigger {
-            vosh_trigger::Trigger {
+        fn heal_preset() -> vosh_automation::trigger::Trigger {
+            vosh_automation::trigger::Trigger {
                 preset: Some("healing_basics".into()),
                 ..send_trigger("heal 1", "^You heal", "say healed")
             }

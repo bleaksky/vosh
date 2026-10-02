@@ -21,7 +21,7 @@
 
 use serde::{Deserialize, Serialize};
 use vosh_automation::alias::Alias;
-use vosh_trigger::Trigger;
+use vosh_automation::trigger::Trigger;
 
 use crate::profile::Macro;
 use crate::profile_set::AutoMatch;

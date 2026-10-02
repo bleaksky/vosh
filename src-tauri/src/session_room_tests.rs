@@ -80,10 +80,10 @@ fn preset_lines() -> Vec<PresetLine> {
 }
 
 /// The triggers of the Room, time and weather colors preset, from preset.json.
-fn preset_triggers() -> Vec<vosh_trigger::Trigger> {
+fn preset_triggers() -> Vec<vosh_automation::trigger::Trigger> {
     #[derive(serde::Deserialize)]
     struct PresetFile {
-        triggers: Vec<vosh_trigger::Trigger>,
+        triggers: Vec<vosh_automation::trigger::Trigger>,
     }
     let text = include_str!("../../fixtures/room-colors/preset.json");
     serde_json::from_str::<PresetFile>(text)
@@ -247,16 +247,19 @@ fn open_for(color: &str) -> &'static str {
 }
 
 /// A trigger on `target` that colors a whole line yellow.
-fn yellow(name: &str, target: vosh_trigger::TriggerTarget) -> vosh_trigger::Trigger {
-    vosh_trigger::Trigger {
+fn yellow(
+    name: &str,
+    target: vosh_automation::trigger::TriggerTarget,
+) -> vosh_automation::trigger::Trigger {
+    vosh_automation::trigger::Trigger {
         priority: 4,
         target,
-        ..vosh_trigger::Trigger::new(
+        ..vosh_automation::trigger::Trigger::new(
             name,
             "^.+$",
-            vosh_trigger::TriggerAction::Highlight {
-                style: vosh_trigger::HighlightStyle {
-                    fg: Some(vosh_trigger::NamedColor::Yellow),
+            vosh_automation::trigger::TriggerAction::Highlight {
+                style: vosh_automation::trigger::HighlightStyle {
+                    fg: Some(vosh_automation::trigger::NamedColor::Yellow),
                     ..Default::default()
                 },
             },
@@ -272,7 +275,10 @@ fn a_room_trigger_colors_the_things_and_people_of_each_look_and_nothing_else() {
         // The line of your target is a room line too.
         let mut p = targeting(case);
         p.triggers
-            .set(yellow("room", vosh_trigger::TriggerTarget::Room))
+            .set(yellow(
+                "room",
+                vosh_automation::trigger::TriggerTarget::Room,
+            ))
             .unwrap();
         let shown = read(&mut p, &wire(&case.events));
         let want = expected(&case.events, &|line, listed, _| match listed {
@@ -289,17 +295,23 @@ fn a_your_target_trigger_colors_the_line_of_your_target_and_nothing_else() {
     assert!(cases.iter().filter(|c| c.target.is_some()).count() >= 4);
     for case in &cases {
         let mut p = targeting(case);
-        let mut target = yellow("target", vosh_trigger::TriggerTarget::RoomTarget);
+        let mut target = yellow(
+            "target",
+            vosh_automation::trigger::TriggerTarget::RoomTarget,
+        );
         target.priority = 5;
-        target.actions = vec![vosh_trigger::TriggerAction::Highlight {
-            style: vosh_trigger::HighlightStyle {
-                fg: Some(vosh_trigger::NamedColor::BrightRed),
+        target.actions = vec![vosh_automation::trigger::TriggerAction::Highlight {
+            style: vosh_automation::trigger::HighlightStyle {
+                fg: Some(vosh_automation::trigger::NamedColor::BrightRed),
                 ..Default::default()
             },
         }];
         p.triggers.set(target).unwrap();
         p.triggers
-            .set(yellow("room", vosh_trigger::TriggerTarget::Room))
+            .set(yellow(
+                "room",
+                vosh_automation::trigger::TriggerTarget::Room,
+            ))
             .unwrap();
         let shown = read(&mut p, &wire(&case.events));
         let want = expected(&case.events, &|line, listed, _| match listed {
@@ -319,7 +331,10 @@ fn with_no_target_no_line_is_the_line_of_your_target() {
         .expect("a look with a target");
     let mut p = Profile::default();
     p.triggers
-        .set(yellow("target", vosh_trigger::TriggerTarget::RoomTarget))
+        .set(yellow(
+            "target",
+            vosh_automation::trigger::TriggerTarget::RoomTarget,
+        ))
         .unwrap();
     let shown = read(&mut p, &wire(&case.events));
     assert_eq!(
@@ -332,7 +347,10 @@ fn with_no_target_no_line_is_the_line_of_your_target() {
 fn an_exits_line_someone_says_opens_no_look() {
     let mut p = Profile::default();
     p.triggers
-        .set(yellow("room", vosh_trigger::TriggerTarget::Room))
+        .set(yellow(
+            "room",
+            vosh_automation::trigger::TriggerTarget::Room,
+        ))
         .unwrap();
     // languages.c, $n says with the text in `# bold yellow.
     let said = "Tolliver says '\x1b[0;1;33m[Exits: south]\x1b[0;0m'";
@@ -346,7 +364,7 @@ fn line_triggers_still_see_every_line_of_a_look() {
     let case = &looks()[0];
     let mut p = Profile::default();
     p.triggers
-        .set(yellow("all", vosh_trigger::TriggerTarget::Line))
+        .set(yellow("all", vosh_automation::trigger::TriggerTarget::Line))
         .unwrap();
     let shown = read(&mut p, &wire(&case.events));
     for event in &case.events {
@@ -449,12 +467,12 @@ fn the_preset_colors_each_line_it_names_and_leaves_every_near_miss_alone() {
 #[test]
 fn your_own_highlight_on_a_name_draws_over_the_room_color() {
     let mut p = preset_profile();
-    let mut name = yellow("friend", vosh_trigger::TriggerTarget::Line);
+    let mut name = yellow("friend", vosh_automation::trigger::TriggerTarget::Line);
     name.patterns[0].pattern = "Tolliver".to_string();
     name.priority = 5;
-    name.actions = vec![vosh_trigger::TriggerAction::Highlight {
-        style: vosh_trigger::HighlightStyle {
-            fg: Some(vosh_trigger::NamedColor::Cyan),
+    name.actions = vec![vosh_automation::trigger::TriggerAction::Highlight {
+        style: vosh_automation::trigger::HighlightStyle {
+            fg: Some(vosh_automation::trigger::NamedColor::Cyan),
             ..Default::default()
         },
     }];

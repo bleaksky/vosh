@@ -30,7 +30,6 @@ tracing-subscriber = { workspace = true }
 thiserror = { workspace = true }
 vosh-protocol = { path = "../crates/protocol" }
 vosh-automation = { path = "../crates/automation" }
-vosh-trigger = { path = "../crates/trigger" }
 vosh-script = { path = "../crates/script" }
 vosh-log = { path = "../crates/log" }
 vosh-prompt = { path = "../crates/prompt" }
@@ -114,11 +113,10 @@ tempfile = "3"
 # The fake Aabahran and its wire cases, which the session tests drive the
 # real session against.
 vosh-prompt = { path = "../crates/prompt", features = ["testkit"] }
-# The alias builders the input, session, command and fake MUD tests use.
-vosh-automation = { path = "../crates/automation", features = ["testkit"] }
-# vosh_trigger::process and TriggerStore::len, which the session, command
+# The alias builders the input, session, command and fake MUD tests use,
+# and trigger::process and TriggerStore::len, which the session, command
 # and input tests use.
-vosh-trigger = { path = "../crates/trigger", features = ["testkit"] }
+vosh-automation = { path = "../crates/automation", features = ["testkit"] }
 # LogStore::in_memory and the other test only log calls, which the
 # session, prompt lookup, hidden input and password wipe tests use.
 vosh-log = { path = "../crates/log", features = ["testkit"] }

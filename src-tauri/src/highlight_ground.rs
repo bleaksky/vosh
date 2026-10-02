@@ -3,7 +3,7 @@
 //! While Keep highlight colors readable is on, the page reports the
 //! theme's terminal background here (`highlight_ground_set`) on every
 //! theme change, and the session hands it to the trigger engine with each
-//! line it runs (`vosh_trigger::process_on_ground`). The engine lifts each
+//! line it runs (`vosh_automation::trigger::process_on_ground`). The engine lifts each
 //! fixed color a trigger paints, a true color or a 256 color past the 16,
 //! until it reads on that ground. While the switch is off, and before the
 //! page reports, there is no ground, and trigger colors draw as you set
@@ -12,7 +12,7 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use vosh_trigger::readable::{self, Rgb};
+use vosh_automation::trigger::readable::{self, Rgb};
 
 /// The ground packed as `0x01_rr_gg_bb`, so black is still a ground, or 0
 /// for none.

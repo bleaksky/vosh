@@ -2513,7 +2513,7 @@ impl CellRenderer {
         // How far the field carries toward the mark color. Low enough
         // that a washed row reads as marked rather than painted.
         let wash_field_mix = 0.18_f32;
-        let wash_paint: HashMap<[u8; 3], Rgba> = vosh_trigger::NamedColor::ALL
+        let wash_paint: HashMap<[u8; 3], Rgba> = vosh_automation::trigger::NamedColor::ALL
             .iter()
             .enumerate()
             .map(|(idx, c)| {

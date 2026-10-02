@@ -21,7 +21,7 @@
 
 use std::borrow::Cow;
 
-use crate::color::NamedColor;
+use crate::trigger::color::NamedColor;
 
 /// An sRGB color, one byte per channel.
 pub type Rgb = (u8, u8, u8);
@@ -581,7 +581,7 @@ mod tests {
     }
 
     fn fixture() -> Fixture {
-        serde_json::from_str(include_str!("../../../fixtures/readable/grounds.json")).unwrap()
+        serde_json::from_str(include_str!("../../../../fixtures/readable/grounds.json")).unwrap()
     }
 
     /// Every color in the fixture as sRGB, with a name for messages.
@@ -730,13 +730,13 @@ mod tests {
 
     /// A store with one Replace trigger that saves `template` and matches a
     /// line of four words, so `$0` to `$4` all fill.
-    fn replace_store(template: &str) -> crate::TriggerStore {
-        let mut store = crate::TriggerStore::new();
+    fn replace_store(template: &str) -> crate::trigger::TriggerStore {
+        let mut store = crate::trigger::TriggerStore::new();
         store
-            .set(crate::Trigger::new(
+            .set(crate::trigger::Trigger::new(
                 "preset",
                 r"^(\S+) (\S+) (\S+) (\S+)$",
-                crate::TriggerAction::Replace {
+                crate::trigger::TriggerAction::Replace {
                     template: template.into(),
                 },
             ))
@@ -774,9 +774,15 @@ mod tests {
         for template in &f.templates {
             let store = replace_store(template);
             let draw = |ground| {
-                crate::process_on_ground(&store, line, &plain, crate::MatchScope::Line, ground)
-                    .display
-                    .unwrap()
+                crate::trigger::process_on_ground(
+                    &store,
+                    line,
+                    &plain,
+                    crate::trigger::MatchScope::Line,
+                    ground,
+                )
+                .display
+                .unwrap()
             };
             let as_set = draw(None);
             assert!(

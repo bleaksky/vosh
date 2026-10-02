@@ -9,7 +9,7 @@ use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
-use crate::action::TriggerAction;
+use crate::trigger::action::TriggerAction;
 
 /// A single pattern row inside a trigger. Mirrors Mudlet's per-pattern
 /// editor: each row carries its own enable flag so a user can toggle
@@ -33,11 +33,11 @@ pub struct TriggerPattern {
 /// - `Room` — runs only on the lines a room look lists after its exits
 ///   line, the armies, the things and the people in the room. The
 ///   session tells those lines apart (see `room_block` in the app crate)
-///   and runs them with [`crate::MatchScope::Room`], which fires `Line`
+///   and runs them with [`crate::trigger::MatchScope::Room`], which fires `Line`
 ///   and `Room` triggers in one pass.
 /// - `RoomTarget` — runs only on the line of the person you target with
 ///   `tar`, among the people a room look lists. The session runs that
-///   line with [`crate::MatchScope::RoomTarget`], which fires `Line`,
+///   line with [`crate::trigger::MatchScope::RoomTarget`], which fires `Line`,
 ///   `Room` and `RoomTarget` triggers in one pass.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
