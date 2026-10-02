@@ -5,15 +5,10 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { SettingsApp } from './SettingsApp';
 import { HelpApp } from './HelpApp';
-// Chrome typefaces for the Ember redesign. Bundled through Vite so the
-// app never fetches fonts at runtime. Inter carries chrome body text,
-// Rajdhani the uppercase pane labels, Roboto Slab the wordmark and
-// window titles. Terminal text stays on the bundled mono faces.
+// The chrome typeface from the Ember redesign. Bundled through Vite so
+// the app never fetches fonts at runtime. Inter carries chrome body
+// text. Terminal text stays on the bundled mono faces.
 import '@fontsource-variable/inter';
-import '@fontsource/rajdhani/500.css';
-import '@fontsource/rajdhani/600.css';
-import '@fontsource/rajdhani/700.css';
-import '@fontsource-variable/roboto-slab';
 import './styles.css';
 import './styles/index.css';
 // The One Window frame: the shell grid, title band, input band, and
