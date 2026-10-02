@@ -1,7 +1,8 @@
 //! The candidates ring as the card reads it (section 4 of the build
 //! spec): `prompt_candidates` groups the entries by their shape with the
 //! digits masked, and `prompt_capture_check` counts how a capture matches
-//! them and the lines in your scrollback.
+//! them and the lines in your scrollback. Each entry it reads carries a
+//! [`Mark`] for what each value printed.
 //!
 //! The ring holds what came right before each of your sends and each GA
 //! or EOR, so its entries are your prompts. A line in the scrollback that
@@ -12,8 +13,8 @@ use std::collections::BTreeSet;
 
 use serde::Serialize;
 
-pub use crate::capture::Mark;
-use crate::capture::Recognizer;
+use crate::aabahran::{Compiled, Shape, WarningKind};
+use crate::capture::{shapes_in_order, Reader, Recognizer};
 use crate::stage::Candidate;
 
 /// `text` with each run of digits, and a minus sign before one, as `#`,
@@ -242,4 +243,148 @@ pub fn check<'a, 'b>(
         reads,
         ..CaptureCheck::new(matched, total, fight, false_matches)
     }
+}
+
+/// What one value printed in a prompt a capture read, for the card to
+/// mark: its line, top line first, and its characters in that line, by
+/// Unicode scalar value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Mark {
+    pub line: usize,
+    pub start: usize,
+    pub end: usize,
+    /// The value it fills. None for codes that run together, which Vosh
+    /// cannot tell apart, so it reads neither.
+    pub field: Option<String>,
+    /// What the card names it, such as `Max health`, or `Health and
+    /// Mana` for codes that run together.
+    pub label: String,
+    /// Vosh cannot read it: codes that run together.
+    pub warn: bool,
+}
+
+// Only the candidates view marks what a capture read, so the marking
+// lives here rather than in the capture module.
+impl Recognizer {
+    /// What each value printed in `lines`, a whole prompt or one whose
+    /// last line is a partial, for the card to mark, in the order the
+    /// lines print them. Codes that run together make one mark Vosh cannot
+    /// read. A code Vosh does not read for any other reason, such as the
+    /// second use of one, makes none. None when the capture does not read
+    /// `lines`.
+    pub fn marks(&self, lines: &[&str]) -> Option<Vec<Mark>> {
+        match &self.reader {
+            Reader::Regex { line, groups, .. } => {
+                let [plain] = lines else {
+                    return None;
+                };
+                let found = line.captures(plain)?;
+                let mut out: Vec<Mark> = groups
+                    .iter()
+                    .filter_map(|(index, var)| {
+                        let m = found.get(*index).filter(|m| !m.is_empty())?;
+                        Some(Mark {
+                            line: 0,
+                            start: chars_before(plain, m.start()),
+                            end: chars_before(plain, m.end()),
+                            field: Some(var.clone()),
+                            label: crate::aabahran::value_label(var),
+                            warn: false,
+                        })
+                    })
+                    .collect();
+                out.sort_by_key(|m| (m.start, m.end));
+                Some(out)
+            }
+            Reader::Codes(compiled) => {
+                let shape = shapes_in_order(compiled).find(|shape| {
+                    shape.read(lines).is_some() || shape.read_partial(lines).is_some()
+                })?;
+                Some(code_marks(compiled, shape, lines))
+            }
+        }
+    }
+}
+
+/// The marks of a prompt `shape` read, codes that run together merged
+/// into one mark Vosh cannot read.
+fn code_marks(compiled: &Compiled, shape: &Shape, lines: &[&str]) -> Vec<Mark> {
+    let runs: Vec<&std::ops::Range<usize>> = compiled
+        .warnings
+        .iter()
+        .filter(|w| w.kind == WarningKind::RunTogether && w.which == shape.which)
+        .map(|w| &w.span)
+        .collect();
+    let mut out: Vec<Mark> = Vec::new();
+    // Each merged mark's place in `out`, its run and line, and the labels
+    // of the codes in it.
+    let mut merged: Vec<(usize, usize, usize, Vec<String>)> = Vec::new();
+    for mark in shape.marks(lines).unwrap_or_default() {
+        let plain = lines[mark.line];
+        let start = chars_before(plain, mark.bytes.start);
+        let end = chars_before(plain, mark.bytes.end);
+        let Some(code) = &mark.code else {
+            // The immortal prefix and the fallback prompt's values.
+            let name = mark.name.clone().unwrap_or_default();
+            out.push(Mark {
+                line: mark.line,
+                start,
+                end,
+                label: crate::aabahran::value_label(&name),
+                field: Some(name),
+                warn: false,
+            });
+            continue;
+        };
+        if code.read {
+            out.push(Mark {
+                line: mark.line,
+                start,
+                end,
+                field: mark.name.clone(),
+                label: code.code.label(),
+                warn: false,
+            });
+            continue;
+        }
+        let Some(run) = runs
+            .iter()
+            .position(|r| r.start <= code.span.start && code.span.end <= r.end)
+        else {
+            // Vosh reads it elsewhere, or not at all, and marks nothing.
+            continue;
+        };
+        let label = code.code.label();
+        match merged
+            .iter_mut()
+            .find(|(_, r, line, _)| *r == run && *line == mark.line)
+        {
+            Some((at, _, _, labels)) => {
+                let into = &mut out[*at];
+                into.start = into.start.min(start);
+                into.end = into.end.max(end);
+                if !labels.contains(&label) {
+                    labels.push(label);
+                }
+                into.label = crate::aabahran::and_list(labels);
+            }
+            None => {
+                merged.push((out.len(), run, mark.line, vec![label.clone()]));
+                out.push(Mark {
+                    line: mark.line,
+                    start,
+                    end,
+                    field: None,
+                    label,
+                    warn: true,
+                });
+            }
+        }
+    }
+    out
+}
+
+/// How many characters of `text` come before byte `at`.
+fn chars_before(text: &str, at: usize) -> usize {
+    text.get(..at).map_or(0, |head| head.chars().count())
 }
