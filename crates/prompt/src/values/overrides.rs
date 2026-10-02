@@ -14,9 +14,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 
 use crate::design::FieldRef;
-use crate::render::Values;
 use crate::values::format::{Resolved, Value};
-use crate::values::{self, Kind, Pair};
+use crate::values::{self, Kind, Pair, Values};
 
 /// What a preview draws in place of the live values.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

@@ -4,9 +4,8 @@ use chrono::NaiveDateTime;
 
 use super::catalog::{field, Field, Kind, MemberStat, CATALOG};
 use super::resolver::{exits_value, label, moon_code_value, pos_value};
-use super::since_of;
+use super::{since_of, Values};
 use crate::design::FieldRef;
-use crate::render::Values;
 use crate::values::format::{Position, Resolved, Value, MOON_CODES};
 
 // ---------------------------------------------------------------------

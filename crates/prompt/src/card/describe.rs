@@ -20,9 +20,9 @@ use crate::card::edit::{
     self, bar_choice, choice, ColorChoice, Doc, EditOp, FormatChoice, FormatName, StyleChoice, When,
 };
 use crate::design::{FieldRef, Format, PieceKind, Template, TokenKind};
-use crate::render::{render, RenderOptions, Rendered, Values};
+use crate::render::{render, RenderOptions, Rendered};
 use crate::values::format::{Resolved, Value};
-use crate::values::{self, Group, Kind};
+use crate::values::{self, Group, Kind, Values};
 
 /// One form a value takes, for Show as and the picker's formats.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

@@ -4,9 +4,8 @@
 use serde_json::Value as Json;
 
 use super::catalog::{entry, field, Entry, Field, MemberStat, Pair};
-use super::{since_of, Vars, Vosh};
+use super::{max_spellings, since_of, Values, Vars, Vosh};
 use crate::design::FieldRef;
-use crate::render::Values;
 use crate::values::format::{lang_game, tank_bar_cells, Position, Resolved, Value, MOON_CODES};
 use crate::values::gmcp::{
     self, Find, Snapshot, CHAR_COMBAT, CHAR_STATUS, CHAR_VITALS, CHAR_WORTH, GROUP_INFO,
@@ -930,7 +929,7 @@ impl<'a> Resolver<'a> {
         let Some(cur) = Value::parse_number(raw) else {
             return Resolved::Value(Value::Text(raw.to_string()));
         };
-        let max = crate::render::max_spellings(name)
+        let max = max_spellings(name)
             .iter()
             .find_map(|key| self.vars.var(key).and_then(Value::parse_number));
         Resolved::Value(match max {
