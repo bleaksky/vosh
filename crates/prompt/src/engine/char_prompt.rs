@@ -7,9 +7,8 @@
 use chrono::{DateTime, FixedOffset};
 
 use super::{stamp, GamePromptSeen, PromptEngine, SeenKind};
-use crate::aabahran::{CompileError, Origin, Which, Who};
+use crate::aabahran::{CompileError, Origin, Who};
 use crate::capture;
-use crate::card::sentences::and_list;
 use crate::config::{AabahranCapture, CaptureConfig, CaptureSource};
 use crate::design::Template;
 use crate::values;
@@ -18,7 +17,7 @@ use crate::values::gmcp::CharPrompt;
 /// Why the migrated capture kept its pattern when the game showed your
 /// PROMPT.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum Kept {
+pub(crate) enum Kept {
     /// A color code runs into a code in the settings the game sent, so
     /// they do not compile.
     Compile(CompileError),
@@ -217,35 +216,6 @@ impl PromptEngine {
             .into_iter()
             .filter(|name| !values::known(name))
             .collect()
-    }
-
-    /// Why the migrated capture kept its pattern when the game last
-    /// showed your PROMPT this session, as one sentence for `#prompt`.
-    pub fn kept_pattern(&self) -> Option<String> {
-        let because = match self.kept_pattern.as_ref()? {
-            Kept::Compile(error) => {
-                let setting = match error.which {
-                    Which::Prompt => "prompt",
-                    Which::Fight => "fight prompt",
-                };
-                format!(
-                    "a color code runs into {} in the {setting} the game sent",
-                    error.code
-                )
-            }
-            Kept::Unknown(names) => match names.as_slice() {
-                [name] => {
-                    format!("it fills a value named {name}, and no prompt code fills that name")
-                }
-                _ => format!(
-                    "it fills values named {}, and no prompt code fills those names",
-                    and_list(names)
-                ),
-            },
-        };
-        Some(format!(
-            "Vosh kept the pattern from your old capture trigger because {because}."
-        ))
     }
 
     /// Apply the latest Char.Prompt to the table a profile switch just
