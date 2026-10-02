@@ -10,7 +10,7 @@ use std::path::Path;
 
 use regex::{Regex, RegexBuilder};
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use thiserror::Error;
 use vosh_ansi::plain_text;
 
@@ -24,13 +24,11 @@ pub enum LogError {
     Sqlite(#[from] rusqlite::Error),
     #[error("regex: {0}")]
     Regex(#[from] regex::Error),
-    #[error("io: {0}")]
-    Io(#[from] std::io::Error),
 }
 
 pub type Result<T> = std::result::Result<T, LogError>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SessionRow {
     pub id: i64,
     pub host: String,
@@ -40,7 +38,7 @@ pub struct SessionRow {
     pub line_count: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SearchHit {
     pub session_id: i64,
     pub host: String,
@@ -54,7 +52,7 @@ pub struct SearchHit {
     pub raw: Option<Vec<u8>>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct SearchOptions {
     pub case_sensitive: bool,
     /// Cap the number of hits returned. Zero means "no cap".
@@ -63,17 +61,15 @@ pub struct SearchOptions {
     pub session_id: Option<i64>,
     /// Only lines older than this line id. The log view pages back
     /// through a long result with the oldest line id it already holds.
-    #[serde(default)]
     pub before_line_id: Option<i64>,
     /// Leave out sessions to this machine (see [`is_local_host`]), like
     /// a test server run next to the client.
-    #[serde(default)]
     pub hide_local: bool,
 }
 
 /// One page of a search: the newest matches in scope, oldest first,
 /// and optionally how many lines in scope match in all.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct SearchPage {
     pub hits: Vec<SearchHit>,
     /// Every matching line in scope, past the cap too. `None` when the
