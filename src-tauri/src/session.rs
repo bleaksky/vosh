@@ -2865,7 +2865,7 @@ async fn end_read<R: tauri::Runtime>(
 /// What Vosh itself supplies to the custom prompt: the tick timer, your
 /// target, the profile's name and the affects you track. The clock reads
 /// the local time.
-pub(crate) fn prompt_supplies(p: &Profile, now: Instant) -> vosh_prompt::Vosh {
+pub(crate) fn prompt_supplies(p: &Profile, now: Instant) -> vosh_prompt::ClientValues {
     let tick = p.tick.remaining(now).map(|left| vosh_prompt::values::Tick {
         remaining: i64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(i64::MAX),
         interval: i64::try_from(p.tick.config.interval.as_secs()).ok(),
@@ -2874,7 +2874,7 @@ pub(crate) fn prompt_supplies(p: &Profile, now: Instant) -> vosh_prompt::Vosh {
             .elapsed(now)
             .and_then(|since| i64::try_from(since.as_secs()).ok()),
     });
-    vosh_prompt::Vosh {
+    vosh_prompt::ClientValues {
         tick,
         target: p.target.name.clone(),
         profile: p.display_name.clone(),

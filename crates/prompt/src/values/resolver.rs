@@ -4,7 +4,7 @@
 use serde_json::Value as Json;
 
 use super::catalog::{entry, field, Entry, Field, MemberStat, Pair};
-use super::{max_spellings, since_of, Values, Vars, Vosh};
+use super::{max_spellings, since_of, ClientValues, Values, Vars};
 use crate::aabahran::codes::{Position, PHASES};
 use crate::design::FieldRef;
 use crate::values::format::{lang_game, tank_bar_cells, Resolved, Value};
@@ -20,7 +20,7 @@ use crate::values::gmcp::{
 /// Answers the renderer for one draw.
 pub struct Resolver<'a> {
     pub(super) vars: &'a Vars,
-    pub(super) vosh: &'a Vosh,
+    pub(super) vosh: &'a ClientValues,
 }
 
 /// What one source says about a field.

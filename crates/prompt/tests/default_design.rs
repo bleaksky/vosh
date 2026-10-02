@@ -21,7 +21,7 @@ use vosh_prompt::config::{AabahranCapture, RegexCapture};
 use vosh_prompt::design::{Code, ColorSpec, Format, Scale, TokenKind};
 use vosh_prompt::stage::{End, Offer};
 use vosh_prompt::testkit::{game, shown, Build};
-use vosh_prompt::values::{self, Capture, FormatId, Tick, Vosh};
+use vosh_prompt::values::{self, Capture, ClientValues, FormatId, Tick};
 use vosh_prompt::{
     render_str, CaptureConfig, PromptConfig, PromptEngine, RenderOptions, Template, DEFAULT_DESIGN,
 };
@@ -635,8 +635,8 @@ fn draw_with(template: &str, prompt: &str, st: &St, sent: fn(&str) -> bool) -> D
 }
 
 /// What Vosh itself supplies in every state.
-fn vosh() -> Vosh {
-    Vosh {
+fn vosh() -> ClientValues {
+    ClientValues {
         tick: Some(Tick {
             remaining: 14,
             interval: Some(30),

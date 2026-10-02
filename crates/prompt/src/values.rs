@@ -100,7 +100,7 @@ struct Scripted {
 
 /// What Vosh itself supplies.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Vosh {
+pub struct ClientValues {
     pub tick: Option<Tick>,
     /// Your target, the client one (`#target`), not Char.Combat's.
     pub target: Option<String>,
@@ -306,14 +306,14 @@ impl Vars {
     }
 
     /// A resolver over these variables and what Vosh supplies.
-    pub fn resolver<'a>(&'a self, vosh: &'a Vosh) -> Resolver<'a> {
+    pub fn resolver<'a>(&'a self, vosh: &'a ClientValues) -> Resolver<'a> {
         Resolver { vars: self, vosh }
     }
 
     /// Which source a field reads from now, in the order the resolver
     /// tries them: a fresh script value, the fresh capture, the latest
     /// packet of its package, then Vosh. None when none has it yet.
-    pub fn source(&self, e: &Entry, vosh: &Vosh) -> Option<Source> {
+    pub fn source(&self, e: &Entry, vosh: &ClientValues) -> Option<Source> {
         let keys = capture_keys(e);
         let fresh_script = |key: &str| self.script.get(key).is_some_and(|s| self.script_fresh(s));
         if keys.iter().any(|k| fresh_script(k)) {

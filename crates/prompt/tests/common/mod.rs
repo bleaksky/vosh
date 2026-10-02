@@ -8,7 +8,7 @@
 use serde_json::Value as Json;
 use vosh_prompt::testkit::{at, now};
 use vosh_prompt::{
-    render_str, Capture, FieldRef, RenderOptions, Resolved, Value, Values, Vars, Vosh,
+    render_str, Capture, ClientValues, FieldRef, RenderOptions, Resolved, Value, Values, Vars,
 };
 
 macro_rules! fixture {
@@ -50,10 +50,10 @@ pub const FIXTURES: &[(&str, &str)] = &[
     fixture!("group-info-own-row.gmcp"),
 ];
 
-pub fn vosh() -> Vosh {
-    Vosh {
+pub fn vosh() -> ClientValues {
+    ClientValues {
         now: Some(now()),
-        ..Vosh::default()
+        ..ClientValues::default()
     }
 }
 
@@ -106,7 +106,7 @@ pub fn resolve(vars: &Vars, field: &str) -> Resolved {
     vars.resolver(&vosh).resolve(&f)
 }
 
-pub fn draw_with(vars: &Vars, vosh: &Vosh, template: &str) -> String {
+pub fn draw_with(vars: &Vars, vosh: &ClientValues, template: &str) -> String {
     render_str(template, &vars.resolver(vosh), RenderOptions::default()).plain
 }
 

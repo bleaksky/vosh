@@ -8,7 +8,7 @@ use crate::design::{FieldRef, Format};
 use crate::engine::{PromptEngine, StatusReport};
 use crate::render::Span;
 use crate::values::format::{Resolved, Value};
-use crate::values::{self, Entry, Group, Kind, Source, Values, Vars, Vosh, CATALOG};
+use crate::values::{self, ClientValues, Entry, Group, Kind, Source, Values, Vars, CATALOG};
 
 /// A field's state now (D4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -94,7 +94,7 @@ impl PromptEngine {
     /// `prompt_state_get` and `session://prompt-state`: each field with its
     /// state and source, the status, the new build sign and the open row
     /// with where each piece of the design landed in it.
-    pub fn state(&self, vosh: &Vosh) -> PromptState {
+    pub fn state(&self, vosh: &ClientValues) -> PromptState {
         let reads = self
             .stage
             .recognizer()
@@ -127,7 +127,7 @@ impl PromptEngine {
 
 /// Every catalog field and every name only scripts set, with its state
 /// now. `reads` holds the names the capture fills.
-pub fn catalog(vars: &Vars, vosh: &Vosh, reads: &[String]) -> Vec<FieldState> {
+pub fn catalog(vars: &Vars, vosh: &ClientValues, reads: &[String]) -> Vec<FieldState> {
     let resolver = vars.resolver(vosh);
     let mut out: Vec<FieldState> = CATALOG
         .iter()
@@ -163,7 +163,7 @@ pub fn catalog(vars: &Vars, vosh: &Vosh, reads: &[String]) -> Vec<FieldState> {
 fn field_state(
     e: &'static Entry,
     vars: &Vars,
-    vosh: &Vosh,
+    vosh: &ClientValues,
     resolver: &values::Resolver<'_>,
     reads: &[String],
 ) -> FieldState {
