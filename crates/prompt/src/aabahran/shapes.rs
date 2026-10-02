@@ -30,7 +30,7 @@ use super::lex::{self, Lexed, Piece, Placed, Token};
 use super::{CompileError, Warning, WarningKind, Which, Who};
 
 /// The Wizi and Incog levels the game prints before the first line.
-pub const PREFIX: &str = r"(?:\(Wizi (?<wizi>\d+)\) )?(?:\(Incog (?<incog>\d+)\) )?";
+pub(crate) const PREFIX: &str = r"(?:\(Wizi (?<wizi>\d+)\) )?(?:\(Incog (?<incog>\d+)\) )?";
 
 /// `<Nhp Nm Nmv>` and your `prefix` setting, the prompt the game prints
 /// for an empty setting (`comm.c:1793-1799`).
@@ -86,7 +86,7 @@ pub struct ShapeCode {
 
 /// What one code printed in a prompt a shape read.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ShapeMark {
+pub(crate) struct ShapeMark {
     /// The line it is on, top line first.
     pub line: usize,
     /// Its bytes in that line.
@@ -119,7 +119,7 @@ impl Shape {
     /// mark per code that printed anything, and one for each level of
     /// the immortal prefix, in the order the lines print them. None when
     /// the shape does not read `lines`.
-    pub fn marks(&self, lines: &[&str]) -> Option<Vec<ShapeMark>> {
+    pub(crate) fn marks(&self, lines: &[&str]) -> Option<Vec<ShapeMark>> {
         if lines.len() != self.lines.len() {
             return None;
         }
@@ -161,7 +161,7 @@ impl Shape {
 
     /// The names this shape reads, in the order its lines print them,
     /// the immortal prefix left out.
-    pub fn names(&self) -> Vec<&str> {
+    pub(crate) fn names(&self) -> Vec<&str> {
         let mut names = Vec::new();
         for line in &self.lines {
             for name in line.line.capture_names().flatten() {

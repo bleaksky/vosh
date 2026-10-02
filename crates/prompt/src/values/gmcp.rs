@@ -18,25 +18,25 @@ use chrono::{DateTime, FixedOffset};
 use serde_json::Value;
 
 /// Aabahran's vitals, one packet per prompt. It starts a pulse.
-pub const CHAR_VITALS: &str = "Char.Vitals";
-pub const CHAR_AFFECTS: &str = "Char.Affects";
-pub const CHAR_COMBAT: &str = "Char.Combat";
-pub const CHAR_PROMPT: &str = "Char.Prompt";
-pub const CHAR_STATE: &str = "Char.State";
-pub const CHAR_STATUS: &str = "Char.Status";
-pub const CHAR_WORTH: &str = "Char.Worth";
-pub const GROUP_INFO: &str = "Group.Info";
-pub const ROOM_INFO: &str = "Room.Info";
-pub const ROOM_WEATHER: &str = "Room.Weather";
-pub const ROOM_CHARS: &str = "Room.Chars";
-pub const ROOM_ITEMS: &str = "Room.Items";
-pub const WORLD_TIME: &str = "World.Time";
-pub const WORLD_MOONS: &str = "World.Moons";
-pub const IMM_QUEUES: &str = "Imm.Queues";
+pub(crate) const CHAR_VITALS: &str = "Char.Vitals";
+pub(crate) const CHAR_AFFECTS: &str = "Char.Affects";
+pub(crate) const CHAR_COMBAT: &str = "Char.Combat";
+pub(crate) const CHAR_PROMPT: &str = "Char.Prompt";
+pub(crate) const CHAR_STATE: &str = "Char.State";
+pub(crate) const CHAR_STATUS: &str = "Char.Status";
+pub(crate) const CHAR_WORTH: &str = "Char.Worth";
+pub(crate) const GROUP_INFO: &str = "Group.Info";
+pub(crate) const ROOM_INFO: &str = "Room.Info";
+pub(crate) const ROOM_WEATHER: &str = "Room.Weather";
+pub(crate) const ROOM_CHARS: &str = "Room.Chars";
+pub(crate) const ROOM_ITEMS: &str = "Room.Items";
+pub(crate) const WORLD_TIME: &str = "World.Time";
+pub(crate) const WORLD_MOONS: &str = "World.Moons";
+pub(crate) const IMM_QUEUES: &str = "Imm.Queues";
 
 /// One packet as it came.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Packet {
+pub(crate) struct Packet {
     /// The package name as the game spelled it.
     pub package: String,
     pub data: Value,
@@ -124,7 +124,7 @@ impl Snapshot {
 
     /// Note one of your own sends. On a server that has sent no Char.Vitals
     /// this session each send starts a pulse. True when it did.
-    pub fn on_send(&mut self) -> bool {
+    pub(crate) fn on_send(&mut self) -> bool {
         if self.vitals_seen {
             return false;
         }
@@ -139,7 +139,7 @@ impl Snapshot {
     }
 
     /// The latest packet of a package, in any case.
-    pub fn packet(&self, package: &str) -> Option<&Packet> {
+    pub(crate) fn packet(&self, package: &str) -> Option<&Packet> {
         self.packets.get(&package.to_ascii_lowercase())
     }
 
@@ -154,7 +154,7 @@ impl Snapshot {
     }
 
     /// The packages seen this session, as the game spelled them.
-    pub fn packages(&self) -> impl Iterator<Item = &str> {
+    pub(crate) fn packages(&self) -> impl Iterator<Item = &str> {
         self.packets.values().map(|p| p.package.as_str())
     }
 
@@ -169,14 +169,14 @@ impl Snapshot {
     }
 
     /// Forget everything, as a disconnect does.
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         *self = Self::default();
     }
 
     /// Follow a path into the packets. The longest run of leading names
     /// that is a package seen this session picks the packet, and the
     /// rest walks its fields. Names match in any case.
-    pub fn find(&self, path: &str) -> Find<'_> {
+    pub(crate) fn find(&self, path: &str) -> Find<'_> {
         let segments = split_path(path);
         for split in (1..=segments.len()).rev() {
             let name = segments[..split]
@@ -337,7 +337,7 @@ impl Snapshot {
     }
 
     /// The names in a list package such as Room.Chars or Room.Items.
-    pub fn names(&self, package: &str) -> Option<Vec<String>> {
+    pub(crate) fn names(&self, package: &str) -> Option<Vec<String>> {
         let data = self.get(package)?;
         Some(
             data.as_array()
@@ -351,7 +351,7 @@ impl Snapshot {
 
 /// Where a path led.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Find<'a> {
+pub(crate) enum Find<'a> {
     /// No package on the path has arrived this session.
     NoPacket,
     /// The packet came but has nothing at that path.
@@ -466,12 +466,12 @@ pub struct Weather {
 }
 
 /// True when a packet carries `"hidden": true`.
-pub fn hidden_flag(data: &Value) -> bool {
+pub(crate) fn hidden_flag(data: &Value) -> bool {
     data.get("hidden").and_then(Value::as_bool) == Some(true)
 }
 
 /// A whole number sent as a number or a numeric string.
-pub fn int(value: &Value) -> Option<i64> {
+pub(crate) fn int(value: &Value) -> Option<i64> {
     match value {
         Value::Number(n) => n
             .as_i64()
@@ -482,7 +482,7 @@ pub fn int(value: &Value) -> Option<i64> {
 }
 
 /// A string with something in it, trimmed.
-pub fn text(value: &Value) -> Option<&str> {
+pub(crate) fn text(value: &Value) -> Option<&str> {
     value.as_str().map(str::trim).filter(|s| !s.is_empty())
 }
 
@@ -497,7 +497,7 @@ fn key<'a>(value: &'a Value, name: &str) -> Option<&'a Value> {
 }
 
 /// Words match in any case, with `_` standing for a space.
-pub fn same_words(a: &str, b: &str) -> bool {
+pub(crate) fn same_words(a: &str, b: &str) -> bool {
     let norm = |s: &str| s.trim().replace('_', " ").to_lowercase();
     norm(a) == norm(b)
 }

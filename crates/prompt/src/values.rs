@@ -32,11 +32,13 @@ mod hidden;
 mod resolver;
 mod samples;
 
-pub use catalog::{entry, entry_for, feeds, is_sourced, known, Entry, FormatId, Group, Kind};
-pub use catalog::{Pair, Source, CATALOG};
+pub use catalog::{entry, is_sourced, known, FormatId, Group, Source, CATALOG};
 pub use hidden::Hidden;
-pub use resolver::Resolver;
-pub use samples::{value_of, Samples};
+pub use samples::Samples;
+
+pub(crate) use catalog::{entry_for, feeds, Entry, Kind, Pair};
+pub(crate) use resolver::Resolver;
+pub(crate) use samples::value_of;
 
 use std::collections::BTreeMap;
 
@@ -133,7 +135,7 @@ fn since_of(secs: i64, interval: Option<i64>) -> Option<i64> {
 
 /// True when the Forsaken Lands rules hold (D17). They hold when the host
 /// is The Forsaken Lands or the active capture reads Aabahran's codes.
-pub fn forsaken_lands(known_host: bool, aabahran_capture: bool) -> bool {
+pub(crate) fn forsaken_lands(known_host: bool, aabahran_capture: bool) -> bool {
     known_host || aabahran_capture
 }
 
@@ -161,13 +163,13 @@ impl Vars {
         }
     }
 
-    pub fn forsaken(&self) -> bool {
+    pub(crate) fn forsaken(&self) -> bool {
         self.forsaken
     }
 
     /// Change whether the Forsaken Lands rules hold, as a profile switch
     /// or a new capture kind can.
-    pub fn set_forsaken(&mut self, forsaken: bool) {
+    pub(crate) fn set_forsaken(&mut self, forsaken: bool) {
         self.forsaken = forsaken;
         self.recompute();
     }
@@ -313,7 +315,7 @@ impl Vars {
     /// Which source a field reads from now, in the order the resolver
     /// tries them: a fresh script value, the fresh capture, the latest
     /// packet of its package, then Vosh. None when none has it yet.
-    pub fn source(&self, e: &Entry, vosh: &ClientValues) -> Option<Source> {
+    pub(crate) fn source(&self, e: &Entry, vosh: &ClientValues) -> Option<Source> {
         let keys = capture_keys(e);
         let fresh_script = |key: &str| self.script.get(key).is_some_and(|s| self.script_fresh(s));
         if keys.iter().any(|k| fresh_script(k)) {
@@ -349,7 +351,7 @@ impl Vars {
 
     /// The names a script set that no catalog field has, each with a
     /// fresh value, for the picker's Your scripts group.
-    pub fn script_names(&self) -> Vec<&str> {
+    pub(crate) fn script_names(&self) -> Vec<&str> {
         self.script
             .iter()
             .filter(|(name, scripted)| self.script_fresh(scripted) && !known(name))

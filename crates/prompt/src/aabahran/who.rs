@@ -18,19 +18,19 @@ pub struct Who {
 
 /// The level above which the game counts you as an immortal
 /// (`LEVEL_IMMORTAL`, `merc.h`), for `%u`.
-pub const LEVEL_IMMORTAL: i64 = 51;
+pub(crate) const LEVEL_IMMORTAL: i64 = 51;
 
 /// The trust from which the game keeps the backticks you type. Vosh
 /// reads it from the level in Char.Status, which is your trust unless an
 /// immortal set another.
-pub const TRUST_BACKTICKS: i64 = 55;
+pub(crate) const TRUST_BACKTICKS: i64 = 55;
 
 impl Who {
     /// Who the prompt is for, from the packets the game sent: the level
     /// in Char.Status, and Char.State, whose language is empty while you
     /// control a mobile (correction 27). Without a packet Vosh takes you
     /// for a mortal in your own body.
-    pub fn from_packets(level: Option<i64>, language: Option<&str>) -> Self {
+    pub(crate) fn from_packets(level: Option<i64>, language: Option<&str>) -> Self {
         Self {
             immortal: level.is_some_and(|l| l > LEVEL_IMMORTAL),
             mobile: language.is_some_and(str::is_empty),

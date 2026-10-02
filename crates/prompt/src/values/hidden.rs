@@ -33,7 +33,7 @@ pub struct Hidden {
 }
 
 impl Hidden {
-    pub fn pair(&self, pair: Pair) -> bool {
+    pub(crate) fn pair(&self, pair: Pair) -> bool {
         match pair {
             Pair::Hp => self.hp,
             Pair::Mana => self.mana,

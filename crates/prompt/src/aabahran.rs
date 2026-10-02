@@ -19,14 +19,16 @@
 //! are.
 
 pub mod codes;
-pub mod colors;
+pub(crate) mod colors;
 pub mod lex;
 pub mod observer;
 pub mod shapes;
 mod who;
 
-pub use shapes::{compile, Compiled, Origin, Shape, ShapeKind, ShapeLine};
-pub use who::{Who, LEVEL_IMMORTAL, TRUST_BACKTICKS};
+pub use shapes::{compile, Compiled, Origin, Shape, ShapeKind};
+pub use who::Who;
+
+pub(crate) use shapes::ShapeLine;
 
 use std::fmt;
 use std::ops::Range;

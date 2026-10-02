@@ -1056,7 +1056,7 @@ pub fn entry(name: &str) -> Option<&'static Entry> {
 /// The catalog entry for a field as a template reads it: a name or an
 /// alias, or a field written with a parameter, `aff:sanctuary` among
 /// them. None for a name only scripts set.
-pub fn entry_for(field: &FieldRef) -> Option<&'static Entry> {
+pub(crate) fn entry_for(field: &FieldRef) -> Option<&'static Entry> {
     match &field.param {
         Some(_) => CATALOG.iter().find(|e| e.param && e.name == field.name),
         None => entry(&field.name),
@@ -1115,7 +1115,7 @@ pub(super) fn capture_keys(e: &Entry) -> Vec<&'static str> {
 }
 
 /// The field a name the capture fills feeds, `hp` for `hp_pct`.
-pub fn feeds(name: &str) -> &str {
+pub(crate) fn feeds(name: &str) -> &str {
     match name {
         "hp_pct" => "hp",
         "mana_pct" => "mana",
@@ -1127,17 +1127,17 @@ pub fn feeds(name: &str) -> &str {
 
 /// A vital pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Pair {
+pub(crate) enum Pair {
     Hp,
     Mana,
     Move,
 }
 
 impl Pair {
-    pub const ALL: [Pair; 3] = [Pair::Hp, Pair::Mana, Pair::Move];
+    pub(crate) const ALL: [Pair; 3] = [Pair::Hp, Pair::Mana, Pair::Move];
 
     /// The current value's name.
-    pub fn cur(self) -> &'static str {
+    pub(crate) fn cur(self) -> &'static str {
         match self {
             Pair::Hp => "hp",
             Pair::Mana => "mana",
@@ -1146,7 +1146,7 @@ impl Pair {
     }
 
     /// The max's name.
-    pub fn max(self) -> &'static str {
+    pub(crate) fn max(self) -> &'static str {
         match self {
             Pair::Hp => "maxhp",
             Pair::Mana => "maxmana",
@@ -1155,7 +1155,7 @@ impl Pair {
     }
 
     /// The percent a `%K %k %E` capture fills.
-    pub fn pct(self) -> &'static str {
+    pub(crate) fn pct(self) -> &'static str {
         match self {
             Pair::Hp => "hp_pct",
             Pair::Mana => "mana_pct",
@@ -1164,7 +1164,7 @@ impl Pair {
     }
 
     /// The pair a name reads, current, max or percent.
-    pub fn of(name: &str) -> Option<Pair> {
+    pub(crate) fn of(name: &str) -> Option<Pair> {
         Pair::ALL.into_iter().find(|p| {
             name == p.cur()
                 || name == p.pct()
@@ -1242,7 +1242,7 @@ pub(super) fn field(f: &FieldRef) -> Option<Field<'_>> {
 impl Entry {
     /// The sample as a value, for previews with no live data. `now` fills
     /// the clock and date.
-    pub fn sample_value(&self, now: NaiveDateTime) -> Resolved {
+    pub(crate) fn sample_value(&self, now: NaiveDateTime) -> Resolved {
         value_of(self.kind, self.label, self.sample, now)
     }
 }

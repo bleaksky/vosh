@@ -158,7 +158,7 @@ const CODES: [(char, u8); 67] = [
 
 /// A color the game writes for a backtick code. It takes no cell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Color {
+pub(crate) enum Color {
     /// A `color_table` entry, and the code you wrote for it.
     Table { index: u8, code: char },
     /// `` `(NNN) ``, a 256 color foreground. A number above 255 sends
@@ -172,7 +172,7 @@ impl Color {
     /// The SGR the game writes for it with 256 color on, or None when it
     /// writes nothing. Test only.
     #[cfg(test)]
-    pub fn sgr(self) -> Option<String> {
+    pub(crate) fn sgr(self) -> Option<String> {
         match self {
             Self::Table { index, .. } => sgr(index),
             Self::Fg256(n) => (n <= 255).then(|| format!("\x1b[38;5;{n}m")),
@@ -186,7 +186,7 @@ impl Color {
 /// `-` and `=` print `~` and a backtick, so they are not colors either.
 /// `<` writes the same color as `,` but sits after the table in the
 /// switch, so it is looked up on its own.
-pub fn index(code: char) -> Option<u8> {
+pub(crate) fn index(code: char) -> Option<u8> {
     if code == '<' {
         return Some(64);
     }
@@ -194,7 +194,7 @@ pub fn index(code: char) -> Option<u8> {
 }
 
 /// The bytes the game writes for a table index.
-pub fn sgr(index: u8) -> Option<String> {
+pub(crate) fn sgr(index: u8) -> Option<String> {
     TABLE
         .get(usize::from(index))
         .map(|entry| format!("\x1b[0{entry}m"))
@@ -212,7 +212,7 @@ fn code(index: u8) -> Option<char> {
 /// comes back as the 256 code under 16 that writes the same bytes. A `~`
 /// comes back as `` `- `` and a backtick as `` `= ``, since the game
 /// keeps neither in a setting any other way. Any other escape drops.
-pub fn rebuild(shown: &str) -> String {
+pub(crate) fn rebuild(shown: &str) -> String {
     let mut out = String::with_capacity(shown.len());
     let mut chars = shown.chars().peekable();
     while let Some(c) = chars.next() {
