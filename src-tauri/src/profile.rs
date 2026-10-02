@@ -27,8 +27,9 @@ pub(crate) struct Profile {
     /// `;`-joined sequence.
     pub(crate) recording_macro: Option<MacroRecorder>,
     /// User-controlled target state plus configured quick-key verbs.
-    /// `name` clears on disconnect; `quick_keys` persist via
-    /// `ProfileConfig` so verb bindings survive restarts.
+    /// `name` clears on disconnect. `quick_keys` live in memory only. No
+    /// profile file holds them, so a restart brings back the stock gg,
+    /// xx, zz and tt slots, as HELP.md says.
     pub(crate) target: TargetState,
     /// Latest `Room.Chars` snapshot — kept here so `tar` slash
     /// commands can resolve a numeric index or partial name without
