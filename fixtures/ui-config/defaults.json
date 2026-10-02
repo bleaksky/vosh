@@ -12,6 +12,7 @@
     "keep_last_command": false,
     "theme_terminal_colors": null,
     "bright_bold": false,
+    "blink_text": null,
     "terminal_base_ansi": null,
     "custom_themes": [],
     "split_divider_color": null,

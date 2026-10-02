@@ -52,6 +52,7 @@ const ADVANCED_ANCHORS: ReadonlySet<string> = new Set([
   'custom-theme',
   'base-palette',
   'bright-bold',
+  'blink-text',
   'font-stack',
 ]);
 

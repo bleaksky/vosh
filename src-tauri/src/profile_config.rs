@@ -248,6 +248,11 @@ pub(crate) struct UiConfig {
     /// way. Most MUDs encode bright as SGR-1 bold + a base color.
     #[serde(default)]
     pub bright_bold: bool,
+    /// Blinking text: text the game or your prompt sets to blink shows
+    /// and hides. None until you choose, which the page reads as on
+    /// unless the system asks to reduce motion. Your choice always wins.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blink_text: Option<bool>,
     /// Custom base terminal palette: 16 CSS colors (ANSI 0-15 order)
     /// used whenever tint-output-with-theme resolves off. None means
     /// the canonical xterm-256 chart. The frontend owns validation.
@@ -1216,6 +1221,7 @@ impl Default for UiConfig {
             keep_last_command: false,
             theme_terminal_colors: None,
             bright_bold: false,
+            blink_text: None,
             terminal_base_ansi: None,
             custom_themes: Vec::new(),
             split_divider_color: None,

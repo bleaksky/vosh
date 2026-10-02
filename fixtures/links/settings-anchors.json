@@ -22,6 +22,7 @@
     "appearance:advanced#custom-theme",
     "appearance:advanced#base-palette",
     "appearance:advanced#bright-bold",
+    "appearance:advanced#blink-text",
     "appearance:advanced#font-stack",
     "layout:panel#show-panel",
     "layout:panel#panel-width",
@@ -155,6 +156,7 @@
     "appearance": [
       "advanced",
       "base-palette",
+      "blink-text",
       "bright-bold",
       "custom-theme",
       "dark-theme",

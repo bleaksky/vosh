@@ -38,6 +38,7 @@ import {
   presetsInstall,
   presetsRemove,
   subscribeBrightBoldChanged,
+  subscribeBlinkTextChanged,
   subscribeBaseAnsiChanged,
   subscribeCustomThemesChanged,
   subscribeMigrationApplied,
@@ -122,6 +123,7 @@ import { notePageWrite, usePinnedDockRows } from './lib/stores/pinnedPromptStore
 import { usePromptReach } from './lib/stores/promptReachStore';
 import { lentRows, type CellSize } from './lib/promptBand';
 import { noteReader } from './lib/readerBusy';
+import { resolveBlinkText, useReduceMotion } from './lib/blink';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
 
@@ -277,6 +279,12 @@ function App() {
   const dockLent = dockShows ? lentRows(dockShown) : 0;
   // Bright bold, which the native grid and the pinned band over it follow.
   const [brightBold, setBrightBold] = useState(false);
+  // Blinking text: your choice, undefined until the config loads, and
+  // with none, on unless your system reduces motion. It draws steady
+  // until the config loads.
+  const [blinkChoice, setBlinkChoice] = useState<boolean | null | undefined>(undefined);
+  const reduceMotion = useReduceMotion();
+  const blinkText = blinkChoice !== undefined && resolveBlinkText(blinkChoice, reduceMotion);
   const panelOpen = panelLayout?.panel_open ?? true;
   const panelWidth = panelWidthOf(panelLayout);
   const shownPanes = useMemo(() => (panelLayout ? allPanes(panelLayout.root) : []), [panelLayout]);
@@ -313,6 +321,12 @@ function App() {
       void invoke('native_surface_set_bright_bold', { on }).catch(() => {});
     }
   };
+  // The native grid blinks while Blinking text is on and draws steady
+  // while it is off, from the next frame.
+  useEffect(() => {
+    if (!nativeSurfaceEnabled()) return;
+    void invoke('native_surface_set_blink_text', { on: blinkText }).catch(() => {});
+  }, [blinkText]);
   // Direct ref on the terminal-area wrapper so we can attach a
   // non-passive wheel listener. JSX onWheel is passive in some
   // React versions and silently no-ops preventDefault, which would
@@ -964,6 +978,7 @@ function App() {
         setTerminalLineHeight(cfg.terminal_line_height);
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
+        setBlinkChoice(cfg.blink_text);
         applySplitDividerColor(cfg.split_divider_color);
 
         // Bring the preset triggers in line with the presets that are
@@ -1026,6 +1041,7 @@ function App() {
         setTerminalLineHeight(cfg.terminal_line_height);
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
+        setBlinkChoice(cfg.blink_text);
         applySplitDividerColor(cfg.split_divider_color);
       },
       (e) => console.error('[app] reading the replaced config failed', e),
@@ -1106,6 +1122,20 @@ function App() {
     subscribeBrightBoldChanged((value) => {
       applyBrightBold(value);
     }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Settings save broadcasts the Blinking text choice.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    subscribeBlinkTextChanged((value) => setBlinkChoice(value)).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
     });

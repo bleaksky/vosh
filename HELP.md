@@ -516,6 +516,7 @@ The terminal font lives in Settings under Appearance, then Terminal text.
 - Pick `Compact`, `Default`, or `Loose` in `Line height`.
 - To set a whole list of fonts, open `Advanced` and type it in `Font stack`, like `"Fira Code", "JetBrainsMono Bundled", monospace`. Vosh uses the first font in the list that you have.
 - Turn on `Bright text in bold` under Advanced to draw bright colors in the bold weight of your font. It works on macOS.
+- Turn off `Blinking text` under Advanced to keep text that your MUD or your prompt sets to blink still. It starts off when your system reduces motion.
 
 Each change applies at once and saves. Under General, `Font and size` in Keep the same for every character decides whether every character shares one font.
 

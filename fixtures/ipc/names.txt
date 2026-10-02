@@ -131,6 +131,7 @@ event vosh://affects-display-changed app page heard
 event vosh://aliases-changed app heard
 event vosh://app-menu app heard
 event vosh://base-ansi-changed page heard
+event vosh://blink-text-changed page heard
 event vosh://bright-bold-changed page heard
 event vosh://chat-colors-changed app heard
 event vosh://chip-style-changed app page heard
