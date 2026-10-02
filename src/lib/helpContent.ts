@@ -55,6 +55,7 @@ export const PROMPT_DESIGN_CODES: readonly PromptDesignCode[] = [
     codes: ['%{hour:ampm}'],
     text: 'The game hour as 3PM, with 12AM for midnight and 12PM for noon.',
   },
+  { codes: ['%{tick:since}'], text: 'The seconds since the last tick, as 16s.' },
   { codes: ['%c_green', '%c_hp'], text: "A theme color, or Health's color by how full it is." },
   {
     codes: ['%{c:#80c8ff}', '%{c:128,200,255}'],

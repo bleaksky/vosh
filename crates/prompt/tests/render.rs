@@ -646,6 +646,7 @@ fn every_format_in_every_state() {
             v(Value::Seconds {
                 secs: 14,
                 max: Some(60),
+                since: Some(46),
             }),
             "14s",
             "?",
@@ -813,6 +814,7 @@ fn detailed_out_of_a_fight_with_nothing_missing_draws_one_line() {
             Value::Seconds {
                 secs: 14,
                 max: Some(60),
+                since: Some(46),
             },
         )
         .value("gold", Value::Num(1250));

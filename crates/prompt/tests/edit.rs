@@ -381,6 +381,10 @@ fn show_as_writes_the_forms_the_card_names() {
         set("x %{hour:word} y", FormatChoice::of(FormatName::Ampm)),
         "x %{hour:ampm} y"
     );
+    assert_eq!(
+        set("x %tick y", FormatChoice::of(FormatName::Since)),
+        "x %{tick:since} y"
+    );
     for template in [
         "[%c_hp%{hp}hp]",
         "[%c_hp%pct_hp%%hp]",
@@ -388,6 +392,7 @@ fn show_as_writes_the_forms_the_card_names() {
         "x %{pos:word} y",
         "x %{gold:thousands} y",
         "x %{hour:ampm} y",
+        "x %{tick:since} y",
     ] {
         assert_reads_clean(template);
     }

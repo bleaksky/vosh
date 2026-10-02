@@ -2382,9 +2382,11 @@ fn late_repaint_step(p: &mut Profile, other: bool, now: Instant) -> Output {
 /// clock piece in your design next shows another second, or None while
 /// your design draws none, so a design without one never wakes the
 /// session. The tick turns on its own seconds, counted from its last
-/// restart, so the repaint lands on each of them and never skips one. The
-/// time and the date turn on the local clock's seconds. With both, the
-/// tick sets the pace, so your prompt repaints at most once a second.
+/// restart, so the repaint lands on each of them and never skips one.
+/// Once a late tick has none left, the seconds since it keep counting
+/// up from the same restart. The time and the date turn on the local
+/// clock's seconds. With both, the tick sets the pace, so your prompt
+/// repaints at most once a second.
 fn clock_after(p: &Profile, now: Instant) -> Option<Instant> {
     let clock = p.prompt.clock()?;
     let tick = clock
@@ -2392,12 +2394,17 @@ fn clock_after(p: &Profile, now: Instant) -> Option<Instant> {
         .then(|| p.tick.remaining(now))
         .flatten()
         .filter(|left| !left.is_zero());
-    let wait = match tick {
-        Some(left) => match left.as_nanos() % 1_000_000_000 {
+    let late = clock.tick.then(|| p.tick.elapsed(now)).flatten();
+    let wait = match (tick, late) {
+        (Some(left), _) => match left.as_nanos() % 1_000_000_000 {
             0 => Duration::from_secs(1),
             part => Duration::from_nanos(u64::try_from(part).unwrap_or(0)),
         },
-        None => {
+        (None, Some(since)) => {
+            let into = since.as_nanos() % 1_000_000_000;
+            Duration::from_nanos(u64::try_from(1_000_000_000 - into).unwrap_or(0))
+        }
+        (None, None) => {
             let into = chrono::Local::now().timestamp_subsec_nanos() % 1_000_000_000;
             Duration::from_nanos(u64::from(1_000_000_000 - into))
         }
@@ -2727,6 +2734,10 @@ pub(crate) fn prompt_supplies(p: &Profile, now: Instant) -> vosh_prompt::Vosh {
     let tick = p.tick.remaining(now).map(|left| vosh_prompt::vars::Tick {
         remaining: i64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(i64::MAX),
         interval: i64::try_from(p.tick.config.interval.as_secs()).ok(),
+        since: p
+            .tick
+            .elapsed(now)
+            .and_then(|since| i64::try_from(since.as_secs()).ok()),
     });
     vosh_prompt::Vosh {
         tick,
@@ -5148,6 +5159,7 @@ mod tests {
             Some(vosh_prompt::vars::Tick {
                 remaining: interval,
                 interval: Some(interval),
+                since: Some(0),
             })
         );
         feed(&mut p, "char-affects.gmcp");

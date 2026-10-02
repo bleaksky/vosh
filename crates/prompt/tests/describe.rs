@@ -268,6 +268,20 @@ fn the_picker_offers_every_form_with_a_live_sample() {
             ("Compact clock", "2PM".to_string()),
         ]
     );
+    // The tick counts down, and up from when it last turned.
+    let tick: Vec<(&str, String)> = forms(&FieldRef::new("tick"), &values)
+        .iter()
+        .take(3)
+        .map(|f| (f.label, f.segment.clone()))
+        .collect();
+    assert_eq!(
+        tick,
+        [
+            ("Seconds", "14".to_string()),
+            ("With unit", "14s".to_string()),
+            ("Since the tick", "46s".to_string()),
+        ]
+    );
     // The bar draws in theme green at full.
     let bar = &forms(&FieldRef::new("hp"), &values)[4];
     assert!(

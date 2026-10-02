@@ -986,6 +986,7 @@ export type PromptFormatName =
   | 'short'
   | 'thousands'
   | 'unit'
+  | 'since'
   | 'trunc'
   | 'hm'
   | 'hms'

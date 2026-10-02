@@ -186,10 +186,13 @@ pub enum Value {
         degrees: i64,
         unit: Option<char>,
     },
-    /// Seconds with the interval as the max, the tick.
+    /// Seconds with the interval as the max, the tick. `since` is the
+    /// whole seconds since it last turned, which keep counting past the
+    /// interval when a tick comes late, None when nothing says.
     Seconds {
         secs: i64,
         max: Option<i64>,
+        since: Option<i64>,
     },
     /// The local clock. `date` marks the date field, which prints a date.
     Clock {
@@ -447,6 +450,7 @@ impl Value {
             Value::Seconds {
                 secs,
                 max: Some(max),
+                ..
             } => share(*secs, *max),
             _ => None,
         }
@@ -482,6 +486,7 @@ impl Value {
             Value::Seconds {
                 secs,
                 max: Some(max),
+                ..
             } => percent_rounded(*secs, *max),
             _ => None,
         }
@@ -505,6 +510,7 @@ impl Value {
             Value::Seconds {
                 secs,
                 max: Some(max),
+                ..
             } => percent_game(*secs, *max),
             _ => None,
         }
@@ -601,6 +607,14 @@ impl Value {
                     degrees,
                     unit: None,
                 } => Some(format!("{degrees}°")),
+                _ => None,
+            },
+            // Nothing when Vosh does not know when the tick last turned,
+            // as a max it does not know draws nothing.
+            Format::Since => match self {
+                Value::Seconds { since, .. } => {
+                    Some(since.map(|s| format!("{s}s")).unwrap_or_default())
+                }
                 _ => None,
             },
             Format::Trunc(chars) => match self {
@@ -950,9 +964,26 @@ mod tests {
         let tick = Value::Seconds {
             secs: 14,
             max: Some(60),
+            since: Some(46),
         };
         assert_eq!(text(&tick, Format::Unit).as_deref(), Some("14s"));
         assert_eq!(text(&tick, Format::Pct).as_deref(), Some("23"));
+        // The old TinTin prompt counted up from the tick, and so does
+        // since, past the interval when the tick comes late.
+        assert_eq!(text(&tick, Format::Since).as_deref(), Some("46s"));
+        let late = Value::Seconds {
+            secs: 0,
+            max: Some(30),
+            since: Some(33),
+        };
+        assert_eq!(text(&late, Format::Since).as_deref(), Some("33s"));
+        let unknown = Value::Seconds {
+            secs: 14,
+            max: None,
+            since: None,
+        };
+        assert_eq!(text(&unknown, Format::Since).as_deref(), Some(""));
+        assert_eq!(text(&Value::Num(5), Format::Since), None);
         let temp = |unit| Value::Temp { degrees: 61, unit };
         assert_eq!(
             text(&temp(Some('F')), Format::Unit).as_deref(),

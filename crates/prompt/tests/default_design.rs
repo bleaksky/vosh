@@ -640,6 +640,7 @@ fn vosh() -> Vosh {
         tick: Some(Tick {
             remaining: 14,
             interval: Some(30),
+            since: Some(16),
         }),
         target: None,
         profile: Some("Default".into()),

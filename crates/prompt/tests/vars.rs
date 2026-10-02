@@ -220,6 +220,7 @@ fn a_script_value_comes_first_for_every_field() {
     timed.tick = Some(Tick {
         remaining: 30,
         interval: Some(60),
+        since: Some(30),
     });
     timed.profile = Some("Default".to_string());
     assert_eq!(
@@ -729,6 +730,7 @@ fn the_gate_pieces_draw_from_the_new_build_packets() {
         tick: Some(Tick {
             remaining: 14,
             interval: Some(60),
+            since: Some(46),
         }),
         ..vosh()
     };
@@ -756,6 +758,16 @@ fn the_gate_pieces_draw_from_the_new_build_packets() {
         ),
         "1,250 125k 40 7 12"
     );
+    // The forms the old TinTin prompt wrote: the tick counting up, the
+    // hour as 3PM and gold in thousands.
+    assert_eq!(
+        draw_with(
+            &vars,
+            &vosh,
+            "%{tick:since} %{tick:unit} %{gold:thousands} %{exp:thousands}"
+        ),
+        "46s 14s 1.2K 125.0K"
+    );
     // Labels for the moons come from the packet.
     assert_eq!(
         vars.resolver(&vosh).label(&FieldRef::new("moon2")),
@@ -780,6 +792,7 @@ fn detailed_out_of_a_fight_draws_one_line() {
         tick: Some(Tick {
             remaining: 14,
             interval: Some(60),
+            since: Some(46),
         }),
         tracked: vec!["bless".to_string(), "armor".to_string()],
         ..vosh()
@@ -948,6 +961,7 @@ fn vosh_supplies_the_tick_target_clock_and_profile() {
         tick: Some(Tick {
             remaining: 14,
             interval: Some(60),
+            since: Some(46),
         }),
         target: Some("a Blackwatch guard".to_string()),
         profile: Some("Default".to_string()),

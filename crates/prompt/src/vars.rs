@@ -97,6 +97,7 @@ pub enum FormatId {
     Short,
     Thousands,
     Unit,
+    Since,
     Trunc,
     Hm,
     Hms,
@@ -132,7 +133,7 @@ impl Kind {
             Kind::Moon => &[F::Value, F::Game, F::Word, F::Name],
             Kind::Hour => &[F::Value, F::Word, F::Ampm],
             Kind::Temp => &[F::Value, F::Unit],
-            Kind::Seconds => &[F::Value, F::Unit, F::Bar],
+            Kind::Seconds => &[F::Value, F::Unit, F::Since, F::Bar],
             Kind::Clock => &[F::Hm, F::Hms],
             Kind::Date => &[F::Md, F::Value],
             Kind::Ticks => &[F::Value, F::On, F::Off],
@@ -1302,9 +1303,12 @@ pub fn value_of(kind: Kind, label: &str, text: &str, now: NaiveDateTime) -> Reso
         }
         Kind::Seconds => {
             let (secs, max) = s.split_once('/').unwrap_or((s, ""));
+            let secs = num(secs).unwrap_or(0);
+            let max = num(max);
             Value::Seconds {
-                secs: num(secs).unwrap_or(0),
-                max: num(max),
+                secs,
+                max,
+                since: since_of(secs, max),
             }
         }
         Kind::Num => Value::Num(num(s).unwrap_or(0)),
@@ -1423,6 +1427,16 @@ pub struct Tick {
     pub remaining: i64,
     /// Seconds between ticks, when known.
     pub interval: Option<i64>,
+    /// Whole seconds since the tick last turned, when known. They keep
+    /// counting past the interval while a tick is late, where
+    /// `remaining` stays at 0.
+    pub since: Option<i64>,
+}
+
+/// The seconds since the tick for a count of seconds left, when the
+/// interval says: the interval less what is left, never below 0.
+fn since_of(secs: i64, interval: Option<i64>) -> Option<i64> {
+    interval.map(|i| (i - secs).max(0))
 }
 
 /// Which values the game hides right now. Worked out from the latest
@@ -2399,6 +2413,7 @@ impl<'a> Resolver<'a> {
                         is(Value::Seconds {
                             secs,
                             max: interval,
+                            since: since_of(secs, interval),
                         })
                     },
                 ),
@@ -2407,6 +2422,7 @@ impl<'a> Resolver<'a> {
                 Some(t) => is(Value::Seconds {
                     secs: t.remaining,
                     max: t.interval,
+                    since: t.since,
                 }),
                 None => Got::Nothing,
             },
