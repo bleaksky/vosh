@@ -5154,7 +5154,6 @@ version = "0.8.0"
 dependencies = [
  "mlua",
  "regex",
- "serde",
  "serde_json",
  "thiserror 1.0.69",
 ]

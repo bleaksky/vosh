@@ -45,12 +45,6 @@ pub struct LuaTriggerInfo {
 pub enum ScriptError {
     #[error("lua error: {0}")]
     Lua(#[from] mlua::Error),
-    #[error("invalid regex `{pattern}`: {source}")]
-    InvalidRegex {
-        pattern: String,
-        #[source]
-        source: regex::Error,
-    },
 }
 
 /// What [`ScriptEngine::run_body`] puts before a body. It takes the
@@ -441,9 +435,6 @@ impl ScriptEngine {
                     callback_id,
                 } => {
                     self.gmcp_subs.entry(package).or_default().push(callback_id);
-                }
-                Action::DropCallback(id) => {
-                    self.drop_callback_inline(id);
                 }
                 other => outcome.actions.push(other),
             }

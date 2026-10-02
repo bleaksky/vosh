@@ -70,8 +70,6 @@ pub enum Action {
     },
     /// Cancel a previously scheduled timer.
     CancelTimer(u32),
-    /// Free a registry slot when its owner cancels itself.
-    DropCallback(i64),
     /// Log a debug line (currently echoes to the terminal in a faint color).
     Log(String),
 }

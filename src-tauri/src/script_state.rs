@@ -182,8 +182,7 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
             }
             Action::SetLuaTrigger { .. }
             | Action::RemoveLuaTrigger(_)
-            | Action::SubscribeGmcp { .. }
-            | Action::DropCallback(_) => {
+            | Action::SubscribeGmcp { .. } => {
                 // The script engine consumes these in its own drain loop;
                 // they should not reach here. Ignore defensively.
             }
