@@ -89,4 +89,4 @@ Applies to README, CONTRIBUTING, settings labels, error messages, commit message
 
 ## Phase Status
 
-Milestone 2 of the one window redesign is done. The refactor before 1.0 is under way and follows `docs/refactor-plan.md`, which holds the status of every phase and the decisions taken. The current phase is R2. The last commit of each phase updates this line.
+Milestone 2 of the one window redesign is done. The refactor before 1.0 is under way and follows `docs/refactor-plan.md`, which holds the status of every phase and the decisions taken. The current phase is R3. The last commit of each phase updates this line.

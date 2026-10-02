@@ -10,7 +10,7 @@ The last commit of each phase updates this table and the Phase Status line in CL
 | ----- | ----------------------------------------- | ------------------------------------------------------------------------------------------ |
 | R0    | Freeze and set up                         | Done. The plan is in the repo, you have the stale branch list, and one flaky test is fixed |
 | R1    | Latency work                              | Done. a55a817 to 846c85d, plus 7dced45, which fixed the Windows and Linux build            |
-| R2    | Safety nets                               | Not started                                                                                |
+| R2    | Safety nets                               | Done. 5fdbe52 to 4882421 with R0. The captures wait for D37, the dead code tools for R23   |
 | R3    | The 13 bug fixes                          | Not started                                                                                |
 | R4    | Dead page code and old files              | Not started                                                                                |
 | R5    | Dead styles                               | Not started                                                                                |
