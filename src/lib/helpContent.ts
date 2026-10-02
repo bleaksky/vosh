@@ -50,7 +50,7 @@ export const PROMPT_DESIGN_CODES: readonly PromptDesignCode[] = [
   { codes: ['%pct_hp'], text: 'Health as a percent with no sign. Add %% for the sign.' },
   {
     codes: ['%{hp:pct:game}'],
-    text: 'Health as a percent rounded down the way the game does, so 37.5 reads 37.',
+    text: 'Health as a percent with no sign, rounded down as the game does, so 37.5 reads 37.',
   },
   { codes: ['%hp_bar:10:auto'], text: 'A bar ten cells wide, colored by how full it is.' },
   { codes: ['%{gold:grouped}'], text: 'Any value from the picker, in any of its forms.' },

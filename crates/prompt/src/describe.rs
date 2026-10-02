@@ -288,7 +288,8 @@ fn form(
         .unwrap_or_default();
     let segment = match format {
         // The game's percent reads as the rounded one most of the time,
-        // so it goes by its name, as a bar does.
+        // so it goes by its name, as a bar does. The name says it has no
+        // sign, since picking it on a Percent drops the sign.
         FormatName::Bar | FormatName::PctGame => label.to_string(),
         FormatName::Game if edit::kind_of(field) == Some(Kind::TankPct) => label.to_string(),
         _ if sample.plain.is_empty() || sample.plain.chars().count() > 16 => label.to_string(),
@@ -319,7 +320,7 @@ fn form_list(kind: Option<Kind>) -> &'static [(FormatName, &'static str, bool)] 
             (F::CurMax, "Current and max", true),
             (F::Max, "Max", false),
             (F::Percent, "Percent", true),
-            (F::PctGame, "Game percent", true),
+            (F::PctGame, "Game percent, no sign", true),
             (F::Bar, "Bar", true),
         ],
         Kind::Num => &[
@@ -397,7 +398,7 @@ fn format_label(format: FormatName) -> &'static str {
         FormatName::CurMax => "Current and max",
         FormatName::Max => "Max",
         FormatName::Pct => "Percent, no sign",
-        FormatName::PctGame => "Game percent",
+        FormatName::PctGame => "Game percent, no sign",
         FormatName::Percent => "Percent",
         FormatName::Bar => "Bar",
         FormatName::Game => "Game style",
