@@ -384,6 +384,12 @@ impl TermGrid {
     /// stacks empty rows. While the row a pinned prompt left is open, the
     /// line end that would end it writes nothing, and the output says
     /// whether the row is open after it.
+    ///
+    /// A replace whose bytes leave out the end of their region, which the
+    /// grid should still hold back (`Replace::tail`), holds that end back
+    /// in their place when it writes them on a new row, or finds the
+    /// region open with nothing held, as when the region came from the
+    /// scrollback the grid loaded.
     pub(crate) fn session_output(&mut self, out: &Output) {
         // A lift's two marks ride in one output.
         self.lift_tracks.clear();
@@ -412,6 +418,9 @@ impl TermGrid {
                         self.feed_marked(text.as_bytes());
                     }
                 }
+                if self.pending_hold.is_empty() {
+                    self.pending_hold.clone_from(&replace.tail);
+                }
             } else if replace.fresh && !replace.bytes.is_empty() {
                 self.restore_first();
                 self.write_hold();
@@ -421,7 +430,7 @@ impl TermGrid {
                 }
                 let text = self.land(text);
                 self.feed_marked(text.as_bytes());
-                wrote = true;
+                self.pending_hold.clone_from(&replace.tail);
             }
         }
         if !out.bytes.is_empty() {

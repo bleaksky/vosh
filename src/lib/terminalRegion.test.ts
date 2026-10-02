@@ -820,7 +820,7 @@ describe('a run of repeated lines the session collapses', () => {
   // game's own, from fight.c, with an invented name.
   const dodge = "You dodge Quenby's attack.";
   const parry = "You parry Quenby's attack.";
-  const count = (n: number, line: string) => `\x1b[38;5;244m(${n})\x1b[39m ${line}`;
+  const count = (n: number, line: string) => `\x1b[0m\x1b[38;5;244m(${n}) \x1b[39m${line}`;
 
   it('shows the run once, its count rewritten in place, and the next line after it', async () => {
     const { term, writer } = setup();
@@ -853,6 +853,31 @@ describe('a run of repeated lines the session collapses', () => {
     writer.output(replace(8, `${mark(9)}${count(4, dodge)}\r\n`, true));
     await parsed(writer);
     expect(screen(term)).toEqual(['You are hungry.', `(2) ${dodge}`, `(4) ${dodge}`]);
+  });
+
+  it('holds the tail back once it writes the run on a new row', async () => {
+    // Your echo reached xterm after the run, and before the session heard
+    // of it, so the run goes on on a new row. Its line end still waits
+    // there, and the next line lands on a row of its own in its own color.
+    const { term, writer } = setup();
+    const red = `\x1b[1;31m${dodge}`;
+    writer.output({ text: `${mark(1)}${red}`, hold: '\x1b[0m\r\n', pinRow: true });
+    writer.local('kill guard\r\n');
+    writer.output({
+      text: '',
+      replace: { gen: 1, text: `${mark(2)}${count(2, red)}`, fresh: true, tail: '\x1b[0m\r\n' },
+      pinRow: true,
+    });
+    writer.output({ text: `${mark(3)}${parry}\r\n` });
+    await parsed(writer);
+    expect(screen(term)).toEqual([dodge, 'kill guard', `(2) ${dodge}`, parry]);
+    const buffer = term.buffer.active;
+    expect(
+      buffer
+        .getLine(buffer.baseY + 3)
+        ?.getCell(0)
+        ?.isFgDefault(),
+    ).toBe(true);
   });
 
   it('keeps what you read where it is while the run goes on below', async () => {

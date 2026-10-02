@@ -389,6 +389,7 @@ fn output(payload: &str) -> vosh_prompt::stage::Output {
                     bytes: base64_decode(above["b64"].as_str().unwrap_or_default()),
                 }
             }),
+            tail: base64_decode(replace["tail"].as_str().unwrap_or_default()),
         });
     }
     if let Some(restore) = json.get("restore").and_then(Json::as_str) {

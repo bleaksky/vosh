@@ -176,6 +176,12 @@ pub(crate) struct ReplacePayload {
     /// `vosh_prompt::stage::Above`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub above: Option<AbovePayload>,
+    /// The end of the region the bytes leave out, as base64, which a
+    /// renderer that writes them on a new row, or finds the region open
+    /// with nothing held back, holds back in their place. See
+    /// `vosh_prompt::stage::Replace::tail`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tail: Option<String>,
 }
 
 /// `ReplacePayload.above`: the lines' plain text, and what to write from
@@ -1955,6 +1961,8 @@ fn text_line_step(
             shown.extend_from_slice(b"\r\n");
         }
     }
+    let collapse = p.ui.collapse_repeats;
+    p.prompt.stage.set_collapse(collapse);
     let mut repeat = None;
     let kept = match shows {
         // Collapse repeated lines shows a line the same as the one before
@@ -1962,7 +1970,7 @@ fn text_line_step(
         // Its triggers ran above, and it is logged below as any line that
         // shows.
         Shows::Now(painted)
-            if p.ui.collapse_repeats
+            if collapse
                 && result
                     .display
                     .as_ref()
@@ -1974,12 +1982,10 @@ fn text_line_step(
                 .stage
                 .repeat_line(&mut batch.out, &bytes, &plain, painted, text);
             repeat = Some(made);
-            Some(match made {
-                vosh_prompt::stage::Repeat::Starts => text.to_vec(),
-                vosh_prompt::stage::Repeat::Joins(count) => {
-                    vosh_prompt::stage::counted(count, text)
-                }
-            })
+            // The run as it shows, its count before it in the colors the
+            // text carried into it.
+            let shows = p.prompt.stage.run_shown().map(|(shows, _)| shows);
+            Some(shows.unwrap_or_else(|| text.to_vec()))
         }
         Shows::Now(painted) => {
             if let Some(text) = &result.display {
@@ -2869,6 +2875,7 @@ pub(crate) fn prompt_supplies(p: &Profile, now: Instant) -> vosh_prompt::Vosh {
 /// also hold when the profile's capture reads Aabahran's codes.
 fn start_prompt(p: &mut Profile, known_host: bool) {
     p.prompt.connect(known_host);
+    p.prompt.stage.set_collapse(p.ui.collapse_repeats);
 }
 
 /// The custom prompt's packets, values and hidden state go with the
@@ -3615,6 +3622,7 @@ impl OutputPayload {
                     plain: a.plain.clone(),
                     b64: base64_encode(&a.bytes),
                 }),
+                tail: (!r.tail.is_empty()).then(|| base64_encode(&r.tail)),
             }),
             restore: out.restore.as_deref().map(base64_encode),
             pin: out.pin.as_deref().map(base64_encode),
@@ -4469,6 +4477,7 @@ mod tests {
                 bytes: with(&[&wire.mark(2), b"<1020>\x1b[0m"]),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
         let leftover = &second.bytes;
@@ -4489,6 +4498,7 @@ mod tests {
                 bytes: with(&[&wire.mark(2), b"You are hungry"]),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
         let third = wire.read(b".\n\rNext.\n\r");
@@ -4499,6 +4509,7 @@ mod tests {
                 bytes: b"You are hungry.\r\n".to_vec(),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
         assert_eq!(third.bytes, b"Next.\r\n");
@@ -4531,6 +4542,7 @@ mod tests {
                 bytes: with(&[&wire.mark(3), b"<90>\x1b[0m"]),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
     }
@@ -4571,6 +4583,7 @@ mod tests {
                 bytes: with(&[&wire.mark(2), b"<1020>\x1b[0m"]),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
         let leftover = &second.bytes;
@@ -4607,6 +4620,7 @@ mod tests {
                 bytes: b"<100hp 50m 30mv> \r\n".to_vec(),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
         let leftover = &second.bytes;
@@ -4895,6 +4909,7 @@ mod tests {
                 bytes: with(&[&wire.mark(2), PROMPT_ROW_SHOWN]),
                 fresh: false,
                 above: None,
+                tail: Vec::new(),
             })
         );
         let leftover = &off.bytes;
@@ -5433,6 +5448,7 @@ mod tests {
                 ]),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
         // A send forgets a painted tank line, which stays as it shows,
@@ -5568,6 +5584,7 @@ mod tests {
                 bytes: with(&[&wire.mark(2), FIGHT_LINE.as_bytes(), b"\r\n"]),
                 fresh: false,
                 above: None,
+                tail: Vec::new(),
             })
         );
     }
@@ -5902,6 +5919,7 @@ mod tests {
                 bytes: with(&[&wire.mark(2), b"<10>\x1b[0m"]),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
     }

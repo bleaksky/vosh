@@ -79,12 +79,18 @@ export interface RegionTerminal {
  *  `above` carries the lines the region's prompt shows right above it,
  *  such as a tank line shown as sent: when the rows right above the open
  *  region show `plain`, the writer erases from their first row and writes
- *  its `text` there instead. */
+ *  its `text` there instead. `tail` is the end of the region `text` leaves
+ *  out, since the writer still holds it back as line ends that wait: a
+ *  run of repeated lines the session rewrites while your prompt shows
+ *  pinned. Written on a new row, or over an open region with nothing held
+ *  back, as one loaded from your scrollback, the writer holds `tail` back
+ *  in their place. */
 export interface RegionReplace {
   gen: number;
   text: string;
   fresh: boolean;
   above?: { plain: string; text: string };
+  tail?: string;
 }
 
 /** True when rows reading `rows`, top first, show the lines `plain`
@@ -522,12 +528,13 @@ export class RegionWriter {
         const text = above && replace.above ? replace.above.text : replace.text;
         this.write(from.escape + text);
         if (text.length === 0) this.erased?.(from.row, from.col);
+        if (this.pendingHold.length === 0 && replace.tail) this.pendingHold = replace.tail;
       } else if (replace.fresh && replace.text.length > 0) {
         // Held line ends end their row, which xterm has not parsed yet.
         const held = this.writeHold();
         const lead = held || this.term.buffer.active.cursorX === 0 ? '' : '\r\n';
         this.write(this.land(lead + replace.text));
-        wrote = true;
+        this.pendingHold = replace.tail ?? '';
       }
     }
     if (out.text.length > 0) {

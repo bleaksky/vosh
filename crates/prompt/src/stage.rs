@@ -51,14 +51,18 @@
 //! a repaint rewrites the open row, so both renderers show the run once.
 //! Anything else written after the run ends it, and so do your echo,
 //! output from elsewhere and a new connection. A pinned prompt leaves the
-//! text, so it ends nothing, and neither does a hidden line.
+//! text, so it ends nothing, and neither does a hidden line. The stage
+//! follows the colors the text carries from line to line meanwhile, so
+//! the run is written again from the colors it started in (see
+//! [`counted`]). A rewrite leaves out the line end each renderer still
+//! holds back after the run, and carries it as [`Replace::tail`].
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::aabahran::Who;
 use crate::capture::{Recognized, Recognizer};
 use crate::config::{CaptureConfig, PromptShow};
-use crate::render::Span;
+use crate::render::{Color, SgrState, Span};
 use crate::template::{FieldRef, Template, TokenKind};
 
 /// The private OSC Vosh marks regions with.
@@ -109,23 +113,86 @@ pub fn with_lift_end(body: &[u8], id: u64) -> Vec<u8> {
     out
 }
 
-/// The count a run of repeated lines shows before its line, `(N) `, in
-/// the gray of 256 color 244 with the default color after it. The
-/// restored scrollback banner draws in the same gray, since dim draws in
-/// a shade of its own on each renderer.
-pub fn count_prefix(count: u32) -> Vec<u8> {
-    format!("\x1b[38;5;244m({count})\x1b[39m ").into_bytes()
-}
-
-/// `line` as a run of `count` repeated lines shows it: the line alone for
-/// one, and the count before it from two on.
-pub fn counted(count: u32, line: &[u8]) -> Vec<u8> {
+/// `line` as a run of `count` repeated lines shows it, when the text
+/// carries the colors `carry` into the line: the line alone for one, and
+/// from two on the count before it, `(N) `. The count draws in the gray of
+/// 256 color 244, which the restored scrollback banner draws in too, since
+/// dim draws in a shade of its own on each renderer.
+///
+/// The run is written again over its own region, so it starts from the
+/// colors `carry` names whatever the renderer was left in. The count goes
+/// after the colors the line opens with and keeps their background, so a
+/// washed line still starts washed, and the colors go back to the line's
+/// own after it, so the rest of the line and the lines after it show as
+/// they would without the count.
+pub fn counted(count: u32, line: &[u8], carry: &SgrState) -> Vec<u8> {
     if count < 2 {
         return line.to_vec();
     }
-    let mut bytes = count_prefix(count);
-    bytes.extend_from_slice(line);
+    let lead = leading_sgr(line);
+    let mut look = *carry;
+    apply_sgr(&mut look, &line[..lead]);
+    let gray = SgrState {
+        fg: Color::Index(244),
+        bg: look.bg,
+        ..SgrState::default()
+    };
+    let mut bytes = sgr(&format!("0;{}", SgrState::default().transition(carry)));
+    bytes.extend_from_slice(&line[..lead]);
+    bytes.extend(sgr(&look.transition(&gray)));
+    bytes.extend(format!("({count}) ").into_bytes());
+    bytes.extend(sgr(&gray.transition(&look)));
+    bytes.extend_from_slice(&line[lead..]);
     bytes
+}
+
+/// The SGR code `ESC [ params m`, with the trailing `;` an empty
+/// parameter list leaves gone. Nothing for no parameters.
+fn sgr(params: &str) -> Vec<u8> {
+    let params = params.trim_end_matches(';');
+    if params.is_empty() {
+        return Vec::new();
+    }
+    format!("\x1b[{params}m").into_bytes()
+}
+
+/// How many bytes the SGR codes `bytes` opens with take.
+fn leading_sgr(bytes: &[u8]) -> usize {
+    let mut at = 0;
+    while bytes.get(at) == Some(&0x1b) && bytes.get(at + 1) == Some(&b'[') {
+        let end = escape_end(bytes, at);
+        if bytes.get(end - 1) != Some(&b'm') || !sgr_params(&bytes[at + 2..end - 1]) {
+            break;
+        }
+        at = end;
+    }
+    at
+}
+
+/// True when `params` reads as the parameters of an SGR code.
+fn sgr_params(params: &[u8]) -> bool {
+    params
+        .iter()
+        .all(|b| b.is_ascii_digit() || *b == b';' || *b == b':')
+}
+
+/// Apply every SGR code in `bytes` to `state`, in order.
+fn apply_sgr(state: &mut SgrState, bytes: &[u8]) {
+    let mut i = 0;
+    while let Some(at) = bytes[i..].iter().position(|&b| b == 0x1b) {
+        let start = i + at;
+        let end = escape_end(bytes, start);
+        if bytes.get(start + 1) == Some(&b'[')
+            && end > start + 2
+            && bytes[end - 1] == b'm'
+            && sgr_params(&bytes[start + 2..end - 1])
+        {
+            if let Ok(params) = std::str::from_utf8(&bytes[start + 2..end - 1]) {
+                state.apply(params);
+            }
+        }
+        i = end.max(start + 1);
+    }
 }
 
 /// True when a line that shows as `line` can be part of a run of repeated
@@ -175,6 +242,14 @@ pub struct Replace {
     /// Lines the region's prompt shows right above the region, which a
     /// change of where your prompt shows moves with it.
     pub above: Option<Above>,
+    /// The end of the region `bytes` leave out, since each renderer still
+    /// holds it back as the line ends it waits to write (see
+    /// [`Output::hold`]). A run of repeated lines rewritten while your
+    /// prompt shows pinned carries it. A renderer that writes `bytes` on a
+    /// new row, or finds the region open with nothing held back, holds it
+    /// back in their place, so the line still ends before the next write.
+    /// Empty for every other replace.
+    pub tail: Vec<u8>,
 }
 
 /// The lines a drawn prompt shows as sent right above its region, such as
@@ -430,6 +505,7 @@ impl Output {
                 bytes,
                 fresh,
                 above: None,
+                tail: Vec::new(),
             });
         } else if fresh && !bytes.is_empty() {
             self.new_row();
@@ -471,8 +547,9 @@ impl Output {
     /// place of what it writes from the lines above its region when it
     /// carries them, as a run of repeated lines this output rewrote does
     /// when the next line joins it. The new text lands on the row a pinned
-    /// prompt left, as a write at the cursor would.
-    fn rewrite_replace(&mut self, bytes: Vec<u8>) {
+    /// prompt left, as a write at the cursor would. `tail` is what `bytes`
+    /// leave out of the region (see [`Replace::tail`]).
+    fn rewrite_replace(&mut self, bytes: Vec<u8>, tail: Vec<u8>) {
         let Some(replace) = self.replace.as_mut() else {
             return;
         };
@@ -480,6 +557,7 @@ impl Output {
             above.bytes.clone_from(&bytes);
         }
         replace.bytes = bytes;
+        replace.tail = tail;
         replace.fresh = true;
         self.visible += 1;
         self.row_open = false;
@@ -1068,10 +1146,19 @@ struct Run {
     /// The line as it shows, colors included, which the next line has to
     /// show byte for byte to join the run.
     line: Vec<u8>,
+    /// The colors the text carried into the run's first line, which the
+    /// run is written again from.
+    carry: SgrState,
+    /// The colors after the ones the line opens with, which the next line
+    /// has to start in too, so it looks the same.
+    look: SgrState,
     /// How many lines the run holds.
     count: u32,
     /// The region the run shows in.
     gen: u64,
+    /// How many bytes the region's mark takes, so a line that ends the
+    /// run in the output that wrote it can take the mark out.
+    mark: usize,
     /// The output that last wrote the run, or the region after it.
     output: u64,
     /// What that output had written at the cursor right after it (see
@@ -1165,6 +1252,12 @@ pub struct Stage {
     /// The run of repeated lines the text ends on, while Collapse repeated
     /// lines is on.
     run: Option<Run>,
+    /// Collapse repeated lines is on, so the stage follows the colors the
+    /// text carries from line to line.
+    collapse: bool,
+    /// The colors the text carries into the next line, as the lines the
+    /// stage wrote left them, while Collapse repeated lines is on.
+    carry: SgrState,
 }
 
 impl Stage {
@@ -1221,8 +1314,24 @@ impl Stage {
             show: self.show,
             shown_as: self.show,
             card: self.card,
+            collapse: self.collapse,
             ..Self::default()
         };
+    }
+
+    /// Take Collapse repeated lines from the profile. While it is on, the
+    /// stage follows the colors the text carries from one line to the
+    /// next, so a run it writes again keeps them (see [`counted`]).
+    pub fn set_collapse(&mut self, on: bool) {
+        self.collapse = on;
+    }
+
+    /// Follow the colors `bytes`, written to the text, leave the text in,
+    /// while Collapse repeated lines is on.
+    fn carry_through(&mut self, bytes: &[u8]) {
+        if self.collapse {
+            apply_sgr(&mut self.carry, bytes);
+        }
     }
 
     /// The prompt card opened or closed. While it is open, the row that
@@ -1718,6 +1827,7 @@ impl Stage {
         bytes.extend(block.heads_shown());
         let len = region.len();
         bytes.extend(region);
+        self.carry_through(&bytes);
         put(out, painted, bytes, true);
         if let Some(live) = &live {
             out.preview_tail(len, region_bytes(gen, lift, live));
@@ -1774,6 +1884,7 @@ impl Stage {
         }
         let mut bytes = before.to_vec();
         bytes.extend(self.lift_shown(shown));
+        self.carry_through(&bytes);
         write(out, &mut self.open, painted, bytes);
         self.shown_as = self.show;
         self.note_recognized(block);
@@ -1856,6 +1967,7 @@ impl Stage {
         spans: Option<Vec<Span>>,
     ) {
         self.sync(out);
+        self.carry_through(before);
         match painted {
             // The prompt completes a partial painted right after a run of
             // repeated lines. Its region empties and stays open, so the
@@ -1894,7 +2006,9 @@ impl Stage {
 
     /// Write a complete line that is not your prompt, as the Line pass
     /// left it. `painted` is the region an earlier read painted its start
-    /// as. `bytes` is empty when a trigger hid the line.
+    /// as. `bytes` is empty when a trigger hid the line. Returns true when
+    /// the line was the line end a pinned prompt's row would have taken,
+    /// which writes nothing.
     pub fn line(
         &mut self,
         out: &mut Output,
@@ -1902,10 +2016,10 @@ impl Stage {
         plain: &str,
         painted: Option<u64>,
         bytes: &[u8],
-    ) {
+    ) -> bool {
         self.sync(out);
         // The line end a pinned prompt's row would have taken, and any
-        // empty line with it, writes nothing. It is still logged and kept.
+        // empty line with it, writes nothing. It is still logged.
         let swallowed = self.swallow.is_some()
             && painted.is_none()
             && plain.trim().is_empty()
@@ -1914,11 +2028,13 @@ impl Stage {
             // Anything written ends a run of repeated lines. A hidden line
             // that was never painted writes nothing, so the run goes on.
             if !bytes.is_empty() || painted.is_some() {
-                self.run = None;
+                self.end_run(out);
             }
+            self.carry_through(bytes);
             write(out, &mut self.open, painted, bytes.to_vec());
         }
         self.note_line(raw, plain);
+        swallowed
     }
 
     /// Write a complete line that is not your prompt while Collapse
@@ -1946,9 +2062,16 @@ impl Stage {
         self.sync(out);
         self.note_line(raw, plain);
         self.open = None;
+        // The colors the line starts in, and the ones after those it opens
+        // with. A line that starts in other colors looks different even
+        // with the same bytes, so it starts a run of its own.
+        let carry = self.carry;
+        let mut look = carry;
+        apply_sgr(&mut look, &line[..leading_sgr(line)]);
         let joins = self.run_last(out)
             && self.run.as_ref().is_some_and(|run| {
                 run.line == line
+                    && run.look == look
                     && match run.after {
                         None => painted.is_none(),
                         Some(after) if after.empty => painted.is_none(),
@@ -1960,8 +2083,11 @@ impl Stage {
         if joins {
             return self.join_run(out);
         }
+        self.end_run(out);
+        self.carry_through(line);
         let gen = self.next_gen();
         let mut bytes = mark(gen);
+        let mark_len = bytes.len();
         bytes.extend_from_slice(line);
         bytes.extend_from_slice(b"\r\n");
         let place = match painted {
@@ -1981,8 +2107,11 @@ impl Stage {
         };
         self.run = Some(Run {
             line: line.to_vec(),
+            carry,
+            look,
             count: 1,
             gen,
+            mark: mark_len,
             output: out.id.0,
             end: out.written(),
             place,
@@ -1990,6 +2119,29 @@ impl Stage {
             after: None,
         });
         Repeat::Starts
+    }
+
+    /// The run of repeated lines ends, as a line written after it does.
+    /// When `out` wrote it in its bytes and nothing came after it yet, its
+    /// region is never written again, so its mark goes. An output then
+    /// carries no mark of a run but the one of the run it ends on.
+    fn end_run(&mut self, out: &mut Output) {
+        let Some(run) = self.run.take() else {
+            return;
+        };
+        if let (RunPlace::Bytes(at), None) = (run.place, run.after) {
+            if run.output == out.id.0 && out.written() == run.end {
+                out.bytes.drain(at..at + run.mark);
+            }
+        }
+    }
+
+    /// The run of repeated lines the text ends on as it shows, the count
+    /// before its line from the second on, and the region it shows in.
+    /// None when there is none.
+    pub fn run_shown(&self) -> Option<(Vec<u8>, u64)> {
+        let run = self.run.as_ref()?;
+        Some((counted(run.count, &run.line, &run.carry), run.gen))
     }
 
     /// The next line joins the run of repeated lines, which [`run_last`]
@@ -2003,25 +2155,35 @@ impl Stage {
         };
         // What the run shows now, which a renderer finds above the region
         // after it.
-        let shows = plain_text(&String::from_utf8_lossy(&counted(run.count, &run.line)));
+        let shows = plain_text(&String::from_utf8_lossy(&counted(
+            run.count, &run.line, &run.carry,
+        )));
         run.count += 1;
         let mut whole = mark(gen);
-        whole.extend(counted(run.count, &run.line));
+        run.mark = whole.len();
+        whole.extend(counted(run.count, &run.line, &run.carry));
         whole.extend_from_slice(b"\r\n");
         // Without the line ends each renderer keeps back after the run, so
-        // they still follow it.
+        // they still follow it. The replace carries them as its tail.
         let mut kept = whole.clone();
+        let mut tail = Vec::new();
         if run.held <= run.line.len() + 2 {
-            kept.truncate(kept.len() - run.held);
+            tail = kept.split_off(kept.len() - run.held);
         }
+        // The run leaves the text in the colors its line leaves it in.
+        self.carry = run.carry;
+        apply_sgr(&mut self.carry, &run.line);
         let same = run.output == out.id.0;
         match (run.after, same) {
             (None, true) => match run.place {
                 RunPlace::Bytes(at) => out.rewrite_from(at, &whole),
-                RunPlace::Replace => out.rewrite_replace(kept),
+                RunPlace::Replace => out.rewrite_replace(kept, tail),
             },
             (None, false) => {
                 out.replace(run.gen, kept, true);
+                if let Some(replace) = out.replace.as_mut().filter(|r| r.gen == run.gen) {
+                    replace.tail = tail;
+                }
                 run.place = RunPlace::Replace;
             }
             (Some(_), true) => {
@@ -2033,7 +2195,7 @@ impl Stage {
                         bytes: Vec::new(),
                     });
                 }
-                out.rewrite_replace(whole);
+                out.rewrite_replace(whole, Vec::new());
                 run.place = RunPlace::Replace;
                 run.held = 0;
             }
@@ -2153,6 +2315,7 @@ impl Stage {
         if whole && before.is_empty() && display == Some(raw) {
             self.open = None;
             // Already on screen as it is. Only the row ends.
+            self.carry_through(raw);
             out.new_row();
             out.closed = true;
             return;
@@ -2163,6 +2326,7 @@ impl Stage {
             bytes.extend_from_slice(display);
             bytes.extend_from_slice(b"\r\n");
         }
+        self.carry_through(&bytes);
         write(out, &mut self.open, painted, bytes);
     }
 
@@ -2785,6 +2949,7 @@ mod tests {
                 bytes: with(&[&mark(2), b"DRAWN"]),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
         let leftover = &second.bytes;
@@ -2839,6 +3004,7 @@ mod tests {
                 bytes: b"You are hungry.\r\n".to_vec(),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
         assert_eq!(second.bytes, b"next\r\n");
@@ -2856,6 +3022,7 @@ mod tests {
                 bytes: Vec::new(),
                 fresh: false,
                 above: None,
+                tail: Vec::new(),
             })
         );
     }
@@ -2875,6 +3042,7 @@ mod tests {
                 bytes: with(&[&mark(2), b"<10hp> "]),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
         // A read that adds nothing to it writes nothing.
@@ -2937,6 +3105,7 @@ mod tests {
                 bytes: with(&[&mark(2), b"NEW\r\n"]),
                 fresh: false,
                 above: None,
+                tail: Vec::new(),
             })
         );
         let mut off = Output::new(false);
@@ -2989,6 +3158,7 @@ mod tests {
                 bytes: with(&[&mark(3), b"DRAWN"]),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
 
@@ -3028,6 +3198,7 @@ mod tests {
                 bytes: b"<100hp 50m 30mv> \r\n".to_vec(),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
         let leftover = &out.bytes;
@@ -3048,6 +3219,7 @@ mod tests {
                 bytes: b"\x1b[31m> \x1b[0m\r\n".to_vec(),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
         // A trigger hid it: the painted one is erased, and an unpainted
@@ -3061,6 +3233,7 @@ mod tests {
                 bytes: Vec::new(),
                 fresh: false,
                 above: None,
+                tail: Vec::new(),
             })
         );
         let mut out = Output::new(false);
@@ -3084,6 +3257,7 @@ mod tests {
                 bytes: with(&[&mark(2), PROMPT.as_bytes(), b"\r\n"]),
                 fresh: false,
                 above: None,
+                tail: Vec::new(),
             })
         );
         let leftover = &off.bytes;
@@ -3099,6 +3273,7 @@ mod tests {
                 bytes: with(&[&mark(3), b"DRAWN"]),
                 fresh: false,
                 above: None,
+                tail: Vec::new(),
             })
         );
         // A repaint that changes nothing writes nothing.
@@ -3708,6 +3883,7 @@ mod tests {
                 bytes: Vec::new(),
                 fresh: false,
                 above: None,
+                tail: Vec::new(),
             })
         );
         let leftover = &second.bytes;
@@ -3732,6 +3908,7 @@ mod tests {
                 bytes: b"low on mana\r\n".to_vec(),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
         // After other output the painted start is closed, so it stays.
@@ -3842,6 +4019,7 @@ mod tests {
                 bytes: Vec::new(),
                 fresh: false,
                 above: None,
+                tail: Vec::new(),
             })
         );
         assert_eq!(moved.pin.as_deref(), Some(&b"DRAWN"[..]));
@@ -4442,6 +4620,7 @@ mod tests {
                     plain: "Tester: [===|---]".into(),
                     bytes: Vec::new(),
                 }),
+                tail: Vec::new(),
             })
         );
         assert_eq!(pin.pin.as_deref(), Some(&b"Tester: [===|---]\r\nDRAWN"[..]));
@@ -4613,6 +4792,7 @@ mod tests {
                 bytes: with(&[&mark(2), b"LOW"]),
                 fresh: false,
                 above: None,
+                tail: Vec::new(),
             })
         );
         let leftover = &low.bytes;
@@ -4982,7 +5162,12 @@ mod tests {
     /// Region `gen` holding `line` as a run of `count` shows it, with its
     /// line end.
     fn run_region(gen: u64, count: u32, line: &[u8]) -> Vec<u8> {
-        with(&[&mark(gen), &counted(count, line), b"\r\n"])
+        with(&[&mark(gen), &shown(count, line), b"\r\n"])
+    }
+
+    /// `line` as a run of `count` shows it, in the default colors.
+    fn shown(count: u32, line: &[u8]) -> Vec<u8> {
+        counted(count, line, &SgrState::default())
     }
 
     /// Offer `line` to `stage` as the session does while Collapse repeated
@@ -4994,10 +5179,30 @@ mod tests {
 
     #[test]
     fn the_count_draws_gray_before_the_line_from_the_second_on() {
-        assert_eq!(counted(1, DODGE), DODGE);
+        assert_eq!(shown(1, DODGE), DODGE);
         assert_eq!(
-            counted(3, DODGE),
-            b"\x1b[38;5;244m(3)\x1b[39m You dodge Quenby's attack."
+            shown(3, DODGE),
+            b"\x1b[0m\x1b[38;5;244m(3) \x1b[39mYou dodge Quenby's attack."
+        );
+        // The count goes after the colors the line opens with, on its
+        // background, and the line's own colors come back after it.
+        let washed: &[u8] = b"\x1b[33;48;2;51;51;0mYou are hungry.\x1b[0m";
+        assert_eq!(
+            shown(2, washed),
+            b"\x1b[0m\x1b[33;48;2;51;51;0m\x1b[38;5;244m(2) \x1b[33mYou are hungry.\x1b[0m"
+        );
+        let red: &[u8] = b"\x1b[1;31mYou are hungry.";
+        assert_eq!(
+            shown(2, red),
+            b"\x1b[0m\x1b[1;31m\x1b[22;38;5;244m(2) \x1b[1;31mYou are hungry."
+        );
+        // A line that relies on the color an earlier line left on starts
+        // in it again, and keeps it after the count.
+        let mut green = SgrState::default();
+        green.apply("32");
+        assert_eq!(
+            counted(2, b"You are hungry.", &green),
+            b"\x1b[0;32m\x1b[38;5;244m(2) \x1b[32mYou are hungry."
         );
         assert!(collapsible(DODGE));
         assert!(collapsible(b"\x1b[1;31mYou are hungry.\x1b[0m"));
@@ -5023,19 +5228,80 @@ mod tests {
             out.bytes,
             with(&[b"You are hungry.\r\n", &run_region(3, 3, DODGE)])
         );
-        // Another line starts a run of its own.
+        // Another line starts a run of its own. The run before it is never
+        // written again, so its mark goes, and the output keeps one.
         assert_eq!(repeat(&mut stage, &mut out, PARRY), Repeat::Starts);
         assert_eq!(repeat(&mut stage, &mut out, DODGE), Repeat::Starts);
         assert_eq!(
             out.bytes,
             with(&[
                 b"You are hungry.\r\n",
-                &run_region(3, 3, DODGE),
-                &run_region(4, 1, PARRY),
+                &shown(3, DODGE),
+                b"\r\n",
+                PARRY,
+                b"\r\n",
                 &run_region(5, 1, DODGE),
             ])
         );
         assert_eq!(out.replace, None);
+        // A line that ends the run takes its mark out too.
+        let mut stage = Stage::default();
+        let mut out = Output::new(false);
+        repeat(&mut stage, &mut out, DODGE);
+        stage.line(&mut out, b"", "", None, b"\r\n");
+        repeat(&mut stage, &mut out, PARRY);
+        assert_eq!(
+            out.bytes,
+            with(&[DODGE, b"\r\n\r\n", &run_region(2, 1, PARRY)])
+        );
+        // Text the stage did not write, such as a script's echo, leaves
+        // it where it is.
+        let mut stage = Stage::default();
+        let mut out = Output::new(false);
+        repeat(&mut stage, &mut out, DODGE);
+        out.text(b"You are hungry.\r\n");
+        repeat(&mut stage, &mut out, PARRY);
+        assert_eq!(
+            out.bytes,
+            with(&[
+                &run_region(1, 1, DODGE),
+                b"You are hungry.\r\n",
+                &run_region(2, 1, PARRY)
+            ])
+        );
+    }
+
+    #[test]
+    fn a_line_that_starts_in_other_colors_starts_a_run_of_its_own() {
+        // Collapse repeated lines follows the colors from line to line.
+        let mut stage = Stage::default();
+        stage.set_collapse(true);
+        let mut out = Output::new(false);
+        let green: &[u8] = b"\x1b[32mYou are hungry.";
+        let hungry: &[u8] = b"You are hungry.";
+        assert_eq!(repeat(&mut stage, &mut out, green), Repeat::Starts);
+        // The same bytes, but the first line left green on for the next.
+        assert_eq!(repeat(&mut stage, &mut out, hungry), Repeat::Starts);
+        assert_eq!(repeat(&mut stage, &mut out, hungry), Repeat::Joins(2));
+        let mut carry = SgrState::default();
+        carry.apply("32");
+        assert_eq!(stage.run_shown(), Some((counted(2, hungry, &carry), 3)));
+        // A line with a color of its own that it leaves on: the next one
+        // looks the same, since it opens with the same colors.
+        let mut stage = Stage::default();
+        stage.set_collapse(true);
+        let mut out = Output::new(false);
+        assert_eq!(repeat(&mut stage, &mut out, green), Repeat::Starts);
+        assert_eq!(repeat(&mut stage, &mut out, green), Repeat::Joins(2));
+        // One whose color comes after text that relies on the color
+        // before it does not, until the color it leaves on stays.
+        let mut stage = Stage::default();
+        stage.set_collapse(true);
+        let mut out = Output::new(false);
+        let late: &[u8] = b"You are \x1b[32mhungry.";
+        assert_eq!(repeat(&mut stage, &mut out, late), Repeat::Starts);
+        assert_eq!(repeat(&mut stage, &mut out, late), Repeat::Starts);
+        assert_eq!(repeat(&mut stage, &mut out, late), Repeat::Joins(2));
     }
 
     #[test]
@@ -5053,6 +5319,7 @@ mod tests {
                 bytes: run_region(2, 2, DODGE),
                 fresh: true,
                 above: None,
+                tail: Vec::new(),
             })
         );
         // Another one in the same output rewrites the replace.
@@ -5200,7 +5467,8 @@ mod tests {
         assert_eq!(repeat(&mut stage, &mut out, red), Repeat::Joins(2));
         pin_prompt(&mut stage, &mut out);
         // The run's color reset and line end wait with the prompt's.
-        assert_eq!(out.bytes, with(&[&mark(2), &counted(2, shown)]));
+        let plain = SgrState::default();
+        assert_eq!(out.bytes, with(&[&mark(2), &counted(2, shown, &plain)]));
         assert_eq!(out.hold, b"\x1b[0m\r\n");
         stage.finish(&mut out);
         assert_eq!(out.pin_row, Some(true));
@@ -5215,9 +5483,10 @@ mod tests {
             next.replace,
             Some(Replace {
                 gen: 2,
-                bytes: with(&[&mark(3), &counted(3, shown)]),
+                bytes: with(&[&mark(3), &counted(3, shown, &plain)]),
                 fresh: true,
                 above: None,
+                tail: b"\x1b[0m\r\n".to_vec(),
             })
         );
         assert!(next.bytes.is_empty() && next.hold.is_empty());
@@ -5273,6 +5542,7 @@ mod tests {
                     plain: "You dodge Quenby's attack.".into(),
                     bytes: whole,
                 }),
+                tail: Vec::new(),
             })
         );
         assert_eq!(repeat(&mut stage, &mut third, DODGE), Repeat::Joins(3));
@@ -5331,6 +5601,7 @@ mod tests {
                 bytes: mark(3),
                 fresh: false,
                 above: None,
+                tail: Vec::new(),
             })
         );
         // The next pulse in the same read writes the run where the region
@@ -5348,6 +5619,7 @@ mod tests {
                     plain: "You dodge Quenby's attack.".into(),
                     bytes: whole,
                 }),
+                tail: Vec::new(),
             })
         );
         pin_prompt(&mut stage, &mut second);
@@ -5384,6 +5656,7 @@ mod tests {
                     plain: "You dodge Quenby's attack.".into(),
                     bytes: whole,
                 }),
+                tail: Vec::new(),
             })
         );
 
