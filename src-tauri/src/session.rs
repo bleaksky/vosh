@@ -4046,9 +4046,9 @@ mod tests {
         assert!(super::observe_world_time_for_tick(&mut tick, &no_hour, at(80)).is_none());
     }
 
-    /// A prompt template in the style of the one in the fixtures, with
-    /// colors by how full and the `%)h` trick that prints a percent sign.
-    const TEMPLATE: &str = "%{c:100,100,100}[%c_reset%s_italic%hp(%c_hp%pct_hp%c_reset%s_italic%)h %mana(%{c:128,200,255}%pct_mana%c_reset%s_italic%)m %move(%{c:200,255,23}%pct_move%c_reset%s_italic%)v%c_reset%{c:100,100,100}] %c_reset";
+    /// James's design, with colors by how full and the `%)h` trick that
+    /// prints a percent sign.
+    const TEMPLATE: &str = vosh_prompt::testkit::designs::JAMES;
 
     /// The game prompt `%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c` at full.
     const PROMPT_LINE: &str = "[1020/1020hp 800/800mn 930/930mv]";
@@ -5351,7 +5351,7 @@ mod tests {
 
     /// James's PROMPT as the game stores it, and the tank block it prints
     /// while someone in the group tanks.
-    const CODES: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c";
+    const CODES: &str = vosh_prompt::testkit::mud::PROMPT;
     const TANK_LINE: &str = "Tester: [===|===|---|---]";
     const FIGHT_LINE: &str = "[159/1020hp 310/800mn 489/930mv]";
 

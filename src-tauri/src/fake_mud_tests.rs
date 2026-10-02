@@ -1235,7 +1235,7 @@ const OLD_PATTERN: &str =
     r"\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)/(?<maxmana>\d+)mn (?<move>\d+)/(?<maxmove>\d+)mv\]";
 
 /// James's design.
-const DESIGN: &str = "%{c:100,100,100}[%c_reset%s_italic%hp(%c_hp%pct_hp%c_reset%s_italic%)h %mana(%{c:128,200,255}%pct_mana%c_reset%s_italic%)m %move(%{c:200,255,23}%pct_move%c_reset%s_italic%)v%c_reset%{c:100,100,100}] %c_reset";
+const DESIGN: &str = vosh_prompt::testkit::designs::JAMES;
 
 /// What his design draws at full health.
 const DRAWN: &str = "[1020(100%)h 800(100%)m 930(100%)v]";

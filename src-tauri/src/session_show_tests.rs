@@ -7,6 +7,7 @@
 //! before the other two choices existed, byte for byte.
 
 use super::*;
+use vosh_prompt::testkit::designs::DETAILED;
 
 /// The PROMPT the fake Aabahran prints, the one the wire fixtures carry.
 pub(super) const CODES: &str = vosh_prompt::testkit::mud::PROMPT;
@@ -373,9 +374,6 @@ fn digests() -> Vec<(String, u64)> {
     }
     out
 }
-
-/// The Detailed preset of the prompt editor, which ends on a piece.
-const DETAILED: &str = "%{if:fight}%opponent %{opponent_hp:bar:10} %{opponent_hp:pct}%% %opponent_cond%nl%{end}%c_hp%hp%c_default/%{maxhp}hp %c_mana%mana%c_default/%{maxmana}mn %c_move%move%c_default/%{maxmove}mv %{c:8}tick%c_default %tick%{if:exits} %{c:8}[%c_default%exits%{c:8}]%c_default%{end} %{gold}g%{if:missing} %c_3%missing missing%c_default%{end}";
 
 /// One step of a scripted play: a socket read's payload, or a line you
 /// send, which the webview echoes before the next read.
