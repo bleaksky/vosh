@@ -154,6 +154,31 @@ describe('a custom theme on a built-in id', () => {
     expect(ui.dark_theme).toBe('nord');
   });
 
+  it('frees the Everforest and Green Screen ids too', () => {
+    // An Everforest file you imported, or a theme you named Green Screen.
+    const ids = ['everforest-dark', 'everforest-light', 'green-screen'];
+    const out = freeBuiltinThemeIds(
+      raw({
+        theme: 'green-screen',
+        light_theme: 'everforest-light',
+        dark_theme: 'everforest-dark',
+        custom_themes: ids.map((id) => custom(id, '#000000')),
+      }),
+    );
+    expect(out.custom_themes?.map((t) => t.id)).toEqual(ids.map((id) => `${id}-2`));
+    expect(out).toMatchObject({
+      theme: 'green-screen-2',
+      light_theme: 'everforest-light-2',
+      dark_theme: 'everforest-dark-2',
+    });
+  });
+
+  it('frees the id of every built-in theme', () => {
+    const ids = BUILTIN_THEMES.map((t) => t.id);
+    const out = freeBuiltinThemeIds(raw({ custom_themes: ids.map((id) => custom(id, '#000000')) }));
+    expect(out.custom_themes?.map((t) => t.id)).toEqual(ids.map((id) => `${id}-2`));
+  });
+
   it('seeds the dark theme from the moved custom theme', () => {
     const ui = normalizeUiConfig(
       raw({ theme: 'solarized-dark', custom_themes: [custom('solarized-dark', '#000000')] }),
