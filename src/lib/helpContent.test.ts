@@ -69,19 +69,37 @@ describe('the help on the affects pane', () => {
     expect(text).not.toContain('renders nothing until you list');
   });
 
-  it('describes the three styles, the markers, the gauge, and the tint', () => {
+  it('describes the four styles, the markers, the gauge, and the tint', () => {
     const text = topic().body;
     expect(text).toContain(
       'Pick how the affects pane draws in Settings under Layout, then Affects',
     );
     expect(text).toContain('`Countdown` lists every affect by the hours it has left.');
     expect(text).toContain('`Grouped chips` puts what to recast first.');
+    expect(text).toContain(
+      '`Draining chips` does the same and colors only the hours a chip has left.',
+    );
+    expect(text).toContain('fills only the share that matches the hours it has left');
+    expect(text).toContain('A missing affect is a dotted red chip.');
+    expect(text).not.toContain('dashed');
+    expect(text).toContain('Both chip styles always mark what to recast.');
     expect(text).toContain('the fill drains from the left as its hours run down');
     expect(text).toContain('the most hours Vosh has seen for it since you last cast it');
     expect(text).toContain('Pick a dot, a square, plus and minus, or none.');
     expect(text).toContain('Turn on `Tint what to recast`');
     // The writing style keeps colons and semicolons out of the prose.
     expect(text).not.toMatch(/[;:] /);
+  });
+
+  it('says when affects warn and turn red, and how to change it', () => {
+    const text = topic().body;
+    expect(text).toContain(
+      'Unless you change them, that is two hours or fewer for yellow and one hour or none for red.',
+    );
+    expect(text).toContain(
+      'Set `Running out at` and `Almost gone at` in Settings under Layout, then Affects, or choose `Change when affects warn…` in the pane',
+    );
+    expect(text).toContain('almost gone never goes over running out');
   });
 
   it('reads the same in HELP.md', () => {
