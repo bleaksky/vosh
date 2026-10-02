@@ -1106,8 +1106,8 @@ fn spans_count_cells_as_the_webview_lays_them_out() {
 
 #[test]
 fn the_sgr_state_reads_sub_parameters_as_one_code() {
+    use vosh_prompt::design::UnderlineStyle;
     use vosh_prompt::render::{Color, SgrState};
-    use vosh_prompt::template::UnderlineStyle;
     let mut s = SgrState::default();
     s.apply("4:3;58:2::191:97:106");
     assert_eq!(s.underline, Some(UnderlineStyle::Curly));

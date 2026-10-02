@@ -15,11 +15,11 @@ use crate::aabahran::observer::{self, ReplyKind};
 use crate::aabahran::{and_list, CompileError, Origin, Which, Who};
 use crate::capture;
 use crate::config::{AabahranCapture, CaptureConfig, CaptureSource, PromptConfig};
+use crate::design::Template;
 use crate::gmcp::{CharPrompt, Observed, CHAR_STATE, CHAR_STATUS};
 use crate::overrides::PromptPreview;
 use crate::stage::Stage;
 use crate::state::{OpenRowState, PromptState};
-use crate::template::Template;
 use crate::vars::{self, forsaken_lands, Vars, Vosh};
 
 /// What told Vosh your prompt settings, in `session://game-prompt-seen`.
@@ -106,7 +106,7 @@ pub struct Clock {
 
 impl Clock {
     /// The clock pieces among the fields a design reads.
-    fn of(reads: &std::collections::BTreeSet<crate::template::FieldRef>) -> Self {
+    fn of(reads: &std::collections::BTreeSet<crate::design::FieldRef>) -> Self {
         let reads = |name: &str| reads.iter().any(|field| field.name == name);
         Self {
             tick: reads("tick"),
@@ -277,7 +277,7 @@ impl PromptEngine {
         self.right = template
             .tokens()
             .iter()
-            .any(|t| t.kind == crate::template::TokenKind::Right);
+            .any(|t| t.kind == crate::design::TokenKind::Right);
     }
 
     /// Keep a GMCP packet. Char.Status and Char.State say who the prompt

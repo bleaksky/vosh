@@ -22,11 +22,11 @@
 
 use serde::Serialize;
 
-use crate::format::{h_band, how_full, p_band, step_color, tank_bar_cells, Band, Resolved, Value};
-use crate::template::{
+use crate::design::{
     BarColor, Code, ColorSpec, FieldRef, Format, Layer, PieceKind, Scale, Template, TokenKind,
     UnderlineStyle, ValueRef,
 };
+use crate::format::{h_band, how_full, p_band, step_color, tank_bar_cells, Band, Resolved, Value};
 
 /// Ends every non-empty render, so an unclosed color never bleeds into the
 /// game output that follows.

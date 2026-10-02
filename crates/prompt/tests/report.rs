@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 use vosh_prompt::aabahran::{compile, Compiled, Origin, ShapeKind, WarningKind, Which, Who};
 use vosh_prompt::capture::fills;
 use vosh_prompt::config::RegexCapture;
+use vosh_prompt::design::TokenKind;
 use vosh_prompt::report::{line_report, report, CompileRequest};
-use vosh_prompt::template::TokenKind;
 use vosh_prompt::testkit::mud::PROMPT;
 use vosh_prompt::Template;
 

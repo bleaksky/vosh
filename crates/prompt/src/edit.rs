@@ -21,7 +21,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::template::{
+use crate::design::{
     self, bg, code, color, fg, restore, runs_on, transition, underline_color, write_token,
     BarColor, Code, ColorSpec, FieldRef, Format, Item, Layer, Look, PieceKind, Scale, Style,
     Template, TokenKind, UnderlineStyle, ValueRef, BAR_MAX_WIDTH,
@@ -1028,9 +1028,9 @@ fn shown<'a>(kinds: impl Iterator<Item = &'a TokenKind>) -> Vec<TokenKind> {
 /// field with no format after it.
 fn parse_field(text: &str) -> Result<FieldRef, EditError> {
     let text = text.trim();
-    if text.chars().all(template::brace_char) {
+    if text.chars().all(design::brace_char) {
         let segs: Vec<&str> = text.split(':').collect();
-        if let Some((field, [])) = template::parse_field(&segs) {
+        if let Some((field, [])) = design::parse_field(&segs) {
             return Ok(field);
         }
     }
@@ -1164,7 +1164,7 @@ fn content_for(
         FormatName::Bar => {
             let (old_width, old_color) = match was {
                 Some(Format::Bar { width, color }) => (*width, color.clone()),
-                _ => (crate::template::BAR_DEFAULT_WIDTH, BarColor::Auto),
+                _ => (crate::design::BAR_DEFAULT_WIDTH, BarColor::Auto),
             };
             let width = choice.width.unwrap_or(old_width);
             if !(1..=BAR_MAX_WIDTH).contains(&width) {
