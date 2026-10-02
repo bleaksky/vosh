@@ -2,6 +2,7 @@ import { memo, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } 
 import { onGmcpPackage } from '../lib/session';
 import { MAP_COLORS, hexToRgba, mapThemeSignature, sectorForCode } from '../lib/mapPalette';
 import { MAP_STYLE_KEY, loadMapStyle, type MapStyle } from '../lib/mapStyle';
+import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom } from '../lib/mapZoom';
 import {
   DOOR_COLORS,
   corridors,
@@ -19,18 +20,12 @@ import {
 import { subscribeThemeChanges } from '../lib/theme';
 import { pushToast } from '../lib/toasts';
 import { MapPaneControls } from './panel/MapPaneControls';
+import { useMapGestures } from './useMapGestures';
 
 type Style = MapStyle;
 
 const TILESET_KEY = 'vosh.layout.serverMapTileset';
 const ZOOM_KEY = 'vosh.layout.serverMapZoom';
-
-// Zoom multiplier applied to the base 20-pixel pitch. 1.0 = default
-// (20px cells), 2.0 = 40px, 0.5 = 10px. Stepping at 0.25 increments
-// keeps cell sizes on whole-pixel boundaries.
-const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 3.0;
-const ZOOM_STEP = 0.25;
 
 function loadStyle(): Style {
   try {
@@ -56,13 +51,6 @@ function loadZoom(): number {
   } catch {
     return 1.0;
   }
-}
-
-function clampZoom(z: number): number {
-  // Snap to the nearest step to avoid drift from arithmetic on
-  // wheel-delta increments accumulating sub-step fractions.
-  const snapped = Math.round(z / ZOOM_STEP) * ZOOM_STEP;
-  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, snapped));
 }
 
 // Default sector code order in a horizontal sprite strip. A tileset PNG
@@ -159,21 +147,8 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
     }
   }, [zoom]);
 
-  // Ctrl/Cmd + wheel zooms in/out, mirroring the convention used by
-  // map apps. Attached non-passively so we can preventDefault and stop
-  // the browser from scrolling the surrounding pane in lieu of zooming.
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const handler = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-      const direction = e.deltaY < 0 ? 1 : -1;
-      setZoom((z) => clampZoom(z + direction * ZOOM_STEP));
-    };
-    el.addEventListener('wheel', handler, { passive: false });
-    return () => el.removeEventListener('wheel', handler);
-  }, []);
+  // Plain scroll and a pinch zoom the map in every style.
+  useMapGestures(containerRef, { zoom, setZoom });
 
   useEffect(() => {
     if (!tilesetUrl) {
