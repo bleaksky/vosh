@@ -1,4 +1,3 @@
-import { useSyncExternalStore } from 'react';
 import { hiddenGet, onHidden, onState, type HiddenPayload } from '../session';
 import { createStore } from './store';
 
@@ -96,9 +95,4 @@ export function getHidden(): HiddenState {
 export function subscribeHidden(cb: () => void): () => void {
   startHiddenStore();
   return store.subscribe(cb);
-}
-
-/** Which values the game hides right now. */
-export function useHidden(): HiddenState {
-  return useSyncExternalStore(subscribeHidden, getHidden);
 }

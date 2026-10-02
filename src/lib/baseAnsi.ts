@@ -75,12 +75,6 @@ export function baseAnsiRecord(): Record<AnsiSlot, string> {
   return override ?? CANONICAL_ANSI_16;
 }
 
-/** The active base palette as the persisted 16-entry list, or null
- *  when it is the canonical default. */
-export function baseAnsiList(): string[] | null {
-  return override ? ANSI_SLOTS.map((s) => override![s]) : null;
-}
-
 export function subscribeBaseAnsi(cb: () => void): () => void {
   subs.add(cb);
   return () => {
