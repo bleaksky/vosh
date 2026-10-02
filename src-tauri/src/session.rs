@@ -21,6 +21,7 @@ use vosh_trigger::{LineResult, MatchScope};
 use crate::connection::{self, ConnectionError, Stream};
 use crate::gmcp_bind;
 use crate::hidden_input::{self, ServerEcho};
+use crate::highlight_ground;
 use crate::input;
 use crate::line_accumulator::{Line, LineAccumulator, Partial};
 use crate::list_events::{broadcast_list_changes, ListChanges, ListRevisions};
@@ -1701,7 +1702,8 @@ fn line_pass(
     scope: MatchScope,
     now: Instant,
 ) -> LinePass {
-    let result = vosh_trigger::process_with_plain(&p.triggers, bytes, plain, scope);
+    let result =
+        vosh_trigger::process_on_ground(&p.triggers, bytes, plain, scope, highlight_ground::get());
     let tick_step = tick_reset(p, plain, now);
     script_state::snapshot_vars(&p.script, &p.vars);
     let mut outcome = match p.script.match_line(plain) {
@@ -2017,8 +2019,13 @@ fn prompt_block(
     }
 
     let last = block.final_line().clone();
-    let result =
-        vosh_trigger::process_with_plain(&p.triggers, &last.raw, &last.plain, MatchScope::Prompt);
+    let result = vosh_trigger::process_on_ground(
+        &p.triggers,
+        &last.raw,
+        &last.plain,
+        MatchScope::Prompt,
+        highlight_ground::get(),
+    );
     if !result.scripts.is_empty() {
         script_state::snapshot_vars(&p.script, &p.vars);
     }
@@ -2139,8 +2146,13 @@ fn unread_partial(
     partial: &Partial,
     plain: &str,
 ) -> LineStep {
-    let result =
-        vosh_trigger::process_with_plain(&p.triggers, &partial.bytes, plain, MatchScope::Prompt);
+    let result = vosh_trigger::process_on_ground(
+        &p.triggers,
+        &partial.bytes,
+        plain,
+        MatchScope::Prompt,
+        highlight_ground::get(),
+    );
     let effect = match &result.display {
         None => true,
         Some(text) => text.as_bytes() != partial.bytes,

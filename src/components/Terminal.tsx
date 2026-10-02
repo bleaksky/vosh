@@ -24,6 +24,7 @@ import {
   terminalLocalWrite,
 } from '../lib/session';
 import { findTheme } from '../lib/themes';
+import { setHighlightGround } from '../lib/highlightGround';
 import { ansi16Of, xtermThemeFor } from '../lib/terminalTheme';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
 import { OutputShaper } from '../lib/outputShaper';
@@ -91,11 +92,14 @@ export function nativeUnderlay(): boolean {
   );
 }
 
-// Report the active theme's surface colors and resolved ANSI palette to
-// the native renderer so its background/foreground/selection and the
-// 16-color palette match xterm (including the themeTerminalColors tint),
-// live-updating on theme or toggle change.
-function reportNativeTheme(themeId: string, themeTerminalColors: boolean): void {
+// Report the active theme's terminal background to the session, which
+// keeps trigger colors readable on it, on either renderer. Then report the
+// surface colors and resolved ANSI palette to the native renderer so its
+// background/foreground/selection and the 16-color palette match xterm
+// (including the themeTerminalColors tint), live-updating on theme or
+// toggle change.
+function reportTheme(themeId: string, themeTerminalColors: boolean): void {
+  setHighlightGround(findTheme(themeId).xterm.background);
   if (!nativeSurfaceEnabled()) return;
   const resolved = xtermThemeFor(findTheme(themeId), themeTerminalColors);
   const ansi = ansi16Of(resolved);
@@ -1565,7 +1569,7 @@ export function Terminal({
     const term = termRef.current;
     if (!term) return;
     term.options.theme = themeFor(getCurrentThemeId(), themeTerminalColors, liftsHere());
-    reportNativeTheme(getCurrentThemeId(), themeTerminalColors);
+    reportTheme(getCurrentThemeId(), themeTerminalColors);
   }, [themeTerminalColors, liftsHere]);
 
   // Lift your prompts, or stop, when the choice changes.
@@ -1587,7 +1591,7 @@ export function Terminal({
         themeTerminalColorsRef.current,
         liftsHere(),
       );
-      reportNativeTheme(getCurrentThemeId(), themeTerminalColorsRef.current);
+      reportTheme(getCurrentThemeId(), themeTerminalColorsRef.current);
     });
   }, [liftsHere]);
 
@@ -1600,7 +1604,7 @@ export function Terminal({
       const term = termRef.current;
       if (!term) return;
       term.options.theme = themeFor(themeId, themeTerminalColorsRef.current, liftsHere());
-      reportNativeTheme(themeId, themeTerminalColorsRef.current);
+      reportTheme(themeId, themeTerminalColorsRef.current);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
