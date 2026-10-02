@@ -20,15 +20,7 @@
 import { ANSI_SLOT_LABELS } from './appearanceSettings';
 import { ANSI_SLOTS, type AnsiSlot } from './baseAnsi';
 import type { ChromeTokens } from './chrome';
-import {
-  composite,
-  contrast,
-  oklchToRgbInGamut,
-  parseHex,
-  rgbToOklch,
-  toHex,
-  type Rgb,
-} from './color';
+import { composite, contrast, liftAtHue, parseHex, toHex } from './color';
 import type { XtermPalette } from './themes';
 
 // A Map rather than an object literal: pane names come straight from
@@ -160,22 +152,6 @@ export interface ChatInk {
 /** The ground the pane draws on, from the theme's chrome tokens. */
 export type ChatGround = Pick<ChromeTokens, 'panel' | 'appearance'>;
 
-// Step `c` in OKLCH lightness, away from `panel`, until it reads at
-// CHAT_CONTRAST. The hue holds at every step, and chroma gives way only
-// where sRGB runs out. A clamp per channel, as the chrome's lift does,
-// would turn a deep yellow orange.
-function liftAtHue(c: Rgb, panel: Rgb, dir: 1 | -1): Rgb {
-  if (contrast(c, panel) >= CHAT_CONTRAST) return c;
-  const lch = rgbToOklch(c);
-  let out = c;
-  for (let L = lch.L; L >= 0 && L <= 1; L += dir * 0.005) {
-    const raw = oklchToRgbInGamut({ ...lch, L });
-    out = { r: Math.round(raw.r), g: Math.round(raw.g), b: Math.round(raw.b) };
-    if (contrast(out, panel) >= CHAT_CONTRAST) break;
-  }
-  return out;
-}
-
 /** The ink for each of the 16 slots on the theme whose palette and
  *  panel are given. A slot that already reads at 3:1 keeps its color.
  *  One that falls short moves lighter on a dark theme and darker on a
@@ -187,7 +163,7 @@ export function chatInks(palette: XtermPalette, ground: ChatGround): Record<Ansi
   const ink = (color: string): ChatInk => {
     const rgb = parseHex(color);
     if (!rgb || !panel) return { color, fadeTag: true };
-    const lifted = liftAtHue(rgb, panel, dir);
+    const lifted = liftAtHue(rgb, panel, CHAT_CONTRAST, dir);
     const tag = composite(lifted, panel, CHAT_TAG_OPACITY);
     return { color: toHex(lifted), fadeTag: contrast(tag, panel) >= CHAT_CONTRAST };
   };
