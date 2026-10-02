@@ -43,6 +43,7 @@ use std::path::{Path, PathBuf};
 
 use vosh_automation::trigger::{Trigger, TriggerAction};
 use vosh_prompt::capture::{self, NotACapture};
+use vosh_prompt::card::sentences::and_list;
 use vosh_prompt::config::RegexCapture;
 use vosh_prompt::CaptureConfig;
 
@@ -186,16 +187,6 @@ impl Moved {
         if !self.left.iter().any(|(n, _)| *n == trigger.name) {
             self.left.push((trigger.name.clone(), why));
         }
-    }
-}
-
-/// `A`, `A and B`, or `A, B, and C`.
-fn and_list(names: &[String]) -> String {
-    match names {
-        [] => String::new(),
-        [one] => one.clone(),
-        [first, second] => format!("{first} and {second}"),
-        [rest @ .., last] => format!("{}, and {last}", rest.join(", ")),
     }
 }
 

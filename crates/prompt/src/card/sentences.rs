@@ -211,7 +211,7 @@ pub(crate) fn value_label(name: &str) -> String {
 }
 
 /// `A`, `A and B`, or `A, B, and C`.
-pub(crate) fn and_list(items: &[String]) -> String {
+pub fn and_list(items: &[String]) -> String {
     match items {
         [] => String::new(),
         [one] => one.clone(),
