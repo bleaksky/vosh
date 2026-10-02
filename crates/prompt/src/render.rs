@@ -24,7 +24,7 @@ use serde::Serialize;
 
 use crate::format::{h_band, how_full, p_band, step_color, tank_bar_cells, Band, Resolved, Value};
 use crate::template::{
-    BarColor, Code, ColorSpec, FieldRef, Format, PieceKind, Scale, Template, TokenKind,
+    BarColor, Code, ColorSpec, FieldRef, Format, Layer, PieceKind, Scale, Template, TokenKind,
     UnderlineStyle, ValueRef,
 };
 
@@ -169,14 +169,6 @@ impl Color {
             Color::Rgb(r, g, b) => SpanColor::Rgb { r, g, b },
         }
     }
-}
-
-/// What a color code paints.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Layer {
-    Fg,
-    Bg,
-    Underline,
 }
 
 /// An extended color, `5;n` or `2;r;g;b`, from the numbers after a 38,
