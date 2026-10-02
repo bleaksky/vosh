@@ -7562,19 +7562,14 @@ mod tests {
             use crate::profile_config::{CustomTheme, PaneLayoutPersist, TrackedAffect};
             let pick = |options: &[&str]| options[n as usize % options.len()].to_string();
             let trigger = |what: &str, pattern: &str, group: Option<&str>| vosh_trigger::Trigger {
-                name: format!("{name} {what}"),
-                patterns: vec![vosh_trigger::TriggerPattern {
-                    pattern: pattern.into(),
-                    enabled: true,
-                }],
-                priority: 0,
-                enabled: true,
-                actions: vec![vosh_trigger::TriggerAction::Send {
-                    template: format!("say {what} {n}"),
-                }],
-                preset: None,
                 group: group.map(String::from),
-                target: vosh_trigger::TriggerTarget::Line,
+                ..vosh_trigger::Trigger::new(
+                    format!("{name} {what}"),
+                    pattern,
+                    vosh_trigger::TriggerAction::Send {
+                        template: format!("say {what} {n}"),
+                    },
+                )
             };
             let mut config = ProfileConfig::default();
             let mut combat = vosh_alias::Alias::new(format!("{name} bash"), "bash %1");
@@ -8171,21 +8166,13 @@ mod tests {
 
         /// A trigger that sends `command` on lines matching `pattern`.
         fn send_trigger(name: &str, pattern: &str, command: &str) -> vosh_trigger::Trigger {
-            vosh_trigger::Trigger {
-                name: name.into(),
-                patterns: vec![vosh_trigger::TriggerPattern {
-                    pattern: pattern.into(),
-                    enabled: true,
-                }],
-                priority: 0,
-                enabled: true,
-                actions: vec![vosh_trigger::TriggerAction::Send {
+            vosh_trigger::Trigger::new(
+                name,
+                pattern,
+                vosh_trigger::TriggerAction::Send {
                     template: command.into(),
-                }],
-                preset: None,
-                group: None,
-                target: vosh_trigger::TriggerTarget::Line,
-            }
+                },
+            )
         }
 
         #[tokio::test]

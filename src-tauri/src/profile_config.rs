@@ -2823,7 +2823,7 @@ fn prune_backups(path: &Path, keep: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vosh_trigger::{HighlightStyle, NamedColor, TriggerAction, TriggerPattern};
+    use vosh_trigger::{HighlightStyle, NamedColor, TriggerAction};
 
     #[test]
     fn a_saved_profile_leaves_out_the_connection_table() {
@@ -2976,33 +2976,21 @@ mod tests {
         out.into_iter().map(|(_, p)| p).collect()
     }
 
-    fn single_pattern(p: &str) -> Vec<TriggerPattern> {
-        vec![TriggerPattern {
-            pattern: p.to_string(),
-            enabled: true,
-        }]
-    }
-
     #[test]
     fn round_trip_through_toml() {
         let mut config = ProfileConfig::default();
         config.aliases.push(Alias::new("greet", "wave;bow"));
         config.profile_vars.insert("target".into(), "goblin".into());
-        config.triggers.push(Trigger {
-            name: "tells".into(),
-            patterns: single_pattern(r"\w+ tells you"),
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Highlight {
+        config.triggers.push(Trigger::new(
+            "tells",
+            r"\w+ tells you",
+            TriggerAction::Highlight {
                 style: HighlightStyle {
                     fg: Some(NamedColor::Cyan),
                     ..Default::default()
                 },
-            }],
-            preset: None,
-            group: None,
-            target: vosh_trigger::TriggerTarget::Line,
-        });
+            },
+        ));
         let text = config.to_toml().unwrap();
         let parsed = ProfileConfig::from_toml(&text).unwrap();
         assert_eq!(parsed.aliases.len(), 1);
@@ -3357,16 +3345,9 @@ name = "haste"
     #[test]
     fn invalid_trigger_regex_warns_but_continues() {
         let mut config = ProfileConfig::default();
-        config.triggers.push(Trigger {
-            name: "bad".into(),
-            patterns: single_pattern("[unclosed"),
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Gag],
-            preset: None,
-            group: None,
-            target: vosh_trigger::TriggerTarget::Line,
-        });
+        config
+            .triggers
+            .push(Trigger::new("bad", "[unclosed", TriggerAction::Gag));
         let mut profile = Profile::default();
         let warnings = config.apply_to(&mut profile);
         assert_eq!(warnings.len(), 1);

@@ -1116,17 +1116,9 @@ fn a_your_target_trigger_saves_where_0_8_0_still_reads_the_file() {
         profile
             .triggers
             .set(Trigger {
-                name: name.into(),
-                patterns: vec![TriggerPattern {
-                    pattern: "^.+$".into(),
-                    enabled: true,
-                }],
                 priority: 4,
-                enabled: true,
-                actions: vec![TriggerAction::Gag],
-                preset: None,
-                group: None,
                 target,
+                ..Trigger::new(name, "^.+$", TriggerAction::Gag)
             })
             .unwrap();
     }

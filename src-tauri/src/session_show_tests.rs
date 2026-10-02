@@ -463,19 +463,14 @@ pub(super) fn showing(mut p: Profile, show: vosh_prompt::PromptShow) -> Profile 
 fn counting(mut p: Profile) -> Profile {
     p.triggers
         .set(vosh_trigger::Trigger {
-            name: "count".into(),
-            patterns: vec![vosh_trigger::TriggerPattern {
-                pattern: ".".into(),
-                enabled: true,
-            }],
-            priority: 0,
-            enabled: true,
-            actions: vec![vosh_trigger::TriggerAction::Send {
-                template: "seen".into(),
-            }],
-            preset: None,
-            group: None,
             target: vosh_trigger::TriggerTarget::Prompt,
+            ..vosh_trigger::Trigger::new(
+                "count",
+                ".",
+                vosh_trigger::TriggerAction::Send {
+                    template: "seen".into(),
+                },
+            )
         })
         .expect("the trigger compiles");
     p
@@ -713,17 +708,8 @@ fn a_prompts_trigger_that_hides_the_prompt_leaves_the_band_empty() {
     let mut p = showing(profile(CODES, HP, false), PromptShow::Pinned);
     p.triggers
         .set(vosh_trigger::Trigger {
-            name: "hide".into(),
-            patterns: vec![vosh_trigger::TriggerPattern {
-                pattern: "hp".into(),
-                enabled: true,
-            }],
-            priority: 0,
-            enabled: true,
-            actions: vec![vosh_trigger::TriggerAction::Gag],
-            preset: None,
-            group: None,
             target: vosh_trigger::TriggerTarget::Prompt,
+            ..vosh_trigger::Trigger::new("hide", "hp", vosh_trigger::TriggerAction::Gag)
         })
         .expect("the trigger compiles");
     let mut session = Session::new(p);
@@ -1329,17 +1315,8 @@ fn enter_on_an_empty_line_ends_the_row_of_a_prompt_left_in_the_text() {
 fn prompts_trigger(mut p: Profile, action: vosh_trigger::TriggerAction) -> Profile {
     p.triggers
         .set(vosh_trigger::Trigger {
-            name: "on-prompt".into(),
-            patterns: vec![vosh_trigger::TriggerPattern {
-                pattern: "hp".into(),
-                enabled: true,
-            }],
-            priority: 0,
-            enabled: true,
-            actions: vec![action],
-            preset: None,
-            group: None,
             target: vosh_trigger::TriggerTarget::Prompt,
+            ..vosh_trigger::Trigger::new("on-prompt", "hp", action)
         })
         .expect("the trigger compiles");
     p
