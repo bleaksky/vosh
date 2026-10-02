@@ -582,6 +582,98 @@ const rosePine: AppTheme = {
   chrome: { accent: '#c4a7e7' },
 };
 
+// ── Solarized ───────────────────────────────────────────────────────
+// Ethan Schoonover's Solarized (MIT licensed). The ground, the text, the
+// cursor, the normal colors, bright red (orange), and bright magenta
+// (violet) are his published values as his Xresources map them, save
+// white on the light theme (below). The canonical mapping fills bright
+// green, yellow, blue, and cyan with the grey base tones base01, base00,
+// base0, and base1. MUD text leans on those four. Aabahran prints say in
+// bright yellow, newbie in bright green, cabal in bright blue, and clan
+// in bright cyan, so on the canonical mapping say turns grey, newbie
+// drops to the comment tone, and cabal matches plain text. Instead,
+// each of the four brights here is its
+// accent moved 10 in CIELAB L*, the scale Solarized is built on, with
+// its hue held. The step goes toward the theme's strong end, lighter on
+// the dark ground and darker on the light one, the way Solarized moves
+// emphasis from base1 to base01 when it flips modes. A lighter step on
+// the cream ground would fall near 2:1. The darker step trims chroma
+// only as far as sRGB needs, 13 percent at most.
+//
+// Bright black and bright white follow the same mode flip. The canonical
+// bright black is base03, the dark ground itself, so dim text vanishes,
+// and the canonical bright white is base3, the light ground. Here dim
+// text takes the comment tone of each mode (base01 dark, base1 light)
+// and bright white the far end (base3 dark, base03 light). The light
+// theme also gives white base01, the light mode emphasis tone, since the
+// canonical base2 sits at 1.1:1 on base3.
+//
+// The selection takes the tones Solarized's own Visual mode uses, base01
+// dark and base1 light, because the terminal paints it at 40 percent and
+// the published base02 and base2 would barely show. Neither cursor
+// carries color, so the chrome pins Solarized blue as its accent.
+const solarizedDark: AppTheme = {
+  id: 'solarized-dark',
+  label: 'Solarized Dark',
+  description: 'Deep teal ground, muted grey text, blue accent. Bright colors keep their hue.',
+  xterm: {
+    background: '#002b36',
+    foreground: '#839496',
+    cursor: '#93a1a1',
+    cursorAccent: '#002b36',
+    selectionBackground: '#586e75',
+    selectionForeground: '#eee8d5',
+    black: '#073642',
+    red: '#dc322f',
+    green: '#859900',
+    yellow: '#b58900',
+    blue: '#268bd2',
+    magenta: '#d33682',
+    cyan: '#2aa198',
+    white: '#eee8d5',
+    brightBlack: '#586e75',
+    brightRed: '#cb4b16',
+    brightGreen: '#a1b42b',
+    brightYellow: '#d3a32a',
+    brightBlue: '#4fa5ef',
+    brightMagenta: '#6c71c4',
+    brightCyan: '#4dbcb3',
+    brightWhite: '#fdf6e3',
+  },
+  chrome: { accent: '#268bd2' },
+};
+
+const solarizedLight: AppTheme = {
+  id: 'solarized-light',
+  label: 'Solarized Light',
+  description: 'Warm cream ground, slate text, blue accent. Bright colors keep their hue.',
+  xterm: {
+    background: '#fdf6e3',
+    foreground: '#657b83',
+    cursor: '#586e75',
+    cursorAccent: '#fdf6e3',
+    selectionBackground: '#93a1a1',
+    selectionForeground: '#073642',
+    black: '#073642',
+    red: '#dc322f',
+    green: '#859900',
+    yellow: '#b58900',
+    blue: '#268bd2',
+    magenta: '#d33682',
+    cyan: '#2aa198',
+    white: '#586e75',
+    brightBlack: '#93a1a1',
+    brightRed: '#cb4b16',
+    brightGreen: '#6d7e00',
+    brightYellow: '#957000',
+    brightBlue: '#0371b0',
+    brightMagenta: '#6c71c4',
+    brightCyan: '#00867e',
+    brightWhite: '#002b36',
+  },
+  chrome: { accent: '#268bd2' },
+};
+
 export const BUILTIN_THEMES: AppTheme[] = [
   obsidianEmber,
   vellum,
@@ -595,6 +687,8 @@ export const BUILTIN_THEMES: AppTheme[] = [
   monokai,
   oneDark,
   oneHalfDark,
+  solarizedDark,
+  solarizedLight,
   tangoDark,
   classicVivid,
   highContrast,

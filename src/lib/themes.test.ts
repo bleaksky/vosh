@@ -9,7 +9,7 @@ import {
   type Appearance,
   type ChromeColorKey,
 } from './chrome';
-import { composite, contrast, deltaE2000, parseHex, type Rgb } from './color';
+import { composite, contrast, deltaE2000, parseHex, rgbToOklch, type Rgb } from './color';
 import {
   BUILTIN_THEMES,
   customThemeLabel,
@@ -211,6 +211,101 @@ describe('contrast floors', () => {
     };
     for (const [id, accent] of Object.entries(accents)) {
       expect(themeTokens(findTheme(id)).accent, id).toBe(accent);
+    }
+  });
+});
+
+describe('Solarized', () => {
+  // Ethan Schoonover's published values.
+  const SOL = {
+    base03: '#002b36',
+    base02: '#073642',
+    base01: '#586e75',
+    base00: '#657b83',
+    base0: '#839496',
+    base1: '#93a1a1',
+    base2: '#eee8d5',
+    base3: '#fdf6e3',
+    yellow: '#b58900',
+    orange: '#cb4b16',
+    red: '#dc322f',
+    magenta: '#d33682',
+    violet: '#6c71c4',
+    blue: '#268bd2',
+    cyan: '#2aa198',
+    green: '#859900',
+  };
+  const dark = findTheme('solarized-dark');
+  const light = findTheme('solarized-light');
+  const BOTH = [
+    { theme: dark, appearance: 'dark', bg: SOL.base03, fg: SOL.base0, strong: 1 },
+    { theme: light, appearance: 'light', bg: SOL.base3, fg: SOL.base00, strong: -1 },
+  ] as const;
+  const HUED = [
+    ['green', 'brightGreen'],
+    ['yellow', 'brightYellow'],
+    ['blue', 'brightBlue'],
+    ['cyan', 'brightCyan'],
+  ] as const;
+
+  it('ships a dark and a light theme', () => {
+    for (const { theme, appearance } of BOTH) {
+      expect(theme.id).toBe(`solarized-${appearance}`);
+      expect(themeTokens(theme).appearance).toBe(appearance);
+    }
+  });
+
+  it('keeps the published ground, text, accent, and normal colors', () => {
+    for (const { theme, bg, fg } of BOTH) {
+      expect(theme.xterm).toMatchObject({
+        background: bg,
+        foreground: fg,
+        black: SOL.base02,
+        red: SOL.red,
+        green: SOL.green,
+        yellow: SOL.yellow,
+        blue: SOL.blue,
+        magenta: SOL.magenta,
+        cyan: SOL.cyan,
+        brightRed: SOL.orange,
+        brightMagenta: SOL.violet,
+      });
+      expect(themeTokens(theme).accent, theme.id).toBe(SOL.blue);
+    }
+    expect(dark.xterm.white).toBe(SOL.base2);
+  });
+
+  it('gives the hued brights a hue instead of a grey base tone', () => {
+    const greys = new Set([SOL.base01, SOL.base00, SOL.base0, SOL.base1]);
+    for (const { theme, strong } of BOTH) {
+      for (const [normal, bright] of HUED) {
+        const label = `${theme.id} ${bright}`;
+        expect(greys.has(theme.xterm[bright]), label).toBe(false);
+        const n = rgbToOklch(hex(theme.xterm[normal]));
+        const b = rgbToOklch(hex(theme.xterm[bright]));
+        // The normal hue, still a color, a step toward the strong end.
+        expect(Math.abs(b.h - n.h), label).toBeLessThan(5);
+        expect(b.C, label).toBeGreaterThan(0.08);
+        expect(Math.sign(b.L - n.L), label).toBe(strong);
+      }
+    }
+  });
+
+  it('keeps every slot game text reads off its ground', () => {
+    const slots = [
+      'white',
+      'brightBlack',
+      'brightGreen',
+      'brightYellow',
+      'brightBlue',
+      'brightCyan',
+      'brightWhite',
+    ] as const;
+    for (const { theme } of BOTH) {
+      const bg = hex(theme.xterm.background);
+      for (const slot of slots) {
+        expect(contrast(hex(theme.xterm[slot]), bg), `${theme.id} ${slot}`).toBeGreaterThan(2);
+      }
     }
   });
 });
