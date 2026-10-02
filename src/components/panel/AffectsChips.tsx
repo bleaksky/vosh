@@ -17,6 +17,10 @@ import {
   chipLabelMode,
   chipPages,
   chipTone,
+  chipDots,
+  chipDotsPath,
+  chipWidth,
+  CHIP_DOT_PX,
   type ChipGroup,
   type ChipMeasure,
   type ChipPage,
@@ -31,7 +35,8 @@ import { affectHours, affectsEmptyText, affectWords } from './paneText';
 // pages, and the pane draws exactly what it packs.
 //
 // Each chip carries its own state, so C draws no marker. A missing
-// affect is a dashed red chip. A tracked chip is filled, and the fill
+// affect is a chip with no ground, ringed in soft red dots (ChipDots).
+// A tracked chip is filled, and the fill
 // is a gauge: it drains from the left toward empty as the hours run
 // down, over the affect's own cast (gaugeFraction, from the fulls the
 // backend keeps), with a hairline to show the chip's full width. One
@@ -86,6 +91,7 @@ export function ChipsView({ current, tracked, hidden, box, full, measure }: Chip
             labels={labels}
             height={size ? size.height : null}
             full={full}
+            measure={m}
           />
         )}
       </div>
@@ -101,12 +107,14 @@ function ChipPages({
   labels,
   height,
   full,
+  measure,
 }: {
   groups: readonly ChipGroup[];
   pages: ChipPage[];
   labels: LabelMode;
   height: number | null;
   full: AffectFulls;
+  measure: ChipMeasure;
 }) {
   const pageHeight = height ?? 0;
   const paged = usePagedWindow(pageHeight);
@@ -159,7 +167,7 @@ function ChipPages({
                   </li>
                 )}
                 {line.rows.map((row) => (
-                  <Chip key={row.key} row={row} full={full} />
+                  <Chip key={row.key} row={row} full={full} measure={measure} />
                 ))}
                 {last && page.more > 0 && (
                   <li className="pane-chips-more">
@@ -182,8 +190,9 @@ function pageBottom(page: ChipPage): number {
   return last ? last.top + 20 : 0;
 }
 
-function Chip({ row, full }: { row: AffectRow; full: AffectFulls }) {
+function Chip({ row, full, measure }: { row: AffectRow; full: AffectFulls; measure: ChipMeasure }) {
   const kind = chipKind(row);
+  if (kind === 'missing') return <MissingChip row={row} measure={measure} />;
   const tone = hoursTone(row.ticks);
   const chip = chipTone(row);
   // Only a tracked chip has a ground, so only it drains.
@@ -218,3 +227,53 @@ function Chip({ row, full }: { row: AffectRow; full: AffectFulls }) {
     </li>
   );
 }
+
+/** A tracked affect you are missing: the name in red and the game's
+ *  `-`, on no ground, ringed in soft red dots. */
+function MissingChip({ row, measure }: { row: AffectRow; measure: ChipMeasure }) {
+  const ref = useRef<HTMLLIElement | null>(null);
+  const box = useBoxSize(ref);
+  const hours = hoursOf(row);
+  // The ring follows the chip's own width once it is measured, since a
+  // long name ellipsizes and the chip narrows. Until then, and in a
+  // test, it takes the width chipsGrid packed it at.
+  const width = box?.width ?? chipWidth(row.name, hours, measure);
+  return (
+    <li ref={ref} className="pane-chip pane-chip-missing">
+      <span className="pane-chip-name">
+        {row.name}
+        <span className="pane-sr">{affectWords(row.state, row.ticks)}</span>
+      </span>
+      <span className="pane-chip-hours" aria-hidden="true">
+        {hours}
+      </span>
+      <ChipDots width={width} />
+    </li>
+  );
+}
+
+/** The soft dotted ring round a missing chip: a zero length dash with
+ *  a round cap draws each dot, so they come out round where a CSS
+ *  dotted border draws squares. The gap is in pixels, so the ring needs
+ *  no pathLength, and the dots start half a gap in, so the seam where
+ *  the path closes falls between two dots. */
+function ChipDots({ width }: { width: number }) {
+  const { w, h, r } = chipDotsPath(width);
+  const { gap } = chipDots(width);
+  const inset = CHIP_DOT_PX / 2;
+  return (
+    <svg className="pane-chip-dots" aria-hidden="true" focusable="false">
+      <rect
+        x={inset}
+        y={inset}
+        width={round3(w)}
+        height={round3(h)}
+        rx={round3(r)}
+        strokeDasharray={`0 ${round3(gap)}`}
+        strokeDashoffset={round3(gap / 2)}
+      />
+    </svg>
+  );
+}
+
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
