@@ -12,5 +12,6 @@
 
 pub mod alias;
 mod revision;
+mod split;
 pub mod trigger;
 pub mod vars;
