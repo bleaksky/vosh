@@ -295,6 +295,7 @@ fn a_color_keeps_the_pieces_after_it_in_theirs() {
             color: ColorChoice::ByValue {
                 field: None,
                 game: false,
+                steps: false,
             },
             background: false,
             underline: false,
@@ -326,6 +327,7 @@ fn text_takes_no_color_by_value() {
             color: ColorChoice::ByValue {
                 field: None,
                 game: false,
+                steps: false,
             },
             background: false,
             underline: false,
@@ -338,6 +340,78 @@ fn text_takes_no_color_by_value() {
             "Only a value can take its color from how full it is.".into()
         ))
     );
+}
+
+#[test]
+fn a_color_by_steps_writes_and_keeps_its_scale() {
+    let steps = |field: Option<&str>| ColorChoice::ByValue {
+        field: field.map(str::to_string),
+        game: false,
+        steps: true,
+    };
+    let color = |template: &str, piece: usize, color: ColorChoice| {
+        edit(
+            template,
+            &EditOp::SetColor {
+                piece,
+                color,
+                background: false,
+                underline: false,
+            },
+        )
+    };
+    assert_eq!(
+        color("x %hp y", 1, steps(None)),
+        "x %{c:hp:steps}%hp%c_default y"
+    );
+    // The sign after a percent takes the steps of the value before it.
+    assert_eq!(
+        color("%pct_hp%c_hp%%", 1, steps(Some("hp"))),
+        "%pct_hp%{c:hp:steps}%%"
+    );
+    // Other edits keep it as it is.
+    let kept = edit(
+        "%pct_hp%{c:hp:steps}%%x",
+        &EditOp::SetStyle {
+            piece: 0,
+            style: StyleChoice::Bold,
+            on: true,
+        },
+    );
+    assert_eq!(kept, "%s_bold%pct_hp%s_off%{c:hp:steps}%%x");
+    assert_reads_clean("%pct_hp%{c:hp:steps}%%x");
+    // A bar takes one color for its cells, so it takes no steps.
+    assert_eq!(
+        apply(
+            "x %{hp:bar:6} y",
+            &EditOp::SetColor {
+                piece: 1,
+                color: steps(None),
+                background: false,
+                underline: false,
+            },
+            &known,
+        ),
+        Err(EditError(
+            "A bar cannot take the steps from red to green.".into()
+        ))
+    );
+    let both = ColorChoice::ByValue {
+        field: None,
+        game: true,
+        steps: true,
+    };
+    assert!(apply(
+        "x %hp y",
+        &EditOp::SetColor {
+            piece: 1,
+            color: both,
+            background: false,
+            underline: false,
+        },
+        &known,
+    )
+    .is_err());
 }
 
 #[test]
@@ -444,6 +518,7 @@ fn a_bar_takes_its_color_as_its_own() {
             color: ColorChoice::ByValue {
                 field: None,
                 game: false,
+                steps: false,
             },
             background: false,
             underline: false,

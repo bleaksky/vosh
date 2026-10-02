@@ -20,10 +20,10 @@ use std::collections::BTreeMap;
 use chrono::NaiveDateTime;
 use serde::Serialize;
 
-use crate::format::{h_band, how_full, p_band, tank_bar_cells, Band, Resolved, Value};
+use crate::format::{h_band, how_full, p_band, step_color, tank_bar_cells, Band, Resolved, Value};
 use crate::template::{
-    BarColor, Code, ColorSpec, FieldRef, Format, PieceKind, Template, TokenKind, UnderlineStyle,
-    ValueRef,
+    BarColor, Code, ColorSpec, FieldRef, Format, PieceKind, Scale, Template, TokenKind,
+    UnderlineStyle, ValueRef,
 };
 
 /// Ends every non-empty render, so an unclosed color never bleeds into the
@@ -635,7 +635,7 @@ fn color_params(spec: &ColorSpec, layer: Layer, values: &dyn Values) -> Option<S
         ColorSpec::Index(n) => color(Color::Index(*n)),
         ColorSpec::Rgb(r, g, b) => color(Color::Rgb(*r, *g, *b)),
         ColorSpec::Default => color(Color::Default),
-        ColorSpec::ByValue { field, game } => {
+        ColorSpec::ByValue { field, scale } => {
             let band = |band: Band| {
                 Some(match layer {
                     Layer::Fg => band.fg().to_string(),
@@ -652,10 +652,15 @@ fn color_params(spec: &ColorSpec, layer: Layer, values: &dyn Values) -> Option<S
 
             match values.resolve(field) {
                 Resolved::Unknown => None,
-                Resolved::Value(value) if *game => value.game_percent().map(h_band).and_then(band),
-                Resolved::Value(value) => value
-                    .fraction()
-                    .and_then(|f| color(Color::Ansi(how_full(f)))),
+                Resolved::Value(value) => match scale {
+                    Scale::Game => value.game_percent().map(h_band).and_then(band),
+                    Scale::Thirds => value
+                        .fraction()
+                        .and_then(|f| color(Color::Ansi(how_full(f)))),
+                    Scale::Steps => value
+                        .game_percent()
+                        .and_then(|pct| color(Color::Index(step_color(pct)))),
+                },
                 _ => color(Color::Default),
             }
         }

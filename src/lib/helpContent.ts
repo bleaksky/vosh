@@ -58,6 +58,10 @@ export const PROMPT_DESIGN_CODES: readonly PromptDesignCode[] = [
   { codes: ['%{tick:since}'], text: 'The seconds since the last tick, as 16s.' },
   { codes: ['%c_green', '%c_hp'], text: "A theme color, or Health's color by how full it is." },
   {
+    codes: ['%{c:hp:steps}'],
+    text: 'Colors by how full Health is in eleven steps from red to green, one for each tenth.',
+  },
+  {
     codes: ['%{c:#80c8ff}', '%{c:128,200,255}'],
     text: 'Any color you choose, as hex or as red, green and blue.',
   },

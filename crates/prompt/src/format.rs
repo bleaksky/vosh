@@ -369,6 +369,18 @@ pub fn how_full(fraction: f64) -> u8 {
     }
 }
 
+/// The 256 colors the old tt++ prompt drew a percent in, from red at 0
+/// to green at 100, one for each tenth: 196 202 208 214 220 226 190 154
+/// 118 82 46.
+pub const STEPS: [u8; 11] = [196, 202, 208, 214, 220, 226, 190, 154, 118, 82, 46];
+
+/// The step a percent falls in, as the old prompt took it: the percent by
+/// integer division, then its tenth, so 39 is the step of 30 and 100 the
+/// last. A percent below 0 is red and one past 100 green.
+pub fn step_color(pct: i64) -> u8 {
+    STEPS[usize::try_from((pct / 10).clamp(0, 10)).unwrap_or(0)]
+}
+
 /// Which of the twelve `%P` cells are full, as `health_prompt` fills them.
 pub fn tank_bar_cells(pct: i64) -> [bool; 12] {
     let mut cells = [false; 12];
@@ -788,6 +800,31 @@ mod tests {
         assert_eq!(how_full(0.5), 3);
         assert_eq!(how_full(0.33), 3);
         assert_eq!(how_full(0.2), 1);
+    }
+
+    #[test]
+    fn steps_color_each_tenth_as_the_old_prompt_did() {
+        // What tt++ 2.02.61 drew the percent sign in for @percent.
+        for (pct, color) in [
+            (0, 196),
+            (9, 196),
+            (10, 202),
+            (20, 208),
+            (37, 214),
+            (40, 220),
+            (59, 226),
+            (65, 190),
+            (79, 154),
+            (80, 118),
+            (90, 82),
+            (99, 82),
+            (100, 46),
+        ] {
+            assert_eq!(step_color(pct), color, "{pct}");
+        }
+        // Past the ends it stays at the ends.
+        assert_eq!(step_color(-15), 196);
+        assert_eq!(step_color(110), 46);
     }
 
     #[test]

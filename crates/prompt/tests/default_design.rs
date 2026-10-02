@@ -19,7 +19,7 @@ use chrono::{DateTime, FixedOffset, NaiveDate};
 use serde_json::{json, Value as Json};
 use vosh_prompt::config::{AabahranCapture, RegexCapture};
 use vosh_prompt::stage::{End, Offer};
-use vosh_prompt::template::{Code, ColorSpec, Format, TokenKind};
+use vosh_prompt::template::{Code, ColorSpec, Format, Scale, TokenKind};
 use vosh_prompt::testkit::{game, shown, Build};
 use vosh_prompt::vars::{self, Capture, FormatId, Tick, Vosh};
 use vosh_prompt::{
@@ -906,12 +906,16 @@ fn the_default_design_parses_into_fields_and_formats_vosh_knows() {
                 assert!(vars::entry(&field.name).is_some(), "{text}");
             }
             TokenKind::Code(
-                Code::Fg(ColorSpec::ByValue { field, game })
-                | Code::Bg(ColorSpec::ByValue { field, game }),
+                Code::Fg(ColorSpec::ByValue { field, scale })
+                | Code::Bg(ColorSpec::ByValue { field, scale }),
             ) => {
                 let entry = vars::entry(&field.name).unwrap_or_else(|| panic!("{text}"));
                 assert!(entry.kind.formats().contains(&FormatId::Pct), "{text}");
-                assert!(!game, "{text} colors by how full, not by the game's bands");
+                assert_eq!(
+                    *scale,
+                    Scale::Thirds,
+                    "{text} colors by how full, not by the game's bands"
+                );
             }
             TokenKind::Value(value) => {
                 let entry = vars::entry(&value.field.name)

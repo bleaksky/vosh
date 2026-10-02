@@ -15,6 +15,8 @@
 //!                          #rrggbb, r,g,b, `default`, `reset`, or a field
 //!                          name to color by how full it is
 //! %{c:hp:game}             foreground by the game's own %h bands
+//! %{c:hp:steps}            foreground in eleven steps from red to green,
+//!                          one for each tenth
 //! %bg_<spec> %{bg:<spec>}  background, same specs
 //! %{ul:<spec>}             the underline's color, same specs. Braced only,
 //!                          so a value named `ul_...` stays a value
@@ -107,9 +109,22 @@ pub enum ColorSpec {
     Rgb(u8, u8, u8),
     /// The terminal's own color, SGR 39 or 49 (`%c_default`).
     Default,
-    /// Color by how full a field is (`%c_hp`), or by the game's own `%h`
-    /// bands when `game` is set (`%{c:hp:game}`).
-    ByValue { field: FieldRef, game: bool },
+    /// Color by how full a field is, on the scale `scale` names.
+    ByValue { field: FieldRef, scale: Scale },
+}
+
+/// How a color by value turns how full a field is into a color.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scale {
+    /// The theme's green from two thirds, yellow from one third and red
+    /// below (`%c_hp`).
+    Thirds,
+    /// The game's own `%h` bands (`%{c:hp:game}`).
+    Game,
+    /// Eleven 256 colors from red to green, one for each tenth of the
+    /// percent as integer division takes it, as the old tt++ prompt
+    /// colored its percents (`%{c:hp:steps}`).
+    Steps,
 }
 
 /// The line an underline draws. One kind holds at a time, so turning one
@@ -626,8 +641,18 @@ fn color_body(spec: &ColorSpec) -> String {
         ColorSpec::Index(n) => n.to_string(),
         ColorSpec::Rgb(r, g, b) => format!("#{r:02x}{g:02x}{b:02x}"),
         ColorSpec::Default => "default".to_string(),
-        ColorSpec::ByValue { field, game: false } => field.to_string(),
-        ColorSpec::ByValue { field, game: true } => format!("{field}:game"),
+        ColorSpec::ByValue {
+            field,
+            scale: Scale::Thirds,
+        } => field.to_string(),
+        ColorSpec::ByValue {
+            field,
+            scale: Scale::Game,
+        } => format!("{field}:game"),
+        ColorSpec::ByValue {
+            field,
+            scale: Scale::Steps,
+        } => format!("{field}:steps"),
     }
 }
 
@@ -638,9 +663,10 @@ fn color_short(spec: &ColorSpec) -> Option<String> {
         ColorSpec::Named(n) => color_name(*n).map(str::to_string),
         ColorSpec::Index(n) => Some(n.to_string()),
         ColorSpec::Default => Some("default".to_string()),
-        ColorSpec::ByValue { field, game: false }
-            if field.param.is_none() && !field.name.chars().all(|c| c.is_ascii_digit()) =>
-        {
+        ColorSpec::ByValue {
+            field,
+            scale: Scale::Thirds,
+        } if field.param.is_none() && !field.name.chars().all(|c| c.is_ascii_digit()) => {
             Some(field.name.clone())
         }
         ColorSpec::Rgb(..) | ColorSpec::ByValue { .. } => None,
@@ -833,18 +859,23 @@ fn parse_color_spec(spec: &str) -> Option<Code> {
             clamp(parts[2]),
         )));
     }
-    if let Some((name, band)) = spec.split_once(':') {
-        return (band == "game" && valid_name(name)).then(|| {
+    if let Some((name, scale)) = spec.split_once(':') {
+        let scale = match scale {
+            "game" => Scale::Game,
+            "steps" => Scale::Steps,
+            _ => return None,
+        };
+        return valid_name(name).then(|| {
             Code::Fg(ColorSpec::ByValue {
                 field: FieldRef::new(name),
-                game: true,
+                scale,
             })
         });
     }
     valid_name(spec).then(|| {
         Code::Fg(ColorSpec::ByValue {
             field: FieldRef::new(spec),
-            game: false,
+            scale: Scale::Thirds,
         })
     })
 }
@@ -1211,7 +1242,14 @@ mod tests {
     fn by_value(name: &str) -> ColorSpec {
         ColorSpec::ByValue {
             field: FieldRef::new(name),
-            game: false,
+            scale: Scale::Thirds,
+        }
+    }
+
+    fn by_scale(name: &str, scale: Scale) -> ColorSpec {
+        ColorSpec::ByValue {
+            field: FieldRef::new(name),
+            scale,
         }
     }
 
@@ -1371,10 +1409,7 @@ mod tests {
         assert_eq!(kinds("%{ul:hp}"), vec![ul(by_value("hp"))]);
         assert_eq!(
             kinds("%{ul:hp:game}"),
-            vec![ul(ColorSpec::ByValue {
-                field: FieldRef::new("hp"),
-                game: true
-            })]
+            vec![ul(by_scale("hp", Scale::Game))]
         );
         assert_eq!(kinds("%{ul:reset}"), vec![TokenKind::Code(Code::Reset)]);
         assert_eq!(kinds("%{ul:}"), vec![TokenKind::Unknown]);
@@ -1430,6 +1465,9 @@ mod tests {
             "%{ul:default}",
             "%{ul:#bf616a}",
             "%{ul:hp:game}",
+            "%{c:hp:steps}",
+            "%{bg:mana:steps}",
+            "%{ul:move:steps}",
         ] {
             let tokens = kinds(source);
             assert_eq!(write_tokens(&tokens), source, "{source}");
@@ -1595,13 +1633,20 @@ mod tests {
         assert_eq!(kinds("%c_gray"), vec![fg(ColorSpec::Named(8))]);
         assert_eq!(kinds("%c_black"), vec![fg(ColorSpec::Named(0))]);
         assert_eq!(kinds("%c_bright_white"), vec![fg(ColorSpec::Named(15))]);
+        assert_eq!(kinds("%{c:hp:game}"), vec![fg(by_scale("hp", Scale::Game))]);
         assert_eq!(
-            kinds("%{c:hp:game}"),
-            vec![fg(ColorSpec::ByValue {
-                field: FieldRef::new("hp"),
-                game: true
-            })]
+            kinds("%{c:hp:steps}"),
+            vec![fg(by_scale("hp", Scale::Steps))]
         );
+        assert_eq!(
+            kinds("%{bg:Mana:STEPS}"),
+            vec![bg(by_scale("mana", Scale::Steps))]
+        );
+        assert_eq!(
+            kinds("%{ul:move:steps}"),
+            vec![ul(by_scale("move", Scale::Steps))]
+        );
+        assert_eq!(kinds("%{c:hp:tenths}"), vec![TokenKind::Unknown]);
         assert_eq!(kinds("%nl%{nl}"), vec![TokenKind::Nl, TokenKind::Nl]);
         assert_eq!(kinds("%{raw}"), vec![TokenKind::Raw]);
         assert_eq!(kinds("%{end}"), vec![TokenKind::End]);

@@ -19,7 +19,9 @@ use serde::Serialize;
 use crate::edit::{self, ColorChoice, Doc, EditOp, FormatChoice, FormatName, StyleChoice, When};
 use crate::format::{Resolved, Value};
 use crate::render::{render, RenderOptions, Rendered, Values};
-use crate::template::{BarColor, ColorSpec, FieldRef, Format, PieceKind, Template, TokenKind};
+use crate::template::{
+    BarColor, ColorSpec, FieldRef, Format, PieceKind, Scale, Template, TokenKind,
+};
 use crate::vars::{self, Group, Kind};
 
 /// What a piece holds, as the card names it.
@@ -473,9 +475,10 @@ fn choice(spec: Option<&ColorSpec>, own: Option<&FieldRef>) -> ColorChoice {
             g: *g,
             b: *b,
         },
-        Some(ColorSpec::ByValue { field, game }) => ColorChoice::ByValue {
+        Some(ColorSpec::ByValue { field, scale }) => ColorChoice::ByValue {
             field: (Some(field) != own).then(|| field.to_string()),
-            game: *game,
+            game: *scale == Scale::Game,
+            steps: *scale == Scale::Steps,
         },
     }
 }
@@ -486,10 +489,12 @@ fn bar_choice(color: &BarColor, own: Option<&FieldRef>) -> ColorChoice {
         BarColor::Auto => ColorChoice::ByValue {
             field: None,
             game: false,
+            steps: false,
         },
         BarColor::Game => ColorChoice::ByValue {
             field: None,
             game: true,
+            steps: false,
         },
         BarColor::Color(spec) => choice(Some(spec), own),
     }

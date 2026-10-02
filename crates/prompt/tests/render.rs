@@ -409,6 +409,44 @@ fn color_by_the_game_bands_uses_integer_division() {
     assert_eq!(at(214), "\x1b[31m\x1b[0m");
 }
 
+#[test]
+fn color_by_steps_takes_the_old_prompts_color_for_each_tenth() {
+    // The values the old prompt drew: 918, 300 and 930 out of a fight,
+    // 408 and 610 in one, and the red branch at 204.
+    let values = vitals(918, 300, 930);
+    let at = |template: &str| draw(template, &values).ansi;
+    assert_eq!(at("%{c:hp:steps}"), "\x1b[38;5;82m\x1b[0m");
+    // 300 of 800 is 37.5, which the old prompt cut to 37, step 30.
+    assert_eq!(at("%{c:mana:steps}"), "\x1b[38;5;214m\x1b[0m");
+    assert_eq!(at("%{c:move:steps}"), "\x1b[38;5;46m\x1b[0m");
+    let fight = vitals(408, 300, 610);
+    assert_eq!(draw("%{c:hp:steps}", &fight).ansi, "\x1b[38;5;220m\x1b[0m");
+    // 610 of 930 is 65.6, cut to 65, the step of 60 and not 70.
+    assert_eq!(
+        draw("%{c:move:steps}", &fight).ansi,
+        "\x1b[38;5;190m\x1b[0m"
+    );
+    assert_eq!(
+        draw("%{c:hp:steps}", &vitals(204, 300, 610)).ansi,
+        "\x1b[38;5;208m\x1b[0m"
+    );
+    // Each step from empty to full, and the ground and the underline
+    // take them too.
+    let steps: Vec<String> = (0..=10)
+        .map(|tenth| draw("%{c:hp:steps}", &vitals(102 * tenth, 0, 0)).ansi)
+        .collect();
+    let want: Vec<String> = [196, 202, 208, 214, 220, 226, 190, 154, 118, 82, 46]
+        .iter()
+        .map(|n| format!("\x1b[38;5;{n}m\x1b[0m"))
+        .collect();
+    assert_eq!(steps, want);
+    assert_eq!(at("%{bg:hp:steps}"), "\x1b[48;5;82m\x1b[0m");
+    assert_eq!(at("%{ul:hp:steps}"), "\x1b[58:5:82m\x1b[0m");
+    // With no value the color is the terminal's own, as by thirds.
+    let hidden = Fixed::default().with("hp", Resolved::Hidden);
+    assert_eq!(draw("%{c:hp:steps}", &hidden).ansi, "\x1b[39m\x1b[0m");
+}
+
 // Looks, spans and restoring the color before a mark.
 
 #[test]
