@@ -57,7 +57,7 @@ fn refresh_vars(script: &ScriptEngine, vars: &VariableStore) {
 /// variables. A body that fails is logged and asks for nothing.
 pub(crate) fn run_alias_body(
     profile: &mut Profile,
-    call: &vosh_automation::alias::AliasScriptCall,
+    call: &vosh_automation::ScriptCall,
 ) -> ApplyResult {
     refresh_vars(&profile.script, &profile.vars);
     match profile

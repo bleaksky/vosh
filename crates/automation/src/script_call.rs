@@ -1,0 +1,12 @@
+//! The Lua call a script alias or a trigger Script action queues.
+
+/// One Lua body to run, with the captures it runs against. A script
+/// alias fills `captures` with the words typed after its name, split on
+/// whitespace. A trigger Script action fills it with the capture groups
+/// of one match, the whole match first and then the numbered groups.
+/// Either way Lua reads them as `captures[1]` onward.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScriptCall {
+    pub body: String,
+    pub captures: Vec<String>,
+}

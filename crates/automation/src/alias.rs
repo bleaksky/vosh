@@ -21,6 +21,7 @@ use thiserror::Error;
 use crate::groups::GroupSwitch;
 use crate::revision::next_revision;
 use crate::split::split_commands;
+use crate::ScriptCall;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Alias {
@@ -78,16 +79,6 @@ impl Alias {
     }
 }
 
-/// One Lua body invocation queued by a script-bodied alias.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AliasScriptCall {
-    pub body: String,
-    /// The words typed after the alias name, split on whitespace. Lua
-    /// reads them as `captures[1]`, `captures[2]`, ..., the words `%1`,
-    /// `%2`, ... pick out of a template.
-    pub captures: Vec<String>,
-}
-
 /// One step of an expanded line. A line expands to its steps in the
 /// order you typed them, so a script alias runs between the commands
 /// around it.
@@ -96,7 +87,7 @@ pub enum ExpandStep {
     /// A command to send to the game.
     Command(String),
     /// The Lua body of a script alias, to run at this point in the line.
-    Script(AliasScriptCall),
+    Script(ScriptCall),
 }
 
 #[derive(Debug, Error)]
@@ -274,7 +265,7 @@ impl AliasStore {
         // Lua reads the words after the name as `captures[1]`,
         // `captures[2]`, ..., the words `%1`, `%2`, ... would take.
         if let Some(body) = &alias.script {
-            out.push(ExpandStep::Script(AliasScriptCall {
+            out.push(ExpandStep::Script(ScriptCall {
                 body: body.clone(),
                 captures: rest.split_whitespace().map(str::to_string).collect(),
             }));
@@ -672,7 +663,7 @@ mod tests {
         let body = "mud.send('kick ' .. captures[1])";
         s.set(Alias::new("kk", "ignored").with_script(body));
         let kick = |captures: &[&str]| {
-            ExpandStep::Script(AliasScriptCall {
+            ExpandStep::Script(ScriptCall {
                 body: body.into(),
                 captures: captures.iter().map(|c| (*c).to_string()).collect(),
             })
