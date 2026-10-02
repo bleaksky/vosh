@@ -17,7 +17,9 @@ import {
   widenNewest,
   type LiftExtent,
 } from './promptBands';
+import { OutputShaper } from './outputShaper';
 import { RegionWriter } from './terminalRegion';
+import type { SessionOutput } from './session';
 
 // The lift marks against a real xterm with no page around it, through the
 // same writer the terminal uses, so region marks and lift marks share the
@@ -199,6 +201,43 @@ describe('LiftTracker with your echo after a prompt of several rows', () => {
     expect(extents(term, lifts)).toEqual([
       { id: 1, top: 0, bottom: 1, left: 0, right: 20, notch: 11 },
     ]);
+  });
+});
+
+describe('LiftTracker with a prompt pushed to the right edge', () => {
+  // `<%hp>%{right}%mana!` as the session draws it at `cols` wide.
+  const row = (cols: number) => `<1020>${' '.repeat(cols - 10)}800!`;
+  const bytes = (text: string) => new TextEncoder().encode(text);
+
+  it('keeps a band that fills its row on it, at each width the row draws again', async () => {
+    const { term, writer, lifts } = setup(40);
+    // Through the word wrap the terminal uses, which ends the row where
+    // the space after the lift's end would run past it.
+    const shaper = new OutputShaper(40);
+    const write = (out: SessionOutput) => {
+      const shaped = shaper.shape(out).output;
+      if (shaped) writer.output(shaped);
+    };
+    const line = (n: number) => term.buffer.active.getLine(n)?.translateToString(true);
+    write({ bytes: bytes(`${start(1)}${mark(2)}${row(40)}${end(1)} `) });
+    await parsed(writer);
+    expect(line(0)).toBe(row(40));
+    expect(extents(term, lifts)).toEqual([{ id: 1, top: 0, bottom: 0, left: 0, right: 40 }]);
+    // A new width draws the row again, as the session repaints it.
+    term.resize(30, 10);
+    shaper.setCols(30);
+    write({
+      bytes: bytes(''),
+      replace: { gen: 2, bytes: bytes(`${mark(3)}${row(30)}${end(1)} `), fresh: false },
+    });
+    await parsed(writer);
+    expect([line(0), line(1), line(2)]).toEqual([row(30), '', '']);
+    expect(extents(term, lifts)).toEqual([{ id: 1, top: 0, bottom: 0, left: 0, right: 30 }]);
+    // Your echo takes the next row, and the band stays on its own.
+    writer.local('look\r\n');
+    await parsed(writer);
+    expect([line(0), line(1)]).toEqual([row(30), 'look']);
+    expect(extents(term, lifts)).toEqual([{ id: 1, top: 0, bottom: 0, left: 0, right: 30 }]);
   });
 });
 
