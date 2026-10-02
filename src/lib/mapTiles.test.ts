@@ -8,6 +8,7 @@ import {
   gridDims,
   gridRooms,
   hasExit,
+  offFloorLayers,
   playerCellOf,
   type Corridor,
   type Dir,
@@ -275,5 +276,80 @@ describe('the top row and the left column', () => {
     expect(glyphAt(grid, 0, 10, 0, 1).glyph).toBe('│');
     expect(glyphAt(grid, 10, 0).glyph).toBe('*');
     expect(glyphAt(grid, 10, 0, 1, 0).glyph).toBe('─');
+  });
+});
+
+describe('offFloorLayers', () => {
+  it('gives each room above or below you one spot', () => {
+    for (const name of aabahranMapFixtureNames()) {
+      const spots = offFloorLayers(tiles(name))
+        .flat()
+        .map((e) => `${e.x},${e.y},${e.z}`);
+      expect(spots.length, name).toBeGreaterThan(0);
+      expect(new Set(spots).size, name).toBe(spots.length);
+    }
+  });
+
+  it('draws a room that a or b sends again in zr once, from zr', () => {
+    const p = tiles(VAL_MIRAN);
+    // Before the Temple of Neutrality sits right above you, its down
+    // exit back to your room, and Beneath the Suspension Bridge sits six
+    // steps south and one floor down. The game sends each in a or b and
+    // again in zr, at the same spot.
+    expect(p.a).toContainEqual({ x: 10, y: 10, s: 0, e: 'nd' });
+    expect(p.zr).toContainEqual(
+      expect.objectContaining({ x: 10, y: 10, z: 1, e: 'nd', ex: { n: 20784, d: 20605 } }),
+    );
+    expect(p.b).toContainEqual({ x: 10, y: 16, s: 7, e: 'ewu' });
+    expect(p.zr).toContainEqual(
+      expect.objectContaining({
+        x: 10,
+        y: 16,
+        z: -1,
+        e: 'ewu',
+        ex: { e: 20817, w: 20770, u: 20741 },
+      }),
+    );
+    // Every room of a and b comes again in zr there.
+    expect(offFloorLayers(p)).toEqual([[], [], p.zr]);
+  });
+
+  it('keeps the rooms above or below you that only a or b carries', () => {
+    const p = tiles(CARANDUIN);
+    // The zr search counts the climb against your radius. It climbs at
+    // Inside the West Gate, five steps west, and stops short of the two
+    // Under a Battlement Ladder rooms seven steps away. The a list climbs
+    // them too. It holds Atop a Battlement Ladder over each, and On the
+    // Battlements beyond each, in a cell with no room on your floor.
+    expect(getCell(p, 4, 2)).toBeNull();
+    expect(getCell(p, 10, 2)).toBeNull();
+    const [above, below, searched] = offFloorLayers(p);
+    expect(above).toEqual([
+      { x: 2, y: 5, s: 1, e: 'nsd', z: 1 },
+      { x: 2, y: 4, s: 1, e: 'ns', z: 1 },
+      { x: 2, y: 9, s: 1, e: 'nsd', z: 1 },
+      { x: 2, y: 10, s: 1, e: 'ns', z: 1 },
+    ]);
+    expect(below).toEqual([]);
+    expect(searched).toEqual(p.zr);
+    // zr holds Atop the West Gate and the battlements beside it, so the
+    // wall walk reads whole.
+    const wall = [above, searched]
+      .flat()
+      .filter((e) => e.x === 2 && e.z === 1)
+      .map((e) => e.y)
+      .sort((a, b) => a - b);
+    expect(wall).toEqual([4, 5, 6, 7, 8, 9, 10]);
+  });
+
+  it('draws a and b alone when the game sends no zr', () => {
+    // The game leaves zr out when its search finds no room.
+    const bare = structuredClone(tiles(VAL_MIRAN));
+    delete bare.zr;
+    expect(offFloorLayers(bare)).toEqual([
+      bare.a!.map((e) => ({ ...e, z: 1 })),
+      bare.b!.map((e) => ({ ...e, z: -1 })),
+      [],
+    ]);
   });
 });

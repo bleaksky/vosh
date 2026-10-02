@@ -68,15 +68,17 @@ export interface MapTilesPayload {
   g?: Record<string, Record<string, ServerCell | null | string>>;
   /// Rooms one floor above the player's current floor, in the same
   /// `[y][x]` coordinate space as `g`. Empty/absent when no above-
-  /// floor rooms are within radius.
+  /// floor rooms are within radius. The game keeps this list for older
+  /// clients. The map draws the rooms in it that `zr` does not already
+  /// hold (offFloorLayers).
   a?: OffFloorEntry[];
-  /// Rooms one floor below.
+  /// Rooms one floor below, kept the same way as `a`.
   b?: OffFloorEntry[];
-  /// Per the GMCP wiki, the multi-Z array carries rooms at any
-  /// floor delta (positive=above, negative=below) via an explicit
-  /// `z` field on each entry. Aabahran's current production server
-  /// uses `a`/`b` for ±1; `zr` should still be honored if it shows
-  /// up so deeper-floor rooms render too.
+  /// The multi-Z array carries rooms at any floor delta
+  /// (positive=above, negative=below) via an explicit `z` field on
+  /// each entry, out to your radius. It repeats most rooms in `a` and
+  /// `b` at the same spot. The game leaves it out when its search finds
+  /// no room.
   zr?: OffFloorEntry[];
   areas?: Record<string, AreaInfo>;
 }
@@ -292,6 +294,43 @@ export function corridors(payload: MapTilesPayload, rows: number, cols: number):
   return out;
 }
 
+/** A room on another floor, `z` floors above you (below when negative). */
+export interface OffFloorRoom extends OffFloorEntry {
+  z: number;
+}
+
+/** The rooms on other floors, one list per layer the painters draw.
+ *
+ *  The game sends most of them twice. `zr` is its search over every
+ *  floor out to your radius, and `a` and `b` are its older lists of the
+ *  floor just above and just below. Most rooms in `a` and `b` come again
+ *  in `zr` at the same spot, and drawing all three painted those rooms
+ *  twice. Some do not. The `zr` search counts the climb against your
+ *  radius and `a` and `b` do not, so the room over a staircase r steps
+ *  away, and the rooms beside it, come only in `a` or `b`. The game also
+ *  leaves `zr` out when its search finds no room. So every room of `zr`
+ *  draws, and a room of `a` or `b` draws only when no room of `zr`, and
+ *  no room listed before it, holds its spot, the same x, y and floor.
+ *  `zr` comes last, so its room wins a glyph cell that `a` or `b`
+ *  reaches on another floor. */
+export function offFloorLayers(payload: MapTilesPayload): OffFloorRoom[][] {
+  const spotOf = (e: OffFloorRoom) => `${e.x},${e.y},${e.z}`;
+  const searched = Array.isArray(payload.zr) ? payload.zr.map((e) => ({ ...e, z: e.z ?? 0 })) : [];
+  const taken = new Set(searched.map(spotOf));
+  const older = (entries: OffFloorEntry[] | undefined, z: number): OffFloorRoom[] => {
+    const out: OffFloorRoom[] = [];
+    if (!Array.isArray(entries)) return out;
+    for (const e of entries) {
+      const room = { ...e, z };
+      if (taken.has(spotOf(room))) continue;
+      taken.add(spotOf(room));
+      out.push(room);
+    }
+    return out;
+  };
+  return [older(payload.a, 1), older(payload.b, -1), searched];
+}
+
 // Player marker color. xterm color 220 is the bright gold tintin
 // uses in its `\e[1;38;5;220m@\e[0m` marker. Hardcoded here so the
 // glyph overlay does not need a full xterm-256 lookup table.
@@ -331,7 +370,7 @@ function dimLevel(dr: number, dc: number, light: number | string | undefined): n
 // connection cells have somewhere to live.
 //
 // Layers, painted in order:
-//   1. Off-floor rooms (a / b / zr) — dim sector glyph as a
+//   1. Off-floor rooms (offFloorLayers) — dim sector glyph as a
 //      background hint so the player can see structure above and
 //      below the current floor. Rendered at low alpha via CSS.
 //   2. Same-floor rooms — full color sector glyph; overrides any
@@ -389,31 +428,20 @@ export function glyphGrid(payload: MapTilesPayload): GlyphGrid | null {
 
   // Pass 1: off-floor rooms. Each entry produces a sector glyph
   // tagged with its floor kind so the renderer can dim it via CSS.
-  const placeOffEntries = (entries: OffFloorEntry[] | undefined, floor: FloorKind) => {
-    if (!Array.isArray(entries)) return;
-    for (const entry of entries) {
-      const sectorCode = sectorCodeOf(entry.s);
-      if (sectorCode === '') continue;
-      const sector = sectorForCode(sectorCode);
-      const isUnknown = sectorCode !== '0' && sector === SECTORS[0];
-      const cg = connectGlyph(entry.e);
-      const glyph = cg ?? (isUnknown ? UNKNOWN_GLYPH : sector.glyph);
-      placeRoom(entry.y, entry.x, {
-        glyph,
-        color: sector.halo,
-        isPlayer: false,
-        floor,
-      });
-    }
-  };
-  placeOffEntries(payload.a, 'above');
-  placeOffEntries(payload.b, 'below');
-  if (Array.isArray(payload.zr)) {
-    for (const entry of payload.zr) {
-      const z = entry.z ?? 0;
-      const floor: FloorKind = z > 0 ? 'above' : z < 0 ? 'below' : 'far';
-      placeOffEntries([entry], floor);
-    }
+  for (const entry of offFloorLayers(payload).flat()) {
+    const sectorCode = sectorCodeOf(entry.s);
+    if (sectorCode === '') continue;
+    const sector = sectorForCode(sectorCode);
+    const isUnknown = sectorCode !== '0' && sector === SECTORS[0];
+    const cg = connectGlyph(entry.e);
+    const glyph = cg ?? (isUnknown ? UNKNOWN_GLYPH : sector.glyph);
+    const floor: FloorKind = entry.z > 0 ? 'above' : entry.z < 0 ? 'below' : 'far';
+    placeRoom(entry.y, entry.x, {
+      glyph,
+      color: sector.halo,
+      isPlayer: false,
+      floor,
+    });
   }
 
   // Pass 2: same-floor rooms. Overrides off-floor at the same coords.
