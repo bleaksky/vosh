@@ -75,6 +75,9 @@ pub(super) struct Read {
     pub(super) out: Output,
     pub(super) log: Vec<String>,
     pub(super) kept: Vec<Vec<u8>>,
+    /// What Collapse repeated lines made of each kept line, in the same
+    /// order, None for a line it left alone.
+    pub(super) repeats: Vec<Option<vosh_prompt::stage::Repeat>>,
     pub(super) sends: Vec<String>,
     pub(super) gmcp: bool,
     pub(super) prompt: bool,
@@ -125,8 +128,10 @@ impl Session {
         batch.out = Output::new(std::mem::take(&mut self.other));
         let now = Instant::now();
         let mut kept = Vec::new();
+        let mut repeats = Vec::new();
         let mut sends = Vec::new();
-        let mut take = |step: LineStep, kept: &mut Vec<Vec<u8>>| {
+        let mut take = |step: LineStep, kept: &mut Vec<Vec<u8>>, repeats: &mut Vec<_>| {
+            repeats.extend(step.scrollback.iter().map(|_| step.repeat));
             kept.extend(step.scrollback);
             sends.extend(step.result.sends);
         };
@@ -136,7 +141,7 @@ impl Session {
                     for line in self.acc.feed(&bytes) {
                         let plain = vosh_ansi::plain_text(&line.bytes);
                         for step in line_step(&mut self.p, &mut batch, line, plain, now, Some(1)) {
-                            take(step, &mut kept);
+                            take(step, &mut kept, &mut repeats);
                         }
                     }
                 }
@@ -151,14 +156,14 @@ impl Session {
                     if byte == telnet_codes::GA || byte == telnet_codes::EOR =>
                 {
                     for step in marker_step(&mut self.p, &mut self.acc, &mut batch, now, Some(1)) {
-                        take(step, &mut kept);
+                        take(step, &mut kept, &mut repeats);
                     }
                 }
                 _ => {}
             }
         }
         if let Some(step) = partial_step(&mut self.p, &mut self.acc, &mut batch, now, Some(1)) {
-            take(step, &mut kept);
+            take(step, &mut kept, &mut repeats);
         }
         if batch.hold {
             hold_step(&mut self.p, &mut self.acc, &mut batch.out);
@@ -168,6 +173,7 @@ impl Session {
             out: batch.out,
             log: batch.log.into_iter().map(|row| row.text).collect(),
             kept,
+            repeats,
             sends,
             gmcp: batch.gmcp,
             prompt: batch.prompt,

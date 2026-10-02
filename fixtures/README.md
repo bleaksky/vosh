@@ -8,6 +8,15 @@ Captured byte streams used by parser tests.
 fixtures/
   telnet/    Raw telnet negotiation captures (IAC sequences).
   ansi/      ANSI escape sequence captures, including 256 color and truecolor.
+  collapse/  splits.b64, the session's payloads with Collapse repeated lines
+             on, for pulses, a fight and lines with no prompt from the fake
+             Aabahran, your prompt pinned and for the pulses in the text
+             too, as one read and as two cut at every place, after the
+             login, with the native grid's screen of each. Generated and
+             synthetic, from the server's own lines with an invented name,
+             stored the way prompt/aabahran/pinned/ is, held to the session
+             by its test, and written again with
+             VOSH_WRITE_COLLAPSE_SPLITS=1.
   config/    The exact bytes Vosh writes for each config file, through its
              own save functions. A default and a full profile file,
              global.toml, loadouts.toml, catalog.toml and profiles.toml,

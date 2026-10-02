@@ -1764,6 +1764,10 @@ struct LineStep {
     tick_step: Option<TickStep>,
     /// The lines to keep in the scrollback ring, each as it shows.
     scrollback: Vec<Vec<u8>>,
+    /// What Collapse repeated lines made of the line, when it is on: the
+    /// line kept starts a run of repeated lines, or takes the place of the
+    /// run's line in the ring, the count before it, as on screen.
+    repeat: Option<vosh_prompt::stage::Repeat>,
 }
 
 /// Handle one complete line under the profile lock. The stage reads it
@@ -1951,7 +1955,32 @@ fn text_line_step(
             shown.extend_from_slice(b"\r\n");
         }
     }
+    let mut repeat = None;
     let kept = match shows {
+        // Collapse repeated lines shows a line the same as the one before
+        // it once, with the count before it. Only what shows collapses.
+        // Its triggers ran above, and it is logged below as any line that
+        // shows.
+        Shows::Now(painted)
+            if p.ui.collapse_repeats
+                && result
+                    .display
+                    .as_ref()
+                    .is_some_and(|text| vosh_prompt::stage::collapsible(text.as_bytes())) =>
+        {
+            let text = result.display.as_deref().unwrap_or_default().as_bytes();
+            let made = p
+                .prompt
+                .stage
+                .repeat_line(&mut batch.out, &bytes, &plain, painted, text);
+            repeat = Some(made);
+            Some(match made {
+                vosh_prompt::stage::Repeat::Starts => text.to_vec(),
+                vosh_prompt::stage::Repeat::Joins(count) => {
+                    vosh_prompt::stage::counted(count, text)
+                }
+            })
+        }
         Shows::Now(painted) => {
             if let Some(text) = &result.display {
                 shown.extend_from_slice(text.as_bytes());
@@ -1992,6 +2021,7 @@ fn text_line_step(
         apply,
         tick_step,
         scrollback,
+        repeat,
     }
 }
 
@@ -2129,6 +2159,7 @@ fn prompt_block(
         apply,
         tick_step,
         scrollback,
+        repeat: None,
     }
 }
 
@@ -2208,6 +2239,7 @@ fn unread_partial(
         apply,
         tick_step: None,
         scrollback: Vec::new(),
+        repeat: None,
     }
 }
 
@@ -2753,6 +2785,7 @@ async fn deliver_line_step<R: tauri::Runtime>(
         apply,
         tick_step,
         scrollback: kept,
+        repeat,
     } = step;
     if !result.routes.is_empty() {
         perf.routed_emits += result.routes.len() as u64;
@@ -2760,7 +2793,9 @@ async fn deliver_line_step<R: tauri::Runtime>(
     emit_line_routes(app, &result);
     for text in kept {
         let sb_t0 = std::time::Instant::now();
-        scrollback.lock().await.push(text);
+        // The ring keeps a run of repeated lines once, as the screen shows
+        // it.
+        scrollback.lock().await.keep(text, repeat);
         perf.scrollback_push_ns += sb_t0.elapsed().as_nanos() as u64;
         perf.scrollback_pushes += 1;
     }
@@ -6277,6 +6312,10 @@ mod pointer_tests;
 #[cfg(test)]
 #[path = "session_room_tests.rs"]
 mod room_tests;
+
+#[cfg(test)]
+#[path = "session_collapse_tests.rs"]
+mod collapse_tests;
 
 #[cfg(test)]
 mod settle_tests {
