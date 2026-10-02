@@ -20,7 +20,7 @@ use regex_syntax::hir::{HirKind, Look};
 
 use serde::Serialize;
 
-use crate::aabahran::{Compiled, Origin, Shape, ShapeKind, WarningKind, Which, Who};
+use crate::aabahran::{Compiled, Origin, Shape, ShapeKind, ShapeLine, WarningKind, Which, Who};
 use crate::config::{CaptureConfig, CaptureSource, RegexCapture};
 
 /// True when a partial line `pattern` matches is the prompt at once. That
@@ -616,6 +616,59 @@ fn code_marks(compiled: &Compiled, shape: &Shape, lines: &[&str]) -> Vec<Mark> {
 /// How many characters of `text` come before byte `at`.
 fn chars_before(text: &str, at: usize) -> usize {
     text.get(..at).map_or(0, |head| head.chars().count())
+}
+
+// A shape reads lines into a Recognized, so its reading lives with the
+// recognizer, and the shapes module needs nothing from the capture.
+impl Shape {
+    /// Read whole lines as this shape, the last one without its line end
+    /// or ended by a GA or EOR. Every name the shape reads is in the
+    /// values, empty where the game printed nothing. The AFK shape reads
+    /// `afk`.
+    pub fn read(&self, lines: &[&str]) -> Option<Recognized> {
+        self.read_with(lines, |line| Some(&line.line))
+    }
+
+    /// Read lines whose last one is a partial the game has not ended.
+    /// Only a shape that settles reads one, and a partial split before
+    /// its last character does not match.
+    pub fn read_partial(&self, lines: &[&str]) -> Option<Recognized> {
+        if !self.settle {
+            return None;
+        }
+        self.read_with(lines, |line| line.partial.as_ref())
+    }
+
+    fn read_with<'a>(
+        &'a self,
+        lines: &[&str],
+        last: impl Fn(&'a ShapeLine) -> Option<&'a Regex>,
+    ) -> Option<Recognized> {
+        if lines.len() != self.lines.len() {
+            return None;
+        }
+        let mut values = BTreeMap::new();
+        let count = lines.len();
+        for (i, (text, line)) in lines.iter().zip(&self.lines).enumerate() {
+            let re = if i + 1 == count {
+                last(line)?
+            } else {
+                &line.line
+            };
+            let found = re.captures(text)?;
+            for name in re.capture_names().flatten() {
+                let value = found.name(name).map_or("", |m| m.as_str());
+                values.insert(name.to_string(), value.to_string());
+            }
+        }
+        if self.kind == ShapeKind::Afk {
+            values.insert("afk".to_string(), "1".to_string());
+        }
+        Some(Recognized {
+            values,
+            ..Recognized::default()
+        })
+    }
 }
 
 /// What a shape read, with what the shape itself says: whether it
