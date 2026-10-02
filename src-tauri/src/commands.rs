@@ -1968,25 +1968,13 @@ pub(crate) async fn broadcast_profile_ui<R: tauri::Runtime>(
     }
 }
 
-/// Read a profile's pane layout, the active one when `profile` is
-/// absent. A profile that has never saved one gets a tree migrated from
-/// its dock layout (or the default), with nothing written to disk until
-/// the first edit. An inactive profile's tree comes from its file and
-/// carries no generation.
+/// Read the active profile's pane layout. A profile that has never
+/// saved one gets a tree migrated from its dock layout (or the
+/// default), with nothing written to disk until the first edit.
 #[tauri::command]
 pub(crate) async fn pane_layout_get(
     state: State<'_, SharedState>,
-    profile: Option<String>,
 ) -> Result<PaneLayoutEnvelope, String> {
-    if let Some(name) = profile.as_deref() {
-        let shared: SharedState = state.inner().clone();
-        if let Some(layout) = crate::characters::inactive_pane_layout(&shared, name).await? {
-            return Ok(PaneLayoutEnvelope {
-                layout,
-                generation: None,
-            });
-        }
-    }
     let p = state.profile.lock().await;
     Ok(pane_layout_envelope(&p))
 }

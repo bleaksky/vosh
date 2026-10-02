@@ -254,23 +254,6 @@ pub(crate) async fn profile_detail(
     })
 }
 
-/// An inactive profile's pane tree as it will show once live. Ok(None)
-/// when `name` is the live profile.
-pub(crate) async fn inactive_pane_layout(
-    state: &SharedState,
-    name: &str,
-) -> Result<Option<PaneLayoutPersist>, String> {
-    let guard = state.profile_set.lock().await;
-    let set = guard.as_ref().ok_or(PROFILES_NOT_LOADED)?;
-    if set.get(name).is_none() {
-        return Err(not_found(name));
-    }
-    if set.active_name() == name {
-        return Ok(None);
-    }
-    Ok(Some(stored_ui(set, name)?.pane_layout()))
-}
-
 /// Put a profile's panes back to the stock map over affects tree,
 /// keeping whether its panel shows and how wide it is. The active
 /// profile when `profile` is absent.
@@ -683,27 +666,6 @@ mod tests {
         }
         layout.sanitize();
         layout
-    }
-
-    #[tokio::test]
-    async fn pane_reads_follow_the_named_profile() {
-        let dir = tempfile::tempdir().unwrap();
-        let state = james_like_state(dir.path()).await;
-        let mut config = ProfileConfig::default();
-        config.ui.panes = Some(arranged());
-        write_profile(dir.path(), "Healer", &config);
-
-        assert_eq!(
-            inactive_pane_layout(&state, "Healer").await.unwrap(),
-            Some(arranged())
-        );
-        assert_eq!(
-            inactive_pane_layout(&state, DEFAULT_PROFILE_NAME)
-                .await
-                .unwrap(),
-            None
-        );
-        assert!(inactive_pane_layout(&state, "Nobody").await.is_err());
     }
 
     #[tokio::test]
