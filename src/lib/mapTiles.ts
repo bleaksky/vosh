@@ -250,20 +250,23 @@ export function gridRooms(payload: MapTilesPayload, rows: number, cols: number):
  *  the game sends in uppercase because it leads past the next cell. */
 export type StrokeKind = 'join' | 'stub' | 'tick';
 
-/** How far a bent exit's tick reaches from the room's center, in
- *  cells. It clears a room in Squares and stops short of the middle of
- *  the gap, so two ticks that face each other never read as a join. */
-export const TICK_REACH = 0.42;
+/** How far a stroke of each kind reaches from its room's center in
+ *  Squares and Tileset, in cells. A join meets the room in the next cell
+ *  and a stub stops in the middle of the gap. A tick clears a room in
+ *  Squares and stops short of the middle of the gap, so two ticks that
+ *  face each other never read as a join. */
+export const REACH: Record<StrokeKind, number> = { join: 1, stub: 0.5, tick: 0.42 };
 
 /** One stroke from a room's center toward the next cell, in grid
- *  units. `reach` is 1 for a join, 0.5 for a stub and TICK_REACH for a
- *  tick. */
+ *  units. */
 export interface Stroke {
   dx: number;
   dy: number;
-  reach: number;
   state: DoorState;
   kind: StrokeKind;
+  /** A join the room in the next cell leads back along, so the two
+   *  rooms share one line. */
+  mutual: boolean;
 }
 
 /** A stroke out of the room at a row and column of your floor. */
@@ -305,13 +308,14 @@ export function exitStrokes(
     const neighbor = next(dx, dy);
     const here = doorStateAt(cell, dir);
     if (neighbor && hasExit(cell, dir)) {
-      const there = hasExit(neighbor, opp) ? doorStateAt(neighbor, opp) : null;
+      const mutual = hasExit(neighbor, opp);
+      const there = mutual ? doorStateAt(neighbor, opp) : null;
       const state = combineDoorStates(here, there) ?? 'open';
-      out.push({ dx, dy, reach: 1, state, kind: 'join' });
+      out.push({ dx, dy, state, kind: 'join', mutual });
     } else if (here === 'hidden') {
-      out.push({ dx, dy, reach: 0.5, state: 'hidden', kind: 'stub' });
+      out.push({ dx, dy, state: 'hidden', kind: 'stub', mutual: false });
     } else if (cell.e?.includes(dir.toUpperCase())) {
-      out.push({ dx, dy, reach: TICK_REACH, state: here ?? 'open', kind: 'tick' });
+      out.push({ dx, dy, state: here ?? 'open', kind: 'tick', mutual: false });
     }
   }
   return out;

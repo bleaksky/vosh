@@ -18,6 +18,7 @@ import { MAP_STYLE_KEY, loadMapStyle, type MapStyle } from '../lib/mapStyle';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom } from '../lib/mapZoom';
 import {
   DOOR_COLORS,
+  REACH,
   corridors,
   glyphGrid,
   gridDims,
@@ -514,15 +515,11 @@ function drawSquares(
     locked: [],
     hidden: [],
   };
-  for (const { row, col, dx, dy, reach, state } of corridors(payload, rows, cols)) {
+  for (const { row, col, dx, dy, kind, state } of corridors(payload, rows, cols)) {
     const cx = ox + col * pitch;
     const cy = oy + row * pitch;
-    buckets[state].push({
-      cx,
-      cy,
-      nx: cx + dx * reach * pitch,
-      ny: cy + dy * reach * pitch,
-    });
+    const reach = REACH[kind] * pitch;
+    buckets[state].push({ cx, cy, nx: cx + dx * reach, ny: cy + dy * reach });
   }
   ctx.lineWidth = 1.25;
   const flushSolid = (state: 'open' | 'closed' | 'locked') => {
@@ -860,15 +857,11 @@ function drawTileset(
     locked: [],
     hidden: [],
   };
-  for (const { row, col, dx, dy, reach, state } of corridors(payload, rows, cols)) {
+  for (const { row, col, dx, dy, kind, state } of corridors(payload, rows, cols)) {
     const cx = ox + col * pitch;
     const cy = oy + row * pitch;
-    buckets[state].push({
-      x1: cx,
-      y1: cy,
-      x2: cx + dx * reach * pitch,
-      y2: cy + dy * reach * pitch,
-    });
+    const reach = REACH[kind] * pitch;
+    buckets[state].push({ x1: cx, y1: cy, x2: cx + dx * reach, y2: cy + dy * reach });
   }
   const flushSolid = (state: 'open' | 'closed' | 'locked') => {
     const segs = buckets[state];

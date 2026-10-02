@@ -9,11 +9,9 @@ import {
   exitStrokes,
   gridDims,
   gridRooms,
-  hasExit,
   offFloorLayers,
   playerCellOf,
   sectorCodeOf,
-  type Dir,
   type DoorState,
   type MapTilesPayload,
   type ServerCell,
@@ -203,22 +201,17 @@ export interface ExitLine {
   kind: StrokeKind;
 }
 
-const DIR_AT: Record<string, Dir> = { '0,-1': 'n', '1,0': 'e', '0,1': 's', '-1,0': 'w' };
-
 /** The exits on each floor shown, from exitStrokes. A join runs across
  *  the gap from roof edge to roof edge, once for a pair that lead to
- *  each other. A stub runs to the middle of the gap, and a tick crosses
- *  its room's edge. */
+ *  each other, from the room west or north of the other. A stub runs to
+ *  the middle of the gap, and a tick crosses its room's edge. */
 export function exitLines(scene: Scene): ExitLine[] {
   const out: ExitLine[] = [];
   const hf = TILE / 2;
   for (const r of scene.rooms) {
     const next = (dx: number, dy: number) => scene.at(r.x + dx, r.y + dy, r.z)?.cell ?? null;
     for (const s of exitStrokes(r.cell, next)) {
-      const back = DIR_AT[`${-s.dx},${-s.dy}`];
-      const neighbor = next(s.dx, s.dy);
-      if (s.kind === 'join' && (s.dx < 0 || s.dy < 0) && neighbor && hasExit(neighbor, back))
-        continue;
+      if (s.mutual && (s.dx < 0 || s.dy < 0)) continue;
       const [a, b] =
         s.kind === 'join'
           ? [hf, 1 - hf]
