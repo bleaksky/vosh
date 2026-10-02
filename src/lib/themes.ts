@@ -612,6 +612,13 @@ const rosePine: AppTheme = {
 // dark and base1 light, because the terminal paints it at 40 percent and
 // the published base02 and base2 would barely show. Neither cursor
 // carries color, so the chrome pins Solarized blue as its accent.
+//
+// The dark theme also pins danger. A dark theme's chrome reads danger
+// from bright red, which Solarized fills with orange, so low HP and
+// error words would turn orange beside the yellow warn tone. The pin is
+// Solarized red lifted with its hue held until it clears 3:1 on the
+// panel and the raised surface, the value the chrome derives from red
+// itself. The light theme reads plain red and needs no pin.
 const solarizedDark: AppTheme = {
   id: 'solarized-dark',
   label: 'Solarized Dark',
@@ -640,7 +647,7 @@ const solarizedDark: AppTheme = {
     brightCyan: '#4dbcb3',
     brightWhite: '#fdf6e3',
   },
-  chrome: { accent: '#268bd2' },
+  chrome: { accent: '#268bd2', danger: '#e8403a' },
 };
 
 const solarizedLight: AppTheme = {
