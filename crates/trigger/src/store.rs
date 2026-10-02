@@ -207,6 +207,25 @@ impl Serialize for Trigger {
 }
 
 impl Trigger {
+    /// A trigger with one enabled pattern and one action, on at priority
+    /// 0, in no preset or group, matching completed lines. Set any other
+    /// field with struct update syntax.
+    pub fn new(name: impl Into<String>, pattern: impl Into<String>, action: TriggerAction) -> Self {
+        Self {
+            name: name.into(),
+            patterns: vec![TriggerPattern {
+                pattern: pattern.into(),
+                enabled: true,
+            }],
+            priority: 0,
+            enabled: true,
+            actions: vec![action],
+            preset: None,
+            group: None,
+            target: TriggerTarget::Line,
+        }
+    }
+
     /// Convenience accessor for the first pattern's text — used by
     /// older call sites + UI summaries that just need "what does this
     /// trigger match on?" at a glance.
@@ -453,17 +472,8 @@ mod tests {
 
     fn trigger(name: &str, pattern: &str) -> Trigger {
         Trigger {
-            name: name.into(),
-            patterns: vec![TriggerPattern {
-                pattern: pattern.into(),
-                enabled: true,
-            }],
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Gag],
-            preset: None,
             group: Some("combat".into()),
-            target: TriggerTarget::Line,
+            ..Trigger::new(name, pattern, TriggerAction::Gag)
         }
     }
 

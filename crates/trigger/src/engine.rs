@@ -684,28 +684,16 @@ mod tests {
     }
 
     fn highlight(name: &str, pattern: &str, fg: NamedColor) -> Trigger {
-        Trigger {
-            name: name.to_string(),
-            patterns: single_pattern(pattern),
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Highlight {
+        Trigger::new(
+            name,
+            pattern,
+            TriggerAction::Highlight {
                 style: HighlightStyle {
                     fg: Some(fg),
                     ..Default::default()
                 },
-            }],
-            preset: None,
-            group: None,
-            target: TriggerTarget::Line,
-        }
-    }
-
-    fn single_pattern(p: &str) -> Vec<crate::store::TriggerPattern> {
-        vec![crate::store::TriggerPattern {
-            pattern: p.to_string(),
-            enabled: true,
-        }]
+            },
+        )
     }
 
     #[test]
@@ -814,88 +802,59 @@ mod tests {
 
     #[test]
     fn gag_drops_line() {
-        let s = store(vec![Trigger {
-            name: "spam".into(),
-            patterns: single_pattern("tingle"),
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Gag],
-            preset: None,
-            group: None,
-            target: TriggerTarget::Line,
-        }]);
+        let s = store(vec![Trigger::new("spam", "tingle", TriggerAction::Gag)]);
         let r = process(&s, b"You feel a tingle.");
         assert!(r.display.is_none());
     }
 
     #[test]
     fn replace_substitutes_with_capture() {
-        let s = store(vec![Trigger {
-            name: "rename".into(),
-            patterns: single_pattern(r"goblin"),
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Replace {
+        let s = store(vec![Trigger::new(
+            "rename",
+            r"goblin",
+            TriggerAction::Replace {
                 template: "wolf".into(),
-            }],
-            preset: None,
-            group: None,
-            target: TriggerTarget::Line,
-        }]);
+            },
+        )]);
         let r = process(&s, b"You see a goblin.");
         assert_eq!(r.display.as_deref(), Some("You see a wolf."));
     }
 
     #[test]
     fn replace_uses_named_capture() {
-        let s = store(vec![Trigger {
-            name: "polite".into(),
-            patterns: single_pattern(r"(?<who>\w+) yells"),
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Replace {
+        let s = store(vec![Trigger::new(
+            "polite",
+            r"(?<who>\w+) yells",
+            TriggerAction::Replace {
                 template: "$who calmly says".into(),
-            }],
-            preset: None,
-            group: None,
-            target: TriggerTarget::Line,
-        }]);
+            },
+        )]);
         let r = process(&s, b"Bob yells");
         assert_eq!(r.display.as_deref(), Some("Bob calmly says"));
     }
 
     #[test]
     fn send_substitutes_capture() {
-        let s = store(vec![Trigger {
-            name: "loot".into(),
-            patterns: single_pattern(r"The (\w+) is DEAD"),
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Send {
+        let s = store(vec![Trigger::new(
+            "loot",
+            r"The (\w+) is DEAD",
+            TriggerAction::Send {
                 template: "loot $1".into(),
-            }],
-            preset: None,
-            group: None,
-            target: TriggerTarget::Line,
-        }]);
+            },
+        )]);
         let r = process(&s, b"The goblin is DEAD!");
         assert_eq!(r.sends, vec!["loot goblin".to_string()]);
     }
 
     #[test]
     fn route_appends_pane_name() {
-        let s = store(vec![Trigger {
-            name: "tells".into(),
-            patterns: single_pattern(r"tells you"),
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Route {
+        let s = store(vec![Trigger::new(
+            "tells",
+            r"tells you",
+            TriggerAction::Route {
                 pane: "chat".into(),
-            }],
-            preset: None,
-            group: None,
-            target: TriggerTarget::Line,
-        }]);
+            },
+        )]);
         let r = process(&s, b"Bob tells you 'hi'");
         assert_eq!(r.routes, vec!["chat".to_string()]);
     }
@@ -905,14 +864,12 @@ mod tests {
         // A trigger you built and a preset that route the same line to
         // the same pane show it there once, not twice.
         let route = |name: &str, pane: &str, priority: i32| Trigger {
-            name: name.into(),
-            patterns: single_pattern(r"^You tell "),
             priority,
-            enabled: true,
-            actions: vec![TriggerAction::Route { pane: pane.into() }],
-            preset: None,
-            group: None,
-            target: TriggerTarget::Line,
+            ..Trigger::new(
+                name,
+                r"^You tell ",
+                TriggerAction::Route { pane: pane.into() },
+            )
         };
         let s = store(vec![
             route("mine", "tell", 2),
@@ -927,29 +884,25 @@ mod tests {
     fn priority_order_is_high_to_low() {
         let mut s = TriggerStore::new();
         s.set(Trigger {
-            name: "low".into(),
-            patterns: single_pattern("x"),
             priority: -10,
-            enabled: true,
-            actions: vec![TriggerAction::Replace {
-                template: "L".into(),
-            }],
-            preset: None,
-            group: None,
-            target: TriggerTarget::Line,
+            ..Trigger::new(
+                "low",
+                "x",
+                TriggerAction::Replace {
+                    template: "L".into(),
+                },
+            )
         })
         .unwrap();
         s.set(Trigger {
-            name: "high".into(),
-            patterns: single_pattern("x"),
             priority: 100,
-            enabled: true,
-            actions: vec![TriggerAction::Replace {
-                template: "H".into(),
-            }],
-            preset: None,
-            group: None,
-            target: TriggerTarget::Line,
+            ..Trigger::new(
+                "high",
+                "x",
+                TriggerAction::Replace {
+                    template: "H".into(),
+                },
+            )
         })
         .unwrap();
         // High runs first on plain text "x". After high replaces to "H",
@@ -1088,7 +1041,10 @@ mod tests {
     fn a_trigger_that_draws_nothing_keeps_the_line_as_sent() {
         let s = store(vec![Trigger {
             name: "away".into(),
-            patterns: single_pattern(r"^\[AFK\] (\w+) is resting here\.$"),
+            patterns: vec![crate::store::TriggerPattern {
+                pattern: r"^\[AFK\] (\w+) is resting here\.$".into(),
+                enabled: true,
+            }],
             priority: 0,
             enabled: true,
             actions: vec![
@@ -1210,16 +1166,7 @@ mod tests {
     #[test]
     fn invalid_regex_rejected_at_set() {
         let mut s = TriggerStore::new();
-        let bad = Trigger {
-            name: "bad".into(),
-            patterns: single_pattern("[unclosed"),
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Gag],
-            preset: None,
-            group: None,
-            target: TriggerTarget::Line,
-        };
+        let bad = Trigger::new("bad", "[unclosed", TriggerAction::Gag);
         assert!(s.set(bad).is_err());
     }
 
@@ -1291,14 +1238,8 @@ mod tests {
         s.set(highlight("tells", r"tells you", NamedColor::Cyan))
             .unwrap();
         s.set(Trigger {
-            name: "spam".into(),
-            patterns: single_pattern("tingle"),
             priority: 50,
-            enabled: true,
-            actions: vec![TriggerAction::Gag],
-            preset: None,
-            group: None,
-            target: TriggerTarget::Line,
+            ..Trigger::new("spam", "tingle", TriggerAction::Gag)
         })
         .unwrap();
         let json = s.export_json().unwrap();
@@ -1394,14 +1335,8 @@ mod tests {
     #[test]
     fn prompt_target_skipped_on_line_scope() {
         let s = store(vec![Trigger {
-            name: "p".into(),
-            patterns: single_pattern("hp"),
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Gag],
-            preset: None,
-            group: None,
             target: TriggerTarget::Prompt,
+            ..Trigger::new("p", "hp", TriggerAction::Gag)
         }]);
         // Line-scope pass MUST NOT fire a prompt-target trigger.
         let r = process_scoped(&s, b"100/100 hp", MatchScope::Line);
@@ -1411,14 +1346,8 @@ mod tests {
     #[test]
     fn prompt_target_fires_on_prompt_scope() {
         let s = store(vec![Trigger {
-            name: "p".into(),
-            patterns: single_pattern("hp"),
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Gag],
-            preset: None,
-            group: None,
             target: TriggerTarget::Prompt,
+            ..Trigger::new("p", "hp", TriggerAction::Gag)
         }]);
         let r = process_scoped(&s, b"100/100 hp", MatchScope::Prompt);
         assert!(r.display.is_none());
@@ -1426,16 +1355,7 @@ mod tests {
 
     #[test]
     fn line_target_skipped_on_prompt_scope() {
-        let s = store(vec![Trigger {
-            name: "l".into(),
-            patterns: single_pattern("hp"),
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Gag],
-            preset: None,
-            group: None,
-            target: TriggerTarget::Line,
-        }]);
+        let s = store(vec![Trigger::new("l", "hp", TriggerAction::Gag)]);
         // Prompt-scope pass MUST NOT fire a line-target trigger.
         let r = process_scoped(&s, b"100/100 hp", MatchScope::Prompt);
         assert_eq!(r.display.as_deref(), Some("100/100 hp"));
@@ -1685,18 +1605,13 @@ mod tests {
     /// A weather trigger that paints the line #8fa7d9, the way a
     /// `{#8fa7d9}$0{reset}` Replace template saves.
     fn weather_store() -> TriggerStore {
-        store(vec![Trigger {
-            name: "weather".into(),
-            patterns: single_pattern("^It starts to rain\\.$"),
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Replace {
+        store(vec![Trigger::new(
+            "weather",
+            "^It starts to rain\\.$",
+            TriggerAction::Replace {
                 template: "\x1b[38;2;143;167;217m$0\x1b[0m".into(),
-            }],
-            preset: None,
-            group: None,
-            target: TriggerTarget::Line,
-        }])
+            },
+        )])
     }
 
     fn on_ground(s: &TriggerStore, line: &[u8], ground: Option<readable::Rgb>) -> String {
