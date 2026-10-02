@@ -61,8 +61,8 @@
 //! into a room line), armies with your color off (they read as people),
 //! and two looks in one pulse.
 //!
-//! [`MatchScope::Room`]: vosh_trigger::MatchScope::Room
-//! [`MatchScope::RoomTarget`]: vosh_trigger::MatchScope::RoomTarget
+//! [`MatchScope::Room`]: vosh_automation::trigger::MatchScope::Room
+//! [`MatchScope::RoomTarget`]: vosh_automation::trigger::MatchScope::RoomTarget
 
 use std::sync::OnceLock;
 

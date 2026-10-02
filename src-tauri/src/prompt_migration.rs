@@ -41,10 +41,10 @@
 
 use std::path::{Path, PathBuf};
 
+use vosh_automation::trigger::{Trigger, TriggerAction};
 use vosh_prompt::capture::{self, NotACapture};
 use vosh_prompt::config::RegexCapture;
 use vosh_prompt::CaptureConfig;
-use vosh_trigger::{Trigger, TriggerAction};
 
 use crate::loadout_store;
 use crate::profile_config::{before_prompt_editor_path, ProfileConfig};
@@ -672,7 +672,7 @@ theme = "vellum"
         std::fs::read_to_string(root.join(file)).unwrap()
     }
 
-    fn catalog_trigger(root: &Path, name: &str) -> vosh_trigger::Trigger {
+    fn catalog_trigger(root: &Path, name: &str) -> vosh_automation::trigger::Trigger {
         load_global_catalog(root)
             .unwrap()
             .triggers

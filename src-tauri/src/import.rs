@@ -18,7 +18,7 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::QName;
 use quick_xml::reader::Reader;
 use vosh_automation::alias::Alias;
-use vosh_trigger::{Trigger, TriggerAction};
+use vosh_automation::trigger::{Trigger, TriggerAction};
 
 use crate::profile::Macro;
 
@@ -209,7 +209,7 @@ fn mushclient_trigger_from(e: &BytesStart, report: &mut ImportReport) -> Option<
     }
     Some(Trigger {
         name,
-        patterns: vec![vosh_trigger::TriggerPattern {
+        patterns: vec![vosh_automation::trigger::TriggerPattern {
             pattern,
             enabled: true,
         }],
@@ -218,7 +218,7 @@ fn mushclient_trigger_from(e: &BytesStart, report: &mut ImportReport) -> Option<
         group: None,
         actions,
         preset: None,
-        target: vosh_trigger::TriggerTarget::Line,
+        target: vosh_automation::trigger::TriggerTarget::Line,
     })
 }
 
@@ -420,7 +420,7 @@ fn commit_mudlet_trigger(item: MudletItem, report: &mut ImportReport) {
     }
     report.triggers.push(Trigger {
         name,
-        patterns: vec![vosh_trigger::TriggerPattern {
+        patterns: vec![vosh_automation::trigger::TriggerPattern {
             pattern: item.pattern,
             enabled: true,
         }],
@@ -429,7 +429,7 @@ fn commit_mudlet_trigger(item: MudletItem, report: &mut ImportReport) {
         actions,
         preset: None,
         group: None,
-        target: vosh_trigger::TriggerTarget::Line,
+        target: vosh_automation::trigger::TriggerTarget::Line,
     });
 }
 
@@ -869,7 +869,7 @@ fn commit_cmud_trigger(t: CmudTriggerInProgress, report: &mut ImportReport) {
     }
     report.triggers.push(Trigger {
         name,
-        patterns: vec![vosh_trigger::TriggerPattern {
+        patterns: vec![vosh_automation::trigger::TriggerPattern {
             pattern,
             enabled: true,
         }],
@@ -878,7 +878,7 @@ fn commit_cmud_trigger(t: CmudTriggerInProgress, report: &mut ImportReport) {
         actions,
         preset: None,
         group: None,
-        target: vosh_trigger::TriggerTarget::Line,
+        target: vosh_automation::trigger::TriggerTarget::Line,
     });
 }
 

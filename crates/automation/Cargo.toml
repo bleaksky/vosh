@@ -8,12 +8,20 @@ description = "Aliases, variables and triggers for Vosh, as plain data with no L
 rust-version.workspace = true
 
 [dependencies]
+regex = "1"
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
+vosh-protocol = { path = "../protocol" }
 
 [features]
-# The test kit: the alias builders the app's tests use.
+# The test kit the app's tests use: the alias builders, and the plain
+# trigger entry points with the trigger count.
 testkit = []
+
+[dev-dependencies]
+# The SGR model, whose span colors the readable highlight tests read.
+vosh-protocol = { path = "../protocol", features = ["testkit"] }
 
 [lints]
 workspace = true

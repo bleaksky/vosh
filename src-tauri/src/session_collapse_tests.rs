@@ -40,10 +40,10 @@ fn collapsing(show: PromptShow) -> Profile {
     let mut p = showing(profile(CODES, HP, true), show);
     p.ui.collapse_repeats = true;
     p.triggers
-        .set(vosh_trigger::Trigger::new(
+        .set(vosh_automation::trigger::Trigger::new(
             "quenby",
             "Quenby",
-            vosh_trigger::TriggerAction::Send {
+            vosh_automation::trigger::TriggerAction::Send {
                 template: "seen".into(),
             },
         ))
@@ -478,10 +478,10 @@ fn your_echo_output_from_elsewhere_and_a_new_connection_start_a_new_run() {
 fn a_hidden_line_leaves_the_run_and_another_color_starts_a_new_one() {
     let mut p = collapsing(PromptShow::Pinned);
     p.triggers
-        .set(vosh_trigger::Trigger::new(
+        .set(vosh_automation::trigger::Trigger::new(
             "thirst",
             "thirsty",
-            vosh_trigger::TriggerAction::Gag,
+            vosh_automation::trigger::TriggerAction::Gag,
         ))
         .expect("the trigger compiles");
     let mut session = Session::new(p);
@@ -569,12 +569,12 @@ fn a_run_longer_than_the_width_rewrites_every_row_it_takes() {
 fn highlight(
     name: &str,
     pattern: &str,
-    style: vosh_trigger::HighlightStyle,
-) -> vosh_trigger::Trigger {
-    vosh_trigger::Trigger::new(
+    style: vosh_automation::trigger::HighlightStyle,
+) -> vosh_automation::trigger::Trigger {
+    vosh_automation::trigger::Trigger::new(
         name,
         pattern,
-        vosh_trigger::TriggerAction::Highlight { style },
+        vosh_automation::trigger::TriggerAction::Highlight { style },
     )
 }
 
@@ -589,7 +589,11 @@ fn row_of(grid: &crate::term_grid::TermGrid, text: &str) -> usize {
 /// What the session writes, your prompt pinned, while a Line trigger
 /// highlights `pattern` in `style`: the login of the fake Aabahran with a
 /// compact prompt, then a pulse for each of `lines`.
-fn highlighted(pattern: &str, style: vosh_trigger::HighlightStyle, lines: &[&str]) -> Vec<Output> {
+fn highlighted(
+    pattern: &str,
+    style: vosh_automation::trigger::HighlightStyle,
+    lines: &[&str],
+) -> Vec<Output> {
     let mut p = collapsing(PromptShow::Pinned);
     p.triggers
         .set(highlight("mark", pattern, style))
@@ -608,19 +612,19 @@ fn highlighted(pattern: &str, style: vosh_trigger::HighlightStyle, lines: &[&str
 
 /// A run whose line ends on a blue background, across pinned pulses.
 fn blue_run() -> Vec<Output> {
-    let style = vosh_trigger::HighlightStyle {
-        bg: Some(vosh_trigger::NamedColor::Blue),
-        ..vosh_trigger::HighlightStyle::default()
+    let style = vosh_automation::trigger::HighlightStyle {
+        bg: Some(vosh_automation::trigger::NamedColor::Blue),
+        ..vosh_automation::trigger::HighlightStyle::default()
     };
     highlighted(r"attack\.", style, &[DODGE, DODGE, PARRY])
 }
 
 /// A run of a line a red wash covers, across pinned pulses.
 fn washed_run() -> Vec<Output> {
-    let style = vosh_trigger::HighlightStyle {
-        fg: Some(vosh_trigger::NamedColor::Red),
+    let style = vosh_automation::trigger::HighlightStyle {
+        fg: Some(vosh_automation::trigger::NamedColor::Red),
         wash: true,
-        ..vosh_trigger::HighlightStyle::default()
+        ..vosh_automation::trigger::HighlightStyle::default()
     };
     highlighted("You dodge", style, &[DODGE, DODGE, DODGE, PARRY])
 }
@@ -673,7 +677,7 @@ fn a_run_with_a_background_crossing_a_pinned_pulse_leaves_every_other_cell_plain
     // reads the row as washed from its first cell, and the rows below
     // stay plain.
     let grid = grid_after(&washed_run(), 40);
-    let (r, g, b) = vosh_trigger::NamedColor::Red.wash_tint();
+    let (r, g, b) = vosh_automation::trigger::NamedColor::Red.wash_tint();
     let wash = Color::Spec(Rgb { r, g, b });
     let run = row_of(&grid, &times(3, DODGE));
     assert_eq!(

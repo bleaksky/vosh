@@ -176,7 +176,7 @@ pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> b
         aliases.set_disabled_groups(alias_disabled);
         p.aliases = aliases;
 
-        let mut triggers = vosh_trigger::TriggerStore::new();
+        let mut triggers = vosh_automation::trigger::TriggerStore::new();
         for t in &catalog.triggers {
             if let Err(e) = triggers.set(t.clone()) {
                 info!(error = %e, "catalog trigger rejected at startup");

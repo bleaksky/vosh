@@ -8,9 +8,9 @@ use regex::Regex;
 use vosh_protocol::ansi::plain_text;
 use vosh_protocol::ansi::PieceKind;
 
-use crate::action::{HighlightStyle, TriggerAction};
-use crate::readable;
-use crate::store::{Trigger, TriggerStore, TriggerTarget};
+use crate::trigger::action::{HighlightStyle, TriggerAction};
+use crate::trigger::readable;
+use crate::trigger::store::{Trigger, TriggerStore, TriggerTarget};
 
 /// Which dispatch lane the engine is running. Mirrors
 /// [`TriggerTarget`]: a `Line` pass only fires triggers with
@@ -259,7 +259,7 @@ pub fn process_on_ground(
     // theme instead of pinning it to the canonical xterm chart.
     let wash_fg = wash_style
         .and_then(|s| s.fg)
-        .map(crate::color::NamedColor::fg_code);
+        .map(crate::trigger::color::NamedColor::fg_code);
     // The attributes every washed row opens with, and that each
     // highlight span restores when it closes.
     let wash_open = wash_bg.map(|(r, g, b)| match wash_fg {
@@ -672,8 +672,8 @@ fn bytes_to_string_lossy(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::action::HighlightStyle;
-    use crate::color::NamedColor;
+    use crate::trigger::action::HighlightStyle;
+    use crate::trigger::color::NamedColor;
 
     fn store(triggers: Vec<Trigger>) -> TriggerStore {
         let mut s = TriggerStore::new();
@@ -743,7 +743,7 @@ mod tests {
         let mut grouped = highlight("grouped", "hp", NamedColor::Red);
         grouped.group = Some("combat".to_string());
         let mut two = highlight("two", "^nothing", NamedColor::Red);
-        two.patterns.push(crate::store::TriggerPattern {
+        two.patterns.push(crate::trigger::store::TriggerPattern {
             pattern: r"\d+hp".to_string(),
             enabled: true,
         });
@@ -1041,7 +1041,7 @@ mod tests {
     fn a_trigger_that_draws_nothing_keeps_the_line_as_sent() {
         let s = store(vec![Trigger {
             name: "away".into(),
-            patterns: vec![crate::store::TriggerPattern {
+            patterns: vec![crate::trigger::store::TriggerPattern {
                 pattern: r"^\[AFK\] (\w+) is resting here\.$".into(),
                 enabled: true,
             }],
@@ -1122,8 +1122,8 @@ mod tests {
         // the server sends, with each of its words highlighted in turn.
         let mut lines: Vec<String> = Vec::new();
         for text in [
-            include_str!("../../../fixtures/room-colors/lines.json"),
-            include_str!("../../../fixtures/room-colors/looks.json"),
+            include_str!("../../../../fixtures/room-colors/lines.json"),
+            include_str!("../../../../fixtures/room-colors/looks.json"),
         ] {
             let json: serde_json::Value = serde_json::from_str(text).unwrap();
             let mut stack = vec![json];
@@ -1175,11 +1175,11 @@ mod tests {
         let s = store(vec![Trigger {
             name: "mobs".into(),
             patterns: vec![
-                crate::store::TriggerPattern {
+                crate::trigger::store::TriggerPattern {
                     pattern: "goblin".into(),
                     enabled: true,
                 },
-                crate::store::TriggerPattern {
+                crate::trigger::store::TriggerPattern {
                     pattern: "orc".into(),
                     enabled: true,
                 },
@@ -1207,11 +1207,11 @@ mod tests {
         let s = store(vec![Trigger {
             name: "mobs".into(),
             patterns: vec![
-                crate::store::TriggerPattern {
+                crate::trigger::store::TriggerPattern {
                     pattern: "goblin".into(),
                     enabled: true,
                 },
-                crate::store::TriggerPattern {
+                crate::trigger::store::TriggerPattern {
                     pattern: "orc".into(),
                     enabled: false,
                 },
@@ -1748,7 +1748,7 @@ mod tests {
             triggers: Vec<Trigger>,
         }
         let file: PresetFile =
-            serde_json::from_str(include_str!("../../../fixtures/room-colors/preset.json"))
+            serde_json::from_str(include_str!("../../../../fixtures/room-colors/preset.json"))
                 .unwrap();
         store(file.triggers)
     }
@@ -1758,7 +1758,8 @@ mod tests {
     /// is None.
     fn room_lines(trigger: Option<&str>) -> Vec<String> {
         let file: serde_json::Value =
-            serde_json::from_str(include_str!("../../../fixtures/room-colors/lines.json")).unwrap();
+            serde_json::from_str(include_str!("../../../../fixtures/room-colors/lines.json"))
+                .unwrap();
         file["lines"]
             .as_array()
             .unwrap()
@@ -1778,7 +1779,8 @@ mod tests {
         // Fourteen from sky_event_text and ten from weather_affect_room.
         assert_eq!(weather.len(), 24);
         let grounds: serde_json::Value =
-            serde_json::from_str(include_str!("../../../fixtures/readable/grounds.json")).unwrap();
+            serde_json::from_str(include_str!("../../../../fixtures/readable/grounds.json"))
+                .unwrap();
         let grounds: Vec<(String, readable::Rgb)> = grounds["grounds"]
             .as_array()
             .unwrap()

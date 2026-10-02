@@ -462,12 +462,12 @@ pub(super) fn showing(mut p: Profile, show: vosh_prompt::PromptShow) -> Profile 
 /// can count what Prompts triggers saw.
 fn counting(mut p: Profile) -> Profile {
     p.triggers
-        .set(vosh_trigger::Trigger {
-            target: vosh_trigger::TriggerTarget::Prompt,
-            ..vosh_trigger::Trigger::new(
+        .set(vosh_automation::trigger::Trigger {
+            target: vosh_automation::trigger::TriggerTarget::Prompt,
+            ..vosh_automation::trigger::Trigger::new(
                 "count",
                 ".",
-                vosh_trigger::TriggerAction::Send {
+                vosh_automation::trigger::TriggerAction::Send {
                     template: "seen".into(),
                 },
             )
@@ -707,9 +707,13 @@ fn a_prompts_trigger_that_hides_the_prompt_leaves_the_band_empty() {
     use vosh_prompt::PromptShow;
     let mut p = showing(profile(CODES, HP, false), PromptShow::Pinned);
     p.triggers
-        .set(vosh_trigger::Trigger {
-            target: vosh_trigger::TriggerTarget::Prompt,
-            ..vosh_trigger::Trigger::new("hide", "hp", vosh_trigger::TriggerAction::Gag)
+        .set(vosh_automation::trigger::Trigger {
+            target: vosh_automation::trigger::TriggerTarget::Prompt,
+            ..vosh_automation::trigger::Trigger::new(
+                "hide",
+                "hp",
+                vosh_automation::trigger::TriggerAction::Gag,
+            )
         })
         .expect("the trigger compiles");
     let mut session = Session::new(p);
@@ -1318,11 +1322,11 @@ fn enter_on_an_empty_line_ends_the_row_of_a_prompt_left_in_the_text() {
 }
 
 /// `p` with a Prompts trigger on `hp` that does `action`.
-fn prompts_trigger(mut p: Profile, action: vosh_trigger::TriggerAction) -> Profile {
+fn prompts_trigger(mut p: Profile, action: vosh_automation::trigger::TriggerAction) -> Profile {
     p.triggers
-        .set(vosh_trigger::Trigger {
-            target: vosh_trigger::TriggerTarget::Prompt,
-            ..vosh_trigger::Trigger::new("on-prompt", "hp", action)
+        .set(vosh_automation::trigger::Trigger {
+            target: vosh_automation::trigger::TriggerTarget::Prompt,
+            ..vosh_automation::trigger::Trigger::new("on-prompt", "hp", action)
         })
         .expect("the trigger compiles");
     p
@@ -1330,8 +1334,8 @@ fn prompts_trigger(mut p: Profile, action: vosh_trigger::TriggerAction) -> Profi
 
 #[test]
 fn leaving_pinned_with_drawing_off_keeps_what_prompts_triggers_did() {
+    use vosh_automation::trigger::TriggerAction;
     use vosh_prompt::PromptShow;
-    use vosh_trigger::TriggerAction;
     let replace = TriggerAction::Replace {
         template: "HITPOINTS".into(),
     };

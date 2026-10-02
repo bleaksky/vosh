@@ -5088,7 +5088,6 @@ dependencies = [
  "vosh-prompt",
  "vosh-protocol",
  "vosh-script",
- "vosh-trigger",
  "webpki-roots 0.26.11",
  "wgpu",
  "windows-sys 0.59.0",
@@ -5099,8 +5098,11 @@ dependencies = [
 name = "vosh-automation"
 version = "0.8.0"
 dependencies = [
+ "regex",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
+ "vosh-protocol",
 ]
 
 [[package]]
@@ -5148,17 +5150,6 @@ dependencies = [
  "regex",
  "serde_json",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "vosh-trigger"
-version = "0.8.0"
-dependencies = [
- "regex",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "vosh-protocol",
 ]
 
 [[package]]

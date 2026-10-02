@@ -12,8 +12,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use vosh_automation::alias::Alias;
+use vosh_automation::trigger::Trigger;
 use vosh_automation::vars::Scope;
-use vosh_trigger::Trigger;
 
 use crate::profile::{Macro, Profile, Timer};
 use crate::profile_set::{ProfileSet, ScopeConfig};
@@ -113,7 +113,7 @@ impl GroupFolders {
 /// `#[serde(flatten, with = "trigger_lists")]`.
 pub(crate) mod trigger_lists {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use vosh_trigger::Trigger;
+    use vosh_automation::trigger::Trigger;
 
     #[derive(Serialize)]
     struct Written<'a> {
@@ -1730,7 +1730,7 @@ impl ProfileConfig {
         profile.vars = vars;
 
         // Triggers: replace, surfacing invalid regex.
-        let mut triggers = vosh_trigger::TriggerStore::new();
+        let mut triggers = vosh_automation::trigger::TriggerStore::new();
         for t in &self.triggers {
             if let Err(e) = triggers.set(t.clone()) {
                 warnings.push(format!("trigger `{}` rejected: {e}", t.name));
@@ -2823,7 +2823,7 @@ fn prune_backups(path: &Path, keep: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vosh_trigger::{HighlightStyle, NamedColor, TriggerAction};
+    use vosh_automation::trigger::{HighlightStyle, NamedColor, TriggerAction};
 
     #[test]
     fn a_saved_profile_leaves_out_the_connection_table() {

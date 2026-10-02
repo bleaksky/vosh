@@ -5,8 +5,8 @@
 
 use tokio::time::Instant;
 use vosh_automation::alias::{ExpandError, ExpandStep};
+use vosh_automation::trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
 use vosh_automation::vars::Scope;
-use vosh_trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
 
 use crate::profile::{MacroRecorder, Profile, QuickKey, RoomChar};
 use crate::profile_config::ProfileConfig;

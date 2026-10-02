@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::color::NamedColor;
+use crate::trigger::color::NamedColor;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HighlightStyle {
@@ -75,10 +75,10 @@ impl HighlightStyle {
 
     /// The color the wash derives from: the explicit background if one
     /// is set, else the foreground, else yellow.
-    pub fn wash_source(&self) -> crate::color::NamedColor {
+    pub fn wash_source(&self) -> crate::trigger::color::NamedColor {
         self.bg
             .or(self.fg)
-            .unwrap_or(crate::color::NamedColor::Yellow)
+            .unwrap_or(crate::trigger::color::NamedColor::Yellow)
     }
 }
 

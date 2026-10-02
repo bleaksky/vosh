@@ -32,7 +32,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use vosh_automation::alias::Alias;
-use vosh_trigger::{Trigger, TriggerAction, TriggerPattern, TriggerTarget};
+use vosh_automation::trigger::{Trigger, TriggerAction, TriggerPattern, TriggerTarget};
 
 use super::{AppState, SharedState, PERSIST_LOCK};
 use crate::migration::{ItemKind, ItemPayload};

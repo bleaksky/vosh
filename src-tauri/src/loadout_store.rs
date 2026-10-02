@@ -664,7 +664,7 @@ mod tests {
     use std::fs;
 
     use vosh_automation::alias::Alias;
-    use vosh_trigger::{Trigger, TriggerAction};
+    use vosh_automation::trigger::{Trigger, TriggerAction};
 
     use crate::loadout::Loadout;
     use crate::profile::Macro;

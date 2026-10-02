@@ -71,7 +71,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 use vosh_automation::alias::Alias;
-use vosh_trigger::Trigger;
+use vosh_automation::trigger::Trigger;
 
 use crate::loadout::{GlobalCatalog, Loadout};
 use crate::profile::Macro;
@@ -898,7 +898,7 @@ pub(crate) fn profile_file_for_catalog(
 mod tests {
     use super::*;
     use vosh_automation::alias::Alias;
-    use vosh_trigger::{Trigger, TriggerAction};
+    use vosh_automation::trigger::{Trigger, TriggerAction};
 
     fn trigger(name: &str, pattern: &str, replacement: &str) -> Trigger {
         Trigger::new(
@@ -1301,7 +1301,7 @@ mod tests {
     /// the wizard, from the catalog.
     fn run_order(plan: &MigrationPlan, profile: &str) -> Vec<String> {
         let off = file_after(plan, profile).disabled_trigger_groups;
-        let mut store = vosh_trigger::TriggerStore::new();
+        let mut store = vosh_automation::trigger::TriggerStore::new();
         for t in &plan.auto_resolved.triggers {
             store.set(t.clone()).unwrap();
         }
