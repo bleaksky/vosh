@@ -404,6 +404,50 @@ describe('SplitDrag', () => {
     expect(lines).toContain('[scrollback restored');
   });
 
+  it('carries a history drag on when the wheel takes the history to its bottom', async () => {
+    const { history, live, drag, timers, closes } = await split();
+    drag.press(at(4, 15), true);
+    drag.move(at(40, 101));
+    expect(drag.state).toBe('history');
+    // The wheel scrolls the history to the end of its buffer, and the page
+    // says so before it closes the split.
+    history.term.scrollToBottom();
+    drag.historyBottomed();
+    expect(closes()).toBe(1);
+    expect(drag.state).toBe('live');
+    expect(timers.running).toBe(1);
+    // Row 10 of the live screen is L090, as at the end of a drag's own scroll.
+    expect(live.text()).toBe(`${run(73, 89)}\nL090`);
+    drag.move(at(200, 195));
+    expect(live.text()).toBe(run(73, 99));
+  });
+
+  it('takes a drag over from xterm when the wheel bottoms the history under it', async () => {
+    const { history, live, drag, timers, closes } = await split();
+    drag.press(at(4, 15), true);
+    // Still on the history pane, so xterm drags.
+    expect(drag.move(at(40, 45))).toBe(false);
+    history.term.scrollToBottom();
+    drag.historyBottomed();
+    // Selecting in the history ended xterm's own drag there first.
+    expect(history.selections).toBe(1);
+    expect(closes()).toBe(1);
+    expect(drag.state).toBe('live');
+    expect(timers.running).toBe(1);
+    // Row 4 of the live screen holds L084.
+    expect(live.text()).toBe(`${run(73, 83)}\nL084`);
+    drag.release();
+    expect(timers.running).toBe(0);
+  });
+
+  it('does nothing when the history bottoms with no drag on it', async () => {
+    const { live, drag, closes } = await split();
+    drag.historyBottomed();
+    expect(drag.state).toBe('idle');
+    expect(closes()).toBe(0);
+    expect(live.selections).toBe(0);
+  });
+
   it('scrolls the history back up past the top once it drags there', async () => {
     const { history, drag } = await split();
     drag.press(at(4, 15), true);

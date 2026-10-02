@@ -15,8 +15,9 @@
 // shows what the live pane holds under it. There the split closes, the way
 // a scroll back to the bottom closes it, and the same selection runs on in
 // the live pane from the same line, so a copy holds one run of lines with
-// nothing doubled and nothing skipped. The native grid does the same in
-// src-tauri/src/native_surface/split_drag.rs.
+// nothing doubled and nothing skipped. A wheel or Page Down that takes the
+// history to its bottom during the drag carries it on the same way. The
+// native grid does the same in src-tauri/src/native_surface/split_drag.rs.
 //
 // A drag that starts in the live half, or that never leaves the history
 // pane, stays xterm's own.
@@ -349,6 +350,24 @@ export class SplitDrag {
       return;
     }
     this.extend();
+  }
+
+  /** The split is about to close because the history reached its bottom
+   *  some other way than this drag's own scroll, by the wheel or Page
+   *  Down. A drag in the history then carries its selection on in the
+   *  live pane, as at the end of its own scroll, whether this or xterm
+   *  drags it so far. Call it while the split is still open. A find, a
+   *  middle click or Esc closes the split without it, and the drag ends. */
+  historyBottomed(): void {
+    const phase = this.phase;
+    if (phase.kind === 'armed') {
+      // From here on this drags, in the live pane. Selecting through
+      // xterm's API ends xterm's own drag in the history first.
+      this.phase = { kind: 'history', anchor: phase.anchor };
+      this.timer = this.timers.start(() => this.tick(), DRAG_SCROLL_INTERVAL);
+      this.extend();
+    }
+    if (this.phase.kind === 'history') this.handOff();
   }
 
   /** The button went up, or the drag ended some other way. */
