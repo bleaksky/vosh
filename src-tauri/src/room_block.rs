@@ -281,7 +281,12 @@ mod tests {
     fn kinds(block: &mut RoomBlock, lines: &[&str]) -> Vec<RoomLine> {
         lines
             .iter()
-            .map(|line| block.line(&vosh_ansi::plain_text(line.as_bytes()), line.as_bytes()))
+            .map(|line| {
+                block.line(
+                    &vosh_protocol::ansi::plain_text(line.as_bytes()),
+                    line.as_bytes(),
+                )
+            })
             .collect()
     }
 

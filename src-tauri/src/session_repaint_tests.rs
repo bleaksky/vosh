@@ -54,7 +54,7 @@ fn read_then_wait(
 }
 
 fn plain(bytes: &[u8]) -> String {
-    vosh_ansi::plain_text(bytes)
+    vosh_protocol::ansi::plain_text(bytes)
 }
 
 /// What `f` gives, and how many times the session drew your design while

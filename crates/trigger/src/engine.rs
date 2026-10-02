@@ -5,8 +5,8 @@ use std::borrow::Cow;
 
 use regex::Regex;
 #[cfg(any(test, feature = "testkit"))]
-use vosh_ansi::plain_text;
-use vosh_ansi::PieceKind;
+use vosh_protocol::ansi::plain_text;
+use vosh_protocol::ansi::PieceKind;
 
 use crate::action::{HighlightStyle, TriggerAction};
 use crate::readable;
@@ -435,7 +435,7 @@ fn lift_open(open: &mut String, ground: readable::Rgb) {
 /// closes exactly as on a plain line. None when the bytes do not spell
 /// `plain`, so the caller rebuilds the line from its plain text.
 fn highlight_in_place(original: &[u8], plain: &str, spans: &[Span]) -> Option<String> {
-    let pieces = vosh_ansi::pieces(original);
+    let pieces = vosh_protocol::ansi::pieces(original);
     let mut out = String::with_capacity(original.len() + spans.len() * 24);
     // The game's SGR codes in effect since its last reset.
     let mut state: Vec<String> = Vec::new();

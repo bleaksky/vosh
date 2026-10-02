@@ -7,8 +7,8 @@
 
 use vte::{Params, Parser, Perform};
 
-use crate::color::Color;
-use crate::parser::keeps_control;
+use crate::ansi::color::Color;
+use crate::ansi::parser::keeps_control;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Attributes {

@@ -175,7 +175,11 @@ fn a_preview_set_on_the_open_row_gives_way_to_the_next_pulse_at_every_split() {
             match show {
                 PromptShow::Pinned => {
                     assert_eq!(
-                        repaint.pin.as_deref().map(vosh_ansi::plain_text).as_deref(),
+                        repaint
+                            .pin
+                            .as_deref()
+                            .map(vosh_protocol::ansi::plain_text)
+                            .as_deref(),
                         Some("<180>"),
                         "{label}"
                     );
@@ -184,11 +188,14 @@ fn a_preview_set_on_the_open_row_gives_way_to_the_next_pulse_at_every_split() {
                 _ => {
                     let replace = repaint.replace.as_ref().expect("the repaint");
                     assert!(
-                        vosh_ansi::plain_text(&replace.bytes).contains("<180>"),
+                        vosh_protocol::ansi::plain_text(&replace.bytes).contains("<180>"),
                         "{label}"
                     );
                     let restore = repaint.restore.as_ref().expect("the live render");
-                    assert!(vosh_ansi::plain_text(restore).contains("<1020>"), "{label}");
+                    assert!(
+                        vosh_protocol::ansi::plain_text(restore).contains("<1020>"),
+                        "{label}"
+                    );
                 }
             }
             got.push(Read {
@@ -278,7 +285,7 @@ fn drawn_text(bytes: &[u8]) -> String {
         None => &text[..],
     };
     let after = after.find('\x07').map_or(after, |end| &after[end + 1..]);
-    vosh_ansi::plain_text(after.as_bytes())
+    vosh_protocol::ansi::plain_text(after.as_bytes())
 }
 
 #[test]
@@ -521,7 +528,10 @@ fn the_live_render_comes_back_when_the_connection_ends_during_a_preview() {
         assert!(out.restore.is_none(), "{label}");
         if show == PromptShow::Pinned {
             assert_eq!(
-                out.pin.as_deref().map(vosh_ansi::plain_text).as_deref(),
+                out.pin
+                    .as_deref()
+                    .map(vosh_protocol::ansi::plain_text)
+                    .as_deref(),
                 Some("<1020>"),
                 "{label}"
             );

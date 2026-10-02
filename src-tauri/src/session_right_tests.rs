@@ -28,7 +28,7 @@ fn at(show: PromptShow, cols: u16) -> (Session, Negotiator) {
 
 /// What the band shows, as text.
 fn band(out: &Output) -> Option<String> {
-    out.pin.as_deref().map(vosh_ansi::plain_text)
+    out.pin.as_deref().map(vosh_protocol::ansi::plain_text)
 }
 
 #[test]

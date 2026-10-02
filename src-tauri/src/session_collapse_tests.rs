@@ -153,7 +153,7 @@ fn ring_after(reads: &[Read]) -> crate::log_state::Scrollback {
 fn ring_of(reads: &[Read]) -> Vec<String> {
     ring_after(reads)
         .lines()
-        .map(vosh_ansi::plain_text)
+        .map(vosh_protocol::ansi::plain_text)
         .collect()
 }
 
@@ -167,7 +167,7 @@ fn made(read: &Read) -> Vec<Option<Repeat>> {
 
 /// `line` as a run of `count` shows it, plain.
 fn times(count: u32, line: &str) -> String {
-    vosh_ansi::plain_text(&vosh_prompt::stage::counted(
+    vosh_protocol::ansi::plain_text(&vosh_prompt::stage::counted(
         count,
         line.as_bytes(),
         &vosh_prompt::render::SgrState::default(),

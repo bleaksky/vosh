@@ -745,16 +745,16 @@ mod tests {
     }
 
     /// Each run of visible text in `line` that draws in a fixed color, with
-    /// that color. The SGR model in the vosh-ansi test kit reads the line,
+    /// that color. The SGR model in the vosh-protocol test kit reads the line,
     /// so the check does not lean on the scan it checks.
     fn fixed_runs(line: &str) -> Vec<(String, Rgb)> {
-        vosh_ansi::AnsiParser::new()
+        vosh_protocol::ansi::AnsiParser::new()
             .feed(line.as_bytes())
             .into_iter()
             .filter_map(|span| {
                 let rgb = match span.attrs.fg {
-                    vosh_ansi::Color::Rgb { r, g, b } => Some((r, g, b)),
-                    vosh_ansi::Color::Indexed256(n) => xterm256(n),
+                    vosh_protocol::ansi::Color::Rgb { r, g, b } => Some((r, g, b)),
+                    vosh_protocol::ansi::Color::Indexed256(n) => xterm256(n),
                     _ => None,
                 }?;
                 (!span.text.trim().is_empty()).then_some((span.text, rgb))
@@ -770,7 +770,7 @@ mod tests {
             "the fixture lists every preset template"
         );
         let line = b"alpha beta gamma delta";
-        let plain = vosh_ansi::plain_text(line);
+        let plain = vosh_protocol::ansi::plain_text(line);
         for template in &f.templates {
             let store = replace_store(template);
             let draw = |ground| {
@@ -788,8 +788,8 @@ mod tests {
                 let bg = parse_hex(&ground.background).unwrap();
                 let out = draw(Some(bg));
                 assert_eq!(
-                    vosh_ansi::plain_text(out.as_bytes()),
-                    vosh_ansi::plain_text(as_set.as_bytes()),
+                    vosh_protocol::ansi::plain_text(out.as_bytes()),
+                    vosh_protocol::ansi::plain_text(as_set.as_bytes()),
                     "{template:?} on {} keeps its text",
                     ground.theme
                 );

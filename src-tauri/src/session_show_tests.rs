@@ -139,7 +139,7 @@ impl Session {
             match event {
                 TelnetEvent::Data(bytes) => {
                     for line in self.acc.feed(&bytes) {
-                        let plain = vosh_ansi::plain_text(&line.bytes);
+                        let plain = vosh_protocol::ansi::plain_text(&line.bytes);
                         for step in line_step(&mut self.p, &mut batch, line, plain, now, Some(1)) {
                             take(step, &mut kept, &mut repeats);
                         }
@@ -503,7 +503,7 @@ fn text_of(reads: &[Read]) -> String {
         bytes.extend_from_slice(&read.out.bytes);
         bytes.extend_from_slice(&read.out.hold);
     }
-    vosh_ansi::plain_text(&bytes)
+    vosh_protocol::ansi::plain_text(&bytes)
 }
 
 #[test]
@@ -583,7 +583,7 @@ fn a_pinned_band_shows_the_design_or_the_game_prompt_with_its_tank_line() {
     let pin = reads[0].out.pin.clone().expect("the band");
     // The design reads nothing on the tank line, so it shows as sent.
     assert_eq!(
-        vosh_ansi::plain_text(&pin),
+        vosh_protocol::ansi::plain_text(&pin),
         "Tester: [===|===|===|---]\r\n<765>"
     );
     assert_eq!(
@@ -612,7 +612,7 @@ fn a_pinned_band_shows_the_design_or_the_game_prompt_with_its_tank_line() {
     };
     let reads = play_reads(&make, &fight, &[]);
     let pin = reads[0].out.pin.clone().expect("the band");
-    assert_eq!(vosh_ansi::plain_text(&pin), "Tester 75% <765>");
+    assert_eq!(vosh_protocol::ansi::plain_text(&pin), "Tester 75% <765>");
     assert_eq!(
         band_pieces(&reads[0].out).map(|pieces| pieces.iter().map(|p| p.1).max()),
         Some(Some(0)),
@@ -623,7 +623,7 @@ fn a_pinned_band_shows_the_design_or_the_game_prompt_with_its_tank_line() {
     let reads = play_reads(&|| pinned(false), &fight, &[]);
     let pin = reads[0].out.pin.clone().expect("the band");
     assert_eq!(
-        vosh_ansi::plain_text(&pin),
+        vosh_protocol::ansi::plain_text(&pin),
         "Tester: [===|===|===|---]\r\n[765/1020hp 800/800mn 930/930mv]"
     );
     assert_eq!(reads[0].out.pin_spans, None);
@@ -682,7 +682,7 @@ fn an_edit_that_starts_or_stops_reading_the_tank_line_shows_it_once() {
         let mut session = Session::new(showing(profile(CODES, from, true), PromptShow::Pinned));
         let _ = session.read(&fight);
         let out = edit_design(&mut session, to);
-        let band = vosh_ansi::plain_text(out.pin.as_deref().expect("the band"));
+        let band = vosh_protocol::ansi::plain_text(out.pin.as_deref().expect("the band"));
         let rows: Vec<String> = band.split("\r\n").map(str::to_string).collect();
         assert_eq!(tank_rows(&rows), 1, "{label}: {rows:?}");
         let mut fresh = Session::new(showing(profile(CODES, to, true), PromptShow::Pinned));
@@ -761,7 +761,10 @@ fn a_repaint_while_pinned_goes_to_the_band_and_a_change_of_place_moves_the_promp
         .as_ref()
         .is_some_and(|r| r.bytes.is_empty() && !r.fresh));
     assert_eq!(
-        out.pin.as_deref().map(vosh_ansi::plain_text).as_deref(),
+        out.pin
+            .as_deref()
+            .map(vosh_protocol::ansi::plain_text)
+            .as_deref(),
         Some("<1020>")
     );
     // A design change only redraws the band.
@@ -771,7 +774,10 @@ fn a_repaint_while_pinned_goes_to_the_band_and_a_change_of_place_moves_the_promp
     let out = session.repaint();
     assert!(out.bytes.is_empty() && out.replace.is_none());
     assert_eq!(
-        out.pin.as_deref().map(vosh_ansi::plain_text).as_deref(),
+        out.pin
+            .as_deref()
+            .map(vosh_protocol::ansi::plain_text)
+            .as_deref(),
         Some("hp 1020> ")
     );
     assert_eq!(
@@ -1426,7 +1432,7 @@ fn changing_where_your_prompt_shows_mid_fight_moves_the_tank_line_with_it() {
                 // The band holds the tank line, and the text does not.
                 let band = band.expect("the band");
                 assert_eq!(
-                    vosh_ansi::plain_text(&band),
+                    vosh_protocol::ansi::plain_text(&band),
                     "Tester: [===|===|===|---]\r\n<765>",
                     "{label}"
                 );
