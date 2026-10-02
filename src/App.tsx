@@ -592,10 +592,13 @@ function App() {
   // scrolls the history down and hands its selection to the live pane
   // when the split closes at the bottom (src/lib/splitDrag.ts). One
   // controller for the window's life, since the drag outlives the split.
+  // The wheel and Page Down tell it when they take the history to its
+  // bottom, so a drag carries on through that close too.
   const historyReadyRef = useRef(false);
   useEffect(() => {
     historyReadyRef.current = historyReady;
   }, [historyReady]);
+  const splitDragRef = useRef<SplitDrag | null>(null);
   useEffect(() => {
     const drag = new SplitDrag({
       history: () =>
@@ -603,7 +606,12 @@ function App() {
       live: () => termRef.current,
       closeSplit: () => setSplitOpen(false),
     });
-    return listenSplitDrag(window, drag, nativeSurfaceEnabled);
+    splitDragRef.current = drag;
+    const stop = listenSplitDrag(window, drag, nativeSurfaceEnabled);
+    return () => {
+      stop();
+      splitDragRef.current = null;
+    };
   }, []);
 
   // Showing, hiding, or resizing the panel changes the terminal
@@ -680,7 +688,9 @@ function App() {
       historyTermRef.current?.scrollLines(lines);
       if (lines > 0) {
         queueMicrotask(() => {
-          if (historyTermRef.current?.isAtBottom()) setSplitOpen(false);
+          if (!historyTermRef.current?.isAtBottom()) return;
+          splitDragRef.current?.historyBottomed();
+          setSplitOpen(false);
         });
       }
     };
@@ -1578,7 +1588,9 @@ function App() {
         // After the page-down lands, close the split if we paged
         // all the way back to the live tail.
         queueMicrotask(() => {
-          if (historyTermRef.current?.isAtBottom()) setSplitOpen(false);
+          if (!historyTermRef.current?.isAtBottom()) return;
+          splitDragRef.current?.historyBottomed();
+          setSplitOpen(false);
         });
       }}
       onExitSplit={() => {
