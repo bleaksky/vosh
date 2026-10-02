@@ -215,10 +215,10 @@ pub(crate) struct UiConfig {
     /// don't have to re-toggle each launch.
     #[serde(default)]
     pub enabled_presets: Vec<String>,
-    /// Persistent dock layout for the side-panel sections. Authored
-    /// in the standalone Layout Editor window; the main window reads
-    /// this at startup and listens for `vosh://dock-layout-changed`
-    /// to pick up live edits without a relaunch.
+    /// The dock layout the side panels had before panes. Nothing edits
+    /// it now. `pane_layout` turns it into a pane tree for a profile
+    /// that has never saved one, and saves keep writing it through 1.0
+    /// (D13).
     #[serde(default)]
     pub dock_layout: Vec<DockEntryPersist>,
     /// The one-window panel's pane tree. Always per profile: it is
