@@ -12,6 +12,7 @@ use crate::split::split_commands;
 use crate::trigger::action::{HighlightStyle, TriggerAction};
 use crate::trigger::readable;
 use crate::trigger::store::{Trigger, TriggerStore, TriggerTarget};
+use crate::ScriptCall;
 
 /// Which dispatch lane the engine is running. Mirrors
 /// [`TriggerTarget`]: a `Line` pass only fires triggers with
@@ -62,15 +63,7 @@ pub struct LineResult {
     /// matching pattern (group 0 is the whole match; `[1..]` are the
     /// numbered groups). The session loop evaluates these against
     /// its shared `ScriptEngine` after the line is displayed.
-    pub scripts: Vec<ScriptInvocation>,
-}
-
-/// One Lua body queued by a trigger's `Script` action, with the
-/// capture groups it should run against.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ScriptInvocation {
-    pub body: String,
-    pub captures: Vec<String>,
+    pub scripts: Vec<ScriptCall>,
 }
 
 /// Run the trigger store against a single line of MUD output.
@@ -128,7 +121,7 @@ pub fn process_on_ground(
     let mut highlights: Vec<(Regex, HighlightStyle)> = Vec::new();
     let mut sends = Vec::new();
     let mut routes = Vec::new();
-    let mut scripts: Vec<ScriptInvocation> = Vec::new();
+    let mut scripts: Vec<ScriptCall> = Vec::new();
     let mut any_match = false;
     // The SGR open of the first base style that matched, in priority
     // order. See [`HighlightStyle::base`].
@@ -225,7 +218,7 @@ pub fn process_on_ground(
                                         .unwrap_or_default()
                                 })
                                 .collect();
-                            scripts.push(ScriptInvocation {
+                            scripts.push(ScriptCall {
                                 body: body.clone(),
                                 captures,
                             });
