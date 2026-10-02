@@ -4,7 +4,7 @@ Hand written and synthetic. Nothing here was captured from a live session. Every
 
 ## looks.json
 
-Room looks, each as a list of events in wire order. A `gmcp` event is a packet, a `line` event is one line of text with the ANSI codes the server sends, and a `prompt` event is a prompt the server ends with a GA. `room` marks the lines a Room trigger matches, the things and the people a look lists after its exits line. `src-tauri/src/session_room_tests.rs` plays each look through the session's own steps.
+Room looks, each as a list of events in wire order. A `gmcp` event is a packet, a `line` event is one line of text with the ANSI codes the server sends, and a `prompt` event is a prompt the server ends with a GA. `room` marks the lines a Room trigger matches, the things and the people a look lists after its exits line. `src-tauri/src/session_room_tests.rs` plays each look through the session's own steps, and `crates/trigger/src/engine.rs` highlights each word of each line in place.
 
 Where the lines come from.
 
@@ -21,11 +21,11 @@ Where the lines come from.
 
 ## lines.json
 
-Single lines for the Room and time colors preset. `trigger` names the trigger that colors a line and `match` the text its color covers. A line with no `trigger` is a near miss that no trigger of the preset may touch. `src/lib/presets.test.ts` runs the preset's patterns on each one, and `src-tauri/src/session_room_tests.rs` runs each through the session's own steps.
+Single lines for the Room and time colors preset. `trigger` names the trigger that colors a line and `match` the text its color covers. A line with no `trigger` is a near miss that no trigger of the preset may touch. `src/lib/presets.test.ts` runs the preset's patterns on each one, `src-tauri/src/session_room_tests.rs` runs each through the session's own steps, and `crates/trigger/src/engine.rs` highlights each word of each line in place.
 
 - The exits lines are `do_exits` with `auto`. Room 5233, The Eastern Square, has exits `D0` to `D3`. Room 5279 has `D2`. Room 5200, Rock Bottom, has `D4` and a door at `D5` that resets closed, which the line shows in parentheses. The same room shows `(+down)` when you see a trap on that door, the `+` in `` `! `` bold red. A room with no exit you can see reads `[Exits: none]`, the same text the builder tutorial mob in area/higher.are echoes.
 - The eleven time of day lines are `weather_update` in update.c, the five usual ones and the six it sends in eternal darkness.
-- The WiZNET lines are `wiznet` in act_wiz.c, `` `&W`8i`&ZNET`8 ``, the time cut from ctime, and the message. The messages are `TICK!` from update.c, `Newbie alert!  $N sighted.` from comm.c and `$N has posted a note.` from recycle.c.
+- The WiZNET lines are `wiznet` in act_wiz.c, `` `&W`8i`&ZNET`8 ``, the time cut from ctime, and the message. The messages are `TICK!` from update.c, `Newbie alert!  $N sighted.` from comm.c and `$N has posted a note.` from recycle.c. Three more carry colors of their own, which the preset leaves on them. `` `!Corrupted Pfile detected: %s`` `` from comm.c is bold red, `` `&%s attacked %s at %d`` `` from `m_yell` in magic.c is bold white, here in room 5279, and `` `@%s has been forced wizinvis for idling > 13 ticks.`` `` from update.c is bold green.
 - The says, tells and yells are the formats in languages.c and act_comm.c, `$n says`, `%s tells you` and `$n yells`, each with its color code around the text. The game has no gossip channel, so the newbie channel from `do_newbiechat` stands in for one. Each quotes a line the preset colors.
 - `Welcome to Wiznet!` is `do_wiznet` in act_wiz.c.
 - The prompts are the one `prompt all` sets, and `%e` alone from `do_promptexit` in act_info.c, which prints single letters, `---` while you are blind and `???` in forest mist.

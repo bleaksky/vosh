@@ -608,6 +608,12 @@ describe('the help on the Room and time colors preset', () => {
     expect(text).toContain(
       'The exits and room colors fill only the text the game left uncolored, so an aura, a red `[AFK]` and the red `+` of a trap you see keep their own colors.',
     );
+    expect(text).toContain(
+      'The magenta covers the WiZNET tag alone, so the message after it keeps its colors too.',
+    );
+    expect(text).toContain(
+      'A plain highlight restyles the matched words, and the rest of the line keeps the colors the game sent.',
+    );
   });
 
   it('matches HELP.md word for word', () => {

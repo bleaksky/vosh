@@ -221,7 +221,7 @@ A highlight trigger restyles every line that matches a pattern. Define one from 
 - Add `wash` to the style list to tint the whole line instead of restyling the text alone.
 - Type `#triggers` to confirm the pattern and action. Defining a trigger under an existing name replaces it.
 
-A plain highlight restyles the matched words. A wash marks the whole line. The line text takes the highlight color, a dim field in that color fills the row edge to edge, and an accent bar marks the left edge. The field and the bar follow your theme palette, so a washed line sits with the colors around it instead of fighting them.
+A plain highlight restyles the matched words, and the rest of the line keeps the colors the game sent. A wash marks the whole line. The line text takes the highlight color, a dim field in that color fills the row edge to edge, and an accent bar marks the left edge. The field and the bar follow your theme palette, so a washed line sits with the colors around it instead of fighting them.
 
 Colors take the sixteen ANSI names. `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, and `white`, plus a `bright_` variant of each. `purple` maps to magenta and `gray` to `bright_black`. Stack `bold`, `underline`, and `inverse` freely, and add `bg:<color>` for a background.
 
@@ -229,7 +229,7 @@ Example. `#trigger tell-glow {tells you} highlight bright_yellow bold` renders e
 
 The Triggers editor under Automation in Settings offers the same options. Pick `Highlight` or `Wash` in `Style`, then open `Advanced` to set `Text color` and `Background`, with `Bold`, `Underline`, and `Inverse` beside them.
 
-The `Room and time colors` preset colors a room look and the clock. The exits line turns green, the things and people the room lists turn yellow, the day and night messages turn blue, and the WiZNET tag turns bold magenta. Each one is a terminal color from your theme, so a theme switch carries them along. The exits and room colors fill only the text the game left uncolored, so an aura, a red `[AFK]` and the red `+` of a trap you see keep their own colors. A say or a tell that quotes the same words stays as it was. Vosh turns the preset on for every profile, once, unless you had turned every preset off. Turn it off in Settings under Automation, then Presets.
+The `Room and time colors` preset colors a room look and the clock. The exits line turns green, the things and people the room lists turn yellow, the day and night messages turn blue, and the WiZNET tag turns bold magenta. Each one is a terminal color from your theme, so a theme switch carries them along. The exits and room colors fill only the text the game left uncolored, so an aura, a red `[AFK]` and the red `+` of a trap you see keep their own colors. The magenta covers the WiZNET tag alone, so the message after it keeps its colors too. A say or a tell that quotes the same words stays as it was. Vosh turns the preset on for every profile, once, unless you had turned every preset off. Turn it off in Settings under Automation, then Presets.
 
 ### 3.4 Route lines to a pane
 
