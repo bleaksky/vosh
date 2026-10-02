@@ -133,23 +133,11 @@ struct Unheard {
 /// Every name sent with no page listener. Everything else the app or the
 /// page sends must have one, so a rename at one sender alone fails even
 /// while another sender keeps the old name.
-const UNHEARD: &[Unheard] = &[
-    Unheard {
-        name: r"https?://[^\s<>()\[\]]+",
-        why: "The terminal grid's pattern for a web address in the game output. \
-              It is no event.",
-    },
-    Unheard {
-        name: "vosh://moons-position-changed",
-        why: "broadcastUiConfigChanges sends it with every other Settings field, \
-              and no window listens for it. It goes with the dead events.",
-    },
-    Unheard {
-        name: "vosh://vitals-config-changed",
-        why: "broadcastUiConfigChanges sends it with every other Settings field, \
-              and no window listens for it. It goes with the dead events.",
-    },
-];
+const UNHEARD: &[Unheard] = &[Unheard {
+    name: r"https?://[^\s<>()\[\]]+",
+    why: "The terminal grid's pattern for a web address in the game output. \
+          It is no event.",
+}];
 
 /// A name argument, as far as the source tells it.
 #[derive(Clone, Debug, PartialEq)]

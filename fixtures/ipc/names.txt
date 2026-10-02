@@ -169,7 +169,6 @@ event vosh://loadouts-changed app heard
 event vosh://macro-groups-changed app heard
 event vosh://macros-changed app heard
 event vosh://migration-applied app heard
-event vosh://moons-position-changed page unheard
 event vosh://native-copied app heard
 event vosh://native-grid-size app heard
 event vosh://native-scroll app heard
@@ -183,7 +182,6 @@ event vosh://prompt-config-changed app heard
 event vosh://session-identity-changed app heard
 event vosh://settings-find app heard
 event vosh://settings-goto-tab page heard
-event vosh://side-panels-fill-height-changed page heard
 event vosh://spellcheck-prompt-changed page heard
 event vosh://split-divider-changed page heard
 event vosh://terminal-clicked app heard
@@ -200,6 +198,5 @@ event vosh://tracked-affects-changed app page heard
 event vosh://trigger-groups-changed app heard
 event vosh://triggers-changed app heard
 event vosh://ui-config-replaced app heard
-event vosh://vitals-config-changed page unheard
 event vosh://vitals-density-changed page heard
 event vosh://vitals-options-changed page heard

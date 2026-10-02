@@ -570,7 +570,6 @@ describe('a replaced UI config', () => {
       input_cursor_style: 'underline',
       input_echo_color: '#ff8800',
       vitals_density: 'line',
-      moons_position: 'before-time',
     });
     await broadcastUiConfigChanges(normalizeUiConfig(loaded));
     const sent = vi.mocked(emit);
@@ -601,7 +600,6 @@ describe('a replaced UI config', () => {
     expect(payloads.get('vosh://input-cursor-style-changed')).toBe('underline');
     expect(payloads.get('vosh://input-echo-color-changed')).toBe('#ff8800');
     expect(payloads.get('vosh://vitals-density-changed')).toBe('line');
-    expect(payloads.get('vosh://moons-position-changed')).toBe('before-time');
     // Your prompt travels through the prompt commands, not the config.
     expect(payloads.has('vosh://prompt-template-changed')).toBe(false);
   });
