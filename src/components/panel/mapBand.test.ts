@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { MAP_BAND_MAX_ROWS, mapBandPeople, mapBandRows } from './mapBand';
+import { MAP_BAND_MAX_ROWS, mapBandLayout, mapBandPeople, mapBandRows } from './mapBand';
 
 describe('mapBandRows', () => {
-  it('fills what the drawing leaves above its floor, up to three rows', () => {
+  it('fills what the drawing leaves above its floor, up to four rows', () => {
     // A tall pane: the drawing keeps the rest.
-    expect(MAP_BAND_MAX_ROWS).toBe(3);
-    expect(mapBandRows(480, 96, 22)).toBe(3);
+    expect(MAP_BAND_MAX_ROWS).toBe(4);
+    expect(mapBandRows(480, 96, 22)).toBe(4);
+    expect(mapBandRows(96 + 88, 96, 22)).toBe(4);
+    expect(mapBandRows(96 + 87, 96, 22)).toBe(3);
     // Room for two rows over the floor, with a pixel to spare.
     expect(mapBandRows(96 + 45, 96, 22)).toBe(2);
     expect(mapBandRows(96 + 44, 96, 22)).toBe(2);
@@ -41,5 +43,17 @@ describe('mapBandPeople', () => {
 
   it('shows no people when only the room row fits', () => {
     expect(mapBandPeople(people, 0)).toEqual({ shown: [], rest: [] });
+  });
+});
+
+describe('mapBandLayout', () => {
+  it('puts the terrain row under the name and gives people the rest', () => {
+    expect(mapBandLayout(4)).toEqual({ where: true, people: 2 });
+    expect(mapBandLayout(3)).toEqual({ where: true, people: 1 });
+  });
+
+  it('gives up people before the terrain row, and that row before the name', () => {
+    expect(mapBandLayout(2)).toEqual({ where: true, people: 0 });
+    expect(mapBandLayout(1)).toEqual({ where: false, people: 0 });
   });
 });

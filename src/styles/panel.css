@@ -1145,6 +1145,35 @@
   color: var(--tertiary);
 }
 
+/* The room's terrain and region, a quiet caption under its name. It
+   sits at the top of its row so it reads with the name above it, and
+   the people keep their distance below. Where the row runs short, the
+   region gives way with an ellipsis and takes its dot along, so the
+   row never ends on a stray dot. */
+.pane-map-where {
+  align-items: flex-start;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--tertiary);
+}
+
+.pane-map-terrain {
+  flex: none;
+  white-space: nowrap;
+}
+
+.pane-map-region {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-map-sep {
+  margin: 0 5px;
+}
+
 /* ── Group ───────────────────────────────────────────────────────── */
 
 .pane-member-lead {
