@@ -8,7 +8,7 @@ use crate::engine::StatusReport;
 use crate::format::{Resolved, Value};
 use crate::render::{Span, Values};
 use crate::template::{FieldRef, Format};
-use crate::vars::{self, Entry, FormatId, Group, Kind, Source, Vars, Vosh, CATALOG};
+use crate::vars::{self, Entry, Group, Kind, Source, Vars, Vosh, CATALOG};
 
 /// A field's state now (D4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -41,8 +41,6 @@ pub struct FieldState {
     pub param: bool,
     /// Shown as its own row in the picker.
     pub listed: bool,
-    /// The formats it offers, the value first.
-    pub formats: &'static [FormatId],
     pub state: State,
     pub source: Option<Source>,
     /// The value as the picker shows it, an enum as its word. None
@@ -113,7 +111,6 @@ pub fn catalog(vars: &Vars, vosh: &Vosh, reads: &[String]) -> Vec<FieldState> {
             search: &[],
             param: false,
             listed: true,
-            formats: Kind::Text.formats(),
             state,
             source: Some(Source::Script),
             value,
@@ -162,7 +159,6 @@ fn field_state(
         search: e.search,
         param: e.param,
         listed: e.listed,
-        formats: e.kind.formats(),
         state,
         source,
         value,

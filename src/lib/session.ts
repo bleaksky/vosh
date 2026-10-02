@@ -697,7 +697,7 @@ export type PromptCompileRequest =
   | { kind: 'aabahran'; prompt: string; fprompt?: string; typed?: boolean }
   | { kind: 'regex'; lines: string[]; names?: Record<string, string> };
 
-/** Which of your two settings a code, a shape or a warning is from. */
+/** Which of your two settings a code or a warning is from. */
 export type PromptWhich = 'prompt' | 'fprompt';
 
 export type PromptWarningKind =
@@ -747,20 +747,8 @@ export interface PromptCompileReport {
   prompt: string;
   fprompt: string;
   shapes: {
-    label: string;
-    kind: 'normal' | 'tank' | 'either' | 'afk' | 'fallback' | 'line';
-    which: PromptWhich | null;
     lines: string[];
     settle: boolean;
-  }[];
-  vars: string[];
-  codes: {
-    code: string;
-    label: string;
-    field: string | null;
-    which: PromptWhich;
-    span: [number, number];
-    read: boolean;
   }[];
   warnings: {
     kind: PromptWarningKind;
@@ -1236,8 +1224,6 @@ export type PromptFieldKind =
   | 'member'
   | 'raw';
 
-export type PromptFormatId = Exclude<PromptFormatName, 'cur_max' | 'percent'>;
-
 /** One field the picker lists, with its state now. */
 export interface PromptFieldState {
   name: string;
@@ -1253,7 +1239,6 @@ export interface PromptFieldState {
   /** Written with a parameter, `%{aff:sanctuary}`. */
   param: boolean;
   listed: boolean;
-  formats: PromptFormatId[];
   state: 'value' | 'hidden' | 'absent' | 'missing';
   source: 'script' | 'capture' | 'gmcp' | 'vosh' | null;
   /** The value as the picker shows it, an enum as its word. */

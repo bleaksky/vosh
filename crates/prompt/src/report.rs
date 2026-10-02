@@ -1,18 +1,17 @@
 //! What a capture compiles to, for `prompt_compile` (section 6).
 //!
 //! The report is pure. It says whether Vosh can read the prompt, the ways
-//! the game prints it, the values it reads, each code with its label, the
-//! warnings with the span of the setting each is about, and the designs
-//! the card offers to start from. [`line_report`] reports a capture built
-//! from a line another game prints, with each number in it, for
-//! `prompt_capture_from_line`.
+//! the game prints it, the card's code legend, the warnings with the span
+//! of the setting each is about, and the designs the card offers to start
+//! from. [`line_report`] reports a capture built from a line another game
+//! prints, with each number in it, for `prompt_capture_from_line`.
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
 use crate::aabahran::lex::{self, Token as GameToken};
-use crate::aabahran::{self, Origin, ShapeKind, WarningKind, Which, Who};
+use crate::aabahran::{self, Origin, WarningKind, Which, Who};
 use crate::capture;
 use crate::config::{CaptureConfig, RegexCapture};
 use crate::generic;
@@ -55,11 +54,6 @@ pub struct CompileReport {
     pub fprompt: String,
     /// The ways the game prints the prompt, each with its patterns.
     pub shapes: Vec<ReportShape>,
-    /// The values Vosh reads, each once, the way the game prints the
-    /// prompt out of a fight first.
-    pub vars: Vec<String>,
-    /// Every value code in the settings, in order.
-    pub codes: Vec<ReportCode>,
     pub warnings: Vec<ReportWarning>,
     pub presets: Vec<Preset>,
     /// The value each group of a pattern feeds where it differs from the
@@ -132,29 +126,21 @@ pub struct ReportError {
 /// One way the game prints the prompt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ReportShape {
-    pub label: String,
-    /// `normal`, `tank`, `either`, `afk`, `fallback`, or `line` for a
-    /// pattern.
-    pub kind: String,
-    pub which: Option<Which>,
     /// The pattern for each line, top line first.
     pub lines: Vec<String>,
     /// A partial the last line reads is the prompt at once.
     pub settle: bool,
 }
 
-/// One value code in a setting.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ReportCode {
-    /// As you write it, `%h`.
-    pub code: String,
-    pub label: String,
+/// One value code in a setting, for the legend to say which codes that
+/// run together Vosh still reads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ReportCode {
+    label: String,
     /// The value it fills, None for a code that fills none.
-    pub field: Option<String>,
-    pub which: Which,
-    pub span: [usize; 2],
-    /// Vosh reads its value.
-    pub read: bool,
+    field: Option<String>,
+    which: Which,
+    span: [usize; 2],
 }
 
 /// A warning with its sentence.
@@ -213,9 +199,6 @@ fn codes_report(prompt: &str, fprompt: &str, typed: bool, who: Who) -> CompileRe
                 .shapes
                 .iter()
                 .map(|shape| ReportShape {
-                    label: shape_label(shape.kind, shape.which).to_string(),
-                    kind: shape_kind(shape.kind).to_string(),
-                    which: Some(shape.which),
                     lines: shape
                         .lines
                         .iter()
@@ -245,17 +228,11 @@ fn codes_report(prompt: &str, fprompt: &str, typed: bool, who: Who) -> CompileRe
             let GameToken::Code(code) = lexed.token else {
                 continue;
             };
-            let field = code.name().map(str::to_string);
-            let read = field
-                .as_deref()
-                .is_some_and(|f| vars.iter().any(|v| v == f));
             codes.push(ReportCode {
-                code: code.written(),
                 label: code.label(),
-                field,
+                field: code.name().map(str::to_string),
                 which,
                 span: span(&lexed.span),
-                read,
             });
         }
     }
@@ -274,8 +251,6 @@ fn codes_report(prompt: &str, fprompt: &str, typed: bool, who: Who) -> CompileRe
         prompt: stored_prompt,
         fprompt: stored_fprompt,
         shapes,
-        vars,
-        codes,
         warnings: warnings
             .into_iter()
             .map(|w| ReportWarning {
@@ -490,27 +465,6 @@ fn setting_legend(
 
 const SHORT: &str = "A prompt with no values";
 
-fn shape_kind(kind: ShapeKind) -> &'static str {
-    match kind {
-        ShapeKind::Normal => "normal",
-        ShapeKind::Tank => "tank",
-        ShapeKind::Either => "either",
-        ShapeKind::Afk => "afk",
-        ShapeKind::Fallback => "fallback",
-    }
-}
-
-fn shape_label(kind: ShapeKind, which: Which) -> &'static str {
-    match (kind, which) {
-        (ShapeKind::Normal | ShapeKind::Either, Which::Prompt) => "Your prompt",
-        (ShapeKind::Tank, Which::Prompt) => "Your prompt while someone in your group tanks",
-        (ShapeKind::Normal | ShapeKind::Either, Which::Fight) => "Your fight prompt",
-        (ShapeKind::Tank, Which::Fight) => "Your fight prompt while someone in your group tanks",
-        (ShapeKind::Afk, _) => "Your prompt while you are away",
-        (ShapeKind::Fallback, _) => "The prompt the game draws for an empty setting",
-    }
-}
-
 /// The one pattern a regex capture reads your prompt with, or why Vosh
 /// cannot read with it.
 fn one_pattern(lines: &[String]) -> Result<&String, String> {
@@ -553,8 +507,6 @@ fn regex_report(
         prompt: String::new(),
         fprompt: String::new(),
         shapes: Vec::new(),
-        vars: Vec::new(),
-        codes: Vec::new(),
         warnings: Vec::new(),
         presets: presets::other(supplied),
         names: names.clone(),
@@ -583,14 +535,9 @@ fn regex_report(
         prompt: String::new(),
         fprompt: String::new(),
         shapes: vec![ReportShape {
-            label: "Your prompt".to_string(),
-            kind: "line".to_string(),
-            which: None,
             lines: vec![pattern.clone()],
             settle: capture.settle,
         }],
-        vars: vars.clone(),
-        codes: Vec::new(),
         warnings: Vec::new(),
         presets: presets::other(&reads),
         names: names.clone(),

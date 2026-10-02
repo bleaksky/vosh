@@ -17,7 +17,6 @@ const field = (over: Partial<PromptFieldState>): PromptFieldState => ({
   search: [],
   param: false,
   listed: true,
-  formats: [],
   state: 'value',
   source: null,
   value: null,

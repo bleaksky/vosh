@@ -3,7 +3,9 @@
 
 use std::collections::BTreeMap;
 
-use vosh_prompt::aabahran::{WarningKind, Which, Who};
+use vosh_prompt::aabahran::{compile, Compiled, Origin, ShapeKind, WarningKind, Which, Who};
+use vosh_prompt::capture::fills;
+use vosh_prompt::config::RegexCapture;
 use vosh_prompt::report::{line_report, report, CompileRequest};
 use vosh_prompt::template::TokenKind;
 use vosh_prompt::Template;
@@ -35,6 +37,24 @@ fn regex(lines: &[&str], supplied: &dyn Fn(&str) -> bool) -> vosh_prompt::report
     )
 }
 
+/// The two settings compiled as the report compiles them, for the names
+/// they read and the codes each shape prints, which the report leaves out
+/// since the card never shows them.
+fn stored(prompt: &str, fprompt: &str) -> Compiled {
+    compile(prompt, fprompt, Origin::Stored, Who::default()).expect("the settings compile")
+}
+
+/// The names the numbers of a line read into, without the ones you left
+/// out.
+fn read_into(report: &vosh_prompt::report::CompileReport) -> Vec<String> {
+    report
+        .numbers
+        .iter()
+        .filter(|n| !n.name.is_empty())
+        .map(|n| n.name.clone())
+        .collect()
+}
+
 fn assert_reads_clean(template: &str) {
     let parsed = Template::parse(template);
     assert!(
@@ -57,24 +77,34 @@ fn james_prompt_reads_his_vitals_and_the_tank_line() {
     assert!(report.ok);
     assert_eq!(report.error, None);
     assert_eq!(report.prompt, JAMES_PROMPT);
+    let compiled = stored(&report.prompt, &report.fprompt);
     assert_eq!(
-        report.vars,
+        compiled.reads(Which::Prompt),
         ["hp", "maxhp", "mana", "maxmana", "move", "maxmove", "tank", "tank_bar"]
     );
-    let kinds: Vec<&str> = report.shapes.iter().map(|s| s.kind.as_str()).collect();
-    assert_eq!(kinds, ["normal", "tank", "afk"]);
-    assert_eq!(report.shapes[0].label, "Your prompt");
+    let kinds: Vec<(Which, ShapeKind)> =
+        compiled.shapes.iter().map(|s| (s.which, s.kind)).collect();
     assert_eq!(
-        report.shapes[1].label,
-        "Your prompt while someone in your group tanks"
+        kinds,
+        [
+            (Which::Prompt, ShapeKind::Normal),
+            (Which::Prompt, ShapeKind::Tank),
+            (Which::Prompt, ShapeKind::Afk),
+        ]
     );
+    assert_eq!(report.shapes.len(), 3);
     assert_eq!(report.shapes[1].lines.len(), 2);
     let leftover = &report.warnings;
     assert!(leftover.is_empty(), "{leftover:?}");
-    let written: Vec<(&str, &str, bool)> = report
+    // The tank's shape prints every code, and Vosh reads each one.
+    let printed: Vec<(String, String, bool)> = compiled.shapes[1]
         .codes
         .iter()
-        .map(|c| (c.code.as_str(), c.label.as_str(), c.read))
+        .map(|c| (c.code.written(), c.code.label(), c.read))
+        .collect();
+    let written: Vec<(&str, &str, bool)> = printed
+        .iter()
+        .map(|(code, label, read)| (code.as_str(), label.as_str(), *read))
         .collect();
     assert_eq!(
         written,
@@ -89,8 +119,9 @@ fn james_prompt_reads_his_vitals_and_the_tank_line() {
             ("%V", "Max moves", true),
         ]
     );
-    assert_eq!(report.codes[2].span, [7, 9]);
-    assert_eq!(report.codes[2].which, Which::Prompt);
+    let health = report.legend.iter().find(|r| r.code == "%h").expect("%h");
+    assert_eq!(health.span, [7, 9]);
+    assert_eq!(health.which, Which::Prompt);
 }
 
 #[test]
@@ -157,7 +188,8 @@ fn prompt_all_and_a_fight_prompt_with_colors_draw_as_the_game_does() {
         "{game}"
     );
     assert_reads_clean(game);
-    assert!(fight.vars.contains(&"tank_pct".to_string()));
+    let compiled = stored(&fight.prompt, &fight.fprompt);
+    assert!(compiled.reads(Which::Fight).contains(&"tank_pct"));
 }
 
 #[test]
@@ -203,10 +235,14 @@ fn warnings_carry_their_span_and_sentence() {
     assert_eq!(warning.span, [1, 5]);
     assert_eq!(warning.which, Which::Prompt);
     // The two codes it cannot tell apart are not read.
-    let read: Vec<(&str, bool)> = report
+    let printed: Vec<(String, bool)> = stored(&report.prompt, &report.fprompt).shapes[0]
         .codes
         .iter()
-        .map(|c| (c.code.as_str(), c.read))
+        .map(|c| (c.code.written(), c.read))
+        .collect();
+    let read: Vec<(&str, bool)> = printed
+        .iter()
+        .map(|(code, read)| (code.as_str(), *read))
         .collect();
     assert_eq!(read, [("%h", false), ("%m", false), ("%v", true)]);
 }
@@ -223,10 +259,14 @@ fn a_typed_setting_is_stored_as_the_game_stores_it() {
 fn a_pattern_reports_what_it_fills_and_presets_from_what_is_supplied() {
     let report = regex(&[r"^<(?<hp>\d+)hp> $"], &|_| false);
     assert!(report.ok);
-    assert_eq!(report.vars, ["hp"]);
+    let capture = RegexCapture {
+        lines: vec![r"^<(?<hp>\d+)hp> $".into()],
+        ..RegexCapture::default()
+    };
+    assert_eq!(fills(&capture), ["hp"]);
     assert_eq!(report.shapes.len(), 1);
     assert!(report.shapes[0].settle);
-    assert_eq!(report.shapes[0].kind, "line");
+    assert_eq!(report.shapes[0].lines, [r"^<(?<hp>\d+)hp> $"]);
     let ids: Vec<&str> = report.presets.iter().map(|p| p.id).collect();
     assert_eq!(ids, ["default", "minimal", "how_full", "detailed", "empty"]);
     assert_eq!(
@@ -280,13 +320,12 @@ fn a_line_another_game_prints_reports_its_numbers_and_the_names_it_reads() {
     let line = line_report(text, &[], &|_| false);
     assert!(line.ok);
     assert_eq!(line.shapes.len(), 1);
-    assert_eq!(line.shapes[0].kind, "line");
     assert_eq!(
         line.shapes[0].lines,
         [r"^<(?<hp>-?\d+)hp +(?<mana>-?\d+)m +(?<move>-?\d+)mv> +$"]
     );
     assert!(line.shapes[0].settle);
-    assert_eq!(line.vars, ["hp", "mana", "move"]);
+    assert_eq!(read_into(&line), ["hp", "mana", "move"]);
     assert!(line.names.is_empty());
     let marks: Vec<(&str, &str, [usize; 2])> = line
         .numbers
@@ -304,13 +343,13 @@ fn a_line_another_game_prints_reports_its_numbers_and_the_names_it_reads() {
     assert!(preset(&line, "how_full").is_some());
     // Names you give, and a number you leave out.
     let named = line_report(text, &["health".into(), String::new()], &|_| false);
-    assert_eq!(named.vars, ["health", "move"]);
+    assert_eq!(read_into(&named), ["health", "move"]);
     assert_eq!(named.numbers[1].name, "");
     assert_eq!(named.numbers[1].suggested, "mana");
     // A name no group can carry goes by the number of its group.
     let odd = line_report("1 2", &["9x".into()], &|_| false);
     assert_eq!(odd.names, BTreeMap::from([("1".into(), "9x".into())]));
-    assert_eq!(odd.vars, ["9x", "n2"]);
+    assert_eq!(read_into(&odd), ["9x", "n2"]);
     // The card reads the report as JSON.
     let json = serde_json::to_value(&line).expect("json");
     assert_eq!(
@@ -338,7 +377,12 @@ fn a_line_another_game_prints_reports_its_numbers_and_the_names_it_reads() {
         &|_| false,
     );
     assert_eq!(pattern.names, BTreeMap::from([("1".into(), "hp".into())]));
-    assert_eq!(pattern.vars, ["hp"]);
+    let capture = RegexCapture {
+        lines: vec![r"^<(\d+)hp> $".into()],
+        names: pattern.names.clone(),
+        ..RegexCapture::default()
+    };
+    assert_eq!(fills(&capture), ["hp"]);
 }
 
 /// Each legend row as code, label, tag and whether it carries the warn
