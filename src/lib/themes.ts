@@ -675,6 +675,51 @@ const everforestLight: AppTheme = {
   chrome: { accent: '#809300' },
 };
 
+// ── Green Screen ────────────────────────────────────────────────────
+// The old school MUD look. Green text on a monochrome terminal, with
+// the game's own colors drawn as a CGA telnet client drew them. The
+// ground is near black with the faintest green cast. Default text is
+// a softened phosphor green near 11:1, the reading level of the house
+// dark themes, where pure #00ff00 would glare at 14:1. The cursor is
+// the same phosphor at full glow and becomes the accent, and the
+// selection is a deeper phosphor green.
+//
+// The sixteen slots are the CGA palette (#aa0000, #00aa00, #aa5500,
+// #0000aa, #aa00aa, #00aaaa, #aaaaaa, #555555, then the 55 and ff
+// brights) as published. Dark red and dark blue sit at 2.5:1 and 1.5:1
+// on the ground, as they did on a CGA screen, and the terminal draws
+// them that way. The chat pane lifts the game colors it draws on the
+// panel (chatColors.ts).
+const greenScreen: AppTheme = {
+  id: 'green-screen',
+  label: 'Green Screen',
+  description: 'Old school terminal. Phosphor green text and classic CGA colors on black.',
+  xterm: {
+    background: '#0a0e0b',
+    foreground: '#84d48a',
+    cursor: '#79f887',
+    cursorAccent: '#0a0e0b',
+    selectionBackground: '#358540',
+    selectionForeground: '#79f887',
+    black: '#000000',
+    red: '#aa0000',
+    green: '#00aa00',
+    yellow: '#aa5500',
+    blue: '#0000aa',
+    magenta: '#aa00aa',
+    cyan: '#00aaaa',
+    white: '#aaaaaa',
+    brightBlack: '#555555',
+    brightRed: '#ff5555',
+    brightGreen: '#55ff55',
+    brightYellow: '#ffff55',
+    brightBlue: '#5555ff',
+    brightMagenta: '#ff55ff',
+    brightCyan: '#55ffff',
+    brightWhite: '#ffffff',
+  },
+};
+
 // ── Solarized ───────────────────────────────────────────────────────
 // Ethan Schoonover's Solarized (MIT licensed). The ground, the text, the
 // cursor, the normal colors, bright red (orange), and bright magenta
@@ -794,6 +839,7 @@ export const BUILTIN_THEMES: AppTheme[] = [
   highContrast,
   everforestDark,
   everforestLight,
+  greenScreen,
 ];
 
 /** The chrome tokens a theme paints the window with. */

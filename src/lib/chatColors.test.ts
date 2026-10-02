@@ -167,6 +167,8 @@ describe('chatInks', () => {
       ['classic-vivid', 'blue'],
       ['everforest-light', 'yellow'],
       ['everforest-light', 'red'],
+      ['green-screen', 'blue'],
+      ['green-screen', 'magenta'],
     ] as const;
     for (const [id, slot] of cases) {
       const theme = findTheme(id);

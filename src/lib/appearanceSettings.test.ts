@@ -148,6 +148,7 @@ describe('pairChoices', () => {
       'Tokyo Night',
     ]);
     expect(dark).toContain('Everforest Dark');
+    expect(dark).toContain('Green Screen');
     expect(dark).not.toContain('Vellum');
     expect(dark).toContain('Solarized Dark');
     expect(dark).not.toContain('Everforest Light');
