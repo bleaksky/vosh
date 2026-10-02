@@ -1,5 +1,6 @@
 import { isTrackedRow, type AffectRow } from '../../lib/affectsView';
-import { AFFECTS_TWO_COLUMNS_W } from './affectsGrid';
+import { affectsTwoColumnsW } from './affectsGrid';
+import { PANE_TEXT_BASE, PANE_TEXT_PX, paneText } from './paneTextSize';
 
 // Where each chip sits in the Grouped chips style (board Affects C).
 // Three groups, what to recast first: the tracked affects you miss and
@@ -16,6 +17,10 @@ import { AFFECTS_TWO_COLUMNS_W } from './affectsGrid';
 // cannot hold everything left ends with the count of what follows on
 // its last line, and a click on the count scrolls one page on. Pure,
 // with the text measure handed in, so the fit is unit tested.
+//
+// The lines, the gaps between them, and the width for the gutter
+// follow your terminal size (paneTextSize.ts), and the measure is in
+// your terminal face at that size. The numbers here are at 12 px.
 
 export type ChipGroupId = 'recast' | 'tracked' | 'other';
 
@@ -51,12 +56,11 @@ export function chipGroups(rows: readonly AffectRow[]): ChipGroup[] {
   return groups.filter((g) => g.rows.length > 0);
 }
 
-/** One chip line, 20 tall. */
-export const CHIP_H = 20;
-/** Between chips on a line, and between the lines of a group. */
+/** One chip line, 20 tall at 12 px. */
+export const CHIP_H = PANE_TEXT_BASE.chip;
+/** Between chips on a line. The lines of a group sit chipLineGap
+ *  apart, and groups chipGroupGap, both in paneTextSize.ts. */
 export const CHIP_GAP = 4;
-/** Between groups. */
-export const GROUP_GAP = 8;
 /** Above the first line of a page. */
 export const CHIPS_TOP = 4;
 /** The label gutter, and the space after a label. */
@@ -72,18 +76,22 @@ export const CHIPS_RIGHT = 12;
  *  nothing, so every chip is Other and a name would say nothing. */
 export type LabelMode = 'gutter' | 'runin' | 'none';
 
-export function chipLabelMode(rows: readonly AffectRow[], width: number): LabelMode {
+export function chipLabelMode(
+  rows: readonly AffectRow[],
+  width: number,
+  size: number = PANE_TEXT_PX,
+): LabelMode {
   if (!rows.some(isTrackedRow)) return 'none';
-  return width < AFFECTS_TWO_COLUMNS_W ? 'runin' : 'gutter';
+  return width < affectsTwoColumnsW(size) ? 'runin' : 'gutter';
 }
 
 /** Text widths in the faces the pane draws. */
 export interface ChipMeasure {
-  /** A name or hours in the terminal face at 12 px. */
+  /** A name or hours in the terminal face at your terminal size. */
   mono: (s: string) => number;
-  /** The hours in the terminal face at 12 px and the heaviest weight
-   *  they draw in, so a face whose bold runs wider never overflows its
-   *  line. The name's measure when left out. */
+  /** The hours in the terminal face at your terminal size and the
+   *  heaviest weight they draw in, so a face whose bold runs wider
+   *  never overflows its line. The name's measure when left out. */
   hours?: (s: string) => number;
   /** A group name in the UI face at 600 11 px. */
   label: (s: string) => number;
@@ -92,7 +100,7 @@ export interface ChipMeasure {
 }
 
 /** Widths with no page to measure in, as in a test: 7.2 px a terminal
- *  cell, close to the system face otherwise. */
+ *  cell at 12 px, close to the system face otherwise. */
 export const FIXED_MEASURE: ChipMeasure = {
   mono: (s) => s.length * 7.2,
   label: (s) => s.length * 6.5,
@@ -114,9 +122,13 @@ export const CHIP_DOT_PITCH = 3;
 /** The chip's corner radius, panel.css .pane-chip. */
 export const CHIP_RADIUS = 4;
 
-/** The ring's path round a chip `width` wide, inset half a dot so the
- *  dots sit inside the chip's edge: its rect and its length. */
-export function chipDotsPath(width: number): {
+/** The ring's path round a chip `width` wide and `height` tall, inset
+ *  half a dot so the dots sit inside the chip's edge: its rect and its
+ *  length. */
+export function chipDotsPath(
+  width: number,
+  height: number = CHIP_H,
+): {
   w: number;
   h: number;
   r: number;
@@ -124,16 +136,17 @@ export function chipDotsPath(width: number): {
 } {
   const inset = CHIP_DOT_PX / 2;
   const w = Math.max(0, width - CHIP_DOT_PX);
-  const h = CHIP_H - CHIP_DOT_PX;
+  const h = Math.max(0, height - CHIP_DOT_PX);
   const r = Math.min(CHIP_RADIUS - inset, w / 2, h / 2);
   return { w, h, r, length: 2 * w + 2 * h - 8 * r + 2 * Math.PI * r };
 }
 
-/** How the dots fall round a chip `width` wide: how many, and the gap
- *  from one to the next. The count rounds the pitch, so the last gap
- *  matches the rest and the ring closes evenly at any width. */
-export function chipDots(width: number): { count: number; gap: number } {
-  const { length } = chipDotsPath(width);
+/** How the dots fall round a chip `width` wide and `height` tall: how
+ *  many, and the gap from one to the next. The count rounds the pitch,
+ *  so the last gap matches the rest and the ring closes evenly at any
+ *  width. */
+export function chipDots(width: number, height: number = CHIP_H): { count: number; gap: number } {
+  const { length } = chipDotsPath(width, height);
   const count = Math.max(1, Math.round(length / CHIP_DOT_PITCH));
   return { count, gap: length / count };
 }
@@ -157,15 +170,16 @@ export interface ChipPage {
 }
 
 /** Pack `groups` into pages of whole lines, each page `bodyH` tall, in
- *  a pane `width` wide. `hoursOf` is the text a chip shows for its
- *  hours. A page that cannot hold everything left ends with the count
- *  on its last line: while that line has no room for 8 px and the
- *  count, its last chip moves to the next page, keeping at least one
- *  chip on the page, and a run in name left alone moves with it. A
- *  chip never grows past its line, and its name ellipsizes instead.
- *  A run in name whose first chip would not fit whole after it takes a
- *  line of its own, and the next page starts with the group when this
- *  one has no room for that line and the next. */
+ *  a pane `width` wide, with the game text at `size` px. `hoursOf` is
+ *  the text a chip shows for its hours. A page that cannot hold
+ *  everything left ends with the count on its last line: while that
+ *  line has no room for 8 px and the count, its last chip moves to the
+ *  next page, keeping at least one chip on the page, and a run in name
+ *  left alone moves with it. A chip never grows past its line, and its
+ *  name ellipsizes instead. A run in name whose first chip would not
+ *  fit whole after it takes a line of its own, and the next page starts
+ *  with the group when this one has no room for that line and the
+ *  next. */
 export function chipPages(
   groups: readonly ChipGroup[],
   width: number,
@@ -173,7 +187,9 @@ export function chipPages(
   measure: ChipMeasure,
   labels: LabelMode,
   bodyH: number,
+  size: number = PANE_TEXT_PX,
 ): ChipPage[] {
+  const { chip: lineH, chipLineGap: lineGap, chipGroupGap: groupGap } = paneText(size);
   const inner =
     width - CHIPS_LEFT - CHIPS_RIGHT - (labels === 'gutter' ? GUTTER_W + GUTTER_GAP : 0);
   const labelOf = (id: ChipGroupId) => groups.find((g) => g.id === id)?.label ?? '';
@@ -210,17 +226,17 @@ export function chipPages(
         continue;
       }
       // A new line: the next group, or this one wrapping.
-      const top: number = line ? line.top + CHIP_H + (newGroup ? GROUP_GAP : CHIP_GAP) : CHIPS_TOP;
-      if (top + CHIP_H > bodyH && lines.length > 0) {
+      const top: number = line ? line.top + lineH + (newGroup ? groupGap : lineGap) : CHIPS_TOP;
+      if (top + lineH > bodyH && lines.length > 0) {
         full = true;
         break;
       }
       const labelled: boolean = labels !== 'none' && (newGroup || lines.length === 0);
       if (labels === 'runin' && labelled) {
         const alone: ChipLine = { group, labelled, rows: [], top };
-        const next = top + CHIP_H + CHIP_GAP;
+        const next = top + lineH + lineGap;
         if (lead(alone) + natural(row) > inner) {
-          if (next + CHIP_H <= bodyH) {
+          if (next + lineH <= bodyH) {
             // The name alone, and its first chip from the text edge.
             lines.push(alone);
             line = { group, labelled: false, rows: [row], top: next };
@@ -266,8 +282,8 @@ export function chipPages(
 
 /** The least body height whose first page holds every Recast and
  *  Tracked chip and every harmful one, the rows Timers first holds, and
- *  the count after them when more follow. 0 when nothing needs holding,
- *  and never more than `cap`. */
+ *  the count after them when more follow, with the game text at `size`
+ *  px. 0 when nothing needs holding, and never more than `cap`. */
 export function chipsMinBody(
   groups: readonly ChipGroup[],
   width: number,
@@ -275,13 +291,14 @@ export function chipsMinBody(
   measure: ChipMeasure,
   labels: LabelMode,
   cap: number,
+  size: number = PANE_TEXT_PX,
 ): number {
   const must = groups.flatMap((g) =>
     g.rows.filter((r) => g.id !== 'other' || r.state === 'harmful'),
   );
   if (must.length === 0) return 0;
-  for (let h = CHIPS_TOP + CHIP_H; h <= cap; h += 1) {
-    const [first] = chipPages(groups, width, hoursOf, measure, labels, h);
+  for (let h = CHIPS_TOP + paneText(size).chip; h <= cap; h += 1) {
+    const [first] = chipPages(groups, width, hoursOf, measure, labels, h, size);
     const shown = new Set(first?.lines.flatMap((l) => l.rows.map((r) => r.key)) ?? []);
     if (must.every((r) => shown.has(r.key))) return h;
   }

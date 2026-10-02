@@ -209,21 +209,21 @@ describe('ChatLog', () => {
 });
 
 describe('the chat line in panel.css', () => {
-  it('sets the log in the terminal face at 12 on a 17 px line', () => {
+  it('sets the log in the terminal face at your terminal size, 17 px lines at 12', () => {
     const log = rule('.pane-chat-log');
     expect(log).toContain('font-family: var(--font-mud);');
-    expect(log).toContain('font-size: 12px;');
-    expect(log).toContain('line-height: 17px;');
+    expect(log).toContain('font-size: var(--mud-text);');
+    expect(log).toContain('line-height: var(--mud-chat-line);');
     expect(log).toContain('padding: 8px 12px 12px 18px;');
   });
 
-  it('hangs wrapped lines two cells in and keeps 3 px between messages', () => {
+  it('hangs wrapped lines two cells in and keeps 3 px between messages at 12', () => {
     const msg = rule('.pane-chat-msg');
     expect(msg).toContain('padding: 0 0 0 2ch;');
     expect(msg).toContain('text-indent: -2ch;');
     expect(msg).toContain('white-space: pre-wrap;');
     expect(msg).toContain('overflow-wrap: break-word;');
-    expect(rule('.pane-chat-msg + .pane-chat-msg')).toContain('margin-top: 3px;');
+    expect(rule('.pane-chat-msg + .pane-chat-msg')).toContain('margin-top: var(--mud-chat-gap);');
   });
 
   it('sets the tag at 600 and 0.7 and the speaker bold', () => {

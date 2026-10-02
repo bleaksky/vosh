@@ -3,7 +3,8 @@
    mockups' (Main, PanelTabs, Combat, Session), colors are tokens only.
    Dense rows are 22 px, pane headers 28 px, text starts at x 18, and
    a row with a status marker puts the 8 px marker at x 18 and its
-   text at x 34. */
+   text at x 34. Game text in the terminal face follows your terminal
+   size, and the rows that hold it scale with it (.panel-host). */
 
 /* The shell's panel slot supplies the ground, the 1 px left edge, and
    the band's 32 px above the first pane. */
@@ -20,6 +21,24 @@
   font-size: 12px;
   line-height: 16px;
   font-weight: 400;
+
+  /* Game text follows your terminal size, which PanelHost writes here
+     as --font-mud-px. Every length that sits with that text was drawn
+     at 12 px and scales by your size over 12, rounded to whole px, so
+     at 12 px each is the number it names. paneTextSize.ts holds the
+     same bases for the pane geometry. */
+  --mud-scale: calc(var(--font-mud-px, 12) / 12);
+  --mud-text: calc(var(--font-mud-px, 12) * 1px);
+  --mud-line: round(16px * var(--mud-scale), 1px);
+  --mud-affects-row: round(22px * var(--mud-scale), 1px);
+  --mud-affects-rule-gap: round(4px * var(--mud-scale), 1px);
+  --mud-affects-hours: round(22px * var(--mud-scale), 1px);
+  --mud-countdown-row: round(23px * var(--mud-scale), 1px);
+  --mud-countdown-meter-top: round(19px * var(--mud-scale), 1px);
+  --mud-countdown-meter: round(2px * var(--mud-scale), 1px);
+  --mud-chip: round(20px * var(--mud-scale), 1px);
+  --mud-chat-line: round(17px * var(--mud-scale), 1px);
+  --mud-chat-gap: round(3px * var(--mud-scale), 1px);
 }
 
 .panel-panes {
@@ -313,8 +332,8 @@
   white-space: nowrap;
 }
 
-/* Board Affects A, timers first. Two columns 16 apart on 22 px rows,
-   18 in from the left and 12 from the right. In each cell the mark
+/* Board Affects A, timers first. Two columns 16 apart on 22 px rows
+   at 12 px, 18 in from the left and 12 from the right. In each cell the mark
    sits at x 0, the hours right aligned in a column of three cells from
    x 14, and the name 8 after them, both in the terminal face. While a
    longer count shows, AffectsPane sets --affect-hours-ch on the body
@@ -322,7 +341,7 @@
 .pane-affects-grid {
   display: grid;
   column-gap: 16px;
-  grid-auto-rows: var(--row);
+  grid-auto-rows: var(--mud-affects-row);
   margin: 0;
   padding: 0 12px 0 18px;
   list-style: none;
@@ -333,14 +352,16 @@
   display: flex;
   align-items: center;
   min-width: 0;
-  height: var(--row);
+  height: var(--mud-affects-row);
 }
 
+/* The mark keeps its 8 px at every size and sits centered on the row,
+   7 px down a 22 px row. */
 .pane-affect-mark {
   --mark: var(--success);
   position: absolute;
   left: 0;
-  top: 7px;
+  top: round((var(--mud-affects-row) - 8px) / 2, 1px);
   width: 8px;
   height: 8px;
   border-radius: 4px;
@@ -373,7 +394,7 @@
 .pane-affect-mark.is-harmful {
   --mark: var(--danger);
   left: 1px;
-  top: 8px;
+  top: round((var(--mud-affects-row) - 6px) / 2, 1px);
   width: 6px;
   height: 6px;
   border-radius: 1px;
@@ -385,13 +406,13 @@
    warns in yellow at two. `+` is permanent and `-` missing. */
 .pane-affect-hours {
   flex: none;
-  width: 22px;
+  width: var(--mud-affects-hours);
   min-width: calc(var(--affect-hours-ch, 3) * 1ch);
   margin-left: 14px;
   text-align: right;
   font-family: var(--font-mud, ui-monospace, monospace);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -414,8 +435,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-mud, ui-monospace, monospace);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
   white-space: nowrap;
   color: var(--text);
 }
@@ -482,7 +503,7 @@
 /* The hairline between your tracked slots and the rest. */
 .pane-affects-rule {
   height: 1px;
-  margin: 4px 12px 4px 18px;
+  margin: var(--mud-affects-rule-gap) 12px var(--mud-affects-rule-gap) 18px;
   background: var(--divider);
 }
 
@@ -512,7 +533,7 @@
   display: flex;
   align-items: center;
   min-width: 0;
-  height: var(--row);
+  height: var(--mud-affects-row);
 }
 
 /* The count of what does not fit, set in the UI face where the names
@@ -520,7 +541,7 @@
 .pane-affects-more {
   display: flex;
   align-items: center;
-  height: var(--row);
+  height: var(--mud-affects-row);
   margin: 0 0 0 8px;
   padding: 0;
   border: 0;
@@ -544,11 +565,12 @@
 }
 
 /* Board Affects B, Countdown. One run on 23 px rows, two columns 24
-   apart from 360 px, 18 in from the left and 12 from the right. Each
-   cell holds the mark at x 0, y 5, the name from x 14, the hours at the
-   right edge, and a 2 px meter under the text from x 14 to the edge.
-   The line is 17 tall with 1 px above the text, as the board draws it
-   under the app's border-box reset. */
+   apart from 360 px, 18 in from the left and 12 from the right, at 12
+   px. Each cell holds the mark at x 0, y 5, the name from x 14, the
+   hours at the right edge, and a 2 px meter under the text from x 14
+   to the edge. The line is 17 tall with 1 px above the text, as the
+   board draws it under the app's border-box reset. At another size
+   the mark stays centered on the text. */
 .pane-countdown-window {
   overflow: hidden;
 }
@@ -579,25 +601,25 @@
 .pane-countdown-cell {
   position: relative;
   min-width: 0;
-  height: 23px;
+  height: var(--mud-countdown-row);
 }
 
 .pane-countdown-cell .pane-affect-mark {
-  top: 5px;
+  top: round(1px + var(--mud-line) / 2 - 4px, 1px);
 }
 
 .pane-countdown-cell .pane-affect-mark.is-harmful {
-  top: 6px;
+  top: round(1px + var(--mud-line) / 2 - 3px, 1px);
 }
 
 .pane-countdown-line {
   display: flex;
   align-items: center;
-  height: 17px;
+  height: calc(var(--mud-line) + 1px);
   padding: 1px 0 0 14px;
   font-family: var(--font-mud, ui-monospace, monospace);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
 }
 
 .pane-countdown-name {
@@ -644,8 +666,8 @@
   position: absolute;
   left: 14px;
   right: 0;
-  top: 19px;
-  height: 2px;
+  top: var(--mud-countdown-meter-top);
+  height: var(--mud-countdown-meter);
   border-radius: 1px;
   background: var(--divider);
   overflow: hidden;
@@ -653,7 +675,7 @@
 
 .pane-countdown-fill {
   display: block;
-  height: 2px;
+  height: var(--mud-countdown-meter);
   border-radius: 1px;
   background: var(--tertiary);
 }
@@ -672,12 +694,12 @@
   display: flex;
   align-items: flex-start;
   min-width: 0;
-  height: 23px;
+  height: var(--mud-countdown-row);
   padding: 1px 0 0 14px;
 }
 
 .pane-countdown-more-cell .pane-affects-more {
-  height: 16px;
+  height: var(--mud-line);
   margin: 0;
 }
 
@@ -737,7 +759,7 @@
 /* Board Affects C, Grouped chips. chipsGrid packs the lines, and each
    sits at its own top in a page as tall as the body. Pages stack and
    scroll a page at a time, as the other styles do. Lines run from x 18
-   to 12 from the right, chips 4 apart. */
+   to 12 from the right, chips 4 apart, each line a chip tall. */
 .pane-chips {
   overflow: hidden;
 }
@@ -765,7 +787,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  height: 20px;
+  height: var(--mud-chip);
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -780,7 +802,7 @@
   width: 56px;
   margin: 0 4px 0 0;
   font-size: 11px;
-  line-height: 20px;
+  line-height: var(--mud-chip);
   font-weight: 600;
   white-space: nowrap;
   color: var(--tertiary);
@@ -795,17 +817,17 @@
   display: flex;
   align-items: center;
   flex: none;
-  height: 20px;
+  height: var(--mud-chip);
   margin-left: 4px;
 }
 
 .pane-chips-more .pane-affects-more {
-  height: 20px;
+  height: var(--mud-chip);
   margin: 0;
 }
 
-/* A chip: 20 tall, 7 px each side, radius 4, the name and 6 px after
-   it the hours, in the terminal face. Its ground is the track, and
+/* A chip: 20 tall at 12 px, 7 px each side, radius 4, the name and 6
+   px after it the hours, in the terminal face. Its ground is the track, and
    while its gauge drains, the gauge over it from the left, as wide as
    --gauge of the chip. A 1 px inset ring shows the edge. Every tone
    mixes a theme token. */
@@ -817,12 +839,12 @@
   align-items: center;
   flex: 0 1 auto;
   min-width: 0;
-  height: 20px;
+  height: var(--mud-chip);
   padding: 0 7px;
   border-radius: 4px;
   font-family: var(--font-mud, ui-monospace, monospace);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
   white-space: nowrap;
   background: var(--chip-track);
   box-shadow: inset 0 0 0 1px var(--chip-edge);
@@ -1211,19 +1233,21 @@
   );
 }
 
-/* Messages are MUD text, so they sit in the terminal face. */
+/* Messages are MUD text, so they sit in the terminal face at your
+   terminal size, on 17 px lines 3 apart at 12 px. */
 .pane-chat-log {
   margin: auto 0 0;
   padding: 8px 12px 12px 18px;
   list-style: none;
   font-family: var(--font-mud);
-  font-size: 12px;
-  line-height: 17px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-chat-line);
 }
 
 /* One line per message in its channel's color, which ChatPane sets on
    the line. Wrapped lines hang two cells in, so only tags touch the
-   left edge. */
+   left edge. A cell is 1ch of the log's face, so the hang follows your
+   terminal size. */
 .pane-chat-msg {
   margin: 0;
   padding: 0 0 0 2ch;
@@ -1233,7 +1257,7 @@
 }
 
 .pane-chat-msg + .pane-chat-msg {
-  margin-top: 3px;
+  margin-top: var(--mud-chat-gap);
 }
 
 /* The tag takes the line's color a step back, so the message stays the

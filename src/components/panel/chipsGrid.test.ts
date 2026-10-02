@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { affectsPaneRows, type AffectInput, type AffectRow } from '../../lib/affectsView';
 import {
   chipGroups,
+  chipDotsPath,
   chipKind,
   chipLabelMode,
   chipPages,
@@ -323,5 +324,45 @@ describe('chipsMinBody', () => {
       ),
     );
     expect(chipsMinBody(lost, 247, hoursOf, MEASURE, 'runin', 264)).toBe(264);
+  });
+});
+
+describe('chips at your terminal size', () => {
+  const tops = (pages: ChipPage[]) => pages.flatMap((p) => p.lines.map((l) => l.top));
+
+  it('packs board C exactly as before at 12 px', () => {
+    const groups = chipGroups(rowsOf(TWENTY));
+    expect(chipPages(groups, 494, hoursOf, MEASURE, 'gutter', BODY, 12)).toEqual(
+      chipPages(groups, 494, hoursOf, MEASURE, 'gutter', BODY),
+    );
+    expect(chipsMinBody(groups, 494, hoursOf, MEASURE, 'gutter', 264, 12)).toBe(104);
+    expect(chipLabelMode(rowsOf(FOURTEEN), 359, 12)).toBe('runin');
+  });
+
+  it('stacks taller lines further apart at 16 px', () => {
+    const groups = chipGroups(rowsOf(FOURTEEN));
+    const all = Number.POSITIVE_INFINITY;
+    // 20 px lines, 4 apart in a group and 8 between groups at 12 px.
+    expect(tops(chipPages(groups, 494, hoursOf, MEASURE, 'gutter', all))).toEqual([
+      4, 32, 56, 84, 108, 132,
+    ]);
+    // 27 px lines, 5 apart in a group and 11 between groups at 16 px.
+    expect(tops(chipPages(groups, 494, hoursOf, MEASURE, 'gutter', all, 16))).toEqual([
+      4, 42, 74, 112, 144, 176,
+    ]);
+    // The last line no longer fits the board's 191 px body.
+    const [first] = chipPages(groups, 494, hoursOf, MEASURE, 'gutter', BODY, 16);
+    expect(first.lines.at(-1)?.top).toBe(144);
+    expect(first.more).toBeGreaterThan(0);
+  });
+
+  it('runs the names in under the wider pane two columns want', () => {
+    expect(chipLabelMode(rowsOf(FOURTEEN), 479, 16)).toBe('runin');
+    expect(chipLabelMode(rowsOf(FOURTEEN), 480, 16)).toBe('gutter');
+  });
+
+  it('rings a missing chip at its own height', () => {
+    expect(chipDotsPath(80)).toEqual(chipDotsPath(80, 20));
+    expect(chipDotsPath(80, 27).h).toBe(25.5);
   });
 });

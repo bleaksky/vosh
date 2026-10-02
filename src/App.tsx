@@ -1943,7 +1943,7 @@ function App() {
       terminal={terminalAreaElement}
       input={inputElement}
       statusLine={<StatusLine connected={connection.live} showVitals={!panelOpen} />}
-      panel={<PanelHost promptShow={promptShow} />}
+      panel={<PanelHost promptShow={promptShow} fontSize={fontSize} />}
     >
       <UpdateNotice />
       <Toasts />

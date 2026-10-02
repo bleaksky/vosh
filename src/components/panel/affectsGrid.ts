@@ -1,29 +1,43 @@
 import { isTrackedRow, type AffectRow } from '../../lib/affectsView';
-import { PANE_ROW_PX } from '../../lib/paneLayout';
+import { PANE_TEXT_BASE, PANE_TEXT_PX, paneText } from './paneTextSize';
 
 // Where each affect sits in the Affects pane (board Affects A, timers
-// first). Two columns of 22 px rows: your tracked affects fill the top
-// rows in your order, row by row, so each keeps its slot. The rest sit
-// under a hairline and fill down the left column, then down the right,
-// so the hours rise down each column.
+// first). Two columns of 22 px rows at 12 px: your tracked affects
+// fill the top rows in your order, row by row, so each keeps its slot.
+// The rest sit under a hairline and fill down the left column, then
+// down the right, so the hours rise down each column.
 //
 // The pane shows only whole rows. When the rest do not fit, the last
 // cell counts the ones that do not, the ones that last longest, and
 // the ones past it wait on the next page. A page is as many rows as
 // fit under the tracked slots, so scrolling one page at a time always
 // stops on whole rows. Pure so the fit is unit tested.
+//
+// The rows, the gaps round the hairline, and the width for two columns
+// follow your terminal size (paneTextSize.ts). The numbers here are at
+// 12 px.
 
 /** The hairline between your tracked slots and the rest, with 4 px
- *  above and below. */
-export const AFFECTS_RULE_PX = 9;
+ *  above and below at 12 px. */
+export const AFFECTS_RULE_PX = 1 + 2 * PANE_TEXT_BASE.affectsRuleGap;
 
-/** Narrowest pane that draws two columns. Each column then keeps room
- *  for the hours and a name of about 16 characters in the terminal
- *  face at 12 px. A narrower pane draws one column. */
-export const AFFECTS_TWO_COLUMNS_W = 360;
+/** The hairline and its gaps at text `size` px. */
+export function affectsRulePx(size: number = PANE_TEXT_PX): number {
+  return 1 + 2 * paneText(size).affectsRuleGap;
+}
 
-export function affectsColumns(width: number): number {
-  return width >= AFFECTS_TWO_COLUMNS_W ? 2 : 1;
+/** Narrowest pane that draws two columns at 12 px. Each column then
+ *  keeps room for the hours and a name of about 16 characters in the
+ *  terminal face. A narrower pane draws one column. */
+export const AFFECTS_TWO_COLUMNS_W = PANE_TEXT_BASE.twoColumns;
+
+/** Narrowest pane that draws two columns at text `size` px. */
+export function affectsTwoColumnsW(size: number = PANE_TEXT_PX): number {
+  return paneText(size).twoColumns;
+}
+
+export function affectsColumns(width: number, size: number = PANE_TEXT_PX): number {
+  return width >= affectsTwoColumnsW(size) ? 2 : 1;
 }
 
 export interface CellPlace {
@@ -55,22 +69,24 @@ export interface AffectsGrid {
 }
 
 /** Place `rows`, in the order affectsView gives them, in a pane body
- *  of `box`. Before the body is measured (`null`) every affect goes on
- *  one page. */
+ *  of `box`, with the game text at `size` px. Before the body is
+ *  measured (`null`) every affect goes on one page. */
 export function affectsGrid(
   rows: readonly AffectRow[],
   box: { width: number; height: number } | null,
+  size: number = PANE_TEXT_PX,
 ): AffectsGrid {
-  const columns = box ? affectsColumns(box.width) : 2;
+  const columns = box ? affectsColumns(box.width, size) : 2;
+  const row = paneText(size).affectsRow;
   const tracked = rows.filter(isTrackedRow);
   const others = rows.filter((r) => !isTrackedRow(r));
   const rule = tracked.length > 0 && others.length > 0;
   if (others.length === 0) return { columns, tracked, rule, rest: [], pageRows: 0, pages: 0 };
 
   const allRows = Math.ceil(others.length / columns);
-  const trackedPx = Math.ceil(tracked.length / columns) * PANE_ROW_PX;
+  const trackedPx = Math.ceil(tracked.length / columns) * row;
   const fit = box
-    ? Math.floor((box.height - trackedPx - (rule ? AFFECTS_RULE_PX : 0)) / PANE_ROW_PX)
+    ? Math.floor((box.height - trackedPx - (rule ? affectsRulePx(size) : 0)) / row)
     : allRows;
   // A page holds at least two cells while two or more affects wait, so
   // the count always has an affect beside it. In a pane too short even

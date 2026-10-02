@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent,
   type RefObject,
 } from 'react';
@@ -17,8 +18,9 @@ import { GroupPane } from './GroupPane';
 import { ImmPane } from './ImmPane';
 import { MapPane } from './MapPane';
 import { PaneLeafContext } from './paneActions';
-import { PANE_MIN_H, dragSizes, layoutPanes, type HandleBox } from './paneGeometry';
+import { dragSizes, layoutPanes, paneMinH, type HandleBox } from './paneGeometry';
 import { getPanelLayout, setPaneTree, usePanelLayout } from './panelLayoutStore';
+import { PaneTextSizeContext, paneTextSize } from './paneTextSize';
 import { PANE_LABELS } from './paneTypes';
 import { usePaneMins } from './usePaneMins';
 import { VitalsFooter } from './VitalsFooter';
@@ -37,8 +39,12 @@ import { VitalsFooter } from './VitalsFooter';
 // and each pane's scroll position survive every tree edit, and a pane
 // moved with Show here instead keeps its state too.
 //
+// The game text in the panes follows your terminal size. The panel
+// writes it as --font-mud-px for panel.css and hands it to every pane,
+// which sizes its rows from it (paneTextSize.ts).
+//
 // No pane drops below the height it reads at while the panel has room
-// (PANE_MIN_H, raised for Affects and Group to hold your tracked
+// (paneMinH, raised for Affects and Group to hold your tracked
 // affects, anything harmful, and every member). On a panel too short
 // for every pane, the lightest ones come up short and scroll inside
 // their box, header and all for the map, whose drawing has no list of
@@ -58,8 +64,16 @@ const PANES: Record<PaneType, () => React.ReactNode> = {
 
 /** `promptShow` is where your prompt shows, from usePromptShow, which
  *  decides with Hide vitals while your prompt is pinned whether the
- *  vitals draw. */
-export function PanelHost({ promptShow }: { promptShow: PromptShowState | null }) {
+ *  vitals draw. `fontSize` is your terminal size in px, which the game
+ *  text in the panes follows. */
+export function PanelHost({
+  promptShow,
+  fontSize,
+}: {
+  promptShow: PromptShowState | null;
+  fontSize?: number | undefined;
+}) {
+  const textSize = paneTextSize(fontSize);
   const layout = usePanelLayout();
   const { hide_when_pinned: hideWhenPinned } = useVitalsOptions();
   const areaRef = useRef<HTMLDivElement | null>(null);
@@ -82,7 +96,7 @@ export function PanelHost({ promptShow }: { promptShow: PromptShowState | null }
   useMoreBelow(areaRef);
 
   const root = layout?.root ?? null;
-  const mins = usePaneMins(root, size.w);
+  const mins = usePaneMins(root, size.w, textSize);
   const geometry = useMemo(
     () => (root ? layoutPanes(root, size.w, size.h, mins) : null),
     [root, size.w, size.h, mins],
@@ -94,25 +108,29 @@ export function PanelHost({ promptShow }: { promptShow: PromptShowState | null }
       )
     : [];
 
+  const hostStyle = { ['--font-mud-px' as string]: textSize } as CSSProperties;
+
   return (
-    <div className="panel-host">
+    <div className="panel-host" style={hostStyle}>
       <div ref={areaRef} className="panel-panes">
-        {leaves.map(({ leaf, rect }) => (
-          <section
-            key={leaf.pane}
-            className={`pane pane-${leaf.pane}`}
-            aria-label={PANE_LABELS[leaf.pane]}
-            style={{
-              left: rect.x,
-              top: rect.y,
-              width: rect.w,
-              height: rect.h,
-              overflowY: rect.h < PANE_MIN_H[leaf.pane] ? 'auto' : undefined,
-            }}
-          >
-            <PaneLeafContext.Provider value={leaf}>{PANES[leaf.pane]()}</PaneLeafContext.Provider>
-          </section>
-        ))}
+        <PaneTextSizeContext.Provider value={textSize}>
+          {leaves.map(({ leaf, rect }) => (
+            <section
+              key={leaf.pane}
+              className={`pane pane-${leaf.pane}`}
+              aria-label={PANE_LABELS[leaf.pane]}
+              style={{
+                left: rect.x,
+                top: rect.y,
+                width: rect.w,
+                height: rect.h,
+                overflowY: rect.h < paneMinH(leaf.pane, textSize) ? 'auto' : undefined,
+              }}
+            >
+              <PaneLeafContext.Provider value={leaf}>{PANES[leaf.pane]()}</PaneLeafContext.Provider>
+            </section>
+          ))}
+        </PaneTextSizeContext.Provider>
         {geometry?.handles.map((h) => (
           <PaneHandle key={`${h.parentId}:${h.index}`} handle={h} />
         ))}

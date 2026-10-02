@@ -28,12 +28,14 @@ import {
   type LabelMode,
 } from './chipsGrid';
 import { affectHours, affectsEmptyText, affectWords } from './paneText';
+import { usePaneText } from './paneTextSize';
 
 // Board Affects C, Grouped chips. What to recast first: the tracked
 // affects you miss and the ones running out, then the rest you track,
 // then everything else, each a chip with the name exactly as the game
 // sends it and the hours after it. chipsGrid packs the lines and the
-// pages, and the pane draws exactly what it packs.
+// pages, and the pane draws exactly what it packs. The chips and the
+// lines follow your terminal size.
 //
 // Each chip carries its own state, so C draws no marker. A missing
 // affect is a chip with no ground, ringed in soft red dots (ChipDots).
@@ -97,16 +99,17 @@ export function ChipsView({
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const measured = useBoxSize(bodyRef);
   const size = box ?? measured;
-  const live = useChipMeasure();
+  const text = usePaneText();
+  const live = useChipMeasure(text.size);
   const m = measure ?? live;
   const groups = useMemo(() => chipGroups(rows), [rows]);
   // Before the body is measured, every chip goes on one page.
   const width = size?.width ?? 494;
   const height = size?.height ?? Number.POSITIVE_INFINITY;
-  const labels = chipLabelMode(rows, width);
+  const labels = chipLabelMode(rows, width, text.size);
   const pages = useMemo(
-    () => chipPages(groups, width, hoursOf, m, labels, height),
-    [groups, width, m, labels, height],
+    () => chipPages(groups, width, hoursOf, m, labels, height, text.size),
+    [groups, width, m, labels, height, text.size],
   );
   return (
     <>
@@ -126,6 +129,7 @@ export function ChipsView({
             height={size ? size.height : null}
             full={full}
             measure={m}
+            chipH={text.chip}
           />
         )}
       </div>
@@ -142,6 +146,7 @@ function ChipPages({
   height,
   full,
   measure,
+  chipH,
 }: {
   groups: readonly ChipGroup[];
   pages: ChipPage[];
@@ -149,6 +154,8 @@ function ChipPages({
   height: number | null;
   full: AffectFulls;
   measure: ChipMeasure;
+  /** A chip line's height. */
+  chipH: number;
 }) {
   const pageHeight = height ?? 0;
   const paged = usePagedWindow(pageHeight);
@@ -166,7 +173,7 @@ function ChipPages({
         <div
           key={p}
           className="pane-chips-page"
-          style={height === null ? { height: pageBottom(page) } : tall}
+          style={height === null ? { height: pageBottom(page, chipH) } : tall}
         >
           {page.lines.map((line, l) => {
             const last = l === page.lines.length - 1;
@@ -201,7 +208,7 @@ function ChipPages({
                   </li>
                 )}
                 {line.rows.map((row) => (
-                  <Chip key={row.key} row={row} full={full} measure={measure} />
+                  <Chip key={row.key} row={row} full={full} measure={measure} chipH={chipH} />
                 ))}
                 {last && page.more > 0 && (
                   <li className="pane-chips-more">
@@ -218,15 +225,25 @@ function ChipPages({
 }
 
 /** A page's height before the body is measured: down to its last
- *  line. */
-function pageBottom(page: ChipPage): number {
+ *  line, `chipH` tall. */
+function pageBottom(page: ChipPage, chipH: number): number {
   const last = page.lines[page.lines.length - 1];
-  return last ? last.top + 20 : 0;
+  return last ? last.top + chipH : 0;
 }
 
-function Chip({ row, full, measure }: { row: AffectRow; full: AffectFulls; measure: ChipMeasure }) {
+function Chip({
+  row,
+  full,
+  measure,
+  chipH,
+}: {
+  row: AffectRow;
+  full: AffectFulls;
+  measure: ChipMeasure;
+  chipH: number;
+}) {
   const kind = chipKind(row);
-  if (kind === 'missing') return <MissingChip row={row} measure={measure} />;
+  if (kind === 'missing') return <MissingChip row={row} measure={measure} chipH={chipH} />;
   const tone = row.tone;
   const chip = chipTone(row);
   // Only a tracked chip has a ground, so only it drains.
@@ -264,13 +281,22 @@ function Chip({ row, full, measure }: { row: AffectRow; full: AffectFulls; measu
 
 /** A tracked affect you are missing: the name in red and the game's
  *  `-`, on no ground, ringed in soft red dots. */
-function MissingChip({ row, measure }: { row: AffectRow; measure: ChipMeasure }) {
+function MissingChip({
+  row,
+  measure,
+  chipH,
+}: {
+  row: AffectRow;
+  measure: ChipMeasure;
+  chipH: number;
+}) {
   const ref = useRef<HTMLLIElement | null>(null);
   const box = useBoxSize(ref);
   const hours = hoursOf(row);
   // The ring follows the chip's own width once it is measured, since a
   // long name ellipsizes and the chip narrows. Until then, and in a
-  // test, it takes the width chipsGrid packed it at.
+  // test, it takes the width chipsGrid packed it at. Its height is a
+  // chip's at your terminal size.
   const width = box?.width ?? chipWidth(row.name, hours, measure);
   return (
     <li ref={ref} className="pane-chip pane-chip-missing">
@@ -281,7 +307,7 @@ function MissingChip({ row, measure }: { row: AffectRow; measure: ChipMeasure })
       <span className="pane-chip-hours" aria-hidden="true">
         {hours}
       </span>
-      <ChipDots width={width} />
+      <ChipDots width={width} height={chipH} />
     </li>
   );
 }
@@ -291,9 +317,9 @@ function MissingChip({ row, measure }: { row: AffectRow; measure: ChipMeasure })
  *  dotted border draws squares. The gap is in pixels, so the ring needs
  *  no pathLength, and the dots start half a gap in, so the seam where
  *  the path closes falls between two dots. */
-function ChipDots({ width }: { width: number }) {
-  const { w, h, r } = chipDotsPath(width);
-  const { gap } = chipDots(width);
+function ChipDots({ width, height }: { width: number; height: number }) {
+  const { w, h, r } = chipDotsPath(width, height);
+  const { gap } = chipDots(width, height);
   const inset = CHIP_DOT_PX / 2;
   return (
     <svg className="pane-chip-dots" aria-hidden="true" focusable="false">

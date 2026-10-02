@@ -12,18 +12,20 @@ import {
 import type { AffectsMarker } from '../../lib/session';
 import { useBoxSize, usePagedWindow, type Box } from './affectsHooks';
 import { AffectMark, AffectsEmpty, AffectsHeader, MoreButton } from './affectsParts';
-import { COUNTDOWN_ROW_PX, countdownGrid, type CountdownGrid } from './countdownGrid';
+import { countdownGrid, type CountdownGrid } from './countdownGrid';
 import { affectHours, affectsEmptyText, affectWords } from './paneText';
+import { usePaneText } from './paneTextSize';
 
 // Board Affects B, Countdown. One run by the hours left, missing first
 // and permanent last, down the left column and on down the right, on
-// 23 px rows. Each cell carries Timers first's mark, the name exactly
-// as the game sends it, the hours at the right edge with the game's own
-// `+` and `-`, and a 2 px meter under the text. The meter drains from
-// full toward empty over the affect's own cast (gaugeFraction reads the
-// full the backend keeps), in the tertiary tone, yellow once the affect
-// runs out and red once it is almost gone, at the hours you set, two and
-// one unless you change them. It stays full for a permanent affect, empty for a
+// 23 px rows at 12 px, taller at a larger terminal size. Each cell
+// carries Timers first's mark, the name exactly as the game sends it,
+// the hours at the right edge with the game's own `+` and `-`, and a
+// 2 px meter under the text. The meter drains from full toward empty
+// over the affect's own cast (gaugeFraction reads the full the backend
+// keeps), in the tertiary tone, yellow once the affect runs out and
+// red once it is almost gone, at the hours you set, two and one unless
+// you change them. It stays full for a permanent affect, empty for a
 // missing one, and is gone when the server sent no hours. What does not
 // fit is the end of the countdown, counted in the last cell of a page,
 // and a click on the count scrolls to it.
@@ -63,7 +65,8 @@ export function CountdownView({
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const measured = useBoxSize(bodyRef);
   const size = box ?? measured;
-  const grid = useMemo(() => countdownGrid(rows, size), [rows, size]);
+  const text = usePaneText();
+  const grid = useMemo(() => countdownGrid(rows, size, text.size), [rows, size, text.size]);
   const empty = affectsEmptyText(current, hidden, rows);
   return (
     <>
@@ -77,16 +80,25 @@ export function CountdownView({
         {empty !== null ? (
           <AffectsEmpty text={empty} />
         ) : (
-          <CountdownPages grid={grid} full={full} />
+          <CountdownPages grid={grid} full={full} row={text.countdownRow} />
         )}
       </div>
     </>
   );
 }
 
-/** Every page of the countdown in a window one page tall. */
-function CountdownPages({ grid, full }: { grid: CountdownGrid; full: AffectFulls }) {
-  const pageHeight = grid.pageRows * COUNTDOWN_ROW_PX;
+/** Every page of the countdown in a window one page tall, each row
+ *  `row` px. */
+function CountdownPages({
+  grid,
+  full,
+  row,
+}: {
+  grid: CountdownGrid;
+  full: AffectFulls;
+  row: number;
+}) {
+  const pageHeight = grid.pageRows * row;
   const paged = usePagedWindow(pageHeight);
   return (
     <div
@@ -101,7 +113,7 @@ function CountdownPages({ grid, full }: { grid: CountdownGrid; full: AffectFulls
         aria-label="Affects by hours left"
         style={{
           gridTemplateColumns: `repeat(${grid.columns}, minmax(0, 1fr))`,
-          gridTemplateRows: `repeat(${grid.pages * grid.pageRows}, ${COUNTDOWN_ROW_PX}px)`,
+          gridTemplateRows: `repeat(${grid.pages * grid.pageRows}, ${row}px)`,
         }}
       >
         {grid.cells.map((cell) => {

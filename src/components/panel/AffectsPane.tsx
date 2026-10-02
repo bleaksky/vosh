@@ -8,7 +8,6 @@ import {
   type AffectThresholds,
   type TrackedInput,
 } from '../../lib/affectsView';
-import { PANE_ROW_PX } from '../../lib/paneLayout';
 import type { AffectsMarker } from '../../lib/session';
 import { useAffectFull } from '../../lib/stores/affectFullStore';
 import { useAffectsDisplay } from '../../lib/stores/affectsDisplayStore';
@@ -20,16 +19,17 @@ import { affectsGrid, type AffectsCell } from './affectsGrid';
 import { useBoxSize, usePagedWindow, type Box } from './affectsHooks';
 import { AffectMark, AffectsEmpty, AffectsHeader, MoreButton } from './affectsParts';
 import { affectHours, affectsEmptyText, affectWords } from './paneText';
+import { usePaneText } from './paneTextSize';
 
 // The at a glance checklist, board Affects A, timers first. Two columns
-// of 22 px rows, each the hours left in a right aligned column and then
-// the name exactly as the game sends it, both in the terminal face. The
-// column is three digits wide, wider while a longer count shows. The
-// game's own marks stand in for the hours, `+` permanent and `-`
-// missing. Your tracked affects keep the slots you set in Characters,
-// each with a dot that agrees with its hours. The rest sit under a
-// hairline, harmful ones first. affectsView orders the rows and
-// affectsGrid places them.
+// of 22 px rows at 12 px, taller at a larger terminal size, each the
+// hours left in a right aligned column and then the name exactly as
+// the game sends it, both in the terminal face. The column is three
+// digits wide, wider while a longer count shows. The game's own marks
+// stand in for the hours, `+` permanent and `-` missing. Your tracked
+// affects keep the slots you set in Characters, each with a dot that
+// agrees with its hours. The rest sit under a hairline, harmful ones
+// first. affectsView orders the rows and affectsGrid places them.
 //
 // The pane shows whole rows only. When the rest do not fit, the last
 // cell counts the ones that do not, and a click on it scrolls them into
@@ -141,7 +141,8 @@ export function AffectsPaneView({
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const measured = useBoxSize(bodyRef);
   const size = box ?? measured;
-  const grid = useMemo(() => affectsGrid(rows, size), [rows, size]);
+  const text = usePaneText();
+  const grid = useMemo(() => affectsGrid(rows, size, text.size), [rows, size, text.size]);
   // Every cell's hours column fits the longest count, three cells or
   // more, so the names stay in line and a 1200 hour psalm never runs
   // into its name.
@@ -173,6 +174,7 @@ export function AffectsPaneView({
             pageRows={grid.pageRows}
             pages={grid.pages}
             columns={columns}
+            row={text.affectsRow}
           />
         )}
       </>
@@ -196,19 +198,21 @@ export function AffectsPaneView({
 }
 
 /** The affects you do not track, in a window `pageRows` rows tall that
- *  scrolls a page at a time. */
+ *  scrolls a page at a time, each row `row` px. */
 function RestPages({
   cells,
   pageRows,
   pages,
   columns,
+  row,
 }: {
   cells: AffectsCell[];
   pageRows: number;
   pages: number;
   columns: CSSProperties;
+  row: number;
 }) {
-  const pageHeight = pageRows * PANE_ROW_PX;
+  const pageHeight = pageRows * row;
   // Back to the first page once you point and tab away, so the pane
   // shows the affects that matter most again.
   const paged = usePagedWindow(pageHeight);
@@ -224,7 +228,7 @@ function RestPages({
       <ul
         className="pane-affects-grid"
         aria-label="Not tracked, by hours left"
-        style={{ ...columns, gridTemplateRows: `repeat(${pages * pageRows}, ${PANE_ROW_PX}px)` }}
+        style={{ ...columns, gridTemplateRows: `repeat(${pages * pageRows}, ${row}px)` }}
       >
         {cells.map((cell) => {
           const place: CSSProperties = { gridRow: cell.gridRow, gridColumn: cell.gridColumn };

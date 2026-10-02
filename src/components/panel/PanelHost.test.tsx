@@ -56,4 +56,18 @@ describe('PanelHost', () => {
   it('keeps the vitals while prompts are off in the game', () => {
     expect(drawsVitals({ ...PINNED, promptsOff: true }, true)).toBe(true);
   });
+
+  it('writes your terminal size on the panel for the game text in the panes', () => {
+    options = DEFAULT_VITALS_OPTIONS;
+    expect(renderToStaticMarkup(<PanelHost promptShow={null} fontSize={16} />)).toContain(
+      '<div class="panel-host" style="--font-mud-px:16">',
+    );
+    // 12 px, the panes as they were drawn, when no size or no real one
+    // comes in.
+    for (const size of [undefined, 0, Number.NaN]) {
+      expect(renderToStaticMarkup(<PanelHost promptShow={null} fontSize={size} />)).toContain(
+        '<div class="panel-host" style="--font-mud-px:12">',
+      );
+    }
+  });
 });

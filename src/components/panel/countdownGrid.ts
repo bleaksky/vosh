@@ -1,17 +1,25 @@
 import { isTrackedRow, type AffectRow } from '../../lib/affectsView';
 import { affectsColumns, pageCells, type AffectsCell } from './affectsGrid';
+import { PANE_TEXT_BASE, PANE_TEXT_PX, paneText } from './paneTextSize';
 
 // Where each affect sits in the Countdown style (board Affects B). One
 // run sorted by the hours left: the tracked affects you are missing
 // first, in your order, then every other affect, fewest hours first,
 // permanent after every timed one and unknown last. It fills down the
 // left column, then down the right, on 23 px rows, two columns from
-// 360 px, one below. What does not fit is the end of the countdown,
-// counted in the last cell of the page, and a click on the count
-// scrolls one page on. Pure so the fit is unit tested.
+// 360 px, one below, at 12 px. The rows and the width follow your
+// terminal size (paneTextSize.ts). What does not fit is the end of the
+// countdown, counted in the last cell of the page, and a click on the
+// count scrolls one page on. Pure so the fit is unit tested.
 
-/** One countdown row: the text line and the 2 px meter under it. */
-export const COUNTDOWN_ROW_PX = 23;
+/** One countdown row at 12 px: the text line and the 2 px meter under
+ *  it. */
+export const COUNTDOWN_ROW_PX = PANE_TEXT_BASE.countdownRow;
+
+/** One countdown row at text `size` px. */
+export function countdownRowPx(size: number = PANE_TEXT_PX): number {
+  return paneText(size).countdownRow;
+}
 
 /** A row's place in the countdown by its hours. */
 function rank(ticks: number | null): number {
@@ -46,18 +54,20 @@ export interface CountdownGrid {
 }
 
 /** Place `rows`, in the order affectsView gives them, in a pane body of
- *  `box`. A short list balances across both columns (fifteen make
- *  eight over seven), a long one fills what fits, and a page holds at
- *  least two cells while two or more affects wait. Before the body is
- *  measured (`null`) every affect goes on one page. */
+ *  `box`, with the game text at `size` px. A short list balances
+ *  across both columns (fifteen make eight over seven), a long one
+ *  fills what fits, and a page holds at least two cells while two or
+ *  more affects wait. Before the body is measured (`null`) every affect
+ *  goes on one page. */
 export function countdownGrid(
   rows: readonly AffectRow[],
   box: { width: number; height: number } | null,
+  size: number = PANE_TEXT_PX,
 ): CountdownGrid {
-  const columns = box ? affectsColumns(box.width) : 2;
+  const columns = box ? affectsColumns(box.width, size) : 2;
   const ordered = countdownOrder(rows);
   const all = Math.max(1, Math.ceil(ordered.length / columns));
-  const fit = box ? Math.floor(box.height / COUNTDOWN_ROW_PX) : all;
+  const fit = box ? Math.floor(box.height / countdownRowPx(size)) : all;
   const least = ordered.length > 1 ? Math.ceil(2 / columns) : 1;
   const pageRows = Math.max(least, Math.min(all, fit));
   const { cells, pages } = pageCells(ordered, columns, pageRows);
