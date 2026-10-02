@@ -8,6 +8,7 @@ import {
   gridDims,
   gridRooms,
   hasExit,
+  playerCellOf,
   type Corridor,
   type Dir,
   type GlyphCell,
@@ -27,6 +28,8 @@ function tiles(name: string): MapTilesPayload {
 
 /** You stand West of the City Fountain in Caranduin, radius 7. */
 const CARANDUIN = 'caranduin-west-of-the-fountain.gmcp';
+/** You stand in The Central Square of Val Miran, radius 10. */
+const VAL_MIRAN = 'val-miran-central-square.gmcp';
 /** You stand at An Enormous Gate in Mahn-Tor's Dungeon, radius 7. */
 const MAHN_TOR = 'mahn-tor-an-enormous-gate.gmcp';
 /** An immortal stands in the Maw of Malfeascances in The Dark Castle,
@@ -56,13 +59,18 @@ function corridorFrom(
   );
 }
 
+/** What glyphAt reads for a slot the glyph grid does not have. */
+const NOWHERE: GlyphCell = { glyph: '', color: '', isPlayer: false, floor: 'same' };
+
 /** The glyph at a room of the packet's grid, or at the connector slot
  *  dx, dy from it. Found from where the player's @ sits, so it reads
  *  the layout the grid has, wherever its first row starts. */
 function glyphAt(grid: GlyphGrid, row: number, col: number, dx = 0, dy = 0): GlyphCell {
   const pr = grid.cells.findIndex((r) => r.some((c) => c.isPlayer));
   const pc = grid.cells[pr].findIndex((c) => c.isPlayer);
-  return grid.cells[pr + 2 * (row - grid.centerR) + dy][pc + 2 * (col - grid.centerC) + dx];
+  const r = pr + 2 * (row - grid.centerR) + dy;
+  const c = pc + 2 * (col - grid.centerC) + dx;
+  return grid.cells[r]?.[c] ?? NOWHERE;
 }
 
 describe('the Map.Tiles fixtures', () => {
@@ -210,5 +218,62 @@ describe('glyphGrid', () => {
     // A cobbled road into the forest, its hidden door south toward an
     // empty cell.
     expect(glyphAt(grid, 16, 14, 0, 1)).toMatchObject({ glyph: '╎', color: DOOR_COLORS.hidden });
+  });
+});
+
+describe('the top row and the left column', () => {
+  it('count every row and column the packet sends', () => {
+    // The game sends 2r + 1 rows and columns, indexed from 0, with you
+    // at [r][r].
+    expect(gridDims(tiles(VAL_MIRAN))).toEqual({ rows: 21, cols: 21 });
+    expect(gridDims(tiles(CARANDUIN))).toEqual({ rows: 15, cols: 15 });
+  });
+
+  it('find you at [r][r], with or without your h flag', () => {
+    expect(playerCellOf(tiles(VAL_MIRAN), 21, 21)).toEqual({ row: 10, col: 10 });
+    const unmarked = structuredClone(aabahranMapPacket(VAL_MIRAN).data) as {
+      g: Array<Array<{ h?: number } | null>>;
+    };
+    delete unmarked.g[10][10]!.h;
+    const payload = unmarked as unknown as MapTilesPayload;
+    expect(playerCellOf(payload, 21, 21)).toEqual({ row: 10, col: 10 });
+  });
+
+  it('draw every room the packet sends', () => {
+    for (const name of aabahranMapFixtureNames()) {
+      const p = tiles(name);
+      const { rows, cols } = gridDims(p);
+      const sent = (p.g as unknown as Array<Array<unknown>>).flatMap((row, r) =>
+        row.flatMap((cell, c) => (cell ? [`${r},${c}`] : [])),
+      );
+      const drawn = gridRooms(p, rows, cols).map(({ row, col }) => `${row},${col}`);
+      expect(drawn, name).toEqual(sent);
+      const grid = glyphGrid(p)!;
+      for (const key of sent) {
+        const [r, c] = key.split(',').map(Number);
+        expect(grid.cells[2 * r]?.[2 * c]?.glyph ?? '', `${name} ${key}`).toMatch(/\S/);
+      }
+    }
+  });
+
+  it('draw the room ten steps north and the room ten steps west of Val Miran', () => {
+    const p = tiles(VAL_MIRAN);
+    const { rows, cols } = gridDims(p);
+    // The Forest's Edge, in Elium Forest, tops the grid. Its south exit
+    // reaches the room below it.
+    expect(getCell(p, 0, 10)?.e).toBe('Ns');
+    expect(strokesFrom(p, 0, 10)).toEqual(['s']);
+    // A trail through the light forest, in Haon Dor, starts the grid on
+    // the left. Its east exit reaches the room beside it.
+    expect(getCell(p, 10, 0)?.e).toBe('eW');
+    expect(strokesFrom(p, 10, 0)).toEqual(['e']);
+    expect(gridRooms(p, rows, cols)[0]).toMatchObject({ row: 0, col: 10 });
+    const grid = glyphGrid(p)!;
+    expect(grid.cells[20][20].isPlayer).toBe(true);
+    // Both are forest, joined to their neighbors.
+    expect(glyphAt(grid, 0, 10).glyph).toBe('*');
+    expect(glyphAt(grid, 0, 10, 0, 1).glyph).toBe('│');
+    expect(glyphAt(grid, 10, 0).glyph).toBe('*');
+    expect(glyphAt(grid, 10, 0, 1, 0).glyph).toBe('─');
   });
 });

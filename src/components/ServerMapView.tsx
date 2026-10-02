@@ -8,6 +8,7 @@ import {
   glyphGrid,
   gridDims,
   gridRooms,
+  playerCellOf,
   sectorCodeOf,
   type DoorState,
   type GlyphCell,
@@ -248,8 +249,7 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
       return;
     }
 
-    const centerR = Math.floor((rows + 1) / 2);
-    const centerC = Math.floor((cols + 1) / 2);
+    const { row: centerR, col: centerC } = playerCellOf(tiles, rows, cols);
 
     const anchor = computeAnchor(tiles, rows, cols, centerR, centerC, cssWidth, cssHeight, zoom);
 
@@ -753,8 +753,8 @@ const GlyphsOverlay = memo(
     const BRIDGE_EM = 0.35;
     const ROOM_EM = 1.0;
     const stepEm = ROOM_EM + BRIDGE_EM;
-    const playerColOffset = (centerC - 1) * stepEm + ROOM_EM / 2;
-    const playerRowOffset = (centerR - 1) * stepEm + ROOM_EM / 2;
+    const playerColOffset = centerC * stepEm + ROOM_EM / 2;
+    const playerRowOffset = centerR * stepEm + ROOM_EM / 2;
 
     return (
       <div
