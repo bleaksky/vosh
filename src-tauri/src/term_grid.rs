@@ -23,7 +23,12 @@ use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::cell::{Cell, Flags, Hyperlink};
 use alacritty_terminal::term::{Config, Term, TermMode};
-use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
+use alacritty_terminal::vte::ansi::cursor_icon::CursorIcon;
+use alacritty_terminal::vte::ansi::{
+    Attr, CharsetIndex, ClearMode, Color, CursorShape, CursorStyle, Handler, Hyperlink as LinkSpec,
+    KeyboardModes, KeyboardModesApplyBehavior, LineClearMode, Mode, ModifyOtherKeys, NamedColor,
+    PrivateMode, Processor, Rgb, StandardCharset, TabulationClearMode,
+};
 use regex::RegexBuilder;
 use vosh_prompt::stage::{close_pin_row, Output, MARK_OSC};
 
@@ -74,6 +79,120 @@ pub(crate) struct CellFlags {
     pub strikeout: bool,
     /// SGR 8: the cell keeps its place and background but shows no glyph.
     pub hidden: bool,
+    /// SGR 5: the glyph blinks (see [`BLINK`]).
+    pub blink: bool,
+}
+
+/// The blink of SGR 5 as a mark on the cell. `alacritty_terminal` reads
+/// SGR 5 and 25 and drops them, and leaves the top bit of its `Flags`
+/// free, so the grid keeps blink there. A cell written while the
+/// cursor's template holds the bit carries it through scrolling, reflow
+/// and a saved cursor, and a reset clears it with every other style.
+/// The rapid blink of SGR 6 draws steady, as xterm draws it.
+pub(crate) const BLINK: Flags = Flags::from_bits_retain(1 << 15);
+
+/// The terminal, with the blink it drops kept on the cursor's template.
+/// alacritty's parser hands SGR 5 and 25 to its handler as `BlinkSlow`
+/// and `CancelBlink`, in the order the parameters come, so a 5 inside a
+/// color stays part of the color and a reset in the same sequence clears
+/// what came before it. Every other call goes to the terminal as it
+/// comes. On an update of `alacritty_terminal`, check its `Handler` for
+/// new methods, since one missing here falls to the trait's empty
+/// default instead of the terminal.
+struct Blinking<'a>(&'a mut Term<NoopListener>);
+
+/// Hand each listed `Handler` method to the terminal.
+macro_rules! to_term {
+    ($($name:ident($($arg:ident: $ty:ty),*);)*) => {
+        $(
+            #[inline]
+            fn $name(&mut self, $($arg: $ty),*) {
+                Handler::$name(&mut *self.0, $($arg),*);
+            }
+        )*
+    };
+}
+
+impl Handler for Blinking<'_> {
+    #[inline]
+    fn terminal_attribute(&mut self, attr: Attr) {
+        match attr {
+            Attr::BlinkSlow => self.0.grid_mut().cursor.template.flags.insert(BLINK),
+            Attr::CancelBlink => self.0.grid_mut().cursor.template.flags.remove(BLINK),
+            attr => Handler::terminal_attribute(&mut *self.0, attr),
+        }
+    }
+
+    to_term! {
+        set_title(title: Option<String>);
+        set_cursor_style(style: Option<CursorStyle>);
+        set_cursor_shape(shape: CursorShape);
+        input(c: char);
+        goto(line: i32, col: usize);
+        goto_line(line: i32);
+        goto_col(col: usize);
+        insert_blank(count: usize);
+        move_up(rows: usize);
+        move_down(rows: usize);
+        identify_terminal(intermediate: Option<char>);
+        device_status(arg: usize);
+        move_forward(col: usize);
+        move_backward(col: usize);
+        move_down_and_cr(row: usize);
+        move_up_and_cr(row: usize);
+        put_tab(count: u16);
+        backspace();
+        carriage_return();
+        linefeed();
+        bell();
+        substitute();
+        newline();
+        set_horizontal_tabstop();
+        scroll_up(rows: usize);
+        scroll_down(rows: usize);
+        insert_blank_lines(rows: usize);
+        delete_lines(rows: usize);
+        erase_chars(count: usize);
+        delete_chars(count: usize);
+        move_backward_tabs(count: u16);
+        move_forward_tabs(count: u16);
+        save_cursor_position();
+        restore_cursor_position();
+        clear_line(mode: LineClearMode);
+        clear_screen(mode: ClearMode);
+        clear_tabs(mode: TabulationClearMode);
+        reset_state();
+        reverse_index();
+        set_mode(mode: Mode);
+        unset_mode(mode: Mode);
+        report_mode(mode: Mode);
+        set_private_mode(mode: PrivateMode);
+        unset_private_mode(mode: PrivateMode);
+        report_private_mode(mode: PrivateMode);
+        set_scrolling_region(top: usize, bottom: Option<usize>);
+        set_keypad_application_mode();
+        unset_keypad_application_mode();
+        set_active_charset(index: CharsetIndex);
+        configure_charset(index: CharsetIndex, charset: StandardCharset);
+        set_color(index: usize, color: Rgb);
+        dynamic_color_sequence(prefix: String, index: usize, terminator: &str);
+        reset_color(index: usize);
+        clipboard_store(clipboard: u8, base64: &[u8]);
+        clipboard_load(clipboard: u8, terminator: &str);
+        decaln();
+        push_title();
+        pop_title();
+        text_area_size_pixels();
+        text_area_size_chars();
+        set_hyperlink(link: Option<LinkSpec>);
+        set_mouse_cursor_icon(icon: CursorIcon);
+        report_keyboard_mode();
+        push_keyboard_mode(mode: KeyboardModes);
+        pop_keyboard_modes(to_pop: u16);
+        set_keyboard_mode(mode: KeyboardModes, behavior: KeyboardModesApplyBehavior);
+        set_modify_other_keys(mode: ModifyOtherKeys);
+        report_modify_other_keys();
+    }
 }
 
 /// `Term` requires an event listener for bell, title, clipboard, and
@@ -712,10 +831,12 @@ impl TermGrid {
     }
 
     /// Advance the VT parser over a chunk of post-telnet bytes. vte
-    /// 0.13's `advance` is byte-at-a-time.
+    /// 0.13's `advance` is byte-at-a-time. The terminal takes them
+    /// through [`Blinking`], which keeps the blink it drops.
     pub(crate) fn feed(&mut self, bytes: &[u8]) {
+        let mut term = Blinking(&mut self.term);
         for &byte in bytes {
-            self.parser.advance(&mut self.term, byte);
+            self.parser.advance(&mut term, byte);
         }
     }
 
@@ -789,6 +910,7 @@ impl TermGrid {
             underline_color: cell.underline_color(),
             strikeout: flags.contains(Flags::STRIKEOUT),
             hidden: flags.contains(Flags::HIDDEN),
+            blink: flags.contains(BLINK),
         };
         (cell.c, cell.fg, cell.bg, cell_flags)
     }
@@ -1594,19 +1716,185 @@ mod tests {
     }
 
     #[test]
-    fn blink_and_overline_leave_no_mark_on_the_cell() {
-        // alacritty_terminal drops SGR 5 and 6 and its parser has no SGR
-        // 53, so a blinking or overlined cell reads as plain text.
+    fn blink_marks_the_cell_and_overline_leaves_no_mark() {
+        // SGR 5 blinks, and 25 or a reset ends it, in the order the
+        // parameters come. The rapid 6 draws steady, as xterm draws it.
+        // alacritty's parser has no SGR 53, so an overlined cell reads as
+        // plain text.
         let mut g = TermGrid::new(80, 24);
-        g.feed(b"\x1b[5mA\x1b[6mB\x1b[53mC\x1b[0mD");
-        for col in 0..4 {
+        g.feed(b"\x1b[6mA\x1b[5mB\x1b[25mC\x1b[53mD\x1b[5;0mE\x1b[0;5mF\x1b[mG");
+        let blinks: Vec<bool> = (0..7).map(|col| g.cell_at_line(0, col).3.blink).collect();
+        assert_eq!(blinks, [false, true, false, false, false, true, false]);
+        for col in 0..7 {
             let (_, fg, bg, flags) = g.cell_at_line(0, col);
             assert_eq!(fg, Color::Named(NamedColor::Foreground));
             assert_eq!(bg, Color::Named(NamedColor::Background));
             assert_eq!(flags.underline, Underline::None);
             assert!(!flags.bold && !flags.inverse && !flags.hidden);
         }
+        assert_eq!(&g.row_string(0)[..7], "ABCDEFG");
+    }
+
+    #[test]
+    fn a_five_inside_a_color_never_blinks() {
+        // A 5 that a 38, 48 or 58 takes as its own is part of the color,
+        // as alacritty reads it. So is any number of a colon color, and
+        // 5 with a sub parameter is no blink.
+        let mut g = TermGrid::new(80, 24);
+        g.feed(b"\x1b[38;5;5mA\x1b[48;2;5;5;5mB\x1b[58;5;5mC\x1b[38:5:5mD\x1b[5:1mE");
+        // A color that ends early hands the rest back as styles.
+        g.feed(b"\x1b[0;38;2;300;5mF\x1b[0m");
+        let blinks: Vec<bool> = (0..6).map(|col| g.cell_at_line(0, col).3.blink).collect();
+        assert_eq!(blinks, [false, false, false, false, false, true]);
+    }
+
+    #[test]
+    fn the_blink_mark_survives_a_split_write_and_a_reflow() {
+        let mut g = TermGrid::new(10, 4);
+        g.feed(b"ab\x1b[");
+        g.feed(b"5mcd\x1b[0mef");
+        assert!(g.cell_at_line(0, 2).3.blink && g.cell_at_line(0, 3).3.blink);
+        assert!(!g.cell_at_line(0, 4).3.blink);
+        // Narrower, the row wraps and the blinking cells keep their mark.
+        g.resize(3, 4);
+        assert_eq!(g.char_at(0, 2), 'c');
+        assert!(g.cell_at_line(0, 2).3.blink && g.cell_at_line(1, 0).3.blink);
+        assert!(!g.cell_at_line(1, 1).3.blink);
+        // The mark is a bit alacritty leaves free.
+        assert!(Flags::from_bits(BLINK.bits()).is_none());
+    }
+
+    #[test]
+    fn a_synchronized_update_blinks_in_the_order_it_was_written() {
+        // The parser holds an update's bytes back and reads them at its
+        // end, blink and reset alike.
+        let mut g = TermGrid::new(10, 4);
+        g.feed(b"\x1b[?2026h\x1b[5mA\x1b[0mB\x1b[5mC\x1b[?2026l\x1b[25mD");
+        let blinks: Vec<bool> = (0..4).map(|col| g.cell_at_line(0, col).3.blink).collect();
+        assert_eq!(blinks, [true, false, true, false]);
         assert_eq!(&g.row_string(0)[..4], "ABCD");
+    }
+
+    /// Whether two grids hold the same terminal: cursor, saved cursor,
+    /// modes, cursor look, colors, and every cell on screen and in
+    /// history. A link's id counts up across terminals, so a link
+    /// compares by its address.
+    fn assert_same_terminal(a: &TermGrid, b: &TermGrid, step: &str) {
+        let (ga, gb) = (a.term.grid(), b.term.grid());
+        assert_eq!(ga.cursor, gb.cursor, "cursor after {step}");
+        assert_eq!(
+            ga.saved_cursor, gb.saved_cursor,
+            "saved cursor after {step}"
+        );
+        assert_eq!(a.term.mode(), b.term.mode(), "modes after {step}");
+        assert_eq!(
+            a.term.cursor_style(),
+            b.term.cursor_style(),
+            "cursor look after {step}"
+        );
+        for i in 0..alacritty_terminal::term::color::COUNT {
+            assert_eq!(
+                a.term.colors()[i],
+                b.term.colors()[i],
+                "color {i} after {step}"
+            );
+        }
+        assert_eq!(ga.history_size(), gb.history_size(), "history after {step}");
+        let look = |cell: &Cell| {
+            let link = cell.hyperlink().map(|link| link.uri().to_owned());
+            let marks = cell.zerowidth().map(<[char]>::to_vec);
+            let line = cell.underline_color();
+            (cell.c, cell.fg, cell.bg, cell.flags, line, link, marks)
+        };
+        let top = -i32::try_from(ga.history_size()).unwrap();
+        for line in top..i32::try_from(ga.screen_lines()).unwrap() {
+            for col in 0..ga.columns() {
+                let (x, y) = (&ga[Line(line)][Column(col)], &gb[Line(line)][Column(col)]);
+                assert_eq!(look(x), look(y), "line {line} col {col} after {step}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_blink_handler_hands_every_other_sequence_to_the_terminal() {
+        // Text, moves, erases, scrolls, tabs, modes, a scroll region,
+        // charsets, colors, a link, the cursor's look, keyboard modes and
+        // a reset, each a step that leaves its own mark. Through
+        // `Blinking` the terminal must stay as it is straight from the
+        // parser after every step, so a `Handler` method the wrapper
+        // drops, as on an update of alacritty_terminal that adds one,
+        // shows up here. Only the calls the terminal keeps nothing for,
+        // such as the title, the bell and the reports, cannot.
+        let steps: &[&[u8]] = &[
+            b"Before",
+            b"\x1bc",
+            b"\x1b#8",
+            b"\x1b[2J",
+            b"\x1b[H",
+            b"\x1b[1;31;44mHello\x1b[0m",
+            b"\x1b[3;5HX",
+            b"\x1b[2dY",
+            b"\x1b[10GZ",
+            b"\x1b[1;1H\x1b[2@",
+            b"\x1b[4;4H\x1b[AU",
+            b"\x1b[BD",
+            b"\x1b[2CR",
+            b"\x1b[DL",
+            b"\x1b[Ee",
+            b"\x1b[Ff",
+            b"\r\ta",
+            b"\x1b[Ib",
+            b"\x1b[Zc",
+            b"\x08x",
+            b"\ry",
+            b"\nz",
+            b"\x1bEw",
+            b"\x1b[6;4H\x1bH\r\t!",
+            b"\x1b[3g\r\t?",
+            b"\x1b[S",
+            b"\x1b[T",
+            b"\x1b[2;1H\x1b[L",
+            b"\x1b[M",
+            b"\x1b[1;1Habcdefghij\r\nklmnopqrst\r\nuvwxyz",
+            b"\x1b[1;2H\x1b[2X",
+            b"\x1b[P",
+            b"\x1b[3;3H\x1b7\x1b[5;5Hs",
+            b"\x1b8r",
+            b"\x1b[2;2H\x1b[s\x1b[4;4H\x1b[u!",
+            b"\x1b[2;8H\x1b[K",
+            b"\x1b[1;4H\x1b[1K",
+            b"\x1b[2;3H\x1b[1J",
+            b"\x1b[1;1H\x1bMq",
+            b"\x1b[3;1H\x1b[4hI",
+            b"\x1b[4lJ",
+            b"\x1b[?7l\x1b[4;9Hwrapping",
+            b"\x1b[?7h\x1b[?1h\x1b=",
+            b"\x1b>",
+            b"\x1b[2;4r",
+            b"\x1b[?6h\x1b[1;1Ho",
+            b"\x1b[?6l\x1b[4;1H\r\nnew",
+            b"\x1b[r\x1b[6;1H",
+            b"\x1b(0lqk",
+            b"\x1b(B\x1b)0\x0eq",
+            b"\x0fj",
+            b"\x1b]4;1;rgb:12/34/56\x07",
+            b"\x1b]4;2;rgb:65/43/21\x07\x1b]104;2\x07",
+            b"\x1b]8;;https://example.com\x07link\x1b]8;;\x07",
+            b"\x1b]2;title\x07\x1b[22t\x1b[23t",
+            b"\x1b[3 q",
+            b"\x1b]50;CursorShape=1\x07",
+            b"\x1b[>1u\x1b[>4;1m",
+            b"\x1a\x07",
+        ];
+        let mut wrapped = TermGrid::new(12, 6);
+        let mut plain = TermGrid::new(12, 6);
+        for bytes in steps {
+            wrapped.feed(bytes);
+            for &byte in *bytes {
+                plain.parser.advance(&mut plain.term, byte);
+            }
+            assert_same_terminal(&wrapped, &plain, &String::from_utf8_lossy(bytes));
+        }
     }
 
     #[test]

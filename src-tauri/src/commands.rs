@@ -1562,6 +1562,22 @@ pub(crate) fn native_surface_set_bright_bold(on: bool) {
     }
 }
 
+/// Tier 3 native renderer: turn blinking text on or off, from the Blinking
+/// text setting and the system's reduce motion setting. Off, every
+/// blinking cell draws steady. A no-op without the native surface.
+#[tauri::command]
+pub(crate) fn native_surface_set_blink_text(on: bool) {
+    #[cfg(native_surface)]
+    {
+        crate::cell_render::set_blink_text(on);
+        crate::native_surface::request_redraw();
+    }
+    #[cfg(not(native_surface))]
+    {
+        let _ = on;
+    }
+}
+
 /// Tier 3 native renderer (macOS): report xterm's device cell size so the
 /// surface grid matches the webview's spacing exactly instead of deriving it
 /// from font metrics. `char_height` is xterm's device glyph box, which it

@@ -149,6 +149,68 @@ pub(crate) fn request_redraw() {
     let _ = app.run_on_main_thread(redraw_now);
 }
 
+// A frame that flips blinking text waits on its timer. It is armed only
+// by a frame that drew text that blinks, so while nothing on screen
+// blinks no timer runs and no extra frame is drawn.
+static BLINK_ARMED: AtomicBool = AtomicBool::new(false);
+
+/// Past the flip, so the timer's frame lands in the new half even when
+/// its clock and the wall clock part by a millisecond.
+const BLINK_SLACK: std::time::Duration = std::time::Duration::from_millis(2);
+
+// Whether the last frame drawn showed text that blinks, for a frame
+// that gets no texture to draw on.
+static LAST_BLINKS: AtomicBool = AtomicBool::new(false);
+
+/// The moment a frame draws its blinking text at, in milliseconds since
+/// the epoch. None while Blinking text is off, so a frame then reads no
+/// clock.
+fn blink_now() -> Option<u64> {
+    crate::cell_render::blink_text().then(crate::cell_render::epoch_ms)
+}
+
+/// Whether a frame leaves text on screen that blinks: what it drew when
+/// it drew (`Some`), and what the last frame drew when it got no texture
+/// (`None`). A failed frame the blink timer asked for then waits for the
+/// next flip, so a hidden half it was meant to end cannot stick.
+fn frame_blinks(drew: Option<bool>) -> bool {
+    match drew {
+        Some(blinks) => {
+            LAST_BLINKS.store(blinks, Ordering::Release);
+            blinks
+        }
+        None => LAST_BLINKS.load(Ordering::Acquire),
+    }
+}
+
+/// How long after a frame at `now_ms` to draw the one that flips its
+/// blinking text. None when the frame left no text that blinks
+/// (`blinks`) or Blinking text is off (no `now_ms`): then nothing waits.
+fn blink_wait(blinks: bool, now_ms: Option<u64>) -> Option<std::time::Duration> {
+    let now_ms = now_ms.filter(|_| blinks)?;
+    Some(crate::cell_render::until_blink_flip(now_ms) + BLINK_SLACK)
+}
+
+/// After a frame that left text that blinks, ask for a frame at the next
+/// flip after `now_ms`, the moment the frame drew its half at, unless one
+/// is asked for already. The ask goes through `request_redraw`, so it
+/// joins any frame the game or your typing asks for meanwhile, and that
+/// frame draws at once in the half of its own moment. A flip never holds
+/// a frame back.
+fn arm_blink(blinks: bool, now_ms: Option<u64>) {
+    let Some(wait) = blink_wait(blinks, now_ms) else {
+        return;
+    };
+    if BLINK_ARMED.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(wait).await;
+        BLINK_ARMED.store(false, Ordering::Release);
+        request_redraw();
+    });
+}
+
 fn redraw_now() {
     REDRAW_PENDING.store(false, Ordering::Release);
     if let Ok(mut slot) = surface_slot().lock() {
@@ -1127,10 +1189,13 @@ unsafe fn init_gpu(
 }
 
 fn render(state: &mut GpuState) {
+    // One moment for the half this frame draws and the flip it waits for.
+    let now_ms = blink_now();
     let frame = match state.surface.get_current_texture() {
         Ok(f) => f,
         Err(e) => {
             tracing::warn!(error = %e, "native-surface: get_current_texture failed");
+            arm_blink(frame_blinks(None), now_ms);
             return;
         }
     };
@@ -1166,11 +1231,12 @@ fn render(state: &mut GpuState) {
         indicators: !UNDERLAY,
         scale: load_f32(&DPR, 2.0),
         target: [state.config.width, state.config.height],
+        blink_hidden: now_ms.is_some_and(|now| !crate::cell_render::blink_shown(now)),
     };
     let cell_renderer = &mut state.cell_renderer;
-    let drew = crate::term_grid::with_grid(|grid| {
-        if let Some(grid) = grid {
-            let frac = cell_renderer.draw(
+    let drawn = crate::term_grid::with_grid(|grid| {
+        grid.map(|grid| {
+            cell_renderer.draw(
                 device,
                 queue,
                 &mut encoder,
@@ -1180,14 +1246,12 @@ fn render(state: &mut GpuState) {
                 pane_h,
                 split_ratio(),
                 placement,
-            );
-            set_divider_frac(frac);
-            true
-        } else {
-            false
-        }
+            )
+        })
     });
-    if !drew {
+    if let Some(drawn) = drawn {
+        set_divider_frac(drawn.divider);
+    } else {
         // No grid yet: clear to the terminal background, since under the
         // underlay this fills the whole window behind the page. The pass
         // records its clear when dropped at the end of this block.
@@ -1217,6 +1281,7 @@ fn render(state: &mut GpuState) {
     // Every scroll path repaints through here, and the grid lock is free
     // again, so this is where the page hears about the new offset.
     report_scroll_if_changed();
+    arm_blink(frame_blinks(Some(drawn.is_some_and(|d| d.blinks))), now_ms);
 }
 
 #[cfg(test)]
@@ -1316,6 +1381,36 @@ mod tests {
             failed.recv_timeout(WAIT),
             Err(RecvTimeoutError::Disconnected)
         );
+    }
+
+    #[test]
+    fn nothing_waits_for_a_flip_while_nothing_blinks() {
+        // A frame with no blinking text on screen arms no timer, and
+        // neither does one while Blinking text is off.
+        for now in [0, 599, 600, 1_234_567] {
+            assert_eq!(blink_wait(false, Some(now)), None);
+        }
+        assert_eq!(blink_wait(true, None), None);
+        assert_eq!(blink_wait(false, None), None);
+        // Text that blinks waits for the next flip and a hair past it.
+        assert_eq!(blink_wait(true, Some(0)), Some(Duration::from_millis(602)));
+        assert_eq!(blink_wait(true, Some(1199)), Some(Duration::from_millis(3)));
+    }
+
+    #[test]
+    fn a_frame_with_no_texture_waits_for_the_flip_the_last_frame_left() {
+        // A frame drew blinking text, then the frame its timer asked for
+        // got no texture. It still waits for the next flip, so the half
+        // on screen flips then.
+        assert!(frame_blinks(Some(true)));
+        assert!(frame_blinks(None));
+        let wait = blink_wait(frame_blinks(None), Some(1300));
+        assert_eq!(wait, Some(Duration::from_millis(502)));
+        // Once a frame draws with nothing blinking, a failed frame waits
+        // for nothing.
+        assert!(!frame_blinks(Some(false)));
+        assert!(!frame_blinks(None));
+        assert_eq!(blink_wait(frame_blinks(None), Some(1300)), None);
     }
 
     #[test]
