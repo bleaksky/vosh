@@ -7,7 +7,7 @@
 //!   it in the two passes the game prints it in.
 //! - [`codes`] holds every value code, the field it fills and the
 //!   pattern Vosh reads it with.
-//! - [`colors`] holds the backtick colors the game sends and rebuilds
+//! - `colors` holds the backtick colors the game sends and rebuilds
 //!   your codes from them.
 //! - [`shapes`] compiles your settings into the shapes Vosh recognizes
 //!   your prompt by, with the settle flag of each.

@@ -87,7 +87,7 @@ impl Stage {
 
     /// Pin `block` shown as sent, drawing off: the band shows every line
     /// above the last one, then what Prompts triggers left of the last.
-    /// `display` is None when one hid it. See [`Stage::pin`].
+    /// `display` is None when one hid it. See `Stage::pin`.
     pub fn pin_shown(
         &mut self,
         out: &mut Output,

@@ -7,9 +7,9 @@
 //! sends in Char.Prompt, or shows after `Current prompt:`, is already
 //! stored that way, so Vosh reads it as it came and skips this step.
 //!
-//! [`pass_one`] reads the stored setting as `bust_a_prompt`
+//! `pass_one` reads the stored setting as `bust_a_prompt`
 //! (`comm.c:1801-1944`) does, into characters it copies, breaks and
-//! value codes. [`pass_two`] reads each run of copied characters as
+//! value codes. `pass_two` reads each run of copied characters as
 //! `send_to_char` (`comm.c:6583-6649`) and `process_color` do, into text
 //! and colors that take no cell.
 
@@ -47,7 +47,7 @@ pub struct Normalized {
 
 /// Store a setting you typed as the game does. Vosh trims the ends of
 /// every command it sends. The game reads the line through
-/// [`read_line`], and skips the spaces after the command word
+/// `read_line`, and skips the spaces after the command word
 /// (`one_argument`, `interp.c:1704-1727`), so no space before the
 /// setting reaches `do_prompt`. That turns each `~` into `-`
 /// (`smash_tilde`) and adds one space unless the setting ends in `%c` in

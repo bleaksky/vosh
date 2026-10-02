@@ -181,7 +181,7 @@ pub struct Stage {
 
 impl Stage {
     /// Compile the capture a profile's `[prompt]` table holds, for a
-    /// mortal. See [`Stage::set_capture_for`]. Test only. The app's tests
+    /// mortal. See `Stage::set_capture_for`. Test only. The app's tests
     /// reach it through the `testkit` feature.
     #[cfg(any(test, feature = "testkit"))]
     pub fn set_capture(&mut self, capture: &CaptureConfig) {

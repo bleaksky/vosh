@@ -1046,7 +1046,7 @@ const fn moon(
 }
 
 /// The catalog entry for a name or one of its aliases. Fields written
-/// with a parameter are found only by [`field`].
+/// with a parameter are found only by `field`.
 pub fn entry(name: &str) -> Option<&'static Entry> {
     CATALOG
         .iter()

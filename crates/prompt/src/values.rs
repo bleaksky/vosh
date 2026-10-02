@@ -4,7 +4,7 @@
 //! sources, a sample for previews and the words the picker searches.
 //! [`Vars`] holds what feeds them in a session: script values, the last
 //! recognized prompt (the capture), the GMCP snapshot, and whether the
-//! Forsaken Lands rules hold. [`Resolver`] answers the renderer with each
+//! Forsaken Lands rules hold. `Resolver` answers the renderer with each
 //! field's state. [`Values`] is what the renderer asks, of the resolver,
 //! the samples and a preview's overrides alike.
 //!

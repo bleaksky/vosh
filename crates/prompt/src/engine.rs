@@ -280,7 +280,7 @@ impl PromptEngine {
     }
 
     /// The rows the band above the command line keeps while your prompt
-    /// shows pinned. See [`Stage::zone`].
+    /// shows pinned. See `Stage::zone`.
     pub fn zone(&self) -> usize {
         self.stage
             .zone(self.draws(), &Template::parse(&self.config.template))
@@ -288,7 +288,7 @@ impl PromptEngine {
 
     /// Record a candidate in the ring, on a send or a GA or EOR, with
     /// whether drawing is on and whether the profile has a capture. See
-    /// [`Stage::record`].
+    /// `Stage::record`.
     pub fn record(&mut self, partial: Option<(&[u8], &str)>, at_ms: i64) {
         let draw = self.draws();
         let capture = !self.config.capture.is_none();
