@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { dragView, keyView, resetView, type Map3dView } from '../lib/map3dView';
 import { NO_WHEEL_RUN, ZOOM_STEP, clampZoom, pinchZoom, wheelZoomSteps } from '../lib/mapZoom';
 
@@ -16,18 +16,19 @@ interface GestureLike extends Event {
 }
 
 interface Options {
+  /** The zoom a pinch starts from. */
   zoom: number;
-  setZoom: (zoom: number) => void;
+  setZoom: Dispatch<SetStateAction<number>>;
   /** The 3D view while the map draws in 3D, else null. */
   view: Map3dView | null;
-  setView: (view: Map3dView) => void;
+  setView: Dispatch<SetStateAction<Map3dView>>;
 }
 
 export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Options): void {
   // The listeners stay bound for the life of the view and read the
-  // latest values and setters through this ref. A setter also writes
-  // its value here, so a second event before the next render builds on
-  // the first.
+  // latest values and setters through this ref. Each change goes
+  // through an updater, so a second event before the next render builds
+  // on the first.
   const latest = useRef(options);
   latest.current = options;
 
@@ -38,27 +39,15 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
     let pinchFrom: number | null = null;
     let drag: { id: number; x: number; y: number } | null = null;
 
-    const zoomTo = (z: number) => {
-      const o = latest.current;
-      if (z === o.zoom) return;
-      o.setZoom(z);
-      o.zoom = z;
-    };
-    const viewTo = (v: Map3dView) => {
-      const o = latest.current;
-      o.setView(v);
-      o.view = v;
-    };
-
     // Attached by hand, not passive, so the drawing can keep the wheel
     // from scrolling the panel and a pinch from zooming the page.
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       // WebKit may send a pinch as both, and the gesture wins.
       if (pinchFrom !== null && e.ctrlKey) return;
-      const out = wheelZoomSteps(wheel, e);
-      wheel = out.run;
-      if (out.steps !== 0) zoomTo(clampZoom(latest.current.zoom + out.steps * ZOOM_STEP));
+      const { run, steps } = wheelZoomSteps(wheel, e);
+      wheel = run;
+      if (steps !== 0) latest.current.setZoom((z) => clampZoom(z + steps * ZOOM_STEP));
     };
     const onGestureStart = (e: Event) => {
       e.preventDefault();
@@ -66,7 +55,8 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
     };
     const onGestureChange = (e: Event) => {
       e.preventDefault();
-      if (pinchFrom !== null) zoomTo(pinchZoom(pinchFrom, (e as GestureLike).scale));
+      if (pinchFrom === null) return;
+      latest.current.setZoom(pinchZoom(pinchFrom, (e as GestureLike).scale));
     };
     const onGestureEnd = (e: Event) => {
       e.preventDefault();
@@ -86,12 +76,11 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
       el.setPointerCapture?.(e.pointerId);
     };
     const onPointerMove = (e: PointerEvent) => {
-      const v = latest.current.view;
-      if (!drag || e.pointerId !== drag.id || !v) return;
+      if (!drag || e.pointerId !== drag.id || !latest.current.view) return;
       const dx = e.clientX - drag.x;
       const dy = e.clientY - drag.y;
       drag = { ...drag, x: e.clientX, y: e.clientY };
-      if (dx !== 0 || dy !== 0) viewTo(dragView(v, dx, dy));
+      if (dx !== 0 || dy !== 0) latest.current.setView((v) => dragView(v, dx, dy));
     };
     const onPointerUp = (e: PointerEvent) => {
       if (!drag || e.pointerId !== drag.id) return;
@@ -99,16 +88,15 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
       if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
     };
     const onDoubleClick = (e: MouseEvent) => {
-      const v = latest.current.view;
-      if (v && !onButton(e)) viewTo(resetView(v));
+      if (latest.current.view && !onButton(e)) latest.current.setView(resetView);
     };
     const onKeyDown = (e: KeyboardEvent) => {
       const v = latest.current.view;
       if (!v || e.target !== el || e.altKey || e.ctrlKey || e.metaKey) return;
-      const next = keyView(v, e.key);
-      if (!next) return;
+      const { key } = e;
+      if (!keyView(v, key)) return;
       e.preventDefault();
-      viewTo(next);
+      latest.current.setView((cur) => keyView(cur, key) ?? cur);
     };
 
     const on = <E extends Event>(
