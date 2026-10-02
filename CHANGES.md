@@ -220,7 +220,7 @@ All notable changes to Vosh. Newest first.
 ## v0.3.1 - 2026-05-31
 
 - Profile auto-match now reads your character name from the MUD itself. As soon as you log in, the MUD sends Vosh your character name over GMCP, and Vosh swaps to the matching profile silently. No more typing your character name into the Connect form, no more wrong profile loaded because you forgot.
-- A profile can now claim more than one character. List them in Settings · Profiles · auto-match as a comma-separated string ("Erelei, Lustig, Carmen") and the profile autoloads for any of those characters. Useful when you want one profile to cover every warrior you play, or every alt on a single shared host.
+- A profile can now claim more than one character. List them in Settings · Profiles · auto-match as a comma-separated string ("Ilsabet, Dovic, Orla") and the profile autoloads for any of those characters. Useful when you want one profile to cover every warrior you play, or every alt on a single shared host.
 - Your settings are now protected against bad writes. Every save of `profile.toml` and `global.toml` is atomic, and the previous version is kept as a timestamped backup. Up to ten backup generations are retained, so a crashed save or a stale-state overwrite can no longer wipe your custom themes or tracked affects. (One user reported losing both after installing v0.3.0; this protection lives forward of this release.)
 
 ## v0.3.0 - 2026-05-31
@@ -277,7 +277,7 @@ All notable changes to Vosh. Newest first.
 
 ## v0.2.4 - 2026-05-29
 
-- Tab completes the current word. First Tab fills the most recent match from typed history; subsequent Tabs cycle, Shift+Tab cycles back. Room characters (combat targets) are a secondary source so `ere` completes to `Erelei`.
+- Tab completes the current word. First Tab fills the most recent match from typed history; subsequent Tabs cycle, Shift+Tab cycles back. Room characters (combat targets) are a secondary source so `ils` completes to `Ilsabet`.
 - Client-side word wrap so long lines (tells, comm channels) stop splitting words mid-character. NAWS still handles most lines server-side; this catches the rest.
 - Status bar no longer truncates the target name or quick keys. Wraps to a second row when there are too many to fit.
 - Chat panel now has a bounded default height of 240 px (50vh max), so it stops eating the window and the body scrolls properly. Auto-scroll-to-bottom on new messages works again.
