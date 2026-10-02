@@ -1077,8 +1077,9 @@ fn the_tank_row_is_the_name_a_colon_and_a_ten_cell_gauge() {
 }
 
 /// The gallery mockup's design, the template its pinned band was drawn
-/// with (`SCR/gallery/harness/template.txt`).
-const MOCKUP: &str = "%{if:fight}%opponent %{opponent_hp:bar:10} %{opponent_hp:pct}%% %{c:245}%opponent_cond%c_default%{if:group_size}%{if:tank}  %{c:245}tank %c_tank_hp%tank%c_default%{end}%{end}%nl%{end}%c_hp%hp%{c:245}/%{maxhp}hp%c_default %c_mana%mana%{c:245}/%{maxmana}mn%c_default %c_move%move%{c:245}/%{maxmove}mv%c_default%{if:pos}  %{c:245}%pos%c_default%{end}%{if:lang}%{ifnot:pos} %{end} %{c:245}%lang%c_default%{end}%{if:exits}  %{c:245}[%c_default%exits%{c:245}]%c_default%{end}%{if:gold}  %{gold:grouped}%{c:245}g%c_default%{end}%{ifnot:fight}%{if:wizi}  %{c:245}wizi %wizi%c_default%{end}%{if:incog}%{ifnot:wizi} %{end} %{c:245}incog %incog%c_default%{end}%{end}%{if:missing}  %{c:245}missing %c_yellow%{missing:names}%c_default%{end} ";
+/// with (`SCR/gallery/harness/template.txt`). It is At a glance as it
+/// first shipped.
+const MOCKUP: &str = vosh_prompt::config::RETIRED_DEFAULTS[1];
 
 /// The PROMPT the gallery's healer kept, hour and moons, which sends no
 /// position or language.

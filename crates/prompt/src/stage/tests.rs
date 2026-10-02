@@ -2855,7 +2855,7 @@ fn held_lines_a_read_split_after_the_run_leave_it_whole() {
     // line of its own before the vitals.
     let mut stage = Stage::default();
     stage.set_capture(&CaptureConfig::Aabahran(crate::config::AabahranCapture {
-        prompt: "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c".to_string(),
+        prompt: crate::testkit::mud::PROMPT.to_string(),
         ..crate::config::AabahranCapture::default()
     }));
     stage.set_show(PromptShow::Pinned);

@@ -1400,26 +1400,28 @@ fn the_band_keeps_the_rows_the_tallest_prompt_can_take() {
     assert_eq!(zoned("[%h/%Hhp]%c", "<%hp>", true).zone(), 1);
     // James's PROMPT prints the tank line above the vitals in a fight.
     // A design that reads nothing on it leaves it as sent.
-    let james = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c";
-    assert_eq!(zoned(james, "<%hp>", true).zone(), 2);
+    assert_eq!(zoned(PROMPT, "<%hp>", true).zone(), 2);
     // One that reads the tank takes it over.
-    assert_eq!(zoned(james, "%tank %{tank_hp:pct}%% <%hp>", true).zone(), 1);
+    assert_eq!(
+        zoned(PROMPT, "%tank %{tank_hp:pct}%% <%hp>", true).zone(),
+        1
+    );
     // Every line break counts, inside a condition too.
     let detailed = "%{if:fight}%opponent%nl%{end}%hp";
-    assert_eq!(zoned(james, detailed, true).zone(), 3);
+    assert_eq!(zoned(PROMPT, detailed, true).zone(), 3);
     assert_eq!(
         zoned("[%h/%Hhp]%c", "%hp%{nl}%mana%nl%move", true).zone(),
         3
     );
     // A design that reads the prompt as sent takes its lines.
-    assert_eq!(zoned(james, "%{raw}", true).zone(), 2);
-    assert_eq!(zoned(james, "%{raw}%nl%hp", true).zone(), 3);
+    assert_eq!(zoned(PROMPT, "%{raw}", true).zone(), 2);
+    assert_eq!(zoned(PROMPT, "%{raw}%nl%hp", true).zone(), 3);
     // Not drawing, the game's own lines.
-    assert_eq!(zoned(james, detailed, false).zone(), 2);
+    assert_eq!(zoned(PROMPT, detailed, false).zone(), 2);
     assert_eq!(zoned("[%h/%Hhp]%c", "", true).zone(), 1);
     // No more than six.
     let tall = "%hp%nl%hp%nl%hp%nl%hp%nl%hp%nl%hp%nl%hp%nl%hp";
-    assert_eq!(zoned(james, tall, true).zone(), crate::stage::ZONE_MAX);
+    assert_eq!(zoned(PROMPT, tall, true).zone(), crate::stage::ZONE_MAX);
 }
 
 #[test]
