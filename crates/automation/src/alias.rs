@@ -14,10 +14,11 @@
 //! re-fed through the engine, bounded by a maximum recursion depth.
 
 use std::collections::{BTreeSet, HashMap};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::revision::next_revision;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Alias {
@@ -117,14 +118,6 @@ pub struct AliasStore {
     disabled_groups: BTreeSet<String>,
     /// See [`AliasStore::revision`].
     revision: u64,
-}
-
-/// Hands out list revisions. One counter serves every store, so a store
-/// built to replace another never reads as the same list by accident.
-static NEXT_REVISION: AtomicU64 = AtomicU64::new(1);
-
-fn next_revision() -> u64 {
-    NEXT_REVISION.fetch_add(1, Ordering::Relaxed)
 }
 
 impl Default for AliasStore {
