@@ -417,6 +417,109 @@
       ]
     },
     {
+      "name": "tar 3 on the bank representative, whose line words the name another way",
+      "target": "a bank representative",
+      "events": [
+        {
+          "gmcp": "Room.Chars",
+          "data": [
+            { "name": "a villager", "npc": true },
+            { "name": "Tolliver", "npc": false },
+            { "name": "a bank representative", "npc": true },
+            { "name": "Maren", "npc": false }
+          ]
+        },
+        {
+          "gmcp": "Room.Items",
+          "data": [
+            { "name": "a pair of black-steel gauntlets", "type": "armor" },
+            { "name": "a black-steel helm", "type": "armor" },
+            { "name": "a pair of black-steel gauntlets", "type": "armor" },
+            { "name": "a pair of black-steel gauntlets", "type": "armor" }
+          ]
+        },
+        {
+          "line": "[Exits: south]",
+          "room": false,
+          "preset": "green",
+          "from": "do_exits with auto, room 5279"
+        },
+        {
+          "line": "( 3) A pair of black-steel gauntlets rests on the ground.",
+          "room": true,
+          "from": "list_to_char, three of object 5202 combined on the line of the first"
+        },
+        {
+          "line": "     A black-steel helm is here, gleaming darkly.",
+          "room": true,
+          "from": "list_to_char, object 5201"
+        },
+        {
+          "line": "A Blackwatch villager scurries about, taking care of business.",
+          "room": true,
+          "from": "char_to_char, mob 5287"
+        },
+        {
+          "line": "[\u001b[0;31mAFK\u001b[0;0m] Tolliver is resting here.",
+          "room": true,
+          "from": "char_to_char for a resting player who is away"
+        },
+        {
+          "line": "A representative of the Bank of Aabahran is here, ready to take your gold.",
+          "room": true,
+          "target": true,
+          "from": "char_to_char, mob 5283, the third in Room.Chars"
+        },
+        {
+          "line": "Maren is sleeping here.",
+          "room": true,
+          "from": "char_to_char for a sleeping player, who shows no title"
+        },
+        { "line": "Orla walks in.", "room": false, "from": "act_move.c, $n walks in." },
+        { "line": "", "room": false, "from": "the blank line before the prompt" },
+        { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
+      ]
+    },
+    {
+      "name": "tar warrior where three people carry the word, and only the first is your target",
+      "target": "warrior",
+      "events": [
+        {
+          "gmcp": "Room.Chars",
+          "data": [
+            { "name": "a warrior medic", "npc": true },
+            { "name": "a master warrior", "npc": true },
+            { "name": "a warrior", "npc": true }
+          ]
+        },
+        { "gmcp": "Room.Items", "data": [] },
+        {
+          "line": "[Exits: north south west]",
+          "room": false,
+          "preset": "green",
+          "from": "do_exits with auto, room 4811 in area/gastride.are"
+        },
+        {
+          "line": "A warrior medic stands here ready to tend to the wounded warriors.",
+          "room": true,
+          "target": true,
+          "from": "char_to_char, mob 4812, the last to reset in the room and so the first in it"
+        },
+        {
+          "line": "A master warrior stands here watching over others.",
+          "room": true,
+          "from": "char_to_char, mob 4808"
+        },
+        {
+          "line": "A warrior stands here ready to train.",
+          "room": true,
+          "from": "char_to_char, mob 4801"
+        },
+        { "line": "", "room": false, "from": "the blank line before the prompt" },
+        { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
+      ]
+    },
+    {
       "name": "a move into an empty room, then how much of the area you have explored",
       "events": [
         { "gmcp": "Room.Chars", "data": [] },
