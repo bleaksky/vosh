@@ -239,12 +239,21 @@ fn the_picker_offers_every_form_with_a_live_sample() {
             ("Bar", "██████████".to_string()),
         ]
     );
-    // Gold, a number, groups its thousands and shortens.
-    let gold: Vec<&str> = forms(&FieldRef::new("gold"), &values)
+    // Gold, a number, groups its thousands, shortens, and reads in
+    // thousands as the old TinTin prompt wrote it.
+    let gold: Vec<(&str, String)> = forms(&FieldRef::new("gold"), &values)
         .iter()
-        .map(|f| f.label)
+        .map(|f| (f.label, f.sample.plain.clone()))
         .collect();
-    assert_eq!(gold, ["Number", "Grouped", "Short"]);
+    assert_eq!(
+        gold,
+        [
+            ("Number", "1250".to_string()),
+            ("Grouped", "1,250".to_string()),
+            ("Short", "1.2k".to_string()),
+            ("Thousands", "1.2K".to_string()),
+        ]
+    );
     // The bar draws in theme green at full.
     let bar = &forms(&FieldRef::new("hp"), &values)[4];
     assert!(

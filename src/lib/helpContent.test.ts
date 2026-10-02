@@ -415,6 +415,7 @@ describe('the help on prompt design codes', () => {
     [['%pct_hp'], 'Health as a percent with no sign. Add %% for the sign.'],
     [['%hp_bar:10:auto'], 'A bar ten cells wide, colored by how full it is.'],
     [['%{gold:grouped}'], 'Any value from the picker, in any of its forms.'],
+    [['%{gold:thousands}'], 'Gold in thousands with one decimal, as 12.3K.'],
     [['%c_green', '%c_hp'], "A theme color, or Health's color by how full it is."],
     [
       ['%{c:#80c8ff}', '%{c:128,200,255}'],

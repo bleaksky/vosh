@@ -233,6 +233,8 @@ pub enum Format {
     Grouped,
     /// A number in short form, `1.2k`.
     Short,
+    /// A number in thousands with one decimal and a capital K, `12.3K`.
+    Thousands,
     /// With its unit, `14s`, `61°F`.
     Unit,
     /// The first N characters.
@@ -676,6 +678,7 @@ fn format_body(format: &Format) -> Option<String> {
         Format::Name => "name".into(),
         Format::Grouped => "grouped".into(),
         Format::Short => "short".into(),
+        Format::Thousands => "thousands".into(),
         Format::Unit => "unit".into(),
         Format::Trunc(n) => format!("trunc:{n}"),
         Format::Hm => "hm".into(),
@@ -961,6 +964,7 @@ fn parse_format(segs: &[&str]) -> Option<Format> {
         "name" => no_args(Format::Name),
         "grouped" => no_args(Format::Grouped),
         "short" => no_args(Format::Short),
+        "thousands" => no_args(Format::Thousands),
         "unit" => no_args(Format::Unit),
         "hm" => no_args(Format::Hm),
         "hms" => no_args(Format::Hms),
@@ -1632,6 +1636,11 @@ mod tests {
         assert_eq!(kinds("%{moon1:name}"), vec![fmt("moon1", Format::Name)]);
         assert_eq!(kinds("%{gold:grouped}"), vec![fmt("gold", Format::Grouped)]);
         assert_eq!(kinds("%{gold:short}"), vec![fmt("gold", Format::Short)]);
+        assert_eq!(
+            kinds("%{gold:thousands}"),
+            vec![fmt("gold", Format::Thousands)]
+        );
+        assert_eq!(kinds("%{gold:thousands:1}"), vec![TokenKind::Unknown]);
         assert_eq!(kinds("%{temp:unit}"), vec![fmt("temp", Format::Unit)]);
         assert_eq!(
             kinds("%{room:trunc:20}"),
@@ -1650,6 +1659,15 @@ mod tests {
             vec![fmt("missing", Format::Count)]
         );
         assert_eq!(kinds("%{hp:max:1}"), vec![TokenKind::Unknown]);
+    }
+
+    #[test]
+    fn the_forms_of_the_old_prompt_write_back_as_they_read() {
+        for source in ["%{gold:thousands}", "%{exp:thousands}"] {
+            let tokens = kinds(source);
+            assert!(tokens.iter().all(|t| *t != TokenKind::Unknown), "{source}");
+            assert_eq!(write_tokens(&tokens), source, "{source}");
+        }
     }
 
     #[test]

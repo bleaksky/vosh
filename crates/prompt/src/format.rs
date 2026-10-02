@@ -255,6 +255,15 @@ pub fn short(n: i64) -> String {
     }
 }
 
+/// `12.3K`, the number over a thousand with one decimal and a capital K,
+/// as the old tt++ prompt printed gold. The tenth rounds as printf
+/// rounds a double, to the nearest with a tie going to the even digit,
+/// so 1350 reads `1.4K` and 1250, a tie, `1.2K`. It stays in thousands
+/// past a million, `1234.6K`.
+pub fn thousands(n: i64) -> String {
+    format!("{:.1}K", n as f64 / 1000.0)
+}
+
 /// The game hour as `2 pm`.
 pub fn hour_word(hour: u8) -> String {
     let h = hour % 24;
@@ -565,6 +574,7 @@ impl Value {
             },
             Format::Grouped => self.whole().map(grouped),
             Format::Short => self.whole().map(short),
+            Format::Thousands => self.whole().map(thousands),
             Format::Unit => match self {
                 Value::Seconds { secs, .. } => Some(format!("{secs}s")),
                 Value::Temp {
@@ -660,6 +670,45 @@ mod tests {
         assert_eq!(short(1_200_000), "1.2m");
         assert_eq!(short(3_400_000_000), "3.4b");
         assert_eq!(short(-1250), "-1.2k");
+    }
+
+    #[test]
+    fn thousands_print_as_the_old_tintin_prompt_did() {
+        // Each pair is what tt++ 2.02.61 printed for @gold{n} in the old
+        // prompt, with the K it wrote after it.
+        for (n, old) in [
+            (0, "0.0"),
+            (49, "0.0"),
+            (50, "0.1"),
+            (99, "0.1"),
+            (500, "0.5"),
+            (950, "0.9"),
+            (999, "1.0"),
+            (1050, "1.1"),
+            (1150, "1.1"),
+            (1250, "1.2"),
+            (1350, "1.4"),
+            (1450, "1.4"),
+            (1999, "2.0"),
+            (2650, "2.6"),
+            (12_345, "12.3"),
+            (12_399, "12.4"),
+            (99_999, "100.0"),
+            (812_345, "812.3"),
+            (1_234_567, "1234.6"),
+        ] {
+            assert_eq!(thousands(n), format!("{old}K"), "{n}");
+        }
+        assert_eq!(thousands(-1250), "-1.2K");
+        let gold = Value::Num(12_345);
+        assert_eq!(text(&gold, Format::Thousands).as_deref(), Some("12.3K"));
+        let gauge = Value::Gauge {
+            cur: 500,
+            max: Some(1000),
+            pct: None,
+        };
+        assert_eq!(text(&gauge, Format::Thousands).as_deref(), Some("0.5K"));
+        assert_eq!(text(&Value::Text("lots".into()), Format::Thousands), None);
     }
 
     #[test]
