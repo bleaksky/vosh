@@ -7,6 +7,7 @@ import type { TrackedAffect } from '../../lib/session';
 import { aabahranPacket } from '../../test/aabahranGmcp';
 import { AffectsPaneView } from './AffectsPane';
 import { PaneLeafContext } from './paneActions';
+import { PaneTextSizeContext } from './paneTextSize';
 
 // The stores behind AffectsPane reach the Tauri bridge. AffectsPaneView,
 // under test, draws from plain values and never calls it.
@@ -181,7 +182,7 @@ describe('AffectsPaneView', () => {
     // Every cell's hours column takes the widest count, so the names
     // stay in line and never run into the digits.
     const hours = rule('.pane-affect-hours');
-    expect(hours).toContain('width: 22px');
+    expect(hours).toContain('width: var(--mud-affects-hours)');
     expect(hours).toContain('min-width: calc(var(--affect-hours-ch, 3) * 1ch)');
     expect(hours).toContain('flex: none');
   });
@@ -396,5 +397,35 @@ describe('AffectsPaneView', () => {
     expect(rule('.pane-affect-hours')).toContain('font-family: var(--font-mud');
     expect(rule('.pane-affect-hours')).toContain('text-align: right');
     expect(rule('.pane-affect-hours.is-danger')).toContain('font-weight: 700');
+  });
+});
+
+describe('AffectsPaneView at your terminal size', () => {
+  const at = (size: number) =>
+    renderToStaticMarkup(
+      <PaneTextSizeContext.Provider value={size}>
+        <PaneLeafContext.Provider value={LEAF}>
+          <AffectsPaneView
+            current={ILSABET}
+            tracked={ILSABET_TRACKED}
+            hidden={false}
+            box={{ width: 494, height: 191 }}
+          />
+        </PaneLeafContext.Provider>
+      </PaneTextSizeContext.Provider>,
+    );
+
+  it('draws the board exactly as before at 12 px', () => {
+    const html = at(12);
+    expect(html).toBe(draw(ILSABET, false, ILSABET_TRACKED, { width: 494, height: 191 }));
+    expect(html).toContain('style="height:88px"');
+    expect(html).toContain('grid-template-rows:repeat(4, 22px)');
+  });
+
+  it('pages the rest on 29 px rows at 16 px', () => {
+    // Four rows of slots and the rule leave two rows of the rest.
+    const html = at(16);
+    expect(html).toContain('style="height:58px"');
+    expect(html).toMatch(/grid-template-rows:repeat\(\d+, 29px\)/);
   });
 });

@@ -5,6 +5,8 @@ import {
   AFFECTS_TWO_COLUMNS_W,
   affectsColumns,
   affectsGrid,
+  affectsRulePx,
+  affectsTwoColumnsW,
   holdsPage,
   pageCells,
   type AffectsGrid,
@@ -260,5 +262,38 @@ describe('holdsPage', () => {
   it('lets go once you point away after a click on the count', () => {
     expect(holdsPage(rest(false, 'click'))).toBe(false);
     expect(holdsPage(rest(false, 'none'))).toBe(false);
+  });
+});
+
+describe('at your terminal size', () => {
+  it('lays the board out exactly as before at 12 px', () => {
+    expect(affectsRulePx(12)).toBe(AFFECTS_RULE_PX);
+    expect(affectsTwoColumnsW(12)).toBe(AFFECTS_TWO_COLUMNS_W);
+    expect(affectsGrid([...TRACKED, ...REST], BOARD_BOX, 12)).toEqual(
+      affectsGrid([...TRACKED, ...REST], BOARD_BOX),
+    );
+  });
+
+  it('wants a wider pane for two columns as the text grows', () => {
+    expect(affectsTwoColumnsW(16)).toBe(480);
+    expect(affectsColumns(479, 16)).toBe(1);
+    expect(affectsColumns(480, 16)).toBe(2);
+    expect(affectsColumns(494, 16)).toBe(2);
+  });
+
+  it('fits fewer, taller rows in the same body at 16 px', () => {
+    const grid = affectsGrid([...TRACKED, ...REST], BOARD_BOX, 16);
+    expect(grid.columns).toBe(2);
+    // Four tracked rows of 29 px and the 11 px rule leave 64 of 191 px,
+    // two rows of the rest, so the last cell counts what follows.
+    expect(affectsRulePx(16)).toBe(11);
+    expect(grid.pageRows).toBe(2);
+    expect(grid.pages).toBe(2);
+    expect(cells(grid).slice(0, 4)).toEqual([
+      'pass door@1,1',
+      'haste@2,1',
+      'bagatelle of bravado@1,2',
+      '4 more@2,2',
+    ]);
   });
 });

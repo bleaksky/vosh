@@ -5,10 +5,20 @@ import {
   type AffectRow,
   type AffectRowState,
 } from '../../lib/affectsView';
-import { addPane, defaultLayout, sanitize, splitPane, type PaneSplit } from '../../lib/paneLayout';
+import {
+  addPane,
+  defaultLayout,
+  PANE_TYPES,
+  sanitize,
+  splitPane,
+  type PaneSplit,
+} from '../../lib/paneLayout';
+import { chipGroups, chipsMinBody, FIXED_MEASURE } from './chipsGrid';
+import { affectHours } from './paneText';
 import {
   affectsMinH,
   affectsMinIn,
+  affectsStyleMinH,
   allocate,
   chipsMinH,
   countdownMinH,
@@ -20,6 +30,7 @@ import {
   minExtent,
   PANE_FLOOR_H,
   PANE_MIN_H,
+  paneMinH,
   paneWidth,
 } from './paneGeometry';
 
@@ -474,5 +485,59 @@ describe('dragSizes', () => {
     expect(dragSizes([40, 40], 0, 10, 50)).toEqual([40, 40]);
     // A squeezed pair on a short panel does not move.
     expect(dragSizes([180, 119], 0, -20, 180, 160)).toEqual([180, 119]);
+  });
+});
+
+describe('at your terminal size', () => {
+  it('keeps every stock minimum at 12 px', () => {
+    for (const pane of PANE_TYPES) expect(paneMinH(pane, 12), pane).toBe(PANE_MIN_H[pane]);
+    for (const pane of PANE_TYPES) expect(paneMinH(pane), pane).toBe(PANE_MIN_H[pane]);
+  });
+
+  it('holds six rows of affects and as many messages at 16 px', () => {
+    // 29 px rows, and a chat body four thirds of 92 px.
+    expect(paneMinH('affects', 16)).toBe(28 + 6 * 29);
+    expect(paneMinH('chat', 16)).toBe(28 + 123);
+    // The map, group, and staff queues draw in the UI face.
+    expect(paneMinH('map', 16)).toBe(PANE_MIN_H.map);
+    expect(paneMinH('group', 16)).toBe(PANE_MIN_H.group);
+    expect(paneMinH('imm', 16)).toBe(PANE_MIN_H.imm);
+  });
+
+  it('counts the same rows at 12 px as before', () => {
+    expect(affectsMinH(FIGHT_AFFECTS, 2, 12)).toBe(28 + 7 * 22 + 9);
+    expect(countdownMinH(rows(thirty), 1, 12)).toBe(28 + 6 * 23);
+    expect(chipsMinH(rows(thirty), 247, FIXED_MEASURE, 12)).toBe(204);
+  });
+
+  it('counts taller rows at 16 px', () => {
+    // Four rows of slots, the 11 px rule, and three rows for the four
+    // harmful affects and the count, each 29 px.
+    expect(affectsMinH(FIGHT_AFFECTS, 2, 16)).toBe(28 + 7 * 29 + 11);
+    // Down to poison and the count: six rows of 31 px.
+    expect(countdownMinH(rows(thirty), 1, 16)).toBe(28 + 6 * 31);
+    const body = chipsMinBody(
+      chipGroups(rows(thirty)),
+      247,
+      (r) => affectHours(r.state, r.ticks),
+      FIXED_MEASURE,
+      'runin',
+      12 * 29,
+      16,
+    );
+    expect(chipsMinH(rows(thirty), 247, FIXED_MEASURE, 16)).toBe(28 + body);
+    expect(28 + body).toBeGreaterThan(204);
+  });
+
+  it('counts one column below the wider pane two columns need', () => {
+    // A 400 px pane draws two columns at 12 px and one at 16 px.
+    expect(affectsStyleMinH(FIGHT_AFFECTS, 400, 'timers')).toBe(affectsMinH(FIGHT_AFFECTS, 2));
+    expect(affectsStyleMinH(FIGHT_AFFECTS, 400, 'timers', FIXED_MEASURE, 16)).toBe(
+      affectsMinH(FIGHT_AFFECTS, 1, 16),
+    );
+    const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
+    expect(affectsMinIn(tree, 494, rows(thirty), 'countdown', FIXED_MEASURE, 16)).toBe(
+      countdownMinH(rows(thirty), 1, 16),
+    );
   });
 });

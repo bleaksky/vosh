@@ -4,6 +4,7 @@ import {
   COUNTDOWN_ROW_PX,
   countdownGrid,
   countdownMinRows,
+  countdownRowPx,
   countdownOrder,
   type CountdownGrid,
 } from './countdownGrid';
@@ -166,5 +167,23 @@ describe('countdownMinRows', () => {
     expect(countdownMinRows(calm, 2)).toBe(0);
     const missing = affectsPaneRows([], [{ name: 'armor' }], false);
     expect(countdownMinRows(missing, 2)).toBe(1);
+  });
+});
+
+describe('countdownGrid at your terminal size', () => {
+  it('lays the board out exactly as before at 12 px', () => {
+    expect(countdownRowPx(12)).toBe(COUNTDOWN_ROW_PX);
+    expect(countdownGrid(rowsOf(TWENTY), BOARD_BOX, 12)).toEqual(
+      countdownGrid(rowsOf(TWENTY), BOARD_BOX),
+    );
+  });
+
+  it('fits fewer, taller rows at 16 px and wants a wider pane for two columns', () => {
+    expect(countdownRowPx(16)).toBe(31);
+    const grid = countdownGrid(rowsOf(TWENTY), BOARD_BOX, 16);
+    expect(grid.columns).toBe(2);
+    expect(grid.pageRows).toBe(6);
+    expect(countdownGrid(rowsOf(FOURTEEN), { width: 479, height: 191 }, 16).columns).toBe(1);
+    expect(countdownGrid(rowsOf(FOURTEEN), { width: 480, height: 191 }, 16).columns).toBe(2);
   });
 });

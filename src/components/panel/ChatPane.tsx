@@ -16,6 +16,7 @@ import { returnToCommandLine, updateLeafProps, usePaneLeaf } from './paneActions
 import { PaneHeader } from './PaneHeader';
 import { CheckIcon, ChevronDownIcon } from './paneIcons';
 import { chatTime } from './paneText';
+import { usePaneText } from './paneTextSize';
 
 // Channel chat, the line you had from May to September on the theme
 // (the approved Chat A board). Messages sit at the bottom like the
@@ -24,11 +25,8 @@ import { chatTime } from './paneText';
 // under Channel colors in the pane menu, lifted where it would read
 // under 3:1 on the panel (chatColors.ts). The channel filter lives in
 // the pane's props, so it follows the profile and two chat panes can
-// each show a different channel.
-
-// Distance from the bottom, in pixels, that still counts as reading
-// the newest message. Scrolled further up, new lines leave you be.
-const STICKY_PX = 24;
+// each show a different channel. The messages follow your terminal
+// size, and the lines and the gaps between them scale with it.
 
 export function ChatPane() {
   const leaf = usePaneLeaf();
@@ -40,6 +38,10 @@ export function ChatPane() {
   const colors = useChatColors();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickyRef = useRef(true);
+  // Distance from the bottom that still counts as reading the newest
+  // message, about a message at your terminal size. Scrolled further
+  // up, new lines leave you be.
+  const sticky = usePaneText().chatSticky;
 
   useEffect(() => subscribeChatLines(setLines), []);
 
@@ -90,7 +92,7 @@ export function ChatPane() {
         className={`pane-body pane-chat-scroll${visible.length === 0 ? ' is-empty' : ''}`}
         onScroll={(e) => {
           const el = e.currentTarget;
-          stickyRef.current = el.scrollHeight - (el.scrollTop + el.clientHeight) < STICKY_PX;
+          stickyRef.current = el.scrollHeight - (el.scrollTop + el.clientHeight) < sticky;
         }}
       >
         {visible.length === 0 ? (

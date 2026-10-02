@@ -1,6 +1,6 @@
 import { isTrackedRow, type AffectRow } from '../../lib/affectsView';
 import { isChipsStyle, type AffectsStyle } from '../../lib/session';
-import { AFFECTS_RULE_PX, affectsColumns, affectsRestMinRows } from './affectsGrid';
+import { affectsColumns, affectsRestMinRows, affectsRulePx } from './affectsGrid';
 import {
   chipGroups,
   chipLabelMode,
@@ -8,8 +8,9 @@ import {
   FIXED_MEASURE,
   type ChipMeasure,
 } from './chipsGrid';
-import { COUNTDOWN_ROW_PX, countdownMinRows } from './countdownGrid';
+import { countdownMinRows, countdownRowPx } from './countdownGrid';
 import { affectHours } from './paneText';
+import { PANE_TEXT_PX, paneText, textPx } from './paneTextSize';
 import {
   PANE_HEADER_PX,
   PANE_MIN_H,
@@ -40,6 +41,10 @@ export { PANE_MIN_H };
 // one row, the heaviest panes then get their minimum in turn, and the
 // lightest ones come up short and scroll inside their own box. No two
 // boxes ever overlap.
+//
+// The Affects and Chat panes draw game text at your terminal size
+// (paneTextSize.ts), so their minimums count their rows at that size.
+// The rest draw in the UI face and keep theirs.
 
 export interface Rect {
   x: number;
@@ -89,6 +94,17 @@ export const MIN_PANE_W = 120;
  *  of its PANE_MIN_H entry. */
 export type PaneMins = Partial<Record<PaneType, number>>;
 
+/** A pane type's stock minimum height with the game text at `size`
+ *  px: Affects its header and six rows, and Chat its header and a
+ *  body that holds as many messages as at 12 px. Every other pane
+ *  draws in the UI face and keeps its PANE_MIN_H entry, as do these
+ *  two at 12 px. */
+export function paneMinH(pane: PaneType, size: number = PANE_TEXT_PX): number {
+  if (pane === 'affects') return PANE_HEADER_PX + 6 * paneText(size).affectsRow;
+  if (pane === 'chat') return PANE_HEADER_PX + textPx(PANE_MIN_H.chat - PANE_HEADER_PX, size);
+  return PANE_MIN_H[pane];
+}
+
 /** Most rows a list pane holds on to as its minimum, so a long list
  *  never crowds every other pane out of the panel. */
 const LIST_MIN_ROWS = 12;
@@ -105,75 +121,92 @@ function withPeek(shows: number, total: number): number {
 }
 
 /** The Affects pane's minimum for the rows it shows in `columns`
- *  columns: every tracked slot, then under the hairline every harmful
- *  affect and the count cell after them. Never under the stock
- *  minimum, and never over a dozen rows. The pane shows whole rows
- *  only and counts the rest, so no peek follows. */
-export function affectsMinH(rows: readonly AffectRow[], columns = 2): number {
+ *  columns, with the game text at `size` px: every tracked slot, then
+ *  under the hairline every harmful affect and the count cell after
+ *  them. Never under the stock minimum, and never over a dozen rows.
+ *  The pane shows whole rows only and counts the rest, so no peek
+ *  follows. */
+export function affectsMinH(
+  rows: readonly AffectRow[],
+  columns = 2,
+  size: number = PANE_TEXT_PX,
+): number {
   const tracked = rows.filter(isTrackedRow).length;
   const trackedRows = Math.ceil(tracked / columns);
   const restRows = affectsRestMinRows(rows, columns);
-  const rule = tracked > 0 && restRows > 0 ? AFFECTS_RULE_PX : 0;
-  const need = PANE_HEADER_PX + Math.min(LIST_MIN_ROWS, trackedRows + restRows) * PANE_ROW_PX;
-  return Math.max(PANE_MIN_H.affects, need + rule);
+  const rule = tracked > 0 && restRows > 0 ? affectsRulePx(size) : 0;
+  const row = paneText(size).affectsRow;
+  const need = PANE_HEADER_PX + Math.min(LIST_MIN_ROWS, trackedRows + restRows) * row;
+  return Math.max(paneMinH('affects', size), need + rule);
 }
 
 /** The Countdown pane's minimum for the rows it shows in `columns`
- *  columns: every row down to the last one missing, running out, or
- *  harmful, and the count after it when more follow. Never under the
- *  stock minimum, and never over a dozen rows. */
-export function countdownMinH(rows: readonly AffectRow[], columns = 2): number {
-  const need = Math.min(LIST_MIN_ROWS, countdownMinRows(rows, columns)) * COUNTDOWN_ROW_PX;
-  return Math.max(PANE_MIN_H.affects, PANE_HEADER_PX + need);
+ *  columns, with the game text at `size` px: every row down to the last
+ *  one missing, running out, or harmful, and the count after it when
+ *  more follow. Never under the stock minimum, and never over a dozen
+ *  rows. */
+export function countdownMinH(
+  rows: readonly AffectRow[],
+  columns = 2,
+  size: number = PANE_TEXT_PX,
+): number {
+  const need = Math.min(LIST_MIN_ROWS, countdownMinRows(rows, columns)) * countdownRowPx(size);
+  return Math.max(paneMinH('affects', size), PANE_HEADER_PX + need);
 }
 
-/** The Grouped chips pane's minimum `width` wide: every Recast and
- *  Tracked chip and every harmful one on the first page, and the count
- *  after them when more follow, packed as the pane packs them with the
- *  same `measure`. Never under the stock minimum, and never over a
- *  dozen rows' worth. */
+/** The Grouped chips pane's minimum `width` wide, with the game text
+ *  at `size` px: every Recast and Tracked chip and every harmful one on
+ *  the first page, and the count after them when more follow, packed as
+ *  the pane packs them with the same `measure`. Never under the stock
+ *  minimum, and never over a dozen rows' worth. */
 export function chipsMinH(
   rows: readonly AffectRow[],
   width: number,
   measure: ChipMeasure = FIXED_MEASURE,
+  size: number = PANE_TEXT_PX,
 ): number {
   const body = chipsMinBody(
     chipGroups(rows),
     width,
     (r) => affectHours(r.state, r.ticks),
     measure,
-    chipLabelMode(rows, width),
-    LIST_MIN_ROWS * PANE_ROW_PX,
+    chipLabelMode(rows, width, size),
+    LIST_MIN_ROWS * paneText(size).affectsRow,
+    size,
   );
-  return Math.max(PANE_MIN_H.affects, PANE_HEADER_PX + body);
+  return Math.max(paneMinH('affects', size), PANE_HEADER_PX + body);
 }
 
 /** The Affects pane's minimum in `root` laid out `width` wide, for the
- *  style it draws. The pane draws one column or two by its own width,
- *  which a Split right halves, so the minimum counts the columns the
- *  pane draws, and the chips pack to it. A tree without the pane reads
- *  the panel's width. */
+ *  style it draws, with the game text at `size` px. The pane draws one
+ *  column or two by its own width, which a Split right halves, so the
+ *  minimum counts the columns the pane draws, and the chips pack to
+ *  it. A tree without the pane reads the panel's width. */
 export function affectsMinIn(
   root: PaneSplit,
   width: number,
   rows: readonly AffectRow[],
   style: AffectsStyle = 'timers',
   measure: ChipMeasure = FIXED_MEASURE,
+  size: number = PANE_TEXT_PX,
 ): number {
-  return affectsStyleMinH(rows, paneWidth(root, width, 'affects') ?? width, style, measure);
+  const paneW = paneWidth(root, width, 'affects') ?? width;
+  return affectsStyleMinH(rows, paneW, style, measure, size);
 }
 
-/** The Affects pane's minimum `paneW` wide for the style it draws. */
+/** The Affects pane's minimum `paneW` wide for the style it draws,
+ *  with the game text at `size` px. */
 export function affectsStyleMinH(
   rows: readonly AffectRow[],
   paneW: number,
   style: AffectsStyle,
   measure: ChipMeasure = FIXED_MEASURE,
+  size: number = PANE_TEXT_PX,
 ): number {
-  const columns = affectsColumns(paneW);
-  if (style === 'countdown') return countdownMinH(rows, columns);
-  if (isChipsStyle(style)) return chipsMinH(rows, paneW, measure);
-  return affectsMinH(rows, columns);
+  const columns = affectsColumns(paneW, size);
+  if (style === 'countdown') return countdownMinH(rows, columns, size);
+  if (isChipsStyle(style)) return chipsMinH(rows, paneW, measure, size);
+  return affectsMinH(rows, columns, size);
 }
 
 /** The Group pane's minimum for `members` rows: every member up to

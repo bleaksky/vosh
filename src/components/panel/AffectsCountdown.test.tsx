@@ -6,6 +6,7 @@ import type { PaneLeaf } from '../../lib/paneLayout';
 import type { AffectsMarker } from '../../lib/session';
 import { CountdownView } from './AffectsCountdown';
 import { PaneLeafContext } from './paneActions';
+import { PaneTextSizeContext } from './paneTextSize';
 
 // The stores behind AffectsPane reach the Tauri bridge. CountdownView,
 // under test, draws from plain values and never calls it.
@@ -335,17 +336,49 @@ describe('CountdownView', () => {
   });
 
   it('sets the geometry of the board', () => {
+    // The rows, the line, and the meter follow your terminal size, and
+    // at 12 px read 23, 17, and 19 (paneTextSize.test.ts).
     expect(rule('.pane-countdown')).toContain('column-gap: 24px');
     expect(rule('.pane-countdown')).toContain('padding: 0 12px 0 18px');
-    expect(rule('.pane-countdown-cell')).toContain('height: 23px');
-    expect(rule('.pane-countdown-cell .pane-affect-mark')).toContain('top: 5px');
-    expect(rule('.pane-countdown-line')).toContain('height: 17px');
+    expect(rule('.pane-countdown-cell')).toContain('height: var(--mud-countdown-row)');
+    expect(rule('.pane-countdown-cell .pane-affect-mark')).toContain(
+      'top: round(1px + var(--mud-line) / 2 - 4px, 1px)',
+    );
+    expect(rule('.pane-countdown-line')).toContain('height: calc(var(--mud-line) + 1px)');
     expect(rule('.pane-countdown-line')).toContain('padding: 1px 0 0 14px');
-    expect(rule('.pane-countdown-meter')).toContain('top: 19px');
+    expect(rule('.pane-countdown-meter')).toContain('top: var(--mud-countdown-meter-top)');
     expect(rule('.pane-countdown-meter')).toContain('background: var(--divider)');
     expect(rule('.pane-countdown-fill')).toContain('background: var(--tertiary)');
     expect(rule('.pane-countdown-cell.is-warn .pane-countdown-fill')).toContain('var(--warn)');
     expect(rule('.pane-countdown-cell.is-danger .pane-countdown-fill')).toContain('var(--danger)');
     expect(rule('.pane-countdown-hours.is-danger')).toContain('font-weight: 700');
+  });
+});
+
+describe('CountdownView at your terminal size', () => {
+  const at = (size: number) =>
+    renderToStaticMarkup(
+      <PaneTextSizeContext.Provider value={size}>
+        <PaneLeafContext.Provider value={LEAF}>
+          <CountdownView
+            current={TWENTY}
+            tracked={TRACKED}
+            hidden={false}
+            box={BOARD_BOX}
+            full={FULL}
+          />
+        </PaneLeafContext.Provider>
+      </PaneTextSizeContext.Provider>,
+    );
+
+  it('draws the board exactly as before at 12 px', () => {
+    expect(at(12)).toBe(draw(TWENTY));
+    expect(at(12)).toContain('style="height:184px"');
+    expect(at(12)).toMatch(/grid-template-rows:repeat\(\d+, 23px\)/);
+  });
+
+  it('fits six rows of 31 px in the same body at 16 px', () => {
+    expect(at(16)).toContain('style="height:186px"');
+    expect(at(16)).toMatch(/grid-template-rows:repeat\(\d+, 31px\)/);
   });
 });

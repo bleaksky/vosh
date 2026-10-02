@@ -9,6 +9,7 @@ import type { PaneLeaf } from '../../lib/paneLayout';
 import { ChipsView, type ChipFill } from './AffectsChips';
 import { chipDots, chipDotsPath, chipWidth, FIXED_MEASURE } from './chipsGrid';
 import { PaneLeafContext } from './paneActions';
+import { PaneTextSizeContext } from './paneTextSize';
 
 // The stores behind AffectsPane reach the Tauri bridge. ChipsView,
 // under test, draws from plain values and never calls it.
@@ -573,5 +574,36 @@ describe('Draining chips', () => {
         `yellow ${hours(warn, warnText, 0.3).toFixed(2)}`;
     }
     expect(read).toEqual(IMPORTED_READ);
+  });
+});
+
+describe('ChipsView at your terminal size', () => {
+  const at = (size: number) =>
+    renderToStaticMarkup(
+      <PaneTextSizeContext.Provider value={size}>
+        <PaneLeafContext.Provider value={LEAF}>
+          <ChipsView
+            current={FOURTEEN}
+            tracked={TRACKED}
+            hidden={false}
+            box={BOARD_BOX}
+            full={FULL}
+            measure={FIXED_MEASURE}
+          />
+        </PaneLeafContext.Provider>
+      </PaneTextSizeContext.Provider>,
+    );
+  const tops = (html: string) => [...html.matchAll(/style="top:(\d+)px"/g)].map((m) => +m[1]);
+
+  it('draws the board exactly as before at 12 px', () => {
+    expect(at(12)).toBe(draw(FOURTEEN));
+    expect(tops(at(12))).toEqual([4, 32, 56, 84, 108, 132]);
+    expect(at(12)).toContain('height="18.5"');
+  });
+
+  it('stacks 27 px lines further apart at 16 px, and rings a missing chip at that height', () => {
+    // The last line no longer fits the body and starts the next page.
+    expect(tops(at(16))).toEqual([4, 42, 74, 112, 144, 4]);
+    expect(at(16)).toContain('height="25.5"');
   });
 });
