@@ -20,6 +20,7 @@ import {
   DOOR_COLORS,
   REACH,
   corridors,
+  getCell,
   glyphGrid,
   gridDims,
   gridRooms,
@@ -506,8 +507,10 @@ function drawSquares(
 
   // Corridors under the squares, bucketed by door state so we render
   // one stroke per color. corridors() says which ones, hidden door
-  // stubs and the ticks of bent exits included. A tick reaches just
-  // past the square it leaves.
+  // stubs and the ticks of bent exits included. A tick clears its square
+  // by a few pixels at any zoom. Toward a room it stops a pixel short of
+  // the middle of the gap, so it never reads as a join, which leaves it
+  // no room at the smallest zoom.
   type Segment = { cx: number; cy: number; nx: number; ny: number };
   const buckets: Record<DoorState, Segment[]> = {
     open: [],
@@ -518,7 +521,11 @@ function drawSquares(
   for (const { row, col, dx, dy, kind, state } of corridors(payload, rows, cols)) {
     const cx = ox + col * pitch;
     const cy = oy + row * pitch;
-    const reach = REACH[kind] * pitch;
+    let reach = REACH[kind] * pitch;
+    if (kind === 'tick') {
+      reach = Math.max(reach, size / 2 + 3);
+      if (getCell(payload, row + dy, col + dx)) reach = Math.min(reach, pitch / 2 - 1);
+    }
     buckets[state].push({ cx, cy, nx: cx + dx * reach, ny: cy + dy * reach });
   }
   ctx.lineWidth = 1.25;
