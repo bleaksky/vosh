@@ -94,14 +94,14 @@ impl PromptEngine {
     /// `prompt_state_get` and `session://prompt-state`: each field with its
     /// state and source, the status, the new build sign and the open row
     /// with where each piece of the design landed in it.
-    pub fn state(&self, vosh: &ClientValues) -> PromptState {
+    pub fn state(&self, client: &ClientValues) -> PromptState {
         let reads = self
             .stage
             .recognizer()
             .map(crate::capture::Recognizer::reads)
             .unwrap_or_default();
         PromptState {
-            catalog: catalog(&self.vars, vosh, &reads),
+            catalog: catalog(&self.vars, client, &reads),
             status: self.status_report(),
             new_build: self.vars.new_build(),
             forsaken: self.forsaken(),
@@ -127,11 +127,11 @@ impl PromptEngine {
 
 /// Every catalog field and every name only scripts set, with its state
 /// now. `reads` holds the names the capture fills.
-pub fn catalog(vars: &Vars, vosh: &ClientValues, reads: &[String]) -> Vec<FieldState> {
-    let resolver = vars.resolver(vosh);
+pub fn catalog(vars: &Vars, client: &ClientValues, reads: &[String]) -> Vec<FieldState> {
+    let resolver = vars.resolver(client);
     let mut out: Vec<FieldState> = CATALOG
         .iter()
-        .map(|e| field_state(e, vars, vosh, &resolver, reads))
+        .map(|e| field_state(e, vars, client, &resolver, reads))
         .collect();
     for name in vars.script_names() {
         let field = FieldRef::new(name);
@@ -163,7 +163,7 @@ pub fn catalog(vars: &Vars, vosh: &ClientValues, reads: &[String]) -> Vec<FieldS
 fn field_state(
     e: &'static Entry,
     vars: &Vars,
-    vosh: &ClientValues,
+    client: &ClientValues,
     resolver: &values::Resolver<'_>,
     reads: &[String],
 ) -> FieldState {
@@ -179,7 +179,7 @@ fn field_state(
         if e.kind == Kind::Raw {
             value = value.map(|v| crate::stage::plain_text(&v));
         }
-        (state, value, max, vars.source(e, vosh))
+        (state, value, max, vars.source(e, client))
     };
     FieldState {
         name: e.name.to_string(),

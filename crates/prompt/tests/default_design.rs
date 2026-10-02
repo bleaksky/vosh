@@ -620,7 +620,7 @@ fn draw_with(template: &str, prompt: &str, st: &St, sent: fn(&str) -> bool) -> D
     });
     let rendered = render_str(
         template,
-        &engine.vars.resolver(&vosh()),
+        &engine.vars.resolver(&client()),
         RenderOptions::default(),
     );
     Drawn {
@@ -635,7 +635,7 @@ fn draw_with(template: &str, prompt: &str, st: &St, sent: fn(&str) -> bool) -> D
 }
 
 /// What Vosh itself supplies in every state.
-fn vosh() -> ClientValues {
+fn client() -> ClientValues {
     ClientValues {
         tick: Some(Tick {
             remaining: 14,
@@ -682,7 +682,7 @@ fn draw_elsewhere(pattern: &str, line: &str, packets: &[(&str, Json)]) -> Drawn 
     });
     let rendered = render_str(
         DEFAULT_DESIGN,
-        &engine.vars.resolver(&vosh()),
+        &engine.vars.resolver(&client()),
         RenderOptions::default(),
     );
     Drawn {

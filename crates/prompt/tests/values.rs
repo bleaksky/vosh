@@ -6,7 +6,7 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use common::{capture, draw, draw_with, feed, num, packet, resolve, text, vosh};
+use common::{capture, client, draw, draw_with, feed, num, packet, resolve, text};
 use serde_json::json;
 use vosh_prompt::aabahran::codes::Position;
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
@@ -217,7 +217,7 @@ fn a_script_value_comes_first_for_every_field() {
     feed(&mut vars, "char-vitals.gmcp");
     vars.set_script("level", "51");
     vars.set_script("tick", "14");
-    let mut timed = vosh();
+    let mut timed = client();
     timed.tick = Some(Tick {
         remaining: 30,
         interval: Some(60),
@@ -272,9 +272,9 @@ fn numbers_with_a_decimal_point_draw_as_gauges() {
     let mut vars = Vars::new(false);
     vars.set_script("hp", "1.5");
     vars.set_script("maxhp", "3");
-    let vosh = vosh();
+    let client = client();
     let template = "%pct_hp %c_hp%hp%c_default %hp_bar:4 %hp/%{maxhp}";
-    let drawn = render_str(template, &vars.resolver(&vosh), RenderOptions::default());
+    let drawn = render_str(template, &vars.resolver(&client), RenderOptions::default());
     assert_eq!(drawn.plain, "50 1.5 ██░░ 1.5/3");
     // Half full is yellow, in the text and in the bar.
     assert!(
@@ -304,7 +304,7 @@ fn numbers_with_a_decimal_point_draw_as_gauges() {
     );
     let banded = render_str(
         "%{c:hp:game}%hp",
-        &vars.resolver(&vosh),
+        &vars.resolver(&client),
         RenderOptions::default(),
     );
     assert_eq!(banded.ansi, "\x1b[39m1.5\x1b[0m");
@@ -320,10 +320,10 @@ fn the_game_bands_divide_as_the_server_does() {
         "Char.Vitals",
         json!({"hp":414,"maxhp":1020,"mana":1,"maxmana":1,"move":1,"maxmove":1}),
     );
-    let vosh = vosh();
+    let client = client();
     let drawn = render_str(
         "%{c:hp:game}%hp%c_reset %pct_hp",
-        &vars.resolver(&vosh),
+        &vars.resolver(&client),
         RenderOptions::default(),
     );
     // 414 of 1020 is 40.6 percent. The game divides to 40, which is bold
@@ -334,7 +334,7 @@ fn the_game_bands_divide_as_the_server_does() {
     capture(&mut other, &[("hp", "300"), ("hp_pct", "20")]);
     let drawn = render_str(
         "%{c:hp:game}%hp",
-        &other.resolver(&vosh),
+        &other.resolver(&client),
         RenderOptions::default(),
     );
     assert_eq!(drawn.ansi, "\x1b[31m300\x1b[0m");
@@ -380,8 +380,8 @@ fn the_legacy_template_draws_as_the_first_renderer_did() {
         for (k, v) in &full {
             vars.set_script(k, v);
         }
-        let vosh = vosh();
-        let drawn = render_str(JAMES, &vars.resolver(&vosh), RenderOptions::default());
+        let client = client();
+        let drawn = render_str(JAMES, &vars.resolver(&client), RenderOptions::default());
         assert_eq!(drawn.ansi, first.ansi, "forsaken {forsaken}");
     }
 }
@@ -727,18 +727,18 @@ fn the_gate_pieces_draw_from_the_new_build_packets() {
             {"name":"Dyphrities","active":true,"phase":7,"phase_name":"a thin crescent, fading"}
         ],"eclipse":false,"triad":false,"near_alignment":true}),
     );
-    let vosh = ClientValues {
+    let client = ClientValues {
         tick: Some(Tick {
             remaining: 14,
             interval: Some(60),
             since: Some(46),
         }),
-        ..vosh()
+        ..client()
     };
     assert_eq!(
         draw_with(
             &vars,
-            &vosh,
+            &client,
             "%gold %opponent|%{moon1:game} %{moon2:game} %{moon3:word}|%tick %pos %lang %weather %{temp:unit} %region|%tank %{tank_hp:game}|%exits"
         ),
         "1250 a Blackwatch guard|FUL - waning crescent|14 sit common rainy 60°F Coastal North|Tester [===|===|===|=--]|S"
@@ -746,7 +746,7 @@ fn the_gate_pieces_draw_from_the_new_build_packets() {
     assert_eq!(
         draw_with(
             &vars,
-            &vosh,
+            &client,
             "%{moon1:name}%{if:near} near%{end}%{if:eclipse} eclipse%{end}[%cabal]"
         ),
         "full and whole near[]"
@@ -754,7 +754,7 @@ fn the_gate_pieces_draw_from_the_new_build_packets() {
     assert_eq!(
         draw_with(
             &vars,
-            &vosh,
+            &client,
             "%{gold:grouped} %{exp:short} %{cp} %{rp} %pracs"
         ),
         "1,250 125k 40 7 12"
@@ -764,14 +764,14 @@ fn the_gate_pieces_draw_from_the_new_build_packets() {
     assert_eq!(
         draw_with(
             &vars,
-            &vosh,
+            &client,
             "%{tick:since} %{tick:unit} %{gold:thousands} %{exp:thousands}"
         ),
         "46s 14s 1.2K 125.0K"
     );
     // Labels for the moons come from the packet.
     assert_eq!(
-        vars.resolver(&vosh).label(&FieldRef::new("moon2")),
+        vars.resolver(&client).label(&FieldRef::new("moon2")),
         "Nercuros"
     );
 }
@@ -789,36 +789,36 @@ fn detailed_out_of_a_fight_draws_one_line() {
         feed(&mut vars, file);
     }
     packet(&mut vars, "Char.Worth", json!({"gold": 1250}));
-    let vosh = ClientValues {
+    let client = ClientValues {
         tick: Some(Tick {
             remaining: 14,
             interval: Some(60),
             since: Some(46),
         }),
         tracked: vec!["bless".to_string(), "armor".to_string()],
-        ..vosh()
+        ..client()
     };
     assert_eq!(
-        draw_with(&vars, &vosh, DETAILED),
+        draw_with(&vars, &client, DETAILED),
         "850/900hp 760/820mn 250/250mv tick 14 [S] 1250g"
     );
     // Tracked affects that are off show, in a fight too.
-    let vosh = ClientValues {
+    let client = ClientValues {
         tracked: vec![
             "bless".to_string(),
             "sanctuary".to_string(),
             "haste".to_string(),
         ],
-        ..vosh
+        ..client
     };
     feed(&mut vars, "char-vitals.gmcp");
     feed(&mut vars, "char-combat.gmcp");
     assert_eq!(
-        draw_with(&vars, &vosh, DETAILED),
+        draw_with(&vars, &client, DETAILED),
         "a Blackwatch guard █████░░░░░ 54% quite a few wounds\n850/900hp 760/820mn 250/250mv tick 14 [S] 1250g 2 missing"
     );
     assert_eq!(
-        draw_with(&vars, &vosh, "%{missing:names}"),
+        draw_with(&vars, &client, "%{missing:names}"),
         "sanctuary, haste"
     );
     // Without the new build no exits show unless the prompt has %e.
@@ -827,12 +827,12 @@ fn detailed_out_of_a_fight_draws_one_line() {
         feed(&mut older, file);
     }
     packet(&mut older, "Char.Worth", json!({"gold": 1250}));
-    let vosh = ClientValues {
+    let client = ClientValues {
         tracked: Vec::new(),
-        ..vosh
+        ..client
     };
     assert_eq!(
-        draw_with(&older, &vosh, DETAILED),
+        draw_with(&older, &client, DETAILED),
         "850/900hp 760/820mn 250/250mv tick 14 1250g"
     );
 }
@@ -882,7 +882,7 @@ fn members_are_found_by_name_or_id() {
         "Tester 50 human warrior"
     );
     assert_eq!(
-        vars.resolver(&vosh())
+        vars.resolver(&client())
             .label(&FieldRef::with_param("member_hp", "a_loyal_wolf")),
         "a loyal wolf health"
     );
@@ -947,7 +947,7 @@ fn paths_and_affects_reach_any_packet() {
     );
     assert_eq!(resolve(&vars, "aff:fly"), Resolved::Value(Value::Ticks(-1)));
     assert_eq!(
-        vars.resolver(&vosh()).label(&FieldRef::with_param(
+        vars.resolver(&client()).label(&FieldRef::with_param(
             "gmcp",
             "Char.Affects.affects[name=bless].level"
         )),
@@ -966,7 +966,7 @@ fn vosh_supplies_the_tick_target_clock_and_profile() {
         }),
         target: Some("a Blackwatch guard".to_string()),
         profile: Some("Default".to_string()),
-        ..vosh()
+        ..client()
     };
     assert_eq!(
         draw_with(
@@ -976,7 +976,7 @@ fn vosh_supplies_the_tick_target_clock_and_profile() {
         ),
         "14s a Blackwatch guard|a Blackwatch guard Default 08:42 Sep 29"
     );
-    let none = vosh();
+    let none = client();
     assert_eq!(
         vars.resolver(&none).resolve(&FieldRef::new("target")),
         Resolved::Absent
@@ -1050,7 +1050,7 @@ fn catalog_names_follow_the_naming_rules() {
 #[test]
 fn every_catalog_entry_resolves_and_has_a_sample() {
     let vars = Vars::new(true);
-    let vosh = vosh();
+    let client = client();
     let samples = vosh_prompt::values::Samples { now: now() };
     for e in CATALOG {
         let f = if e.param {
@@ -1059,7 +1059,7 @@ fn every_catalog_entry_resolves_and_has_a_sample() {
             FieldRef::new(e.name)
         };
         assert_ne!(
-            vars.resolver(&vosh).resolve(&f),
+            vars.resolver(&client).resolve(&f),
             Resolved::Unknown,
             "{}",
             e.name

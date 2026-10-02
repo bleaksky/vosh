@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::{capture, feed, packet, vosh};
+use common::{capture, client, feed, packet};
 use serde_json::json;
 use vosh_prompt::card::state::{catalog, State};
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
@@ -24,8 +24,8 @@ fn live() -> Vars {
 }
 
 fn draw(vars: &Vars, over: &Overrides, template: &str) -> String {
-    let vosh = vosh();
-    let live = vars.resolver(&vosh);
+    let client = client();
+    let live = vars.resolver(&client);
     render_str(
         template,
         &Overridden::new(&live, over, now()),
@@ -43,8 +43,8 @@ fn low_health_keeps_the_live_max() {
         "180/900hp 20%"
     );
     // Colored by how full takes the preview's share.
-    let vosh = vosh();
-    let resolver = vars.resolver(&vosh);
+    let client = client();
+    let resolver = vars.resolver(&client);
     let rendered = render_str(
         "%c_hp%hp",
         &Overridden::new(&resolver, &low, now()),
@@ -150,7 +150,7 @@ fn every_field_reports_its_state_source_and_value() {
     capture(&mut vars, &[("gold", "1250")]);
     vars.set_script("mood", "grim");
     let reads = vec!["hp".to_string(), "maxhp".to_string(), "hp_pct".to_string()];
-    let fields = catalog(&vars, &vosh(), &reads);
+    let fields = catalog(&vars, &client(), &reads);
     let find = |name: &str| {
         fields
             .iter()
@@ -199,15 +199,15 @@ fn every_field_reports_its_state_source_and_value() {
     let mut hidden = Vars::new(true);
     feed(&mut hidden, "char-prompt.gmcp");
     feed(&mut hidden, "char-vitals-hidden.gmcp");
-    let fields = catalog(&hidden, &vosh(), &[]);
+    let fields = catalog(&hidden, &client(), &[]);
     let hp = fields.iter().find(|f| f.name == "hp").expect("hp");
     assert_eq!((hp.state, hp.value.clone()), (State::Hidden, None));
 }
 
 /// `template` drawn with the card's `preview` over `vars`.
 fn draw_preview(vars: &Vars, preview: &PromptPreview, template: &str) -> String {
-    let vosh = vosh();
-    let live = vars.resolver(&vosh);
+    let client = client();
+    let live = vars.resolver(&client);
     let over = preview.overrides(&live);
     render_str(
         template,
@@ -362,7 +362,7 @@ fn a_package_older_builds_send_feeds_a_new_build_field_only_on_the_new_build() {
     feed(&mut vars, "char-combat.gmcp");
     feed(&mut vars, "room-info.gmcp");
     let sent = |vars: &Vars, name: &str| {
-        catalog(vars, &vosh(), &[])
+        catalog(vars, &client(), &[])
             .into_iter()
             .find(|f| f.name == name)
             .unwrap_or_else(|| panic!("no field {name}"))
@@ -384,7 +384,7 @@ fn the_games_prompt_reads_as_plain_text_in_the_picker() {
     // the prompt as text, not the color codes it came with.
     let mut vars = live();
     vars.set_script("raw", "\u{1b}[38;5;240m(Wizi 60)\u{1b}[0m [1020/1020hp] ");
-    let raw = catalog(&vars, &vosh(), &[])
+    let raw = catalog(&vars, &client(), &[])
         .into_iter()
         .find(|f| f.name == "raw")
         .expect("the game's prompt");
