@@ -180,6 +180,16 @@ fn wrapped(open: &str, line: &str) -> String {
     format!("{open}{}\x1b[0m", vosh_ansi::plain_text(line.as_bytes()))
 }
 
+/// `line` as sent under the base color `open`, which opens it, comes back
+/// after each of the game's resets, and closes with a reset. The fixtures
+/// reset with `ESC[0;0m`, the code the server sends for two backticks.
+fn based(open: &str, line: &str) -> String {
+    format!(
+        "{open}{}\x1b[0m",
+        line.replace("\x1b[0;0m", &format!("\x1b[0;0m{open}"))
+    )
+}
+
 /// The SGR open the preset uses for a color named in a fixture.
 fn open_for(color: &str) -> &'static str {
     match color {
@@ -286,7 +296,8 @@ fn the_preset_colors_each_look_as_the_mockups_draw_it() {
         let mut p = preset_profile();
         let shown = read(&mut p, &wire(&case.events));
         let want = expected(&case.events, &|line, room, preset| match (room, preset) {
-            (true, _) => wrapped(open_for("yellow"), line),
+            (true, _) => based(open_for("yellow"), line),
+            (false, Some("green")) => based(open_for("green"), line),
             (false, Some(color)) => wrapped(open_for(color), line),
             (false, None) => line.to_string(),
         });
@@ -304,10 +315,14 @@ fn the_preset_colors_each_line_it_names_and_leaves_every_near_miss_alone() {
         let plain = vosh_ansi::plain_text(case.line.as_bytes());
         let want = match case.trigger.as_deref() {
             None => case.line.clone(),
+            // The exits line keeps the game's codes, such as a trap's red +.
+            Some("room.exits") => {
+                assert_eq!(case.span.as_deref(), Some(plain.as_str()));
+                based(open_for("green"), &case.line)
+            }
             Some(trigger) => {
                 let span = case.span.as_deref().expect("a colored line names its span");
                 let open = match trigger {
-                    "room.exits" => "\x1b[32m",
                     "time.of_day" => "\x1b[34m",
                     "wiznet.tag" => "\x1b[1;35m",
                     other => panic!("no preset trigger {other}"),
@@ -318,4 +333,29 @@ fn the_preset_colors_each_line_it_names_and_leaves_every_near_miss_alone() {
         };
         assert_eq!(shown, format!("{want}\r\n"), "{plain}");
     }
+}
+
+#[test]
+fn your_own_highlight_on_a_name_draws_over_the_room_color() {
+    let mut p = preset_profile();
+    let mut name = yellow("friend", vosh_trigger::TriggerTarget::Line);
+    name.patterns[0].pattern = "Tolliver".to_string();
+    name.priority = 5;
+    name.actions = vec![vosh_trigger::TriggerAction::Highlight {
+        style: vosh_trigger::HighlightStyle {
+            fg: Some(vosh_trigger::NamedColor::Cyan),
+            ..Default::default()
+        },
+    }];
+    p.triggers.set(name).unwrap();
+    let shown = read(
+        &mut p,
+        b"\xff\xfa\xc9Room.Chars [{\"name\":\"Tolliver\",\"npc\":false}]\xff\xf0\
+          [Exits: south]\n\rTolliver is resting here.\n\r",
+    );
+    assert_eq!(
+        shown,
+        "\x1b[32m[Exits: south]\x1b[0m\r\n\
+         \x1b[33m\x1b[36mTolliver\x1b[0m\x1b[33m is resting here.\x1b[0m\r\n"
+    );
 }

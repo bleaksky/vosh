@@ -301,6 +301,10 @@ export interface HighlightStyle {
    *  from the highlight color, plus a left-edge accent bar in the
    *  native renderer. */
   wash?: boolean;
+  /** Base color: the style fills only the text the game left in its
+   *  default color, so the colors the game puts on parts of the line
+   *  stay, and other highlights draw over it. No span and no wash. */
+  base?: boolean;
 }
 
 export async function exportTriggers(): Promise<string> {

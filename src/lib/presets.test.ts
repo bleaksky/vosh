@@ -126,8 +126,8 @@ describe('the Room and time colors preset', () => {
       ]),
     );
     expect(styles).toEqual({
-      'room.exits': [{ fg: 'green' }],
-      'room.contents': [{ fg: 'yellow' }],
+      'room.exits': [{ fg: 'green', base: true }],
+      'room.contents': [{ fg: 'yellow', base: true }],
       'time.of_day': [{ fg: 'blue' }],
       'wiznet.tag': [{ fg: 'magenta', bold: true }],
     });

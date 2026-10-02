@@ -103,6 +103,12 @@ pub fn process_with_plain(
     let mut routes = Vec::new();
     let mut scripts: Vec<ScriptInvocation> = Vec::new();
     let mut any_match = false;
+    // The SGR open of the first base style that matched, in priority
+    // order. See [`HighlightStyle::base`].
+    let mut base_open: Option<String> = None;
+    // A Replace or a highlight with a span of its own matched, so the
+    // line is rebuilt from its plain text.
+    let mut restyle = false;
 
     for compiled in store.iter_compiled() {
         if !compiled.trigger.enabled {
@@ -137,10 +143,18 @@ pub fn process_with_plain(
                     }
                     TriggerAction::Replace { template } => {
                         text = regex.replace_all(&text, template.as_str()).into_owned();
+                        restyle = true;
+                    }
+                    TriggerAction::Highlight { style } if style.base => {
+                        let open = style.sgr_open();
+                        if base_open.is_none() && !open.is_empty() {
+                            base_open = Some(open);
+                        }
                     }
                     TriggerAction::Highlight { style } => {
                         if !style.is_empty() {
                             highlights.push((regex.clone(), style.clone()));
+                            restyle = true;
                         }
                     }
                     TriggerAction::Send { template } => {
@@ -229,7 +243,13 @@ pub fn process_with_plain(
         None => format!("\x1b[48;2;{r};{g};{b}m"),
     });
 
-    let display = if any_match {
+    let display = if !any_match {
+        bytes_to_string_lossy(original)
+    } else if base_open.is_some() && !restyle {
+        // Only a base color changes how the line looks, so it keeps the
+        // codes the game sent.
+        bytes_to_string_lossy(original)
+    } else {
         // Apply highlights last on the (possibly replaced) text so colors
         // wrap whatever the user ends up seeing.
         text = apply_highlights(&text, &highlights, wash_open.as_deref());
@@ -241,10 +261,14 @@ pub fn process_with_plain(
             // final reset keeps the following line clean.
             text = format!("{open}{text}\x1b[0m");
         }
-        Some(text)
-    } else {
-        Some(bytes_to_string_lossy(original))
+        text
     };
+    // The base color fills what the line left in the default color,
+    // around the game's codes and the spans above alike.
+    let display = Some(match &base_open {
+        Some(open) => with_base(&display, open),
+        None => display,
+    });
 
     LineResult {
         display,
@@ -316,6 +340,87 @@ fn apply_highlights(
     }
     out.push_str(&text[last..]);
     out
+}
+
+/// `text` with `open`, a base color, at its start and again after each
+/// SGR sequence that leaves the foreground at its default, then a reset at
+/// its end. A sequence that sets a foreground of its own, as the game's
+/// color codes and a highlight span's open do, stays as it is.
+fn with_base(text: &str, open: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(text.len() + open.len() * 2 + 4);
+    out.push_str(open);
+    let mut copied = 0;
+    let mut at = 0;
+    while at + 1 < bytes.len() {
+        if bytes[at] != 0x1b || bytes[at + 1] != b'[' {
+            at += 1;
+            continue;
+        }
+        // A CSI sequence runs to its final byte, 0x40 to 0x7e.
+        let Some(len) = bytes[at + 2..]
+            .iter()
+            .position(|b| (0x40..=0x7e).contains(b))
+        else {
+            break;
+        };
+        let last = at + 2 + len;
+        out.push_str(&text[copied..=last]);
+        copied = last + 1;
+        if bytes[last] == b'm' && leaves_default_fg(&text[at + 2..last]) {
+            out.push_str(open);
+        }
+        at = copied;
+    }
+    out.push_str(&text[copied..]);
+    out.push_str(HighlightStyle::sgr_reset());
+    out
+}
+
+/// Whether an SGR sequence with `params` leaves the foreground at its
+/// default: its last code that touches the foreground is a reset (`0` or
+/// none at all) or `39`. Extended colors skip their own arguments, so
+/// the `5` in `48;5;0` never reads as a code.
+fn leaves_default_fg(params: &str) -> bool {
+    let mut default = false;
+    let mut codes = params.split(';');
+    while let Some(code) = codes.next() {
+        // A colon form like `38:5:208` carries its arguments with it.
+        let (head, inline) = match code.split_once(':') {
+            Some((head, _)) => (head, true),
+            None => (code, false),
+        };
+        let n = if head.is_empty() {
+            0
+        } else {
+            match head.parse::<u32>() {
+                Ok(n) => n,
+                Err(_) => continue,
+            }
+        };
+        match n {
+            0 | 39 => default = true,
+            30..=37 | 90..=97 => default = false,
+            38 | 48 | 58 => {
+                if n == 38 {
+                    default = false;
+                }
+                if !inline {
+                    match codes.next() {
+                        Some("5") => {
+                            codes.next();
+                        }
+                        Some("2") => {
+                            codes.nth(2);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    default
 }
 
 /// Split a Send-action template into one command per `;` / `\n`.
@@ -960,6 +1065,113 @@ mod tests {
             .map(|t| t.name.clone())
             .collect();
         assert_eq!(line_only, ["name", "greet"]);
+    }
+
+    /// A base color trigger: `fg` fills what the line leaves in the
+    /// default color.
+    fn base(name: &str, pattern: &str, fg: NamedColor, priority: i32) -> Trigger {
+        let mut t = highlight(name, pattern, fg);
+        t.priority = priority;
+        t.actions = vec![TriggerAction::Highlight {
+            style: HighlightStyle {
+                fg: Some(fg),
+                base: true,
+                ..Default::default()
+            },
+        }];
+        t
+    }
+
+    #[test]
+    fn a_base_color_keeps_the_codes_the_game_sent() {
+        // do_exits with a trap seen on a closed door, the + in `! bold red
+        // and the game's reset after it.
+        let s = store(vec![base("exits", r"^\[Exits:", NamedColor::Green, 6)]);
+        let line = "[Exits: up (\x1b[0;1;31m+\x1b[0;0mdown)]";
+        assert_eq!(
+            process(&s, line.as_bytes()).display.as_deref(),
+            Some("\x1b[32m[Exits: up (\x1b[0;1;31m+\x1b[0;0m\x1b[32mdown)]\x1b[0m")
+        );
+        // A line with no codes takes the color whole.
+        assert_eq!(
+            process(&s, b"[Exits: south]").display.as_deref(),
+            Some("\x1b[32m[Exits: south]\x1b[0m")
+        );
+        // A line it does not match is left as sent.
+        assert_eq!(
+            process(&s, b"Obvious exits:").display.as_deref(),
+            Some("Obvious exits:")
+        );
+    }
+
+    #[test]
+    fn a_base_color_comes_back_after_each_reset_and_never_over_a_set_color() {
+        let s = store(vec![base("room", "^.+$", NamedColor::Yellow, 4)]);
+        // `[AFK] ` in `1 red, then a bare reset, a 39 and a reset inside a
+        // longer sequence. A 256 color and a background with a 0 in its
+        // arguments set nothing back.
+        let line =
+            "[\x1b[0;31mAFK\x1b[0;0m] a\x1b[mb\x1b[1;39mc\x1b[38;5;208md\x1b[48;5;0me\x1b[0;1mf";
+        assert_eq!(
+            process(&s, line.as_bytes()).display.as_deref(),
+            Some(
+                "\x1b[33m[\x1b[0;31mAFK\x1b[0;0m\x1b[33m] a\x1b[m\x1b[33mb\x1b[1;39m\x1b[33mc\
+                 \x1b[38;5;208md\x1b[48;5;0me\x1b[0;1m\x1b[33mf\x1b[0m"
+            )
+        );
+    }
+
+    #[test]
+    fn a_span_draws_over_a_base_color_and_the_base_comes_back_after_it() {
+        // A name highlight at a higher priority keeps its span, and the
+        // whole line base color never drops for overlapping it.
+        let mut name = highlight("name", "Tolliver", NamedColor::Cyan);
+        name.priority = 5;
+        let s = store(vec![base("room", "^.+$", NamedColor::Yellow, 4), name]);
+        assert_eq!(
+            process(&s, b"Tolliver is resting here.").display.as_deref(),
+            Some("\x1b[33m\x1b[36mTolliver\x1b[0m\x1b[33m is resting here.\x1b[0m")
+        );
+    }
+
+    #[test]
+    fn a_base_color_fills_around_a_replace_and_its_own_codes() {
+        let mut label = highlight("potion", "a bubbly brown potion", NamedColor::Red);
+        label.actions = vec![TriggerAction::Replace {
+            template: "a bubbly brown potion \x1b[38;5;248m(cure serious)\x1b[0m".into(),
+        }];
+        let s = store(vec![base("room", "^.+$", NamedColor::Yellow, 4), label]);
+        assert_eq!(
+            process(&s, b"a bubbly brown potion").display.as_deref(),
+            Some(
+                "\x1b[33ma bubbly brown potion \x1b[38;5;248m(cure serious)\x1b[0m\x1b[33m\x1b[0m"
+            )
+        );
+    }
+
+    #[test]
+    fn the_first_base_color_in_priority_order_wins() {
+        let s = store(vec![
+            base("low", "^.+$", NamedColor::Yellow, 4),
+            base("high", "^.+$", NamedColor::Green, 6),
+        ]);
+        assert_eq!(
+            process(&s, b"x").display.as_deref(),
+            Some("\x1b[32mx\x1b[0m")
+        );
+    }
+
+    #[test]
+    fn a_base_color_round_trips_and_a_plain_style_writes_no_flag() {
+        let s = store(vec![
+            base("room", "^.+$", NamedColor::Yellow, 4),
+            highlight("plain", "x", NamedColor::Red),
+        ]);
+        let json = s.export_json().unwrap();
+        assert_eq!(json.matches("\"base\": true").count(), 1, "{json}");
+        let mut back = TriggerStore::new();
+        back.import_json(&json).unwrap();
+        assert_eq!(back.list(), s.list());
     }
 
     #[test]

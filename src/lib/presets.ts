@@ -632,8 +632,11 @@ export const PRESETS: Preset[] = [
   // are the mockup colors exactly. The things and people a room lists
   // match through the Room target, which the session gives only the lines
   // a look lists after its exits line, with the count of people from the
-  // Room.Chars packet. WiZNET (act_wiz.c wiznet) only turns its tag bold
-  // magenta, the mockup's mauve, since the game sends it white and grey.
+  // Room.Chars packet. Both room colors are base colors, which fill only
+  // what the game left uncolored, so an aura, a red [AFK] or a trap's red
+  // + keeps its own color. WiZNET (act_wiz.c wiznet) only turns its tag
+  // bold magenta, the mockup's mauve, since the game sends it white and
+  // grey.
   {
     id: 'room_and_time',
     category: 'world',
@@ -643,8 +646,11 @@ export const PRESETS: Preset[] = [
       'WiZNET tag magenta.',
     defaultEnabled: true,
     triggers: [
-      highlight('room.exits', EXITS_LINE, { fg: 'green' }, 6),
-      { ...highlight('room.contents', '^.+$', { fg: 'yellow' }, 4), target: 'room' },
+      highlight('room.exits', EXITS_LINE, { fg: 'green', base: true }, 6),
+      {
+        ...highlight('room.contents', '^.+$', { fg: 'yellow', base: true }, 4),
+        target: 'room',
+      },
       {
         name: 'time.of_day',
         patterns: TIME_OF_DAY.map((line) => ({

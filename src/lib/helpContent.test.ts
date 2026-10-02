@@ -605,6 +605,9 @@ describe('the help on the Room and time colors preset', () => {
       'The exits line turns green, the things and people the room lists turn yellow, the day and night messages turn blue, and the WiZNET tag turns bold magenta.',
     );
     expect(text).toContain('Each one is a terminal color from your theme');
+    expect(text).toContain(
+      'The exits and room colors fill only the text the game left uncolored, so an aura, a red `[AFK]` and the red `+` of a trap you see keep their own colors.',
+    );
   });
 
   it('matches HELP.md word for word', () => {
