@@ -4,7 +4,7 @@ use crate::config::{AabahranCapture, CaptureConfig, CaptureSource, RegexCapture}
 use crate::stage::End;
 use crate::testkit::at;
 use crate::testkit::mud::PROMPT;
-use crate::values::{Capture, Vosh};
+use crate::values::{Capture, ClientValues};
 use serde_json::json;
 
 fn aabahran() -> PromptConfig {
@@ -105,7 +105,7 @@ fn the_state_reports_the_fields_the_status_and_the_packages() {
         }),
         ..PromptConfig::from_legacy(true, "%hp")
     });
-    let state = engine.state(&Vosh::default());
+    let state = engine.state(&ClientValues::default());
     assert!(state.new_build);
     assert_eq!(state.status, engine.status_report());
     assert_eq!(state.packages, ["Char.Prompt", "Char.Vitals"]);

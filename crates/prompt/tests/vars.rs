@@ -14,7 +14,7 @@ use vosh_prompt::testkit::now;
 use vosh_prompt::values::format::tank_bar_cells;
 use vosh_prompt::values::{is_sourced, known, Tick, CATALOG};
 use vosh_prompt::{
-    render_str, FieldRef, MapValues, RenderOptions, Resolved, Value, Values, Vars, Vosh,
+    render_str, ClientValues, FieldRef, MapValues, RenderOptions, Resolved, Value, Values, Vars,
 };
 
 // ---------------------------------------------------------------------
@@ -727,7 +727,7 @@ fn the_gate_pieces_draw_from_the_new_build_packets() {
             {"name":"Dyphrities","active":true,"phase":7,"phase_name":"a thin crescent, fading"}
         ],"eclipse":false,"triad":false,"near_alignment":true}),
     );
-    let vosh = Vosh {
+    let vosh = ClientValues {
         tick: Some(Tick {
             remaining: 14,
             interval: Some(60),
@@ -789,7 +789,7 @@ fn detailed_out_of_a_fight_draws_one_line() {
         feed(&mut vars, file);
     }
     packet(&mut vars, "Char.Worth", json!({"gold": 1250}));
-    let vosh = Vosh {
+    let vosh = ClientValues {
         tick: Some(Tick {
             remaining: 14,
             interval: Some(60),
@@ -803,7 +803,7 @@ fn detailed_out_of_a_fight_draws_one_line() {
         "850/900hp 760/820mn 250/250mv tick 14 [S] 1250g"
     );
     // Tracked affects that are off show, in a fight too.
-    let vosh = Vosh {
+    let vosh = ClientValues {
         tracked: vec![
             "bless".to_string(),
             "sanctuary".to_string(),
@@ -827,7 +827,7 @@ fn detailed_out_of_a_fight_draws_one_line() {
         feed(&mut older, file);
     }
     packet(&mut older, "Char.Worth", json!({"gold": 1250}));
-    let vosh = Vosh {
+    let vosh = ClientValues {
         tracked: Vec::new(),
         ..vosh
     };
@@ -958,7 +958,7 @@ fn paths_and_affects_reach_any_packet() {
 #[test]
 fn vosh_supplies_the_tick_target_clock_and_profile() {
     let vars = Vars::new(true);
-    let full = Vosh {
+    let full = ClientValues {
         tick: Some(Tick {
             remaining: 14,
             interval: Some(60),

@@ -21,7 +21,7 @@ use common::FIXTURES;
 use serde_json::{json, Map, Value as Json};
 use vosh_prompt::testkit::at;
 use vosh_prompt::values::gmcp::Snapshot;
-use vosh_prompt::{FieldRef, Resolved, Value, Values, Vars, Vosh};
+use vosh_prompt::{ClientValues, FieldRef, Resolved, Value, Values, Vars};
 
 const VIEWS: &str = include_str!("../../../fixtures/gmcp/aabahran/views.json");
 
@@ -46,7 +46,7 @@ fn room_view(msg: &vosh_protocol::gmcp::Message) -> Json {
         at(),
     );
     vars.observe(&msg.package, msg.data.clone(), at());
-    let vosh = Vosh::default();
+    let vosh = ClientValues::default();
     let resolver = vars.resolver(&vosh);
     let get = |name: &str| resolver.resolve(&FieldRef::new(name));
     let exits: Vec<&str> = match get("exits") {
@@ -88,7 +88,7 @@ fn view(file: &str, text: &str) -> Json {
     // reads each field as the packet gives it.
     let mut vars = Vars::new(false);
     vars.observe(&msg.package, msg.data.clone(), at());
-    let vosh = Vosh::default();
+    let vosh = ClientValues::default();
     let resolver = vars.resolver(&vosh);
     match msg.package.as_str() {
         "Char.Vitals" => {
