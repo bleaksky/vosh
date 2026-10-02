@@ -631,7 +631,7 @@ fn leaves_default_fg(params: &str) -> bool {
 }
 
 /// Split a Send-action template into one command per `;` / `\n`.
-/// Mirrors `vosh_alias::AliasEngine::expand_line`'s splitter so a
+/// Mirrors `vosh_automation::alias::AliasStore::expand_line`'s splitter so a
 /// trigger-driven `get 1.;wield 1.` fires the same way as a typed
 /// `get 1.;wield 1.`. `\;` and `\\` are escape-passthroughs so the
 /// user can embed a literal semicolon when a server actually wants

@@ -1,10 +1,10 @@
 [package]
-name = "vosh-alias"
+name = "vosh-automation"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Alias engine with parameter substitution and recursion guards."
+description = "Aliases, variables and triggers for Vosh, as plain data with no Lua."
 rust-version.workspace = true
 
 [dependencies]

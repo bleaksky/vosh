@@ -70,7 +70,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
-use vosh_alias::Alias;
+use vosh_automation::alias::Alias;
 use vosh_trigger::Trigger;
 
 use crate::loadout::{GlobalCatalog, Loadout};
@@ -897,7 +897,7 @@ pub(crate) fn profile_file_for_catalog(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vosh_alias::Alias;
+    use vosh_automation::alias::Alias;
     use vosh_trigger::{Trigger, TriggerAction};
 
     fn trigger(name: &str, pattern: &str, replacement: &str) -> Trigger {

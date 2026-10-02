@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 use tokio::time::Instant;
-use vosh_alias::Alias;
+use vosh_automation::alias::Alias;
 use vosh_script::{Action, ScriptEngine, ScriptOutcome, VarScope};
 use vosh_vars::{Scope, VariableStore};
 
@@ -57,7 +57,7 @@ fn refresh_vars(script: &ScriptEngine, vars: &VariableStore) {
 /// variables. A body that fails is logged and asks for nothing.
 pub(crate) fn run_alias_body(
     profile: &mut Profile,
-    call: &vosh_alias::AliasScriptCall,
+    call: &vosh_automation::alias::AliasScriptCall,
 ) -> ApplyResult {
     refresh_vars(&profile.script, &profile.vars);
     match profile

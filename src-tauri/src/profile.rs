@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use vosh_alias::AliasStore;
+use vosh_automation::alias::AliasStore;
 use vosh_script::ScriptEngine;
 use vosh_trigger::TriggerStore;
 use vosh_vars::VariableStore;

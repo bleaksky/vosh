@@ -5046,14 +5046,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
-name = "vosh-alias"
-version = "0.8.0"
-dependencies = [
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "vosh-app"
 version = "0.8.0"
 dependencies = [
@@ -5091,7 +5083,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "urlencoding",
- "vosh-alias",
+ "vosh-automation",
  "vosh-log",
  "vosh-prompt",
  "vosh-protocol",
@@ -5102,6 +5094,14 @@ dependencies = [
  "wgpu",
  "windows-sys 0.59.0",
  "x11-dl",
+]
+
+[[package]]
+name = "vosh-automation"
+version = "0.8.0"
+dependencies = [
+ "serde",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

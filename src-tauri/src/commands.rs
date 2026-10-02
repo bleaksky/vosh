@@ -1264,8 +1264,8 @@ pub(crate) async fn aliases_export(state: State<'_, SharedState>) -> Result<Stri
 /// The JSON `aliases_export` sends, sorted by name. The page reads it in
 /// the palette and the Aliases editor, and its tests read
 /// `fixtures/ipc/aliases_export.json`, which a test here holds to it.
-fn aliases_json(store: &vosh_alias::AliasStore) -> Result<String, String> {
-    let aliases: Vec<vosh_alias::Alias> = store.list().into_iter().cloned().collect();
+fn aliases_json(store: &vosh_automation::alias::AliasStore) -> Result<String, String> {
+    let aliases: Vec<vosh_automation::alias::Alias> = store.list().into_iter().cloned().collect();
     serde_json::to_string_pretty(&aliases).map_err(|e| e.to_string())
 }
 
@@ -1278,11 +1278,12 @@ pub(crate) async fn aliases_import(
     state: State<'_, SharedState>,
     json: String,
 ) -> Result<usize, String> {
-    let parsed: Vec<vosh_alias::Alias> = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+    let parsed: Vec<vosh_automation::alias::Alias> =
+        serde_json::from_str(&json).map_err(|e| e.to_string())?;
     let count = parsed.len();
     {
         let mut p = state.profile.lock().await;
-        let mut store = vosh_alias::AliasStore::new();
+        let mut store = vosh_automation::alias::AliasStore::new();
         for alias in parsed {
             store.set(alias);
         }
@@ -2504,7 +2505,7 @@ fn lay_catalog_over(
     // enabled).
     let alias_disabled = p.aliases.disabled_groups();
     let trigger_disabled = p.triggers.disabled_groups();
-    let mut aliases = vosh_alias::AliasStore::new();
+    let mut aliases = vosh_automation::alias::AliasStore::new();
     for a in &catalog.aliases {
         aliases.set(a.clone());
     }
@@ -5561,7 +5562,7 @@ mod tests {
         // The page tests read this file as the reply to aliases_export,
         // so renaming a field fails here instead of leaving the page to
         // read nothing.
-        use vosh_alias::{Alias, AliasStore};
+        use vosh_automation::alias::{Alias, AliasStore};
         let mut store = AliasStore::new();
         store.set(Alias::new("rec", "recall"));
         store.set(Alias::new("k", "kill %1"));
@@ -6836,7 +6837,7 @@ mod tests {
             let mut config = ProfileConfig::default();
             config
                 .aliases
-                .push(vosh_alias::Alias::new(alias, "kick %1"));
+                .push(vosh_automation::alias::Alias::new(alias, "kick %1"));
             config.save(&set.profile_path(name)).unwrap();
         }
 
@@ -6852,7 +6853,7 @@ mod tests {
             let mut catalog = GlobalCatalog::default();
             catalog
                 .aliases
-                .push(vosh_alias::Alias::new("kk", "kick %1"));
+                .push(vosh_automation::alias::Alias::new("kk", "kick %1"));
             save_global_catalog(dir, &catalog).unwrap();
             let loadouts = LoadoutSet {
                 loadouts: vec![Loadout::empty("default")],
@@ -7160,7 +7161,7 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let set = james_like_set(dir.path());
             // Default keeps its kk off, and the Healer uses its own.
-            let mut off = vosh_alias::Alias::new("kk", "kick %1");
+            let mut off = vosh_automation::alias::Alias::new("kk", "kick %1");
             off.enabled = false;
             let mut config = ProfileConfig::default();
             config.aliases.push(off);
@@ -7168,7 +7169,9 @@ mod tests {
                 .save(&set.profile_path(DEFAULT_PROFILE_NAME))
                 .unwrap();
             let mut config = ProfileConfig::default();
-            config.aliases.push(vosh_alias::Alias::new("kk", "kick 1."));
+            config
+                .aliases
+                .push(vosh_automation::alias::Alias::new("kk", "kick 1."));
             config.save(&set.profile_path("Healer")).unwrap();
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
             let plan = super::super::analyze_migration(&state, dir.path(), LIBRARY)
@@ -7248,7 +7251,8 @@ mod tests {
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
             {
                 let mut p = state.profile.lock().await;
-                p.aliases.set(vosh_alias::Alias::new("zz", "sleep"));
+                p.aliases
+                    .set(vosh_automation::alias::Alias::new("zz", "sleep"));
                 p.vars.set(vosh_vars::Scope::Profile, "target", "dragon");
             }
             persist(&state, dir.path()).await;
@@ -7292,7 +7296,7 @@ mod tests {
                 .lock()
                 .await
                 .aliases
-                .set(vosh_alias::Alias::new("zz", "sleep"));
+                .set(vosh_automation::alias::Alias::new("zz", "sleep"));
             persist(&state, dir.path()).await;
             let state = relaunch_as(dir.path(), "Healer").await;
             assert_eq!(
@@ -7395,7 +7399,9 @@ mod tests {
             let state = launch_state(dir.path()).await;
             // You fix the file in an editor while Vosh runs.
             let mut config = ProfileConfig::default();
-            config.aliases.push(vosh_alias::Alias::new("kk", "kick %1"));
+            config
+                .aliases
+                .push(vosh_automation::alias::Alias::new("kk", "kick %1"));
             let fixed = config.to_toml().unwrap();
             std::fs::write(set.active_path(), &fixed).unwrap();
 
@@ -7572,10 +7578,10 @@ mod tests {
                 )
             };
             let mut config = ProfileConfig::default();
-            let mut combat = vosh_alias::Alias::new(format!("{name} bash"), "bash %1");
+            let mut combat = vosh_automation::alias::Alias::new(format!("{name} bash"), "bash %1");
             combat.group = Some("combat".into());
             config.aliases = vec![
-                vosh_alias::Alias::new(format!("{name} kick"), format!("kick {n}")),
+                vosh_automation::alias::Alias::new(format!("{name} kick"), format!("kick {n}")),
                 combat,
             ];
             config.triggers = vec![
@@ -7708,7 +7714,7 @@ mod tests {
         /// Every alias, trigger, and macro in the three lists, one JSON
         /// line each, sorted. The item types do not implement `PartialEq`.
         fn item_rows(
-            aliases: &[vosh_alias::Alias],
+            aliases: &[vosh_automation::alias::Alias],
             triggers: &[vosh_trigger::Trigger],
             macros: &[crate::profile::Macro],
         ) -> Vec<String> {
@@ -7878,10 +7884,10 @@ mod tests {
                 for (alias, expansion) in aliases {
                     config
                         .aliases
-                        .push(vosh_alias::Alias::new(*alias, *expansion));
+                        .push(vosh_automation::alias::Alias::new(*alias, *expansion));
                 }
                 for (alias, expansion) in combat {
-                    let mut a = vosh_alias::Alias::new(*alias, *expansion);
+                    let mut a = vosh_automation::alias::Alias::new(*alias, *expansion);
                     a.group = Some("combat".into());
                     config.aliases.push(a);
                 }
@@ -8183,7 +8189,7 @@ mod tests {
             // The Healer loots by hand with its loot alias and keeps the
             // auto loot trigger off. Both sit in a group named loot.
             let mut healer = ProfileConfig::default();
-            let mut alias = vosh_alias::Alias::new("loot", "get all corpse");
+            let mut alias = vosh_automation::alias::Alias::new("loot", "get all corpse");
             alias.group = Some("loot".into());
             healer.aliases.push(alias);
             let mut autoloot = send_trigger("autoloot", "^You killed", "get all corpse");
@@ -8357,7 +8363,7 @@ mod tests {
             let mut default = ProfileConfig::default();
             default
                 .aliases
-                .push(vosh_alias::Alias::new("kk", "kick %1"));
+                .push(vosh_automation::alias::Alias::new("kk", "kick %1"));
             default.profile_vars.insert("target".into(), "orc".into());
             default.ui.panes = Some(crate::profile_config::PaneLayoutPersist {
                 panel_width: Some(300),
@@ -8383,7 +8389,8 @@ mod tests {
                 if let Some(panes) = p.ui.panes.as_mut() {
                     panes.panel_width = Some(420);
                 }
-                p.aliases.set(vosh_alias::Alias::new("zz", "sleep"));
+                p.aliases
+                    .set(vosh_automation::alias::Alias::new("zz", "sleep"));
             }
 
             super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
@@ -8629,7 +8636,7 @@ mod tests {
                 let mut prompt = character("Test-Prompt", 3, &[]);
                 prompt
                     .aliases
-                    .push(vosh_alias::Alias::new("default kick", "kick 1"));
+                    .push(vosh_automation::alias::Alias::new("default kick", "kick 1"));
                 prompt.save(&set.profile_path("Test-Prompt")).unwrap();
                 let mut before = Vec::new();
                 for name in names {
@@ -9123,10 +9130,12 @@ mod tests {
             loadout_mode(&set, dir.path());
             // The Healer file still holds items of its own.
             let mut healer = ProfileConfig::default();
-            healer.aliases.push(vosh_alias::Alias::new("hh", "heal %1"));
             healer
                 .aliases
-                .push(vosh_alias::Alias::new("kk", "kick hard %1"));
+                .push(vosh_automation::alias::Alias::new("hh", "heal %1"));
+            healer
+                .aliases
+                .push(vosh_automation::alias::Alias::new("kk", "kick hard %1"));
             healer
                 .triggers
                 .push(send_trigger("Healer greet", "^hi$", "say hi"));

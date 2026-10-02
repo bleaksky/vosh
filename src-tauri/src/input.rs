@@ -4,7 +4,7 @@
 //! profile rather than the connection.
 
 use tokio::time::Instant;
-use vosh_alias::{ExpandError, ExpandStep};
+use vosh_automation::alias::{ExpandError, ExpandStep};
 use vosh_trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
 use vosh_vars::Scope;
 
@@ -2031,7 +2031,7 @@ fn echo_lines<'a>(lines: impl IntoIterator<Item = &'a str>) -> InputResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vosh_alias::Alias;
+    use vosh_automation::alias::Alias;
 
     fn regex_capture(p: &Profile) -> vosh_prompt::config::RegexCapture {
         match &p.prompt.config().capture {
@@ -2666,7 +2666,8 @@ mod tests {
     #[test]
     fn profile_save_load_and_reset_wait_for_the_relaunch_after_the_wizard() {
         let mut p = Profile::default();
-        p.aliases.set(vosh_alias::Alias::new("kk", "kick %1"));
+        p.aliases
+            .set(vosh_automation::alias::Alias::new("kk", "kick %1"));
         for sub in ["save", "load", "reset"] {
             let mut replaced = false;
             let result = slash_profile_with(&mut p, sub, &mut replaced, true, None);
@@ -2706,7 +2707,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app_data = dir.path();
         let mut p = Profile::default();
-        p.aliases.set(vosh_alias::Alias::new("kk", "kick %1"));
+        p.aliases
+            .set(vosh_automation::alias::Alias::new("kk", "kick %1"));
         // With no index there is no active profile to save.
         let saved = save_profile_in(&mut p, app_data);
         assert_eq!(saved.echo, ["[could not resolve profile path]"]);

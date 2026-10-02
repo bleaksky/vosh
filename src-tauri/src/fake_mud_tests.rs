@@ -1994,7 +1994,7 @@ async fn a_lua_alias_you_type_runs_its_body_and_the_game_hears_it() {
     h.connect().await;
     h.until_last_row("<1020>").await;
     h.state.profile.lock().await.aliases.set(
-        vosh_alias::Alias::new("peer", "ignored")
+        vosh_automation::alias::Alias::new("peer", "ignored")
             .with_script("mud.echo('You peer ' .. captures[1] .. '.')\nmud.send(captures[1])"),
     );
 
@@ -2033,8 +2033,10 @@ async fn a_lua_alias_that_mud_input_names_runs_its_body() {
     h.until_last_row("<1020>").await;
     {
         let mut p = h.state.profile.lock().await;
-        p.aliases
-            .set(vosh_alias::Alias::new("peer", "ignored").with_script("mud.send(captures[1])"));
+        p.aliases.set(
+            vosh_automation::alias::Alias::new("peer", "ignored")
+                .with_script("mud.send(captures[1])"),
+        );
         p.triggers
             .set(vosh_trigger::Trigger::new(
                 "exits",

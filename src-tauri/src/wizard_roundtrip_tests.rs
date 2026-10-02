@@ -31,7 +31,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::Arc;
 
-use vosh_alias::Alias;
+use vosh_automation::alias::Alias;
 use vosh_trigger::{Trigger, TriggerAction, TriggerPattern, TriggerTarget};
 
 use super::{AppState, SharedState, PERSIST_LOCK};
