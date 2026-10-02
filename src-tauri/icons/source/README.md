@@ -27,7 +27,8 @@ The squircle in the tile, the legacy master and the small masters is the shape m
 - `icon.icns` is `CFBundleIconFile` for macOS 11 to 15, the DMG volume, and the Dock icon under `tauri dev`.
 - `icon.ico` serves the Windows exe, window, taskbar and installers. It holds frames at 32, 16, 20, 24, 40, 48, 64 and 256. The 32 frame comes first because Tauri takes the first frame as the window icon.
 - `32x32.png`, `64x64.png`, `128x128.png`, `128x128@2x.png` and `icon.png` are the Linux desktop icons, and `32x32.png` is also the Linux window icon.
-- `Square*Logo.png`, `StoreLogo.png`, `ios/` and `android/` come from `tauri icon` run on the tile. Desktop builds never read them.
+
+`tauri icon` also writes Windows Store logos and iOS and Android sets. Vosh ships only for the desktop, so the script leaves them in its scratch folder.
 
 `Assets.car` is committed prebuilt. Tauri can compile a `.icon` itself, but that path failed every time on macOS 27 with Xcode 26.5 when the icon was set up, while the same actool run by hand works.
 

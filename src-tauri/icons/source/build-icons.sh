@@ -18,7 +18,6 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ICONS="$(dirname "$SRC")"
 REPO="$(cd "$ICONS/../.." && pwd)"
 TAURI="$REPO/node_modules/.bin/tauri"
-GROUND="#090e13"
 export PYTHONDONTWRITEBYTECODE=1
 
 ART=0
@@ -63,15 +62,13 @@ tauri() {
   (cd "$REPO" && "$TAURI" "$@") > "$WORK/tauri.log" 2>&1 || { cat "$WORK/tauri.log" >&2; exit 1; }
 }
 
-# 1. The tauri set from the Windows and Linux tile: PNGs, Square logos, StoreLogo, ios and android.
-#    Its icon.icns and icon.ico are replaced below.
-tauri icon "$SRC/vosh-tile.svg" --ios-color "$GROUND" -o "$WORK/tauri"
-for f in 64x64.png 128x128.png 128x128@2x.png icon.png StoreLogo.png "$WORK"/tauri/Square*Logo.png; do
-  cp "$WORK/tauri/$(basename "$f")" "$OUT/"
+# 1. The Linux PNGs from the Windows and Linux tile. Vosh ships only for the desktop, so the
+#    store logos and the ios and android sets tauri also writes stay in the scratch folder. Its
+#    icon.icns and icon.ico are replaced below.
+tauri icon "$SRC/vosh-tile.svg" -o "$WORK/tauri"
+for f in 64x64.png 128x128.png 128x128@2x.png icon.png; do
+  cp "$WORK/tauri/$f" "$OUT/"
 done
-mkdir -p "$OUT/ios" "$OUT/android"
-cp -R "$WORK/tauri/ios/." "$OUT/ios/"
-cp -R "$WORK/tauri/android/." "$OUT/android/"
 
 # 2. Hand drawn small masters and the tile at the sizes the .ico needs.
 for s in 16 20 24 32; do render "$SRC/vosh-$s.svg" "$WORK/small" "$s"; done
@@ -140,10 +137,7 @@ if [ "$CHECK" = 1 ] || [ "$CAR_SAME" = 0 ]; then
   cp "$CAR/out/Assets.car" "$OUT/Assets.car"
 fi
 
-GENERATED=(Assets.car icon.icns icon.ico 32x32.png 64x64.png 128x128.png 128x128@2x.png icon.png StoreLogo.png)
-for f in "$WORK"/tauri/Square*Logo.png "$WORK"/tauri/ios/* "$WORK"/tauri/android/*/*; do
-  GENERATED+=("${f#"$WORK"/tauri/}")
-done
+GENERATED=(Assets.car icon.icns icon.ico 32x32.png 64x64.png 128x128.png 128x128@2x.png icon.png)
 
 if [ "$CHECK" = 1 ]; then
   DIFF=0

@@ -139,7 +139,6 @@ use commands::{
 use fonts::{fonts_list, handle_font_uri};
 use map_state::MapState;
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
