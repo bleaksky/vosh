@@ -48,6 +48,7 @@ import {
 import { noteReader } from '../lib/readerBusy';
 import { ingestRecentNames } from '../lib/recentNames';
 import { underlayShows, XtermMirror } from '../lib/xtermMirror';
+import { XtermBlink } from '../lib/xtermBlink';
 
 /** Session flag set when the native surface never came up, so the page
  *  falls back to xterm instead of leaving a transparent hole. */
@@ -262,6 +263,10 @@ interface Props {
   /// and the newest line sits the dock's gap over the band. Off, the grid
   /// keeps to the top, as in the text and Lifted.
   anchorBottom?: boolean;
+  /// Blinking text is on, so xterm blinks SGR 5 on the shared clock
+  /// (src/lib/xtermBlink.ts) while WebGL draws the pane. Off, or on the
+  /// DOM renderer, it draws it steady.
+  blinkText?: boolean;
 }
 
 // The terminal's palette lives in src/lib/terminalTheme.ts, which the
@@ -296,6 +301,7 @@ export function Terminal({
   lifted = false,
   lentRows = 0,
   anchorBottom = false,
+  blinkText = false,
 }: Props) {
   const quietRef = useRef(quiet);
   quietRef.current = quiet;
@@ -324,6 +330,10 @@ export function Terminal({
   const refitCellRef = useRef<(() => void) | null>(null);
   // The band layer, while this pane can draw bands.
   const bandsRef = useRef<BandLayer | null>(null);
+  // Blinking text on xterm, and whether it is on.
+  const blinkRef = useRef<XtermBlink | null>(null);
+  const blinkTextRef = useRef(blinkText);
+  blinkTextRef.current = blinkText;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -427,6 +437,9 @@ export function Terminal({
     });
 
     term.open(containerRef.current);
+    const blink = new XtermBlink(term);
+    blink.setOn(blinkTextRef.current);
+    blinkRef.current = blink;
     const area = containerRef.current.closest<HTMLElement>('.terminal-area');
     if (lifts && area) {
       bandsRef.current = new BandLayer(term, lifts, area);
@@ -552,6 +565,7 @@ export function Terminal({
             console.warn('[vosh] webgl dispose after context loss failed', err);
           }
           webglAddon = null;
+          blink.setWebgl(false);
           // Force the DOM renderer to paint the visible rows once the
           // swap settles. The buffer is untouched by the renderer
           // change, so this just makes the content reappear immediately
@@ -566,6 +580,7 @@ export function Terminal({
         });
         term.loadAddon(addon);
         webglAddon = addon;
+        blink.setWebgl(true);
         console.log('[vosh] webgl renderer active');
       } catch (err) {
         console.log('[vosh] webgl renderer failed, staying on DOM', err);
@@ -1444,6 +1459,8 @@ export function Terminal({
       writer.dispose();
       bandsRef.current?.dispose();
       bandsRef.current = null;
+      blink.dispose();
+      blinkRef.current = null;
       lifts?.dispose();
       resultsSub.dispose();
       scrollDisposable.dispose();
@@ -1489,6 +1506,11 @@ export function Terminal({
     anchorRef.current = anchorBottom;
     relayoutRef.current?.();
   }, [lentRows, anchorBottom]);
+
+  // Blinking text turns on or off live.
+  useEffect(() => {
+    blinkRef.current?.setOn(blinkText);
+  }, [blinkText]);
 
   // Apply font changes without rebuilding the terminal so scrollback and
   // listeners survive. xterm reflows on the next fit() call.
