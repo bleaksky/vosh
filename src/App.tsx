@@ -1806,7 +1806,6 @@ function App() {
           // is a no-op that the next write would override anyway.
           <Resizable
             storageKey="vosh.layout.splitHistoryHeight"
-            anchor="top"
             defaultSize={240}
             minSize={80}
             maxSize={1200}
