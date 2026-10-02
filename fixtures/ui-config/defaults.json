@@ -14,6 +14,7 @@
     "bright_bold": false,
     "blink_text": null,
     "readable_highlights": true,
+    "collapse_repeats": false,
     "terminal_base_ansi": null,
     "custom_themes": [],
     "split_divider_color": null,

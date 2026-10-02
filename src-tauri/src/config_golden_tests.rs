@@ -339,6 +339,9 @@ fn full_ui() -> UiConfig {
         // Written only while off, so on keeps the golden's bytes. The
         // readable_highlights tests in commands.rs cover off.
         readable_highlights: true,
+        // Written only while on, so off keeps the golden's bytes. The
+        // collapse_repeats tests in commands.rs cover on.
+        collapse_repeats: false,
         terminal_base_ansi: Some(
             [
                 "#000000", "#cd3131", "#0dbc79", "#e5e510", "#2472c8", "#bc3fbc", "#11a8cd",
