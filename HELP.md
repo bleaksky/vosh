@@ -1,6 +1,6 @@
 # Vosh help
 
-This file holds the topics the Help window shows. Open the Help window with `Cmd+/` on macOS or `Ctrl+/` elsewhere, from Help in the menu bar, or with Open help in the command palette. This file mirrors the same topics for offline reading and copy-out.
+This file holds the topics the Help window shows. Open the Help window with `Cmd+/` on macOS or `Ctrl+/` elsewhere, from Help in the menu bar, from Settings in the terminal right click menu, or with Open help in the command palette. This file mirrors the same topics for offline reading and copy-out.
 
 The source of truth for both is `src/lib/helpContent.ts`.
 
@@ -172,9 +172,10 @@ The terminal right click menu collects the terminal's everyday actions in one pl
 - `Copy` copies the current selection, and `Paste` inserts the clipboard into the command line. Nothing sends until you press `Enter` yourself.
 - `Select all` selects the whole terminal, scrollback included.
 - `Find in scrollback…` opens the find bar.
+- `Settings` opens a list beside the menu. `Triggers`, `Aliases`, `Macros`, and `Timers` open Settings under Automation on that list. `General`, `Appearance`, `Layout`, `Input`, `Automation`, and `Characters` open that page of Settings. `Help` opens the Help window.
 - `Clear scrollback` wipes the terminal. The item appears only with the xterm renderer, since the native grid has no clear command.
 
-Each item shows its shortcut on the right. The arrow keys move through the menu and `Enter` picks an item. The menu closes on `Esc`, on a click anywhere outside it, or the instant you pick an item. It keeps itself inside the window, so a right click near a corner never opens it half off screen.
+Items with a shortcut show it on the right, and `Settings` shows an arrow. The arrow keys move through the menu and `Enter` picks an item. `ArrowRight` or `Enter` on `Settings` opens its list on the first row, and `ArrowLeft` steps back out. Pointing at `Settings` opens the list too. `Esc` closes the list first, then the menu. The menu also closes on a click anywhere outside it, or the instant you pick an item. It keeps itself inside the window, so a right click near a corner never opens it half off screen. Near the right edge the Settings list opens on the left of the menu, and near the bottom it rises from its row.
 
 ## Automate
 
@@ -736,6 +737,8 @@ In the command line.
 In the find bar. `Enter` finds the next match, `Shift+Enter` the previous, `Escape` closes and clears.
 
 In the command palette. `ArrowUp` and `ArrowDown` move the selection, `Enter` runs the entry, `ArrowRight` opens a list like Choose theme, `ArrowLeft` or `Backspace` steps back out of it, and `Escape` steps back or closes.
+
+In the terminal menu. `ArrowUp` and `ArrowDown` move through the items, `Enter` picks one, `ArrowRight` opens the Settings list, `ArrowLeft` steps back out of it, and `Escape` closes the list, then the menu.
 
 In Settings and Help. `Cmd+F` puts the caret in the search, `ArrowUp` and `ArrowDown` move through the results, and `Escape` clears the search. In Help, `Enter` steps to the next match in the topic you read and `Shift+Enter` to the previous one.
 

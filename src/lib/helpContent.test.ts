@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import helpMd from '../../HELP.md?raw';
 import { HELP_SECTIONS, HELP_TOPICS, parseHelpBody, PROMPT_DESIGN_CODES } from './helpContent';
+import { SETTINGS_MENU } from './settingsMenu';
 
 function body(id: string): string {
   const topic = HELP_TOPICS.find((t) => t.id === id);
@@ -314,6 +315,34 @@ describe('the help on forgetting passwords in the session log', () => {
     const { number, title, body: text } = topic('automate.slash-commands');
     expect(text).toContain(howToBullet);
     expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
+  });
+});
+
+describe('the help on the right click menu', () => {
+  it('names every row of the Settings list as the menu shows it', () => {
+    const text = body('play.right-click-menu');
+    expect(text).toContain('- `Settings` opens a list beside the menu.');
+    for (const row of SETTINGS_MENU.flat()) {
+      expect(text, row.label).toContain(`\`${row.label}\``);
+    }
+    expect(text).toContain('open Settings under Automation on that list.');
+    expect(text).toContain('`Help` opens the Help window.');
+  });
+
+  it('says how the keys reach the list and how Esc leaves it', () => {
+    const text = body('play.right-click-menu');
+    expect(text).toContain(
+      '`ArrowRight` or `Enter` on `Settings` opens its list on the first row, and `ArrowLeft` steps back out.',
+    );
+    expect(text).toContain('`Esc` closes the list first, then the menu.');
+    expect(text).toContain('Near the right edge the Settings list opens on the left of the menu');
+    expect(body('reference.keyboard-shortcuts')).toContain(
+      'In the terminal menu. `ArrowUp` and `ArrowDown` move through the items, `Enter` picks one, `ArrowRight` opens the Settings list, `ArrowLeft` steps back out of it, and `Escape` closes the list, then the menu.',
+    );
+  });
+
+  it('opens Help from the terminal menu in HELP.md too', () => {
+    expect(helpMd).toContain('from Settings in the terminal right click menu');
   });
 });
 
