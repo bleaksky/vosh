@@ -1497,18 +1497,6 @@ export async function applyImport(format: ImportFormat, text: string): Promise<I
   return invoke('import_apply', { format, text });
 }
 
-export async function walkToRoom(targetId: number): Promise<void> {
-  await invoke('map_walk_to', { targetId });
-}
-
-export async function setRoomNote(roomId: number, notes: string): Promise<void> {
-  await invoke('map_set_note', { roomId, notes });
-}
-
-export async function setRoomAvoid(roomId: number, avoid: boolean): Promise<void> {
-  await invoke('map_set_avoid', { roomId, avoid });
-}
-
 export async function onOutput(cb: (out: SessionOutput) => void): Promise<UnlistenFn> {
   return listen<OutputPayload>('session://output', (event) => {
     cb(decodeOutputPayload(event.payload));
