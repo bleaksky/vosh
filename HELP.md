@@ -57,7 +57,7 @@ The command input sends lines to the server. It handles single commands, chained
 - Type a command and press `Enter` to send it.
 - Chain commands on one line with `;`. Each piece goes out as its own command. Type `\;` for a literal semicolon.
 - Press `Shift+Enter` to add a line without sending. The box grows and a line number gutter appears once it holds two or more lines. Press `Enter` and every line submits separately, in order, with blank lines dropped.
-- Press `Enter` on an empty box to send a bare line. Many MUD prompts advance on that.
+- Press `Enter` on an empty box to send a bare line. Many MUD prompts advance on that. It echoes as a grey `›` on its own line, or as a blank line with `Mark your commands` off, so you see each one go out.
 - Paste multi line text straight into the input. A single line submits immediately. Two or more lines become a paste burst, sent one line every 500 ms by default, with a `paste N/M esc cancels` counter in the command line.
 - Press `Esc` during a burst to cancel every line that has not gone out yet. Starting a new paste also cancels the old burst.
 

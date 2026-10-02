@@ -1517,7 +1517,6 @@ function App() {
     <Input
       ref={inputRef}
       enabled={connected}
-      promptPinned={promptPinned}
       fontKey={`${fontFamily}|${fontSize}`}
       onError={handleError}
       onSelectAllTerminal={() => termRef.current?.selectAll()}
