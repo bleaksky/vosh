@@ -1214,7 +1214,6 @@ async fn io_loop<R: tauri::Runtime>(
         }
     }
 
-    accumulator.reset();
     let line_triggers;
     // Session-only target state and the cached Room.Chars list clear
     // on disconnect — quick-key verb bindings persist via the profile
@@ -3374,7 +3373,7 @@ async fn fire_due_script_timers<R: tauri::Runtime>(
 
 /// Flush a partial line still buffered when the session ends so the MUD's
 /// final output (a logout banner on `quit`, most often) is captured rather
-/// than discarded by the disconnect `accumulator.reset()`. The end of its
+/// than dropped with the session loop's accumulator. The end of its
 /// read painted it, so display only needs the terminating newline. The
 /// value of this pass is logging it and pushing it into the scrollback
 /// ring that the dump persists.
