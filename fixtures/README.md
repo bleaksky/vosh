@@ -97,8 +97,8 @@ fixtures/
              the fixed text colors the trigger presets paint with the
              #8fa7d9 weather blue, and every Replace template of the
              presets. The Keep highlight colors readable tests in
-             crates/trigger lift every color on every ground and run every
-             template through the trigger engine on every ground, and
+             crates/automation lift every color on every ground and run
+             every template through the trigger engine on every ground, and
              readableGrounds.test.ts on the page holds the lists to the
              themes and presets. Written from the page sources.
   room-colors/ looks.json, room looks as the Aabahran server prints them,

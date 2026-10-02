@@ -4,7 +4,7 @@ Hand written and synthetic. Nothing here was captured from a live session. Every
 
 ## looks.json
 
-Room looks, each as a list of events in wire order. A `gmcp` event is a packet, a `line` event is one line of text with the ANSI codes the server sends, and a `prompt` event is a prompt the server ends with a GA. `room` marks the lines a Room trigger matches, the armies, the things and the people a look lists after its exits line. `target` on a case is what you gave `tar` before the look, and on a line it marks the line of that person, which a Your target trigger matches. `src-tauri/src/session_room_tests.rs` plays each look through the session's own steps, and `crates/trigger/src/engine.rs` highlights each word of each line in place.
+Room looks, each as a list of events in wire order. A `gmcp` event is a packet, a `line` event is one line of text with the ANSI codes the server sends, and a `prompt` event is a prompt the server ends with a GA. `room` marks the lines a Room trigger matches, the armies, the things and the people a look lists after its exits line. `target` on a case is what you gave `tar` before the look, and on a line it marks the line of that person, which a Your target trigger matches. `src-tauri/src/session_room_tests.rs` plays each look through the session's own steps, and `crates/automation/src/trigger/engine.rs` highlights each word of each line in place.
 
 Where the lines come from.
 
@@ -30,7 +30,7 @@ Where the lines come from.
 
 ## lines.json
 
-Single lines for the Room, time and weather colors preset. `trigger` names the trigger that colors a line and `match` the text its color covers. A line with no `trigger` is a near miss that no trigger of the preset may touch. `src/lib/presets.test.ts` runs the preset's patterns on each one, `src-tauri/src/session_room_tests.rs` runs each through the session's own steps, and `crates/trigger/src/engine.rs` highlights each word of each line in place, draws each weather line on every ground in `fixtures/readable/grounds.json`, and holds each near miss to the bytes the game sent.
+Single lines for the Room, time and weather colors preset. `trigger` names the trigger that colors a line and `match` the text its color covers. A line with no `trigger` is a near miss that no trigger of the preset may touch. `src/lib/presets.test.ts` runs the preset's patterns on each one, `src-tauri/src/session_room_tests.rs` runs each through the session's own steps, and `crates/automation/src/trigger/engine.rs` highlights each word of each line in place, draws each weather line on every ground in `fixtures/readable/grounds.json`, and holds each near miss to the bytes the game sent.
 
 - The exits lines are `do_exits` with `auto`. Room 5233, The Eastern Square, has exits `D0` to `D3`. Room 5279 has `D2`. Room 5200, Rock Bottom, has `D4` and a door at `D5` that resets closed, which the line shows in parentheses. The same room shows `(+down)` when you see a trap on that door, the `+` in `` `! `` bold red. A room with no exit you can see reads `[Exits: none]`, the same text the builder tutorial mob in area/higher.are echoes.
 - The eleven time of day lines are `weather_update` in update.c, the five usual ones and the six it sends in eternal darkness.
