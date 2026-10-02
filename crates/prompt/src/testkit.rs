@@ -9,8 +9,10 @@
 //! - [`wire`] names the synthetic pulses in
 //!   `fixtures/prompt/aabahran/wire` and plays each one again, so a test
 //!   holds every fixture to the fake that wrote it.
+//! - [`map_values`] draws a template from a plain map of prompt vars.
 
 pub mod game;
+pub mod map_values;
 pub mod mud;
 pub mod wire;
 
