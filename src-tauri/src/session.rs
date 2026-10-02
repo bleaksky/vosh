@@ -13,7 +13,7 @@ use tokio::task::JoinHandle;
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
 use vosh_prompt::stage::{Block, BlockLine, End, Offer, Output};
-use vosh_telnet::{
+use vosh_protocol::telnet::{
     codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Negotiator, Parser,
 };
 use vosh_trigger::{LineResult, MatchScope};
@@ -4116,7 +4116,7 @@ mod tests {
         p: Profile,
         acc: super::LineAccumulator,
         /// The telnet parser, for reads of raw wire bytes.
-        parser: vosh_telnet::Parser,
+        parser: vosh_protocol::telnet::Parser,
         /// The first generation this wire hands out, so tests can name
         /// the marks by number.
         gen0: u64,
@@ -4127,7 +4127,7 @@ mod tests {
             let mut wire = Self {
                 p,
                 acc: super::LineAccumulator::new(),
-                parser: vosh_telnet::Parser::new(),
+                parser: vosh_protocol::telnet::Parser::new(),
                 gen0: 0,
             };
             wire.gen0 = wire.p.prompt.stage.next_gen();
@@ -4945,7 +4945,7 @@ mod tests {
     #[test]
     fn only_a_new_width_closes_the_open_row() {
         let mut wire = Wire::new(capture_profile(HP));
-        let mut negotiator = vosh_telnet::Negotiator::new();
+        let mut negotiator = vosh_protocol::telnet::Negotiator::new();
         negotiator.set_window_size(94, 41);
         let _ = wire.read(PROMPT_ROW);
         // The webview sends the size the session already holds on every

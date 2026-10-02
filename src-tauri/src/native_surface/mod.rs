@@ -1914,14 +1914,14 @@ mod tests {
 
     /// What the game reads when the client says it is `cols` by 40.
     fn naws(cols: u8) -> [u8; 9] {
-        use vosh_telnet::codes::{option::NAWS, IAC, SB, SE};
+        use vosh_protocol::telnet::codes::{option::NAWS, IAC, SB, SE};
         [IAC, SB, NAWS, 0, cols, 0, 40, IAC, SE]
     }
 
     async fn sized_game() -> SizedGame {
         use tauri::test::{mock_builder, mock_context, noop_assets};
         use tokio::io::AsyncWriteExt;
-        use vosh_telnet::codes::{option::NAWS, DO, IAC};
+        use vosh_protocol::telnet::codes::{option::NAWS, DO, IAC};
 
         use crate::commands::{AppState, SharedState};
 
@@ -2022,7 +2022,7 @@ mod tests {
     /// the game keeps the wider one.
     #[tokio::test]
     async fn a_size_that_waited_never_undoes_a_newer_one() {
-        use vosh_telnet::codes::{option::NAWS, IAC, SB};
+        use vosh_protocol::telnet::codes::{option::NAWS, IAC, SB};
 
         static LAST: AtomicU32 = AtomicU32::new(0);
         let SizedGame {

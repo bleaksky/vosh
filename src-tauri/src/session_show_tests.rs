@@ -87,7 +87,7 @@ pub(super) struct Read {
 pub(super) struct Session {
     pub(super) p: Profile,
     acc: LineAccumulator,
-    parser: vosh_telnet::Parser,
+    parser: vosh_protocol::telnet::Parser,
     /// Output from elsewhere reached the terminal since the last read.
     other: bool,
 }
@@ -97,7 +97,7 @@ impl Session {
         Self {
             p,
             acc: LineAccumulator::new(),
-            parser: vosh_telnet::Parser::new(),
+            parser: vosh_protocol::telnet::Parser::new(),
             other: false,
         }
     }
@@ -118,7 +118,7 @@ impl Session {
     pub(super) fn restart(&mut self) {
         start_prompt(&mut self.p, false);
         self.acc = LineAccumulator::new();
-        self.parser = vosh_telnet::Parser::new();
+        self.parser = vosh_protocol::telnet::Parser::new();
     }
 
     /// One socket read of raw wire bytes, then the end of the read and

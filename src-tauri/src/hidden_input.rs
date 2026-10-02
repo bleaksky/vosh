@@ -5,7 +5,7 @@
 //! them, take echo for every password prompt. Vosh treats a line sent
 //! while the server holds echo as a secret and writes its text nowhere.
 
-use vosh_telnet::{option as telnet_option, Event as TelnetEvent};
+use vosh_protocol::telnet::{option as telnet_option, Event as TelnetEvent};
 
 /// Who echoes your input on one connection. The session task owns one
 /// per connection. It flips the state as it handles each WILL or WONT
@@ -111,7 +111,7 @@ pub(crate) fn sent_log_entries(
 #[cfg(test)]
 mod tests {
     use super::{masked_line_bytes, sent_log_entries, sent_log_rows, ServerEcho};
-    use vosh_telnet::{codes, option, Parser, IAC};
+    use vosh_protocol::telnet::{codes, option, Parser, IAC};
 
     // Made up values only. None of these is anyone's password.
     const SECRET: &str = "Tr0ub4dor&3";

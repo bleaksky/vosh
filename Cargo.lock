@@ -5103,8 +5103,8 @@ dependencies = [
  "vosh-gmcp",
  "vosh-log",
  "vosh-prompt",
+ "vosh-protocol",
  "vosh-script",
- "vosh-telnet",
  "vosh-trigger",
  "vosh-vars",
  "webpki-roots 0.26.11",
@@ -5150,6 +5150,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "vosh-protocol"
+version = "0.8.0"
+
+[[package]]
 name = "vosh-script"
 version = "0.8.0"
 dependencies = [
@@ -5158,10 +5162,6 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
 ]
-
-[[package]]
-name = "vosh-telnet"
-version = "0.8.0"
 
 [[package]]
 name = "vosh-trigger"
