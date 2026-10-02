@@ -4,7 +4,7 @@
 // is fetched from the game site. Each sector's fill, border and halo are
 // the mapPalette table, which the atlas shares value for value.
 
-import type { Rgb } from './color';
+import { WHITE, mix, parseHex, scaled, type Rgb } from './color';
 import { SECTORS } from './mapPalette';
 
 /** How one terrain paints on a box. */
@@ -47,29 +47,16 @@ const KINDS: SpriteKind[] = [
   'snow', // Snow
 ];
 
-function hex(c: string): Rgb {
-  return {
-    r: parseInt(c.slice(1, 3), 16),
-    g: parseInt(c.slice(3, 5), 16),
-    b: parseInt(c.slice(5, 7), 16),
-  };
-}
-
-function mix(a: Rgb, b: Rgb, t: number): Rgb {
-  return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t };
-}
-
 // Truncated, as the atlas rounds its colors.
 function whole(c: Rgb): Rgb {
   const ch = (v: number) => Math.max(0, Math.min(255, v | 0));
   return { r: ch(c.r), g: ch(c.g), b: ch(c.b) };
 }
 
-const WHITE: Rgb = { r: 255, g: 255, b: 255 };
-
+// SECTORS holds literal hex colors, so each one parses.
 function sector(i: number) {
   const s = SECTORS[i] ?? SECTORS[0];
-  return { fill: hex(s.fill), border: hex(s.border), halo: hex(s.halo) };
+  return { fill: parseHex(s.fill)!, border: parseHex(s.border)!, halo: parseHex(s.halo)! };
 }
 
 /** Each sector's shade, by the index mapPalette gives it. */
@@ -82,7 +69,7 @@ export const TERRAIN: TerrainShade[] = KINDS.map((_, i) => {
 function ramp(i: number): Rgb[] {
   const { fill: F, border: B, halo: H } = sector(i);
   return [
-    whole({ r: F.r * 0.55, g: F.g * 0.55, b: F.b * 0.55 }),
+    whole(scaled(F, 0.55)),
     whole(mix(F, B, 0.18)),
     whole(mix(F, B, 0.55)),
     whole(mix(B, H, 0.45)),

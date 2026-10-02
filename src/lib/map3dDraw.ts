@@ -5,7 +5,7 @@
 // ground. Your room takes the accent. map3dScene.ts holds the geometry,
 // and this file decides only the paint and its order.
 
-import { parseHex, toRgba, type Rgb } from './color';
+import { WHITE, mix, parseHex, scaled, toRgba, type Rgb } from './color';
 import { isNorthUp, type Map3dView } from './map3dView';
 import {
   TILE,
@@ -44,21 +44,12 @@ const EDGE_PX = 6;
 // A roof under this many pixels keeps plain color with sprites on.
 const SPRITE_PX = 11;
 
-const WHITE: Rgb = { r: 255, g: 255, b: 255 };
 const FALLBACK: Rgb = { r: 128, g: 128, b: 128 };
-
-function mix(a: Rgb, b: Rgb, t: number): Rgb {
-  return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t };
-}
 
 /** Toward gray by t, at the same light. */
 function desat(c: Rgb, t: number): Rgb {
   const l = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
   return mix(c, { r: l, g: l, b: l }, t);
-}
-
-function scaled(c: Rgb, k: number): Rgb {
-  return { r: c.r * k, g: c.g * k, b: c.b * k };
 }
 
 /** One thing to paint. Floors paint bottom up, and within a floor far
