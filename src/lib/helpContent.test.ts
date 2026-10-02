@@ -644,7 +644,7 @@ describe('the help on Room triggers', () => {
 
   it('says what Your target matches and how Vosh finds that line', () => {
     expect(body('automate.first-trigger')).toContain(
-      '- Pick `Your target` in `Match` to match only the line of the one you target with `tar`, when a room lists them. Vosh finds that line by what you gave `tar` as whole words in any case, or by the name in the room it points at, so `tar crow` finds `A large murder of crows nearly turns the trees black here.`. Someone who fights your target keeps the room color.',
+      '- Pick `Your target` in `Match` to match only the line of the one you target with `tar`, when a room lists them. Vosh finds that line by where your target stands in the room, the place `tar` marks with `>`, so `tar 3` finds the third person even when their line words the name another way. When more than one person in the room fits what you gave `tar`, the first of them is your target, so one line matches.',
     );
   });
 

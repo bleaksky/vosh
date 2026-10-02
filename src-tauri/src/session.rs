@@ -1899,32 +1899,18 @@ enum Shows {
 
 /// The scope a complete line that is not your prompt runs in, from the
 /// room look tracker, which reads every such line in the order the game
-/// sent it. [`MatchScope::RoomTarget`] for the line of the person you
-/// target, [`MatchScope::Room`] for any other army, thing or person the
-/// look lists, and [`MatchScope::Line`] for any other line.
+/// sent it. [`MatchScope::RoomTarget`] for the person at the place your
+/// target holds in Room.Chars, [`MatchScope::Room`] for any other army,
+/// thing or person the look lists, and [`MatchScope::Line`] for any other
+/// line. The look's Room.Chars packet comes before its text, so the
+/// place is one in this look, the one `tar` marks with `>`.
 fn room_scope(p: &mut Profile, plain: &str, bytes: &[u8]) -> MatchScope {
     use crate::room_block::RoomLine;
     match p.room_block.line(plain, bytes) {
         RoomLine::Other => MatchScope::Line,
-        RoomLine::Person if names_your_target(p, plain) => MatchScope::RoomTarget,
-        RoomLine::Army | RoomLine::Thing | RoomLine::Person => MatchScope::Room,
+        RoomLine::Person(place) if p.target.room_idx == Some(place) => MatchScope::RoomTarget,
+        RoomLine::Army | RoomLine::Thing | RoomLine::Person(_) => MatchScope::Room,
     }
-}
-
-/// Whether `plain`, a person's line in a room look, names the one you
-/// target, by the target itself or by the Room.Chars name it points at.
-/// The look's Room.Chars packet comes before its text, so the name is
-/// the one this look lists.
-fn names_your_target(p: &Profile, plain: &str) -> bool {
-    let Some(target) = p.target.name.as_deref() else {
-        return false;
-    };
-    let name = p
-        .target
-        .room_idx
-        .and_then(|idx| p.room_chars.get(idx.checked_sub(1)?))
-        .map(|c| c.name.as_str());
-    crate::room_block::names_target(plain, target, name)
 }
 
 /// A complete line that is not your prompt. It runs the Line pass and

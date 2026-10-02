@@ -33,7 +33,9 @@
 //!   close the block.
 //! - Then lines shaped like a thing, each one spending its count of the
 //!   objects Room.Items named, until none are left.
-//! - Then as many lines as Room.Chars named, each one a person.
+//! - Then as many lines as Room.Chars named, each one a person, in the
+//!   order of Room.Chars, since the look and the packet both walk the
+//!   people of the room in one order.
 //! - A blank line, a line past the counts, a new exits line, your prompt,
 //!   a GA or EOR and a disconnect each close the block. So a say or an
 //!   arrival after the people in the same pulse stays a plain line.
@@ -44,15 +46,17 @@
 //! like a thing until the first person, and a look with no Room.Chars
 //! before it lists its armies and things only, since nothing says how
 //! many people follow. Lines in the block run [`MatchScope::Room`], so
-//! Line and Room triggers both see them. A person's line that names the
-//! one you target with `tar` (see [`names_target`]) runs
-//! [`MatchScope::RoomTarget`], so Your target triggers see it too.
+//! Line and Room triggers both see them. The person at the place in
+//! Room.Chars of the one you target with `tar`, the place `tar` marks
+//! with `>`, runs [`MatchScope::RoomTarget`], so Your target triggers
+//! see that line too, however its long text words the name.
 //!
 //! Rare looks the counts get wrong by one: a mob with no long text or a
 //! character in catalepsy (one line after the people turns into a room
 //! line), people that height sense or sense evil shows past Room.Chars
-//! (the last of them stays a plain line), a long text of two lines, a
-//! mob whose long text ends in the reset with no other code and no thing
+//! (the last of them stays a plain line, and the color of your target
+//! can land on the line before theirs), a long text of two lines, a mob
+//! whose long text ends in the reset with no other code and no thing
 //! before it (it reads as an army, and one line after the people turns
 //! into a room line), armies with your color off (they read as people),
 //! and two looks in one pulse.
@@ -139,8 +143,9 @@ pub(crate) enum RoomLine {
     Army,
     /// A thing on the floor, or the things that share a long text.
     Thing,
-    /// A person, a player or a mob.
-    Person,
+    /// A person, a player or a mob, with their place in Room.Chars from
+    /// 1, the place `tar` gives your target.
+    Person(usize),
 }
 
 /// The look the session is following, if any. Session state that lives
@@ -165,6 +170,8 @@ struct Open {
     /// People lines still to come, or None when no Room.Chars came
     /// before the look.
     people_left: Option<usize>,
+    /// People lines so far.
+    people_seen: usize,
     /// The run the block is in.
     run: Run,
 }
@@ -195,6 +202,7 @@ impl RoomBlock {
             self.open = Some(Open {
                 things_left: self.things.take(),
                 people_left: self.people.take(),
+                people_seen: 0,
                 run: Run::Armies,
             });
             return RoomLine::Other;
@@ -233,8 +241,9 @@ impl RoomBlock {
         match open.people_left {
             Some(left) if left > 0 => {
                 open.people_left = Some(left - 1);
+                open.people_seen += 1;
                 open.run = Run::People;
-                RoomLine::Person
+                RoomLine::Person(open.people_seen)
             }
             _ => {
                 self.open = None;
@@ -249,55 +258,6 @@ impl RoomBlock {
     pub(crate) fn end(&mut self) {
         self.open = None;
     }
-}
-
-/// What `char_to_char` prints after a person in a fight, before the one
-/// they fight.
-const FIGHTING: &str = " is here, fighting ";
-
-/// The articles a mob's short text starts with.
-const ARTICLES: [&str; 4] = ["a ", "an ", "the ", "some "];
-
-/// `text` without a leading article, in any case.
-fn without_article(text: &str) -> &str {
-    let lower = text.to_ascii_lowercase();
-    ARTICLES
-        .iter()
-        .find(|article| lower.starts_with(*article))
-        .map_or(text, |article| &text[article.len()..])
-}
-
-/// Whether `words` stands in `text` as whole words, in any case.
-fn has_words(text: &str, words: &str) -> bool {
-    let words = words.trim().to_lowercase();
-    if words.is_empty() {
-        return false;
-    }
-    let text = text.to_lowercase();
-    text.match_indices(&words).any(|(at, found)| {
-        let before = text[..at].chars().next_back();
-        let after = text[at + found.len()..].chars().next();
-        !before.is_some_and(char::is_alphanumeric) && !after.is_some_and(char::is_alphanumeric)
-    })
-}
-
-/// Whether `plain`, the line of a person a room look lists, is the line
-/// of your target. `target` is what you gave `tar`, and `name` the name
-/// of the Room.Chars entry it points at, if any.
-///
-/// The name counts first, since `tar gris` points at The Baron Grisvald
-/// while gris is no word of his line. The target counts too, since a
-/// mob's long text often words its name another way, as `A large murder
-/// of crows` for `a murder of crows`. Each counts as whole words in any
-/// case, with or without the article a short text starts with. Who a
-/// fighting person fights never counts, so `Maren is here, fighting a
-/// villager.` is no line of the villager.
-pub(crate) fn names_target(plain: &str, target: &str, name: Option<&str>) -> bool {
-    let who = plain.split(FIGHTING).next().unwrap_or(plain);
-    name.into_iter()
-        .chain(std::iter::once(target))
-        .flat_map(|text| [text, without_article(text)])
-        .any(|text| has_words(who, text))
 }
 
 #[cfg(test)]
@@ -369,7 +329,7 @@ mod tests {
                 &mut block,
                 &[EXITS_LINE, HELM, GAUNTLETS, VILLAGER, RESTING, WALKS_IN, HELM],
             ),
-            [Other, Thing, Thing, Person, Person, Other, Other]
+            [Other, Thing, Thing, Person(1), Person(2), Other, Other]
         );
     }
 
@@ -391,7 +351,7 @@ mod tests {
                     "A werebeast looks into the sky.",
                 ],
             ),
-            [Other, Army, Thing, Person, Other]
+            [Other, Army, Thing, Person(1), Other]
         );
     }
 
@@ -411,7 +371,7 @@ mod tests {
                     WALKS_IN,
                 ],
             ),
-            [Other, Army, Person, Other]
+            [Other, Army, Person(1), Other]
         );
     }
 
@@ -440,7 +400,7 @@ mod tests {
         block.room_items(0);
         assert_eq!(
             kinds(&mut block, &[EXITS_LINE, VILLAGER, FORTRESS]),
-            [Other, Person, Other]
+            [Other, Person(1), Other]
         );
     }
 
@@ -468,7 +428,7 @@ mod tests {
         block.room_items(1);
         assert_eq!(
             kinds(&mut block, &[EXITS_LINE, HELM, HELM, HELM]),
-            [Other, Thing, Person, Other]
+            [Other, Thing, Person(1), Other]
         );
     }
 
@@ -507,7 +467,7 @@ mod tests {
         block.room_chars(2);
         assert_eq!(
             kinds(&mut block, &[EXITS_LINE, VILLAGER, HELM, HELM]),
-            [Other, Person, Person, Other]
+            [Other, Person(1), Person(2), Other]
         );
     }
 
@@ -526,7 +486,7 @@ mod tests {
                     RESTING
                 ]
             ),
-            [Other, Other, Army, Thing, Person]
+            [Other, Other, Army, Thing, Person(1)]
         );
     }
 
@@ -552,7 +512,7 @@ mod tests {
         block.end();
         assert_eq!(
             kinds(&mut block, &[EXITS_LINE, HELM, VILLAGER, WALKS_IN]),
-            [Other, Thing, Person, Other]
+            [Other, Thing, Person(1), Other]
         );
     }
 
@@ -561,7 +521,10 @@ mod tests {
         let mut block = RoomBlock::default();
         block.room_chars(1);
         block.room_items(0);
-        assert_eq!(kinds(&mut block, &[EXITS_LINE, VILLAGER]), [Other, Person]);
+        assert_eq!(
+            kinds(&mut block, &[EXITS_LINE, VILLAGER]),
+            [Other, Person(1)]
+        );
         // A second look with no packets of its own lists armies and
         // things only.
         assert_eq!(
@@ -614,61 +577,29 @@ mod tests {
         block.room_items(0);
         assert_eq!(
             kinds(&mut block, &[EXITS_LINE, fortress, VILLAGER]),
-            [Other, Army, Person]
+            [Other, Army, Person(1)]
         );
     }
 
-    const WEREBEAST: &str = "A young werebeast stands here, leaning on his spear.";
-    const CROWS: &str = "A large murder of crows nearly turns the trees black here.";
-
     #[test]
-    fn the_target_names_a_line_as_whole_words_in_any_case() {
-        assert!(names_target(WEREBEAST, "werebeast", Some("a werebeast")));
-        assert!(names_target(WEREBEAST, "WEREBEAST", None));
-        assert!(names_target(RESTING, "tolliver", Some("Tolliver")));
-        assert!(names_target(
-            "[\u{1b}[0;31mAFK\u{1b}[0;0m] Tolliver is resting here.",
-            "Tolliver",
-            None
-        ));
-        // A part of a word is no whole word.
-        assert!(!names_target(WEREBEAST, "were", None));
-        assert!(!names_target(VILLAGER, "village", None));
-        assert!(!names_target(WEREBEAST, "", None));
-        assert!(!names_target(VILLAGER, "werebeast", Some("a werebeast")));
-    }
-
-    #[test]
-    fn the_room_chars_name_the_target_points_at_counts_first() {
-        // tar toll points at Tolliver, and toll is no word of the line.
-        assert!(names_target(RESTING, "toll", Some("Tolliver")));
-        assert!(!names_target(RESTING, "toll", None));
-        assert!(names_target(
-            "The Baron Grisvald is resting here.",
-            "gris",
-            Some("The Baron Grisvald")
-        ));
-        // tar crow points at a murder of crows, whose line words the name
-        // another way after its article.
-        assert!(names_target(CROWS, "crow", Some("a murder of crows")));
-        assert!(!names_target(CROWS, "crow", None));
-    }
-
-    #[test]
-    fn a_target_set_by_its_number_counts_without_its_article() {
-        // tar 1 and tarn set the target to the full Room.Chars name.
-        let name = "a murder of crows";
-        assert!(names_target(CROWS, name, Some(name)));
-        assert!(names_target(VILLAGER, "a villager", Some("a villager")));
-    }
-
-    #[test]
-    fn who_a_person_fights_is_no_line_of_theirs() {
-        let villager = "A villager is here, fighting Maren.";
-        let maren = "Maren is here, fighting a villager.";
-        assert!(names_target(villager, "villager", Some("a villager")));
-        assert!(!names_target(maren, "villager", Some("a villager")));
-        assert!(names_target(maren, "maren", Some("Maren")));
-        assert!(!names_target(villager, "maren", Some("Maren")));
+    fn each_person_takes_the_next_place_in_room_chars() {
+        // Room 4811 in area/gastride.are, where mobs 4801, 4808 and 4812
+        // reset in that order, so the last stands first in the room.
+        let mut block = RoomBlock::default();
+        block.room_chars(3);
+        block.room_items(0);
+        assert_eq!(
+            kinds(
+                &mut block,
+                &[
+                    "[Exits: north south west]",
+                    "A warrior medic stands here ready to tend to the wounded warriors.",
+                    "A master warrior stands here watching over others.",
+                    "A warrior stands here ready to train.",
+                    WALKS_IN,
+                ],
+            ),
+            [Other, Person(1), Person(2), Person(3), Other]
+        );
     }
 }
