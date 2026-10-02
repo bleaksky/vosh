@@ -1150,9 +1150,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 }
 
 /* Each column owns its vital color. The class sets the theme's
-   semantic token per vital, a user override lands on the same
-   property from inline style (VitalsSettings.tsx), and the low state
-   wins over both because the inline value is dropped while low. */
+   semantic token per vital, and the low state wins over it. */
 .vitals-ledger-cell {
   display: flex;
   flex-direction: column;
@@ -2382,8 +2380,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   padding-top: 0;
 }
 
-/* The one section-header idiom. Also finally defines the class
-   ImportTab has referenced since before the redesign. */
+/* The one section-header idiom. */
 .settings-section-label {
   font-family: var(--font-label);
   font-size: 11px;

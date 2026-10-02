@@ -1358,9 +1358,9 @@ pub(crate) async fn triggers_import(
     Ok(count)
 }
 
-/// Dump every alias to a pretty JSON array. Mirrors `triggers_export`
-/// so the settings window can treat triggers and aliases with the
-/// same `JsonTab` component.
+/// Dump every alias to a pretty JSON array. Mirrors `triggers_export`,
+/// so the Aliases and Triggers editors in Settings load their lists the
+/// same way, through automationRecords.ts and automationTriggers.ts.
 #[tauri::command]
 pub(crate) async fn aliases_export(state: State<'_, SharedState>) -> Result<String, String> {
     let p = state.profile.lock().await;
@@ -4758,8 +4758,8 @@ pub(crate) async fn loadouts_get_state(
 /// Replace the active-loadouts list and reapply group state: the
 /// union rule while loadouts are active, full dormancy when the user
 /// deactivates everything. Persists the loadout set to disk and emits
-/// a state-changed event so other windows (e.g. a future `TopBar`
-/// checklist) see the update.
+/// a state-changed event so other windows, such as the Loadouts editor
+/// in Settings, see the update.
 #[tauri::command]
 pub(crate) async fn loadouts_set_active(app: AppHandle, active: Vec<String>) -> Result<(), String> {
     let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;

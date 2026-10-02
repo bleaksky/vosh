@@ -3,6 +3,9 @@
 //! read too (D29). The engine keeps its own copy of the packages, since
 //! the session draws the prompt without the webview, so this file and
 //! `src/test/aabahranViews.test.ts` hold both readings to one record.
+//! No webview store reads Char.State or Room.Weather, so their records
+//! are the engine's alone (`ENGINE_ONLY` in that test) until a pane
+//! brings their stores back.
 //!
 //! Each view is what a pane or a piece shows from the packet alone, with
 //! no hidden model: the vitals, the affects one row per name, the fight
