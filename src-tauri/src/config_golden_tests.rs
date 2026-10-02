@@ -432,6 +432,7 @@ fn full_triggers() -> Vec<Trigger> {
                         underline: true,
                         inverse: true,
                         wash: true,
+                        base: false,
                     },
                 },
                 TriggerAction::Replace {

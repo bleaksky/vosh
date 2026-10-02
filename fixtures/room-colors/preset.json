@@ -11,7 +11,7 @@
       ],
       "priority": 6,
       "enabled": true,
-      "actions": [{ "kind": "highlight", "style": { "fg": "green" } }],
+      "actions": [{ "kind": "highlight", "style": { "fg": "green", "base": true } }],
       "preset": "room_and_time"
     },
     {
@@ -19,7 +19,7 @@
       "patterns": [{ "pattern": "^.+$", "enabled": true }],
       "priority": 4,
       "enabled": true,
-      "actions": [{ "kind": "highlight", "style": { "fg": "yellow" } }],
+      "actions": [{ "kind": "highlight", "style": { "fg": "yellow", "base": true } }],
       "target": "room",
       "preset": "room_and_time"
     },

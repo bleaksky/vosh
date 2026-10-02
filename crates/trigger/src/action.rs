@@ -22,6 +22,14 @@ pub struct HighlightStyle {
     /// the flag off.
     #[serde(default, skip_serializing_if = "is_false")]
     pub wash: bool,
+    /// Base color. The style fills only the text the game left in its
+    /// default color, so the colors the game puts on parts of the line
+    /// stay. It opens the line and comes back after each SGR sequence
+    /// that leaves the foreground at its default, and other highlights on
+    /// the line draw over it. A base style has no span of its own and no
+    /// wash. Old profiles deserialize with the flag off.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub base: bool,
 }
 
 impl HighlightStyle {
