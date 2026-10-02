@@ -230,10 +230,19 @@ export function paintSprite(sectorIndex: number, variant: number): Uint32Array {
   return b;
 }
 
-/** Which of the three variants a room at x, y paints, the same at every
- *  visit. */
-export function spriteVariant(x: number, y: number): number {
-  return (h2(x, y, 77) * 3) | 0;
+/** Which of the three variants a room paints, the same at every visit.
+ *  The atlas hashes where a room stands in the world. A packet's grid
+ *  centers on you and moves with each step, so the rooms its exits lead
+ *  to, `ex` in the packet, stand in for that. A room with no exit there
+ *  paints variant 0. */
+export function spriteVariant(ex: Record<string, number | string> | undefined): number {
+  const vnums = Object.values(ex ?? {})
+    .map(Number)
+    .filter(Number.isInteger)
+    .sort((a, b) => a - b);
+  if (vnums.length === 0) return 0;
+  const seed = vnums.reduce((n, v) => (Math.imul(n, 31) + v) | 0, 0);
+  return (h2(seed, vnums.length, 77) * 3) | 0;
 }
 
 /** The average color of a sprite. Its walls paint in it, so a room

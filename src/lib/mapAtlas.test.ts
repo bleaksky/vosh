@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { aabahranMapPacket } from '../test/aabahranGmcp';
 import { SPRITE_SIZE, TERRAIN, paintSprite, spriteMean, spriteVariant } from './mapAtlas';
 import { SECTORS } from './mapPalette';
+import { getCell, gridDims, gridRooms, type MapTilesPayload } from './mapTiles';
 
 describe('TERRAIN', () => {
   it('shades each of the thirteen sectors', () => {
@@ -39,16 +41,32 @@ describe('paintSprite', () => {
 });
 
 describe('spriteVariant', () => {
-  it('picks one of three variants for a spot, the same each time', () => {
-    const seen = new Set<number>();
-    for (let x = 0; x < 21; x++) {
-      for (let y = 0; y < 21; y++) {
-        const v = spriteVariant(x, y);
-        expect(v).toBe(spriteVariant(x, y));
-        seen.add(v);
-      }
+  // You stand West of the City Fountain in Caranduin, then step west
+  // onto The Common Road. The packets come from fixtures/gmcp/aabahran.
+  const tiles = (name: string) => aabahranMapPacket(name).data as MapTilesPayload;
+  const before = tiles('caranduin-west-of-the-fountain.gmcp');
+  const after = tiles('caranduin-the-common-road.gmcp');
+
+  it('keeps each room to its variant as you walk', () => {
+    // Most rooms sit one cell further east after the step. A packet
+    // names no room, so a room counts as the same one where it leads to
+    // the same rooms.
+    const { rows, cols } = gridDims(before);
+    let kept = 0;
+    for (const { row, col, cell } of gridRooms(before, rows, cols)) {
+      const moved = getCell(after, row, col + 1);
+      if (!moved || JSON.stringify(moved.ex) !== JSON.stringify(cell.ex)) continue;
+      expect(spriteVariant(moved.ex), `${row}, ${col}`).toBe(spriteVariant(cell.ex));
+      kept++;
     }
+    expect(kept).toBeGreaterThan(60);
+  });
+
+  it('spreads the rooms of a packet over all three variants', () => {
+    const { rows, cols } = gridDims(before);
+    const seen = new Set(gridRooms(before, rows, cols).map((r) => spriteVariant(r.cell.ex)));
     expect([...seen].sort()).toEqual([0, 1, 2]);
+    expect(spriteVariant(undefined)).toBe(0);
   });
 });
 

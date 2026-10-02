@@ -314,7 +314,7 @@ interface Sprite {
 const SPRITES = new Map<string, Sprite>();
 
 function spriteOf(room: Room3d): Sprite | null {
-  const variant = spriteVariant(room.x, room.y);
+  const variant = spriteVariant(room.cell.ex);
   const key = `${room.sector}_${variant}`;
   const hit = SPRITES.get(key);
   if (hit) return hit;
