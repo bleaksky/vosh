@@ -1712,12 +1712,10 @@ fn slash_scripts_list(profile: &Profile) -> InputResult {
     }
     if !triggers.is_empty() {
         lines.push(format!("{} lua trigger(s):", triggers.len()));
+        // Every Lua trigger runs at priority 0. The column lines up with
+        // the #triggers listing.
         for t in triggers {
-            let mark = if t.enabled { ' ' } else { '*' };
-            lines.push(format!(
-                "  {mark} [{:>3}] {} /{}/",
-                t.priority, t.name, t.pattern
-            ));
+            lines.push(format!("    [  0] {} /{}/", t.name, t.pattern));
         }
     }
     InputResult {

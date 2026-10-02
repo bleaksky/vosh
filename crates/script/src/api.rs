@@ -191,7 +191,6 @@ fn mud_trigger(lua: &Lua, (name, pattern, callback): (String, String, Function))
             name,
             pattern,
             callback_id: id,
-            priority: 0,
         });
         Ok(())
     })
