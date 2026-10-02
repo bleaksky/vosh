@@ -4,9 +4,9 @@
 use std::fmt;
 
 /// Bar width when the template does not give one.
-pub const BAR_DEFAULT_WIDTH: u8 = 10;
+pub(crate) const BAR_DEFAULT_WIDTH: u8 = 10;
 /// The widest bar a template can ask for.
-pub const BAR_MAX_WIDTH: u8 = 80;
+pub(crate) const BAR_MAX_WIDTH: u8 = 80;
 
 /// A field the template reads, with its parameter for the fields that take
 /// one (`aff:sanctuary`, `member_hp:quenby`, `queue:bugs`,
@@ -46,7 +46,7 @@ impl fmt::Display for FieldRef {
 }
 
 /// True for the fields written with a parameter, `%{aff:sanctuary}`.
-pub fn takes_param(name: &str) -> bool {
+pub(crate) fn takes_param(name: &str) -> bool {
     matches!(name, "aff" | "queue" | "gmcp") || name.starts_with("member_")
 }
 
@@ -104,7 +104,7 @@ pub enum UnderlineStyle {
 impl UnderlineStyle {
     /// The SGR parameter the kind writes. Single stays the plain `4`
     /// every terminal reads.
-    pub fn sgr(self) -> &'static str {
+    pub(crate) fn sgr(self) -> &'static str {
         match self {
             UnderlineStyle::Single => "4",
             UnderlineStyle::Double => "4:2",
@@ -116,7 +116,7 @@ impl UnderlineStyle {
 
     /// The kind an SGR `4:n` names, None for `4:0`, which turns it off.
     /// A kind no terminal names draws the single line, as terminals do.
-    pub fn from_sgr(n: u32) -> Option<UnderlineStyle> {
+    pub(crate) fn from_sgr(n: u32) -> Option<UnderlineStyle> {
         Some(match n {
             0 => return None,
             2 => UnderlineStyle::Double,
@@ -146,7 +146,7 @@ pub enum Style {
 
 impl Style {
     /// The SGR parameters the style writes.
-    pub fn sgr(self) -> &'static str {
+    pub(crate) fn sgr(self) -> &'static str {
         match self {
             Style::Bold => "1",
             Style::Dim => "2",
@@ -292,7 +292,7 @@ fn valid_name(name: &str) -> bool {
 }
 
 /// Split a template into tokens.
-pub fn tokenize(source: &str) -> Vec<Token> {
+pub(crate) fn tokenize(source: &str) -> Vec<Token> {
     let bytes = source.as_bytes();
     let mut out = Vec::new();
     let mut text = String::new();
@@ -435,7 +435,7 @@ fn bar_color(spec: &str) -> BarColor {
 }
 
 /// A theme color name as its ANSI index.
-pub fn named_color(name: &str) -> Option<u8> {
+pub(crate) fn named_color(name: &str) -> Option<u8> {
     Some(match name {
         "black" => 0,
         "red" => 1,
@@ -458,7 +458,7 @@ pub fn named_color(name: &str) -> Option<u8> {
 }
 
 /// The name a theme color goes by, the reverse of [`named_color`].
-pub fn color_name(index: u8) -> Option<&'static str> {
+pub(crate) fn color_name(index: u8) -> Option<&'static str> {
     Some(match index {
         0 => "black",
         1 => "red",

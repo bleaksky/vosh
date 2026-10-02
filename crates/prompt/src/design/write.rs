@@ -44,7 +44,7 @@ fn color_short(spec: &ColorSpec) -> Option<String> {
 }
 
 /// The name a style goes by in `%s_<style>`.
-pub fn style_name(style: Style) -> &'static str {
+pub(crate) fn style_name(style: Style) -> &'static str {
     match style {
         Style::Bold => "bold",
         Style::Dim => "dim",
@@ -96,7 +96,7 @@ fn format_body(format: &Format) -> Option<String> {
 
 /// Text as a template writes it, each `%` doubled so it stays literal
 /// whatever follows it.
-pub fn escape_text(text: &str) -> String {
+pub(crate) fn escape_text(text: &str) -> String {
     text.replace('%', "%%")
 }
 
@@ -105,7 +105,7 @@ pub fn escape_text(text: &str) -> String {
 /// unless `braced` asks for braces, and the braced form everywhere else
 /// (`%{hp:bar:6}`, `%{c:#80c8ff}`, `%{if:fight}`). An unknown token has no
 /// form of its own and writes nothing.
-pub fn write_token(kind: &TokenKind, braced: bool) -> String {
+pub(crate) fn write_token(kind: &TokenKind, braced: bool) -> String {
     match kind {
         TokenKind::Text(text) => escape_text(text),
         TokenKind::Percent => "%%".to_string(),
@@ -160,7 +160,7 @@ fn write_value(value: &ValueRef, braced: bool) -> String {
 /// first character written after it, so it needs its braced form: a
 /// short name before a name character, or a bar before a colon or a
 /// digit, which the first grammar took as the bar's width and color.
-pub fn runs_on(kind: &TokenKind, text: &str, next: Option<char>) -> bool {
+pub(crate) fn runs_on(kind: &TokenKind, text: &str, next: Option<char>) -> bool {
     let Some(next) = next else {
         return false;
     };
@@ -178,7 +178,7 @@ pub fn runs_on(kind: &TokenKind, text: &str, next: Option<char>) -> bool {
 
 /// Tokens as template text, each in its short form unless the next one
 /// would extend it, as [`write_token`] and [`runs_on`] decide.
-pub fn write_tokens(kinds: &[TokenKind]) -> String {
+pub(crate) fn write_tokens(kinds: &[TokenKind]) -> String {
     let texts: Vec<String> = kinds.iter().map(|k| write_token(k, false)).collect();
     let mut out = String::new();
     for (index, kind) in kinds.iter().enumerate() {

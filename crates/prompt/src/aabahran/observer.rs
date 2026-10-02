@@ -15,7 +15,7 @@ use super::colors;
 
 /// What a reply says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReplyKind {
+pub(crate) enum ReplyKind {
     /// Your PROMPT setting follows the prefix. `prompt` printed it, and
     /// every `prompt` but `prompt off` turns prompts on.
     Prompt,
@@ -33,7 +33,7 @@ pub enum ReplyKind {
 
 /// A line the game answers `prompt` or `fprompt` with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Reply {
+pub(crate) struct Reply {
     pub kind: ReplyKind,
     /// The text before the setting, for the replies that carry one.
     pub prefix: &'static str,
@@ -52,7 +52,7 @@ const SETTINGS: [(&str, ReplyKind); 5] = [
 const NO_FIGHT: &str = "No fight prompt set. ";
 const FIGHT_CLEARED: &str = "Fight prompt cleared.";
 /// What `prompt off` prints first.
-pub const PROMPTS_OFF: &str = "You will no longer see prompts.";
+pub(crate) const PROMPTS_OFF: &str = "You will no longer see prompts.";
 
 /// Every prefix a reply starts with, for a log query that looks only at
 /// the lines that might be one.
@@ -68,7 +68,7 @@ pub const PREFIXES: [&str; 8] = [
 ];
 
 /// The reply a plain line is, if any.
-pub fn reply(plain: &str) -> Option<Reply> {
+pub(crate) fn reply(plain: &str) -> Option<Reply> {
     for (prefix, kind) in SETTINGS {
         if plain.starts_with(prefix) {
             return Some(Reply { kind, prefix });
@@ -89,7 +89,7 @@ pub fn reply(plain: &str) -> Option<Reply> {
 /// The setting a reply shows, as the game stores it: the text after the
 /// prefix, with the colors the game made of your backtick codes turned
 /// back into them. Empty for a reply that carries none.
-pub fn setting(reply: Reply, raw: &[u8]) -> String {
+pub(crate) fn setting(reply: Reply, raw: &[u8]) -> String {
     if reply.prefix.is_empty() {
         return String::new();
     }
@@ -103,7 +103,7 @@ pub fn setting(reply: Reply, raw: &[u8]) -> String {
 /// How long after your send its reply counts, in milliseconds. In the
 /// log it is also how close the reply to `prompt off` follows the line
 /// it prints first.
-pub const WINDOW_MS: i64 = 2_000;
+pub(crate) const WINDOW_MS: i64 = 2_000;
 
 /// A reply line from your log.
 #[derive(Debug, Clone, Copy)]
@@ -194,7 +194,7 @@ pub fn latest(lines: &[Logged<'_>]) -> Option<Found> {
 
 /// True when a line you sent is `prompt off`, abbreviated or not, in any
 /// case.
-pub fn turns_prompts_off(sent: &str) -> bool {
+pub(crate) fn turns_prompts_off(sent: &str) -> bool {
     let mut words = sent.split_whitespace();
     let (Some(command), Some(argument), None) = (words.next(), words.next(), words.next()) else {
         return false;

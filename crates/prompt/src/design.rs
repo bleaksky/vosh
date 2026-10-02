@@ -49,13 +49,14 @@ mod pieces;
 mod tokens;
 mod write;
 
+pub use pieces::{PieceKind, Template};
+pub use tokens::{Code, ColorSpec, FieldRef, Format, Scale, TokenKind, UnderlineStyle};
+
 pub(crate) use look::{bg, code, color, fg, restore, transition, underline_color, Item, Look};
-pub use pieces::{Piece, PieceKind, Template};
-pub(crate) use tokens::{brace_char, parse_field, Layer};
-pub use tokens::{color_name, named_color, takes_param, tokenize};
-pub use tokens::{BarColor, Code, ColorSpec, FieldRef, Format, Scale, Style, UnderlineStyle};
-pub use tokens::{Token, TokenKind, ValueRef, BAR_DEFAULT_WIDTH, BAR_MAX_WIDTH};
-pub use write::{escape_text, runs_on, style_name, write_token, write_tokens};
+pub(crate) use pieces::Piece;
+pub(crate) use tokens::{brace_char, parse_field, BarColor, Layer, Style, ValueRef};
+pub(crate) use tokens::{BAR_DEFAULT_WIDTH, BAR_MAX_WIDTH};
+pub(crate) use write::{runs_on, write_token, write_tokens};
 
 #[cfg(test)]
 mod tests;

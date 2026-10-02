@@ -65,7 +65,7 @@ pub const DEFAULT_DESIGN: &str = concat!(
 /// gauge, the percent and the game's condition words, then the tank in a
 /// group. Its vitals row added your position and language, Wizi and
 /// Incog, and the tracked affects you were missing.
-pub const AT_A_GLANCE: &str = concat!(
+pub(crate) const AT_A_GLANCE: &str = concat!(
     // The fight row.
     "%{if:fight}",
     "%opponent %{opponent_hp:bar:10} %{opponent_hp:pct}%% ",
@@ -177,7 +177,7 @@ pub enum PromptShow {
 }
 
 impl PromptShow {
-    pub fn is_text(&self) -> bool {
+    pub(crate) fn is_text(&self) -> bool {
         *self == Self::Text
     }
 

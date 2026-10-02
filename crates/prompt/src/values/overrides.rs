@@ -86,7 +86,7 @@ impl Preview {
     /// The values the preview draws in place of `live`'s. Fight makes you
     /// the tank: your name, and your health as the game counts a tank's,
     /// from `live`, or the catalog's samples when it has neither.
-    pub fn overrides(self, live: &dyn Values) -> Overrides {
+    pub(crate) fn overrides(self, live: &dyn Values) -> Overrides {
         let mut values = BTreeMap::new();
         let mut lament = false;
         match self {

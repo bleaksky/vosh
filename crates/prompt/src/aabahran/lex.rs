@@ -25,12 +25,12 @@ pub const PROMPT_ALL: &str = "%n%P%C<%hhp %mm %vmv> ";
 /// The most characters of a line the game reads, `MIL - 3`
 /// (`read_from_buffer`, `comm.c:1486-1495`). Past them it says "Line too
 /// long." and runs the ones it read.
-pub const LINE: usize = 253;
+pub(crate) const LINE: usize = 253;
 
 /// The most characters of a setting the game keeps when you type it:
 /// what the line holds after `prompt ` or `fprompt `. `do_prompt` would
 /// keep 255, but the line never brings it that many.
-pub fn keeps(which: Which) -> usize {
+pub(crate) fn keeps(which: Which) -> usize {
     let command = match which {
         Which::Prompt => "prompt ",
         Which::Fight => "fprompt ",
@@ -128,7 +128,7 @@ fn ends_in_break(text: &str) -> bool {
 
 /// What pass one reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Token {
+pub(crate) enum Token {
     /// A character the game copies as it is. A backtick among them starts
     /// a color in pass two.
     Lit(char),
@@ -143,14 +143,14 @@ pub enum Token {
 
 /// A token and the bytes of the setting it came from.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Lexed {
+pub(crate) struct Lexed {
     pub token: Token,
     pub span: Range<usize>,
 }
 
 /// A setting read by pass one.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PassOne {
+pub(crate) struct PassOne {
     pub tokens: Vec<Lexed>,
     pub warnings: Vec<Warning>,
 }
@@ -164,7 +164,7 @@ const LONE_PERCENT: &str =
 /// next character alone. `%` and any other character prints nothing and
 /// takes that character, so a `%` at the end swallows the space the game
 /// adds, which warns.
-pub fn pass_one(setting: &str, which: Which) -> PassOne {
+pub(crate) fn pass_one(setting: &str, which: Which) -> PassOne {
     let mut tokens = Vec::new();
     let mut warnings = Vec::new();
     let mut push = |token, span| tokens.push(Lexed { token, span });
@@ -226,7 +226,7 @@ fn lone_percent(which: Which, span: Range<usize>) -> Warning {
 
 /// What the game prints, after pass two.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Piece {
+pub(crate) enum Piece {
     /// A character that takes one cell.
     Text(char),
     /// A color, which takes no cell.
@@ -239,7 +239,7 @@ pub enum Piece {
 
 /// A piece and the bytes of the setting it came from.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Placed {
+pub(crate) struct Placed {
     pub piece: Piece,
     pub span: Range<usize>,
 }
@@ -259,7 +259,7 @@ pub struct Placed {
 /// just drops. Otherwise it can take the code's first character as a
 /// color, which no pattern can follow, and so can a run that ends in part
 /// of a 256 color the code's digits would finish. That is the error.
-pub fn pass_two(
+pub(crate) fn pass_two(
     tokens: &[Lexed],
     which: Which,
     edges: &dyn Fn(Code) -> Edges,

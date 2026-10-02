@@ -18,7 +18,7 @@ use crate::values::format::{Resolved, Value};
 /// a phase number for a moon, names joined by commas for a count. Empty
 /// text is Absent, but a clock reads `now`. `label` names an immortal
 /// level, `Wizi` or `Incog`.
-pub fn value_of(kind: Kind, label: &str, text: &str, now: NaiveDateTime) -> Resolved {
+pub(crate) fn value_of(kind: Kind, label: &str, text: &str, now: NaiveDateTime) -> Resolved {
     let s = text;
     let num = |t: &str| t.trim().parse::<i64>().ok();
     let value = match kind {

@@ -87,7 +87,7 @@ pub enum Code {
 }
 
 /// `prompt_sky`'s words for `%W` (`comm.c:1692-1707`).
-pub const SKY: [&str; 10] = [
+pub(crate) const SKY: [&str; 10] = [
     "indoors",
     "cloudless",
     "cloudy",
@@ -101,7 +101,7 @@ pub const SKY: [&str; 10] = [
 ];
 
 /// `region_table`'s names for `%G` (`tables.c:4335-4352`).
-pub const REGIONS: [&str; 8] = [
+pub(crate) const REGIONS: [&str; 8] = [
     "Temperate",
     "Coastal North",
     "Coastal South",
@@ -128,7 +128,7 @@ pub enum Position {
 }
 
 impl Position {
-    pub const ALL: [Position; 10] = [
+    pub(crate) const ALL: [Position; 10] = [
         Position::Dead,
         Position::MortallyWounded,
         Position::Incapacitated,
@@ -143,7 +143,7 @@ impl Position {
 
     /// The game's word, as Char.State sends it (`position_table`,
     /// `tables.c:780-791`).
-    pub fn word(self) -> &'static str {
+    pub(crate) fn word(self) -> &'static str {
         match self {
             Position::Dead => "dead",
             Position::MortallyWounded => "mortally wounded",
@@ -160,7 +160,7 @@ impl Position {
 
     /// What `%S` prints, `pos_abbrev` in `comm.c:1904-1907`. Nothing
     /// while you meditate.
-    pub fn abbrev(self) -> &'static str {
+    pub(crate) fn abbrev(self) -> &'static str {
         match self {
             Position::Dead => "dea",
             Position::MortallyWounded => "mor",
@@ -177,31 +177,31 @@ impl Position {
 
     /// Vosh's three letters, what `%S` prints and `med` while you
     /// meditate, where `%S` prints nothing.
-    pub fn short(self) -> &'static str {
+    pub(crate) fn short(self) -> &'static str {
         match self {
             Position::Meditate => "med",
             p => p.abbrev(),
         }
     }
 
-    pub fn from_word(word: &str) -> Option<Self> {
+    pub(crate) fn from_word(word: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|p| p.word() == word)
     }
 
     /// The position `%S` printed. The empty string is meditate.
-    pub fn from_abbrev(abbrev: &str) -> Option<Self> {
+    pub(crate) fn from_abbrev(abbrev: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|p| p.abbrev() == abbrev)
     }
 }
 
 /// The three letter phases `%j` prints, and `-` for a moon that is not
 /// up (`comm.c:1851-1868`).
-pub const PHASES: [&str; 9] = ["new", "wax", "Hwx", "Gwx", "FUL", "Gwn", "Hwn", "wan", "-"];
+pub(crate) const PHASES: [&str; 9] = ["new", "wax", "Hwx", "Gwx", "FUL", "Gwn", "Hwn", "wan", "-"];
 
 impl Code {
     /// The code a letter after `%` names, for every letter but `f` and
     /// `j`, which take a digit.
-    pub fn from_letter(letter: char) -> Option<Self> {
+    pub(crate) fn from_letter(letter: char) -> Option<Self> {
         Some(match letter {
             'h' => Self::Hp,
             'H' => Self::MaxHp,
@@ -240,7 +240,7 @@ impl Code {
     }
 
     /// `%f` or `%j` with its digit.
-    pub fn with_digit(letter: char, digit: char) -> Option<Self> {
+    pub(crate) fn with_digit(letter: char, digit: char) -> Option<Self> {
         let d = digit.to_digit(10)? as u8;
         match letter {
             'f' => Some(Self::Slot(d)),
@@ -292,7 +292,7 @@ impl Code {
 
     /// The field the code fills, which names its group in the pattern.
     /// None for a `%j` digit that names no moon, which always prints `-`.
-    pub fn name(self) -> Option<&'static str> {
+    pub(crate) fn name(self) -> Option<&'static str> {
         const SLOTS: [&str; 10] = [
             "slot10", "slot1", "slot2", "slot3", "slot4", "slot5", "slot6", "slot7", "slot8",
             "slot9",
@@ -340,14 +340,14 @@ impl Code {
 
     /// `%n`, `%p` and `%P`, which print only while your opponent fights
     /// someone in your group.
-    pub fn is_tank(self) -> bool {
+    pub(crate) fn is_tank(self) -> bool {
         matches!(self, Self::Tank | Self::TankPct | Self::TankBar)
     }
 
     /// Whether Vosh can read what the code prints for you. `%u` for a
     /// mortal and `%s` while you control a mobile leave the game's
     /// buffer as it was, so they repeat the text of the code before them.
-    pub fn readable(self, who: Who) -> bool {
+    pub(crate) fn readable(self, who: Who) -> bool {
         match self {
             Self::Pacify => who.immortal,
             Self::Lang => !who.mobile,
@@ -356,7 +356,7 @@ impl Code {
     }
 
     /// The pattern for what the code prints.
-    pub fn pattern(self, who: Who) -> Pattern {
+    pub(crate) fn pattern(self, who: Who) -> Pattern {
         if !self.readable(who) {
             return Pattern::inner(".*?");
         }
@@ -420,7 +420,7 @@ impl Code {
     /// The characters the code can start and end with, and whether its
     /// end is plain from what it printed, which decides when two codes
     /// with nothing between them run together.
-    pub fn edges(self, who: Who) -> Edges {
+    pub(crate) fn edges(self, who: Who) -> Edges {
         use chars::{ANY, APOS, BRACKET, DIGIT, LETTER, MINUS, OTHER, SPACE};
         let number = Edges::new(MINUS | DIGIT, DIGIT);
         let digits = Edges::new(DIGIT, DIGIT);
@@ -460,7 +460,7 @@ impl Code {
 /// The pattern for one code: fixed text before and after, and the part
 /// the field's group holds.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Pattern {
+pub(crate) struct Pattern {
     pub before: &'static str,
     pub inner: String,
     pub after: &'static str,
@@ -482,7 +482,7 @@ impl Pattern {
 
     /// The pattern with the inner part in the named group, or in a group
     /// that reads nothing when `name` is None.
-    pub fn regex(&self, name: Option<&str>) -> String {
+    pub(crate) fn regex(&self, name: Option<&str>) -> String {
         let Self {
             before,
             inner,
@@ -496,20 +496,20 @@ impl Pattern {
 }
 
 /// Sets of characters, as bits, for [`Edges`].
-pub mod chars {
-    pub const DIGIT: u8 = 1;
-    pub const MINUS: u8 = 1 << 1;
-    pub const LETTER: u8 = 1 << 2;
-    pub const APOS: u8 = 1 << 3;
-    pub const SPACE: u8 = 1 << 4;
-    pub const BRACKET: u8 = 1 << 5;
-    pub const OTHER: u8 = 1 << 6;
-    pub const ANY: u8 = u8::MAX;
+pub(crate) mod chars {
+    pub(crate) const DIGIT: u8 = 1;
+    pub(crate) const MINUS: u8 = 1 << 1;
+    pub(crate) const LETTER: u8 = 1 << 2;
+    pub(crate) const APOS: u8 = 1 << 3;
+    pub(crate) const SPACE: u8 = 1 << 4;
+    pub(crate) const BRACKET: u8 = 1 << 5;
+    pub(crate) const OTHER: u8 = 1 << 6;
+    pub(crate) const ANY: u8 = u8::MAX;
 }
 
 /// What the edges of a code's text can be.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Edges {
+pub(crate) struct Edges {
     /// The characters it can start with.
     pub first: u8,
     /// The characters it can end with.
@@ -551,7 +551,7 @@ impl Edges {
 
     /// The same edges for a code that can print nothing.
     #[must_use]
-    pub const fn nullable(self) -> Self {
+    pub(crate) const fn nullable(self) -> Self {
         Self {
             nullable: true,
             ..self
@@ -560,7 +560,7 @@ impl Edges {
 
     /// True when Vosh cannot tell where `self` ends and `next` begins
     /// with nothing between them.
-    pub fn runs_into(self, next: Self) -> bool {
+    pub(crate) fn runs_into(self, next: Self) -> bool {
         !self.words && !next.bracketed && self.last & next.first != 0
     }
 }

@@ -67,7 +67,7 @@ impl Template {
         }
     }
 
-    pub fn source(&self) -> &str {
+    pub(crate) fn source(&self) -> &str {
         &self.source
     }
 
@@ -100,7 +100,7 @@ impl Template {
 
     /// Every field the template reads, in values, conditions and colors
     /// by value. `%{raw}` reads the field `raw`.
-    pub fn reads(&self) -> BTreeSet<FieldRef> {
+    pub(crate) fn reads(&self) -> BTreeSet<FieldRef> {
         let mut out = BTreeSet::new();
         for token in &self.tokens {
             match &token.kind {

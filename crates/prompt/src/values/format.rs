@@ -32,7 +32,7 @@ pub enum Resolved {
 }
 
 /// The phase as a word, for the `word` format.
-pub const MOON_WORDS: [&str; 8] = [
+pub(crate) const MOON_WORDS: [&str; 8] = [
     "new",
     "waxing crescent",
     "first quarter",
@@ -130,18 +130,18 @@ pub enum Value {
 
 /// A percent rounded to the nearest whole number. None when `max` is not
 /// above 0.
-pub fn percent_rounded(cur: i64, max: i64) -> Option<i64> {
+pub(crate) fn percent_rounded(cur: i64, max: i64) -> Option<i64> {
     (max > 0).then(|| ((cur as f64 / max as f64) * 100.0).round() as i64)
 }
 
 /// A percent by integer division, as the server works it out. None when
 /// `max` is below 1, where the game prints nothing.
-pub fn percent_game(cur: i64, max: i64) -> Option<i64> {
+pub(crate) fn percent_game(cur: i64, max: i64) -> Option<i64> {
     (max >= 1).then(|| cur.saturating_mul(100) / max)
 }
 
 /// `1,250`.
-pub fn grouped(n: i64) -> String {
+pub(crate) fn grouped(n: i64) -> String {
     let digits = n.unsigned_abs().to_string();
     let mut out = String::with_capacity(digits.len() + digits.len() / 3 + 1);
     if n < 0 {
@@ -158,7 +158,7 @@ pub fn grouped(n: i64) -> String {
 
 /// `1.2k`, `812k`, `3.4m`. Tenths are cut, not rounded, so 1250 reads
 /// `1.2k` next to its grouped `1,250`.
-pub fn short(n: i64) -> String {
+pub(crate) fn short(n: i64) -> String {
     let sign = if n < 0 { "-" } else { "" };
     let a = n.unsigned_abs();
     let (unit, suffix) = match a {
@@ -181,12 +181,12 @@ pub fn short(n: i64) -> String {
 /// rounds a double, to the nearest with a tie going to the even digit,
 /// so 1350 reads `1.4K` and 1250, a tie, `1.2K`. It stays in thousands
 /// past a million, `1234.6K`.
-pub fn thousands(n: i64) -> String {
+pub(crate) fn thousands(n: i64) -> String {
     format!("{:.1}K", n as f64 / 1000.0)
 }
 
 /// The game hour as `2 pm`.
-pub fn hour_word(hour: u8) -> String {
+pub(crate) fn hour_word(hour: u8) -> String {
     let h = hour % 24;
     let half = if h < 12 { "am" } else { "pm" };
     let twelve = match h % 12 {
@@ -198,7 +198,7 @@ pub fn hour_word(hour: u8) -> String {
 
 /// The game hour as the old tt++ prompt printed it, `3PM`, with `12AM`
 /// for midnight and `12PM` for noon.
-pub fn hour_ampm(hour: u8) -> String {
+pub(crate) fn hour_ampm(hour: u8) -> String {
     let h = hour % 24;
     let half = if h < 12 { "AM" } else { "PM" };
     let twelve = match h % 12 {
@@ -209,7 +209,7 @@ pub fn hour_ampm(hour: u8) -> String {
 }
 
 /// A language as `%s` prints it, first letter lowercased.
-pub fn lang_game(lang: &str) -> String {
+pub(crate) fn lang_game(lang: &str) -> String {
     let mut chars = lang.chars();
     match chars.next() {
         Some(first) => first.to_lowercase().chain(chars).collect(),
@@ -219,7 +219,7 @@ pub fn lang_game(lang: &str) -> String {
 
 /// A color band the game draws a value in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Band {
+pub(crate) enum Band {
     Plain,
     Yellow,
     BoldYellow,
@@ -229,7 +229,7 @@ pub enum Band {
 
 impl Band {
     /// The foreground SGR the band writes. Plain is the terminal's color.
-    pub fn fg(self) -> &'static str {
+    pub(crate) fn fg(self) -> &'static str {
         match self {
             Band::Plain => "39",
             Band::Yellow => "33",
@@ -240,7 +240,7 @@ impl Band {
     }
 
     /// The background SGR the band writes. Bold has no background.
-    pub fn bg(self) -> &'static str {
+    pub(crate) fn bg(self) -> &'static str {
         match self {
             Band::Plain => "49",
             Band::Yellow | Band::BoldYellow => "43",
@@ -251,7 +251,7 @@ impl Band {
 
 /// The `%h` bands. Plain above 40 percent, bold yellow at 40 and below,
 /// red at 20 and below.
-pub fn h_band(pct: i64) -> Band {
+pub(crate) fn h_band(pct: i64) -> Band {
     if pct <= 20 {
         Band::Red
     } else if pct <= 40 {
@@ -263,7 +263,7 @@ pub fn h_band(pct: i64) -> Band {
 
 /// The `%P` bands (`health_prompt`). Yellow under 75 percent, red under 25,
 /// bold red under 5.
-pub fn p_band(pct: i64) -> Band {
+pub(crate) fn p_band(pct: i64) -> Band {
     if pct < 5 {
         Band::BoldRed
     } else if pct < 25 {
@@ -277,7 +277,7 @@ pub fn p_band(pct: i64) -> Band {
 
 /// The ANSI color for how full a share is. Green from two thirds, yellow
 /// from one third, red below.
-pub fn how_full(fraction: f64) -> u8 {
+pub(crate) fn how_full(fraction: f64) -> u8 {
     if fraction >= 0.66 {
         2
     } else if fraction >= 0.33 {
@@ -290,12 +290,12 @@ pub fn how_full(fraction: f64) -> u8 {
 /// The 256 colors the old tt++ prompt drew a percent in, from red at 0
 /// to green at 100, one for each tenth: 196 202 208 214 220 226 190 154
 /// 118 82 46.
-pub const STEPS: [u8; 11] = [196, 202, 208, 214, 220, 226, 190, 154, 118, 82, 46];
+pub(crate) const STEPS: [u8; 11] = [196, 202, 208, 214, 220, 226, 190, 154, 118, 82, 46];
 
 /// The step a percent falls in, as the old prompt took it: the percent by
 /// integer division, then its tenth, so 39 is the step of 30 and 100 the
 /// last. A percent below 0 is red and one past 100 green.
-pub fn step_color(pct: i64) -> u8 {
+pub(crate) fn step_color(pct: i64) -> u8 {
     STEPS[usize::try_from((pct / 10).clamp(0, 10)).unwrap_or(0)]
 }
 
@@ -311,7 +311,7 @@ pub fn tank_bar_cells(pct: i64) -> [bool; 12] {
 impl Value {
     /// A number as a prompt value writes it, whole or with a decimal
     /// point. None when the text is no number.
-    pub fn parse_number(text: &str) -> Option<Value> {
+    pub(crate) fn parse_number(text: &str) -> Option<Value> {
         let t = text.trim();
         if let Ok(n) = t.parse::<i64>() {
             return Some(Value::Num(n));
@@ -325,7 +325,7 @@ impl Value {
     }
 
     /// The number a whole or decimal value holds.
-    pub fn number(&self) -> Option<f64> {
+    pub(crate) fn number(&self) -> Option<f64> {
         match self {
             Value::Num(n) => Some(*n as f64),
             Value::Decimal { value, .. } => Some(*value),
@@ -334,7 +334,7 @@ impl Value {
     }
 
     /// True for a whole or decimal 0, a max that means no such pool.
-    pub fn is_zero(&self) -> bool {
+    pub(crate) fn is_zero(&self) -> bool {
         match self {
             Value::Num(n) => *n == 0,
             Value::Decimal { value, .. } => value.abs() < f64::EPSILON,
@@ -345,7 +345,7 @@ impl Value {
     /// This number over `max`, with the game's own percent when it gave
     /// one. Two whole numbers make a gauge, and a decimal point on either
     /// makes a decimal with its max. None when either is no number.
-    pub fn over(&self, max: &Value, pct: Option<i64>) -> Option<Value> {
+    pub(crate) fn over(&self, max: &Value, pct: Option<i64>) -> Option<Value> {
         match (self, max) {
             (Value::Num(cur), Value::Num(max)) => Some(Value::Gauge {
                 cur: *cur,
@@ -362,7 +362,7 @@ impl Value {
 
     /// How full the value is, 0 to 1, for bars and color by how full.
     /// None when nothing gives a share.
-    pub fn fraction(&self) -> Option<f64> {
+    pub(crate) fn fraction(&self) -> Option<f64> {
         let share =
             |cur: i64, max: i64| (max > 0).then(|| (cur as f64 / max as f64).clamp(0.0, 1.0));
         match self {
@@ -387,7 +387,7 @@ impl Value {
     }
 
     /// True for the values a bar can draw, even when no share is known yet.
-    pub fn has_bar(&self) -> bool {
+    pub(crate) fn has_bar(&self) -> bool {
         matches!(
             self,
             Value::Gauge { .. }
@@ -400,7 +400,7 @@ impl Value {
     }
 
     /// The rounded percent the `pct` format prints.
-    pub fn percent(&self) -> Option<i64> {
+    pub(crate) fn percent(&self) -> Option<i64> {
         match self {
             Value::Decimal {
                 value,
@@ -425,7 +425,7 @@ impl Value {
     /// The percent by the server's integer division, for the game's bands,
     /// the steps and the `pct:game` format. A decimal cuts its fraction off
     /// the same way.
-    pub fn game_percent(&self) -> Option<i64> {
+    pub(crate) fn game_percent(&self) -> Option<i64> {
         match self {
             Value::Decimal {
                 value,
@@ -478,7 +478,7 @@ impl Value {
     /// The plain text of a format, or None when the format does not apply
     /// to this value. The renderer draws bars, the tank's game bar, an
     /// immortal level's game look and styled text itself.
-    pub fn text(&self, format: &Format, label: &str) -> Option<String> {
+    pub(crate) fn text(&self, format: &Format, label: &str) -> Option<String> {
         match format {
             Format::Value => Some(self.value_text(label)),
             Format::Max => match self {
@@ -581,7 +581,7 @@ impl Value {
 }
 
 /// What `%j` prints for a moon, `-` when it is not up.
-pub fn moon_code(phase: u8, active: bool) -> &'static str {
+pub(crate) fn moon_code(phase: u8, active: bool) -> &'static str {
     if !active {
         return "-";
     }

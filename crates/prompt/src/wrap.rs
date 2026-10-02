@@ -97,7 +97,7 @@ pub fn wrap_stream(text: &str, cols: usize) -> String {
 /// zero width. When the column passes `cols`, put a CRLF in place of the
 /// last whitespace so the wrap lands between words. A single token wider
 /// than the width breaks at the edge so the line still ends.
-pub fn wrap_line(line: &str, cols: usize) -> String {
+pub(crate) fn wrap_line(line: &str, cols: usize) -> String {
     enum AnsiState {
         Normal,
         Esc,
