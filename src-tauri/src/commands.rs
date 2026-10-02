@@ -6494,6 +6494,7 @@ mod tests {
             "potion_labels",
             "herb_labels",
             "sent_tells",
+            "room_and_time",
         ];
 
         #[test]

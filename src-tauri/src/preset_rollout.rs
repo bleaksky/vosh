@@ -27,7 +27,10 @@ use crate::profile_set::ProfileSet;
 
 /// Each preset that comes on once, with the id the step is recorded
 /// under in `profiles.toml`.
-pub(crate) const ROLLOUTS: &[(&str, &str)] = &[("preset-sent-tells-on", "sent_tells")];
+pub(crate) const ROLLOUTS: &[(&str, &str)] = &[
+    ("preset-sent-tells-on", "sent_tells"),
+    ("preset-room-and-time-on", "room_and_time"),
+];
 
 /// Run every step in [`ROLLOUTS`] that has not run over the app data
 /// folder `app_data`.
@@ -156,10 +159,10 @@ name = "Quiet"
         dir
     }
 
-    fn recorded(root: &Path) -> bool {
-        ProfileSet::load_or_migrate(root.to_path_buf())
-            .unwrap()
-            .migrated("preset-sent-tells-on")
+    /// How many steps in [`ROLLOUTS`] are recorded.
+    fn recorded(root: &Path) -> usize {
+        let set = ProfileSet::load_or_migrate(root.to_path_buf()).unwrap();
+        ROLLOUTS.iter().filter(|(id, _)| set.migrated(id)).count()
     }
 
     #[test]
@@ -169,14 +172,19 @@ name = "Quiet"
         run(root);
         assert_eq!(
             list(root, "default"),
-            strings(&["healing_basics", "potion_labels", "sent_tells"])
+            strings(&[
+                "healing_basics",
+                "potion_labels",
+                "sent_tells",
+                "room_and_time"
+            ])
         );
         // Every preset off stays off, and the defaults hold it already.
         assert_eq!(list(root, "Healer"), strings(&["none"]));
         let leftover = &list(root, "Ranger");
         assert!(leftover.is_empty(), "{leftover:?}");
         assert!(!file(root, "Quiet").exists());
-        assert!(recorded(root));
+        assert_eq!(recorded(root), ROLLOUTS.len());
     }
 
     #[test]
@@ -199,7 +207,7 @@ name = "Quiet"
         run(root);
         assert_eq!(
             load_global_catalog(root).unwrap().enabled_presets,
-            Some(strings(&["herb_labels", "sent_tells"]))
+            Some(strings(&["herb_labels", "sent_tells", "room_and_time"]))
         );
     }
 
@@ -222,15 +230,20 @@ name = "Quiet"
             list(root, "default"),
             strings(&["healing_basics", "potion_labels"])
         );
-        assert!(!recorded(root));
+        assert_eq!(recorded(root), 0);
         // Once it reads, the next launch runs the step.
         write_list(root, "Ranger", &[]);
         run(root);
         assert_eq!(
             list(root, "default"),
-            strings(&["healing_basics", "potion_labels", "sent_tells"])
+            strings(&[
+                "healing_basics",
+                "potion_labels",
+                "sent_tells",
+                "room_and_time"
+            ])
         );
-        assert!(recorded(root));
+        assert_eq!(recorded(root), ROLLOUTS.len());
     }
 
     #[test]

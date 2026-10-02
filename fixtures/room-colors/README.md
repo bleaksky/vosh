@@ -18,3 +18,21 @@ Where the lines come from.
 - `You spot some fresh spur.` is `show_tracks` in skills4.c, which follows the exits line when the game draws its minimap.
 - `It is pitch black ... ` is the dark room line in `do_look`, which prints no exits line.
 - The prompt is the one `prompt all` sets, `%n%P%C<%hhp %mm %vmv> `, with sample numbers.
+
+## lines.json
+
+Single lines for the Room and time colors preset. `trigger` names the trigger that colors a line and `match` the text its color covers. A line with no `trigger` is a near miss that no trigger of the preset may touch. `src/lib/presets.test.ts` runs the preset's patterns on each one, and `src-tauri/src/session_room_tests.rs` runs each through the session's own steps.
+
+- The exits lines are `do_exits` with `auto`. Room 5233, The Eastern Square, has exits `D0` to `D3`. Room 5279 has `D2`. Room 5200, Rock Bottom, has `D4` and a door at `D5` that resets closed, which the line shows in parentheses. The same room shows `(+down)` when you see a trap on that door, the `+` in `` `! `` bold red. A room with no exit you can see reads `[Exits: none]`, the same text the builder tutorial mob in area/higher.are echoes.
+- The eleven time of day lines are `weather_update` in update.c, the five usual ones and the six it sends in eternal darkness.
+- The WiZNET lines are `wiznet` in act_wiz.c, `` `&W`8i`&ZNET`8 ``, the time cut from ctime, and the message. The messages are `TICK!` from update.c, `Newbie alert!  $N sighted.` from comm.c and `$N has posted a note.` from recycle.c.
+- The says, tells and yells are the formats in languages.c and act_comm.c, `$n says`, `%s tells you` and `$n yells`, each with its color code around the text. The game has no gossip channel, so the newbie channel from `do_newbiechat` stands in for one. Each quotes a line the preset colors.
+- `Welcome to Wiznet!` is `do_wiznet` in act_wiz.c.
+- The prompts are the one `prompt all` sets, and `%e` alone from `do_promptexit` in act_info.c, which prints single letters, `---` while you are blind and `???` in forest mist.
+- `Obvious exits:` and its row are `do_exits` typed by hand, and `You can't tell where the exits are.` is what it prints in forest mist.
+- The room names are rooms 5279, 5233 and 5200 in area/fortblac.are, with their own color codes.
+- `The sky is getting cloudy.` is `sky_event_text` in update.c, which can follow a time of day message in the same send.
+
+## preset.json
+
+The triggers of the Room and time colors preset, exactly as `presetTriggers` in `src/lib/presets.ts` makes them. `src/lib/presets.test.ts` holds the two equal, so a change to the preset changes this file in the same commit, and the Rust tests install these triggers.

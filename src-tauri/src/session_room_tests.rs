@@ -1,17 +1,19 @@
-//! Room triggers, played through the session's own steps.
+//! Room triggers and the Room and time colors preset, played through the
+//! session's own steps.
 //!
 //! A child of `session`, so it drives the same private steps the socket
-//! loop runs: the GMCP step, the Line pass and the GA step. The looks come
-//! from fixtures/room-colors/looks.json, each one the way the Aabahran
+//! loop runs: the GMCP step, the Line pass and the GA step. The looks and
+//! lines come from fixtures/room-colors, each one the way the Aabahran
 //! server prints it, with its Room.Chars packet first where the server
-//! sends one.
+//! sends one. The preset's triggers come from preset.json, which
+//! presets.test.ts holds to src/lib/presets.ts.
 
 use super::*;
 
-/// One event of a look in the fixture.
+/// One event of a look in looks.json.
 #[derive(Debug, serde::Deserialize)]
 #[serde(untagged)]
-pub(super) enum LookEvent {
+enum LookEvent {
     Gmcp {
         gmcp: String,
         data: serde_json::Value,
@@ -19,6 +21,10 @@ pub(super) enum LookEvent {
     Line {
         line: String,
         room: bool,
+        /// The color the Room and time colors preset gives a line that
+        /// is not a room line, if any.
+        #[serde(default)]
+        preset: Option<String>,
     },
     Prompt {
         prompt: String,
@@ -26,9 +32,9 @@ pub(super) enum LookEvent {
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub(super) struct LookCase {
-    pub(super) name: String,
-    pub(super) events: Vec<LookEvent>,
+struct LookCase {
+    name: String,
+    events: Vec<LookEvent>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -37,17 +43,63 @@ struct LookFile {
 }
 
 /// Every look in fixtures/room-colors/looks.json.
-pub(super) fn looks() -> Vec<LookCase> {
+fn looks() -> Vec<LookCase> {
     let text = include_str!("../../fixtures/room-colors/looks.json");
     serde_json::from_str::<LookFile>(text)
         .expect("looks.json reads")
         .cases
 }
 
+/// One line in lines.json.
+#[derive(Debug, serde::Deserialize)]
+struct PresetLine {
+    line: String,
+    #[serde(default)]
+    trigger: Option<String>,
+    #[serde(default, rename = "match")]
+    span: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct LineFile {
+    lines: Vec<PresetLine>,
+}
+
+/// Every line in fixtures/room-colors/lines.json.
+fn preset_lines() -> Vec<PresetLine> {
+    let text = include_str!("../../fixtures/room-colors/lines.json");
+    serde_json::from_str::<LineFile>(text)
+        .expect("lines.json reads")
+        .lines
+}
+
+/// The triggers of the Room and time colors preset, from preset.json.
+fn preset_triggers() -> Vec<vosh_trigger::Trigger> {
+    #[derive(serde::Deserialize)]
+    struct PresetFile {
+        triggers: Vec<vosh_trigger::Trigger>,
+    }
+    let text = include_str!("../../fixtures/room-colors/preset.json");
+    serde_json::from_str::<PresetFile>(text)
+        .expect("preset.json reads")
+        .triggers
+}
+
+/// A profile with the Room and time colors preset installed.
+fn preset_profile() -> Profile {
+    let mut p = Profile::default();
+    for trigger in preset_triggers() {
+        p.triggers
+            .set(trigger)
+            .expect("every preset pattern compiles");
+    }
+    p
+}
+
 /// The wire bytes of `events`: each packet as a GMCP subnegotiation, each
 /// line with the `\n\r` the server ends it with, and each prompt with a
 /// GA after it.
-pub(super) fn wire(events: &[LookEvent]) -> Vec<u8> {
+fn wire(events: &[LookEvent]) -> Vec<u8> {
     let mut bytes = Vec::new();
     for event in events {
         match event {
@@ -75,7 +127,7 @@ pub(super) fn wire(events: &[LookEvent]) -> Vec<u8> {
 
 /// One socket read of `data` through the steps the session runs for each
 /// event, then the end of the read. Returns what the terminal gets.
-pub(super) fn read(p: &mut Profile, data: &[u8]) -> String {
+fn read(p: &mut Profile, data: &[u8]) -> String {
     let mut parser = Parser::new();
     let mut acc = LineAccumulator::new();
     let mut batch = ReadBatch::new(output_count());
@@ -102,19 +154,16 @@ pub(super) fn read(p: &mut Profile, data: &[u8]) -> String {
     String::from_utf8(batch.out.bytes).expect("the output is text")
 }
 
-/// What the terminal shows for `events` when each room line takes
-/// `room_line` and every other line and prompt shows as sent.
-pub(super) fn expected(events: &[LookEvent], room_line: &dyn Fn(&str) -> String) -> String {
+/// What the terminal shows for `events`, each line as `shows` gives it
+/// from the line as sent, whether it is a room line, and the preset color
+/// looks.json names for it. Each prompt shows as sent.
+fn expected(events: &[LookEvent], shows: &dyn Fn(&str, bool, Option<&str>) -> String) -> String {
     let mut out = String::new();
     for event in events {
         match event {
             LookEvent::Gmcp { .. } => {}
-            LookEvent::Line { line, room: true } => {
-                out.push_str(&room_line(line));
-                out.push_str("\r\n");
-            }
-            LookEvent::Line { line, room: false } => {
-                out.push_str(line);
+            LookEvent::Line { line, room, preset } => {
+                out.push_str(&shows(line, *room, preset.as_deref()));
                 out.push_str("\r\n");
             }
             LookEvent::Prompt { prompt } => {
@@ -124,6 +173,21 @@ pub(super) fn expected(events: &[LookEvent], room_line: &dyn Fn(&str) -> String)
         }
     }
     out
+}
+
+/// `line` without its ANSI codes, wrapped in `open` and a reset.
+fn wrapped(open: &str, line: &str) -> String {
+    format!("{open}{}\x1b[0m", vosh_ansi::plain_text(line.as_bytes()))
+}
+
+/// The SGR open the preset uses for a color named in a fixture.
+fn open_for(color: &str) -> &'static str {
+    match color {
+        "green" => "\x1b[32m",
+        "yellow" => "\x1b[33m",
+        "blue" => "\x1b[34m",
+        other => panic!("no preset color {other}"),
+    }
 }
 
 /// A trigger on `target` that colors a whole line yellow.
@@ -158,8 +222,12 @@ fn a_room_trigger_colors_the_things_and_people_of_each_look_and_nothing_else() {
             .set(yellow("room", vosh_trigger::TriggerTarget::Room))
             .unwrap();
         let shown = read(&mut p, &wire(&case.events));
-        let want = expected(&case.events, &|line| {
-            format!("\x1b[33m{}\x1b[0m", vosh_ansi::plain_text(line.as_bytes()))
+        let want = expected(&case.events, &|line, room, _| {
+            if room {
+                wrapped("\x1b[33m", line)
+            } else {
+                line.to_string()
+            }
         });
         assert_eq!(shown, want, "{}", case.name);
     }
@@ -196,5 +264,58 @@ fn line_triggers_still_see_every_line_of_a_look() {
                 );
             }
         }
+    }
+}
+
+#[test]
+fn the_preset_opens_a_look_on_the_line_the_session_reads_as_its_exits() {
+    let exits = preset_triggers()
+        .into_iter()
+        .find(|t| t.name == "room.exits")
+        .expect("the preset colors the exits");
+    assert_eq!(
+        exits.first_pattern(),
+        crate::room_block::EXITS_PATTERN,
+        "the preset and the session read the same exits line"
+    );
+}
+
+#[test]
+fn the_preset_colors_each_look_as_the_mockups_draw_it() {
+    for case in &looks() {
+        let mut p = preset_profile();
+        let shown = read(&mut p, &wire(&case.events));
+        let want = expected(&case.events, &|line, room, preset| match (room, preset) {
+            (true, _) => wrapped(open_for("yellow"), line),
+            (false, Some(color)) => wrapped(open_for(color), line),
+            (false, None) => line.to_string(),
+        });
+        assert_eq!(shown, want, "{}", case.name);
+    }
+}
+
+#[test]
+fn the_preset_colors_each_line_it_names_and_leaves_every_near_miss_alone() {
+    let lines = preset_lines();
+    assert!(lines.iter().any(|l| l.trigger.is_none()));
+    for case in &lines {
+        let mut p = preset_profile();
+        let shown = read(&mut p, format!("{}\n\r", case.line).as_bytes());
+        let plain = vosh_ansi::plain_text(case.line.as_bytes());
+        let want = match case.trigger.as_deref() {
+            None => case.line.clone(),
+            Some(trigger) => {
+                let span = case.span.as_deref().expect("a colored line names its span");
+                let open = match trigger {
+                    "room.exits" => "\x1b[32m",
+                    "time.of_day" => "\x1b[34m",
+                    "wiznet.tag" => "\x1b[1;35m",
+                    other => panic!("no preset trigger {other}"),
+                };
+                assert!(plain.starts_with(span), "{plain}");
+                format!("{open}{span}\x1b[0m{}", &plain[span.len()..])
+            }
+        };
+        assert_eq!(shown, format!("{want}\r\n"), "{plain}");
     }
 }

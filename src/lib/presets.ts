@@ -26,7 +26,8 @@ export type PresetCategory =
   | 'events'
   | 'loot'
   | 'labels'
-  | 'chat';
+  | 'chat'
+  | 'world';
 
 export interface Preset {
   id: string;
@@ -46,6 +47,7 @@ export const PRESET_CATEGORIES: Record<PresetCategory, string> = {
   loot: 'Loot and progress',
   labels: 'Potion and herb labels',
   chat: 'Chat',
+  world: 'Rooms and time',
 };
 
 // Helper to build a highlight trigger compactly. Default priority of 5
@@ -92,6 +94,38 @@ function replace(
 // active.
 const GREEN: HighlightStyle = { fg: 'bright_green' };
 const RED: HighlightStyle = { fg: 'bright_red', bold: true };
+
+// The exits line a room look prints with autoexit on (act_info.c
+// do_exits with "auto"). Each exit shows by its full name, in parentheses
+// while closed, with a + where you see a trap, or the line reads none.
+// The prompt's %e code prints single letters, `[Exits: N E (S) W]`, and a
+// blind or misty prompt prints `[Exits: --- ]` or `[Exits: ??? ]`, so
+// none of those match. The session opens a room look on the same pattern
+// (EXITS_PATTERN in src-tauri/src/room_block.rs).
+const EXITS_LINE = '^\\[Exits:(?: none|(?: \\(?\\+?(?:north|east|south|west|up|down)\\)?)+)\\]$';
+
+// Every time of day message the game sends (update.c weather_update), the
+// usual five and the six it sends instead while an immortal holds the
+// land in eternal darkness. Each one is a line of its own, so each
+// pattern is anchored at both ends and a say that quotes one stays plain.
+const TIME_OF_DAY = [
+  'The night is about to end.',
+  'The day has begun.',
+  'The sun rises in the east.',
+  'The sun slowly disappears in the west.',
+  'The night has begun.',
+  'The darkness begets an unbearable chill.',
+  'The night air is suffocating.',
+  'Darkness covers the landscape.',
+  'Your bones ache as the chilly air cuts through you.',
+  'The night air burns as the chilly air dances across your body.',
+  'The landscape remains grey and lifeless.',
+];
+
+// `text` as a regex that matches it literally.
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 // Damage verb alternation, lifted from the user's TinTin `CalcDam`
 // table. Pairs cover the conjugated form ("punch decimates") and
@@ -589,6 +623,39 @@ export const PRESETS: Preset[] = [
         enabled: true,
         actions: [{ kind: 'route', pane: 'tell' }],
       },
+    ],
+  },
+
+  // ── ROOMS AND TIME ───────────────────────────────────────────────
+  // The look and the clock in four of the theme's terminal colors, as the
+  // redesign mockups draw them, so they follow every theme. In Nord these
+  // are the mockup colors exactly. The things and people a room lists
+  // match through the Room target, which the session gives only the lines
+  // a look lists after its exits line, with the count of people from the
+  // Room.Chars packet. WiZNET (act_wiz.c wiznet) only turns its tag bold
+  // magenta, the mockup's mauve, since the game sends it white and grey.
+  {
+    id: 'room_and_time',
+    category: 'world',
+    name: 'Room and time colors',
+    description:
+      'Colors the exits green, what is in the room yellow, the time of day blue, and the ' +
+      'WiZNET tag magenta.',
+    defaultEnabled: true,
+    triggers: [
+      highlight('room.exits', EXITS_LINE, { fg: 'green' }, 6),
+      { ...highlight('room.contents', '^.+$', { fg: 'yellow' }, 4), target: 'room' },
+      {
+        name: 'time.of_day',
+        patterns: TIME_OF_DAY.map((line) => ({
+          pattern: `^${escapeRegex(line)}$`,
+          enabled: true,
+        })),
+        priority: 6,
+        enabled: true,
+        actions: [{ kind: 'highlight', style: { fg: 'blue' } }],
+      },
+      highlight('wiznet.tag', '^WiZNET\\b', { fg: 'magenta', bold: true }, 6),
     ],
   },
 ];
