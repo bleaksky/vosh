@@ -117,7 +117,7 @@ mod window_backdrop;
 
 use commands::{
     aliases_export, aliases_groups_list, aliases_import, aliases_set_group_enabled, app_quit,
-    app_version, import_apply, import_detect, loadouts_get_state, loadouts_set_active, logs_export,
+    import_apply, import_detect, loadouts_get_state, loadouts_set_active, logs_export,
     logs_list_sessions, logs_search, logs_search_page, macros_delete, macros_groups_list,
     macros_list, macros_set, macros_set_group_enabled, map_set_avoid, map_set_note, map_walk_to,
     migration_analyze, migration_apply, native_surface_copy, native_surface_find,
@@ -303,7 +303,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            app_version,
             native_surface_set_bounds,
             native_surface_scroll,
             native_surface_copy,
@@ -707,15 +706,5 @@ async fn load_enabled_plugins<R: tauri::Runtime>(
                 "plugin output at launch has nowhere to go"
             );
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn app_version_matches_cargo_pkg_version() {
-        assert_eq!(app_version(), env!("CARGO_PKG_VERSION"));
     }
 }

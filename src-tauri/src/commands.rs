@@ -1393,11 +1393,6 @@ pub(crate) async fn aliases_import(
     Ok(count)
 }
 
-#[tauri::command]
-pub(crate) fn app_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
-}
-
 /// Tier 3 native renderer (macOS). The frontend reports the terminal
 /// pane's screen rectangle (CSS pixels, top-left origin, relative to the
 /// window) and device pixel ratio so the native wgpu surface can track
