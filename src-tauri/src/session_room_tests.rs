@@ -147,7 +147,7 @@ fn read(p: &mut Profile, data: &[u8]) -> String {
                 }
             }
             TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
-                let msg = vosh_gmcp::parse(&payload).expect("every packet parses");
+                let msg = vosh_protocol::gmcp::parse(&payload).expect("every packet parses");
                 let _ = gmcp_step(p, &msg, now);
             }
             TelnetEvent::Command(byte) if byte == telnet_codes::GA || byte == telnet_codes::EOR => {

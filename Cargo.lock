@@ -5100,7 +5100,6 @@ dependencies = [
  "urlencoding",
  "vosh-alias",
  "vosh-ansi",
- "vosh-gmcp",
  "vosh-log",
  "vosh-prompt",
  "vosh-protocol",
@@ -5111,15 +5110,6 @@ dependencies = [
  "wgpu",
  "windows-sys 0.59.0",
  "x11-dl",
-]
-
-[[package]]
-name = "vosh-gmcp"
-version = "0.8.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -5145,13 +5135,18 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "vosh-gmcp",
  "vosh-prompt",
+ "vosh-protocol",
 ]
 
 [[package]]
 name = "vosh-protocol"
 version = "0.8.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "vosh-script"

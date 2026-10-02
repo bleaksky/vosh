@@ -149,7 +149,7 @@ impl Session {
                     if option == telnet_option::GMCP =>
                 {
                     batch.gmcp = true;
-                    let msg = vosh_gmcp::parse(&payload).expect("every packet parses");
+                    let msg = vosh_protocol::gmcp::parse(&payload).expect("every packet parses");
                     let _ = gmcp_step(&mut self.p, &msg, now);
                 }
                 TelnetEvent::Command(byte)

@@ -1,11 +1,11 @@
 //! GMCP message parsing and serialization.
 //!
 //! GMCP wraps `package.name JSON` payloads inside telnet subnegotiation
-//! blocks. The telnet parser delivers the payload bytes; this crate splits
+//! blocks. The telnet parser delivers the payload bytes; this module splits
 //! the package name from the JSON value and parses both.
 //!
 //! Outgoing messages serialize back into the same wire format. The byte
-//! framing (IAC SB GMCP ... IAC SE) lives in the telnet crate next to the
+//! framing (IAC SB GMCP ... IAC SE) lives in the telnet module next to the
 //! other subnegotiation builders.
 
 use serde::Serialize;

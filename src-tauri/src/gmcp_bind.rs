@@ -5,7 +5,7 @@
 //! current target name and HP show up in the prompt-area HUD.
 
 use serde_json::Value;
-use vosh_gmcp::Message;
+use vosh_protocol::gmcp::Message;
 use vosh_vars::{Scope, VariableStore};
 
 /// Push fields from a known GMCP package into the session variable store.
@@ -207,7 +207,7 @@ mod tests {
 
     /// An Aabahran packet from fixtures/gmcp/aabahran.
     fn packet(text: &str) -> Message {
-        vosh_gmcp::parse(text.as_bytes()).expect("fixture parses")
+        vosh_protocol::gmcp::parse(text.as_bytes()).expect("fixture parses")
     }
 
     const VITALS: &str = include_str!("../../fixtures/gmcp/aabahran/char-vitals.gmcp");

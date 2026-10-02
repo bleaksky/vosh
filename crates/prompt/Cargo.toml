@@ -27,7 +27,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 testkit = []
 
 [dev-dependencies]
-vosh-gmcp = { path = "../gmcp" }
+vosh-protocol = { path = "../protocol" }
 # The tests here and the fake_mud example read the test kit.
 vosh-prompt = { path = ".", features = ["testkit"] }
 # The fake_mud example serves the test kit over TCP.

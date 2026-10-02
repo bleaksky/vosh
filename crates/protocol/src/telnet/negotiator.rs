@@ -168,7 +168,7 @@ impl Negotiator {
     }
 
     /// Wrap a GMCP wire payload (`package <json>` bytes from
-    /// `vosh_gmcp::build`) in `IAC SB GMCP ... IAC SE`. Any literal
+    /// `crate::gmcp::build`) in `IAC SB GMCP ... IAC SE`. Any literal
     /// 0xFF inside the payload is doubled per the telnet escape rule.
     pub fn build_gmcp_subnegotiation(payload: &[u8]) -> Vec<u8> {
         subnegotiation(option::GMCP, payload)
