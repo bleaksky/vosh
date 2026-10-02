@@ -66,7 +66,6 @@
 //! and macros out of each profile file, which keeps every other setting
 //! of its profile. The `migration_analyze` Tauri command consumes
 //! [`analyze_profiles`] for the preview.
-#![allow(dead_code)]
 
 use std::collections::{BTreeMap, BTreeSet};
 
