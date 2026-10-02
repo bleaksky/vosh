@@ -1400,46 +1400,10 @@ export async function timersDelete(id: number): Promise<Timer[]> {
   return invoke('timers_delete', { id });
 }
 
-// --- Group toggle commands (one set per type) ---
-
-export async function listAliasGroups(): Promise<GroupState[]> {
-  return invoke('aliases_groups_list');
-}
-
-export async function setAliasGroupEnabled(group: string, enabled: boolean): Promise<void> {
-  await invoke('aliases_set_group_enabled', { group, enabled });
-}
-
-export async function listTriggerGroups(): Promise<GroupState[]> {
-  return invoke('triggers_groups_list');
-}
-
-export async function setTriggerGroupEnabled(group: string, enabled: boolean): Promise<void> {
-  await invoke('triggers_set_group_enabled', { group, enabled });
-}
+// --- Macro groups, which the command line follows ---
 
 export async function listMacroGroups(): Promise<GroupState[]> {
   return invoke('macros_groups_list');
-}
-
-export async function setMacroGroupEnabled(group: string, enabled: boolean): Promise<void> {
-  await invoke('macros_set_group_enabled', { group, enabled });
-}
-
-export async function subscribeAliasGroupsChanged(
-  cb: (group: string) => void,
-): Promise<UnlistenFn> {
-  return listen<string>('vosh://alias-groups-changed', (event) => {
-    cb(event.payload);
-  });
-}
-
-export async function subscribeTriggerGroupsChanged(
-  cb: (group: string) => void,
-): Promise<UnlistenFn> {
-  return listen<string>('vosh://trigger-groups-changed', (event) => {
-    cb(event.payload);
-  });
 }
 
 /** The trigger list changed: Settings saved it, or #trigger, an import,
