@@ -35,8 +35,9 @@ import { ThemeGallery } from './appearance/ThemeGallery';
 // Theme holds Import… and the gallery of every theme, then follow
 // system appearance and the light and dark pair it switches between.
 // Terminal text holds the font, size, line height, whether MUD text
-// takes the theme's colors, and whether Vosh keeps the colors your
-// triggers set readable on the theme. A quiet Advanced row at the end holds
+// takes the theme's colors, whether Vosh keeps the colors your triggers
+// set readable on the theme, and whether a line the same as the one
+// before it shows once with a count. A quiet Advanced row at the end holds
 // what the board leaves out. Every change saves on its own.
 
 const LINE_HEIGHTS = [
@@ -275,6 +276,16 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           <Toggle
             checked={config.readable_highlights}
             onChange={(on) => update({ readable_highlights: on }, { now: true })}
+          />
+        </Row>
+        <Row
+          anchor="collapse-repeats"
+          label="Collapse repeated lines"
+          description="A line the same as the line before it shows once, with a count in front."
+        >
+          <Toggle
+            checked={config.collapse_repeats}
+            onChange={(on) => update({ collapse_repeats: on }, { now: true })}
           />
         </Row>
       </Section>

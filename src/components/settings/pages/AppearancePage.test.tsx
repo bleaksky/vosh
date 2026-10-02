@@ -210,4 +210,48 @@ describe('AppearancePage', () => {
     const off = await readableSwitch({ ...config(), readable_highlights: false });
     expect(off.checked).toBe(false);
   });
+
+  it('draws Collapse repeated lines last under Terminal text, off until you turn it on', async () => {
+    const collapseSwitch = async (cfg: UiConfig) => {
+      const container = doc.createElement('div');
+      doc.body.appendChild(container);
+      const root = createRoot(container as unknown as HTMLElement);
+      await act(async () => {
+        root.render(
+          createElement(AppearancePage, {
+            target: { group: 'appearance' },
+            navSeq: 0,
+            config: cfg,
+            setConfig: () => undefined,
+            onError: () => undefined,
+            pathB: false,
+            navigate: () => undefined,
+            setLeaveGuard: () => undefined,
+          }),
+        );
+      });
+      const anchors = findAll(container, (el) => el.getAttribute('data-st-anchor') !== null).map(
+        (el) => el.getAttribute('data-st-anchor'),
+      );
+      const [row] = findAll(
+        container,
+        (el) => el.getAttribute('data-st-anchor') === 'collapse-repeats',
+      );
+      const [input] = findAll(row, (el) => el.getAttribute('role') === 'switch');
+      const checked = (input as unknown as { checked: boolean }).checked;
+      await act(async () => {
+        root.unmount();
+      });
+      return { label: row.textContent, checked, anchors };
+    };
+
+    const off = await collapseSwitch(config());
+    expect(off.label).toContain('Collapse repeated lines');
+    expect(off.checked).toBe(false);
+    // It follows Keep highlight colors readable.
+    const at = off.anchors.indexOf('collapse-repeats');
+    expect(off.anchors[at - 1]).toBe('readable-highlights');
+    const on = await collapseSwitch({ ...config(), collapse_repeats: true });
+    expect(on.checked).toBe(true);
+  });
 });
