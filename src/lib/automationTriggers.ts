@@ -278,7 +278,7 @@ export function normalizeTrigger(raw: unknown): TriggerRecord {
   if (typeof r.preset === 'string' && r.preset.length > 0) out.preset = r.preset;
   const group = typeof r.group === 'string' ? r.group.trim() : '';
   if (group) out.group = group;
-  if (r.target === 'prompt') out.target = 'prompt';
+  if (r.target === 'prompt' || r.target === 'room') out.target = r.target;
   return out;
 }
 

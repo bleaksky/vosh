@@ -101,6 +101,7 @@ mod profile_set;
 mod prompt_commands;
 mod prompt_lookup;
 mod prompt_migration;
+mod room_block;
 mod script_state;
 mod session;
 #[cfg(native_surface)]

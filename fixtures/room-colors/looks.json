@@ -1,0 +1,186 @@
+{
+  "notes": "Hand written and synthetic, never captured. Room looks as the Aabahran server prints them, built from its own format strings and area files, with a Room.Chars packet before the text where the server sends one. Each line says where it comes from, and room says whether it lists a thing or a person, the lines a Room trigger matches. Tolliver and Maren are invented names. README.md has the details. Read by src-tauri/src/session_room_tests.rs.",
+  "cases": [
+    {
+      "name": "a look with things and people, then what follows it in the same pulse",
+      "events": [
+        {
+          "gmcp": "Room.Chars",
+          "data": [
+            { "name": "a villager", "npc": true },
+            { "name": "a bank representative", "npc": true },
+            { "name": "Tolliver", "npc": false }
+          ]
+        },
+        {
+          "line": "\u001b[38;5;255m\u001b[0;1;30mThe Bank of Aabahran\u001b[0;0m\u001b[0;0m",
+          "room": false,
+          "from": "do_look, the name of room 5279 in area/fortblac.are with its `8 code, after the tint for an inside sector"
+        },
+        {
+          "line": "  Carved marble pillars bely the village setting of this branch of the Bank",
+          "room": false,
+          "from": "do_look, the two spaces before the description of room 5279"
+        },
+        {
+          "line": "of Aabahran.  Despite not being held in one of the major cities, clearly the",
+          "room": false,
+          "from": "the second line of the description of room 5279"
+        },
+        { "line": "", "room": false, "from": "the blank line do_look sends before the exits" },
+        {
+          "line": "[Exits: south]",
+          "room": false,
+          "from": "do_exits with auto, room 5279 has one exit, D2 south"
+        },
+        {
+          "line": "     A black-steel helm is here, gleaming darkly.",
+          "room": true,
+          "from": "list_to_char, the long text of object 5201"
+        },
+        {
+          "line": "( 2) A pair of black-steel gauntlets rests on the ground.",
+          "room": true,
+          "from": "list_to_char, two of object 5202 combined"
+        },
+        {
+          "line": "A Blackwatch villager scurries about, taking care of business.",
+          "room": true,
+          "from": "char_to_char, the long text of mob 5287, which resets in room 5279"
+        },
+        {
+          "line": "A representative of the Bank of Aabahran is here, ready to take your gold.",
+          "room": true,
+          "from": "char_to_char, the long text of mob 5283, which resets in room 5279"
+        },
+        {
+          "line": "[\u001b[0;31mAFK\u001b[0;0m] Tolliver is resting here.",
+          "room": true,
+          "from": "char_to_char for a resting player who is away, the AFK tag in `1 red"
+        },
+        {
+          "line": "Maren walks in.",
+          "room": false,
+          "from": "act_move.c, $n walks in."
+        },
+        {
+          "line": "The day has begun.",
+          "room": false,
+          "from": "update.c weather_update at hour 6"
+        },
+        { "line": "", "room": false, "from": "the blank line process_output sends before the prompt" },
+        { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all, %n%P%C<%hhp %mm %vmv>" }
+      ]
+    },
+    {
+      "name": "a look with no Room.Chars before it lists its things only",
+      "events": [
+        { "line": "[Exits: south]", "room": false, "from": "do_exits with auto" },
+        {
+          "line": "     A black-steel helm is here, gleaming darkly.",
+          "room": true,
+          "from": "list_to_char, object 5201"
+        },
+        {
+          "line": "A Blackwatch villager scurries about, taking care of business.",
+          "room": false,
+          "from": "char_to_char, mob 5287"
+        },
+        { "line": "", "room": false, "from": "the blank line before the prompt" },
+        { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
+      ]
+    },
+    {
+      "name": "a look at a room with no one else in it",
+      "events": [
+        { "gmcp": "Room.Chars", "data": [] },
+        { "line": "[Exits: south]", "room": false, "from": "do_exits with auto" },
+        {
+          "line": "     A black-steel helm is here, gleaming darkly.",
+          "room": true,
+          "from": "list_to_char, object 5201"
+        },
+        { "line": "Maren walks in.", "room": false, "from": "act_move.c, $n walks in." },
+        { "line": "", "room": false, "from": "the blank line before the prompt" },
+        { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
+      ]
+    },
+    {
+      "name": "a dark room prints no exits line",
+      "events": [
+        { "line": "It is pitch black ... ", "room": false, "from": "do_look in a dark room" },
+        {
+          "line": "     A black-steel helm is here, gleaming darkly.",
+          "room": false,
+          "from": "list_to_char, object 5201"
+        },
+        {
+          "line": "A Blackwatch villager scurries about, taking care of business.",
+          "room": false,
+          "from": "char_to_char, mob 5287"
+        },
+        { "line": "", "room": false, "from": "the blank line before the prompt" },
+        { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
+      ]
+    },
+    {
+      "name": "a ranger's tracks after the exits line on the minimap layout",
+      "events": [
+        { "gmcp": "Room.Chars", "data": [{ "name": "a villager", "npc": true }] },
+        {
+          "line": "\u001b[0;1;30mThe Bank of Aabahran\u001b[0;0m",
+          "room": false,
+          "from": "the name of room 5279 with its `8 code"
+        },
+        { "line": "", "room": false, "from": "the blank line before the exits on the minimap layout" },
+        { "line": "[Exits: south]", "room": false, "from": "do_look on the minimap layout" },
+        {
+          "line": "You spot some fresh spur.",
+          "room": false,
+          "from": "skills4.c show_tracks"
+        },
+        {
+          "line": "     A black-steel helm is here, gleaming darkly.",
+          "room": true,
+          "from": "list_to_char, object 5201"
+        },
+        {
+          "line": "A Blackwatch villager scurries about, taking care of business.",
+          "room": true,
+          "from": "char_to_char, mob 5287"
+        },
+        { "line": "", "room": false, "from": "the blank line before the prompt" },
+        { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
+      ]
+    },
+    {
+      "name": "the prompt ends the look, so an inventory after it stays plain",
+      "events": [
+        { "gmcp": "Room.Chars", "data": [] },
+        { "line": "[Exits: south]", "room": false, "from": "do_exits with auto" },
+        {
+          "line": "     A black-steel helm is here, gleaming darkly.",
+          "room": true,
+          "from": "list_to_char, object 5201"
+        },
+        {
+          "prompt": "<1020hp 800m 930mv> ",
+          "from": "prompt all, with compact on, so no blank line comes before it"
+        },
+        { "line": "You are carrying:", "room": false, "from": "do_inventory" },
+        {
+          "line": "     a black-steel helm",
+          "room": false,
+          "from": "list_to_char with short texts, object 5201"
+        },
+        {
+          "line": "( 2) a pair of black-steel gauntlets",
+          "room": false,
+          "from": "list_to_char with short texts, two of object 5202"
+        },
+        { "line": "", "room": false, "from": "the blank line before the prompt" },
+        { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
+      ]
+    }
+  ]
+}
