@@ -202,7 +202,6 @@ pub(crate) fn broadcast<R: tauri::Runtime, S: serde::Serialize + ?Sized>(
         warn!(error = %e, event, "broadcast failed");
     }
 }
-use crate::map_state::SharedMap;
 use crate::plugins::SharedPluginManager;
 use crate::profile::{Macro, Profile, Timer};
 use crate::profile_config::{
@@ -218,7 +217,6 @@ use crate::session::{self, SessionHandle, TargetPayload};
 pub(crate) struct AppState {
     pub(crate) session: Mutex<Option<SessionHandle>>,
     pub(crate) profile: Arc<Mutex<Profile>>,
-    pub(crate) map: SharedMap,
     pub(crate) script_timers: SharedTimers,
     pub(crate) logs: SharedLogStore,
     /// A second connection to the same log database for the read
@@ -338,7 +336,6 @@ impl Default for AppState {
         Self {
             session: Mutex::new(None),
             profile: Arc::new(Mutex::new(Profile::default())),
-            map: SharedMap::default(),
             script_timers: SharedTimers::default(),
             logs: SharedLogStore::default(),
             log_reader: SharedLogStore::default(),
@@ -647,7 +644,6 @@ pub(crate) async fn session_connect(
         port,
         tls,
         state.profile.clone(),
-        state.map.clone(),
         state.script_timers.clone(),
         state.logs.clone(),
         state.scrollback.clone(),

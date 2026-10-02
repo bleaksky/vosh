@@ -194,7 +194,6 @@ async fn play(session: Arc<Vec<u8>>) -> Run {
         port,
         false,
         state.profile.clone(),
-        state.map.clone(),
         state.script_timers.clone(),
         state.logs.clone(),
         state.scrollback.clone(),

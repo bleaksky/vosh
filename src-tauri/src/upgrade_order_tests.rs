@@ -1,19 +1,20 @@
 //! The order launch runs its upgrades in (R2 of the refactor plan).
 //!
-//! The setup hook in lib.rs opens the map store first, which creates
-//! maps.sqlite. Then it copies the app data of an older
-//! `com.aabahran.mudclient` install, but only into a folder that holds
-//! none of the core files, so on a normal launch the copy finds
-//! maps.sqlite and skips. It copies only when the map store did not open.
+//! The setup hook in lib.rs makes the scripts folder first. Then it copies
+//! the app data of an older `com.aabahran.mudclient` install, but only
+//! into a folder that holds none of the core files, and the scripts folder
+//! counts as one, so on a normal launch the copy skips. It copies only
+//! when the scripts folder could not be made. Until D3 retired the map
+//! store, maps.sqlite, which its opener made at the same step, did this.
 //! Then `launch::load` finishes a shared catalog wizard run that stopped,
 //! moves the prompt capture triggers into the profiles, turns on the
 //! presets a build adds, and loads the profile set. Then it moves the
 //! custom themes older profile files hold into global.toml, and only then
 //! loads the active profile. Each step reads what the steps before it
 //! wrote, so the order is part of what a refactor keeps. R12 gathers the
-//! steps into one list, and this order holds there too. R8 retires the
-//! map store and the copy (D3, D15), and its commit changes the copy cases
-//! here on purpose.
+//! steps into one list, and this order holds there too. D15 decides
+//! whether the copy stays, and its commit changes the copy cases here on
+//! purpose.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -141,11 +142,10 @@ fn shared_theme_ids(set: &ProfileSet) -> Vec<String> {
     themes.into_iter().map(|t| t.id).collect()
 }
 
-/// Open the map store over `app_data` the way `open_map_store` in lib.rs
-/// does, which creates maps.sqlite.
-fn open_map_store(app_data: &Path) {
-    std::fs::create_dir_all(app_data).unwrap();
-    vosh_map::MapStore::open(&app_data.join("maps.sqlite")).unwrap();
+/// Make the scripts folder in `app_data` the way `create_scripts_dir` in
+/// lib.rs does.
+fn create_scripts_dir(app_data: &Path) {
+    std::fs::create_dir_all(app_data.join("scripts")).unwrap();
 }
 
 /// Run `launch::load` over `app_data` on a fresh state.
@@ -155,17 +155,18 @@ async fn load(app_data: &Path) -> (SharedState, Launch) {
     (state, launched)
 }
 
-/// Launch the way the setup hook in lib.rs does, over `app_data`. The map
-/// store opens, then the mudclient copy runs, then `launch::load`.
+/// Launch the way the setup hook in lib.rs does, over `app_data`. The
+/// scripts folder is made, then the mudclient copy runs, then
+/// `launch::load`.
 async fn launch(app_data: &Path) -> (SharedState, Launch) {
-    open_map_store(app_data);
+    create_scripts_dir(app_data);
     crate::migrate_from_mudclient_dir(app_data);
     load(app_data).await
 }
 
-/// Launch the way the setup hook does when the map store did not open, so
-/// no maps.sqlite stops the mudclient copy.
-async fn launch_without_map_store(app_data: &Path) -> (SharedState, Launch) {
+/// Launch the way the setup hook does when the scripts folder could not be
+/// made, so nothing stops the mudclient copy.
+async fn launch_without_scripts_dir(app_data: &Path) -> (SharedState, Launch) {
     crate::migrate_from_mudclient_dir(app_data);
     load(app_data).await
 }
@@ -298,8 +299,8 @@ async fn an_unfinished_wizard_run_holds_the_upgrades_after_it() {
     );
 }
 
-/// On a normal launch the map store has created maps.sqlite by the time
-/// the copy looks, so the copy skips and leaves the older folder where it
+/// On a normal launch the scripts folder exists by the time the copy
+/// looks, so the copy skips and leaves the older folder where it
 /// is. A wizard run the older folder holds never reaches Vosh.
 #[tokio::test]
 async fn a_normal_launch_skips_the_mudclient_folder() {
@@ -322,17 +323,17 @@ async fn a_normal_launch_skips_the_mudclient_folder() {
     assert!(leftover.is_empty(), "{leftover:?}");
 }
 
-/// When the map store does not open, no maps.sqlite stops the copy. It
+/// When the scripts folder could not be made, nothing stops the copy. It
 /// brings the older folder over before `launch::load` runs, so the wizard
 /// finish reads the journal the older folder held.
 #[tokio::test]
-async fn a_launch_without_the_map_store_copies_the_mudclient_folder_first() {
+async fn a_launch_without_the_scripts_folder_copies_the_mudclient_folder_first() {
     let dir = tempfile::tempdir().unwrap();
     let old = dir.path().join("com.example.mudclient");
     let app_data = dir.path().join("com.example.vosh");
     save_wizard_journal(&old, &journal()).unwrap();
 
-    let (state, launched) = launch_without_map_store(&app_data).await;
+    let (state, launched) = launch_without_scripts_dir(&app_data).await;
     assert!(read(&app_data.join(".migrated-from-mudclient")).starts_with("copied "));
     assert!(
         journal_path(&old).exists(),
@@ -348,17 +349,17 @@ async fn a_launch_without_the_map_store_copies_the_mudclient_folder_first() {
 }
 
 /// The setup hook cannot run without a Tauri app, so this reads lib.rs to
-/// pin its order. The map store opens first and creates maps.sqlite, which
-/// makes the mudclient copy skip. Then the copy runs, then `launch::load`.
-/// D3 and D15 retire the map store and the copy, or give the copy its own
-/// guard, and this test changes in that commit too.
+/// pin its order. The scripts folder comes first, and the copy guard reads
+/// it as a folder in use, which makes the mudclient copy skip. Then the
+/// copy runs, then `launch::load`. D15 retires the copy, and this test
+/// changes in that commit too.
 #[test]
-fn the_setup_hook_opens_the_map_store_then_copies_then_loads() {
+fn the_setup_hook_makes_the_scripts_folder_then_copies_then_loads() {
     let src = include_str!("lib.rs");
     let hook = &src[src.find(".setup(move |app|").expect("the setup hook")..];
-    let map = hook
-        .find("open_map_store(app)")
-        .expect("the setup hook opens the map store");
+    let scripts = hook
+        .find("create_scripts_dir(app)")
+        .expect("the setup hook makes the scripts folder");
     let copy = hook
         .find("migrate_from_mudclient_dir(&path);")
         .expect("the setup hook copies the mudclient folder");
@@ -366,21 +367,26 @@ fn the_setup_hook_opens_the_map_store_then_copies_then_loads() {
         .find("launch::load(&state, &path)")
         .expect("the setup hook runs launch::load");
     assert!(
-        map < copy,
-        "the map store opens before the mudclient folder copy, so the copy skips"
+        scripts < copy,
+        "the scripts folder comes before the mudclient folder copy, so the copy skips"
     );
     assert!(
         copy < load,
         "the mudclient folder copy runs before launch::load"
     );
-    // The file the map store opens is the one the copy reads as a folder
-    // in use.
-    let opener = &src[src
-        .find("fn open_map_store(")
-        .expect("the map store opener")..];
-    let opener = &opener[..opener.find("\n}\n").expect("the end of the opener")];
+    // The folder the step makes is one the copy reads as a folder in use.
+    let maker = &src[src
+        .find("fn create_scripts_dir(")
+        .expect("the scripts folder step")..];
+    let maker = &maker[..maker.find("\n}\n").expect("the end of the step")];
     assert!(
-        opener.contains(r#"dir.join("maps.sqlite")"#),
-        "the map store creates maps.sqlite"
+        maker.contains("dir.join(SCRIPTS_DIR)"),
+        "the step makes the scripts folder"
+    );
+    let guard = &src[src.find("let occupied = [").expect("the copy guard")..];
+    let guard = &guard[..guard.find(']').expect("the end of the guard list")];
+    assert!(
+        guard.contains("SCRIPTS_DIR"),
+        "the guard reads the scripts folder"
     );
 }

@@ -5202,7 +5202,6 @@ dependencies = [
  "vosh-ansi",
  "vosh-gmcp",
  "vosh-log",
- "vosh-map",
  "vosh-prompt",
  "vosh-script",
  "vosh-telnet",
@@ -5232,15 +5231,6 @@ dependencies = [
  "serde",
  "thiserror 1.0.69",
  "vosh-ansi",
-]
-
-[[package]]
-name = "vosh-map"
-version = "0.8.0"
-dependencies = [
- "rusqlite",
- "serde",
- "thiserror 1.0.69",
 ]
 
 [[package]]

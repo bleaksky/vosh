@@ -8,7 +8,6 @@ members = [
     "crates/vars",
     "crates/trigger",
     "crates/gmcp",
-    "crates/map",
     "crates/script",
     "crates/log",
     "crates/prompt",
