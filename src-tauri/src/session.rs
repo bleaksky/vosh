@@ -1694,7 +1694,7 @@ struct LinePass {
 /// profile lock the caller holds. `plain` is the line without ANSI, so
 /// no pattern has to allow for escape bytes and the line is stripped
 /// once. `scope` is [`MatchScope::Room`] for a line that lists a room's
-/// things or people, so Room triggers run on it too.
+/// armies, things or people, so Room triggers run on it too.
 fn line_pass(
     p: &mut Profile,
     bytes: &[u8],
@@ -1896,6 +1896,18 @@ enum Shows {
     Painted,
 }
 
+/// The scope a complete line that is not your prompt runs in, from the
+/// room look tracker, which reads every such line in the order the game
+/// sent it. [`MatchScope::Room`] for an army, a thing or a person the
+/// look lists, and [`MatchScope::Line`] for any other line.
+fn room_scope(p: &mut Profile, plain: &str, bytes: &[u8]) -> MatchScope {
+    use crate::room_block::RoomLine;
+    match p.room_block.line(plain, bytes) {
+        RoomLine::Other => MatchScope::Line,
+        RoomLine::Army | RoomLine::Thing | RoomLine::Person => MatchScope::Room,
+    }
+}
+
 /// A complete line that is not your prompt. It runs the Line pass and
 /// lands in the batch as its triggers left it, replacing the region an
 /// earlier read painted its start in, or stays as an earlier read
@@ -1911,8 +1923,8 @@ fn text_line_step(
 ) -> LineStep {
     // Every complete line that is not your prompt passes the room look
     // tracker in the order the game sent it, so it knows the lines that
-    // list a room's things and people.
-    let scope = p.room_block.line(&plain);
+    // list a room's armies, things and people.
+    let scope = room_scope(p, &plain, &bytes);
     let LinePass {
         result,
         tick_step,
@@ -3157,6 +3169,13 @@ fn gmcp_step(
                 })
                 .collect();
             crate::input::set_room_chars(p, chars);
+        }
+    }
+    // The look this packet goes with lists a line for each long text its
+    // objects share, five spaces or their count before it.
+    if msg.package == "Room.Items" {
+        if let Some(arr) = msg.data.as_array() {
+            p.room_block.room_items(arr.len());
         }
     }
     let tick_step = observe_world_time_for_tick(&mut p.tick, msg, now);

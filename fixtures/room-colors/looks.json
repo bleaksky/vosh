@@ -1,5 +1,5 @@
 {
-  "notes": "Hand written and synthetic, never captured. Room looks as the Aabahran server prints them, built from its own format strings and area files, with a Room.Chars packet before the text where the server sends one. Each line says where it comes from, room says whether it lists a thing or a person, the lines a Room trigger matches, and preset names any other color the Room and time colors preset gives it. Tolliver and Maren are invented names. README.md has the details. Read by src-tauri/src/session_room_tests.rs and crates/trigger/src/engine.rs.",
+  "notes": "Hand written and synthetic, never captured. Room looks as the Aabahran server prints them, built from its own format strings and area files, with the Room.Chars and Room.Items packets before the text where the server sends them. Each line says where it comes from, room says whether it lists an army, a thing or a person, the lines a Room trigger matches, and preset names any other color the Room and time colors preset gives it. Tolliver, Maren and Orla are invented names. README.md has the details. Read by src-tauri/src/session_room_tests.rs and crates/trigger/src/engine.rs.",
   "cases": [
     {
       "name": "a look with things and people, then what follows it in the same pulse",
@@ -185,6 +185,194 @@
           "room": false,
           "from": "list_to_char with short texts, two of object 5202"
         },
+        { "line": "", "room": false, "from": "the blank line before the prompt" },
+        { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
+      ]
+    },
+    {
+      "name": "an army before a thing and a mob, and the mob greets you after the look",
+      "events": [
+        { "gmcp": "Room.Chars", "data": [{ "name": "a werebeast", "npc": true }] },
+        {
+          "gmcp": "Room.Items",
+          "data": [{ "name": "a stand of blue dried leaves", "type": "plant" }]
+        },
+        {
+          "line": "\u001b[38;5;82m\u001b[0;33mThe Crossroads\u001b[0;0m\u001b[0;0m",
+          "room": false,
+          "from": "do_look, the name of room 6909 in area/eastroad.are with its `3 code, after the tint for a field"
+        },
+        {
+          "line": "  Here, the great eastern road intersects with a small, oder road that runs",
+          "room": false,
+          "from": "do_look, the two spaces before the description of room 6909"
+        },
+        {
+          "line": "southward to Fort Blackwatch.  The ground around you is covered with young",
+          "room": false,
+          "from": "the description of room 6909"
+        },
+        {
+          "line": "but healthy growth, mostly grasses and a few small bushes.  The outskirts of",
+          "room": false,
+          "from": "the description of room 6909"
+        },
+        {
+          "line": "Val Miran lie to your west.  Eastward, the great Dragon's Teeth rise up",
+          "room": false,
+          "from": "the description of room 6909"
+        },
+        {
+          "line": "almost immediately.  ",
+          "room": false,
+          "from": "the last line of the description of room 6909"
+        },
+        { "line": "", "room": false, "from": "the blank line do_look sends before the exits" },
+        {
+          "line": "[Exits: north east south west]",
+          "room": false,
+          "preset": "green",
+          "from": "do_exits with auto, room 6909 has exits D0 to D3"
+        },
+        {
+          "line": "A mighty Fortress looms over the area.\u001b[0;0m",
+          "room": true,
+          "from": "show_room_armies, the long text of Knight Fortress, army 12 in area/limbo.are, with the reset the server ends each army line with"
+        },
+        {
+          "line": "     A stand of blue dried leaves grows in the wild here.",
+          "room": true,
+          "from": "list_to_char, a sickle node from skills3.c, %s grows in the wild here. with a stand of blue dried leaves"
+        },
+        {
+          "line": "A young werebeast stands here, leaning on his spear.",
+          "room": true,
+          "from": "char_to_char, the long text of mob 6904, which resets in room 6909"
+        },
+        {
+          "line": "A werebeast looks into the sky.",
+          "room": false,
+          "from": "the GREET program of mob 6904, emote looks into the sky., which runs after the look in the same pulse"
+        },
+        {
+          "line": "A werebeast says in Beastial '\u001b[0;1;33mI like the weather today.\u001b[0;0m'",
+          "room": false,
+          "from": "the same program, beastial I like the weather today., as languages.c says it to a listener who knows Beastial"
+        },
+        {
+          "line": "A werebeast says in Beastial '\u001b[0;1;33mThe forest looks so peaceful.\u001b[0;0m'",
+          "room": false,
+          "from": "the same program, beastial The forest looks so peaceful."
+        },
+        { "line": "", "room": false, "from": "the blank line before the prompt" },
+        { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
+      ]
+    },
+    {
+      "name": "an army and a mob with nothing on the floor",
+      "events": [
+        { "gmcp": "Room.Chars", "data": [{ "name": "a murder of crows", "npc": true }] },
+        { "gmcp": "Room.Items", "data": [] },
+        {
+          "line": "\u001b[38;5;28m\u001b[0;32mThickening Woods\u001b[0;0m\u001b[0;0m",
+          "room": false,
+          "from": "do_look, the name of room 6904 in area/eastroad.are with its `2 code, after the tint for a forest"
+        },
+        {
+          "line": "  The trees thicken slightly around you but your path is still clearly",
+          "room": false,
+          "from": "do_look, the two spaces before the description of room 6904"
+        },
+        {
+          "line": "visible having been worn down by many feet.  The land under foot becomes a",
+          "room": false,
+          "from": "the description of room 6904"
+        },
+        {
+          "line": "little more rugged as you sense the terrain becoming slightly more uneven.  ",
+          "room": false,
+          "from": "the last line of the description of room 6904"
+        },
+        { "line": "", "room": false, "from": "the blank line do_look sends before the exits" },
+        {
+          "line": "[Exits: east west]",
+          "room": false,
+          "preset": "green",
+          "from": "do_exits with auto, room 6904 has exits D1 and D3"
+        },
+        {
+          "line": "A horde of Demons hovers overhead, their talons dripping blood.\u001b[0;0m",
+          "room": true,
+          "from": "show_room_armies, the long text of a Demon Horde, army 18 in area/limbo.are"
+        },
+        {
+          "line": "A large murder of crows nearly turns the trees black here.",
+          "room": true,
+          "from": "char_to_char, the long text of mob 6936, which resets in room 6904"
+        },
+        { "line": "Maren walks in.", "room": false, "from": "act_move.c, $n walks in." },
+        { "line": "", "room": false, "from": "the blank line before the prompt" },
+        { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
+      ]
+    },
+    {
+      "name": "stacked things, mobs and players, and an arrival after them",
+      "events": [
+        {
+          "gmcp": "Room.Chars",
+          "data": [
+            { "name": "a villager", "npc": true },
+            { "name": "Tolliver", "npc": false },
+            { "name": "a bank representative", "npc": true },
+            { "name": "Maren", "npc": false }
+          ]
+        },
+        {
+          "gmcp": "Room.Items",
+          "data": [
+            { "name": "a pair of black-steel gauntlets", "type": "armor" },
+            { "name": "a black-steel helm", "type": "armor" },
+            { "name": "a pair of black-steel gauntlets", "type": "armor" },
+            { "name": "a pair of black-steel gauntlets", "type": "armor" }
+          ]
+        },
+        {
+          "line": "[Exits: south]",
+          "room": false,
+          "preset": "green",
+          "from": "do_exits with auto, room 5279"
+        },
+        {
+          "line": "( 3) A pair of black-steel gauntlets rests on the ground.",
+          "room": true,
+          "from": "list_to_char, three of object 5202 combined on the line of the first"
+        },
+        {
+          "line": "     A black-steel helm is here, gleaming darkly.",
+          "room": true,
+          "from": "list_to_char, object 5201"
+        },
+        {
+          "line": "A Blackwatch villager scurries about, taking care of business.",
+          "room": true,
+          "from": "char_to_char, mob 5287"
+        },
+        {
+          "line": "[\u001b[0;31mAFK\u001b[0;0m] Tolliver is resting here.",
+          "room": true,
+          "from": "char_to_char for a resting player who is away"
+        },
+        {
+          "line": "A representative of the Bank of Aabahran is here, ready to take your gold.",
+          "room": true,
+          "from": "char_to_char, mob 5283"
+        },
+        {
+          "line": "Maren is sleeping here.",
+          "room": true,
+          "from": "char_to_char for a sleeping player, who shows no title"
+        },
+        { "line": "Orla walks in.", "room": false, "from": "act_move.c, $n walks in." },
         { "line": "", "room": false, "from": "the blank line before the prompt" },
         { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
       ]
