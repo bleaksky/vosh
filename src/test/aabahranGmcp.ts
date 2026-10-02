@@ -61,3 +61,25 @@ export function aabahranChatPacket(name: string): GmcpPacket {
   if (path === undefined) throw new Error(`no chat fixture ${name}`);
   return splitGmcp(CHAT_FILES[path]);
 }
+
+// The Map.Tiles packets sit in their own folder too, since only the map
+// view reads them.
+const MAP_FILES = import.meta.glob<string>('../../fixtures/gmcp/aabahran/map/*.gmcp', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+
+/** Every Map.Tiles fixture's file name. */
+export function aabahranMapFixtureNames(): string[] {
+  return Object.keys(MAP_FILES)
+    .map((path) => path.slice(path.lastIndexOf('/') + 1))
+    .sort();
+}
+
+/** One Map.Tiles fixture by file name, split into its package and data. */
+export function aabahranMapPacket(name: string): GmcpPacket {
+  const path = Object.keys(MAP_FILES).find((p) => p.endsWith(`/${name}`));
+  if (path === undefined) throw new Error(`no map fixture ${name}`);
+  return splitGmcp(MAP_FILES[path]);
+}
