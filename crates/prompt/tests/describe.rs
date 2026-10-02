@@ -112,7 +112,7 @@ fn the_hp_value_reads_as_health_with_its_own_codes_and_inherited_italic() {
     assert!(hp.by_value && hp.shows);
     assert_eq!(
         segments(hp),
-        ["1020", "1020/1020", "100%", "Game percent", "Bar"]
+        ["1020", "1020/1020", "100%", "Game percent, no sign", "Bar"]
     );
     // The percent after it is By value, and Show as adds the percent with
     // no sign it shows now.
@@ -128,7 +128,14 @@ fn the_hp_value_reads_as_health_with_its_own_codes_and_inherited_italic() {
     assert_eq!(pct.format, Some(FormatName::Pct));
     assert_eq!(
         segments(pct),
-        ["1020", "1020/1020", "100%", "Game percent", "Bar", "100"]
+        [
+            "1020",
+            "1020/1020",
+            "100%",
+            "Game percent, no sign",
+            "Bar",
+            "100"
+        ]
     );
     // The mana percent keeps its own true color.
     let mana = piece(&described.pieces, "%{c:128,200,255}%pct_mana");
@@ -225,7 +232,14 @@ fn a_max_alone_shows_as_its_gauge_in_the_form_max() {
     assert_eq!(max.format, Some(FormatName::Max));
     assert_eq!(
         segments(max),
-        ["1020", "1020/1020", "1020", "100%", "Game percent", "Bar"],
+        [
+            "1020",
+            "1020/1020",
+            "1020",
+            "100%",
+            "Game percent, no sign",
+            "Bar"
+        ],
         "Show as keeps the form it shows now"
     );
 }
@@ -244,7 +258,7 @@ fn the_picker_offers_every_form_with_a_live_sample() {
             ("Current and max", "1020/1020".to_string()),
             ("Max", "1020".to_string()),
             ("Percent", "100%".to_string()),
-            ("Game percent", "100".to_string()),
+            ("Game percent, no sign", "100".to_string()),
             ("Bar", "██████████".to_string()),
         ]
     );
@@ -384,7 +398,7 @@ fn show_as_marks_current_and_max_and_percent_once_you_choose_them() {
     assert_eq!(mana.format, Some(FormatName::CurMax));
     assert_eq!(
         segments(&mana),
-        ["800", "800/800", "100%", "Game percent", "Bar"]
+        ["800", "800/800", "100%", "Game percent, no sign", "Bar"]
     );
 
     // Then as Percent, with no fifth segment for a percent with no sign.
@@ -393,7 +407,7 @@ fn show_as_marks_current_and_max_and_percent_once_you_choose_them() {
     assert_eq!(mana.format, Some(FormatName::Percent));
     assert_eq!(
         segments(&mana),
-        ["800", "800/800", "100%", "Game percent", "Bar"]
+        ["800", "800/800", "100%", "Game percent, no sign", "Bar"]
     );
 
     // Health as Percent, with the label text hp right after its sign.
@@ -402,7 +416,7 @@ fn show_as_marks_current_and_max_and_percent_once_you_choose_them() {
     assert_eq!(health.format, Some(FormatName::Percent));
     assert_eq!(
         segments(&health),
-        ["1020", "1020/1020", "100%", "Game percent", "Bar"]
+        ["1020", "1020/1020", "100%", "Game percent, no sign", "Bar"]
     );
 }
 
@@ -439,11 +453,11 @@ fn the_game_percent_reads_as_its_own_form_with_the_cut_percent() {
         mana,
         [
             ("Percent", "38%".to_string()),
-            ("Game percent", "37".to_string())
+            ("Game percent, no sign", "37".to_string())
         ]
     );
-    // A piece in it reads as Health in the form Game percent, which Show
-    // as marks by its name.
+    // A piece in it reads as Health in the form Game percent, no sign,
+    // which Show as marks by its name, so you see the sign goes.
     let described = describe(
         &Template::parse("%{c:#d0d0d0}%{hp:pct:game}%{c:hp:steps}%%"),
         &Sampled { fight: false },
@@ -455,7 +469,7 @@ fn the_game_percent_reads_as_its_own_form_with_the_cut_percent() {
     assert_eq!(hp.format, Some(FormatName::PctGame));
     assert_eq!(
         segments(hp),
-        ["1020", "1020/1020", "100%", "Game percent", "Bar"]
+        ["1020", "1020/1020", "100%", "Game percent, no sign", "Bar"]
     );
     // Its sign stays text of its own, so it keeps its own color.
     let sign = piece(&described.pieces, "%{c:hp:steps}%%");

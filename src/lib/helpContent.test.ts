@@ -415,7 +415,7 @@ describe('the help on prompt design codes', () => {
     [['%pct_hp'], 'Health as a percent with no sign. Add %% for the sign.'],
     [
       ['%{hp:pct:game}'],
-      'Health as a percent rounded down the way the game does, so 37.5 reads 37.',
+      'Health as a percent with no sign, rounded down as the game does, so 37.5 reads 37.',
     ],
     [['%hp_bar:10:auto'], 'A bar ten cells wide, colored by how full it is.'],
     [['%{gold:grouped}'], 'Any value from the picker, in any of its forms.'],
