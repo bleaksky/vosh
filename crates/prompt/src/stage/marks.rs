@@ -30,7 +30,7 @@ pub fn lift_end(id: u64) -> Vec<u8> {
 /// end and on a character other than a space gets one plain space after
 /// the mark, so your echo starts a cell later and the band's 4 px reach
 /// past the last glyph stays inside that cell instead of under your echo.
-pub fn with_lift_end(body: &[u8], id: u64) -> Vec<u8> {
+pub(crate) fn with_lift_end(body: &[u8], id: u64) -> Vec<u8> {
     let at = trailing_line_ends(body);
     let (shown, ends) = body.split_at(at);
     let mut out = shown.to_vec();

@@ -9,9 +9,8 @@ mod char_prompt;
 mod replies;
 mod status;
 
-pub use char_prompt::codes_from_game;
-pub use replies::{GamePromptSeen, SeenKind, SessionSetting, OBSERVE_MS};
-pub use status::{Status, StatusReport, MISSES};
+pub use replies::{GamePromptSeen, SeenKind};
+pub use status::Status;
 
 use std::collections::BTreeMap;
 
@@ -29,6 +28,7 @@ use crate::values::{forsaken_lands, Vars};
 pub(crate) use char_prompt::Kept;
 use replies::Observer;
 use status::Misses;
+pub(crate) use status::StatusReport;
 
 /// The clock pieces a design reads (decision 6). While it reads one, the
 /// session repaints your idle prompt as what the piece shows changes.
@@ -261,12 +261,6 @@ impl PromptEngine {
     /// and another profile keep it, since the window stays.
     pub fn set_cols(&mut self, cols: usize) {
         self.cols = Some(cols);
-    }
-
-    /// The columns of the terminal your prompt shows in, None until the
-    /// session heard them.
-    pub fn cols(&self) -> Option<usize> {
-        self.cols
     }
 
     /// Vosh draws a design that pushes part of a row to the right edge,

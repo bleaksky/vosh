@@ -55,7 +55,7 @@ pub(super) struct PinnedShown {
 impl Stage {
     /// [`Stage::pin_view`] with `rendered` as the live render. Test only.
     #[cfg(test)]
-    pub fn pin_drawn(
+    pub(crate) fn pin_drawn(
         &mut self,
         out: &mut Output,
         block: Block,
