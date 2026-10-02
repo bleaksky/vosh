@@ -112,6 +112,7 @@ pub enum FormatName {
     CurMax,
     Max,
     Pct,
+    PctGame,
     Percent,
     Bar,
     Game,
@@ -1405,6 +1406,7 @@ fn content_for(
             }
             FormatName::Value => F::Value,
             FormatName::Pct => F::Pct,
+            FormatName::PctGame => F::PctGame,
             FormatName::Bar => F::Bar,
             FormatName::Game => F::Game,
             FormatName::Word => F::Word,
@@ -1459,6 +1461,7 @@ fn content_for(
             ))
         }
         FormatName::Pct => one(Format::Pct),
+        FormatName::PctGame => one(Format::PctGame),
         FormatName::Percent => Ok((
             PieceKind::Percent,
             vec![value(Format::Pct), Item::new(TokenKind::Percent)],

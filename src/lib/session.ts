@@ -982,6 +982,7 @@ export type PromptFormatName =
   | 'cur_max'
   | 'max'
   | 'pct'
+  | 'pct_game'
   | 'percent'
   | 'bar'
   | 'game'
