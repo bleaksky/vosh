@@ -135,6 +135,11 @@ impl Template {
 
 /// True when `max` reads the max of `base`, in any spelling the first
 /// grammar looked a max up by, or as `%{base:max}`.
+///
+/// `max_spellings` in the values module holds the same four spellings in
+/// the order a lookup tries them. Here any one of them matches, so the
+/// order changes nothing. The design module reads nothing from values, so
+/// this list stays here in its own order (D26).
 fn is_max_of(base: &ValueRef, max: &ValueRef) -> bool {
     if base.format != Format::Value || base.field.param.is_some() || max.field.param.is_some() {
         return false;

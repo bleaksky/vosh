@@ -159,6 +159,14 @@ impl Vars {
         // H6, Group.Info carries the flag.
         let h6 = g_flag;
         // H7, Char.Affects names the song or carries the flag.
+        //
+        // The Lament preview hides by a list of its own, `lament_hides` in
+        // overrides.rs, since it shows what the song hides while no packet
+        // names the song. The two differ on Char.Combat. Here a path that
+        // reads the whole packet or the whole tank hides too, through the
+        // resolver's `path_hidden`, and the preview hides only their
+        // health and condition keys. Both stay as they are (D26), since a
+        // merge would change what the live prompt or the preview draws.
         let h7 = a_flag || affects.as_ref().is_some_and(names_lament);
         // Z, Group.Info is {}.
         let z = group.as_ref().is_some_and(|g| g.empty);

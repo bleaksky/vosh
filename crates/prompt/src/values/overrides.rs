@@ -191,6 +191,14 @@ impl PromptPreview {
 
 /// True for a field lamented tears hides: your vitals, your tank's and
 /// your opponent's health, your affects and your group (section 1.2).
+///
+/// The live prompt works this out from the packets instead, in
+/// `work_out_hidden` (H7 in hidden.rs). The preview keeps this list
+/// because it shows what the song hides while no packet names the song.
+/// The two differ on Char.Combat. This list hides only its health and
+/// condition keys, and the live rule also hides a path that reads the
+/// whole packet or the whole tank. Both stay as they are (D26), since a
+/// merge would change what the preview or the live prompt draws.
 pub fn lament_hides(field: &FieldRef) -> bool {
     let name = field.name.as_str();
     if Pair::of(name).is_some() {
