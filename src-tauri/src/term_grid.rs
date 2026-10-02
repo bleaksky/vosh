@@ -107,8 +107,6 @@ impl Dimensions for GridSize {
 pub(crate) struct TermGrid {
     term: Term<NoopListener>,
     parser: Processor,
-    // Read by the deferred cell accessors (see the impl note below).
-    #[allow(dead_code)]
     size: GridSize,
     /// The region the last session write left open, if any (D22).
     region: Option<Region>,
@@ -216,10 +214,6 @@ struct Region {
     restore: Option<Vec<u8>>,
 }
 
-// The read side (size + cell accessors) is the grid API the M2c wgpu
-// renderer will consume; for now it is exercised only by the unit tests,
-// so allow it to sit unused in the lib build until the renderer lands.
-#[allow(dead_code)]
 impl TermGrid {
     pub(crate) fn new(columns: usize, screen_lines: usize) -> Self {
         let size = GridSize {
@@ -734,6 +728,7 @@ impl TermGrid {
     }
 
     /// The character at a visible-screen cell (line 0 = top row).
+    #[cfg(test)]
     pub(crate) fn char_at(&self, line: usize, col: usize) -> char {
         self.term.grid()[Line(line as i32)][Column(col)].c
     }
@@ -749,6 +744,7 @@ impl TermGrid {
     /// A cell's character and fg/bg colors at a visible row, accounting for
     /// the scrollback display offset (scrollback lives at negative lines).
     /// Out-of-range rows (scrolled past the top) read as blank.
+    #[cfg(test)]
     pub(crate) fn cell(&self, line: usize, col: usize) -> (char, Color, Color) {
         let grid = self.term.grid();
         let target = Line(line as i32 - grid.display_offset() as i32);
