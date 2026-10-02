@@ -304,7 +304,7 @@ function App() {
     writeLive(`\r\n\x1b[31m[${message}]\x1b[0m\r\n`);
   };
   // The session for the title band, the session menu, the palette, and
-  // Cmd+R. It also answers the `vosh:connect-request` event.
+  // Cmd+R.
   const connection = useConnection(status, handleError);
   // Report the bright-bold setting to the native surface (xterm has no
   // equivalent option, so this drives the GPU renderer only).

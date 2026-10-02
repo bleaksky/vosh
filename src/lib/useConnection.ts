@@ -14,8 +14,8 @@ import { pushToast } from './toasts';
 // The session the title band shows and the session menu drives. Moved
 // out of the old top bar chip so the connect logic lives in App for
 // the life of the window instead of in whichever control happens to
-// be mounted. The palette's connect entry and the Cmd+R
-// shortcut reach it through the `vosh:connect-request` window event.
+// be mounted. The palette's connect entry and the Cmd+R shortcut call
+// it through App.
 
 export type ConnectionStatus =
   | { kind: 'idle' }
@@ -250,14 +250,12 @@ export function useConnection(
   const character = useCharacterName();
   const live = status.kind === 'connecting' || status.kind === 'connected';
 
-  // The event listener and the shortcut read the newest values through
-  // refs, so they never dial a stale target.
+  // The actions read the newest values through refs, so they never
+  // dial a stale target.
   const targetRef = useRef(target);
-  const liveRef = useRef(live);
   const onErrorRef = useRef(onError);
   useEffect(() => {
     targetRef.current = target;
-    liveRef.current = live;
     onErrorRef.current = onError;
   });
 
@@ -303,14 +301,6 @@ export function useConnection(
       onErrorRef.current(String(e));
     }
   }, []);
-
-  useEffect(() => {
-    const onRequest = () => {
-      if (!liveRef.current) void connect();
-    };
-    window.addEventListener('vosh:connect-request', onRequest);
-    return () => window.removeEventListener('vosh:connect-request', onRequest);
-  }, [connect]);
 
   const world = worldName(
     status.kind === 'connected' || status.kind === 'connecting' ? status.host : target.host,
