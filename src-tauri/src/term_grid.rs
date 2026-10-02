@@ -950,6 +950,31 @@ impl TermGrid {
         self.term.selection = Some(selection);
     }
 
+    /// Begin a text selection anchored at the left edge of a grid cell.
+    pub(crate) fn start_selection(&mut self, line: i32, col: usize) {
+        let point = Point::new(Line(line), Column(col));
+        self.term.selection = Some(Selection::new(SelectionType::Simple, point, Side::Left));
+    }
+
+    /// Extend the active selection to the left edge of a grid cell, or
+    /// with `through_end` through the last cell of the line, so the whole
+    /// line and its line break come along.
+    pub(crate) fn extend_selection(&mut self, line: i32, col: usize, through_end: bool) {
+        let last = self.term.grid().last_column();
+        if let Some(selection) = self.term.selection.as_mut() {
+            if through_end {
+                selection.update(Point::new(Line(line), last), Side::Right);
+            } else {
+                selection.update(Point::new(Line(line), Column(col)), Side::Left);
+            }
+        }
+    }
+
+    /// The selected text, or None when there is no selection.
+    pub(crate) fn selection_text(&self) -> Option<String> {
+        self.term.selection_to_string()
+    }
+
     /// Scroll the display by `delta` lines (positive scrolls up into
     /// scrollback, clamped to history).
     pub(crate) fn scroll(&mut self, delta: i32) {
@@ -1352,23 +1377,12 @@ pub(crate) fn reader_busy() -> bool {
 
 /// Begin a text selection anchored at a grid cell.
 pub(crate) fn start_selection(line: i32, col: usize) {
-    if let Ok(mut slot) = grid_slot().lock() {
-        if let Some(grid) = slot.as_mut() {
-            let point = Point::new(Line(line), Column(col));
-            grid.term.selection = Some(Selection::new(SelectionType::Simple, point, Side::Left));
-        }
-    }
+    with_grid_mut(|grid| grid.start_selection(line, col));
 }
 
 /// Extend the active selection to a grid cell.
 pub(crate) fn update_selection(line: i32, col: usize) {
-    if let Ok(mut slot) = grid_slot().lock() {
-        if let Some(grid) = slot.as_mut() {
-            if let Some(selection) = grid.term.selection.as_mut() {
-                selection.update(Point::new(Line(line), Column(col)), Side::Left);
-            }
-        }
-    }
+    with_grid_mut(|grid| grid.extend_selection(line, col, false));
 }
 
 /// Drop the active selection.
@@ -1392,10 +1406,10 @@ pub(crate) fn select_all() {
 
 /// The selected text, or None when there is no selection.
 pub(crate) fn selection_text() -> Option<String> {
-    grid_slot().lock().ok().and_then(|slot| {
-        slot.as_ref()
-            .and_then(|grid| grid.term.selection_to_string())
-    })
+    grid_slot()
+        .lock()
+        .ok()
+        .and_then(|slot| slot.as_ref().and_then(TermGrid::selection_text))
 }
 
 // Find/search state. Matches are (grid_line, col_start, col_end) in reading
@@ -1561,6 +1575,14 @@ pub(crate) fn with_grid<R>(f: impl FnOnce(Option<&TermGrid>) -> R) -> R {
         Ok(slot) => f(slot.as_ref()),
         Err(_) => f(None),
     }
+}
+
+/// Change the shared grid under its lock. None until the first feed.
+pub(crate) fn with_grid_mut<R>(f: impl FnOnce(&mut TermGrid) -> R) -> Option<R> {
+    grid_slot()
+        .lock()
+        .ok()
+        .and_then(|mut slot| slot.as_mut().map(f))
 }
 
 /// Held by every test that feeds or reads the shared grid. The grid
