@@ -98,8 +98,9 @@ pub fn process_with_plain(
 }
 
 /// Like [`process_with_plain`], and with `ground`, the terminal
-/// background, every true color the triggers paint text or an underline
-/// in holds [`readable::READABLE_CONTRAST`] on what it draws on (see
+/// background, every fixed color the triggers paint text or an underline
+/// in, a true color or a 256 color past the 16, holds
+/// [`readable::READABLE_CONTRAST`] on what it draws on (see
 /// [`readable::lift_sgr`]). `None` leaves each color as the trigger set
 /// it. A line no trigger matched keeps the bytes the game sent either
 /// way, so the game's own colors never change.

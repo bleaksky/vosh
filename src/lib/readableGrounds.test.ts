@@ -5,45 +5,46 @@ import { BUILTIN_THEMES } from './themes';
 
 // fixtures/readable/grounds.json feeds the Rust tests of Keep highlight
 // colors readable (crates/trigger/src/readable.rs). These hold it to the
-// themes and presets it was written from, so a theme or a preset color
-// added later joins the Rust tests too.
+// themes and presets it was written from, so a theme, a preset color or a
+// preset template added later joins the Rust tests too.
 
-const ANSI_NAMES = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'];
-
-/** The text colors the presets paint, by kind. */
-function presetColors() {
-  const trueColor = new Set<string>();
-  const indexed = new Set<number>();
-  const named = new Set<string>();
-  const hex = (n: number) => n.toString(16).padStart(2, '0');
+/** Every Replace template of the presets once, in the order they list them. */
+function presetTemplates(): string[] {
+  const templates: string[] = [];
   for (const preset of PRESETS) {
     for (const trigger of preset.triggers) {
       for (const action of trigger.actions) {
-        if (action.kind === 'highlight' && action.style.fg) named.add(action.style.fg);
-        if (action.kind !== 'replace') continue;
-        // eslint-disable-next-line no-control-regex
-        for (const m of action.template.matchAll(/\x1b\[([\d;]*)m/g)) {
-          const codes = m[1].split(';').map(Number);
-          for (let i = 0; i < codes.length; i++) {
-            const code = codes[i];
-            if (code === 38 && codes[i + 1] === 5) {
-              indexed.add(codes[i + 2]);
-              i += 2;
-            } else if (code === 38 && codes[i + 1] === 2) {
-              const [r, g, b] = codes.slice(i + 2, i + 5);
-              trueColor.add(`#${hex(r)}${hex(g)}${hex(b)}`);
-              i += 4;
-            } else if (code >= 30 && code <= 37) {
-              named.add(ANSI_NAMES[code - 30]);
-            } else if (code >= 90 && code <= 97) {
-              named.add(`bright_${ANSI_NAMES[code - 90]}`);
-            }
-          }
+        if (action.kind === 'replace' && !templates.includes(action.template)) {
+          templates.push(action.template);
         }
       }
     }
   }
-  return { trueColor, indexed, named };
+  return templates;
+}
+
+/** The fixed text colors the preset templates paint, by kind. */
+function presetColors() {
+  const trueColor = new Set<string>();
+  const indexed = new Set<number>();
+  const hex = (n: number) => n.toString(16).padStart(2, '0');
+  for (const template of presetTemplates()) {
+    // eslint-disable-next-line no-control-regex
+    for (const m of template.matchAll(/\x1b\[([\d;]*)m/g)) {
+      const codes = m[1].split(';').map(Number);
+      for (let i = 0; i < codes.length; i++) {
+        if (codes[i] === 38 && codes[i + 1] === 5) {
+          indexed.add(codes[i + 2]);
+          i += 2;
+        } else if (codes[i] === 38 && codes[i + 1] === 2) {
+          const [r, g, b] = codes.slice(i + 2, i + 5);
+          trueColor.add(`#${hex(r)}${hex(g)}${hex(b)}`);
+          i += 4;
+        }
+      }
+    }
+  }
+  return { trueColor, indexed };
 }
 
 describe('the readable grounds fixture', () => {
@@ -53,11 +54,21 @@ describe('the readable grounds fixture', () => {
     );
   });
 
-  it('holds every color the presets paint text in', () => {
+  it('holds every Replace template of the presets', () => {
+    expect(fixture.templates).toEqual(presetTemplates());
+  });
+
+  it('holds every fixed color the presets paint text in', () => {
     const colors = presetColors();
     expect([...colors.indexed].sort((a, b) => a - b)).toEqual(fixture.colors.indexed);
-    expect([...colors.named].sort()).toEqual(fixture.colors.named);
     for (const hex of colors.trueColor) expect(fixture.colors.true_color).toContain(hex);
+  });
+
+  it('holds only indexes past the 16, which draw the same on every theme', () => {
+    for (const n of fixture.colors.indexed) {
+      expect(n).toBeGreaterThanOrEqual(16);
+      expect(n).toBeLessThanOrEqual(255);
+    }
   });
 
   it('holds the weather blue', () => {
