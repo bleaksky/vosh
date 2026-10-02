@@ -19,5 +19,9 @@ vosh-ansi = { path = "../ansi" }
 # tests use.
 testkit = []
 
+[dev-dependencies]
+# The SGR model, whose span colors the readable highlight tests read.
+vosh-ansi = { path = "../ansi", features = ["testkit"] }
+
 [lints]
 workspace = true
