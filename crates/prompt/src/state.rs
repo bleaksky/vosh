@@ -31,8 +31,6 @@ pub struct FieldState {
     pub aliases: &'static [&'static str],
     pub kind: Kind,
     pub group: Group,
-    /// The GMCP source as the picker shows it.
-    pub gmcp: Option<&'static str>,
     pub package: Option<&'static str>,
     /// Only the new server build sends its package.
     pub new_build: bool,
@@ -109,7 +107,6 @@ pub fn catalog(vars: &Vars, vosh: &Vosh, reads: &[String]) -> Vec<FieldState> {
             aliases: &[],
             kind: Kind::Text,
             group: Group::Scripts,
-            gmcp: None,
             package: None,
             new_build: false,
             codes: &[],
@@ -159,7 +156,6 @@ fn field_state(
         aliases: e.aliases,
         kind: e.kind,
         group: e.group,
-        gmcp: e.gmcp,
         package: e.package,
         new_build: e.new_build,
         codes: e.codes,

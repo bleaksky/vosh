@@ -173,8 +173,6 @@ pub struct Entry {
     pub label: &'static str,
     pub kind: Kind,
     pub group: Group,
-    /// The GMCP source as the picker shows it, package and fields.
-    pub gmcp: Option<&'static str>,
     /// The package that feeds it, for "not sent yet".
     pub package: Option<&'static str>,
     /// Only the new server build sends that package.
@@ -199,7 +197,6 @@ const BASE: Entry = Entry {
     label: "",
     kind: Kind::Text,
     group: Group::More,
-    gmcp: None,
     package: None,
     new_build: false,
     codes: &[],
@@ -209,7 +206,8 @@ const BASE: Entry = Entry {
     listed: true,
 };
 
-/// Every field Vosh knows, in the picker's order.
+/// Every field Vosh knows, in the picker's order. The comment in an
+/// entry names the GMCP package and fields its value comes from.
 pub static CATALOG: &[Entry] = &[
     // Vitals
     Entry {
@@ -217,7 +215,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Health",
         kind: Kind::Gauge,
         group: Group::Vitals,
-        gmcp: Some("Char.Vitals hp maxhp"),
+        // Char.Vitals hp maxhp
         package: Some(CHAR_VITALS),
         codes: &["%h", "%H", "%K"],
         sample: "1020/1020",
@@ -230,7 +228,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Max health",
         kind: Kind::Num,
         group: Group::Vitals,
-        gmcp: Some("Char.Vitals maxhp"),
+        // Char.Vitals maxhp
         package: Some(CHAR_VITALS),
         codes: &["%H"],
         sample: "1020",
@@ -242,7 +240,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Mana",
         kind: Kind::Gauge,
         group: Group::Vitals,
-        gmcp: Some("Char.Vitals mana maxmana"),
+        // Char.Vitals mana maxmana
         package: Some(CHAR_VITALS),
         codes: &["%m", "%M", "%k"],
         sample: "800/800",
@@ -255,7 +253,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Max mana",
         kind: Kind::Num,
         group: Group::Vitals,
-        gmcp: Some("Char.Vitals maxmana"),
+        // Char.Vitals maxmana
         package: Some(CHAR_VITALS),
         codes: &["%M"],
         sample: "800",
@@ -267,7 +265,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Moves",
         kind: Kind::Gauge,
         group: Group::Vitals,
-        gmcp: Some("Char.Vitals move maxmove"),
+        // Char.Vitals move maxmove
         package: Some(CHAR_VITALS),
         codes: &["%v", "%V", "%E"],
         sample: "930/930",
@@ -280,7 +278,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Max moves",
         kind: Kind::Num,
         group: Group::Vitals,
-        gmcp: Some("Char.Vitals maxmove"),
+        // Char.Vitals maxmove
         package: Some(CHAR_VITALS),
         codes: &["%V"],
         sample: "930",
@@ -293,7 +291,7 @@ pub static CATALOG: &[Entry] = &[
         label: "In a fight",
         kind: Kind::Flag,
         group: Group::Fight,
-        gmcp: Some("Char.Combat target"),
+        // Char.Combat target
         package: Some(CHAR_COMBAT),
         sample: "1",
         search: &["combat", "fighting"],
@@ -304,7 +302,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Opponent",
         kind: Kind::Text,
         group: Group::Fight,
-        gmcp: Some("Char.Combat target"),
+        // Char.Combat target
         package: Some(CHAR_COMBAT),
         sample: "Blackwatch Guard",
         search: &["enemy", "foe", "victim"],
@@ -315,7 +313,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Opponent health",
         kind: Kind::Pct,
         group: Group::Fight,
-        gmcp: Some("Char.Combat hp_pct"),
+        // Char.Combat hp_pct
         package: Some(CHAR_COMBAT),
         sample: "60",
         search: &["enemy", "foe"],
@@ -326,7 +324,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Opponent condition",
         kind: Kind::Text,
         group: Group::Fight,
-        gmcp: Some("Char.Combat condition"),
+        // Char.Combat condition
         package: Some(CHAR_COMBAT),
         sample: "quite a few wounds",
         search: &["enemy", "foe", "wounds"],
@@ -337,7 +335,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Tank",
         kind: Kind::Text,
         group: Group::Fight,
-        gmcp: Some("Char.Combat tank.name"),
+        // Char.Combat tank.name
         package: Some(CHAR_COMBAT),
         new_build: true,
         codes: &["%n"],
@@ -349,7 +347,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Tank health",
         kind: Kind::TankPct,
         group: Group::Fight,
-        gmcp: Some("Char.Combat tank.hp_pct"),
+        // Char.Combat tank.hp_pct
         package: Some(CHAR_COMBAT),
         new_build: true,
         codes: &["%p", "%P"],
@@ -361,7 +359,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Position",
         kind: Kind::Position,
         group: Group::Fight,
-        gmcp: Some("Char.State position"),
+        // Char.State position
         package: Some(CHAR_STATE),
         new_build: true,
         codes: &["%S"],
@@ -374,7 +372,7 @@ pub static CATALOG: &[Entry] = &[
         name: "leader",
         label: "Leader",
         group: Group::Group,
-        gmcp: Some("Group.Info leader"),
+        // Group.Info leader
         package: Some(GROUP_INFO),
         sample: "Ketterly",
         ..BASE
@@ -384,7 +382,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Group size",
         kind: Kind::Count,
         group: Group::Group,
-        gmcp: Some("Group.Info members"),
+        // Group.Info members
         package: Some(GROUP_INFO),
         sample: "Ketterly,a loyal wolf",
         search: &["members"],
@@ -395,7 +393,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Lowest health",
         kind: Kind::Member,
         group: Group::Group,
-        gmcp: Some("Group.Info members"),
+        // Group.Info members
         package: Some(GROUP_INFO),
         sample: "Iskra 45",
         search: &["group", "member", "weakest"],
@@ -406,7 +404,7 @@ pub static CATALOG: &[Entry] = &[
         label: "A member's health",
         kind: Kind::Pct,
         group: Group::Group,
-        gmcp: Some("Group.Info members[].hp_pct"),
+        // Group.Info members[].hp_pct
         package: Some(GROUP_INFO),
         sample: "78",
         param: true,
@@ -417,7 +415,7 @@ pub static CATALOG: &[Entry] = &[
         label: "A member's mana",
         kind: Kind::Pct,
         group: Group::Group,
-        gmcp: Some("Group.Info members[].mana_pct"),
+        // Group.Info members[].mana_pct
         package: Some(GROUP_INFO),
         sample: "55",
         param: true,
@@ -428,7 +426,7 @@ pub static CATALOG: &[Entry] = &[
         label: "A member's moves",
         kind: Kind::Pct,
         group: Group::Group,
-        gmcp: Some("Group.Info members[].move_pct"),
+        // Group.Info members[].move_pct
         package: Some(GROUP_INFO),
         sample: "93",
         param: true,
@@ -439,7 +437,7 @@ pub static CATALOG: &[Entry] = &[
         label: "A member's level",
         kind: Kind::Num,
         group: Group::Group,
-        gmcp: Some("Group.Info members[].level"),
+        // Group.Info members[].level
         package: Some(GROUP_INFO),
         sample: "50",
         param: true,
@@ -449,7 +447,7 @@ pub static CATALOG: &[Entry] = &[
         name: "member_class",
         label: "A member's class",
         group: Group::Group,
-        gmcp: Some("Group.Info members[].class"),
+        // Group.Info members[].class
         package: Some(GROUP_INFO),
         sample: "Dkn",
         param: true,
@@ -460,7 +458,7 @@ pub static CATALOG: &[Entry] = &[
         label: "A member's experience to level",
         kind: Kind::Num,
         group: Group::Group,
-        gmcp: Some("Group.Info members[].tnl"),
+        // Group.Info members[].tnl
         package: Some(GROUP_INFO),
         sample: "1250",
         param: true,
@@ -472,7 +470,7 @@ pub static CATALOG: &[Entry] = &[
         name: "name",
         label: "Name",
         group: Group::Character,
-        gmcp: Some("Char.Status name"),
+        // Char.Status name
         package: Some(CHAR_STATUS),
         sample: "Wystan",
         ..BASE
@@ -482,7 +480,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Level",
         kind: Kind::Num,
         group: Group::Character,
-        gmcp: Some("Char.Status level"),
+        // Char.Status level
         package: Some(CHAR_STATUS),
         sample: "50",
         ..BASE
@@ -491,7 +489,7 @@ pub static CATALOG: &[Entry] = &[
         name: "race",
         label: "Race",
         group: Group::Character,
-        gmcp: Some("Char.Status race"),
+        // Char.Status race
         package: Some(CHAR_STATUS),
         sample: "human",
         ..BASE
@@ -500,7 +498,7 @@ pub static CATALOG: &[Entry] = &[
         name: "class",
         label: "Class",
         group: Group::Character,
-        gmcp: Some("Char.Status class"),
+        // Char.Status class
         package: Some(CHAR_STATUS),
         sample: "warrior",
         ..BASE
@@ -510,7 +508,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Language",
         kind: Kind::Lang,
         group: Group::Character,
-        gmcp: Some("Char.State language"),
+        // Char.State language
         package: Some(CHAR_STATE),
         new_build: true,
         codes: &["%s"],
@@ -560,7 +558,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Gold",
         kind: Kind::Num,
         group: Group::Worth,
-        gmcp: Some("Char.Worth gold"),
+        // Char.Worth gold
         package: Some(CHAR_WORTH),
         codes: &["%g"],
         sample: "1250",
@@ -572,7 +570,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Bank",
         kind: Kind::Num,
         group: Group::Worth,
-        gmcp: Some("Char.Worth bank"),
+        // Char.Worth bank
         package: Some(CHAR_WORTH),
         sample: "5000",
         search: &["gold", "coins"],
@@ -583,7 +581,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Experience",
         kind: Kind::Num,
         group: Group::Worth,
-        gmcp: Some("Char.Worth exp"),
+        // Char.Worth exp
         package: Some(CHAR_WORTH),
         codes: &["%x"],
         sample: "125000",
@@ -595,7 +593,7 @@ pub static CATALOG: &[Entry] = &[
         label: "To next level",
         kind: Kind::Num,
         group: Group::Worth,
-        gmcp: Some("Char.Worth tnl"),
+        // Char.Worth tnl
         package: Some(CHAR_WORTH),
         codes: &["%X"],
         sample: "1250",
@@ -607,7 +605,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Trains",
         kind: Kind::Num,
         group: Group::Worth,
-        gmcp: Some("Char.Worth trains"),
+        // Char.Worth trains
         package: Some(CHAR_WORTH),
         sample: "3",
         ..BASE
@@ -617,7 +615,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Practices",
         kind: Kind::Num,
         group: Group::Worth,
-        gmcp: Some("Char.Worth practices"),
+        // Char.Worth practices
         package: Some(CHAR_WORTH),
         sample: "12",
         ..BASE
@@ -627,7 +625,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Cabal points",
         kind: Kind::Num,
         group: Group::Worth,
-        gmcp: Some("Char.Worth cps"),
+        // Char.Worth cps
         package: Some(CHAR_WORTH),
         codes: &["%a"],
         sample: "40",
@@ -639,7 +637,7 @@ pub static CATALOG: &[Entry] = &[
         label: "RP points",
         kind: Kind::Num,
         group: Group::Worth,
-        gmcp: Some("Char.Worth rps"),
+        // Char.Worth rps
         package: Some(CHAR_WORTH),
         codes: &["%A"],
         sample: "7",
@@ -650,7 +648,7 @@ pub static CATALOG: &[Entry] = &[
         name: "cabal",
         label: "Cabal",
         group: Group::Worth,
-        gmcp: Some("Char.Worth cabal"),
+        // Char.Worth cabal
         package: Some(CHAR_WORTH),
         sample: "Nexus",
         ..BASE
@@ -661,7 +659,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Tracked affects missing",
         kind: Kind::Count,
         group: Group::Affects,
-        gmcp: Some("Char.Affects"),
+        // Char.Affects
         package: Some(gmcp::CHAR_AFFECTS),
         sample: "sanctuary,haste",
         search: &["tracked", "spells", "buffs"],
@@ -672,7 +670,7 @@ pub static CATALOG: &[Entry] = &[
         label: "An affect",
         kind: Kind::Ticks,
         group: Group::Affects,
-        gmcp: Some("Char.Affects"),
+        // Char.Affects
         package: Some(gmcp::CHAR_AFFECTS),
         sample: "12",
         search: &["spell", "buff", "duration"],
@@ -694,7 +692,7 @@ pub static CATALOG: &[Entry] = &[
         name: "room",
         label: "Room",
         group: Group::Room,
-        gmcp: Some("Room.Info name"),
+        // Room.Info name
         package: Some(ROOM_INFO),
         codes: &["%r"],
         sample: "The Bank of Aabahran",
@@ -705,7 +703,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Room number",
         kind: Kind::Num,
         group: Group::Room,
-        gmcp: Some("Room.Info num"),
+        // Room.Info num
         package: Some(ROOM_INFO),
         codes: &["%R"],
         sample: "5279",
@@ -716,7 +714,7 @@ pub static CATALOG: &[Entry] = &[
         name: "area",
         label: "Area",
         group: Group::Room,
-        gmcp: Some("Room.Info area"),
+        // Room.Info area
         package: Some(ROOM_INFO),
         codes: &["%z"],
         sample: "Fort Blackwatch",
@@ -738,7 +736,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Exits",
         kind: Kind::Exits,
         group: Group::Room,
-        gmcp: Some("Room.Info exits"),
+        // Room.Info exits
         package: Some(ROOM_INFO),
         new_build: true,
         codes: &["%e"],
@@ -750,7 +748,7 @@ pub static CATALOG: &[Entry] = &[
         name: "terrain",
         label: "Terrain",
         group: Group::Room,
-        gmcp: Some("Room.Info terrain"),
+        // Room.Info terrain
         package: Some(ROOM_INFO),
         sample: "inside",
         search: &["sector"],
@@ -761,7 +759,7 @@ pub static CATALOG: &[Entry] = &[
         aliases: &["climate"],
         label: "Region",
         group: Group::Room,
-        gmcp: Some("Room.Weather region, then Room.Info climate"),
+        // Room.Weather region, then Room.Info climate
         package: Some(ROOM_WEATHER),
         new_build: true,
         codes: &["%G"],
@@ -774,7 +772,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Sector",
         kind: Kind::Num,
         group: Group::Room,
-        gmcp: Some("Room.Info sector"),
+        // Room.Info sector
         package: Some(ROOM_INFO),
         sample: "0",
         search: &["terrain"],
@@ -785,7 +783,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Region number",
         kind: Kind::Num,
         group: Group::Room,
-        gmcp: Some("Room.Info region"),
+        // Room.Info region
         package: Some(ROOM_INFO),
         sample: "0",
         search: &["climate"],
@@ -796,7 +794,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Temperature",
         kind: Kind::Temp,
         group: Group::Room,
-        gmcp: Some("Room.Weather temp unit"),
+        // Room.Weather temp unit
         package: Some(ROOM_WEATHER),
         new_build: true,
         codes: &["%w"],
@@ -808,7 +806,7 @@ pub static CATALOG: &[Entry] = &[
         name: "weather",
         label: "Weather",
         group: Group::Room,
-        gmcp: Some("Room.Weather sky"),
+        // Room.Weather sky
         package: Some(ROOM_WEATHER),
         new_build: true,
         codes: &["%W"],
@@ -821,7 +819,7 @@ pub static CATALOG: &[Entry] = &[
         label: "People here",
         kind: Kind::Count,
         group: Group::Room,
-        gmcp: Some("Room.Chars"),
+        // Room.Chars
         package: Some(ROOM_CHARS),
         sample: "a Blackwatch guard,a loyal wolf",
         search: &["mobs", "characters"],
@@ -832,7 +830,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Things here",
         kind: Kind::Count,
         group: Group::Room,
-        gmcp: Some("Room.Items"),
+        // Room.Items
         package: Some(ROOM_ITEMS),
         sample: "a wooden torch",
         search: &["items", "objects"],
@@ -844,7 +842,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Game hour",
         kind: Kind::Hour,
         group: Group::TimeAndSky,
-        gmcp: Some("World.Time hour"),
+        // World.Time hour
         package: Some(WORLD_TIME),
         codes: &["%t"],
         sample: "14",
@@ -856,7 +854,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Day",
         kind: Kind::Num,
         group: Group::TimeAndSky,
-        gmcp: Some("World.Time day"),
+        // World.Time day
         package: Some(WORLD_TIME),
         sample: "12",
         search: &["date"],
@@ -867,7 +865,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Month",
         kind: Kind::Num,
         group: Group::TimeAndSky,
-        gmcp: Some("World.Time month"),
+        // World.Time month
         package: Some(WORLD_TIME),
         sample: "3",
         search: &["date"],
@@ -878,7 +876,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Year",
         kind: Kind::Num,
         group: Group::TimeAndSky,
-        gmcp: Some("World.Time year"),
+        // World.Time year
         package: Some(WORLD_TIME),
         sample: "812",
         search: &["date"],
@@ -888,7 +886,7 @@ pub static CATALOG: &[Entry] = &[
         name: "sun",
         label: "Sunlight",
         group: Group::TimeAndSky,
-        gmcp: Some("World.Time sunlight"),
+        // World.Time sunlight
         package: Some(WORLD_TIME),
         sample: "light",
         search: &["day", "night", "dark"],
@@ -898,7 +896,7 @@ pub static CATALOG: &[Entry] = &[
         name: "sky",
         label: "Sky",
         group: Group::TimeAndSky,
-        gmcp: Some("World.Time sky"),
+        // World.Time sky
         package: Some(WORLD_TIME),
         sample: "cloudless",
         search: &["weather"],
@@ -912,7 +910,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Eclipse",
         kind: Kind::Flag,
         group: Group::TimeAndSky,
-        gmcp: Some("World.Moons eclipse"),
+        // World.Moons eclipse
         package: Some(WORLD_MOONS),
         sample: "1",
         search: &["moons"],
@@ -923,7 +921,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Triad",
         kind: Kind::Flag,
         group: Group::TimeAndSky,
-        gmcp: Some("World.Moons triad"),
+        // World.Moons triad
         package: Some(WORLD_MOONS),
         sample: "1",
         search: &["moons"],
@@ -934,7 +932,7 @@ pub static CATALOG: &[Entry] = &[
         label: "Moons near alignment",
         kind: Kind::Flag,
         group: Group::TimeAndSky,
-        gmcp: Some("World.Moons near_alignment"),
+        // World.Moons near_alignment
         package: Some(WORLD_MOONS),
         sample: "1",
         search: &["moons", "alignment"],
@@ -1024,7 +1022,7 @@ pub static CATALOG: &[Entry] = &[
         label: "A queue",
         kind: Kind::Num,
         group: Group::Building,
-        gmcp: Some("Imm.Queues"),
+        // Imm.Queues
         package: Some(IMM_QUEUES),
         sample: "3",
         search: &["bugs", "notes", "applications"],
@@ -1066,7 +1064,7 @@ const fn moon(
         label,
         kind: Kind::Moon,
         group: Group::TimeAndSky,
-        gmcp: Some("World.Moons moons"),
+        // World.Moons moons
         package: Some(WORLD_MOONS),
         codes: code,
         sample,

@@ -20,7 +20,6 @@ function field(name: string, over: Partial<PromptFieldState> = {}): PromptFieldS
     aliases: [],
     kind: 'num',
     group: 'vitals',
-    gmcp: null,
     package: null,
     new_build: false,
     codes: [],
