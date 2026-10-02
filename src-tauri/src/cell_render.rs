@@ -184,6 +184,20 @@ pub(crate) struct Placement {
     /// The render target's size in device pixels. A prompt band reaches
     /// past the pane into it, as far as the target allows.
     pub target: [u32; 2],
+    /// Blinking text is in its hidden half. Never while Blinking text is
+    /// off.
+    pub blink_hidden: bool,
+}
+
+/// What a frame drew that the surface acts on after it.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct Drawn {
+    /// Where the split divider sits, as a fraction of the surface height,
+    /// while the view is split.
+    pub divider: Option<f32>,
+    /// A cell on screen blinks, with a glyph or a line that its hidden
+    /// half takes away, so the frame that flips it changes something.
+    pub blinks: bool,
 }
 
 fn theme_fg() -> Rgb {
@@ -447,6 +461,45 @@ pub(crate) fn set_bright_bold(on: bool) {
     BRIGHT_BOLD.store(on, Ordering::Release);
 }
 
+// Blinking text, the setting of that name. Off until the page reports it,
+// so a frame drawn before then holds still.
+static BLINK_TEXT: AtomicBool = AtomicBool::new(false);
+
+/// Turn blinking text on or off, reported by the page from the Blinking
+/// text setting and the reduce motion setting of the system. Off, every
+/// blinking cell draws steady.
+pub(crate) fn set_blink_text(on: bool) {
+    BLINK_TEXT.store(on, Ordering::Release);
+}
+
+pub(crate) fn blink_text() -> bool {
+    BLINK_TEXT.load(Ordering::Acquire)
+}
+
+/// How long blinking text shows and how long it hides, the blink of
+/// xterm's cursor (`CursorBlinkStateManager`). xterm's text blink and the
+/// page's pinned prompt use it too (`BLINK_MS` in src/lib/blink.ts).
+pub(crate) const BLINK_MS: u64 = 600;
+
+/// Blinking text shows at `now_ms`, milliseconds since the Unix epoch.
+/// Every renderer counts the halves from the epoch, so whatever blinks
+/// on the screen flips together.
+pub(crate) fn blink_shown(now_ms: u64) -> bool {
+    (now_ms / BLINK_MS) % 2 == 0
+}
+
+/// How long from `now_ms` until blinking text flips.
+pub(crate) fn until_blink_flip(now_ms: u64) -> std::time::Duration {
+    std::time::Duration::from_millis(BLINK_MS - now_ms % BLINK_MS)
+}
+
+/// Milliseconds since the Unix epoch, as the page's `Date.now()` counts.
+pub(crate) fn epoch_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+}
+
 // When set, your prompt shows lifted and each lift draws on a band.
 static PROMPT_BANDS: AtomicBool = AtomicBool::new(false);
 
@@ -703,20 +756,37 @@ fn underline_color(flags: CellFlags, text: Rgba) -> Rgba {
     })
 }
 
+/// Whether a cell shows its text: not while SGR 8 hides it, nor in the
+/// hidden half of a blink (`blink_hidden`).
+fn shows_text(flags: CellFlags, blink_hidden: bool) -> bool {
+    let blinked_away = blink_hidden && flags.blink;
+    !flags.hidden && !blinked_away
+}
+
 /// The glyph a cell draws. SGR 8 hides the text and keeps the cell's
-/// place and ground, as xterm does.
-fn drawn_char(ch: char, flags: CellFlags) -> char {
-    if flags.hidden {
-        ' '
-    } else {
+/// place and ground, as xterm does, and so does the hidden half of a
+/// blink.
+fn drawn_char(ch: char, flags: CellFlags, blink_hidden: bool) -> char {
+    if shows_text(flags, blink_hidden) {
         ch
+    } else {
+        ' '
     }
 }
 
 /// Whether a cell draws its underline and strike. Hidden text draws
-/// neither, the same as xterm, which skips the whole glyph.
-fn draws_lines(flags: CellFlags) -> bool {
-    !flags.hidden
+/// neither, the same as xterm, which skips the whole glyph. xterm skips
+/// it in the hidden half of a blink too, lines and all, so the grid and
+/// the pinned band do the same.
+fn draws_lines(flags: CellFlags, blink_hidden: bool) -> bool {
+    shows_text(flags, blink_hidden)
+}
+
+/// A cell blinks with something its hidden half takes away: a glyph, an
+/// underline or a strike.
+fn blinks_visibly(ch: char, flags: CellFlags) -> bool {
+    let ink = !matches!(ch, ' ' | '\0') || flags.underline != Underline::None || flags.strikeout;
+    flags.blink && shows_text(flags, false) && ink
 }
 
 // ---------------------------------------------------------------------------
@@ -2411,7 +2481,7 @@ impl CellRenderer {
         surface_h: u32,
         split_ratio: f32,
         placement: Placement,
-    ) -> Option<f32> {
+    ) -> Drawn {
         let cell_w = self.atlas.cell_w() as f32;
         let cell_h = self.atlas.cell_h() as f32;
         let cols = grid.columns();
@@ -2506,12 +2576,16 @@ impl CellRenderer {
         // re-upload the atlas texture if it grew. Steady state (every glyph
         // already cached) costs only the lookups, no upload.
         let mut atlas_grew = false;
+        let blink_hidden = placement.blink_hidden;
+        // A cell on screen that blinks with something to hide.
+        let mut blinks = false;
         for reg in &regions {
             for row in 0..reg.vis {
                 for col in 0..cols {
                     let grid_line = reg.line0 + row as i32;
                     let (ch, fg, _, flags) = grid.cell_at_line(grid_line, col);
-                    let ch = drawn_char(ch, flags);
+                    blinks |= blinks_visibly(ch, flags);
+                    let ch = drawn_char(ch, flags, blink_hidden);
                     let bold = wants_bold_font(fg, flags);
                     if ch != ' ' && self.atlas.uv_if_cached(ch, bold, flags.italic).is_none() {
                         self.atlas.glyph_uv(ch, bold, flags.italic);
@@ -2689,7 +2763,7 @@ impl CellRenderer {
             if hovered {
                 fg_rgba = link;
             }
-            if draws_lines(flags) {
+            if draws_lines(flags, blink_hidden) {
                 // A link under the pointer reads as a plain underline in
                 // the link color, whatever line the cell carries.
                 if hovered {
@@ -2703,7 +2777,7 @@ impl CellRenderer {
                 }
             }
             (
-                drawn_char(ch, flags),
+                drawn_char(ch, flags, blink_hidden),
                 fg_rgba,
                 bg_rgba,
                 wants_bold_font(fg, flags),
@@ -3035,7 +3109,10 @@ impl CellRenderer {
             }
         }
         drop(rpass);
-        divider_frac
+        Drawn {
+            divider: divider_frac,
+            blinks,
+        }
     }
 }
 
@@ -3162,14 +3239,81 @@ mod tests {
             strikeout: true,
             ..CellFlags::default()
         };
-        assert_eq!(drawn_char('H', hidden), ' ');
-        assert!(!draws_lines(hidden));
+        assert_eq!(drawn_char('H', hidden, false), ' ');
+        assert!(!draws_lines(hidden, false));
         let shown = CellFlags {
             hidden: false,
             ..hidden
         };
-        assert_eq!(drawn_char('H', shown), 'H');
-        assert!(draws_lines(shown));
+        assert_eq!(drawn_char('H', shown, false), 'H');
+        assert!(draws_lines(shown, false));
+    }
+
+    #[test]
+    fn a_blinking_cell_hides_its_glyph_and_lines_in_the_off_phase() {
+        let blink = CellFlags {
+            blink: true,
+            underline: Underline::Single,
+            strikeout: true,
+            ..CellFlags::default()
+        };
+        // The shown half draws it all.
+        assert_eq!(drawn_char('B', blink, false), 'B');
+        assert!(draws_lines(blink, false));
+        // The hidden half draws neither glyph nor line, as xterm does.
+        assert_eq!(drawn_char('B', blink, true), ' ');
+        assert!(!draws_lines(blink, true));
+        // A steady cell draws the same in both halves.
+        let steady = CellFlags {
+            blink: false,
+            ..blink
+        };
+        assert_eq!(drawn_char('B', steady, true), 'B');
+        assert!(draws_lines(steady, true));
+    }
+
+    #[test]
+    fn a_blink_counts_when_its_hidden_half_takes_something_away() {
+        let blink = CellFlags {
+            blink: true,
+            ..CellFlags::default()
+        };
+        assert!(blinks_visibly('x', blink));
+        // A bare blank changes nothing when it flips.
+        assert!(!blinks_visibly(' ', blink) && !blinks_visibly('\0', blink));
+        // An underlined or struck blank loses its line.
+        let underlined = CellFlags {
+            underline: Underline::Curly,
+            ..blink
+        };
+        let struck = CellFlags {
+            strikeout: true,
+            ..blink
+        };
+        assert!(blinks_visibly(' ', underlined) && blinks_visibly(' ', struck));
+        // Hidden text and steady text never flip.
+        let hidden = CellFlags {
+            hidden: true,
+            ..underlined
+        };
+        let steady = CellFlags {
+            blink: false,
+            ..underlined
+        };
+        assert!(!blinks_visibly('x', hidden) && !blinks_visibly('x', steady));
+    }
+
+    #[test]
+    fn blink_flips_every_600_ms_on_the_wall_clock() {
+        assert!(blink_shown(0) && blink_shown(599));
+        assert!(!blink_shown(600) && !blink_shown(1199));
+        assert!(blink_shown(1200));
+        assert_eq!(until_blink_flip(0), std::time::Duration::from_millis(600));
+        assert_eq!(until_blink_flip(599), std::time::Duration::from_millis(1));
+        assert_eq!(
+            until_blink_flip(1250),
+            std::time::Duration::from_millis(550)
+        );
     }
 
     /// Berkeley Mono at 12 CSS px and line height 1.2, the cell xterm
@@ -4273,6 +4417,8 @@ mod tests {
         h: u32,
         cell: (u32, u32),
         decor: Decor,
+        /// The frame drew a cell that blinks.
+        blinks: bool,
     }
 
     /// Render `bytes` on a `cols` by `rows` grid at `scale`, in the font
@@ -4284,6 +4430,20 @@ mod tests {
         rows: usize,
         scale: f32,
         line_height: f32,
+    ) -> Option<Frame> {
+        render_frame(bytes, cols, rows, scale, line_height, false, false)
+    }
+
+    /// [`render_offscreen`] in the hidden half of a blink when
+    /// `blink_hidden`, with every cell selected when `select_all`.
+    fn render_frame(
+        bytes: &[u8],
+        cols: usize,
+        rows: usize,
+        scale: f32,
+        line_height: f32,
+        blink_hidden: bool,
+        select_all: bool,
     ) -> Option<Frame> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
@@ -4312,6 +4472,9 @@ mod tests {
         let mut renderer = CellRenderer::with_atlas(&device, &queue, format, atlas);
         let mut grid = crate::term_grid::TermGrid::new(cols, rows);
         grid.feed(bytes);
+        if select_all {
+            grid.select_all();
+        }
         let (w, h) = (cols as u32 * cell_w, rows as u32 * cell_h);
         let extent = wgpu::Extent3d {
             width: w,
@@ -4337,8 +4500,9 @@ mod tests {
             indicators: false,
             scale,
             target: [w, h],
+            blink_hidden,
         };
-        renderer.draw(
+        let drawn = renderer.draw(
             &device,
             &queue,
             &mut encoder,
@@ -4388,6 +4552,7 @@ mod tests {
             h,
             cell: (cell_w, cell_h),
             decor,
+            blinks: drawn.blinks,
         })
     }
 
@@ -4499,6 +4664,74 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn a_blinking_cell_keeps_only_its_ground_through_the_hidden_half() {
+        // Nord text that blinks, underlined and struck through, then two
+        // steady blanks. Every cell is selected, so the ground each one
+        // keeps is the selection's over Nord.
+        let bytes = [NORD, b"\x1b[5;4;9mBlink\x1b[25;24;29m  ".as_slice()].concat();
+        for scale in [1.0_f32, 2.0] {
+            let shown = render_frame(&bytes, 7, 1, scale, 1.2, false, true);
+            let hidden = render_frame(&bytes, 7, 1, scale, 1.2, true, true);
+            let (Some(shown), Some(hidden)) = (shown, hidden) else {
+                return;
+            };
+            if let Some(dir) = std::env::var_os("VOSH_TEXT_STYLE_RENDERS") {
+                for (frame, half) in [(&shown, "shown"), (&hidden, "hidden")] {
+                    let name = format!("grid_blink_{half}_{}x.png", scale as u32);
+                    write_png(&std::path::Path::new(&dir).join(name), frame);
+                }
+            }
+            assert!(shown.blinks && hidden.blinks);
+            let (cw, ch) = shown.cell;
+            let w = shown.w;
+            let pixel = |f: &Frame, x: u32, y: u32| {
+                let at = ((y * w + x) * 4) as usize;
+                [0, 1, 2].map(|i| i32::from(f.rgba[at + i]))
+            };
+            let close = |a: [i32; 3], b: [i32; 3]| (0..3).all(|i| (a[i] - b[i]).abs() <= 2);
+            // The steady blank at column 6 shows the selected ground.
+            let ground = pixel(&hidden, 6 * cw + cw / 2, ch / 2);
+            let line = shown.decor.under..shown.decor.under + shown.decor.t;
+            let (mut ink, mut underline) = (0, 0);
+            for y in 0..ch {
+                for x in 0..5 * cw {
+                    let (on, off) = (pixel(&shown, x, y), pixel(&hidden, x, y));
+                    // The hidden half is bare ground: no glyph, no
+                    // underline and no strike, as xterm draws it.
+                    assert!(close(off, ground), "ink at {scale}x, x {x} y {y}: {off:?}");
+                    if line.contains(&y) {
+                        underline += usize::from(!close(on, ground));
+                    } else {
+                        ink += usize::from(!close(on, ground));
+                    }
+                }
+            }
+            assert!(ink > 0, "the shown half drew no text at {scale}x");
+            assert!(
+                underline > 0,
+                "the shown half drew no underline at {scale}x"
+            );
+        }
+    }
+
+    #[test]
+    fn a_frame_with_no_blinking_text_reports_none() {
+        let steady = [NORD, b"\x1b[4;9mSteady\x1b[0m \x1b[5m \x1b[0m".as_slice()].concat();
+        let Some(frame) = render_offscreen(&steady, 9, 1, 1.0, 1.2) else {
+            return;
+        };
+        // A blinking blank changes nothing when it flips.
+        assert!(!frame.blinks);
+        for blinks in [b"\x1b[5mx".as_slice(), b"\x1b[5;4m \x1b[0m"] {
+            let Some(frame) = render_offscreen(blinks, 4, 1, 1.0, 1.2) else {
+                return;
+            };
+            // A blinking letter, or a blank that loses its underline.
+            assert!(frame.blinks);
         }
     }
 

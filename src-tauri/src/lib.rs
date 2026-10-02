@@ -313,6 +313,7 @@ pub fn run() {
             commands::native_surface_set_tokens,
             commands::native_surface_set_prompt_bands,
             commands::native_surface_set_prompt_reach,
+            commands::native_surface_set_blink_text,
             session_connect,
             session_send_input,
             session_send_masked,

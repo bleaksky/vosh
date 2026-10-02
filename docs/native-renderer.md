@@ -151,7 +151,13 @@ NSWindow / HWND / GtkWindow
   uses xterm's reported device cell so spacing matches exactly. Cell styles
   render at parity: true bold (the bundled Bold face), synthesized italic
   (CoreGraphics shear, overhanging its cell like the webview), underline,
-  strikethrough, dim, inverse, and background color. The atlas keys four
+  strikethrough, dim, inverse, background color, and blink. Blinking text
+  (SGR 5) shows and hides in 600 ms halves counted from the Unix epoch,
+  the clock xterm and the pinned band share. The hidden half drops the
+  glyph, the underline and the strike and keeps the ground, as xterm's
+  WebGL renderer does. The surface runs its blink timer only after a frame
+  that drew blinking text, and the rapid blink of SGR 6 draws steady, as
+  in xterm. The atlas keys four
   faces by (char, bold, italic) in double-width slots so slanted glyphs are
   not clipped; backgrounds and glyphs draw as separate layers. Theme colors
   follow the active theme and the `themeTerminalColors` tint; the font
@@ -210,7 +216,9 @@ The frontend reports state to the surface through commands:
 `native_surface_scroll` (PageUp/PageDown/bottom), `native_surface_copy`
 (Cmd+C), `native_surface_set_theme` (bg/fg/selection + ANSI palette),
 `native_surface_set_font` (family + size), `native_surface_set_bright_bold`
-(weight toggle), `native_surface_set_visible` (overlay suppression),
+(weight toggle), `native_surface_set_blink_text` (the Blinking text
+setting, which the page resolves against reduce motion),
+`native_surface_set_visible` (overlay suppression),
 `terminal_local_write` (text the page writes itself, such as your sent
 input), `native_surface_find` /
 `native_surface_find_clear` (search). The backend feeds the grid from
