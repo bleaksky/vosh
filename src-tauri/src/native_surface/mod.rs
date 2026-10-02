@@ -1627,7 +1627,6 @@ mod tests {
             port,
             false,
             state.profile.clone(),
-            state.map.clone(),
             state.script_timers.clone(),
             state.logs.clone(),
             state.scrollback.clone(),

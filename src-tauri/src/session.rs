@@ -24,7 +24,6 @@ use crate::hidden_input::{self, ServerEcho};
 use crate::input;
 use crate::line_accumulator::{Line, LineAccumulator, Partial};
 use crate::list_events::{broadcast_list_changes, ListChanges, ListRevisions};
-use crate::map_state::{self, SharedMap};
 use crate::profile::Profile;
 use crate::profile_config::SharedLayer;
 use crate::script_state::{self, ApplyResult, PendingTimer, SharedTimers};
@@ -549,7 +548,6 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
     port: u16,
     tls: bool,
     profile: Arc<Mutex<Profile>>,
-    map: SharedMap,
     timers: SharedTimers,
     logs: crate::log_state::SharedLogStore,
     scrollback: crate::log_state::SharedScrollback,
@@ -619,7 +617,6 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         stream,
         rx_outgoing,
         profile,
-        map,
         timers,
         logs,
         log_session_id,
@@ -696,7 +693,6 @@ async fn io_loop<R: tauri::Runtime>(
     mut stream: Stream,
     mut rx_outgoing: mpsc::UnboundedReceiver<OutgoingMsg>,
     profile: Arc<Mutex<Profile>>,
-    map: SharedMap,
     timers: SharedTimers,
     logs: crate::log_state::SharedLogStore,
     log_session_id: Option<i64>,
@@ -939,7 +935,6 @@ async fn io_loop<R: tauri::Runtime>(
                             &mut negotiator,
                             &mut accumulator,
                             &profile,
-                            &map,
                             &timers,
                             log_session_id,
                             &scrollback,
@@ -1022,7 +1017,6 @@ async fn io_loop<R: tauri::Runtime>(
                                         &mut negotiator,
                                         &mut accumulator,
                                         &profile,
-                                        &map,
                                         &timers,
                                         log_session_id,
                                         &scrollback,
@@ -1558,7 +1552,6 @@ async fn handle_event<R: tauri::Runtime>(
     negotiator: &mut Negotiator,
     accumulator: &mut LineAccumulator,
     profile: &Arc<Mutex<Profile>>,
-    map: &SharedMap,
     timers: &SharedTimers,
     log_session_id: Option<i64>,
     scrollback: &crate::log_state::SharedScrollback,
@@ -1618,7 +1611,7 @@ async fn handle_event<R: tauri::Runtime>(
         TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
             perf.gmcp_packets += 1;
             batch.gmcp = true;
-            handle_gmcp(app, profile, map, timers, stream, &payload, batch, perf).await?;
+            handle_gmcp(app, profile, timers, stream, &payload, batch, perf).await?;
             Ok(())
         }
         TelnetEvent::Command(byte) if byte == telnet_codes::EOR || byte == telnet_codes::GA => {
@@ -2964,7 +2957,6 @@ impl LogSession {
 async fn handle_gmcp<R: tauri::Runtime>(
     app: &AppHandle<R>,
     profile: &Arc<Mutex<Profile>>,
-    map: &SharedMap,
     timers: &SharedTimers,
     stream: &mut Stream,
     payload: &[u8],
@@ -3028,13 +3020,6 @@ async fn handle_gmcp<R: tauri::Runtime>(
         script_apply,
     )
     .await?;
-    if msg.package == "Room.Info" {
-        // Map-store SQLite writes ride a dedicated single-consumer task
-        // (ordering preserved) instead of running inline on the io loop,
-        // where they sat between a socket read and the next outgoing
-        // command write and contributed to command latency.
-        let _ = map_writer(map).send(msg.clone());
-    }
     // Phase 4 perf fix: emit on a per-package event channel so each
     // frontend listener subscribes only to the packages it cares
     // about, instead of all 12 listeners running on every packet and
@@ -3113,29 +3098,6 @@ fn gmcp_step(
     };
     let apply = script_state::apply_actions(p, outcome);
     (tick_step, apply)
-}
-
-/// Lazily-started single-consumer task that applies `Room.Info` map
-/// updates off the session io loop. One consumer preserves room-visit
-/// ordering (spawn-per-message would not).
-static MAP_WRITER: std::sync::OnceLock<tokio::sync::mpsc::UnboundedSender<vosh_gmcp::Message>> =
-    std::sync::OnceLock::new();
-
-fn map_writer(
-    map: &crate::map_state::SharedMap,
-) -> &'static tokio::sync::mpsc::UnboundedSender<vosh_gmcp::Message> {
-    MAP_WRITER.get_or_init(|| {
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<vosh_gmcp::Message>();
-        let map = map.clone();
-        tauri::async_runtime::spawn(async move {
-            while let Some(msg) = rx.recv().await {
-                if let Err(e) = map_state::handle_room_info(&map, &msg).await {
-                    warn!(error = %e, "failed to update map from Room.Info");
-                }
-            }
-        });
-        tx
-    })
 }
 
 /// Detect the game's tick from a GMCP `World.Time` push. Aabahran (and

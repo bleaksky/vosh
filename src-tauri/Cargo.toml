@@ -35,7 +35,6 @@ vosh-vars = { path = "../crates/vars" }
 vosh-trigger = { path = "../crates/trigger" }
 vosh-gmcp = { path = "../crates/gmcp" }
 vosh-ansi = { path = "../crates/ansi" }
-vosh-map = { path = "../crates/map" }
 vosh-script = { path = "../crates/script" }
 vosh-log = { path = "../crates/log" }
 vosh-prompt = { path = "../crates/prompt" }

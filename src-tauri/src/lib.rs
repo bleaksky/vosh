@@ -4,7 +4,6 @@ use tauri::Manager;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 use vosh_log::LogStore;
-use vosh_map::MapStore;
 
 // macOS-only: WKWebView ignores the HTML `spellcheck` attribute
 // until continuous spell-checking is enabled at the NSView level.
@@ -91,7 +90,6 @@ mod list_events;
 mod loadout;
 mod loadout_store;
 mod log_state;
-mod map_state;
 mod migration;
 #[cfg(native_surface)]
 mod native_surface;
@@ -135,7 +133,6 @@ use commands::{
     updater_install_and_relaunch, AppState, SharedState,
 };
 use fonts::{fonts_list, handle_font_uri};
-use map_state::MapState;
 
 pub fn run() {
     tracing_subscriber::fmt()
@@ -207,17 +204,11 @@ pub fn run() {
             // on the blocking pool, never here on the main thread.
             #[cfg(target_os = "macos")]
             fonts::warm_font_cache();
-            match open_map_store(app) {
-                Ok(store) => {
-                    let map = state.map.clone();
-                    tauri::async_runtime::block_on(async move {
-                        let mut guard = map.lock().await;
-                        *guard = Some(MapState::new(store));
-                    });
-                }
-                Err(e) => {
-                    error!(error = %e, "map store failed to open; map features disabled");
-                }
+            // The data folder and the scripts folder in it. This runs
+            // before the mudclient copy, whose guard reads the scripts
+            // folder as a folder in use.
+            if let Err(e) = create_scripts_dir(app) {
+                error!(error = %e, "scripts folder could not be created");
             }
             if let Ok(path) = app.path().app_data_dir() {
                 migrate_from_mudclient_dir(&path);
@@ -539,12 +530,16 @@ fn migrate_from_mudclient_dir(new_dir: &std::path::Path) {
     }
     // Don't overwrite a real install. If the new dir already has a
     // profile or any of the core data files, the user has already used
-    // the renamed build — leave them alone.
+    // the renamed build — leave them alone. Launch creates the scripts
+    // folder before this runs, so a launch always finds the folder in
+    // use and skips, the way it did while the map store created
+    // maps.sqlite here first. D15 decides whether the copy stays at all.
     let occupied = [
         "profile.toml",
         "scrollback.bin",
         "maps.sqlite",
         "logs.sqlite",
+        SCRIPTS_DIR,
     ]
     .iter()
     .any(|name| new_dir.join(name).exists());
@@ -593,17 +588,18 @@ fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::
     Ok(count)
 }
 
-fn open_map_store(app: &tauri::App) -> Result<MapStore, Box<dyn std::error::Error>> {
+/// Create the app data folder and the `scripts` folder in it, where
+/// `#script load` finds Lua files. The map store's opener did this until
+/// D3 retired the store. maps.sqlite stays on disk as it is, and nothing
+/// reads or writes it.
+fn create_scripts_dir(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let dir = app.path().app_data_dir()?;
-    std::fs::create_dir_all(&dir)?;
-    let scripts_dir = dir.join("scripts");
-    if !scripts_dir.exists() {
-        std::fs::create_dir_all(&scripts_dir)?;
-    }
-    let path = dir.join("maps.sqlite");
-    info!(path = %path.display(), "opening map store");
-    Ok(MapStore::open(&path)?)
+    std::fs::create_dir_all(dir.join(SCRIPTS_DIR))?;
+    Ok(())
 }
+
+/// The folder under the app data folder that holds Lua scripts.
+const SCRIPTS_DIR: &str = "scripts";
 
 fn open_log_store(dir: &std::path::Path) -> Result<LogStore, Box<dyn std::error::Error>> {
     std::fs::create_dir_all(dir)?;
@@ -700,5 +696,51 @@ async fn load_enabled_plugins<R: tauri::Runtime>(
                 "plugin output at launch has nowhere to go"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Launch makes the scripts folder before the mudclient copy looks,
+    /// so the copy reads the folder as in use and leaves the older
+    /// folder where it is, as it did while the map store made
+    /// maps.sqlite there first.
+    #[test]
+    fn the_mudclient_copy_skips_a_folder_launch_already_made() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = dir.path().join("com.example.mudclient");
+        let new = dir.path().join("com.example.vosh");
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("logs.sqlite"), "older install").unwrap();
+        std::fs::create_dir_all(new.join(SCRIPTS_DIR)).unwrap();
+
+        migrate_from_mudclient_dir(&new);
+
+        assert_eq!(
+            std::fs::read_to_string(new.join(".migrated-from-mudclient")).unwrap(),
+            "skipped: new dir already populated\n"
+        );
+        assert!(!new.join("logs.sqlite").exists(), "nothing was copied");
+        assert!(old.join("logs.sqlite").exists(), "the older folder stays");
+    }
+
+    /// The setup hook needs a Tauri app, so this reads lib.rs to pin that
+    /// the scripts folder exists before the mudclient copy runs. Without
+    /// that order a fresh install next to an older mudclient folder would
+    /// copy the old data in, which no launch has done since the map store
+    /// opened first.
+    #[test]
+    fn the_setup_hook_makes_the_scripts_folder_before_the_copy() {
+        let src = include_str!("lib.rs");
+        let hook = &src[src.find(".setup(move |app|").expect("the setup hook")..];
+        let scripts = hook
+            .find("create_scripts_dir(app)")
+            .expect("the setup hook makes the scripts folder");
+        let copy = hook
+            .find("migrate_from_mudclient_dir(&path);")
+            .expect("the setup hook copies the mudclient folder");
+        assert!(scripts < copy, "the scripts folder comes first");
     }
 }

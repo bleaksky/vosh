@@ -659,7 +659,7 @@ Inside that folder.
 - `catalog.toml` and `loadouts.toml` appear once loadout mode is active.
 - `logs.sqlite` stores session logs, with `-wal` and `-shm` sidecars alongside.
 - `scrollback.txt` persists the last 10,000 terminal lines across restarts.
-- `maps.sqlite` stores map data.
+- `maps.sqlite`, if you have one, holds rooms that older builds recorded. Vosh no longer reads or writes it.
 - `affect_full.toml` remembers the most hours Vosh has seen for each affect, for each character.
 - `scripts/` holds Lua files for `#script load`.
 - `plugins/` holds plugin folders, each with a `manifest.toml`.
