@@ -117,6 +117,8 @@ export function drawMap3D(
     });
   }
 
+  // The middle of a room's box. The box sorts at its depth.
+  const boxMid = (r: Room3d) => project(cam, r.x, r.y, (floorAt(r.z) + roofAt(r.z)) / 2);
   const walls = wallsFacing(cam);
   const hf = TILE / 2;
   for (const r of scene.rooms) {
@@ -126,7 +128,7 @@ export function drawMap3D(
       q: [top[f], top[(f + 1) % 4], bot[(f + 1) % 4], bot[f]],
       light: WALL_LIGHT[f],
     }));
-    const mid = project(cam, r.x, r.y, (floorAt(r.z) + roofAt(r.z)) / 2);
+    const mid = boxMid(r);
     const mode: BoxMode = r.z === 0 ? 'lit' : r.z > 0 ? 'outline' : 'faded';
     const box = { room: r, top, faces, mode, topPx: TILE * mid.scale };
     prims.push({
@@ -166,7 +168,10 @@ export function drawMap3D(
 
   // Stairs. A dashed shaft in the secondary ink, a stair and never a
   // corridor, as strong as the nearer of its two floors. A stair from
-  // your floor whose other end does not show leaves a small mark.
+  // your floor whose other end does not show leaves a small mark on its
+  // roof. It sorts just nearer than its own box, since its own point
+  // toward the far edge of the roof lies deeper than the box's middle.
+  // Your roof keeps only the pin, as your cell in Squares keeps no arrow.
   const { shafts, marks } = stairsOf(scene);
   for (const s of shafts) {
     const a = project(cam, s.x, s.y, roofAt(s.lo));
@@ -185,11 +190,12 @@ export function drawMap3D(
     });
   }
   for (const { room, up } of marks) {
+    if (room.you) continue;
     const p = project(cam, room.x, room.y + (up ? -0.2 : 0.2), roofAt(0));
     const size = Math.max(3, Math.min(5, TILE * p.scale * 0.2));
     prims.push({
       floor: 0,
-      depth: p.depth - 0.005,
+      depth: boxMid(room).depth - 0.005,
       draw: () => drawStairMark(ctx, p, up, toRgba(second, 0.95), size, inks.ground),
     });
   }
