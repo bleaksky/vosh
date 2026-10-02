@@ -4862,8 +4862,6 @@ mod tests {
         assert!(super::apply_ui_config(&mut p.ui, save, 4));
         assert_eq!(p.ui.font_size, 16);
         assert_eq!(*p.prompt.config(), table);
-        assert!(p.ui.prompt_template_enabled);
-        assert_eq!(p.ui.prompt_template, "%hp");
 
         // A window from before the prompt section still sends the three
         // fields. They are read past and change nothing.
@@ -4875,8 +4873,6 @@ mod tests {
         let old: UiConfigPayload = serde_json::from_value(json).unwrap();
         assert!(super::apply_ui_config(&mut p.ui, old, 4));
         assert_eq!(*p.prompt.config(), table);
-        assert!(p.ui.prompt_template_enabled);
-        assert_eq!(p.ui.prompt_template, "%hp");
 
         // The file keeps the table, and [ui] its copy of the switch and
         // the design for an older build.

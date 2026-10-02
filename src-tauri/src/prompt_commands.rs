@@ -709,9 +709,10 @@ mod tests {
         assert_eq!(set_config(&mut p, config.clone()), Ok(true));
         assert_eq!(p.prompt.config().previous_templates, ["a", "b"]);
         assert!(p.prompt.stage.has_recognizer());
-        // The [ui] copy follows, for Settings.
-        assert!(p.ui.prompt_template_enabled);
-        assert_eq!(p.ui.prompt_template, "%hp");
+        // A save writes the [ui] copy from the table, for older builds.
+        let file = crate::profile_config::ProfileConfig::from_profile(&p);
+        assert!(file.ui.prompt_template_enabled);
+        assert_eq!(file.ui.prompt_template, "%hp");
         // The same table again changes nothing.
         assert_eq!(set_config(&mut p, config), Ok(false));
     }
