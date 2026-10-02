@@ -2,13 +2,13 @@
 //! insert, and exposes them in priority order.
 
 use std::collections::BTreeSet;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use regex::Regex;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
+use crate::revision::next_revision;
 use crate::trigger::action::TriggerAction;
 
 /// A single pattern row inside a trigger. Mirrors Mudlet's per-pattern
@@ -253,14 +253,6 @@ pub enum TriggerError {
 pub(crate) struct CompiledTrigger {
     pub trigger: Trigger,
     pub regexes: Vec<Regex>,
-}
-
-/// Hands out list revisions. One counter serves every store, so a store
-/// built to replace another never reads as the same list by accident.
-static NEXT_REVISION: AtomicU64 = AtomicU64::new(1);
-
-fn next_revision() -> u64 {
-    NEXT_REVISION.fetch_add(1, Ordering::Relaxed)
 }
 
 #[derive(Default)]
