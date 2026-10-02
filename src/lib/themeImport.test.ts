@@ -221,12 +221,13 @@ describe('parseThemeFile edge cases', () => {
 
   it('keeps the id clear of the themes you already have', () => {
     const taken = BUILTIN_THEMES.map((t) => t.id);
-    // Dracula and Tokyo Night ship built in.
+    // Dracula, Tokyo Night, and Solarized Light ship built in.
     expect(parseThemeFile('Dracula.itermcolors', itermFile, taken).id).toBe('dracula-2');
     expect(parseThemeFile('tokyonight_night.conf', kittyFile, taken).id).toBe('tokyo-night-2');
     expect(parseThemeFile('solarized_light.yml', alacrittyYamlFile, taken).id).toBe(
-      'solarized-light',
+      'solarized-light-2',
     );
+    expect(parseThemeFile('catppuccin-mocha', ghosttyFile, taken).id).toBe('catppuccin-mocha');
     expect(uniqueThemeId('nord', ['nord', 'nord-2'])).toBe('nord-3');
     expect(uniqueThemeId('fresh', taken)).toBe('fresh');
   });

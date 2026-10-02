@@ -398,6 +398,20 @@ describe('theme order', () => {
     ]);
     const rest = ordered.slice(6, -1).map((t) => t.theme.label);
     expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)));
+    // The menu bar's Choose theme lists the same order.
+    expect(rest).toEqual([
+      'Catppuccin',
+      'Classic Vivid',
+      'Dracula at Night',
+      'High Contrast',
+      'Kanso Zen',
+      'Monokai',
+      'One Dark',
+      'One Half Dark',
+      'Solarized Dark',
+      'Solarized Light',
+      'Tango Dark',
+    ]);
     expect(ordered.at(-1)).toMatchObject({ theme: { id: 'mine' }, custom: true });
     expect(ordered.filter((t) => t.custom)).toHaveLength(1);
     expect(themeEntries().map((e) => e.id)).toEqual(ordered.map((t) => `theme-${t.theme.id}`));

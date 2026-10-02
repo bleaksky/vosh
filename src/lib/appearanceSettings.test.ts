@@ -148,10 +148,15 @@ describe('pairChoices', () => {
       'Tokyo Night',
     ]);
     expect(dark).not.toContain('Vellum');
+    expect(dark).toContain('Solarized Dark');
+    expect(dark).not.toContain('Solarized Light');
   });
 
   it('lists the light themes', () => {
-    expect(pairChoices(themes, 'light', 'vellum').map((c) => c.value)).toEqual(['vellum']);
+    expect(pairChoices(themes, 'light', 'vellum').map((c) => c.value)).toEqual([
+      'vellum',
+      'solarized-light',
+    ]);
   });
 
   it('keeps a pick of the other appearance, first', () => {
@@ -197,8 +202,15 @@ describe('stepGalleryTheme', () => {
     expect(stepGalleryTheme(themes, 'vellum', -1, 'dark')).toBe('obsidian-ember');
   });
 
+  it('steps between the light themes while follow is on', () => {
+    expect(stepGalleryTheme(themes, 'vellum', 1, 'light')).toBe('solarized-light');
+    expect(stepGalleryTheme(themes, 'solarized-light', 1, 'light')).toBe('vellum');
+    expect(stepGalleryTheme(themes, 'vellum', -1, 'light')).toBe('solarized-light');
+  });
+
   it('stays put when no other theme has that appearance', () => {
-    expect(stepGalleryTheme(themes, 'vellum', 1, 'light')).toBe('vellum');
+    const oneLight = themes.filter((t) => t.id !== 'solarized-light');
+    expect(stepGalleryTheme(oneLight, 'vellum', 1, 'light')).toBe('vellum');
   });
 
   it('shows every step and leaves the light theme alone on a dark system', () => {
