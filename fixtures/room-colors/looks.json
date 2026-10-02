@@ -1,5 +1,5 @@
 {
-  "notes": "Hand written and synthetic, never captured. Room looks as the Aabahran server prints them, built from its own format strings and area files, with the Room.Chars and Room.Items packets before the text where the server sends them. Each line says where it comes from, room says whether it lists an army, a thing or a person, the lines a Room trigger matches, and preset names any other color the Room and time colors preset gives it. Tolliver, Maren and Orla are invented names. README.md has the details. Read by src-tauri/src/session_room_tests.rs and crates/trigger/src/engine.rs.",
+  "notes": "Hand written and synthetic, never captured. Room looks as the Aabahran server prints them, built from its own format strings and area files, with the Room.Chars and Room.Items packets before the text where the server sends them. Each line says where it comes from, room says whether it lists an army, a thing or a person, the lines a Room trigger matches, target on a case is what you gave tar and on a line marks the line of that person, and preset names any other color the Room and time colors preset gives it. Tolliver, Maren and Orla are invented names. README.md has the details. Read by src-tauri/src/session_room_tests.rs and crates/trigger/src/engine.rs.",
   "cases": [
     {
       "name": "a look with things and people, then what follows it in the same pulse",
@@ -191,6 +191,7 @@
     },
     {
       "name": "an army before a thing and a mob, and the mob greets you after the look",
+      "target": "werebeast",
       "events": [
         { "gmcp": "Room.Chars", "data": [{ "name": "a werebeast", "npc": true }] },
         {
@@ -247,6 +248,7 @@
         {
           "line": "A young werebeast stands here, leaning on his spear.",
           "room": true,
+          "target": true,
           "from": "char_to_char, the long text of mob 6904, which resets in room 6909"
         },
         {
@@ -270,6 +272,7 @@
     },
     {
       "name": "an army and a mob with nothing on the floor",
+      "target": "crow",
       "events": [
         { "gmcp": "Room.Chars", "data": [{ "name": "a murder of crows", "npc": true }] },
         { "gmcp": "Room.Items", "data": [] },
@@ -308,6 +311,7 @@
         {
           "line": "A large murder of crows nearly turns the trees black here.",
           "room": true,
+          "target": true,
           "from": "char_to_char, the long text of mob 6936, which resets in room 6904"
         },
         { "line": "Maren walks in.", "room": false, "from": "act_move.c, $n walks in." },
@@ -317,6 +321,7 @@
     },
     {
       "name": "stacked things, mobs and players, and an arrival after them",
+      "target": "toll",
       "events": [
         {
           "gmcp": "Room.Chars",
@@ -360,6 +365,7 @@
         {
           "line": "[\u001b[0;31mAFK\u001b[0;0m] Tolliver is resting here.",
           "room": true,
+          "target": true,
           "from": "char_to_char for a resting player who is away"
         },
         {
@@ -373,6 +379,39 @@
           "from": "char_to_char for a sleeping player, who shows no title"
         },
         { "line": "Orla walks in.", "room": false, "from": "act_move.c, $n walks in." },
+        { "line": "", "room": false, "from": "the blank line before the prompt" },
+        { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
+      ]
+    },
+    {
+      "name": "your target fights a player, who names it in their own line",
+      "target": "villager",
+      "events": [
+        {
+          "gmcp": "Room.Chars",
+          "data": [
+            { "name": "a villager", "npc": true },
+            { "name": "Maren", "npc": false }
+          ]
+        },
+        { "gmcp": "Room.Items", "data": [] },
+        {
+          "line": "[Exits: south]",
+          "room": false,
+          "preset": "green",
+          "from": "do_exits with auto, room 5279"
+        },
+        {
+          "line": "A villager is here, fighting Maren.",
+          "room": true,
+          "target": true,
+          "from": "char_to_char for mob 5287 in a fight, its short text, is here, fighting and the one it fights"
+        },
+        {
+          "line": "Maren is here, fighting a villager.",
+          "room": true,
+          "from": "char_to_char for a player in a fight with the mob"
+        },
         { "line": "", "room": false, "from": "the blank line before the prompt" },
         { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
       ]

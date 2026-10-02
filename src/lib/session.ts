@@ -234,13 +234,15 @@ export interface TriggerRecord {
    *  the partial-prompt buffer the telnet parser flushes on GA/EOR
    *  so #prompt-style triggers can capture from prompt text that
    *  arrives without a trailing newline. 'room' fires only on the
-   *  lines a room look lists after its exits line, the things and the
-   *  people in the room (src-tauri/src/room_block.rs). Omitted on the
-   *  wire when the value is 'line' (the backend's default). */
+   *  lines a room look lists after its exits line, the armies, the
+   *  things and the people in the room (src-tauri/src/room_block.rs).
+   *  'room_target' fires only on the line of the person you target with
+   *  `tar` among them. Omitted on the wire when the value is 'line' (the
+   *  backend's default). */
   target?: TriggerTarget;
 }
 
-export type TriggerTarget = 'line' | 'prompt' | 'room';
+export type TriggerTarget = 'line' | 'prompt' | 'room' | 'room_target';
 
 /** Read a `patterns:` list out of a raw wire-shape object, falling
  *  back to the legacy `pattern:` string the backend still emits

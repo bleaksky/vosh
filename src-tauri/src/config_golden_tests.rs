@@ -1014,11 +1014,11 @@ fn old_build_reads(text: &str) -> Result<Vec<OldTrigger>, toml::de::Error> {
     toml::from_str::<OldTriggers>(text).map(|file| file.triggers)
 }
 
-/// The names of the Room triggers in `triggers`.
+/// The names of the Room and Your target triggers in `triggers`.
 fn room_names(triggers: &[Trigger]) -> Vec<&str> {
     triggers
         .iter()
-        .filter(|t| t.target == TriggerTarget::Room)
+        .filter(|t| t.target.is_room())
         .map(|t| t.name.as_str())
         .collect()
 }
@@ -1091,4 +1091,50 @@ fn the_room_time_and_weather_colors_preset_saves_where_0_8_0_still_reads_the_fil
     let loaded = load_global_catalog(dir.path()).unwrap();
     assert_eq!(room_names(&loaded.triggers), ["room.contents"]);
     assert_eq!(loaded.triggers.len(), 5);
+}
+
+#[test]
+fn a_your_target_trigger_saves_where_0_8_0_still_reads_the_file() {
+    let mut profile = crate::profile::Profile::default();
+    for (name, target) in [
+        ("hp", TriggerTarget::Line),
+        ("room", TriggerTarget::Room),
+        ("target", TriggerTarget::RoomTarget),
+    ] {
+        profile
+            .triggers
+            .set(Trigger {
+                name: name.into(),
+                patterns: vec![TriggerPattern {
+                    pattern: "^.+$".into(),
+                    enabled: true,
+                }],
+                priority: 4,
+                enabled: true,
+                actions: vec![TriggerAction::Gag],
+                preset: None,
+                group: None,
+                target,
+            })
+            .unwrap();
+    }
+    let text = profile_bytes(&ProfileConfig::from_profile(&profile));
+    assert!(text.contains("target = \"room_target\""), "{text}");
+    let old = old_build_reads(&text).unwrap_or_else(|e| panic!("0.8.0 reads it: {e}\n{text}"));
+    assert_eq!(old.len(), 1, "the Line trigger");
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("default.toml");
+    std::fs::write(&path, &text).unwrap();
+    let loaded = ProfileConfig::load(&path).unwrap();
+    assert_eq!(room_names(&loaded.triggers), ["room", "target"]);
+    let target = loaded.triggers.iter().find(|t| t.name == "target").unwrap();
+    assert_eq!(target.target, TriggerTarget::RoomTarget);
+
+    let text = catalog_bytes(&GlobalCatalog::from_profile(&profile));
+    assert_eq!(
+        old_build_reads(&text)
+            .unwrap_or_else(|e| panic!("0.8.0 reads it: {e}\n{text}"))
+            .len(),
+        1
+    );
 }

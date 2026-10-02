@@ -21,6 +21,9 @@ enum LookEvent {
     Line {
         line: String,
         room: bool,
+        /// The line of the person the case targets.
+        #[serde(default)]
+        target: bool,
         /// The color the Room, time and weather colors preset gives a line
         /// that is not a room line, if any.
         #[serde(default)]
@@ -34,6 +37,9 @@ enum LookEvent {
 #[derive(Debug, serde::Deserialize)]
 struct LookCase {
     name: String,
+    /// What you gave `tar` before the look, if anything.
+    #[serde(default)]
+    target: Option<String>,
     events: Vec<LookEvent>,
 }
 
@@ -155,15 +161,25 @@ fn read(p: &mut Profile, data: &[u8]) -> String {
 }
 
 /// What the terminal shows for `events`, each line as `shows` gives it
-/// from the line as sent, whether it is a room line, and the preset color
+/// from the line as sent, what it is to the look, and the preset color
 /// looks.json names for it. Each prompt shows as sent.
-fn expected(events: &[LookEvent], shows: &dyn Fn(&str, bool, Option<&str>) -> String) -> String {
+fn expected(events: &[LookEvent], shows: &dyn Fn(&str, Listed, Option<&str>) -> String) -> String {
     let mut out = String::new();
     for event in events {
         match event {
             LookEvent::Gmcp { .. } => {}
-            LookEvent::Line { line, room, preset } => {
-                out.push_str(&shows(line, *room, preset.as_deref()));
+            LookEvent::Line {
+                line,
+                room,
+                target,
+                preset,
+            } => {
+                let listed = match (room, target) {
+                    (_, true) => Listed::Target,
+                    (true, false) => Listed::Room,
+                    (false, false) => Listed::No,
+                };
+                out.push_str(&shows(line, listed, preset.as_deref()));
                 out.push_str("\r\n");
             }
             LookEvent::Prompt { prompt } => {
@@ -173,6 +189,25 @@ fn expected(events: &[LookEvent], shows: &dyn Fn(&str, bool, Option<&str>) -> St
         }
     }
     out
+}
+
+/// What a line of a look is, as looks.json marks it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Listed {
+    /// No line the room lists.
+    No,
+    /// An army, a thing or a person the room lists.
+    Room,
+    /// The line of the person the case targets, a room line too.
+    Target,
+}
+
+/// A profile that targets what `case` gives `tar`, if anything, with no
+/// trigger yet.
+fn targeting(case: &LookCase) -> Profile {
+    let mut p = Profile::default();
+    p.target.name = case.target.clone();
+    p
 }
 
 /// `line` without its ANSI codes, wrapped in `open` and a reset. A line
@@ -237,20 +272,63 @@ fn a_room_trigger_colors_the_things_and_people_of_each_look_and_nothing_else() {
     let cases = looks();
     assert!(cases.len() >= 6);
     for case in &cases {
-        let mut p = Profile::default();
+        // The line of your target is a room line too.
+        let mut p = targeting(case);
         p.triggers
             .set(yellow("room", vosh_trigger::TriggerTarget::Room))
             .unwrap();
         let shown = read(&mut p, &wire(&case.events));
-        let want = expected(&case.events, &|line, room, _| {
-            if room {
-                wrapped("\x1b[33m", line)
-            } else {
-                line.to_string()
-            }
+        let want = expected(&case.events, &|line, listed, _| match listed {
+            Listed::Room | Listed::Target => wrapped("\x1b[33m", line),
+            Listed::No => line.to_string(),
         });
         assert_eq!(shown, want, "{}", case.name);
     }
+}
+
+#[test]
+fn a_your_target_trigger_colors_the_line_of_your_target_and_nothing_else() {
+    let cases = looks();
+    assert!(cases.iter().filter(|c| c.target.is_some()).count() >= 4);
+    for case in &cases {
+        let mut p = targeting(case);
+        let mut target = yellow("target", vosh_trigger::TriggerTarget::RoomTarget);
+        target.priority = 5;
+        target.actions = vec![vosh_trigger::TriggerAction::Highlight {
+            style: vosh_trigger::HighlightStyle {
+                fg: Some(vosh_trigger::NamedColor::BrightRed),
+                ..Default::default()
+            },
+        }];
+        p.triggers.set(target).unwrap();
+        p.triggers
+            .set(yellow("room", vosh_trigger::TriggerTarget::Room))
+            .unwrap();
+        let shown = read(&mut p, &wire(&case.events));
+        let want = expected(&case.events, &|line, listed, _| match listed {
+            Listed::Target => wrapped("\x1b[91m", line),
+            Listed::Room => wrapped("\x1b[33m", line),
+            Listed::No => line.to_string(),
+        });
+        assert_eq!(shown, want, "{}", case.name);
+    }
+}
+
+#[test]
+fn with_no_target_no_line_is_the_line_of_your_target() {
+    let case = looks()
+        .into_iter()
+        .find(|c| c.target.is_some())
+        .expect("a look with a target");
+    let mut p = Profile::default();
+    p.triggers
+        .set(yellow("target", vosh_trigger::TriggerTarget::RoomTarget))
+        .unwrap();
+    let shown = read(&mut p, &wire(&case.events));
+    assert_eq!(
+        shown,
+        expected(&case.events, &|line, _, _| line.to_string())
+    );
 }
 
 #[test]
@@ -309,12 +387,15 @@ fn the_preset_colors_each_look_as_the_mockups_draw_it() {
     for case in &looks() {
         let mut p = preset_profile();
         let shown = read(&mut p, &wire(&case.events));
-        let want = expected(&case.events, &|line, room, preset| match (room, preset) {
-            (true, _) => based(open_for("yellow"), line),
-            (false, Some("green")) => based(open_for("green"), line),
-            (false, Some(color)) => wrapped(open_for(color), line),
-            (false, None) => line.to_string(),
-        });
+        let want = expected(
+            &case.events,
+            &|line, listed, preset| match (listed, preset) {
+                (Listed::Room | Listed::Target, _) => based(open_for("yellow"), line),
+                (Listed::No, Some("green")) => based(open_for("green"), line),
+                (Listed::No, Some(color)) => wrapped(open_for(color), line),
+                (Listed::No, None) => line.to_string(),
+            },
+        );
         assert_eq!(shown, want, "{}", case.name);
     }
 }

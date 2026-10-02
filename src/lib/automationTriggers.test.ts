@@ -194,11 +194,12 @@ describe('normalizeTrigger', () => {
     expect(t.target).toBe('prompt');
   });
 
-  it('keeps the room lane and drops a lane it does not know', () => {
+  it('keeps the room lanes and drops a lane it does not know', () => {
     const t = (target: unknown) =>
       normalizeTrigger({ name: 'r', patterns: [{ pattern: '^.+$', enabled: true }], target })
         .target;
     expect(t('room')).toBe('room');
+    expect(t('room_target')).toBe('room_target');
     expect(t('line')).toBeUndefined();
     expect(t('screen')).toBeUndefined();
   });

@@ -111,6 +111,7 @@ const MATCH_OPTIONS = [
   { value: 'line', label: 'Lines' },
   { value: 'prompt', label: 'Prompts' },
   { value: 'room', label: 'Room' },
+  { value: 'room_target', label: 'Your target' },
 ] as const;
 
 const EFFECT_LABELS = {
@@ -264,7 +265,7 @@ function TriggerAdvanced({
       </Row>
       <Row
         label="Match"
-        description="Prompts match what your MUD sends before you type. Room matches the things and people a room lists after its exits."
+        description="Prompts match what your MUD sends before you type. Room matches the armies, things and people a room lists after its exits. Your target matches the line of the one you target with tar when a room lists them."
       >
         <Segmented
           options={MATCH_OPTIONS.map((o) => ({ ...o, disabled: locked }))}
