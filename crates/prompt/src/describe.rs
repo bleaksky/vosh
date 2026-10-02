@@ -24,45 +24,6 @@ use crate::template::{
 };
 use crate::vars::{self, Group, Kind};
 
-/// What a piece holds, as the card names it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PieceKindName {
-    /// Codes with nothing after them, which take no cells.
-    Codes,
-    Text,
-    Value,
-    CurMax,
-    Percent,
-    Nl,
-    /// The push to the right edge.
-    Right,
-    Raw,
-    If,
-    IfNot,
-    End,
-    Unknown,
-}
-
-impl From<PieceKind> for PieceKindName {
-    fn from(kind: PieceKind) -> Self {
-        match kind {
-            PieceKind::Codes => Self::Codes,
-            PieceKind::Text => Self::Text,
-            PieceKind::Value => Self::Value,
-            PieceKind::CurMax => Self::CurMax,
-            PieceKind::Percent => Self::Percent,
-            PieceKind::Nl => Self::Nl,
-            PieceKind::Right => Self::Right,
-            PieceKind::Raw => Self::Raw,
-            PieceKind::If => Self::If,
-            PieceKind::IfNot => Self::IfNot,
-            PieceKind::End => Self::End,
-            PieceKind::Unknown => Self::Unknown,
-        }
-    }
-}
-
 /// One form a value takes, for Show as and the picker's formats.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FormView {
@@ -83,7 +44,7 @@ pub struct FormView {
 pub struct PieceView {
     /// Its index, as every span of a render names it.
     pub piece: usize,
-    pub kind: PieceKindName,
+    pub kind: PieceKind,
     /// The template text of the piece, its own codes included, exactly as
     /// written. The name line shows it.
     pub text: String,
@@ -214,7 +175,7 @@ pub fn describe(template: &Template, values: &dyn Values, preview: bool) -> Desc
             };
             PieceView {
                 piece: index,
-                kind: kind.into(),
+                kind,
                 text: template.piece_text(index).to_string(),
                 field: field.as_ref().map(ToString::to_string),
                 label,
