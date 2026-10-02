@@ -145,8 +145,9 @@ export interface TerminalHandle {
    *  DOM renderer leaves it blank until the next scroll triggers a draw;
    *  calling this after it settles paints it immediately. */
   refresh: () => void;
-  /** TEMPORARY diagnostic snapshot of the xterm internals, for tracing
-   *  the intermittent blank split-scrollback pane. */
+  /** A snapshot of the xterm internals. The history split reads
+   *  `bufferLength` and `rows` from it to know when its pane holds real
+   *  content. */
   debug: () => {
     rows: number;
     cols: number;
@@ -156,7 +157,6 @@ export interface TerminalHandle {
     hostW: number;
     hostH: number;
     webgl: boolean;
-    instances: number;
   };
   /** Height of one terminal cell in CSS pixels, derived from the
    *  host's pixel height divided by the current row count. Used
@@ -281,11 +281,6 @@ function themeFor(themeId: string, tinted: boolean, clear: boolean) {
   return theme;
 }
 
-// TEMPORARY: count live xterm instances to catch a mount/dispose leak
-// across split-scrollback open/close cycles (the history pane mounts and
-// unmounts each time the split toggles).
-let liveTerminalInstances = 0;
-
 export function Terminal({
   onReady,
   fontFamily,
@@ -368,7 +363,6 @@ export function Terminal({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    liveTerminalInstances += 1;
     const term = new XTerm({
       // The user types into the bottom input box, not into xterm, so a
       // cursor block in the output pane is just noise (and a confusing
@@ -1230,7 +1224,6 @@ export function Terminal({
         hostW: host && host.style.width ? parseFloat(host.style.width) : 0,
         hostH: host && host.style.height ? parseFloat(host.style.height) : 0,
         webgl: webglAddon !== null,
-        instances: liveTerminalInstances,
       }),
       // viewportY tracks the top of the viewport in scrollback coords;
       // baseY tracks the top of the bottom page. Equal means the
@@ -1477,7 +1470,6 @@ export function Terminal({
       fitRef.current = null;
       fitKeptRef.current = null;
       relayoutRef.current = null;
-      liveTerminalInstances -= 1;
     };
     // Setup runs exactly once. Font is read from props on initial mount;
     // later font changes re-apply via the effect below without disposing
