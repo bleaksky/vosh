@@ -216,8 +216,8 @@ describe('contrast floors', () => {
   });
 });
 
-describe('Everforest', () => {
-  const NEW_THEMES = ['everforest-dark', 'everforest-light'];
+describe('Everforest and Green Screen', () => {
+  const NEW_THEMES = ['everforest-dark', 'everforest-light', 'green-screen'];
   // Black and bright black stay near the ground on purpose in many
   // palettes, Everforest's own mapping included. Every other slot draws
   // game text.
@@ -245,9 +245,10 @@ describe('Everforest', () => {
     for (const id of NEW_THEMES) expect(ids, id).toContain(id);
     expect(themeTokens(findTheme('everforest-dark')).appearance).toBe('dark');
     expect(themeTokens(findTheme('everforest-light')).appearance).toBe('light');
+    expect(themeTokens(findTheme('green-screen')).appearance).toBe('dark');
   });
 
-  // The colors Everforest publishes under 3:1 on its own ground.
+  // The colors Everforest and CGA publish under 3:1 on their own ground.
   // The terminal draws them as published. The chat pane lifts them where
   // it draws them on the panel (chatColors.test.ts).
   const PUBLISHED_FAINT: Record<string, readonly (typeof WORD_SLOTS)[number][]> = {
@@ -261,6 +262,7 @@ describe('Everforest', () => {
       'brightMagenta',
       'brightCyan',
     ],
+    'green-screen': ['red', 'blue'],
   };
 
   it('draw every other game color at 3:1 or better on the terminal ground', () => {
@@ -276,7 +278,7 @@ describe('Everforest', () => {
     }
   });
 
-  it('keep the published Everforest colors', () => {
+  it('keep the published Everforest and CGA colors', () => {
     const everforest: Partial<XtermPalette> = {
       red: '#f85552',
       green: '#8da101',
@@ -293,6 +295,24 @@ describe('Everforest', () => {
       ]),
     );
     expect(findTheme('everforest-light').xterm).toMatchObject({ ...everforest, ...brights });
+    expect(findTheme('green-screen').xterm).toMatchObject({
+      black: '#000000',
+      red: '#aa0000',
+      green: '#00aa00',
+      yellow: '#aa5500',
+      blue: '#0000aa',
+      magenta: '#aa00aa',
+      cyan: '#00aaaa',
+      white: '#aaaaaa',
+      brightBlack: '#555555',
+      brightRed: '#ff5555',
+      brightGreen: '#55ff55',
+      brightYellow: '#ffff55',
+      brightBlue: '#5555ff',
+      brightMagenta: '#ff55ff',
+      brightCyan: '#55ffff',
+      brightWhite: '#ffffff',
+    });
   });
 
   it('paint the Everforest selection on its bg_visual', () => {
@@ -316,6 +336,26 @@ describe('Everforest', () => {
     expect(light.accent).toBe(light.success);
     expect(Math.abs(hue(light.accent) - hue('#8da101'))).toBeLessThan(2);
     expect(contrast(hex(light.accent), hex(light.bg))).toBeGreaterThanOrEqual(3);
+  });
+
+  it('give Green Screen soft phosphor text on a green black ground', () => {
+    const x = findTheme('green-screen').xterm;
+    const ground = rgbToOklch(hex(x.background));
+    expect(ground.L).toBeLessThan(0.2);
+    expect(ground.C).toBeGreaterThan(0);
+    expect(ground.C).toBeLessThan(0.02);
+    expect(Math.abs(ground.h - 145)).toBeLessThan(20);
+    // Green, and well short of the 14:1 and up glare of #00ff00.
+    const text = contrast(hex(x.foreground), hex(x.background));
+    expect(text).toBeGreaterThanOrEqual(10);
+    expect(text).toBeLessThan(12);
+    expect(Math.abs(hue(x.foreground) - hue('#00ff00'))).toBeLessThan(10);
+    // The green cursor becomes the accent and tints the selection.
+    const t = themeTokens(findTheme('green-screen'));
+    expect(t.accent).toBe(x.cursor);
+    for (const green of [x.cursor, x.selectionBackground]) {
+      expect(Math.abs(hue(green) - hue('#00ff00')), green).toBeLessThan(10);
+    }
   });
 });
 

@@ -80,6 +80,10 @@ describe('galleryThemes', () => {
     expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)));
     expect(rest[0]).toBe('Catppuccin');
     const everforest = rest.indexOf('Everforest Dark');
-    expect(rest.slice(everforest, everforest + 2)).toEqual(['Everforest Dark', 'Everforest Light']);
+    expect(rest.slice(everforest, everforest + 3)).toEqual([
+      'Everforest Dark',
+      'Everforest Light',
+      'Green Screen',
+    ]);
   });
 });

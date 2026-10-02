@@ -405,6 +405,7 @@ describe('theme order', () => {
       'Dracula at Night',
       'Everforest Dark',
       'Everforest Light',
+      'Green Screen',
       'High Contrast',
       'Kanso Zen',
       'Monokai',
