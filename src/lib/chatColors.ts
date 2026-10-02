@@ -8,9 +8,27 @@
 // stable color of its own. A color you pick in the chat pane's menu
 // (Channel colors) wins over both, and stays one of the theme's slots,
 // so it follows a theme switch too.
+//
+// The pane draws on the panel, not on the terminal ground, so a slot
+// that reads in the terminal can fade there (a light theme's panel sits
+// a step darker than its paper). Each color moves in OKLCH lightness at
+// a fixed hue until it reads at 3:1 on the panel. Where the new
+// lightness leaves sRGB, the color gives up chroma rather than hue, so
+// a deep yellow stays yellow. Only the pane's ink moves. The theme and
+// the terminal keep the published color.
 
 import { ANSI_SLOT_LABELS } from './appearanceSettings';
 import { ANSI_SLOTS, type AnsiSlot } from './baseAnsi';
+import type { ChromeTokens } from './chrome';
+import {
+  composite,
+  contrast,
+  oklchToRgbInGamut,
+  parseHex,
+  rgbToOklch,
+  toHex,
+  type Rgb,
+} from './color';
 import type { XtermPalette } from './themes';
 
 // A Map rather than an object literal: pane names come straight from
@@ -113,13 +131,69 @@ export function chatChannelSlot(pane: string, colors: ChatColors = NO_CHAT_COLOR
   return HASHED_SLOTS[(hash >>> 0) % HASHED_SLOTS.length];
 }
 
-/** A channel's color on the theme whose terminal palette is given. */
+/** A channel's color on the theme whose terminal palette is given, as
+ *  the theme holds it. The pane menu's swatches show this. */
 export function chatChannelColor(
   pane: string,
   palette: XtermPalette,
   colors: ChatColors = NO_CHAT_COLORS,
 ): string {
   return palette[chatChannelSlot(pane, colors)];
+}
+
+/** The contrast every message holds on the panel, tag included. */
+export const CHAT_CONTRAST = 3;
+
+/** The tag's step back from its line, the opacity panel.css gives
+ *  .pane-chat-tag. */
+export const CHAT_TAG_OPACITY = 0.7;
+
+/** How the pane draws the messages of one slot. */
+export interface ChatInk {
+  /** The line's color, the slot lifted to 3:1 on the panel. */
+  color: string;
+  /** Whether the tag keeps its step back. A tag that would read under
+   *  3:1 at CHAT_TAG_OPACITY draws at full strength instead. */
+  fadeTag: boolean;
+}
+
+/** The ground the pane draws on, from the theme's chrome tokens. */
+export type ChatGround = Pick<ChromeTokens, 'panel' | 'appearance'>;
+
+// Step `c` in OKLCH lightness, away from `panel`, until it reads at
+// CHAT_CONTRAST. The hue holds at every step, and chroma gives way only
+// where sRGB runs out. A clamp per channel, as the chrome's lift does,
+// would turn a deep yellow orange.
+function liftAtHue(c: Rgb, panel: Rgb, dir: 1 | -1): Rgb {
+  if (contrast(c, panel) >= CHAT_CONTRAST) return c;
+  const lch = rgbToOklch(c);
+  let out = c;
+  for (let L = lch.L; L >= 0 && L <= 1; L += dir * 0.005) {
+    const raw = oklchToRgbInGamut({ ...lch, L });
+    out = { r: Math.round(raw.r), g: Math.round(raw.g), b: Math.round(raw.b) };
+    if (contrast(out, panel) >= CHAT_CONTRAST) break;
+  }
+  return out;
+}
+
+/** The ink for each of the 16 slots on the theme whose palette and
+ *  panel are given. A slot that already reads at 3:1 keeps its color.
+ *  One that falls short moves lighter on a dark theme and darker on a
+ *  light one, at its own hue. A slot or panel that does not parse as
+ *  hex draws as given, tag faded. */
+export function chatInks(palette: XtermPalette, ground: ChatGround): Record<AnsiSlot, ChatInk> {
+  const panel = parseHex(ground.panel);
+  const dir = ground.appearance === 'dark' ? 1 : -1;
+  const ink = (color: string): ChatInk => {
+    const rgb = parseHex(color);
+    if (!rgb || !panel) return { color, fadeTag: true };
+    const lifted = liftAtHue(rgb, panel, dir);
+    const tag = composite(lifted, panel, CHAT_TAG_OPACITY);
+    return { color: toHex(lifted), fadeTag: contrast(tag, panel) >= CHAT_CONTRAST };
+  };
+  const inks = {} as Record<AnsiSlot, ChatInk>;
+  for (const slot of ANSI_SLOTS) inks[slot] = ink(palette[slot]);
+  return inks;
 }
 
 /** One row of a channel's color list in the chat pane menu. */

@@ -1,16 +1,27 @@
 import { describe, expect, it } from 'vitest';
+import { ANSI_SLOTS } from './baseAnsi';
 import {
   CHAT_CHANNELS,
+  CHAT_CONTRAST,
+  CHAT_TAG_OPACITY,
   chatChannelColor,
   chatChannelSlot,
   chatColorChoices,
+  chatInks,
   normalizeChatColors,
   sameChatColors,
 } from './chatColors';
-import { findTheme } from './themes';
+import { composite, contrast, parseHex, rgbToOklch, type Rgb } from './color';
+import { BUILTIN_THEMES, findTheme, themeTokens } from './themes';
 
 const kanso = findTheme('kanso-zen').xterm;
 const vellum = findTheme('vellum').xterm;
+
+const hex = (h: string): Rgb => {
+  const c = parseHex(h);
+  if (!c) throw new Error(`not hex ${h}`);
+  return c;
+};
 
 describe('chatChannelSlot', () => {
   // The slot each channel's message prints in on Aabahran (comm.c color
@@ -85,6 +96,107 @@ describe('chatChannelColor', () => {
     expect(chatChannelColor('say', vellum)).toBe('#b88226');
     expect(chatChannelColor('tell', vellum)).toBe('#4f7a3a');
     expect(chatChannelColor('immortal', vellum)).toBe('#c2574a');
+  });
+});
+
+describe('chatInks', () => {
+  it('reads at 3:1 on the panel, tag included, for every color a channel can take on every built in theme', () => {
+    for (const theme of BUILTIN_THEMES) {
+      const tokens = themeTokens(theme);
+      const panel = hex(tokens.panel);
+      const inks = chatInks(theme.xterm, tokens);
+      for (const slot of ANSI_SLOTS) {
+        const { color, fadeTag } = inks[slot];
+        const label = `${theme.id} ${slot}`;
+        expect(contrast(hex(color), panel), label).toBeGreaterThanOrEqual(CHAT_CONTRAST);
+        // The tag draws at CHAT_TAG_OPACITY over the panel, or solid.
+        const tag = fadeTag ? composite(hex(color), panel, CHAT_TAG_OPACITY) : hex(color);
+        expect(contrast(tag, panel), `${label} tag`).toBeGreaterThanOrEqual(CHAT_CONTRAST);
+      }
+    }
+  });
+
+  it('moves only lightness, and only for a color that falls short', () => {
+    for (const theme of BUILTIN_THEMES) {
+      const tokens = themeTokens(theme);
+      const panel = hex(tokens.panel);
+      const inks = chatInks(theme.xterm, tokens);
+      for (const slot of ANSI_SLOTS) {
+        const label = `${theme.id} ${slot}`;
+        const was = hex(theme.xterm[slot]);
+        const now = hex(inks[slot].color);
+        if (contrast(was, panel) >= CHAT_CONTRAST) {
+          expect(now, label).toEqual(was);
+          continue;
+        }
+        // The hue holds. Chroma holds too, or gives way only where the
+        // new lightness leaves sRGB. A near gray's hue can swing a degree
+        // or two on the rounding to whole sRGB values, so the hue check
+        // starts at chroma 0.05.
+        const a = rgbToOklch(was);
+        const b = rgbToOklch(now);
+        expect(b.C, label).toBeLessThan(a.C + 0.003);
+        if (a.C >= 0.05) {
+          expect(Math.abs(((b.h - a.h + 540) % 360) - 180), label).toBeLessThan(1);
+        }
+        // Lighter on a dark panel, darker on a light one.
+        expect(Math.sign(b.L - a.L), label).toBe(tokens.appearance === 'dark' ? 1 : -1);
+      }
+    }
+  });
+
+  it('gives up chroma, not hue, where the lift leaves sRGB', () => {
+    // Everforest yellow has to darken past the edge of sRGB to read at
+    // 3:1 on a cream panel. A clamp per channel would turn it orange.
+    const yellow = '#dfa000';
+    const panel = '#f6efdc';
+    const ink = chatInks({ ...vellum, yellow }, { panel, appearance: 'light' }).yellow;
+    const was = rgbToOklch(hex(yellow));
+    const now = rgbToOklch(hex(ink.color));
+    expect(contrast(hex(ink.color), hex(panel))).toBeGreaterThanOrEqual(CHAT_CONTRAST);
+    expect(Math.abs(now.h - was.h)).toBeLessThan(1);
+    expect(now.C).toBeLessThan(was.C - 0.01);
+  });
+
+  it('lifts the published colors that fade on a panel, and leaves the theme alone', () => {
+    const cases = [
+      ['vellum', 'brightYellow'],
+      ['solarized-light', 'cyan'],
+      ['solarized-dark', 'red'],
+      ['tango-dark', 'blue'],
+      ['classic-vivid', 'blue'],
+    ] as const;
+    for (const [id, slot] of cases) {
+      const theme = findTheme(id);
+      const before = { ...theme.xterm };
+      const ink = chatInks(theme.xterm, themeTokens(theme))[slot];
+      expect(ink.color, `${id} ${slot}`).not.toBe(theme.xterm[slot]);
+      expect(theme.xterm, id).toEqual(before);
+    }
+  });
+
+  it('keeps the tag a step back only while the step back reads at 3:1', () => {
+    expect(chatInks(kanso, themeTokens(findTheme('kanso-zen'))).brightYellow).toEqual({
+      color: kanso.brightYellow,
+      fadeTag: true,
+    });
+    // Vellum's green tell reads at 4.3:1 on its panel, but near 2.6:1 a
+    // step back, so its tag draws solid.
+    expect(chatInks(vellum, themeTokens(findTheme('vellum'))).green).toEqual({
+      color: vellum.green,
+      fadeTag: false,
+    });
+  });
+
+  it('draws a color or panel that does not parse as given', () => {
+    const nord = findTheme('nord');
+    const tokens = themeTokens(nord);
+    const broken = { ...nord.xterm, red: 'var(--red)' };
+    expect(chatInks(broken, tokens).red).toEqual({ color: 'var(--red)', fadeTag: true });
+    expect(chatInks(nord.xterm, { ...tokens, panel: 'transparent' }).black).toEqual({
+      color: nord.xterm.black,
+      fadeTag: true,
+    });
   });
 });
 

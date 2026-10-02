@@ -362,7 +362,7 @@ The chat pane collects channel talk in its own buffer, one line per message. Add
 
 - Lines arrive on their own. `Comm.Channel` GMCP feeds the pane automatically.
 - Read a line as `[tell] Tolliver: meet at the bank`. The tag names the channel and the speaker is bold, even a name of several words like `a Blackwatch villager`. Wrapped lines hang two cells in, so the tags run down the left edge.
-- Each line takes the color the game prints that channel in, from your theme's terminal colors. Say is bright yellow, tell green, gtell bright magenta, yell cyan, pray bright white, cabal bright blue, clan bright cyan, faction yellow, newbie bright green, immortal bright red, and imp bright cyan. Switch themes and the chat follows.
+- Each line takes the color the game prints that channel in, from your theme's terminal colors. Say is bright yellow, tell green, gtell bright magenta, yell cyan, pray bright white, cabal bright blue, clan bright cyan, faction yellow, newbie bright green, immortal bright red, and imp bright cyan. Switch themes and the chat follows. A color too faint to read on the pane goes lighter or darker, with its hue kept, until it reads clearly. The terminal still shows the theme's own color.
 - Recolor a channel from the pane's menu. Choose `Channel colors`, then the channel, then `Default` or one of your theme's 16 terminal colors. The pane follows at once, each profile keeps its own picks, and a theme switch carries them along. `Reset all` gives every channel its default again.
 - Point at a message to see when it arrived.
 - Filter with the channel select beside the pane's name. `All` shows every channel. Each chat pane keeps its own filter, so you can split one off for tells alone.

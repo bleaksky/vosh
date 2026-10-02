@@ -6,6 +6,7 @@ import {
   deltaE2000Lab,
   luminance,
   oklchToRgb,
+  oklchToRgbInGamut,
   parseHex,
   rgbToOklab,
   rgbToOklch,
@@ -62,6 +63,22 @@ describe('OKLab and OKLCH', () => {
     const lifted = shiftLightness(bg, 0.04);
     expect(toHex(lifted)).toBe('#0c0a08');
     expect(rgbToOklab(lifted).L - rgbToOklab(bg).L).toBeCloseTo(0.04, 2);
+  });
+
+  it('gives up chroma, not hue, to land inside sRGB', () => {
+    for (const h of ['#ef8f2f', '#3f6690', '#88c0d0', '#050403', '#f7f4ee']) {
+      expect(toHex(oklchToRgbInGamut(rgbToOklch(hex(h))))).toBe(h);
+    }
+    // Everforest yellow a step darker no longer fits sRGB at its chroma.
+    // A clamp per channel turns it orange.
+    const yellow = rgbToOklch(hex('#dfa000'));
+    const deeper = { ...yellow, L: yellow.L - 0.12 };
+    const clamped = rgbToOklch(oklchToRgb(deeper));
+    const mapped = rgbToOklch(oklchToRgbInGamut(deeper));
+    expect(yellow.h - clamped.h).toBeGreaterThan(3);
+    expect(Math.abs(mapped.h - yellow.h)).toBeLessThan(0.01);
+    expect(mapped.L).toBeCloseTo(deeper.L, 4);
+    expect(mapped.C).toBeLessThan(yellow.C);
   });
 });
 

@@ -85,18 +85,24 @@ export function rgbToOklab(c: Rgb): Oklab {
   };
 }
 
-/** Convert back to sRGB. Out of gamut results clamp per channel, which
- *  keeps hue close enough for the small shifts the derivation makes. */
-export function oklabToRgb(c: Oklab): Rgb {
+// Linear sRGB, 0..1 inside the gamut, with nothing clamped.
+function oklabToLinear(c: Oklab): [number, number, number] {
   const l = (c.L + 0.3963377774 * c.a + 0.2158037573 * c.b) ** 3;
   const m = (c.L - 0.1055613458 * c.a - 0.0638541728 * c.b) ** 3;
   const s = (c.L - 0.0894841775 * c.a - 1.291485548 * c.b) ** 3;
+  return [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+  ];
+}
+
+/** Convert back to sRGB. Out of gamut results clamp per channel, which
+ *  keeps hue close enough for the small shifts the derivation makes. */
+export function oklabToRgb(c: Oklab): Rgb {
+  const [r, g, b] = oklabToLinear(c);
   const clamp = (v: number) => Math.max(0, Math.min(255, fromLinear(v)));
-  return {
-    r: clamp(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
-    g: clamp(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
-    b: clamp(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s),
-  };
+  return { r: clamp(r), g: clamp(g), b: clamp(b) };
 }
 
 export function rgbToOklch(c: Rgb): Oklch {
@@ -105,9 +111,35 @@ export function rgbToOklch(c: Rgb): Oklch {
   return { L, C: Math.hypot(a, b), h: h < 0 ? h + 360 : h };
 }
 
-export function oklchToRgb(c: Oklch): Rgb {
+function oklchToOklab(c: Oklch): Oklab {
   const rad = (c.h * Math.PI) / 180;
-  return oklabToRgb({ L: c.L, a: c.C * Math.cos(rad), b: c.C * Math.sin(rad) });
+  return { L: c.L, a: c.C * Math.cos(rad), b: c.C * Math.sin(rad) };
+}
+
+export function oklchToRgb(c: Oklch): Rgb {
+  return oklabToRgb(oklchToOklab(c));
+}
+
+// Float slack, so a color that round trips from sRGB counts as inside.
+const GAMUT_SLACK = 1e-6;
+
+function inGamut(c: Oklch): boolean {
+  return oklabToLinear(oklchToOklab(c)).every((v) => v >= -GAMUT_SLACK && v <= 1 + GAMUT_SLACK);
+}
+
+/** Convert to sRGB at the same lightness and hue, giving up only as
+ *  much chroma as sRGB needs. A clamp per channel bends the hue of a
+ *  color well outside the gamut (a deep yellow turns orange). */
+export function oklchToRgbInGamut(c: Oklch): Rgb {
+  if (inGamut(c)) return oklchToRgb(c);
+  let inside = 0;
+  let outside = c.C;
+  for (let i = 0; i < 24; i += 1) {
+    const mid = (inside + outside) / 2;
+    if (inGamut({ ...c, C: mid })) inside = mid;
+    else outside = mid;
+  }
+  return oklchToRgb({ ...c, C: inside });
 }
 
 /** Move a color's OKLab lightness by `delta` at the same a and b (so
