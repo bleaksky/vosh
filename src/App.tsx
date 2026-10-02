@@ -128,8 +128,6 @@ import { noteReader } from './lib/readerBusy';
 import { resolveBlinkText, useReduceMotion } from './lib/blink';
 import { listenSplitDrag, SplitDrag } from './lib/splitDrag';
 
-const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
-
 // Hide or show the panel. When focus sat on the title band's toggle or
 // inside the panel, the caret goes back to the command line: a hidden
 // panel is inert and would drop focus to the body, and a toggle button
@@ -191,37 +189,6 @@ function leafIdFor(node: PaneNode, pane: PaneType): string | null {
   }
   return null;
 }
-
-// One-shot rename migration: when the project was renamed from
-// "mudclient" to "vosh" the localStorage namespace changed too. On
-// first run after the rename, copy every `mudclient.*` key to its
-// `vosh.*` counterpart (only if the new key doesn't already exist)
-// and delete the originals.
-function migrateMudclientKeys(): void {
-  try {
-    if (localStorage.getItem(RENAME_MIGRATION_KEY)) return;
-    const toMove: [string, string][] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key || !key.startsWith('mudclient.')) continue;
-      const newKey = `vosh.${key.slice('mudclient.'.length)}`;
-      toMove.push([key, newKey]);
-    }
-    for (const [oldKey, newKey] of toMove) {
-      const value = localStorage.getItem(oldKey);
-      if (value === null) continue;
-      if (localStorage.getItem(newKey) === null) {
-        localStorage.setItem(newKey, value);
-      }
-      localStorage.removeItem(oldKey);
-    }
-    localStorage.setItem(RENAME_MIGRATION_KEY, '1');
-  } catch {
-    // ignore storage failures (private mode, quota)
-  }
-}
-
-migrateMudclientKeys();
 
 const DEFAULT_FONT_FAMILY = '"JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace';
 
