@@ -16,7 +16,7 @@ use crate::aabahran::codes::Code as GameCode;
 use crate::aabahran::colors::Color as GameColor;
 use crate::aabahran::lex::{self, Piece as GamePiece, Token as GameToken};
 use crate::aabahran::{Which, Who};
-use crate::template::{
+use crate::design::{
     write_tokens, Code, ColorSpec, FieldRef, Format, Scale, Style, TokenKind, UnderlineStyle,
     ValueRef,
 };

@@ -18,8 +18,8 @@
 use chrono::{DateTime, FixedOffset, NaiveDate};
 use serde_json::{json, Value as Json};
 use vosh_prompt::config::{AabahranCapture, RegexCapture};
+use vosh_prompt::design::{Code, ColorSpec, Format, Scale, TokenKind};
 use vosh_prompt::stage::{End, Offer};
-use vosh_prompt::template::{Code, ColorSpec, Format, Scale, TokenKind};
 use vosh_prompt::testkit::{game, shown, Build};
 use vosh_prompt::vars::{self, Capture, FormatId, Tick, Vosh};
 use vosh_prompt::{

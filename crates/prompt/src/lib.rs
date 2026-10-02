@@ -9,8 +9,9 @@
 //!   session's variables together.
 //! - [`capture`] reads patterns you point at, and the capture triggers
 //!   older builds used, into a capture.
-//! - [`design`] parses a prompt template into tokens and the pieces the
-//!   editor shows.
+//! - [`design`] is the template language. It parses a design into tokens
+//!   and the pieces the editor shows, writes tokens back as text, and
+//!   holds the look algebra the editor uses to keep each piece's look.
 //! - [`edit`] writes the template changes the editor makes, keeping the
 //!   look of every other piece.
 //! - [`describe`] says what each piece and token of a design is, for the
@@ -67,10 +68,6 @@ pub use format::{Resolved, Value};
 pub use presets::DEFAULT_DESIGN;
 pub use render::{render, render_str, RenderOptions, Rendered, Span, Values};
 pub use vars::{Capture, Vosh};
-
-// The old name of `design`, so its callers keep compiling until their
-// imports move to the new name.
-pub use design as template;
 
 // The tests in `tests/` import these from the root.
 #[cfg(feature = "testkit")]

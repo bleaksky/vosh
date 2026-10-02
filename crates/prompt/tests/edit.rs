@@ -2,11 +2,11 @@
 //! and the look of every piece it does not change, and the writer never
 //! writes a token that reads back as something else.
 
+use vosh_prompt::design::{PieceKind, TokenKind};
 use vosh_prompt::edit::{
     apply, ColorChoice, EditError, EditOp, FormatChoice, FormatName, StyleChoice, When,
 };
 use vosh_prompt::render::SgrState;
-use vosh_prompt::template::{PieceKind, TokenKind};
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
 use vosh_prompt::testkit::now;
 use vosh_prompt::vars::Samples;

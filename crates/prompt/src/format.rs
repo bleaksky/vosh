@@ -11,7 +11,7 @@
 
 use chrono::{Datelike, NaiveDateTime, Timelike};
 
-use crate::template::Format;
+use crate::design::Format;
 
 /// What a resolver knows about a field right now.
 #[derive(Debug, Clone, PartialEq)]

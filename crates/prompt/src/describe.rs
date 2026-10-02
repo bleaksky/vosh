@@ -16,12 +16,12 @@
 
 use serde::Serialize;
 
+use crate::design::{FieldRef, Format, PieceKind, Template, TokenKind};
 use crate::edit::{
     self, bar_choice, choice, ColorChoice, Doc, EditOp, FormatChoice, FormatName, StyleChoice, When,
 };
 use crate::format::{Resolved, Value};
 use crate::render::{render, RenderOptions, Rendered, Values};
-use crate::template::{FieldRef, Format, PieceKind, Template, TokenKind};
 use crate::vars::{self, Group, Kind};
 
 /// One form a value takes, for Show as and the picker's formats.
@@ -384,7 +384,7 @@ fn format_label(format: FormatName) -> &'static str {
 
 /// The field a value piece shows, how and how wide. `%{maxhp}` alone is
 /// Health in the form Max.
-fn shown_as(value: &crate::template::ValueRef) -> (FieldRef, FormatName, Option<u8>) {
+fn shown_as(value: &crate::design::ValueRef) -> (FieldRef, FormatName, Option<u8>) {
     let (gauge, max) = edit::gauge_of(value);
     if max {
         return (gauge, FormatName::Max, None);
@@ -445,7 +445,7 @@ fn full(field: &FieldRef) -> bool {
 }
 
 /// What a text piece prints, `%%` as one `%`.
-fn literal(template: &Template, piece: &crate::template::Piece) -> String {
+fn literal(template: &Template, piece: &crate::design::Piece) -> String {
     let mut out = String::new();
     for token in &template.tokens()[piece.content.clone()] {
         match &token.kind {

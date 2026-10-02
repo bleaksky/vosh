@@ -62,8 +62,8 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use crate::aabahran::Who;
 use crate::capture::{Recognized, Recognizer};
 use crate::config::{CaptureConfig, PromptShow};
+use crate::design::{FieldRef, Template, TokenKind};
 use crate::render::{Color, SgrState, Span};
-use crate::template::{FieldRef, Template, TokenKind};
 
 /// The private OSC Vosh marks regions with.
 pub const MARK_OSC: u32 = 7717;

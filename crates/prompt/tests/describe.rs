@@ -4,9 +4,9 @@
 //! the text with its piece.
 
 use vosh_prompt::describe::{describe, forms, PieceView, TokenKindName};
+use vosh_prompt::design::PieceKind;
 use vosh_prompt::edit::{ColorChoice, FormatName, StyleChoice, When};
 use vosh_prompt::presets::DEFAULT_DESIGN;
-use vosh_prompt::template::PieceKind;
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
 use vosh_prompt::testkit::now;
 use vosh_prompt::vars::Samples;

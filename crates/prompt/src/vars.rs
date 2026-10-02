@@ -30,6 +30,7 @@ use serde::{Serialize, Serializer};
 use serde_json::Value as Json;
 
 use crate::aabahran;
+use crate::design::FieldRef;
 use crate::format::{lang_game, tank_bar_cells, Position, Resolved, Value, MOON_CODES};
 use crate::gmcp::{
     self, Find, Observed, Snapshot, CHAR_COMBAT, CHAR_STATE, CHAR_STATUS, CHAR_VITALS, CHAR_WORTH,
@@ -37,7 +38,6 @@ use crate::gmcp::{
     WORLD_TIME,
 };
 use crate::render::Values;
-use crate::template::FieldRef;
 
 // ---------------------------------------------------------------------
 // The catalog

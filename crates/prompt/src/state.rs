@@ -4,10 +4,10 @@
 
 use serde::Serialize;
 
+use crate::design::{FieldRef, Format};
 use crate::engine::StatusReport;
 use crate::format::{Resolved, Value};
 use crate::render::{Span, Values};
-use crate::template::{FieldRef, Format};
 use crate::vars::{self, Entry, Group, Kind, Source, Vars, Vosh, CATALOG};
 
 /// A field's state now (D4).
