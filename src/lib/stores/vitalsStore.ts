@@ -1,8 +1,13 @@
 import { useSyncExternalStore } from 'react';
 import { onGmcpPackage, onPromptVars, onState, type PromptVarsPayload } from '../session';
-import { LEDGER_LOW_ENTER, LEDGER_LOW_EXIT } from '../vitalsLayouts';
 import { getHidden, subscribeHidden } from './hiddenStore';
 import { asNumber, createStore, isHiddenFlag } from './store';
+
+/** Below this percent a vital enters the low state. */
+const LEDGER_LOW_ENTER = 20;
+/** A low vital leaves the state only once it climbs back to this
+ *  percent, so regen straddling the line does not flicker. */
+const LEDGER_LOW_EXIT = 25;
 
 // Your hp, mana and moves for the pinned vitals and the compact status
 // line. Char.Vitals is the base. Prompt vars that a trigger sets with
