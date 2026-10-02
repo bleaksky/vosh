@@ -163,7 +163,10 @@ export function ItemList({
     const uid = order[next];
     onSelect(uid);
     const row = scrollRef.current?.querySelector<HTMLElement>(`[data-uid="${CSS.escape(uid)}"]`);
-    row?.focus();
+    // Focus would scroll the row into view on its own, centered when it
+    // was hidden and in every box above it. Keep that off so the list
+    // steps one row at a time and nothing else moves.
+    row?.focus({ preventScroll: true });
     scrollWithin(row, { block: 'nearest' });
   };
 

@@ -353,8 +353,10 @@ export function DraftEditor<T>({
         ? body.querySelector<HTMLElement>(`.st-auto-row[data-uid="${CSS.escape(uid)}"]`)
         : null) ?? body.querySelector<HTMLElement>('.st-auto-row[aria-current]');
     const target = row ?? body.querySelector<HTMLElement>('.st-auto-filter input');
-    target?.focus();
-    scrollWithin(row, { block: 'nearest' });
+    // Focus alone would scroll every box above the target. Move only
+    // the box that holds it.
+    target?.focus({ preventScroll: true });
+    scrollWithin(target, { block: 'nearest' });
   }, [deleteSeq]);
 
   // JSON edits reach the draft after a short pause. Take the text
