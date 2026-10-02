@@ -4,8 +4,9 @@
 
 mod common;
 
-use common::{capture, draw, feed, lament_capture, packet, resolve, text, JAMES};
+use common::{capture, draw, feed, lament_capture, packet, resolve, text};
 use serde_json::json;
+use vosh_prompt::testkit::designs::JAMES;
 use vosh_prompt::vars::Hidden;
 use vosh_prompt::{Resolved, Value, Vars};
 

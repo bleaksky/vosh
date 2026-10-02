@@ -6,11 +6,11 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use common::{
-    capture, draw, draw_with, feed, now, num, packet, resolve, text, vosh, DETAILED, JAMES,
-};
+use common::{capture, draw, draw_with, feed, num, packet, resolve, text, vosh};
 use serde_json::json;
 use vosh_prompt::format::{tank_bar_cells, Position};
+use vosh_prompt::testkit::designs::{DETAILED, JAMES};
+use vosh_prompt::testkit::now;
 use vosh_prompt::vars::{is_sourced, known, Tick, CATALOG};
 use vosh_prompt::{
     render_str, FieldRef, MapValues, RenderOptions, Resolved, Value, Values, Vars, Vosh,

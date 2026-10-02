@@ -5,8 +5,7 @@ use vosh_prompt::candidates::{check, groups, shape_of, CaptureCheck, CheckRead, 
 use vosh_prompt::capture::Recognizer;
 use vosh_prompt::config::{AabahranCapture, CaptureConfig, RegexCapture};
 use vosh_prompt::stage::Candidate;
-
-const JAMES_PROMPT: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c";
+use vosh_prompt::testkit::mud::PROMPT;
 
 fn entry(id: u64, plain: &str, recognized: bool) -> Candidate {
     Candidate {
@@ -22,7 +21,7 @@ fn entry(id: u64, plain: &str, recognized: bool) -> Candidate {
 
 fn james() -> Recognizer {
     Recognizer::compile(&CaptureConfig::Aabahran(AabahranCapture {
-        prompt: JAMES_PROMPT.into(),
+        prompt: PROMPT.into(),
         ..AabahranCapture::default()
     }))
     .expect("his prompt compiles")

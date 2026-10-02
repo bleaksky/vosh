@@ -686,13 +686,7 @@ fn clock(at: &NaiveDateTime, format: &Format) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::NaiveDate;
-
-    fn at() -> NaiveDateTime {
-        NaiveDate::from_ymd_opt(2026, 9, 29)
-            .and_then(|d| d.and_hms_opt(8, 42, 10))
-            .expect("a valid date")
-    }
+    use crate::testkit::now;
 
     fn text(value: &Value, format: Format) -> Option<String> {
         value.text(&format, "Label")
@@ -1085,11 +1079,11 @@ mod tests {
         );
         assert_eq!(text(&temp(None), Format::Unit).as_deref(), Some("61°"));
         let time = Value::Clock {
-            at: at(),
+            at: now(),
             date: false,
         };
         let date = Value::Clock {
-            at: at(),
+            at: now(),
             date: true,
         };
         assert_eq!(text(&time, Format::Value).as_deref(), Some("08:42:10"));

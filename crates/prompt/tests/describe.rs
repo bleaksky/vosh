@@ -3,22 +3,13 @@
 //! reads now, the forms Show as and the picker offer, and each token of
 //! the text with its piece.
 
-use chrono::{NaiveDate, NaiveDateTime};
 use vosh_prompt::describe::{describe, forms, PieceKindName, PieceView, TokenKindName};
 use vosh_prompt::edit::{ColorChoice, FormatName, StyleChoice, When};
 use vosh_prompt::presets::DEFAULT_DESIGN;
+use vosh_prompt::testkit::designs::{DETAILED, JAMES};
+use vosh_prompt::testkit::now;
 use vosh_prompt::vars::Samples;
 use vosh_prompt::{FieldRef, Resolved, Template, Values};
-
-const JAMES: &str = "%{c:100,100,100}[%c_reset%s_italic%hp(%c_hp%pct_hp%c_reset%s_italic%)h %mana(%{c:128,200,255}%pct_mana%c_reset%s_italic%)m %move(%{c:200,255,23}%pct_move%c_reset%s_italic%)v%c_reset%{c:100,100,100}] %c_reset";
-
-const DETAILED: &str = "%{if:fight}%opponent %{opponent_hp:bar:10} %{opponent_hp:pct}%% %opponent_cond%nl%{end}%c_hp%hp%c_default/%{maxhp}hp %c_mana%mana%c_default/%{maxmana}mn %c_move%move%c_default/%{maxmove}mv %{c:8}tick%c_default %tick%{if:exits} %{c:8}[%c_default%exits%{c:8}]%c_default%{end} %{gold}g%{if:missing} %c_3%missing missing%c_default%{end}";
-
-fn now() -> NaiveDateTime {
-    NaiveDate::from_ymd_opt(2026, 9, 29)
-        .and_then(|d| d.and_hms_opt(8, 42, 10))
-        .expect("a valid date")
-}
 
 /// The catalog's samples, in a fight or out of one.
 struct Sampled {

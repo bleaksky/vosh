@@ -1,12 +1,12 @@
 //! Shared helpers for the resolver tests: the Aabahran packets in
-//! `fixtures/gmcp/aabahran`, fixed clocks and short ways to feed and
-//! draw.
+//! `fixtures/gmcp/aabahran` and short ways to feed and draw, at the test
+//! kit's fixed clocks.
 
 // Each test file uses its own share of these.
 #![allow(dead_code, unreachable_pub)]
 
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime};
 use serde_json::Value as Json;
+use vosh_prompt::testkit::{at, now};
 use vosh_prompt::{
     render_str, Capture, FieldRef, RenderOptions, Resolved, Value, Values, Vars, Vosh,
 };
@@ -49,20 +49,6 @@ pub const FIXTURES: &[(&str, &str)] = &[
     fixture!("group-info-empty.gmcp"),
     fixture!("group-info-own-row.gmcp"),
 ];
-
-pub const JAMES: &str = "%{c:100,100,100}[%c_reset%s_italic%hp(%c_hp%pct_hp%c_reset%s_italic%)h %mana(%{c:128,200,255}%pct_mana%c_reset%s_italic%)m %move(%{c:200,255,23}%pct_move%c_reset%s_italic%)v%c_reset%{c:100,100,100}] %c_reset";
-
-pub const DETAILED: &str = "%{if:fight}%opponent %{opponent_hp:bar:10} %{opponent_hp:pct}%% %opponent_cond%nl%{end}%c_hp%hp%c_default/%{maxhp}hp %c_mana%mana%c_default/%{maxmana}mn %c_move%move%c_default/%{maxmove}mv %{c:8}tick%c_default %tick%{if:exits} %{c:8}[%c_default%exits%{c:8}]%c_default%{end} %{gold}g%{if:missing} %c_3%missing missing%c_default%{end}";
-
-pub fn at() -> DateTime<FixedOffset> {
-    DateTime::parse_from_rfc3339("2026-09-29T12:58:02-05:00").expect("a valid time")
-}
-
-pub fn now() -> NaiveDateTime {
-    NaiveDate::from_ymd_opt(2026, 9, 29)
-        .and_then(|d| d.and_hms_opt(8, 42, 10))
-        .expect("a valid date")
-}
 
 pub fn vosh() -> Vosh {
     Vosh {

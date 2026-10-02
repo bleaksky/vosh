@@ -10,13 +10,30 @@
 //!   `fixtures/prompt/aabahran/wire` and plays each one again, so a test
 //!   holds every fixture to the fake that wrote it.
 //! - [`map_values`] draws a template from a plain map of prompt vars.
+//! - [`designs`] holds the designs many tests draw, and [`at`] and
+//!   [`now`] the fixed clocks they read.
 
+pub mod designs;
 pub mod game;
 pub mod map_values;
 pub mod mud;
 pub mod wire;
 
+use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime};
+
 pub use mud::{Affect, Build, Mud, Options, Write};
+
+/// The instant every packet a test feeds arrives at.
+pub fn at() -> DateTime<FixedOffset> {
+    DateTime::parse_from_rfc3339("2026-09-29T12:58:02-05:00").expect("a valid time")
+}
+
+/// The local time the clock pieces read in a test.
+pub fn now() -> NaiveDateTime {
+    NaiveDate::from_ymd_opt(2026, 9, 29)
+        .and_then(|d| d.and_hms_opt(8, 42, 10))
+        .expect("a valid date")
+}
 
 /// A GMCP packet as the game writes it: IAC SB GMCP, the package, a
 /// space, the JSON, IAC SE. UTF-8 text holds no IAC byte, so none is
