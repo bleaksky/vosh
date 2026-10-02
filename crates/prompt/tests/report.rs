@@ -509,3 +509,18 @@ fn the_card_says_what_a_prompt_shows_in_one_sentence() {
     );
     assert_eq!(shows("<%ggold> ").as_deref(), Some("It shows Gold."));
 }
+
+/// The game cuts its percent codes (%K, %k and %E), so Same as the game
+/// writes the form that rounds down the same way.
+#[test]
+fn same_as_the_game_rounds_percents_down_as_the_game_does() {
+    let game = vosh_prompt::presets::same_as_the_game(
+        "%h (%K) %m (%k) %v (%E)",
+        "",
+        vosh_prompt::aabahran::Who::default(),
+    )
+    .expect("the setting reads");
+    for name in ["hp", "mana", "move"] {
+        assert!(game.contains(&format!("%{{{name}:pct:game}}")), "{game}");
+    }
+}
