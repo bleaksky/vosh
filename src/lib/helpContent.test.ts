@@ -320,7 +320,7 @@ describe('the help on forgetting passwords in the session log', () => {
 describe('the help on the chat pane', () => {
   it('says how a message prints and where its color comes from', () => {
     const text = body('shape.chat-pane');
-    expect(text).toContain('Read a line as `[tell] Selune: meet at the bank`.');
+    expect(text).toContain('Read a line as `[tell] Tolliver: meet at the bank`.');
     expect(text).toContain('Wrapped lines hang two cells in');
     expect(text).toContain("from your theme's terminal colors");
     expect(text).toContain('Point at a message to see when it arrived.');
@@ -339,7 +339,7 @@ describe('the help on the chat pane', () => {
     expect(text).toContain(
       '- See the tells you send. The game sends no GMCP for them, so the `Tells you send` preset routes the line the game prints for each one. Vosh turns it on for every profile, once, unless you had turned every preset off.',
     );
-    expect(text).toContain('Each one reads `[tell] to Selune: text`');
+    expect(text).toContain('Each one reads `[tell] to Tolliver: text`');
     expect(text).toContain(
       'The pane skips the `You tell your group` line, because your gtell already arrives over GMCP.',
     );
