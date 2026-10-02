@@ -11,5 +11,9 @@ rust-version.workspace = true
 serde = { workspace = true }
 thiserror = { workspace = true }
 
+[features]
+# The test kit: the alias builders the app's tests use.
+testkit = []
+
 [lints]
 workspace = true

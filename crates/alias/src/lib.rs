@@ -56,14 +56,18 @@ impl Alias {
         }
     }
 
-    /// Builder-style setter for the optional Lua script body.
+    /// Builder-style setter for the optional Lua script body. Only tests
+    /// call it, the app's tests through the `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     #[must_use]
     pub fn with_script(mut self, script: impl Into<String>) -> Self {
         self.script = Some(script.into());
         self
     }
 
-    /// Builder-style setter for the optional group tag.
+    /// Builder-style setter for the optional group tag. Test only, like
+    /// `with_script`.
+    #[cfg(any(test, feature = "testkit"))]
     #[must_use]
     pub fn with_group(mut self, group: impl Into<String>) -> Self {
         self.group = Some(group.into());
@@ -208,6 +212,8 @@ impl AliasStore {
             .collect();
     }
 
+    /// Lowers the recursion cap so a test can reach it in a few steps.
+    #[cfg(test)]
     #[must_use]
     pub fn with_max_depth(mut self, depth: usize) -> Self {
         self.max_depth = depth;
@@ -238,9 +244,10 @@ impl AliasStore {
     }
 
     /// Expand a single command line and return only the resulting send
-    /// commands. Script aliases that fire during expansion are discarded
-    /// — for the full result including script bodies, call
+    /// commands. Script aliases that fire during expansion are discarded.
+    /// Test only, since the input path runs script bodies and so calls
     /// [`expand_line_full`](Self::expand_line_full).
+    #[cfg(test)]
     pub fn expand_line(&self, line: &str) -> Result<Vec<String>, ExpandError> {
         Ok(self
             .expand_line_full(line)?
