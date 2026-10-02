@@ -101,14 +101,10 @@ pub enum ExpandError {
 /// Default cap on alias recursion depth. Matches the `TinTin++` default.
 pub const DEFAULT_MAX_DEPTH: usize = 16;
 
-/// Default command separator inside an expansion.
-pub const DEFAULT_SEPARATOR: char = ';';
-
 #[derive(Debug, Clone)]
 pub struct AliasStore {
     aliases: HashMap<String, Alias>,
     max_depth: usize,
-    separator: char,
     /// Group names the user has turned OFF as a bulk override. An
     /// alias whose `group` is in this set is treated as disabled
     /// regardless of its own `enabled` flag. Stored as the inverse
@@ -138,7 +134,6 @@ impl AliasStore {
         Self {
             aliases: HashMap::new(),
             max_depth: DEFAULT_MAX_DEPTH,
-            separator: DEFAULT_SEPARATOR,
             disabled_groups: BTreeSet::new(),
             revision: 0,
         }
@@ -242,10 +237,6 @@ impl AliasStore {
         out
     }
 
-    pub fn separator(&self) -> char {
-        self.separator
-    }
-
     /// Expand a single command line and return only the resulting send
     /// commands. Script aliases that fire during expansion are discarded
     /// — for the full result including script bodies, call
@@ -267,7 +258,7 @@ impl AliasStore {
     /// out between the commands around it.
     pub fn expand_line_full(&self, line: &str) -> Result<Vec<ExpandStep>, ExpandError> {
         let mut steps = Vec::new();
-        for raw in split_commands(line, self.separator) {
+        for raw in split_commands(line) {
             let trimmed = raw.trim();
             if trimmed.is_empty() {
                 continue;
@@ -317,7 +308,7 @@ impl AliasStore {
         }
 
         let expanded = substitute_params(&alias.expansion, rest);
-        for raw in split_commands(&expanded, self.separator) {
+        for raw in split_commands(&expanded) {
             let trimmed = raw.trim();
             if trimmed.is_empty() {
                 continue;
@@ -339,16 +330,17 @@ fn split_first_word(input: &str) -> (&str, &str) {
     }
 }
 
-/// Split on a single-byte separator, treating `\;` as a literal `;`. Returns
-/// non-empty pieces with the escape removed.
-fn split_commands(input: &str, sep: char) -> Vec<String> {
+/// Split on `;` and on newlines, treating `\;` as a literal `;`. Returns
+/// the pieces with the escape removed. Callers skip the empty ones.
+fn split_commands(input: &str) -> Vec<String> {
+    const SEPARATOR: char = ';';
     let mut out = Vec::new();
     let mut current = String::new();
     let mut chars = input.chars().peekable();
     while let Some(ch) = chars.next() {
         if ch == '\\' {
             if let Some(&next) = chars.peek() {
-                if next == sep || next == '\\' || next == '\n' {
+                if next == SEPARATOR || next == '\\' || next == '\n' {
                     current.push(next);
                     chars.next();
                     continue;
@@ -365,7 +357,7 @@ fn split_commands(input: &str, sep: char) -> Vec<String> {
         if ch == '\r' {
             continue;
         }
-        if ch == sep || ch == '\n' {
+        if ch == SEPARATOR || ch == '\n' {
             out.push(std::mem::take(&mut current));
             continue;
         }
