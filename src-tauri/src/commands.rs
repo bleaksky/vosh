@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::Mutex;
 use tracing::warn;
-use vosh_log::{SearchHit, SearchOptions, SearchPage, SessionRow};
+use vosh_log::{SearchOptions, SearchPage, SessionRow};
 use vosh_trigger::Trigger;
 
 use crate::input;
@@ -2972,26 +2972,6 @@ pub(crate) async fn logs_list_sessions(
     .await
     .unwrap_or_else(|| Ok(Vec::new()))
     .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub(crate) async fn logs_search(
-    state: State<'_, SharedState>,
-    pattern: String,
-    case_sensitive: bool,
-    max_results: usize,
-    session_id: Option<i64>,
-) -> Result<Vec<SearchHit>, String> {
-    let opts = SearchOptions {
-        case_sensitive,
-        max_results,
-        session_id,
-        ..SearchOptions::default()
-    };
-    read_logs(&state, |store| store.search(&pattern, &opts))
-        .await
-        .unwrap_or_else(|| Ok(Vec::new()))
-        .map_err(|e| e.to_string())
 }
 
 /// One page of the Settings log view: the newest `max_results` matches

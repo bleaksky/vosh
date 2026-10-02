@@ -1625,22 +1625,6 @@ export async function searchLogPage(
   return invoke('logs_search_page', { pattern, ...options });
 }
 
-export async function searchLogs(
-  pattern: string,
-  options: {
-    caseSensitive?: boolean;
-    maxResults?: number;
-    sessionId?: number | null;
-  } = {},
-): Promise<LogSearchHit[]> {
-  return invoke('logs_search', {
-    pattern,
-    caseSensitive: options.caseSensitive ?? false,
-    maxResults: options.maxResults ?? 500,
-    sessionId: options.sessionId ?? null,
-  });
-}
-
 export async function exportLogSession(sessionId: number, withAnsi: boolean): Promise<string> {
   return invoke('logs_export', { sessionId, withAnsi });
 }
