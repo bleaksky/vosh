@@ -3,6 +3,7 @@ import {
   affectsDisplayOf,
   DEFAULT_AFFECTS_DISPLAY,
   getUiConfig,
+  sameAffectsDisplay,
   subscribeAffectsDisplayChanged,
   subscribeProfileSwitched,
   type AffectsDisplay,
@@ -10,8 +11,9 @@ import {
 import { createStore } from './store';
 
 // The active profile's affects display for the Affects pane: Style,
-// Marker, and Tint what to recast from Settings, Layout, Affects, or a
-// pick in the pane's own menu. Seeded from ui_get_config, kept live by
+// Marker, Tint what to recast, and the hours at which an affect runs out
+// and is almost gone, from Settings, Layout, Affects, or a pick in the
+// pane's own menu. Seeded from ui_get_config, kept live by
 // vosh://affects-display-changed (a save from Settings, a menu pick, the
 // broadcast after a profile switch), and refetched on
 // vosh://profile-switched in case the switch lands without one.
@@ -26,10 +28,7 @@ let generation = 0;
 /** Keep the current snapshot when nothing in it moved, so the pane does
  *  not render again. */
 function put(next: AffectsDisplay): void {
-  const prev = store.get();
-  if (prev.style === next.style && prev.marker === next.marker && prev.tint === next.tint) {
-    return;
-  }
+  if (sameAffectsDisplay(store.get(), next)) return;
   store.set(next);
 }
 

@@ -25,7 +25,11 @@ describe('the affects display choices', () => {
   });
 
   it('checks the current style and marker', () => {
-    const display = { style: 'countdown', marker: 'plus_minus', tint: false } as const;
+    const display = {
+      ...DEFAULT_AFFECTS_DISPLAY,
+      style: 'countdown',
+      marker: 'plus_minus',
+    } as const;
     expect(affectsStyleChoices(display)).toEqual([
       { value: 'timers', label: 'Timers first', checked: false },
       { value: 'countdown', label: 'Countdown', checked: true },

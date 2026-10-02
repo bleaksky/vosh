@@ -451,6 +451,28 @@ pub(crate) struct UiConfig {
     /// countdown layouts. Off by default. The chips layout always does.
     #[serde(default)]
     pub affects_tint: bool,
+    /// At or under this many hours an affect you track turns yellow in
+    /// the Affects pane and counts as running out. Whole hours, 0 to 99,
+    /// and never under `affects_almost_gone_hours`. Written only once it
+    /// differs from the default, 2, so a profile that never changed it
+    /// writes nothing new. A hand edit that is not a number reads as the
+    /// default and never stops the profile loading.
+    #[serde(
+        default = "default_affects_running_out_hours",
+        deserialize_with = "deserialize_affects_running_out_hours",
+        skip_serializing_if = "is_default_affects_running_out_hours"
+    )]
+    pub affects_running_out_hours: u32,
+    /// At or under this many hours the hours of an affect turn bold red,
+    /// as the game prints them in its own affects bar at 1, the default.
+    /// Whole hours, 0 to 99, and never over `affects_running_out_hours`.
+    /// Written and read like it.
+    #[serde(
+        default = "default_affects_almost_gone_hours",
+        deserialize_with = "deserialize_affects_almost_gone_hours",
+        skip_serializing_if = "is_default_affects_almost_gone_hours"
+    )]
+    pub affects_almost_gone_hours: u32,
     /// The chat pane's channel colors, picked from its own menu. Each
     /// key is a channel name in lowercase and each value one of the
     /// theme's 16 ANSI slots, like `brightBlue`. A channel left out takes
@@ -728,6 +750,92 @@ pub(crate) fn coerce_affects_marker(value: String) -> String {
     } else {
         default_affects_marker()
     }
+}
+
+/// The hours at which an affect you track turns yellow and counts as
+/// running out, unless you set another.
+pub(crate) const DEFAULT_AFFECTS_RUNNING_OUT_HOURS: u32 = 2;
+
+/// The hours at which an affect's hours turn bold red, unless you set
+/// another. The game's own affects bar turns red at 1.
+pub(crate) const DEFAULT_AFFECTS_ALMOST_GONE_HOURS: u32 = 1;
+
+/// The most hours either affects threshold takes.
+pub(crate) const AFFECTS_HOURS_MAX: u32 = 99;
+
+fn default_affects_running_out_hours() -> u32 {
+    DEFAULT_AFFECTS_RUNNING_OUT_HOURS
+}
+
+fn default_affects_almost_gone_hours() -> u32 {
+    DEFAULT_AFFECTS_ALMOST_GONE_HOURS
+}
+
+fn is_default_affects_running_out_hours(hours: &u32) -> bool {
+    *hours == DEFAULT_AFFECTS_RUNNING_OUT_HOURS
+}
+
+fn is_default_affects_almost_gone_hours(hours: &u32) -> bool {
+    *hours == DEFAULT_AFFECTS_ALMOST_GONE_HOURS
+}
+
+/// Keep both affects thresholds in whole hours from 0 to 99, with
+/// almost gone never over running out. Running out wins, since the
+/// Settings rows never let you set almost gone above it and only a hand
+/// edit can.
+pub(crate) fn coerce_affects_thresholds(running_out: u32, almost_gone: u32) -> (u32, u32) {
+    let running_out = running_out.min(AFFECTS_HOURS_MAX);
+    (running_out, almost_gone.min(running_out))
+}
+
+/// Whole hours from a number: rounded and held to 0 to 99. None when it
+/// is not a finite number.
+fn affects_hours_of(n: f64) -> Option<u32> {
+    // The clamp keeps the cast in range.
+    n.is_finite()
+        .then(|| n.round().clamp(0.0, f64::from(AFFECTS_HOURS_MAX)) as u32)
+}
+
+/// Read an affects threshold leniently, so a hand edit never stops a
+/// profile loading. A whole number or a decimal rounds and clamps to 0
+/// to 99, a string that holds a number reads the same way, and anything
+/// else reads as `fallback`.
+fn lenient_affects_hours<'de, D>(deser: D, fallback: u32) -> Result<u32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Whole(i64),
+        Decimal(f64),
+        Text(String),
+        Other(serde::de::IgnoredAny),
+    }
+    // A whole number past 2^53 loses precision as a float, and clamps to
+    // 99 all the same.
+    #[allow(clippy::cast_precision_loss)]
+    let hours = match Raw::deserialize(deser)? {
+        Raw::Whole(n) => affects_hours_of(n as f64),
+        Raw::Decimal(n) => affects_hours_of(n),
+        Raw::Text(text) => text.trim().parse::<f64>().ok().and_then(affects_hours_of),
+        Raw::Other(_) => None,
+    };
+    Ok(hours.unwrap_or(fallback))
+}
+
+pub(crate) fn deserialize_affects_running_out_hours<'de, D>(deser: D) -> Result<u32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    lenient_affects_hours(deser, DEFAULT_AFFECTS_RUNNING_OUT_HOURS)
+}
+
+pub(crate) fn deserialize_affects_almost_gone_hours<'de, D>(deser: D) -> Result<u32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    lenient_affects_hours(deser, DEFAULT_AFFECTS_ALMOST_GONE_HOURS)
 }
 
 fn default_echo_macros() -> bool {
@@ -1313,6 +1421,8 @@ impl Default for UiConfig {
             affects_style: default_affects_style(),
             affects_marker: default_affects_marker(),
             affects_tint: false,
+            affects_running_out_hours: DEFAULT_AFFECTS_RUNNING_OUT_HOURS,
+            affects_almost_gone_hours: DEFAULT_AFFECTS_ALMOST_GONE_HOURS,
             chat_colors: BTreeMap::new(),
         }
     }
@@ -1700,6 +1810,15 @@ impl ProfileConfig {
     pub(crate) fn from_toml(text: &str) -> Result<Self, ConfigError> {
         let mut config: ProfileConfig = toml::from_str(text)?;
         config.merge_legacy_prompt();
+        // A hand edit can set almost gone above running out. Read it as
+        // running out, as a save would write it.
+        (
+            config.ui.affects_running_out_hours,
+            config.ui.affects_almost_gone_hours,
+        ) = coerce_affects_thresholds(
+            config.ui.affects_running_out_hours,
+            config.ui.affects_almost_gone_hours,
+        );
         Ok(config)
     }
 }

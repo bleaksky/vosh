@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { CRITICAL_TICKS, EXPIRING_TICKS } from './affectsView';
 import { sanitizeLayout, type PaneLayout } from './paneLayout';
 import {
   resolveActiveTheme,
@@ -1785,32 +1786,95 @@ export function normalizeAffectsMarker(value: unknown): AffectsMarker {
   return AFFECTS_MARKERS.find((marker) => marker === value) ?? 'dot';
 }
 
+/** The most hours either affects threshold takes. */
+export const AFFECTS_HOURS_MAX = 99;
+
+/** Whole hours from 0 to AFFECTS_HOURS_MAX, or null when `value` is no
+ *  number. */
+function affectsHoursOf(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return Math.min(AFFECTS_HOURS_MAX, Math.max(0, Math.round(value)));
+}
+
+/** The hours at which an affect runs out and is almost gone, read the
+ *  way the backend saves them: whole hours from 0 to 99, almost gone
+ *  never over running out, and the defaults, 2 and 1, for anything
+ *  that is no number. */
+export function normalizeAffectsThresholds(
+  runningOut: unknown,
+  almostGone: unknown,
+): { running_out: number; almost_gone: number } {
+  const running_out = affectsHoursOf(runningOut) ?? EXPIRING_TICKS;
+  const almost_gone = Math.min(affectsHoursOf(almostGone) ?? CRITICAL_TICKS, running_out);
+  return { running_out, almost_gone };
+}
+
 /** How the Affects pane draws, as one event payload. Style and Marker
  *  from Settings, Layout, Affects or the pane's own menu, and Tint what
- *  to recast from Settings. */
+ *  to recast and the two thresholds from Settings. */
 export interface AffectsDisplay {
   style: AffectsStyle;
   marker: AffectsMarker;
   /** Tint the missing and running out rows in the timers and countdown
    *  layouts. Grouped chips always do. */
   tint: boolean;
+  /** At or under this many hours an affect you track turns yellow and
+   *  counts as running out. `affects_running_out_hours`. */
+  running_out: number;
+  /** At or under this many hours an affect's hours turn bold red.
+   *  `affects_almost_gone_hours`. */
+  almost_gone: number;
 }
 
 export const DEFAULT_AFFECTS_DISPLAY: AffectsDisplay = {
   style: 'timers',
   marker: 'dot',
   tint: false,
+  running_out: EXPIRING_TICKS,
+  almost_gone: CRITICAL_TICKS,
 };
 
+/** The fields of a config that hold the affects display. */
+export type AffectsDisplayFields = Pick<
+  UiConfig,
+  | 'affects_style'
+  | 'affects_marker'
+  | 'affects_tint'
+  | 'affects_running_out_hours'
+  | 'affects_almost_gone_hours'
+>;
+
 /** The affects display a config holds. */
-export function affectsDisplayOf(
-  config: Pick<UiConfig, 'affects_style' | 'affects_marker' | 'affects_tint'>,
-): AffectsDisplay {
+export function affectsDisplayOf(config: AffectsDisplayFields): AffectsDisplay {
   return {
     style: config.affects_style,
     marker: config.affects_marker,
     tint: config.affects_tint,
+    running_out: config.affects_running_out_hours,
+    almost_gone: config.affects_almost_gone_hours,
   };
+}
+
+/** The config fields that hold `display`, to lay over a config copy. */
+export function affectsDisplayFields(display: AffectsDisplay): AffectsDisplayFields {
+  return {
+    affects_style: display.style,
+    affects_marker: display.marker,
+    affects_tint: display.tint,
+    affects_running_out_hours: display.running_out,
+    affects_almost_gone_hours: display.almost_gone,
+  };
+}
+
+/** Whether two affects displays draw the pane alike. */
+export function sameAffectsDisplay(a: AffectsDisplay, b: AffectsDisplay): boolean {
+  return (
+    a.style === b.style &&
+    a.marker === b.marker &&
+    a.tint === b.tint &&
+    a.running_out === b.running_out &&
+    a.almost_gone === b.almost_gone
+  );
 }
 
 /** Read an affects display off the bus, filling anything missing or
@@ -1821,6 +1885,7 @@ export function normalizeAffectsDisplay(raw: unknown): AffectsDisplay {
     style: normalizeAffectsStyle(o.style),
     marker: normalizeAffectsMarker(o.marker),
     tint: o.tint === true,
+    ...normalizeAffectsThresholds(o.running_out, o.almost_gone),
   };
 }
 
@@ -1966,6 +2031,12 @@ export interface UiConfig {
   affects_marker: AffectsMarker;
   /** Tint what to recast in the timers and countdown layouts. */
   affects_tint: boolean;
+  /** At or under this many hours an affect you track turns yellow and
+   *  counts as running out. Whole hours from 0 to 99. */
+  affects_running_out_hours: number;
+  /** At or under this many hours an affect's hours turn bold red. Whole
+   *  hours from 0 to 99, never over affects_running_out_hours. */
+  affects_almost_gone_hours: number;
   /** How many times the backend had replaced the live config when this
    *  copy was read. setUiConfig sends it back, and the backend turns
    *  away a save from a copy read before a later replace. Absent on a
@@ -2045,6 +2116,8 @@ export interface RawUiConfig {
   affects_style?: string;
   affects_marker?: string;
   affects_tint?: boolean;
+  affects_running_out_hours?: number;
+  affects_almost_gone_hours?: number;
   generation?: number;
 }
 
@@ -2077,6 +2150,10 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
   const theme =
     typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : DEFAULT_THEME_ID;
   const customThemes = Array.isArray(cfg.custom_themes) ? cfg.custom_themes : [];
+  const thresholds = normalizeAffectsThresholds(
+    cfg.affects_running_out_hours,
+    cfg.affects_almost_gone_hours,
+  );
   return {
     theme,
     follow_system_appearance: cfg.follow_system_appearance === true,
@@ -2135,6 +2212,8 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     affects_style: normalizeAffectsStyle(cfg.affects_style),
     affects_marker: normalizeAffectsMarker(cfg.affects_marker),
     affects_tint: cfg.affects_tint === true,
+    affects_running_out_hours: thresholds.running_out,
+    affects_almost_gone_hours: thresholds.almost_gone,
     ...(typeof cfg.generation === 'number' ? { generation: cfg.generation } : {}),
   };
 }
@@ -2406,12 +2485,7 @@ export function primeUiConfigThemePrefs(prefs: ThemePrefs): void {
 // window's next save does not send it on as its own change.
 export function primeUiConfigAffectsDisplay(display: AffectsDisplay): void {
   if (!lastSentConfig) return;
-  lastSentConfig = {
-    ...lastSentConfig,
-    affects_style: display.style,
-    affects_marker: display.marker,
-    affects_tint: display.tint,
-  };
+  lastSentConfig = { ...lastSentConfig, ...affectsDisplayFields(display) };
 }
 
 // Every window hears its own affects display broadcast too. One this
@@ -2518,6 +2592,8 @@ function uiConfigPayload(config: UiConfig): Record<string, unknown> {
     affects_style: config.affects_style,
     affects_marker: config.affects_marker,
     affects_tint: config.affects_tint,
+    affects_running_out_hours: config.affects_running_out_hours,
+    affects_almost_gone_hours: config.affects_almost_gone_hours,
     generation: config.generation ?? null,
   };
 }
@@ -2602,6 +2678,8 @@ export async function setAffectsDisplay(patch: Partial<AffectsDisplay>): Promise
     style: patch.style ?? null,
     marker: patch.marker ?? null,
     tint: patch.tint ?? null,
+    runningOut: patch.running_out ?? null,
+    almostGone: patch.almost_gone ?? null,
   });
 }
 
