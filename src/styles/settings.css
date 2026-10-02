@@ -416,10 +416,6 @@
   background: var(--inputband);
 }
 
-.st-card-padded {
-  padding: 16px;
-}
-
 .st-row {
   position: relative;
   display: flex;

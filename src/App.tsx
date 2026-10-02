@@ -1948,7 +1948,6 @@ function App() {
         <TerminalMenu
           x={terminalMenu.x}
           y={terminalMenu.y}
-          connected={connected}
           termRef={termRef}
           inputRef={inputRef}
           onOpenFind={() => setFindOpen(true)}

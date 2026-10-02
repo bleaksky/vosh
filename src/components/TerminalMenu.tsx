@@ -10,9 +10,6 @@ interface Props {
    *  top-left corner here, clamped so it never overflows the window. */
   x: number;
   y: number;
-  /** Unused since the session controls moved to the title band. Kept
-   *  so existing call sites still type check. */
-  connected?: boolean;
   termRef: RefObject<TerminalHandle | null>;
   inputRef: RefObject<InputHandle | null>;
   onOpenFind: () => void;
