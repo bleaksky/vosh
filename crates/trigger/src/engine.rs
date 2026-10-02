@@ -88,30 +88,20 @@ pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
 /// dispatch the same engine for both completed lines (`MatchScope::Line`)
 /// and partial-prompt buffers (`MatchScope::Prompt`).
 pub fn process_scoped(store: &TriggerStore, original: &[u8], scope: MatchScope) -> LineResult {
-    process_with_plain(store, original, &plain_text(original), scope)
+    process_on_ground(store, original, &plain_text(original), scope, None)
 }
 
-/// Like [`process_scoped`] but reuses a caller-computed plain-text strip
-/// instead of recomputing it. The session loop already strips `plain`
-/// for the tick-reset check, so passing it here avoids a second full
-/// ANSI pass + span allocation on every output line.
-pub fn process_with_plain(
-    store: &TriggerStore,
-    original: &[u8],
-    plain: &str,
-    scope: MatchScope,
-) -> LineResult {
-    process_on_ground(store, original, plain, scope, None)
-}
-
-/// Like [`process_with_plain`], and with `ground`, the terminal
-/// background, every fixed color the triggers paint text or an underline
-/// in, a true color or a 256 color past the 16, holds
-/// [`readable::READABLE_CONTRAST`] on what it draws on (see
-/// [`readable::lift_sgr`]). `None` leaves each color as the trigger set
-/// it. The game's own colors never change either way. A line no trigger
-/// matched keeps the bytes the game sent, and a highlight drawn over those
-/// bytes lifts its own open alone.
+/// Run the trigger store against a line or a prompt buffer, firing only
+/// the triggers whose `target` the scope takes. `plain` is `original`
+/// with its escapes stripped. The session already strips it for the tick
+/// reset check, so taking it here saves a second ANSI pass on every
+/// output line. With `ground`, the terminal background, every fixed
+/// color the triggers paint text or an underline in, a true color or a
+/// 256 color past the 16, holds [`readable::READABLE_CONTRAST`] on what
+/// it draws on (see [`readable::lift_sgr`]). `None` leaves each color as
+/// the trigger set it. The game's own colors never change either way. A
+/// line no trigger matched keeps the bytes the game sent, and a highlight
+/// drawn over those bytes lifts its own open alone.
 pub fn process_on_ground(
     store: &TriggerStore,
     original: &[u8],
@@ -1139,11 +1129,12 @@ mod tests {
     #[test]
     fn a_line_whose_bytes_do_not_spell_its_plain_text_is_rebuilt() {
         let s = store(vec![highlight("name", "Tolliver", NamedColor::Cyan)]);
-        let r = process_with_plain(
+        let r = process_on_ground(
             &s,
             b"\x1b[0;32mMaren\x1b[0;0m",
             "Tolliver",
             MatchScope::Line,
+            None,
         );
         assert_eq!(r.display.as_deref(), Some("\x1b[36mTolliver\x1b[0m"));
     }
