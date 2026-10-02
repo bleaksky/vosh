@@ -9,6 +9,7 @@ import {
   closeAt,
   lineShift,
   listenSplitDrag,
+  matchRow,
   pastEdge,
   selectSpan,
   xtermCell,
@@ -76,6 +77,9 @@ class Pane implements DragPane {
   markLine(row: number) {
     const b = this.term.buffer.active;
     return this.term.registerMarker(row - (b.baseY + b.cursorY));
+  }
+  lineText(row: number): string | null {
+    return this.term.buffer.active.getLine(row)?.translateToString(true) ?? null;
   }
   /** The selected text as xterm copies it: whole rows between the ends,
    *  trailing blanks gone, a line break between rows. */
@@ -147,12 +151,17 @@ function run(first: number, last: number): string {
 
 /** The split as the page opens it: the history pane at its bottom, then
  *  back by the live pane's rows, so its last row is the line above the
- *  live pane's first. `liveFirst` is text only the live pane holds. */
-async function split(liveFirst = '') {
+ *  live pane's first. `liveFirst` is text only the live pane holds, and
+ *  `liveAfter` text it alone holds after the line `afterLine`, as the
+ *  restored banner and its pad sit between the last session and this one. */
+async function split(liveFirst = '', liveAfter = '', afterLine = 0) {
   const historyTerm = new Terminal({ cols: 20, rows: 8, scrollback: 1000, allowProposedApi: true });
   const liveTerm = new Terminal({ cols: 20, rows: 20, scrollback: 1000, allowProposedApi: true });
   await write(historyTerm, numbered(0, 100));
-  await write(liveTerm, liveFirst + numbered(0, 100));
+  const liveText = liveAfter
+    ? `${numbered(0, afterLine + 1)}\r\n${liveAfter}${numbered(afterLine + 1, 99 - afterLine)}`
+    : numbered(0, 100);
+  await write(liveTerm, liveFirst + liveText);
   historyTerm.scrollToBottom();
   historyTerm.scrollLines(-liveTerm.rows);
   const history = new Pane(historyTerm);
@@ -250,6 +259,54 @@ describe('the drag geometry', () => {
   });
 });
 
+describe('matchRow', () => {
+  /** Row text from a list, null past it. */
+  const rows =
+    (list: string[]) =>
+    (row: number): string | null =>
+      list[row] ?? null;
+
+  it('keeps the guess when the rows there match', () => {
+    const text = rows(['a', 'b', 'c', 'd']);
+    expect(matchRow(text, text, 2, 2)).toBe(2);
+  });
+
+  it('finds the line the guess missed by rows only the live pane holds', () => {
+    const history = rows(['a', 'b', 'c', 'd', 'e', 'f']);
+    // A banner and a blank row after `c` put the guess two rows low.
+    const live = rows(['a', 'b', 'c', '', '[restored]', 'd', 'e', 'f']);
+    expect(matchRow(history, live, 1, 3)).toBe(1);
+    // And a guess two rows high finds the line below.
+    expect(matchRow(history, live, 4, 4)).toBe(6);
+  });
+
+  it('takes the repeated line whose rows around it match, not the nearest', () => {
+    const history = rows(['<p>', 'one', '<p>', 'two', '<p>', 'three']);
+    const live = rows(['x', 'x', '<p>', 'one', '<p>', 'two', '<p>', 'three']);
+    // The guess sits on a prompt too, but the prompt between `one` and
+    // `two` is two rows down.
+    expect(matchRow(history, live, 2, 2)).toBe(4);
+  });
+
+  it('counts no blank row as a match around the line', () => {
+    const history = rows(['', '', 'a', '', '', 'b']);
+    const live = rows(['', '', 'a', '', '', 'x', 'q', 'a', 'z', 'z', 'b']);
+    // Row 2 has the same four blank rows around it, which says nothing.
+    // Row 7 has `b` three rows down, as the history does.
+    expect(matchRow(history, live, 2, 2)).toBe(7);
+  });
+
+  it('keeps the guess when no row near it holds the line', () => {
+    const history = rows(['a', 'b', 'c']);
+    const live = rows(['x', 'y', 'z']);
+    expect(matchRow(history, live, 1, 1)).toBe(1);
+    expect(matchRow(rows([]), live, 1, 2)).toBe(2);
+    // Never further out than its reach.
+    const far = rows(['b', 'x', 'x', 'x', 'x']);
+    expect(matchRow(history, far, 1, 4, 2)).toBe(4);
+  });
+});
+
 describe('SplitDrag', () => {
   it('leaves a drag that stays on the history pane to xterm', async () => {
     const { history, drag, timers } = await split();
@@ -329,6 +386,22 @@ describe('SplitDrag', () => {
     expect(live.text().split('\n')[0]).toBe('L073');
     // The pointer's row 13 of the live screen holds L093.
     expect(live.text().split('\n').at(-1)).toBe('L093');
+  });
+
+  it('carries the selection over by line past rows only the live pane holds', async () => {
+    // The restored banner, wrapped at 20 columns, and four pad rows sit
+    // between L080 and L081 in the live pane only, below the anchor.
+    const { live, drag } = await split('', '\r\n[scrollback restored]\r\n\r\n\r\n\r\n\r\n', 80);
+    drag.press(at(4, 15), true);
+    drag.move(at(40, 140));
+    for (let n = 0; n < 10 && drag.state === 'history'; n++) drag.tick();
+    expect(drag.state).toBe('live');
+    const lines = live.text().split('\n');
+    expect(lines[0]).toBe('L073');
+    // Every numbered line once, in order, to the pointer's row 13 of the
+    // live screen, L093, with the live pane's own rows where it holds them.
+    expect(lines.filter((line) => /^L\d{3}$/.test(line))).toEqual(run(73, 93).split('\n'));
+    expect(lines).toContain('[scrollback restored');
   });
 
   it('scrolls the history back up past the top once it drags there', async () => {
