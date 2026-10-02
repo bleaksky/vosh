@@ -63,6 +63,8 @@ The command input sends lines to the server. It handles single commands, chained
 
 With `Keep last command` on under Input, then Command line, in Settings, a sent command stays in the box fully selected. Press `Enter` again to resend it, or start typing to replace it.
 
+Each command you send echoes in the text after a grey `›`, so your commands stand apart from the lines the game sends. Turn off `Mark your commands` under Input, then Command line, in Settings, to echo them bare. A quick key and a macro echo the same way.
+
 Set the delay in `Wait between pasted lines` under Input, then Advanced, in Settings, anywhere from 0 to 10000 ms.
 
 ### 2.2 Recall command history
@@ -507,7 +509,7 @@ The colors MUD text draws in live in Settings under Appearance.
 - Open `Advanced` and change `Base palette`, the sixteen colors MUD text uses while the theme's colors are off. Change any color with its swatch or by typing a hex color. The first change keeps all sixteen as your own list.
 - Click `Reset` beside Base palette to go back to the stock chart. It stays off until you change a color.
 
-Two more colors sit with the rows they belong to. `Sent command color` under Input, then Command line, recolors the local echo of every command you send. `Divider color` under Layout, then Split terminal, recolors the line between the history and the live tail. Press the swatch to pick a color or type a hex color like `#fffc41`. Each applies live, and emptying the field returns it to the theme default.
+Two more colors sit with the rows they belong to. `Sent command color` under Input, then Command line, recolors the local echo of every command you send, and the `›` before it stays grey. `Divider color` under Layout, then Split terminal, recolors the line between the history and the live tail. Press the swatch to pick a color or type a hex color like `#fffc41`. Each applies live, and emptying the field returns it to the theme default.
 
 ### 6.4 Set the terminal font
 

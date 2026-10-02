@@ -16,6 +16,20 @@ export function colorizeEcho(line: string, color: string | null): string {
   return `\x1b[38;2;${r};${g};${b}m${line}\x1b[0m`;
 }
 
+/** The grey `›` and space before each command you send, in the theme's
+ *  bright black (SGR 90), so both renderers draw it in the active theme.
+ *  U+203A is one cell wide. The backend echoes a quick key with the same
+ *  bytes (ECHO_CARET in src-tauri/src/input.rs). */
+export const ECHO_CARET = '\x1b[90m\u203a \x1b[0m';
+
+/** The echo of one command, with its line end: the caret first when
+ *  `caret` is on, then the command in the echo color. An empty line
+ *  takes no caret, so a bare Enter echoes only its line end. */
+export function commandEcho(line: string, color: string | null, caret: boolean): string {
+  const mark = caret && line.length > 0 ? ECHO_CARET : '';
+  return `${mark}${colorizeEcho(line, color)}\r\n`;
+}
+
 /** What the command input does with one submitted line. */
 export interface SubmitPlan {
   /** The local echo for the terminal, the split history pane, and the
@@ -39,6 +53,9 @@ export interface SubmitContext {
   quickKey: boolean;
   /** The echo color from Settings, or null for the terminal default. */
   echoColor: string | null;
+  /** Mark your commands from Settings, a grey `›` before each echo. Off
+   *  when left out. */
+  echoCaret?: boolean;
   /** The row your pinned prompt held is where the next thing lands, so
    *  the text holds no prompt row for an empty line's echo to end. False
    *  at a prompt left in the text, such as the pager. */
@@ -71,7 +88,7 @@ export function macroEcho(
   context: SubmitContext & { enabled: boolean },
 ): string | null {
   if (!context.enabled || context.masked || context.quickKey) return null;
-  return `${colorizeEcho(command, context.echoColor)}\r\n`;
+  return commandEcho(command, context.echoColor, context.echoCaret === true);
 }
 
 /** The draft the input row keeps when it masks or unmasks. A flip either
@@ -86,7 +103,8 @@ export function draftAfterMaskChange(wasMasked: boolean, masked: boolean, draft:
 /** Plan a submitted line. A line from the masked field echoes only a line
  *  break, stays out of history, and goes to the server as typed, past
  *  aliases, variables, and `#` commands. Every other line echoes in your
- *  echo color, unless a quick key echoes it, and joins history. At your
+ *  echo color, after the caret while Mark your commands is on, unless a
+ *  quick key echoes it, and joins history. At your
  *  pinned prompt an empty line echoes nothing, so Enter on an empty line
  *  moves nothing in the text. */
 export function planSubmit(line: string, context: SubmitContext): SubmitPlan {
@@ -95,7 +113,7 @@ export function planSubmit(line: string, context: SubmitContext): SubmitPlan {
   }
   const silent = context.quickKey || (context.pinRowOpen === true && line.length === 0);
   return {
-    echo: silent ? null : `${colorizeEcho(line, context.echoColor)}\r\n`,
+    echo: silent ? null : commandEcho(line, context.echoColor, context.echoCaret === true),
     remember: line.length > 0,
     local: /^#nativesurface\b/i.test(line),
     masked: false,

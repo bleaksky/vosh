@@ -276,6 +276,12 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('input', 'command-line', 'spellcheck'),
   },
   {
+    label: 'Mark your commands',
+    description: 'Draws a grey › before each command you send.',
+    keywords: 'echo caret arrow prefix typed input sent',
+    target: at('input', 'command-line', 'mark-commands'),
+  },
+  {
     label: 'Sent command color',
     keywords: 'echo local command typed input',
     target: at('input', 'command-line', 'sent-color'),

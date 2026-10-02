@@ -357,6 +357,9 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // on). Under lag the echo shows the keybind registered before the
   // world responds. Same load + subscribe pattern as keepLast.
   const echoMacrosRef = useRef<boolean>(true);
+  // Mark your commands, a grey caret before each echo (default on).
+  // Same load + subscribe pattern as keepLast.
+  const echoCaretRef = useRef<boolean>(true);
   useEffect(() => {
     let cancelled = false;
     let unlistenKeep: (() => void) | undefined;
@@ -365,6 +368,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     let unlistenCursor: (() => void) | undefined;
     let unlistenEcho: (() => void) | undefined;
     let unlistenEchoMacros: (() => void) | undefined;
+    let unlistenEchoCaret: (() => void) | undefined;
     getUiConfig()
       .then((cfg) => {
         if (cancelled) return;
@@ -372,6 +376,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         pasteDelayRef.current = cfg.paste_line_delay_ms;
         echoColorRef.current = cfg.input_echo_color;
         echoMacrosRef.current = cfg.echo_macros;
+        echoCaretRef.current = cfg.input_echo_caret;
         setSpellcheckPrompt(cfg.spellcheck_prompt);
         setCursorStyle(cfg.input_cursor_style);
       })
@@ -416,6 +421,12 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       if (cancelled) fn();
       else unlistenEchoMacros = fn;
     });
+    listen<boolean>('vosh://input-echo-caret-changed', (event) => {
+      echoCaretRef.current = Boolean(event.payload);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlistenEchoCaret = fn;
+    });
     return () => {
       cancelled = true;
       unlistenKeep?.();
@@ -424,6 +435,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       unlistenCursor?.();
       unlistenEcho?.();
       unlistenEchoMacros?.();
+      unlistenEchoCaret?.();
     };
   }, []);
 
@@ -660,6 +672,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       quickKey:
         !masked && quickKeysRef.current.some((q) => q.name === firstWord && q.verb.length > 0),
       echoColor: echoColorRef.current,
+      echoCaret: echoCaretRef.current,
       pinRowOpen: promptPinnedRef.current && pinnedRowOpen(),
     });
     if (plan.remember) {
@@ -798,6 +811,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           masked: maskedNow(),
           quickKey: quickKeysRef.current.some((q) => q.name === firstWord && q.verb.length > 0),
           echoColor: echoColorRef.current,
+          echoCaret: echoCaretRef.current,
         });
         if (echo !== null) onLocalEcho?.(echo);
         try {

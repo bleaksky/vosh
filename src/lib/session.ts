@@ -1921,6 +1921,9 @@ export interface UiConfig {
    *  locally like typed commands, so under lag the keybind visibly
    *  registered before the world responds. */
   echo_macros: boolean;
+  /** When true (default), each command you send echoes after a grey
+   *  `›` and a space, Mark your commands under Input in Settings. */
+  input_echo_caret: boolean;
   /** Milliseconds to wait between lines when sending a multi-line
    *  paste. 0 = no pacing; non-zero spreads sends out so the MUD
    *  flood filter does not kick. Clamped server-side to [0, 10000]. */
@@ -2022,6 +2025,7 @@ export interface RawUiConfig {
   split_divider_color?: string | null;
   input_echo_color?: string | null;
   echo_macros?: boolean;
+  input_echo_caret?: boolean;
   paste_line_delay_ms?: number;
   spellcheck_prompt?: boolean;
   input_cursor_style?: string;
@@ -2107,6 +2111,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
         ? cfg.input_echo_color
         : null,
     echo_macros: cfg.echo_macros !== false,
+    input_echo_caret: cfg.input_echo_caret !== false,
     paste_line_delay_ms:
       typeof cfg.paste_line_delay_ms === 'number' && cfg.paste_line_delay_ms >= 0
         ? Math.min(10_000, Math.floor(cfg.paste_line_delay_ms))
@@ -2233,6 +2238,11 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     prev?.input_echo_color,
   );
   await emitChanged('vosh://echo-macros-changed', config.echo_macros, prev?.echo_macros);
+  await emitChanged(
+    'vosh://input-echo-caret-changed',
+    config.input_echo_caret,
+    prev?.input_echo_caret,
+  );
   await emitChanged(
     'vosh://paste-line-delay-changed',
     config.paste_line_delay_ms,
@@ -2480,6 +2490,7 @@ function uiConfigPayload(config: UiConfig): Record<string, unknown> {
     split_divider_color: config.split_divider_color,
     input_echo_color: config.input_echo_color,
     echo_macros: config.echo_macros,
+    input_echo_caret: config.input_echo_caret,
     paste_line_delay_ms: config.paste_line_delay_ms,
     spellcheck_prompt: config.spellcheck_prompt,
     input_cursor_style: config.input_cursor_style,

@@ -123,6 +123,7 @@ terminal_base_ansi = [
 split_divider_color = "#ff00ff"
 input_echo_color = "#88aaff"
 echo_macros = false
+input_echo_caret = false
 side_panels_fill_height = true
 paste_line_delay_ms = 250
 spellcheck_prompt = true

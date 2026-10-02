@@ -115,6 +115,16 @@ export function InputGroup({ target, navSeq, config, setConfig, onError }: Setti
             onChange={(on) => update({ spellcheck_prompt: on })}
           />
         </Row>
+        <Row
+          label="Mark your commands"
+          description="Draws a grey › before each command you send."
+          anchor="mark-commands"
+        >
+          <Toggle
+            checked={config.input_echo_caret}
+            onChange={(on) => update({ input_echo_caret: on })}
+          />
+        </Row>
         <Row label="Sent command color" anchor="sent-color">
           <ColorField
             value={config.input_echo_color ?? ''}

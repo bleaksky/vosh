@@ -617,6 +617,25 @@ describe('the help on the Room and time colors preset', () => {
   });
 });
 
+describe('the help on Mark your commands', () => {
+  it('says how your commands echo and how to turn the caret off', () => {
+    expect(body('play.send-commands')).toContain(
+      'Each command you send echoes in the text after a grey `›`, so your commands stand apart from the lines the game sends. Turn off `Mark your commands` under Input, then Command line, in Settings, to echo them bare.',
+    );
+    expect(body('make-it-yours.control-terminal-colors')).toContain(
+      'recolors the local echo of every command you send, and the `›` before it stays grey.',
+    );
+  });
+
+  it('matches HELP.md word for word', () => {
+    for (const id of ['play.send-commands', 'make-it-yours.control-terminal-colors']) {
+      const found = HELP_TOPICS.find((t) => t.id === id);
+      if (!found) throw new Error(`no help topic ${id}`);
+      expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+    }
+  });
+});
+
 describe('the help body format', () => {
   it('reads paragraphs, lists and tables', () => {
     expect(

@@ -716,6 +716,7 @@ describe('a replaced UI config', () => {
     // window's last broadcast, so a diff there would skip them.
     const loaded = raw({
       echo_macros: false,
+      input_echo_caret: false,
       paste_line_delay_ms: 200,
       spellcheck_prompt: true,
       input_cursor_style: 'underline',
@@ -746,6 +747,7 @@ describe('a replaced UI config', () => {
     expect(sentBeforeApply).toBe(0);
     const payloads = new Map(sent.mock.calls.map(([event, payload]) => [event, payload]));
     expect(payloads.get('vosh://echo-macros-changed')).toBe(false);
+    expect(payloads.get('vosh://input-echo-caret-changed')).toBe(false);
     expect(payloads.get('vosh://paste-line-delay-changed')).toBe(200);
     expect(payloads.get('vosh://spellcheck-prompt-changed')).toBe(true);
     expect(payloads.get('vosh://input-cursor-style-changed')).toBe('underline');
