@@ -1,0 +1,6 @@
+# The one Rust version local builds and CI use. Bump it in its own commit
+# after cargo fmt and cargo clippy pass on the new version. See CONTRIBUTING.md.
+[toolchain]
+channel = "1.99.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
