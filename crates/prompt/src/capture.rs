@@ -10,6 +10,9 @@
 //! your prompt and says whether a partial can still become one. It reads
 //! Aabahran's codes through each [`Shape`], whose reading lives here so
 //! the shapes module needs nothing from this one.
+//!
+//! `Recognizer::marks`, which only the candidates view reads, lives in
+//! [`crate::card::candidates`], so this module never imports the card.
 
 pub mod generic;
 

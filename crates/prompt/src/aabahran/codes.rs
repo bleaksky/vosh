@@ -9,6 +9,10 @@
 //!
 //! The breaks `%c` and `%C`, the color codes `%l` and `%L`, and `%%` are
 //! not values, and the lexer reads them itself.
+//!
+//! [`Code::label`] lives in [`crate::card::sentences`] with the other
+//! labels. It reads the values catalog, and the aabahran module reads
+//! nothing from values.
 
 use super::Who;
 
