@@ -1,9 +1,24 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { nativeSurfaceEnabled, type TerminalHandle } from './Terminal';
 import { type InputHandle } from './Input';
+import { submenuAt } from './panel/menuPlacement';
+import { MenuItem, MenuSeparator, MenuSurface } from './panel/MenuSurface';
+import { ChevronRightIcon } from './panel/paneIcons';
+import { openPaneSubmenu, type PaneSubmenuState } from '../lib/affectsDisplay';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
+import { openHelpWindow } from '../lib/helpLink';
 import { shortcutLabel } from '../lib/palette';
+import { openSettingsTab } from '../lib/settingsLink';
+import { SETTINGS_MENU, type SettingsMenuRow } from '../lib/settingsMenu';
 
 interface Props {
   /** Pointer position in viewport coordinates. The menu opens with its
@@ -24,8 +39,13 @@ interface Item {
   /** Shortcut spec for the trailing hint, like 'Mod+C'. */
   keys?: string;
   danger?: boolean;
+  /** The row opens the Settings list instead of running. */
+  submenu?: boolean;
   run: () => void;
 }
+
+/** The id of the Settings list, which the Settings row controls. */
+const SETTINGS_LIST_ID = 'terminal-menu-settings';
 
 /** How close the menu may sit to the window edge after clamping. */
 const EDGE_MARGIN = 8;
@@ -35,11 +55,14 @@ const EDGE_MARGIN = 8;
 // shortcut hints on the right in the platform's glyphs, and hairline
 // separators. Customize prompt… comes first on every row, since Vosh
 // may not know yet which row is your prompt, and opens the prompt card
-// over it (P1). Clear scrollback is the one destructive item and comes
-// last. Every action routes through the same path the keyboard uses
-// (the native copy command, the input row's insert, the find bar), so
-// the menu never grows a second implementation. It takes focus while
-// open so the arrow keys and Enter drive it, then hands focus back.
+// over it (P1). Settings opens a list beside the menu, built like the
+// pane menus' submenus, that goes straight to Triggers, Aliases, Macros
+// and Timers, to each Settings page, and to Help. Clear scrollback is
+// the one destructive item and comes last. Every action routes through
+// the same path the keyboard uses (the native copy command, the input
+// row's insert, the find bar, the palette's Settings links), so the
+// menu never grows a second implementation. It takes focus while open
+// so the arrow keys and Enter drive it, then hands focus back.
 export function TerminalMenu({
   x,
   y,
@@ -50,8 +73,12 @@ export function TerminalMenu({
   onClose,
 }: Props) {
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const settingsRowRef = useRef<HTMLButtonElement | null>(null);
   const [pos, setPos] = useState({ x, y });
   const [active, setActive] = useState(-1);
+  // The Settings list, and whether it opened from the keyboard and so
+  // takes focus.
+  const [sub, setSub] = useState<PaneSubmenuState<'settings'> | null>(null);
 
   // Clamp to the viewport once the menu has a measurable size. Re-runs
   // when a second right-click moves the anchor while the menu is open.
@@ -76,12 +103,14 @@ export function TerminalMenu({
   }, []);
 
   // Outside press and Escape close. Pointerdown so the close fires
-  // before any click handler inside an unrelated element. Escape also
-  // closes when focus has drifted out of the menu.
+  // before any click handler inside an unrelated element. The Settings
+  // list draws apart from the menu, so a press on it counts as inside.
+  // Escape also closes when focus has drifted out of the menu.
   useEffect(() => {
     const onPointer = (e: PointerEvent) => {
       if (!menuRef.current) return;
       if (e.target instanceof Node && menuRef.current.contains(e.target)) return;
+      if (e.target instanceof Element && e.target.closest('[data-menu-surface]')) return;
       onClose();
     };
     const onKey = (e: KeyboardEvent) => {
@@ -138,6 +167,7 @@ export function TerminalMenu({
       { id: 'select-all', label: 'Select all', keys: 'Mod+A', run: runSelectAll },
     ],
     [{ id: 'find', label: 'Find in scrollback…', keys: APP_SHORTCUTS.find, run: onOpenFind }],
+    [{ id: 'settings', label: 'Settings', submenu: true, run: () => openSub(true) }],
   ];
   if (!nativeSurfaceEnabled()) {
     groups.push([
@@ -150,83 +180,175 @@ export function TerminalMenu({
     ]);
   }
   const items = groups.flat();
+  const settingsAt = items.findIndex((item) => item.submenu);
+
+  // Open the Settings list beside its row. From the keyboard or a click
+  // it takes focus on its first row. Pointing at the row leaves focus
+  // in the menu, and leaves a list the keyboard opened as it is.
+  function openSub(focus: boolean) {
+    setActive(settingsAt);
+    setSub((prev) => openPaneSubmenu(prev, 'settings', focus));
+  }
+
+  // Close the list and hand focus back to the menu, so the arrow keys
+  // keep working when focus was in the list.
+  const closeSub = () => {
+    setSub(null);
+    const el = menuRef.current;
+    if (el && document.activeElement !== el) el.focus({ preventScroll: true });
+  };
+
+  // Highlight a row. Any row but Settings closes the list.
+  const highlight = (i: number) => {
+    setActive(i);
+    if (sub && !items[i]?.submenu) closeSub();
+  };
 
   // Every item closes the menu first, then runs, the same order the
   // palette uses, so an action that moves focus wins over the menu.
+  // Settings opens its list instead.
   const pick = (item: Item | undefined) => {
     if (!item) return;
-    onClose();
+    if (!item.submenu) onClose();
     item.run();
+  };
+
+  const pickRow = (row: SettingsMenuRow) => {
+    onClose();
+    if (row.link === null) openHelpWindow();
+    else openSettingsTab(row.link);
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActive((i) => (i + 1) % items.length);
+      highlight((active + 1) % items.length);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setActive((i) => (i <= 0 ? items.length - 1 : i - 1));
+      highlight(active <= 0 ? items.length - 1 : active - 1);
     } else if (e.key === 'Home') {
       e.preventDefault();
-      setActive(0);
+      highlight(0);
     } else if (e.key === 'End') {
       e.preventDefault();
-      setActive(items.length - 1);
+      highlight(items.length - 1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      if (items[active]?.submenu) openSub(true);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      if (sub) closeSub();
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       pick(items[active]);
     } else if (e.key === 'Escape') {
+      // One level at a time: the list, then the menu.
       e.preventDefault();
       e.stopPropagation();
-      onClose();
+      if (sub) closeSub();
+      else onClose();
     } else if (e.key === 'Tab') {
       e.preventDefault();
     }
   };
 
+  // The Settings list, built like the pane menus' submenus. It opens
+  // right of the menu level with its row, flips left at the right edge
+  // and up at the bottom edge, and Esc or ArrowLeft steps back to the
+  // row. It draws apart from the menu, so its keys never reach the
+  // menu's own.
+  let list: ReactNode = null;
+  const row = sub ? settingsRowRef.current : null;
+  if (sub && row && menuRef.current) {
+    list = (
+      <MenuSurface
+        id={SETTINGS_LIST_ID}
+        label="Settings"
+        nested
+        autoFocus={sub.focus}
+        className="pane-menu-sub"
+        at={submenuAt(row.getBoundingClientRect(), menuRef.current.getBoundingClientRect())}
+        onClose={() => {
+          setActive(settingsAt);
+          closeSub();
+        }}
+      >
+        {SETTINGS_MENU.map((group, g) => (
+          <Fragment key={group[0].id}>
+            {g > 0 && <MenuSeparator />}
+            {group.map((entry) => (
+              <MenuItem
+                key={entry.id}
+                onSelect={() => pickRow(entry)}
+                trailing={
+                  entry.keys ? (
+                    <kbd className="ov-menu-keys">{shortcutLabel(entry.keys)}</kbd>
+                  ) : null
+                }
+              >
+                {entry.label}
+              </MenuItem>
+            ))}
+          </Fragment>
+        ))}
+      </MenuSurface>
+    );
+  }
+
   let index = -1;
   return (
-    <div
-      ref={menuRef}
-      className="ov-menu ov-terminal-menu"
-      role="menu"
-      aria-label="Terminal"
-      tabIndex={-1}
-      data-occludes-surface="true"
-      style={{ left: pos.x, top: pos.y }}
-      onKeyDown={onKeyDown}
-      onPointerLeave={() => setActive(-1)}
-      // Keep the window's click-to-type handler from pulling focus to
-      // the command line when you press the menu's padding.
-      onMouseUp={(e) => e.stopPropagation()}
-    >
-      {groups.map((group, g) => (
-        <div key={group[0].id} role="none" className="ov-menu-group">
-          {g > 0 && <div role="separator" className="ov-menu-sep" />}
-          {group.map((item) => {
-            index += 1;
-            const i = index;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                role="menuitem"
-                tabIndex={-1}
-                className={`ov-menu-item${i === active ? ' is-active' : ''}${
-                  item.danger ? ' is-danger' : ''
-                }`}
-                onPointerMove={() => {
-                  if (i !== active) setActive(i);
-                }}
-                onClick={() => pick(item)}
-              >
-                <span className="ov-menu-label">{item.label}</span>
-                {item.keys && <kbd className="ov-menu-keys">{shortcutLabel(item.keys)}</kbd>}
-              </button>
-            );
-          })}
-        </div>
-      ))}
-    </div>
+    <>
+      <div
+        ref={menuRef}
+        className="ov-menu ov-terminal-menu"
+        role="menu"
+        aria-label="Terminal"
+        tabIndex={-1}
+        data-occludes-surface="true"
+        style={{ left: pos.x, top: pos.y }}
+        onKeyDown={onKeyDown}
+        onPointerLeave={() => setActive(-1)}
+        // Keep the window's click-to-type handler from pulling focus to
+        // the command line when you press the menu's padding.
+        onMouseUp={(e) => e.stopPropagation()}
+      >
+        {groups.map((group, g) => (
+          <div key={group[0].id} role="none" className="ov-menu-group">
+            {g > 0 && <div role="separator" className="ov-menu-sep" />}
+            {group.map((item) => {
+              index += 1;
+              const i = index;
+              // Settings stays lit while its list is open.
+              const lit = i === active || (item.submenu === true && sub !== null);
+              return (
+                <button
+                  key={item.id}
+                  ref={item.submenu ? settingsRowRef : undefined}
+                  type="button"
+                  role="menuitem"
+                  tabIndex={-1}
+                  aria-haspopup={item.submenu ? 'menu' : undefined}
+                  aria-expanded={item.submenu ? sub !== null : undefined}
+                  aria-controls={item.submenu && sub ? SETTINGS_LIST_ID : undefined}
+                  className={`ov-menu-item${lit ? ' is-active' : ''}${
+                    item.danger ? ' is-danger' : ''
+                  }`}
+                  onPointerMove={() => {
+                    if (item.submenu) openSub(false);
+                    else if (i !== active || sub) highlight(i);
+                  }}
+                  onClick={() => pick(item)}
+                >
+                  <span className="ov-menu-label">{item.label}</span>
+                  {item.keys && <kbd className="ov-menu-keys">{shortcutLabel(item.keys)}</kbd>}
+                  {item.submenu && <ChevronRightIcon className="pane-menu-chevron" />}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      {list}
+    </>
   );
 }
