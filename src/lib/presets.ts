@@ -634,9 +634,11 @@ export const PRESETS: Preset[] = [
   // a look lists after its exits line, with the count of people from the
   // Room.Chars packet. Both room colors are base colors, which fill only
   // what the game left uncolored, so an aura, a red [AFK] or a trap's red
-  // + keeps its own color. WiZNET (act_wiz.c wiznet) only turns its tag
-  // bold magenta, the mockup's mauve, since the game sends it white and
-  // grey.
+  // + keeps its own color. WiZNET (act_wiz.c wiznet) turns its tag bold
+  // magenta, the mockup's mauve, where the game sends it white and grey.
+  // A highlight draws over the text it matches alone, so the time and the
+  // message after the tag keep the colors the game sent, such as the bold
+  // red of a corrupted pfile alert.
   {
     id: 'room_and_time',
     category: 'world',

@@ -266,10 +266,14 @@ fn line_triggers_still_see_every_line_of_a_look() {
     let shown = read(&mut p, &wire(&case.events));
     for event in &case.events {
         if let LookEvent::Line { line, .. } = event {
+            // The yellow opens on each line's text, after any codes the
+            // game sent ahead of it, a reset first where the game had set
+            // a color.
             let plain = vosh_ansi::plain_text(line.as_bytes());
             if !plain.is_empty() {
                 assert!(
-                    shown.contains(&format!("\x1b[33m{plain}\x1b[0m\r\n")),
+                    shown.contains(&format!("\x1b[33m{plain}"))
+                        || shown.contains(&format!("\x1b[0;33m{plain}")),
                     "{plain}"
                 );
             }
@@ -305,6 +309,10 @@ fn the_preset_colors_each_look_as_the_mockups_draw_it() {
     }
 }
 
+/// The `WiZNET` tag as `act_wiz.c` sends it after the bold white of its
+/// W, the grey i and then ZNET in bold white again.
+const WIZNET_TAG: &str = "W\x1b[0;1;30mi\x1b[0;1;37mZNET";
+
 #[test]
 fn the_preset_colors_each_line_it_names_and_leaves_every_near_miss_alone() {
     let lines = preset_lines();
@@ -320,16 +328,21 @@ fn the_preset_colors_each_line_it_names_and_leaves_every_near_miss_alone() {
                 assert_eq!(case.span.as_deref(), Some(plain.as_str()));
                 based(open_for("green"), &case.line)
             }
-            Some(trigger) => {
-                let span = case.span.as_deref().expect("a colored line names its span");
-                let open = match trigger {
-                    "time.of_day" => "\x1b[34m",
-                    "wiznet.tag" => "\x1b[1;35m",
-                    other => panic!("no preset trigger {other}"),
-                };
-                assert!(plain.starts_with(span), "{plain}");
-                format!("{open}{span}\x1b[0m{}", &plain[span.len()..])
+            // The game sends a time of day message with no codes, and the
+            // blue wraps it whole.
+            Some("time.of_day") => {
+                assert_eq!(case.span.as_deref(), Some(case.line.as_str()));
+                format!("\x1b[34m{}\x1b[0m", case.line)
             }
+            // The tag turns bold magenta whole, the grey i in it too, and
+            // the rest of the line keeps the codes the game sent, the
+            // colors of the message included.
+            Some("wiznet.tag") => {
+                assert_eq!(case.span.as_deref(), Some("WiZNET"));
+                assert!(case.line.contains(WIZNET_TAG), "{plain}");
+                case.line.replacen(WIZNET_TAG, "\x1b[0;1;35mWiZNET", 1)
+            }
+            Some(other) => panic!("no preset trigger {other}"),
         };
         assert_eq!(shown, format!("{want}\r\n"), "{plain}");
     }

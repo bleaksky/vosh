@@ -1,5 +1,5 @@
 {
-  "notes": "Hand written and synthetic, never captured. Lines the Aabahran server prints, built from its own format strings and area files, with the ANSI codes it sends. trigger names the Room and time colors trigger that colors the line, and match is the text its color covers. A line with no trigger is a near miss that no trigger of the preset may touch. Tolliver is an invented name. README.md has the details. Read by src/lib/presets.test.ts and src-tauri/src/session_room_tests.rs.",
+  "notes": "Hand written and synthetic, never captured. Lines the Aabahran server prints, built from its own format strings and area files, with the ANSI codes it sends. trigger names the Room and time colors trigger that colors the line, and match is the text its color covers. A line with no trigger is a near miss that no trigger of the preset may touch. Tolliver and Maren are invented names. README.md has the details. Read by src/lib/presets.test.ts, src-tauri/src/session_room_tests.rs and crates/trigger/src/engine.rs.",
   "lines": [
     {
       "line": "[Exits: north east south west]",
@@ -114,6 +114,24 @@
       "trigger": "wiznet.tag",
       "match": "WiZNET",
       "from": "act_wiz.c wiznet with $N has posted a note. from recycle.c"
+    },
+    {
+      "line": "\u001b[0;1;37mW\u001b[0;1;30mi\u001b[0;1;37mZNET\u001b[0;1;30m \u001b[0;0m08:20:01\u001b[0;1;30m: \u001b[0;0m\u001b[0;1;31mCorrupted Pfile detected: Tolliver\u001b[0;0m",
+      "trigger": "wiznet.tag",
+      "match": "WiZNET",
+      "from": "act_wiz.c wiznet with `!Corrupted Pfile detected: %s`` from comm.c, a message in bold red"
+    },
+    {
+      "line": "\u001b[0;1;37mW\u001b[0;1;30mi\u001b[0;1;37mZNET\u001b[0;1;30m \u001b[0;0m08:20:01\u001b[0;1;30m: \u001b[0;0m\u001b[0;1;37mTolliver attacked Maren at 5279\u001b[0;0m",
+      "trigger": "wiznet.tag",
+      "match": "WiZNET",
+      "from": "act_wiz.c wiznet with `&%s attacked %s at %d`` from m_yell in magic.c, a message in bold white"
+    },
+    {
+      "line": "\u001b[0;1;37mW\u001b[0;1;30mi\u001b[0;1;37mZNET\u001b[0;1;30m \u001b[0;0m08:20:01\u001b[0;1;30m: \u001b[0;0m\u001b[0;1;32mTolliver has been forced wizinvis for idling > 13 ticks.\u001b[0;0m",
+      "trigger": "wiznet.tag",
+      "match": "WiZNET",
+      "from": "act_wiz.c wiznet with `@%s has been forced wizinvis for idling > 13 ticks.`` from update.c, a message in bold green"
     },
     {
       "line": "Tolliver says '\u001b[0;1;33mThe day has begun.\u001b[0;0m'",

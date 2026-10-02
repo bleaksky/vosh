@@ -2,7 +2,7 @@
 //! display text plus any side effects.
 
 use regex::Regex;
-use vosh_ansi::plain_text;
+use vosh_ansi::{plain_text, PieceKind};
 
 use crate::action::{HighlightStyle, TriggerAction};
 use crate::store::{Trigger, TriggerStore, TriggerTarget};
@@ -64,7 +64,9 @@ pub struct ScriptInvocation {
 ///
 /// `original` is the raw bytes of the line as the server sent it, including
 /// any embedded ANSI escapes. The trigger engine matches against the plain
-/// text (escapes stripped) and rebuilds the display string from there.
+/// text (escapes stripped). A highlight draws its style over the text it
+/// matches and leaves the rest of the line as the game sent it, colors
+/// included. A Replace or a wash rebuilds the line from its plain text.
 ///
 /// Equivalent to `process_scoped(store, original, MatchScope::Line)`.
 pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
@@ -106,9 +108,8 @@ pub fn process_with_plain(
     // The SGR open of the first base style that matched, in priority
     // order. See [`HighlightStyle::base`].
     let mut base_open: Option<String> = None;
-    // A Replace or a highlight with a span of its own matched, so the
-    // line is rebuilt from its plain text.
-    let mut restyle = false;
+    // A Replace ran, so the line is rebuilt from its plain text.
+    let mut replaced = false;
 
     for compiled in store.iter_compiled() {
         if !compiled.trigger.enabled {
@@ -143,7 +144,7 @@ pub fn process_with_plain(
                     }
                     TriggerAction::Replace { template } => {
                         text = regex.replace_all(&text, template.as_str()).into_owned();
-                        restyle = true;
+                        replaced = true;
                     }
                     TriggerAction::Highlight { style } if style.base => {
                         let open = style.sgr_open();
@@ -154,7 +155,6 @@ pub fn process_with_plain(
                     TriggerAction::Highlight { style } => {
                         if !style.is_empty() {
                             highlights.push((regex.clone(), style.clone()));
-                            restyle = true;
                         }
                     }
                     TriggerAction::Send { template } => {
@@ -245,10 +245,17 @@ pub fn process_with_plain(
 
     let display = if !any_match {
         bytes_to_string_lossy(original)
-    } else if base_open.is_some() && !restyle {
-        // Only a base color changes how the line looks, so it keeps the
-        // codes the game sent.
-        bytes_to_string_lossy(original)
+    } else if !replaced && wash_open.is_none() {
+        // Each highlight draws over the text it matched, and the rest of
+        // the line keeps the codes the game sent. A line whose bytes do
+        // not spell `plain` is rebuilt from it instead.
+        let spans = highlight_spans(plain, &highlights);
+        if spans.is_empty() {
+            bytes_to_string_lossy(original)
+        } else {
+            highlight_in_place(original, plain, &spans)
+                .unwrap_or_else(|| paint_spans(plain, &spans, HighlightStyle::sgr_reset()))
+        }
     } else {
         // Apply highlights last on the (possibly replaced) text so colors
         // wrap whatever the user ends up seeing.
@@ -309,7 +316,17 @@ fn apply_highlights(
         Some(open) => format!("{}{open}", HighlightStyle::sgr_reset()),
         None => HighlightStyle::sgr_reset().to_string(),
     };
-    let mut spans: Vec<(usize, usize, String)> = Vec::new();
+    paint_spans(text, &highlight_spans(text, highlights), &close)
+}
+
+/// One highlight span: where it starts and ends in the text, and the SGR
+/// open of its style.
+type Span = (usize, usize, String);
+
+/// The spans `highlights` cover in `text`, in text order. Overlapping
+/// spans resolve first wins in trigger priority order.
+fn highlight_spans(text: &str, highlights: &[(Regex, HighlightStyle)]) -> Vec<Span> {
+    let mut spans: Vec<Span> = Vec::new();
     for (regex, style) in highlights {
         let open = style.sgr_open();
         if open.is_empty() {
@@ -329,17 +346,144 @@ fn apply_highlights(
         }
     }
     spans.sort_by_key(|&(start, _, _)| start);
+    spans
+}
+
+/// `text` with each span in its style, closed by `close`.
+fn paint_spans(text: &str, spans: &[Span], close: &str) -> String {
     let mut out = String::with_capacity(text.len() + spans.len() * 24);
     let mut last = 0;
     for (start, end, open) in spans {
-        out.push_str(&text[last..start]);
-        out.push_str(&open);
-        out.push_str(&text[start..end]);
-        out.push_str(&close);
-        last = end;
+        out.push_str(&text[last..*start]);
+        out.push_str(open);
+        out.push_str(&text[*start..*end]);
+        out.push_str(close);
+        last = *end;
     }
     out.push_str(&text[last..]);
     out
+}
+
+/// `original` with each span, at its place in `plain`, drawn in its style
+/// over the text it covers, and every byte outside the spans as the game
+/// sent it. The game's own SGR codes inside a span drop, so the span shows
+/// in its style alone, and after it the line goes on in the colors the
+/// game had set by then. A span on text the game left uncolored opens and
+/// closes exactly as on a plain line. None when the bytes do not spell
+/// `plain`, so the caller rebuilds the line from its plain text.
+fn highlight_in_place(original: &[u8], plain: &str, spans: &[Span]) -> Option<String> {
+    let pieces = vosh_ansi::pieces(original);
+    let mut out = String::with_capacity(original.len() + spans.len() * 24);
+    // The game's SGR codes in effect since its last reset.
+    let mut state: Vec<String> = Vec::new();
+    // The bytes of `original` before this are in `out` or dropped.
+    let mut copied = 0;
+    // Where the walk is in `plain`.
+    let mut at = 0;
+    // The end of the span drawing now.
+    let mut open: Option<usize> = None;
+    let mut spans = spans.iter().peekable();
+    for (i, piece) in pieces.iter().enumerate() {
+        match &piece.kind {
+            PieceKind::Text(c) => {
+                if !plain.get(at..)?.starts_with(*c) {
+                    return None;
+                }
+                if open.is_none() {
+                    if let Some((_, end, style)) = spans.next_if(|(start, ..)| *start == at) {
+                        out.push_str(&String::from_utf8_lossy(&original[copied..piece.raw.start]));
+                        if state.is_empty() {
+                            out.push_str(style);
+                        } else {
+                            // The game's attributes stop at the span.
+                            out.push_str("\x1b[0;");
+                            out.push_str(style.strip_prefix("\x1b[").unwrap_or(style));
+                        }
+                        open = Some(*end);
+                    }
+                }
+                at += c.len_utf8();
+                if let Some(end) = open {
+                    out.push(*c);
+                    copied = piece.raw.end;
+                    if end == at {
+                        open = None;
+                        // A reset the game sends next ends the span on
+                        // its own.
+                        let next_resets = matches!(
+                            pieces.get(i + 1).map(|p| &p.kind),
+                            Some(PieceKind::Sgr(params)) if resets(params)
+                        );
+                        if !next_resets {
+                            out.push_str(&restore(&state));
+                        }
+                    }
+                }
+            }
+            PieceKind::Sgr(params) => {
+                fold_sgr(&mut state, params);
+                if open.is_some() {
+                    copied = piece.raw.end;
+                }
+            }
+            PieceKind::Other => {
+                if open.is_some() {
+                    out.push_str(&String::from_utf8_lossy(&original[piece.raw.clone()]));
+                    copied = piece.raw.end;
+                }
+            }
+        }
+    }
+    if at != plain.len() {
+        return None;
+    }
+    out.push_str(&String::from_utf8_lossy(&original[copied..]));
+    Some(out)
+}
+
+/// Whether the SGR `params` open with a reset, `0` or no number at all.
+fn resets(params: &str) -> bool {
+    let first = params.split([';', ':']).next().unwrap_or("");
+    first.is_empty() || first.parse::<u32>() == Ok(0)
+}
+
+/// Fold the SGR `params` into `state`, the codes in effect since the
+/// last reset. A reset clears it, and every other code joins it, an
+/// extended color with its arguments, so the `0` in `48;5;0` never reads
+/// as a reset.
+fn fold_sgr(state: &mut Vec<String>, params: &str) {
+    let codes: Vec<&str> = params.split(';').collect();
+    let mut i = 0;
+    while i < codes.len() {
+        let code = codes[i];
+        let (head, inline) = match code.split_once(':') {
+            Some((head, _)) => (head, true),
+            None => (code, false),
+        };
+        if head.is_empty() || head.parse::<u32>() == Ok(0) {
+            state.clear();
+            i += 1;
+            continue;
+        }
+        let width = match (head, inline, codes.get(i + 1)) {
+            ("38" | "48" | "58", false, Some(&"5")) => 3,
+            ("38" | "48" | "58", false, Some(&"2")) => 5,
+            _ => 1,
+        };
+        let end = (i + width).min(codes.len());
+        state.extend(codes[i..end].iter().map(|c| (*c).to_string()));
+        i = end;
+    }
+}
+
+/// The SGR sequence that ends a span and puts back `state`, the game's
+/// codes in effect there.
+fn restore(state: &[String]) -> String {
+    if state.is_empty() {
+        HighlightStyle::sgr_reset().to_string()
+    } else {
+        format!("\x1b[0;{}m", state.join(";"))
+    }
 }
 
 /// `text` with `open`, a base color, at its start and again after each
@@ -768,11 +912,235 @@ mod tests {
     #[test]
     fn ansi_in_input_is_stripped_for_match() {
         let s = store(vec![highlight("tells", r"Bob tells you", NamedColor::Cyan)]);
-        // Server sends gray text. Trigger should still match.
+        // Server sends gray text. Trigger should still match, and the
+        // rest of the line stays gray.
         let r = process(&s, b"\x1b[37mBob tells you 'hi'\x1b[0m");
-        let text = r.display.unwrap();
-        assert!(text.contains("\x1b[36m"));
-        assert!(text.contains("Bob tells you"));
+        assert_eq!(
+            r.display.as_deref(),
+            Some("\x1b[37m\x1b[0;36mBob tells you\x1b[0;37m 'hi'\x1b[0m")
+        );
+    }
+
+    /// The `WiZNET` line `act_wiz.c` sends for `message`, the tag in `` `& ``
+    /// bold white and `` `8 `` grey, the time, and the message as its caller
+    /// wrote it.
+    fn wiznet(message: &str) -> String {
+        format!(
+            "\x1b[0;1;37mW\x1b[0;1;30mi\x1b[0;1;37mZNET\x1b[0;1;30m \x1b[0;0m08:20:01\
+             \x1b[0;1;30m: \x1b[0;0m{message}"
+        )
+    }
+
+    /// The tag of a `WiZNET` line in `open`, and the rest as the game sent
+    /// it.
+    fn wiznet_tagged(open: &str, message: &str) -> String {
+        format!(
+            "\x1b[0;1;37m{open}WiZNET\x1b[0;1;30m \x1b[0;0m08:20:01\x1b[0;1;30m: \
+             \x1b[0;0m{message}"
+        )
+    }
+
+    #[test]
+    fn a_highlight_keeps_the_colors_the_game_put_on_the_rest_of_the_line() {
+        let mut tag = highlight("wiznet.tag", r"^WiZNET\b", NamedColor::Magenta);
+        tag.actions = vec![TriggerAction::Highlight {
+            style: HighlightStyle {
+                fg: Some(NamedColor::Magenta),
+                bold: true,
+                ..Default::default()
+            },
+        }];
+        let s = store(vec![tag]);
+        // The game's grey i inside the tag drops, so the tag is magenta
+        // whole. Its reset right after the tag ends the span, and the
+        // message keeps its color: comm.c in `! bold red, magic.c in `&
+        // bold white, and update.c in `@ bold green.
+        for message in [
+            "\x1b[0;1;31mCorrupted Pfile detected: Tolliver\x1b[0;0m",
+            "\x1b[0;1;37mTolliver attacked Maren at 5279\x1b[0;0m",
+            "\x1b[0;1;32mTolliver has been forced wizinvis for idling > 13 ticks.\x1b[0;0m",
+            "TICK!",
+        ] {
+            assert_eq!(
+                process(&s, wiznet(message).as_bytes()).display,
+                Some(wiznet_tagged("\x1b[0;1;35m", message)),
+                "{message}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_span_on_uncolored_text_opens_and_closes_as_on_a_plain_line() {
+        // char_to_char for a resting player who is away, the AFK in `1
+        // red. After the game's reset the name is uncolored, so the span
+        // opens and closes as it would on a plain line.
+        let s = store(vec![highlight("name", "Tolliver", NamedColor::Cyan)]);
+        let line = "[\x1b[0;31mAFK\x1b[0;0m] Tolliver is resting here.";
+        assert_eq!(
+            process(&s, line.as_bytes()).display.as_deref(),
+            Some("[\x1b[0;31mAFK\x1b[0;0m] \x1b[36mTolliver\x1b[0m is resting here.")
+        );
+    }
+
+    #[test]
+    fn the_game_color_comes_back_after_a_span_inside_it() {
+        // A say in `# bold yellow, quoting a time of day message.
+        let s = store(vec![highlight("day", "day", NamedColor::Cyan)]);
+        let line = "Tolliver says '\x1b[0;1;33mThe day has begun.\x1b[0;0m'";
+        assert_eq!(
+            process(&s, line.as_bytes()).display.as_deref(),
+            Some(
+                "Tolliver says '\x1b[0;1;33mThe \x1b[0;36mday\x1b[0;1;33m has begun.\
+                 \x1b[0;0m'"
+            )
+        );
+    }
+
+    #[test]
+    fn the_game_codes_fold_into_what_a_span_puts_back() {
+        let folded = |sequences: &[&str]| {
+            let mut state = Vec::new();
+            for params in sequences {
+                fold_sgr(&mut state, params);
+            }
+            restore(&state)
+        };
+        assert_eq!(folded(&[]), "\x1b[0m");
+        assert_eq!(folded(&["0;1;31", "0;0"]), "\x1b[0m");
+        assert_eq!(folded(&["0;1;31"]), "\x1b[0;1;31m");
+        assert_eq!(folded(&["1", "4", "0;33"]), "\x1b[0;33m");
+        // The 0 in an extended color is an argument, never a reset.
+        assert_eq!(
+            folded(&["38;5;208;48;5;0", "1"]),
+            "\x1b[0;38;5;208;48;5;0;1m"
+        );
+        assert_eq!(folded(&["48;2;0;0;0", "4:3"]), "\x1b[0;48;2;0;0;0;4:3m");
+        assert!(resets("0;1;30"));
+        assert!(resets("0"));
+        assert!(!resets("1;30"));
+        assert!(!resets("38;5;0"));
+    }
+
+    #[test]
+    fn a_trigger_that_draws_nothing_keeps_the_line_as_sent() {
+        let s = store(vec![Trigger {
+            name: "away".into(),
+            patterns: single_pattern(r"^\[AFK\] (\w+) is resting here\.$"),
+            priority: 0,
+            enabled: true,
+            actions: vec![
+                TriggerAction::Send {
+                    template: "wake $1".into(),
+                },
+                TriggerAction::Route {
+                    pane: "group".into(),
+                },
+            ],
+            preset: None,
+            group: None,
+            target: TriggerTarget::Line,
+        }]);
+        let line = "[\x1b[0;31mAFK\x1b[0;0m] Tolliver is resting here.";
+        let r = process(&s, line.as_bytes());
+        assert_eq!(r.display.as_deref(), Some(line));
+        assert_eq!(r.sends, ["wake Tolliver"]);
+    }
+
+    #[test]
+    fn a_replace_or_a_wash_still_rebuilds_the_line_from_its_text() {
+        let line = b"Tolliver says '\x1b[0;1;33mThe day has begun.\x1b[0;0m'";
+        let mut rename = highlight("rename", "Tolliver", NamedColor::Cyan);
+        rename.actions = vec![TriggerAction::Replace {
+            template: "Maren".into(),
+        }];
+        assert_eq!(
+            process(&store(vec![rename]), line).display.as_deref(),
+            Some("Maren says 'The day has begun.'")
+        );
+        let mut wash = highlight("wash", "says", NamedColor::Red);
+        wash.actions = vec![TriggerAction::Highlight {
+            style: HighlightStyle {
+                fg: Some(NamedColor::Red),
+                wash: true,
+                ..Default::default()
+            },
+        }];
+        let washed = process(&store(vec![wash]), line).display.unwrap();
+        assert!(!washed.contains("\x1b[0;1;33m"), "{washed:?}");
+    }
+
+    #[test]
+    fn a_line_whose_bytes_do_not_spell_its_plain_text_is_rebuilt() {
+        let s = store(vec![highlight("name", "Tolliver", NamedColor::Cyan)]);
+        let r = process_with_plain(
+            &s,
+            b"\x1b[0;32mMaren\x1b[0;0m",
+            "Tolliver",
+            MatchScope::Line,
+        );
+        assert_eq!(r.display.as_deref(), Some("\x1b[36mTolliver\x1b[0m"));
+    }
+
+    #[test]
+    fn a_base_color_fills_around_a_span_kept_in_place() {
+        let mut name = highlight("name", "Tolliver", NamedColor::Cyan);
+        name.priority = 5;
+        let s = store(vec![base("room", "^.+$", NamedColor::Yellow, 4), name]);
+        let line = "[\x1b[0;31mAFK\x1b[0;0m] Tolliver is resting here.";
+        assert_eq!(
+            process(&s, line.as_bytes()).display.as_deref(),
+            Some(
+                "\x1b[33m[\x1b[0;31mAFK\x1b[0;0m\x1b[33m] \x1b[36mTolliver\x1b[0m\x1b[33m \
+                 is resting here.\x1b[0m"
+            )
+        );
+    }
+
+    #[test]
+    fn a_highlight_in_place_never_changes_the_text_a_line_shows() {
+        // Every line of the room colors fixtures, game text with the codes
+        // the server sends, with each of its words highlighted in turn.
+        let mut lines: Vec<String> = Vec::new();
+        for text in [
+            include_str!("../../../fixtures/room-colors/lines.json"),
+            include_str!("../../../fixtures/room-colors/looks.json"),
+        ] {
+            let json: serde_json::Value = serde_json::from_str(text).unwrap();
+            let mut stack = vec![json];
+            while let Some(value) = stack.pop() {
+                match value {
+                    serde_json::Value::Object(map) => {
+                        if let Some(serde_json::Value::String(line)) = map.get("line") {
+                            lines.push(line.clone());
+                        }
+                        stack.extend(map.into_iter().map(|(_, v)| v));
+                    }
+                    serde_json::Value::Array(list) => stack.extend(list),
+                    _ => {}
+                }
+            }
+        }
+        assert!(lines.len() > 40, "{}", lines.len());
+        let word = Regex::new(r"\w+").unwrap();
+        let cyan = HighlightStyle {
+            fg: Some(NamedColor::Cyan),
+            ..Default::default()
+        };
+        let mut drawn = 0;
+        for line in &lines {
+            let plain = plain_text(line.as_bytes());
+            for found in word.find_iter(&plain) {
+                let pattern = Regex::new(&format!(r"\b{}\b", regex::escape(found.as_str())))
+                    .expect("a word pattern compiles");
+                let spans = highlight_spans(&plain, &[(pattern, cyan.clone())]);
+                let shown = highlight_in_place(line.as_bytes(), &plain, &spans)
+                    .unwrap_or_else(|| panic!("{line:?} draws in place"));
+                assert_eq!(plain_text(shown.as_bytes()), plain, "{line:?} {found:?}");
+                assert!(shown.contains("36m"), "{line:?} {found:?}");
+                drawn += 1;
+            }
+        }
+        assert!(drawn > 300, "{drawn}");
     }
 
     #[test]
