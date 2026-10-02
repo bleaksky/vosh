@@ -902,7 +902,7 @@ Work.
 5. Move the World.Time tick reading into tick.rs and the Room.Chars parsing into `input/target.rs`. One tick settings shape replaces three, with the same keys on disk and in the payload.
 6. Split input.rs into `input/` and add InputResult constructors in place of 25 hand built literals.
 7. `spawn` takes the known host flag from its caller, which deletes the Forsaken Lands test port seam.
-8. Rename for clarity. `timers` becomes `lua_timers`, `TICK_EMIT_INTERVAL` becomes `POLL_INTERVAL`, and the spec numbers in comments become plain reasons.
+8. Rename for clarity. `timers` becomes `lua_timers`, `TICK_EMIT_INTERVAL` becomes `POLL_INTERVAL`, and the spec numbers in comments become plain reasons. The app takes up D25. `prompt_supplies` becomes `client_values`, and the `vosh` locals that hold what it returns, in the session and in the prompt logic R10 moved out of prompt_commands.rs, become `client`, as they did in the prompt crate in R9.
 
 Checks. The digests and the three stored fixtures pass without being written again. The fake MUD tests, latency tests and the perf set.
 
