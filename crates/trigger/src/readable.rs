@@ -463,6 +463,12 @@ pub fn lift_sgr(text: &str, ground: Rgb) -> Cow<'_, str> {
         if end >= bytes.len() {
             break;
         }
+        // A final byte past ASCII ends nothing a terminal reads as SGR, and
+        // stepping one byte past it would land inside the character.
+        if !bytes[end].is_ascii() {
+            from = end;
+            continue;
+        }
         let params = &text[start + 2..params_end];
         let plain_sgr = bytes[end] == b'm'
             && params_end == end
@@ -797,6 +803,19 @@ mod tests {
         assert_eq!(
             lift_sgr(line, VELLUM),
             format!("\x1b[38;2;{r};{g};{b}mrain\x1b[0m \x1b[48;2;255;255;255msun")
+        );
+    }
+
+    #[test]
+    fn a_sequence_ending_past_ascii_passes_through() {
+        // No terminal reads this as SGR. The scan steps over it whole and
+        // still lifts the color after it.
+        assert_eq!(lift_sgr("\x1b[1\u{e9}x", VELLUM), "\x1b[1\u{e9}x");
+        assert_eq!(lift_sgr("\x1b[1;2 \u{e9}x", VELLUM), "\x1b[1;2 \u{e9}x");
+        let (r, g, b) = lift_to_contrast(WEATHER, VELLUM);
+        assert_eq!(
+            lift_sgr("\x1b[1\u{e9}\x1b[38;2;143;167;217mrain", VELLUM),
+            format!("\x1b[1\u{e9}\x1b[38;2;{r};{g};{b}mrain")
         );
     }
 
