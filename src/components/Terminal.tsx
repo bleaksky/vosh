@@ -28,6 +28,7 @@ import { ansi16Of, xtermThemeFor } from '../lib/terminalTheme';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
 import { OutputShaper } from '../lib/outputShaper';
 import { RegionWriter } from '../lib/terminalRegion';
+import { remeasureWhenLoaded } from '../lib/terminalFont';
 import {
   cellInGrid,
   regionFromCursor,
@@ -318,6 +319,9 @@ export function Terminal({
   const relayoutRef = useRef<(() => void) | null>(null);
   // Fits xterm to its pane less the lent rows. Set by the setup effect.
   const fitKeptRef = useRef<(() => void) | null>(null);
+  // Fits the pane to a cell measured again and reports it. Set by the
+  // setup effect.
+  const refitCellRef = useRef<(() => void) | null>(null);
   // The band layer, while this pane can draw bands.
   const bandsRef = useRef<BandLayer | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -773,6 +777,15 @@ export function Terminal({
     } else {
       intervalPoll = setInterval(sync, 250);
     }
+
+    // Fits the pane to a cell xterm measured again once a face loaded, and
+    // reports the cell. Under the native surface the fit waits for the
+    // grid, which hears the new cell.
+    refitCellRef.current = () => {
+      safeFit();
+      reportCellMetrics();
+      reportCellSize();
+    };
 
     // Underlay input. The webview sits above the surface and receives every
     // pointer event over the pane, so forward them to the native grid in
@@ -1457,6 +1470,7 @@ export function Terminal({
       termRef.current = null;
       fitRef.current = null;
       fitKeptRef.current = null;
+      refitCellRef.current = null;
       relayoutRef.current = null;
     };
     // Setup runs exactly once. Font is read from props on initial mount;
@@ -1497,6 +1511,11 @@ export function Terminal({
         size: Math.round(fontSize),
       }).catch(() => {});
     }
+    // xterm just measured its cell on the faces that had loaded, and a
+    // face the page mints for this list loads later. Measure again once
+    // the face the list draws with has loaded (src/lib/terminalFont.ts).
+    if (typeof document === 'undefined' || !document.fonts) return;
+    return remeasureWhenLoaded(document.fonts, term, () => refitCellRef.current?.());
   }, [fontFamily, fontSize]);
 
   // Apply a line height change without rebuilding the terminal. xterm
