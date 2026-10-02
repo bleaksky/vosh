@@ -690,21 +690,6 @@ pub(crate) async fn session_connect(
     Ok(())
 }
 
-#[tauri::command]
-pub(crate) async fn session_send(
-    state: State<'_, SharedState>,
-    bytes: Vec<u8>,
-) -> Result<(), String> {
-    let current = state.session.lock().await;
-    let Some(handle) = current.as_ref() else {
-        return Err("not connected".to_string());
-    };
-    if !handle.send(bytes) {
-        return Err("session task gone".to_string());
-    }
-    Ok(())
-}
-
 /// global.toml as a switch reads it, for `#profile reset` and `#profile
 /// load` to lay back over the config they swap in. Holds the persist
 /// lock for the read, so a save cannot move the file aside midway. None
