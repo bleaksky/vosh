@@ -55,6 +55,8 @@ Features that landed before stage B. These landed on `one-window` after R6, in t
 - The Rust 1.99.0 pin in rust-toolchain.toml.
 - Smaller work, such as the affects thresholds, the Draining chips style, Settings in the terminal menu and the history drag through the split.
 
+R16 places four page files Part 2 does not name. `src/lib/blink.ts` and `src/lib/xtermBlink.ts` came with blinking text and `src/lib/readableGrounds.test.ts` with readable highlight colors. `src/lib/fontLoader.ts` is older, but it now holds the page side of the font stacks twin.
+
 The trigger engine reads `pieces` in `crates/ansi`, and the readable.rs tests read the SGR model there, so the ansi row in 3.7 and R7 item 3 no longer hold as written. R7 keeps `plain_text` and `pieces` and puts the SGR model behind a vosh-ansi `testkit` feature that the vosh-trigger tests turn on.
 
 ## Decisions taken
