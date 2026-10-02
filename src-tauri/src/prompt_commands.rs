@@ -820,7 +820,7 @@ mod tests {
         let mut seventh = ProfileConfig::default();
         seventh.set_prompt(PromptConfig::from_legacy(
             false,
-            vosh_prompt::card::presets::RETIRED_DEFAULTS[0],
+            vosh_prompt::config::RETIRED_DEFAULTS[0],
         ));
         seventh.save(&set.profile_path("Seventh")).unwrap();
         let mut active = ProfileConfig::default();

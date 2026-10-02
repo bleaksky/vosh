@@ -4534,7 +4534,7 @@ mod prompt_tests {
     fn a_file_with_an_old_default_design_loads_todays() {
         let dir = tempfile::tempdir().unwrap();
         let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
-        for old in vosh_prompt::card::presets::RETIRED_DEFAULTS {
+        for old in vosh_prompt::config::RETIRED_DEFAULTS {
             // As a fresh profile saved it, drawing off.
             let mut file = ProfileConfig::from_toml(&older_file()).unwrap();
             file.set_prompt(PromptConfig {

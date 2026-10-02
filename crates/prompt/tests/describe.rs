@@ -5,7 +5,7 @@
 
 use vosh_prompt::card::describe::{describe, forms, PieceView, TokenKindName};
 use vosh_prompt::card::edit::{ColorChoice, FormatName, StyleChoice, When};
-use vosh_prompt::card::presets::DEFAULT_DESIGN;
+use vosh_prompt::config::DEFAULT_DESIGN;
 use vosh_prompt::design::PieceKind;
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
 use vosh_prompt::testkit::now;

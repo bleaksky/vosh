@@ -4,7 +4,8 @@
 //! no Tauri, so each one is testable on its own. The session task feeds it
 //! and emits what it returns.
 //!
-//! - [`config`] is the `[prompt]` table of a profile file.
+//! - [`config`] is the `[prompt]` table of a profile file, with the
+//!   default design a fresh table takes.
 //! - [`engine`] is the live profile's custom prompt, its table and the
 //!   session's variables together.
 //! - [`capture`] reads patterns you point at, and the capture triggers
@@ -59,8 +60,7 @@ pub mod testkit;
 pub mod values;
 pub mod wrap;
 
-pub use card::presets::DEFAULT_DESIGN;
-pub use config::{CaptureConfig, PromptConfig, PromptShow};
+pub use config::{CaptureConfig, PromptConfig, PromptShow, DEFAULT_DESIGN};
 pub use design::{FieldRef, Template};
 pub use engine::{GamePromptSeen, PromptEngine, Status};
 pub use render::{render, render_str, RenderOptions, Rendered, Span, Values};
