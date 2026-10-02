@@ -488,6 +488,29 @@ mod tests {
     }
 
     #[test]
+    fn ttype_slot0_carries_the_workspace_version() {
+        // MTTS reads the client version from slot 0. The constant takes it
+        // from this crate's own version, so read the root manifest to catch
+        // the day the crate stops inheriting the workspace version.
+        let manifest =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.toml"))
+                .expect("read the workspace Cargo.toml");
+        let version = manifest
+            .lines()
+            .skip_while(|line| line.trim() != "[workspace.package]")
+            .skip(1)
+            .take_while(|line| !line.trim_start().starts_with('['))
+            .filter_map(|line| line.split_once('='))
+            .find(|(key, _)| key.trim() == "version")
+            .map(|(_, value)| value.trim().trim_matches('"'))
+            .expect("[workspace.package] sets version");
+        assert_eq!(
+            DEFAULT_TERMINAL_TYPE,
+            format!("VOSH-xterm-256color {version}")
+        );
+    }
+
+    #[test]
     fn mtts_bits_include_ansi_utf8_256_truecolor() {
         // If anyone changes the constant, the assertion documents which
         // capability bits Vosh actually claims so the change is deliberate.
