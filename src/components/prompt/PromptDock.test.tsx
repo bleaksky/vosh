@@ -295,7 +295,7 @@ describe('a pointer on the pinned band', () => {
 
 describe('cells and colors on the band', () => {
   it('reads every SGR attribute a prompt can carry', () => {
-    const [row] = parseSgrCells('\x1b[1;2;3;4:3;9;7;8;38;5;208;48;2;1;2;3;58:2::9:8:7mx\x1b[0my');
+    const [row] = parseSgrCells('\x1b[1;2;3;4:3;5;9;7;8;38;5;208;48;2;1;2;3;58:2::9:8:7mx\x1b[0my');
     expect(row[0].attrs).toEqual({
       fg: { kind: 'indexed', n: 208 },
       bg: { kind: 'rgb', r: 1, g: 2, b: 3 },
@@ -307,8 +307,13 @@ describe('cells and colors on the band', () => {
       strike: true,
       inverse: true,
       hidden: true,
+      blink: true,
     });
     expect(row[1].attrs).toEqual(PLAIN);
+    // The rapid 6 draws steady, as xterm draws it, 25 ends a blink, and
+    // a 5 a color takes is the color's.
+    const [more] = parseSgrCells('\x1b[6ma\x1b[5mb\x1b[25mc\x1b[38;5;5md');
+    expect(more.map((cell) => cell.attrs.blink)).toEqual([false, true, false, false]);
   });
 
   it('counts a wide character as two columns and a trailing space as none', () => {
@@ -375,6 +380,49 @@ describe('cells and colors on the band', () => {
     expect(lines[1]).toContain('text-decoration-line:line-through;');
     expect(lines[1]).toContain('text-decoration-style:solid;');
     expect(lines[1]).toContain(`text-decoration-color:${NORD.fg}`);
+  });
+
+  it('blinks with the text, keeping only its ground through the hidden half', () => {
+    vi.useFakeTimers();
+    try {
+      const pin = '\x1b[5;4;9;44mHP\x1b[0m ok';
+      const at = (now: number, blinkText: boolean, text = pin) => {
+        vi.setSystemTime(now);
+        return renderToStaticMarkup(
+          <PinnedBand
+            state={pinned}
+            pin={text}
+            cell={CELL}
+            fontSize={13}
+            env={NORD}
+            blinkText={blinkText}
+          />,
+        );
+      };
+      const glyphs = (html: string) =>
+        [...html.matchAll(/class="prompt-band-glyph" style="[^"]*">([^<]*)</g)].map((m) => m[1]);
+      const lines = (html: string) =>
+        [...html.matchAll(/text-decoration-line:([a-z-]+)/g)].map((m) => m[1]);
+      // The shown half, 100 ms into a cycle, draws it all.
+      const shown = at(100, true);
+      expect(glyphs(shown)).toEqual(['H', 'P', 'o', 'k']);
+      expect(lines(shown)).toEqual(['underline', 'line-through']);
+      // The hidden half, 700 ms in, keeps the ground and drops the
+      // letters and both lines, as xterm does. The steady text stays.
+      const hidden = at(700, true);
+      expect(glyphs(hidden)).toEqual(['o', 'k']);
+      expect(lines(hidden)).toEqual([]);
+      expect(hidden).toContain('prompt-band-ground');
+      // Blinking text off, it draws steady in either half.
+      expect(at(700, false)).toBe(shown);
+      // A blinking blank that is underlined flips too, since its hidden
+      // half drops the line.
+      const blank = '\x1b[5;4m \x1b[0m ok';
+      expect(lines(at(100, true, blank))).toEqual(['underline']);
+      expect(lines(at(700, true, blank))).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('swaps the colors of an inverse cell and draws its ground over the band', () => {

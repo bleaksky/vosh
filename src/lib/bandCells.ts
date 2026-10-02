@@ -30,6 +30,9 @@ export interface BandCellLook {
   /** A strikethrough, which every renderer draws as one straight line in
    *  the text color, whatever the underline's kind and color. */
   strike: boolean;
+  /** SGR 5. The pinned band hides the glyph and both lines in the
+   *  hidden half, as xterm and the native grid do. */
+  blink: boolean;
 }
 
 /** A CSS text-decoration-style an underline draws in. */
@@ -148,6 +151,7 @@ export function resolveCell(attrs: CellAttrs, env: BandEnv): BandCellLook {
           }
         : null,
     strike: attrs.strike,
+    blink: attrs.blink,
   };
 }
 

@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BLINK_MS,
   blinkShown,
+  onBlinkFlips,
   REDUCE_MOTION_QUERY,
   resolveBlinkText,
   subscribeReduceMotion,
@@ -25,6 +26,39 @@ describe('the blink clock', () => {
     expect(untilBlinkShows(100)).toBe(1100);
     expect(untilBlinkShows(700)).toBe(500);
     expect(untilBlinkShows(1200)).toBe(1200);
+  });
+});
+
+describe('the flips a drawer waits for', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('runs no timer while nothing blinks', () => {
+    vi.useFakeTimers();
+    const ticks: boolean[] = [];
+    const stop = onBlinkFlips(false, (shown) => ticks.push(shown));
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(10_000);
+    expect(ticks).toEqual([]);
+    stop();
+  });
+
+  it('flips with the clock while text blinks, and stops when told', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(5 * 2 * BLINK_MS + 100);
+    const ticks: boolean[] = [];
+    const stop = onBlinkFlips(true, (shown) => ticks.push(shown));
+    expect(ticks).toEqual([true]);
+    // The flip comes 500 ms on, and the timer lands just past it.
+    vi.advanceTimersByTime(499);
+    expect(ticks).toEqual([true]);
+    vi.advanceTimersByTime(3);
+    expect(ticks).toEqual([true, false]);
+    vi.advanceTimersByTime(BLINK_MS);
+    expect(ticks).toEqual([true, false, true]);
+    stop();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

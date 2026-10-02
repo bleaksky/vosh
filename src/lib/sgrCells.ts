@@ -26,6 +26,8 @@ export interface CellAttrs {
   strike: boolean;
   inverse: boolean;
   hidden: boolean;
+  /** SGR 5. The rapid blink of SGR 6 draws steady, as xterm draws it. */
+  blink: boolean;
 }
 
 export interface Cell {
@@ -47,6 +49,7 @@ export const PLAIN: Readonly<CellAttrs> = Object.freeze({
   strike: false,
   inverse: false,
   hidden: false,
+  blink: false,
 });
 
 /** True for a character that takes two columns: CJK, Hangul, fullwidth
@@ -131,6 +134,9 @@ export function applySgr(prev: CellAttrs, params: number[], sub: number[][]): Ce
         a.underline = (style >= 0 && style <= 5 ? style : 1) as UnderlineStyle;
         break;
       }
+      case p === 5:
+        a.blink = true;
+        break;
       case p === 7:
         a.inverse = true;
         break;
@@ -152,6 +158,9 @@ export function applySgr(prev: CellAttrs, params: number[], sub: number[][]): Ce
         break;
       case p === 24:
         a.underline = 0;
+        break;
+      case p === 25:
+        a.blink = false;
         break;
       case p === 27:
         a.inverse = false;
