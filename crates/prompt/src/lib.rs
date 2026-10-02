@@ -47,10 +47,7 @@ pub mod describe;
 pub mod design;
 pub mod edit;
 pub mod engine;
-pub mod format;
 pub mod generic;
-pub mod gmcp;
-pub mod overrides;
 pub mod presets;
 pub mod render;
 pub mod report;
@@ -58,16 +55,21 @@ pub mod stage;
 pub mod state;
 #[cfg(feature = "testkit")]
 pub mod testkit;
-pub mod vars;
+pub mod values;
 pub mod wrap;
 
 pub use config::{CaptureConfig, PromptConfig, PromptShow};
 pub use design::{FieldRef, Template};
 pub use engine::{GamePromptSeen, PromptEngine, Status};
-pub use format::{Resolved, Value};
 pub use presets::DEFAULT_DESIGN;
 pub use render::{render, render_str, RenderOptions, Rendered, Span, Values};
-pub use vars::{Capture, Vosh};
+pub use values::format::{Resolved, Value};
+pub use values::{Capture, Vosh};
+
+// The old names of `values` and the modules it now holds, so their
+// callers keep compiling until their imports move to the new paths.
+pub use values as vars;
+pub use values::{format, gmcp, overrides};
 
 // The tests in `tests/` import these from the root.
 #[cfg(feature = "testkit")]
@@ -75,4 +77,4 @@ pub use render::SpanColor;
 #[cfg(feature = "testkit")]
 pub use testkit::map_values::MapValues;
 #[cfg(feature = "testkit")]
-pub use vars::Vars;
+pub use values::Vars;
