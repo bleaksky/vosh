@@ -8,9 +8,10 @@ use std::collections::BTreeMap;
 
 use common::{capture, draw, draw_with, feed, num, packet, resolve, text, vosh};
 use serde_json::json;
+use vosh_prompt::aabahran::codes::Position;
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
 use vosh_prompt::testkit::now;
-use vosh_prompt::values::format::{tank_bar_cells, Position};
+use vosh_prompt::values::format::tank_bar_cells;
 use vosh_prompt::values::{is_sourced, known, Tick, CATALOG};
 use vosh_prompt::{
     render_str, FieldRef, MapValues, RenderOptions, Resolved, Value, Values, Vars, Vosh,

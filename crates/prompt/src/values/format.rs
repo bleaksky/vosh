@@ -11,7 +11,7 @@
 
 use chrono::{Datelike, NaiveDateTime, Timelike};
 
-use crate::aabahran::codes::PHASES;
+use crate::aabahran::codes::{Position, PHASES};
 use crate::design::Format;
 
 /// What a resolver knows about a field right now.
@@ -29,86 +29,6 @@ pub enum Resolved {
     /// The name is in no catalog and no script set it. The token prints as
     /// written so a typo stays visible.
     Unknown,
-}
-
-/// A position, as Char.State names it and `%S` abbreviates it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Position {
-    Dead,
-    MortallyWounded,
-    Incapacitated,
-    Stunned,
-    Meditate,
-    Sleeping,
-    Resting,
-    Sitting,
-    Fighting,
-    Standing,
-}
-
-impl Position {
-    pub const ALL: [Position; 10] = [
-        Position::Dead,
-        Position::MortallyWounded,
-        Position::Incapacitated,
-        Position::Stunned,
-        Position::Meditate,
-        Position::Sleeping,
-        Position::Resting,
-        Position::Sitting,
-        Position::Fighting,
-        Position::Standing,
-    ];
-
-    /// The game's word, as Char.State sends it.
-    pub fn word(self) -> &'static str {
-        match self {
-            Position::Dead => "dead",
-            Position::MortallyWounded => "mortally wounded",
-            Position::Incapacitated => "incapacitated",
-            Position::Stunned => "stunned",
-            Position::Meditate => "meditate",
-            Position::Sleeping => "sleeping",
-            Position::Resting => "resting",
-            Position::Sitting => "sitting",
-            Position::Fighting => "fighting",
-            Position::Standing => "standing",
-        }
-    }
-
-    /// What `%S` prints. Nothing while you meditate.
-    pub fn abbrev(self) -> &'static str {
-        match self {
-            Position::Dead => "dea",
-            Position::MortallyWounded => "mor",
-            Position::Incapacitated => "inc",
-            Position::Stunned => "stn",
-            Position::Meditate => "",
-            Position::Sleeping => "slp",
-            Position::Resting => "rst",
-            Position::Sitting => "sit",
-            Position::Fighting => "fgt",
-            Position::Standing => "std",
-        }
-    }
-
-    /// Vosh's three letters, what `%S` prints and `med` while you
-    /// meditate, where `%S` prints nothing.
-    pub fn short(self) -> &'static str {
-        match self {
-            Position::Meditate => "med",
-            p => p.abbrev(),
-        }
-    }
-
-    pub fn from_word(word: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|p| p.word() == word)
-    }
-
-    /// The position `%S` printed. The empty string is meditate.
-    pub fn from_abbrev(abbrev: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|p| p.abbrev() == abbrev)
-    }
 }
 
 /// The phase as a word, for the `word` format.

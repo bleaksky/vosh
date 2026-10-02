@@ -112,11 +112,87 @@ pub const REGIONS: [&str; 8] = [
     "Mountain East",
 ];
 
-/// `pos_abbrev` for `%S` (`comm.c:1904-1907`), with meditate printing
-/// nothing.
-pub const POSITIONS: [&str; 9] = [
-    "dea", "mor", "inc", "stn", "slp", "rst", "sit", "fgt", "std",
-];
+/// A position, as Char.State names it and `%S` abbreviates it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Position {
+    Dead,
+    MortallyWounded,
+    Incapacitated,
+    Stunned,
+    Meditate,
+    Sleeping,
+    Resting,
+    Sitting,
+    Fighting,
+    Standing,
+}
+
+impl Position {
+    pub const ALL: [Position; 10] = [
+        Position::Dead,
+        Position::MortallyWounded,
+        Position::Incapacitated,
+        Position::Stunned,
+        Position::Meditate,
+        Position::Sleeping,
+        Position::Resting,
+        Position::Sitting,
+        Position::Fighting,
+        Position::Standing,
+    ];
+
+    /// The game's word, as Char.State sends it (`position_table`,
+    /// `tables.c:780-791`).
+    pub fn word(self) -> &'static str {
+        match self {
+            Position::Dead => "dead",
+            Position::MortallyWounded => "mortally wounded",
+            Position::Incapacitated => "incapacitated",
+            Position::Stunned => "stunned",
+            Position::Meditate => "meditate",
+            Position::Sleeping => "sleeping",
+            Position::Resting => "resting",
+            Position::Sitting => "sitting",
+            Position::Fighting => "fighting",
+            Position::Standing => "standing",
+        }
+    }
+
+    /// What `%S` prints, `pos_abbrev` in `comm.c:1904-1907`. Nothing
+    /// while you meditate.
+    pub fn abbrev(self) -> &'static str {
+        match self {
+            Position::Dead => "dea",
+            Position::MortallyWounded => "mor",
+            Position::Incapacitated => "inc",
+            Position::Stunned => "stn",
+            Position::Meditate => "",
+            Position::Sleeping => "slp",
+            Position::Resting => "rst",
+            Position::Sitting => "sit",
+            Position::Fighting => "fgt",
+            Position::Standing => "std",
+        }
+    }
+
+    /// Vosh's three letters, what `%S` prints and `med` while you
+    /// meditate, where `%S` prints nothing.
+    pub fn short(self) -> &'static str {
+        match self {
+            Position::Meditate => "med",
+            p => p.abbrev(),
+        }
+    }
+
+    pub fn from_word(word: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.word() == word)
+    }
+
+    /// The position `%S` printed. The empty string is meditate.
+    pub fn from_abbrev(abbrev: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.abbrev() == abbrev)
+    }
+}
 
 /// The three letter phases `%j` prints, and `-` for a moon that is not
 /// up (`comm.c:1851-1868`).
@@ -303,7 +379,15 @@ impl Code {
             Self::Weather => Pattern::words(&SKY),
             Self::Region => Pattern::words(&REGIONS),
             Self::Lang => Pattern::inner("[A-Za-z']+"),
-            Self::Pos => Pattern::inner(format!("(?:{})?", POSITIONS.join("|"))),
+            // Meditate prints nothing, which the closing `?` reads.
+            Self::Pos => {
+                let abbrevs: Vec<&str> = Position::ALL
+                    .into_iter()
+                    .map(Position::abbrev)
+                    .filter(|a| !a.is_empty())
+                    .collect();
+                Pattern::inner(format!("(?:{})?", abbrevs.join("|")))
+            }
             Self::Stallion => Pattern::inner("[MD]"),
             Self::Exits => Pattern {
                 before: r"\[Exits:",
