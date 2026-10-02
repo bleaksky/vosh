@@ -44,10 +44,12 @@
 //! or one run of text. Two runs fold into one piece. `%X/%{maxX}` is a
 //! current and max piece, and `%pct_X%%` a percent piece.
 
+mod look;
 mod pieces;
 mod tokens;
 mod write;
 
+pub(crate) use look::{bg, code, color, fg, restore, transition, underline_color, Item, Look};
 pub use pieces::{Piece, PieceKind, Template};
 pub(crate) use tokens::{brace_char, parse_field, Layer};
 pub use tokens::{color_name, named_color, takes_param, tokenize};
