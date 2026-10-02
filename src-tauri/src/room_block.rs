@@ -1,38 +1,61 @@
 //! Which lines of a room look list what the room holds.
 //!
 //! A look on Aabahran prints the room's name, its description and its
-//! exits line, then the things on the floor, then the people (`act_info.c`
-//! `do_look`, `list_to_char` and `show_char_to_char`). A thing has a shape, five
-//! spaces or a count like `( 2) ` before its text, but an inventory has
-//! the same shape, and a person's line has none at all. The game says how
-//! many people a look shows, though. Its Room.Chars packet names each one
-//! you can see, and it reaches Vosh before the look's text, since
-//! `gmcp_send` writes the socket at once while text waits for the end of
-//! the pulse. So the session follows each look, line by line.
+//! exits line, then what the room holds in three runs (`act_info.c`
+//! `do_look`).
 //!
-//! - Room.Chars holds the count of people for the next exits line.
-//! - The exits line opens the block and takes that count.
-//! - Lines shaped like a thing come first, each one a thing.
+//! - The armies (`armies.c` `show_room_armies`), one line for each group
+//!   that shares a long text. No packet names them. The server prints each
+//!   one as `%s``\n\r`, so the reset code of two backticks, `ESC[0;0m`,
+//!   ends every army line, and nothing comes before its text unless you
+//!   belong to an area cabal, which puts the cabal and a health bar there.
+//! - The things on the floor (`act_info.c` `list_to_char`), one line for
+//!   each long text, five spaces before it, or a count like `( 2) ` for
+//!   the objects that share it. An object with no long text prints no
+//!   line. Room.Items names each object you can see, one entry each.
+//! - The people (`act_info.c` `show_char_to_char`), one line each, with
+//!   nothing before the text. Room.Chars names each one you can see. The
+//!   units of a city raid (`raid.c`) are mobs and print here too.
+//!
+//! An inventory has the shape of the things, and an army or a person a
+//! line with no shape at all, so the session counts. Both packets reach
+//! Vosh before the look's text, since `gmcp_send` writes the socket at
+//! once while text waits for the end of the pulse. So the session
+//! follows each look, line by line.
+//!
+//! - Room.Chars and Room.Items each hold a count for the next exits line.
+//! - The exits line opens the block and takes both counts.
+//! - Lines with no shape of a thing that end in the reset come first,
+//!   each one an army.
+//! - Then lines shaped like a thing, each one spending its count of the
+//!   objects Room.Items named, until none are left.
 //! - Then as many lines as Room.Chars named, each one a person.
-//! - A blank line, a line that is neither, a new exits line, your prompt,
-//!   a GA or EOR and a disconnect each close the block.
+//! - A blank line, a line past the counts, a new exits line, your prompt,
+//!   a GA or EOR and a disconnect each close the block. So a say or an
+//!   arrival after the people in the same pulse stays a plain line.
 //!
 //! A ranger's `You spot some fresh spur.` line, which follows the exits
 //! line when the game draws its minimap, leaves the block open and stays
-//! plain. A look with no Room.Chars before it lists its things only,
-//! since nothing says how many people follow. Lines in the block run
-//! [`MatchScope::Room`], so Line and Room triggers both see them.
+//! plain. A look with no Room.Items before it takes every line shaped
+//! like a thing until the first person, and a look with no Room.Chars
+//! before it lists its armies and things only, since nothing says how
+//! many people follow. Lines in the block run [`MatchScope::Room`], so
+//! Line and Room triggers both see them.
 //!
-//! Rare looks the count gets wrong by one: a mob with no long text or a
+//! Rare looks the counts get wrong by one: a mob with no long text or a
 //! character in catalepsy (one line after the people turns into a room
 //! line), people that height sense or sense evil shows past Room.Chars
-//! (the last of them stays a plain line), a long text of two lines, an
-//! army, and two looks in one pulse.
+//! (the last of them stays a plain line), a long text of two lines, a
+//! mob whose long text ends in the reset with no thing before it (it
+//! reads as an army, and one line after the people turns into a room
+//! line), armies with your color off (they read as people), and two
+//! looks in one pulse.
+//!
+//! [`MatchScope::Room`]: vosh_trigger::MatchScope::Room
 
 use std::sync::OnceLock;
 
 use regex::Regex;
-use vosh_trigger::MatchScope;
 
 /// The exits line a look prints with autoexit on (`act_info.c` `do_exits`
 /// with "auto"). Each exit shows by its full name, in parentheses while
@@ -43,11 +66,16 @@ pub(crate) const EXITS_PATTERN: &str =
     r"^\[Exits:(?: none|(?: \(?\+?(?:north|east|south|west|up|down)\)?)+)\]$";
 
 /// A thing on the floor (`act_info.c` `list_to_char`), five spaces, or a
-/// count like `( 2) ` or `(12) ` for things with the same text.
-const THING_PATTERN: &str = r"^(?:     |\(\s?\d+\) )\S";
+/// count like `( 2) ` or `(12) ` for things with the same text, which the
+/// group captures.
+const THING_PATTERN: &str = r"^(?:     |\(\s?(\d+)\) )\S";
 
 /// A ranger's tracks (skills4.c `show_tracks`).
 const SPUR_PATTERN: &str = r"^You spot some (?:new|fresh|recent|old) spur\.$";
+
+/// The code two backticks send (`comm.c` `process_color`), which ends
+/// every army line (`armies.c` `show_room_armies`).
+const RESET: &[u8] = b"\x1b[0;0m";
 
 /// `pattern`, compiled once into `cell`.
 fn compiled(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
@@ -69,74 +97,133 @@ fn spur() -> &'static Regex {
     compiled(&CELL, SPUR_PATTERN)
 }
 
+/// How many objects a line shaped like a thing stands for, its count
+/// or 1, or None for a line of any other shape.
+fn thing_count(plain: &str) -> Option<usize> {
+    let caps = thing().captures(plain)?;
+    Some(
+        caps.get(1)
+            .and_then(|n| n.as_str().parse().ok())
+            .unwrap_or(1),
+    )
+}
+
+/// What a line is to the look the session follows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RoomLine {
+    /// No line the room lists, outside a look or past its end.
+    Other,
+    /// An army or a group of armies with the same long text.
+    Army,
+    /// A thing on the floor, or the things that share a long text.
+    Thing,
+    /// A person, a player or a mob.
+    Person,
+}
+
 /// The look the session is following, if any. Session state that lives
 /// in the profile and resets on a disconnect.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(crate) struct RoomBlock {
     /// How many people the latest Room.Chars named, held for the next
     /// exits line.
-    pending: Option<usize>,
+    people: Option<usize>,
+    /// How many objects the latest Room.Items named, held for the next
+    /// exits line.
+    things: Option<usize>,
     /// The open block, from its exits line to its last line.
     open: Option<Open>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Open {
+    /// Objects still to come, or None when no Room.Items came before
+    /// the look.
+    things_left: Option<usize>,
     /// People lines still to come, or None when no Room.Chars came
     /// before the look.
     people_left: Option<usize>,
-    /// A person's line came, so a line shaped like a thing is no longer
-    /// one.
-    people_started: bool,
+    /// The run the block is in.
+    run: Run,
+}
+
+/// The runs of a look, in the order the server prints them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Run {
+    Armies,
+    Things,
+    People,
 }
 
 impl RoomBlock {
     /// Room.Chars named `count` people.
     pub(crate) fn room_chars(&mut self, count: usize) {
-        self.pending = Some(count);
+        self.people = Some(count);
     }
 
-    /// `plain`, the next complete line of text, without ANSI. Returns the
-    /// scope its triggers run in, [`MatchScope::Room`] for a thing or a
-    /// person in the open block and [`MatchScope::Line`] for any other
-    /// line.
-    pub(crate) fn line(&mut self, plain: &str) -> MatchScope {
+    /// Room.Items named `count` objects.
+    pub(crate) fn room_items(&mut self, count: usize) {
+        self.things = Some(count);
+    }
+
+    /// The next complete line of text, `plain` without ANSI and `bytes`
+    /// as the game sent it. Returns what the line is to the open look.
+    pub(crate) fn line(&mut self, plain: &str, bytes: &[u8]) -> RoomLine {
         if exits().is_match(plain) {
             self.open = Some(Open {
-                people_left: self.pending.take(),
-                people_started: false,
+                things_left: self.things.take(),
+                people_left: self.people.take(),
+                run: Run::Armies,
             });
-            return MatchScope::Line;
+            return RoomLine::Other;
         }
         let Some(open) = self.open.as_mut() else {
-            return MatchScope::Line;
+            return RoomLine::Other;
         };
         if plain.trim().is_empty() {
             self.open = None;
-            return MatchScope::Line;
+            return RoomLine::Other;
         }
-        if spur().is_match(plain) {
-            return MatchScope::Line;
+        let count = thing_count(plain);
+        if open.run == Run::Armies {
+            if spur().is_match(plain) {
+                return RoomLine::Other;
+            }
+            if count.is_none() && bytes.ends_with(RESET) {
+                return RoomLine::Army;
+            }
         }
-        if !open.people_started && thing().is_match(plain) {
-            return MatchScope::Room;
+        if let (Some(count), Run::Armies | Run::Things) = (count, open.run) {
+            match open.things_left {
+                None => {
+                    open.run = Run::Things;
+                    return RoomLine::Thing;
+                }
+                Some(left) if left > 0 => {
+                    open.things_left = Some(left.saturating_sub(count));
+                    open.run = Run::Things;
+                    return RoomLine::Thing;
+                }
+                // Every object Room.Items named has its line.
+                Some(_) => {}
+            }
         }
         match open.people_left {
             Some(left) if left > 0 => {
-                open.people_started = true;
                 open.people_left = Some(left - 1);
-                MatchScope::Room
+                open.run = Run::People;
+                RoomLine::Person
             }
             _ => {
                 self.open = None;
-                MatchScope::Line
+                RoomLine::Other
             }
         }
     }
 
-    /// Your prompt, a GA or an EOR. The look is over. The count Room.Chars
-    /// left stays, since a prompt the session reads at its line end can
-    /// land after the next look's packet.
+    /// Your prompt, a GA or an EOR. The look is over. The counts the
+    /// packets left stay, since a prompt the session reads at its line
+    /// end can land after the next look's packets.
     pub(crate) fn end(&mut self) {
         self.open = None;
     }
@@ -145,7 +232,7 @@ impl RoomBlock {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use MatchScope::{Line, Room};
+    use RoomLine::{Army, Other, Person, Thing};
 
     const EXITS_LINE: &str = "[Exits: north east south west]";
     const HELM: &str = "     A black-steel helm is here, gleaming darkly.";
@@ -153,10 +240,18 @@ mod tests {
     const VILLAGER: &str = "A Blackwatch villager scurries about, taking care of business.";
     const RESTING: &str = "Tolliver is resting here.";
     const WALKS_IN: &str = "Tolliver walks in.";
+    /// Knight Fortress, army 12 in area/limbo.are, as `show_room_armies`
+    /// prints it to a player outside an area cabal.
+    const FORTRESS: &str = "A mighty Fortress looms over the area.\x1b[0;0m";
+    /// A Demon Horde, army 18 in area/limbo.are.
+    const HORDE: &str = "A horde of Demons hovers overhead, their talons dripping blood.\x1b[0;0m";
 
-    /// The scope each line takes, in order.
-    fn scopes(block: &mut RoomBlock, lines: &[&str]) -> Vec<MatchScope> {
-        lines.iter().map(|line| block.line(line)).collect()
+    /// What each line is, in order. Each line is its own bytes.
+    fn kinds(block: &mut RoomBlock, lines: &[&str]) -> Vec<RoomLine> {
+        lines
+            .iter()
+            .map(|line| block.line(&vosh_ansi::plain_text(line.as_bytes()), line.as_bytes()))
+            .collect()
     }
 
     #[test]
@@ -183,15 +278,126 @@ mod tests {
     }
 
     #[test]
+    fn a_thing_counts_the_objects_its_line_stands_for() {
+        assert_eq!(thing_count(HELM), Some(1));
+        assert_eq!(thing_count(GAUNTLETS), Some(2));
+        assert_eq!(
+            thing_count("(12) A pair of black-steel gauntlets rests on the ground."),
+            Some(12)
+        );
+        assert_eq!(thing_count(VILLAGER), None);
+        assert_eq!(thing_count("      "), None);
+    }
+
+    #[test]
     fn room_chars_counts_the_people_after_the_things() {
         let mut block = RoomBlock::default();
         block.room_chars(2);
         assert_eq!(
-            scopes(
+            kinds(
                 &mut block,
                 &[EXITS_LINE, HELM, GAUNTLETS, VILLAGER, RESTING, WALKS_IN, HELM],
             ),
-            [Line, Room, Room, Room, Room, Line, Line]
+            [Other, Thing, Thing, Person, Person, Other, Other]
+        );
+    }
+
+    #[test]
+    fn an_army_comes_before_the_things_and_costs_no_person() {
+        // Room 6909, The Crossroads, in area/eastroad.are, with a herb
+        // stand from skills3.c and mob 6904, which resets there.
+        let mut block = RoomBlock::default();
+        block.room_chars(1);
+        block.room_items(1);
+        assert_eq!(
+            kinds(
+                &mut block,
+                &[
+                    EXITS_LINE,
+                    FORTRESS,
+                    "     A stand of blue dried leaves grows in the wild here.",
+                    "A young werebeast stands here, leaning on his spear.",
+                    "A werebeast looks into the sky.",
+                ],
+            ),
+            [Other, Army, Thing, Person, Other]
+        );
+    }
+
+    #[test]
+    fn an_army_with_no_things_after_it_still_leaves_the_people_their_count() {
+        // Room 6904, Thickening Woods, with mob 6936, which resets there.
+        let mut block = RoomBlock::default();
+        block.room_chars(1);
+        block.room_items(0);
+        assert_eq!(
+            kinds(
+                &mut block,
+                &[
+                    "[Exits: east west]",
+                    HORDE,
+                    "A large murder of crows nearly turns the trees black here.",
+                    WALKS_IN,
+                ],
+            ),
+            [Other, Army, Person, Other]
+        );
+    }
+
+    #[test]
+    fn two_armies_each_take_a_line() {
+        let mut block = RoomBlock::default();
+        block.room_chars(0);
+        block.room_items(0);
+        assert_eq!(
+            kinds(&mut block, &[EXITS_LINE, FORTRESS, HORDE, WALKS_IN]),
+            [Other, Army, Army, Other]
+        );
+    }
+
+    #[test]
+    fn a_line_ending_in_the_reset_after_the_things_is_no_army() {
+        let mut block = RoomBlock::default();
+        block.room_chars(0);
+        block.room_items(1);
+        assert_eq!(
+            kinds(&mut block, &[EXITS_LINE, HELM, FORTRESS]),
+            [Other, Thing, Other]
+        );
+        let mut block = RoomBlock::default();
+        block.room_chars(1);
+        block.room_items(0);
+        assert_eq!(
+            kinds(&mut block, &[EXITS_LINE, VILLAGER, FORTRESS]),
+            [Other, Person, Other]
+        );
+    }
+
+    #[test]
+    fn room_items_counts_the_things_and_a_count_spends_its_number() {
+        // Three objects, one helm and two gauntlets on one line, and no
+        // one else in the room. The inventory line after them is no
+        // thing of the room.
+        let mut block = RoomBlock::default();
+        block.room_chars(0);
+        block.room_items(3);
+        assert_eq!(
+            kinds(
+                &mut block,
+                &[EXITS_LINE, GAUNTLETS, HELM, "     a black-steel helm"]
+            ),
+            [Other, Thing, Thing, Other]
+        );
+    }
+
+    #[test]
+    fn a_line_shaped_like_a_thing_past_the_items_is_a_person_or_ends_the_look() {
+        let mut block = RoomBlock::default();
+        block.room_chars(1);
+        block.room_items(1);
+        assert_eq!(
+            kinds(&mut block, &[EXITS_LINE, HELM, HELM, HELM]),
+            [Other, Thing, Person, Other]
         );
     }
 
@@ -200,17 +406,17 @@ mod tests {
         let mut block = RoomBlock::default();
         block.room_chars(0);
         assert_eq!(
-            scopes(&mut block, &[EXITS_LINE, HELM, WALKS_IN, VILLAGER]),
-            [Line, Room, Line, Line]
+            kinds(&mut block, &[EXITS_LINE, HELM, WALKS_IN, VILLAGER]),
+            [Other, Thing, Other, Other]
         );
     }
 
     #[test]
-    fn with_no_room_chars_only_the_things_count() {
+    fn with_no_room_chars_only_the_armies_and_things_count() {
         let mut block = RoomBlock::default();
         assert_eq!(
-            scopes(&mut block, &[EXITS_LINE, HELM, VILLAGER, RESTING]),
-            [Line, Room, Line, Line]
+            kinds(&mut block, &[EXITS_LINE, FORTRESS, HELM, VILLAGER, RESTING]),
+            [Other, Army, Thing, Other, Other]
         );
     }
 
@@ -219,8 +425,8 @@ mod tests {
         let mut block = RoomBlock::default();
         block.room_chars(1);
         assert_eq!(
-            scopes(&mut block, &[EXITS_LINE, "", VILLAGER]),
-            [Line, Line, Line]
+            kinds(&mut block, &[EXITS_LINE, "", VILLAGER]),
+            [Other, Other, Other]
         );
     }
 
@@ -229,8 +435,8 @@ mod tests {
         let mut block = RoomBlock::default();
         block.room_chars(2);
         assert_eq!(
-            scopes(&mut block, &[EXITS_LINE, VILLAGER, HELM, HELM]),
-            [Line, Room, Room, Line]
+            kinds(&mut block, &[EXITS_LINE, VILLAGER, HELM, HELM]),
+            [Other, Person, Person, Other]
         );
     }
 
@@ -239,11 +445,17 @@ mod tests {
         let mut block = RoomBlock::default();
         block.room_chars(1);
         assert_eq!(
-            scopes(
+            kinds(
                 &mut block,
-                &[EXITS_LINE, "You spot some fresh spur.", HELM, RESTING]
+                &[
+                    EXITS_LINE,
+                    "You spot some fresh spur.",
+                    FORTRESS,
+                    HELM,
+                    RESTING
+                ]
             ),
-            [Line, Line, Room, Room]
+            [Other, Other, Army, Thing, Person]
         );
     }
 
@@ -251,36 +463,39 @@ mod tests {
     fn the_prompt_ends_the_block_and_an_inventory_after_it_stays_plain() {
         let mut block = RoomBlock::default();
         block.room_chars(1);
-        assert_eq!(scopes(&mut block, &[EXITS_LINE, HELM]), [Line, Room]);
+        assert_eq!(kinds(&mut block, &[EXITS_LINE, HELM]), [Other, Thing]);
         block.end();
         assert_eq!(
-            scopes(&mut block, &["You are carrying:", HELM, VILLAGER]),
-            [Line, Line, Line]
+            kinds(&mut block, &["You are carrying:", HELM, VILLAGER]),
+            [Other, Other, Other]
         );
     }
 
     #[test]
-    fn the_count_waits_for_its_exits_line_past_a_prompt() {
+    fn the_counts_wait_for_their_exits_line_past_a_prompt() {
         // The prompt before this look reads at its line end, after the
-        // look's packet came.
+        // look's packets came.
         let mut block = RoomBlock::default();
         block.room_chars(1);
+        block.room_items(1);
         block.end();
         assert_eq!(
-            scopes(&mut block, &[EXITS_LINE, VILLAGER, WALKS_IN]),
-            [Line, Room, Line]
+            kinds(&mut block, &[EXITS_LINE, HELM, VILLAGER, WALKS_IN]),
+            [Other, Thing, Person, Other]
         );
     }
 
     #[test]
-    fn each_exits_line_takes_its_own_count() {
+    fn each_exits_line_takes_its_own_counts() {
         let mut block = RoomBlock::default();
         block.room_chars(1);
-        assert_eq!(scopes(&mut block, &[EXITS_LINE, VILLAGER]), [Line, Room]);
-        // A second look with no packet of its own lists things only.
+        block.room_items(0);
+        assert_eq!(kinds(&mut block, &[EXITS_LINE, VILLAGER]), [Other, Person]);
+        // A second look with no packets of its own lists armies and
+        // things only.
         assert_eq!(
-            scopes(&mut block, &[EXITS_LINE, HELM, VILLAGER]),
-            [Line, Room, Line]
+            kinds(&mut block, &[EXITS_LINE, HELM, HELM, VILLAGER]),
+            [Other, Thing, Thing, Other]
         );
     }
 
@@ -288,8 +503,11 @@ mod tests {
     fn a_dark_room_with_no_exits_line_opens_no_block() {
         let mut block = RoomBlock::default();
         assert_eq!(
-            scopes(&mut block, &["It is pitch black ... ", HELM, VILLAGER]),
-            [Line, Line, Line]
+            kinds(
+                &mut block,
+                &["It is pitch black ... ", FORTRESS, HELM, VILLAGER]
+            ),
+            [Other, Other, Other, Other]
         );
     }
 }

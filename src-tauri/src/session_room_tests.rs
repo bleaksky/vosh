@@ -4,9 +4,9 @@
 //! A child of `session`, so it drives the same private steps the socket
 //! loop runs: the GMCP step, the Line pass and the GA step. The looks and
 //! lines come from fixtures/room-colors, each one the way the Aabahran
-//! server prints it, with its Room.Chars packet first where the server
-//! sends one. The preset's triggers come from preset.json, which
-//! presets.test.ts holds to src/lib/presets.ts.
+//! server prints it, with its Room.Chars and Room.Items packets first
+//! where the server sends them. The preset's triggers come from
+//! preset.json, which presets.test.ts holds to src/lib/presets.ts.
 
 use super::*;
 
@@ -175,10 +175,20 @@ fn expected(events: &[LookEvent], shows: &dyn Fn(&str, bool, Option<&str>) -> St
     out
 }
 
-/// `line` without its ANSI codes, wrapped in `open` and a reset.
+/// `line` without its ANSI codes, wrapped in `open` and a reset. A line
+/// the game ends with its own reset, as `show_room_armies` ends each army
+/// line, keeps that reset in place of the highlight's.
 fn wrapped(open: &str, line: &str) -> String {
-    format!("{open}{}\x1b[0m", vosh_ansi::plain_text(line.as_bytes()))
+    let plain = vosh_ansi::plain_text(line.as_bytes());
+    if line.ends_with(GAME_RESET) {
+        format!("{open}{plain}{GAME_RESET}")
+    } else {
+        format!("{open}{plain}\x1b[0m")
+    }
 }
+
+/// The reset the server sends for two backticks.
+const GAME_RESET: &str = "\x1b[0;0m";
 
 /// `line` as sent under the base color `open`, which opens it, comes back
 /// after each of the game's resets, and closes with a reset. The fixtures
