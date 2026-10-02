@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { roomNameColor, terrainLabel, type RoomNameGround } from '../../lib/roomName';
 import { groupPeople, useRoom, type RoomInfo, type RoomPerson } from '../../lib/stores/roomStore';
-import { themeTokens } from '../../lib/themes';
+import { themeTokens, type XtermPalette } from '../../lib/themes';
 import { useActiveTheme } from '../../lib/useActiveTheme';
 import { ServerMapView } from '../ServerMapView';
 import { mapBandLayout, mapBandPeople, mapBandRows } from './mapBand';
@@ -18,8 +18,8 @@ import { exitsLabel } from './paneText';
 // The Map pane (SPEC 9): the server map drawing in a box inset 8 px
 // with radius 8, then a band of dense rows for the room you stand in
 // with its exits, a quiet row with its terrain and region, and the
-// people here. The room's name takes the color the game tints it with
-// for its sector (roomName.ts). The band's height follows the pane
+// people here. The room's name takes the theme color the terminal draws
+// it in for its sector (roomName.ts). The band's height follows the pane
 // alone, and the band is there from the first paint, so the drawing
 // keeps its size as you walk and as people come and go. A crowded room
 // counts the people past the last slot on that slot, and a short pane
@@ -45,7 +45,13 @@ export function MapPane() {
         className="pane-rows pane-map-rows"
         style={{ '--band-rows': rows } as CSSProperties}
       >
-        <MapBandRows info={info} people={people} rows={rows} ground={ground} />
+        <MapBandRows
+          info={info}
+          people={people}
+          rows={rows}
+          palette={theme.xterm}
+          ground={ground}
+        />
       </ul>
     </>
   );
@@ -59,17 +65,19 @@ export function MapBandRows({
   info,
   people,
   rows,
+  palette,
   ground,
 }: {
   info: RoomInfo | null;
   people: readonly RoomPerson[];
   rows: number;
+  palette: XtermPalette;
   ground: RoomNameGround;
 }) {
   const layout = mapBandLayout(rows);
   const { shown, rest } = mapBandPeople(groupPeople(people), layout.people);
   const others = rest.reduce((sum, g) => sum + g.count, 0);
-  const color = info ? roomNameColor(info.sector, ground) : null;
+  const color = info ? roomNameColor(info.sector, palette, ground) : null;
   const terrain = info ? terrainLabel(info.sector, info.terrain) : null;
   const region = info?.region ?? null;
 

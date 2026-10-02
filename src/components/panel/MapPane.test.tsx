@@ -21,8 +21,10 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
 
-const kanso = themeTokens(findTheme('kanso-zen'));
-const vellum = themeTokens(findTheme('vellum'));
+const kansoTheme = findTheme('kanso-zen');
+const vellumTheme = findTheme('vellum');
+const kanso = themeTokens(kansoTheme);
+const vellum = themeTokens(vellumTheme);
 
 function room(data: Record<string, unknown>): RoomInfo {
   const base: RoomInfoBase | null = parseRoomInfo(data);
@@ -33,7 +35,8 @@ function room(data: Record<string, unknown>): RoomInfo {
 // Rooms from the area files, as Room.Info on the new build sends them.
 // Room 10874 in winsteel.are, Faction of Steel, an inside room with one
 // exit west, in the Coastal North region area_regions.txt gives the
-// area. The game prints its name in the `8 code the area file gives it.
+// area. The area file stores its name as `8Between Ice Bars``, so the
+// terminal draws it in the theme's bright black.
 const ICE_BARS = room({
   num: 10874,
   name: 'Between Ice Bars',
@@ -68,11 +71,17 @@ interface Row {
 /** Each row the band draws, read back out of its markup. */
 function band(
   info: RoomInfo | null,
-  { people = [] as RoomPerson[], rows = 4, ground = kanso } = {},
+  { people = [] as RoomPerson[], rows = 4, theme = kansoTheme } = {},
 ): Row[] {
   const html = renderToStaticMarkup(
     <ul>
-      <MapBandRows info={info} people={people} rows={rows} ground={ground} />
+      <MapBandRows
+        info={info}
+        people={people}
+        rows={rows}
+        palette={theme.xterm}
+        ground={themeTokens(theme)}
+      />
     </ul>,
   );
   return Array.from(html.matchAll(/<li class="([^"]*)">([\s\S]*?)<\/li>/g), ([, cls, body]) => ({
@@ -92,7 +101,7 @@ function rule(selector: string): string {
 }
 
 describe('the band under the map', () => {
-  it('names the room in its sector tint, with the terrain and region under it', () => {
+  it('names the room in its terminal color, with the terrain and region under it', () => {
     const rows = band(ICE_BARS, { people: [BARON] });
     expect(rows.map((r) => r.className)).toEqual([
       'pane-row pane-map-room',
@@ -100,8 +109,9 @@ describe('the band under the map', () => {
       'pane-row pane-map-person',
     ]);
     const [name, where, person] = rows;
+    const ink = roomNameColor(0, kansoTheme.xterm, kanso);
     expect(name.html).toBe(
-      '<span class="pane-row-name" title="Between Ice Bars" style="color:#eeeeee">' +
+      `<span class="pane-row-name" title="Between Ice Bars" style="color:${ink}">` +
         'Between Ice Bars</span>' +
         '<span class="pane-row-value pane-map-exits">west</span>',
     );
@@ -113,15 +123,20 @@ describe('the band under the map', () => {
     expect(person.text).toBe('The Baron Helgardium');
   });
 
-  it('draws the name darker on a light theme, the way the pane lifts it', () => {
-    const [name] = band(ICE_BARS, { ground: vellum });
-    expect(name.color).toBe(roomNameColor(0, vellum));
-    expect(name.color).not.toBe('#eeeeee');
+  it('draws the name from the theme the terminal draws it in', () => {
+    const [onKanso] = band(ICE_BARS);
+    const [onVellum] = band(ICE_BARS, { theme: vellumTheme });
+    expect(onKanso.color).toBe(roomNameColor(0, kansoTheme.xterm, kanso));
+    expect(onVellum.color).toBe(roomNameColor(0, vellumTheme.xterm, vellum));
+    expect(onKanso.color).not.toBe(onVellum.color);
+    // The 256 color tint do_look prints first never shows, since the
+    // name's own code resets it.
+    expect(onKanso.color).not.toBe('#eeeeee');
   });
 
   it('shows the terrain alone for an older build that sends no region', () => {
     const [name, where] = band(MISTY_LAKE);
-    expect(name.color).toBe(roomNameColor(7, kanso));
+    expect(name.color).toBe(roomNameColor(7, kansoTheme.xterm, kanso));
     expect(name.text).toBe('A Misty Lakenorth east south west');
     expect(where.html).toBe('<span class="pane-map-terrain">Deep Water</span>');
   });
