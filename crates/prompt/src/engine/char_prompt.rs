@@ -7,8 +7,9 @@
 use chrono::{DateTime, FixedOffset};
 
 use super::{stamp, GamePromptSeen, PromptEngine, SeenKind};
-use crate::aabahran::{and_list, CompileError, Origin, Which, Who};
+use crate::aabahran::{CompileError, Origin, Which, Who};
 use crate::capture;
+use crate::card::sentences::and_list;
 use crate::config::{AabahranCapture, CaptureConfig, CaptureSource};
 use crate::design::Template;
 use crate::values;

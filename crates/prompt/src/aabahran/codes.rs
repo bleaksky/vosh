@@ -262,26 +262,6 @@ impl Code {
         })
     }
 
-    /// What the card and a warning call it, the catalog's label where the
-    /// field has one.
-    pub fn label(self) -> String {
-        match self {
-            Self::HpPct => "Health percent".into(),
-            Self::ManaPct => "Mana percent".into(),
-            Self::MovePct => "Moves percent".into(),
-            Self::TankPct | Self::TankBar => "Tank health".into(),
-            Self::Moon(_) => self
-                .name()
-                .and_then(crate::values::entry)
-                .map_or("Moon", |e| e.label)
-                .into(),
-            _ => self
-                .name()
-                .and_then(crate::values::entry)
-                .map_or_else(|| self.written(), |e| e.label.to_string()),
-        }
-    }
-
     /// `%n`, `%p` and `%P`, which print only while your opponent fights
     /// someone in your group.
     pub fn is_tank(self) -> bool {
@@ -564,16 +544,6 @@ mod tests {
 
     #[test]
     fn labels_are_the_catalogs() {
-        assert_eq!(Code::Hp.label(), "Health");
-        assert_eq!(Code::Mana.label(), "Mana");
-        assert_eq!(Code::MaxHp.label(), "Max health");
-        assert_eq!(Code::Room.label(), "Room");
-        assert_eq!(Code::Area.label(), "Area");
-        assert_eq!(Code::Slot(0).label(), "Affect slot 10");
-        assert_eq!(Code::Moon(2).label(), "Nercuros");
-        assert_eq!(Code::Moon(7).label(), "Moon");
-        assert_eq!(Code::HpPct.label(), "Health percent");
-        assert_eq!(Code::TankBar.label(), "Tank health");
         for code in every_code() {
             if let Some(entry) = code.name().and_then(crate::values::entry) {
                 assert_eq!(code.label(), entry.label, "{}", code.written());
