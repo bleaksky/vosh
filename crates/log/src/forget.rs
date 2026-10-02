@@ -79,11 +79,6 @@ mod aabahran;
 mod replay;
 mod wipe;
 
-/// The text a blanked sent line keeps. The session log writes the same
-/// row for a line you send while the server hides your input, so a
-/// blanked line reads like one that was never saved.
-pub const HIDDEN_SENT_TEXT: &str = "> (hidden)";
-
 /// Sent lines that still hold a password. Row ids only, never text.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PasswordLines {
@@ -113,7 +108,7 @@ impl PasswordLines {
 /// What blanking did.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Forgotten {
-    /// Lines whose text Vosh replaced with [`HIDDEN_SENT_TEXT`].
+    /// Lines whose text Vosh replaced with [`HIDDEN_SENT_TEXT`](crate::HIDDEN_SENT_TEXT).
     pub lines: usize,
     /// Sessions those lines belong to.
     pub sessions: usize,

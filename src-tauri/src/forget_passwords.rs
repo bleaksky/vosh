@@ -192,13 +192,6 @@ mod tests {
     use vosh_log::LogStore;
 
     #[test]
-    fn a_blanked_line_reads_like_a_line_the_session_never_saved() {
-        // The session logs a line sent while the server hides your input
-        // as this row, and the command blanks an old one to the same.
-        assert_eq!(vosh_log::HIDDEN_SENT_TEXT, crate::hidden_input::HIDDEN_ROW);
-    }
-
-    #[test]
     fn the_preview_says_how_many_and_how_to_blank_them() {
         let found = PasswordLines {
             lines: vec![(3, 1), (9, 1), (40, 2), (41, 2), (77, 5)],

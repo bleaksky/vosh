@@ -5,7 +5,8 @@ use super::aabahran::{
     AFTER_IMM_PASSWORD, ALREADY_PLAYING, ASK_AGAIN, IMM_PASSWORD_NEEDED, MAIN_MENU, MISMATCH,
     NULL_PASSWORD, RECONNECT_FAILED, SET_IMM, VERIFY_IMM,
 };
-use super::{PasswordLines, HIDDEN_SENT_TEXT};
+use super::PasswordLines;
+use crate::HIDDEN_SENT_TEXT;
 
 /// What the login waits for next, as far as the log shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

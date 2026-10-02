@@ -4,6 +4,8 @@
 //! and IAC WONT ECHO hands echo back. ROM derivatives, Aabahran among
 //! them, take echo for every password prompt. Vosh treats a line sent
 //! while the server holds echo as a secret and writes its text nowhere.
+//! The log rows for what you send, hidden or not, come from
+//! `vosh_log::sent_rows`.
 
 use vosh_protocol::telnet::{option as telnet_option, Event as TelnetEvent};
 
@@ -59,58 +61,9 @@ pub(crate) fn masked_line_bytes(line: &str) -> Vec<u8> {
     bytes
 }
 
-/// What the session log keeps of a line sent while your input is
-/// hidden.
-pub(crate) const HIDDEN_ROW: &str = "> (hidden)";
-
-/// The session log rows for bytes sent to the server. The wire payload
-/// is one or more commands ended by `\r\n`. Each command becomes one
-/// `> ` row so a reader tells input from output at a glance, and blank
-/// lines (a bare Enter) leave no row.
-///
-/// The rule for hidden input. While `hidden` is true every command
-/// becomes the fixed row [`HIDDEN_ROW`] and its text is dropped here,
-/// before anything reaches the store. The row keeps the fact that a
-/// line went out, so a login in the transcript still reads as the
-/// prompt, your answer, and the game's reply, and a failed login shows
-/// where the answer went. It carries nothing of the line, not even its
-/// length. Leaving the row out entirely would hide that a line was sent
-/// and protect nothing more.
-pub(crate) fn sent_log_rows(bytes: &[u8], hidden: bool) -> Vec<String> {
-    let text = String::from_utf8_lossy(bytes);
-    let mut rows = Vec::new();
-    for raw in text.split('\n') {
-        let line = raw.trim_end_matches('\r').trim_end();
-        if line.is_empty() {
-            continue;
-        }
-        rows.push(if hidden {
-            HIDDEN_ROW.to_string()
-        } else {
-            format!("> {line}")
-        });
-    }
-    rows
-}
-
-/// The log entries for one send to a session, its rows as plain text
-/// with no raw bytes, all at the time the send left.
-pub(crate) fn sent_log_entries(
-    session_id: i64,
-    ts_ms: i64,
-    rows: Vec<String>,
-) -> impl Iterator<Item = vosh_log::LogEntry> {
-    rows.into_iter().map(move |text| vosh_log::LogEntry {
-        session_id,
-        ts_ms,
-        text,
-        raw: None,
-    })
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{masked_line_bytes, sent_log_entries, sent_log_rows, ServerEcho};
+    use super::{masked_line_bytes, ServerEcho};
     use vosh_protocol::telnet::{codes, option, Parser, IAC};
 
     // Made up values only. None of these is anyone's password.
@@ -159,8 +112,8 @@ mod tests {
         }
 
         fn leave(&mut self, bytes: &[u8], masked: bool) {
-            let rows = sent_log_rows(bytes, self.echo.hides(masked));
-            let entries: Vec<_> = sent_log_entries(self.id, 1, rows).collect();
+            let rows = vosh_log::sent_rows(bytes, self.echo.hides(masked));
+            let entries: Vec<_> = vosh_log::sent_entries(self.id, 1, rows).collect();
             self.store.append_batch(&entries).expect("the rows go in");
         }
 
@@ -246,13 +199,6 @@ mod tests {
         let store = vosh_log::LogStore::open(&path).unwrap();
         let earlier = store.export_session(first_id, false).unwrap();
         assert_eq!(earlier, "> wanderer\n> (hidden)\n");
-    }
-
-    #[test]
-    fn a_hidden_send_of_several_lines_keeps_one_row_each_and_no_text() {
-        let rows = sent_log_rows(format!("{SECRET}\r\n\r\n{SECRET}\r\n").as_bytes(), true);
-        assert_eq!(rows, vec!["> (hidden)", "> (hidden)"]);
-        assert_eq!(sent_log_rows(b"\r\n", true), Vec::<String>::new());
     }
 
     #[test]

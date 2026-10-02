@@ -20,7 +20,7 @@ use vosh_protocol::telnet::{
 
 use crate::connection::{self, ConnectionError, Stream};
 use crate::gmcp_bind;
-use crate::hidden_input::{self, ServerEcho};
+use crate::hidden_input::ServerEcho;
 use crate::highlight_ground;
 use crate::input;
 use crate::line_accumulator::{Line, LineAccumulator, Partial};
@@ -819,14 +819,13 @@ async fn io_loop<R: tauri::Runtime>(
                     // password prompt), and for any line typed into the
                     // masked field, each line is logged as `> (hidden)`
                     // and its text never reaches the store. See
-                    // `hidden_input::sent_log_rows`. The rows and their
+                    // `vosh_log::sent_rows`. The rows and their
                     // time are taken as the line leaves, and they wait
                     // behind the rows before them for the log, which
                     // writes them once the socket is quiet, so a log
                     // write never holds your line or its answer back.
                     let sent = log_session_id.map(|sid| {
-                        let rows =
-                            hidden_input::sent_log_rows(&bytes, server_echo.hides(masked));
+                        let rows = vosh_log::sent_rows(&bytes, server_echo.hides(masked));
                         (sid, now_ms(), rows)
                     });
                     let wrote = match stream.write_all(&bytes).await {
@@ -834,7 +833,7 @@ async fn io_loop<R: tauri::Runtime>(
                         Ok(()) => stream.flush().await.map_err(|e| ("flush failed", e)),
                     };
                     if let Some((sid, at, rows)) = sent {
-                        settle.queue_rows(hidden_input::sent_log_entries(sid, at, rows));
+                        settle.queue_rows(vosh_log::sent_entries(sid, at, rows));
                     }
                     if let Err((what, e)) = wrote {
                         error!(error = %e, "{what}");

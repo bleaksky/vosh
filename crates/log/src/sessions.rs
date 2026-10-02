@@ -69,6 +69,56 @@ pub struct LogEntry {
     pub raw: Option<Vec<u8>>,
 }
 
+/// The row the session log keeps for a line you send while your input
+/// is hidden. The password wipe blanks an old sent line to the same
+/// text, so a blanked line reads like one that was never saved.
+pub const HIDDEN_SENT_TEXT: &str = "> (hidden)";
+
+/// The session log rows for bytes sent to the server. The wire payload
+/// is one or more commands ended by `\r\n`. Each command becomes one
+/// `> ` row so a reader tells input from output at a glance, and blank
+/// lines (a bare Enter) leave no row.
+///
+/// The rule for hidden input. While `hidden` is true every command
+/// becomes the fixed row [`HIDDEN_SENT_TEXT`] and its text is dropped
+/// here, before anything reaches the store. The row keeps the fact that
+/// a line went out, so a login in the transcript still reads as the
+/// prompt, your answer, and the game's reply, and a failed login shows
+/// where the answer went. It carries nothing of the line, not even its
+/// length. Leaving the row out entirely would hide that a line was sent
+/// and protect nothing more.
+pub fn sent_rows(bytes: &[u8], hidden: bool) -> Vec<String> {
+    let text = String::from_utf8_lossy(bytes);
+    let mut rows = Vec::new();
+    for raw in text.split('\n') {
+        let line = raw.trim_end_matches('\r').trim_end();
+        if line.is_empty() {
+            continue;
+        }
+        rows.push(if hidden {
+            HIDDEN_SENT_TEXT.to_string()
+        } else {
+            format!("> {line}")
+        });
+    }
+    rows
+}
+
+/// The log entries for one send to a session, its rows as plain text
+/// with no raw bytes, all at the time the send left.
+pub fn sent_entries(
+    session_id: i64,
+    ts_ms: i64,
+    rows: Vec<String>,
+) -> impl Iterator<Item = LogEntry> {
+    rows.into_iter().map(move |text| LogEntry {
+        session_id,
+        ts_ms,
+        text,
+        raw: None,
+    })
+}
+
 /// The statement that writes one log line, shared by
 /// [`LogStore::append`] and [`LogStore::append_batch`] so both hit the
 /// same entry in the statement cache.
@@ -329,6 +379,15 @@ pub(crate) mod tests {
         assert_eq!(plain, "red\nplain\n");
         let ansi = s.export_session(id, true).unwrap();
         assert_eq!(ansi, "\x1b[31mred\x1b[0m\nplain\n");
+    }
+
+    #[test]
+    fn a_hidden_send_of_several_lines_keeps_one_row_each_and_no_text() {
+        // Made up. It is nobody's password.
+        const SECRET: &str = "Tr0ub4dor&3";
+        let rows = sent_rows(format!("{SECRET}\r\n\r\n{SECRET}\r\n").as_bytes(), true);
+        assert_eq!(rows, vec!["> (hidden)", "> (hidden)"]);
+        assert_eq!(sent_rows(b"\r\n", true), Vec::<String>::new());
     }
 
     /// Five sessions: two to a MUD, one each to 127.0.0.1, localhost,
