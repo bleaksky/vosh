@@ -122,10 +122,13 @@ const SERVER_CODE_TO_SECTOR: Record<string, number> = {
   '12': 12, // Snow
 };
 
+/** The SECTORS index of a sector code, 0 (Inside) for one we do not know. */
+export function sectorIndex(code: string | undefined): number {
+  return (code && SERVER_CODE_TO_SECTOR[code]) || 0;
+}
+
 export function sectorForCode(code: string | undefined): SectorTheme {
-  if (!code) return SECTORS[0];
-  const idx = SERVER_CODE_TO_SECTOR[code];
-  return SECTORS[idx ?? 0];
+  return SECTORS[sectorIndex(code)];
 }
 
 // Convert a hex string like "#aabbcc" to an rgba() string at the given alpha.
