@@ -89,10 +89,11 @@ fixtures/
              themes and presets. Written from the page sources.
   room-colors/ looks.json, room looks as the Aabahran server prints them,
                each with its Room.Chars packet, for the Room trigger tests
-               in src-tauri. lines.json, the lines the Room and time colors
-               preset colors and the near misses it leaves alone, read by
-               presets.test.ts and src-tauri. The trigger crate highlights
-               each word of both in place. preset.json, that preset's
+               in src-tauri. lines.json, the lines the Room, time and
+               weather colors preset colors and the near misses it leaves
+               alone, read by presets.test.ts and src-tauri. The trigger
+               crate highlights each word of both in place and draws each
+               weather line on every ground. preset.json, that preset's
                triggers, which presets.test.ts holds to presets.ts and the
                Rust tests install. Hand written and synthetic, from the
                server's own format strings and area files. Its README says

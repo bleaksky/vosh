@@ -1,5 +1,5 @@
 {
-  "notes": "Hand written and synthetic, never captured. Lines the Aabahran server prints, built from its own format strings and area files, with the ANSI codes it sends. trigger names the Room and time colors trigger that colors the line, and match is the text its color covers. A line with no trigger is a near miss that no trigger of the preset may touch. Tolliver and Maren are invented names. README.md has the details. Read by src/lib/presets.test.ts, src-tauri/src/session_room_tests.rs and crates/trigger/src/engine.rs.",
+  "notes": "Hand written and synthetic, never captured. Lines the Aabahran server prints, built from its own format strings and area files, with the ANSI codes it sends. trigger names the Room, time and weather colors trigger that colors the line, and match is the text its color covers. A line with no trigger is a near miss that no trigger of the preset may touch. Tolliver and Maren are invented names. README.md has the details. Read by src/lib/presets.test.ts, src-tauri/src/session_room_tests.rs and crates/trigger/src/engine.rs.",
   "lines": [
     {
       "line": "[Exits: north east south west]",
@@ -98,6 +98,150 @@
       "from": "update.c weather_update in eternal darkness, hour 19"
     },
     {
+      "line": "\u001b[0;1;37mThe sky is getting cloudy.\u001b[0;0m",
+      "trigger": "weather.change",
+      "match": "The sky is getting cloudy.",
+      "from": "update.c sky_event_text, the clouds forming, in `& bold white"
+    },
+    {
+      "line": "\u001b[0;1;37mThe clouds disappear.\u001b[0;0m",
+      "trigger": "weather.change",
+      "match": "The clouds disappear.",
+      "from": "update.c sky_event_text, the clouds clearing, in `& bold white"
+    },
+    {
+      "line": "\u001b[0;1;37mIt starts to snow.\u001b[0;0m",
+      "trigger": "weather.change",
+      "match": "It starts to snow.",
+      "from": "update.c sky_event_text, rain or snow starting below 30 degrees, in `& bold white"
+    },
+    {
+      "line": "\u001b[0;1;37mIt starts to sleet.\u001b[0;0m",
+      "trigger": "weather.change",
+      "match": "It starts to sleet.",
+      "from": "update.c sky_event_text, rain or snow starting from 30 to 35 degrees, in `& bold white"
+    },
+    {
+      "line": "\u001b[0;1;37mIt starts to rain.\u001b[0;0m",
+      "trigger": "weather.change",
+      "match": "It starts to rain.",
+      "from": "update.c sky_event_text, rain or snow starting at 36 degrees or more, in `& bold white"
+    },
+    {
+      "line": "\u001b[0;1;37mThe snowstorm becomes a blizzard.\u001b[0;0m",
+      "trigger": "weather.change",
+      "match": "The snowstorm becomes a blizzard.",
+      "from": "update.c sky_event_text, a storm starting below 30 degrees, in `& bold white"
+    },
+    {
+      "line": "\u001b[0;1;37mThe sleet turns into hail.\u001b[0;0m",
+      "trigger": "weather.change",
+      "match": "The sleet turns into hail.",
+      "from": "update.c sky_event_text, a storm starting from 30 to 35 degrees, in `& bold white"
+    },
+    {
+      "line": "\u001b[0;1;37mLightning flashes in the sky.\u001b[0;0m",
+      "trigger": "weather.change",
+      "match": "Lightning flashes in the sky.",
+      "from": "update.c sky_event_text, a storm starting at 36 degrees or more, in `& bold white"
+    },
+    {
+      "line": "\u001b[0;1;37mThe snow stopped.\u001b[0;0m",
+      "trigger": "weather.change",
+      "match": "The snow stopped.",
+      "from": "update.c sky_event_text, rain or snow stopping below 30 degrees, in `& bold white"
+    },
+    {
+      "line": "\u001b[0;1;37mThe sleet stopped.\u001b[0;0m",
+      "trigger": "weather.change",
+      "match": "The sleet stopped.",
+      "from": "update.c sky_event_text, rain or snow stopping from 30 to 35 degrees, in `& bold white"
+    },
+    {
+      "line": "\u001b[0;1;37mThe rain stopped.\u001b[0;0m",
+      "trigger": "weather.change",
+      "match": "The rain stopped.",
+      "from": "update.c sky_event_text, rain or snow stopping at 36 degrees or more, in `& bold white"
+    },
+    {
+      "line": "\u001b[0;1;37mThe blizzard has slowed down.\u001b[0;0m",
+      "trigger": "weather.change",
+      "match": "The blizzard has slowed down.",
+      "from": "update.c sky_event_text, a storm calming below 30 degrees, in `& bold white"
+    },
+    {
+      "line": "\u001b[0;1;37mThe hail stops and it starts sleeting.\u001b[0;0m",
+      "trigger": "weather.change",
+      "match": "The hail stops and it starts sleeting.",
+      "from": "update.c sky_event_text, a storm calming from 30 to 35 degrees, in `& bold white"
+    },
+    {
+      "line": "\u001b[0;1;37mThe lightning has stopped.\u001b[0;0m",
+      "trigger": "weather.change",
+      "match": "The lightning has stopped.",
+      "from": "update.c sky_event_text, a storm calming at 36 degrees or more, in `& bold white"
+    },
+    {
+      "line": "A fierce blizzard descends, howling winds and blinding snow engulfing the area.",
+      "trigger": "weather.change",
+      "match": "A fierce blizzard descends, howling winds and blinding snow engulfing the area.",
+      "from": "update.c weather_affect_room, a blizzard setting in"
+    },
+    {
+      "line": "The blizzard subsides, the winds dying down.",
+      "trigger": "weather.change",
+      "match": "The blizzard subsides, the winds dying down.",
+      "from": "update.c weather_affect_room, a blizzard clearing"
+    },
+    {
+      "line": "The winds pick up violently, hurling sand in every direction.",
+      "trigger": "weather.change",
+      "match": "The winds pick up violently, hurling sand in every direction.",
+      "from": "update.c weather_affect_room, a sandstorm setting in"
+    },
+    {
+      "line": "The sandstorm dies down, the air clearing.",
+      "trigger": "weather.change",
+      "match": "The sandstorm dies down, the air clearing.",
+      "from": "update.c weather_affect_room, a sandstorm clearing"
+    },
+    {
+      "line": "The cold bites deep as ice forms across every surface.",
+      "trigger": "weather.change",
+      "match": "The cold bites deep as ice forms across every surface.",
+      "from": "update.c weather_affect_room, ice setting in"
+    },
+    {
+      "line": "The ice begins to thaw and melt away.",
+      "trigger": "weather.change",
+      "match": "The ice begins to thaw and melt away.",
+      "from": "update.c weather_affect_room, ice clearing"
+    },
+    {
+      "line": "The rain soaks into the ground, turning it to thick mud.",
+      "trigger": "weather.change",
+      "match": "The rain soaks into the ground, turning it to thick mud.",
+      "from": "update.c weather_affect_room, mud setting in"
+    },
+    {
+      "line": "The ground begins to dry out and firm up.",
+      "trigger": "weather.change",
+      "match": "The ground begins to dry out and firm up.",
+      "from": "update.c weather_affect_room, mud clearing"
+    },
+    {
+      "line": "A thick fog rolls in, shrouding the area.",
+      "trigger": "weather.change",
+      "match": "A thick fog rolls in, shrouding the area.",
+      "from": "update.c weather_affect_room, fog setting in"
+    },
+    {
+      "line": "The fog lifts, revealing the surroundings once more.",
+      "trigger": "weather.change",
+      "match": "The fog lifts, revealing the surroundings once more.",
+      "from": "update.c weather_affect_room, fog clearing"
+    },
+    {
       "line": "\u001b[0;1;37mW\u001b[0;1;30mi\u001b[0;1;37mZNET\u001b[0;1;30m \u001b[0;0m08:20:01\u001b[0;1;30m: \u001b[0;0mTICK!",
       "trigger": "wiznet.tag",
       "match": "WiZNET",
@@ -194,8 +338,28 @@
       "from": "the name of room 5200 in area/fortblac.are, in `8 grey"
     },
     {
-      "line": "\u001b[0;1;37mThe sky is getting cloudy.\u001b[0;0m",
-      "from": "update.c sky_event_text, which can follow a time of day message"
+      "line": "Tolliver says '\u001b[0;1;33mIt starts to rain.\u001b[0;0m'",
+      "from": "languages.c, $n says with the text in `# bold yellow, quoting a weather line"
+    },
+    {
+      "line": "Tolliver tells you '\u001b[0;32mThe fog lifts, revealing the surroundings once more.\u001b[0;0m'",
+      "from": "act_comm.c, %s tells you with the text in `2 green, quoting a fog line"
+    },
+    {
+      "line": "The sky is cloudy and a mild southerly breeze blows.",
+      "from": "do_weather in act_info.c, the sky and the wind you ask about, not a change"
+    },
+    {
+      "line": "The sky seems a bit too clear.",
+      "from": "magic2.c, a thunder storm spell cast under a sky too clear for it"
+    },
+    {
+      "line": "The fog thins and you can no longer keep hidden.",
+      "from": "weather_affect_room in update.c, your hiding lost as the fog lifts, after the fog line"
+    },
+    {
+      "line": "A bolt of lightning streaks from the sky and strikes Tolliver!",
+      "from": "weather_affect_room in update.c, lightning striking someone in the room"
     }
   ]
 }

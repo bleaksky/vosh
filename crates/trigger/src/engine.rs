@@ -1762,4 +1762,102 @@ mod tests {
         );
         assert_eq!(Some(shown), process(&s, BANK.as_bytes()).display);
     }
+
+    /// The Room, time and weather colors preset as presets.ts makes it,
+    /// from fixtures/room-colors/preset.json.
+    fn room_preset() -> TriggerStore {
+        #[derive(serde::Deserialize)]
+        struct PresetFile {
+            triggers: Vec<Trigger>,
+        }
+        let file: PresetFile =
+            serde_json::from_str(include_str!("../../../fixtures/room-colors/preset.json"))
+                .unwrap();
+        store(file.triggers)
+    }
+
+    /// The lines of fixtures/room-colors/lines.json the preset's `trigger`
+    /// colors, or the near misses no trigger of it touches when `trigger`
+    /// is None.
+    fn room_lines(trigger: Option<&str>) -> Vec<String> {
+        let file: serde_json::Value =
+            serde_json::from_str(include_str!("../../../fixtures/room-colors/lines.json")).unwrap();
+        file["lines"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|l| match trigger {
+                None => l.get("trigger").is_none(),
+                Some(name) => l["trigger"] == name,
+            })
+            .map(|l| l["line"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn each_weather_line_draws_in_the_weather_blue_and_reads_on_every_ground() {
+        let s = room_preset();
+        let weather = room_lines(Some("weather.change"));
+        // Fourteen from sky_event_text and ten from weather_affect_room.
+        assert_eq!(weather.len(), 24);
+        let grounds: serde_json::Value =
+            serde_json::from_str(include_str!("../../../fixtures/readable/grounds.json")).unwrap();
+        let grounds: Vec<(String, readable::Rgb)> = grounds["grounds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|g| {
+                let hex = g["background"].as_str().unwrap();
+                let theme = g["theme"].as_str().unwrap().to_string();
+                (theme, readable::parse_hex(hex).unwrap())
+            })
+            .collect();
+        let lifted = readable::lift_to_contrast(WEATHER, VELLUM);
+        assert_ne!(lifted, WEATHER);
+        assert!(readable::contrast(lifted, VELLUM) >= readable::READABLE_CONTRAST);
+        for line in &weather {
+            let plain = plain_text(line.as_bytes());
+            let drawn = |(r, g, b): readable::Rgb| format!("\x1b[38;2;{r};{g};{b}m{plain}\x1b[0m");
+            // The whole line in the blue, in place of the bold white the
+            // game sends with a change in the sky.
+            assert_eq!(on_ground(&s, line.as_bytes(), None), drawn(WEATHER));
+            assert_eq!(on_ground(&s, line.as_bytes(), Some(NORD)), drawn(WEATHER));
+            assert_eq!(on_ground(&s, line.as_bytes(), Some(VELLUM)), drawn(lifted));
+            // On every built in ground it reads, and it changes on the
+            // three light ones alone.
+            let mut changed = Vec::new();
+            for (theme, ground) in &grounds {
+                let want = readable::lift_to_contrast(WEATHER, *ground);
+                assert!(readable::contrast(want, *ground) >= readable::READABLE_CONTRAST);
+                assert_eq!(
+                    on_ground(&s, line.as_bytes(), Some(*ground)),
+                    drawn(want),
+                    "{plain} on {theme}"
+                );
+                if want != WEATHER {
+                    changed.push(theme.as_str());
+                }
+            }
+            assert_eq!(
+                changed,
+                ["vellum", "solarized-light", "everforest-light"],
+                "{plain}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_near_miss_of_the_room_preset_keeps_the_bytes_the_game_sent() {
+        // A say or a tell that quotes a weather line, the weather report you
+        // ask for, and the lines around a change in the weather among them.
+        let s = room_preset();
+        let misses = room_lines(None);
+        assert!(misses.len() > 20, "{}", misses.len());
+        assert!(misses.iter().any(|l| l.contains("It starts to rain.")));
+        for line in &misses {
+            let plain = plain_text(line.as_bytes());
+            assert!(matching(&s, &plain, MatchScope::Line).is_empty(), "{plain}");
+            assert_eq!(on_ground(&s, line.as_bytes(), Some(VELLUM)), *line);
+        }
+    }
 }

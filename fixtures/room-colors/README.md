@@ -21,7 +21,7 @@ Where the lines come from.
 
 ## lines.json
 
-Single lines for the Room and time colors preset. `trigger` names the trigger that colors a line and `match` the text its color covers. A line with no `trigger` is a near miss that no trigger of the preset may touch. `src/lib/presets.test.ts` runs the preset's patterns on each one, `src-tauri/src/session_room_tests.rs` runs each through the session's own steps, and `crates/trigger/src/engine.rs` highlights each word of each line in place.
+Single lines for the Room, time and weather colors preset. `trigger` names the trigger that colors a line and `match` the text its color covers. A line with no `trigger` is a near miss that no trigger of the preset may touch. `src/lib/presets.test.ts` runs the preset's patterns on each one, `src-tauri/src/session_room_tests.rs` runs each through the session's own steps, and `crates/trigger/src/engine.rs` highlights each word of each line in place, draws each weather line on every ground in `fixtures/readable/grounds.json`, and holds each near miss to the bytes the game sent.
 
 - The exits lines are `do_exits` with `auto`. Room 5233, The Eastern Square, has exits `D0` to `D3`. Room 5279 has `D2`. Room 5200, Rock Bottom, has `D4` and a door at `D5` that resets closed, which the line shows in parentheses. The same room shows `(+down)` when you see a trap on that door, the `+` in `` `! `` bold red. A room with no exit you can see reads `[Exits: none]`, the same text the builder tutorial mob in area/higher.are echoes.
 - The eleven time of day lines are `weather_update` in update.c, the five usual ones and the six it sends in eternal darkness.
@@ -31,8 +31,10 @@ Single lines for the Room and time colors preset. `trigger` names the trigger th
 - The prompts are the one `prompt all` sets, and `%e` alone from `do_promptexit` in act_info.c, which prints single letters, `---` while you are blind and `???` in forest mist.
 - `Obvious exits:` and its row are `do_exits` typed by hand, and `You can't tell where the exits are.` is what it prints in forest mist.
 - The room names are rooms 5279, 5233 and 5200 in area/fortblac.are, with their own color codes.
-- `The sky is getting cloudy.` is `sky_event_text` in update.c, which can follow a time of day message in the same send.
+- The fourteen sky lines are `sky_event_text` in update.c, which `weather_update` sends to each player awake outdoors when the sky over the region changes, each in `` `& `` bold white. Whether a change brings rain, sleet or snow, and hail or a blizzard in a storm, follows the temperature where you stand, below 30, from 30 to 35, or 36 and up. A sky line can follow a time of day message in the same send.
+- The ten room weather lines are `weather_affect_room` in update.c, which tells each player awake in an outdoor room when its blizzard, sandstorm, ice, mud or fog sets in or clears. The game sends them with no color.
+- The weather near misses are a say and a tell that quote a weather line, the report `do_weather` in act_info.c prints when you type `weather`, `The sky seems a bit too clear.` from a thunder storm spell in magic2.c, and two lines `weather_affect_room` sends beside a change, the fog costing you your hiding and lightning striking someone in the room.
 
 ## preset.json
 
-The triggers of the Room and time colors preset, exactly as `presetTriggers` in `src/lib/presets.ts` makes them. `src/lib/presets.test.ts` holds the two equal, so a change to the preset changes this file in the same commit, and the Rust tests install these triggers.
+The triggers of the Room, time and weather colors preset, exactly as `presetTriggers` in `src/lib/presets.ts` makes them. `src/lib/presets.test.ts` holds the two equal, so a change to the preset changes this file in the same commit, and the Rust tests install these triggers.
