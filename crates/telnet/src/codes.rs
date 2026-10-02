@@ -56,11 +56,9 @@ pub mod charset {
 pub mod new_environ {
     pub const IS: u8 = 0;
     pub const SEND: u8 = 1;
-    #[allow(dead_code)]
     pub const INFO: u8 = 2;
     pub const VAR: u8 = 0;
     pub const VALUE: u8 = 1;
-    #[allow(dead_code)]
     pub const ESC: u8 = 2;
     pub const USERVAR: u8 = 3;
 }

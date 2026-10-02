@@ -5162,9 +5162,6 @@ dependencies = [
 [[package]]
 name = "vosh-telnet"
 version = "0.8.0"
-dependencies = [
- "thiserror 1.0.69",
-]
 
 [[package]]
 name = "vosh-trigger"
