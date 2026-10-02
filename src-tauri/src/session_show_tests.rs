@@ -762,7 +762,7 @@ fn enter_on_an_empty_line_while_pinned_moves_nothing_and_updates_the_band() {
     let mut mud = Mud::playing(Options::new(Build::New));
     let mut session = Session::new(showing(profile(CODES, HP, true), PromptShow::Pinned));
     let login = session.read(&mud.login());
-    assert!(!login.out.hold.is_empty());
+    assert!(!login.out.hold.is_empty(), "expected entries");
     assert!(session.p.prompt.stage.swallows(), "armed after login");
     // Enter on an empty line: the webview echoes nothing while pinned,
     // so only the send reaches the session.
@@ -771,7 +771,8 @@ fn enter_on_an_empty_line_while_pinned_moves_nothing_and_updates_the_band() {
     for write in mud.command("") {
         let read = session.read(&write.bytes);
         assert!(read.out.bytes.is_empty(), "{:?}", read.out);
-        assert!(read.out.hold.is_empty());
+        let leftover = &read.out.hold;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(read.out.replace.is_none());
         assert!(read.out.pin.is_some());
         assert!(!read.out.is_empty(), "the band still goes out");

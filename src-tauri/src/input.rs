@@ -2349,7 +2349,8 @@ mod tests {
             ran.result.echo,
             ["Your design is now Vosh's default. Vosh keeps the one you had as an earlier design."]
         );
-        assert!(ran.result.bytes.is_empty());
+        let leftover = &ran.result.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         let config = p.prompt.config();
         assert_eq!(config.template, DEFAULT_DESIGN);
         assert_eq!(config.previous_templates, ["%hp"]);
@@ -2383,7 +2384,8 @@ mod tests {
                 "Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start.",
             ]
         );
-        assert!(ran.result.bytes.is_empty());
+        let leftover = &ran.result.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         let config = p.prompt.config();
         assert!(config.draw);
         // Drawing with no design draws Vosh's default, as Settings does.
@@ -2444,7 +2446,8 @@ mod tests {
             ]
         );
         assert_eq!(p.prompt.config().template, vosh_prompt::DEFAULT_DESIGN);
-        assert!(p.prompt.config().previous_templates.is_empty());
+        let leftover = &p.prompt.config().previous_templates;
+        assert!(leftover.is_empty(), "{leftover:?}");
 
         // A fresh profile already holds the default design, and still
         // hears what else it takes.
@@ -2469,7 +2472,8 @@ mod tests {
             ]
         );
         assert_eq!(p.prompt.config().template, vosh_prompt::DEFAULT_DESIGN);
-        assert!(p.prompt.config().previous_templates.is_empty());
+        let leftover = &p.prompt.config().previous_templates;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     /// A table with the pattern the move from a capture trigger wrote.
@@ -2827,8 +2831,10 @@ mod tests {
             "#lua mud.echo('hi') mud.send('look') mud.timer(1, function() end) \
              mud.input('#echo again') mud.set_prompt_var('mark', 'on')",
         );
-        assert!(ran.result.echo.is_empty());
-        assert!(ran.result.bytes.is_empty());
+        let leftover = &ran.result.echo;
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &ran.result.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(ran.lua.echoes, ["hi"]);
         assert_eq!(ran.lua.send_bytes, b"look\r\n");
         assert_eq!(ran.lua.new_timers.len(), 1);
@@ -2849,7 +2855,8 @@ mod tests {
         let mut p = Profile::default();
         let r = process(&mut p, "look");
         assert_eq!(r.bytes, b"look\r\n");
-        assert!(r.echo.is_empty());
+        let leftover = &r.echo;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -2857,7 +2864,8 @@ mod tests {
         let mut p = Profile::default();
         let r = process(&mut p, "");
         assert_eq!(r.bytes, b"\r\n");
-        assert!(r.echo.is_empty());
+        let leftover = &r.echo;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -2916,8 +2924,10 @@ mod tests {
         ));
         let ran = run_line(&mut p, "later;look");
         assert_eq!(ran.result.bytes, b"now\r\nlook\r\n");
-        assert!(ran.lua.send_bytes.is_empty());
-        assert!(ran.lua.echoes.is_empty());
+        let leftover = &ran.lua.send_bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &ran.lua.echoes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(ran.lua.new_timers.len(), 1);
         assert_eq!(ran.lua.inputs, ["#echo again"]);
         assert!(ran.lua.prompt_vars_changed);
@@ -3065,7 +3075,8 @@ mod tests {
         let mut p = Profile::default();
         let _ = process(&mut p, "#qkey gg kick");
         let r = process(&mut p, "gg");
-        assert!(r.bytes.is_empty());
+        let leftover = &r.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(r.echo.iter().any(|l| l.contains("no target")));
     }
 
@@ -3200,7 +3211,8 @@ mod tests {
     fn unknown_slash_returns_error_echo() {
         let mut p = Profile::default();
         let r = process(&mut p, "#nope");
-        assert!(r.bytes.is_empty());
+        let leftover = &r.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(r.echo.iter().any(|l| l.contains("unknown slash command")));
     }
 
@@ -3209,7 +3221,8 @@ mod tests {
         let mut p = Profile::default();
         p.aliases.set(Alias::new("loop", "loop"));
         let r = process(&mut p, "loop");
-        assert!(r.bytes.is_empty());
+        let leftover = &r.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(r.echo.iter().any(|l| l.contains("recursion limit")));
     }
 
@@ -3336,7 +3349,8 @@ mod tests {
         let mut p = Profile::default();
         let r = process(&mut p, "#help");
         assert_eq!(r.echo.first().map(String::as_str), Some("slash commands:"));
-        assert!(r.bytes.is_empty());
+        let leftover = &r.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -3379,7 +3393,8 @@ mod tests {
         let mut p = Profile::default();
         for line in ["#logs forget-passwords now", "#logs"] {
             let r = process(&mut p, line);
-            assert!(r.bytes.is_empty());
+            let leftover = &r.bytes;
+            assert!(leftover.is_empty(), "{leftover:?}");
             assert_eq!(r.echo, vec!["[type #logs at the input bar]".to_string()]);
         }
     }

@@ -927,7 +927,8 @@ mod tests {
         );
         // The vitals this game sends that Vosh has no name for are offered
         // as names, each with its package.
-        assert!(report.gmcp_names.is_empty());
+        let leftover = &report.gmcp_names;
+        assert!(leftover.is_empty(), "{leftover:?}");
         p.prompt.observe(
             "Char.Vitals",
             json!({"hp": 10, "maxhp": 20, "mp": 5, "mv": 9, "hidden": false}),
@@ -1140,7 +1141,8 @@ mod tests {
             ]
         );
         // No capture reads nothing, so nothing is named.
-        assert!(line_triggers(&p, &CaptureConfig::None).is_empty());
+        let leftover = &line_triggers(&p, &CaptureConfig::None);
+        assert!(leftover.is_empty(), "{leftover:?}");
         let json = serde_json::to_value(&named[1]).unwrap();
         assert_eq!(
             json,

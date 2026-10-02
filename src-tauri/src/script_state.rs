@@ -426,7 +426,8 @@ mod tests {
         assert_eq!(aliases_on(&p), ["bash", "flee"]);
         let report = toggle_group(&mut p, "combat", false);
         assert!(report.aliases);
-        assert!(aliases_on(&p).is_empty());
+        let leftover = &aliases_on(&p);
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(group_states(&p, "combat")[1], Some(GroupState::Off));
         // Turning it on again brings back the Healer's own, and never the
         // default profile's.
@@ -457,7 +458,8 @@ mod tests {
             }],
         };
         apply_actions(&mut p, outcome);
-        assert!(aliases_on(&p).is_empty());
+        let leftover = &aliases_on(&p);
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]

@@ -1039,7 +1039,8 @@ pub(crate) mod tests {
         let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         assert!(set.migrated("step"));
         assert_eq!(set.take_notices(), ["Once."]);
-        assert!(set.take_notices().is_empty());
+        let leftover = &set.take_notices();
+        assert!(leftover.is_empty(), "{leftover:?}");
         let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         assert!(set.index.notices.is_empty(), "the take saved");
         let text = std::fs::read_to_string(dir.path().join(INDEX_FILENAME)).unwrap();
@@ -1049,7 +1050,8 @@ pub(crate) mod tests {
         let mut set = set;
         set.record_with_notice("quiet", None).unwrap();
         assert!(set.migrated("quiet"));
-        assert!(set.take_notices().is_empty());
+        let leftover = &set.take_notices();
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -1420,7 +1422,8 @@ characters = ["Erelei", "Vanek"]
 
         // default kept its world but lost its only character, so its
         // toggle went off rather than leaving a host wide fallback.
-        assert!(characters_of(&set, DEFAULT_PROFILE_NAME).is_empty());
+        let leftover = &characters_of(&set, DEFAULT_PROFILE_NAME);
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(!enabled(&set, DEFAULT_PROFILE_NAME));
         let am = set.get(DEFAULT_PROFILE_NAME).unwrap().auto_match.clone();
         assert_eq!(
@@ -1490,7 +1493,8 @@ characters = ["Erelei", "Vanek"]
         let dir = tempdir().unwrap();
         let mut set = james_like_set(dir.path());
         let claim = set.set_login("Healer", "Caelaor", false).unwrap();
-        assert!(claim.released_from.is_empty());
+        let leftover = &claim.released_from;
+        assert!(leftover.is_empty(), "{leftover:?}");
         let am = claim.entry.auto_match.unwrap();
         assert!(!am.enabled);
         assert_eq!(am.characters, vec!["Caelaor"]);
@@ -1503,7 +1507,8 @@ characters = ["Erelei", "Vanek"]
         );
         // On again restores it without taking anything from anyone.
         let claim = set.set_login("Healer", "Caelaor", true).unwrap();
-        assert!(claim.released_from.is_empty());
+        let leftover = &claim.released_from;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(set.login_on("Healer"));
     }
 
@@ -1580,7 +1585,8 @@ characters = ["Erelei", "Vanek"]
             .unwrap();
         let am = entry.auto_match.unwrap();
         assert!(!am.enabled);
-        assert!(am.characters.is_empty());
+        let leftover = &am.characters;
+        assert!(leftover.is_empty(), "{leftover:?}");
         // No fallback appeared for logins with no claim.
         assert_eq!(
             set.resolve_match("play.theforsakenlands.com", 1848, None),
@@ -1776,7 +1782,8 @@ characters = ["Erelei", "Vanek"]
                 Some(claim(world, Some(1848), &["Erelei"])),
             )
             .unwrap();
-        assert!(result.released_from.is_empty());
+        let leftover = &result.released_from;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(characters_of(&set, DEFAULT_PROFILE_NAME), vec!["Erelei"]);
         assert!(set.login_on(DEFAULT_PROFILE_NAME));
 

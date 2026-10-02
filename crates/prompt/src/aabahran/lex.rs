@@ -525,7 +525,8 @@ mod tests {
         let typed = "y".repeat(246);
         let got = normalize(&typed, Which::Prompt, MORTAL);
         assert_eq!(got.text, format!("{typed} "));
-        assert!(got.warnings.is_empty());
+        let leftover = &got.warnings;
+        assert!(leftover.is_empty(), "{leftover:?}");
         // `fprompt ` takes 8, which leaves 245.
         let typed = "y".repeat(246);
         let got = normalize(&typed, Which::Fight, MORTAL);
@@ -534,9 +535,8 @@ mod tests {
             got.warnings[0].text,
             "The game keeps the first 245 characters of your prompt. Vosh reads the same 245."
         );
-        assert!(normalize(&"y".repeat(245), Which::Fight, MORTAL)
-            .warnings
-            .is_empty());
+        let leftover = &normalize(&"y".repeat(245), Which::Fight, MORTAL).warnings;
+        assert!(leftover.is_empty(), "{leftover:?}");
         // A cut that ends in spaces keeps them as the game does, and the
         // game adds its own.
         let typed = format!("{}{}zz", "w".repeat(240), " ".repeat(10));
@@ -578,7 +578,8 @@ mod tests {
         let typed = format!("{}{}", "`1".repeat(10), "x".repeat(246));
         let got = normalize(&typed, Which::Prompt, MORTAL);
         assert_eq!(got.text, format!("{} ", "x".repeat(246)));
-        assert!(got.warnings.is_empty());
+        let leftover = &got.warnings;
+        assert!(leftover.is_empty(), "{leftover:?}");
         // The same line from someone who keeps them runs out of room.
         let got = normalize(&typed, Which::Prompt, TRUSTED);
         assert_eq!(got.text, format!("{}{} ", "`1".repeat(10), "x".repeat(226)));
@@ -687,7 +688,8 @@ mod tests {
             );
         }
         // A percent and a space in the middle take the space quietly.
-        assert!(pass_one("50% hp ", Which::Prompt).warnings.is_empty());
+        let leftover = &pass_one("50% hp ", Which::Prompt).warnings;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     fn printed(setting: &str) -> Result<Vec<Piece>, CompileError> {

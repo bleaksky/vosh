@@ -229,7 +229,8 @@ mod tests {
     #[test]
     fn effective_enabled_groups_empty_when_no_active() {
         let set = LoadoutSet::default();
-        assert!(set.effective_enabled_groups().is_empty());
+        let leftover = &set.effective_enabled_groups();
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]

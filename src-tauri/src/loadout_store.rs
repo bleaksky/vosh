@@ -777,11 +777,15 @@ mod tests {
         let dir = tmpdir();
         let catalog = load_global_catalog(&dir).unwrap();
         let set = load_loadout_set(&dir).unwrap();
-        assert!(catalog.aliases.is_empty());
-        assert!(catalog.triggers.is_empty());
-        assert!(catalog.macros.is_empty());
+        let leftover = &catalog.aliases;
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &catalog.triggers;
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &catalog.macros;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(set.loadouts.is_empty());
-        assert!(set.active.is_empty());
+        let leftover = &set.active;
+        assert!(leftover.is_empty(), "{leftover:?}");
         fs::remove_dir_all(&dir).ok();
     }
 
@@ -861,8 +865,10 @@ mod tests {
         let set = LoadoutSet::default();
         apply_loadout_state(&set, &mut profile);
 
-        assert!(profile.aliases.disabled_groups().is_empty());
-        assert!(profile.triggers.disabled_groups().is_empty());
+        let leftover = &profile.aliases.disabled_groups();
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &profile.triggers.disabled_groups();
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(profile.disabled_macro_groups.is_empty());
     }
 
@@ -1096,7 +1102,8 @@ mod tests {
         );
         let set = LoadoutSet::default();
         apply_loadout_state(&set, &mut profile);
-        assert!(profile.aliases.disabled_groups().is_empty());
+        let leftover = &profile.aliases.disabled_groups();
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     fn presets(list: &[&str]) -> Vec<String> {
@@ -1205,7 +1212,8 @@ mod tests {
         // Test-Prompt turned every preset off.
         write_presets(&set, "Test-Prompt", &["none"]);
         let erelei = launch(dir.path(), &set);
-        assert!(erelei.ui.enabled_presets.is_empty());
+        let leftover = &erelei.ui.enabled_presets;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(
             load_global_catalog(dir.path()).unwrap().enabled_presets,
             Some(Vec::new())
@@ -1266,7 +1274,8 @@ mod tests {
         std::fs::write(set.active_path(), "presets = = [\n").unwrap();
 
         let (erelei, notices) = launch_with_notices(dir.path(), &set);
-        assert!(erelei.ui.enabled_presets.is_empty());
+        let leftover = &erelei.ui.enabled_presets;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(
             load_global_catalog(dir.path()).unwrap().enabled_presets,
             None
@@ -1323,7 +1332,8 @@ mod tests {
             write_with_backup(&path, text).unwrap();
         }
         assert_eq!(finish_wizard_run(dir.path()), WizardRun::Done);
-        assert!(WizardRun::Done.notices().is_empty());
+        let leftover = &WizardRun::Done.notices();
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(!journal_path(dir.path()).exists());
     }
 

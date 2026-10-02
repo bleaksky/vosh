@@ -164,7 +164,8 @@ fn a_line_with_no_number_read_only_recognizes_your_prompt() {
     assert!(read.values.is_empty());
     let line = generic("<100hp> ", &[""]);
     assert_eq!(line.capture.lines[0], r"^<-?\d+hp> +$");
-    assert!(fills(&line.capture).is_empty());
+    let leftover = &fills(&line.capture);
+    assert!(leftover.is_empty(), "{leftover:?}");
     assert!(recognizer(&line).line("<5hp> ").is_some());
 }
 

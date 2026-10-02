@@ -601,7 +601,8 @@ mod tests {
         assert_eq!(held_callbacks(&e), 0);
         assert!(e.state.cell.lock().unwrap().timer_callbacks.is_empty());
         // A cancelled timer the session already took as due runs nothing.
-        assert!(e.fire_timer(callback_id).unwrap().actions.is_empty());
+        let leftover = &e.fire_timer(callback_id).unwrap().actions;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -794,7 +795,8 @@ mod tests {
         let outcome = e
             .dispatch_gmcp("Char.Vitals", &serde_json::json!({}))
             .unwrap();
-        assert!(outcome.actions.is_empty());
+        let leftover = &outcome.actions;
+        assert!(leftover.is_empty(), "{leftover:?}");
         let outcome = e.eval("", "t").unwrap();
         assert_eq!(
             outcome.actions,
@@ -803,8 +805,10 @@ mod tests {
         let outcome = e
             .dispatch_gmcp("Char.Vitals", &serde_json::json!({}))
             .unwrap();
-        assert!(outcome.actions.is_empty());
-        assert!(e.loaded_script_names().is_empty());
+        let leftover = &outcome.actions;
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &e.loaded_script_names();
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]

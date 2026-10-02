@@ -1493,7 +1493,8 @@ mod tests {
     fn cmud_macro_unknown_key_unsupported() {
         let xml = r#"<cmud><window><macro key="171"><value>x</value></macro></window></cmud>"#;
         let r = parse_cmud(xml);
-        assert!(r.macros.is_empty());
+        let leftover = &r.macros;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(r.unsupported.iter().any(|(k, _)| k == "macro-key"));
     }
 

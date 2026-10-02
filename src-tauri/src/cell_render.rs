@@ -3507,7 +3507,7 @@ mod tests {
         let text = include_str!("../../fixtures/font-stacks/cases.json");
         let fixture: serde_json::Value = serde_json::from_str(text).unwrap();
         let cases = fixture["cases"].as_array().unwrap();
-        assert!(!cases.is_empty());
+        assert!(!cases.is_empty(), "expected entries");
         for case in cases {
             let name = case["name"].as_str().unwrap();
             let want: Vec<String> = serde_json::from_value(case["families"].clone()).unwrap();

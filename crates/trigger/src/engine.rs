@@ -462,7 +462,9 @@ mod tests {
         line.sort();
         assert_eq!(line, ["low", "two"]);
         assert_eq!(names(MatchScope::Prompt), ["prompt-look"]);
-        assert!(matching(&TriggerStore::new(), "hp", MatchScope::Line).is_empty());
+        let empty = TriggerStore::new();
+        let leftover = matching(&empty, "hp", MatchScope::Line);
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -470,7 +472,8 @@ mod tests {
         let s = TriggerStore::new();
         let r = process(&s, b"plain text");
         assert_eq!(r.display.as_deref(), Some("plain text"));
-        assert!(r.sends.is_empty());
+        let leftover = &r.sends;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]

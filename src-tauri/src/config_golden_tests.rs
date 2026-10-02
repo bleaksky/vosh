@@ -959,5 +959,6 @@ fn a_catalog_without_enabled_presets_still_loads() {
         catalog.triggers[0].preset.as_deref(),
         Some("combat_outgoing")
     );
-    assert!(catalog.macros.is_empty());
+    let leftover = &catalog.macros;
+    assert!(leftover.is_empty(), "{leftover:?}");
 }

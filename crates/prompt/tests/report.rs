@@ -69,7 +69,8 @@ fn james_prompt_reads_his_vitals_and_the_tank_line() {
         "Your prompt while someone in your group tanks"
     );
     assert_eq!(report.shapes[1].lines.len(), 2);
-    assert!(report.warnings.is_empty());
+    let leftover = &report.warnings;
+    assert!(leftover.is_empty(), "{leftover:?}");
     let written: Vec<(&str, &str, bool)> = report
         .codes
         .iter()
@@ -169,7 +170,8 @@ fn a_color_that_runs_into_a_code_does_not_compile() {
         "A color code runs into %h. Put a space between them in the game."
     );
     assert_eq!(error.which, Some(Which::Prompt));
-    assert!(report.shapes.is_empty());
+    let leftover = &report.shapes;
+    assert!(leftover.is_empty(), "{leftover:?}");
     // Same as the game needs codes Vosh can read, and the rest stay.
     assert_eq!(preset(&report, "game"), None);
     assert!(preset(&report, "minimal").is_some());
@@ -384,7 +386,8 @@ fn the_legend_lists_every_code_and_line_end_in_the_order_the_game_prints_them() 
         Some("It shows Health, Mana, and Moves with their maxes, and your tank and its health in a fight.")
     );
     assert_eq!(report.fix_note, None);
-    assert!(report.fixes.is_empty());
+    let leftover = &report.fixes;
+    assert!(leftover.is_empty(), "{leftover:?}");
 }
 
 #[test]

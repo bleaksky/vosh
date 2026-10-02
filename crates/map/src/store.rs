@@ -424,7 +424,7 @@ mod tests {
         // Even with avoid set on the destination we still allow it because
         // it is the explicit target.
         let path = s.find_path(1, 4).unwrap().unwrap();
-        assert!(!path.is_empty());
+        assert!(!path.is_empty(), "expected entries");
         // But avoid rooms in the middle get skipped.
         s.set_avoid(2, true).unwrap();
         s.set_avoid(4, false).unwrap();

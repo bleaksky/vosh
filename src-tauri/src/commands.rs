@@ -5917,7 +5917,8 @@ mod tests {
         super::switch_live_profile(&state, "Healer").await.unwrap();
         let mut p = state.profile.lock().await;
         assert_eq!(*p.prompt.config(), codes(false));
-        assert!(p.prompt.take_seen().is_empty());
+        let leftover = &p.prompt.take_seen();
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[tokio::test]
@@ -6073,7 +6074,8 @@ mod tests {
             ]
         );
         // You tell once. A second take finds nothing.
-        assert!(state.take_launch_notices().is_empty());
+        let leftover = &state.take_launch_notices();
+        assert!(leftover.is_empty(), "{leftover:?}");
 
         // The app keeps running on the defaults, and an edit saves.
         state.profile.lock().await.ui.tracked_affects = vec![affect("Haste")];
@@ -6402,11 +6404,11 @@ mod tests {
     #[test]
     fn lines_that_leave_the_tick_alone_send_nothing() {
         let mut profile = crate::profile::Profile::default();
-        assert!(heard_after(
+        let leftover = &heard_after(
             &mut profile,
-            &["look", "#tick", "#tick warn", "#tick reset"]
-        )
-        .is_empty());
+            &["look", "#tick", "#tick warn", "#tick reset"],
+        );
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -6756,7 +6758,8 @@ mod tests {
             assert_eq!(bard.font_size, 16);
             assert_eq!(bard.terminal_line_height, "loose");
             // The theme is still shared, so the file keeps the defaults.
-            assert!(bard.custom_themes.is_empty());
+            let leftover = &bard.custom_themes;
+            assert!(leftover.is_empty(), "{leftover:?}");
         }
 
         #[tokio::test]
@@ -7014,10 +7017,8 @@ mod tests {
             persist(&state, dir.path()).await;
             let saved = crate::loadout_store::load_global_catalog(dir.path()).unwrap();
             assert_eq!(macro_keys(&saved.macros), ["f1"]);
-            assert!(ProfileConfig::load(&set.active_path())
-                .unwrap()
-                .macros
-                .is_empty());
+            let leftover = &ProfileConfig::load(&set.active_path()).unwrap().macros;
+            assert!(leftover.is_empty(), "{leftover:?}");
 
             // You delete the macro while you play Healer.
             let state = relaunch_as(dir.path(), "Healer").await;
@@ -7026,7 +7027,8 @@ mod tests {
 
             // Back on Default, the macro stays deleted.
             let state = relaunch_as(dir.path(), crate::profile_set::DEFAULT_PROFILE_NAME).await;
-            assert!(state.profile.lock().await.macros.is_empty());
+            let leftover = &state.profile.lock().await.macros;
+            assert!(leftover.is_empty(), "{leftover:?}");
         }
 
         #[tokio::test]
@@ -7221,7 +7223,8 @@ mod tests {
             // The alias left the profile file, and the copy in legacy
             // still holds it.
             let healer = set.profile_path("Healer");
-            assert!(ProfileConfig::load(&healer).unwrap().aliases.is_empty());
+            let leftover = &ProfileConfig::load(&healer).unwrap().aliases;
+            assert!(leftover.is_empty(), "{leftover:?}");
             let legacy = healer.parent().unwrap().join("legacy").join("Healer.toml");
             assert_eq!(ProfileConfig::load(&legacy).unwrap().aliases[0].name, "hh");
             // A profile that never saved a file gets one that keeps the
@@ -7236,7 +7239,8 @@ mod tests {
             let before = read(&catalog_path(dir.path()));
             refused(&state, dir.path()).await;
             assert_eq!(read(&catalog_path(dir.path())), before);
-            assert!(ProfileConfig::load(&healer).unwrap().aliases.is_empty());
+            let leftover = &ProfileConfig::load(&healer).unwrap().aliases;
+            assert!(leftover.is_empty(), "{leftover:?}");
         }
 
         #[tokio::test]
@@ -7272,7 +7276,8 @@ mod tests {
             assert_eq!(items_on(&p), ["alias kk"]);
             drop(p);
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            assert!(items_on(&*state.profile.lock().await).is_empty());
+            let leftover = &items_on(&*state.profile.lock().await);
+            assert!(leftover.is_empty(), "{leftover:?}");
         }
 
         #[tokio::test]
@@ -7862,7 +7867,8 @@ mod tests {
                 .unwrap();
 
             let (catalog, loadouts) = load_path_b_at_launch(dir.path()).unwrap();
-            assert!(loadouts.active.is_empty());
+            let leftover = &loadouts.active;
+            assert!(leftover.is_empty(), "{leftover:?}");
             assert!(!loadouts.dormant);
             // Every item sits in the catalog once.
             let mut in_catalog: Vec<String> = catalog
@@ -8051,8 +8057,10 @@ mod tests {
             }
             assert_eq!(before[0].len(), 6);
             assert_eq!(before[1].len(), 3);
-            assert!(before[2].is_empty());
-            assert!(before[3].is_empty());
+            let leftover = &before[2];
+            assert!(leftover.is_empty(), "{leftover:?}");
+            let leftover = &before[3];
+            assert!(leftover.is_empty(), "{leftover:?}");
 
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
             super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
@@ -8061,8 +8069,10 @@ mod tests {
             let (_, loadouts) = load_path_b_at_launch(dir.path()).unwrap();
             let groups = |name: &str| loadouts.get(name).unwrap().enabled_groups.clone();
             assert_eq!(groups("Healer"), ["(Healer)"]);
-            assert!(groups("Test-Prompt").is_empty());
-            assert!(groups("Bard").is_empty());
+            let leftover = &groups("Test-Prompt");
+            assert!(leftover.is_empty(), "{leftover:?}");
+            let leftover = &groups("Bard");
+            assert!(leftover.is_empty(), "{leftover:?}");
             // The Settings group checkboxes of each file say the same.
             let healer = ProfileConfig::load(&set.profile_path("Healer")).unwrap();
             assert_eq!(
@@ -8127,7 +8137,8 @@ mod tests {
             assert_eq!(items_on(&p), ["trigger bash", "trigger flee"]);
             let r = crate::input::process(&mut p, "#group combat off");
             assert_eq!(r.echo, ["group `combat` disabled for triggers"]);
-            assert!(items_on(&p).is_empty());
+            let leftover = &items_on(&p);
+            assert!(leftover.is_empty(), "{leftover:?}");
             let r = crate::input::process(&mut p, "#group combat");
             assert_eq!(r.echo[1], "  triggers: off");
             crate::input::process(&mut p, "#group combat on");
@@ -8139,7 +8150,8 @@ mod tests {
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
             let mut p = state.profile.lock().await;
             crate::input::process(&mut p, "#group combat off");
-            assert!(items_on(&p).is_empty());
+            let leftover = &items_on(&p);
+            assert!(leftover.is_empty(), "{leftover:?}");
             crate::input::process(&mut p, "#group combat on");
             assert_eq!(items_on(&p), ["trigger flee"]);
             drop(p);
@@ -8152,7 +8164,8 @@ mod tests {
                 r.echo,
                 ["[group `combat` not found in triggers, aliases, or macros]"]
             );
-            assert!(items_on(&p).is_empty());
+            let leftover = &items_on(&p);
+            assert!(leftover.is_empty(), "{leftover:?}");
         }
 
         #[tokio::test]
@@ -8318,7 +8331,8 @@ mod tests {
                 ));
             }
             assert_eq!(before[0], ["trigger autoloot"]);
-            assert!(before[1].is_empty());
+            let leftover = &before[1];
+            assert!(leftover.is_empty(), "{leftover:?}");
 
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
             super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
@@ -8757,10 +8771,10 @@ mod tests {
                     assert!(state.global_catalog.lock().await.is_some(), "stop {stop}");
                     let p = state.profile.lock().await;
                     assert_eq!(items_on(&p), before[n], "stop {stop} {name}");
-                    assert!(ProfileConfig::load(&set.profile_path(name))
+                    let leftover = &ProfileConfig::load(&set.profile_path(name))
                         .unwrap()
-                        .aliases
-                        .is_empty());
+                        .aliases;
+                    assert!(leftover.is_empty(), "{leftover:?}");
                 }
                 assert!(!journal.exists(), "stop {stop}");
             }
@@ -9025,7 +9039,8 @@ mod tests {
             assert!(written);
             assert!(catalog_path(dir.path()).exists());
             let bard = ProfileConfig::load(&set.profile_path("Bard")).unwrap();
-            assert!(bard.aliases.is_empty());
+            let leftover = &bard.aliases;
+            assert!(leftover.is_empty(), "{leftover:?}");
             assert_eq!(bard.profile_vars.get("target").unwrap(), "orc 3");
         }
 

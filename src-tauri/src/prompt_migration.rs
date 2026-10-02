@@ -760,7 +760,8 @@ theme = "vellum"
         let root = dir.path();
         assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
         let after_first = snapshot(root);
-        assert!(run(root).is_empty());
+        let leftover = &run(root);
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(snapshot(root), after_first);
     }
 
@@ -879,7 +880,8 @@ mud.set_prompt_var('move', captures[4])"""
         assert_eq!(std::fs::read_to_string(before).unwrap(), default_file());
         // Back in step, so the next launch changes nothing.
         let after = snapshot(root);
-        assert!(run(root).is_empty());
+        let leftover = &run(root);
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(snapshot(root), after);
     }
 
@@ -911,7 +913,8 @@ mud.set_prompt_var('move', captures[4])"""
         assert!(!catalog_trigger(root, "prompt-capture").enabled);
         let default_before = text(root, "profiles/default.toml");
 
-        assert!(run(root).is_empty());
+        let leftover = &run(root);
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(profile(root, "default").prompt_config().capture.is_none());
         assert_eq!(text(root, "profiles/default.toml"), default_before);
         assert!(!catalog_trigger(root, "prompt-capture").enabled);
@@ -985,7 +988,8 @@ mud.set_prompt_var('move', captures[4])"""
         default.save(&path).unwrap();
         let before = snapshot(root);
 
-        assert!(run(root).is_empty());
+        let leftover = &run(root);
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(snapshot(root), before);
         assert!(profile(root, "default").prompt_config().capture.is_none());
     }
@@ -1085,7 +1089,8 @@ mud.set_prompt_var('move', captures[4])"""
         let root = dir.path();
         std::fs::write(root.join("catalog.toml"), "not [ toml").unwrap();
         let before = snapshot(root);
-        assert!(run(root).is_empty());
+        let leftover = &run(root);
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(snapshot(root), before);
     }
 
@@ -1119,7 +1124,8 @@ mud.set_prompt_var('move', captures[4])"""
         // Before the profile set loads, nothing is recorded.
         note_line_triggers(&state, vec!["early".to_string()]).await;
         crate::launch::load(&state, root).await;
-        assert!(state.take_launch_notices().is_empty());
+        let leftover = &state.take_launch_notices();
+        assert!(leftover.is_empty(), "{leftover:?}");
 
         note_line_triggers(&state, vec!["hp-watch".to_string()]).await;
         // A later session checks nothing more.
@@ -1141,7 +1147,8 @@ mud.set_prompt_var('move', captures[4])"""
         let again: crate::commands::SharedState =
             std::sync::Arc::new(crate::commands::AppState::default());
         crate::launch::load(&again, root).await;
-        assert!(again.take_launch_notices().is_empty());
+        let leftover = &again.take_launch_notices();
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[tokio::test]

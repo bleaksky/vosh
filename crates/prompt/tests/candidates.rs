@@ -74,7 +74,8 @@ fn candidates_group_by_shape_with_counts() {
         groups[1].entries[0].raw,
         "Tester: [===|===|===|---]\r\n[700/1020hp 790/800mn 930/930mv]"
     );
-    assert!(vosh_prompt::candidates::groups(std::iter::empty()).is_empty());
+    let leftover = &vosh_prompt::candidates::groups(std::iter::empty());
+    assert!(leftover.is_empty(), "{leftover:?}");
 }
 
 #[test]

@@ -2763,7 +2763,8 @@ mod tests {
         hold_unread(&path);
         assert!(write_with_backup(&path, "defaults = true\n").is_err());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "tracked = = [\n");
-        assert!(list_backups(&path).is_empty());
+        let leftover = &list_backups(&path);
+        assert!(leftover.is_empty(), "{leftover:?}");
 
         // A rename carries the hold to the new name.
         let renamed = dir.path().join("Cleric.toml");
@@ -2989,7 +2990,8 @@ name = "haste"
         config.aliases.push(Alias::new("greet", "wave"));
         let mut profile = Profile::default();
         let warnings = config.apply_to(&mut profile);
-        assert!(warnings.is_empty());
+        let leftover = &warnings;
+        assert!(leftover.is_empty(), "{leftover:?}");
         let snapshot = ProfileConfig::from_profile(&profile);
         assert_eq!(snapshot.aliases.len(), 1);
         assert_eq!(snapshot.aliases[0].name, "greet");
@@ -3023,7 +3025,8 @@ name = "haste"
         incoming.tick.reset_pattern = Some("^You feel".into());
         incoming.tick.warn_at_secs = Some(8);
         incoming.tick.warn_message = Some("Tick soon".into());
-        assert!(incoming.apply_to(&mut profile).is_empty());
+        let leftover = &incoming.apply_to(&mut profile);
+        assert!(leftover.is_empty(), "{leftover:?}");
 
         let tick = &profile.tick;
         assert_eq!(tick.last_tick, Some(t0 + secs(3)));
@@ -3364,7 +3367,8 @@ name = "haste"
         let entries: Vec<_> = ids.iter().map(|id| (*id, "hidden", None)).collect();
         let layout = PaneLayoutPersist::from_dock(&dock(&entries));
         assert!(!layout.panel_open);
-        assert!(layout.root.children.is_empty());
+        let leftover = &layout.root.children;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -3377,7 +3381,8 @@ name = "haste"
         ]);
         let layout = PaneLayoutPersist::from_dock(&entries);
         assert!(layout.panel_open);
-        assert!(layout.root.children.is_empty());
+        let leftover = &layout.root.children;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(layout.root.split.as_deref(), Some("column"));
     }
 
@@ -3388,7 +3393,7 @@ name = "haste"
         let text = include_str!("../../fixtures/pane-layout/sanitize.json");
         let fixture: serde_json::Value = serde_json::from_str(text).unwrap();
         let cases = fixture["cases"].as_array().unwrap();
-        assert!(!cases.is_empty());
+        assert!(!cases.is_empty(), "expected entries");
         for case in cases {
             let name = case["name"].as_str().unwrap();
             let mut got: PaneLayoutPersist = serde_json::from_value(case["input"].clone()).unwrap();
@@ -3554,7 +3559,8 @@ name = "haste"
         assert!(!per_profile.ui.follow_system_appearance);
         assert_eq!(per_profile.ui.light_theme, defaults.light_theme);
         assert_eq!(per_profile.ui.dark_theme, defaults.dark_theme);
-        assert!(per_profile.ui.custom_themes.is_empty());
+        let leftover = &per_profile.ui.custom_themes;
+        assert!(leftover.is_empty(), "{leftover:?}");
 
         assert!(restored.ui.follow_system_appearance);
         assert_eq!(restored.ui.light_theme, "classic-vivid");
@@ -3788,7 +3794,8 @@ name = "haste"
             ["mine", "mine-2", "alts"]
         );
         let alt = ProfileConfig::load(&set.profile_path("alt")).unwrap();
-        assert!(alt.ui.custom_themes.is_empty());
+        let leftover = &alt.ui.custom_themes;
+        assert!(leftover.is_empty(), "{leftover:?}");
 
         // The persist that follows the scope change clears the active
         // file, and the other profile sees every theme.
@@ -4004,7 +4011,8 @@ name = "haste"
 
         assert_shared_settings(&live);
         // What the profile owns goes back to the defaults.
-        assert!(live.ui.tracked_affects.is_empty());
+        let leftover = &live.ui.tracked_affects;
+        assert!(leftover.is_empty(), "{leftover:?}");
         // The next save writes the same shared settings back.
         persist_live(&set, &live);
         let global_after = std::fs::read_to_string(set.global_path()).unwrap();
@@ -4038,7 +4046,8 @@ name = "haste"
 
         let defaults = UiConfig::default();
         assert_eq!(live.ui.theme, defaults.theme);
-        assert!(live.ui.custom_themes.is_empty());
+        let leftover = &live.ui.custom_themes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(!live.ui.follow_system_appearance);
         // The font is still shared, so it stays.
         assert_eq!(live.ui.font_size, 16);
@@ -4348,7 +4357,8 @@ mod prompt_tests {
         let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         assert!(!set.active_path().exists());
         let mut live = Profile::default();
-        assert!(load_at_launch(&set, &mut live).is_empty());
+        let leftover = &load_at_launch(&set, &mut live);
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(*live.prompt.config(), PromptConfig::fresh());
         assert_eq!(live.ui.prompt_template, vosh_prompt::DEFAULT_DESIGN);
 
@@ -4377,7 +4387,8 @@ mod prompt_tests {
             });
             file.save(&set.active_path()).unwrap();
             let mut live = Profile::default();
-            assert!(load_at_launch(&set, &mut live).is_empty());
+            let leftover = &load_at_launch(&set, &mut live);
+            assert!(leftover.is_empty(), "{leftover:?}");
             let prompt = live.prompt.config();
             assert_eq!(prompt.template, vosh_prompt::DEFAULT_DESIGN);
             assert_eq!(live.ui.prompt_template, vosh_prompt::DEFAULT_DESIGN);
