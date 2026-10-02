@@ -638,8 +638,23 @@ describe('the help on the one window', () => {
 describe('the help on Room triggers', () => {
   it('says what Room matches and how Vosh finds those lines', () => {
     expect(body('automate.first-trigger')).toContain(
-      '- Pick `Room` in `Match` to match only the things and people a room lists after its exits line. The game sends a `Room.Chars` packet with each look, and Vosh counts the people lines from it, so a say or an arrival after the look stays a plain line.',
+      '- Pick `Room` in `Match` to match only the armies, things and people a room lists after its exits line. The game sends `Room.Chars` and `Room.Items` packets with each look, and Vosh counts the lines from them, so a say or an arrival after the look stays a plain line.',
     );
+  });
+
+  it('says what Your target matches and how Vosh finds that line', () => {
+    expect(body('automate.first-trigger')).toContain(
+      '- Pick `Your target` in `Match` to match only the line of the one you target with `tar`, when a room lists them. Vosh finds that line by what you gave `tar` as whole words in any case, or by the name in the room it points at, so `tar crow` finds `A large murder of crows nearly turns the trees black here.`. Someone who fights your target keeps the room color.',
+    );
+  });
+
+  it('tells you where your target turns red, in the help on targets too', () => {
+    const found = HELP_TOPICS.find((t) => t.id === 'tick.track-target');
+    if (!found) throw new Error('no target topic');
+    expect(found.body).toContain(
+      '- Look at the room. With the `Room, time and weather colors` preset on, the line of your target turns bright red while the room lists them.',
+    );
+    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
   });
 
   it('matches HELP.md word for word', () => {
@@ -656,11 +671,14 @@ describe('the help on the Room, time and weather colors preset', () => {
       'The `Room, time and weather colors` preset colors a room look, the clock and the weather.',
     );
     expect(text).toContain(
-      'The exits line turns green, the things and people the room lists turn yellow, the day and night messages turn blue, and the WiZNET tag turns bold magenta.',
+      'The exits line turns green, the armies, things and people the room lists turn yellow, the day and night messages turn blue, and the WiZNET tag turns bold magenta.',
     );
     expect(text).toContain('Each one is a terminal color from your theme');
     expect(text).toContain(
-      'The exits and room colors fill only the text the game left uncolored, so an aura, a red `[AFK]` and the red `+` of a trap you see keep their own colors.',
+      'The exits, room and target colors fill only the text the game left uncolored, so an aura, a red `[AFK]` and the red `+` of a trap you see keep their own colors.',
+    );
+    expect(text).toContain(
+      'The one you target with `tar` turns bright red when the room lists them, so your target stands out from the rest of the room. That red is the `room.target` trigger, so give it a group in Triggers and turn the group off to keep your target yellow.',
     );
     expect(text).toContain(
       'The magenta covers the WiZNET tag alone, so the message after it keeps its colors too.',
