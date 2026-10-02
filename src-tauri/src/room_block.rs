@@ -25,8 +25,12 @@
 //!
 //! - Room.Chars and Room.Items each hold a count for the next exits line.
 //! - The exits line opens the block and takes both counts.
-//! - Lines with no shape of a thing that end in the reset come first,
-//!   each one an army.
+//! - Lines shaped like an army come first, each one an army. An army
+//!   line ends in the reset and holds no other code, or opens with the
+//!   cabal in brackets an area cabal sees. The lines the game colors
+//!   whole, such as `You have explored a quarter of The Eastern Road.`
+//!   after a move into an empty room, carry a code of their own, so they
+//!   close the block.
 //! - Then lines shaped like a thing, each one spending its count of the
 //!   objects Room.Items named, until none are left.
 //! - Then as many lines as Room.Chars named, each one a person.
@@ -48,10 +52,10 @@
 //! character in catalepsy (one line after the people turns into a room
 //! line), people that height sense or sense evil shows past Room.Chars
 //! (the last of them stays a plain line), a long text of two lines, a
-//! mob whose long text ends in the reset with no thing before it (it
-//! reads as an army, and one line after the people turns into a room
-//! line), armies with your color off (they read as people), and two
-//! looks in one pulse.
+//! mob whose long text ends in the reset with no other code and no thing
+//! before it (it reads as an army, and one line after the people turns
+//! into a room line), armies with your color off (they read as people),
+//! and two looks in one pulse.
 //!
 //! [`MatchScope::Room`]: vosh_trigger::MatchScope::Room
 //! [`MatchScope::RoomTarget`]: vosh_trigger::MatchScope::RoomTarget
@@ -79,6 +83,21 @@ const SPUR_PATTERN: &str = r"^You spot some (?:new|fresh|recent|old) spur\.$";
 /// The code two backticks send (`comm.c` `process_color`), which ends
 /// every army line (`armies.c` `show_room_armies`).
 const RESET: &[u8] = b"\x1b[0;0m";
+
+/// Whether a line with no shape of a thing has the shape of an army line
+/// (`armies.c` `show_room_armies`). To a player outside an area cabal the
+/// server prints the long text and the reset, and no army in the area
+/// files holds a color code, so the reset is the only code in the line.
+/// To a member of an area cabal it prints the cabal in brackets first.
+/// The lines the game colors whole carry a code of their own before the
+/// reset, as `explore_room` does with `You have explored a quarter of
+/// The Eastern Road.` after a move into an empty room.
+fn army_shaped(plain: &str, bytes: &[u8]) -> bool {
+    let Some(text) = bytes.strip_suffix(RESET) else {
+        return false;
+    };
+    !text.contains(&0x1b) || plain.starts_with('[')
+}
 
 /// `pattern`, compiled once into `cell`.
 fn compiled(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
@@ -192,7 +211,7 @@ impl RoomBlock {
             if spur().is_match(plain) {
                 return RoomLine::Other;
             }
-            if count.is_none() && bytes.ends_with(RESET) {
+            if count.is_none() && army_shaped(plain, bytes) {
                 return RoomLine::Army;
             }
         }
@@ -560,6 +579,42 @@ mod tests {
                 &["It is pitch black ... ", FORTRESS, HELM, VILLAGER]
             ),
             [Other, Other, Other, Other]
+        );
+    }
+
+    #[test]
+    fn a_line_the_game_colors_whole_after_an_empty_room_is_no_army() {
+        // explore.c `explore_room`, which `move_char` runs right after the
+        // look, in `8 bold black. Room 6910 in area/eastroad.are holds no
+        // one and nothing.
+        let mut block = RoomBlock::default();
+        block.room_chars(0);
+        block.room_items(0);
+        assert_eq!(
+            kinds(
+                &mut block,
+                &[
+                    "[Exits: east west]",
+                    "\x1b[0;1;30mYou have explored a quarter of The Eastern Road.\x1b[0;0m",
+                ],
+            ),
+            [Other, Other]
+        );
+    }
+
+    #[test]
+    fn an_area_cabal_sees_an_army_with_its_cabal_and_health_first() {
+        // `show_room_armies` to a member of an area cabal. Knight Fortress
+        // at full health, its cabal `6KNIGHT`` padded to 15 and the bar
+        // from `short_bar` in misc.c in `2 green.
+        let fortress = "[\x1b[0;36mKNIGHT\x1b[0;0m]   \x1b[0;0m \
+                        [\x1b[0;32m||||||\x1b[0;0m]    A mighty Fortress looms over the area.\x1b[0;0m";
+        let mut block = RoomBlock::default();
+        block.room_chars(1);
+        block.room_items(0);
+        assert_eq!(
+            kinds(&mut block, &[EXITS_LINE, fortress, VILLAGER]),
+            [Other, Army, Person]
         );
     }
 

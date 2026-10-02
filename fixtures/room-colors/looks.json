@@ -415,6 +415,26 @@
         { "line": "", "room": false, "from": "the blank line before the prompt" },
         { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
       ]
+    },
+    {
+      "name": "a move into an empty room, then how much of the area you have explored",
+      "events": [
+        { "gmcp": "Room.Chars", "data": [] },
+        { "gmcp": "Room.Items", "data": [] },
+        {
+          "line": "[Exits: east west]",
+          "room": false,
+          "preset": "green",
+          "from": "do_exits with auto, room 6910 in area/eastroad.are"
+        },
+        {
+          "line": "\u001b[0;1;30mYou have explored a quarter of The Eastern Road.\u001b[0;0m",
+          "room": false,
+          "from": "explore_room in explore.c, which move_char runs right after the look"
+        },
+        { "line": "", "room": false, "from": "the blank line before the prompt" },
+        { "prompt": "<1020hp 800m 930mv> ", "from": "prompt all" }
+      ]
     }
   ]
 }
