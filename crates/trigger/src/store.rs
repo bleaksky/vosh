@@ -328,6 +328,9 @@ impl TriggerStore {
         self.items.iter().map(|t| t.trigger.clone()).collect()
     }
 
+    /// Test only. The app's tests count triggers through the `testkit`
+    /// feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn len(&self) -> usize {
         self.items.len()
     }

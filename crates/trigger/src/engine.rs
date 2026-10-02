@@ -4,7 +4,9 @@
 use std::borrow::Cow;
 
 use regex::Regex;
-use vosh_ansi::{plain_text, PieceKind};
+#[cfg(any(test, feature = "testkit"))]
+use vosh_ansi::plain_text;
+use vosh_ansi::PieceKind;
 
 use crate::action::{HighlightStyle, TriggerAction};
 use crate::readable;
@@ -79,14 +81,18 @@ pub struct ScriptInvocation {
 /// included. A Replace or a wash rebuilds the line from its plain text.
 ///
 /// Equivalent to `process_scoped(store, original, MatchScope::Line)`.
+/// Test only, like `process_scoped`.
+#[cfg(any(test, feature = "testkit"))]
 pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
     process_scoped(store, original, MatchScope::Line)
 }
 
 /// Run the trigger store against a buffer, only firing triggers whose
-/// `target` matches the given scope. Used by the session loop to
-/// dispatch the same engine for both completed lines (`MatchScope::Line`)
-/// and partial-prompt buffers (`MatchScope::Prompt`).
+/// `target` matches the given scope, with no ground to lift colors on.
+/// Only tests call it, the app's tests through the `testkit` feature.
+/// The session calls [`process_on_ground`] with the plain text it
+/// already holds and the terminal background.
+#[cfg(any(test, feature = "testkit"))]
 pub fn process_scoped(store: &TriggerStore, original: &[u8], scope: MatchScope) -> LineResult {
     process_on_ground(store, original, &plain_text(original), scope, None)
 }
