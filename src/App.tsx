@@ -49,7 +49,6 @@ import {
   promptConfigSet,
   promptCodeReaderSet,
   promptPreviewSet,
-  promptStateGet,
   subscribePromptCardOpen,
   TERMINAL_LINE_HEIGHTS,
   type StatePayload,
@@ -119,7 +118,7 @@ import { usePromptShow } from './lib/promptShow';
 import { PromptDock } from './components/prompt/PromptDock';
 import { PromptCard, type PromptCardHost } from './components/prompt/PromptCard';
 import { nextCardRequest, type CardRequest, type CardRequestView } from './lib/promptCard';
-import { getPinnedBand, notePageWrite, usePinnedDockRows } from './lib/stores/pinnedPromptStore';
+import { notePageWrite, usePinnedDockRows } from './lib/stores/pinnedPromptStore';
 import { usePromptReach } from './lib/stores/promptReachStore';
 import { lentRows, type CellSize } from './lib/promptBand';
 import { noteReader } from './lib/readerBusy';
@@ -445,48 +444,6 @@ function App() {
       unlisten?.();
     };
   }, [openPromptCard]);
-
-  // A dev run gives the Web Inspector __voshPromptPointer, which names the
-  // piece of your prompt under each click, in the text or on the pinned
-  // band (src/lib/promptPointerProbe.ts). A production build leaves it out.
-  const probeRef = useRef({ promptShow, cellSize });
-  probeRef.current = { promptShow, cellSize };
-  useEffect(() => {
-    if (import.meta.env.DEV) {
-      let gone = false;
-      let remove: (() => void) | undefined;
-      void import('./lib/promptPointerProbe').then(({ installPromptPointerProbe }) => {
-        if (gone) return;
-        remove = installPromptPointerProbe({
-          renderer: () => (nativeSurfaceEnabled() ? 'native' : 'xterm'),
-          terminal: () => termRef.current,
-          openRow: async () => (await promptStateGet()).open_row,
-          dock: () => {
-            const el = document.querySelector('.prompt-dock');
-            const { promptShow: show, cellSize: cell } = probeRef.current;
-            if (!el || !show || !cell) return null;
-            const r = el.getBoundingClientRect();
-            // The dock is as tall as the rows it shows now.
-            const rows = Number(el.getAttribute('data-rows')) || show.zone;
-            return {
-              left: r.left,
-              top: r.top,
-              right: r.right,
-              bottom: r.bottom,
-              zone: rows,
-              cell,
-            };
-          },
-          band: getPinnedBand,
-        });
-      });
-      return () => {
-        gone = true;
-        remove?.();
-      };
-    }
-    return undefined;
-  }, []);
 
   // On quit the backend asks each window for the writes it holds back,
   // like a pane layout waiting out a splitter drag, before it writes
