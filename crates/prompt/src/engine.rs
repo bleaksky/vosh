@@ -4,6 +4,10 @@
 //! The table lasts as long as the profile. The variables last as long as
 //! the connection, and a profile switch keeps the GMCP packets while it
 //! drops the values the last profile's prompt read.
+//!
+//! The card adds two methods to [`PromptEngine`], `state` in
+//! [`crate::card::state`] and `kept_pattern` in [`crate::card::sentences`],
+//! so this module never imports the card.
 
 mod char_prompt;
 mod replies;
