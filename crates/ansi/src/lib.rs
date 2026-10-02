@@ -17,5 +17,5 @@ pub mod parser;
 pub mod sgr;
 
 pub use color::Color;
-pub use parser::{pieces, plain_text, AnsiParser, Piece, PieceKind, Span};
-pub use sgr::{Attributes, Sgr};
+pub use parser::{pieces, plain_text, Piece, PieceKind};
+pub use sgr::{AnsiParser, Attributes, Sgr, Span};
