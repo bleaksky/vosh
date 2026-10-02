@@ -69,8 +69,9 @@ pub fn build<T: Serialize>(package: &str, value: &T) -> serde_json::Result<Vec<u
     Ok(out)
 }
 
-/// Build a payload from an already-stringified JSON body. Useful when the
-/// caller has the JSON ready as a `&str` and wants to skip another parse.
+/// Build a payload from an already-stringified JSON body. Only tests
+/// call it, since the session serializes every payload through `build`.
+#[cfg(test)]
 pub fn build_raw(package: &str, json_body: &str) -> Vec<u8> {
     let mut out = Vec::with_capacity(package.len() + json_body.len() + 1);
     out.extend_from_slice(package.as_bytes());
