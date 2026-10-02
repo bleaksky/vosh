@@ -19,6 +19,12 @@ const SCROLLBACK_CAP: usize = 10_000;
 #[derive(Debug, Default)]
 pub(crate) struct Scrollback {
     lines: VecDeque<Vec<u8>>,
+    /// How many lines the ring ever took, so a line's number names it for
+    /// as long as the ring still holds it.
+    taken: u64,
+    /// The number of the line that shows the run of repeated lines the
+    /// screen ends on, while Collapse repeated lines is on.
+    run: Option<u64>,
 }
 
 impl Scrollback {
@@ -27,6 +33,41 @@ impl Scrollback {
             self.lines.pop_front();
         }
         self.lines.push_back(raw_line);
+        self.taken += 1;
+    }
+
+    /// Keep `line` as Collapse repeated lines made of it on screen: on its
+    /// own while it is off, as the start of a run, or as the run's line
+    /// with its count once a line joined the run.
+    pub(crate) fn keep(&mut self, line: Vec<u8>, repeat: Option<vosh_prompt::stage::Repeat>) {
+        match repeat {
+            None => self.push(line),
+            Some(vosh_prompt::stage::Repeat::Starts) => self.start_run(line),
+            Some(vosh_prompt::stage::Repeat::Joins(_)) => self.join_run(line),
+        }
+    }
+
+    /// Keep `line`, the first of a run of repeated lines, and note it, so
+    /// the lines that join the run take its place.
+    pub(crate) fn start_run(&mut self, line: Vec<u8>) {
+        self.push(line);
+        self.run = Some(self.taken - 1);
+    }
+
+    /// Keep `line`, the run of repeated lines with its count, in place of
+    /// the run's line, as the screen shows the run once. A prompt kept
+    /// after the run while it shows pinned stays where it is. A run whose
+    /// line already left the ring starts again.
+    pub(crate) fn join_run(&mut self, line: Vec<u8>) {
+        let first = self.taken - self.lines.len() as u64;
+        let at = self
+            .run
+            .filter(|&run| run >= first)
+            .and_then(|run| usize::try_from(run - first).ok());
+        match at.and_then(|at| self.lines.get_mut(at)) {
+            Some(kept) => *kept = line,
+            None => self.start_run(line),
+        }
     }
 
     /// The kept lines, oldest first, colors included.
@@ -49,6 +90,7 @@ impl Scrollback {
 
     pub(crate) fn load_from_bytes(&mut self, bytes: &[u8]) {
         self.lines.clear();
+        self.run = None;
         // Keep empty intermediate rows so blank lines in the original
         // output show up again on restore. Splitting on \n always yields
         // one trailing empty chunk after a final \n; that one is an
@@ -121,6 +163,48 @@ mod tests {
         assert_eq!(s.lines[1], b"beta");
         assert_eq!(s.lines[2], b"");
         assert_eq!(s.lines[3], b"gamma");
+    }
+
+    #[test]
+    fn a_run_of_repeated_lines_keeps_one_line_with_its_count() {
+        let mut s = Scrollback::default();
+        s.push(b"You are hungry.".to_vec());
+        s.start_run(b"You dodge Quenby's attack.".to_vec());
+        s.join_run(b"(2) You dodge Quenby's attack.".to_vec());
+        // A prompt kept while it shows pinned stays after the run.
+        s.push(b"[1020/1020hp 800/800mn 930/930mv]".to_vec());
+        s.join_run(b"(3) You dodge Quenby's attack.".to_vec());
+        assert_eq!(
+            s.lines().collect::<Vec<_>>(),
+            [
+                &b"You are hungry."[..],
+                b"(3) You dodge Quenby's attack.",
+                b"[1020/1020hp 800/800mn 930/930mv]",
+            ]
+        );
+        // The next run starts on a line of its own.
+        s.start_run(b"You parry Quenby's attack.".to_vec());
+        s.join_run(b"(2) You parry Quenby's attack.".to_vec());
+        assert_eq!(s.lines.len(), 4);
+        assert_eq!(s.lines[3], b"(2) You parry Quenby's attack.");
+        assert_eq!(s.lines[1], b"(3) You dodge Quenby's attack.");
+    }
+
+    #[test]
+    fn a_run_whose_line_left_the_ring_starts_again() {
+        let mut s = Scrollback::default();
+        s.start_run(b"You are hungry.".to_vec());
+        for i in 0..SCROLLBACK_CAP {
+            s.push(format!("line {i}").into_bytes());
+        }
+        s.join_run(b"(2) You are hungry.".to_vec());
+        assert_eq!(s.lines.len(), SCROLLBACK_CAP);
+        assert_eq!(s.lines.back().unwrap(), b"(2) You are hungry.");
+        assert_eq!(s.lines.front().unwrap(), b"line 1");
+        // A restored scrollback holds no run.
+        s.load_from_bytes(b"alpha\r\n");
+        s.join_run(b"(3) You are hungry.".to_vec());
+        assert_eq!(s.lines.len(), 2);
     }
 
     #[test]

@@ -793,3 +793,83 @@ describe('a resize while xterm parses a long backlog', () => {
     expect(writes).toEqual(['You are hungry.\r\n', 'look\r\n', 'You see nothing special.\r\n']);
   });
 });
+
+describe('a run of repeated lines the session collapses', () => {
+  // The session writes each line as a region of its own while Collapse
+  // repeated lines is on, and rewrites the run's region in place with the
+  // count before the line as the next line joins it. The lines are the
+  // game's own, from fight.c, with an invented name.
+  const dodge = "You dodge Quenby's attack.";
+  const parry = "You parry Quenby's attack.";
+  const count = (n: number, line: string) => `\x1b[38;5;244m(${n})\x1b[39m ${line}`;
+
+  it('shows the run once, its count rewritten in place, and the next line after it', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: `${mark(1)}${dodge}\r\n` });
+    writer.output(replace(1, `${mark(2)}${count(2, dodge)}\r\n`, true));
+    writer.output(replace(2, `${mark(3)}${count(3, dodge)}\r\n`, true));
+    writer.output({ text: `${mark(4)}${parry}\r\n` });
+    await parsed(writer);
+    expect(screen(term)).toEqual([`(3) ${dodge}`, parry]);
+  });
+
+  it('writes the run on a new row once your echo landed after it', async () => {
+    // Your echo reached xterm before the session heard of it.
+    const { term, writer } = setup();
+    writer.output({ text: `${mark(1)}${dodge}\r\n` });
+    writer.local('wake\r\n');
+    writer.output(replace(1, `${mark(2)}${count(2, dodge)}\r\n`, true));
+    writer.output(replace(2, `${mark(3)}${count(3, dodge)}\r\n`, true));
+    await parsed(writer);
+    expect(screen(term)).toEqual([dodge, 'wake', `(3) ${dodge}`]);
+  });
+
+  it('goes on in the history of the split, which took the run from your scrollback', async () => {
+    // The history pane fills from the scrollback ring, which keeps the
+    // run as the screen shows it but with no region. The run the session
+    // goes on with lands once on a new row, and then in place.
+    const { term, writer } = setup(40, 6);
+    writer.local(`You are hungry.\r\n${count(2, dodge)}\r\n`);
+    writer.output(replace(7, `${mark(8)}${count(3, dodge)}\r\n`, true));
+    writer.output(replace(8, `${mark(9)}${count(4, dodge)}\r\n`, true));
+    await parsed(writer);
+    expect(screen(term)).toEqual(['You are hungry.', `(2) ${dodge}`, `(4) ${dodge}`]);
+  });
+
+  it('keeps what you read where it is while the run goes on below', async () => {
+    const { term, writer } = setup(40, 5);
+    const history = Array.from({ length: 20 }, (_, i) =>
+      i % 2 === 0 ? 'You are hungry.' : 'You are thirsty.',
+    );
+    writer.output({ text: `${history.join('\r\n')}\r\n${mark(1)}${dodge}\r\n` });
+    await parsed(writer);
+    term.scrollLines(-6);
+    const top = term.buffer.active.viewportY;
+    const reading = term.buffer.active.getLine(top)?.translateToString(true);
+    writer.output(replace(1, `${mark(2)}${count(2, dodge)}\r\n`, true));
+    writer.output(replace(2, `${mark(3)}${count(3, dodge)}\r\n`, true));
+    await parsed(writer);
+    expect(term.buffer.active.viewportY).toBe(top);
+    expect(term.buffer.active.getLine(top)?.translateToString(true)).toBe(reading);
+    expect(screen(term).slice(-2)).toEqual(['You are thirsty.', `(3) ${dodge}`]);
+  });
+
+  it('finds the run right above a region a pinned prompt emptied', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: `${mark(1)}${dodge}\r\n${mark(2)}[1020/1020hp 8` });
+    // The prompt leaves the text, and its region stays open, empty.
+    writer.output(replace(2, mark(3)));
+    writer.output({
+      text: '',
+      replace: {
+        gen: 3,
+        text: `${mark(4)}${count(2, dodge)}\r\n`,
+        fresh: true,
+        above: { plain: dodge, text: `${mark(4)}${count(2, dodge)}\r\n` },
+      },
+    });
+    writer.output(replace(4, `${mark(5)}${count(3, dodge)}\r\n`, true));
+    await parsed(writer);
+    expect(screen(term)).toEqual([`(3) ${dodge}`]);
+  });
+});
