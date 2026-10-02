@@ -19,6 +19,29 @@ export interface MenuPlacement {
 
 // Space kept between a menu and the window edge.
 const EDGE = 8;
+// Space between a menu and a submenu beside it.
+const SUBMENU_GAP = 4;
+// A menu's inner padding. A submenu rises by it, so its first row sits
+// level with the row that opened it.
+const MENU_PAD = 6;
+
+/** The edges of a box on screen, as getBoundingClientRect gives them. */
+export type MenuBox = Pick<DOMRect, 'left' | 'right' | 'top' | 'bottom'>;
+
+/** Where a submenu wants to sit beside `row`, a row of `menu`: to the
+ *  right of the menu with its first row level with `row`, flipped to the
+ *  left of the menu at the window's right edge, and up from the bottom
+ *  of `row` at the bottom edge. Pass `preferFlip` when `menu` itself
+ *  opened to the left of its parent. */
+export function submenuAt(row: MenuBox, menu: MenuBox, preferFlip?: boolean): MenuPlacement {
+  return {
+    x: menu.right + SUBMENU_GAP,
+    y: row.top - MENU_PAD,
+    flipX: menu.left - SUBMENU_GAP,
+    flipY: row.bottom + MENU_PAD,
+    ...(preferFlip !== undefined && { preferFlip }),
+  };
+}
 
 /** Where a menu `w` by `h` sits in a `vw` by `vh` window. */
 export function placeMenu(

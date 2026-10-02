@@ -31,6 +31,7 @@ import {
   showHereInstead,
   splitHere,
 } from './paneActions';
+import { submenuAt } from './menuPlacement';
 import { fitsPanel } from './paneGeometry';
 import { CheckIcon, ChevronRightIcon } from './paneIcons';
 import { getPanelLayout } from './panelLayoutStore';
@@ -181,7 +182,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         nested
         autoFocus={subOpen.focus}
         className="pane-menu-sub"
-        at={{ x: menu.right + 4, y: r.top - 6, flipX: menu.left - 4, flipY: r.bottom + 6 }}
+        at={submenuAt(r, menu)}
         onClose={() => {
           // Escape or ArrowLeft: back to the row that opened it.
           setSubOpen(null);
@@ -214,13 +215,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         nested
         autoFocus={chanOpen.focus}
         className="pane-menu-sub"
-        at={{
-          x: menu.right + 4,
-          y: r.top - 6,
-          flipX: menu.left - 4,
-          flipY: r.bottom + 6,
-          preferFlip: leftward,
-        }}
+        at={submenuAt(r, menu, leftward)}
         onClose={() => {
           setChanOpen(null);
           chanRefs.current[channel]?.focus();

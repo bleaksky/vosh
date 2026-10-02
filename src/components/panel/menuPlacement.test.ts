@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeMenu } from './menuPlacement';
+import { placeMenu, submenuAt } from './menuPlacement';
 
 // A 1280 by 800 window, a menu 200 by 300.
 const W = 200;
@@ -37,5 +37,36 @@ describe('placeMenu', () => {
       left: 100,
       top: 350,
     });
+  });
+});
+
+describe('submenuAt', () => {
+  // A menu 232 wide whose row is 30 tall, 6 inside the menu's padding.
+  const menuAt = (left: number, top: number) => ({
+    menu: { left, right: left + 232, top, bottom: top + 200 },
+    row: { left: left + 6, right: left + 226, top: top + 66, bottom: top + 96 },
+  });
+
+  it('opens right of the menu, its first row level with the row', () => {
+    const { menu, row } = menuAt(100, 100);
+    // 4 past the menu, and up by its own 6 of padding.
+    expect(placeMenu(submenuAt(row, menu), W, H, VW, VH)).toEqual({ left: 336, top: 160 });
+  });
+
+  it('opens left of the menu at the right edge', () => {
+    const { menu, row } = menuAt(1000, 100);
+    expect(placeMenu(submenuAt(row, menu), W, H, VW, VH)).toEqual({ left: 796, top: 160 });
+  });
+
+  it('rises from the row at the bottom edge', () => {
+    const { menu, row } = menuAt(100, 560);
+    // Its bottom sits 6 below the row's, so its last row is level with it.
+    expect(placeMenu(submenuAt(row, menu), W, H, VW, VH)).toEqual({ left: 336, top: 362 });
+  });
+
+  it('carries preferFlip only when asked', () => {
+    const { menu, row } = menuAt(100, 100);
+    expect(submenuAt(row, menu)).not.toHaveProperty('preferFlip');
+    expect(submenuAt(row, menu, true).preferFlip).toBe(true);
   });
 });
