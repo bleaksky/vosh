@@ -223,8 +223,6 @@ pub enum TriggerError {
         #[source]
         source: regex::Error,
     },
-    #[error("trigger `{0}` not found")]
-    NotFound(String),
     #[error("invalid json: {0}")]
     InvalidJson(#[from] serde_json::Error),
 }
@@ -317,17 +315,6 @@ impl TriggerStore {
             self.revision = next_revision();
         }
         removed
-    }
-
-    /// List preset ids currently present in the store, deduplicated.
-    pub fn preset_ids(&self) -> Vec<String> {
-        let mut seen = std::collections::BTreeSet::new();
-        for t in &self.items {
-            if let Some(id) = t.trigger.preset.as_deref() {
-                seen.insert(id.to_string());
-            }
-        }
-        seen.into_iter().collect()
     }
 
     pub fn get(&self, name: &str) -> Option<&Trigger> {
