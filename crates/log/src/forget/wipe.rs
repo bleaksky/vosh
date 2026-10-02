@@ -5,8 +5,8 @@ use rusqlite::types::ValueRef;
 use rusqlite::{params, Connection, TransactionBehavior};
 
 use super::replay::PasswordFinder;
-use super::{Forgotten, PasswordLines, HIDDEN_SENT_TEXT};
-use crate::{LogStore, Result};
+use super::{Forgotten, PasswordLines};
+use crate::{LogStore, Result, HIDDEN_SENT_TEXT};
 
 /// A table that says an earlier run blanked lines and has not yet cleared
 /// the old copies of their text from the file. The blanking transaction
