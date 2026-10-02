@@ -1,5 +1,6 @@
-//! Named ANSI 16 colors. Phase 3 keeps the highlight palette to the named
-//! set; xterm 256 and 24 bit truecolor land in a later phase.
+//! The named ANSI 16 colors, the palette a highlight style draws from.
+//! Each goes out as its 16 color SGR code, so the theme decides how it
+//! looks.
 
 use serde::{Deserialize, Serialize};
 

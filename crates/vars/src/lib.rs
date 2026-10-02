@@ -1,6 +1,6 @@
 //! Variable store with two scopes and `$name` interpolation.
 //!
-//! Profile scope persists across sessions (Phase 9 lands disk persistence).
+//! Profile scope persists across sessions and saves in the profile file.
 //! Session scope clears on reconnect. Lookups resolve session before profile,
 //! so a session set hides the profile value until cleared.
 

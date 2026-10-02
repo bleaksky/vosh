@@ -24,7 +24,7 @@ fn alloc_timer_id() -> u32 {
     NEXT_TIMER_ID.fetch_add(1, Ordering::Relaxed)
 }
 
-/// Install the `mud` global with the full Phase 8 API surface.
+/// Install the mud API as the `mud` global table scripts call into.
 pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
     let mud = lua.create_table()?;
 
@@ -304,8 +304,7 @@ pub(crate) fn captures_to_lua(
 }
 
 /// Apply the sandbox: remove globals that shell out, touch the filesystem,
-/// or load arbitrary code. Phase 9 will add per-script permission grants
-/// that re-enable a curated subset for trusted scripts.
+/// or load arbitrary code.
 pub(crate) fn apply_sandbox(lua: &Lua) -> LuaResult<()> {
     let globals = lua.globals();
     for name in ["dofile", "loadfile", "load", "loadstring", "require"] {
