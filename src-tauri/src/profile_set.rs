@@ -192,6 +192,7 @@ impl AutoMatch {
 
     /// Whether `other` names the same world and the same characters in
     /// the same order, ignoring case. The toggle is not compared.
+    #[cfg(test)]
     fn same_claim(&self, other: &AutoMatch) -> bool {
         let same_host = match (self.host.as_deref(), other.host.as_deref()) {
             (Some(a), Some(b)) => a.trim().eq_ignore_ascii_case(b.trim()),
@@ -893,7 +894,10 @@ impl ProfileSet {
     ///   does, and names them in `released_from`.
     /// - A claim with no world, port or character goes away.
     ///
-    /// Writes the index once and never switches.
+    /// Writes the index once and never switches. No command calls it
+    /// since D7 dropped `profile_set_metadata`. Tests use it to set up
+    /// claims under the login rules.
+    #[cfg(test)]
     pub(crate) fn set_metadata(
         &mut self,
         name: &str,

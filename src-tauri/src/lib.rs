@@ -123,12 +123,12 @@ use commands::{
     native_surface_set_divider_color, native_surface_set_font, native_surface_set_theme,
     native_surface_set_visible, native_surface_wheel, open_help_window, open_settings_window,
     presets_install, presets_remove, profile_create, profile_delete, profile_duplicate,
-    profile_get_scope, profile_rename, profile_resolve_match, profile_set_metadata,
-    profile_set_scope, profile_switch, profiles_list, scrollback_load, session_connect,
-    session_disconnect, session_send_input, session_send_masked, session_set_window_size,
-    target_get, tick_get_config, tick_set_config, timers_delete, timers_list, timers_set,
-    triggers_export, triggers_import, triggers_list, ui_get_config, ui_set_config, updater_check,
-    updater_install_and_relaunch, AppState, SharedState,
+    profile_get_scope, profile_rename, profile_resolve_match, profile_set_scope, profile_switch,
+    profiles_list, scrollback_load, session_connect, session_disconnect, session_send_input,
+    session_send_masked, session_set_window_size, target_get, tick_get_config, tick_set_config,
+    timers_delete, timers_list, timers_set, triggers_export, triggers_import, triggers_list,
+    ui_get_config, ui_set_config, updater_check, updater_install_and_relaunch, AppState,
+    SharedState,
 };
 use fonts::{fonts_list, handle_font_uri};
 
@@ -340,7 +340,6 @@ pub fn run() {
             profile_rename,
             profile_duplicate,
             profile_switch,
-            profile_set_metadata,
             profile_resolve_match,
             migration_analyze,
             migration_apply,
