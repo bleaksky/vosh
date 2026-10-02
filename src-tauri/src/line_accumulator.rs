@@ -135,11 +135,6 @@ impl LineAccumulator {
         self.buffer.clear();
         self.painted = None;
     }
-
-    /// Drop the partial. Call on disconnect.
-    pub(crate) fn reset(&mut self) {
-        self.forget_partial();
-    }
 }
 
 #[cfg(test)]
@@ -257,17 +252,12 @@ mod tests {
     }
 
     #[test]
-    fn forget_and_reset_drop_the_partial_and_its_region() {
+    fn forget_drops_the_partial_and_its_region() {
         let mut a = LineAccumulator::new();
         let _ = a.feed(b"Login: ");
         a.set_painted(Some((1, 7)));
         a.forget_partial();
         assert_eq!(a.partial(), None);
-        assert_eq!(a.feed(b"new\n"), vec![line(b"new")]);
-
-        let _ = a.feed(b"Login: ");
-        a.set_painted(Some((2, 7)));
-        a.reset();
         assert_eq!(a.feed(b"new\n"), vec![line(b"new")]);
     }
 
