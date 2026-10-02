@@ -40,7 +40,9 @@
 //! like a thing until the first person, and a look with no Room.Chars
 //! before it lists its armies and things only, since nothing says how
 //! many people follow. Lines in the block run [`MatchScope::Room`], so
-//! Line and Room triggers both see them.
+//! Line and Room triggers both see them. A person's line that names the
+//! one you target with `tar` (see [`names_target`]) runs
+//! [`MatchScope::RoomTarget`], so Your target triggers see it too.
 //!
 //! Rare looks the counts get wrong by one: a mob with no long text or a
 //! character in catalepsy (one line after the people turns into a room
@@ -52,6 +54,7 @@
 //! looks in one pulse.
 //!
 //! [`MatchScope::Room`]: vosh_trigger::MatchScope::Room
+//! [`MatchScope::RoomTarget`]: vosh_trigger::MatchScope::RoomTarget
 
 use std::sync::OnceLock;
 
@@ -227,6 +230,55 @@ impl RoomBlock {
     pub(crate) fn end(&mut self) {
         self.open = None;
     }
+}
+
+/// What `char_to_char` prints after a person in a fight, before the one
+/// they fight.
+const FIGHTING: &str = " is here, fighting ";
+
+/// The articles a mob's short text starts with.
+const ARTICLES: [&str; 4] = ["a ", "an ", "the ", "some "];
+
+/// `text` without a leading article, in any case.
+fn without_article(text: &str) -> &str {
+    let lower = text.to_ascii_lowercase();
+    ARTICLES
+        .iter()
+        .find(|article| lower.starts_with(*article))
+        .map_or(text, |article| &text[article.len()..])
+}
+
+/// Whether `words` stands in `text` as whole words, in any case.
+fn has_words(text: &str, words: &str) -> bool {
+    let words = words.trim().to_lowercase();
+    if words.is_empty() {
+        return false;
+    }
+    let text = text.to_lowercase();
+    text.match_indices(&words).any(|(at, found)| {
+        let before = text[..at].chars().next_back();
+        let after = text[at + found.len()..].chars().next();
+        !before.is_some_and(char::is_alphanumeric) && !after.is_some_and(char::is_alphanumeric)
+    })
+}
+
+/// Whether `plain`, the line of a person a room look lists, is the line
+/// of your target. `target` is what you gave `tar`, and `name` the name
+/// of the Room.Chars entry it points at, if any.
+///
+/// The name counts first, since `tar gris` points at The Baron Grisvald
+/// while gris is no word of his line. The target counts too, since a
+/// mob's long text often words its name another way, as `A large murder
+/// of crows` for `a murder of crows`. Each counts as whole words in any
+/// case, with or without the article a short text starts with. Who a
+/// fighting person fights never counts, so `Maren is here, fighting a
+/// villager.` is no line of the villager.
+pub(crate) fn names_target(plain: &str, target: &str, name: Option<&str>) -> bool {
+    let who = plain.split(FIGHTING).next().unwrap_or(plain);
+    name.into_iter()
+        .chain(std::iter::once(target))
+        .flat_map(|text| [text, without_article(text)])
+        .any(|text| has_words(who, text))
 }
 
 #[cfg(test)]
@@ -509,5 +561,59 @@ mod tests {
             ),
             [Other, Other, Other, Other]
         );
+    }
+
+    const WEREBEAST: &str = "A young werebeast stands here, leaning on his spear.";
+    const CROWS: &str = "A large murder of crows nearly turns the trees black here.";
+
+    #[test]
+    fn the_target_names_a_line_as_whole_words_in_any_case() {
+        assert!(names_target(WEREBEAST, "werebeast", Some("a werebeast")));
+        assert!(names_target(WEREBEAST, "WEREBEAST", None));
+        assert!(names_target(RESTING, "tolliver", Some("Tolliver")));
+        assert!(names_target(
+            "[\u{1b}[0;31mAFK\u{1b}[0;0m] Tolliver is resting here.",
+            "Tolliver",
+            None
+        ));
+        // A part of a word is no whole word.
+        assert!(!names_target(WEREBEAST, "were", None));
+        assert!(!names_target(VILLAGER, "village", None));
+        assert!(!names_target(WEREBEAST, "", None));
+        assert!(!names_target(VILLAGER, "werebeast", Some("a werebeast")));
+    }
+
+    #[test]
+    fn the_room_chars_name_the_target_points_at_counts_first() {
+        // tar toll points at Tolliver, and toll is no word of the line.
+        assert!(names_target(RESTING, "toll", Some("Tolliver")));
+        assert!(!names_target(RESTING, "toll", None));
+        assert!(names_target(
+            "The Baron Grisvald is resting here.",
+            "gris",
+            Some("The Baron Grisvald")
+        ));
+        // tar crow points at a murder of crows, whose line words the name
+        // another way after its article.
+        assert!(names_target(CROWS, "crow", Some("a murder of crows")));
+        assert!(!names_target(CROWS, "crow", None));
+    }
+
+    #[test]
+    fn a_target_set_by_its_number_counts_without_its_article() {
+        // tar 1 and tarn set the target to the full Room.Chars name.
+        let name = "a murder of crows";
+        assert!(names_target(CROWS, name, Some(name)));
+        assert!(names_target(VILLAGER, "a villager", Some("a villager")));
+    }
+
+    #[test]
+    fn who_a_person_fights_is_no_line_of_theirs() {
+        let villager = "A villager is here, fighting Maren.";
+        let maren = "Maren is here, fighting a villager.";
+        assert!(names_target(villager, "villager", Some("a villager")));
+        assert!(!names_target(maren, "villager", Some("a villager")));
+        assert!(names_target(maren, "maren", Some("Maren")));
+        assert!(!names_target(villager, "maren", Some("Maren")));
     }
 }

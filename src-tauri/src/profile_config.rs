@@ -102,17 +102,18 @@ impl GroupFolders {
 }
 
 /// The trigger list of a profile file or catalog.toml, as two keys on
-/// disk. Line and Prompt triggers go under `triggers` and Room triggers
-/// under `room_triggers`. Builds up to 0.8.0 read `triggers` with
-/// `line` and `prompt` as the only targets, and a `room` there would
-/// fail the whole file, so a rollback would start on defaults (D14).
+/// disk. Line and Prompt triggers go under `triggers`, and Room and Your
+/// target triggers under `room_triggers`. Builds up to 0.8.0 read
+/// `triggers` with `line` and `prompt` as the only targets, and a `room`
+/// or a `room_target` there would fail the whole file, so a rollback
+/// would start on defaults (D14).
 /// They skip the key they do not know, and a load here puts the two
 /// lists back together, so the field holds every trigger in memory. Use
 /// it on a `Vec<Trigger>` field with
 /// `#[serde(flatten, with = "trigger_lists")]`.
 pub(crate) mod trigger_lists {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use vosh_trigger::{Trigger, TriggerTarget};
+    use vosh_trigger::Trigger;
 
     #[derive(Serialize)]
     struct Written<'a> {
@@ -130,7 +131,7 @@ pub(crate) mod trigger_lists {
     }
 
     pub(crate) fn serialize<S: Serializer>(list: &[Trigger], s: S) -> Result<S::Ok, S::Error> {
-        let (room_triggers, triggers) = list.iter().partition(|t| t.target == TriggerTarget::Room);
+        let (room_triggers, triggers) = list.iter().partition(|t| t.target.is_room());
         Written {
             triggers,
             room_triggers,

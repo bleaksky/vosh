@@ -19,20 +19,27 @@ use crate::store::{Trigger, TriggerStore, TriggerTarget};
 pub enum MatchScope {
     Line,
     Prompt,
-    /// A line a room look lists after its exits line, one of the things
-    /// or people in the room. It is a completed line too, so `Line`
+    /// A line a room look lists after its exits line, one of the armies,
+    /// things or people in the room. It is a completed line too, so `Line`
     /// triggers fire on it alongside the `Room` ones, in one pass, and
     /// their priorities and overlapping spans resolve together.
     Room,
+    /// The line of the person you target, among the people a room look
+    /// lists. It is a room line too, so `Line`, `Room` and `RoomTarget`
+    /// triggers all fire on it in one pass.
+    RoomTarget,
 }
 
 impl MatchScope {
     fn matches(self, target: TriggerTarget) -> bool {
+        use MatchScope as S;
+        use TriggerTarget as T;
         matches!(
             (self, target),
-            (MatchScope::Line | MatchScope::Room, TriggerTarget::Line)
-                | (MatchScope::Prompt, TriggerTarget::Prompt)
-                | (MatchScope::Room, TriggerTarget::Room)
+            (S::Line | S::Room | S::RoomTarget, T::Line)
+                | (S::Prompt, T::Prompt)
+                | (S::Room | S::RoomTarget, T::Room)
+                | (S::RoomTarget, T::RoomTarget)
         )
     }
 }
@@ -1508,6 +1515,64 @@ mod tests {
             },
         }];
         t
+    }
+
+    #[test]
+    fn a_target_line_runs_line_room_and_target_triggers_in_one_pass() {
+        // The target color sits above the room color, so its base wins
+        // on the line of your target, and the room color holds on every
+        // other room line.
+        let mut target = base("target", "^.+$", NamedColor::BrightRed, 5);
+        target.target = TriggerTarget::RoomTarget;
+        let mut room = base("room", "^.+$", NamedColor::Yellow, 4);
+        room.target = TriggerTarget::Room;
+        let mut send = highlight("greet", "werebeast", NamedColor::Cyan);
+        send.priority = 3;
+        send.actions = vec![TriggerAction::Send {
+            template: "nod".into(),
+        }];
+        let s = store(vec![room, target, send]);
+        let text = "A young werebeast stands here, leaning on his spear.";
+        let shown = |scope| process_scoped(&s, text.as_bytes(), scope).display;
+        assert_eq!(
+            shown(MatchScope::RoomTarget).as_deref(),
+            Some(format!("\x1b[91m{text}\x1b[0m").as_str())
+        );
+        assert_eq!(
+            shown(MatchScope::Room).as_deref(),
+            Some(format!("\x1b[33m{text}\x1b[0m").as_str())
+        );
+        for scope in [MatchScope::Line, MatchScope::Prompt] {
+            assert_eq!(shown(scope).as_deref(), Some(text), "{scope:?}");
+        }
+        let names = |scope| -> Vec<String> {
+            matching(&s, text, scope)
+                .into_iter()
+                .map(|t| t.name.clone())
+                .collect()
+        };
+        assert_eq!(names(MatchScope::RoomTarget), ["target", "room", "greet"]);
+        assert_eq!(names(MatchScope::Room), ["room", "greet"]);
+        assert_eq!(names(MatchScope::Line), ["greet"]);
+        assert_eq!(names(MatchScope::Prompt), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_your_target_trigger_round_trips_as_room_target() {
+        let mut t = highlight("target", "^.+$", NamedColor::BrightRed);
+        t.target = TriggerTarget::RoomTarget;
+        let json = store(vec![t]).export_json().unwrap();
+        assert!(json.contains("\"target\": \"room_target\""), "{json}");
+        let mut back = TriggerStore::new();
+        back.import_json(&json).unwrap();
+        assert_eq!(
+            back.get("target").unwrap().target,
+            TriggerTarget::RoomTarget
+        );
+        assert!(TriggerTarget::RoomTarget.is_room());
+        assert!(TriggerTarget::Room.is_room());
+        assert!(!TriggerTarget::Line.is_room());
+        assert!(!TriggerTarget::Prompt.is_room());
     }
 
     #[test]

@@ -31,10 +31,14 @@ pub struct TriggerPattern {
 ///   triggers that need to capture from prompt text that arrives
 ///   without a trailing newline.
 /// - `Room` — runs only on the lines a room look lists after its exits
-///   line, the things and the people in the room. The session tells
-///   those lines apart (see `room_block` in the app crate) and runs them
-///   with [`crate::MatchScope::Room`], which fires `Line` and `Room`
-///   triggers in one pass.
+///   line, the armies, the things and the people in the room. The
+///   session tells those lines apart (see `room_block` in the app crate)
+///   and runs them with [`crate::MatchScope::Room`], which fires `Line`
+///   and `Room` triggers in one pass.
+/// - `RoomTarget` — runs only on the line of the person you target with
+///   `tar`, among the people a room look lists. The session runs that
+///   line with [`crate::MatchScope::RoomTarget`], which fires `Line`,
+///   `Room` and `RoomTarget` triggers in one pass.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TriggerTarget {
@@ -42,6 +46,15 @@ pub enum TriggerTarget {
     Line,
     Prompt,
     Room,
+    RoomTarget,
+}
+
+impl TriggerTarget {
+    /// A target that matches lines of a room look, which builds up to
+    /// 0.8.0 do not read.
+    pub fn is_room(self) -> bool {
+        matches!(self, TriggerTarget::Room | TriggerTarget::RoomTarget)
+    }
 }
 
 /// User-visible trigger record. Serializes cleanly to JSON for the editor UI
