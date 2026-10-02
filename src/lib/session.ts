@@ -8,6 +8,7 @@ import {
   themePrefsOf,
   type ThemePrefs,
 } from './theme';
+import { uniqueThemeId } from './themeImport';
 import { BUILTIN_THEMES, customToAppTheme, DEFAULT_THEME_ID, themeTokens } from './themes';
 
 /** Resolve the tri-state tint setting: an explicit user choice wins;
@@ -1821,6 +1822,37 @@ export function seedDarkTheme(theme: string, customThemes: CustomTheme[]): strin
   return found && themeTokens(found).appearance === 'dark' ? theme : DEFAULT_THEME_ID;
 }
 
+/** Move every custom theme whose id a built-in theme now has to a free
+ *  id of its own, and point the theme choices that named it there. A
+ *  theme you imported before Vosh shipped one under the same id (a
+ *  Solarized Light file reads as solarized-light) would otherwise hide
+ *  behind the built-in. findTheme returns the built-in, the gallery
+ *  shows two tiles under one id, and your edits never reach the screen.
+ *  Until a built-in took the id, a choice that named it meant the custom
+ *  theme, the first one when two shared it. Returns `cfg` itself when no
+ *  id collides. */
+export function freeBuiltinThemeIds(cfg: RawUiConfig): RawUiConfig {
+  const customs = Array.isArray(cfg.custom_themes) ? cfg.custom_themes : [];
+  const builtinIds = new Set(BUILTIN_THEMES.map((t) => t.id));
+  if (!customs.some((t) => builtinIds.has(t.id))) return cfg;
+  const taken = new Set([...builtinIds, ...customs.map((t) => t.id)]);
+  const moved = new Map<string, string>();
+  const custom_themes = customs.map((t) => {
+    if (!builtinIds.has(t.id)) return t;
+    const id = uniqueThemeId(t.id, taken);
+    taken.add(id);
+    if (!moved.has(t.id)) moved.set(t.id, id);
+    return { ...t, id };
+  });
+  const out: RawUiConfig = { ...cfg, custom_themes };
+  for (const key of ['theme', 'light_theme', 'dark_theme'] as const) {
+    const id = cfg[key];
+    const to = typeof id === 'string' ? moved.get(id) : undefined;
+    if (to !== undefined) out[key] = to;
+  }
+  return out;
+}
+
 /** Where your prompt shows: in the text, lifted on a band in the text,
  *  or pinned on a band above the command line. */
 export type PromptShow = 'text' | 'lifted' | 'pinned';
@@ -1995,14 +2027,31 @@ export interface RawUiConfig {
 }
 
 async function fetchUiConfig(): Promise<UiConfig> {
-  return normalizeUiConfig(await invoke<RawUiConfig>('ui_get_config'));
+  const raw = await invoke<RawUiConfig>('ui_get_config');
+  const freed = freeBuiltinThemeIds(raw);
+  const config = normalizeUiConfig(freed);
+  // A custom theme moved off a built-in id is saved under its new id at
+  // once. Later reads then find no collision, so a choice that names
+  // the built-in keeps meaning the built-in. Every window moves it the
+  // same way, so the save sends no events. A save the backend turns
+  // away met a replace, and that replace reads the config again.
+  if (freed !== raw) {
+    try {
+      await invoke('ui_set_config', { config: uiConfigPayload(config) });
+    } catch (e) {
+      console.error('[themes] saving the moved custom themes failed', e);
+    }
+  }
+  return config;
 }
 
 /** Fill gaps and coerce unknown values in a raw config so every window
  *  reads the same shape. A gap takes the value Rust sends for a profile
  *  that sets nothing, and fixtures/ui-config/defaults.json holds both
- *  sides to those values. */
-export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
+ *  sides to those values. Custom themes leave the ids built-in themes
+ *  have (freeBuiltinThemeIds). */
+export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
+  const cfg = freeBuiltinThemeIds(raw);
   const theme =
     typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : DEFAULT_THEME_ID;
   const customThemes = Array.isArray(cfg.custom_themes) ? cfg.custom_themes : [];
@@ -2389,56 +2438,61 @@ export async function setUiTheme(
   });
 }
 
+/** The snake_case payload `ui_set_config` takes, matching the Rust
+ *  `UiConfigPayload` DTO, the same shape `ui_get_config` returns.
+ *  `dock_layout` is omitted on purpose, since only the old dock to
+ *  panes conversion reads it. */
+function uiConfigPayload(config: UiConfig): Record<string, unknown> {
+  return {
+    theme: config.theme,
+    follow_system_appearance: config.follow_system_appearance,
+    light_theme: config.light_theme,
+    dark_theme: config.dark_theme,
+    auto_update: config.auto_update,
+    font_family: config.font_family,
+    font_size: config.font_size,
+    terminal_line_height: config.terminal_line_height,
+    // Wire format intentionally drops `label: null` to the omitted
+    // form so the backend's `Option<String>` deserializes cleanly.
+    tracked_affects: config.tracked_affects.map((t) => ({
+      name: t.name,
+      ...(t.label ? { label: t.label } : {}),
+    })),
+    enabled_presets: config.enabled_presets,
+    keep_last_command: config.keep_last_command,
+    theme_terminal_colors: config.theme_terminal_colors,
+    bright_bold: config.bright_bold,
+    blink_text: config.blink_text,
+    terminal_base_ansi: config.terminal_base_ansi,
+    custom_themes: config.custom_themes,
+    split_divider_color: config.split_divider_color,
+    input_echo_color: config.input_echo_color,
+    echo_macros: config.echo_macros,
+    paste_line_delay_ms: config.paste_line_delay_ms,
+    spellcheck_prompt: config.spellcheck_prompt,
+    input_cursor_style: config.input_cursor_style,
+    vitals_density: config.vitals_density,
+    vitals_values: config.vitals_values,
+    vitals_meter: config.vitals_meter,
+    vitals_warn_thirds: config.vitals_warn_thirds,
+    vitals_hide_when_pinned: config.vitals_hide_when_pinned,
+    chip_style: config.chip_style,
+    tick_count: config.tick_count,
+    affects_style: config.affects_style,
+    affects_marker: config.affects_marker,
+    affects_tint: config.affects_tint,
+    generation: config.generation ?? null,
+  };
+}
+
 /** Save the whole config and tell every window what changed. Resolves
  *  false when the backend turned the save away, because it replaced
  *  the live config after this copy was read (a profile switch, a
  *  #profile load or reset, or an import). Nothing is sent then, and
  *  this window reads the config again. */
 export async function setUiConfig(config: UiConfig): Promise<boolean> {
-  // Single snake_case payload matching the Rust `UiConfigPayload` DTO,
-  // the same shape `ui_get_config` returns. `dock_layout` is omitted on
-  // purpose, since only the old dock to panes conversion reads it.
   const applied = await invoke<boolean | undefined>('ui_set_config', {
-    config: {
-      theme: config.theme,
-      follow_system_appearance: config.follow_system_appearance,
-      light_theme: config.light_theme,
-      dark_theme: config.dark_theme,
-      auto_update: config.auto_update,
-      font_family: config.font_family,
-      font_size: config.font_size,
-      terminal_line_height: config.terminal_line_height,
-      // Wire format intentionally drops `label: null` to the omitted
-      // form so the backend's `Option<String>` deserializes cleanly.
-      tracked_affects: config.tracked_affects.map((t) => ({
-        name: t.name,
-        ...(t.label ? { label: t.label } : {}),
-      })),
-      enabled_presets: config.enabled_presets,
-      keep_last_command: config.keep_last_command,
-      theme_terminal_colors: config.theme_terminal_colors,
-      bright_bold: config.bright_bold,
-      blink_text: config.blink_text,
-      terminal_base_ansi: config.terminal_base_ansi,
-      custom_themes: config.custom_themes,
-      split_divider_color: config.split_divider_color,
-      input_echo_color: config.input_echo_color,
-      echo_macros: config.echo_macros,
-      paste_line_delay_ms: config.paste_line_delay_ms,
-      spellcheck_prompt: config.spellcheck_prompt,
-      input_cursor_style: config.input_cursor_style,
-      vitals_density: config.vitals_density,
-      vitals_values: config.vitals_values,
-      vitals_meter: config.vitals_meter,
-      vitals_warn_thirds: config.vitals_warn_thirds,
-      vitals_hide_when_pinned: config.vitals_hide_when_pinned,
-      chip_style: config.chip_style,
-      tick_count: config.tick_count,
-      affects_style: config.affects_style,
-      affects_marker: config.affects_marker,
-      affects_tint: config.affects_tint,
-      generation: config.generation ?? null,
-    },
+    config: uiConfigPayload(config),
   });
   if (applied === false) {
     // The old profile's values stay off the new one. Take the new copy,

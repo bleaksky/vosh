@@ -9,6 +9,7 @@ import {
   broadcastUiConfigChanges,
   decodeOutputPayload,
   followReplacedUiConfig,
+  freeBuiltinThemeIds,
   getUiConfig,
   isOwnAffectsDisplayEcho,
   isOwnThemeEcho,
@@ -41,6 +42,8 @@ import {
   type RawUiConfig,
   type UiConfig,
 } from './session';
+import { galleryThemes } from './themeThumb';
+import { BUILTIN_THEMES, customToAppTheme, findTheme, setCustomThemes } from './themes';
 import gmcpEvents from '../../fixtures/ipc/gmcp-events.json';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -114,6 +117,129 @@ describe('seedDarkTheme', () => {
     const themes = [custom('night-ink', '#000000'), custom('paper', '#ffffff')];
     expect(seedDarkTheme('night-ink', themes)).toBe('night-ink');
     expect(seedDarkTheme('paper', themes)).toBe('obsidian-ember');
+  });
+});
+
+describe('a custom theme on a built-in id', () => {
+  // An Alacritty solarized_light.yml imported before Solarized Light
+  // shipped, picked as your theme and as the light theme.
+  const imported = custom('solarized-light', '#ffffff');
+  const before = () =>
+    raw({
+      theme: 'solarized-light',
+      light_theme: 'solarized-light',
+      dark_theme: 'nord',
+      custom_themes: [custom('night-ink', '#000000'), imported],
+      generation: 4,
+    });
+
+  afterEach(() => {
+    setCustomThemes([]);
+    vi.mocked(invoke).mockReset();
+    vi.mocked(invoke).mockImplementation(() => Promise.resolve());
+  });
+
+  it('leaves a config with no collision as it is', () => {
+    const cfg = raw({ custom_themes: [custom('night-ink', '#000000')] });
+    expect(freeBuiltinThemeIds(cfg)).toBe(cfg);
+    expect(freeBuiltinThemeIds(raw())).toEqual(raw());
+  });
+
+  it('moves the custom theme to a free id and follows it with every choice', () => {
+    const ui = normalizeUiConfig(before());
+    expect(ui.custom_themes.map((t) => t.id)).toEqual(['night-ink', 'solarized-light-2']);
+    expect(ui.custom_themes[1].xterm).toEqual(imported.xterm);
+    expect(ui.theme).toBe('solarized-light-2');
+    expect(ui.light_theme).toBe('solarized-light-2');
+    expect(ui.dark_theme).toBe('nord');
+  });
+
+  it('seeds the dark theme from the moved custom theme', () => {
+    const ui = normalizeUiConfig(
+      raw({ theme: 'solarized-dark', custom_themes: [custom('solarized-dark', '#000000')] }),
+    );
+    expect(ui.theme).toBe('solarized-dark-2');
+    expect(ui.dark_theme).toBe('solarized-dark-2');
+  });
+
+  it('keeps every id distinct and points a choice at the first holder', () => {
+    const ui = normalizeUiConfig(
+      raw({
+        theme: 'solarized-light',
+        custom_themes: [
+          custom('solarized-light-2', '#000000'),
+          custom('solarized-light', '#ffffff'),
+          custom('solarized-light', '#eeeeee'),
+        ],
+      }),
+    );
+    expect(ui.custom_themes.map((t) => t.id)).toEqual([
+      'solarized-light-2',
+      'solarized-light-3',
+      'solarized-light-4',
+    ]);
+    expect(ui.theme).toBe('solarized-light-3');
+  });
+
+  it('shows one gallery tile per id and keeps the custom colors reachable', () => {
+    const ui = normalizeUiConfig(before());
+    setCustomThemes(ui.custom_themes.map(customToAppTheme));
+    const ids = galleryThemes(BUILTIN_THEMES, ui.custom_themes.map(customToAppTheme)).map(
+      (t) => t.id,
+    );
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toContain('solarized-light');
+    expect(ids).toContain('solarized-light-2');
+    expect(findTheme(ui.theme).xterm.background).toBe('#ffffff');
+    expect(findTheme('solarized-light').xterm.background).toBe('#fdf6e3');
+  });
+
+  it('saves the move once, at the generation it read', async () => {
+    let stored: Record<string, unknown> = { ...before() };
+    const saves: Record<string, unknown>[] = [];
+    vi.mocked(invoke).mockImplementation(((
+      command: string,
+      args?: { config: Record<string, unknown> },
+    ) => {
+      if (command === 'ui_get_config') return Promise.resolve(stored);
+      if (command === 'ui_set_config' && args) {
+        saves.push(args.config);
+        stored = { ...args.config };
+        return Promise.resolve(true);
+      }
+      return Promise.resolve();
+    }) as typeof invoke);
+
+    const first = await getUiConfig();
+    expect(saves).toHaveLength(1);
+    expect(saves[0]).toMatchObject({
+      theme: 'solarized-light-2',
+      light_theme: 'solarized-light-2',
+      dark_theme: 'nord',
+      generation: 4,
+    });
+    expect((saves[0].custom_themes as CustomTheme[]).map((t) => t.id)).toEqual([
+      'night-ink',
+      'solarized-light-2',
+    ]);
+
+    // The next read finds nothing to move, so picking the built-in
+    // later keeps meaning the built-in.
+    const again = await getUiConfig();
+    expect(saves).toHaveLength(1);
+    expect(again.theme).toBe(first.theme);
+    expect(again.custom_themes).toEqual(first.custom_themes);
+  });
+
+  it('still reads the config when the save fails', async () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(invoke).mockImplementation(((command: string) =>
+      command === 'ui_get_config'
+        ? Promise.resolve(before())
+        : Promise.reject(new Error('disk full'))) as typeof invoke);
+    const ui = await getUiConfig();
+    expect(ui.theme).toBe('solarized-light-2');
+    quiet.mockRestore();
   });
 });
 
