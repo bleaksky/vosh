@@ -1,3 +1,5 @@
+//! Tests of the template grammar, the pieces it groups and the writer.
+
 use super::tokens::{tokenize, value, Token};
 use super::*;
 use crate::testkit::designs::JAMES;

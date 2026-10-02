@@ -1,3 +1,5 @@
+//! Tests of the engine's table, Char.Prompt, the game's replies and misses.
+
 use super::char_prompt::codes_from_game;
 use super::replies::OBSERVE_MS;
 use super::*;
