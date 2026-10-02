@@ -613,6 +613,7 @@ describe('the help on the one window', () => {
   it('keeps the room and its people under the map', () => {
     const text = body('shape.use-the-map');
     expect(text).toContain('The first names the room you stand in and its exits.');
+    expect(text).toContain('The name takes the color the terminal shows it in');
     expect(text).toContain(
       'The second row names the terrain and the region, like `Inside` and `Coastal North`.',
     );
