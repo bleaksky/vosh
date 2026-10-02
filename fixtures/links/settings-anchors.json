@@ -1,5 +1,5 @@
 {
-  "notes": "Taken from the code at 7dced45. The Settings deep links that search, the palette and other windows open, where each one lands, the anchors each Settings page draws as data-st-anchor, and the help topics its book buttons open. search lists the search index rows in order. palette maps each palette row that opens Settings, by the id the palette keeps in Recent, to the link it sends. senders maps the pane menu Edit tracked affects item, the Layout panes row and the General Search logs button to the links each one sends, first with the profile in use named Ilsabet and then with no profile known. links maps each link string to where it lands. Its last group holds every link in senders. anchors lists what each page draws on every link, opened cold and warm, with the Prompt section on the Input page in each of its four states. src/components/settings/settingsAnchors.test.tsx holds the code to this file. Change it only in a commit tied to a numbered bug or a lettered decision, so the diff shows every link that moves.",
+  "notes": "Taken from the code at 7dced45. The Settings deep links that search, the palette and other windows open, where each one lands, the anchors each Settings page draws as data-st-anchor, and the help topics its book buttons open. search lists the search index rows in order. palette maps each palette row that opens Settings, by the id the palette keeps in Recent, to the link it sends. senders maps the pane menu Edit tracked affects and Change when affects warn items, the Layout panes row and the General Search logs button to the links each one sends, first with the profile in use named Ilsabet and then with no profile known. links maps each link string to where it lands. Its last group holds every link in senders. anchors lists what each page draws on every link, opened cold and warm, with the Prompt section on the Input page in each of its four states. src/components/settings/settingsAnchors.test.tsx holds the code to this file. Change it only in a commit tied to a numbered bug or a lettered decision, so the diff shows every link that moves.",
   "search": [
     "general:connection#world",
     "general:connection#host",
@@ -39,6 +39,8 @@
     "layout:affects#affects-style",
     "layout:affects#affects-marker",
     "layout:affects#affects-tint",
+    "layout:affects#affects-running-out",
+    "layout:affects#affects-almost-gone",
     "input:command-line#caret",
     "input:command-line#keep-last",
     "input:command-line#spellcheck",
@@ -85,6 +87,10 @@
       "characters:Ilsabet#tracked",
       "characters#tracked"
     ],
+    "pane menu, Change when affects warn": [
+      "layout:affects#affects-running-out",
+      "layout:affects#affects-running-out"
+    ],
     "Layout, Panes and tracked affects": [
       "characters:Ilsabet",
       "characters"
@@ -127,7 +133,8 @@
       "characters:Ilsabet#tracked": "characters:Ilsabet#tracked",
       "characters": "characters",
       "characters:Ilsabet": "characters:Ilsabet",
-      "general:logs": "general:logs"
+      "general:logs": "general:logs",
+      "layout:affects#affects-running-out": "layout:affects#affects-running-out"
     }
   },
   "help": [
@@ -176,7 +183,9 @@
     ],
     "layout": [
       "affects",
+      "affects-almost-gone",
       "affects-marker",
+      "affects-running-out",
       "affects-style",
       "affects-tint",
       "density",

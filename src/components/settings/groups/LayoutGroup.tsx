@@ -5,6 +5,7 @@ import { PANEL_WIDTH_MAX, PANEL_WIDTH_MIN } from '../../../lib/paneLayout';
 import { isMacPlatform, shortcutKeys, shortcutLabel } from '../../../lib/palette';
 import { profilePossessive } from '../../../lib/profileLabel';
 import {
+  AFFECTS_HOURS_MAX,
   AFFECTS_MARKERS,
   AFFECTS_STYLES,
   isChipsStyle,
@@ -235,10 +236,13 @@ const MARKER_OPTIONS: readonly SegmentedOption<AffectsMarker>[] = AFFECTS_MARKER
 
 /** How the Affects pane draws (AffectsStyles SPEC 4.1): one of the
  *  three approved boards or Draining chips, the mark beside each
- *  tracked affect, and the wash behind what to recast. Both chip styles
- *  show the state on each chip and always mark what to recast, so
- *  Marker and Tint go quiet while one is chosen and keep your picks for
- *  the other two. Exported for its test. */
+ *  tracked affect, the wash behind what to recast, and the hours at
+ *  which an affect runs out and is almost gone. Both chip styles show
+ *  the state on each chip and always mark what to recast, so Marker
+ *  and Tint go quiet while one is chosen and keep your picks for the
+ *  other two. The hours apply to every style. Each field bounds the
+ *  other, so almost gone never goes over running out. Exported for its
+ *  test. */
 export function AffectsSection({
   config,
   update,
@@ -296,6 +300,34 @@ export function AffectsSection({
           checked={config.affects_tint}
           disabled={chips}
           onChange={(on) => update({ affects_tint: on })}
+        />
+      </Row>
+      <Row
+        label="Running out at"
+        description="With this many hours or fewer an affect's hours turn yellow, and one you track counts as running out."
+        anchor="affects-running-out"
+      >
+        <NumberField
+          value={config.affects_running_out_hours}
+          onChange={(hours) => update({ affects_running_out_hours: hours })}
+          min={config.affects_almost_gone_hours}
+          max={AFFECTS_HOURS_MAX}
+          unit="h"
+          unitName="hours"
+        />
+      </Row>
+      <Row
+        label="Almost gone at"
+        description="With this many hours or fewer the hours turn bold red. The game's own affects bar turns red at 1."
+        anchor="affects-almost-gone"
+      >
+        <NumberField
+          value={config.affects_almost_gone_hours}
+          onChange={(hours) => update({ affects_almost_gone_hours: hours })}
+          min={0}
+          max={config.affects_running_out_hours}
+          unit="h"
+          unitName="hours"
         />
       </Row>
     </Section>

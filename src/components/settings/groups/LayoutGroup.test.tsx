@@ -124,7 +124,13 @@ describe('AffectsSection', () => {
   it('draws Style and Marker, Timers first and the dot by default', () => {
     const html = drawAffects();
     const labels = [...html.matchAll(/class="st-row-label"[^>]*>([^<]*)</g)].map((m) => m[1]);
-    expect(labels).toEqual(['Style', 'Marker', 'Tint what to recast']);
+    expect(labels).toEqual([
+      'Style',
+      'Marker',
+      'Tint what to recast',
+      'Running out at',
+      'Almost gone at',
+    ]);
     expect(html).toMatch(/<h2[^>]*>Affects<\/h2>/);
     expect(html).toContain(
       'Timers first keeps your slots, Countdown sorts by hours left, Grouped chips puts what to recast first, and Draining chips colors only the hours a chip has left.',
@@ -200,12 +206,63 @@ describe('AffectsSection', () => {
     expect(segments(html)).toContain('None pressed');
   });
 
+  /** Each number field as its value and the unit a screen reader
+   *  hears, in order. */
+  const hours = (html: string) =>
+    [
+      ...html.matchAll(
+        /<span class="st-number"[^>]*><input[^>]*value="([^"]*)"[^>]*>.*?<span id="[^"]*" hidden="">([^<]*)<\/span><\/span>/g,
+      ),
+    ].map(([, value, unit]) => `${value} ${unit}`);
+
+  it('shows when affects warn and turn red, two and one hours by default', () => {
+    const html = drawAffects();
+    expect(hours(html)).toEqual(['2 hours', '1 hours']);
+    expect(html).toContain(
+      'With this many hours or fewer an affect&#x27;s hours turn yellow, and one you track counts as running out.',
+    );
+    expect(html).toContain(
+      'With this many hours or fewer the hours turn bold red. The game&#x27;s own affects bar turns red at 1.',
+    );
+    expect(
+      hours(drawAffects({ affects_running_out_hours: 5, affects_almost_gone_hours: 2 })),
+    ).toEqual(['5 hours', '2 hours']);
+    // The hours apply to every style, so the rows never go quiet.
+    const chips = drawAffects({ affects_style: 'chips_drain' });
+    const rowsFrom = chips.slice(chips.indexOf('data-st-anchor="affects-running-out"'));
+    expect(rowsFrom).toContain('data-st-anchor="affects-almost-gone"');
+    expect(rowsFrom).not.toContain('disabled');
+    expect(hours(chips)).toEqual(['2 hours', '1 hours']);
+  });
+
+  it('keeps almost gone at or under running out, each field bounding the other', () => {
+    const update = vi.fn();
+    const config5 = config({ affects_running_out_hours: 5, affects_almost_gone_hours: 2 });
+    const element = AffectsSection({ config: config5, update });
+    const rows = (element.props as { children: { props: { children: unknown } }[] }).children;
+    type Field = { props: { min: number; max: number; onChange: (n: number) => void } };
+    const runningOut = rows[3].props.children as Field;
+    const almostGone = rows[4].props.children as Field;
+    expect([runningOut.props.min, runningOut.props.max]).toEqual([2, 99]);
+    expect([almostGone.props.min, almostGone.props.max]).toEqual([0, 5]);
+    runningOut.props.onChange(7);
+    expect(update).toHaveBeenLastCalledWith({ affects_running_out_hours: 7 });
+    almostGone.props.onChange(0);
+    expect(update).toHaveBeenLastCalledWith({ affects_almost_gone_hours: 0 });
+  });
+
   it('renders every search anchor Layout, Affects lists', () => {
     const html = drawAffects();
     const anchors = SETTINGS_ROWS.filter(
       (r) => r.target.group === 'layout' && r.target.section === 'affects',
     ).map((r) => r.target.anchor);
-    expect(anchors).toEqual(['affects-style', 'affects-marker', 'affects-tint']);
+    expect(anchors).toEqual([
+      'affects-style',
+      'affects-marker',
+      'affects-tint',
+      'affects-running-out',
+      'affects-almost-gone',
+    ]);
     for (const anchor of anchors) {
       expect(html).toContain(`data-st-anchor="${anchor}"`);
     }
