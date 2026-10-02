@@ -30,10 +30,8 @@
   --app-font-size: 14px;
 
   /* Ember chrome type system. The terminal keeps --app-font-family;
-     everything around it draws from these four stacks. */
+     everything around it draws from these two stacks. */
   --font-chrome: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-display: 'Roboto Slab Variable', 'Roboto Slab', Georgia, serif;
-  --font-label: 'Rajdhani', 'Avenir Next Condensed', 'Arial Narrow', sans-serif;
   --font-mono: 'JetBrainsMono Bundled', Menlo, 'SF Mono', monospace;
 
   /* Floating-layer shadow recipe. Menus, toolbars, tooltips, toasts,
