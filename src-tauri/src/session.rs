@@ -3870,22 +3870,14 @@ mod tests {
         // trigger that reads hp from captures[2] keeps reading it.
         let mut p = Profile::default();
         p.triggers
-            .set(vosh_trigger::Trigger {
-                name: "says".into(),
-                patterns: vec![vosh_trigger::TriggerPattern {
-                    pattern: r"^(\w+) says (\w+)".into(),
-                    enabled: true,
-                }],
-                priority: 0,
-                enabled: true,
-                actions: vec![vosh_trigger::TriggerAction::Script {
+            .set(vosh_trigger::Trigger::new(
+                "says",
+                r"^(\w+) says (\w+)",
+                vosh_trigger::TriggerAction::Script {
                     body: "mud.send(captures[1] .. '|' .. captures[2] .. '|' .. captures[3])"
                         .into(),
-                }],
-                preset: None,
-                group: None,
-                target: vosh_trigger::TriggerTarget::Line,
-            })
+                },
+            ))
             .expect("the trigger compiles");
         let result = vosh_trigger::process(&p.triggers, b"Bob says hi");
         assert_eq!(
@@ -4802,19 +4794,14 @@ mod tests {
         });
         p.triggers
             .set(vosh_trigger::Trigger {
-                name: "mark".into(),
-                patterns: vec![vosh_trigger::TriggerPattern {
-                    pattern: "hp".into(),
-                    enabled: true,
-                }],
-                priority: 0,
-                enabled: true,
-                actions: vec![vosh_trigger::TriggerAction::Replace {
-                    template: "HP".into(),
-                }],
-                preset: None,
-                group: None,
                 target: vosh_trigger::TriggerTarget::Prompt,
+                ..vosh_trigger::Trigger::new(
+                    "mark",
+                    "hp",
+                    vosh_trigger::TriggerAction::Replace {
+                        template: "HP".into(),
+                    },
+                )
             })
             .expect("the trigger compiles");
         let mut wire = Wire::new(p);
@@ -4826,17 +4813,8 @@ mod tests {
     fn line_triggers_that_matched_a_read_prompt_are_noted() {
         let mut p = capture_profile(HP);
         let highlight = |name: &str, pattern: &str, target| vosh_trigger::Trigger {
-            name: name.into(),
-            patterns: vec![vosh_trigger::TriggerPattern {
-                pattern: pattern.into(),
-                enabled: true,
-            }],
-            priority: 0,
-            enabled: true,
-            actions: vec![vosh_trigger::TriggerAction::Gag],
-            preset: None,
-            group: None,
             target,
+            ..vosh_trigger::Trigger::new(name, pattern, vosh_trigger::TriggerAction::Gag)
         };
         for trigger in [
             highlight("hp-watch", r"\d+hp", vosh_trigger::TriggerTarget::Line),
@@ -5477,21 +5455,13 @@ mod tests {
     fn a_held_line_your_send_lets_go_runs_the_line_pass_and_is_logged() {
         let mut p = codes_profile(CODES, HP);
         p.triggers
-            .set(vosh_trigger::Trigger {
-                name: "answer".into(),
-                patterns: vec![vosh_trigger::TriggerPattern {
-                    pattern: "^Bob says: ".into(),
-                    enabled: true,
-                }],
-                priority: 0,
-                enabled: true,
-                actions: vec![vosh_trigger::TriggerAction::Send {
+            .set(vosh_trigger::Trigger::new(
+                "answer",
+                "^Bob says: ",
+                vosh_trigger::TriggerAction::Send {
                     template: "nod".into(),
-                }],
-                preset: None,
-                group: None,
-                target: vosh_trigger::TriggerTarget::Line,
-            })
+                },
+            ))
             .unwrap();
         let mut wire = Wire::new(p);
         // A line that can start a tank block ends the read, so the stage
@@ -5641,19 +5611,11 @@ mod tests {
     fn a_released_line_runs_the_line_pass_and_is_logged() {
         let mut p = codes_profile(CODES, HP);
         p.triggers
-            .set(vosh_trigger::Trigger {
-                name: "hush".into(),
-                patterns: vec![vosh_trigger::TriggerPattern {
-                    pattern: "^Tester: ".into(),
-                    enabled: true,
-                }],
-                priority: 0,
-                enabled: true,
-                actions: vec![vosh_trigger::TriggerAction::Gag],
-                preset: None,
-                group: None,
-                target: vosh_trigger::TriggerTarget::Line,
-            })
+            .set(vosh_trigger::Trigger::new(
+                "hush",
+                "^Tester: ",
+                vosh_trigger::TriggerAction::Gag,
+            ))
             .unwrap();
         let mut batch = super::ReadBatch::new(super::output_count());
         let now = tokio::time::Instant::now();
@@ -5752,17 +5714,8 @@ mod tests {
         // shows, so it is still logged and kept.
         p.triggers
             .set(vosh_trigger::Trigger {
-                name: "hide-prompt".into(),
-                patterns: vec![vosh_trigger::TriggerPattern {
-                    pattern: "hp ".into(),
-                    enabled: true,
-                }],
-                priority: 0,
-                enabled: true,
-                actions: vec![vosh_trigger::TriggerAction::Gag],
-                preset: None,
-                group: None,
                 target: vosh_trigger::TriggerTarget::Prompt,
+                ..vosh_trigger::Trigger::new("hide-prompt", "hp ", vosh_trigger::TriggerAction::Gag)
             })
             .unwrap();
         let (logged, kept, shown) = logged_and_kept(&mut p, &block);

@@ -249,22 +249,18 @@ fn open_for(color: &str) -> &'static str {
 /// A trigger on `target` that colors a whole line yellow.
 fn yellow(name: &str, target: vosh_trigger::TriggerTarget) -> vosh_trigger::Trigger {
     vosh_trigger::Trigger {
-        name: name.to_string(),
-        patterns: vec![vosh_trigger::TriggerPattern {
-            pattern: "^.+$".to_string(),
-            enabled: true,
-        }],
         priority: 4,
-        enabled: true,
-        actions: vec![vosh_trigger::TriggerAction::Highlight {
-            style: vosh_trigger::HighlightStyle {
-                fg: Some(vosh_trigger::NamedColor::Yellow),
-                ..Default::default()
-            },
-        }],
-        preset: None,
-        group: None,
         target,
+        ..vosh_trigger::Trigger::new(
+            name,
+            "^.+$",
+            vosh_trigger::TriggerAction::Highlight {
+                style: vosh_trigger::HighlightStyle {
+                    fg: Some(vosh_trigger::NamedColor::Yellow),
+                    ..Default::default()
+                },
+            },
+        )
     }
 }
 

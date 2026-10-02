@@ -40,21 +40,13 @@ fn collapsing(show: PromptShow) -> Profile {
     let mut p = showing(profile(CODES, HP, true), show);
     p.ui.collapse_repeats = true;
     p.triggers
-        .set(vosh_trigger::Trigger {
-            name: "quenby".into(),
-            patterns: vec![vosh_trigger::TriggerPattern {
-                pattern: "Quenby".into(),
-                enabled: true,
-            }],
-            priority: 0,
-            enabled: true,
-            actions: vec![vosh_trigger::TriggerAction::Send {
+        .set(vosh_trigger::Trigger::new(
+            "quenby",
+            "Quenby",
+            vosh_trigger::TriggerAction::Send {
                 template: "seen".into(),
-            }],
-            preset: None,
-            group: None,
-            target: vosh_trigger::TriggerTarget::Line,
-        })
+            },
+        ))
         .expect("the trigger compiles");
     p
 }
@@ -486,19 +478,11 @@ fn your_echo_output_from_elsewhere_and_a_new_connection_start_a_new_run() {
 fn a_hidden_line_leaves_the_run_and_another_color_starts_a_new_one() {
     let mut p = collapsing(PromptShow::Pinned);
     p.triggers
-        .set(vosh_trigger::Trigger {
-            name: "thirst".into(),
-            patterns: vec![vosh_trigger::TriggerPattern {
-                pattern: "thirsty".into(),
-                enabled: true,
-            }],
-            priority: 0,
-            enabled: true,
-            actions: vec![vosh_trigger::TriggerAction::Gag],
-            preset: None,
-            group: None,
-            target: vosh_trigger::TriggerTarget::Line,
-        })
+        .set(vosh_trigger::Trigger::new(
+            "thirst",
+            "thirsty",
+            vosh_trigger::TriggerAction::Gag,
+        ))
         .expect("the trigger compiles");
     let mut session = Session::new(p);
     let read = session.read(
@@ -587,19 +571,11 @@ fn highlight(
     pattern: &str,
     style: vosh_trigger::HighlightStyle,
 ) -> vosh_trigger::Trigger {
-    vosh_trigger::Trigger {
-        name: name.into(),
-        patterns: vec![vosh_trigger::TriggerPattern {
-            pattern: pattern.into(),
-            enabled: true,
-        }],
-        priority: 0,
-        enabled: true,
-        actions: vec![vosh_trigger::TriggerAction::Highlight { style }],
-        preset: None,
-        group: None,
-        target: vosh_trigger::TriggerTarget::Line,
-    }
+    vosh_trigger::Trigger::new(
+        name,
+        pattern,
+        vosh_trigger::TriggerAction::Highlight { style },
+    )
 }
 
 /// The screen row that shows `text`, trimmed.

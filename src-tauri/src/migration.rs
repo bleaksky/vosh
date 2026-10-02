@@ -898,28 +898,16 @@ pub(crate) fn profile_file_for_catalog(
 mod tests {
     use super::*;
     use vosh_alias::Alias;
-    use vosh_trigger::{Trigger, TriggerAction, TriggerPattern};
-
-    fn single_pattern(p: &str) -> Vec<TriggerPattern> {
-        vec![TriggerPattern {
-            pattern: p.to_string(),
-            enabled: true,
-        }]
-    }
+    use vosh_trigger::{Trigger, TriggerAction};
 
     fn trigger(name: &str, pattern: &str, replacement: &str) -> Trigger {
-        Trigger {
-            name: name.to_string(),
-            patterns: single_pattern(pattern),
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Replace {
+        Trigger::new(
+            name,
+            pattern,
+            TriggerAction::Replace {
                 template: replacement.to_string(),
-            }],
-            preset: None,
-            group: None,
-            target: vosh_trigger::TriggerTarget::Line,
-        }
+            },
+        )
     }
 
     fn profile_with(

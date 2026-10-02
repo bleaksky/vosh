@@ -101,19 +101,15 @@ fn preset_trigger(preset: &str, name: &str, older: bool) -> Trigger {
         format!("^{name}$")
     };
     Trigger {
-        name: name.to_string(),
-        patterns: vec![TriggerPattern {
-            pattern,
-            enabled: true,
-        }],
         priority: 5,
-        enabled: true,
-        actions: vec![TriggerAction::Send {
-            template: format!("say {name}"),
-        }],
         preset: Some(preset.to_string()),
-        group: None,
-        target: TriggerTarget::Line,
+        ..Trigger::new(
+            name,
+            pattern,
+            TriggerAction::Send {
+                template: format!("say {name}"),
+            },
+        )
     }
 }
 

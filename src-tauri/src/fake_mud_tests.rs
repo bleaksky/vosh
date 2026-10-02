@@ -2032,21 +2032,13 @@ async fn a_lua_alias_that_mud_input_names_runs_its_body() {
         p.aliases
             .set(vosh_alias::Alias::new("peer", "ignored").with_script("mud.send(captures[1])"));
         p.triggers
-            .set(vosh_trigger::Trigger {
-                name: "exits".into(),
-                patterns: vec![vosh_trigger::TriggerPattern {
-                    pattern: r"^\[Exits: south\]$".into(),
-                    enabled: true,
-                }],
-                priority: 0,
-                enabled: true,
-                actions: vec![vosh_trigger::TriggerAction::Script {
+            .set(vosh_trigger::Trigger::new(
+                "exits",
+                r"^\[Exits: south\]$",
+                vosh_trigger::TriggerAction::Script {
                     body: "mud.input('peer afk')".into(),
-                }],
-                preset: None,
-                group: None,
-                target: vosh_trigger::TriggerTarget::Line,
-            })
+                },
+            ))
             .expect("the trigger compiles");
     }
 
@@ -2226,21 +2218,13 @@ async fn lua_that_changes_an_alias_saves_your_profile() {
         .lock()
         .await
         .triggers
-        .set(vosh_trigger::Trigger {
-            name: "learn".into(),
-            patterns: vec![vosh_trigger::TriggerPattern {
-                pattern: "a clerk nods at you".into(),
-                enabled: true,
-            }],
-            priority: 0,
-            enabled: true,
-            actions: vec![vosh_trigger::TriggerAction::Script {
+        .set(vosh_trigger::Trigger::new(
+            "learn",
+            "a clerk nods at you",
+            vosh_trigger::TriggerAction::Script {
                 body: "mud.alias('k', 'kick')".into(),
-            }],
-            preset: None,
-            group: None,
-            target: vosh_trigger::TriggerTarget::Line,
-        })
+            },
+        ))
         .expect("the trigger compiles");
     h.connect().await;
 
@@ -2329,25 +2313,17 @@ async fn a_line_from_mud_input_moves_the_target_display_and_repaints_your_prompt
         .lock()
         .await
         .triggers
-        .set(vosh_trigger::Trigger {
-            name: "huh".into(),
-            patterns: vec![vosh_trigger::TriggerPattern {
-                pattern: r"^Huh\?".into(),
-                enabled: true,
-            }],
-            priority: 0,
-            enabled: true,
-            actions: vec![vosh_trigger::TriggerAction::Script {
+        .set(vosh_trigger::Trigger::new(
+            "huh",
+            r"^Huh\?",
+            vosh_trigger::TriggerAction::Script {
                 body: r##"mud.timer(0.3, function()
                     mud.input("tar goblin")
                     mud.input("#prompt default")
                 end)"##
                     .into(),
-            }],
-            preset: None,
-            group: None,
-            target: vosh_trigger::TriggerTarget::Line,
-        })
+            },
+        ))
         .expect("the trigger compiles");
     h.type_line("xyzzy").await;
     h.until_shown("Huh?").await;

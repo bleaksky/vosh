@@ -664,26 +664,21 @@ mod tests {
     use std::fs;
 
     use vosh_alias::Alias;
-    use vosh_trigger::{Trigger, TriggerAction, TriggerPattern, TriggerTarget};
+    use vosh_trigger::{Trigger, TriggerAction};
 
     use crate::loadout::Loadout;
     use crate::profile::Macro;
 
     fn make_trigger(name: &str, pattern: &str, group: Option<&str>) -> Trigger {
         Trigger {
-            name: name.to_string(),
-            patterns: vec![TriggerPattern {
-                pattern: pattern.to_string(),
-                enabled: true,
-            }],
-            priority: 0,
-            enabled: true,
-            actions: vec![TriggerAction::Send {
-                template: "noop".to_string(),
-            }],
-            preset: None,
             group: group.map(String::from),
-            target: TriggerTarget::Line,
+            ..Trigger::new(
+                name,
+                pattern,
+                TriggerAction::Send {
+                    template: "noop".to_string(),
+                },
+            )
         }
     }
 

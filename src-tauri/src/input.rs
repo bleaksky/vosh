@@ -814,19 +814,7 @@ fn slash_trigger(profile: &mut Profile, args: &str) -> InputResult {
         Ok(a) => a,
         Err(msg) => return error_echo(msg),
     };
-    let trigger = Trigger {
-        name: name.to_string(),
-        patterns: vec![vosh_trigger::TriggerPattern {
-            pattern,
-            enabled: true,
-        }],
-        priority: 0,
-        enabled: true,
-        actions: vec![action],
-        preset: None,
-        group: None,
-        target: vosh_trigger::TriggerTarget::Line,
-    };
+    let trigger = Trigger::new(name, pattern, action);
     match profile.triggers.set(trigger) {
         Ok(()) => echo_one(format!("trigger {name} set")),
         Err(e) => error_echo(format!("trigger {name} rejected: {e}")),
