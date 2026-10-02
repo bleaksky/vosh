@@ -28,7 +28,7 @@ jobs:
           # GitHub has been deprecating macos-13 (Intel) runners and
           # the queue often never picks them up. Cross-compile to
           # x86_64 from the arm64 macos-latest runner instead. The
-          # dtolnay/rust-toolchain step installs the target so cargo
+          # Add Rust target step installs the target so cargo
           # produces a native x86_64 binary that Tauri bundles into
           # an x86_64 .dmg.
           - platform: macos-latest
@@ -45,10 +45,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # rustup reads the version, components and profile from
+      # rust-toolchain.toml so releases build with the same Rust as CI.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
+        run: rustup toolchain install
+
+      - name: Add Rust target
+        if: matrix.target != ''
+        run: rustup target add ${{ matrix.target }}
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
