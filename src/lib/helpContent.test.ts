@@ -598,9 +598,12 @@ describe('the help on Room triggers', () => {
   });
 });
 
-describe('the help on the Room and time colors preset', () => {
+describe('the help on the Room, time and weather colors preset', () => {
   it('names each color and says it follows your theme', () => {
     const text = body('automate.highlight-lines');
+    expect(text).toContain(
+      'The `Room, time and weather colors` preset colors a room look, the clock and the weather.',
+    );
     expect(text).toContain(
       'The exits line turns green, the things and people the room lists turn yellow, the day and night messages turn blue, and the WiZNET tag turns bold magenta.',
     );
@@ -613,6 +616,16 @@ describe('the help on the Room and time colors preset', () => {
     );
     expect(text).toContain(
       'A plain highlight restyles the matched words, and the rest of the line keeps the colors the game sent.',
+    );
+  });
+
+  it('names the weather blue and says Vosh keeps it readable', () => {
+    const text = body('automate.highlight-lines');
+    expect(text).toContain(
+      'A change in the weather, such as `It starts to rain.` or `A thick fog rolls in, shrouding the area.`, turns pale blue.',
+    );
+    expect(text).toContain(
+      'That blue is `#8fa7d9` on every theme, apart from the blue and cyan of your theme, and `Keep highlight colors readable` darkens it on a light theme until it reads.',
     );
   });
 
