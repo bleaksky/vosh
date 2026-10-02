@@ -17,6 +17,14 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.sh text eol=lf
+# Fixtures and sources that tests read byte for byte, such as the IPC
+# names list, must keep LF on a Windows checkout too.
+*.txt text eol=lf
+*.gmcp text eol=lf
+*.lua text eol=lf
+*.py text eol=lf
+*.xml text eol=lf
+*.svg text eol=lf
 
 # Binary file types — never touched by line-ending normalization.
 *.png binary
