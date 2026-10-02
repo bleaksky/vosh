@@ -199,7 +199,7 @@ fn a_fight_condition_outside_another_one_holds_the_part_in_place() {
         .find(|p| p.field.as_deref() == Some("tank"))
         .expect("the tank");
     assert_eq!((tank.when, tank.when_fixed), (When::Fight, true));
-    assert_eq!(tank.meta.as_deref(), Some("Tarvik"));
+    assert_eq!(tank.meta.as_deref(), Some("Brask"));
 }
 
 #[test]

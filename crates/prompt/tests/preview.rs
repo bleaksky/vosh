@@ -268,7 +268,7 @@ fn a_fight_preview_with_nothing_live_takes_the_samples() {
             &named(Preview::Fight),
             "%tank %{tank_hp:pct}%% %opponent"
         ),
-        "Tarvik 78% Blackwatch Guard"
+        "Wystan 78% Blackwatch Guard"
     );
     // While the game hides your health, the tank health is hidden too.
     let mut hidden = Vars::new(true);
