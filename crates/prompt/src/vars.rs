@@ -328,7 +328,7 @@ pub static CATALOG: &[Entry] = &[
         package: Some(CHAR_COMBAT),
         new_build: true,
         codes: &["%n"],
-        sample: "Tarvik",
+        sample: "Brask",
         ..BASE
     },
     Entry {
@@ -363,7 +363,7 @@ pub static CATALOG: &[Entry] = &[
         group: Group::Group,
         gmcp: Some("Group.Info leader"),
         package: Some(GROUP_INFO),
-        sample: "Tarvik",
+        sample: "Ketterly",
         ..BASE
     },
     Entry {
@@ -373,7 +373,7 @@ pub static CATALOG: &[Entry] = &[
         group: Group::Group,
         gmcp: Some("Group.Info members"),
         package: Some(GROUP_INFO),
-        sample: "Tarvik,a loyal wolf",
+        sample: "Ketterly,a loyal wolf",
         search: &["members"],
         ..BASE
     },
@@ -384,7 +384,7 @@ pub static CATALOG: &[Entry] = &[
         group: Group::Group,
         gmcp: Some("Group.Info members"),
         package: Some(GROUP_INFO),
-        sample: "Tarvik 45",
+        sample: "Iskra 45",
         search: &["group", "member", "weakest"],
         ..BASE
     },
@@ -461,7 +461,7 @@ pub static CATALOG: &[Entry] = &[
         group: Group::Character,
         gmcp: Some("Char.Status name"),
         package: Some(CHAR_STATUS),
-        sample: "Tarvik",
+        sample: "Wystan",
         ..BASE
     },
     Entry {

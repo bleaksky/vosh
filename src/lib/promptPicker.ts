@@ -177,5 +177,5 @@ export function paramPrompt(f: PromptFieldState): { label: string; placeholder: 
   if (f.name === 'aff') return { label: 'Affect', placeholder: 'sanctuary' };
   if (f.name === 'queue') return { label: 'Queue', placeholder: 'bugs' };
   if (f.name === 'gmcp') return { label: 'Path', placeholder: 'Char.Vitals.hp' };
-  return { label: 'Member', placeholder: 'Tarvik' };
+  return { label: 'Member', placeholder: 'Quenby' };
 }

@@ -49,7 +49,7 @@ pub const BAR_DEFAULT_WIDTH: u8 = 10;
 pub const BAR_MAX_WIDTH: u8 = 80;
 
 /// A field the template reads, with its parameter for the fields that take
-/// one (`aff:sanctuary`, `member_hp:tarvik`, `queue:bugs`,
+/// one (`aff:sanctuary`, `member_hp:quenby`, `queue:bugs`,
 /// `gmcp:Char.Vitals.ep`).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FieldRef {
