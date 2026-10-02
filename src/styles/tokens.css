@@ -64,13 +64,11 @@
 
 /* Legacy aliases. styles.css and every component built before the One
    Window shell read the --c-* names, so each maps to its nearest token
-   until those components move to the new names. This block loads after
-   styles.css and replaces its Ember defaults. */
+   until those components move to the new names. */
 :root {
   --c-surface: var(--bg);
   --c-surface-deep: var(--panel);
   --c-surface-pane: var(--panel);
-  --c-surface-lift: var(--hover);
   --c-surface-emphasis: var(--selrow);
   --c-text-strong: var(--text);
   --c-text: var(--text);
@@ -85,10 +83,6 @@
   /* theme.ts also writes this one as rgba, since the map canvas reads
      it and a canvas fill cannot parse color-mix in every webview. */
   --c-accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
-  --c-warn: var(--warn);
-  --c-danger: var(--danger);
-  --c-info: var(--accent);
-  --c-success: var(--success);
   /* Referenced by styles.css and CodeEditor but never defined before. */
   --c-muted: var(--secondary);
   --c-muted-red: var(--danger);
