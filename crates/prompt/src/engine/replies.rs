@@ -71,7 +71,7 @@ pub(super) struct Observer {
 impl PromptEngine {
     /// The observer reads lines now: the Forsaken Lands rules hold, no
     /// Char.Prompt came this session, and you sent a line within
-    /// [`OBSERVE_MS`].
+    /// `OBSERVE_MS`.
     pub fn observing(&self, at_ms: i64) -> bool {
         self.forsaken()
             && !self.vars.gmcp().prompt_seen()

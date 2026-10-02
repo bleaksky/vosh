@@ -28,8 +28,8 @@ impl Stage {
         self.draw_view(out, block, painted, before, View::live(Some(rendered)));
     }
 
-    /// [`Stage::draw`] with what the open card shows: a preview, the
-    /// labels of values with nothing to show, or the game's own line. The
+    /// `Stage::draw` with what the open card shows: a preview, the labels
+    /// of values with nothing to show, or the game's own line. The
     /// region carries the live render as its restore, and anything this
     /// output writes after it puts the live render back first, so only
     /// live renders reach history.

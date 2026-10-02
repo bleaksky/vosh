@@ -3,7 +3,7 @@
 //!
 //! A resolver hands the renderer a [`Resolved`] per field. The renderer
 //! draws the colored forms itself (bars, the game's tank bar, hidden marks)
-//! and asks [`Value::text`] for everything else.
+//! and asks `Value::text` for everything else.
 
 // Game numbers and bar widths sit far below 2^52, so the float math for
 // shares and rounded percents is exact.
