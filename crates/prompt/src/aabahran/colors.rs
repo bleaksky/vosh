@@ -170,7 +170,8 @@ pub enum Color {
 
 impl Color {
     /// The SGR the game writes for it with 256 color on, or None when it
-    /// writes nothing.
+    /// writes nothing. Test only.
+    #[cfg(test)]
     pub fn sgr(self) -> Option<String> {
         match self {
             Self::Table { index, .. } => sgr(index),

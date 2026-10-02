@@ -77,6 +77,9 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
+    /// An empty snapshot. Test only. The tests in `tests/` reach it
+    /// through the `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn new() -> Self {
         Self::default()
     }

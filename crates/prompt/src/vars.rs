@@ -1469,7 +1469,9 @@ impl Hidden {
         self.hp || self.mana || self.moves
     }
 
-    /// Nothing is hidden.
+    /// Nothing is hidden. Test only. The tests in `tests/` reach it
+    /// through the `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn none(&self) -> bool {
         *self == Hidden::default()
     }
@@ -1509,7 +1511,9 @@ pub struct Vars {
 
 impl Vars {
     /// Empty variables. `forsaken` is whether the Forsaken Lands rules
-    /// hold.
+    /// hold. Test only. The tests in `tests/` reach it through the
+    /// `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn new(forsaken: bool) -> Self {
         Self {
             forsaken,
@@ -1567,7 +1571,9 @@ impl Vars {
     }
 
     /// How many disagreements between a fresh capture and GMCP this
-    /// session.
+    /// session. Test only. The tests in `tests/` reach it through the
+    /// `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn disagreements(&self) -> u64 {
         self.disagreements
     }
@@ -1614,7 +1620,9 @@ impl Vars {
         self.recompute();
     }
 
-    /// What the game hides right now.
+    /// What the game hides right now. Test only. The tests in `tests/`
+    /// reach it through the `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn hidden(&self) -> Hidden {
         self.hidden
     }

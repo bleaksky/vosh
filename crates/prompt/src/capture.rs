@@ -282,6 +282,9 @@ pub struct Recognized {
 
 impl Recognizer {
     /// Compile a capture for a mortal. See [`Recognizer::compile_for`].
+    /// Test only. The tests in `tests/` reach it through the `testkit`
+    /// feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn compile(capture: &CaptureConfig) -> Option<Self> {
         Self::compile_for(capture, Who::default())
     }
@@ -349,7 +352,8 @@ impl Recognizer {
         }
     }
 
-    /// The compiled codes, for a capture that reads them.
+    /// The compiled codes, for a capture that reads them. Test only.
+    #[cfg(test)]
     pub fn codes(&self) -> Option<&Compiled> {
         match &self.reader {
             Reader::Codes(compiled) => Some(compiled),
@@ -401,7 +405,9 @@ impl Recognizer {
         out
     }
 
-    /// True when a partial some shape reads is the prompt at once.
+    /// True when a partial some shape reads is the prompt at once. Test
+    /// only.
+    #[cfg(test)]
     pub fn settles(&self) -> bool {
         match &self.reader {
             Reader::Regex { settle, .. } => *settle,
