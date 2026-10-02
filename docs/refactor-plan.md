@@ -15,7 +15,7 @@ The last commit of each phase updates this table and the Phase Status line in CL
 | R4    | Dead page code and old files              | Done. 7e8199f to e347469, with D8, D20, D27 and D31                                                                        |
 | R5    | Dead styles                               | Done. d2357d2 to b99934a                                                                                                   |
 | R6    | Dead backend commands and app code        | Done. ba9284b to 3ac5cb9, with D3, D5, D6, D7, D12, D14 and the D20 exporter. The stand in functions stay with D9 option B |
-| R7    | Small crates tidied in place              | Not started                                                                                                                |
+| R7    | Small crates tidied in place              | Current. Stage B runs R7 to R13 as one stage                                                                               |
 | R8    | Crates merged, log crate split            | Not started                                                                                                                |
 | R9    | Prompt crate                              | Not started                                                                                                                |
 | R10   | App frame and the command layer           | Not started                                                                                                                |
@@ -23,6 +23,7 @@ The last commit of each phase updates this table and the Phase Status line in CL
 | R12   | Profiles, loadouts and files on disk      | Not started                                                                                                                |
 | R13   | Native renderer and windows               | Not started                                                                                                                |
 | R14   | Connection state out of the profile       | Not started                                                                                                                |
+| R14b  | Sessions. One tab per connection          | Not started                                                                                                                |
 | R15   | Page command and event layer              | Not started                                                                                                                |
 | R16   | Page folder moves                         | Not started                                                                                                                |
 | R17   | Big components split, helpers merged      | Not started                                                                                                                |
@@ -38,14 +39,33 @@ The last commit of each phase updates this table and the Phase Status line in CL
 
 The R1 section below names d2239d7. That is the same work before it moved onto `one-window`, where it landed as 72f95e6.
 
+Stage B. On October 2 you approved R7 to R13 as one stage, with new features frozen until the safe stopping point after R13.
+
+Features that landed before stage B. These landed on `one-window` after R6, in the old structure, so Parts 1 to 3 do not list them. Each phase places the ones in its files into the target structure when it reaches them.
+
+- Blinking text. The `Blinking` wrapper in term_grid.rs, cell_render.rs and xtermBlink.ts, plus the blink prompt code.
+- Five themes, Solarized Dark and Light, Everforest Dark and Light and Green Screen, and the chat lift that keeps faint channel colors at 3:1 on the panel.
+- Prompt features. The push to the right edge, the steps color, since, ampm, thousands and pct:game.
+- The Room target with room_block.rs, the Your target match, and the Room, time and weather colors preset.
+- Readable highlight colors, in readable.rs in `crates/trigger`, with the grounds fixture the page tests read too.
+- Highlights drawn over the original bytes, through the `pieces` split in `crates/ansi`.
+- The grey caret that marks your commands.
+- Collapse repeated lines, across the prompt stage, the session, term_grid.rs and the scrollback.
+- The map tile fixes, on the page only.
+- The Rust 1.99.0 pin in rust-toolchain.toml.
+- Smaller work, such as the affects thresholds, the Draining chips style, Settings in the terminal menu and the history drag through the split.
+
+readable.rs reads the parser and colors in `crates/ansi`, and the trigger engine reads `pieces`, so the ansi row in 3.7 and R7 item 3 no longer hold as written. R7 removes from that crate only what nothing uses.
+
 ## Decisions taken
 
-You approved this plan on October 1, 2026. Every decision takes its recommended answer from the answer sheet, except four you answered yourself the same day.
+You approved this plan on October 1, 2026. Every decision takes its recommended answer from the answer sheet, except four you answered yourself the same day and D19, which changed on October 2.
 
 - D10. Option B. Vosh no longer ships Berkeley Mono, and the bundled JetBrains Mono is the default font. A saved list that names Berkeley Mono draws with the copy installed on your computer, or with JetBrains Mono where none is installed. 9541225 to 1f99108 made the change before R4, and a fix after R6 makes the xterm renderer measure its cell again once your font loads.
 - D1. Option C. Every phase lands on `one-window` on your machine, and nothing is pushed.
 - D37. Option C. The wire fixtures stay synthetic and no captures land, so R2 item 8 and its R7 fallback drop. The CLAUDE.md quality bar still asks for captured bytes, and that line changes to say so once you approve the new wording.
 - D20. Every part takes its recommended answer. The `VOSH_WRITE_PLAYS` exporter left in R6 with the rest of the debug tools.
+- D19. Option A, whether or not R11 lands clean. You want tabs for more than one connection, and R14 gives each connection its own state as their groundwork. So R14 is required, and the Sessions phase R14b follows it.
 
 With D1 as answered, CI never sees the refactor. A phase that touches platform code runs `cargo clippy -p vosh-app --all-targets --target x86_64-pc-windows-gnu -- -D warnings` on the Mac in place of CI. Nothing here compiles its Linux code, so whoever lands the phase reads that code through.
 
@@ -116,7 +136,8 @@ Answer these in the order the phases need them. Blocks 1.0 marks the eight answe
 | R11   | B     | Session and input                         | Required       |                          | 11,000 moved           |
 | R12   | B     | Profiles, loadouts and files on disk      | Required       | D13, D17, D18, D33       | 12,000 moved           |
 | R13   | B     | Native renderer and windows               | Required       | D9, D10                  | 10,000 moved           |
-| R14   | B     | Connection state out of the profile       | Deferrable     | D19                      | 1,500 changed          |
+| R14   | B     | Connection state out of the profile       | Required       | D19                      | 1,500 changed          |
+| R14b  |       | Sessions. One tab per connection          | Required       | Boards                   | feature work           |
 | R15   | C     | Page command and event layer              | Required       |                          | 3,400 moved            |
 | R16   | C     | Page folder moves                         | Required       |                          | 60,000 moved           |
 | R17   | C     | Big components split, helpers merged      | Required       | D28                      | 5,000 moved            |
@@ -673,8 +694,9 @@ Three promises hold for every phase.
 4. Delete before moving. Dead code removed in R4 to R6 is code nobody has to move, rename or review later.
 5. Rust bottom up, then the page. Crates first, then the app frame, the session, the data layer and the renderer. The page stage starts once the Rust command and event names stop moving. R19 is the one exception, and it adds its setter commands on both sides in the same commits.
 6. Deferrable phases sit right after a safe stopping point, so skipping one leaves nothing half done.
-7. Phase 10 comes after the page command layer and the save model, so its new Settings rows are built once on the final pattern. If you defer R19, R22 builds them on today's save path.
-8. Docs last among the refactor phases, when the structure they describe is real. Phase 11 packaging comes after that, so packaging work isn't redone by a later move.
+7. Sessions comes after R14, which gives each connection its own state, and before the page stage, so the command and event names tabs add settle before R15 gathers them.
+8. Phase 10 comes after the page command layer and the save model, so its new Settings rows are built once on the final pattern. If you defer R19, R22 builds them on today's save path.
+9. Docs last among the refactor phases, when the structure they describe is real. Phase 11 packaging comes after that, so packaging work isn't redone by a later move.
 
 ### 4.3 Stage A. Clear the decks
 
@@ -926,9 +948,9 @@ Size. About 10,000 lines moved and about 1,200 removed with D9 option B.
 
 Safe stopping point.
 
-#### R14. Connection state out of the profile (deferrable)
+#### R14. Connection state out of the profile (required)
 
-Goal. Move what belongs to one connection out of the profile and into a connection object the session task owns. Today every output decision takes the profile lock, and a profile switch has to carry connection state across. This is the largest change in meaning in the plan, so it runs only if R11 landed clean (D19).
+Goal. Move what belongs to one connection out of the profile and into a connection object the session task owns. Today every output decision takes the profile lock, and a profile switch has to carry connection state across. This is the largest change in meaning in the plan. It is required, because it is the groundwork for tabs, one per connection, in R14b (D19).
 
 Work.
 
@@ -942,7 +964,22 @@ Checks. The digests, the fake MUD tests, the latency tests, the perf set, and a 
 
 Size. About 1,500 changed lines.
 
-### 4.5 Stage C. The page
+### 4.5 Sessions
+
+#### R14b. Sessions (required)
+
+Goal. Tabs for more than one connection, one session each, in the style of otty. The phase takes the number R14b so every later phase keeps the number this plan and its commits use.
+
+Work.
+
+1. Boards first. Mockups that follow otty's vertical tab sidebar, measured from otty itself, for you to approve before any code. The tab sidebar shows only while two or more sessions are open, so a single connection looks as it does today.
+2. Build what the boards show on the connection state R14 moves out of the profile.
+
+Checks. All gates, the digests, the fake MUD tests, the latency tests and the perf set, plus the app check with one session open and with two.
+
+Size. Feature work, sized once you approve the boards.
+
+### 4.6 Stage C. The page
 
 #### R15. Page command and event layer (required)
 
@@ -1043,7 +1080,7 @@ Checks. Your approval of each board, then the app check of every window that use
 
 Size. About 800 lines removed.
 
-### 4.6 Phase 10, docs and guards
+### 4.7 Phase 10, docs and guards
 
 #### R22. Phase 10. Logs, scrollback and search (required)
 
@@ -1084,7 +1121,7 @@ Size. Docs and CI only.
 
 Safe stopping point. The refactor is done.
 
-### 4.7 Phase 11. Packaging
+### 4.8 Phase 11. Packaging
 
 These come after the structure settles, so packaging work isn't redone by a later move.
 
