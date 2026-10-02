@@ -98,8 +98,8 @@ pub enum TriggerAction {
     Replace { template: String },
     /// Send a command back to the server. Template supports captures.
     Send { template: String },
-    /// Route the line to a named pane. Phase 5 wires panes; until then the
-    /// session loop logs the route.
+    /// Route the line to a named pane. The session sends that pane the
+    /// line as it displays, and a gagged line goes to no pane.
     Route { pane: String },
     /// Evaluate a Lua body in the session's `ScriptEngine` with regex
     /// captures bound as a local `captures` table (`captures[1]`,

@@ -1,4 +1,4 @@
-//! Embedded Lua scripting for Vosh. Phase 8.
+//! Embedded Lua scripting for Vosh.
 //!
 //! The engine wraps a sandboxed `mlua::Lua` and exposes a `mud.*` API to
 //! Lua scripts. Side effects (sends, echoes, alias edits, trigger
