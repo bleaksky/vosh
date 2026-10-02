@@ -11,7 +11,6 @@ const field = (over: Partial<PromptFieldState>): PromptFieldState => ({
   aliases: [],
   kind: 'gauge',
   group: 'vitals',
-  gmcp: null,
   package: null,
   new_build: false,
   codes: [],

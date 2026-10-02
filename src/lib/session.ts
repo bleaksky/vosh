@@ -1245,7 +1245,6 @@ export interface PromptFieldState {
   aliases: string[];
   kind: PromptFieldKind;
   group: PromptFieldGroup;
-  gmcp: string | null;
   package: string | null;
   /** Only the new server build sends its package. */
   new_build: boolean;
