@@ -4,11 +4,7 @@
 
 use std::time::Duration;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VarScope {
-    Profile,
-    Session,
-}
+use vosh_automation::vars::Scope;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
@@ -26,7 +22,7 @@ pub enum Action {
     RemoveAlias(String),
     /// Insert or replace a variable.
     SetVar {
-        scope: VarScope,
+        scope: Scope,
         name: String,
         value: String,
     },

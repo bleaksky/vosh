@@ -12,6 +12,8 @@ mlua = { version = "0.10", features = ["lua54", "vendored", "send"] }
 regex = "1"
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+# The variable scope that mud.set_var and mud.set_profile_var name.
+vosh-automation = { path = "../automation" }
 
 [lints]
 workspace = true

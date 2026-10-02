@@ -5150,6 +5150,7 @@ dependencies = [
  "regex",
  "serde_json",
  "thiserror 1.0.69",
+ "vosh-automation",
 ]
 
 [[package]]
