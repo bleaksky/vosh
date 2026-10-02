@@ -14,7 +14,9 @@ impl Stage {
     /// whole before the line end that came after it keeps that line end
     /// in the row. `painted` is the region an earlier read painted the
     /// block's partial as, which the drawn prompt replaces. `before` goes
-    /// first, such as lines a Prompts trigger's script echoed.
+    /// first, such as lines a Prompts trigger's script echoed. Test only.
+    /// The app's tests reach it through the `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn draw(
         &mut self,
         out: &mut Output,
@@ -283,7 +285,7 @@ impl Stage {
     /// repaint, and while a change of where your prompt shows waits for
     /// its own repaint. Test only.
     #[cfg(test)]
-    pub fn stale(&self, view: View) -> bool {
+    pub(crate) fn stale(&self, view: View) -> bool {
         let Some(block) = &self.last_raw else {
             return false;
         };

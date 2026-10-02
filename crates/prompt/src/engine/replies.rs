@@ -43,7 +43,7 @@ pub struct GamePromptSeen {
 
 /// How long after one of your own sends the game's reply to `prompt` or
 /// `fprompt` counts, in milliseconds.
-pub const OBSERVE_MS: i64 = observer::WINDOW_MS;
+pub(crate) const OBSERVE_MS: i64 = observer::WINDOW_MS;
 
 /// The settings the game showed after one of your own sends this
 /// session, without Char.Prompt.

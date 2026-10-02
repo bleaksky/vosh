@@ -66,13 +66,14 @@ mod reading;
 mod repeats;
 mod ring;
 
-pub use blocks::{Block, BlockLine, End, OpenRow, View};
-pub use marks::{lift_end, lift_start, mark, with_lift_end, MARK_OSC};
-pub use output::{close_pin_row, shows_lines, trailing_line_ends, Above, Output, Replace};
-pub use reading::{Offer, Offered, Released};
+pub use blocks::{Block, BlockLine, End, View};
+pub use marks::{lift_end, lift_start, mark, MARK_OSC};
+pub use output::{close_pin_row, shows_lines, Above, Output, Replace};
+pub use reading::{Offer, Released};
 pub use repeats::{collapsible, counted, Repeat};
 pub use ring::Candidate;
 
+pub(crate) use blocks::OpenRow;
 pub(crate) use output::plain_text;
 
 use std::collections::{BTreeSet, VecDeque};
@@ -90,14 +91,14 @@ use repeats::Run;
 use ring::Seen;
 
 /// How many candidates the ring keeps.
-pub const RING: usize = 32;
+pub(crate) const RING: usize = 32;
 
 /// How long a partial that can still become your prompt waits for the
 /// next read before it paints raw, in milliseconds.
 pub const HOLD_MS: u64 = 20;
 
 /// The most rows the band above the command line keeps for your prompt.
-pub const ZONE_MAX: usize = 6;
+pub(crate) const ZONE_MAX: usize = 6;
 
 /// What the stage keeps between reads.
 #[derive(Debug, Clone, Default)]
@@ -189,7 +190,7 @@ impl Stage {
 
     /// Compile the capture a profile's `[prompt]` table holds. `who`
     /// decides what Aabahran's `%u` and `%s` print.
-    pub fn set_capture_for(&mut self, capture: &CaptureConfig, who: Who) {
+    pub(crate) fn set_capture_for(&mut self, capture: &CaptureConfig, who: Who) {
         self.recognizer = Recognizer::compile_for(capture, who);
         // Once something reads your prompt, no trigger hides it with
         // nothing drawn in its place.
@@ -199,7 +200,7 @@ impl Stage {
     }
 
     /// The compiled capture.
-    pub fn recognizer(&self) -> Option<&Recognizer> {
+    pub(crate) fn recognizer(&self) -> Option<&Recognizer> {
         self.recognizer.as_ref()
     }
 
@@ -207,7 +208,7 @@ impl Stage {
     /// the last one it hides (D7). The last prompt read follows at once,
     /// so a repaint after an edit shows a line above the last one as sent
     /// exactly when the new design leaves it alone.
-    pub fn set_reads(&mut self, reads: &BTreeSet<FieldRef>) {
+    pub(crate) fn set_reads(&mut self, reads: &BTreeSet<FieldRef>) {
         self.hides = Hides::of(reads);
         if let Some(block) = self.last_raw.as_mut() {
             if block.groups.len() == block.lines.len() {
@@ -225,7 +226,7 @@ impl Stage {
     /// A connection opened or closed. The regions, the ring and what the
     /// session noted go. The capture, what the design reads, the
     /// generation count and the candidate count stay.
-    pub fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         *self = Self {
             recognizer: self.recognizer.take(),
             gen: self.gen,
@@ -251,25 +252,19 @@ impl Stage {
 
     /// The prompt card is open. Test only.
     #[cfg(test)]
-    pub fn card_open(&self) -> bool {
+    pub(crate) fn card_open(&self) -> bool {
         self.card
     }
 
     /// Take where your prompt shows from the `[prompt]` table. The prompt
     /// on screen moves at the next repaint.
-    pub fn set_show(&mut self, show: PromptShow) {
+    pub(crate) fn set_show(&mut self, show: PromptShow) {
         self.show = show;
-    }
-
-    /// Where your prompt shows. Test only.
-    #[cfg(test)]
-    pub fn shows(&self) -> PromptShow {
-        self.show
     }
 
     /// What the band shows, while your prompt shows pinned. Test only.
     #[cfg(test)]
-    pub fn pinned(&self) -> Option<&[u8]> {
+    pub(crate) fn pinned(&self) -> Option<&[u8]> {
         self.pinned.as_deref()
     }
 
@@ -289,7 +284,7 @@ impl Stage {
     /// prompt as sent takes that prompt's lines in its place. Not
     /// drawing, and for the away prompt, it takes its own lines. At least
     /// 1 and at most [`ZONE_MAX`].
-    pub fn zone(&self, draw: bool, template: &Template) -> usize {
+    pub(crate) fn zone(&self, draw: bool, template: &Template) -> usize {
         let Some(recognizer) = &self.recognizer else {
             return 1;
         };
@@ -422,7 +417,7 @@ impl Stage {
 
     /// Start the list of triggers that hid a prompt with nothing reading
     /// it over, as a profile that reads one or another profile does.
-    pub fn forget_gags_without_reader(&mut self) {
+    pub(crate) fn forget_gags_without_reader(&mut self) {
         self.gag_reported.clear();
     }
 

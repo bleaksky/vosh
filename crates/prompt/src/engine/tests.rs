@@ -1,3 +1,5 @@
+use super::char_prompt::codes_from_game;
+use super::replies::OBSERVE_MS;
 use super::*;
 use crate::aabahran::Which;
 use crate::config::{AabahranCapture, CaptureConfig, CaptureSource, RegexCapture};

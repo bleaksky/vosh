@@ -205,7 +205,7 @@ pub struct View<'a> {
 
 impl<'a> View<'a> {
     /// The live render, or the game's lines with drawing off.
-    pub fn live(rendered: Option<&'a str>) -> Self {
+    pub(crate) fn live(rendered: Option<&'a str>) -> Self {
         Self {
             shown: rendered,
             ..Self::default()

@@ -263,7 +263,7 @@ impl Output {
 
     /// Write `bytes` as region `gen`, such as the partial a read ended on.
     /// It closes the open row.
-    pub fn region(&mut self, gen: u64, bytes: &[u8]) {
+    pub(crate) fn region(&mut self, gen: u64, bytes: &[u8]) {
         self.push(&mark(gen));
         self.push(bytes);
         self.closed = true;
@@ -461,7 +461,7 @@ pub(super) fn escape_end(bytes: &[u8], at: usize) -> usize {
 /// SGR codes after the last thing that shows, holding at least one line
 /// end. `bytes.len()` when there is none. A mark or any other escape stops
 /// the run, so a region never loses its start to the hold.
-pub fn trailing_line_ends(bytes: &[u8]) -> usize {
+pub(crate) fn trailing_line_ends(bytes: &[u8]) -> usize {
     let mut at = bytes.len();
     let mut line_end = false;
     loop {

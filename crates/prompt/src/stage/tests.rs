@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
-use super::output::shows_anything;
+use super::marks::with_lift_end;
+use super::output::{shows_anything, trailing_line_ends};
 use super::*;
 use crate::config::RegexCapture;
 

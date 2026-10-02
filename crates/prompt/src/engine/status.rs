@@ -8,7 +8,7 @@ use super::{stamp, PromptEngine};
 use crate::aabahran::observer;
 
 /// How many pulses in a row without your prompt make it not matching.
-pub const MISSES: u32 = 3;
+pub(crate) const MISSES: u32 = 3;
 
 /// Whether Vosh reads your prompt, for `session://prompt-status` and
 /// `#prompt`.
@@ -116,7 +116,7 @@ impl PromptEngine {
 
     /// The status and when Vosh last read your prompt, as
     /// `session://prompt-status` carries them.
-    pub fn status_report(&self) -> StatusReport {
+    pub(crate) fn status_report(&self) -> StatusReport {
         StatusReport {
             status: self.status(),
             last_match_at: self.misses.last_match_at.map(stamp),

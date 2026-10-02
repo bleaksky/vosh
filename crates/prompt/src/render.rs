@@ -37,10 +37,10 @@ use crate::values::Values;
 
 /// Ends every non-empty render, so an unclosed color never bleeds into the
 /// game output that follows.
-pub const RESET: &str = "\x1b[0m";
+pub(crate) const RESET: &str = "\x1b[0m";
 
 /// The mark for a value the game hides.
-pub const HIDDEN_MARK: &str = "?";
+pub(crate) const HIDDEN_MARK: &str = "?";
 
 /// A hidden bar cell.
 const HIDDEN_CELL: &str = "·";

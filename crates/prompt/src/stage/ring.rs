@@ -72,7 +72,7 @@ impl Stage {
     /// else the latest complete line. When nothing came in since the last
     /// entry, nothing is recorded. `draw` and `capture` say whether
     /// drawing was on and whether the profile had a capture.
-    pub fn record(
+    pub(crate) fn record(
         &mut self,
         partial: Option<(&[u8], &str)>,
         at_ms: i64,

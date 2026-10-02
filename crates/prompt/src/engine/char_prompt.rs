@@ -235,7 +235,7 @@ impl PromptEngine {
 /// The capture a migrated one becomes when the game shows your settings:
 /// Aabahran's codes as the game stores them, following the game, learned
 /// from `source` at `at`. An error when they do not compile for `who`.
-pub fn codes_from_game(
+pub(crate) fn codes_from_game(
     prompt: &str,
     fprompt: &str,
     source: CaptureSource,

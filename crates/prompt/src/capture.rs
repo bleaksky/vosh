@@ -306,7 +306,7 @@ impl Recognizer {
     /// True when `partial`, after the held lines `held`, can still grow
     /// into your prompt, so the stage holds it a moment rather than paint
     /// it raw. A partial that no shape can become paints at once.
-    pub fn live(&mut self, held: &[&str], partial: &str) -> bool {
+    pub(crate) fn live(&mut self, held: &[&str], partial: &str) -> bool {
         match &self.reader {
             Reader::Regex { .. } => {
                 held.is_empty()
@@ -336,7 +336,7 @@ impl Recognizer {
 
     /// The compiled codes, for a capture that reads them. Test only.
     #[cfg(test)]
-    pub fn codes(&self) -> Option<&Compiled> {
+    pub(crate) fn codes(&self) -> Option<&Compiled> {
         match &self.reader {
             Reader::Codes(compiled) => Some(compiled),
             Reader::Regex { .. } => None,
@@ -346,7 +346,7 @@ impl Recognizer {
     /// The groups each line of each way the game prints your prompt
     /// reads, top line first, and whether that way is the away prompt,
     /// which always shows as sent. A regex capture has one way, one line.
-    pub fn shapes(&self) -> Vec<(Vec<Vec<String>>, bool)> {
+    pub(crate) fn shapes(&self) -> Vec<(Vec<Vec<String>>, bool)> {
         let names = |re: &Regex| -> Vec<String> {
             re.capture_names().flatten().map(str::to_string).collect()
         };
@@ -367,7 +367,7 @@ impl Recognizer {
 
     /// Every value a prompt this capture reads can fill, each once, the
     /// immortal prefix's among them.
-    pub fn reads(&self) -> Vec<String> {
+    pub(crate) fn reads(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         let mut add = |name: &str| {
             if !out.iter().any(|n| n == name) {
@@ -390,7 +390,7 @@ impl Recognizer {
     /// True when a partial some shape reads is the prompt at once. Test
     /// only.
     #[cfg(test)]
-    pub fn settles(&self) -> bool {
+    pub(crate) fn settles(&self) -> bool {
         match &self.reader {
             Reader::Regex { settle, .. } => *settle,
             Reader::Codes(compiled) => compiled.shapes.iter().any(|s| s.settle),
@@ -454,7 +454,7 @@ impl Recognizer {
 
     /// True when `lines` are the top lines of a shape with more lines,
     /// so the stage holds them for the rest.
-    pub fn starts(&self, lines: &[&str]) -> bool {
+    pub(crate) fn starts(&self, lines: &[&str]) -> bool {
         let Reader::Codes(compiled) = &self.reader else {
             return false;
         };
