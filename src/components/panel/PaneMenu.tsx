@@ -61,8 +61,6 @@ interface Props {
 
 // Gap between the more button and the menu, like the session popover.
 const DROP = 12;
-// The menu's left edge sits this far inside the pane.
-const INSET = 8;
 
 export function PaneMenu({ leaf, anchor, onClose }: Props) {
   const [profile, setProfile] = useState<string | null>(null);
@@ -91,9 +89,17 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
     };
   }, [leaf.pane]);
 
+  // The menu hangs from the button you pressed, its right edge on the
+  // button's right edge, so it opens where you look. It moves right of
+  // the button only when the window has no room to its left.
   const button = anchor.getBoundingClientRect();
-  const pane = anchor.closest('section')?.getBoundingClientRect() ?? button;
-  const at = { x: pane.left + INSET, y: button.bottom + DROP, flipY: button.top - DROP };
+  const at = {
+    x: button.left,
+    y: button.bottom + DROP,
+    flipX: button.right,
+    preferFlip: true,
+    flipY: button.top - DROP,
+  };
 
   // Like the title band's menus, closing hands the caret back to the
   // command line, unless you clicked somewhere else on purpose.
