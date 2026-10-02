@@ -4,7 +4,6 @@ members = [
     "src-tauri",
     "crates/protocol",
     "crates/automation",
-    "crates/vars",
     "crates/trigger",
     "crates/script",
     "crates/log",

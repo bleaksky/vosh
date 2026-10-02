@@ -5,8 +5,8 @@
 //! current target name and HP show up in the prompt-area HUD.
 
 use serde_json::Value;
+use vosh_automation::vars::{Scope, VariableStore};
 use vosh_protocol::gmcp::Message;
-use vosh_vars::{Scope, VariableStore};
 
 /// Push fields from a known GMCP package into the session variable store.
 /// Unknown packages are ignored so the auto-bind stays opt-in.

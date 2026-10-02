@@ -1024,7 +1024,8 @@ pub(crate) async fn import_apply(
             macros_changed = true;
         }
         for (k, v) in &report.vars {
-            p.vars.set(vosh_vars::Scope::Profile, k.clone(), v.clone());
+            p.vars
+                .set(vosh_automation::vars::Scope::Profile, k.clone(), v.clone());
         }
         macros_snapshot = p.macros.clone();
         lists = ListChanges::since(lists_before, &p);
@@ -7253,7 +7254,8 @@ mod tests {
                 let mut p = state.profile.lock().await;
                 p.aliases
                     .set(vosh_automation::alias::Alias::new("zz", "sleep"));
-                p.vars.set(vosh_vars::Scope::Profile, "target", "dragon");
+                p.vars
+                    .set(vosh_automation::vars::Scope::Profile, "target", "dragon");
             }
             persist(&state, dir.path()).await;
 
@@ -8385,7 +8387,8 @@ mod tests {
             // target, you drag the splitter, and you add an alias.
             {
                 let mut p = state.profile.lock().await;
-                p.vars.set(vosh_vars::Scope::Profile, "target", "dragon");
+                p.vars
+                    .set(vosh_automation::vars::Scope::Profile, "target", "dragon");
                 if let Some(panes) = p.ui.panes.as_mut() {
                     panes.panel_width = Some(420);
                 }
@@ -8744,12 +8747,11 @@ mod tests {
             // lib.rs holds every save and every switch, since the next
             // launch writes the journal again over what this one saved.
             let pending = AtomicBool::new(launched.wizard_unfinished);
-            state
-                .profile
-                .lock()
-                .await
-                .vars
-                .set(vosh_vars::Scope::Profile, "target", "dragon");
+            state.profile.lock().await.vars.set(
+                vosh_automation::vars::Scope::Profile,
+                "target",
+                "dragon",
+            );
             {
                 let _persist_guard = super::super::PERSIST_LOCK.lock().await;
                 super::super::persist_state_with(&state, Some(dir.path()), &pending).await;

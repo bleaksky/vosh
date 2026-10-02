@@ -5,5 +5,8 @@
 //!
 //! [`alias`] expands the first word of a command into the commands it
 //! stands for.
+//! [`vars`] keeps variables in profile and session scope and fills in
+//! `$name`.
 
 pub mod alias;
+pub mod vars;
