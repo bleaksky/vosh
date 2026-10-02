@@ -3,11 +3,11 @@ import { onGmcpPackage } from '../session';
 import { asNumber, asText, createStore } from './store';
 
 // The room you stand in, for the rows under the Map pane. Room.Info
-// gives the name, vnum, area name, sector and exits. Room.Chars lists
-// the people you can see. Map.Tiles carries an `areas` dict keyed by
-// area VNUM plus the grid cell you stand on (`h`), whose `ar` names
-// your area vnum. RoomStrip looked the dict up by area NAME, so the
-// area color never resolved. resolveArea matches it properly.
+// gives the name, vnum, area name, sector, climate region and exits.
+// Room.Chars lists the people you can see. Map.Tiles carries an `areas`
+// dict keyed by area VNUM plus the grid cell you stand on (`h`), whose
+// `ar` names your area vnum. RoomStrip looked the dict up by area NAME,
+// so the area color never resolved. resolveArea matches it properly.
 //
 // Room.* arrives only when you move or look. The store keeps the last
 // room across a disconnect, the way the Map pane keeps the last map.
@@ -30,6 +30,21 @@ const SECTOR_NAMES = [
   'snow',
 ];
 
+/** Aabahran's climate regions, in index order (tables.c
+ *  region_table). The new build's Room.Info sends the index as
+ *  `region` and the name as `climate`. The prompt's `%G` prints the
+ *  same names. */
+const REGION_NAMES = [
+  'Temperate',
+  'Coastal North',
+  'Coastal South',
+  'Desert',
+  'Tundra',
+  'Mountain North',
+  'Mountain South',
+  'Mountain East',
+];
+
 const EXIT_ORDER = ['north', 'east', 'south', 'west', 'up', 'down'];
 
 export interface RoomInfo {
@@ -46,6 +61,9 @@ export interface RoomInfo {
   /** Sector index 0..12, the same index Map.Tiles cells use. */
   sector: number | null;
   terrain: string | null;
+  /** The climate region the room's area lies in, by its name, like
+   *  `Coastal North`. Null from a build that sends no region. */
+  region: string | null;
 }
 
 export interface RoomPerson {
@@ -91,7 +109,18 @@ export function parseRoomInfo(data: unknown): RoomInfoBase | null {
     exits: parseExits(d.exits),
     sector,
     terrain,
+    region: parseRegion(d.climate, d.region),
   };
+}
+
+/** The region's name: `climate` as sent, or else the name of the
+ *  `region` index. Null when neither names one. */
+export function parseRegion(climate: unknown, region: unknown): string | null {
+  const name = asText(climate);
+  if (name) return name;
+  const idx = asNumber(region);
+  if (idx === null || !Number.isInteger(idx)) return null;
+  return REGION_NAMES[idx] ?? null;
 }
 
 /** Exits with a destination, compass order first, then any others in

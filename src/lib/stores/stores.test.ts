@@ -454,6 +454,34 @@ describe('stores on the event bus', () => {
     expect(s.room.getRoom().info).toMatchObject({ areaVnum: 52, areaColor: '#a3be8c' });
   });
 
+  it('keep the name, terrain and region of the room you last saw together', async () => {
+    const s = await load();
+    packet('room-info.gmcp');
+    const bank = {
+      name: 'The Bank of Aabahran',
+      sector: 0,
+      terrain: 'inside',
+      region: 'Temperate',
+    };
+    expect(s.room.getRoom().info).toMatchObject(bank);
+    // A dark room sends no Room.Info, while Room.Weather still comes
+    // with each prompt. The room keeps what its own packet said.
+    packet('room-weather.gmcp');
+    expect(s.room.getRoom().info).toMatchObject(bank);
+    disconnect();
+    expect(s.room.getRoom().info).toMatchObject(bank);
+    // Under rhapsody of delusion the game sends a room with no sector
+    // and no region.
+    connect();
+    packet('room-info-rhapsody.gmcp');
+    expect(s.room.getRoom().info).toMatchObject({
+      name: 'A Wondrous Place',
+      sector: null,
+      terrain: 'unknown',
+      region: null,
+    });
+  });
+
   it('count up from the last tick, warn at your threshold, and hide when reports stop', async () => {
     const s = await load();
     vi.useFakeTimers();

@@ -70,6 +70,7 @@ fn room_view(msg: &vosh_gmcp::Message) -> Json {
         "area": field_json(get("area")),
         "terrain": field_json(get("terrain")),
         "sector": field_json(get("sector")),
+        "region": field_json(get("region")),
         "exits": exits,
     })
 }

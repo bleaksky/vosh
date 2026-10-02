@@ -195,6 +195,7 @@
     "area": "Fort Blackwatch",
     "terrain": "inside",
     "sector": 0,
+    "region": "Temperate",
     "exits": [
       "south"
     ]
@@ -205,6 +206,7 @@
     "area": "Unknown",
     "terrain": "unknown",
     "sector": -1,
+    "region": null,
     "exits": [
       "north",
       "east",
