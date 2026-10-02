@@ -12,9 +12,9 @@ import {
 import { pushToast } from './toasts';
 
 // The session the title band shows and the session menu drives. Moved
-// out of the old top bar chip (Connect.tsx) so the connect logic lives
-// in App for the life of the window instead of in whichever control
-// happens to be mounted. The palette's connect entry and the Cmd+R
+// out of the old top bar chip so the connect logic lives in App for
+// the life of the window instead of in whichever control happens to
+// be mounted. The palette's connect entry and the Cmd+R
 // shortcut reach it through the `vosh:connect-request` window event.
 
 export type ConnectionStatus =
