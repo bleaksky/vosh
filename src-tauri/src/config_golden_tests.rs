@@ -40,9 +40,8 @@ use crate::loadout_store::{
 };
 use crate::profile::{Macro, Timer};
 use crate::profile_config::{
-    ConnectionConfig, CustomTheme, DockEntryPersist, GlobalConfig, GroupFolders, PaneLayoutPersist,
-    PaneNode, PluginsPersist, ProfileConfig, TickPersistConfig, TrackedAffect, UiConfig,
-    VitalsConfig,
+    CustomTheme, DockEntryPersist, GlobalConfig, GroupFolders, PaneLayoutPersist, PaneNode,
+    PluginsPersist, ProfileConfig, TickPersistConfig, TrackedAffect, UiConfig, VitalsConfig,
 };
 use crate::profile_set::{AutoMatch, ProfileEntry, ProfileSet, ProfilesIndex, Scope, ScopeConfig};
 
@@ -596,13 +595,6 @@ fn full_loadouts() -> LoadoutSet {
                 description: Some("Melee main".into()),
                 auto_match: Some(full_auto_match()),
                 enabled_groups: vec!["combat-melee".into(), "wartools".into()],
-                profile_vars: BTreeMap::from([("target".into(), "orc".into())]),
-                tick: full_tick(),
-                connection: ConnectionConfig {
-                    host: "mud.example.org".into(),
-                    port: 4000,
-                    tls: true,
-                },
             },
         ],
     }

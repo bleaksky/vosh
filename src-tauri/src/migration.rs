@@ -1883,20 +1883,6 @@ mod tests {
     }
 
     #[test]
-    fn a_loadout_leaves_vars_tick_and_connection_to_the_profile_file() {
-        let mut cfg = profile_with(vec![], vec![], vec![]);
-        cfg.tick.interval_secs = 45;
-        cfg.profile_vars.insert("target".into(), "orc".into());
-        let plan = analyze(&[("default".into(), cfg)]);
-        let loadout = &plan.loadouts[0];
-        let empty = Loadout::empty("default");
-        assert_eq!(loadout.connection.host, empty.connection.host);
-        assert_eq!(loadout.connection.port, empty.connection.port);
-        assert_eq!(loadout.tick.interval_secs, empty.tick.interval_secs);
-        assert!(loadout.profile_vars.is_empty());
-    }
-
-    #[test]
     fn source_profiles_listed_in_iteration_order() {
         let plan = analyze(&[
             ("default".into(), profile_with(vec![], vec![], vec![])),
