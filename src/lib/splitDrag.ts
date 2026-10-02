@@ -316,20 +316,21 @@ export class SplitDrag {
     return true;
   }
 
-  /** One autoscroll tick, every `DRAG_SCROLL_INTERVAL` ms while this drags. */
-  tick(): void {
+  /** One autoscroll tick, every `DRAG_SCROLL_INTERVAL` ms while this
+   *  drags. False once this no longer drags. */
+  tick(): boolean {
     const phase = this.phase;
     const p = this.pointer;
-    if ((phase.kind !== 'history' && phase.kind !== 'live') || !p) return;
+    if ((phase.kind !== 'history' && phase.kind !== 'live') || !p) return false;
     const pane = phase.kind === 'history' ? this.opts.history() : this.opts.live();
     const grid = pane?.grid();
     if (!pane || !grid) {
       this.release();
-      return;
+      return false;
     }
     const view = pane.bufferView();
     const lines = autoscrollLines(pastEdge(p.clientY, grid.top, view.rows * grid.cellH));
-    if (lines === 0) return;
+    if (lines === 0) return true;
     let floor = view.baseY;
     if (phase.kind === 'history' && lines > 0) {
       const live = this.opts.live();
@@ -340,16 +341,17 @@ export class SplitDrag {
       }
       if (view.viewportY >= floor) {
         this.handOff();
-        return;
+        return this.dragging();
       }
     }
     const target = Math.max(0, Math.min(view.viewportY + lines, floor));
     if (target !== view.viewportY) pane.scrollLines(target - view.viewportY);
     if (phase.kind === 'history' && lines > 0 && target >= floor) {
       this.handOff();
-      return;
+      return this.dragging();
     }
     this.extend();
+    return this.dragging();
   }
 
   /** The split is about to close because the history reached its bottom
@@ -378,6 +380,11 @@ export class SplitDrag {
     if (phase.kind !== 'idle') phase.anchor.mark?.dispose();
     this.phase = { kind: 'idle' };
     this.pointer = null;
+  }
+
+  /** True while this drags rather than xterm. */
+  private dragging(): boolean {
+    return this.phase.kind === 'history' || this.phase.kind === 'live';
   }
 
   /** The history reached the bottom: close the split and carry the
@@ -445,8 +452,10 @@ export const HISTORY_TEXT = '.terminal-pane-history .xterm-screen';
 /** Feed `drag` the window's mouse events, in the capture phase so the
  *  move that takes a drag over selects, and with it ends xterm's own
  *  drag, before xterm's document listener hears it. Nothing starts while
- *  `native` says the native grid draws, since it splits itself. Returns
- *  the cleanup. */
+ *  `native` says the native grid draws, since it splits itself. The drag
+ *  ends when the window loses focus or the page hides, since the release
+ *  may never come then. Leaving the window ends nothing, as the release
+ *  still comes. Returns the cleanup. */
 export function listenSplitDrag(win: DragWindow, drag: SplitDrag, native: () => boolean) {
   const onDown = (e: WindowMouse) => {
     if (native()) return;
@@ -458,13 +467,24 @@ export function listenSplitDrag(win: DragWindow, drag: SplitDrag, native: () => 
     drag.move(e);
   };
   const onUp = () => drag.release();
+  // The window's own blur. A field in the page that loses focus, as the
+  // command line does on a press in the terminal, blurs too, and must not
+  // end the drag that press starts.
+  const onBlur = (e: WindowMouse) => {
+    if (e.target === win) drag.release();
+  };
+  const onHide = () => drag.release();
   win.addEventListener('mousedown', onDown, true);
   win.addEventListener('mousemove', onMove, true);
   win.addEventListener('mouseup', onUp, true);
+  win.addEventListener('blur', onBlur, false);
+  win.addEventListener('visibilitychange', onHide, true);
   return () => {
     drag.release();
     win.removeEventListener('mousedown', onDown, true);
     win.removeEventListener('mousemove', onMove, true);
     win.removeEventListener('mouseup', onUp, true);
+    win.removeEventListener('blur', onBlur, false);
+    win.removeEventListener('visibilitychange', onHide, true);
   };
 }
