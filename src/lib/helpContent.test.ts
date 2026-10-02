@@ -622,6 +622,19 @@ describe('the help on the one window', () => {
     expect(HELP_TOPICS.some((t) => t.id === 'shape.split-the-well')).toBe(false);
   });
 
+  it('names the 3D style, its floors and view, the zoom gesture and bent exits', () => {
+    const text = body('shape.use-the-map');
+    expect(text).toContain('Pick `Squares`, `Glyphs`, `Tileset`, or `3D`');
+    expect(text).toContain('a short tick out of a room marks an exit that leads past the room');
+    expect(text).toContain('Scroll or pinch over the map to zoom it, in any style');
+    expect(text).not.toContain('hold `Cmd` or `Ctrl`');
+    expect(text).toContain('drag the map to turn and tilt it');
+    expect(text).toContain('`Reset view` to put north back at the top');
+    expect(text).toContain('`Your floor`, `One floor up and down`, or `Every floor`');
+    expect(text).toContain('Turn on `Terrain sprites`');
+    expect(text).toContain('Vosh remembers the style, the zoom, the 3D view, and the tileset.');
+  });
+
   it('lists #help with words with the slash commands', () => {
     expect(body('reference.slash-commands')).toContain(
       '`#help <words>` opens Help on those words.',
