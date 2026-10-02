@@ -197,8 +197,9 @@ impl PromptPreview {
 /// because it shows what the song hides while no packet names the song.
 /// The two differ on Char.Combat. This list hides only its health and
 /// condition keys, and the live rule also hides a path that reads the
-/// whole packet or the whole tank. Both stay as they are (D26), since a
-/// merge would change what the preview or the live prompt draws.
+/// whole packet or the whole tank. Both stay as they are (refactor plan
+/// D26), since a merge would change what the preview or the live prompt
+/// draws.
 pub fn lament_hides(field: &FieldRef) -> bool {
     let name = field.name.as_str();
     if Pair::of(name).is_some() {
