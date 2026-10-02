@@ -25,6 +25,7 @@ keep_last_command = false
 bright_bold = false
 custom_themes = []
 echo_macros = true
+input_echo_caret = true
 side_panels_fill_height = false
 paste_line_delay_ms = 500
 spellcheck_prompt = false

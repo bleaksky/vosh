@@ -349,6 +349,7 @@ fn full_ui() -> UiConfig {
         split_divider_color: Some("#ff00ff".into()),
         input_echo_color: Some("#88aaff".into()),
         echo_macros: false,
+        input_echo_caret: false,
         side_panels_fill_height: true,
         paste_line_delay_ms: 250,
         spellcheck_prompt: true,

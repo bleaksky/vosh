@@ -282,6 +282,11 @@ pub(crate) struct UiConfig {
     /// when stacked macro sends make the scrollback too noisy.
     #[serde(default = "default_echo_macros")]
     pub echo_macros: bool,
+    /// When true (the default), the echo of each command you send starts
+    /// with a grey `›` and a space, so your commands stand apart from the
+    /// game's lines. A profile from before the setting reads it on.
+    #[serde(default = "default_input_echo_caret")]
+    pub input_echo_caret: bool,
     /// Whether the old side panel zones filled the window height. The
     /// one window panel has no such zones, so nothing reads it. Every
     /// save writes back the value it loaded, so 0.7.2 keeps it on a
@@ -669,6 +674,10 @@ pub(crate) fn coerce_affects_marker(value: String) -> String {
 }
 
 fn default_echo_macros() -> bool {
+    true
+}
+
+fn default_input_echo_caret() -> bool {
     true
 }
 
@@ -1227,6 +1236,7 @@ impl Default for UiConfig {
             split_divider_color: None,
             input_echo_color: None,
             echo_macros: true,
+            input_echo_caret: true,
             side_panels_fill_height: false,
             paste_line_delay_ms: default_paste_line_delay_ms(),
             spellcheck_prompt: false,
@@ -3373,6 +3383,15 @@ name = "haste"
         assert!(text.contains("[ui.panes]"), "{text}");
         let parsed = ProfileConfig::from_toml(&text).unwrap();
         assert_eq!(parsed.ui.panes, Some(custom_layout()));
+    }
+
+    #[test]
+    fn a_profile_from_before_mark_your_commands_reads_it_on() {
+        let parsed = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n").unwrap();
+        assert!(parsed.ui.input_echo_caret);
+        let off = ProfileConfig::from_toml("[ui]\ninput_echo_caret = false\n").unwrap();
+        assert!(!off.ui.input_echo_caret);
+        assert!(off.to_toml().unwrap().contains("input_echo_caret = false"));
     }
 
     #[test]

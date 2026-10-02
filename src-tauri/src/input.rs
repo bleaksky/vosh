@@ -341,10 +341,10 @@ fn process_line(
         }
         let expansion = format!("{} {}", qk.verb, target);
         let mut inner = process_line(profile, &expansion, replaced, lua);
-        // Echo the resolved line like any other typed command. The
-        // frontend suppresses its own echo for quick-keys, so this is
-        // the only echo that lands.
-        inner.echo.insert(0, expansion);
+        // Echo the resolved line like any other typed command, with the
+        // caret and the Sent command color. The frontend suppresses its
+        // own echo for quick-keys, so this is the only echo that lands.
+        inner.echo.insert(0, command_echo(&expansion, &profile.ui));
         return inner;
     }
 
@@ -1987,6 +1987,40 @@ fn split_first_word(input: &str) -> (&str, &str) {
     }
 }
 
+/// The echo of a command you send, as the command line draws it: a grey
+/// `›` and a space while Mark your commands is on, then the command in
+/// the Sent command color when one is set. Mirrors `planSubmit` and
+/// `colorizeEcho` in src/lib/maskedInput.ts, so a quick key echoes like a
+/// typed command. An empty line echoes as itself.
+pub(crate) fn command_echo(line: &str, ui: &crate::profile_config::UiConfig) -> String {
+    if line.is_empty() {
+        return String::new();
+    }
+    let caret = if ui.input_echo_caret { ECHO_CARET } else { "" };
+    match ui.input_echo_color.as_deref().and_then(echo_rgb) {
+        Some((r, g, b)) => format!("{caret}\x1b[38;2;{r};{g};{b}m{line}\x1b[0m"),
+        None => format!("{caret}{line}"),
+    }
+}
+
+/// The grey `›` and space before each command you send, in the theme's
+/// bright black (SGR 90). The same bytes as `ECHO_CARET` in
+/// src/lib/maskedInput.ts.
+pub(crate) const ECHO_CARET: &str = "\x1b[90m\u{203a} \x1b[0m";
+
+/// The red, green and blue of a Sent command color, the six hex digits
+/// at its start after an optional `#`, or None when it does not read.
+fn echo_rgb(color: &str) -> Option<(u8, u8, u8)> {
+    let hex = color.trim();
+    let hex = hex.strip_prefix('#').unwrap_or(hex);
+    let digits = hex.get(..6)?;
+    if !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let channel = |at: usize| u8::from_str_radix(&digits[at..at + 2], 16).ok();
+    Some((channel(0)?, channel(2)?, channel(4)?))
+}
+
 fn error_echo(message: String) -> InputResult {
     InputResult {
         bytes: Vec::new(),
@@ -3038,6 +3072,52 @@ mod tests {
         let _ = process(&mut p, "#qkey gg kick");
         let r = process(&mut p, "gg");
         assert_eq!(r.bytes, b"kick ogre\r\n");
+    }
+
+    #[test]
+    fn a_quick_key_echoes_like_a_typed_command() {
+        let mut p = Profile::default();
+        set_room_chars(&mut p, vec![rc("ogre", true)]);
+        let _ = process(&mut p, "tar 1");
+        let _ = process(&mut p, "#qkey gg kick");
+        // The caret is on by default, before the command in the
+        // terminal's own color.
+        assert_eq!(
+            process(&mut p, "gg").echo,
+            vec!["\x1b[90m\u{203a} \x1b[0mkick ogre".to_string()]
+        );
+        // The Sent command color wraps the command, never the caret.
+        p.ui.input_echo_color = Some("#88AAff".into());
+        assert_eq!(
+            process(&mut p, "gg").echo,
+            vec!["\x1b[90m\u{203a} \x1b[0m\x1b[38;2;136;170;255mkick ogre\x1b[0m".to_string()]
+        );
+        // With the caret off the command echoes bare.
+        p.ui.input_echo_caret = false;
+        p.ui.input_echo_color = None;
+        assert_eq!(process(&mut p, "gg").echo, vec!["kick ogre".to_string()]);
+    }
+
+    #[test]
+    fn the_caret_is_the_one_the_command_line_draws() {
+        let page = include_str!("../../src/lib/maskedInput.ts");
+        assert!(page.contains(r"export const ECHO_CARET = '\x1b[90m\u203a \x1b[0m';"));
+        assert_eq!(ECHO_CARET, "\x1b[90m\u{203a} \x1b[0m");
+    }
+
+    #[test]
+    fn a_sent_command_color_that_does_not_read_leaves_the_command_plain() {
+        let mut ui = crate::profile_config::UiConfig {
+            input_echo_caret: false,
+            ..crate::profile_config::UiConfig::default()
+        };
+        for color in ["", "red", "#12345", "#12g456", "rgb(1,2,3)"] {
+            ui.input_echo_color = Some(color.into());
+            assert_eq!(command_echo("look", &ui), "look", "{color}");
+        }
+        ui.input_echo_color = Some(" ff8800 ".into());
+        assert_eq!(command_echo("look", &ui), "\x1b[38;2;255;136;0mlook\x1b[0m");
+        assert_eq!(command_echo("", &ui), "");
     }
 
     #[test]

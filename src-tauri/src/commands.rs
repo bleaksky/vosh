@@ -2992,6 +2992,7 @@ pub(crate) struct UiConfigPayload {
     pub split_divider_color: Option<String>,
     pub input_echo_color: Option<String>,
     pub echo_macros: bool,
+    pub input_echo_caret: bool,
     pub paste_line_delay_ms: u32,
     pub spellcheck_prompt: bool,
     pub input_cursor_style: String,
@@ -3041,6 +3042,7 @@ impl UiConfigPayload {
             split_divider_color: ui.split_divider_color.clone(),
             input_echo_color: ui.input_echo_color.clone(),
             echo_macros: ui.echo_macros,
+            input_echo_caret: ui.input_echo_caret,
             paste_line_delay_ms: ui.paste_line_delay_ms,
             spellcheck_prompt: ui.spellcheck_prompt,
             input_cursor_style: ui.input_cursor_style.clone(),
@@ -3086,6 +3088,7 @@ impl UiConfigPayload {
             split_divider_color,
             input_echo_color,
             echo_macros,
+            input_echo_caret,
             paste_line_delay_ms,
             spellcheck_prompt,
             input_cursor_style,
@@ -3148,6 +3151,7 @@ impl UiConfigPayload {
             }
         });
         ui.echo_macros = echo_macros;
+        ui.input_echo_caret = input_echo_caret;
         // Clamp to a sane range so a malformed input cannot freeze the
         // paste indicator (0–10s per line is plenty).
         ui.paste_line_delay_ms = paste_line_delay_ms.min(10_000);

@@ -18,6 +18,7 @@
     "split_divider_color": null,
     "input_echo_color": null,
     "echo_macros": true,
+    "input_echo_caret": true,
     "paste_line_delay_ms": 500,
     "spellcheck_prompt": false,
     "input_cursor_style": "block",

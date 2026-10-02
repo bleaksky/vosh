@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   draftAfterMaskChange,
+  ECHO_CARET,
   isMasked,
   keepsLastCommand,
   macroEcho,
@@ -93,6 +94,43 @@ describe('a macro pressed at a password prompt', () => {
     expect(macroEcho('stand', macro())).toBe('stand\r\n');
     expect(macroEcho('stand', macro({ enabled: false }))).toBeNull();
     expect(macroEcho('gg', macro({ quickKey: true }))).toBeNull();
+  });
+});
+
+describe('Mark your commands', () => {
+  const marked = (patch: Partial<SubmitContext> = {}) => typed({ echoCaret: true, ...patch });
+
+  it('draws a grey single width caret and a space in the theme bright black', () => {
+    expect(ECHO_CARET).toBe('\x1b[90m\u203a \x1b[0m');
+  });
+
+  it('puts the caret before a typed command in the terminal text color', () => {
+    expect(planSubmit('look', marked()).echo).toBe(`${ECHO_CARET}look\r\n`);
+  });
+
+  it('keeps the Sent command color on the command and the caret grey', () => {
+    expect(planSubmit('look', marked({ echoColor: '#102030' })).echo).toBe(
+      `${ECHO_CARET}\x1b[38;2;16;32;48mlook\x1b[0m\r\n`,
+    );
+  });
+
+  it('marks a macro command the same way', () => {
+    expect(macroEcho('stand', { ...marked({ echoColor: '#ff8800' }), enabled: true })).toBe(
+      `${ECHO_CARET}\x1b[38;2;255;136;0mstand\x1b[0m\r\n`,
+    );
+  });
+
+  it('leaves a password, a bare Enter, a quick key and a pinned empty line alone', () => {
+    expect(planSubmit(SECRET, marked({ masked: true })).echo).toBe('\r\n');
+    expect(planSubmit('', marked()).echo).toBe('\r\n');
+    expect(planSubmit('gg', marked({ quickKey: true })).echo).toBeNull();
+    expect(planSubmit('', marked({ pinRowOpen: true })).echo).toBeNull();
+    expect(macroEcho('stand', { ...marked({ masked: true }), enabled: true })).toBeNull();
+  });
+
+  it('echoes bare with the setting off', () => {
+    expect(planSubmit('look', marked({ echoCaret: false })).echo).toBe('look\r\n');
+    expect(planSubmit('look', typed()).echo).toBe('look\r\n');
   });
 });
 
