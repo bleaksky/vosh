@@ -41,18 +41,21 @@ export function ChatPane() {
   // Distance from the bottom that still counts as reading the newest
   // message, about a message at your terminal size. Scrolled further
   // up, new lines leave you be.
-  const sticky = usePaneText().chatSticky;
+  const text = usePaneText();
+  const sticky = text.chatSticky;
 
   useEffect(() => subscribeChatLines(setLines), []);
 
   const channels = Array.from(new Set(lines.map((l) => l.pane))).sort();
   const visible = channel ? lines.filter((l) => l.pane === channel) : lines;
 
-  // Follow the newest line while you are at the bottom.
+  // Follow the newest line while you are at the bottom. A new terminal
+  // size makes every line taller or shorter with the pane the same
+  // size, so it pins the log to the bottom again too.
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (el && stickyRef.current) el.scrollTop = el.scrollHeight;
-  }, [lines]);
+  }, [lines, text.size]);
 
   // A pane that grows or shrinks (a splitter drag, the window) keeps
   // the newest line in view while you are at the bottom.
