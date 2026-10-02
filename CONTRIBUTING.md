@@ -4,11 +4,19 @@ Thanks for helping. Read this whole file before your first commit.
 
 ## Prerequisites
 
-- Rust stable, installed via rustup. The `cargo`, `rustc`, `clippy`, and `rustfmt` components.
+- rustup. You do not pick a Rust version yourself. See Rust Version below.
 - Node 20 or newer.
 - Tauri 2 system prerequisites for your OS. See the Tauri 2 prerequisites page.
 
 On Linux you also need the WebKitGTK and related dev packages. On Debian and Ubuntu these are `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev`, `libssl-dev`, `libayatana-appindicator3-dev`, and `patchelf`.
+
+## Rust Version
+
+`rust-toolchain.toml` at the repo root pins one Rust version along with `clippy` and `rustfmt`. Your machine, CI, and the release builds all read that file, so a lint that passes for you passes in CI too.
+
+rustup installs the pinned version on your first build. Run any `cargo` command in the repo and rustup downloads that version once, then reuses it. Older versions you installed stay on disk until you run `rustup toolchain uninstall` on them.
+
+Bumping Rust is a deliberate commit of its own. Change `channel` in `rust-toolchain.toml`, then run `cargo fmt --all -- --check` and the `cargo clippy` command under Lint and Format on the new version. A newer clippy often brings new lints. Fix what it reports in the same commit so CI stays green.
 
 ## First-Time Setup
 

@@ -25,7 +25,7 @@ Tauri 2 shell. Rust backend with Tokio for async. TypeScript and React frontend.
 
 ## Run It
 
-You need Rust (stable), Node 20 or newer, and the Tauri 2 system prerequisites for your platform. See the Tauri 2 prerequisites page.
+You need rustup, Node 20 or newer, and the Tauri 2 system prerequisites for your platform. See the Tauri 2 prerequisites page. The Rust version is pinned in `rust-toolchain.toml` and rustup installs it on your first build.
 
 ```
 npm install
