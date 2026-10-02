@@ -839,8 +839,9 @@ async fn io_loop<R: tauri::Runtime>(
                 }
                 Some(OutgoingMsg::WindowSize { cols, rows }) => {
                     // A design that pushes part of a row to the right
-                    // edge draws again at the new width.
-                    let out = {
+                    // edge draws again at the new width. The card hears
+                    // the state with it, so its marks move with the push.
+                    let (out, state) = {
                         let mut p = profile.lock().await;
                         let redraw = window_size_step(
                             &mut p,
@@ -849,13 +850,19 @@ async fn io_loop<R: tauri::Runtime>(
                             rows,
                             watching_prompt(&app),
                         );
-                        redraw.then(|| {
+                        let out = redraw.then(|| {
                             repaint_step(&mut p, output_count() != seen_output, Instant::now())
-                        })
+                        });
+                        let state = out
+                            .as_ref()
+                            .filter(|out| !out.is_empty())
+                            .and_then(|_| watched_state(&app, &p));
+                        (out, state)
                     };
                     if let Some(out) = out.filter(|out| !out.is_empty()) {
                         emit_repaint(&app, &out);
                     }
+                    emit_prompt_state(&app, state);
                     // Once the server sent DO NAWS and Vosh agreed, every
                     // new size goes out, so the game wraps at the new
                     // column count.
