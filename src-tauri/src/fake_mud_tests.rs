@@ -743,7 +743,8 @@ async fn the_older_build_reads_your_prompt_from_the_game_replies() {
 
     // Nothing reads the prompt yet, so the game's own prompt shows.
     h.until_last_row("[1020/1020hp 800/800mn 930/930mv]").await;
-    assert!(h.events("session://game-prompt-seen").is_empty());
+    let leftover = &h.events("session://game-prompt-seen");
+    assert!(leftover.is_empty(), "{leftover:?}");
 
     // Paste the PROMPT.
     h.type_line(&format!("#prompt game {{{PROMPT}}}")).await;
@@ -963,7 +964,8 @@ async fn the_code_reader_the_card_chose_hears_your_prompt_on_another_host() {
     h.type_line("prompt").await;
     h.until_shown(&format!("Current prompt: {PROMPT}")).await;
     tokio::time::sleep(Duration::from_millis(200)).await;
-    assert!(h.events("session://game-prompt-seen").is_empty());
+    let leftover = &h.events("session://game-prompt-seen");
+    assert!(leftover.is_empty(), "{leftover:?}");
 
     // More > Use Forsaken Lands prompt codes… in the card, then prompt in
     // the game: the reply fills the card's fields (P2).
@@ -1119,7 +1121,8 @@ async fn a_reconnect_reads_the_prompt_until_char_prompt_comes_again() {
     h.until_shown("Reconnecting.").await;
     h.until_last_row("<1020>").await;
     assert!(!h.state.profile.lock().await.prompt.vars.new_build());
-    assert!(h.events("session://game-prompt-seen").is_empty());
+    let leftover = &h.events("session://game-prompt-seen");
+    assert!(leftover.is_empty(), "{leftover:?}");
     // prompt in the game sends Char.Prompt again.
     h.type_line("prompt").await;
     h.until_shown(&format!("Current prompt: {PROMPT}")).await;
@@ -1342,7 +1345,8 @@ async fn the_older_build_switches_a_moved_capture_from_the_reply_to_prompt() {
     // login, since the older build sends no Char.Prompt.
     h.until_last_row(DRAWN).await;
     assert_eq!(h.prompt_table().await, migrated());
-    assert!(h.events("session://game-prompt-seen").is_empty());
+    let leftover = &h.events("session://game-prompt-seen");
+    assert!(leftover.is_empty(), "{leftover:?}");
 
     // prompt off switches nothing, and says prompts are off.
     h.type_line("prompt off").await;
@@ -1354,7 +1358,8 @@ async fn the_older_build_switches_a_moved_capture_from_the_reply_to_prompt() {
     })
     .await;
     assert_eq!(h.prompt_table().await, migrated());
-    assert!(toasts(&h).is_empty());
+    let leftover = &toasts(&h);
+    assert!(leftover.is_empty(), "{leftover:?}");
 
     // prompt x switches it through the observer, and the prompt after
     // the reply draws.
@@ -1516,7 +1521,8 @@ async fn a_prompt_vosh_cannot_read_keeps_the_moved_pattern_and_prompt_says_why()
     .await;
     h.until_last_row("<020>").await;
     assert_eq!(h.prompt_table().await, migrated());
-    assert!(toasts(&h).is_empty());
+    let leftover = &toasts(&h);
+    assert!(leftover.is_empty(), "{leftover:?}");
     // The sentence wraps at the 100 columns the screen has.
     h.type_line("#prompt").await;
     h.until("the reason the pattern stayed", |h| {
@@ -1565,7 +1571,8 @@ async fn a_moved_pattern_that_fills_a_name_of_its_own_stays_and_draws() {
     .await;
     h.until_last_row("HP=1020").await;
     assert_eq!(h.prompt_table().await, moved);
-    assert!(toasts(&h).is_empty());
+    let leftover = &toasts(&h);
+    assert!(leftover.is_empty(), "{leftover:?}");
     h.type_line("#prompt").await;
     h.until("the reason the pattern stayed", |h| {
         h.screen().join(" ").contains(
@@ -1584,7 +1591,8 @@ async fn a_moved_pattern_that_fills_a_name_of_its_own_stays_and_draws() {
         .iter()
         .any(|e| e["text"] == PROMPT_NEW));
     assert_eq!(h.prompt_table().await, moved);
-    assert!(toasts(&h).is_empty());
+    let leftover = &toasts(&h);
+    assert!(leftover.is_empty(), "{leftover:?}");
     assert!(
         h.screen().iter().all(|r| !r.contains("(100 hp)")),
         "the new line never shows raw: {:#?}",
@@ -1611,7 +1619,8 @@ async fn a_reconnect_keeps_the_moved_pattern_until_the_game_sends_your_prompt() 
     h.until_shown("Reconnecting.").await;
     h.until_last_row(DRAWN).await;
     assert_eq!(h.prompt_table().await, migrated());
-    assert!(h.events("session://game-prompt-seen").is_empty());
+    let leftover = &h.events("session://game-prompt-seen");
+    assert!(leftover.is_empty(), "{leftover:?}");
 
     // prompt in the game sends Char.Prompt, which switches it.
     h.type_line("prompt").await;

@@ -585,7 +585,8 @@ mod tests {
             option: option::NEW_ENVIRON,
             payload: vec![new_environ::IS],
         });
-        assert!(bytes.is_empty());
+        let leftover = &bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -595,9 +596,11 @@ mod tests {
             n.handle(&Event::Will(option::GMCP)),
             vec![IAC, DO, option::GMCP]
         );
-        assert!(n.handle(&Event::Will(option::GMCP)).is_empty());
-        assert!(n.handle(&Event::Will(option::ECHO)).len() == 3);
-        assert!(n.handle(&Event::Will(option::ECHO)).is_empty());
+        let leftover = &n.handle(&Event::Will(option::GMCP));
+        assert!(leftover.is_empty(), "{leftover:?}");
+        assert_eq!(n.handle(&Event::Will(option::ECHO)).len(), 3);
+        let leftover = &n.handle(&Event::Will(option::ECHO));
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -607,7 +610,8 @@ mod tests {
             n.handle(&Event::Do(option::TTYPE)),
             vec![IAC, WILL, option::TTYPE]
         );
-        assert!(n.handle(&Event::Do(option::TTYPE)).is_empty());
+        let leftover = &n.handle(&Event::Do(option::TTYPE));
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -631,10 +635,14 @@ mod tests {
     #[test]
     fn wont_and_dont_for_an_option_that_is_off_get_no_answer() {
         let mut n = Negotiator::new();
-        assert!(n.handle(&Event::Wont(option::ECHO)).is_empty());
-        assert!(n.handle(&Event::Dont(option::NAWS)).is_empty());
-        assert!(n.handle(&Event::Wont(option::MCCP2)).is_empty());
-        assert!(n.handle(&Event::Dont(option::MXP)).is_empty());
+        let leftover = &n.handle(&Event::Wont(option::ECHO));
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &n.handle(&Event::Dont(option::NAWS));
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &n.handle(&Event::Wont(option::MCCP2));
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &n.handle(&Event::Dont(option::MXP));
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -645,7 +653,8 @@ mod tests {
             n.handle(&Event::Wont(option::ECHO)),
             vec![IAC, DONT, option::ECHO]
         );
-        assert!(n.handle(&Event::Wont(option::ECHO)).is_empty());
+        let leftover = &n.handle(&Event::Wont(option::ECHO));
+        assert!(leftover.is_empty(), "{leftover:?}");
         // The server can turn it on again, as a password prompt does.
         assert_eq!(
             n.handle(&Event::Will(option::ECHO)),
@@ -656,7 +665,8 @@ mod tests {
             n.handle(&Event::Dont(option::NAWS)),
             vec![IAC, WONT, option::NAWS]
         );
-        assert!(n.handle(&Event::Dont(option::NAWS)).is_empty());
+        let leftover = &n.handle(&Event::Dont(option::NAWS));
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -667,20 +677,25 @@ mod tests {
         let mut n = Negotiator::new();
         assert_eq!(n.ask(option::EOR), vec![IAC, DO, option::EOR]);
         assert!(!n.server_does(option::EOR));
-        assert!(n.handle(&Event::Will(option::EOR)).is_empty());
+        let leftover = &n.handle(&Event::Will(option::EOR));
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(n.server_does(option::EOR));
         // Asking again once it is on sends nothing.
-        assert!(n.ask(option::EOR).is_empty());
+        let leftover = &n.ask(option::EOR);
+        assert!(leftover.is_empty(), "{leftover:?}");
         // A server that offered it before it read the ask, then answered
         // the ask too, ends the same way.
         let mut n = Negotiator::new();
         let _ = n.ask(option::EOR);
-        assert!(n.handle(&Event::Will(option::EOR)).is_empty());
-        assert!(n.handle(&Event::Will(option::EOR)).is_empty());
+        let leftover = &n.handle(&Event::Will(option::EOR));
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &n.handle(&Event::Will(option::EOR));
+        assert!(leftover.is_empty(), "{leftover:?}");
         // A server that will not, says so once and hears nothing back.
         let mut n = Negotiator::new();
         let _ = n.ask(option::EOR);
-        assert!(n.handle(&Event::Wont(option::EOR)).is_empty());
+        let leftover = &n.handle(&Event::Wont(option::EOR));
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(!n.server_does(option::EOR));
     }
 

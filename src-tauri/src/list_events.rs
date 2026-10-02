@@ -214,12 +214,14 @@ mod tests {
             [PROMPT_CONFIG_CHANGED]
         );
         // With nothing to stop, the table stays as it is.
-        assert!(changes(&mut p, "#unprompt").events().is_empty());
+        let leftover = &changes(&mut p, "#unprompt").events();
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(
             changes(&mut p, "#prompt default").events(),
             [PROMPT_CONFIG_CHANGED]
         );
-        assert!(changes(&mut p, "#prompt default").events().is_empty());
+        let leftover = &changes(&mut p, "#prompt default").events();
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -236,23 +238,29 @@ mod tests {
             [MACRO_GROUPS_CHANGED]
         );
         // Off already, so nothing turned.
-        assert!(changes(&mut p, "#group combat off").events().is_empty());
+        let leftover = &changes(&mut p, "#group combat off").events();
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(
             changes(&mut p, "#lua mud.set_group_enabled('combat', true)").events(),
             [MACRO_GROUPS_CHANGED]
         );
         // A group nothing is in leaves the command line alone.
-        assert!(changes(&mut p, "#group nothing off").events().is_empty());
+        let leftover = &changes(&mut p, "#group nothing off").events();
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
     fn steps_that_leave_the_lists_alone_report_nothing() {
         let mut p = Profile::default();
         let _ = input::process(&mut p, "#alias greet wave");
-        assert!(changes(&mut p, "look").events().is_empty());
-        assert!(changes(&mut p, "greet").events().is_empty());
-        assert!(changes(&mut p, "#unalias missing").events().is_empty());
-        assert!(changes(&mut p, "#aliases").events().is_empty());
+        let leftover = &changes(&mut p, "look").events();
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &changes(&mut p, "greet").events();
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &changes(&mut p, "#unalias missing").events();
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &changes(&mut p, "#aliases").events();
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -274,7 +282,8 @@ mod tests {
                 MACRO_GROUPS_CHANGED
             ]
         );
-        assert!(ListChanges::default().events().is_empty());
+        let leftover = &ListChanges::default().events();
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -308,7 +317,8 @@ mod tests {
         let apply = crate::script_state::apply_actions(&mut p, toggle(false));
         assert_eq!(apply.lists.events(), [MACRO_GROUPS_CHANGED]);
         let apply = crate::script_state::apply_actions(&mut p, toggle(false));
-        assert!(apply.lists.events().is_empty());
+        let leftover = &apply.lists.events();
+        assert!(leftover.is_empty(), "{leftover:?}");
         let apply = crate::script_state::apply_actions(&mut p, toggle(true));
         assert_eq!(apply.lists.events(), [MACRO_GROUPS_CHANGED]);
     }

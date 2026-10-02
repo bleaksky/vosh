@@ -170,7 +170,8 @@ mod tests {
     #[test]
     fn a_partial_waits_without_painting() {
         let mut a = LineAccumulator::new();
-        assert!(a.feed(b"Login: ").is_empty());
+        let leftover = &a.feed(b"Login: ");
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(a.partial(), Some(&b"Login: "[..]));
         assert_eq!(a.painted(), None);
     }
@@ -206,7 +207,8 @@ mod tests {
         let mut a = LineAccumulator::new();
         let _ = a.feed(b"Wel");
         a.set_painted(Some((3, 3)));
-        assert!(a.feed(b"come ").is_empty());
+        let leftover = &a.feed(b"come ");
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(a.partial(), Some(&b"Welcome "[..]));
         assert_eq!(a.painted(), Some((3, 3)));
     }
@@ -300,7 +302,8 @@ mod tests {
         // Only line-terminator debris is stripped: a server overwriting a
         // partial line with `\r` mid-stream keeps its carriage return.
         let mut a = LineAccumulator::new();
-        assert!(a.feed(b"loading 1%\rloading 2%").is_empty());
+        let leftover = &a.feed(b"loading 1%\rloading 2%");
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(a.partial(), Some(&b"loading 1%\rloading 2%"[..]));
         // And a painted partial that the next read continues with a `\r`
         // keeps it too.

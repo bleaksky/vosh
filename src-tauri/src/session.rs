@@ -4345,7 +4345,8 @@ mod tests {
         );
         assert!(batch.log.is_empty());
         assert_eq!(step.len(), 1);
-        assert!(step[0].scrollback.is_empty());
+        let leftover = &step[0].scrollback;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(batch.prompt_vars, "the prompt vars follow a prompt");
     }
 
@@ -4377,7 +4378,8 @@ mod tests {
                 above: None,
             })
         );
-        assert!(second.bytes.is_empty());
+        let leftover = &second.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -4478,7 +4480,8 @@ mod tests {
                 above: None,
             })
         );
-        assert!(second.bytes.is_empty());
+        let leftover = &second.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -4513,7 +4516,8 @@ mod tests {
                 above: None,
             })
         );
-        assert!(second.bytes.is_empty());
+        let leftover = &second.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -4665,7 +4669,8 @@ mod tests {
         wire.p.set_prompt_config(config);
         let batch = wire.read_with(PROMPT_ROW, false, false);
         assert_eq!(drawn_in(&batch.out.bytes).as_deref(), Some("<1020>\x1b[0m"));
-        assert!(batch.gag_without_reader.is_empty());
+        let leftover = &batch.gag_without_reader;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -4760,7 +4765,8 @@ mod tests {
         };
         wire.p.set_prompt_config(config);
         let _ = super::repaint_step(&mut wire.p, false, now);
-        assert!(spans(&wire).is_empty());
+        let leftover = &spans(&wire);
+        assert!(leftover.is_empty(), "{leftover:?}");
         let config = vosh_prompt::PromptConfig {
             draw: true,
             template: "[%hp]".into(),
@@ -4798,7 +4804,8 @@ mod tests {
                 above: None,
             })
         );
-        assert!(off.bytes.is_empty());
+        let leftover = &off.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
 
         // Drawing back on paints the design over the same row, and a new
         // design repaints it.
@@ -5318,7 +5325,8 @@ mod tests {
             with(&[&wire.mark(1), TANK_LINE.as_bytes(), b"\r\n"])
         );
         let out = wire.read(format!("{FIGHT_LINE}\n\r").as_bytes());
-        assert!(out.bytes.is_empty());
+        let leftover = &out.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(
             out.replace,
             Some(vosh_prompt::stage::Replace {
@@ -5754,7 +5762,8 @@ mod tests {
         let mut wire = Wire::new(codes_profile(CODES, HP));
         let batch = wire.read_holding(format!("{TANK_LINE}\n\r[159/10").as_bytes());
         assert!(batch.hold);
-        assert!(batch.out.bytes.is_empty());
+        let leftover = &batch.out.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         let out = wire.read(b"20hp 310/800mn 489/930mv]\n\r");
         assert_eq!(out.replace, None);
         assert_eq!(

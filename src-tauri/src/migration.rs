@@ -992,7 +992,8 @@ mod tests {
         assert_eq!(plan.auto_resolved.aliases.len(), 1);
         assert_eq!(plan.auto_resolved.aliases[0].group, None);
         for loadout in &plan.loadouts {
-            assert!(loadout.enabled_groups.is_empty());
+            let leftover = &loadout.enabled_groups;
+            assert!(leftover.is_empty(), "{leftover:?}");
         }
     }
 
@@ -1016,7 +1017,8 @@ mod tests {
         // the warrior's combat folder, and off for the bard.
         assert_eq!(item.group.as_deref(), Some("combat"));
         assert_eq!(plan.loadouts[0].enabled_groups, ["combat"]);
-        assert!(plan.loadouts[1].enabled_groups.is_empty());
+        let leftover = &plan.loadouts[1].enabled_groups;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(plan.loadouts[2].enabled_groups, ["combat"]);
         assert_eq!(file_after(&plan, "bard").disabled_alias_groups, ["combat"]);
         // Neither the default profile nor the bard had a combat folder, so
@@ -1073,7 +1075,8 @@ mod tests {
         ]);
         // One of them used to stand in for both, so the warrior lost its
         // script without a word.
-        assert!(plan.auto_resolved.aliases.is_empty());
+        let leftover = &plan.auto_resolved.aliases;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(plan.conflicts.len(), 1);
         assert_eq!(plan.conflicts[0].name, "bash");
     }
@@ -1450,7 +1453,8 @@ mod tests {
         assert_eq!(plan.loadouts[0].enabled_groups, ["combat"]);
         let file = file_after(&plan, "default");
         assert_eq!(file.disabled_alias_groups, ["buffs", "combat"]);
-        assert!(file.disabled_trigger_groups.is_empty());
+        let leftover = &file.disabled_trigger_groups;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -1472,12 +1476,14 @@ mod tests {
         let mut file = profile_with(vec![Alias::new("kk", "kick %1")], vec![], vec![]);
         file.disabled_alias_groups = vec!["combat".into()];
         profile_file_for_catalog(&mut file, "bard", &plan);
-        assert!(file.aliases.is_empty());
+        let leftover = &file.aliases;
+        assert!(leftover.is_empty(), "{leftover:?}");
         // kk was on for the default profile without a folder, so its
         // group is named for that profile.
         assert_eq!(alias_group(&plan, "kk").as_deref(), Some("(default)"));
         assert_eq!(file.disabled_alias_groups, ["(default)", "combat"]);
-        assert!(file.disabled_trigger_groups.is_empty());
+        let leftover = &file.disabled_trigger_groups;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -1497,7 +1503,8 @@ mod tests {
         let file = file_after(&plan, "Healer");
         // The trigger group stays off. It used to come on with the alias
         // group of the same name, so the trigger looted every kill.
-        assert!(file.disabled_alias_groups.is_empty());
+        let leftover = &file.disabled_alias_groups;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(file.disabled_trigger_groups, ["loot"]);
     }
 
@@ -1522,14 +1529,14 @@ mod tests {
         // off, and flee is on for both without one.
         assert_eq!(group("autoloot").as_deref(), Some("loot"));
         assert_eq!(group("flee"), None);
-        assert!(file_after(&plan, "default")
-            .disabled_trigger_groups
-            .is_empty());
+        let leftover = &file_after(&plan, "default").disabled_trigger_groups;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(
             file_after(&plan, "Healer").disabled_trigger_groups,
             ["loot"]
         );
-        assert!(plan.loadouts[1].enabled_groups.is_empty());
+        let leftover = &plan.loadouts[1].enabled_groups;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -1592,7 +1599,8 @@ mod tests {
             file_after(&plan, "Healer").disabled_alias_groups,
             ["combat"]
         );
-        assert!(plan.loadouts[0].enabled_groups.is_empty());
+        let leftover = &plan.loadouts[0].enabled_groups;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -1613,7 +1621,8 @@ mod tests {
             assert_eq!(alias.group.as_deref(), Some("combat"));
             assert_eq!(alias.enabled, alias.name == "bash");
         }
-        assert!(file_after(&plan, "Healer").disabled_alias_groups.is_empty());
+        let leftover = &file_after(&plan, "Healer").disabled_alias_groups;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -1760,7 +1769,8 @@ mod tests {
         assert!(plan.conflicts.is_empty());
         assert_eq!(plan.auto_resolved.triggers[0].group, None);
         for name in ["default", "Healer", "Bard"] {
-            assert!(file_after(&plan, name).disabled_trigger_groups.is_empty());
+            let leftover = &file_after(&plan, name).disabled_trigger_groups;
+            assert!(leftover.is_empty(), "{leftover:?}");
         }
     }
 
@@ -1791,9 +1801,8 @@ mod tests {
             let off = file_after(&plan, name).disabled_trigger_groups;
             assert_eq!(off, ["(Healer)"], "{name}");
         }
-        assert!(file_after(&plan, "Healer")
-            .disabled_trigger_groups
-            .is_empty());
+        let leftover = &file_after(&plan, "Healer").disabled_trigger_groups;
+        assert!(leftover.is_empty(), "{leftover:?}");
         // A preset the library has still comes on for every profile.
         assert_eq!(trigger_named(&plan, "heal 1").group, None);
     }
@@ -1822,7 +1831,8 @@ mod tests {
         );
         for name in ["default", "Bard"] {
             let file = file_after(&plan, name);
-            assert!(file.disabled_trigger_groups.is_empty());
+            let leftover = &file.disabled_trigger_groups;
+            assert!(leftover.is_empty(), "{leftover:?}");
             // Neither had a labels folder, so `#group labels` finds none.
             assert_eq!(file.group_folders.triggers["labels"], Vec::<String>::new());
         }
@@ -1846,9 +1856,8 @@ mod tests {
             ("Healer".into(), healer),
         ]);
         assert_eq!(plan.auto_resolved.triggers[0].group, None);
-        assert!(file_after(&plan, "Healer")
-            .disabled_trigger_groups
-            .is_empty());
+        let leftover = &file_after(&plan, "Healer").disabled_trigger_groups;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -1870,9 +1879,8 @@ mod tests {
         for loadout in &plan.loadouts {
             assert_eq!(loadout.enabled_groups, ["labels"]);
         }
-        assert!(file_after(&plan, "Healer")
-            .disabled_trigger_groups
-            .is_empty());
+        let leftover = &file_after(&plan, "Healer").disabled_trigger_groups;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]

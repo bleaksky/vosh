@@ -307,7 +307,8 @@ fn the_game_keeps_what_fits_on_the_line_and_so_does_vosh() {
         }]
     );
     // What is left reads nothing, and the code past the cut is gone.
-    assert!(compiled.reads(Which::Prompt).is_empty());
+    let leftover = &compiled.reads(Which::Prompt);
+    assert!(leftover.is_empty(), "{leftover:?}");
     // A 250 character setting loses its last 4, as "Line too long." does
     // in the game, so Vosh reads what the game prints.
     let typed = format!("<%hhp>{}", "z".repeat(244));
@@ -411,7 +412,8 @@ fn codes_that_print_nothing_read_empty() {
     // A moon digit that names no moon always prints - and reads nothing.
     let compiled = immortal("<%j5>%c");
     assert!(compiled.shapes[0].read(&["<->"]).is_some());
-    assert!(compiled.reads(Which::Prompt).is_empty());
+    let leftover = &compiled.reads(Which::Prompt);
+    assert!(leftover.is_empty(), "{leftover:?}");
 }
 
 #[test]
@@ -566,7 +568,8 @@ fn lines_split_at_each_break_and_only_the_first_has_the_prefix() {
 fn colors_take_no_cell() {
     // `%l(101)blah%L` and `%l2%L` from James's log, around codes.
     let compiled = stored("%l(101)blah%L <%l2%h%L> ", "");
-    assert!(compiled.warnings.is_empty());
+    let leftover = &compiled.warnings;
+    assert!(leftover.is_empty(), "{leftover:?}");
     assert_eq!(
         values(compiled.shapes[0].read_partial(&["blah <10> "])),
         map(&[("hp", "10")])
@@ -650,8 +653,10 @@ fn a_short_prompt_warns() {
         warnings("%n%C> ", Who::default()),
         [(WarningKind::Short, 0..6, short.2.clone())]
     );
-    assert!(warnings("none ", Who::default()).is_empty());
-    assert!(warnings("%h ", Who::default()).is_empty());
+    let leftover = &warnings("none ", Who::default());
+    assert!(leftover.is_empty(), "{leftover:?}");
+    let leftover = &warnings("%h ", Who::default());
+    assert!(leftover.is_empty(), "{leftover:?}");
     // Codes Vosh cannot read give it nothing to tell the prompt by.
     let kinds: Vec<WarningKind> = warnings("%h%m%c", Who::default())
         .into_iter()
@@ -691,7 +696,8 @@ fn stale_codes_warn_and_read_nothing() {
             "While you control a mobile, %s repeats the text of the code before it."
         )]
     );
-    assert!(compiled.reads(Which::Prompt).is_empty());
+    let leftover = &compiled.reads(Which::Prompt);
+    assert!(leftover.is_empty(), "{leftover:?}");
 }
 
 #[test]

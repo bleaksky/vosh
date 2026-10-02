@@ -1220,7 +1220,7 @@ pub(crate) fn current_display_offset() -> usize {
 /// You are selecting text in the shared grid or reading back in it, so a
 /// clock repaint of your prompt waits (decision 6). False with no grid.
 pub(crate) fn reader_busy() -> bool {
-    grid_slot().lock().ok().is_some_and(|slot| {
+    grid_slot().lock().is_ok_and(|slot| {
         slot.as_ref().is_some_and(|grid| {
             grid.display_offset() != 0
                 || grid
@@ -2018,7 +2018,8 @@ mod tests {
             screen(&g),
             ["room", "[Exits: south]", "", "tell", "", "look", "x"]
         );
-        assert!(g.pending_hold().is_empty());
+        let leftover = &g.pending_hold();
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     /// The rows the grid shows at its display offset, trailing blanks

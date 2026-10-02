@@ -1355,7 +1355,8 @@ mod tests {
                 lost: Vec::new(),
             }]
         );
-        assert!(engine.take_seen().is_empty());
+        let leftover = &engine.take_seen();
+        assert!(leftover.is_empty(), "{leftover:?}");
         // The capture reads the new codes at once.
         assert!(engine
             .stage
@@ -1469,7 +1470,8 @@ mod tests {
         engine.set_config(PromptConfig::from_legacy(true, "%hp"));
         engine.follow_latest(at());
         assert!(engine.config().capture.is_none());
-        assert!(engine.take_seen().is_empty());
+        let leftover = &engine.take_seen();
+        assert!(leftover.is_empty(), "{leftover:?}");
 
         // Without a packet this session there is nothing to apply.
         let mut engine = PromptEngine::default();
@@ -1590,7 +1592,8 @@ mod tests {
         // A change that keeps every part fed names none.
         engine.note_send("prompt %n%P%C[%h/%Hhp]%c\r\n", SENT + 100);
         line(&mut engine, "Prompt set to %n%P%C[%h/%Hhp]%c", 140);
-        assert!(engine.take_seen()[0].lost.is_empty());
+        let leftover = &engine.take_seen()[0].lost;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -1629,7 +1632,8 @@ mod tests {
         engine.note_send("prompt %h\r\n", SENT);
         line(&mut engine, "Prompt set to %h ", OBSERVE_MS + 1);
         assert_eq!(codes(&engine).prompt, "<%hhp> ");
-        assert!(engine.take_seen().is_empty());
+        let leftover = &engine.take_seen();
+        assert!(leftover.is_empty(), "{leftover:?}");
         line(&mut engine, "Prompt set to %h ", OBSERVE_MS);
         assert_eq!(codes(&engine).prompt, "%h ");
     }
@@ -1702,7 +1706,8 @@ mod tests {
         assert!(engine.prompts_off());
         assert_eq!(engine.status(), Status::PromptsOff);
         assert_eq!(codes(&engine).prompt, "<%hhp> ");
-        assert!(engine.take_seen().is_empty());
+        let leftover = &engine.take_seen();
+        assert!(leftover.is_empty(), "{leftover:?}");
         // With prompts on, the setting it shows is yours.
         engine.note_send("prompt %h\r\n", SENT + 4_000);
         line(&mut engine, "Prompt set to %h ", 4_010);
@@ -1722,7 +1727,8 @@ mod tests {
         assert!(!engine.observing(SENT + 10));
         line(&mut engine, "Prompt set to %m ", 10);
         assert_eq!(codes(&engine).prompt, "%h ");
-        assert!(engine.take_seen().is_empty());
+        let leftover = &engine.take_seen();
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(engine.session_setting().is_none());
     }
 
@@ -1777,7 +1783,8 @@ mod tests {
         assert!(!engine.forsaken());
         engine.note_send("prompt\r\n", SENT + 3_000);
         line(&mut engine, "Current prompt: %h ", 3_040);
-        assert!(engine.take_seen().is_empty());
+        let leftover = &engine.take_seen();
+        assert!(leftover.is_empty(), "{leftover:?}");
 
         // Another profile taking over lets it go too.
         engine.set_reader(true);
@@ -2229,7 +2236,8 @@ mod tests {
         engine.follow_latest(at());
         assert_eq!(*engine.config(), migrated());
         assert!(engine.kept_pattern().is_some());
-        assert!(engine.take_seen().is_empty());
+        let leftover = &engine.take_seen();
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     /// A migrated table whose pattern reads `pattern`, with `names` for

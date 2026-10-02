@@ -357,7 +357,8 @@ mod tests {
         let config = PromptConfig::from_legacy(true, JAMES);
         assert!(config.draw);
         assert_eq!(config.template, JAMES);
-        assert!(config.previous_templates.is_empty());
+        let leftover = &config.previous_templates;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(config.capture.is_none());
         assert!(!config.is_default());
         assert!(PromptConfig::from_legacy(false, "").is_default());
@@ -477,7 +478,8 @@ mod tests {
     fn an_empty_design_is_never_kept() {
         let mut config = PromptConfig::default();
         assert!(!config.note_opened());
-        assert!(config.previous_templates.is_empty());
+        let leftover = &config.previous_templates;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -514,7 +516,8 @@ mod tests {
         assert!(config.take_switch_and_template(true, ""));
         assert!(config.draw);
         assert_eq!(config.template, DEFAULT_DESIGN);
-        assert!(config.previous_templates.is_empty());
+        let leftover = &config.previous_templates;
+        assert!(leftover.is_empty(), "{leftover:?}");
 
         // The same save the window sends again changes nothing.
         let mut again = config.clone();
@@ -532,7 +535,8 @@ mod tests {
         let fresh = PromptConfig::fresh();
         assert!(!fresh.draw);
         assert_eq!(fresh.template, DEFAULT_DESIGN);
-        assert!(fresh.previous_templates.is_empty());
+        let leftover = &fresh.previous_templates;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(fresh.capture.is_none());
         assert_eq!(fresh.show, PromptShow::Text);
         // The file keeps it from the first save.
@@ -590,7 +594,8 @@ mod tests {
         let mut config = PromptConfig::default();
         assert!(config.use_default_design());
         assert_eq!(config.template, DEFAULT_DESIGN);
-        assert!(config.previous_templates.is_empty());
+        let leftover = &config.previous_templates;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]

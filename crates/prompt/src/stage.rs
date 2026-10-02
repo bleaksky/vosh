@@ -2398,7 +2398,8 @@ mod tests {
                 above: None,
             })
         );
-        assert!(second.bytes.is_empty());
+        let leftover = &second.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(stage.open_row().map(|r| r.gen), Some(2));
     }
 
@@ -2640,7 +2641,8 @@ mod tests {
                 above: None,
             })
         );
-        assert!(out.bytes.is_empty());
+        let leftover = &out.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         // A Prompts trigger changed it, so it replaces the painted one.
         let mut out = Output::new(false);
         stage.end_partial(
@@ -2695,7 +2697,8 @@ mod tests {
                 above: None,
             })
         );
-        assert!(off.bytes.is_empty());
+        let leftover = &off.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
 
         // Drawing back on paints the design again over the same row.
         let mut on = Output::new(false);
@@ -3157,7 +3160,8 @@ mod tests {
             out.bytes, b"room\r\n\r\ntell\r\n",
             "the hold went back first"
         );
-        assert!(out.hold.is_empty());
+        let leftover = &out.hold;
+        assert!(leftover.is_empty(), "{leftover:?}");
         stage.line(&mut out, b"", "", None, b"\r\n");
         pin_prompt(&mut stage, &mut out);
         assert_eq!(out.bytes, b"room\r\n\r\ntell");
@@ -3167,7 +3171,8 @@ mod tests {
         out.text(b"room\r\n\r\n");
         pin_prompt(&mut stage, &mut out);
         let _ = stage.paint_partial(&mut out, b"<10", None);
-        assert!(out.hold.is_empty());
+        let leftover = &out.hold;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(out.bytes.starts_with(b"room\r\n\r\n\x1b]7717;o;"));
     }
 
@@ -3183,7 +3188,8 @@ mod tests {
         assert!(stage.swallows());
         let mut next = Output::new(false);
         stage.line(&mut next, b"", "", None, b"\r\n");
-        assert!(next.bytes.is_empty());
+        let leftover = &next.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         // Text in a later output ends it, whoever wrote it.
         next.text(b"echo\r\n");
         stage.finish(&mut next);
@@ -3202,8 +3208,10 @@ mod tests {
         stage.line(&mut next, b"spam", "spam", None, b"");
         stage.line(&mut next, b"", "", None, b"\r\n");
         pin_prompt(&mut stage, &mut next);
-        assert!(next.bytes.is_empty());
-        assert!(next.hold.is_empty());
+        let leftover = &next.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &next.hold;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(next.pin.as_deref(), Some(&b"DRAWN"[..]));
         assert!(!next.is_empty(), "the band still changes");
     }
@@ -3313,7 +3321,8 @@ mod tests {
                 above: None,
             })
         );
-        assert!(second.bytes.is_empty());
+        let leftover = &second.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         // Echoes a Prompts trigger wrote take the painted region's place,
         // line end and all, since a replace is written whole.
         let mut third = Output::new(false);
@@ -3486,7 +3495,8 @@ mod tests {
         let mut back = Output::new(false);
         stage.repaint(&mut back, Some("DRAWN"));
         assert_eq!(back.pin.as_deref(), Some(&b""[..]));
-        assert!(back.bytes.is_empty());
+        let leftover = &back.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(stage.open_row(), None);
     }
 
@@ -3519,7 +3529,8 @@ mod tests {
         // end writes nothing and the echo takes the row.
         out.text(b"\r\nThe moon rises.\r\n");
         assert_eq!(out.bytes, b"room\r\n\r\nThe moon rises.\r\n");
-        assert!(out.hold.is_empty());
+        let leftover = &out.hold;
+        assert!(leftover.is_empty(), "{leftover:?}");
         // Only the first one goes.
         out.text(b"\r\nThe sun sets.\r\n");
         assert_eq!(
@@ -3637,7 +3648,8 @@ mod tests {
         stage.set_show(PromptShow::Text);
         let mut back = Output::new(false);
         stage.repaint(&mut back, None);
-        assert!(back.bytes.is_empty());
+        let leftover = &back.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -3647,7 +3659,8 @@ mod tests {
         out.text(b"room\r\n\r\n");
         let block = read(&stage, PROMPT, End::Line);
         stage.draw(&mut out, block, None, b"", "DRAWN");
-        assert!(out.hold.is_empty());
+        let leftover = &out.hold;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(out.pin, None);
         assert!(!stage.swallows());
         stage.line(&mut out, b"", "", None, b"\r\n");
@@ -4213,7 +4226,8 @@ mod tests {
                 above: None,
             })
         );
-        assert!(low.bytes.is_empty());
+        let leftover = &low.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(low.restore, Some(with(&[&mark(2), b"LIVE"])));
         // The same view again writes nothing.
         let mut same = Output::new(false);

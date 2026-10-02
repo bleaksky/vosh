@@ -226,13 +226,16 @@ fn without_gmcp_the_first_line_logs_you_in() {
     let mut mud = Mud::new(Options::new(Build::New));
     let writes = mud.receive(b"\r\n");
     assert_eq!(writes.len(), 1);
-    assert!(packets(&writes[0].bytes).is_empty());
+    let leftover = &packets(&writes[0].bytes);
+    assert!(leftover.is_empty(), "{leftover:?}");
     assert!(shown(&writes[0].bytes).contains("Welcome to the fake Aabahran"));
     // A command can come in pieces.
-    assert!(mud.receive(b"lo").is_empty());
+    let leftover = &mud.receive(b"lo");
+    assert!(leftover.is_empty(), "{leftover:?}");
     let writes = mud.receive(b"ok\r\n");
     assert!(shown(&writes[0].bytes).starts_with("The Bank of Aabahran"));
-    assert!(packets(&writes[0].bytes).is_empty());
+    let leftover = &packets(&writes[0].bytes);
+    assert!(leftover.is_empty(), "{leftover:?}");
 }
 
 #[test]
@@ -334,7 +337,8 @@ fn prompt_off_returns_on_the_new_build_and_falls_through_before_it() {
         assert_eq!(mud.prompt, UNFILLED);
         assert!(!mud.prompt_on);
         // No packages come while prompts are off.
-        assert!(packets(&mud.pulse_later("Pulse 1 of 1.")).is_empty());
+        let leftover = &packets(&mud.pulse_later("Pulse 1 of 1."));
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 }
 
@@ -343,11 +347,12 @@ fn away_prints_afk_and_only_the_new_build_keeps_sending_packages() {
     let mut mud = playing(Build::New);
     let raw = run(&mut mud, "afk");
     assert!(shown(&raw).ends_with("<AFK> "));
-    assert!(!packets(&raw).is_empty());
+    assert!(!packets(&raw).is_empty(), "expected entries");
     let mut mud = playing(Build::Older);
     let raw = run(&mut mud, "afk");
     assert!(shown(&raw).ends_with("<AFK> "));
-    assert!(packets(&raw).is_empty());
+    let leftover = &packets(&raw);
+    assert!(leftover.is_empty(), "{leftover:?}");
 }
 
 #[test]
@@ -553,7 +558,8 @@ fn a_game_that_plays_eor_answers_each_ask_and_ends_prompts_with_eor() {
     let will = [telnet::IAC, telnet::WILL, telnet::TELOPT_EOR];
     // A game without it ignores the ask and keeps GA.
     let mut mud = playing(Build::New);
-    assert!(mud.receive(&ask).is_empty());
+    let leftover = &mud.receive(&ask);
+    assert!(leftover.is_empty(), "{leftover:?}");
     assert!(run(&mut mud, "").ends_with(&[telnet::IAC, telnet::GA]));
 
     let mut mud = Mud::playing(Options {

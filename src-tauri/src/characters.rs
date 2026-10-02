@@ -586,7 +586,8 @@ mod tests {
 
         // Test-Prompt never saved a file and loses Erelei to default.
         let detail = profile_detail(&state, "Test-Prompt").await.unwrap();
-        assert!(detail.tracked_affects.is_empty());
+        let leftover = &detail.tracked_affects;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(detail.panes, PaneLayoutPersist::default_layout());
         assert!(!detail.login_on);
 
@@ -775,7 +776,8 @@ mod tests {
         // it loads, the defaults with Vosh's default design.
         let blank = profile_toml(&state, "Test-Prompt").await.unwrap();
         let back = ProfileConfig::from_toml(&blank).unwrap();
-        assert!(back.ui.tracked_affects.is_empty());
+        let leftover = &back.ui.tracked_affects;
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(back.prompt_config(), vosh_prompt::PromptConfig::fresh());
 
         assert!(profile_toml(&state, "Nobody").await.is_err());

@@ -173,7 +173,8 @@ name = "Quiet"
         );
         // Every preset off stays off, and the defaults hold it already.
         assert_eq!(list(root, "Healer"), strings(&["none"]));
-        assert!(list(root, "Ranger").is_empty());
+        let leftover = &list(root, "Ranger");
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(!file(root, "Quiet").exists());
         assert!(recorded(root));
     }

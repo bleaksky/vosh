@@ -278,7 +278,8 @@ async fn an_unfinished_wizard_run_holds_the_upgrades_after_it() {
     assert_eq!(state.take_launch_notices(), [WIZARD_UNFINISHED_NOTICE]);
     // The prompt upgrade and the rollout wait for the run, and the
     // profiles still load.
-    assert!(migrations(&app_data).is_empty());
+    let leftover = &migrations(&app_data);
+    assert!(leftover.is_empty(), "{leftover:?}");
     assert!(state.profile_set.lock().await.is_some());
 
     // Once the file takes writes, the next launch finishes the run, then
@@ -317,7 +318,8 @@ async fn a_normal_launch_skips_the_mudclient_folder() {
     assert!(!app_data.join("catalog.toml").exists(), "no wizard run");
     assert!(!launched.loadout_mode);
     assert!(!launched.wizard_unfinished);
-    assert!(state.take_launch_notices().is_empty());
+    let leftover = &state.take_launch_notices();
+    assert!(leftover.is_empty(), "{leftover:?}");
 }
 
 /// When the map store does not open, no maps.sqlite stops the copy. It

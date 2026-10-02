@@ -650,7 +650,8 @@ mod tests {
         let t0 = Instant::now();
         let mut t = session(t0);
         assert!(!t.synced);
-        assert!(poll_span(&mut t, t0, t0 + secs(30.0)).is_empty());
+        let leftover = &poll_span(&mut t, t0, t0 + secs(30.0));
+        assert!(leftover.is_empty(), "{leftover:?}");
         let step = t.poll(t0 + secs(30.0));
         assert!(step.payload.fired);
         assert_eq!(step.command.as_deref(), Some("score"));
@@ -689,7 +690,8 @@ mod tests {
         let tick = t0 + secs(10.0);
         assert!(t.on_game_tick(tick).is_some());
         // Past the interval the timer waits for the game, overdue.
-        assert!(poll_span(&mut t, tick, tick + secs(59.0)).is_empty());
+        let leftover = &poll_span(&mut t, tick, tick + secs(59.0));
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(t.synced);
         assert_eq!(t.remaining(tick + secs(45.0)), Some(Duration::ZERO));
     }
@@ -758,7 +760,8 @@ mod tests {
         let mut t = session(t0);
         let tick = t0 + secs(5.0);
         assert!(t.on_game_tick(tick).is_some());
-        assert!(poll_span(&mut t, tick, tick + secs(60.0)).is_empty());
+        let leftover = &poll_span(&mut t, tick, tick + secs(60.0));
+        assert!(leftover.is_empty(), "{leftover:?}");
         let step = t.poll(tick + secs(60.0));
         assert!(step.payload.fired);
         assert_eq!(step.command.as_deref(), Some("score"));
@@ -946,7 +949,8 @@ mod tests {
         // interval and a Settings save do.
         let change = tick + secs(25.0);
         t.set_interval(10, change);
-        assert!(poll_span(&mut t, change, tick + secs(30.0)).is_empty());
+        let leftover = &poll_span(&mut t, change, tick + secs(30.0));
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(t.synced);
         // The game's tick lands on time and fires once.
         let step = t.on_game_tick(tick + secs(30.0)).expect("the tick lands");
@@ -964,7 +968,8 @@ mod tests {
         config.interval = secs(10.0);
         let change = tick + secs(25.0);
         t.adopt(config, None, change);
-        assert!(poll_span(&mut t, change, tick + secs(30.0)).is_empty());
+        let leftover = &poll_span(&mut t, change, tick + secs(30.0));
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(t.synced);
         let step = t.on_game_tick(tick + secs(30.0)).expect("the tick lands");
         assert!(step.payload.fired);
@@ -979,7 +984,8 @@ mod tests {
         t.set_interval(10, change);
         // The game goes quiet. Twice the new interval after the change
         // the timer fires once on its own and drops back to unsynced.
-        assert!(poll_span(&mut t, change, change + secs(20.0)).is_empty());
+        let leftover = &poll_span(&mut t, change, change + secs(20.0));
+        assert!(leftover.is_empty(), "{leftover:?}");
         let step = t.poll(change + secs(20.0));
         assert!(step.payload.fired);
         assert_eq!(step.command.as_deref(), Some("score"));
@@ -993,11 +999,13 @@ mod tests {
         let change = tick + secs(25.0);
         t.set_interval(60, change);
         // The game runs a little late and ticks once.
-        assert!(poll_span(&mut t, change, tick + secs(35.0)).is_empty());
+        let leftover = &poll_span(&mut t, change, tick + secs(35.0));
+        assert!(leftover.is_empty(), "{leftover:?}");
         let next = tick + secs(35.0);
         assert!(t.on_game_tick(next).expect("the tick lands").payload.fired);
         // Then it goes quiet, and the fallback waits twice the new one.
-        assert!(poll_span(&mut t, next, next + secs(120.0)).is_empty());
+        let leftover = &poll_span(&mut t, next, next + secs(120.0));
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(t.synced);
         assert!(t.poll(next + secs(120.0)).payload.fired);
         assert!(!t.synced);
@@ -1011,7 +1019,8 @@ mod tests {
         config.interval = secs(60.0);
         let change = tick + secs(25.0);
         t.adopt(config, None, change);
-        assert!(poll_span(&mut t, change, tick + secs(35.0)).is_empty());
+        let leftover = &poll_span(&mut t, change, tick + secs(35.0));
+        assert!(leftover.is_empty(), "{leftover:?}");
         assert!(t.synced);
         assert!(
             t.on_game_tick(tick + secs(35.0))
