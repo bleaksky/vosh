@@ -4359,7 +4359,10 @@ mod prompt_tests {
         let leftover = &load_at_launch(&set, &mut live);
         assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(*live.prompt.config(), PromptConfig::fresh());
-        assert_eq!(live.ui.prompt_template, vosh_prompt::DEFAULT_DESIGN);
+        assert_eq!(
+            ProfileConfig::from_profile(&live).ui.prompt_template,
+            vosh_prompt::DEFAULT_DESIGN
+        );
 
         // A file of its own keeps what it says, a design or none.
         for design in ["%hp", ""] {

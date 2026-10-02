@@ -77,11 +77,10 @@ pub(crate) struct Profile {
 }
 
 impl Profile {
-    /// Take a `[prompt]` table, keeping the `[ui]` copy of its switch and
-    /// design in step, since Settings still reads them there.
+    /// Take a `[prompt]` table. Nothing reads the live `[ui]` copy of its
+    /// switch and design, and a save writes the file's copy from this
+    /// table, see [`crate::profile_config::ProfileConfig::from_profile`].
     pub(crate) fn set_prompt_config(&mut self, config: vosh_prompt::PromptConfig) {
-        self.ui.prompt_template_enabled = config.draw;
-        self.ui.prompt_template.clone_from(&config.template);
         self.prompt.set_config(config);
     }
 }

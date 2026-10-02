@@ -2339,7 +2339,9 @@ mod tests {
         assert!(config.draw);
         assert_eq!(config.show, PromptShow::Pinned);
         assert_eq!(config.capture, capture);
-        assert_eq!(p.ui.prompt_template, DEFAULT_DESIGN);
+        // A save writes the [ui] copy from the table.
+        let file = crate::profile_config::ProfileConfig::from_profile(&p);
+        assert_eq!(file.ui.prompt_template, DEFAULT_DESIGN);
 
         let ran = run_line(&mut p, "#prompt default");
         assert_eq!(ran.result.echo, ["Your design is already Vosh's default."]);
@@ -2371,7 +2373,8 @@ mod tests {
         assert!(config.draw);
         // Drawing with no design draws Vosh's default, as Settings does.
         assert_eq!(config.template, DEFAULT_DESIGN);
-        assert!(p.ui.prompt_template_enabled);
+        let file = crate::profile_config::ProfileConfig::from_profile(&p);
+        assert!(file.ui.prompt_template_enabled);
 
         let _ = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
         let ran = run_line(&mut p, "#prompt draw off");
