@@ -200,6 +200,9 @@ export interface TerminalHandle {
   /** Keep track of buffer row `row` through new output and trimmed
    *  history, or null on the alternate screen. */
   markLine: (row: number) => LineMark | null;
+  /** Buffer row `row` as text with its trailing blanks gone, or null past
+   *  the buffer. A drag across the split finds its line by it. */
+  lineText: (row: number) => string | null;
   /** Select the whole buffer, scrollback included. */
   selectAll: () => void;
   /** Where the open region starts on this pane's screen, as the renderer
@@ -1318,6 +1321,7 @@ export function Terminal({
         if (buffer.type !== 'normal') return null;
         return term.registerMarker(Math.max(0, row) - (buffer.baseY + buffer.cursorY)) ?? null;
       },
+      lineText: (row) => term.buffer.active.getLine(row)?.translateToString(true) ?? null,
       selectAll: () => term.selectAll(),
       onSelectionChange: (cb) => {
         const disposable = term.onSelectionChange(cb);

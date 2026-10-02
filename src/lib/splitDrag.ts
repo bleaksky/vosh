@@ -106,11 +106,62 @@ export function selectSpan(
   };
 }
 
-/** What to add to a history row to find the same line in the live pane.
- *  Both panes take the same output, so the line the cursor is on is the
- *  same line in each, whatever each holds above it. */
+/** What to add to a history row to find about the same line in the live
+ *  pane. Both panes take the same output, so the line the cursor is on is
+ *  the same line in each, whatever each holds above it. Rows only one
+ *  pane holds between a row and the cursor move it off by as many, which
+ *  `matchRow` corrects. */
 export function lineShift(history: BufferView, live: BufferView): number {
   return live.baseY + live.cursorY - (history.baseY + history.cursorY);
+}
+
+/** How many rows each way from its guess a handoff looks for the line. */
+export const MATCH_REACH = 1000;
+/** How many rows each side of the line a handoff compares as well. */
+export const MATCH_CONTEXT = 4;
+
+/** The live row that holds history row `row`, near `guess`, where
+ *  `lineShift` puts it. The panes need not hold the same rows. The live
+ *  pane alone holds the restored banner, the rows that pad a short
+ *  restore to the bottom, and the notices the page writes, and the
+ *  history loads the stored text at its mount. So this looks out from the
+ *  guess, nearest first, for a row with the same text, and takes the one
+ *  whose rows around it match most. A blank row counts for nothing there,
+ *  since blank rows match anywhere. The guess when no row matches. */
+export function matchRow(
+  historyText: (row: number) => string | null,
+  liveText: (row: number) => string | null,
+  row: number,
+  guess: number,
+  reach = MATCH_REACH,
+): number {
+  const want = historyText(row);
+  if (want === null) return guess;
+  const around: { at: number; text: string }[] = [];
+  for (let at = -MATCH_CONTEXT; at <= MATCH_CONTEXT; at++) {
+    const text = at === 0 ? null : historyText(row + at);
+    if (text) around.push({ at, text });
+  }
+  const seen = new Map<number, string | null>();
+  const live = (r: number) => {
+    if (r < 0) return null;
+    if (!seen.has(r)) seen.set(r, liveText(r));
+    return seen.get(r) ?? null;
+  };
+  let best = -1;
+  let found = guess;
+  for (let step = 0; step <= reach; step++) {
+    for (const r of step === 0 ? [guess] : [guess - step, guess + step]) {
+      if (live(r) !== want) continue;
+      const score = around.filter(({ at, text }) => live(r + at) === text).length;
+      if (score > best) {
+        best = score;
+        found = r;
+      }
+      if (best === around.length) return found;
+    }
+  }
+  return found;
 }
 
 /** The history pane's `viewportY` at which it shows what the live pane
@@ -136,6 +187,9 @@ export interface DragPane {
   scrollLines: (n: number) => void;
   select: (column: number, row: number, length: number) => void;
   markLine: (row: number) => LineMark | null;
+  /** Buffer row `row` as text with its trailing blanks gone, or null
+   *  past the buffer. */
+  lineText: (row: number) => string | null;
 }
 
 /** A mouse event as the drag reads it. */
@@ -318,7 +372,13 @@ export class SplitDrag {
       return;
     }
     const from = anchorCell(phase.anchor);
-    const row = Math.max(0, from.y + lineShift(history.bufferView(), live.bufferView()));
+    const guess = Math.max(0, from.y + lineShift(history.bufferView(), live.bufferView()));
+    const row = matchRow(
+      (r) => history.lineText(r),
+      (r) => live.lineText(r),
+      from.y,
+      guess,
+    );
     phase.anchor.mark?.dispose();
     this.phase = { kind: 'live', anchor: { mark: live.markLine(row), row, col: from.x } };
     this.opts.closeSplit();
