@@ -1124,7 +1124,11 @@ fn region_extent(columns: usize, region: &Region) -> Option<Extent> {
 }
 
 /// Move the cursor from the end of a region to its start, `above` rows
-/// up at `col`, then erase to the end of the screen (D22 rule c).
+/// up at `col`, then erase to the end of the screen (D22 rule c). The
+/// erase fills with the default background. The cells it clears take the
+/// background in force, and a line the region ends on can leave its own
+/// on while the line ends after it wait, so without it the rows below
+/// would take that color too. What the replace writes sets its own.
 fn erase_back(above: usize, col: usize) -> Vec<u8> {
     let mut out = b"\r".to_vec();
     if above > 0 {
@@ -1133,7 +1137,7 @@ fn erase_back(above: usize, col: usize) -> Vec<u8> {
     if col > 0 {
         out.extend(format!("\x1b[{col}C").into_bytes());
     }
-    out.extend_from_slice(b"\x1b[0J");
+    out.extend_from_slice(b"\x1b[49m\x1b[0J");
     out
 }
 
@@ -2432,6 +2436,24 @@ mod tests {
     }
 
     #[test]
+    fn a_replace_erases_on_the_default_background() {
+        // The region's line ends on a background, and its color reset
+        // waits with its line end, so the background is still in force
+        // when the replace erases. Every cleared cell stays plain.
+        let mut g = TermGrid::new(20, 6);
+        g.session_output(&held(&marked(1, b"\x1b[44mhungry"), b"\x1b[0m\r\n"));
+        g.session_output(&replace(1, &marked(2, b"\x1b[44mHUNGRY"), false));
+        assert_eq!(screen(&g), ["HUNGRY"]);
+        let plain = Color::Named(NamedColor::Background);
+        assert_eq!(g.cell(0, 0).2, Color::Named(NamedColor::Blue));
+        for line in 0..6 {
+            for col in usize::from(line == 0) * 6..20 {
+                assert_eq!(g.cell(line, col).2, plain, "row {line}, column {col}");
+            }
+        }
+    }
+
+    #[test]
     fn a_replace_rewrites_the_open_region_where_it_starts() {
         let mut g = TermGrid::new(40, 10);
         g.session_output(&text(
@@ -2798,8 +2820,8 @@ mod tests {
         );
         assert_eq!(find_mark(&end), Some((0, end.len(), Mark::LiftEnd(7))));
         assert_eq!(find_mark(b"\x1b]7717;x;7\x07"), None);
-        assert_eq!(erase_back(0, 0), b"\r\x1b[0J");
-        assert_eq!(erase_back(2, 7), b"\r\x1b[2A\x1b[7C\x1b[0J");
+        assert_eq!(erase_back(0, 0), b"\r\x1b[49m\x1b[0J");
+        assert_eq!(erase_back(2, 7), b"\r\x1b[2A\x1b[7C\x1b[49m\x1b[0J");
     }
 
     // The wrap itself runs fixtures/wrap/cases.json in crates/prompt and in
