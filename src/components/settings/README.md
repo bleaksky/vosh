@@ -1,6 +1,6 @@
 # Settings
 
-`src/SettingsApp.tsx` is the frame. It draws the sidebar (`Sidebar.tsx`), the breadcrumb band, and one page per group. A page built from its board lives in `pages/`, and a group still waiting for its board keeps its placeholder in `groups/`. Every page builds from the primitives in `ui/`.
+`src/SettingsApp.tsx` is the frame. It draws the sidebar (`Sidebar.tsx`), the breadcrumb band, and one page per group. Appearance, Automation, and Characters live in `pages/`, and General, Input, and Layout live in `groups/`. Every page is built from its board and from the primitives in `ui/`.
 
 ## Pages
 
@@ -17,11 +17,11 @@ Register a page in `PAGES` in `SettingsApp.tsx`. A page that pins its own bar an
 
 A group can hold a page inside it, like the session logs at `general:logs`. Name it in `SETTINGS_SUBPAGES` in `src/lib/settingsNav.ts` with its title. The breadcrumb then reads `Settings › General › Session logs` with the group as a link back, the nav keeps the group active, and the frame does not scroll to the section. The group's page draws the inner page when `settingsSubpage(target)` names it.
 
-A page that saves as you go takes `update` from `useSettingsAutoSave` in `legacy/`. `update(patch)` patches the config copy and saves the whole snapshot once typing settles. Pass `{ now: true }` for a discrete pick another window shows at once, like a theme or a toggle.
+A page that saves as you go takes `update` from `useSettingsAutoSave` in `legacy/`, the one file left in that folder. `update(patch)` patches the config copy and saves the whole snapshot once typing settles. Pass `{ now: true }` for a discrete pick another window shows at once, like a theme or a toggle.
 
-A page built on its board lives in `pages/`. `pages/CharactersPage.tsx` is the Characters board, with its parts in `pages/characters/`. `pages/AppearancePage.tsx` is the Appearance board. Its parts sit in `pages/appearance/`. The split divider color lives only on Layout and the sent command color only on Input, so Appearance's Advanced does not show them. `pages/AutomationPage.tsx` is the Automation board, described under Automation below.
+`pages/CharactersPage.tsx` is the Characters board, with its parts in `pages/characters/`. `pages/AppearancePage.tsx` is the Appearance board. Its parts sit in `pages/appearance/`. The split divider color lives only on Layout and the sent command color only on Input, so Appearance's Advanced does not show them. `pages/AutomationPage.tsx` is the Automation board, described under Automation below.
 
-`groups/GeneralGroup.tsx` is the General board, with the session log view in `groups/SessionLogs.tsx`. `groups/InputGroup.tsx` and `groups/LayoutGroup.tsx` are the Input and Layout boards. Layout's Status line section holds `rows/TickTimeStyleRow.tsx`, the Tick and time row, and under it `rows/TickCountRow.tsx`, the Tick counts row. The old Appearance, Automation, and Characters placeholders, `groups/AppearanceGroup.tsx`, `groups/AutomationGroup.tsx`, and `groups/CharactersGroup.tsx`, no longer render, and they were the last pages to show old editors from `legacy/` inside `LegacyIsland`.
+`groups/GeneralGroup.tsx` is the General board, with the session log view in `groups/SessionLogs.tsx`. `groups/InputGroup.tsx` and `groups/LayoutGroup.tsx` are the Input and Layout boards. Layout's Status line section holds `rows/TickTimeStyleRow.tsx`, the Tick and time row, and under it `rows/TickCountRow.tsx`, the Tick counts row.
 
 ## Deep links and search
 
@@ -60,7 +60,7 @@ Use monospace only for MUD text. That means patterns, sent commands, macro keys,
 - `actions` renders at the right end of the heading row, like the Appearance import hint and button.
 - `card` wraps the children in a `Card`. It is true by default. Pass false to lay out your own cards or columns.
 
-`Card` is the radius 12 block on the `--inputband` fill. It takes every div prop. `padded` adds 16 px of padding for a card that holds a block instead of rows. `columns` sets its rows two by two with a 1 px line between the columns, like General's `Keep the same for every character`. Only rows below the first pair draw the hairline. Pass `card={false}` to the `Section` and put the `Card` in yourself.
+`Card` is the radius 12 block on the `--inputband` fill. It takes every div prop. `columns` sets its rows two by two with a 1 px line between the columns, like General's `Keep the same for every character`. Only rows below the first pair draw the hairline. Pass `card={false}` to the `Section` and put the `Card` in yourself.
 
 `Row` is one card row, 44 high at least, with padding 10 16.
 
