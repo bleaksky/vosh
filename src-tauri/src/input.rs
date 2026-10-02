@@ -7,6 +7,7 @@ use tokio::time::Instant;
 use vosh_automation::alias::{ExpandError, ExpandStep};
 use vosh_automation::trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
 use vosh_automation::vars::Scope;
+use vosh_prompt::card::sentences::and_list;
 
 use crate::profile::{MacroRecorder, Profile, QuickKey, RoomChar};
 use crate::profile_config::ProfileConfig;
@@ -1113,16 +1114,6 @@ fn prompt_status(profile: &Profile, now: chrono::DateTime<chrono::FixedOffset>) 
     InputResult {
         bytes: Vec::new(),
         echo,
-    }
-}
-
-/// `A`, `A and B`, or `A, B, and C`.
-fn and_list(names: &[String]) -> String {
-    match names {
-        [] => String::new(),
-        [one] => one.clone(),
-        [first, second] => format!("{first} and {second}"),
-        [rest @ .., last] => format!("{}, and {last}", rest.join(", ")),
     }
 }
 
