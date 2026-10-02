@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import { dragView, keyView, resetView, type Map3dView } from '../lib/map3dView';
-import { ZOOM_STEP, clampZoom, pinchZoom, wheelZoomSteps } from '../lib/mapZoom';
+import { NO_WHEEL_RUN, ZOOM_STEP, clampZoom, pinchZoom, wheelZoomSteps } from '../lib/mapZoom';
 
 // What your pointer, wheel and keys do over the map drawing. Plain
 // scroll and a trackpad pinch zoom every style. Chromium sends a pinch
@@ -34,7 +34,7 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    let travel = 0;
+    let wheel = NO_WHEEL_RUN;
     let pinchFrom: number | null = null;
     let drag: { id: number; x: number; y: number } | null = null;
 
@@ -56,8 +56,8 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
       e.preventDefault();
       // WebKit may send a pinch as both, and the gesture wins.
       if (pinchFrom !== null && e.ctrlKey) return;
-      const out = wheelZoomSteps(travel, e);
-      travel = out.travel;
+      const out = wheelZoomSteps(wheel, e);
+      wheel = out.run;
       if (out.steps !== 0) zoomTo(clampZoom(latest.current.zoom + out.steps * ZOOM_STEP));
     };
     const onGestureStart = (e: Event) => {
