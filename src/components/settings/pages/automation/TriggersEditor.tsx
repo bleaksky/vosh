@@ -110,6 +110,7 @@ const COLOR_OPTIONS: readonly SelectOption[] = [
 const MATCH_OPTIONS = [
   { value: 'line', label: 'Lines' },
   { value: 'prompt', label: 'Prompts' },
+  { value: 'room', label: 'Room' },
 ] as const;
 
 const EFFECT_LABELS = {
@@ -261,15 +262,18 @@ function TriggerAdvanced({
           onChange={(priority) => update((v) => ({ ...v, priority }))}
         />
       </Row>
-      <Row label="Match" description="Prompts match what your MUD sends before you type.">
+      <Row
+        label="Match"
+        description="Prompts match what your MUD sends before you type. Room matches the things and people a room lists after its exits."
+      >
         <Segmented
           options={MATCH_OPTIONS.map((o) => ({ ...o, disabled: locked }))}
-          value={t.target === 'prompt' ? 'prompt' : 'line'}
+          value={t.target ?? 'line'}
           onChange={(target) =>
             update((v) => {
               const next = { ...v };
-              if (target === 'prompt') next.target = 'prompt';
-              else delete next.target;
+              if (target === 'line') delete next.target;
+              else next.target = target;
               return next;
             })
           }

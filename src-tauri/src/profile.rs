@@ -35,6 +35,10 @@ pub(crate) struct Profile {
     /// commands can resolve a numeric index or partial name without
     /// round-tripping through the frontend.
     pub(crate) room_chars: Vec<RoomChar>,
+    /// The room look the session is following, which tells the lines
+    /// that list a room's things and people apart for Room triggers. It
+    /// resets on a disconnect.
+    pub(crate) room_block: crate::room_block::RoomBlock,
     /// Keyboard macro bindings. Each entry maps a canonical key
     /// string (e.g. "F1", "Ctrl+N", "Numpad7") to a command line
     /// (which may itself contain `;`-separated subcommands).

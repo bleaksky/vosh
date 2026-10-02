@@ -1247,6 +1247,7 @@ async fn io_loop<R: tauri::Runtime>(
         p.target.name = None;
         p.target.room_idx = None;
         p.room_chars.clear();
+        p.room_block = crate::room_block::RoomBlock::default();
         p.vars.remove("target");
         line_triggers = p.prompt.stage.line_trigger_notice();
         end_prompt(&mut p);
@@ -1691,9 +1692,16 @@ struct LinePass {
 /// Lua triggers and the Script bodies the triggers queued, all under the
 /// profile lock the caller holds. `plain` is the line without ANSI, so
 /// no pattern has to allow for escape bytes and the line is stripped
-/// once.
-fn line_pass(p: &mut Profile, bytes: &[u8], plain: &str, now: Instant) -> LinePass {
-    let result = vosh_trigger::process_with_plain(&p.triggers, bytes, plain, MatchScope::Line);
+/// once. `scope` is [`MatchScope::Room`] for a line that lists a room's
+/// things or people, so Room triggers run on it too.
+fn line_pass(
+    p: &mut Profile,
+    bytes: &[u8],
+    plain: &str,
+    scope: MatchScope,
+    now: Instant,
+) -> LinePass {
+    let result = vosh_trigger::process_with_plain(&p.triggers, bytes, plain, scope);
     let tick_step = tick_reset(p, plain, now);
     script_state::snapshot_vars(&p.script, &p.vars);
     let mut outcome = match p.script.match_line(plain) {
@@ -1899,13 +1907,17 @@ fn text_line_step(
     now: Instant,
     log_session_id: Option<i64>,
 ) -> LineStep {
+    // Every complete line that is not your prompt passes the room look
+    // tracker in the order the game sent it, so it knows the lines that
+    // list a room's things and people.
+    let scope = p.room_block.line(&plain);
     let LinePass {
         result,
         tick_step,
         mut apply,
-    } = line_pass(p, &bytes, &plain, now);
+    } = line_pass(p, &bytes, &plain, scope, now);
     if result.display.is_none() {
-        note_gag_without_reader(p, batch, &plain, MatchScope::Line);
+        note_gag_without_reader(p, batch, &plain, scope);
     }
     // In-place echo replacement. When a trigger gags the line AND its
     // Script action emits one or more `mud.echo(...)` outputs, those
@@ -1981,6 +1993,8 @@ fn prompt_block(
     now: Instant,
     log_session_id: Option<i64>,
 ) -> LineStep {
+    // Your prompt ends any room look before it.
+    p.room_block.end();
     let disagree = p.prompt.vars.capture(vosh_prompt::Capture {
         values: block.values.clone(),
         raw: Some(block.raw_text()),
@@ -2185,6 +2199,8 @@ fn marker_step(
         let released = p.prompt.stage.release();
         let steps = released_steps(p, batch, released, now, log_session_id);
         p.prompt.record(None, now_ms());
+        // The marker ends any room look before it.
+        p.room_block.end();
         return steps;
     };
     let plain = vosh_ansi::plain_text(&partial.bytes);
@@ -2214,6 +2230,7 @@ fn marker_step(
             p.prompt.record(Some((&partial.bytes, &plain)), now_ms());
         }
     }
+    p.room_block.end();
     steps
 }
 
@@ -3107,6 +3124,9 @@ fn gmcp_step(
     // frontend.
     if msg.package == "Room.Chars" {
         if let Some(arr) = msg.data.as_array() {
+            // The look this packet goes with lists one line for each
+            // entry after its things.
+            p.room_block.room_chars(arr.len());
             let chars: Vec<crate::profile::RoomChar> = arr
                 .iter()
                 .filter_map(|v| {
@@ -6217,6 +6237,10 @@ mod right_tests;
 #[cfg(test)]
 #[path = "session_pointer_tests.rs"]
 mod pointer_tests;
+
+#[cfg(test)]
+#[path = "session_room_tests.rs"]
+mod room_tests;
 
 #[cfg(test)]
 mod settle_tests {

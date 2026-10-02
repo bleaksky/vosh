@@ -16,13 +16,20 @@ use crate::store::{Trigger, TriggerStore, TriggerTarget};
 pub enum MatchScope {
     Line,
     Prompt,
+    /// A line a room look lists after its exits line, one of the things
+    /// or people in the room. It is a completed line too, so `Line`
+    /// triggers fire on it alongside the `Room` ones, in one pass, and
+    /// their priorities and overlapping spans resolve together.
+    Room,
 }
 
 impl MatchScope {
     fn matches(self, target: TriggerTarget) -> bool {
         matches!(
             (self, target),
-            (MatchScope::Line, TriggerTarget::Line) | (MatchScope::Prompt, TriggerTarget::Prompt)
+            (MatchScope::Line | MatchScope::Room, TriggerTarget::Line)
+                | (MatchScope::Prompt, TriggerTarget::Prompt)
+                | (MatchScope::Room, TriggerTarget::Room)
         )
     }
 }
@@ -895,5 +902,77 @@ mod tests {
         // Prompt-scope pass MUST NOT fire a line-target trigger.
         let r = process_scoped(&s, b"100/100 hp", MatchScope::Prompt);
         assert_eq!(r.display.as_deref(), Some("100/100 hp"));
+    }
+
+    /// A Room trigger coloring the whole line yellow, at `priority`.
+    fn room_yellow(priority: i32) -> Trigger {
+        let mut t = highlight("room", "^.+$", NamedColor::Yellow);
+        t.target = TriggerTarget::Room;
+        t.priority = priority;
+        t
+    }
+
+    #[test]
+    fn a_room_trigger_fires_only_on_a_room_line() {
+        let s = store(vec![room_yellow(4)]);
+        let line = b"     A black-steel helm is here, gleaming darkly.";
+        assert_eq!(
+            process_scoped(&s, line, MatchScope::Room)
+                .display
+                .as_deref(),
+            Some("\x1b[33m     A black-steel helm is here, gleaming darkly.\x1b[0m")
+        );
+        for scope in [MatchScope::Line, MatchScope::Prompt] {
+            let r = process_scoped(&s, line, scope);
+            assert_eq!(
+                r.display.as_deref(),
+                Some("     A black-steel helm is here, gleaming darkly."),
+                "{scope:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_room_line_runs_line_and_room_triggers_in_one_pass() {
+        // A Line trigger on a name, at a higher priority, keeps its span,
+        // and the Room trigger's whole line span overlaps it, so it drops,
+        // the way two Line triggers resolve.
+        let mut name = highlight("name", "Tolliver", NamedColor::Cyan);
+        name.priority = 5;
+        let mut sends = highlight("greet", "^Tolliver is resting here\\.$", NamedColor::Red);
+        sends.actions = vec![TriggerAction::Send {
+            template: "wave".into(),
+        }];
+        let s = store(vec![room_yellow(4), name, sends]);
+        let r = process_scoped(&s, b"Tolliver is resting here.", MatchScope::Room);
+        assert_eq!(
+            r.display.as_deref(),
+            Some("\x1b[36mTolliver\x1b[0m is resting here.")
+        );
+        assert_eq!(r.sends, vec!["wave".to_string()]);
+        let names: Vec<String> = matching(&s, "Tolliver is resting here.", MatchScope::Room)
+            .into_iter()
+            .map(|t| t.name.clone())
+            .collect();
+        assert_eq!(names, ["name", "room", "greet"]);
+        let line_only: Vec<String> = matching(&s, "Tolliver is resting here.", MatchScope::Line)
+            .into_iter()
+            .map(|t| t.name.clone())
+            .collect();
+        assert_eq!(line_only, ["name", "greet"]);
+    }
+
+    #[test]
+    fn a_room_target_round_trips_and_older_targets_stay_as_they_were() {
+        let s = store(vec![room_yellow(4)]);
+        let json = s.export_json().unwrap();
+        assert!(json.contains("\"target\": \"room\""), "{json}");
+        let mut back = TriggerStore::new();
+        back.import_json(&json).unwrap();
+        assert_eq!(back.get("room").unwrap().target, TriggerTarget::Room);
+        let line = store(vec![highlight("line", "x", NamedColor::Red)])
+            .export_json()
+            .unwrap();
+        assert!(!line.contains("\"target\""), "{line}");
     }
 }

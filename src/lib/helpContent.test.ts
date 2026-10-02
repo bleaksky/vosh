@@ -584,6 +584,20 @@ describe('the help on the one window', () => {
   });
 });
 
+describe('the help on Room triggers', () => {
+  it('says what Room matches and how Vosh finds those lines', () => {
+    expect(body('automate.first-trigger')).toContain(
+      '- Pick `Room` in `Match` to match only the things and people a room lists after its exits line. The game sends a `Room.Chars` packet with each look, and Vosh counts the people lines from it, so a say or an arrival after the look stays a plain line.',
+    );
+  });
+
+  it('matches HELP.md word for word', () => {
+    const found = HELP_TOPICS.find((t) => t.id === 'automate.first-trigger');
+    if (!found) throw new Error('no trigger topic');
+    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+  });
+});
+
 describe('the help body format', () => {
   it('reads paragraphs, lists and tables', () => {
     expect(

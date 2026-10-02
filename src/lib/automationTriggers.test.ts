@@ -193,6 +193,15 @@ describe('normalizeTrigger', () => {
     expect(t.group).toBe('idle');
     expect(t.target).toBe('prompt');
   });
+
+  it('keeps the room lane and drops a lane it does not know', () => {
+    const t = (target: unknown) =>
+      normalizeTrigger({ name: 'r', patterns: [{ pattern: '^.+$', enabled: true }], target })
+        .target;
+    expect(t('room')).toBe('room');
+    expect(t('line')).toBeUndefined();
+    expect(t('screen')).toBeUndefined();
+  });
 });
 
 describe('validateTriggers', () => {

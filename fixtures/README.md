@@ -77,6 +77,11 @@ fixtures/
                sends, VOSH_WRITE_POINTER_CASES=1 writes it again, and the
                webview test maps a pointer with it on xterm, the native
                grid and the dock.
+  room-colors/ looks.json, room looks as the Aabahran server prints them,
+               each with its Room.Chars packet, for the Room trigger tests
+               in src-tauri. Hand written and synthetic, from the server's
+               own format strings and area files. Its README says where
+               each line comes from.
   terminal-rows/ cases.json, the rows the terminal keeps and the rows the
                game is told while your pinned prompt band borrows rows,
                shared by keptRows and gameSize on xterm and

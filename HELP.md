@@ -202,6 +202,7 @@ Triggers watch incoming lines and run actions when a pattern matches. They live 
 - Click `New trigger`.
 - Enter a name and a pattern. Patterns are regexes, so escape literal punctuation. Under `Advanced`, `Add pattern` in More patterns adds another, and the trigger fires when any pattern that is on matches.
 - Leave `Priority` under `Advanced` at `5`, the default for a new trigger, or raise it to run before other triggers. Higher priority triggers run first. Leave `Match` on `Lines`.
+- Pick `Room` in `Match` to match only the things and people a room lists after its exits line. The game sends a `Room.Chars` packet with each look, and Vosh counts the people lines from it, so a say or an arrival after the look stays a plain line.
 - Pick a `Style`. The choices are `None`, `Highlight`, `Wash`, `Replace`, and `Hide`.
 - Put a command in `Then send`. `Send to pane` and `Lua script` sit under `Advanced`. Send and replace templates reach capture groups with `$1` through `$9` or `${name}`, and `;` splits a send into separate commands.
 - Click `Save`. Vosh shows `Saved` in the bar at the bottom.
