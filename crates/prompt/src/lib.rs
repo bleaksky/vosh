@@ -40,6 +40,8 @@
 //!     them.
 //!   - [`card::candidates`] groups the candidates ring by shape and checks
 //!     a capture against it and your scrollback.
+//!   - [`card::sentences`] says what a setting reads and shows, with the
+//!     label each code and value goes by.
 //! - [`wrap`] is the word wrap both renderers share.
 //! - `testkit`, behind the `testkit` feature, prints prompts the way the
 //!   game does and plays a fake Aabahran for tests and scripted runs.

@@ -10,10 +10,13 @@
 //! - [`presets`] holds the designs Vosh ships, its default among them.
 //! - [`candidates`] groups the candidates ring by shape and checks a
 //!   capture against it and your scrollback.
+//! - [`sentences`] says what a setting reads and shows, with the label
+//!   each code and value goes by.
 
 pub mod candidates;
 pub mod describe;
 pub mod edit;
 pub mod presets;
 pub mod report;
+pub mod sentences;
 pub mod state;

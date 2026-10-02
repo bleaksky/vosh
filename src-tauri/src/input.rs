@@ -884,6 +884,7 @@ fn slash_prompt(profile: &mut Profile, args: &str) -> InputResult {
 /// game (D25).
 fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputResult {
     use vosh_prompt::aabahran::{self, lex, Origin, Which};
+    use vosh_prompt::card::sentences;
     use vosh_prompt::config::{AabahranCapture, CaptureSource};
     use vosh_prompt::CaptureConfig;
 
@@ -933,7 +934,7 @@ fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputRe
         source: Some(CaptureSource::Typed),
     });
     profile.set_prompt_config(config);
-    let mut echo = vec![aabahran::reads_sentence(&compiled.reads(which), fight)];
+    let mut echo = vec![sentences::reads_sentence(&compiled.reads(which), fight)];
     echo.extend(
         normalized
             .warnings

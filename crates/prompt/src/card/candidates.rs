@@ -288,7 +288,7 @@ impl Recognizer {
                             start: chars_before(plain, m.start()),
                             end: chars_before(plain, m.end()),
                             field: Some(var.clone()),
-                            label: crate::aabahran::value_label(var),
+                            label: crate::card::sentences::value_label(var),
                             warn: false,
                         })
                     })
@@ -330,7 +330,7 @@ fn code_marks(compiled: &Compiled, shape: &Shape, lines: &[&str]) -> Vec<Mark> {
                 line: mark.line,
                 start,
                 end,
-                label: crate::aabahran::value_label(&name),
+                label: crate::card::sentences::value_label(&name),
                 field: Some(name),
                 warn: false,
             });
@@ -366,7 +366,7 @@ fn code_marks(compiled: &Compiled, shape: &Shape, lines: &[&str]) -> Vec<Mark> {
                 if !labels.contains(&label) {
                     labels.push(label);
                 }
-                into.label = crate::aabahran::and_list(labels);
+                into.label = crate::card::sentences::and_list(labels);
             }
             None => {
                 merged.push((out.len(), run, mark.line, vec![label.clone()]));

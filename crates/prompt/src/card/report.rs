@@ -14,6 +14,7 @@ use crate::aabahran::lex::{self, Token as GameToken};
 use crate::aabahran::{self, Origin, WarningKind, Which, Who};
 use crate::capture::{self, generic};
 use crate::card::presets::{self, Preset};
+use crate::card::sentences;
 use crate::config::{CaptureConfig, RegexCapture};
 
 /// What `prompt_compile` reads.
@@ -339,9 +340,9 @@ fn legend_notes(
     let run_together = !fixes.is_empty();
     Notes {
         shows: (!run_together)
-            .then(|| aabahran::shows_sentence(&names))
+            .then(|| sentences::shows_sentence(&names))
             .flatten(),
-        fix_note: run_together.then(|| aabahran::fix_sentence(&names, &unread)),
+        fix_note: run_together.then(|| sentences::fix_sentence(&names, &unread)),
         legend,
         fixes,
     }
@@ -411,7 +412,7 @@ fn setting_legend(
                 let fight = inside.iter().any(|&i| rows[i].fight);
                 let merged = LegendRow {
                     code: setting.get(at[0]..at[1]).unwrap_or_default().to_string(),
-                    label: aabahran::and_list(&labels),
+                    label: sentences::and_list(&labels),
                     span: at,
                     fight,
                     tag: Some(RUN_TOGETHER.into()),
