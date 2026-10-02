@@ -14,8 +14,8 @@ fixtures/
              too, as one read and as two cut at every place, after the
              login, with the native grid's screen of each. It also holds
              runs whose line ends on a background across pinned pulses,
-             and your echo landing before the session heard of it.
-             Generated and
+             your echo landing before the session heard of it, and a pane
+             that loads your scrollback during a run. Generated and
              synthetic, from the server's own lines with an invented name,
              stored the way prompt/aabahran/pinned/ is, held to the session
              by its test, and written again with

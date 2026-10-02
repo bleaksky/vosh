@@ -1770,10 +1770,11 @@ struct LineStep {
     tick_step: Option<TickStep>,
     /// The lines to keep in the scrollback ring, each as it shows.
     scrollback: Vec<Vec<u8>>,
-    /// What Collapse repeated lines made of the line, when it is on: the
-    /// line kept starts a run of repeated lines, or takes the place of the
-    /// run's line in the ring, the count before it, as on screen.
-    repeat: Option<vosh_prompt::stage::Repeat>,
+    /// What Collapse repeated lines made of the line, when it is on, and
+    /// the region the run shows in: the line kept starts a run of repeated
+    /// lines, or takes the place of the run's line in the ring, the count
+    /// before it, as on screen.
+    repeat: Option<crate::log_state::KeptRun>,
 }
 
 /// Handle one complete line under the profile lock. The stage reads it
@@ -1964,6 +1965,10 @@ fn text_line_step(
     let collapse = p.ui.collapse_repeats;
     p.prompt.stage.set_collapse(collapse);
     let mut repeat = None;
+    // Whether the ring keeps the line. While Collapse repeated lines is
+    // on, it keeps what the screen shows, so the line end a pinned
+    // prompt's row took, which writes nothing, stays out of it.
+    let mut ring = true;
     let kept = match shows {
         // Collapse repeated lines shows a line the same as the one before
         // it once, with the count before it. Only what shows collapses.
@@ -1981,20 +1986,26 @@ fn text_line_step(
                 .prompt
                 .stage
                 .repeat_line(&mut batch.out, &bytes, &plain, painted, text);
-            repeat = Some(made);
             // The run as it shows, its count before it in the colors the
-            // text carried into it.
-            let shows = p.prompt.stage.run_shown().map(|(shows, _)| shows);
-            Some(shows.unwrap_or_else(|| text.to_vec()))
+            // text carried into it, and the region it shows in.
+            let (shows, gen) = p
+                .prompt
+                .stage
+                .run_shown()
+                .unwrap_or_else(|| (text.to_vec(), 0));
+            repeat = Some(crate::log_state::KeptRun { repeat: made, gen });
+            Some(shows)
         }
         Shows::Now(painted) => {
             if let Some(text) = &result.display {
                 shown.extend_from_slice(text.as_bytes());
                 shown.extend_from_slice(b"\r\n");
             }
-            p.prompt
+            let swallowed = p
+                .prompt
                 .stage
                 .line(&mut batch.out, &bytes, &plain, painted, &shown);
+            ring = !(collapse && swallowed);
             result.display.as_ref().map(|text| text.as_bytes().to_vec())
         }
         Shows::Painted => {
@@ -2020,7 +2031,9 @@ fn text_line_step(
                 raw: Some(bytes),
             });
         }
-        scrollback.push(text);
+        if ring {
+            scrollback.push(text);
+        }
     }
     LineStep {
         result,

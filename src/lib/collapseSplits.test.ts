@@ -9,8 +9,8 @@ import { RegionWriter } from './terminalRegion';
 // and a fight with your prompt pinned, the pulses with it in the text
 // too, and lines with no prompt, as one read and as two cut at every
 // place, each after the login. Then scenes: runs whose line ends on a
-// background across pinned pulses, and your echo landing before the
-// session heard of it.
+// background across pinned pulses, your echo landing before the session
+// heard of it, and a pane that loads your scrollback during a run.
 // src-tauri/src/session_collapse_tests.rs writes them from the real
 // session steps, and holds the stored file to what the session sends now.
 // Each is replayed through the same decode, word wrap and writer
@@ -214,6 +214,13 @@ describe('repeated lines in scenes the stream replays leave out', () => {
     expect(rows.slice(-4)).toEqual([dodge, 'kill guard', `(2) ${dodge}`, parry]);
     const at = rows.indexOf(parry);
     expect(cellAt(term, at, 0).isFgDefault()).toBe(true);
+    term.dispose();
+  });
+
+  it('goes on in place in a pane that loaded your scrollback during the run', async () => {
+    const { term, rows, want } = await scene('pane');
+    expect(rows).toEqual(want);
+    expect(rows.slice(-2)).toEqual([`(5) ${dodge}`, parry]);
     term.dispose();
   });
 });
