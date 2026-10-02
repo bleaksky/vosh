@@ -22,11 +22,11 @@
 //!
 //! The numbers alone guard nothing, so the test also holds the session
 //! to what it must deliver under that load. The log keeps every row of
-//! every round in order, and the grid keeps every round its history
-//! holds, each one the same as the others and the last one last. The
-//! grid shows each prompt drawn in your design and never the game's
-//! own, so a session that stops drawing fails here and never reads as
-//! a faster run.
+//! every round in order, from the greeting to the rows after the last
+//! pulse, and the grid keeps every round its history holds, each one
+//! the same as the others and the last one last. The grid shows each
+//! prompt drawn in your design and never the game's own, so a session
+//! that stops drawing fails here and never reads as a faster run.
 
 use std::collections::HashSet;
 use std::io::{Read, Write};
@@ -298,6 +298,40 @@ fn same_rounds(rows: &[String], what: &str) -> Vec<Vec<String>> {
     rounds
 }
 
+/// The log keeps the rows [`rounds`] leaves out, around `first`, the
+/// first round it returns. The log starts with the greeting's line.
+/// Round 1 sits just before the first pulse row, laid out like `first`.
+/// What follows the last pulse row is how `first` starts, as after every
+/// other pulse row.
+fn whole_log(log: &[String], first: &[String]) {
+    let greeting = vosh_prompt::testkit::shown(&Mud::new(Options::new(Build::New)).greeting());
+    let greeting = greeting.lines().next().unwrap_or_default().trim_end();
+    assert_eq!(
+        log.first().map(String::as_str),
+        Some(greeting),
+        "the log lost the greeting"
+    );
+    let round_1 = &first[..first.len() - 1];
+    let pulse_1 = log
+        .iter()
+        .position(|row| pulse_of(row).is_some())
+        .expect("a pulse row");
+    assert!(
+        pulse_1 >= round_1.len() && log[pulse_1 - round_1.len()..pulse_1] == *round_1,
+        "the log lost or changed round 1: {:#?}",
+        &log[..=pulse_1]
+    );
+    let last = log
+        .iter()
+        .rposition(|row| pulse_of(row).is_some())
+        .expect("a pulse row");
+    let tail = &log[last + 1..];
+    assert!(
+        !tail.is_empty() && first.starts_with(tail),
+        "the log lost or changed the rows after the last pulse: {tail:#?}"
+    );
+}
+
 /// The grid's `round` shows each prompt drawn in your design. The game's
 /// own prompt row never reaches the grid, and the grid shows rows the
 /// log's `logged` round lacks, since the log keeps what the game wrote
@@ -340,6 +374,7 @@ async fn p2_a_captured_session_reaches_the_grid() {
         // The whole log, every round.
         let logged = same_rounds(&r.log, "log");
         assert_eq!(logged.len(), CYCLES - 1, "the log holds every round");
+        whole_log(&r.log, &logged[0]);
         // The grid's history holds the newest rounds, each with its
         // prompts drawn.
         let shown = same_rounds(&r.grid, "grid");
