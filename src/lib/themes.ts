@@ -582,6 +582,99 @@ const rosePine: AppTheme = {
   chrome: { accent: '#c4a7e7' },
 };
 
+// ── Everforest ──────────────────────────────────────────────────────
+// sainnhe's Everforest (github.com/sainnhe/everforest, MIT) at its
+// medium background. The palette comes from autoload/everforest.vim
+// and the ANSI mapping from the Terminal section of
+// colors/everforest.vim, which repeats the eight colors for the bright
+// slots and maps black and white as below.
+//
+//   dark    bg0 #2d353b  bg3 #475258  fg #d3c6aa  bg_visual #543a48
+//           red #e67e80  green #a7c080  yellow #dbbc7f  blue #7fbbb3
+//           purple #d699b6  aqua #83c092
+//           black bg3, white fg
+//   light   bg0 #fdf6e3  bg3 #e6e2cc  fg #5c6a72  bg_visual #eaedc8
+//           red #f85552  green #8da101  yellow #dfa000  blue #3a94c5
+//           purple #df69ba  aqua #35a77c
+//           black fg, white bg3
+//
+// The cursor is fg on bg0, Everforest's default reversed cursor. The
+// terminal paints the selection at 40 percent of selectionBackground,
+// so each variant stores the color that lands on its bg_visual there.
+// Everforest's green is the accent, the color its status line and
+// ports lead with.
+const everforestDark: AppTheme = {
+  id: 'everforest-dark',
+  label: 'Everforest Dark',
+  description: 'Soft forest greens and warm earth tones on a gray green dark.',
+  xterm: {
+    background: '#2d353b',
+    foreground: '#d3c6aa',
+    cursor: '#d3c6aa',
+    cursorAccent: '#2d353b',
+    selectionBackground: '#8f425c',
+    selectionForeground: '#d3c6aa',
+    black: '#475258',
+    red: '#e67e80',
+    green: '#a7c080',
+    yellow: '#dbbc7f',
+    blue: '#7fbbb3',
+    magenta: '#d699b6',
+    cyan: '#83c092',
+    white: '#d3c6aa',
+    brightBlack: '#475258',
+    brightRed: '#e67e80',
+    brightGreen: '#a7c080',
+    brightYellow: '#dbbc7f',
+    brightBlue: '#7fbbb3',
+    brightMagenta: '#d699b6',
+    brightCyan: '#83c092',
+    brightWhite: '#d3c6aa',
+  },
+  chrome: { accent: '#a7c080' },
+};
+
+// The light variant keeps every published color but white and bright
+// white, which map to fg as on the dark variant, since bg3 sits at 1.2:1
+// on bg0 and would hide the white text games send. Green, yellow,
+// purple, and aqua sit between 2.1:1 and 2.8:1 on bg0 as published, and
+// the terminal draws them that way. The chat pane lifts the game colors
+// it draws on the panel (chatColors.ts). The published green sits under
+// 3:1 on bg0, so the accent pins it lifted to 3:1 on the panel and the
+// raised surface, the same color the chrome derives for success.
+const everforestLight: AppTheme = {
+  id: 'everforest-light',
+  label: 'Everforest Light',
+  description: 'Soft forest greens and warm ink on cream paper.',
+  xterm: {
+    background: '#fdf6e3',
+    foreground: '#5c6a72',
+    cursor: '#5c6a72',
+    cursorAccent: '#fdf6e3',
+    selectionBackground: '#cee0a0',
+    selectionForeground: '#5c6a72',
+    black: '#5c6a72',
+    red: '#f85552',
+    green: '#8da101',
+    yellow: '#dfa000',
+    blue: '#3a94c5',
+    magenta: '#df69ba',
+    cyan: '#35a77c',
+    // Everforest maps bg3 #e6e2cc here.
+    white: '#5c6a72',
+    brightBlack: '#5c6a72',
+    brightRed: '#f85552',
+    brightGreen: '#8da101',
+    brightYellow: '#dfa000',
+    brightBlue: '#3a94c5',
+    brightMagenta: '#df69ba',
+    brightCyan: '#35a77c',
+    // Everforest maps bg3 #e6e2cc here too.
+    brightWhite: '#5c6a72',
+  },
+  chrome: { accent: '#809300' },
+};
+
 // ── Solarized ───────────────────────────────────────────────────────
 // Ethan Schoonover's Solarized (MIT licensed). The ground, the text, the
 // cursor, the normal colors, bright red (orange), and bright magenta
@@ -699,6 +792,8 @@ export const BUILTIN_THEMES: AppTheme[] = [
   tangoDark,
   classicVivid,
   highContrast,
+  everforestDark,
+  everforestLight,
 ];
 
 /** The chrome tokens a theme paints the window with. */

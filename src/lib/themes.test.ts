@@ -17,6 +17,7 @@ import {
   findTheme,
   migrateCustomChrome,
   themeTokens,
+  type XtermPalette,
 } from './themes';
 
 const hex = (h: string): Rgb => {
@@ -212,6 +213,109 @@ describe('contrast floors', () => {
     for (const [id, accent] of Object.entries(accents)) {
       expect(themeTokens(findTheme(id)).accent, id).toBe(accent);
     }
+  });
+});
+
+describe('Everforest', () => {
+  const NEW_THEMES = ['everforest-dark', 'everforest-light'];
+  // Black and bright black stay near the ground on purpose in many
+  // palettes, Everforest's own mapping included. Every other slot draws
+  // game text.
+  const WORD_SLOTS = [
+    'foreground',
+    'red',
+    'green',
+    'yellow',
+    'blue',
+    'magenta',
+    'cyan',
+    'white',
+    'brightRed',
+    'brightGreen',
+    'brightYellow',
+    'brightBlue',
+    'brightMagenta',
+    'brightCyan',
+    'brightWhite',
+  ] as const;
+  const hue = (h: string) => rgbToOklch(hex(h)).h;
+
+  it('are built in and sort into the light and dark lists by their ground', () => {
+    const ids = BUILTIN_THEMES.map((t) => t.id);
+    for (const id of NEW_THEMES) expect(ids, id).toContain(id);
+    expect(themeTokens(findTheme('everforest-dark')).appearance).toBe('dark');
+    expect(themeTokens(findTheme('everforest-light')).appearance).toBe('light');
+  });
+
+  // The colors Everforest publishes under 3:1 on its own ground.
+  // The terminal draws them as published. The chat pane lifts them where
+  // it draws them on the panel (chatColors.test.ts).
+  const PUBLISHED_FAINT: Record<string, readonly (typeof WORD_SLOTS)[number][]> = {
+    'everforest-light': [
+      'green',
+      'yellow',
+      'magenta',
+      'cyan',
+      'brightGreen',
+      'brightYellow',
+      'brightMagenta',
+      'brightCyan',
+    ],
+  };
+
+  it('draw every other game color at 3:1 or better on the terminal ground', () => {
+    for (const id of NEW_THEMES) {
+      const x = findTheme(id).xterm;
+      const ground = hex(x.background);
+      const faint: readonly string[] = PUBLISHED_FAINT[id] ?? [];
+      for (const slot of WORD_SLOTS) {
+        const ratio = contrast(hex(x[slot]), ground);
+        if (faint.includes(slot)) expect(ratio, `${id} ${slot}`).toBeLessThan(3);
+        else expect(ratio, `${id} ${slot}`).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  it('keep the published Everforest colors', () => {
+    const everforest: Partial<XtermPalette> = {
+      red: '#f85552',
+      green: '#8da101',
+      yellow: '#dfa000',
+      blue: '#3a94c5',
+      magenta: '#df69ba',
+      cyan: '#35a77c',
+    };
+    // Everforest repeats the six colors in the bright slots.
+    const brights = Object.fromEntries(
+      Object.entries(everforest).map(([slot, value]) => [
+        `bright${slot[0].toUpperCase()}${slot.slice(1)}`,
+        value,
+      ]),
+    );
+    expect(findTheme('everforest-light').xterm).toMatchObject({ ...everforest, ...brights });
+  });
+
+  it('paint the Everforest selection on its bg_visual', () => {
+    const visual: Record<string, string> = {
+      'everforest-dark': '#543a48',
+      'everforest-light': '#eaedc8',
+    };
+    for (const [id, want] of Object.entries(visual)) {
+      const x = findTheme(id).xterm;
+      // The terminal paints the selection at 40 percent.
+      const painted = composite(hex(x.selectionBackground), hex(x.background), 0.4);
+      expect(deltaE2000(painted, hex(want)), id).toBeLessThan(1);
+    }
+  });
+
+  it('take Everforest green as the accent', () => {
+    expect(themeTokens(findTheme('everforest-dark')).accent).toBe('#a7c080');
+    // The published green lifted to 3:1, the color the chrome also
+    // derives as success.
+    const light = themeTokens(findTheme('everforest-light'));
+    expect(light.accent).toBe(light.success);
+    expect(Math.abs(hue(light.accent) - hue('#8da101'))).toBeLessThan(2);
+    expect(contrast(hex(light.accent), hex(light.bg))).toBeGreaterThanOrEqual(3);
   });
 });
 
