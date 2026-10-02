@@ -576,6 +576,89 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
     h.finish(grid).await;
 }
 
+/// The pieces of the open row in a `session://prompt-state` payload, as
+/// (piece, column, width).
+fn open_spans(state: &Json) -> Vec<(i64, i64, i64)> {
+    state["open_row"]["spans"]
+        .as_array()
+        .expect("spans")
+        .iter()
+        .map(|s| {
+            (
+                s["piece"].as_i64().unwrap(),
+                s["col"].as_i64().unwrap(),
+                s["width"].as_i64().unwrap(),
+            )
+        })
+        .collect()
+}
+
+/// The newest prompt state whose open row is `cols` wide.
+fn state_at(h: &Harness, cols: usize) -> Option<Json> {
+    h.events("session://prompt-state")
+        .pop()
+        .filter(|s| s["open_row"]["plain"].as_str().map(str::len) == Some(cols))
+}
+
+// While the card watches, a new width that draws a push to the right
+// edge again sends the state with the repaint, so the card's marks and
+// click targets move with the push. The design has no clock, so nothing
+// else would send it before the next prompt.
+// The guard keeps other tests off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_new_width_tells_the_card_where_the_push_draws_now() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.set_prompt(vosh_prompt::PromptConfig {
+        template: "<%hp>%{right}%mana".into(),
+        ..codes(PROMPT)
+    })
+    .await;
+    crate::prompt_commands::prompt_watch(h.app.state(), true);
+    h.connect().await;
+
+    // The session starts 100 wide, so mana takes the last three columns.
+    h.until("the state at 100 columns", |h| state_at(h, 100).is_some())
+        .await;
+    let wide = state_at(&h, 100).expect("the state");
+    assert_eq!(
+        open_spans(&wide),
+        [(0, 0, 1), (1, 1, 4), (2, 5, 1), (3, 6, 91), (4, 97, 3)]
+    );
+
+    // Narrower, the same row draws again and the card hears it at once.
+    if let Some(handle) = h.state.session.lock().await.as_ref() {
+        assert!(handle.set_window_size(80, 40));
+    }
+    h.until("the state at 80 columns", |h| state_at(h, 80).is_some())
+        .await;
+    let narrow = state_at(&h, 80).expect("the state");
+    assert_eq!(
+        open_spans(&narrow),
+        [(0, 0, 1), (1, 1, 4), (2, 5, 1), (3, 6, 71), (4, 77, 3)]
+    );
+    assert_eq!(
+        repaints(&h).last().map(String::as_str),
+        Some(format!("<1020>{}800", " ".repeat(71)).as_str())
+    );
+    // The state names the region the repaint wrote, which the card finds
+    // on screen by its generation.
+    let gen = narrow["open_row"]["gen"].as_u64().expect("a generation");
+    let repaint = h
+        .events("session://output")
+        .last()
+        .and_then(|payload| output(&payload.to_string()).replace)
+        .expect("the repaint");
+    let mark = vosh_prompt::stage::mark(gen);
+    assert!(
+        repaint.bytes.windows(mark.len()).any(|w| w == mark),
+        "region {gen} in {:?}",
+        String::from_utf8_lossy(&repaint.bytes)
+    );
+    h.finish(grid).await;
+}
+
 // The webview echoes your line and sends it with two calls nothing
 // orders, so the session can hear of the echo only after the game
 // answered. The echo came before the answer on screen, so the prompt
