@@ -159,6 +159,8 @@ tick_count = "down_past_zero"
 affects_style = "chips"
 affects_marker = "plus_minus"
 affects_tint = true
+affects_running_out_hours = 5
+affects_almost_gone_hours = 2
 
 [[ui.tracked_affects]]
 name = "sanctuary"
