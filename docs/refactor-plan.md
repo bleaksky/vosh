@@ -6,48 +6,48 @@ Second draft, October 1, 2026. Ten area audits read the whole project at `one-wi
 
 The last commit of each phase updates this table and the Phase Status line in CLAUDE.md.
 
-| Phase | What                                      | Status                                                                                     |
-| ----- | ----------------------------------------- | ------------------------------------------------------------------------------------------ |
-| R0    | Freeze and set up                         | Done. The plan is in the repo, you have the stale branch list, and one flaky test is fixed |
-| R1    | Latency work                              | Done. a55a817 to 846c85d, plus 7dced45, which fixed the Windows and Linux build            |
-| R2    | Safety nets                               | Done. 5fdbe52 to 4882421 with R0. The captures wait for D37, the dead code tools for R23   |
-| R3    | The 13 bug fixes                          | Done. db3c0a4 to b9cc972 fix bugs 1 to 12. Bug 13 leaves with its code in R13 (D9)         |
-| R4    | Dead page code and old files              | Not started                                                                                |
-| R5    | Dead styles                               | Not started                                                                                |
-| R6    | Dead backend commands and app code        | Not started                                                                                |
-| R7    | Small crates tidied in place              | Not started                                                                                |
-| R8    | Crates merged, log crate split            | Not started                                                                                |
-| R9    | Prompt crate                              | Not started                                                                                |
-| R10   | App frame and the command layer           | Not started                                                                                |
-| R11   | Session and input                         | Not started                                                                                |
-| R12   | Profiles, loadouts and files on disk      | Not started                                                                                |
-| R13   | Native renderer and windows               | Not started                                                                                |
-| R14   | Connection state out of the profile       | Not started                                                                                |
-| R15   | Page command and event layer              | Not started                                                                                |
-| R16   | Page folder moves                         | Not started                                                                                |
-| R17   | Big components split, helpers merged      | Not started                                                                                |
-| R18   | Styles reorganized                        | Not started                                                                                |
-| R19   | Settings saves one field at a time        | Not started                                                                                |
-| R20   | One store pattern                         | Not started                                                                                |
-| R21   | Design merges                             | Not started                                                                                |
-| R22   | Phase 10. Logs, scrollback and search     | Not started                                                                                |
-| R23   | Docs, help and guards                     | Not started                                                                                |
-| R24   | Phase 11. Release groundwork              | Not started                                                                                |
-| R25   | Phase 11. Accessibility and high contrast | Not started                                                                                |
-| R26   | Phase 11. Signed packages                 | Not started                                                                                |
+| Phase | What                                      | Status                                                                                                                     |
+| ----- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| R0    | Freeze and set up                         | Done. The plan is in the repo, you have the stale branch list, and one flaky test is fixed                                 |
+| R1    | Latency work                              | Done. a55a817 to 846c85d, plus 7dced45, which fixed the Windows and Linux build                                            |
+| R2    | Safety nets                               | Done. 5fdbe52 to 4882421 with R0. D37 keeps the synthetic fixtures, the dead code tools wait for R23                       |
+| R3    | The 13 bug fixes                          | Done. db3c0a4 to b9cc972 fix bugs 1 to 12. Bug 13 leaves with its code in R13 (D9)                                         |
+| R4    | Dead page code and old files              | Done. 7e8199f to e347469, with D8, D20, D27 and D31                                                                        |
+| R5    | Dead styles                               | Done. d2357d2 to b99934a                                                                                                   |
+| R6    | Dead backend commands and app code        | Done. ba9284b to 3ac5cb9, with D3, D5, D6, D7, D12, D14 and the D20 exporter. The stand in functions stay with D9 option B |
+| R7    | Small crates tidied in place              | Not started                                                                                                                |
+| R8    | Crates merged, log crate split            | Not started                                                                                                                |
+| R9    | Prompt crate                              | Not started                                                                                                                |
+| R10   | App frame and the command layer           | Not started                                                                                                                |
+| R11   | Session and input                         | Not started                                                                                                                |
+| R12   | Profiles, loadouts and files on disk      | Not started                                                                                                                |
+| R13   | Native renderer and windows               | Not started                                                                                                                |
+| R14   | Connection state out of the profile       | Not started                                                                                                                |
+| R15   | Page command and event layer              | Not started                                                                                                                |
+| R16   | Page folder moves                         | Not started                                                                                                                |
+| R17   | Big components split, helpers merged      | Not started                                                                                                                |
+| R18   | Styles reorganized                        | Not started                                                                                                                |
+| R19   | Settings saves one field at a time        | Not started                                                                                                                |
+| R20   | One store pattern                         | Not started                                                                                                                |
+| R21   | Design merges                             | Not started                                                                                                                |
+| R22   | Phase 10. Logs, scrollback and search     | Not started                                                                                                                |
+| R23   | Docs, help and guards                     | Not started                                                                                                                |
+| R24   | Phase 11. Release groundwork              | Not started                                                                                                                |
+| R25   | Phase 11. Accessibility and high contrast | Not started                                                                                                                |
+| R26   | Phase 11. Signed packages                 | Not started                                                                                                                |
 
 The R1 section below names d2239d7. That is the same work before it moved onto `one-window`, where it landed as 72f95e6.
 
 ## Decisions taken
 
-You approved this plan on October 1, 2026. Every decision takes its recommended answer from the answer sheet, except four that wait for you. Until you answer one of them, the work keeps today's behavior for it.
+You approved this plan on October 1, 2026. Every decision takes its recommended answer from the answer sheet, except four you answered yourself the same day.
 
-- D10. Berkeley Mono stays as it is.
-- D1. Nothing is pushed and main does not move. Every phase lands on `one-window` on your machine.
-- D37. No new captures. The synthetic wire fixtures serve.
-- D20, the `VOSH_WRITE_PLAYS` part. The exporter stays. The rest of D20 takes its recommended answer.
+- D10. Option B. Vosh no longer ships Berkeley Mono, and the bundled JetBrains Mono is the default font. A saved list that names Berkeley Mono draws with the copy installed on your computer, or with JetBrains Mono where none is installed. 9541225 to 1f99108 made the change before R4, and a fix after R6 makes the xterm renderer measure its cell again once your font loads.
+- D1. Option C. Every phase lands on `one-window` on your machine, and nothing is pushed.
+- D37. Option C. The wire fixtures stay synthetic and no captures land, so R2 item 8 and its R7 fallback drop. The CLAUDE.md quality bar still asks for captured bytes, and that line changes to say so once you approve the new wording.
+- D20. Every part takes its recommended answer. The `VOSH_WRITE_PLAYS` exporter left in R6 with the rest of the debug tools.
 
-While D1 waits, CI never sees the refactor. A phase that touches platform code runs `cargo clippy -p vosh-app --all-targets --target x86_64-pc-windows-gnu -- -D warnings` on the Mac in place of CI. Nothing here compiles its Linux code, so whoever lands the phase reads that code through.
+With D1 as answered, CI never sees the refactor. A phase that touches platform code runs `cargo clippy -p vosh-app --all-targets --target x86_64-pc-windows-gnu -- -D warnings` on the Mac in place of CI. Nothing here compiles its Linux code, so whoever lands the phase reads that code through.
 
 ## Answer sheet
 
@@ -510,7 +510,7 @@ Each command goes with its registration in lib.rs, its page wrapper in session.t
 - The stray doc comment about macro bindings that sits above `import_detect` and documents the wrong function.
 - The `"scrollback.bin"` name in the mudclient folder copy, which can never match because the file has always been scrollback.txt. Goes with the copy (D15).
 - The mudclient folder copy itself, 86 lines. The first tagged release already used the vosh folder. D15, and it must leave no later than the map store.
-- The `VOSH_WRITE_PLAYS` exporter, 31 test lines, whose screenshot harness is not in the repo. Needs D20.
+- The `VOSH_WRITE_PLAYS` exporter, 31 test lines, whose screenshot harness is not in the repo. Needs D20, which removes it.
 - Stale comments in profile.rs and session.rs that say quick keys persist. They reset on restart, as HELP.md says.
 - An empty untracked folder `src-tauri/src/session/`. A local folder removal only, nothing to commit.
 
@@ -780,7 +780,7 @@ Goal. Remove 3.5 and the parts of 3.6 that don't wait for R13.
 Work.
 
 1. Each dead command with its registration, its page wrapper and any event only it sent, one commit per family. The ones that need a decision wait for it. `vosh://macro-groups-changed` stays, and `pane_layout_get` stays with only its `profile` argument removed.
-2. The never run app code in 3.6, with D20 for the `VOSH_WRITE_PLAYS` exporter. The macOS surface code and the uniform wait for R13, and the mudclient copy for R8.
+2. The never run app code in 3.6, with the `VOSH_WRITE_PLAYS` exporter, which D20 removes. The macOS surface code and the uniform wait for R13, and the mudclient copy for R8.
 3. The 20 stand in functions, only if D9 is option A or C. With option B they stay, and R13 narrows build.rs to macOS when the Windows and Linux surface code leaves.
 4. D12 with D14. The three old `[ui]` fields leave the Settings payload and the page in the same commit, after the payload gets serde defaults, so an older page or a missing field never fails to save. Rust keeps them on disk as stored values it writes back without reading. The three empty Loadout tables stop being written, in their own commit with the golden diff.
 5. The unused shell plugin.
@@ -800,7 +800,7 @@ Work.
 1. The deletions in 3.7.
 2. The test only items in 3.11. vosh-log gets a `testkit` feature and a dev dependency on itself with that feature, as vosh-prompt has, and the app's dev dependency turns it on.
 3. vosh-ansi shrinks to `plain_text`. Its `vte` line keeps `default-features = false`, because the renderer's terminal library breaks without it.
-4. The real captures, if R2 could not take them.
+4. No real captures, since D37 keeps the synthetic fixtures.
 5. Merge copies inside each crate. One subnegotiation framer for TTYPE, CHARSET, NEW-ENVIRON, NAWS and GMCP. One callback cleanup in the Lua engine. Shared row mappers in the log crate. A `Trigger::new` constructor that replaces about 65 eight field literals in tests.
 6. Start `docs/architecture.md` with the crate map and the twins table from 2.10. Each later phase updates its section.
 
@@ -918,7 +918,7 @@ Work.
 4. Remove the macOS on top code in 3.6 and the unused uniform.
 5. `app/windows.rs`, `app/menu/` and `app/system_fonts.rs`. `install_probe` becomes `install`.
 6. D9. With option B, remove the Windows and Linux surface code, narrow build.rs to macOS, and keep the platform seam and the stand in functions so option C can come later. That removes about 800 lines and three dependencies.
-7. D10. Read the bundled fonts from the app bundle at launch instead of baking about 9.5 MB into the binary.
+7. D10. Read the bundled JetBrains Mono from the app bundle at launch instead of baking about 4.9 MB into the binary.
 
 Checks. Frame tests, pointer tests, the session tests that drive the grid, the latency tests, the app check on macOS (cursor shapes over the divider and links, wheel, selection, right click menu, find, copy, fullscreen corners), and Windows and Linux compile and clippy in CI.
 
@@ -1125,6 +1125,7 @@ D10. Bundled fonts (R0, R13, R24). Blocks 1.0.
 - B. Remove it at R0. JetBrains Mono becomes the default, and profiles that name Berkeley Mono fall back to it. Git history still holds the files, and only a history rewrite with a force push removes them, which is your call.
 - Separately, the renderer bakes about 9.5 MB of fonts into the binary while the same files ship for the page. Reading them from the app bundle at launch removes the copy (R13).
 - Recommendation. Answer this first. B unless A is certain. Then read the fonts from the bundle in R13.
+- Answered October 1, 2026. Option B. With Berkeley Mono gone, the renderer bakes the two JetBrains Mono files, about 4.9 MB, and R13 moves them out of the binary.
 
 D1. Branch flow for the refactor (R0). Blocks 1.0.
 
@@ -1132,6 +1133,7 @@ D1. Branch flow for the refactor (R0). Blocks 1.0.
 - B. Keep working on `one-window` and turn on CI for pushes to every branch.
 - C. Keep today's flow with local gates only.
 - Recommendation. A, and also turn on CI for branch pushes. CI costs nothing for a public repo, and you still decide every push. Today CI runs only for pushes to main and pull requests into it, so without this, Windows and Linux code is never compiled during the refactor.
+- Answered October 1, 2026. Option C. Each phase lands on `one-window` on your machine with no pushes.
 
 D39. Where this plan lives (R0). Add it as `docs/refactor-plan.md` with a status table at the top, and change CLAUDE.md Phase Status to name it and the current R phase. The last commit of each phase updates both, and your approval of the phase covers that one CLAUDE.md line. Recommendation. Yes. Kept outside the repo, a later session can't find it from CLAUDE.md alone.
 
@@ -1144,6 +1146,7 @@ D37. Real telnet and ANSI bytes (R2, or R7).
 - B. Build the Aabahran server from its local source and capture a throwaway character on your machine. No player text at all, but the server has to build.
 - C. Keep the synthetic files and change the quality bar to say so.
 - Recommendation. A. It takes a few minutes of your time and gives the parsers the bytes the real server sends.
+- Answered October 1, 2026. Option C. The synthetic fixtures stay. The quality bar line in CLAUDE.md waits for your word on its new wording.
 
 ### Needed at R3
 
@@ -1172,6 +1175,7 @@ D20. Debug tools (R4).
 - Keep the `/__vosh-dbg` sink, which is dev only.
 - Keep the `VOSH_WRITE_PLAYS` exporter only if its screenshot harness still lives somewhere outside the repo.
 - Recommendation. Yes to all three. Tell me whether the harness exists.
+- Answered October 1, 2026. Remove the four tools, keep the `/__vosh-dbg` sink, and remove the exporter too. R4 removed the tools, and R6 removed the exporter.
 
 D27. The Char.State and weather stores (R4). Recommendation. Drop them now and keep their fixtures. They come back with the pane that shows them.
 
