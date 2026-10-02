@@ -1,13 +1,12 @@
 //! Trigger store. Owns the user-defined triggers, compiles their regex on
 //! insert, and exposes them in priority order.
 
-use std::collections::BTreeSet;
-
 use regex::Regex;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
+use crate::groups::GroupSwitch;
 use crate::revision::next_revision;
 use crate::trigger::action::TriggerAction;
 
@@ -258,11 +257,9 @@ pub(crate) struct CompiledTrigger {
 #[derive(Default)]
 pub struct TriggerStore {
     items: Vec<CompiledTrigger>,
-    /// Group names the user has bulk-disabled. A trigger whose
-    /// `group` is in this set is skipped in matching regardless of
-    /// its own `enabled` flag. Stored as the disabled inverse so a
-    /// freshly-tagged group defaults to ON.
-    disabled_groups: BTreeSet<String>,
+    /// The groups you turned off. A trigger in an off group is
+    /// skipped in matching whatever its own `enabled` flag says.
+    groups: GroupSwitch,
     /// See [`TriggerStore::revision`].
     revision: u64,
 }
@@ -355,58 +352,35 @@ impl TriggerStore {
     /// engine consumes this directly; per-trigger and per-pattern
     /// enable flags still apply downstream of the group check.
     pub(crate) fn iter_compiled(&self) -> impl Iterator<Item = &CompiledTrigger> {
-        self.items.iter().filter(|c| {
-            c.trigger
-                .group
-                .as_deref()
-                .map_or(true, |g| !self.disabled_groups.contains(g))
-        })
+        self.items
+            .iter()
+            .filter(|c| self.groups.allows(c.trigger.group.as_deref()))
     }
 
     /// True when the named group is effectively enabled. Empty / missing
     /// group names are always "enabled" since ungrouped triggers do not
     /// participate in the bulk-disable mechanism.
     pub fn is_group_enabled(&self, group: &str) -> bool {
-        group.is_empty() || !self.disabled_groups.contains(group)
+        self.groups.is_enabled(group)
     }
 
     /// Toggle a whole group. Calling with `true` removes the group
     /// from the disabled set; `false` adds it. No-op for an empty
     /// group name.
     pub fn set_group_enabled(&mut self, group: &str, enabled: bool) {
-        if group.is_empty() {
-            return;
-        }
-        if enabled {
-            self.disabled_groups.remove(group);
-        } else {
-            self.disabled_groups.insert(group.to_string());
-        }
+        self.groups.set_enabled(group, enabled);
     }
 
     /// Sorted list of every group referenced by at least one trigger,
     /// paired with its current enabled state.
     pub fn groups(&self) -> Vec<(String, bool)> {
-        let mut names: BTreeSet<String> = BTreeSet::new();
-        for t in &self.items {
-            if let Some(g) = &t.trigger.group {
-                if !g.is_empty() {
-                    names.insert(g.clone());
-                }
-            }
-        }
-        names
-            .into_iter()
-            .map(|n| {
-                let enabled = !self.disabled_groups.contains(&n);
-                (n, enabled)
-            })
-            .collect()
+        self.groups
+            .list(self.items.iter().filter_map(|t| t.trigger.group.as_deref()))
     }
 
     /// Persistence accessor — returns the disabled group names.
     pub fn disabled_groups(&self) -> Vec<String> {
-        self.disabled_groups.iter().cloned().collect()
+        self.groups.disabled()
     }
 
     /// Persistence inverse — replaces the disabled-group set.
@@ -415,11 +389,7 @@ impl TriggerStore {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        self.disabled_groups = groups
-            .into_iter()
-            .map(Into::into)
-            .filter(|s| !s.is_empty())
-            .collect();
+        self.groups.set_disabled(groups);
     }
 
     /// Replace every trigger from a JSON array. Returns the new count.
@@ -436,7 +406,7 @@ impl TriggerStore {
         // Take only after the fallible build succeeded: an early return on
         // a bad pattern must leave self (including its disabled set)
         // untouched.
-        next.disabled_groups = std::mem::take(&mut self.disabled_groups);
+        next.groups = std::mem::take(&mut self.groups);
         next.revision = next_revision();
         *self = next;
         Ok(self.items.len())
@@ -452,7 +422,7 @@ impl std::fmt::Debug for TriggerStore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TriggerStore")
             .field("count", &self.items.len())
-            .field("disabled_groups", &self.disabled_groups)
+            .field("groups", &self.groups)
             .field("revision", &self.revision)
             .finish()
     }
