@@ -2973,17 +2973,14 @@ pub(crate) struct UiConfigPayload {
     pub split_divider_color: Option<String>,
     pub input_echo_color: Option<String>,
     pub echo_macros: bool,
-    pub side_panels_fill_height: bool,
     pub paste_line_delay_ms: u32,
     pub spellcheck_prompt: bool,
     pub input_cursor_style: String,
-    pub vitals: crate::profile_config::VitalsConfig,
     pub vitals_density: String,
     pub vitals_values: String,
     pub vitals_meter: String,
     pub vitals_warn_thirds: bool,
     pub vitals_hide_when_pinned: bool,
-    pub moons_position: String,
     pub chip_style: String,
     pub tick_count: String,
     pub affects_style: String,
@@ -3024,17 +3021,14 @@ impl UiConfigPayload {
             split_divider_color: ui.split_divider_color.clone(),
             input_echo_color: ui.input_echo_color.clone(),
             echo_macros: ui.echo_macros,
-            side_panels_fill_height: ui.side_panels_fill_height,
             paste_line_delay_ms: ui.paste_line_delay_ms,
             spellcheck_prompt: ui.spellcheck_prompt,
             input_cursor_style: ui.input_cursor_style.clone(),
-            vitals: ui.vitals.clone(),
             vitals_density: ui.vitals_density.clone(),
             vitals_values: ui.vitals_values.clone(),
             vitals_meter: ui.vitals_meter.clone(),
             vitals_warn_thirds: ui.vitals_warn_thirds,
             vitals_hide_when_pinned: ui.vitals_hide_when_pinned,
-            moons_position: ui.moons_position.clone(),
             chip_style: ui.chip_style.clone(),
             tick_count: ui.tick_count.clone(),
             affects_style: ui.affects_style.clone(),
@@ -3048,7 +3042,9 @@ impl UiConfigPayload {
     /// goes. `ui_set_config` calls this, and each Settings tab saves the
     /// whole snapshot, so a field left out here would reset on the next
     /// save from any tab. `dock_layout` stays out on purpose, since only
-    /// the conversion from the old dock to panes reads it.
+    /// the conversion from the old dock to panes reads it. So do the old
+    /// `vitals`, `moons_position` and `side_panels_fill_height`, which
+    /// nothing reads and every save writes back as loaded (D12, D14).
     pub(crate) fn apply_to(self, ui: &mut crate::profile_config::UiConfig) {
         let UiConfigPayload {
             theme,
@@ -3069,17 +3065,14 @@ impl UiConfigPayload {
             split_divider_color,
             input_echo_color,
             echo_macros,
-            side_panels_fill_height,
             paste_line_delay_ms,
             spellcheck_prompt,
             input_cursor_style,
-            vitals,
             vitals_density,
             vitals_values,
             vitals_meter,
             vitals_warn_thirds,
             vitals_hide_when_pinned,
-            moons_position,
             chip_style,
             tick_count,
             affects_style,
@@ -3133,7 +3126,6 @@ impl UiConfigPayload {
             }
         });
         ui.echo_macros = echo_macros;
-        ui.side_panels_fill_height = side_panels_fill_height;
         // Clamp to a sane range so a malformed input cannot freeze the
         // paste indicator (0–10s per line is plenty).
         ui.paste_line_delay_ms = paste_line_delay_ms.min(10_000);
@@ -3151,51 +3143,6 @@ impl UiConfigPayload {
         ui.vitals_meter = crate::profile_config::coerce_vitals_meter(vitals_meter);
         ui.vitals_warn_thirds = vitals_warn_thirds;
         ui.vitals_hide_when_pinned = vitals_hide_when_pinned;
-        // Normalize vitals glyphs + width. Empty glyph strings would
-        // render zero-width bars; collapse to the default in that case
-        // so the user cannot accidentally hide the bar via a typo.
-        // Also coerce unknown layout / percent_color values back to
-        // the defaults so a hand-edited profile.toml typo does not
-        // break the panel render.
-        let mut v = vitals;
-        if v.bar_filled.is_empty() {
-            v.bar_filled = "▰".to_string();
-        }
-        if v.bar_empty.is_empty() {
-            v.bar_empty = "▱".to_string();
-        }
-        v.bar_width = v.bar_width.clamp(4, 60);
-        // Every layout the settings picker offers has to be listed
-        // here. The four Ember layouts (ember/ledger, gauges, pips,
-        // strip) join the legacy stacked / inline pair; anything else
-        // is a hand-edited typo and falls back to the default. This
-        // list went stale once already when gauges / pips / strip
-        // shipped, which silently reset every pick to the ledger.
-        v.layout = crate::profile_config::coerce_vitals_layout(v.layout);
-        if v.percent_color != "fill" && v.percent_color != "gradient" {
-            v.percent_color = "fill".to_string();
-        }
-        // Legacy `bar_style: "spark"` migrates to solid + history
-        // layout. The spark mode was reframed as a layout that wraps
-        // any bar style with a braille trend grid below.
-        if v.bar_style == "spark" {
-            v.bar_style = "solid".to_string();
-            v.bar_layout = "with_history".to_string();
-        }
-        if v.bar_style != "solid" && v.bar_style != "track" && v.bar_style != "ramped" {
-            v.bar_style = "solid".to_string();
-        }
-        if v.bar_layout != "plain" && v.bar_layout != "with_history" {
-            v.bar_layout = "plain".to_string();
-        }
-        ui.vitals = v;
-        // Coerce an unknown moons_position value back to "right-edge"
-        // so a hand-edited profile.toml typo cannot leave the status
-        // bar rendering moons in an unrecognized slot.
-        ui.moons_position = match moons_position.as_str() {
-            "before-time" | "after-time" | "right-edge" => moons_position,
-            _ => "right-edge".to_string(),
-        };
         // Same coercion for chip_style — an unknown variant from a
         // hand-edited profile.toml falls back to the default rather
         // than letting the frontend render a chip with no style.

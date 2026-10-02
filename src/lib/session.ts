@@ -1871,9 +1871,6 @@ export interface UiConfig {
    *  locally like typed commands, so under lag the keybind visibly
    *  registered before the world responds. */
   echo_macros: boolean;
-  /** When true, left/right panel zones extend the full window height
-   *  and the input + status bar live only under the terminal column. */
-  side_panels_fill_height: boolean;
   /** Milliseconds to wait between lines when sending a multi-line
    *  paste. 0 = no pacing; non-zero spreads sends out so the MUD
    *  flood filter does not kick. Clamped server-side to [0, 10000]. */
@@ -1887,9 +1884,6 @@ export interface UiConfig {
   spellcheck_prompt: boolean;
   /** Shape of the command-line caret. Defaults to the ember block. */
   input_cursor_style: InputCursorStyle;
-  /** Vitals panel appearance. Toggles which columns render and lets
-   *  the user pick their own bar glyphs and width. */
-  vitals: VitalsConfig;
   /** How the vitals under the panel's panes lay out, one of
    *  VITALS_DENSITIES. */
   vitals_density: VitalsDensity;
@@ -1902,11 +1896,6 @@ export interface UiConfig {
   /** Hide the panel's vitals while your prompt is pinned, so the panes
    *  take their room. On unless you turn it off. */
   vitals_hide_when_pinned: boolean;
-  /** Where to render the World.Moons phase glyphs in the status bar.
-   *  `right-edge` is the historical placement; `before-time` and
-   *  `after-time` dock the moons next to the centered tick + MUD
-   *  time chip on the chosen side. */
-  moons_position: MoonsPosition;
   /** How the status line draws the tick, the game time, and the moons.
    *  The value alone, a caption before each value, or an icon before
    *  each. The moons are icons already, so only Caption changes them. */
@@ -1926,7 +1915,6 @@ export interface UiConfig {
   generation?: number;
 }
 
-export type MoonsPosition = 'right-edge' | 'before-time' | 'after-time';
 export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
 
 /** Read a stored or broadcast chip style. Anything unknown is the
@@ -1946,126 +1934,6 @@ export type TickCount = (typeof TICK_COUNTS)[number];
 export function normalizeTickCount(raw: unknown): TickCount {
   return TICK_COUNTS.find((count) => count === raw) ?? 'up';
 }
-
-/** `ember` (the default) draws a sidebar-pane block — caps header
- *  plus three thin fixed-color track bars; `stacked` is the
- *  historical one-vital-per-row look; `inline` packs all three onto
- *  a single tintin-nprompt-style row. */
-export type VitalsLayout = 'ember' | 'gauges' | 'pips' | 'strip' | 'stacked' | 'inline';
-export type VitalsStripAlign = 'left' | 'center' | 'right';
-export type VitalsPercentColor = 'fill' | 'gradient';
-export type VitalsBarStyle = 'solid' | 'track' | 'ramped';
-/** Whether to stack a braille history grid below the bar. Independent
- *  from `bar_style` — pair any bar style with any layout. Legacy
- *  `bar_style: 'spark'` migrates to `bar_style: 'solid'` +
- *  `bar_layout: 'with_history'` on load. */
-export type VitalsBarLayout = 'plain' | 'with_history';
-/** Sub-style of the inline vitals layout. Applies when
- *  `layout === 'inline'`. `plain` is the historical tintin nprompt
- *  rendering; `drain` renders each vital as a chip with caption +
- *  percent in the top corners and an inset drain background that
- *  glows along its leading edge as it shrinks; `badge` wraps each
- *  vital in a simpler chip with the percent floating as its own
- *  small bordered pill above the upper-right corner. */
-export type VitalsInlineStyle = 'plain' | 'drain' | 'badge';
-/** How the percent text gets colored in the underline / badge inline
- *  styles. `stat` mirrors the numeric stat color; `drain` ramps
- *  through warn-gold → orange → danger-red as the value drops;
- *  `accent` forces the brand pink at every fill. */
-export type VitalsPercentColorMode = 'stat' | 'drain' | 'accent';
-/** Chip wrapper for the percent value in the plain inline layout and
- *  in `%pct_*` template tokens. `none` keeps the historical `(75%)`
- *  parens text. The styled variants wrap the percent in a small
- *  chip — `pill` is the bordered tick/time chrome, `soft` is a
- *  borderless wash of the percent color, `glow` adds a color-tinted
- *  border plus an outer glow, `drain` fills the chip body
- *  proportional to the percent so the chip doubles as a tiny bar.
- *  The drain and badge inline styles use their own built-in percent
- *  rendering and ignore this setting. */
-export type VitalsPctChipStyle = 'none' | 'pill' | 'soft' | 'glow' | 'drain';
-
-export interface VitalsConfig {
-  show_bar: boolean;
-  show_percent: boolean;
-  show_numeric: boolean;
-  show_delta: boolean;
-  bar_filled: string;
-  bar_empty: string;
-  bar_width: number;
-  bar_style: VitalsBarStyle;
-  bar_layout: VitalsBarLayout;
-  layout: VitalsLayout;
-  /** Sub-style for `layout: inline` only. Ignored for stacked. */
-  inline_style: VitalsInlineStyle;
-  /** Percent text color across the inline underline / badge styles.
-   *  Independent of `percent_color` (which still drives the stacked
-   *  layout's percent rendering). */
-  percent_color_mode: VitalsPercentColorMode;
-  /** Wrap the percent value in a styled chip in the plain inline
-   *  layout and in `%pct_*` template tokens. `none` keeps the
-   *  historical parens. */
-  pct_chip_style: VitalsPctChipStyle;
-  percent_color: VitalsPercentColor;
-  template_enabled: boolean;
-  template: string;
-  /** Override the bar color for the corresponding vital. Empty string
-   *  keeps the built-in ramp (green-to-red for hp, blue-to-red for
-   *  mn, orange-to-red for mv). Non-empty values are any CSS color. */
-  hp_color: string;
-  mn_color: string;
-  mv_color: string;
-  /** When true (the default), bars drain through red as the value
-   *  drops — preserves the "low value reads as danger" cue. When
-   *  false, the configured color (or the built-in's full color when
-   *  no override) is used at every fill percentage. */
-  use_color_ramp: boolean;
-  /** CSS font-family stack applied to the bar glyphs only. The
-   *  surrounding label / percent / numeric / delta columns stay in
-   *  the app font. Empty falls through to the parent font. */
-  bar_font: string;
-  /** Pulses a soft red peripheral vignette on the main window's
-   *  edges when hp drops below 30%. Additive — sits on top of the
-   *  regular vitals bar rather than replacing it. */
-  low_hp_vignette: boolean;
-  /** Width in pixels of the vitals block when it sits in a top or
-   *  bottom strip. 0 uses a natural width (a rail-width block for the
-   *  card layouts, content width for strip and inline). Any positive
-   *  value caps the block, and `strip_align` places it across the row.
-   *  Ignored in a side zone, where the column width sizes the bar. */
-  strip_width: number;
-  /** Where a capped strip block sits across the row. */
-  strip_align: VitalsStripAlign;
-}
-
-export const DEFAULT_VITALS_TEMPLATE =
-  '%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v - (%tick) - %time';
-
-export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
-  show_bar: true,
-  show_percent: true,
-  show_numeric: true,
-  show_delta: true,
-  bar_filled: '▰',
-  bar_empty: '▱',
-  bar_width: 20,
-  bar_style: 'solid',
-  bar_layout: 'plain',
-  layout: 'ember',
-  inline_style: 'plain',
-  percent_color_mode: 'drain',
-  pct_chip_style: 'none',
-  percent_color: 'fill',
-  template_enabled: false,
-  template: DEFAULT_VITALS_TEMPLATE,
-  hp_color: '',
-  mn_color: '',
-  mv_color: '',
-  use_color_ramp: true,
-  bar_font: '',
-  low_hp_vignette: false,
-  strip_width: 0,
-  strip_align: 'left',
-};
 
 // Dedupe the mount-time burst: App, Input, and the tracked affects
 // store all call getUiConfig on first render. Sharing one
@@ -2103,17 +1971,14 @@ export interface RawUiConfig {
   split_divider_color?: string | null;
   input_echo_color?: string | null;
   echo_macros?: boolean;
-  side_panels_fill_height?: boolean;
   paste_line_delay_ms?: number;
   spellcheck_prompt?: boolean;
   input_cursor_style?: string;
-  vitals?: Partial<VitalsConfig>;
   vitals_density?: string;
   vitals_values?: string;
   vitals_meter?: string;
   vitals_warn_thirds?: boolean;
   vitals_hide_when_pinned?: boolean;
-  moons_position?: string;
   chip_style?: string;
   tick_count?: string;
   affects_style?: string;
@@ -2173,130 +2038,23 @@ export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
         ? cfg.input_echo_color
         : null,
     echo_macros: cfg.echo_macros !== false,
-    side_panels_fill_height: Boolean(cfg.side_panels_fill_height),
     paste_line_delay_ms:
       typeof cfg.paste_line_delay_ms === 'number' && cfg.paste_line_delay_ms >= 0
         ? Math.min(10_000, Math.floor(cfg.paste_line_delay_ms))
         : 500,
     spellcheck_prompt: Boolean(cfg.spellcheck_prompt),
     input_cursor_style: normalizeInputCursorStyle(cfg.input_cursor_style),
-    vitals: normalizeVitalsConfig(cfg.vitals),
     vitals_density: normalizeVitalsDensity(cfg.vitals_density),
     vitals_values: normalizeVitalsValues(cfg.vitals_values),
     vitals_meter: normalizeVitalsMeter(cfg.vitals_meter),
     vitals_warn_thirds: cfg.vitals_warn_thirds === true,
     vitals_hide_when_pinned: cfg.vitals_hide_when_pinned !== false,
-    moons_position:
-      cfg.moons_position === 'before-time' || cfg.moons_position === 'after-time'
-        ? cfg.moons_position
-        : 'right-edge',
     chip_style: normalizeChipStyle(cfg.chip_style),
     tick_count: normalizeTickCount(cfg.tick_count),
     affects_style: normalizeAffectsStyle(cfg.affects_style),
     affects_marker: normalizeAffectsMarker(cfg.affects_marker),
     affects_tint: cfg.affects_tint === true,
     ...(typeof cfg.generation === 'number' ? { generation: cfg.generation } : {}),
-  };
-}
-
-function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsConfig {
-  const v = raw ?? {};
-  return {
-    show_bar: typeof v.show_bar === 'boolean' ? v.show_bar : DEFAULT_VITALS_CONFIG.show_bar,
-    show_percent:
-      typeof v.show_percent === 'boolean' ? v.show_percent : DEFAULT_VITALS_CONFIG.show_percent,
-    show_numeric:
-      typeof v.show_numeric === 'boolean' ? v.show_numeric : DEFAULT_VITALS_CONFIG.show_numeric,
-    show_delta: typeof v.show_delta === 'boolean' ? v.show_delta : DEFAULT_VITALS_CONFIG.show_delta,
-    bar_filled:
-      typeof v.bar_filled === 'string' && v.bar_filled.length > 0
-        ? v.bar_filled
-        : DEFAULT_VITALS_CONFIG.bar_filled,
-    bar_empty:
-      typeof v.bar_empty === 'string' && v.bar_empty.length > 0
-        ? v.bar_empty
-        : DEFAULT_VITALS_CONFIG.bar_empty,
-    bar_width:
-      typeof v.bar_width === 'number' && Number.isFinite(v.bar_width)
-        ? Math.max(4, Math.min(60, Math.floor(v.bar_width)))
-        : DEFAULT_VITALS_CONFIG.bar_width,
-    bar_style:
-      v.bar_style === 'track' || v.bar_style === 'ramped' || v.bar_style === 'solid'
-        ? v.bar_style
-        : // Legacy `bar_style: 'spark'` migrates to solid + history
-          // layout. Anything unrecognized falls back to the default.
-          DEFAULT_VITALS_CONFIG.bar_style,
-    bar_layout:
-      // Migrate legacy spark style → with_history layout. Otherwise
-      // honor the persisted layout if it is in range.
-      (v as { bar_style?: unknown }).bar_style === 'spark'
-        ? 'with_history'
-        : v.bar_layout === 'with_history' || v.bar_layout === 'plain'
-          ? v.bar_layout
-          : DEFAULT_VITALS_CONFIG.bar_layout,
-    strip_width:
-      typeof v.strip_width === 'number' && Number.isFinite(v.strip_width)
-        ? Math.max(0, Math.min(2000, Math.floor(v.strip_width)))
-        : DEFAULT_VITALS_CONFIG.strip_width,
-    strip_align:
-      v.strip_align === 'left' || v.strip_align === 'center' || v.strip_align === 'right'
-        ? v.strip_align
-        : DEFAULT_VITALS_CONFIG.strip_align,
-    layout:
-      v.layout === 'ember' ||
-      v.layout === 'gauges' ||
-      v.layout === 'pips' ||
-      v.layout === 'strip' ||
-      v.layout === 'stacked' ||
-      v.layout === 'inline'
-        ? v.layout
-        : DEFAULT_VITALS_CONFIG.layout,
-    inline_style:
-      v.inline_style === 'drain' || v.inline_style === 'badge'
-        ? v.inline_style
-        : // Accept legacy `underline` value from the first
-          // implementation pass and silently migrate to `drain`.
-          (v.inline_style as unknown) === 'underline'
-          ? 'drain'
-          : DEFAULT_VITALS_CONFIG.inline_style,
-    percent_color_mode:
-      v.percent_color_mode === 'stat' || v.percent_color_mode === 'accent'
-        ? v.percent_color_mode
-        : DEFAULT_VITALS_CONFIG.percent_color_mode,
-    pct_chip_style:
-      v.pct_chip_style === 'pill' ||
-      v.pct_chip_style === 'soft' ||
-      v.pct_chip_style === 'glow' ||
-      v.pct_chip_style === 'drain'
-        ? v.pct_chip_style
-        : DEFAULT_VITALS_CONFIG.pct_chip_style,
-    percent_color:
-      v.percent_color === 'gradient' ? 'gradient' : DEFAULT_VITALS_CONFIG.percent_color,
-    template_enabled:
-      typeof v.template_enabled === 'boolean'
-        ? v.template_enabled
-        : DEFAULT_VITALS_CONFIG.template_enabled,
-    template:
-      typeof v.template === 'string' && v.template.length > 0
-        ? v.template
-        : DEFAULT_VITALS_CONFIG.template,
-    hp_color: typeof v.hp_color === 'string' ? v.hp_color : DEFAULT_VITALS_CONFIG.hp_color,
-    mn_color: typeof v.mn_color === 'string' ? v.mn_color : DEFAULT_VITALS_CONFIG.mn_color,
-    mv_color: typeof v.mv_color === 'string' ? v.mv_color : DEFAULT_VITALS_CONFIG.mv_color,
-    use_color_ramp:
-      typeof v.use_color_ramp === 'boolean'
-        ? v.use_color_ramp
-        : DEFAULT_VITALS_CONFIG.use_color_ramp,
-    bar_font: typeof v.bar_font === 'string' ? v.bar_font : DEFAULT_VITALS_CONFIG.bar_font,
-    low_hp_vignette:
-      // Accept the new field name, then fall back to the legacy
-      // `one_with_erelei` so existing configs preserve the user's
-      // choice across the rename.
-      typeof v.low_hp_vignette === 'boolean'
-        ? v.low_hp_vignette
-        : typeof (v as { one_with_erelei?: unknown }).one_with_erelei === 'boolean'
-          ? ((v as { one_with_erelei: boolean }).one_with_erelei as boolean)
-          : DEFAULT_VITALS_CONFIG.low_hp_vignette,
   };
 }
 
@@ -2653,17 +2411,14 @@ export async function setUiConfig(config: UiConfig): Promise<boolean> {
       split_divider_color: config.split_divider_color,
       input_echo_color: config.input_echo_color,
       echo_macros: config.echo_macros,
-      side_panels_fill_height: config.side_panels_fill_height,
       paste_line_delay_ms: config.paste_line_delay_ms,
       spellcheck_prompt: config.spellcheck_prompt,
       input_cursor_style: config.input_cursor_style,
-      vitals: config.vitals,
       vitals_density: config.vitals_density,
       vitals_values: config.vitals_values,
       vitals_meter: config.vitals_meter,
       vitals_warn_thirds: config.vitals_warn_thirds,
       vitals_hide_when_pinned: config.vitals_hide_when_pinned,
-      moons_position: config.moons_position,
       chip_style: config.chip_style,
       tick_count: config.tick_count,
       affects_style: config.affects_style,

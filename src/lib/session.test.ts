@@ -871,12 +871,11 @@ describe('the UI config defaults Rust sends', () => {
   /** `ui` as plain fields, so each one reads by name. */
   const fields = (ui: UiConfig): Record<string, unknown> => ({ ...ui });
 
-  /** Each default `got` holds as Rust sends it. Vitals may carry fields
-   *  only the page keeps. An empty dark theme reads as the theme. */
+  /** Each default `got` holds as Rust sends it. An empty dark theme
+   *  reads as the theme. */
   function expectDefaults(got: Record<string, unknown>) {
     for (const [key, value] of Object.entries(defaults)) {
       if (key === 'dark_theme') expect(got[key], key).toBe(defaults.theme);
-      else if (key === 'vitals') expect(got[key], key).toMatchObject(value as object);
       else expect(got[key], key).toEqual(value);
     }
   }

@@ -277,10 +277,10 @@ pub(crate) struct UiConfig {
     /// when stacked macro sends make the scrollback too noisy.
     #[serde(default = "default_echo_macros")]
     pub echo_macros: bool,
-    /// When true, the left and right panel zones extend the full
-    /// height of the window and the terminal input + status bar live
-    /// only under the terminal column. When false (default), input
-    /// and status bar span the whole window width below the panels.
+    /// Whether the old side panel zones filled the window height. The
+    /// one window panel has no such zones, so nothing reads it. Every
+    /// save writes back the value it loaded, so 0.7.2 keeps it on a
+    /// downgrade (D12, D14).
     #[serde(default)]
     pub side_panels_fill_height: bool,
     /// Milliseconds to wait between lines when sending a multi-line
@@ -313,9 +313,10 @@ pub(crate) struct UiConfig {
     /// [`UiConfig::prompt_template_enabled`].
     #[serde(default)]
     pub prompt_template: String,
-    /// Per-row appearance of the vitals panel. Toggles which columns
-    /// render (bar / percent / numeric / delta) and overrides the
-    /// bar glyphs and width. Default mirrors the historical look.
+    /// The old vitals bar look. The vitals under the panes read
+    /// `vitals_density` and the rows after it instead, so nothing reads
+    /// this. Every save writes back the table it loaded, so 0.7.2 keeps
+    /// it on a downgrade (D12, D14).
     #[serde(default)]
     pub vitals: VitalsConfig,
     /// How the vitals under the panel's panes lay out: `rows` (one row
@@ -346,11 +347,9 @@ pub(crate) struct UiConfig {
     /// written before this switch reads it on.
     #[serde(default = "default_true")]
     pub vitals_hide_when_pinned: bool,
-    /// Where to render the World.Moons phase glyphs in the status bar.
-    /// Values: `"right-edge"` (the historical placement, far right of
-    /// the status bar), `"before-time"` (left of the centered tick +
-    /// MUD time chip), `"after-time"` (right of that same chip).
-    /// Unknown values coerce back to `"right-edge"` server-side.
+    /// Where the old status bar drew the moons. The status line places
+    /// them itself, so nothing reads this. Every save writes back the
+    /// value it loaded, so 0.7.2 keeps it on a downgrade (D12, D14).
     #[serde(default = "default_moons_position")]
     pub moons_position: String,
     /// Rendering style for tick / mud time chips. Values:
@@ -565,28 +564,8 @@ fn default_template() -> String {
     "%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v - (%tick) - %time".to_string()
 }
 
-/// Every vitals layout the settings picker offers. `ember` is the
-/// ledger, kept under its original id so saved configs keep working.
-/// The save path coerces anything outside this list back to the
-/// default, so a layout added to the picker MUST be added here too —
-/// gauges / pips / strip were once missing, which silently reset
-/// every pick back to the ledger on the next load.
-pub(crate) const VITALS_LAYOUTS: [&str; 6] =
-    ["ember", "gauges", "pips", "strip", "stacked", "inline"];
-
 fn default_vitals_layout() -> String {
     "ember".to_string()
-}
-
-/// Coerce an incoming layout id to a known one. A hand-edited
-/// profile.toml typo falls back to the default rather than leaving the
-/// panel with a layout nothing renders.
-pub(crate) fn coerce_vitals_layout(layout: String) -> String {
-    if VITALS_LAYOUTS.contains(&layout.as_str()) {
-        layout
-    } else {
-        default_vitals_layout()
-    }
 }
 
 fn default_percent_color() -> String {
@@ -3177,17 +3156,6 @@ name = "haste"
         let warnings = config.apply_to(&mut profile);
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("rejected"));
-    }
-
-    #[test]
-    fn every_picker_layout_survives_a_save() {
-        // gauges / pips / strip regressed exactly this way: the save
-        // path did not list them, so it rewrote each pick to the
-        // ledger and the panel reset on the next load.
-        for layout in VITALS_LAYOUTS {
-            assert_eq!(coerce_vitals_layout(layout.to_string()), layout);
-        }
-        assert_eq!(coerce_vitals_layout("nonsense".to_string()), "ember");
     }
 
     fn dock(entries: &[(&str, &str, Option<&str>)]) -> Vec<DockEntryPersist> {
