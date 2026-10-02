@@ -3,19 +3,18 @@ import views from '../../fixtures/gmcp/aabahran/views.json';
 import { parseGroupInfo } from '../lib/groupStore';
 import { asNumber, asText } from '../lib/stores/store';
 import { parseAffectsPacket } from '../lib/stores/affectsStore';
-import { parseCharState } from '../lib/stores/charStateStore';
 import { parseCombat } from '../lib/stores/combatStore';
 import { parseGamePrompt } from '../lib/stores/gamePromptStore';
 import { parseVitalsPacket } from '../lib/stores/vitalsStore';
 import { parseRoomInfo } from '../lib/stores/roomStore';
-import { parseRoomWeather } from '../lib/stores/weatherStore';
 import { aabahranFixtureNames, aabahranPacket } from './aabahranGmcp';
 
 // The stores' reading of each Aabahran packet against
 // fixtures/gmcp/aabahran/views.json, which the prompt engine's tests in
 // crates/prompt/tests/views.rs read too (D29). The engine keeps its own
 // copy of the packages to draw your prompt, and the panes read these
-// stores, so both readings are held to one record.
+// stores, so both readings are held to one record. A package no store
+// reads keeps its record for the engine alone (ENGINE_ONLY).
 //
 // A view's `map` holds what the Map pane's room strip reads where it
 // differs from the prompt engine on purpose. Under rhapsody of delusion
@@ -75,10 +74,6 @@ function view(name: string): unknown {
         hidden: group.hidden === true,
       };
     }
-    case 'Char.State':
-      return parseCharState(data);
-    case 'Room.Weather':
-      return parseRoomWeather(data);
     case 'Char.Prompt':
       return parseGamePrompt(data);
     case 'Room.Info': {
@@ -100,6 +95,11 @@ function view(name: string): unknown {
 
 const record = views as Record<string, unknown>;
 
+/** Packages the prompt engine reads and no page store does yet. Their
+ *  records stay for crates/prompt/tests/views.rs. A pane that shows one
+ *  brings its store back and moves the package into view(). */
+const ENGINE_ONLY = new Set(['Char.State', 'Room.Weather']);
+
 /** The record's view as the stores read it, with the Map pane's own
  *  readings laid over the engine's. */
 function storeView(name: string): unknown {
@@ -114,6 +114,7 @@ describe('the Aabahran packets', () => {
     const names = aabahranFixtureNames();
     for (const name of names) {
       expect(record, `views.json has no view of ${name}`).toHaveProperty([name]);
+      if (ENGINE_ONLY.has(aabahranPacket(name).package)) continue;
       expect(view(name), name).toEqual(storeView(name));
     }
     // Every view names a fixture.

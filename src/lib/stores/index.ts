@@ -4,7 +4,6 @@ import { startImmStore } from '../immStore';
 import { startAffectFullStore } from './affectFullStore';
 import { startAffectsDisplayStore } from './affectsDisplayStore';
 import { startAffectsStore } from './affectsStore';
-import { startCharStateStore } from './charStateStore';
 import { startChatColorsStore } from './chatColorsStore';
 import { startChipStyleStore } from './chipStyleStore';
 import { startCombatStore } from './combatStore';
@@ -19,7 +18,6 @@ import { startTrackedAffectsStore } from './trackedAffectsStore';
 import { startVitalsDensityStore } from './vitalsDensityStore';
 import { startVitalsOptionsStore } from './vitalsOptionsStore';
 import { startVitalsStore } from './vitalsStore';
-import { startWeatherStore } from './weatherStore';
 import { startWorldStore } from './worldStore';
 
 // Start every pane and status line store once, at launch, so packages
@@ -45,8 +43,6 @@ export function startStores(): void {
   startTrackedAffectsStore();
   startCombatStore();
   startGamePromptStore();
-  startCharStateStore();
-  startWeatherStore();
   startWorldStore();
   startRoomStore();
   startTargetStore();
