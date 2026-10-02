@@ -7,6 +7,7 @@ import {
   subscribeReduceMotion,
   systemReducesMotion,
   untilBlinkFlip,
+  untilBlinkShows,
 } from './blink';
 
 describe('the blink clock', () => {
@@ -20,6 +21,10 @@ describe('the blink clock', () => {
     expect(untilBlinkFlip(0)).toBe(600);
     expect(untilBlinkFlip(599)).toBe(1);
     expect(untilBlinkFlip(1250)).toBe(550);
+    // The next shown half, from the shown half and from the hidden one.
+    expect(untilBlinkShows(100)).toBe(1100);
+    expect(untilBlinkShows(700)).toBe(500);
+    expect(untilBlinkShows(1200)).toBe(1200);
   });
 });
 

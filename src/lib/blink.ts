@@ -20,6 +20,11 @@ export function untilBlinkFlip(now: number): number {
   return BLINK_MS - (now % BLINK_MS);
 }
 
+/** Milliseconds from `now` until the next shown half starts. */
+export function untilBlinkShows(now: number): number {
+  return 2 * BLINK_MS - (now % (2 * BLINK_MS));
+}
+
 /** Blinking text is on: the choice you made in Settings, or with none
  *  on unless your system asks to reduce motion. */
 export function resolveBlinkText(setting: boolean | null, reduceMotion: boolean): boolean {

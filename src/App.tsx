@@ -1791,6 +1791,7 @@ function App() {
               fontSize={fontSize}
               lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
               themeTerminalColors={themeTerminalColors}
+              blinkText={blinkText}
               quiet
               onReady={(handle) => {
                 historyTermRef.current = handle;
@@ -1832,6 +1833,7 @@ function App() {
             fontSize={fontSize}
             lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
             themeTerminalColors={themeTerminalColors}
+            blinkText={blinkText}
             onReady={(handle) => {
               termRef.current = handle;
             }}
