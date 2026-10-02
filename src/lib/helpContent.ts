@@ -69,6 +69,7 @@ export const PROMPT_DESIGN_CODES: readonly PromptDesignCode[] = [
     codes: ['%s_strike', '%s_dim', '%s_inverse'],
     text: 'Strikes the text through, dims it, or swaps its color and ground.',
   },
+  { codes: ['%s_blink'], text: 'Makes the text blink.' },
   {
     codes: ['%s_double', '%s_curly', '%s_dotted', '%s_dashed'],
     text: 'Underlines with two lines, a wave, dots or dashes.',

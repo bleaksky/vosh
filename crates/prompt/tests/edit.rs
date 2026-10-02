@@ -172,6 +172,7 @@ fn the_styles_more_offers_turn_on_and_back_off_for_the_next_piece() {
         (StyleChoice::Strike, "%s_strike"),
         (StyleChoice::Dim, "%s_dim"),
         (StyleChoice::Inverse, "%s_inverse"),
+        (StyleChoice::Blink, "%s_blink"),
     ] {
         let edited = edit("hp %hp mn %mana", &style(1, choice, true));
         assert_eq!(edited, format!("hp {code}%hp%s_off mn %mana"));
@@ -698,6 +699,11 @@ fn keeps_its_looks_through_every_op_on_every_piece(design: &str) {
         ops.push(EditOp::SetStyle {
             piece,
             style: StyleChoice::Strike,
+            on: true,
+        });
+        ops.push(EditOp::SetStyle {
+            piece,
+            style: StyleChoice::Blink,
             on: true,
         });
         ops.push(EditOp::SetColor {

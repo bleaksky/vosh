@@ -366,7 +366,7 @@ fn named_colors_use_the_theme_palette() {
         ("%bg_bright_white", "107"),
         ("%c_default", "39"),
         ("%bg_default", "49"),
-        ("%s_off", "22;23;24;27;29"),
+        ("%s_off", "22;23;24;25;27;29"),
         ("%c_8", "38;5;8"),
         ("%c_240", "38;5;240"),
         ("%{c:#80c8ff}", "38;2;128;200;255"),
@@ -1029,10 +1029,43 @@ fn style_off_ends_any_underline_and_keeps_its_color() {
     );
     assert_eq!(
         out.ansi,
-        "\x1b[4:3m\x1b[58:2::191:97:106m\x1b[9m\x1b[2m\x1b[7m.\x1b[22;23;24;27;29m.\x1b[0m"
+        "\x1b[4:3m\x1b[58:2::191:97:106m\x1b[9m\x1b[2m\x1b[7m.\x1b[22;23;24;25;27;29m.\x1b[0m"
     );
     assert!(out.spans[0].underline);
     assert!(!out.spans[1].underline);
+}
+
+#[test]
+fn blink_writes_sgr_5_and_style_off_ends_it() {
+    use vosh_prompt::render::SgrState;
+    let out = draw("%s_blink.%s_off.", &Fixed::default());
+    assert_eq!(out.ansi, "\x1b[5m.\x1b[22;23;24;25;27;29m.\x1b[0m");
+    assert!(out.spans[0].look.blink);
+    assert!(!out.spans[1].look.blink);
+    // The game's prompt resets the look, so the blink comes back after
+    // it. A 25 from the game ends it, and the rapid 6 draws steady, as
+    // xterm draws it.
+    let values = Fixed::default().value("raw", Value::Styled("x".to_string()));
+    assert_eq!(
+        draw("%s_blink%{raw}!", &values).ansi,
+        "\x1b[5mx\x1b[0m\x1b[5m!\x1b[0m"
+    );
+    let values = Fixed::default().value("raw", Value::Styled("\x1b[25mx".to_string()));
+    assert_eq!(
+        draw("%s_blink%{raw}!", &values).ansi,
+        "\x1b[5m\x1b[25mx\x1b[0m\x1b[5m!\x1b[0m"
+    );
+    let mut s = SgrState::default();
+    s.apply("6");
+    assert!(!s.blink);
+    s.apply("5");
+    assert!(s.blink);
+    s.apply("25");
+    assert!(!s.blink);
+    s.apply("1;5");
+    assert_eq!(SgrState::default().transition(&s), "1;5");
+    s.apply("22");
+    assert_eq!(s.transition(&SgrState::default()), "25");
 }
 
 #[test]

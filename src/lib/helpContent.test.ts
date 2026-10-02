@@ -428,6 +428,7 @@ describe('the help on prompt design codes', () => {
       ['%s_strike', '%s_dim', '%s_inverse'],
       'Strikes the text through, dims it, or swaps its color and ground.',
     ],
+    [['%s_blink'], 'Makes the text blink.'],
     [
       ['%s_double', '%s_curly', '%s_dotted', '%s_dashed'],
       'Underlines with two lines, a wave, dots or dashes.',

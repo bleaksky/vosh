@@ -53,7 +53,7 @@ fn segments(piece: &PieceView) -> Vec<&str> {
 #[test]
 fn a_piece_reads_every_style_its_ground_and_its_underline() {
     let template =
-        "%{bg:#3b4252}%s_dim%s_strike%s_inverse%s_curly%{ul:#bf616a}%hp%s_off%bg_default x";
+        "%{bg:#3b4252}%s_dim%s_strike%s_inverse%s_blink%s_curly%{ul:#bf616a}%hp%s_off%bg_default x";
     let described = describe(&Template::parse(template), &Sampled { fight: false }, false);
     let hp = &described.pieces[0];
     assert_eq!(
@@ -64,7 +64,7 @@ fn a_piece_reads_every_style_its_ground_and_its_underline() {
             b: 0x52
         }
     );
-    assert!(hp.dim && hp.strike && hp.inverse && hp.underline);
+    assert!(hp.dim && hp.strike && hp.inverse && hp.blink && hp.underline);
     assert!(!hp.bold && !hp.italic);
     assert_eq!(hp.underline_style, Some(StyleChoice::Curly));
     assert_eq!(
@@ -79,7 +79,7 @@ fn a_piece_reads_every_style_its_ground_and_its_underline() {
     // the terminal's ground reads as its own.
     let x = &described.pieces[1];
     assert_eq!(x.background, ColorChoice::Default);
-    assert!(!x.dim && !x.strike && !x.inverse && !x.underline);
+    assert!(!x.dim && !x.strike && !x.inverse && !x.blink && !x.underline);
     assert_eq!(x.underline_style, None);
     assert_eq!(x.underline_color, hp.underline_color);
     // The single line reads as Underline, and a plain piece as nothing.

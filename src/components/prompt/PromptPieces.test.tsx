@@ -71,6 +71,7 @@ const HP: PromptPiece = {
   underline_color: { kind: 'default' },
   inverse: false,
   strike: false,
+  blink: false,
   literal: null,
   meta: '1020 of 1020',
   forms: [

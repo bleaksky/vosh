@@ -404,8 +404,7 @@ fn setting(stored: &str, which: Which, who: Who) -> Option<Vec<TokenKind>> {
 }
 
 /// A backtick color as the game writes it, `ESC[0;1;31m`: every color
-/// and style off, then the color and styles, as theme tokens. Blink has
-/// no token and drops.
+/// and style off, then the color and styles, as theme tokens.
 fn color_tokens(color: GameColor) -> Vec<TokenKind> {
     let code = |c: Code| TokenKind::Code(c);
     match color {
@@ -420,6 +419,7 @@ fn color_tokens(color: GameColor) -> Vec<TokenKind> {
                 match param.parse::<u8>() {
                     Ok(1) => out.push(code(Code::Style(Style::Bold))),
                     Ok(4) => out.push(code(Code::Style(Style::Underline(UnderlineStyle::Single)))),
+                    Ok(5) => out.push(code(Code::Style(Style::Blink))),
                     Ok(n @ 30..=37) => out.push(code(Code::Fg(ColorSpec::Named(n - 30)))),
                     _ => {}
                 }
