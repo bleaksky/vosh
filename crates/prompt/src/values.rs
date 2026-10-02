@@ -313,14 +313,14 @@ impl Vars {
     }
 
     /// A resolver over these variables and what Vosh supplies.
-    pub fn resolver<'a>(&'a self, vosh: &'a ClientValues) -> Resolver<'a> {
-        Resolver { vars: self, vosh }
+    pub fn resolver<'a>(&'a self, client: &'a ClientValues) -> Resolver<'a> {
+        Resolver { vars: self, client }
     }
 
     /// Which source a field reads from now, in the order the resolver
     /// tries them: a fresh script value, the fresh capture, the latest
     /// packet of its package, then Vosh. None when none has it yet.
-    pub(crate) fn source(&self, e: &Entry, vosh: &ClientValues) -> Option<Source> {
+    pub(crate) fn source(&self, e: &Entry, client: &ClientValues) -> Option<Source> {
         let keys = capture_keys(e);
         let fresh_script = |key: &str| self.script.get(key).is_some_and(|s| self.script_fresh(s));
         if keys.iter().any(|k| fresh_script(k)) {
@@ -342,10 +342,13 @@ impl Vars {
             return Some(Source::Gmcp);
         }
         let vosh_has = match e.name {
-            "tick" => vosh.tick.is_some(),
+            "tick" => client.tick.is_some(),
             "time" | "date" => true,
-            "target" => vosh.target.as_deref().is_some_and(|t| !t.trim().is_empty()),
-            "profile" => vosh
+            "target" => client
+                .target
+                .as_deref()
+                .is_some_and(|t| !t.trim().is_empty()),
+            "profile" => client
                 .profile
                 .as_deref()
                 .is_some_and(|p| !p.trim().is_empty()),

@@ -46,8 +46,8 @@ fn room_view(msg: &vosh_protocol::gmcp::Message) -> Json {
         at(),
     );
     vars.observe(&msg.package, msg.data.clone(), at());
-    let vosh = ClientValues::default();
-    let resolver = vars.resolver(&vosh);
+    let client = ClientValues::default();
+    let resolver = vars.resolver(&client);
     let get = |name: &str| resolver.resolve(&FieldRef::new(name));
     let exits: Vec<&str> = match get("exits") {
         Resolved::Value(Value::Exits { letters, .. }) if letters != "none" => letters
@@ -88,8 +88,8 @@ fn view(file: &str, text: &str) -> Json {
     // reads each field as the packet gives it.
     let mut vars = Vars::new(false);
     vars.observe(&msg.package, msg.data.clone(), at());
-    let vosh = ClientValues::default();
-    let resolver = vars.resolver(&vosh);
+    let client = ClientValues::default();
+    let resolver = vars.resolver(&client);
     match msg.package.as_str() {
         "Char.Vitals" => {
             let v = snapshot.vitals().expect("a vitals packet");

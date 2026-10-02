@@ -50,7 +50,7 @@ pub const FIXTURES: &[(&str, &str)] = &[
     fixture!("group-info-own-row.gmcp"),
 ];
 
-pub fn vosh() -> ClientValues {
+pub fn client() -> ClientValues {
     ClientValues {
         now: Some(now()),
         ..ClientValues::default()
@@ -98,20 +98,20 @@ pub fn lament_capture(vars: &mut Vars) {
 }
 
 pub fn resolve(vars: &Vars, field: &str) -> Resolved {
-    let vosh = vosh();
+    let client = client();
     let f = match field.split_once(':') {
         Some((name, param)) => FieldRef::with_param(name, param),
         None => FieldRef::new(field),
     };
-    vars.resolver(&vosh).resolve(&f)
+    vars.resolver(&client).resolve(&f)
 }
 
-pub fn draw_with(vars: &Vars, vosh: &ClientValues, template: &str) -> String {
-    render_str(template, &vars.resolver(vosh), RenderOptions::default()).plain
+pub fn draw_with(vars: &Vars, client: &ClientValues, template: &str) -> String {
+    render_str(template, &vars.resolver(client), RenderOptions::default()).plain
 }
 
 pub fn draw(vars: &Vars, template: &str) -> String {
-    draw_with(vars, &vosh(), template)
+    draw_with(vars, &client(), template)
 }
 
 pub fn text(s: &str) -> Resolved {

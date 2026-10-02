@@ -20,7 +20,7 @@ use crate::values::gmcp::{
 /// Answers the renderer for one draw.
 pub struct Resolver<'a> {
     pub(super) vars: &'a Vars,
-    pub(super) vosh: &'a ClientValues,
+    pub(super) client: &'a ClientValues,
 }
 
 /// What one source says about a field.
@@ -470,7 +470,7 @@ impl<'a> Resolver<'a> {
 
     /// The tick, a script value first, with Vosh's interval as its max.
     fn tick(&self) -> Resolved {
-        let interval = self.vosh.tick.and_then(|t| t.interval);
+        let interval = self.client.tick.and_then(|t| t.interval);
         first(&[
             &|| match self.vars.var("tick").map(str::trim) {
                 None => Got::Nothing,
@@ -486,7 +486,7 @@ impl<'a> Resolver<'a> {
                     },
                 ),
             },
-            &|| match self.vosh.tick {
+            &|| match self.client.tick {
                 Some(t) => is(Value::Seconds {
                     secs: t.remaining,
                     max: t.interval,
@@ -560,7 +560,7 @@ impl<'a> Resolver<'a> {
             return Resolved::Missing;
         };
         let missing: Vec<String> = self
-            .vosh
+            .client
             .tracked
             .iter()
             .filter(|t| !affects.list.iter().any(|a| gmcp::same_words(&a.name, t)))
@@ -877,13 +877,13 @@ impl<'a> Resolver<'a> {
             // none.
             "time" | "date" => Resolved::Value(Value::Clock {
                 at: self
-                    .vosh
+                    .client
                     .now
                     .unwrap_or_else(|| chrono::Local::now().naive_local()),
                 date: name == "date",
             }),
             "target" => first(&[&|| self.var_text("target"), &|| match self
-                .vosh
+                .client
                 .target
                 .as_deref()
                 .map(str::trim)
@@ -892,7 +892,7 @@ impl<'a> Resolver<'a> {
                 _ => Got::Is(Resolved::Absent),
             }]),
             "profile" => first(&[&|| self.var_text("profile"), &|| match self
-                .vosh
+                .client
                 .profile
                 .as_deref()
                 .map(str::trim)
