@@ -114,6 +114,8 @@ Scrollback opens in a split above the live terminal, so old output stays readabl
 
 The live tail never scrolls away while the split is open. New output keeps landing there, and the lines you type show in the history too, so the record stays continuous.
 
+Turn on `Collapse repeated lines` in Settings under Appearance, then Terminal text, and a line the game sends again and again takes one row. A line that reads exactly as the line right above it, colors included, joins it, and the row shows a gray count in front, like `(3) You are hungry.` The count climbs in place as more arrive. Any other line ends the run, a blank one too, and so do the lines you type, a reply from Vosh itself and a prompt that stays in the text. A pinned prompt leaves the text, so a run goes on past it. Type `compact` in Aabahran to drop the blank line before each prompt, and a run goes on from one round to the next. Your session log keeps every line, and your triggers fire on each one. It is off until you turn it on.
+
 With the xterm renderer the divider snaps to whole terminal rows. It also answers the keyboard, arrow keys nudge it 16px and `Shift` with an arrow jumps 64px. The native renderer splits its own grid, and a middle click at the live tail opens the split a page up.
 
 ### 2.5 Find text
