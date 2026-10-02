@@ -145,13 +145,13 @@ fn shows_phrase(names: &[&str]) -> Option<String> {
 
 /// What the card says a setting shows, `It shows Health, Mana, and
 /// Moves.`, or None when it reads no value.
-pub fn shows_sentence(names: &[&str]) -> Option<String> {
+pub(crate) fn shows_sentence(names: &[&str]) -> Option<String> {
     shows_phrase(names).map(|phrase| format!("It shows {phrase}."))
 }
 
 /// What the card says while codes run together: what Vosh still reads,
 /// then which values the game supplies until you fix the prompt.
-pub fn fix_sentence(names: &[&str], unread: &[String]) -> String {
+pub(crate) fn fix_sentence(names: &[&str], unread: &[String]) -> String {
     let reads = match shows_phrase(names) {
         Some(phrase) => format!("Vosh reads {phrase}."),
         None => "Vosh reads no value from this prompt.".to_string(),

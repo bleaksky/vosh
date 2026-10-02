@@ -107,7 +107,7 @@ const VITALS: [Vital; 3] = [
 /// capture and GMCP give, after Vosh's default. A preset that would draw
 /// no value is left out, so only Vosh's default and Start empty are left
 /// when nothing is supplied.
-pub fn other(supplied: &dyn Fn(&str) -> bool) -> Vec<Preset> {
+pub(crate) fn other(supplied: &dyn Fn(&str) -> bool) -> Vec<Preset> {
     let have: Vec<&Vital> = VITALS.iter().filter(|v| supplied(v.cur)).collect();
     let full: Vec<&Vital> = have.iter().copied().filter(|v| supplied(v.max)).collect();
     let mut out = vec![default_design()];
