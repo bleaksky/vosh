@@ -29,6 +29,8 @@
 //! %{if:x} %{ifnot:x}       draw what follows up to %{end} only when x has a
 //! %{end}                   value (or is hidden), or only when it has none
 //! %nl %{nl}                a line break
+//! %{right}                 push what follows on its row to the right edge.
+//!                          Braced only, so a value named `right` stays one
 //! %{raw}                   the game's own prompt, colors kept
 //! ```
 //!
@@ -295,6 +297,9 @@ pub enum TokenKind {
     End,
     /// `%nl`, a line break.
     Nl,
+    /// `%{right}`, which pushes what follows it on its row to the right
+    /// edge of the terminal.
+    Right,
     /// `%{raw}`, the game's prompt as it arrived.
     Raw,
     /// A code the grammar does not know. It prints as written.
@@ -324,6 +329,8 @@ pub enum PieceKind {
     /// `%pct_X%%`, a percent and its sign.
     Percent,
     Nl,
+    /// `%{right}`, the push to the right edge.
+    Right,
     Raw,
     If,
     IfNot,
@@ -752,6 +759,7 @@ pub fn write_token(kind: &TokenKind, braced: bool) -> String {
         TokenKind::End => "%{end}".to_string(),
         TokenKind::Nl if braced => "%{nl}".to_string(),
         TokenKind::Nl => "%nl".to_string(),
+        TokenKind::Right => "%{right}".to_string(),
         TokenKind::Raw => "%{raw}".to_string(),
         TokenKind::Unknown => String::new(),
     }
@@ -1053,6 +1061,9 @@ fn parse_braced(body: &str, source: &str, end: &mut usize) -> TokenKind {
     let segs: Vec<&str> = body.split(':').collect();
     let head = segs[0].to_ascii_lowercase();
     if segs.len() == 1 {
+        if head == "right" {
+            return TokenKind::Right;
+        }
         return parse_name(&head, source, end);
     }
     let rest = segs[1..].join(":").to_ascii_lowercase();
@@ -1082,7 +1093,7 @@ fn parse_braced(body: &str, source: &str, end: &mut usize) -> TokenKind {
     };
     if matches!(
         field.name.as_str(),
-        "nl" | "raw" | "end" | "if" | "ifnot" | "s"
+        "nl" | "raw" | "end" | "if" | "ifnot" | "s" | "right"
     ) {
         return TokenKind::Unknown;
     }
@@ -1152,6 +1163,7 @@ fn group(tokens: &[Token]) -> Vec<Piece> {
             TokenKind::IfNot(_) => Some(PieceKind::IfNot),
             TokenKind::End => Some(PieceKind::End),
             TokenKind::Nl => Some(PieceKind::Nl),
+            TokenKind::Right => Some(PieceKind::Right),
             _ => None,
         };
         if let Some(kind) = marker {
@@ -1648,6 +1660,10 @@ mod tests {
         );
         assert_eq!(kinds("%{c:hp:tenths}"), vec![TokenKind::Unknown]);
         assert_eq!(kinds("%nl%{nl}"), vec![TokenKind::Nl, TokenKind::Nl]);
+        assert_eq!(kinds("%{right}%{RIGHT}"), vec![TokenKind::Right; 2]);
+        // Unbraced, it is a value a script may set, as it always was.
+        assert_eq!(kinds("%right"), vec![val("right")]);
+        assert_eq!(kinds("%{right:x}"), vec![TokenKind::Unknown]);
         assert_eq!(kinds("%{raw}"), vec![TokenKind::Raw]);
         assert_eq!(kinds("%{end}"), vec![TokenKind::End]);
         assert_eq!(
@@ -1724,6 +1740,7 @@ mod tests {
             "%{exp:thousands}",
             "%{hour:ampm}",
             "%{tick:since}",
+            "%hp%{right}%mana",
         ] {
             let tokens = kinds(source);
             assert!(tokens.iter().all(|t| *t != TokenKind::Unknown), "{source}");
@@ -1815,6 +1832,20 @@ mod tests {
             .collect();
         assert_eq!(got, expect);
         assert!(!got.iter().any(|(k, _)| *k == Percent));
+    }
+
+    #[test]
+    fn a_push_to_the_right_stands_alone_as_a_line_break_does() {
+        assert_eq!(
+            piece_kinds("%hp%c_red%{right}x %mana"),
+            vec![
+                (PieceKind::Value, "%hp".to_string()),
+                (PieceKind::Codes, "%c_red".to_string()),
+                (PieceKind::Right, "%{right}".to_string()),
+                (PieceKind::Text, "x ".to_string()),
+                (PieceKind::Value, "%mana".to_string()),
+            ]
+        );
     }
 
     #[test]

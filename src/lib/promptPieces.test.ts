@@ -83,6 +83,12 @@ describe('picking a part', () => {
     expect(pickable(DESIGN)).toEqual([0, 1, 2, 4, 6]);
   });
 
+  it('picks a push to the right edge as it picks a line break', () => {
+    const pushed = [piece(0, 'value'), piece(1, 'right'), piece(2, 'value'), piece(3, 'codes')];
+    expect(pickable(pushed)).toEqual([0, 1, 2]);
+    expect(step(pushed, { picked: 0, caret: null }, 1)).toEqual({ picked: 1, caret: null });
+  });
+
   it('steps with Left and Right and stops at the ends', () => {
     expect(step(DESIGN, { picked: 1, caret: null }, 1)).toEqual({ picked: 2, caret: null });
     expect(step(DESIGN, { picked: 2, caret: null }, 1)).toEqual({ picked: 4, caret: null });
@@ -237,15 +243,17 @@ describe('the rows of a part', () => {
       style: false,
     });
     expect(rowsOf(piece(0, 'text', '['))).toMatchObject({ text: true, showAs: false });
-    expect(rowsOf(piece(4, 'nl'))).toEqual({
-      showAs: false,
-      text: false,
-      width: false,
-      color: false,
-      background: false,
-      style: false,
-      underline: false,
-    });
+    for (const kind of ['nl', 'right'] as const) {
+      expect(rowsOf(piece(4, kind))).toEqual({
+        showAs: false,
+        text: false,
+        width: false,
+        color: false,
+        background: false,
+        style: false,
+        underline: false,
+      });
+    }
   });
 
   it('adds the Underline row while an underline is on, and not to a bar', () => {

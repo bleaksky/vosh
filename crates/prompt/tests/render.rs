@@ -539,7 +539,10 @@ fn hidden_marks_and_placeholders_restore_the_color_before_them() {
     let open = render_str(
         "%c_blue%gold|%tank",
         &values,
-        RenderOptions { placeholders: true },
+        RenderOptions {
+            placeholders: true,
+            ..RenderOptions::default()
+        },
     );
     assert_eq!(
         open.ansi,
@@ -903,6 +906,111 @@ fn conditions_test_value_or_hidden_and_nest() {
     );
     // A stray end is ignored, and an open condition runs to the end.
     assert_eq!(draw("a%{end}b%{if:afk}c", &values).plain, "abc");
+}
+
+fn draw_at(template: &str, values: &Fixed, cols: Option<usize>) -> Rendered {
+    render_str(
+        template,
+        values,
+        RenderOptions {
+            cols,
+            ..RenderOptions::default()
+        },
+    )
+}
+
+#[test]
+fn a_push_ends_the_rest_of_its_row_on_the_last_column() {
+    let values = vitals(1020, 800, 930);
+    let out = draw_at("<%hp>%{right}%mana!", &values, Some(20));
+    assert_eq!(out.plain, format!("<1020>{}800!", " ".repeat(10)));
+    assert_eq!(out.ansi, format!("<1020>{}800!\x1b[0m", " ".repeat(10)));
+    assert_eq!(out.rows, 1);
+    // The push takes the spaces as its cells, and the pieces after it
+    // move right with them.
+    let spans: Vec<(usize, usize, usize, usize)> = out
+        .spans
+        .iter()
+        .map(|s| (s.piece, s.row, s.col, s.width))
+        .collect();
+    assert_eq!(
+        spans,
+        [
+            (0, 0, 0, 1),
+            (1, 0, 1, 4),
+            (2, 0, 5, 1),
+            (3, 0, 6, 10),
+            (4, 0, 16, 3),
+            (5, 0, 19, 1)
+        ]
+    );
+    // A row that fits exactly keeps one space, and one that does not fit,
+    // or a render no terminal shows, gets one space too.
+    for cols in [Some(11), Some(10), Some(4), None] {
+        let out = draw_at("<%hp>%{right}%mana!", &values, cols);
+        assert_eq!(out.plain, "<1020> 800!", "{cols:?}");
+    }
+    assert_eq!(
+        draw_at("<%hp>%{right}%mana!", &values, Some(12)).plain,
+        "<1020>  800!"
+    );
+}
+
+#[test]
+fn the_spaces_of_a_push_take_the_look_where_it_sits() {
+    let values = vitals(1020, 800, 930);
+    // The ground runs through the spaces, and the text color after the
+    // push starts after them.
+    let out = draw_at(
+        "%{bg:#3b4252}%hp%{right}%c_red%mana%c_reset",
+        &values,
+        Some(12),
+    );
+    assert_eq!(
+        out.ansi,
+        "\x1b[48;2;59;66;82m1020     \x1b[31m800\x1b[0m\x1b[0m"
+    );
+    let push = &out.spans[1];
+    assert_eq!((push.piece, push.col, push.width), (1, 4, 5));
+    assert_eq!(
+        push.bg,
+        SpanColor::Rgb {
+            r: 59,
+            g: 66,
+            b: 82
+        }
+    );
+}
+
+#[test]
+fn each_row_pushes_on_its_own_and_only_its_first_push_counts() {
+    let values = vitals(1020, 800, 930);
+    let out = draw_at("a%{right}b%{nl}c%{right}d%{right}e", &values, Some(10));
+    assert_eq!(
+        out.plain,
+        format!("a{}b\nc{}de", " ".repeat(8), " ".repeat(7))
+    );
+    assert_eq!(
+        out.ansi,
+        format!("a{}b\r\nc{}de\x1b[0m", " ".repeat(8), " ".repeat(7))
+    );
+    // The second push on a row takes no cells.
+    let pushes: Vec<(usize, usize, usize, usize)> = out
+        .spans
+        .iter()
+        .filter(|s| [1, 5, 7].contains(&s.piece))
+        .map(|s| (s.piece, s.row, s.col, s.width))
+        .collect();
+    assert_eq!(pushes, [(1, 0, 1, 8), (5, 1, 1, 7), (7, 1, 9, 0)]);
+    // A push at the end of a row fills it to the edge, and a push in a
+    // condition that does not hold pushes nothing.
+    assert_eq!(draw_at("ab%{right}", &values, Some(5)).plain, "ab   ");
+    assert_eq!(
+        draw_at("%{if:fight}x%{right}%{end}y", &values, Some(5)).plain,
+        "y"
+    );
+    // A wide character takes two of the columns.
+    assert_eq!(draw_at("界%{right}x", &values, Some(6)).plain, "界   x");
 }
 
 #[test]

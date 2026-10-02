@@ -11,7 +11,7 @@ export type PickerRow =
   | { kind: 'field'; field: PromptFieldState; status: string; dim: boolean }
   | { kind: 'layout'; id: LayoutId; label: string; status: string; dim: false };
 
-export type LayoutId = 'nl' | 'nl_fight' | 'space';
+export type LayoutId = 'nl' | 'nl_fight' | 'space' | 'right';
 
 export interface PickerGroup {
   id: PromptFieldGroup | 'layout';
@@ -56,7 +56,16 @@ const LAYOUT: { id: LayoutId; label: string }[] = [
   { id: 'nl', label: 'Line break' },
   { id: 'nl_fight', label: 'Line break in a fight' },
   { id: 'space', label: 'Space' },
+  { id: 'right', label: 'Push to the right edge' },
 ];
+
+/** What Edit as text takes for each layout item, at its caret. */
+export const LAYOUT_TOKENS: Record<LayoutId, string> = {
+  nl: '%nl',
+  nl_fight: '%{if:fight}%nl%{end}',
+  space: ' ',
+  right: '%{right}',
+};
 
 /** The field reads nothing until your prompt in the game shows its code:
  *  it comes only from the prompt, or from a package only the new server

@@ -11,6 +11,11 @@
 //! theme's palette. A hidden mark, a placeholder, a bar and the game's
 //! tank bar each restore the look that was in effect before them, so they
 //! never change the pieces after them.
+//!
+//! `%{right}` pushes what follows it on its row to the right edge: once
+//! the row ends, the renderer puts spaces where the push sat, in the look
+//! in effect there, so the row ends on the last of [`RenderOptions::cols`].
+//! A row that does not fit, or a render with no width, gets one space.
 
 // Bar widths are capped at 80, so the float math is exact.
 #![allow(clippy::cast_precision_loss)]
@@ -57,6 +62,10 @@ pub struct RenderOptions {
     /// Draw each Missing or Absent value as its label in SGR 90, so the
     /// open editor can point at it.
     pub placeholders: bool,
+    /// The columns of the terminal your prompt shows in, which `%{right}`
+    /// pushes the rest of its row against. None for a render no terminal
+    /// shows, such as a sample, where the push is one space.
+    pub cols: Option<usize>,
 }
 
 /// A color in a span. The webview resolves palette indexes through the
@@ -338,6 +347,19 @@ impl SgrState {
     }
 }
 
+/// Where a `%{right}` sat on the row being written, so the spaces that
+/// push the rest of the row right go there once it ends.
+#[derive(Debug, Clone, Copy)]
+struct Push {
+    /// The byte in the output and in the row's text.
+    out: usize,
+    row: usize,
+    /// The column.
+    col: usize,
+    /// The push's own span, which takes the spaces as its cells.
+    span: usize,
+}
+
 /// Writes the output and keeps the row, column, state and spans.
 struct Writer {
     out: String,
@@ -347,10 +369,14 @@ struct Writer {
     spans: Vec<Span>,
     open: Option<(usize, SgrState)>,
     open_col: usize,
+    /// The columns a push reaches to.
+    cols: Option<usize>,
+    /// The first push on the row being written.
+    push: Option<Push>,
 }
 
 impl Writer {
-    fn new() -> Self {
+    fn new(cols: Option<usize>) -> Self {
         Self {
             out: String::new(),
             rows: vec![String::new()],
@@ -359,7 +385,52 @@ impl Writer {
             spans: Vec::new(),
             open: None,
             open_col: 0,
+            cols,
+            push: None,
         }
+    }
+
+    /// A `%{right}` drawn at the cursor, whose span `span` is. Only the
+    /// first on a row pushes. A later one takes no cells.
+    fn push_right(&mut self, span: usize) {
+        if self.push.is_some() {
+            return;
+        }
+        self.push = Some(Push {
+            out: self.out.len(),
+            row: self.rows.last().map_or(0, String::len),
+            col: self.col,
+            span,
+        });
+    }
+
+    /// The row ends: put the spaces of its push where the push sat, so
+    /// what came after it ends on the last column, or one space when it
+    /// does not fit. The spans after the push move right with it.
+    fn settle_push(&mut self) {
+        let Some(push) = self.push.take() else {
+            return;
+        };
+        let after = self.col.saturating_sub(push.col);
+        let pad = match self.cols {
+            Some(cols) if push.col + after < cols => cols - push.col - after,
+            _ => 1,
+        };
+        let spaces = " ".repeat(pad);
+        self.out.insert_str(push.out, &spaces);
+        if let Some(row) = self.rows.last_mut() {
+            row.insert_str(push.row, &spaces);
+        }
+        if let Some(span) = self.spans.get_mut(push.span) {
+            span.width = pad;
+        }
+        for span in self.spans.iter_mut().skip(push.span + 1) {
+            span.col += pad;
+        }
+        if self.open.is_some() && self.open_col >= push.col {
+            self.open_col += pad;
+        }
+        self.col += pad;
     }
 
     fn row(&self) -> usize {
@@ -398,6 +469,7 @@ impl Writer {
     }
 
     fn line_break(&mut self, bytes: &str) {
+        self.settle_push();
         self.close_span();
         self.out.push_str(bytes);
         self.rows.push(String::new());
@@ -512,7 +584,7 @@ impl Writer {
 
 /// Draw a template.
 pub fn render(template: &Template, values: &dyn Values, options: RenderOptions) -> Rendered {
-    let mut w = Writer::new();
+    let mut w = Writer::new(options.cols);
     let mut conditions: Vec<bool> = Vec::new();
     let tokens = template.tokens();
 
@@ -573,6 +645,11 @@ pub fn render(template: &Template, values: &dyn Values, options: RenderOptions) 
                 w.line_break("\r\n");
                 continue;
             }
+            PieceKind::Right => {
+                w.end_span();
+                w.push_right(w.spans.len() - 1);
+                continue;
+            }
             PieceKind::Raw => {
                 let field = FieldRef::new("raw");
                 match values.resolve(&field) {
@@ -589,6 +666,7 @@ pub fn render(template: &Template, values: &dyn Values, options: RenderOptions) 
         }
         w.end_span();
     }
+    w.settle_push();
 
     let mut ansi = w.out;
     if !ansi.is_empty() {

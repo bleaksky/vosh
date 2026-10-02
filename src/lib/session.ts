@@ -1052,6 +1052,7 @@ export type PromptEditOp =
   | { op: 'insert_field'; at: number; field: string; format?: PromptFormatChoice }
   | { op: 'insert_text'; at: number; text: string }
   | { op: 'insert_nl'; at: number }
+  | { op: 'insert_right'; at: number }
   | { op: 'move'; piece: number; to: number };
 
 /** A design after an edit, drawn with the live values and placeholders. */
@@ -1077,6 +1078,7 @@ export type PromptPieceKind =
   | 'cur_max'
   | 'percent'
   | 'nl'
+  | 'right'
   | 'raw'
   | 'if'
   | 'if_not'

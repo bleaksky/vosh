@@ -718,6 +718,8 @@ async fn io_loop<R: tauri::Runtime>(
         let mut p = profile.lock().await;
         p.tick.start_session(Instant::now());
         start_prompt(&mut p, known_host);
+        // A push to the right edge reaches to the width the game is told.
+        p.prompt.set_cols(usize::from(negotiator.window_size.0));
     }
 
     let mut tick_interval = tokio::time::interval(TICK_EMIT_INTERVAL);
@@ -836,9 +838,23 @@ async fn io_loop<R: tauri::Runtime>(
                     settle.overdue_now(&app, &logs, &mut perf);
                 }
                 Some(OutgoingMsg::WindowSize { cols, rows }) => {
-                    {
+                    // A design that pushes part of a row to the right
+                    // edge draws again at the new width.
+                    let out = {
                         let mut p = profile.lock().await;
-                        window_size_step(&mut p, &mut negotiator, cols, rows, watching_prompt(&app));
+                        let redraw = window_size_step(
+                            &mut p,
+                            &mut negotiator,
+                            cols,
+                            rows,
+                            watching_prompt(&app),
+                        );
+                        redraw.then(|| {
+                            repaint_step(&mut p, output_count() != seen_output, Instant::now())
+                        })
+                    };
+                    if let Some(out) = out.filter(|out| !out.is_empty()) {
+                        emit_repaint(&app, &out);
                     }
                     // Once the server sent DO NAWS and Vosh agreed, every
                     // new size goes out, so the game wraps at the new
@@ -2494,18 +2510,27 @@ fn send_step(p: &mut Profile, accumulator: &LineAccumulator, sent: &[u8], at_ms:
 /// already holds, which the webview sends again on every connect, leaves
 /// the row open. Pinned, the band is not in the text, so no size closes
 /// it.
+///
+/// A design that pushes part of a row to the right edge (`%{right}`)
+/// reaches to the new width, so a new width keeps the row open as the
+/// card does and returns true: your prompt draws again at that width, on
+/// the row or on the band.
 fn window_size_step(
     p: &mut Profile,
     negotiator: &mut Negotiator,
     cols: u16,
     rows: u16,
     card_open: bool,
-) {
+) -> bool {
     let card_open = card_open || p.prompt.preview().is_some();
-    if negotiator.window_size.0 != cols && !card_open {
+    let new_width = negotiator.window_size.0 != cols;
+    p.prompt.set_cols(usize::from(cols));
+    let redraw = new_width && p.prompt.pushes_right();
+    if new_width && !card_open && !redraw {
         p.prompt.stage.close();
     }
     negotiator.set_window_size(cols, rows);
+    redraw
 }
 
 /// Repaint the open row as the `[prompt]` table now says: your design
@@ -2583,7 +2608,7 @@ fn render_prompt(p: &Profile, now: Instant) -> vosh_prompt::Rendered {
     vosh_prompt::render_str(
         &p.prompt.config().template,
         &p.prompt.vars.resolver(&vosh),
-        vosh_prompt::RenderOptions::default(),
+        p.prompt.render_options(false),
     )
 }
 
@@ -2648,9 +2673,7 @@ fn prompt_view(p: &Profile, now: Instant) -> PromptView {
             &overrides,
             chrono::Local::now().naive_local(),
         ),
-        vosh_prompt::RenderOptions {
-            placeholders: preview.placeholders,
-        },
+        p.prompt.render_options(preview.placeholders),
     );
     PromptView {
         shown: Some(shown),
@@ -6179,6 +6202,10 @@ mod repaint_tests;
 #[cfg(test)]
 #[path = "session_clock_tests.rs"]
 mod clock_tests;
+
+#[cfg(test)]
+#[path = "session_right_tests.rs"]
+mod right_tests;
 
 #[cfg(test)]
 #[path = "session_pointer_tests.rs"]

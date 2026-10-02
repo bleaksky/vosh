@@ -840,6 +840,7 @@ fn keeps_its_looks_through_every_op_on_every_piece(design: &str) {
             at: piece,
             text: "x".into(),
         });
+        ops.push(EditOp::InsertRight { at: piece });
         ops.push(EditOp::Move {
             piece,
             to: count.min(piece + 3),
@@ -1019,6 +1020,60 @@ fn the_card_follows_the_piece_an_edit_acted_on() {
         .1,
         None
     );
+}
+
+#[test]
+fn a_push_to_the_right_goes_in_moves_and_takes_when_as_a_line_break_does() {
+    // The picker's Push to the right edge adds it at the caret, and the
+    // card picks it.
+    let (text, at) = edit_at("<%hp> %c_cyan%mana", &EditOp::InsertRight { at: 3 });
+    assert_eq!(text, "<%hp> %{right}%c_cyan%mana");
+    assert_eq!(at.map(|i| piece_text(&text, i)), Some("%{right}".into()));
+    assert_reads_clean(&text);
+    // It shows only in a fight, and always again.
+    let fight = edit(
+        &text,
+        &EditOp::SetWhen {
+            piece: 3,
+            when: When::Fight,
+        },
+    );
+    assert_eq!(fight, "<%hp> %{if:fight}%{right}%{end}%c_cyan%mana");
+    let always = edit(
+        &fight,
+        &EditOp::SetWhen {
+            piece: 4,
+            when: When::Always,
+        },
+    );
+    assert_eq!(always, text);
+    // It moves, and goes, as any part does.
+    assert_eq!(
+        edit(&text, &EditOp::Move { piece: 3, to: 0 }),
+        "%{right}<%hp> %c_cyan%mana"
+    );
+    assert_eq!(
+        edit(&text, &EditOp::Remove { piece: 3 }),
+        "<%hp> %c_cyan%mana"
+    );
+    // It takes no color or style, since its cells are spaces.
+    assert_eq!(
+        apply(
+            &text,
+            &EditOp::SetColor {
+                piece: 3,
+                color: ColorChoice::Named { index: 1 },
+                background: false,
+                underline: false,
+            },
+            &known,
+        ),
+        Err(EditError("Only a part that shows can take a color.".into()))
+    );
+    // A look set before it keeps reaching past it, in its spaces too.
+    let colored = edit("%c_red<%hp> %mana", &EditOp::InsertRight { at: 2 });
+    assert_eq!(colored, "%c_red<%hp%{right}> %mana");
+    assert_reads_clean(&colored);
 }
 
 #[test]

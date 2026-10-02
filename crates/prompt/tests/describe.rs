@@ -418,3 +418,23 @@ fn a_color_by_steps_reads_as_by_value_with_steps() {
         }
     );
 }
+
+#[test]
+fn a_push_to_the_right_reads_as_the_right_edge_and_a_layout_token() {
+    let template = Template::parse("<%hp>%{right}%mana");
+    let described = describe(&template, &Sampled { fight: false }, false);
+    let push = piece(&described.pieces, "%{right}");
+    assert_eq!(push.kind, PieceKindName::Right);
+    assert_eq!(push.label, "Right edge");
+    assert_eq!((push.when, push.when_fixed), (When::Always, false));
+    assert!(push.forms.is_empty() && push.field.is_none() && !push.shows);
+    // Edit as text colors it as it colors a line break.
+    let token = described
+        .tokens
+        .iter()
+        .find(|t| t.piece == push.piece)
+        .expect("its token");
+    assert_eq!((token.start, token.end), (5, 13));
+    assert_eq!(token.kind, TokenKindName::Line);
+    assert!(token.known);
+}

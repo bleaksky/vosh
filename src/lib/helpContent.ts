@@ -90,6 +90,7 @@ export const PROMPT_DESIGN_CODES: readonly PromptDesignCode[] = [
   },
 
   { codes: ['%nl'], text: 'Starts a new line.' },
+  { codes: ['%{right}'], text: 'Pushes the rest of its line to the right edge of the terminal.' },
   {
     codes: ['%{if:fight}', '%{ifnot:fight}', '%{end}'],
     text: 'Shows what sits between them only in a fight, or only out of one.',
@@ -411,7 +412,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     number: '9.3',
     title: 'Prompt design codes',
     section: 'Reference',
-    body: `Your own prompt is a design of text and codes. Customize prompt writes the codes for you as you click the parts of your prompt and pick values. Choose \`Edit as text\` there to read them or type your own.\n\n${promptCodesTable()}\n\nEvery value in \`Insert value…\` has codes of its own, and the picker shows them beside each form. Your tick, the time and the date keep counting while your prompt sits idle. Vosh draws it again each second they change, and waits while you select text or read back. Pinned, the band keeps counting through both.`,
+    body: `Your own prompt is a design of text and codes. Customize prompt writes the codes for you as you click the parts of your prompt and pick values. Choose \`Edit as text\` there to read them or type your own.\n\n${promptCodesTable()}\n\nEvery value in \`Insert value…\` has codes of its own, and the picker shows them beside each form. Your tick, the time and the date keep counting while your prompt sits idle. Vosh draws it again each second they change, and waits while you select text or read back. Pinned, the band keeps counting through both. A line with \`%{right}\` ends on the last column of your terminal, and Vosh draws it again when the window changes width.`,
   },
 ];
 
