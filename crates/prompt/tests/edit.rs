@@ -209,6 +209,18 @@ fn an_underline_kind_replaces_the_kind_the_piece_had() {
 }
 
 #[test]
+fn more_styles_turns_an_underline_kind_on_and_the_checked_kind_off() {
+    // More styles sends a kind on to pick it and the checked kind off.
+    let edited = edit("x %hp", &style(1, StyleChoice::Dotted, true));
+    assert_eq!(edited, "x %s_dotted%hp");
+    let edited = edit(&edited, &style(1, StyleChoice::Dotted, false));
+    assert_eq!(edited, "x %hp");
+    // Another kind's code off on a dotted piece ends the line too.
+    let edited = edit("x %s_dotted%hp", &style(1, StyleChoice::Curly, false));
+    assert_eq!(edited, "x %hp");
+}
+
+#[test]
 fn an_underline_takes_a_color_of_its_own() {
     let rgb = ColorChoice::Rgb {
         r: 191,

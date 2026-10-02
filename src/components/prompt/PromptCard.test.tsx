@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { BandEnv } from '../../lib/bandCells';
 import { menuPosition } from '../../lib/promptCard';
-import { MORE_STYLES_PLACE } from './PromptPiece';
+import { MORE_STYLES_HEIGHT, MORE_STYLES_PLACE } from './PromptPiece';
 import type { PromptCheckRead } from '../../lib/session';
 import { CandidateBox, MatchRow } from './PromptCandidate';
 import { CodesEntry } from './PromptCodes';
@@ -239,21 +239,58 @@ describe('where a card menu opens', () => {
   });
 
   it('opens More styles above its button, clear of the Underline row below', () => {
+    // Its four styles and four underline kinds at 30 px a row, the rule
+    // between them, and the menu's padding.
+    expect(MORE_STYLES_HEIGHT).toBe(8 * 30 + 13 + 12);
     // The Style row's More styles button, with the Underline row 36 px
     // under it while an underline is on.
     const more = { left: 360, top: 520, right: 452, bottom: 548 };
     const underlineRowTop = more.bottom + 8;
-    const menu = menuPosition(more, { width: 184, height: 112 }, MORE_STYLES_PLACE, viewport);
+    const size = { width: 184, height: MORE_STYLES_HEIGHT };
+    const menu = menuPosition(more, size, MORE_STYLES_PLACE, viewport);
     expect(menu.left).toBe(more.left);
-    expect(menu.top + 112).toBeLessThanOrEqual(more.top);
-    expect(menu.top + 112).toBeLessThan(underlineRowTop);
+    // Whole on screen, and all of it above the button.
+    expect(menu.top).toBeGreaterThanOrEqual(8);
+    expect(menu.top + MORE_STYLES_HEIGHT).toBeLessThanOrEqual(more.top);
+    expect(menu.top + MORE_STYLES_HEIGHT).toBeLessThan(underlineRowTop);
   });
 
-  it('stays inside the window', () => {
+  it('opens on the other side of its button when its own has no room', () => {
+    // At the window's foot, a menu meant to open below opens above, and
+    // stays inside the window's right edge.
     const near = { left: 1200, top: 760, right: 1260, bottom: 790 };
     expect(menuPosition(near, { width: 208, height: 261 }, 'below-start', viewport)).toEqual({
       left: 1064,
-      top: 531,
+      top: 495,
+    });
+  });
+
+  it('opens More styles below its button in a window too short for it above', () => {
+    // A 560 px window with the card scrolled, so the button sits 200 px
+    // down. Above it the menu would cover the button, so it opens below.
+    const short = { width: 1000, height: 560 };
+    const more = { left: 360, top: 200, right: 452, bottom: 228 };
+    const size = { width: 184, height: MORE_STYLES_HEIGHT };
+    expect(menuPosition(more, size, MORE_STYLES_PLACE, short)).toEqual({ left: 360, top: 232 });
+  });
+
+  it('scrolls a menu with room on neither side, on the side with more', () => {
+    // The window's least height, 360 px, with the button in the middle.
+    const least = { width: 1000, height: 360 };
+    const more = { left: 360, top: 140, right: 452, bottom: 168 };
+    const size = { width: 184, height: MORE_STYLES_HEIGHT };
+    const menu = menuPosition(more, size, MORE_STYLES_PLACE, least);
+    // 180 px below against 128 above.
+    expect(menu).toEqual({ left: 360, top: 172, maxHeight: 180 });
+    // It never covers its button and ends 8 px from the window's foot.
+    expect(menu.top).toBeGreaterThan(more.bottom);
+    expect(menu.top + (menu.maxHeight ?? 0)).toBe(least.height - 8);
+    // With more room above, it scrolls above and starts 8 px from the top.
+    const low = { ...more, top: 220, bottom: 248 };
+    expect(menuPosition(low, size, MORE_STYLES_PLACE, least)).toEqual({
+      left: 360,
+      top: 8,
+      maxHeight: 208,
     });
   });
 });

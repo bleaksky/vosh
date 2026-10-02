@@ -9,7 +9,9 @@ import {
   customColor,
   customText,
   MORE_STYLES,
+  MORE_UNDERLINES,
   moreLabel,
+  type MoreStylesPiece,
   rowsOf,
   swatchOf,
   THEME_HINT,
@@ -38,7 +40,7 @@ import {
   Segmented,
   type SegmentedOption,
 } from '../settings/ui';
-import { CardMenu } from './CardMenu';
+import { CardMenu, MenuSeparator } from './CardMenu';
 
 // The part you picked on your prompt (P5, P7, P8a, P8b, P10). The name line
 // says what it is and what it reads now, with the part's own codes as you
@@ -51,9 +53,10 @@ import { CardMenu } from './CardMenu';
 // The colors and styles follow the styles board: Color and Background
 // each take the terminal's own, By value on a value, a theme color or any
 // true color. Style keeps B, I and U, and More styles holds
-// strikethrough, dim and reverse. While an underline is on, the Underline
-// row picks its kind, each drawn in its own line, and its color, empty
-// for the text color. A color by value that no swatch shows, such as one
+// strikethrough, dim, reverse and blink, then the underline kinds past the
+// single line. While an underline is on, the Underline row picks its
+// kind, each drawn in its own line, and its color, empty for the text
+// color. A color by value that no swatch shows, such as one
 // typed in Edit as text, names itself in the Custom field.
 
 const WHEN_OPTIONS: SegmentedOption<PromptWhen>[] = [
@@ -385,13 +388,20 @@ function textHex(color: PromptColorChoice, env: BandEnv, palette: (index: number
 }
 
 /** More styles opens above its button. Below, it covers the Underline
- *  row, so the underline kind you picked hides while you choose. */
+ *  row, so the underline kind you picked hides while you choose. In a
+ *  window too short for that, it opens below (menuPosition). */
 export const MORE_STYLES_PLACE = 'above-start' as const;
 
-/** The Style row's More styles button and its menu: strikethrough, dim
- *  and reverse, each drawn in its own look with a check while it is on.
- *  The button reads the ones that are on, in the pressed look of B, I
- *  and U, so you see them without opening it. */
+/** More styles' height in px, as prompt.css draws it: a row of 30 for
+ *  each style and underline kind, the rule of 13 between them, and the
+ *  menu's padding of 6 above and below. The placement tests read it. */
+export const MORE_STYLES_HEIGHT = (MORE_STYLES.length + MORE_UNDERLINES.length) * 30 + 13 + 12;
+
+/** The Style row's More styles button and its menu: strikethrough, dim,
+ *  reverse and blink, then the underline kinds, each drawn in its own
+ *  look with a check while it is on. The button reads the ones that are
+ *  on, in the pressed look of B, I and U, so you see them without
+ *  opening it. */
 function MoreStyles({
   piece,
   onStyle,
@@ -401,7 +411,7 @@ function MoreStyles({
 }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const label = moreLabel(piece);
-  const on = MORE_STYLES.some((s) => piece[s.style]);
+  const on = label !== 'More styles';
   return (
     <>
       <button
@@ -436,33 +446,45 @@ function MoreStyles({
   );
 }
 
-/** The items of More styles, a check before each one that is on. */
+/** The items of More styles, a check before each one that is on: the
+ *  styles, a rule, and the underline kinds. Each item turns its style on
+ *  while it is off and off while it is on, so an underline kind turns
+ *  the underline on in that kind, and the kind that is on turns it off.
+ *  The styles are checkboxes, and the kinds are radios, since one kind
+ *  is on at a time. Blink draws its shown half and never blinks here. */
 export function MoreStyleItems({
   piece,
   onToggle,
 }: {
-  piece: Pick<PromptPiece, 'strike' | 'dim' | 'inverse'>;
+  piece: MoreStylesPiece;
   onToggle: (style: PromptStyleChoice, on: boolean) => void;
 }) {
+  const item = (
+    style: PromptStyleChoice,
+    label: string,
+    checked: boolean,
+    role: 'menuitemcheckbox' | 'menuitemradio',
+  ) => (
+    <li key={style} role="none">
+      <button
+        type="button"
+        role={role}
+        aria-checked={checked}
+        className="pc-style-item"
+        onClick={() => onToggle(style, !checked)}
+      >
+        {checked && <CheckIcon className="pc-start-check" />}
+        <span className={`pc-style-sample is-${style}`}>{label}</span>
+      </button>
+    </li>
+  );
   return (
     <>
-      {MORE_STYLES.map((s) => {
-        const checked = piece[s.style];
-        return (
-          <li key={s.style} role="none">
-            <button
-              type="button"
-              role="menuitemcheckbox"
-              aria-checked={checked}
-              className="pc-style-item"
-              onClick={() => onToggle(s.style, !checked)}
-            >
-              {checked && <CheckIcon className="pc-start-check" />}
-              <span className={`pc-style-sample is-${s.style}`}>{s.label}</span>
-            </button>
-          </li>
-        );
-      })}
+      {MORE_STYLES.map((s) => item(s.style, s.label, piece[s.style], 'menuitemcheckbox'))}
+      <MenuSeparator />
+      {MORE_UNDERLINES.map((k) =>
+        item(k.style, k.label, piece.underline_style === k.style, 'menuitemradio'),
+      )}
     </>
   );
 }

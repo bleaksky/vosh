@@ -324,16 +324,43 @@ export const UNDERLINE_KINDS: readonly {
 ];
 
 /** The styles the Style row's More styles menu holds, past B, I and U. */
-export const MORE_STYLES: readonly { style: 'strike' | 'dim' | 'inverse'; label: string }[] = [
+export const MORE_STYLES: readonly {
+  style: 'strike' | 'dim' | 'inverse' | 'blink';
+  label: string;
+}[] = [
   { style: 'strike', label: 'Strikethrough' },
   { style: 'dim', label: 'Dim' },
   { style: 'inverse', label: 'Reverse' },
+  { style: 'blink', label: 'Blink' },
 ];
 
+/** The underline kinds More styles lists after its styles, past the
+ *  single line of U. Picking one turns the underline on in that kind,
+ *  and picking the one that is on turns the underline off. */
+export const MORE_UNDERLINES: readonly {
+  style: Exclude<PromptUnderlineStyle, 'underline'>;
+  label: string;
+}[] = [
+  { style: 'double', label: 'Double underline' },
+  { style: 'curly', label: 'Curly underline' },
+  { style: 'dotted', label: 'Dotted underline' },
+  { style: 'dashed', label: 'Dashed underline' },
+];
+
+/** The look More styles reads. */
+export type MoreStylesPiece = Pick<
+  PromptPiece,
+  'strike' | 'dim' | 'inverse' | 'blink' | 'underline_style'
+>;
+
 /** What the More styles button reads: the styles it holds that are on,
- *  so you see them without opening it, or More styles with none on. */
-export function moreLabel(piece: Pick<PromptPiece, 'strike' | 'dim' | 'inverse'>): string {
-  const on = MORE_STYLES.filter((s) => piece[s.style]).map((s) => s.label);
+ *  then its underline kind, so you see them without opening it, or More
+ *  styles with none on. */
+export function moreLabel(piece: MoreStylesPiece): string {
+  const on = [
+    ...MORE_STYLES.filter((s) => piece[s.style]).map((s) => s.label),
+    ...MORE_UNDERLINES.filter((k) => piece.underline_style === k.style).map((k) => k.label),
+  ];
   if (on.length === 0) return 'More styles';
   return [on[0], ...on.slice(1).map((label) => label.toLowerCase())].join(', ');
 }
