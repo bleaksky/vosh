@@ -49,7 +49,6 @@ pub mod describe;
 pub mod design;
 pub mod edit;
 pub mod engine;
-pub mod generic;
 pub mod presets;
 pub mod render;
 pub mod report;
@@ -60,6 +59,7 @@ pub mod testkit;
 pub mod values;
 pub mod wrap;
 
+pub use capture::generic;
 pub use config::{CaptureConfig, PromptConfig, PromptShow};
 pub use design::{FieldRef, Template};
 pub use engine::{GamePromptSeen, PromptEngine, Status};
