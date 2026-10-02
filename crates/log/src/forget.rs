@@ -221,7 +221,7 @@ fn prompt_pattern(end: &str) -> Regex {
 /// a password. It covers every password prompt in the game's source, and
 /// only a whole line shaped like one, so a channel line that mentions a
 /// password never matches.
-pub fn is_password_prompt(line: &str) -> bool {
+pub(crate) fn is_password_prompt(line: &str) -> bool {
     static WHOLE: OnceLock<Regex> = OnceLock::new();
     WHOLE
         .get_or_init(|| prompt_pattern("$"))
@@ -627,13 +627,13 @@ impl Replay {
 /// Replays session logs row by row to find the lines where you sent a
 /// password. See the module docs for the rule.
 #[derive(Debug, Default)]
-pub struct PasswordFinder {
+pub(crate) struct PasswordFinder {
     sessions: HashMap<i64, Replay>,
     found: Vec<(i64, i64)>,
 }
 
 impl PasswordFinder {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -641,7 +641,7 @@ impl PasswordFinder {
     /// interleave. `sent` marks a line you sent (a `> ` row with no raw
     /// bytes). `ts_ms` is the row's time. The lines of one write to the
     /// game share it.
-    pub fn row(&mut self, id: i64, session_id: i64, ts_ms: i64, text: &str, sent: bool) {
+    pub(crate) fn row(&mut self, id: i64, session_id: i64, ts_ms: i64, text: &str, sent: bool) {
         let replay = self.sessions.entry(session_id).or_default();
         if sent {
             if let Some(line) = replay.sent(id, ts_ms, text) {
@@ -657,7 +657,7 @@ impl PasswordFinder {
     /// The lines found, oldest first. A session whose log ends right
     /// after the line that followed a pick counts that line, since the
     /// game said nothing to show it was a command.
-    pub fn finish(mut self) -> PasswordLines {
+    pub(crate) fn finish(mut self) -> PasswordLines {
         for (sid, replay) in &self.sessions {
             if let Some(candidate) = &replay.candidate {
                 if !candidate.heard {
@@ -784,7 +784,7 @@ impl LogStore {
 
     /// True when an earlier run blanked lines and could not clear the
     /// old copies of their text from the file.
-    pub fn wipe_pending(&self) -> Result<bool> {
+    fn wipe_pending(&self) -> Result<bool> {
         let pending = self.conn.query_row(
             "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
             [WIPE_PENDING_TABLE],
