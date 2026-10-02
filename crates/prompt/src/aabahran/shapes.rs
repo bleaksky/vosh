@@ -20,7 +20,7 @@
 //! A shape settles, so its partial is the prompt at once, when that
 //! segment ends in a character you wrote.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use regex::Regex;
 use serde::Serialize;
@@ -28,7 +28,6 @@ use serde::Serialize;
 use super::codes::{Code, Edges};
 use super::lex::{self, Lexed, Piece, Placed, Token};
 use super::{CompileError, Warning, WarningKind, Which, Who};
-use crate::capture::Recognized;
 
 /// The Wizi and Incog levels the game prints before the first line.
 pub const PREFIX: &str = r"(?:\(Wizi (?<wizi>\d+)\) )?(?:\(Incog (?<incog>\d+)\) )?";
@@ -158,55 +157,6 @@ impl Shape {
             out.extend(marks);
         }
         Some(out)
-    }
-
-    /// Read whole lines as this shape, the last one without its line end
-    /// or ended by a GA or EOR. Every name the shape reads is in the
-    /// values, empty where the game printed nothing. The AFK shape reads
-    /// `afk`.
-    pub fn read(&self, lines: &[&str]) -> Option<Recognized> {
-        self.read_with(lines, |line| Some(&line.line))
-    }
-
-    /// Read lines whose last one is a partial the game has not ended.
-    /// Only a shape that settles reads one, and a partial split before
-    /// its last character does not match.
-    pub fn read_partial(&self, lines: &[&str]) -> Option<Recognized> {
-        if !self.settle {
-            return None;
-        }
-        self.read_with(lines, |line| line.partial.as_ref())
-    }
-
-    fn read_with<'a>(
-        &'a self,
-        lines: &[&str],
-        last: impl Fn(&'a ShapeLine) -> Option<&'a Regex>,
-    ) -> Option<Recognized> {
-        if lines.len() != self.lines.len() {
-            return None;
-        }
-        let mut values = BTreeMap::new();
-        let count = lines.len();
-        for (i, (text, line)) in lines.iter().zip(&self.lines).enumerate() {
-            let re = if i + 1 == count {
-                last(line)?
-            } else {
-                &line.line
-            };
-            let found = re.captures(text)?;
-            for name in re.capture_names().flatten() {
-                let value = found.name(name).map_or("", |m| m.as_str());
-                values.insert(name.to_string(), value.to_string());
-            }
-        }
-        if self.kind == ShapeKind::Afk {
-            values.insert("afk".to_string(), "1".to_string());
-        }
-        Some(Recognized {
-            values,
-            ..Recognized::default()
-        })
     }
 
     /// The names this shape reads, in the order its lines print them,
