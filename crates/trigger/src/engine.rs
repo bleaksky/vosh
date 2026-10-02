@@ -102,8 +102,9 @@ pub fn process_with_plain(
 /// in, a true color or a 256 color past the 16, holds
 /// [`readable::READABLE_CONTRAST`] on what it draws on (see
 /// [`readable::lift_sgr`]). `None` leaves each color as the trigger set
-/// it. A line no trigger matched keeps the bytes the game sent either
-/// way, so the game's own colors never change.
+/// it. The game's own colors never change either way. A line no trigger
+/// matched keeps the bytes the game sent, and a highlight drawn over those
+/// bytes lifts its own open alone.
 pub fn process_on_ground(
     store: &TriggerStore,
     original: &[u8],
@@ -269,13 +270,7 @@ pub fn process_on_ground(
         // Each highlight draws over the text it matched, and the rest of
         // the line keeps the codes the game sent. A line whose bytes do
         // not spell `plain` is rebuilt from it instead.
-        let spans = highlight_spans(plain, &highlights);
-        if spans.is_empty() {
-            bytes_to_string_lossy(original)
-        } else {
-            highlight_in_place(original, plain, &spans)
-                .unwrap_or_else(|| paint_spans(plain, &spans, HighlightStyle::sgr_reset()))
-        }
+        draw_in_place(original, plain, highlight_spans(plain, &highlights), ground)
     } else {
         // Apply highlights last on the (possibly replaced) text so colors
         // wrap whatever the user ends up seeing.
@@ -298,7 +293,11 @@ pub fn process_on_ground(
         text
     };
     // The base color fills what the line left in the default color,
-    // around the game's codes and the spans above alike.
+    // around the game's codes and the spans above alike. Its open reads
+    // on the ground the way a span's does.
+    if let (Some(open), Some(ground)) = (&mut base_open, ground) {
+        lift_open(open, ground);
+    }
     let display = Some(match &base_open {
         Some(open) => with_base(&display, open),
         None => display,
@@ -389,6 +388,40 @@ fn paint_spans(text: &str, spans: &[Span], close: &str) -> String {
     }
     out.push_str(&text[last..]);
     out
+}
+
+/// `original` with each of `spans` drawn over the text it covers (see
+/// [`highlight_in_place`]), or the line rebuilt from `plain` when its
+/// bytes do not spell it, and `original` as sent when there is no span.
+/// With `ground`, each span's open first gets the lift a rebuilt line gets
+/// (see [`readable::lift_sgr`]). A span opens on the terminal ground, after
+/// a reset where the game had set codes, so its open alone tells what it
+/// draws on. The game's codes around and after a span never reach the
+/// lift, so the game's own colors stay as sent.
+fn draw_in_place(
+    original: &[u8],
+    plain: &str,
+    mut spans: Vec<Span>,
+    ground: Option<readable::Rgb>,
+) -> String {
+    if spans.is_empty() {
+        return bytes_to_string_lossy(original);
+    }
+    if let Some(ground) = ground {
+        for (_, _, open) in &mut spans {
+            lift_open(open, ground);
+        }
+    }
+    highlight_in_place(original, plain, &spans)
+        .unwrap_or_else(|| paint_spans(plain, &spans, HighlightStyle::sgr_reset()))
+}
+
+/// `open`, an SGR sequence a trigger draws with, with each fixed color in
+/// it lifted to read on `ground`.
+fn lift_open(open: &mut String, ground: readable::Rgb) {
+    if let Cow::Owned(lifted) = readable::lift_sgr(open, ground) {
+        *open = lifted;
+    }
 }
 
 /// `original` with each span, at its place in `plain`, drawn in its style
@@ -1672,5 +1705,56 @@ mod tests {
         let s = store(vec![washed]);
         let plain = process(&s, b"a storm rolls in").display.unwrap();
         assert_eq!(on_ground(&s, b"a storm rolls in", Some(VELLUM)), plain);
+    }
+
+    /// The name of room 5279 as `do_look` sends it inside, the 256 color
+    /// 255 tint ahead of the grey of the name (fixtures/room-colors). 255
+    /// reads about 1.1 to 1 on Vellum, so a lift that reached the game's
+    /// codes would change it.
+    const BANK: &str = "\x1b[38;5;255m\x1b[0;1;30mThe Bank of Aabahran\x1b[0;0m\x1b[0;0m";
+
+    #[test]
+    fn a_fixed_color_drawn_in_place_reads_on_a_light_ground() {
+        // A span in the weather blue over `Bank`. The game's grey stops at
+        // the span and comes back after it, and its tint stays as sent.
+        let plain = plain_text(BANK.as_bytes());
+        let at = plain.find("Bank").unwrap();
+        let spans = vec![(at, at + 4, "\x1b[38;2;143;167;217m".to_string())];
+        let shown = |(r, g, b): readable::Rgb| {
+            format!(
+                "\x1b[38;5;255m\x1b[0;1;30mThe \x1b[0;38;2;{r};{g};{b}mBank\x1b[0;1;30m \
+                 of Aabahran\x1b[0;0m\x1b[0;0m"
+            )
+        };
+        let lifted = readable::lift_to_contrast(WEATHER, VELLUM);
+        assert_ne!(lifted, WEATHER);
+        let draw = |ground| draw_in_place(BANK.as_bytes(), &plain, spans.clone(), ground);
+        assert_eq!(draw(None), shown(WEATHER));
+        assert_eq!(draw(Some(NORD)), shown(WEATHER));
+        assert_eq!(draw(Some(VELLUM)), shown(lifted));
+
+        // A line whose bytes do not spell its plain text is rebuilt, and
+        // its span reads on the ground too.
+        let (r, g, b) = lifted;
+        assert_eq!(
+            draw_in_place(
+                b"\x1b[0;32mMaren\x1b[0;0m",
+                "Tolliver",
+                vec![(0, 8, "\x1b[38;2;143;167;217m".to_string())],
+                Some(VELLUM),
+            ),
+            format!("\x1b[38;2;{r};{g};{b}mTolliver\x1b[0m")
+        );
+    }
+
+    #[test]
+    fn the_game_colors_around_a_highlight_in_place_stay_on_a_light_ground() {
+        let s = store(vec![highlight("bank", "Bank", NamedColor::Cyan)]);
+        let shown = on_ground(&s, BANK.as_bytes(), Some(VELLUM));
+        assert_eq!(
+            shown,
+            "\x1b[38;5;255m\x1b[0;1;30mThe \x1b[0;36mBank\x1b[0;1;30m of Aabahran\x1b[0;0m\x1b[0;0m"
+        );
+        assert_eq!(Some(shown), process(&s, BANK.as_bytes()).display);
     }
 }
