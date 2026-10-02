@@ -8,6 +8,7 @@ import {
   glyphGrid,
   gridDims,
   gridRooms,
+  offFloorLayers,
   playerCellOf,
   sectorCodeOf,
   type DoorState,
@@ -529,16 +530,9 @@ function drawSquares(
   // the line "stops at" the same-floor cell visually. Off-floor
   // lines stay visible inside off-floor cells (translucent) and in
   // empty grid positions where no same-floor cell sits.
-  drawOffFloorCells(ctx, payload.a, ox, oy, pitch, size);
-  drawOffFloorCells(ctx, payload.b, ox, oy, pitch, size);
-  if (Array.isArray(payload.zr)) {
-    drawOffFloorCells(ctx, payload.zr, ox, oy, pitch, size);
-  }
-  drawOffFloorOverlay(ctx, payload.a, ox, oy, pitch);
-  drawOffFloorOverlay(ctx, payload.b, ox, oy, pitch);
-  if (Array.isArray(payload.zr)) {
-    drawOffFloorOverlay(ctx, payload.zr, ox, oy, pitch);
-  }
+  const layers = offFloorLayers(payload);
+  for (const layer of layers) drawOffFloorCells(ctx, layer, ox, oy, pitch, size);
+  for (const layer of layers) drawOffFloorOverlay(ctx, layer, ox, oy, pitch);
 
   // Squares, FL web map style: dim sector fill + 0.8-alpha sector border,
   // origin gets a yellow glow + bright yellow border. Each cell's alpha
