@@ -1,15 +1,18 @@
 //! What the game hides right now, worked out from the latest packets and
 //! the fresh prompt values, and where a fresh capture disagrees with
 //! GMCP.
+//!
+//! The lamented tears rule (H7 in section 1.2 of the build spec) lives
+//! here. The older server build sends true values under the song, and
+//! only Char.Affects naming it tells Vosh the game means to hide them.
 
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
 use super::catalog::Pair;
 use super::Vars;
-use crate::aabahran;
 use crate::values::format::{lang_game, Position};
-use crate::values::gmcp::{self, CHAR_STATE, CHAR_WORTH, ROOM_WEATHER, WORLD_TIME};
+use crate::values::gmcp::{self, Affects, CHAR_STATE, CHAR_WORTH, ROOM_WEATHER, WORLD_TIME};
 
 /// Which values the game hides right now. Worked out from the latest
 /// packets and the fresh prompt values, never stored (D23).
@@ -155,7 +158,7 @@ impl Vars {
         // H6, Group.Info carries the flag.
         let h6 = g_flag;
         // H7, Char.Affects names the song or carries the flag.
-        let h7 = a_flag || affects.as_ref().is_some_and(aabahran::names_lament);
+        let h7 = a_flag || affects.as_ref().is_some_and(names_lament);
         // Z, Group.Info is {}.
         let z = group.as_ref().is_some_and(|g| g.empty);
 
@@ -252,5 +255,44 @@ impl Vars {
             .and_then(|t| t.hp_pct);
         check("tank_hp", both(num("tank_pct"), tank));
         out
+    }
+}
+
+/// The song that hides your vitals, affects, group and your opponent's
+/// condition while it is on you.
+const LAMENT: &str = "lamented tears";
+
+/// True when Char.Affects names lamented tears, in any case.
+fn names_lament(affects: &Affects) -> bool {
+    affects
+        .list
+        .iter()
+        .any(|a| a.name.trim().eq_ignore_ascii_case(LAMENT))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::values::gmcp::Affect;
+
+    fn affects(names: &[&str]) -> Affects {
+        Affects {
+            list: names
+                .iter()
+                .map(|n| Affect {
+                    name: (*n).to_string(),
+                    ..Affect::default()
+                })
+                .collect(),
+            hidden: false,
+        }
+    }
+
+    #[test]
+    fn the_song_is_found_by_name_in_any_case() {
+        assert!(names_lament(&affects(&["bless", "lamented tears"])));
+        assert!(names_lament(&affects(&["Lamented Tears"])));
+        assert!(!names_lament(&affects(&["bless", "tears"])));
+        assert!(!names_lament(&affects(&[])));
     }
 }
