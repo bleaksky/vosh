@@ -12,8 +12,10 @@ import { SECTORS, UNKNOWN_GLYPH, sectorForCode, sectorGlyphColor } from './mapPa
 /// live in a separate top-level `zr` array (see `MultiZEntry`), not
 /// in the `g` grid.
 export interface ServerCell {
-  /// Exit string like `"nesw"`. Uppercase letter means an exit that
-  /// leads off-grid.
+  /// Exit string like `"nesw"`. An uppercase letter is an exit that
+  /// does not land on the room in the next cell (exit_mismatch in
+  /// minimap.c), whether that cell is empty, off the grid, or holds
+  /// another room.
   e?: string;
   /// Area vnum this cell belongs to.
   ar?: number | string;
@@ -116,8 +118,12 @@ export function gridDims(payload: MapTilesPayload): { rows: number; cols: number
 
 export type Dir = 'n' | 's' | 'e' | 'w';
 
+/// Whether the exit that way lands on the room in the next cell. The
+/// game sends that letter in lowercase. An uppercase letter is an exit
+/// that leads somewhere else, so it never joins this room to the room
+/// beside it.
 export function hasExit(cell: ServerCell, dir: Dir): boolean {
-  return Boolean(cell.e && cell.e.toLowerCase().includes(dir));
+  return Boolean(cell.e?.includes(dir));
 }
 
 /// Possible door states reported by the server in `cell.d[dir]`.
@@ -254,24 +260,30 @@ const DIR_OFFSETS: Array<[Dir, Dir, number, number]> = [
 
 /** The corridors the squares and tileset styles stroke under the rooms.
  *
- *  Hidden doors get special handling: the server omits the direction
- *  from `cell.e` AND the hidden room beyond may be absent from the grid
- *  (the immortal-only `d[dir] = "hidden"` flag is the ONLY signal we
- *  have). So the hidden path (a) ignores `hasExit`, (b) accepts a null
- *  neighbor and draws a half-pitch stub so the line says "secret exit"
- *  without claiming a room that is not actually rendered. */
+ *  A corridor reaches the next cell only along a lowercase exit, the one
+ *  that lands on the room there. Its door color comes from this room's
+ *  door that way and from the neighbor's door back, but only when the
+ *  neighbor's letter back is lowercase too. An uppercase letter there is
+ *  an exit to somewhere else, and its door belongs to that exit.
+ *
+ *  An immortal sees secret exits. The game sends them in `e` like any
+ *  other exit, uppercase when they lead elsewhere, and marks their door
+ *  `d[dir] = "hidden"`. A hidden door whose exit does not land on the
+ *  next room draws a half pitch stub, so the line says "secret exit"
+ *  without joining this room to the room beside it. */
 export function corridors(payload: MapTilesPayload, rows: number, cols: number): Corridor[] {
   const out: Corridor[] = [];
   for (const { row, col, cell } of gridRooms(payload, rows, cols)) {
     for (const [dir, opp, dx, dy] of DIR_OFFSETS) {
       const neighbor = getCell(payload, row + dy, col + dx);
       const here = doorStateAt(cell, dir);
-      const there = neighbor ? doorStateAt(neighbor, opp) : null;
-      const state = combineDoorStates(here, there);
-      const isHidden = state === 'hidden';
-      if (!hasExit(cell, dir) && !isHidden) continue;
-      if (!isHidden && !neighbor) continue;
-      out.push({ row, col, dx, dy, reach: neighbor ? 1 : 0.5, state: state ?? 'open' });
+      if (neighbor && hasExit(cell, dir)) {
+        const there = hasExit(neighbor, opp) ? doorStateAt(neighbor, opp) : null;
+        const state = combineDoorStates(here, there) ?? 'open';
+        out.push({ row, col, dx, dy, reach: 1, state });
+      } else if (here === 'hidden') {
+        out.push({ row, col, dx, dy, reach: 0.5, state: 'hidden' });
+      }
     }
   }
   return out;
@@ -488,14 +500,15 @@ export function glyphGrid(payload: MapTilesPayload): GlyphGrid | null {
     }
   }
 
-  // Pass 3b: hidden doors. The server omits the direction from
-  // `cell.e` and the hidden room beyond is normally absent from the
-  // grid — `cell.d[dir] === 'hidden'` is the only signal we have.
-  // Iterate all four directions of every cell and place a dashed
-  // connector in the slot pointing toward the secret exit. Only
-  // writes if the slot is still empty so a regular connector from
-  // pass 3 (when both sides happen to be visible AND flagged
-  // hidden) wins.
+  // Pass 3b: hidden doors. An immortal sees secret exits, which the
+  // game sends in `cell.e` like any other exit, uppercase when they
+  // lead elsewhere, with `cell.d[dir] === 'hidden'`. Place a dashed
+  // connector in the slot pointing toward each one. A slot between two
+  // rooms reads as a join, so it takes the connector only when the
+  // exit lands on the room beside it. Toward an empty cell it marks the
+  // secret exit, as the stub corridors() draws does. Only writes if
+  // the slot is still empty so a regular connector from pass 3 (when
+  // both sides lead to each other) wins.
   const hiddenDirOffsets: Array<[Dir, number, number, string]> = [
     ['n', 0, -1, '╎'],
     ['e', 1, 0, '╌'],
@@ -508,6 +521,7 @@ export function glyphGrid(payload: MapTilesPayload): GlyphGrid | null {
       if (!here) continue;
       for (const [dir, dx, dy, glyph] of hiddenDirOffsets) {
         if (doorStateAt(here, dir) !== 'hidden') continue;
+        if (getCell(payload, r + dy, c + dx) && !hasExit(here, dir)) continue;
         const or = 2 * (r - 1) + dy;
         const oc = 2 * (c - 1) + dx;
         if (or < 0 || or >= outRows || oc < 0 || oc >= outCols) continue;

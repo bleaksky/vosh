@@ -22,7 +22,9 @@ fixtures/
   gmcp/      GMCP message captures.
     aabahran/  Hand written Aabahran packets, one payload per file, for the
                new server build and the two older builds. Its README lists
-               what each one stands for.
+               what each one stands for. The Map.Tiles packets in map/
+               come from a port of the server's own map code run over
+               the game's area files instead.
   ipc/       names.txt, every name the page and the app share, each command
              with the keys its function reads and each event with who
              sends it and whether the page hears it. The IPC contract
