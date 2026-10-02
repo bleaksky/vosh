@@ -25,7 +25,7 @@ export function MapPane() {
     <>
       <PaneHeader meta={info?.area ? <PaneMeta>{info.area}</PaneMeta> : null} />
       <div ref={boxRef} className="pane-map-box">
-        <ServerMapView embedded emptyText="The map appears when your MUD sends Map.Tiles." />
+        <ServerMapView emptyText="The map appears when your MUD sends Map.Tiles." />
       </div>
       <ul
         ref={rowsRef}

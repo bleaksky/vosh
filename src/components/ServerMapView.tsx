@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } from 'react';
-import { onGmcpPackage, onState } from '../lib/session';
+import { onGmcpPackage } from '../lib/session';
 import {
   MAP_COLORS,
   SECTORS,
@@ -10,7 +10,6 @@ import {
   sectorGlyphColor,
 } from '../lib/mapPalette';
 import { MAP_STYLE_KEY, loadMapStyle, type MapStyle } from '../lib/mapStyle';
-import { drawTerrainDecorations } from '../lib/terrainDecor';
 import { subscribeThemeChanges } from '../lib/theme';
 import { pushToast } from '../lib/toasts';
 import { MapPaneControls } from './panel/MapPaneControls';
@@ -92,7 +91,6 @@ type Style = MapStyle;
 
 const TILESET_KEY = 'vosh.layout.serverMapTileset';
 const ZOOM_KEY = 'vosh.layout.serverMapZoom';
-const CONTROLS_KEY = 'vosh.map.controlsOpen';
 
 // Zoom multiplier applied to the base 20-pixel pitch. 1.0 = default
 // (20px cells), 2.0 = 40px, 0.5 = 10px. Stepping at 0.25 increments
@@ -114,14 +112,6 @@ function loadTileset(): string | null {
     return localStorage.getItem(TILESET_KEY);
   } catch {
     return null;
-  }
-}
-
-function loadControlsOpen(): boolean {
-  try {
-    return localStorage.getItem(CONTROLS_KEY) === '1';
-  } catch {
-    return false;
   }
 }
 
@@ -270,14 +260,15 @@ function startTilesCache(): void {
 }
 
 interface ServerMapViewProps {
-  /** Inside a One Window pane. The pane header replaces the map's own
-   *  header and controls, the canvas takes the panel's color, and the
-   *  empty state is `emptyText` in the page instead of canvas text. */
-  embedded?: boolean;
+  /** What the pane says until the first Map.Tiles arrives. */
   emptyText?: string;
 }
 
-export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProps = {}) {
+/** The drawing in the Map pane. The pane header names the area, the
+ *  map's own control sits in the drawing's corner, the canvas takes
+ *  the panel's color, and the empty state is `emptyText` in the page
+ *  instead of canvas text. */
+export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -291,19 +282,10 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
   const [style, setStyle] = useState<Style>(loadStyle);
   const [tilesetUrl, setTilesetUrl] = useState<string | null>(loadTileset);
   const [tilesetImage, setTilesetImage] = useState<HTMLImageElement | null>(null);
-  const [tilesetError, setTilesetError] = useState<string | null>(null);
   // Set while a tileset you just picked decodes. A pane has no status
   // row, so a failure there says so in a toast.
   const pickedRef = useRef(false);
   const [zoom, setZoom] = useState<number>(loadZoom);
-  // Current area name from Room.Info, lowercased for the caps header
-  // ("map · ashen quarter"). Null until the first push and after
-  // disconnect, when the header falls back to the bare "map" label.
-  const [area, setArea] = useState<string | null>(null);
-  // Whether the mode / zoom / radius controls row is expanded. The
-  // header itself stays quiet; everything operable hides behind the
-  // sliders toggle, and the choice survives relaunch.
-  const [controlsOpen, setControlsOpen] = useState<boolean>(loadControlsOpen);
   // Snapshot of the persistent mapping store. We use it to translate the
   // player-centric Map.Tiles grid into stable world coordinates so cells
   // do not shift on canvas as the player walks.
@@ -343,14 +325,6 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     }
   }, [zoom]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(CONTROLS_KEY, controlsOpen ? '1' : '0');
-    } catch {
-      // ignore
-    }
-  }, [controlsOpen]);
-
   // Ctrl/Cmd + wheel zooms in/out, mirroring the convention used by
   // map apps. Attached non-passively so we can preventDefault and stop
   // the browser from scrolling the surrounding pane in lieu of zooming.
@@ -376,18 +350,16 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     img.onload = () => {
       pickedRef.current = false;
       setTilesetImage(img);
-      setTilesetError(null);
     };
     img.onerror = () => {
       setTilesetImage(null);
-      setTilesetError('failed to decode tileset image');
-      if (embedded && pickedRef.current) {
+      if (pickedRef.current) {
         pushToast({ kind: 'error', message: 'Vosh could not read that tileset image.' });
       }
       pickedRef.current = false;
     };
     img.src = tilesetUrl;
-  }, [tilesetUrl, embedded]);
+  }, [tilesetUrl]);
 
   // Map.Tiles is the sole tile source; updating `tilesSnap` re-runs
   // the draw effect. The cache drops a push whose JSON matches the
@@ -402,35 +374,6 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     };
   }, []);
 
-  useEffect(() => {
-    // A pane's header names the area itself, and a render per room
-    // would only redraw what never shows.
-    if (embedded) return;
-    let unsubRoom: (() => void) | undefined;
-    let unsubState: (() => void) | undefined;
-
-    // Room.Info carries the area name in its `area` field. The header
-    // only wants the name, lowercased for the caps label.
-    onGmcpPackage<{ area?: string }>('Room.Info', (data) => {
-      const name =
-        data && typeof data === 'object' && typeof data.area === 'string' ? data.area : '';
-      setArea(name ? name.toLowerCase() : null);
-    }).then((fn) => {
-      unsubRoom = fn;
-    });
-
-    onState((payload) => {
-      if (payload.kind === 'disconnected') setArea(null);
-    }).then((fn) => {
-      unsubState = fn;
-    });
-
-    return () => {
-      unsubRoom?.();
-      unsubState?.();
-    };
-  }, [embedded]);
-
   // draw() closes over this render's tiles/style/tileset/zoom. The
   // effects and persistent observers below call it through drawRef so
   // callbacks that outlive a render (rAF, timers, ResizeObserver,
@@ -444,9 +387,8 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     const cssHeight = container.clientHeight;
     // Only resize the backing buffer. CSS keeps the display size
     // pinned to the container via width:100%/height:100% so the
-    // canvas tracks layout reflows (e.g. the tileset-bar appearing
-    // when style flips) without needing the inline style to be
-    // refreshed in lockstep.
+    // canvas tracks layout reflows without needing the inline style
+    // to be refreshed in lockstep.
     const targetW = Math.max(1, cssWidth * dpr);
     const targetH = Math.max(1, cssHeight * dpr);
     if (canvas.width !== targetW || canvas.height !== targetH) {
@@ -459,18 +401,12 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     // A pane's drawing sits on the panel's own color with no box
     // around it, as the approved Map pane shows: rooms, corridors, and
     // doors, nothing behind them.
-    const ground = embedded ? MAP_COLORS.panel : MAP_COLORS.bg;
+    const ground = MAP_COLORS.panel;
     ctx.fillStyle = ground;
     ctx.fillRect(0, 0, cssWidth, cssHeight);
 
-    if (!tiles) {
-      // A pane shows its empty state as page text instead.
-      if (embedded) return;
-      ctx.fillStyle = '#6e7681';
-      ctx.font = '12px monospace';
-      ctx.fillText('waiting for Map.Tiles GMCP push', 10, 22);
-      return;
-    }
+    // A pane shows its empty state as page text instead.
+    if (!tiles) return;
 
     const { rows, cols } = gridDims(tiles);
     if (rows === 0 || cols === 0) {
@@ -482,75 +418,6 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
 
     const centerR = Math.floor((rows + 1) / 2);
     const centerC = Math.floor((cols + 1) / 2);
-
-    // Terrain decorations in the void around the rooms. A pane leaves
-    // them out, so the drawing is only rooms, corridors, and doors on
-    // the panel's color.
-    if (!embedded) {
-      // Pick the dominant sector from the visible cells. Drives both the
-      // terrain decorations in the void and the watermark tint.
-      const sectorCounts: Record<string, number> = {};
-      for (const rowKey of Object.keys(tiles.g ?? {})) {
-        const colMap = tiles.g?.[rowKey];
-        if (!colMap) continue;
-        for (const cellKey of Object.keys(colMap)) {
-          const cell = colMap[cellKey];
-          if (!cell || typeof cell === 'string') continue;
-          const code = cell.s ?? '';
-          if (!code) continue;
-          sectorCounts[code] = (sectorCounts[code] ?? 0) + 1;
-        }
-      }
-      let dominantCode = '0';
-      let bestCount = 0;
-      for (const [code, count] of Object.entries(sectorCounts)) {
-        if (count > bestCount) {
-          bestCount = count;
-          dominantCode = code;
-        }
-      }
-      const sector = sectorForCode(dominantCode) ?? sectorForCode('0');
-      const halo = sector?.halo ?? '#7fb4ca';
-      let dominantSectorId = 0;
-      for (const [id, theme] of Object.entries(SECTORS)) {
-        if (theme === sector) {
-          dominantSectorId = Number(id);
-          break;
-        }
-      }
-
-      // Terrain decorations in the void around the visible cell cluster.
-      // We don't have the area's true world bbox here; approximate it
-      // from the rendered tile grid.
-      {
-        const anchorPitch = computeAnchor(
-          tiles,
-          rows,
-          cols,
-          centerR,
-          centerC,
-          cssWidth,
-          cssHeight,
-          zoom,
-        );
-        const halfW = (cols / 2) * anchorPitch.pitch;
-        const halfH = (rows / 2) * anchorPitch.pitch;
-        drawTerrainDecorations(
-          ctx,
-          [
-            {
-              cx: anchorPitch.playerX,
-              cy: anchorPitch.playerY,
-              hw: halfW,
-              hh: halfH,
-              sector: dominantSectorId,
-              haloColor: halo,
-            },
-          ],
-          { cssWidth, cssHeight, pitch: anchorPitch.pitch },
-        );
-      }
-    }
 
     const anchor = computeAnchor(tiles, rows, cols, centerR, centerC, cssWidth, cssHeight, zoom);
 
@@ -588,11 +455,10 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     drawRef.current();
   }, [tiles]);
 
-  // Style/layout-driven redraw keeps the settle sequence. Layout for
-  // the mode-toggle case (e.g. squares -> tileset adds the tileset-bar
-  // above the canvas-host) can take a frame or two to settle. Schedule
-  // a couple of follow-up draws across short deadlines so at least one
-  // lands on the post-reflow size.
+  // Style/layout-driven redraw keeps the settle sequence. Layout after
+  // a mode toggle can take a frame or two to settle. Schedule a couple
+  // of follow-up draws across short deadlines so at least one lands on
+  // the post-reflow size.
   useEffect(() => {
     drawRef.current();
     const raf = requestAnimationFrame(() => drawRef.current());
@@ -669,8 +535,7 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     };
     reader.onerror = () => {
       pickedRef.current = false;
-      setTilesetError('file read failed');
-      if (embedded) pushToast({ kind: 'error', message: 'Vosh could not read that tileset file.' });
+      pushToast({ kind: 'error', message: 'Vosh could not read that tileset file.' });
     };
     reader.readAsDataURL(file);
   };
@@ -687,94 +552,6 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
 
   return (
     <div className="server-view">
-      {/* Quiet header per the Ember mockup: caps "map · <area>" and a
-          single 12px sliders affordance. Every operable control lives
-          in the collapsible row below, so the pane reads as a clean
-          canvas until the user asks for chrome. A panel pane brings
-          its own header. */}
-      {!embedded && (
-        <div className="map-subhead">
-          <span className="caps map-subhead-title">{area ? `map · ${area}` : 'map'}</span>
-          <button
-            type="button"
-            className="map-controls-toggle"
-            aria-label="map controls"
-            aria-expanded={controlsOpen}
-            title="map controls"
-            onClick={() => setControlsOpen((v) => !v)}
-          >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 12 12"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              aria-hidden="true"
-            >
-              <path d="M1 3.5h10M1 8.5h10M8 1.5v4M4 6.5v4" />
-            </svg>
-          </button>
-        </div>
-      )}
-      {!embedded && controlsOpen && (
-        <div className="map-controls-row">
-          <div className="map-mode-toggle">
-            <button
-              type="button"
-              aria-pressed={style === 'squares'}
-              onClick={() => setStyle('squares')}
-            >
-              squares
-            </button>
-            <button
-              type="button"
-              aria-pressed={style === 'glyphs'}
-              onClick={() => setStyle('glyphs')}
-            >
-              glyphs
-            </button>
-            <button
-              type="button"
-              aria-pressed={style === 'tileset'}
-              onClick={() => setStyle('tileset')}
-            >
-              tileset
-            </button>
-          </div>
-          <div className="map-zoom" title="Ctrl+wheel over the map also zooms">
-            <button
-              type="button"
-              aria-label="zoom out"
-              disabled={zoom <= ZOOM_MIN + 1e-6}
-              onClick={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
-            >
-              −
-            </button>
-            <span className="map-zoom-value">{Math.round(zoom * 100)}%</span>
-            <button
-              type="button"
-              aria-label="zoom in"
-              disabled={zoom >= ZOOM_MAX - 1e-6}
-              onClick={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
-            >
-              +
-            </button>
-            <button
-              type="button"
-              aria-label="reset zoom"
-              disabled={Math.abs(zoom - 1) < 1e-6}
-              onClick={() => setZoom(1)}
-              title="reset to 100%"
-            >
-              ⤺
-            </button>
-          </div>
-          <span className="map-controls-status">
-            {tiles ? `radius ${tiles.r ?? '?'}` : 'waiting for server map'}
-          </span>
-        </div>
-      )}
       <input
         ref={fileInputRef}
         type="file"
@@ -782,48 +559,25 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
         onChange={handleLoadTileset}
         hidden
       />
-      {!embedded && style === 'tileset' && (
-        <div className="tileset-bar">
-          <button type="button" onClick={() => fileInputRef.current?.click()}>
-            load tileset
-          </button>
-          {tilesetUrl && (
-            <button type="button" onClick={clearTileset}>
-              clear
-            </button>
-          )}
-          <span className="tileset-status">
-            {tilesetError
-              ? tilesetError
-              : tilesetImage
-                ? `tileset loaded (${tilesetImage.naturalWidth}x${tilesetImage.naturalHeight})`
-                : tilesetUrl
-                  ? 'loading...'
-                  : 'horizontal strip of 13 tiles in sector order 0..9, a, b, c'}
-          </span>
-        </div>
-      )}
       <div ref={containerRef} className="map-canvas-host">
         <canvas ref={canvasRef} />
         {style === 'glyphs' && tilesSnap && (
           <GlyphsOverlay payload={tilesSnap.payload} payloadJson={tilesSnap.json} zoom={zoom} />
         )}
-        {embedded && !tiles && emptyText && <p className="pane-map-empty">{emptyText}</p>}
-        {embedded && (
-          <MapPaneControls
-            style={style}
-            onStyle={setStyle}
-            zoom={zoom}
-            canZoomIn={zoom < ZOOM_MAX - 1e-6}
-            canZoomOut={zoom > ZOOM_MIN + 1e-6}
-            onZoomIn={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
-            onZoomOut={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
-            onZoomReset={() => setZoom(1)}
-            tilesetLoaded={tilesetUrl !== null}
-            onLoadTileset={() => fileInputRef.current?.click()}
-            onClearTileset={clearTileset}
-          />
-        )}
+        {!tiles && emptyText && <p className="pane-map-empty">{emptyText}</p>}
+        <MapPaneControls
+          style={style}
+          onStyle={setStyle}
+          zoom={zoom}
+          canZoomIn={zoom < ZOOM_MAX - 1e-6}
+          canZoomOut={zoom > ZOOM_MIN + 1e-6}
+          onZoomIn={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
+          onZoomOut={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
+          onZoomReset={() => setZoom(1)}
+          tilesetLoaded={tilesetUrl !== null}
+          onLoadTileset={() => fileInputRef.current?.click()}
+          onClearTileset={clearTileset}
+        />
       </div>
     </div>
   );

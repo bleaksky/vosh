@@ -49,7 +49,7 @@ export function sectorGlyphColor(code: string | undefined, dimLevel: number): st
   return hexToRgba(theme.halo, alpha);
 }
 
-// Theme-dependent slots (bg, origin, originFill, text) are exposed as
+// Theme-dependent slots (panel, origin, originFill, text) are exposed as
 // getters that read from --c-* custom properties at access time so the
 // canvas tracks the active app theme. Terrain-meaningful slots stay
 // fixed regardless of theme. Fallbacks match the Kanso Zen palette
@@ -62,9 +62,6 @@ function readCssVar(name: string, fallback: string): string {
 }
 
 export const MAP_COLORS = {
-  get bg(): string {
-    return readCssVar('--c-surface', '#090e13');
-  },
   /// The panel's own color. A map inside a panel pane paints on it, so
   /// the drawing sits in the pane with no box around it.
   get panel(): string {
