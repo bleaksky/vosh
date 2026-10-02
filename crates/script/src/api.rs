@@ -235,7 +235,9 @@ fn mud_timer(lua: &Lua, (secs, callback): (f64, Function)) -> LuaResult<u32> {
 fn mud_cancel_timer(lua: &Lua, timer_id: u32) -> LuaResult<()> {
     with_state(lua, |s| {
         // Free the callback now. The session drops the schedule when it
-        // applies the cancel, and nothing else would ever free it.
+        // applies the cancel, and nothing else would ever free it. This
+        // removes the key directly because `with_state` already holds the
+        // lock that `ScriptEngine::drop_callback` takes.
         if let Some(callback_id) = s.timer_callbacks.remove(&timer_id) {
             s.callbacks.remove(&callback_id);
         }
