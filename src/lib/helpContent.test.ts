@@ -625,7 +625,7 @@ describe('the help on the Room, time and weather colors preset', () => {
       'A change in the weather, such as `It starts to rain.` or `A thick fog rolls in, shrouding the area.`, turns pale blue.',
     );
     expect(text).toContain(
-      'That blue is `#8fa7d9` on every theme, apart from the blue and cyan of your theme, and `Keep highlight colors readable` darkens it on a light theme until it reads.',
+      'That blue is `#8fa7d9`, a color of its own that stays apart from the blue and cyan of your theme. It holds on every built in dark theme, and `Keep highlight colors readable` darkens it on a light theme until it reads.',
     );
   });
 
