@@ -8,6 +8,8 @@
 //! Aabahran's codes, which reads a line, a partial or a block of lines as
 //! your prompt and says whether a partial can still become one.
 
+pub mod generic;
+
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
