@@ -139,4 +139,37 @@ describe('AppearancePage', () => {
       root.unmount();
     });
   });
+
+  it('starts Blinking text off while your system reduces motion and keeps your choice', async () => {
+    // The window above answers every media query, reduce motion among
+    // them, as a match.
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    const blinking = async (ui: UiConfig): Promise<boolean> => {
+      await act(async () => {
+        root.render(
+          createElement(AppearancePage, {
+            target: { group: 'appearance', anchor: 'blink-text' },
+            navSeq: 0,
+            config: ui,
+            setConfig: () => undefined,
+            onError: () => undefined,
+            pathB: false,
+            navigate: () => undefined,
+            setLeaveGuard: () => undefined,
+          }),
+        );
+      });
+      const [row] = findAll(container, (el) => el.getAttribute('data-st-anchor') === 'blink-text');
+      const [toggle] = findAll(row, (el) => el.getAttribute('role') === 'switch');
+      return (toggle as unknown as { checked: boolean }).checked;
+    };
+    expect(await blinking(config())).toBe(false);
+    expect(await blinking({ ...config(), blink_text: true })).toBe(true);
+    expect(await blinking({ ...config(), blink_text: false })).toBe(false);
+    await act(async () => {
+      root.unmount();
+    });
+  });
 });

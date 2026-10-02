@@ -2984,6 +2984,9 @@ pub(crate) struct UiConfigPayload {
     pub keep_last_command: bool,
     pub theme_terminal_colors: Option<bool>,
     pub bright_bold: bool,
+    /// None until you choose.
+    #[serde(default)]
+    pub blink_text: Option<bool>,
     pub terminal_base_ansi: Option<Vec<String>>,
     pub custom_themes: Vec<crate::profile_config::CustomTheme>,
     pub split_divider_color: Option<String>,
@@ -3032,6 +3035,7 @@ impl UiConfigPayload {
             keep_last_command: ui.keep_last_command,
             theme_terminal_colors: ui.theme_terminal_colors,
             bright_bold: ui.bright_bold,
+            blink_text: ui.blink_text,
             terminal_base_ansi: ui.terminal_base_ansi.clone(),
             custom_themes: ui.custom_themes.clone(),
             split_divider_color: ui.split_divider_color.clone(),
@@ -3076,6 +3080,7 @@ impl UiConfigPayload {
             keep_last_command,
             theme_terminal_colors,
             bright_bold,
+            blink_text,
             terminal_base_ansi,
             custom_themes,
             split_divider_color,
@@ -3121,6 +3126,7 @@ impl UiConfigPayload {
         ui.keep_last_command = keep_last_command;
         ui.theme_terminal_colors = theme_terminal_colors;
         ui.bright_bold = bright_bold;
+        ui.blink_text = blink_text;
         ui.terminal_base_ansi = terminal_base_ansi;
         ui.custom_themes = custom_themes;
         // Empty strings get normalized to None so the picker can clear
@@ -4605,6 +4611,22 @@ mod tests {
         ProfileConfig::from_toml(&config.to_toml().unwrap())
             .unwrap()
             .ui
+    }
+
+    #[test]
+    fn blinking_text_keeps_your_choice_and_none_until_you_make_one() {
+        // None is no choice, which the page reads from the system's reduce
+        // motion setting, so it never reaches the file as a value.
+        let mut ui = UiConfig::default();
+        assert_eq!(through_payload(&ui).blink_text, None);
+        assert_eq!(through_toml(&ui).blink_text, None);
+        let written = ProfileConfig::default().to_toml().unwrap();
+        assert!(!written.contains("blink_text"), "{written}");
+        for choice in [true, false] {
+            ui.blink_text = Some(choice);
+            assert_eq!(through_payload(&ui).blink_text, Some(choice));
+            assert_eq!(through_toml(&ui).blink_text, Some(choice));
+        }
     }
 
     /// A whole config save read at `generation`, holding `ui`.

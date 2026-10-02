@@ -1858,6 +1858,10 @@ export interface UiConfig {
    *  before use. */
   theme_terminal_colors: boolean | null;
   bright_bold: boolean;
+  /** Blinking text. Tri-state: true and false are your choice, null
+   *  means none, which reads as on unless your system reduces motion.
+   *  Resolve with resolveBlinkText before use. */
+  blink_text: boolean | null;
   /** Custom base terminal palette: 16 CSS colors in ANSI 0-15 order,
    *  used whenever the tint toggle resolves off. Null = canonical
    *  xterm chart. */
@@ -1968,6 +1972,7 @@ export interface RawUiConfig {
   keep_last_command?: boolean;
   theme_terminal_colors?: boolean;
   bright_bold?: boolean;
+  blink_text?: boolean | null;
   terminal_base_ansi?: unknown;
   custom_themes?: CustomTheme[];
   split_divider_color?: string | null;
@@ -2024,6 +2029,7 @@ export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
     theme_terminal_colors:
       typeof cfg.theme_terminal_colors === 'boolean' ? cfg.theme_terminal_colors : null,
     bright_bold: Boolean(cfg.bright_bold),
+    blink_text: typeof cfg.blink_text === 'boolean' ? cfg.blink_text : null,
     terminal_base_ansi:
       Array.isArray(cfg.terminal_base_ansi) &&
       cfg.terminal_base_ansi.length === 16 &&
@@ -2070,6 +2076,7 @@ export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
 let lastSentConfig: UiConfig | null = null;
 
 const TERMINAL_LINE_HEIGHT_EVENT = 'vosh://terminal-line-height-changed';
+const BLINK_TEXT_EVENT = 'vosh://blink-text-changed';
 const VITALS_DENSITY_EVENT = 'vosh://vitals-density-changed';
 const VITALS_OPTIONS_EVENT = 'vosh://vitals-options-changed';
 const AFFECTS_DISPLAY_EVENT = 'vosh://affects-display-changed';
@@ -2145,6 +2152,9 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     prev ? resolveThemeTerminalColors(prev.theme, prev.theme_terminal_colors) : undefined,
   );
   await emitChanged('vosh://bright-bold-changed', config.bright_bold, prev?.bright_bold);
+  // Your choice as you made it. Each window reads its own system's
+  // reduce motion setting to resolve none.
+  await emitChanged(BLINK_TEXT_EVENT, config.blink_text, prev?.blink_text);
   await emitChanged(
     'vosh://base-ansi-changed',
     config.terminal_base_ansi,
@@ -2408,6 +2418,7 @@ export async function setUiConfig(config: UiConfig): Promise<boolean> {
       keep_last_command: config.keep_last_command,
       theme_terminal_colors: config.theme_terminal_colors,
       bright_bold: config.bright_bold,
+      blink_text: config.blink_text,
       terminal_base_ansi: config.terminal_base_ansi,
       custom_themes: config.custom_themes,
       split_divider_color: config.split_divider_color,
@@ -2537,6 +2548,15 @@ export async function subscribeVitalsOptionsChanged(
 ): Promise<UnlistenFn> {
   return listen<unknown>(VITALS_OPTIONS_EVENT, (event) => {
     cb(normalizeVitalsOptions(event.payload));
+  });
+}
+
+/** Hear the Blinking text choice change, null for none. */
+export async function subscribeBlinkTextChanged(
+  cb: (value: boolean | null) => void,
+): Promise<UnlistenFn> {
+  return listen<boolean | null>(BLINK_TEXT_EVENT, (event) => {
+    cb(typeof event.payload === 'boolean' ? event.payload : null);
   });
 }
 

@@ -148,6 +148,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('appearance', 'advanced', 'bright-bold'),
   },
   {
+    label: 'Blinking text',
+    description:
+      'Text your MUD or prompt sets to blink flashes. It starts off if your system reduces motion.',
+    keywords: 'advanced blink flash sgr reduce motion animation',
+    target: at('appearance', 'advanced', 'blink-text'),
+  },
+  {
     label: 'Font stack',
     description: 'Vosh uses the first font in this list that you have.',
     keywords: 'advanced family fallback css typeface',
