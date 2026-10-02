@@ -2857,6 +2857,26 @@ mod tests {
     }
 
     #[test]
+    fn scripts_lists_lua_triggers_by_name() {
+        let mut p = Profile::default();
+        process(
+            &mut p,
+            "#lua mud.trigger('zeta', 'z', function() end) \
+             mud.trigger('alpha', 'a', function() end)",
+        );
+        let r = process(&mut p, "#scripts");
+        assert_eq!(
+            r.echo,
+            [
+                "no scripts loaded",
+                "2 lua trigger(s):",
+                "    [  0] alpha /a/",
+                "    [  0] zeta /z/",
+            ]
+        );
+    }
+
+    #[test]
     fn plain_input_appends_crlf() {
         let mut p = Profile::default();
         let r = process(&mut p, "look");
