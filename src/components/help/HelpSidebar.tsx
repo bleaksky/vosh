@@ -8,6 +8,7 @@ import {
 import { HELP_SECTIONS, type HelpTopic } from '../../lib/helpContent';
 import { helpSearchKey, sectionTopics } from '../../lib/helpNav';
 import { shortcutKeys } from '../../lib/palette';
+import { scrollWithin } from '../../lib/scrollWithin';
 import { Keycap, SearchIcon, VisuallyHidden } from '../settings/ui';
 import { sectionIcon } from './sectionIcons';
 
@@ -62,12 +63,12 @@ export function HelpSidebar({
   // Keep the topic you read in view in the nav.
   useEffect(() => {
     if (searching) return;
-    navRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest' });
+    scrollWithin(navRef.current?.querySelector('[aria-current="page"]'), { block: 'nearest' });
   }, [topic.id, openSection, searching]);
 
   useEffect(() => {
     if (!searching) return;
-    document.getElementById(optionId(active))?.scrollIntoView({ block: 'nearest' });
+    scrollWithin(document.getElementById(optionId(active)), { block: 'nearest' });
     // optionId only reads listId, which never changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, searching]);

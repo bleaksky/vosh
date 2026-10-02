@@ -18,6 +18,7 @@ import {
   type PromptPreviewName,
   type PromptState,
 } from '../../lib/session';
+import { scrollWithin } from '../../lib/scrollWithin';
 import { parseSgrCells } from '../../lib/sgrCells';
 import { cx, Field, SearchIcon } from '../settings/ui';
 import { CellLine } from './PromptCells';
@@ -116,9 +117,9 @@ export function PromptPicker({
   useEffect(() => {
     const key = row ? rowKey(row) : null;
     if (!key) return;
-    listRef.current
-      ?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)
-      ?.scrollIntoView({ block: 'nearest' });
+    scrollWithin(listRef.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`), {
+      block: 'nearest',
+    });
   }, [row]);
 
   const usable = field ? !needsCode(field) : true;

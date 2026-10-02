@@ -327,3 +327,30 @@ describe('scrollingAncestor', () => {
     expect(untouched(p.body, p.html)).toBe(true);
   });
 });
+
+describe('scroll into view', () => {
+  // The DOM call moves every scrolling ancestor, the window frame
+  // included. Everything in src goes through scrollWithin instead.
+  const sources = import.meta.glob<string>('../**/*.{ts,tsx}', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  });
+  const app = Object.keys(sources).filter(
+    (path) => !/\.test\.tsx?$/.test(path) && !path.startsWith('../test/'),
+  );
+
+  it('reads the app sources', () => {
+    // Vite names the files beside this one from here.
+    expect(app).toContain('../HelpApp.tsx');
+    expect(app).toContain('../components/help/HelpSidebar.tsx');
+    expect(app).toContain('./scrollWithin.ts');
+    expect(app).not.toContain('./scrollWithin.test.ts');
+    expect(app.length).toBeGreaterThan(100);
+  });
+
+  it('is never called from the app', () => {
+    const name = ['scroll', 'Into', 'View'].join('');
+    expect(app.filter((path) => sources[path].includes(name))).toEqual([]);
+  });
+});

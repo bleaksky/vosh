@@ -12,6 +12,7 @@ import {
   type PaletteEntry,
   type PaletteSectionView,
 } from '../lib/palette';
+import { scrollWithin } from '../lib/scrollWithin';
 
 interface Props {
   deps: PaletteDeps;
@@ -126,7 +127,7 @@ export function CommandPalette({ deps, onClose }: Props) {
   // Keep the selected row in view during keyboard navigation.
   useEffect(() => {
     const row = listRef.current?.querySelector('[aria-selected="true"]');
-    row?.scrollIntoView({ block: 'nearest' });
+    scrollWithin(row, { block: 'nearest' });
   }, [selected]);
 
   const openLevel = (entry: PaletteEntry) => {
