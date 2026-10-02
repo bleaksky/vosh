@@ -185,9 +185,12 @@ export function breaksAfterMark(text: string): number {
 
 /** The escape that goes from the cursor at the end of a region back to
  *  its start, `above` rows up at column `col`, then erases to the end of
- *  the screen (rule c). */
+ *  the screen (rule c) with the default background. The cells it clears
+ *  take the background in force, and a line the region ends on can leave
+ *  its own on while the line ends after it wait. What the replace writes
+ *  sets its own. The same as erase_back in src-tauri/src/term_grid.rs. */
 export function eraseBack(above: number, col: number): string {
-  return `\r${above > 0 ? `\x1b[${above}A` : ''}${col > 0 ? `\x1b[${col}C` : ''}\x1b[0J`;
+  return `\r${above > 0 ? `\x1b[${above}A` : ''}${col > 0 ? `\x1b[${col}C` : ''}\x1b[49m\x1b[0J`;
 }
 
 /** Where the last mark xterm parsed came, counted in its line, since a

@@ -56,8 +56,8 @@ describe('lastMark and eraseBack', () => {
   });
 
   it('goes back up to the region start and erases below it', () => {
-    expect(eraseBack(0, 0)).toBe('\r\x1b[0J');
-    expect(eraseBack(2, 7)).toBe('\r\x1b[2A\x1b[7C\x1b[0J');
+    expect(eraseBack(0, 0)).toBe('\r\x1b[49m\x1b[0J');
+    expect(eraseBack(2, 7)).toBe('\r\x1b[2A\x1b[7C\x1b[49m\x1b[0J');
   });
 });
 
@@ -328,6 +328,25 @@ describe('RegionWriter held line ends', () => {
     writer.output({ text: 'tell', hold: '\r\n\r\n' });
     await parsed(writer);
     expect(screen(term)).toEqual(['room', '[Exits: south]', '', 'tell']);
+  });
+
+  it('leaves the cells a replace erases on the default background', async () => {
+    // The region's line ends on a background, and its color reset waits
+    // with its line end, so the background is still on when the replace
+    // erases.
+    const { term, writer } = setup(20, 6);
+    writer.output({ text: `${mark(1)}\x1b[44mhungry`, hold: '\x1b[0m\r\n' });
+    writer.output(replace(1, `${mark(2)}\x1b[44mHUNGRY`));
+    await parsed(writer);
+    expect(screen(term)).toEqual(['HUNGRY']);
+    const buffer = term.buffer.active;
+    const cell = (y: number, x: number) => buffer.getLine(buffer.baseY + y)?.getCell(x);
+    expect(cell(0, 0)?.getBgColor()).toBe(4);
+    for (let y = 0; y < 6; y++) {
+      for (let x = y === 0 ? 6 : 0; x < 20; x++) {
+        expect(cell(y, x)?.isBgDefault(), `row ${y}, column ${x}`).toBe(true);
+      }
+    }
   });
 
   it('writes them before your echo, whichever reaches xterm first', async () => {
