@@ -1,11 +1,12 @@
 import { useMemo, useRef, type CSSProperties } from 'react';
 import {
   affectsPaneRows,
+  DEFAULT_AFFECT_THRESHOLDS,
   gaugeFraction,
-  hoursTone,
   type AffectFulls,
   type AffectInput,
   type AffectRow,
+  type AffectThresholds,
   type TrackedInput,
 } from '../../lib/affectsView';
 import type { AffectsMarker } from '../../lib/session';
@@ -20,8 +21,9 @@ import { affectHours, affectsEmptyText, affectWords } from './paneText';
 // as the game sends it, the hours at the right edge with the game's own
 // `+` and `-`, and a 2 px meter under the text. The meter drains from
 // full toward empty over the affect's own cast (gaugeFraction reads the
-// full the backend keeps), in the tertiary tone, yellow at two hours and
-// red at one or none. It stays full for a permanent affect, empty for a
+// full the backend keeps), in the tertiary tone, yellow once the affect
+// runs out and red once it is almost gone, at the hours you set, two and
+// one unless you change them. It stays full for a permanent affect, empty for a
 // missing one, and is gone when the server sent no hours. What does not
 // fit is the end of the countdown, counted in the last cell of a page,
 // and a click on the count scrolls to it.
@@ -37,6 +39,9 @@ export interface CountdownViewProps {
   tint?: boolean | undefined;
   /** Hours at full for each affect, from the affect full store. */
   full: AffectFulls;
+  /** When an affect runs out and is almost gone. Two and one hours
+   *  when left out. */
+  thresholds?: AffectThresholds | undefined;
 }
 
 /** The Countdown pane drawn from plain values, so each state renders
@@ -49,8 +54,12 @@ export function CountdownView({
   marker = 'dot',
   tint = false,
   full,
+  thresholds = DEFAULT_AFFECT_THRESHOLDS,
 }: CountdownViewProps) {
-  const rows = useMemo(() => affectsPaneRows(current, tracked, hidden), [current, tracked, hidden]);
+  const rows = useMemo(
+    () => affectsPaneRows(current, tracked, hidden, thresholds),
+    [current, tracked, hidden, thresholds],
+  );
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const measured = useBoxSize(bodyRef);
   const size = box ?? measured;
@@ -130,7 +139,7 @@ function CountdownCell({
   pageStart: boolean;
   style: CSSProperties;
 }) {
-  const tone = hoursTone(row.ticks);
+  const tone = row.tone;
   const gauge = gaugeFraction(row, full);
   // The hours and the mark show only as glyphs and color, so a screen
   // reader hears them as words after the name.

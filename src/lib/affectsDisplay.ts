@@ -1,3 +1,4 @@
+import type { AffectThresholds } from './affectsView';
 import {
   AFFECTS_MARKERS,
   AFFECTS_STYLES,
@@ -44,6 +45,12 @@ export function affectsMarkerChoices(display: AffectsDisplay): MenuChoice<Affect
     label: AFFECTS_MARKER_LABELS[value],
     checked: value === display.marker,
   }));
+}
+
+/** The hours at which an affect runs out and is almost gone, as the
+ *  views read them. */
+export function affectThresholdsOf(display: AffectsDisplay): AffectThresholds {
+  return { runningOut: display.running_out, almostGone: display.almost_gone };
 }
 
 /** Grouped chips show the state on each chip and draw no marker, so

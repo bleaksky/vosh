@@ -4,11 +4,15 @@ import {
   affectsPaneRows,
   affectsSummary,
   affectsView,
+  CRITICAL_TICKS,
+  DEFAULT_AFFECT_THRESHOLDS,
+  EXPIRING_TICKS,
   gaugeFraction,
   hoursTone,
   isTrackedRow,
   type AffectInput,
   type AffectRow,
+  type AffectThresholds,
 } from './affectsView';
 import { HARMFUL_AFFECTS } from './harmfulAffects';
 
@@ -241,6 +245,7 @@ describe('affectMark', () => {
     name: 'x',
     state,
     ticks,
+    tone: state === 'missing' ? null : hoursTone(ticks),
   });
 
   it('gives each tracked slot a dot that agrees with its hours', () => {
@@ -291,6 +296,7 @@ describe('gaugeFraction', () => {
     name: key,
     state,
     ticks,
+    tone: state === 'missing' ? null : hoursTone(ticks),
   });
   const full = { armor: 48, sanctuary: 10 };
 
@@ -331,5 +337,107 @@ describe('HARMFUL_AFFECTS', () => {
 
   it('holds no duplicates', () => {
     expect(new Set(HARMFUL_AFFECTS).size).toBe(HARMFUL_AFFECTS.length);
+  });
+});
+
+describe('the hours you set', () => {
+  const at = (runningOut: number, almostGone: number): AffectThresholds => ({
+    runningOut,
+    almostGone,
+  });
+  const HOURS = [0, 1, 2, 3, 4, 5, 6, 188, -1, null] as const;
+  const tones = (t?: AffectThresholds) => HOURS.map((h) => hoursTone(h, t));
+
+  it('keeps yellow at two hours and red at one or none unless you change them', () => {
+    expect(DEFAULT_AFFECT_THRESHOLDS).toEqual({ runningOut: 2, almostGone: 1 });
+    expect(EXPIRING_TICKS).toBe(2);
+    expect(CRITICAL_TICKS).toBe(1);
+    expect(tones(DEFAULT_AFFECT_THRESHOLDS)).toEqual(tones());
+    // The board on the defaults, every row as before.
+    const view = affectsView(ILSABET_AFFECTS, ILSABET_TRACKED);
+    expect(affectsView(ILSABET_AFFECTS, ILSABET_TRACKED, HARMFUL_AFFECTS, at(2, 1))).toEqual(view);
+  });
+
+  it.each([
+    ['2 and 1, the default', at(2, 1), ['danger', 'danger', 'warn', null, null, null, null]],
+    ['5 and 2', at(5, 2), ['danger', 'danger', 'danger', 'warn', 'warn', 'warn', null]],
+    ['0 and 0, red at none alone', at(0, 0), ['danger', null, null, null, null, null, null]],
+    [
+      '3 and 3, no yellow stage',
+      at(3, 3),
+      ['danger', 'danger', 'danger', 'danger', null, null, null],
+    ],
+    ['99 and 0', at(99, 0), ['danger', 'warn', 'warn', 'warn', 'warn', 'warn', 'warn']],
+    // Almost gone never reaches past running out.
+    ['1 and 4, held to 1', at(1, 4), ['danger', 'danger', null, null, null, null, null]],
+  ])('colors the hours at %s', (_, t, expected) => {
+    // 0 to 6, then 188 hours, a permanent affect and an unknown one.
+    const big = t.runningOut >= 188 ? 'warn' : null;
+    expect(tones(t)).toEqual([...expected, big, null, null]);
+  });
+
+  it('marks a tracked affect running out exactly at the hours you set', () => {
+    const rows = affectsView(
+      [
+        aff('a', 6),
+        aff('b', 5),
+        aff('c', 3),
+        aff('d', 2),
+        aff('e', 0),
+        aff('f', -1),
+        aff('g', null),
+      ],
+      track('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'),
+      HARMFUL_AFFECTS,
+      at(5, 2),
+    );
+    expect(rows.map((r) => [r.key, r.state, r.tone, affectMark(r)])).toEqual([
+      ['a', 'present', null, 'up'],
+      ['b', 'expiring', 'warn', 'warn'],
+      ['c', 'expiring', 'warn', 'warn'],
+      ['d', 'expiring', 'danger', 'danger'],
+      ['e', 'expiring', 'danger', 'danger'],
+      // A permanent affect and one with no hours never run out.
+      ['f', 'present', null, 'up'],
+      ['g', 'present', null, 'up'],
+      ['h', 'missing', null, 'missing'],
+    ]);
+    // The header counts what you miss and what runs out by the same hours.
+    expect(affectsSummary(rows)).toEqual({ missing: 1, runningOut: 4 });
+  });
+
+  it('runs out only at none with 0 and 0', () => {
+    const rows = affectsView(
+      [aff('a', 1), aff('b', 0)],
+      track('a', 'b'),
+      HARMFUL_AFFECTS,
+      at(0, 0),
+    );
+    expect(rows.map((r) => [r.key, r.state, r.tone])).toEqual([
+      ['a', 'present', null],
+      ['b', 'expiring', 'danger'],
+    ]);
+    expect(affectsSummary(rows)).toEqual({ missing: 0, runningOut: 1 });
+  });
+
+  it('colors the affects you do not track by the same hours, and never counts them', () => {
+    const rows = affectsView(
+      [aff('haste', 4), aff('poison', 2), aff('frenzy', 9)],
+      [],
+      HARMFUL_AFFECTS,
+      at(5, 2),
+    );
+    expect(rows.map((r) => [r.key, r.state, r.tone, affectMark(r)])).toEqual([
+      ['poison', 'harmful', 'danger', 'harmful'],
+      ['haste', 'untracked', 'warn', null],
+      ['frenzy', 'untracked', null, null],
+    ]);
+    expect(affectsSummary(rows)).toEqual({ missing: 0, runningOut: 0 });
+  });
+
+  it('hands the hours to the pane rows', () => {
+    const rows = affectsPaneRows([aff('haste', 4)], track('haste'), false, at(5, 2));
+    expect(rows.map((r) => [r.key, r.state, r.tone])).toEqual([['haste', 'expiring', 'warn']]);
+    expect(affectsPaneRows([aff('haste', 4)], track('haste'), false)[0].state).toBe('present');
   });
 });

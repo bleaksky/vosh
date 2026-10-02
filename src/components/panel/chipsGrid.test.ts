@@ -110,6 +110,27 @@ describe('chipGroups', () => {
     expect(chipGroups([])).toEqual([]);
   });
 
+  it('puts what runs out by the hours you set in Recast, fewest hours first', () => {
+    const rows = affectsPaneRows(
+      [aff('fly', 4), aff('sanctuary', 2), aff('armor', 6), aff('haste', 3)],
+      [{ name: 'fly' }, { name: 'sanctuary' }, { name: 'armor' }],
+      false,
+      { runningOut: 5, almostGone: 2 },
+    );
+    expect(chipGroups(rows).map((g) => [g.id, g.rows.map((r) => r.name)])).toEqual([
+      ['recast', ['sanctuary', 'fly']],
+      ['tracked', ['armor']],
+      ['other', ['haste']],
+    ]);
+    const by = (name: string) => rows.find((r) => r.name === name)!;
+    expect(chipTone(by('fly'))).toBe('warn');
+    expect(chipTone(by('sanctuary'))).toBe('danger');
+    expect(chipTone(by('armor'))).toBeNull();
+    // An affect you do not track colors only its hours.
+    expect(by('haste').tone).toBe('warn');
+    expect(chipTone(by('haste'))).toBeNull();
+  });
+
   it('names each chip kind and gives running out its tone only when tracked', () => {
     const rows = rowsOf(
       [aff('fly', 2), aff('haste', 1), aff('faerie fire', 1)],

@@ -58,7 +58,7 @@ describe('PANE_MIN_H', () => {
 
 // Affects rows by state, in the order the pane draws them.
 const rowsOf = (...states: AffectRowState[]): AffectRow[] =>
-  states.map((state, i) => ({ key: `a${i}`, name: `a${i}`, state, ticks: null }));
+  states.map((state, i) => ({ key: `a${i}`, name: `a${i}`, state, ticks: null, tone: null }));
 const times = (n: number, state: AffectRowState): AffectRowState[] =>
   Array<AffectRowState>(n).fill(state);
 

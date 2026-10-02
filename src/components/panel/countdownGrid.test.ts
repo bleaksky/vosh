@@ -152,6 +152,15 @@ describe('countdownMinRows', () => {
     expect(countdownMinRows(rowsOf(TWENTY), 2)).toBe(3);
   });
 
+  it('holds what runs out by the hours you set', () => {
+    const list = [aff('armor', 30), aff('haste', 9), aff('fly', 4)];
+    const tracked = [{ name: 'armor' }, { name: 'fly' }];
+    // Fly at 4 hours runs out only once you set running out at 4 or more.
+    expect(countdownMinRows(affectsPaneRows(list, tracked, false), 2)).toBe(0);
+    const rows = affectsPaneRows(list, tracked, false, { runningOut: 4, almostGone: 1 });
+    expect(countdownMinRows(rows, 2)).toBe(1);
+  });
+
   it('asks for no rows when nothing needs you, and never more than the list', () => {
     const calm = affectsPaneRows([aff('armor', 30), aff('haste', 9)], [{ name: 'armor' }], false);
     expect(countdownMinRows(calm, 2)).toBe(0);

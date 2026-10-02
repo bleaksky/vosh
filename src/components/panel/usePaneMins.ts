@@ -1,4 +1,5 @@
 import { useMemo, useSyncExternalStore } from 'react';
+import { affectThresholdsOf } from '../../lib/affectsDisplay';
 import { affectsPaneRows } from '../../lib/affectsView';
 import { getGroupState, subscribeGroupState } from '../../lib/groupStore';
 import { useAffectsDisplay } from '../../lib/stores/affectsDisplayStore';
@@ -30,12 +31,19 @@ export function usePaneMins(root: PaneSplit | null, width: number): PaneMins {
   const current = useAffects();
   const tracked = useTrackedAffects();
   const hidden = useAffectsHidden();
-  const { style } = useAffectsDisplay();
+  const display = useAffectsDisplay();
+  const { style } = display;
+  // The rows running out are the ones the pane must hold, so the
+  // minimum reads the same hours the pane draws by.
+  const thresholds = useMemo(() => affectThresholdsOf(display), [display]);
   // The chips pack with the pane's own measure, so the minimum holds
   // the lines the pane draws.
   const measure = useChipMeasure();
   const members = useSyncExternalStore(subscribeMembers, memberCount);
-  const rows = useMemo(() => affectsPaneRows(current, tracked, hidden), [current, tracked, hidden]);
+  const rows = useMemo(
+    () => affectsPaneRows(current, tracked, hidden, thresholds),
+    [current, tracked, hidden, thresholds],
+  );
   const affects = useMemo(
     () =>
       root
