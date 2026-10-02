@@ -7,7 +7,7 @@
 
 use super::show_tests::{profile, showing, wire_fixture, Session, CODES};
 use super::*;
-use vosh_prompt::overrides::{Preview, PromptPreview};
+use vosh_prompt::values::overrides::{Preview, PromptPreview};
 use vosh_prompt::PromptShow;
 
 /// Your health and the seconds left of the tick.

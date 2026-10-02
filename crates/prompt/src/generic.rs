@@ -25,7 +25,7 @@ use std::fmt::Write as _;
 use serde::Serialize;
 
 use crate::config::RegexCapture;
-use crate::vars;
+use crate::values;
 
 /// One number in the line, as the card marks and names it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -186,7 +186,7 @@ fn group_name(name: &str) -> bool {
 
 /// The label the card shows for `name`.
 fn label(name: &str) -> String {
-    vars::entry(name).map_or_else(|| name.to_string(), |e| e.label.to_string())
+    values::entry(name).map_or_else(|| name.to_string(), |e| e.label.to_string())
 }
 
 /// The capture for `line`, the plain text of the line you pointed at,

@@ -16,13 +16,16 @@
 //!   look of every other piece.
 //! - [`describe`] says what each piece and token of a design is, for the
 //!   card, with the forms a value takes.
-//! - [`format`] holds the values a template draws and the plain text of
-//!   each format.
 //! - [`generic`] builds a capture from a line another game prints.
-//! - [`gmcp`] keeps the latest packet of each package, the pulse and the
-//!   latest Char.Prompt.
-//! - [`vars`] holds the catalog of fields, the session's sources and the
-//!   resolver that answers the renderer, with the hidden model.
+//! - [`values`] holds the catalog of fields and their samples, the
+//!   session's sources and the resolver that answers the renderer, with
+//!   the hidden model.
+//!   - [`values::format`] holds the values a template draws and the plain
+//!     text of each format.
+//!   - [`values::gmcp`] keeps the latest packet of each package, the pulse
+//!     and the latest Char.Prompt.
+//!   - [`values::overrides`] draws a preview's values in place of the live
+//!     ones.
 //! - [`aabahran`] holds what Vosh knows about Aabahran alone, the PROMPT
 //!   compiler among it.
 //! - [`render`] draws a template as ANSI text with a span per piece.
@@ -33,7 +36,6 @@
 //!   per socket read, with the regions a later output replaces.
 //! - [`candidates`] groups the candidates ring by shape and checks a
 //!   capture against it and your scrollback.
-//! - [`overrides`] draws a preview's values in place of the live ones.
 //! - [`state`] reports each field's live state and source for the card.
 //! - [`wrap`] is the word wrap both renderers share.
 //! - `testkit`, behind the `testkit` feature, prints prompts the way the
@@ -65,11 +67,6 @@ pub use presets::DEFAULT_DESIGN;
 pub use render::{render, render_str, RenderOptions, Rendered, Span, Values};
 pub use values::format::{Resolved, Value};
 pub use values::{Capture, Vosh};
-
-// The old names of `values` and the modules it now holds, so their
-// callers keep compiling until their imports move to the new paths.
-pub use values as vars;
-pub use values::{format, gmcp, overrides};
 
 // The tests in `tests/` import these from the root.
 #[cfg(feature = "testkit")]

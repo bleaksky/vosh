@@ -37,7 +37,7 @@ use std::ops::Range;
 
 use serde::Serialize;
 
-use crate::gmcp::Affects;
+use crate::values::gmcp::Affects;
 
 /// Which of your two settings a warning or a shape comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
@@ -269,7 +269,7 @@ pub(crate) fn value_label(name: &str) -> String {
         "mana_pct" => "Mana percent".into(),
         "move_pct" => "Moves percent".into(),
         "tank_pct" | "tank_bar" => "Tank health".into(),
-        _ => crate::vars::entry(name).map_or_else(|| name.to_string(), |e| e.label.to_string()),
+        _ => crate::values::entry(name).map_or_else(|| name.to_string(), |e| e.label.to_string()),
     }
 }
 
@@ -298,7 +298,7 @@ pub fn names_lament(affects: &Affects) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gmcp::Affect;
+    use crate::values::gmcp::Affect;
 
     fn affects(names: &[&str]) -> Affects {
         Affects {

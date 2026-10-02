@@ -42,7 +42,7 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, FixedOffset, NaiveDateTime};
 use serde_json::Value as Json;
 
-use crate::gmcp::{Observed, Snapshot, ROOM_INFO, ROOM_WEATHER};
+use crate::values::gmcp::{Observed, Snapshot, ROOM_INFO, ROOM_WEATHER};
 
 use catalog::capture_keys;
 

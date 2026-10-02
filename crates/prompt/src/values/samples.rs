@@ -6,8 +6,8 @@ use super::catalog::{field, Field, Kind, MemberStat, CATALOG};
 use super::resolver::{exits_value, label, moon_code_value, pos_value};
 use super::since_of;
 use crate::design::FieldRef;
-use crate::format::{Position, Resolved, Value, MOON_CODES};
 use crate::render::Values;
+use crate::values::format::{Position, Resolved, Value, MOON_CODES};
 
 // ---------------------------------------------------------------------
 // Samples

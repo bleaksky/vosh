@@ -9,7 +9,7 @@ use vosh_prompt::edit::{ColorChoice, FormatName, StyleChoice, When};
 use vosh_prompt::presets::DEFAULT_DESIGN;
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
 use vosh_prompt::testkit::now;
-use vosh_prompt::vars::Samples;
+use vosh_prompt::values::Samples;
 use vosh_prompt::{FieldRef, Resolved, Template, Values};
 
 /// The catalog's samples, in a fight or out of one.

@@ -3,7 +3,7 @@ use crate::config::{AabahranCapture, CaptureConfig, RegexCapture};
 use crate::stage::End;
 use crate::testkit::at;
 use crate::testkit::mud::PROMPT;
-use crate::vars::Capture;
+use crate::values::Capture;
 use serde_json::json;
 
 fn aabahran() -> PromptConfig {
@@ -132,7 +132,7 @@ fn a_connection_starts_over() {
 
 #[test]
 fn the_card_lends_the_band_while_its_preview_lasts() {
-    use crate::overrides::PromptPreview;
+    use crate::values::overrides::PromptPreview;
     let mut engine = PromptEngine::default();
     engine.connect(true);
     assert!(!engine.stage.card_open());
@@ -152,7 +152,7 @@ fn the_card_lends_the_band_while_its_preview_lasts() {
 
 #[test]
 fn the_preview_the_card_set_offline_lasts_through_the_connect() {
-    use crate::overrides::{Preview, PromptPreview};
+    use crate::values::overrides::{Preview, PromptPreview};
     let mut engine = PromptEngine::default();
     let placeholders = PromptPreview {
         placeholders: true,

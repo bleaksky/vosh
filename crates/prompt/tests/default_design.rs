@@ -21,7 +21,7 @@ use vosh_prompt::config::{AabahranCapture, RegexCapture};
 use vosh_prompt::design::{Code, ColorSpec, Format, Scale, TokenKind};
 use vosh_prompt::stage::{End, Offer};
 use vosh_prompt::testkit::{game, shown, Build};
-use vosh_prompt::vars::{self, Capture, FormatId, Tick, Vosh};
+use vosh_prompt::values::{self, Capture, FormatId, Tick, Vosh};
 use vosh_prompt::{
     render_str, CaptureConfig, PromptConfig, PromptEngine, RenderOptions, Template, DEFAULT_DESIGN,
 };
@@ -903,13 +903,13 @@ fn the_default_design_parses_into_fields_and_formats_vosh_knows() {
             // written.
             TokenKind::Text(t) => assert!(!t.contains('%'), "{text}"),
             TokenKind::If(field) | TokenKind::IfNot(field) => {
-                assert!(vars::entry(&field.name).is_some(), "{text}");
+                assert!(values::entry(&field.name).is_some(), "{text}");
             }
             TokenKind::Code(
                 Code::Fg(ColorSpec::ByValue { field, scale })
                 | Code::Bg(ColorSpec::ByValue { field, scale }),
             ) => {
-                let entry = vars::entry(&field.name).unwrap_or_else(|| panic!("{text}"));
+                let entry = values::entry(&field.name).unwrap_or_else(|| panic!("{text}"));
                 assert!(entry.kind.formats().contains(&FormatId::Pct), "{text}");
                 assert_eq!(
                     *scale,
@@ -918,7 +918,7 @@ fn the_default_design_parses_into_fields_and_formats_vosh_knows() {
                 );
             }
             TokenKind::Value(value) => {
-                let entry = vars::entry(&value.field.name)
+                let entry = values::entry(&value.field.name)
                     .unwrap_or_else(|| panic!("{text} reads no field Vosh knows"));
                 let id = match value.format {
                     Format::Value => FormatId::Value,

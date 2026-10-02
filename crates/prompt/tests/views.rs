@@ -19,8 +19,8 @@ mod common;
 
 use common::FIXTURES;
 use serde_json::{json, Map, Value as Json};
-use vosh_prompt::gmcp::Snapshot;
 use vosh_prompt::testkit::at;
+use vosh_prompt::values::gmcp::Snapshot;
 use vosh_prompt::{FieldRef, Resolved, Value, Values, Vars, Vosh};
 
 const VIEWS: &str = include_str!("../../../fixtures/gmcp/aabahran/views.json");

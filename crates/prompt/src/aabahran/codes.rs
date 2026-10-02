@@ -272,12 +272,12 @@ impl Code {
             Self::TankPct | Self::TankBar => "Tank health".into(),
             Self::Moon(_) => self
                 .name()
-                .and_then(crate::vars::entry)
+                .and_then(crate::values::entry)
                 .map_or("Moon", |e| e.label)
                 .into(),
             _ => self
                 .name()
-                .and_then(crate::vars::entry)
+                .and_then(crate::values::entry)
                 .map_or_else(|| self.written(), |e| e.label.to_string()),
         }
     }
@@ -551,12 +551,12 @@ mod tests {
             assert!(seen.insert(name), "{name} twice");
             let percent = ["hp_pct", "mana_pct", "move_pct", "tank_pct", "tank_bar"];
             assert!(
-                crate::vars::entry(name).is_some() || percent.contains(&name),
+                crate::values::entry(name).is_some() || percent.contains(&name),
                 "{name} is no catalog field"
             );
             // A moved pattern that fills a name Vosh does not know keeps
             // its pattern, since no code ever fills that name.
-            assert!(crate::vars::known(name), "{name} is known");
+            assert!(crate::values::known(name), "{name} is known");
         }
         assert_eq!(Code::Slot(0).name(), Some("slot10"));
         assert_eq!(Code::Slot(1).name(), Some("slot1"));
@@ -575,7 +575,7 @@ mod tests {
         assert_eq!(Code::HpPct.label(), "Health percent");
         assert_eq!(Code::TankBar.label(), "Tank health");
         for code in every_code() {
-            if let Some(entry) = code.name().and_then(crate::vars::entry) {
+            if let Some(entry) = code.name().and_then(crate::values::entry) {
                 assert_eq!(code.label(), entry.label, "{}", code.written());
             }
         }

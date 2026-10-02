@@ -8,10 +8,10 @@ use std::collections::BTreeMap;
 
 use common::{capture, draw, draw_with, feed, num, packet, resolve, text, vosh};
 use serde_json::json;
-use vosh_prompt::format::{tank_bar_cells, Position};
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
 use vosh_prompt::testkit::now;
-use vosh_prompt::vars::{is_sourced, known, Tick, CATALOG};
+use vosh_prompt::values::format::{tank_bar_cells, Position};
+use vosh_prompt::values::{is_sourced, known, Tick, CATALOG};
 use vosh_prompt::{
     render_str, FieldRef, MapValues, RenderOptions, Resolved, Value, Values, Vars, Vosh,
 };
@@ -1050,7 +1050,7 @@ fn catalog_names_follow_the_naming_rules() {
 fn every_catalog_entry_resolves_and_has_a_sample() {
     let vars = Vars::new(true);
     let vosh = vosh();
-    let samples = vosh_prompt::vars::Samples { now: now() };
+    let samples = vosh_prompt::values::Samples { now: now() };
     for e in CATALOG {
         let f = if e.param {
             FieldRef::with_param(e.name, "x")

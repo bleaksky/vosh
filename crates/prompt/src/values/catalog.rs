@@ -6,8 +6,8 @@ use serde::Serialize;
 
 use super::samples::value_of;
 use crate::design::FieldRef;
-use crate::format::Resolved;
-use crate::gmcp::{
+use crate::values::format::Resolved;
+use crate::values::gmcp::{
     self, CHAR_COMBAT, CHAR_STATE, CHAR_STATUS, CHAR_VITALS, CHAR_WORTH, GROUP_INFO, IMM_QUEUES,
     ROOM_CHARS, ROOM_INFO, ROOM_ITEMS, ROOM_WEATHER, WORLD_MOONS, WORLD_TIME,
 };

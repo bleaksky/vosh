@@ -20,9 +20,9 @@ use crate::design::{FieldRef, Format, PieceKind, Template, TokenKind};
 use crate::edit::{
     self, bar_choice, choice, ColorChoice, Doc, EditOp, FormatChoice, FormatName, StyleChoice, When,
 };
-use crate::format::{Resolved, Value};
 use crate::render::{render, RenderOptions, Rendered, Values};
-use crate::vars::{self, Group, Kind};
+use crate::values::format::{Resolved, Value};
+use crate::values::{self, Group, Kind};
 
 /// One form a value takes, for Show as and the picker's formats.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -475,7 +475,7 @@ fn meta(field: &FieldRef, values: &dyn Values, preview: bool) -> Option<String> 
             _ => value.text(&Format::Value, &values.label(field))?,
         },
         Resolved::Hidden => "The game hides it".to_string(),
-        Resolved::Absent if vars::entry_for(field).is_some_and(|e| e.group == Group::Fight) => {
+        Resolved::Absent if values::entry_for(field).is_some_and(|e| e.group == Group::Fight) => {
             return Some("Only in a fight".to_string());
         }
         _ => return None,

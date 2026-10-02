@@ -16,11 +16,11 @@ use crate::aabahran::{and_list, CompileError, Origin, Which, Who};
 use crate::capture;
 use crate::config::{AabahranCapture, CaptureConfig, CaptureSource, PromptConfig};
 use crate::design::Template;
-use crate::gmcp::{CharPrompt, Observed, CHAR_STATE, CHAR_STATUS};
-use crate::overrides::PromptPreview;
 use crate::stage::Stage;
 use crate::state::{OpenRowState, PromptState};
-use crate::vars::{self, forsaken_lands, Vars, Vosh};
+use crate::values::gmcp::{CharPrompt, Observed, CHAR_STATE, CHAR_STATUS};
+use crate::values::overrides::PromptPreview;
+use crate::values::{self, forsaken_lands, Vars, Vosh};
 
 /// What told Vosh your prompt settings, in `session://game-prompt-seen`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -258,7 +258,7 @@ impl PromptEngine {
             });
         if let Some(block) = block {
             let raw = block.raw_text();
-            self.vars.capture(crate::vars::Capture {
+            self.vars.capture(crate::values::Capture {
                 values: block.values,
                 raw: Some(raw),
             });
@@ -360,7 +360,7 @@ impl PromptEngine {
             .map(capture::Recognizer::reads)
             .unwrap_or_default()
             .iter()
-            .map(|name| vars::feeds(name).to_string())
+            .map(|name| values::feeds(name).to_string())
             .collect()
     }
 
@@ -372,7 +372,7 @@ impl PromptEngine {
         let now = self.fed();
         let mut lost: Vec<String> = Vec::new();
         for field in Template::parse(&self.config.template).reads() {
-            let Some(entry) = vars::entry_for(&field).filter(|e| !e.param) else {
+            let Some(entry) = values::entry_for(&field).filter(|e| !e.param) else {
                 continue;
             };
             let name = entry.name;
@@ -486,7 +486,7 @@ impl PromptEngine {
         };
         capture::fills(pattern)
             .into_iter()
-            .filter(|name| !vars::known(name))
+            .filter(|name| !values::known(name))
             .collect()
     }
 

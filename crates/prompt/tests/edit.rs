@@ -9,7 +9,7 @@ use vosh_prompt::edit::{
 use vosh_prompt::render::SgrState;
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
 use vosh_prompt::testkit::now;
-use vosh_prompt::vars::Samples;
+use vosh_prompt::values::Samples;
 use vosh_prompt::{render_str, FieldRef, RenderOptions, Resolved, SpanColor, Template, Values};
 
 /// The catalog's samples, in a fight or out of one.

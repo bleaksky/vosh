@@ -4,9 +4,9 @@
 
 use std::collections::BTreeMap;
 
-use vosh_prompt::format::Position;
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
 use vosh_prompt::testkit::now;
+use vosh_prompt::values::format::Position;
 use vosh_prompt::{
     render_str, FieldRef, MapValues, RenderOptions, Rendered, Resolved, SpanColor, Value, Values,
 };
