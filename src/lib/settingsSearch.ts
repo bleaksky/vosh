@@ -245,8 +245,8 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   {
     label: 'Style',
     description:
-      'Timers first keeps your slots, Countdown sorts by hours left, and Grouped chips puts what to recast first.',
-    keywords: 'affects pane layout timers first countdown grouped chips list order',
+      'Timers first keeps your slots, Countdown sorts by hours left, Grouped chips puts what to recast first, and Draining chips colors only the hours a chip has left.',
+    keywords: 'affects pane layout timers first countdown grouped draining chips drain list order',
     target: at('layout', 'affects', 'affects-style'),
   },
   {

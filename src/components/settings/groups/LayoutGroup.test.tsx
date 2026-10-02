@@ -114,6 +114,12 @@ const segments = (html: string) =>
     },
   );
 
+/** Each option of the Style select as `label selected`, in order. */
+const styles = (html: string) =>
+  [...html.matchAll(/<option value="([^"]*)"( selected="")?>([^<]*)<\/option>/g)].map(
+    ([, , selected, label]) => `${label}${selected ? ' selected' : ''}`,
+  );
+
 describe('AffectsSection', () => {
   it('draws Style and Marker, Timers first and the dot by default', () => {
     const html = drawAffects();
@@ -121,20 +127,20 @@ describe('AffectsSection', () => {
     expect(labels).toEqual(['Style', 'Marker', 'Tint what to recast']);
     expect(html).toMatch(/<h2[^>]*>Affects<\/h2>/);
     expect(html).toContain(
-      'Timers first keeps your slots, Countdown sorts by hours left, and Grouped chips puts what to recast first.',
+      'Timers first keeps your slots, Countdown sorts by hours left, Grouped chips puts what to recast first, and Draining chips colors only the hours a chip has left.',
     );
     expect(html).toContain(
       'It sits beside each affect you track, and its color shows whether the affect is up, running out, or missing.',
     );
-    expect(segments(html)).toEqual([
-      'Timers first pressed',
+    // Four styles do not fit as segments beside the words, so they sit
+    // in a select.
+    expect(styles(html)).toEqual([
+      'Timers first selected',
       'Countdown',
       'Grouped chips',
-      'Dot pressed',
-      'Square',
-      'Plus and minus',
-      'None',
+      'Draining chips',
     ]);
+    expect(segments(html)).toEqual(['Dot pressed', 'Square', 'Plus and minus', 'None']);
     expect(html).toContain(
       'A missing affect sits on a red wash, and one about to drop sits on yellow or red.',
     );
@@ -151,6 +157,10 @@ describe('AffectsSection', () => {
     expect(chips).toContain('Grouped chips always mark what to recast.');
     expect(chips).toMatch(/<input disabled=""[^>]*role="switch"/);
     expect(chips).not.toMatch(/<input[^>]*checked=""[^>]*role="switch"|role="switch"[^>]*checked/);
+    // Draining chips the same way.
+    const drain = drawAffects({ affects_style: 'chips_drain', affects_tint: true });
+    expect(drain).toContain('Draining chips always mark what to recast.');
+    expect(drain).toMatch(/<input[^>]*disabled=""[^>]*role="switch"/);
   });
 
   it('draws each marker as the pane draws it, the mark you have and the one you miss', () => {
@@ -165,21 +175,28 @@ describe('AffectsSection', () => {
 
   it('keeps your marker but quiets the row while Grouped chips are chosen', () => {
     const html = drawAffects({ affects_style: 'chips', affects_marker: 'square' });
+    expect(styles(html)).toContain('Grouped chips selected');
     expect(segments(html)).toEqual([
-      'Timers first',
-      'Countdown',
-      'Grouped chips pressed',
       'Dot disabled',
       'Square pressed disabled',
       'Plus and minus disabled',
       'None disabled',
     ]);
     expect(html).toContain('Grouped chips show the state on each chip, so they draw no marker.');
+    const drain = drawAffects({ affects_style: 'chips_drain', affects_marker: 'square' });
+    expect(styles(drain)).toContain('Draining chips selected');
+    expect(segments(drain)).toEqual([
+      'Dot disabled',
+      'Square pressed disabled',
+      'Plus and minus disabled',
+      'None disabled',
+    ]);
+    expect(drain).toContain('Draining chips show the state on each chip, so they draw no marker.');
   });
 
   it('shows the saved style and marker', () => {
     const html = drawAffects({ affects_style: 'countdown', affects_marker: 'none' });
-    expect(segments(html)).toContain('Countdown pressed');
+    expect(styles(html)).toContain('Countdown selected');
     expect(segments(html)).toContain('None pressed');
   });
 

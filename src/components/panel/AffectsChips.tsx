@@ -37,14 +37,20 @@ import { affectHours, affectsEmptyText, affectWords } from './paneText';
 //
 // Each chip carries its own state, so C draws no marker. A missing
 // affect is a chip with no ground, ringed in soft red dots (ChipDots).
-// A tracked chip is filled, and the fill
-// is a gauge: it drains from the left toward empty as the hours run
-// down, over the affect's own cast (gaugeFraction, from the fulls the
-// backend keeps), with a hairline to show the chip's full width. One
-// running out takes the board's yellow, and red once it is almost gone,
-// over the whole chip, at the hours you set, two and one unless you
-// change them. Its gauge shows stronger over that while it drains. Other chips keep the board's hairline ring, and a
-// harmful one its danger ring.
+// A tracked chip is filled, and the fill is a gauge: it drains from
+// the left toward empty as the hours run down, over the affect's own
+// cast (gaugeFraction, from the fulls the backend keeps), with a
+// hairline to show the chip's full width. One running out takes the
+// board's yellow, and red once it is almost gone, over the whole chip,
+// at the hours you set, two and one unless you change them. Its gauge
+// shows stronger over that while it drains. Other chips keep the
+// board's hairline ring, and a harmful one its danger ring.
+//
+// Draining chips (fill drain) is the same pane, and only a chip running
+// out draws differently: no tint over the whole chip, a hairline for
+// its full width, and the yellow or red only over the share that
+// matches the hours it has left. The body carries data-chip-fill, and
+// panel.css draws the rest.
 
 export interface ChipsViewProps {
   current: readonly AffectInput[] | null;
@@ -59,7 +65,13 @@ export interface ChipsViewProps {
   /** When an affect runs out and is almost gone. Two and one hours
    *  when left out. */
   thresholds?: AffectThresholds | undefined;
+  /** How a chip running out colors: `tint` over the whole chip, as
+   *  Grouped chips draws it and the default, or `drain`, as Draining
+   *  chips draws it, only over the hours it has left. */
+  fill?: ChipFill | undefined;
 }
+
+export type ChipFill = 'tint' | 'drain';
 
 const hoursOf = (row: AffectRow) => affectHours(row.state, row.ticks);
 
@@ -73,6 +85,7 @@ export function ChipsView({
   full,
   measure,
   thresholds = DEFAULT_AFFECT_THRESHOLDS,
+  fill = 'tint',
 }: ChipsViewProps) {
   const rows = useMemo(
     () => affectsPaneRows(current, tracked, hidden, thresholds),
@@ -96,7 +109,11 @@ export function ChipsView({
   return (
     <>
       <AffectsHeader rows={rows} />
-      <div ref={bodyRef} className="pane-body">
+      <div
+        ref={bodyRef}
+        className="pane-body"
+        data-chip-fill={fill === 'drain' ? 'drain' : undefined}
+      >
         {empty !== null ? (
           <AffectsEmpty text={empty} />
         ) : (

@@ -261,6 +261,9 @@ describe('chipsMinH', () => {
     const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
     expect(affectsMinIn(tree, 494, rows(thirty), 'chips')).toBe(204);
     expect(affectsMinIn(defaultLayout().root, 494, rows(thirty), 'chips')).toBe(160);
+    // Draining chips packs the same chips, so it holds the same lines.
+    expect(affectsMinIn(tree, 494, rows(thirty), 'chips_drain')).toBe(204);
+    expect(affectsMinIn(defaultLayout().root, 494, rows(thirty), 'chips_drain')).toBe(160);
   });
 });
 

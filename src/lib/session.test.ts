@@ -566,7 +566,7 @@ describe('affects display', () => {
   });
 
   it('keeps every saved choice and coerces anything else to the default', () => {
-    expect(AFFECTS_STYLES).toEqual(['timers', 'countdown', 'chips']);
+    expect(AFFECTS_STYLES).toEqual(['timers', 'countdown', 'chips', 'chips_drain']);
     expect(AFFECTS_MARKERS).toEqual(['dot', 'square', 'plus_minus', 'none']);
     for (const style of AFFECTS_STYLES) expect(normalizeAffectsStyle(style)).toBe(style);
     for (const marker of AFFECTS_MARKERS) expect(normalizeAffectsMarker(marker)).toBe(marker);

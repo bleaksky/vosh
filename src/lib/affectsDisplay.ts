@@ -2,6 +2,7 @@ import type { AffectThresholds } from './affectsView';
 import {
   AFFECTS_MARKERS,
   AFFECTS_STYLES,
+  isChipsStyle,
   type AffectsDisplay,
   type AffectsMarker,
   type AffectsStyle,
@@ -15,6 +16,7 @@ export const AFFECTS_STYLE_LABELS: Readonly<Record<AffectsStyle, string>> = {
   timers: 'Timers first',
   countdown: 'Countdown',
   chips: 'Grouped chips',
+  chips_drain: 'Draining chips',
 };
 
 export const AFFECTS_MARKER_LABELS: Readonly<Record<AffectsMarker, string>> = {
@@ -53,10 +55,11 @@ export function affectThresholdsOf(display: AffectsDisplay): AffectThresholds {
   return { runningOut: display.running_out, almostGone: display.almost_gone };
 }
 
-/** Grouped chips show the state on each chip and draw no marker, so
- *  the marker applies only to Timers first and Countdown. */
+/** Grouped chips and Draining chips show the state on each chip and
+ *  draw no marker, so the marker applies only to Timers first and
+ *  Countdown. */
 export function markerApplies(display: AffectsDisplay): boolean {
-  return display.style !== 'chips';
+  return !isChipsStyle(display.style);
 }
 
 /** The submenus of a pane's more menu. The chat pane's Channel colors

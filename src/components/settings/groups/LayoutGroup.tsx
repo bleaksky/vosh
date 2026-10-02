@@ -7,11 +7,12 @@ import { profilePossessive } from '../../../lib/profileLabel';
 import {
   AFFECTS_MARKERS,
   AFFECTS_STYLES,
+  isChipsStyle,
+  normalizeAffectsStyle,
   profilesList,
   subscribeProfileSwitched,
   subscribeProfilesChanged,
   type AffectsMarker,
-  type AffectsStyle,
   type UiConfig,
   type VitalsDensity,
   type VitalsMeter,
@@ -35,8 +36,10 @@ import {
   Row,
   Section,
   Segmented,
+  Select,
   Toggle,
   type SegmentedOption,
+  type SelectOption,
 } from '../ui';
 
 // Settings, Layout (SettingsLayout.dc.html). How the window is
@@ -205,9 +208,12 @@ export function StatusLineSection({
   );
 }
 
-const AFFECTS_STYLE_OPTIONS: readonly SegmentedOption<AffectsStyle>[] = AFFECTS_STYLES.map(
-  (value) => ({ value, label: AFFECTS_STYLE_LABELS[value] }),
-);
+// Four names do not fit beside the row's words as segments in the
+// narrowest Settings window, so the styles sit in a select.
+const AFFECTS_STYLE_OPTIONS: readonly SelectOption[] = AFFECTS_STYLES.map((value) => ({
+  value,
+  label: AFFECTS_STYLE_LABELS[value],
+}));
 
 /** A Marker segment's picture: the mark of an affect you have, then
  *  the mark of one you are missing, the pane's own 8 px shapes 4 px
@@ -228,11 +234,11 @@ const MARKER_OPTIONS: readonly SegmentedOption<AffectsMarker>[] = AFFECTS_MARKER
 );
 
 /** How the Affects pane draws (AffectsStyles SPEC 4.1): one of the
- *  three approved boards, the mark beside each tracked affect, and the
- *  wash behind what to recast. Grouped chips show the state on each
- *  chip and always mark what to recast, so Marker and Tint go quiet
- *  while they are chosen and keep your picks for the other two.
- *  Exported for its test. */
+ *  three approved boards or Draining chips, the mark beside each
+ *  tracked affect, and the wash behind what to recast. Both chip styles
+ *  show the state on each chip and always mark what to recast, so
+ *  Marker and Tint go quiet while one is chosen and keep your picks for
+ *  the other two. Exported for its test. */
 export function AffectsSection({
   config,
   update,
@@ -240,7 +246,8 @@ export function AffectsSection({
   config: UiConfig;
   update: (patch: Partial<UiConfig>) => void;
 }) {
-  const chips = config.affects_style === 'chips';
+  const chips = isChipsStyle(config.affects_style);
+  const chipsName = AFFECTS_STYLE_LABELS[config.affects_style];
   const markers = chips
     ? MARKER_OPTIONS.map((option) => ({ ...option, disabled: true }))
     : MARKER_OPTIONS;
@@ -252,20 +259,20 @@ export function AffectsSection({
     >
       <Row
         label="Style"
-        description="Timers first keeps your slots, Countdown sorts by hours left, and Grouped chips puts what to recast first."
+        description="Timers first keeps your slots, Countdown sorts by hours left, Grouped chips puts what to recast first, and Draining chips colors only the hours a chip has left."
         anchor="affects-style"
       >
-        <Segmented
+        <Select
           options={AFFECTS_STYLE_OPTIONS}
           value={config.affects_style}
-          onChange={(style) => update({ affects_style: style })}
+          onChange={(style) => update({ affects_style: normalizeAffectsStyle(style) })}
         />
       </Row>
       <Row
         label="Marker"
         description={
           chips
-            ? 'Grouped chips show the state on each chip, so they draw no marker.'
+            ? `${chipsName} show the state on each chip, so they draw no marker.`
             : 'It sits beside each affect you track, and its color shows whether the affect is up, running out, or missing.'
         }
         anchor="affects-marker"
@@ -280,7 +287,7 @@ export function AffectsSection({
         label="Tint what to recast"
         description={
           chips
-            ? 'Grouped chips always mark what to recast.'
+            ? `${chipsName} always mark what to recast.`
             : 'A missing affect sits on a red wash, and one about to drop sits on yellow or red.'
         }
         anchor="affects-tint"
