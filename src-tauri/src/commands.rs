@@ -203,7 +203,7 @@ pub(crate) fn broadcast<R: tauri::Runtime, S: serde::Serialize + ?Sized>(
     }
 }
 use crate::map_state::SharedMap;
-use crate::plugins::{PluginRecord, SharedPluginManager};
+use crate::plugins::SharedPluginManager;
 use crate::profile::{Macro, Profile, Timer};
 use crate::profile_config::{
     hand_out_shared, share_custom_themes, strip_global_fields, GlobalConfig, HeldCustomThemes,
@@ -3890,117 +3890,6 @@ pub(crate) struct UpdateCheckResult {
     pub available: bool,
     pub version: Option<String>,
     pub notes: Option<String>,
-}
-
-#[derive(serde::Serialize)]
-pub(crate) struct PluginInfo {
-    pub name: String,
-    pub version: String,
-    pub description: String,
-    pub author: String,
-    pub entry: String,
-    pub dir: String,
-    pub enabled: bool,
-}
-
-impl From<&PluginRecord> for PluginInfo {
-    fn from(p: &PluginRecord) -> Self {
-        Self {
-            name: p.manifest.name.clone(),
-            version: p.manifest.version.clone(),
-            description: p.manifest.description.clone(),
-            author: p.manifest.author.clone(),
-            entry: p.manifest.entry.clone(),
-            dir: p.dir.display().to_string(),
-            enabled: p.enabled,
-        }
-    }
-}
-
-#[tauri::command]
-pub(crate) async fn plugins_list(state: State<'_, SharedState>) -> Result<Vec<PluginInfo>, String> {
-    let mut mgr = state.plugins.lock().await;
-    mgr.discover().map_err(|e| e.to_string())?;
-    Ok(mgr.list().iter().map(PluginInfo::from).collect())
-}
-
-#[tauri::command]
-pub(crate) async fn plugins_set_enabled(
-    app: AppHandle,
-    state: State<'_, SharedState>,
-    name: String,
-    enabled: bool,
-) -> Result<bool, String> {
-    let body = if enabled {
-        let mgr = state.plugins.lock().await;
-        if !mgr.list().iter().any(|p| p.manifest.name == name) {
-            return Err(format!("plugin `{name}` not found"));
-        }
-        Some(mgr.read_entry(&name).map_err(|e| e.to_string())?)
-    } else {
-        None
-    };
-
-    {
-        let mut mgr = state.plugins.lock().await;
-        if !mgr.mark_enabled(&name, enabled) {
-            return Err(format!("plugin `{name}` not found"));
-        }
-        let mut p = state.profile.lock().await;
-        p.plugins.enabled = mgr.enabled_names();
-    }
-
-    let mut apply = ApplyResult::default();
-    if let Some(code) = body {
-        let mut p = state.profile.lock().await;
-        crate::script_state::snapshot_vars(&p.script, &p.vars);
-        let outcome = p
-            .script
-            .load_script(&format!("plugin:{name}"), code)
-            .map_err(|e| e.to_string())?;
-        apply = crate::script_state::apply_actions(&mut p, outcome);
-    }
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
-    deliver_plugin_load(&app, &shared, &name, apply).await;
-    Ok(enabled)
-}
-
-#[tauri::command]
-pub(crate) async fn plugins_reload(
-    app: AppHandle,
-    state: State<'_, SharedState>,
-    name: String,
-) -> Result<(), String> {
-    let code = {
-        let mgr = state.plugins.lock().await;
-        mgr.read_entry(&name).map_err(|e| e.to_string())?
-    };
-    let apply = {
-        let mut p = state.profile.lock().await;
-        crate::script_state::snapshot_vars(&p.script, &p.vars);
-        let outcome = p
-            .script
-            .load_script(&format!("plugin:{name}"), code)
-            .map_err(|e| e.to_string())?;
-        crate::script_state::apply_actions(&mut p, outcome)
-    };
-    deliver_plugin_load(&app, state.inner(), &name, apply).await;
-    Ok(())
-}
-
-/// Deliver what a plugin's entry script asked for as it loaded, see
-/// [`deliver_script_result`]. The plugin loaded either way, so a session
-/// that went away only gets a log line.
-async fn deliver_plugin_load<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    state: &SharedState,
-    name: &str,
-    apply: ApplyResult,
-) {
-    if let Err(e) = deliver_script_result(app, state, apply).await {
-        tracing::warn!(plugin = %name, error = %e, "plugin load could not send");
-    }
 }
 
 #[tauri::command]

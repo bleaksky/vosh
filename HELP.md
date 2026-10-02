@@ -320,7 +320,7 @@ Lua scripts run inside Vosh and register automation through the global `mud` tab
 
 Scripts talk to Vosh through the global `mud` table. `mud.send(text)` goes straight to the server and `mud.input(text)` feeds back through the input pipeline. `mud.echo(text)` prints locally. `mud.alias(name, expansion)` and `mud.trigger(name, pattern, callback)` register automation, with `captures[1]` holding the full match and `captures[2]` onward the groups. `mud.on_gmcp(package, callback)` hands you server data as a table, and `mud.timer(secs, callback)` schedules work you can cancel with `mud.cancel_timer`.
 
-Loads from `#script load` last for the session. For autoload, make a plugin. Create `plugins/<slug>/` under the app data directory with a `manifest.toml` naming the plugin and its entry script, `main.lua` by default. Enabled plugin names persist in your profile TOML under `[plugins]`, and every enabled plugin loads at launch. Enabling runs immediately, disabling takes effect next launch.
+Loads from `#script load` last for the session. For autoload, make a plugin. Create `plugins/<slug>/` under the app data directory with a `manifest.toml` naming the plugin and its entry script, `main.lua` by default. To turn a plugin on, add its name to `enabled` under `[plugins]` in your profile file while Vosh is closed, like `enabled = ["vitals_alert"]`. Every plugin on that list loads at launch, and removing a name turns that plugin off from the next launch.
 
 The sandbox strips file and process access. `require`, `io`, and `os.execute` are gone.
 
