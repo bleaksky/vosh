@@ -2163,7 +2163,7 @@ fn prompt_block(
         } else {
             p.prompt
                 .stage
-                .show(&mut batch.out, block, painted, &before, display);
+                .show_as_sent(&mut batch.out, block, painted, &before, display);
         }
         for head in &heads {
             keep_shown(batch, &mut scrollback, head, &head.raw, log_session_id);
