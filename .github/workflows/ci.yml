@@ -53,10 +53,10 @@ jobs:
             libssl-dev \
             patchelf
 
+      # rustup reads the version, components and profile from
+      # rust-toolchain.toml so CI builds with the same Rust as local builds.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+        run: rustup toolchain install
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
