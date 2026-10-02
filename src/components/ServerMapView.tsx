@@ -1,6 +1,19 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } from 'react';
 import { onGmcpPackage } from '../lib/session';
-import { MAP_COLORS, hexToRgba, mapThemeSignature, sectorForCode } from '../lib/mapPalette';
+import { drawMap3D } from '../lib/map3dDraw';
+import {
+  DEFAULT_MAP_3D_VIEW,
+  MAP_3D_VIEW_KEY,
+  loadMap3dView,
+  type Map3dView,
+} from '../lib/map3dView';
+import {
+  MAP_COLORS,
+  hexToRgba,
+  mapInks,
+  mapThemeSignature,
+  sectorForCode,
+} from '../lib/mapPalette';
 import { MAP_STYLE_KEY, loadMapStyle, type MapStyle } from '../lib/mapStyle';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom } from '../lib/mapZoom';
 import {
@@ -32,6 +45,14 @@ function loadStyle(): Style {
     return loadMapStyle(localStorage);
   } catch {
     return 'squares';
+  }
+}
+
+function loadView3d(): Map3dView {
+  try {
+    return loadMap3dView(localStorage);
+  } catch {
+    return DEFAULT_MAP_3D_VIEW;
   }
 }
 
@@ -108,6 +129,8 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
   // row, so a failure there says so in a toast.
   const pickedRef = useRef(false);
   const [zoom, setZoom] = useState<number>(loadZoom);
+  // How you look at the 3D style: its turn, tilt, floors and sprites.
+  const [view3d, setView3d] = useState<Map3dView>(loadView3d);
   // Snapshot of the persistent mapping store. We use it to translate the
   // player-centric Map.Tiles grid into stable world coordinates so cells
   // do not shift on canvas as the player walks.
@@ -147,8 +170,23 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
     }
   }, [zoom]);
 
-  // Plain scroll and a pinch zoom the map in every style.
-  useMapGestures(containerRef, { zoom, setZoom });
+  useEffect(() => {
+    try {
+      localStorage.setItem(MAP_3D_VIEW_KEY, JSON.stringify(view3d));
+    } catch {
+      // ignore
+    }
+  }, [view3d]);
+
+  // Plain scroll and a pinch zoom the map in every style. In 3D a drag,
+  // a double click and the arrow keys turn and tilt it.
+  const is3d = style === '3d';
+  useMapGestures(containerRef, {
+    zoom,
+    setZoom,
+    view: is3d ? view3d : null,
+    setView: setView3d,
+  });
 
   useEffect(() => {
     if (!tilesetUrl) {
@@ -225,6 +263,11 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
       return;
     }
 
+    if (style === '3d') {
+      drawMap3D(ctx, cssWidth, cssHeight, tiles, view3d, zoom, mapInks());
+      return;
+    }
+
     const { row: centerR, col: centerC } = playerCellOf(tiles, rows, cols);
 
     const anchor = computeAnchor(tiles, rows, cols, centerR, centerC, cssWidth, cssHeight, zoom);
@@ -259,9 +302,10 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
   // runs after the browser paints, so waiting there and then on a
   // frame showed each step a frame or two after the terminal and the
   // room row had moved on. A layout effect draws before that paint.
+  // A change to the 3D view repaints the same way, once per drag step.
   useLayoutEffect(() => {
     drawRef.current();
-  }, [tiles]);
+  }, [tiles, view3d]);
 
   // Style/layout-driven redraw keeps the settle sequence. Layout after
   // a mode toggle can take a frame or two to settle. Schedule a couple
@@ -367,7 +411,13 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
         onChange={handleLoadTileset}
         hidden
       />
-      <div ref={containerRef} className="map-canvas-host">
+      <div
+        ref={containerRef}
+        className={`map-canvas-host${is3d ? ' is-3d' : ''}`}
+        tabIndex={is3d ? 0 : undefined}
+        role={is3d ? 'group' : undefined}
+        aria-label={is3d ? 'Map. Drag or use the arrow keys to turn and tilt it.' : undefined}
+      >
         <canvas ref={canvasRef} />
         {style === 'glyphs' && tilesSnap && (
           <GlyphsOverlay payload={tilesSnap.payload} payloadJson={tilesSnap.json} zoom={zoom} />
@@ -385,6 +435,8 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
           tilesetLoaded={tilesetUrl !== null}
           onLoadTileset={() => fileInputRef.current?.click()}
           onClearTileset={clearTileset}
+          view3d={view3d}
+          onView3d={setView3d}
         />
       </div>
     </div>
