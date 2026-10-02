@@ -22,6 +22,10 @@
 //! latest packets and what the prompt read this pulse, through the
 //! capture or a prompt trigger's script values, never stored.
 
+pub mod format;
+pub mod gmcp;
+pub mod overrides;
+
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, FixedOffset, NaiveDateTime};
@@ -33,7 +37,7 @@ use crate::aabahran;
 use crate::design::FieldRef;
 use crate::format::{lang_game, tank_bar_cells, Position, Resolved, Value, MOON_CODES};
 use crate::gmcp::{
-    self, Find, Observed, Snapshot, CHAR_COMBAT, CHAR_STATE, CHAR_STATUS, CHAR_VITALS, CHAR_WORTH,
+    Find, Observed, Snapshot, CHAR_COMBAT, CHAR_STATE, CHAR_STATUS, CHAR_VITALS, CHAR_WORTH,
     GROUP_INFO, IMM_QUEUES, ROOM_CHARS, ROOM_INFO, ROOM_ITEMS, ROOM_WEATHER, WORLD_MOONS,
     WORLD_TIME,
 };
