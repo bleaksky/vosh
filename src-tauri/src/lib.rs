@@ -125,12 +125,12 @@ use commands::{
     native_surface_set_bounds, native_surface_set_bright_bold, native_surface_set_cell_metrics,
     native_surface_set_divider_color, native_surface_set_font, native_surface_set_theme,
     native_surface_set_visible, native_surface_wheel, open_help_window, open_settings_window,
-    plugins_list, plugins_reload, plugins_set_enabled, presets_install, presets_remove,
-    profile_create, profile_delete, profile_duplicate, profile_get_scope, profile_rename,
-    profile_resolve_match, profile_set_metadata, profile_set_scope, profile_switch, profiles_list,
-    scrollback_load, session_connect, session_disconnect, session_send_input, session_send_masked,
-    session_set_window_size, target_get, tick_get_config, tick_set_config, timers_delete,
-    timers_list, timers_set, triggers_export, triggers_groups_list, triggers_import, triggers_list,
+    presets_install, presets_remove, profile_create, profile_delete, profile_duplicate,
+    profile_get_scope, profile_rename, profile_resolve_match, profile_set_metadata,
+    profile_set_scope, profile_switch, profiles_list, scrollback_load, session_connect,
+    session_disconnect, session_send_input, session_send_masked, session_set_window_size,
+    target_get, tick_get_config, tick_set_config, timers_delete, timers_list, timers_set,
+    triggers_export, triggers_groups_list, triggers_import, triggers_list,
     triggers_set_group_enabled, ui_get_config, ui_set_config, updater_check,
     updater_install_and_relaunch, AppState, SharedState,
 };
@@ -369,9 +369,6 @@ pub fn run() {
             tick_set_config,
             profile_get_scope,
             profile_set_scope,
-            plugins_list,
-            plugins_set_enabled,
-            plugins_reload,
             open_settings_window,
             open_help_window,
             window_backdrop::window_backdrop_set,
@@ -619,8 +616,8 @@ fn open_log_store(dir: &std::path::Path) -> Result<LogStore, Box<dyn std::error:
 }
 
 /// Drop the example plugins shipped with the app into the user's plugins
-/// directory if they're not already there. Lets a fresh install show
-/// something usable in the Plugins fieldset without manual setup.
+/// directory if they're not already there, so a fresh install has one
+/// to turn on in its profile file.
 fn seed_example_plugins(plugins_dir: &std::path::Path) {
     const EXAMPLES: &[(&str, &[(&str, &str)])] = &[(
         "vitals_alert",

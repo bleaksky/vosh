@@ -4,10 +4,9 @@
 //! enabled plugins have their entry script loaded into the shared
 //! `ScriptEngine` on launch.
 //!
-//! Hot enable runs the entry script through the engine immediately. Hot
-//! reload re-runs it. Hot disable persists the choice but takes effect on
-//! next launch (the engine doesn't track per-script trigger ownership yet,
-//! so we can't safely yank a script's registrations mid-flight).
+//! The `[plugins] enabled` list in the profile file says which plugins
+//! are on. You edit it by hand, and a change takes effect at the next
+//! launch.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -83,6 +82,7 @@ impl PluginManager {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn enabled_names(&self) -> Vec<String> {
         self.enabled.iter().cloned().collect()
     }
@@ -133,6 +133,7 @@ impl PluginManager {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn list(&self) -> &[PluginRecord] {
         &self.plugins
     }
@@ -155,27 +156,6 @@ impl PluginManager {
             ));
         }
         Ok(std::fs::read_to_string(entry_path)?)
-    }
-
-    /// Mark a plugin enabled in the in-memory state. Persistence is the
-    /// caller's responsibility (profile.toml). Returns false when the
-    /// plugin isn't known.
-    pub(crate) fn mark_enabled(&mut self, name: &str, enabled: bool) -> bool {
-        let exists = self.plugins.iter().any(|p| p.manifest.name == name);
-        if !exists {
-            return false;
-        }
-        if enabled {
-            self.enabled.insert(name.to_string());
-        } else {
-            self.enabled.remove(name);
-        }
-        for record in &mut self.plugins {
-            if record.manifest.name == name {
-                record.enabled = enabled;
-            }
-        }
-        true
     }
 }
 
@@ -236,19 +216,6 @@ mod tests {
             vec![("a".to_string(), false), ("b".to_string(), true)]
         );
         assert_eq!(mgr.enabled_names(), vec!["b".to_string()]);
-    }
-
-    #[test]
-    fn mark_enabled_updates_record_and_set() {
-        let tmp = tempdir();
-        write_plugin(tmp.path(), "x", "x", "");
-        let mut mgr = PluginManager::default();
-        mgr.set_plugins_dir(tmp.path().to_path_buf());
-        mgr.discover().unwrap();
-        assert!(mgr.mark_enabled("x", true));
-        assert!(mgr.list()[0].enabled);
-        assert_eq!(mgr.enabled_names(), vec!["x".to_string()]);
-        assert!(!mgr.mark_enabled("missing", true));
     }
 
     #[test]
