@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { panelLayoutFromDock, type PanelId } from './panels';
 import { pendingWrites } from './pendingWrites';
 
 // The one-window panel's pane tree, saved per profile. Mirrors
@@ -487,71 +486,6 @@ function readingHeight(node: PaneNode): number {
   const parts = node.children.map(readingHeight);
   if (parts.length === 0) return 0;
   return node.split === 'column' ? parts.reduce((acc, p) => acc + p, 0) : Math.max(...parts);
-}
-
-// ---------------------------------------------------------------
-// Migration from the old dock layout. Mirrors
-// PaneLayoutPersist::from_dock in Rust, which seeds a profile's tree
-// the first time it opens. Reset panel layout used to run it here and
-// now asks the backend for the stock tree, so only its tests call it.
-// ---------------------------------------------------------------
-
-// Reading order of the old zones when they fold into one column: the
-// right zone (top stack, then bottom), the left zone, then the full
-// width strips. Hidden panels have no rank.
-function oldZoneRank(zone: string, align: string): number | null {
-  if (zone === 'right') return align === 'top' ? 0 : 1;
-  if (zone === 'left') return align === 'top' ? 2 : 3;
-  if (zone === 'top') return 4;
-  if (zone === 'bottom') return 5;
-  return null;
-}
-
-// Over a single pane the map takes the default layout's share. With
-// two or more under it the map drops to 0.45 and affects, the longest
-// list, takes 0.3, and the rest share what is left. Without a map the
-// panes split evenly. `others` counts the panes that are not the map.
-function migratedWeight(pane: PaneType, hasMap: boolean, hasAffects: boolean, others: number) {
-  if (!hasMap || others === 0) return 1;
-  if (others === 1) return pane === 'map' ? DEFAULT_MAP_WEIGHT : DEFAULT_AFFECTS_WEIGHT;
-  if (pane === 'map') return 0.45;
-  if (pane === 'affects') return 0.3;
-  return hasAffects ? 0.25 / (others - 1) : 0.55 / others;
-}
-
-/** The layout a profile gets from its old dock layout, as the
- *  `dock_layout_get` command returns it. Panes keep their old reading
- *  order, vitals, the room strip, and the combat target never become
- *  panes, and an empty list gives the default map over affects. */
-export function layoutFromDock(entries: unknown): PaneLayout {
-  const list = (Array.isArray(entries) ? entries : []).filter(isRecord).map((e) => ({
-    id: typeof e.id === 'string' ? e.id : '',
-    zone: typeof e.zone === 'string' ? e.zone : '',
-    ...(typeof e.align === 'string' ? { align: e.align } : {}),
-  }));
-  if (list.length === 0) return defaultLayout();
-  const { placements, order } = panelLayoutFromDock(list);
-  const rankOf = (id: PanelId) => oldZoneRank(placements[id].zone, placements[id].align);
-  const shown = order
-    .filter((id): id is PanelId & PaneType => isPaneType(id) && rankOf(id) !== null)
-    .map((id, at) => ({ id, at, rank: rankOf(id) ?? 0 }))
-    .sort((a, b) => a.rank - b.rank || a.at - b.at)
-    .map((s) => s.id);
-  const hasMap = shown.includes('map');
-  const hasAffects = shown.includes('affects');
-  const others = shown.length - (hasMap ? 1 : 0);
-  const children: PaneLeaf[] = shown.map((pane) => ({
-    id: pane,
-    pane,
-    weight: migratedWeight(pane, hasMap, hasAffects, others),
-    props: {},
-  }));
-  return {
-    version: PANE_LAYOUT_VERSION,
-    panel_open: children.length > 0 || rankOf('vitals') !== null,
-    panel_width: null,
-    root: sanitize({ id: 'root', split: 'column', weight: 1, children }),
-  };
 }
 
 // ---------------------------------------------------------------

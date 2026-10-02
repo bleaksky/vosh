@@ -7,7 +7,6 @@ import {
   defaultLayout,
   findNode,
   isLeaf,
-  layoutFromDock,
   replacePane,
   sanitize,
   sanitizeLayout,
@@ -293,100 +292,6 @@ describe('tree operations', () => {
     expect(findNode(tree, 'map')).not.toBeNull();
     expect(findNode(tree, 'affects')).not.toBeNull();
     expect(allPanes(tree)).toEqual(['map', 'affects', 'imm']);
-  });
-});
-
-// The same cases as the from_dock tests in src-tauri/src/profile_config.rs.
-describe('layoutFromDock', () => {
-  const dock = (entries: [string, string, string?][]) =>
-    entries.map(([id, zone, align]) => ({ id, zone, ...(align ? { align } : {}) }));
-
-  it('gives the default map over affects for an empty or missing list', () => {
-    expect(layoutFromDock([])).toEqual(defaultLayout());
-    expect(layoutFromDock(null)).toEqual(defaultLayout());
-  });
-
-  it('keeps the right zone order and drops vitals, the room strip, combat, and hidden panels', () => {
-    const layout = layoutFromDock(
-      dock([
-        ['vitals', 'right', 'bottom'],
-        ['affects', 'right', 'bottom'],
-        ['chat', 'bottom'],
-        ['map', 'right', 'top'],
-        ['roomstrip', 'top'],
-        ['combat', 'right', 'top'],
-        ['group', 'left', 'top'],
-        ['imm', 'hidden'],
-      ]),
-    );
-    expect(layout.panel_open).toBe(true);
-    expect(shape(layout.root)).toEqual({
-      column: [
-        ['map', 0.45],
-        ['affects', 0.3],
-        ['group', 0.125],
-        ['chat', 0.125],
-      ],
-    });
-    expect(layout.root.children.map((c) => c.id)).toEqual(['map', 'affects', 'group', 'chat']);
-  });
-
-  it('splits the rest evenly under the map without affects', () => {
-    const layout = layoutFromDock(
-      dock([
-        ['map', 'right', 'top'],
-        ['group', 'right', 'top'],
-        ['chat', 'right'],
-        ['affects', 'hidden'],
-      ]),
-    );
-    expect(shape(layout.root)).toEqual({
-      column: [
-        ['map', 0.45],
-        ['group', 0.275],
-        ['chat', 0.275],
-      ],
-    });
-  });
-
-  it('fills ids the list never mentions with their old placement', () => {
-    const layout = layoutFromDock(dock([['chat', 'right']]));
-    expect(allPanes(layout.root)).toEqual(['map', 'group', 'chat', 'affects']);
-  });
-
-  it('rejects a map in a strip', () => {
-    const layout = layoutFromDock(
-      dock([
-        ['map', 'top'],
-        ['affects', 'hidden'],
-      ]),
-    );
-    expect(shape(layout.root)).toEqual({
-      column: [
-        ['map', 0.525],
-        ['group', 0.475],
-      ],
-    });
-  });
-
-  it('closes the panel when everything was hidden', () => {
-    const ids = ['map', 'group', 'vitals', 'roomstrip', 'chat', 'affects', 'combat', 'imm'];
-    const layout = layoutFromDock(ids.map((id) => ({ id, zone: 'hidden' })));
-    expect(layout.panel_open).toBe(false);
-    expect(layout.root.children).toEqual([]);
-  });
-
-  it('keeps the panel open for vitals alone', () => {
-    const layout = layoutFromDock(
-      dock([
-        ['map', 'hidden'],
-        ['group', 'hidden'],
-        ['vitals', 'left', 'top'],
-        ['affects', 'hidden'],
-      ]),
-    );
-    expect(layout.panel_open).toBe(true);
-    expect(layout.root).toEqual({ id: 'root', split: 'column', weight: 1, children: [] });
   });
 });
 
