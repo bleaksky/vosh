@@ -43,23 +43,19 @@
 //!   game does and plays a fake Aabahran for tests and scripted runs.
 
 pub mod aabahran;
-pub mod candidates;
 pub mod capture;
+pub mod card;
 pub mod config;
-pub mod describe;
 pub mod design;
-pub mod edit;
 pub mod engine;
-pub mod presets;
 pub mod render;
-pub mod report;
 pub mod stage;
-pub mod state;
 #[cfg(feature = "testkit")]
 pub mod testkit;
 pub mod values;
 pub mod wrap;
 
+pub use card::{candidates, describe, edit, presets, report, state};
 pub use config::{CaptureConfig, PromptConfig, PromptShow};
 pub use design::{FieldRef, Template};
 pub use engine::{GamePromptSeen, PromptEngine, Status};
