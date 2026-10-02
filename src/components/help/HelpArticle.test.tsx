@@ -30,7 +30,7 @@ describe('a help topic', () => {
     expect(html).toMatch(/<table class="hp-table"><thead><tr><th scope="col">Code<\/th>/);
     const body = /<tbody>(.*)<\/tbody>/.exec(html)?.[1] ?? '';
     expect(body.match(/<tr>/g)).toHaveLength(PROMPT_DESIGN_CODES.length);
-    expect(body.match(/<tr>/g)).toHaveLength(23);
+    expect(body.match(/<tr>/g)).toHaveLength(24);
     // The code column is a row of mono codes, not chips.
     expect(body).toContain(
       '<span class="hp-codes"><code>%hp</code><code>%mana</code><code>%move</code></span>',

@@ -443,6 +443,7 @@ describe('the help on prompt design codes', () => {
     [['%{ul:#bf616a}', '%{ul:default}'], 'Colors the underline, or gives it the text color again.'],
 
     [['%nl'], 'Starts a new line.'],
+    [['%{right}'], 'Pushes the rest of its line to the right edge of the terminal.'],
     [
       ['%{if:fight}', '%{ifnot:fight}', '%{end}'],
       'Shows what sits between them only in a fight, or only out of one.',

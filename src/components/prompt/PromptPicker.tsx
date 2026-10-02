@@ -33,6 +33,7 @@ const LAYOUT_HELP: Record<LayoutId, { help: string; sample: string }> = {
   nl: { help: 'Starts a new line.', sample: '↵' },
   nl_fight: { help: 'Starts a new line only in a fight.', sample: '↵' },
   space: { help: 'A space between two parts.', sample: '·' },
+  right: { help: 'Pushes what follows on its line to the right edge.', sample: '→' },
 };
 
 interface PromptPickerProps {

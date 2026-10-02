@@ -33,7 +33,7 @@ import {
 import { followCardProfile } from '../../lib/promptCardSync';
 import { numberMarks, wholeMarks, type ScreenAsk } from '../../lib/promptScreen';
 import { warnedPieces } from '../../lib/promptWarn';
-import { type LayoutId } from '../../lib/promptPicker';
+import { LAYOUT_TOKENS, type LayoutId } from '../../lib/promptPicker';
 import {
   caretAfter,
   deleteOp,
@@ -783,7 +783,7 @@ export function PromptCard({
   const insertLayout = (id: LayoutId) => {
     if (pickerFor === 'text') {
       setView('text');
-      const token = id === 'nl' ? '%nl' : id === 'nl_fight' ? '%{if:fight}%nl%{end}' : ' ';
+      const token = LAYOUT_TOKENS[id];
       // The field takes the token once it shows again.
       requestAnimationFrame(() => insertRef.current?.(token));
       return;
@@ -793,6 +793,8 @@ export function PromptCard({
       edit([{ op: 'insert_text', at: place, text: ' ' }], 'caret');
     } else if (id === 'nl') {
       edit([{ op: 'insert_nl', at: place }]);
+    } else if (id === 'right') {
+      edit([{ op: 'insert_right', at: place }]);
     } else {
       // A break, then In a fight on it.
       edit([

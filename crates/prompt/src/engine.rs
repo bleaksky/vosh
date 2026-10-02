@@ -200,6 +200,11 @@ pub struct PromptEngine {
     newest: Option<(u64, u64)>,
     /// The clock pieces the design reads.
     clock: Clock,
+    /// The design pushes part of a row to the right edge, `%{right}`.
+    right: bool,
+    /// The columns of the terminal your prompt shows in, as the session
+    /// last heard them, which a push to the right edge reaches to.
+    cols: Option<usize>,
 }
 
 impl PromptEngine {
@@ -265,9 +270,14 @@ impl PromptEngine {
     fn compile(&mut self) {
         self.stage.set_show(self.config.show);
         self.stage.set_capture_for(&self.config.capture, self.who);
-        let reads = Template::parse(&self.config.template).reads();
+        let template = Template::parse(&self.config.template);
+        let reads = template.reads();
         self.stage.set_reads(&reads);
         self.clock = Clock::of(&reads);
+        self.right = template
+            .tokens()
+            .iter()
+            .any(|t| t.kind == crate::template::TokenKind::Right);
     }
 
     /// Keep a GMCP packet. Char.Status and Char.State say who the prompt
@@ -819,6 +829,34 @@ impl PromptEngine {
     /// Where your prompt shows, `[prompt] show`.
     pub fn show(&self) -> crate::config::PromptShow {
         self.config.show
+    }
+
+    /// The terminal your prompt shows in is `cols` wide now. A connection
+    /// and another profile keep it, since the window stays.
+    pub fn set_cols(&mut self, cols: usize) {
+        self.cols = Some(cols);
+    }
+
+    /// The columns of the terminal your prompt shows in, None until the
+    /// session heard them.
+    pub fn cols(&self) -> Option<usize> {
+        self.cols
+    }
+
+    /// Vosh draws a design that pushes part of a row to the right edge,
+    /// so a new width moves that part and your prompt draws again.
+    pub fn pushes_right(&self) -> bool {
+        self.draws() && self.right
+    }
+
+    /// How your design draws now: the width a push to the right edge
+    /// reaches to, with the labels of values that have nothing to show
+    /// when `placeholders` asks for them.
+    pub fn render_options(&self, placeholders: bool) -> crate::render::RenderOptions {
+        crate::render::RenderOptions {
+            placeholders,
+            cols: self.cols,
+        }
     }
 
     /// The rows the band above the command line keeps while your prompt

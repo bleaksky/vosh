@@ -30,10 +30,11 @@ export interface Pointing {
 
 type PieceShape = Pick<PromptPiece, 'piece' | 'kind' | 'shows'>;
 
-/** The parts you can pick, in order: every part that takes cells, and
- *  each line break, which its ↵ stands for. */
+/** The parts you can pick, in order: every part that takes cells, each
+ *  line break, which its ↵ stands for, and each push to the right edge,
+ *  which its spaces stand for. */
 export function pickable(pieces: readonly PieceShape[]): number[] {
-  return pieces.filter((p) => p.shows || p.kind === 'nl').map((p) => p.piece);
+  return pieces.filter((p) => p.shows || p.kind === 'nl' || p.kind === 'right').map((p) => p.piece);
 }
 
 /** Where Left (-1) or Right (1) goes: the part before or after the one
@@ -288,7 +289,8 @@ export const WHEN_FIXED_HINT =
   'Another part decides when this part shows. Change it in Edit as text.';
 
 /** The rows a part shows (P5, P7, P10): a value has Show as, a bar Width
- *  and no Style, text its words, and a line break only When. Every part
+ *  and no Style, text its words, and a line break or a push to the right
+ *  edge only When. Every part
  *  that takes a color takes a Background, and the Underline row with its
  *  kind and color shows while an underline is on. */
 export function rowsOf(piece: Pick<PromptPiece, 'kind' | 'format' | 'forms' | 'underline'>): {
@@ -302,7 +304,7 @@ export function rowsOf(piece: Pick<PromptPiece, 'kind' | 'format' | 'forms' | 'u
 } {
   const value = piece.kind === 'value' || piece.kind === 'cur_max' || piece.kind === 'percent';
   const bar = piece.format === 'bar';
-  const breaks = piece.kind === 'nl';
+  const breaks = piece.kind === 'nl' || piece.kind === 'right';
   const style = !breaks && !bar;
   return {
     showAs: value && piece.forms.length > 0,

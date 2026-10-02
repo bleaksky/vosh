@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   fieldName,
   flatRows,
+  LAYOUT_TOKENS,
   needsCode,
   paramPrompt,
   pickerGroups,
@@ -177,7 +178,12 @@ describe('the topics', () => {
     expect(groups[0].rows.map(rowKey)).toEqual(['field:hp']);
     // In a fight is what When writes, so the picker leaves it out.
     expect(groups[1].rows.map(rowKey)).toEqual(['field:opponent', 'field:pos']);
-    expect(groups[5].rows.map(rowKey)).toEqual(['layout:nl', 'layout:nl_fight', 'layout:space']);
+    expect(groups[5].rows.map(rowKey)).toEqual([
+      'layout:nl',
+      'layout:nl_fight',
+      'layout:space',
+      'layout:right',
+    ]);
     // Area number draws dim.
     const room = groups.find((g) => g.label === 'Room');
     expect(room?.rows.map((r) => r.dim)).toEqual([true, false]);
@@ -196,6 +202,14 @@ describe('the topics', () => {
     expect(find('hp')).toEqual(['field:hp']);
     expect(find('xp')).toEqual(['field:exp']);
     expect(find('line')).toEqual(['layout:nl', 'layout:nl_fight']);
+    expect(find('right')).toEqual(['layout:right']);
+    // Edit as text takes the code each one writes.
+    expect(LAYOUT_TOKENS).toEqual({
+      nl: '%nl',
+      nl_fight: '%{if:fight}%nl%{end}',
+      space: ' ',
+      right: '%{right}',
+    });
     expect(find('nothing like it')).toEqual([]);
   });
 });

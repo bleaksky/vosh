@@ -69,6 +69,9 @@ pub enum EditOp {
     InsertText { at: usize, text: String },
     /// Add a line break before piece `at`.
     InsertNl { at: usize },
+    /// Add a push to the right edge before piece `at`, so what follows it
+    /// on its row ends on the terminal's last column.
+    InsertRight { at: usize },
     /// Move a piece so it lands before piece `to`, counted before the
     /// move, or at the end when `to` is the number of pieces.
     Move { piece: usize, to: usize },
@@ -243,9 +246,10 @@ pub fn apply_at(
         | EditOp::SetText { piece, .. }
         | EditOp::Move { piece, .. } => doc.pieces.get(*piece).map(|p| p.uid),
         EditOp::Remove { .. } => None,
-        EditOp::InsertField { .. } | EditOp::InsertText { .. } | EditOp::InsertNl { .. } => {
-            Some(doc.next_uid)
-        }
+        EditOp::InsertField { .. }
+        | EditOp::InsertText { .. }
+        | EditOp::InsertNl { .. }
+        | EditOp::InsertRight { .. } => Some(doc.next_uid),
     };
     let edited = doc.run(op, known)?;
     doc.repair(&before, edited);
@@ -537,7 +541,7 @@ impl Piece {
     fn marker(&self) -> bool {
         matches!(
             self.kind,
-            PieceKind::If | PieceKind::IfNot | PieceKind::End | PieceKind::Nl
+            PieceKind::If | PieceKind::IfNot | PieceKind::End | PieceKind::Nl | PieceKind::Right
         )
     }
 
@@ -620,6 +624,7 @@ impl Doc {
             TokenKind::If(_) => PieceKind::If,
             TokenKind::IfNot(_) => PieceKind::IfNot,
             TokenKind::End => PieceKind::End,
+            TokenKind::Right => PieceKind::Right,
             _ => PieceKind::Nl,
         };
         self.new_piece(piece_kind, Vec::new(), vec![Item::new(kind)])
@@ -733,6 +738,12 @@ impl Doc {
             EditOp::InsertNl { at } => {
                 self.check_at(*at)?;
                 let piece = self.marker_piece(TokenKind::Nl);
+                self.pieces.insert(*at, piece);
+                Ok(None)
+            }
+            EditOp::InsertRight { at } => {
+                self.check_at(*at)?;
+                let piece = self.marker_piece(TokenKind::Right);
                 self.pieces.insert(*at, piece);
                 Ok(None)
             }
@@ -957,9 +968,10 @@ impl Doc {
 
     fn set_when(&mut self, index: usize, when: When) -> Result<(), EditError> {
         // A line break shows nothing, but it starts a row only when it
-        // draws, so it takes When as a part that shows does (P10).
+        // draws, so it takes When as a part that shows does (P10). So does
+        // a push to the right edge.
         let piece = self.piece(index)?;
-        if !piece.shows() && piece.kind != PieceKind::Nl {
+        if !piece.shows() && !matches!(piece.kind, PieceKind::Nl | PieceKind::Right) {
             return error("Only a part that shows can change when it shows.");
         }
         let want = match when {

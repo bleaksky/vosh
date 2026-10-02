@@ -935,7 +935,11 @@ fn the_default_design_parses_into_fields_and_formats_vosh_knows() {
                     entry.name
                 );
             }
-            TokenKind::Percent | TokenKind::Nl | TokenKind::End | TokenKind::Code(_) => {}
+            TokenKind::Percent
+            | TokenKind::Nl
+            | TokenKind::Right
+            | TokenKind::End
+            | TokenKind::Code(_) => {}
         }
     }
     // Each condition closes, and the tank row is the only line break.

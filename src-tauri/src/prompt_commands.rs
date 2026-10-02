@@ -417,6 +417,7 @@ pub(crate) fn render_all(p: &Profile, requests: &[RenderRequest]) -> Vec<Rendere
             };
             let options = RenderOptions {
                 placeholders: request.placeholders,
+                ..RenderOptions::default()
             };
             let template = Template::parse(&request.template);
             let overrides = PromptPreview {
@@ -572,7 +573,11 @@ pub(crate) fn edit(p: &Profile, template: &str, op: &EditOp) -> Result<Edited, S
     let live = p.prompt.vars.resolver(&vosh);
     let known = |field: &FieldRef| !matches!(live.resolve(field), Resolved::Unknown);
     let (template, piece) = vosh_prompt::edit::apply_at(template, op, &known).map_err(|e| e.0)?;
-    let rendered = vosh_prompt::render_str(&template, &live, RenderOptions { placeholders: true });
+    let options = RenderOptions {
+        placeholders: true,
+        ..RenderOptions::default()
+    };
+    let rendered = vosh_prompt::render_str(&template, &live, options);
     Ok(Edited {
         template,
         rendered,

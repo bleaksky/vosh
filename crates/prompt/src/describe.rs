@@ -35,6 +35,8 @@ pub enum PieceKindName {
     CurMax,
     Percent,
     Nl,
+    /// The push to the right edge.
+    Right,
     Raw,
     If,
     IfNot,
@@ -51,6 +53,7 @@ impl From<PieceKind> for PieceKindName {
             PieceKind::CurMax => Self::CurMax,
             PieceKind::Percent => Self::Percent,
             PieceKind::Nl => Self::Nl,
+            PieceKind::Right => Self::Right,
             PieceKind::Raw => Self::Raw,
             PieceKind::If => Self::If,
             PieceKind::IfNot => Self::IfNot,
@@ -198,6 +201,7 @@ pub fn describe(template: &Template, values: &dyn Values, preview: bool) -> Desc
                 (Some(field), _) => values.label(field),
                 (None, PieceKind::Text) => "Text".to_string(),
                 (None, PieceKind::Nl) => "Line break".to_string(),
+                (None, PieceKind::Right) => "Right edge".to_string(),
                 (None, PieceKind::Raw) => "The game's prompt".to_string(),
                 (None, PieceKind::If | PieceKind::IfNot | PieceKind::End) => {
                     "Condition".to_string()
@@ -583,7 +587,7 @@ fn tokens(template: &Template, values: &dyn Values) -> Vec<TokenView> {
                     !matches!(values.resolve(field), Resolved::Unknown),
                 ),
                 TokenKind::End => (TokenKindName::Condition, None, true),
-                TokenKind::Nl => (TokenKindName::Line, None, true),
+                TokenKind::Nl | TokenKind::Right => (TokenKindName::Line, None, true),
                 TokenKind::Raw => (TokenKindName::Raw, None, true),
                 TokenKind::Unknown => (TokenKindName::Unknown, None, false),
             };
