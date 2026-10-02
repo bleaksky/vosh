@@ -72,6 +72,13 @@ describe('searchSettingsRows', () => {
     expect(labels('palette')[0]).toBe('Base palette');
   });
 
+  it('finds Collapse repeated lines by what it does to spam', () => {
+    expect(labels('collapse')).toEqual(['Collapse repeated lines']);
+    expect(labels('spam')).toEqual(['Collapse repeated lines']);
+    expect(labels('duplicate lines')).toEqual(['Collapse repeated lines']);
+    expect(labels('repeated')[0]).toBe('Collapse repeated lines');
+  });
+
   it('finds the Input rows, Advanced ones included', () => {
     expect(labels('paste')).toEqual(['Wait between pasted lines']);
     expect(labels('sent command')[0]).toBe('Sent command color');

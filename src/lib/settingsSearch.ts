@@ -137,6 +137,12 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('appearance', 'text', 'readable-highlights'),
   },
   {
+    label: 'Collapse repeated lines',
+    description: 'A line the same as the line before it shows once, with a count in front.',
+    keywords: 'spam duplicate repeat repeated same lines count squash fold compress',
+    target: at('appearance', 'text', 'collapse-repeats'),
+  },
+  {
     label: 'Custom themes',
     description: 'Start from the theme you see now, then change any color.',
     keywords: 'advanced new edit delete rename theme editor',
