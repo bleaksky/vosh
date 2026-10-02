@@ -5131,6 +5131,7 @@ dependencies = [
  "serde",
  "thiserror 1.0.69",
  "vosh-ansi",
+ "vosh-log",
 ]
 
 [[package]]
