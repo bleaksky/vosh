@@ -39,6 +39,23 @@ pub struct SessionRow {
     pub line_count: i64,
 }
 
+/// The columns [`session_row`] reads, in its order, for a query that
+/// joins `sessions` as `s`.
+const SESSION_COLUMNS: &str = "SELECT s.id, s.host, s.port, s.started_at_ms, s.ended_at_ms,
+        (SELECT COUNT(*) FROM log_lines l WHERE l.session_id = s.id)";
+
+/// A [`SessionRow`] from a row that selects [`SESSION_COLUMNS`].
+fn session_row(row: &rusqlite::Row) -> rusqlite::Result<SessionRow> {
+    Ok(SessionRow {
+        id: row.get(0)?,
+        host: row.get(1)?,
+        port: row.get::<_, i64>(2)? as u16,
+        started_at_ms: row.get(3)?,
+        ended_at_ms: row.get(4)?,
+        line_count: row.get(5)?,
+    })
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchHit {
     pub session_id: i64,
@@ -147,6 +164,12 @@ pub struct LogEntry {
     pub text: String,
     pub raw: Option<Vec<u8>>,
 }
+
+/// The statement that writes one log line, shared by
+/// [`LogStore::append`] and [`LogStore::append_batch`] so both hit the
+/// same entry in the statement cache.
+const INSERT_LINE: &str =
+    "INSERT INTO log_lines (session_id, ts_ms, text, raw) VALUES (?1, ?2, ?3, ?4)";
 
 pub struct LogStore {
     conn: Connection,
@@ -306,9 +329,7 @@ impl LogStore {
         // `prepare_cached` keeps the parsed statement in the connection's
         // statement cache, so repeated appends skip the SQL parse.
         self.conn
-            .prepare_cached(
-                "INSERT INTO log_lines (session_id, ts_ms, text, raw) VALUES (?1, ?2, ?3, ?4)",
-            )?
+            .prepare_cached(INSERT_LINE)?
             .execute(params![session_id, ts_ms, text, raw])?;
         Ok(self.conn.last_insert_rowid())
     }
@@ -323,9 +344,7 @@ impl LogStore {
         }
         let tx = self.conn.transaction()?;
         {
-            let mut stmt = tx.prepare_cached(
-                "INSERT INTO log_lines (session_id, ts_ms, text, raw) VALUES (?1, ?2, ?3, ?4)",
-            )?;
+            let mut stmt = tx.prepare_cached(INSERT_LINE)?;
             for e in entries {
                 stmt.execute(params![e.session_id, e.ts_ms, e.text, e.raw])?;
             }
@@ -359,8 +378,7 @@ impl LogStore {
             format!("LIMIT {limit}")
         };
         let sql = format!(
-            "SELECT s.id, s.host, s.port, s.started_at_ms, s.ended_at_ms,
-                    (SELECT COUNT(*) FROM log_lines l WHERE l.session_id = s.id)
+            "{SESSION_COLUMNS}
              FROM sessions s
              {filter}
              ORDER BY s.started_at_ms DESC
@@ -368,16 +386,7 @@ impl LogStore {
         );
         let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt
-            .query_map([], |row| {
-                Ok(SessionRow {
-                    id: row.get(0)?,
-                    host: row.get(1)?,
-                    port: row.get::<_, i64>(2)? as u16,
-                    started_at_ms: row.get(3)?,
-                    ended_at_ms: row.get(4)?,
-                    line_count: row.get(5)?,
-                })
-            })?
+            .query_map([], session_row)?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(rows)
     }
@@ -657,20 +666,9 @@ impl LogStore {
         let row = self
             .conn
             .query_row(
-                "SELECT s.id, s.host, s.port, s.started_at_ms, s.ended_at_ms,
-                        (SELECT COUNT(*) FROM log_lines l WHERE l.session_id = s.id)
-                 FROM sessions s WHERE s.id = ?1",
+                &format!("{SESSION_COLUMNS} FROM sessions s WHERE s.id = ?1"),
                 params![session_id],
-                |row| {
-                    Ok(SessionRow {
-                        id: row.get(0)?,
-                        host: row.get(1)?,
-                        port: row.get::<_, i64>(2)? as u16,
-                        started_at_ms: row.get(3)?,
-                        ended_at_ms: row.get(4)?,
-                        line_count: row.get(5)?,
-                    })
-                },
+                session_row,
             )
             .optional()?;
         Ok(row)
