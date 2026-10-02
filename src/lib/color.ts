@@ -186,6 +186,16 @@ export function composite(fg: Rgb, bg: Rgb, alpha: number): Rgb {
   return { r: mix(fg.r, bg.r), g: mix(fg.g, bg.g), b: mix(fg.b, bg.b) };
 }
 
+/** The color `t` of the way from `a` to `b`, unrounded. */
+export function mix(a: Rgb, b: Rgb, t: number): Rgb {
+  return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t };
+}
+
+/** Each channel times `k`, unrounded. */
+export function scaled(c: Rgb, k: number): Rgb {
+  return { r: c.r * k, g: c.g * k, b: c.b * k };
+}
+
 /** The smallest alpha, in steps of 0.01, at which `fg` composited over
  *  `bg` reaches `target` contrast against `bg`. When even full opacity
  *  falls short the result is `fg` itself at alpha 1. */
