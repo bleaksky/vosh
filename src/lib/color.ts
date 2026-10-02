@@ -142,6 +142,23 @@ export function oklchToRgbInGamut(c: Oklch): Rgb {
   return oklchToRgb({ ...c, C: inside });
 }
 
+/** Step `c` in OKLCH lightness, away from `ground`, until it reads at
+ *  `target` contrast on it: lighter for `dir` 1, darker for -1. The hue
+ *  holds at every step, and chroma gives way only where sRGB runs out.
+ *  A clamp per channel would turn a deep yellow orange. A color that
+ *  already reads at `target` comes back as it is. */
+export function liftAtHue(c: Rgb, ground: Rgb, target: number, dir: 1 | -1): Rgb {
+  if (contrast(c, ground) >= target) return c;
+  const lch = rgbToOklch(c);
+  let out = c;
+  for (let L = lch.L; L >= 0 && L <= 1; L += dir * 0.005) {
+    const raw = oklchToRgbInGamut({ ...lch, L });
+    out = { r: Math.round(raw.r), g: Math.round(raw.g), b: Math.round(raw.b) };
+    if (contrast(out, ground) >= target) break;
+  }
+  return out;
+}
+
 /** Move a color's OKLab lightness by `delta` at the same a and b (so
  *  the same hue and chroma), then round to a displayable color. */
 export function shiftLightness(c: Rgb, delta: number): Rgb {
