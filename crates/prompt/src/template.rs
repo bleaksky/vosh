@@ -1,8 +1,7 @@
 //! The prompt template grammar, version 2.
 //!
 //! A template is text with codes in it. The tokenizer keeps every form the
-//! first grammar accepted (moved from `src-tauri/src/prompt_template.rs`)
-//! and adds the forms of the prompt editor.
+//! first grammar accepted and adds the forms of the prompt editor.
 //!
 //! ```text
 //! %%                       a literal percent sign
