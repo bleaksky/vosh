@@ -1681,7 +1681,7 @@ mod tests {
         // The game paints its own line #8fa7d9. No trigger matches it, so
         // it keeps its bytes even on a ground it fades on.
         let s = weather_store();
-        let line = b"\x1b[38;2;143;167;217mThe sky clears.\x1b[0m";
+        let line = b"\x1b[38;2;143;167;217mThe clouds disappear.\x1b[0m";
         assert_eq!(
             on_ground(&s, line, Some(VELLUM)).as_bytes(),
             line.as_slice()
@@ -1703,8 +1703,13 @@ mod tests {
             style.wash = true;
         }
         let s = store(vec![washed]);
-        let plain = process(&s, b"a storm rolls in").display.unwrap();
-        assert_eq!(on_ground(&s, b"a storm rolls in", Some(VELLUM)), plain);
+        let plain = process(&s, b"The snowstorm becomes a blizzard.")
+            .display
+            .unwrap();
+        assert_eq!(
+            on_ground(&s, b"The snowstorm becomes a blizzard.", Some(VELLUM)),
+            plain
+        );
     }
 
     /// The name of room 5279 as `do_look` sends it inside, the 256 color
