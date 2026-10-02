@@ -9,10 +9,21 @@ rust-version.workspace = true
 
 [dependencies]
 rusqlite = { version = "0.32", features = ["bundled"] }
-vosh-ansi = { path = "../ansi" }
+# Only append_raw strips a line, and only tests call it.
+vosh-ansi = { path = "../ansi", optional = true }
 regex = "1"
 serde = { workspace = true }
 thiserror = { workspace = true }
+
+[features]
+# The test kit: the in-memory store and the readers and writers the app's
+# tests use.
+testkit = ["dep:vosh-ansi"]
+
+[dev-dependencies]
+# The unit tests here call append_raw, so they turn the test kit on, and
+# with it vosh-ansi.
+vosh-log = { path = ".", features = ["testkit"] }
 
 [lints]
 workspace = true

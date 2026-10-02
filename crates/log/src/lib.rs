@@ -12,6 +12,7 @@ use regex::{Regex, RegexBuilder};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use thiserror::Error;
+#[cfg(any(test, feature = "testkit"))]
 use vosh_ansi::plain_text;
 
 mod forget;
@@ -62,7 +63,7 @@ pub struct SearchOptions {
     /// Only lines older than this line id. The log view pages back
     /// through a long result with the oldest line id it already holds.
     pub before_line_id: Option<i64>,
-    /// Leave out sessions to this machine (see [`is_local_host`]), like
+    /// Leave out sessions to this machine (see `LOCAL_HOSTS`), like
     /// a test server run next to the client.
     pub hide_local: bool,
 }
@@ -82,7 +83,10 @@ pub struct SearchPage {
 const LOCAL_HOSTS: [&str; 2] = ["127.0.0.1", "localhost"];
 
 /// True when `host` names this machine, ignoring case, spaces, and a
-/// trailing dot.
+/// trailing dot. Test only. The log view leaves these sessions out in
+/// SQL through [`not_local_sql`], and the tests check both fold a host
+/// alike.
+#[cfg(test)]
 pub fn is_local_host(host: &str) -> bool {
     let clean = host.trim().trim_end_matches('.').to_ascii_lowercase();
     LOCAL_HOSTS.contains(&clean.as_str())
@@ -90,7 +94,7 @@ pub fn is_local_host(host: &str) -> bool {
 
 /// The SQL test that keeps a session off this machine, for a query
 /// that joins `sessions` as `s`. Built from [`LOCAL_HOSTS`] so the two
-/// never drift, and folded the same way as [`is_local_host`].
+/// never drift. It ignores case, spaces, and a trailing dot.
 fn not_local_sql() -> String {
     let list = LOCAL_HOSTS
         .iter()
@@ -198,7 +202,9 @@ impl LogStore {
         Ok(store)
     }
 
-    /// Open an in-memory database. Used by tests.
+    /// Open an in-memory database. Test only. The app's tests open one
+    /// through the `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         configure_connection(&conn)?;
@@ -255,6 +261,8 @@ impl LogStore {
     }
 
     /// The character a session belongs to, when the game named one.
+    /// Test only. The app's tests read it through the `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn session_character(&self, session_id: i64) -> Result<Option<String>> {
         let found = self
             .conn
@@ -327,7 +335,10 @@ impl LogStore {
     }
 
     /// Append a line by raw ANSI-bearing bytes; the plain-text form is
-    /// derived. Convenience wrapper for the session loop hot path.
+    /// derived. Test only, since the session hands rows to
+    /// [`Self::append_batch`] with the plain text it already holds. The
+    /// app's tests write rows through the `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn append_raw(&mut self, session_id: i64, ts_ms: i64, raw: &[u8]) -> Result<i64> {
         let text = plain_text(raw);
         self.append(session_id, ts_ms, &text, Some(raw))
@@ -335,7 +346,7 @@ impl LogStore {
 
     /// List sessions newest first, capped at `limit` rows. A zero limit
     /// returns all sessions. `hide_local` leaves out sessions to this
-    /// machine (see [`is_local_host`]).
+    /// machine (see `LOCAL_HOSTS`).
     pub fn list_sessions(&self, limit: usize, hide_local: bool) -> Result<Vec<SessionRow>> {
         let filter = if hide_local {
             format!("WHERE {}", not_local_sql())
@@ -371,17 +382,21 @@ impl LogStore {
         Ok(rows)
     }
 
+    /// [`Self::search_page`] without the total. Test only. The app's
+    /// tests search through the `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
+    pub fn search(&self, pattern: &str, options: &SearchOptions) -> Result<Vec<SearchHit>> {
+        Ok(self.search_page(pattern, options, false)?.hits)
+    }
+
     /// Run a regex search over log lines. The most recent
     /// `max_results` matches are returned, in chronological (oldest
     /// first) order — that way a UI rendering top-to-bottom reads
     /// like the original conversation. Internally the SQL walks the
     /// table id-descending so the cap selects the newest matches;
     /// the gathered slice is reversed before return.
-    pub fn search(&self, pattern: &str, options: &SearchOptions) -> Result<Vec<SearchHit>> {
-        Ok(self.search_page(pattern, options, false)?.hits)
-    }
-
-    /// [`Self::search`], plus the number of lines in scope that match
+    ///
+    /// Also returns the number of lines in scope that match
     /// when `with_total` is set, counted past the cap. The scope is
     /// every filter in `options`, so a page taken with
     /// `before_line_id` counts only the lines older than it. Without
@@ -635,7 +650,9 @@ impl LogStore {
         Ok(lines)
     }
 
-    /// Look up a single session row.
+    /// Look up a single session row. Test only. The app's tests read it
+    /// through the `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn get_session(&self, session_id: i64) -> Result<Option<SessionRow>> {
         let row = self
             .conn

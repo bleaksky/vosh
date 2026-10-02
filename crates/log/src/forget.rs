@@ -794,6 +794,9 @@ impl LogStore {
     }
 
     /// [`Self::find_password_lines`], then [`Self::blank_password_lines`].
+    /// Test only, since the app finds the lines through the search
+    /// connection and blanks them through the writer, in two steps.
+    #[cfg(test)]
     pub fn forget_passwords(&mut self) -> Result<Forgotten> {
         let found = self.find_password_lines()?;
         self.blank_password_lines(&found)
