@@ -9,7 +9,7 @@
 //!   session's variables together.
 //! - [`capture`] reads patterns you point at, and the capture triggers
 //!   older builds used, into a capture.
-//! - [`template`] parses a prompt template into tokens and the pieces the
+//! - [`design`] parses a prompt template into tokens and the pieces the
 //!   editor shows.
 //! - [`edit`] writes the template changes the editor makes, keeping the
 //!   look of every other piece.
@@ -43,6 +43,7 @@ pub mod candidates;
 pub mod capture;
 pub mod config;
 pub mod describe;
+pub mod design;
 pub mod edit;
 pub mod engine;
 pub mod format;
@@ -54,19 +55,22 @@ pub mod render;
 pub mod report;
 pub mod stage;
 pub mod state;
-pub mod template;
 #[cfg(feature = "testkit")]
 pub mod testkit;
 pub mod vars;
 pub mod wrap;
 
 pub use config::{CaptureConfig, PromptConfig, PromptShow};
+pub use design::{FieldRef, Template};
 pub use engine::{GamePromptSeen, PromptEngine, Status};
 pub use format::{Resolved, Value};
 pub use presets::DEFAULT_DESIGN;
 pub use render::{render, render_str, RenderOptions, Rendered, Span, Values};
-pub use template::{FieldRef, Template};
 pub use vars::{Capture, Vosh};
+
+// The old name of `design`, so its callers keep compiling until their
+// imports move to the new name.
+pub use design as template;
 
 // The tests in `tests/` import these from the root.
 #[cfg(feature = "testkit")]
