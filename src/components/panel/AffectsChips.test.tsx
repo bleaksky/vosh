@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import panelCss from '../../styles/panel.css?raw';
 import type { AffectInput, TrackedInput } from '../../lib/affectsView';
+import { deriveChrome } from '../../lib/chrome';
 import { composite, contrast, parseHex } from '../../lib/color';
 import { BUILTIN_THEMES, themeTokens } from '../../lib/themes';
 import type { PaneLeaf } from '../../lib/paneLayout';
@@ -118,6 +119,15 @@ function rule(selector: string): string {
   const at = panelCss.indexOf(`${selector} {`);
   expect(at, selector).toBeGreaterThanOrEqual(0);
   return panelCss.slice(at, panelCss.indexOf('}', at));
+}
+
+/** The same, with the selector on one line however the sheet wraps
+ *  it. */
+function flatRule(selector: string): string {
+  const flat = panelCss.replace(/\s+/g, ' ');
+  const at = flat.indexOf(`${selector} {`);
+  expect(at, selector).toBeGreaterThanOrEqual(0);
+  return flat.slice(at, flat.indexOf('}', at));
 }
 
 describe('ChipsView', () => {
@@ -367,38 +377,53 @@ describe('Draining chips', () => {
     // weight, and touch only the tracked chips running out.
     const drainAt = panelCss.indexOf("[data-chip-fill='drain']");
     expect(drainAt).toBeGreaterThan(panelCss.indexOf('.pane-chip-tracked.is-danger.is-draining {'));
-    const drainCss = panelCss.slice(drainAt, panelCss.indexOf('/* ── Map'));
-    for (const m of drainCss.matchAll(/\[data-chip-fill='drain'\] ([^,{]+)/g)) {
-      expect(m[1].trim()).toMatch(/^\.pane-chip-tracked\.is-(warn|danger)(\.is-draining)?$/);
+    // Each selector on one line, however the sheet wraps it. A light
+    // theme changes only the red fill and the yellow hours, by the
+    // theme's own appearance, never by its id.
+    const drainCss = panelCss
+      .slice(drainAt, panelCss.indexOf('/* ── Map'))
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\s+/g, ' ');
+    const selectors = [...drainCss.matchAll(/([^{}]+)\{[^}]*\}/g)].flatMap((m) =>
+      m[1].split(',').map((s) => s.trim()),
+    );
+    expect(selectors).toHaveLength(9);
+    for (const s of selectors) {
+      expect(s).toMatch(
+        /^(:root\[data-appearance='light'\] )?\[data-chip-fill='drain'\] \.pane-chip-tracked\.is-(warn|danger)(\.is-draining)?( \.pane-chip-hours)?$/,
+      );
     }
   });
 
-  // The hours a chip running out shows, on every built in theme, the warn
-  // tone in yellow and the danger text tone in bold red. They sit at the
-  // chip's right end. In Grouped chips that end is the plain track, 14
-  // percent yellow or 16 percent red, at full and while the gauge over the
-  // left share stops short of it. In Draining chips they sit on the 30
-  // percent fill while the chip is at full, has no gauge or has no full yet,
-  // and on the bare panel once the fill draws back past them. On the fill
-  // they read harder than in Grouped chips on every theme. The yellow on
-  // Solarized Light and Everforest Light is under 3 to 1 in Grouped chips
-  // already. The yellow on Vellum and the red on Solarized Light fall under
-  // 3 only in Draining chips. These are flagged for review, and the 30
-  // percent stays as the sheet drew it.
+  // The hours a chip running out shows, on every built in theme. They sit
+  // at the chip's right end. In Grouped chips that end is the plain track,
+  // 14 percent yellow or 16 percent red, at full and while the gauge over
+  // the left share stops short of it, and the hours are the warn tone in
+  // yellow and the danger text tone in bold red. In Draining chips they
+  // sit on the fill while the chip is at full, has no gauge or has no full
+  // yet, and on the bare panel once the fill draws back past them.
+  //
+  // A dark theme draws the hours as Grouped chips does over a 30 percent
+  // fill, and they read harder there than on the track. A light theme's
+  // fill darkens toward the hours, so there the yellow hours take the
+  // deeper warn text tone and the red fill eases to 24 percent. Every
+  // built in theme and tone then reads at 3 to 1 or better over the fill
+  // and over the bare panel. An imported light palette whose red sits at
+  // or near 4.5 to 1 draws its hours close to the fill color over itself.
+  // The common ones hold 3 to 1 at 24 percent where 28 dropped them under
+  // it, as the next test pins. Grouped chips stays as drawn, with the
+  // yellow on Solarized Light and Everforest Light under 3 to 1.
   const GROUPED_UNDER_THREE = ['solarized-light warn', 'everforest-light warn'];
-  const DRAINING_UNDER_THREE = [
-    'vellum warn',
-    'solarized-light warn',
-    'solarized-light danger',
-    'everforest-light warn',
-  ];
+  // How far the fill stands off the bare panel on a light theme, so the
+  // drain stays clear. The Grouped chips track stands off it 1.15 to 1.25.
+  const LIGHT_FILL_FLOOR = 1.3;
   // The hours' contrast on each theme, on the Grouped chips track and
   // then on the Draining chips fill.
   const HOURS_READ: Record<string, string> = {
     'obsidian-ember warn': '9.59 to 6.10',
     'obsidian-ember danger': '6.53 to 4.79',
-    'vellum warn': '3.63 to 2.94',
-    'vellum danger': '4.02 to 3.28',
+    'vellum warn': '3.63 to 3.13',
+    'vellum danger': '4.02 to 3.59',
     'kanso-zen warn': '7.98 to 5.15',
     'kanso-zen danger': '4.57 to 3.61',
     'tokyo-night warn': '5.83 to 4.01',
@@ -421,8 +446,8 @@ describe('Draining chips', () => {
     'one-half-dark danger': '4.04 to 3.36',
     'solarized-dark warn': '4.57 to 3.40',
     'solarized-dark danger': '4.47 to 3.97',
-    'solarized-light warn': '2.63 to 2.24',
-    'solarized-light danger': '3.67 to 2.98',
+    'solarized-light warn': '2.63 to 3.36',
+    'solarized-light danger': '3.67 to 3.27',
     'tango-dark warn': '6.09 to 4.05',
     'tango-dark danger': '4.29 to 3.68',
     'classic-vivid warn': '11.89 to 6.74',
@@ -431,13 +456,13 @@ describe('Draining chips', () => {
     'high-contrast danger': '6.01 to 4.39',
     'everforest-dark warn': '4.41 to 3.21',
     'everforest-dark danger': '3.99 to 3.26',
-    'everforest-light warn': '2.61 to 2.21',
-    'everforest-light danger': '3.81 to 3.22',
+    'everforest-light warn': '2.61 to 3.41',
+    'everforest-light danger': '3.81 to 3.46',
     'green-screen warn': '11.51 to 6.50',
     'green-screen danger': '4.74 to 3.72',
   };
 
-  it('reads the hours on the fill harder than on the Grouped chips track, pinned per theme', () => {
+  it('reads the hours at 3 to 1 or better over the fill and the bare panel, pinned per theme', () => {
     // The track under the hours in Grouped chips, as the sheet draws it.
     expect(rule('.pane-chip-tracked.is-warn')).toContain(
       '--chip-track: color-mix(in srgb, var(--warn) 14%, transparent)',
@@ -445,11 +470,25 @@ describe('Draining chips', () => {
     expect(rule('.pane-chip-tracked.is-danger')).toContain(
       '--chip-track: color-mix(in srgb, var(--danger) 16%, transparent)',
     );
+    expect(rule('.pane-chip-hours.is-warn')).toContain('color: var(--warn)');
+    expect(rule('.pane-chip-hours.is-danger')).toContain('color: var(--danger-text)');
+    // A light theme's red fill and yellow hours in Draining chips. The
+    // yellow fill keeps the 30 percent every theme draws.
+    const light = (selector: string) =>
+      flatRule(`:root[data-appearance='light'] [data-chip-fill='drain'] ${selector}`);
+    expect(
+      light(
+        ".pane-chip-tracked.is-danger, :root[data-appearance='light'] [data-chip-fill='drain'] .pane-chip-tracked.is-danger.is-draining",
+      ),
+    ).toContain('--chip-gauge: color-mix(in srgb, var(--danger) 24%, transparent)');
+    expect(light('.pane-chip-tracked.is-warn .pane-chip-hours')).toContain(
+      'color: var(--warn-text)',
+    );
     const read: Record<string, string> = {};
     const groupedUnder: string[] = [];
-    const drainingUnder: string[] = [];
     for (const theme of BUILTIN_THEMES) {
       const t = themeTokens(theme);
+      const isLight = t.appearance === 'light';
       const hex = (value: string) => {
         const rgb = parseHex(value);
         expect(rgb, `${theme.id} ${value}`).not.toBeNull();
@@ -457,27 +496,75 @@ describe('Draining chips', () => {
       };
       const panel = hex(t.panel);
       const text = hex(t.text);
-      for (const [tone, color, hours, track] of [
-        ['warn', hex(t.warn), hex(t.warn), 0.14],
-        ['danger', hex(t.danger), hex(t.dangerText), 0.16],
+      for (const [tone, color, groupedHours, drainHours, track, fill] of [
+        ['warn', hex(t.warn), hex(t.warn), hex(isLight ? t.warnText : t.warn), 0.14, 0.3],
+        ['danger', hex(t.danger), hex(t.dangerText), hex(t.dangerText), 0.16, isLight ? 0.24 : 0.3],
       ] as const) {
         const key = `${theme.id} ${tone}`;
-        const grouped = contrast(hours, composite(color, panel, track));
-        const drained = composite(color, panel, 0.3);
-        const draining = contrast(hours, drained);
-        expect(draining, key).toBeLessThan(grouped);
+        const grouped = contrast(groupedHours, composite(color, panel, track));
+        const drained = composite(color, panel, fill);
+        const draining = contrast(drainHours, drained);
+        // Dark themes stay as drawn, and the fill reads harder than the
+        // track.
+        if (!isLight) expect(draining, key).toBeLessThan(grouped);
+        // Over the fill and over the bare panel alike, 3 to 1 or better.
+        expect(draining, key).toBeGreaterThanOrEqual(3);
+        expect(contrast(drainHours, panel), `${key} bare`).toBeGreaterThanOrEqual(3);
         // Once the fill draws back past them, the bare panel reads
         // better than the Grouped chips track.
-        expect(contrast(hours, panel), key).toBeGreaterThan(grouped);
+        expect(contrast(drainHours, panel), key).toBeGreaterThan(grouped);
         // The name stays clear of the fill.
         expect(contrast(text, drained), `${key} name`).toBeGreaterThanOrEqual(3);
+        // On a light theme the drain stays clear of the bare panel.
+        if (isLight) {
+          expect(contrast(drained, panel), `${key} fill`).toBeGreaterThanOrEqual(LIGHT_FILL_FLOOR);
+        }
         read[key] = `${grouped.toFixed(2)} to ${draining.toFixed(2)}`;
         if (grouped < 3) groupedUnder.push(key);
-        if (draining < 3) drainingUnder.push(key);
       }
     }
     expect(read).toEqual(HOURS_READ);
     expect(groupedUnder).toEqual(GROUPED_UNDER_THREE);
-    expect(drainingUnder).toEqual(DRAINING_UNDER_THREE);
+  });
+
+  // Imported light palettes whose red sits at or near 4.5 to 1, so the
+  // danger text tone barely moves off it and the hours are close to the
+  // fill color over itself. Each is background, foreground, then the
+  // normal red and yellow slots a light theme reads.
+  const IMPORTED_LIGHT: Record<string, [string, string, string, string]> = {
+    'catppuccin-latte': ['#eff1f5', '#4c4f69', '#d20f39', '#df8e1d'],
+    'gruvbox-light': ['#fbf1c7', '#3c3836', '#cc241d', '#d79921'],
+    'selenized-light': ['#fbf3db', '#53676d', '#d2212d', '#ad8900'],
+  };
+  const IMPORTED_READ: Record<string, string> = {
+    'catppuccin-latte': 'red 3.02, 2.83 at 28, yellow 3.31',
+    'gruvbox-light': 'red 3.12, 2.95 at 28, yellow 3.35',
+    'selenized-light': 'red 3.14, 2.94 at 28, yellow 3.39',
+  };
+
+  it('reads the hours at 3 to 1 or better over the fill on imported light palettes', () => {
+    const base = BUILTIN_THEMES.find((theme) => theme.id === 'vellum')!.xterm;
+    const read: Record<string, string> = {};
+    for (const [name, [background, foreground, red, yellow]] of Object.entries(IMPORTED_LIGHT)) {
+      const t = deriveChrome({ ...base, background, foreground, cursor: foreground, red, yellow });
+      expect(t.appearance, name).toBe('light');
+      const [panel, danger, dangerText, warn, warnText] = [
+        t.panel,
+        t.danger,
+        t.dangerText,
+        t.warn,
+        t.warnText,
+      ].map((value) => parseHex(value)!);
+      expect(contrast(danger, panel), name).toBeGreaterThan(4.3);
+      const hours = (color: typeof panel, text: typeof panel, fill: number) =>
+        contrast(text, composite(color, panel, fill));
+      expect(hours(danger, dangerText, 0.24), name).toBeGreaterThanOrEqual(3);
+      expect(hours(warn, warnText, 0.3), name).toBeGreaterThanOrEqual(3);
+      read[name] =
+        `red ${hours(danger, dangerText, 0.24).toFixed(2)}, ` +
+        `${hours(danger, dangerText, 0.28).toFixed(2)} at 28, ` +
+        `yellow ${hours(warn, warnText, 0.3).toFixed(2)}`;
+    }
+    expect(read).toEqual(IMPORTED_READ);
   });
 });
