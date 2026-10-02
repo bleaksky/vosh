@@ -1497,14 +1497,6 @@ export async function applyImport(format: ImportFormat, text: string): Promise<I
   return invoke('import_apply', { format, text });
 }
 
-export async function exportProfile(): Promise<string> {
-  return invoke('profile_export');
-}
-
-export async function importProfile(toml: string): Promise<string[]> {
-  return invoke('profile_import', { toml });
-}
-
 export async function walkToRoom(targetId: number): Promise<void> {
   await invoke('map_walk_to', { targetId });
 }
