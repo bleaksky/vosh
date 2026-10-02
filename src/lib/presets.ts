@@ -570,7 +570,7 @@ export const PRESETS: Preset[] = [
   // ── CHAT ─────────────────────────────────────────────────────────
   // The game sends a Comm.Channel packet for a tell you receive and
   // none for one you send, so this routes the line it prints instead
-  // (languages.c compose_tell): `You tell Selune 'text'`, with
+  // (languages.c compose_tell): `You tell Tolliver 'text'`, with
   // ` in Elvish` before the quote outside common, and `You project to`
   // for a telepath. The chat store reads the line as your side of the
   // tell and skips `You tell your group`, whose gtell packet the pane

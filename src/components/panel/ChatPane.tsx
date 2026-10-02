@@ -136,8 +136,8 @@ export function ChatLog({
   );
 }
 
-// One line per message, [tell] Selune: text, the whole line in the
-// channel's color. A tell you send reads to Selune. A routed line keeps
+// One line per message, [tell] Tolliver: text, the whole line in the
+// channel's color. A tell you send reads to Tolliver. A routed line keeps
 // its own words after the tag. The arrival time shows only when you
 // point at the message.
 function ChatMessage({ line, color }: { line: ChatLine; color: string }) {

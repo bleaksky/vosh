@@ -5,7 +5,7 @@ export interface IconButtonProps extends Omit<
   ButtonHTMLAttributes<HTMLButtonElement>,
   'aria-label' | 'children'
 > {
-  /** The accessible name, like `Erelei options` or `Move Haste up`.
+  /** The accessible name, like `Ilsabet options` or `Move Haste up`.
    *  The button shows only its icon, so this is required. */
   label: string;
   /** A 16 px icon from icons.tsx. */

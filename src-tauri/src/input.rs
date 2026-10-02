@@ -529,9 +529,9 @@ fn is_target_keyword(name: &str) -> bool {
 /// Recompute `room_idx` from the current room snapshot. Called whenever
 /// the target name changes or the room chars push refreshes the list.
 ///
-/// Matching is **substring, case-insensitive**: typing `tar helg`
-/// stores "helg" as the name (so commands use the user's keyword)
-/// but resolves `room_idx` to whichever char contains "helg" so the
+/// Matching is **substring, case-insensitive**: typing `tar gris`
+/// stores "gris" as the name (so commands use the user's keyword)
+/// but resolves `room_idx` to whichever char contains "gris" so the
 /// `>` marker shows on the right chip. First match wins.
 pub(crate) fn refresh_target_idx(profile: &mut Profile) {
     profile.target.room_idx = match &profile.target.name {
@@ -585,8 +585,8 @@ fn run_target_set(profile: &mut Profile, args: &str) -> InputResult {
     }
     // Non-numeric → use the literal string the user typed. The MUD
     // parses commands with its own keyword matching, so short forms
-    // like `tar helg` are what the user actually wants to send back
-    // as `kill helg` rather than the full `The Baron Helgardium`.
+    // like `tar gris` are what the user actually wants to send back
+    // as `kill gris` rather than the full `The Baron Grisvald`.
     // We still look for a containing room char to drive the `>`
     // marker on the room chip but don't substitute the name.
     profile.target.name = Some(arg.to_string());

@@ -20,7 +20,7 @@ export function openSettingsWindow(): void {
 }
 
 /** Open Settings on `target`, a deep link like `automation:macros`,
- *  `characters:Erelei#tracked`, or an old tab id like `themes`. */
+ *  `characters:Ilsabet#tracked`, or an old tab id like `themes`. */
 export function openSettingsTab(target: string): void {
   try {
     localStorage.setItem(SETTINGS_PENDING_KEY, target);

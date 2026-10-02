@@ -8,7 +8,7 @@
 //!   profiles/
 //!     default.toml        per-profile snapshot (same shape as the old
 //!                         single profile.toml)
-//!     aabahran-erelei.toml
+//!     aabahran-ilsabet.toml
 //!     ...
 //! ```
 //!

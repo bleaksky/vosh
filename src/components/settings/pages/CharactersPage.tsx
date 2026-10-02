@@ -45,7 +45,7 @@ import { TrackedAffects } from './characters/TrackedAffects';
 // names, so they stay in the data and off the page. Selecting a
 // profile edits it in place, active or not, and never switches the
 // live session. A deep link names the profile as its section
-// (`characters:Erelei#tracked`), and no section means the profile in
+// (`characters:Ilsabet#tracked`), and no section means the profile in
 // use.
 //
 // Every edit goes through the per profile Characters commands, never

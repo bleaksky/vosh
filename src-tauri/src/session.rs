@@ -202,8 +202,8 @@ pub(crate) enum StatePayload {
 /// push that matches the user's target string (substring,
 /// case-insensitive). It exists so the frontend doesn't have to
 /// re-implement the matching logic for the chip `>` marker —
-/// short keywords like "helg" won't equality-match
-/// "The Baron Helgardium" but the backend already resolved the
+/// short keywords like "gris" won't equality-match
+/// "The Baron Grisvald" but the backend already resolved the
 /// pointer via substring.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct TargetPayload {

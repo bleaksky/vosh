@@ -9,7 +9,7 @@ import { Button, Card, Section } from '../../ui';
 // what Vosh saves and Reset to default.
 
 interface Props {
-  /** The name the schematic's sentence uses, like `Erelei`. */
+  /** The name the schematic's sentence uses, like `Ilsabet`. */
   owner: string;
   panes: PaneLayout;
   onReset: () => void;

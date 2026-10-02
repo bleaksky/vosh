@@ -147,7 +147,7 @@ function labelY(rect: SchematicRect): number {
   return rect.y + rect.height / 2 + LABEL_CENTER_DROP;
 }
 
-/** `Erelei's`, or `Rhys'` for a name that ends in s. */
+/** `Ilsabet's`, or `Rhys'` for a name that ends in s. */
 export function possessive(name: string): string {
   return /s$/i.test(name) ? `${name}'` : `${name}'s`;
 }
@@ -188,7 +188,7 @@ function rootClauses(root: PaneSplit, labelFor: (pane: PaneType) => string): str
   });
 }
 
-/** The drawing as a sentence, like `Erelei's panel. Map on top,
+/** The drawing as a sentence, like `Ilsabet's panel. Map on top,
  *  Affects below it, Vitals along the bottom.` */
 export function schematicSentence(
   root: PaneSplit,

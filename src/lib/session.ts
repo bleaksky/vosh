@@ -2758,7 +2758,7 @@ export async function profileCreate(
 /** Where profileExportFile saved a profile. */
 export interface ProfileExport {
   path: string;
-  /** Like `Erelei profile.toml`. */
+  /** Like `Ilsabet profile.toml`. */
   file_name: string;
 }
 
