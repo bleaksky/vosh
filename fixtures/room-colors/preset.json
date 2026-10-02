@@ -24,6 +24,15 @@
       "preset": "room_and_time"
     },
     {
+      "name": "room.target",
+      "patterns": [{ "pattern": "^.+$", "enabled": true }],
+      "priority": 5,
+      "enabled": true,
+      "actions": [{ "kind": "highlight", "style": { "fg": "bright_red", "base": true } }],
+      "target": "room_target",
+      "preset": "room_and_time"
+    },
+    {
       "name": "time.of_day",
       "patterns": [
         { "pattern": "^The night is about to end\\.$", "enabled": true },

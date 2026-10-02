@@ -1061,7 +1061,10 @@ fn the_room_time_and_weather_colors_preset_saves_where_0_8_0_still_reads_the_fil
     for trigger in preset.triggers {
         profile.triggers.set(trigger).unwrap();
     }
-    assert_eq!(room_names(&profile.triggers.list()), ["room.contents"]);
+    assert_eq!(
+        room_names(&profile.triggers.list()),
+        ["room.target", "room.contents"]
+    );
 
     // The profile file of per profile mode.
     let text = profile_bytes(&ProfileConfig::from_profile(&profile));
@@ -1075,8 +1078,11 @@ fn the_room_time_and_weather_colors_preset_saves_where_0_8_0_still_reads_the_fil
     let path = dir.path().join("default.toml");
     std::fs::write(&path, &text).unwrap();
     let loaded = ProfileConfig::load(&path).unwrap();
-    assert_eq!(room_names(&loaded.triggers), ["room.contents"]);
-    assert_eq!(loaded.triggers.len(), 5);
+    assert_eq!(
+        room_names(&loaded.triggers),
+        ["room.target", "room.contents"]
+    );
+    assert_eq!(loaded.triggers.len(), 6);
 
     // catalog.toml in loadout mode.
     let text = catalog_bytes(&GlobalCatalog::from_profile(&profile));
@@ -1089,8 +1095,11 @@ fn the_room_time_and_weather_colors_preset_saves_where_0_8_0_still_reads_the_fil
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(catalog_path(dir.path()), &text).unwrap();
     let loaded = load_global_catalog(dir.path()).unwrap();
-    assert_eq!(room_names(&loaded.triggers), ["room.contents"]);
-    assert_eq!(loaded.triggers.len(), 5);
+    assert_eq!(
+        room_names(&loaded.triggers),
+        ["room.target", "room.contents"]
+    );
+    assert_eq!(loaded.triggers.len(), 6);
 }
 
 #[test]

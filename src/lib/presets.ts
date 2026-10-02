@@ -669,13 +669,17 @@ export const PRESETS: Preset[] = [
   // ── ROOMS, TIME AND WEATHER ──────────────────────────────────────
   // The look and the clock in four of the theme's terminal colors, as the
   // redesign mockups draw them, so they follow every theme. In Nord these
-  // are the mockup colors exactly. The things and people a room lists
-  // match through the Room target, which the session gives only the lines
-  // a look lists after its exits line, with the count of people from the
-  // Room.Chars packet. Both room colors are base colors, which fill only
-  // what the game left uncolored, so an aura, a red [AFK] or a trap's red
-  // + keeps its own color. WiZNET (act_wiz.c wiznet) turns its tag bold
-  // magenta, the mockup's mauve, where the game sends it white and grey.
+  // are the mockup colors exactly. The armies, things and people a room
+  // lists match through the Room target, which the session gives only the
+  // lines a look lists after its exits line, with the counts of people and
+  // objects from the Room.Chars and Room.Items packets. The line of the
+  // one you target with tar matches through the Your target match, in the
+  // theme's bright red at a priority above the room yellow, so it stands
+  // out from the rest of the room. The exits and room colors are base
+  // colors, which fill only what the game left uncolored, so an aura, a
+  // red [AFK] or a trap's red + keeps its own color. WiZNET (act_wiz.c
+  // wiznet) turns its tag bold magenta, the mockup's mauve, where the game
+  // sends it white and grey.
   // A highlight draws over the text it matches alone, so the time and the
   // message after the tag keep the colors the game sent, such as the bold
   // red of a corrupted pfile alert. A change in the weather redraws its
@@ -688,14 +692,19 @@ export const PRESETS: Preset[] = [
     category: 'world',
     name: 'Room, time and weather colors',
     description:
-      'Colors the exits green, what is in the room yellow, the time of day blue, a change ' +
-      'in the weather pale blue, and the WiZNET tag magenta.',
+      'Colors the exits green, what is in the room yellow, your target in the room bright ' +
+      'red, the time of day blue, a change in the weather pale blue, and the WiZNET tag ' +
+      'magenta.',
     defaultEnabled: true,
     triggers: [
       highlight('room.exits', EXITS_LINE, { fg: 'green', base: true }, 6),
       {
         ...highlight('room.contents', '^.+$', { fg: 'yellow', base: true }, 4),
         target: 'room',
+      },
+      {
+        ...highlight('room.target', '^.+$', { fg: 'bright_red', base: true }, 5),
+        target: 'room_target',
       },
       {
         name: 'time.of_day',

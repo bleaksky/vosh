@@ -241,6 +241,7 @@ fn open_for(color: &str) -> &'static str {
         "green" => "\x1b[32m",
         "yellow" => "\x1b[33m",
         "blue" => "\x1b[34m",
+        "bright_red" => "\x1b[91m",
         other => panic!("no preset color {other}"),
     }
 }
@@ -386,11 +387,14 @@ fn the_preset_opens_a_look_on_the_line_the_session_reads_as_its_exits() {
 fn the_preset_colors_each_look_as_the_mockups_draw_it() {
     for case in &looks() {
         let mut p = preset_profile();
+        p.target.name = case.target.clone();
         let shown = read(&mut p, &wire(&case.events));
         let want = expected(
             &case.events,
             &|line, listed, preset| match (listed, preset) {
-                (Listed::Room | Listed::Target, _) => based(open_for("yellow"), line),
+                // Your target in bright red over the room yellow.
+                (Listed::Target, _) => based(open_for("bright_red"), line),
+                (Listed::Room, _) => based(open_for("yellow"), line),
                 (Listed::No, Some("green")) => based(open_for("green"), line),
                 (Listed::No, Some(color)) => wrapped(open_for(color), line),
                 (Listed::No, None) => line.to_string(),
