@@ -1,8 +1,11 @@
 //! The sentences the card and `#prompt` show about your settings. They
-//! say what Vosh reads from a setting, what it shows and what to fix,
-//! with the label each code and value goes by.
+//! say what Vosh reads from a setting, what it shows, what to fix and
+//! why it kept a moved pattern, with the label each code and value goes
+//! by.
 
 use crate::aabahran::codes::Code;
+use crate::aabahran::Which;
+use crate::engine::{Kept, PromptEngine};
 
 // A code's label comes from the values catalog, so it lives here with the
 // other labels, and the game module reads nothing from values.
@@ -161,6 +164,39 @@ pub fn fix_sentence(names: &[&str], unread: &[String]) -> String {
         "{reads} {} {verb} from the game until you fix the prompt.",
         and_list(unread)
     )
+}
+
+// The sentence on a kept pattern joins names as the other sentences do,
+// so it lives here, and the engine reads nothing from the card.
+impl PromptEngine {
+    /// Why the migrated capture kept its pattern when the game last
+    /// showed your PROMPT this session, as one sentence for `#prompt`.
+    pub fn kept_pattern(&self) -> Option<String> {
+        let because = match self.kept_pattern.as_ref()? {
+            Kept::Compile(error) => {
+                let setting = match error.which {
+                    Which::Prompt => "prompt",
+                    Which::Fight => "fight prompt",
+                };
+                format!(
+                    "a color code runs into {} in the {setting} the game sent",
+                    error.code
+                )
+            }
+            Kept::Unknown(names) => match names.as_slice() {
+                [name] => {
+                    format!("it fills a value named {name}, and no prompt code fills that name")
+                }
+                _ => format!(
+                    "it fills values named {}, and no prompt code fills those names",
+                    and_list(names)
+                ),
+            },
+        };
+        Some(format!(
+            "Vosh kept the pattern from your old capture trigger because {because}."
+        ))
+    }
 }
 
 /// The label a value a setting reads goes by.

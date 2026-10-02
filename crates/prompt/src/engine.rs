@@ -26,7 +26,7 @@ use crate::values::gmcp::{Observed, CHAR_STATE, CHAR_STATUS};
 use crate::values::overrides::PromptPreview;
 use crate::values::{forsaken_lands, Vars};
 
-use char_prompt::Kept;
+pub(crate) use char_prompt::Kept;
 use replies::Observer;
 use status::Misses;
 
@@ -86,7 +86,7 @@ pub struct PromptEngine {
     misses: Misses,
     /// Why the migrated capture kept its pattern when the game last
     /// showed your PROMPT this session.
-    kept_pattern: Option<Kept>,
+    pub(crate) kept_pattern: Option<Kept>,
     /// What the open card shows on your prompt in place of the live
     /// render.
     preview: Option<PromptPreview>,
