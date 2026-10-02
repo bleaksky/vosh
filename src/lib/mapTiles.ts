@@ -95,19 +95,22 @@ export function getCell(payload: MapTilesPayload, row: number, col: number): Ser
   return v;
 }
 
+/// How many rows and columns the grid has. The game sends `g` as rows
+/// indexed from 0, 2r + 1 of them with 2r + 1 cells each, and you stand
+/// at [r][r]. Rows and columns run from 0 to one less than these counts.
 export function gridDims(payload: MapTilesPayload): { rows: number; cols: number } {
   if (payload.g) {
-    let maxRow = 0;
-    let maxCol = 0;
+    let rows = 0;
+    let cols = 0;
     for (const [rKey, row] of Object.entries(payload.g)) {
       const r = Number(rKey);
-      if (Number.isFinite(r) && r > maxRow) maxRow = r;
+      if (Number.isInteger(r) && r >= rows) rows = r + 1;
       for (const cKey of Object.keys(row)) {
         const c = Number(cKey);
-        if (Number.isFinite(c) && c > maxCol) maxCol = c;
+        if (Number.isInteger(c) && c >= cols) cols = c + 1;
       }
     }
-    if (maxRow > 0 && maxCol > 0) return { rows: maxRow, cols: maxCol };
+    if (rows > 0 && cols > 0) return { rows, cols };
   }
   const text = parseTextGrid(payload.t);
   if (text.length > 0) {
@@ -187,8 +190,8 @@ export function sectorCodeOf(s: unknown): string {
 }
 
 /// Find the player cell. Aabahran tags it with `h: 1`; falling back
-/// to (radius+1) per the GMCP spec when no cell carries the flag. Old
-/// "midpoint of observed cells" math broke on sparse grids — the
+/// to [r][r], where the game always puts you, when no cell carries the
+/// flag. Old "midpoint of observed cells" math broke on sparse grids — the
 /// player @ would not paint because the computed center missed the
 /// player's row.
 ///
@@ -208,15 +211,15 @@ export function playerCellOf(
         if (h === 1 || h === '1' || h === true) {
           const r = Number(rKey);
           const c = Number(cKey);
-          if (r > 0 && c > 0) return { row: r, col: c };
+          if (r >= 0 && c >= 0) return { row: r, col: c };
         }
       }
     }
   }
   if (typeof payload.r === 'number' && payload.r > 0) {
-    return { row: payload.r + 1, col: payload.r + 1 };
+    return { row: payload.r, col: payload.r };
   }
-  return { row: Math.floor((rows + 1) / 2), col: Math.floor((cols + 1) / 2) };
+  return { row: Math.floor(rows / 2), col: Math.floor(cols / 2) };
 }
 
 /** A room on your floor, at its row and column in the grid. */
@@ -230,8 +233,8 @@ export interface GridRoom {
  *  tileset painters draw them in. */
 export function gridRooms(payload: MapTilesPayload, rows: number, cols: number): GridRoom[] {
   const out: GridRoom[] = [];
-  for (let r = 1; r <= rows; r++) {
-    for (let c = 1; c <= cols; c++) {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
       const cell = getCell(payload, r, c);
       if (cell) out.push({ row: r, col: c, cell });
     }
@@ -352,7 +355,7 @@ const EMPTY_CELL: GlyphCell = {
 
 /** The glyph grid, rooms at even rows and columns and connectors
  *  between them, with the player's room row and column in the packet's
- *  grid. */
+ *  grid. The room at [r][c] of the packet sits at cells[2r][2c]. */
 export interface GlyphGrid {
   cells: GlyphCell[][];
   centerR: number;
@@ -378,8 +381,8 @@ export function glyphGrid(payload: MapTilesPayload): GlyphGrid | null {
   }
 
   const placeRoom = (r: number, c: number, gc: GlyphCell) => {
-    const or = 2 * (r - 1);
-    const oc = 2 * (c - 1);
+    const or = 2 * r;
+    const oc = 2 * c;
     if (or < 0 || or >= outRows || oc < 0 || oc >= outCols) return;
     out[or][oc] = gc;
   };
@@ -417,8 +420,8 @@ export function glyphGrid(payload: MapTilesPayload): GlyphGrid | null {
   // The player override fires BEFORE the sector check so an indoor
   // cell that arrives without an `s` field (which happens on the first
   // tick after walking up/down a Z transition) still gets the marker.
-  for (let r = 1; r <= rows; r++) {
-    for (let c = 1; c <= cols; c++) {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
       if (r === centerR && c === centerC) {
         placeRoom(r, c, { glyph: '@', color: PLAYER_COLOR, isPlayer: true, floor: 'same' });
         continue;
@@ -461,16 +464,16 @@ export function glyphGrid(payload: MapTilesPayload): GlyphGrid | null {
   const OPEN_COLOR = 'var(--c-border-strong, var(--c-border))';
   const connectorColor = (state: DoorState | null): string =>
     state && state !== 'open' ? DOOR_COLORS[state] : OPEN_COLOR;
-  for (let r = 1; r <= rows; r++) {
-    for (let c = 1; c <= cols; c++) {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
       const here = hasGrid ? getCell(payload, r, c) : null;
       if (!here) continue;
       // east-west connector
-      if (c < cols) {
+      if (c < cols - 1) {
         const east = hasGrid ? getCell(payload, r, c + 1) : null;
         if (east && hasExit(here, 'e') && hasExit(east, 'w')) {
-          const or = 2 * (r - 1);
-          const oc = 2 * (c - 1) + 1;
+          const or = 2 * r;
+          const oc = 2 * c + 1;
           const state = combineDoorStates(doorStateAt(here, 'e'), doorStateAt(east, 'w'));
           const effective = state ?? 'open';
           out[or][oc] = {
@@ -482,11 +485,11 @@ export function glyphGrid(payload: MapTilesPayload): GlyphGrid | null {
         }
       }
       // north-south connector
-      if (r < rows) {
+      if (r < rows - 1) {
         const south = hasGrid ? getCell(payload, r + 1, c) : null;
         if (south && hasExit(here, 's') && hasExit(south, 'n')) {
-          const or = 2 * (r - 1) + 1;
-          const oc = 2 * (c - 1);
+          const or = 2 * r + 1;
+          const oc = 2 * c;
           const state = combineDoorStates(doorStateAt(here, 's'), doorStateAt(south, 'n'));
           const effective = state ?? 'open';
           out[or][oc] = {
@@ -515,15 +518,15 @@ export function glyphGrid(payload: MapTilesPayload): GlyphGrid | null {
     ['s', 0, 1, '╎'],
     ['w', -1, 0, '╌'],
   ];
-  for (let r = 1; r <= rows; r++) {
-    for (let c = 1; c <= cols; c++) {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
       const here = hasGrid ? getCell(payload, r, c) : null;
       if (!here) continue;
       for (const [dir, dx, dy, glyph] of hiddenDirOffsets) {
         if (doorStateAt(here, dir) !== 'hidden') continue;
         if (getCell(payload, r + dy, c + dx) && !hasExit(here, dir)) continue;
-        const or = 2 * (r - 1) + dy;
-        const oc = 2 * (c - 1) + dx;
+        const or = 2 * r + dy;
+        const oc = 2 * c + dx;
         if (or < 0 || or >= outRows || oc < 0 || oc >= outCols) continue;
         if (out[or][oc] !== EMPTY_CELL) continue;
         out[or][oc] = {
