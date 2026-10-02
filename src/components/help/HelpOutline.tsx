@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { helpItemId, type OutlineEntry } from '../../lib/helpNav';
+import { scrollWithin } from '../../lib/scrollWithin';
 
 // On this page (the HelpLongTopic board): beside a long reference list,
 // a row per item in mono 11.5 on the 24 px pitch. The item you are
@@ -71,7 +72,7 @@ export function HelpOutline({ entries, scrollRef }: Props) {
     if (!el) return;
     pickedRef.current = index;
     setReading(index);
-    el.scrollIntoView({ block: 'start' });
+    scrollWithin(el, { block: 'start' });
     el.classList.remove('st-flash');
     // Restart the flash when you pick the same item twice.
     void el.offsetWidth;

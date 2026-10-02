@@ -1,6 +1,7 @@
 import { Fragment, memo, useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import type { KindNoun } from '../../../../lib/automationDraft';
 import type { ListSection } from '../../../../lib/automationList';
+import { scrollWithin } from '../../../../lib/scrollWithin';
 import { cx, Field, SearchIcon, VisuallyHidden } from '../../ui';
 
 /** A row pinned above the groups, like the Tick in Timers. */
@@ -144,7 +145,7 @@ export function ItemList({
     const row = scrollRef.current?.querySelector<HTMLElement>(
       `[data-uid="${CSS.escape(selected)}"]`,
     );
-    row?.scrollIntoView({ block: 'nearest' });
+    scrollWithin(row, { block: 'nearest' });
     // Only a new reveal request moves the list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealSeq]);
@@ -163,7 +164,7 @@ export function ItemList({
     onSelect(uid);
     const row = scrollRef.current?.querySelector<HTMLElement>(`[data-uid="${CSS.escape(uid)}"]`);
     row?.focus();
-    row?.scrollIntoView({ block: 'nearest' });
+    scrollWithin(row, { block: 'nearest' });
   };
 
   let empty: string | null = null;

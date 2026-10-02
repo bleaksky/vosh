@@ -26,6 +26,7 @@ import {
   type HelpTarget,
 } from './lib/helpNav';
 import { HELP_FIND_EVENT, HELP_GOTO_EVENT, HELP_PENDING_KEY } from './lib/helpLink';
+import { scrollWithin } from './lib/scrollWithin';
 import { HelpSidebar } from './components/help/HelpSidebar';
 import { HelpArticle } from './components/help/HelpArticle';
 import { HelpOutline } from './components/help/HelpOutline';
@@ -185,7 +186,7 @@ export function HelpApp() {
     const root = scrollRef.current;
     if (!root) return;
     const current = matches > 0 ? root.querySelector('[data-current]') : null;
-    if (current) current.scrollIntoView({ block: 'center' });
+    if (current) scrollWithin(current, { block: 'center' });
     else root.scrollTop = 0;
   }, [shown.id, query, match, matches, landed]);
 

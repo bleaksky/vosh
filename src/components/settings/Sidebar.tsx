@@ -10,6 +10,7 @@ import {
 import { listen } from '@tauri-apps/api/event';
 import { SETTINGS_FIND_EVENT } from '../../lib/appMenu';
 import { shortcutKey, shortcutKeys } from '../../lib/palette';
+import { scrollWithin } from '../../lib/scrollWithin';
 import {
   SETTINGS_GROUPS,
   settingsGroupLabel,
@@ -104,7 +105,7 @@ export function Sidebar({ group, onNavigate, pathB, mac }: Props) {
 
   useEffect(() => {
     if (!searching) return;
-    document.getElementById(optionId(active))?.scrollIntoView({ block: 'nearest' });
+    scrollWithin(document.getElementById(optionId(active)), { block: 'nearest' });
     // optionId only reads listId, which never changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, searching]);

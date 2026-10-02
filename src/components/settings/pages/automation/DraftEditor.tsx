@@ -28,6 +28,7 @@ import {
   type ListEntry,
 } from '../../../../lib/automationList';
 import { automationSaveError } from '../../../../lib/automationRecords';
+import { scrollWithin } from '../../../../lib/scrollWithin';
 import { subscribeProfileSwitched } from '../../../../lib/session';
 import { Button } from '../../ui';
 import { ItemList, type PinnedEntry } from './ItemList';
@@ -353,7 +354,7 @@ export function DraftEditor<T>({
         : null) ?? body.querySelector<HTMLElement>('.st-auto-row[aria-current]');
     const target = row ?? body.querySelector<HTMLElement>('.st-auto-filter input');
     target?.focus();
-    row?.scrollIntoView({ block: 'nearest' });
+    scrollWithin(row, { block: 'nearest' });
   }, [deleteSeq]);
 
   // JSON edits reach the draft after a short pause. Take the text
