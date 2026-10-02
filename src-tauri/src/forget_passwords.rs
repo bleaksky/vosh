@@ -1,6 +1,7 @@
 //! `#logs forget-passwords`. Counts the lines in the session log where you
 //! sent a password, and with `now` blanks them for good. The rule for
-//! which lines lives in `vosh_log` (crates/log/src/forget.rs).
+//! which lines lives in `vosh_log`. crates/log/src/forget.rs states it,
+//! and crates/log/src/forget/ holds the login replay and the wipe.
 //!
 //! Nothing here reads, prints, logs, or returns the text of a line. The
 //! store hands back row ids and counts only, and an error names what
