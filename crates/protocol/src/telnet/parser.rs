@@ -1,6 +1,6 @@
 //! Streaming telnet parser. Feed bytes, get events.
 
-use crate::codes::{DO, DONT, IAC, SB, SE, WILL, WONT};
+use crate::telnet::codes::{DO, DONT, IAC, SB, SE, WILL, WONT};
 
 /// Events emitted by the parser as bytes flow through.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -181,7 +181,7 @@ fn flush_data(buf: &mut Vec<u8>, events: &mut Vec<Event>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::codes::option;
+    use crate::telnet::codes::option;
 
     #[test]
     fn passes_plain_data_through() {
@@ -224,13 +224,20 @@ mod tests {
     #[test]
     fn parses_subnegotiation() {
         let mut p = Parser::new();
-        let bytes = [IAC, SB, option::TTYPE, crate::codes::ttype::SEND, IAC, SE];
+        let bytes = [
+            IAC,
+            SB,
+            option::TTYPE,
+            crate::telnet::codes::ttype::SEND,
+            IAC,
+            SE,
+        ];
         let events = p.feed(&bytes);
         assert_eq!(
             events,
             vec![Event::Subnegotiation {
                 option: option::TTYPE,
-                payload: vec![crate::codes::ttype::SEND],
+                payload: vec![crate::telnet::codes::ttype::SEND],
             }]
         );
     }
@@ -281,12 +288,17 @@ mod tests {
     #[test]
     fn parses_single_byte_commands() {
         let mut p = Parser::new();
-        let events = p.feed(&[IAC, crate::codes::GA, IAC, crate::codes::EOR]);
+        let events = p.feed(&[
+            IAC,
+            crate::telnet::codes::GA,
+            IAC,
+            crate::telnet::codes::EOR,
+        ]);
         assert_eq!(
             events,
             vec![
-                Event::Command(crate::codes::GA),
-                Event::Command(crate::codes::EOR),
+                Event::Command(crate::telnet::codes::GA),
+                Event::Command(crate::telnet::codes::EOR),
             ]
         );
     }

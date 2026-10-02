@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "src-tauri",
-    "crates/telnet",
+    "crates/protocol",
     "crates/ansi",
     "crates/alias",
     "crates/vars",

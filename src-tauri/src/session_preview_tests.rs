@@ -412,7 +412,7 @@ fn the_open_row_stays_open_across_a_resize_while_the_card_is_open() {
     for show in [PromptShow::Text, PromptShow::Lifted] {
         let label = format!("{show:?}");
         let mut session = Session::new(showing(profile(CODES, HP, true), show));
-        let mut negotiator = vosh_telnet::Negotiator::new();
+        let mut negotiator = vosh_protocol::telnet::Negotiator::new();
         negotiator.set_window_size(80, 40);
         let mut grid = crate::term_grid::TermGrid::new(80, 40);
         let quiet = session.read(&wire_fixture("quiet"));
@@ -468,7 +468,7 @@ fn a_new_height_leaves_the_open_row_open_with_the_card_closed() {
     for show in [PromptShow::Text, PromptShow::Lifted] {
         let label = format!("{show:?}");
         let mut session = Session::new(showing(profile(CODES, HP, true), show));
-        let mut negotiator = vosh_telnet::Negotiator::new();
+        let mut negotiator = vosh_protocol::telnet::Negotiator::new();
         negotiator.set_window_size(80, 40);
         let mut grid = crate::term_grid::TermGrid::new(80, 40);
         let quiet = session.read(&wire_fixture("quiet"));

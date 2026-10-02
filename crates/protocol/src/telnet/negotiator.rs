@@ -7,8 +7,10 @@
 //! only when it changes a state, so a server that offers or asks for an
 //! option again, or answers every DO with WILL, never starts a loop.
 
-use crate::codes::{charset, new_environ, option, ttype, DO, DONT, IAC, SB, SE, WILL, WONT};
-use crate::parser::Event;
+use crate::telnet::codes::{
+    charset, new_environ, option, ttype, DO, DONT, IAC, SB, SE, WILL, WONT,
+};
+use crate::telnet::parser::Event;
 /// Default first TTYPE response (slot 0). MTTS expects the client
 /// name plus version here, and MTTS-aware servers iterate to slot 1
 /// for the terminal emulation. But many ROM- and Diku-derived servers
