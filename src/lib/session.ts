@@ -176,16 +176,6 @@ export async function setWindowSize(cols: number, rows: number): Promise<void> {
   await invoke('session_set_window_size', { cols, rows });
 }
 
-export async function sendBytes(bytes: Uint8Array): Promise<void> {
-  await invoke('session_send', { bytes: Array.from(bytes) });
-}
-
-export async function sendLine(line: string): Promise<void> {
-  const encoder = new TextEncoder();
-  const payload = encoder.encode(line + '\r\n');
-  await sendBytes(payload);
-}
-
 /// Run a typed input line through the backend pipeline. Variables, aliases,
 /// and slash commands are handled there; the result either goes to the
 /// connection or echoes back as a session://output event.
