@@ -40,15 +40,17 @@ import { PANE_LABELS, offeredPaneTypes } from './paneTypes';
 // The more menu on every pane header (SPEC 9): Split right, Split
 // down, Show here instead with a submenu of pane types, and Close pane.
 // The Affects pane adds Style and Marker, each a submenu with a check
-// on the current pick, and Edit tracked affects, which opens Settings
-// on that profile's Tracked affects in Characters. Marker goes quiet
-// while Grouped chips are chosen, since chips draw no marker. The Chat
-// pane adds Channel colors, a submenu of the eleven channels the game
-// sends, each opening Default and the theme's 16 ANSI colors with a
-// check on the current pick, then Reset all. A pick saves alone for the
-// profile and the pane follows at once. Closing a pane loses nothing,
-// so it carries no destructive color. A split the panel has no room
-// for, with every pane at its minimum, stays unavailable.
+// on the current pick, Change when affects warn, which opens Settings
+// on the hours under Layout, Affects, and Edit tracked affects, which
+// opens Settings on that profile's Tracked affects in Characters.
+// Marker goes quiet while either chip style is chosen, since chips draw
+// no marker. The hours are numbers, typed in Settings and never picked
+// in a menu. The Chat pane adds Channel colors, a submenu of the eleven
+// channels the game sends, each opening Default and the theme's 16 ANSI
+// colors with a check on the current pick, then Reset all. A pick saves
+// alone for the profile and the pane follows at once. Closing a pane
+// loses nothing, so it carries no destructive color. A split the panel
+// has no room for, with every pane at its minimum, stays unavailable.
 
 interface Props {
   leaf: PaneLeaf;
@@ -294,6 +296,21 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
             <MenuSeparator />
             {submenuRow('style', false)}
             {submenuRow('marker', !markerApplies(display))}
+            <MenuItem
+              onHover={closeSub}
+              onFocus={closeSub}
+              onSelect={run(() =>
+                openSettingsTab(
+                  formatSettingsTarget({
+                    group: 'layout',
+                    section: 'affects',
+                    anchor: 'affects-running-out',
+                  }),
+                ),
+              )}
+            >
+              Change when affects warn…
+            </MenuItem>
             <MenuItem
               onHover={closeSub}
               onFocus={closeSub}

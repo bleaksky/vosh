@@ -509,9 +509,9 @@ async function mountOnce(key: string) {
   }
 }
 
-/** Open the pane menu on an Affects pane, press Edit tracked affects,
- *  and return the links it sends Settings. */
-async function paneMenuLinks(): Promise<string[]> {
+/** Open the pane menu on an Affects pane, press the item whose text
+ *  starts with `label`, and return the links it sends Settings. */
+async function paneMenuLinks(label: string): Promise<string[]> {
   calls.emitted.length = 0;
   const container = doc.createElement('div');
   doc.body.appendChild(container);
@@ -527,9 +527,8 @@ async function paneMenuLinks(): Promise<string[]> {
   await settle();
   const item = only(
     container,
-    'Edit tracked affects',
-    (el) =>
-      el.getAttribute('role') === 'menuitem' && el.textContent.startsWith('Edit tracked affects'),
+    label,
+    (el) => el.getAttribute('role') === 'menuitem' && el.textContent.startsWith(label),
   );
   await act(async () => {
     press(item);
@@ -547,12 +546,16 @@ async function paneMenuLinks(): Promise<string[]> {
 async function senderLinks(): Promise<Record<string, string[]>> {
   const out: Record<string, string[]> = {
     'pane menu, Edit tracked affects': [],
+    'pane menu, Change when affects warn': [],
     'Layout, Panes and tracked affects': [],
     'General, Search logs': [],
   };
   for (const active of ['Ilsabet', null]) {
     scene.active = active;
-    out['pane menu, Edit tracked affects'].push(...(await paneMenuLinks()));
+    out['pane menu, Edit tracked affects'].push(...(await paneMenuLinks('Edit tracked affects')));
+    out['pane menu, Change when affects warn'].push(
+      ...(await paneMenuLinks('Change when affects warn')),
+    );
     const layout = await land({ group: 'layout' }, MAC, {
       after: (c) =>
         press(only(c, 'the panes row', (el) => el.getAttribute('data-st-anchor') === 'panes')),

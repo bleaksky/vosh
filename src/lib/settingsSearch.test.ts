@@ -123,7 +123,8 @@ describe('searchSettingsRows', () => {
     expect(labels('meter')[0]).toBe('Meter');
     expect(labels('bar')).toContain('Meter');
     expect(labels('warn')[0]).toBe('Warn before you run low');
-    expect(labels('run low')).toEqual(['Warn before you run low']);
+    // Running out at turns hours yellow, which holds both words too.
+    expect(labels('run low')).toEqual(['Warn before you run low', 'Running out at']);
     const targets = ['values', 'meter', 'warn-low'].map(
       (anchor) => SETTINGS_ROWS.find((r) => r.target.anchor === anchor)?.target,
     );
@@ -148,6 +149,19 @@ describe('searchSettingsRows', () => {
     const [tint] = searchSettingsRows('tint recast', mac);
     expect(tint.label).toBe('Tint what to recast');
     expect(settingsRowKey(tint)).toBe('layout:affects#affects-tint');
+    expect(labels('draining chips')).toEqual(['Style']);
+  });
+
+  it('finds when affects warn and turn red under Layout', () => {
+    const [runningOut] = searchSettingsRows('running out', mac);
+    expect(runningOut.label).toBe('Running out at');
+    expect(settingsRowKey(runningOut)).toBe('layout:affects#affects-running-out');
+    expect(labels('affects threshold')).toEqual(['Running out at', 'Almost gone at']);
+    expect(labels('affects warn')[0]).toBe('Running out at');
+    const [almostGone] = searchSettingsRows('almost gone', mac);
+    expect(almostGone.label).toBe('Almost gone at');
+    expect(settingsRowKey(almostGone)).toBe('layout:affects#affects-almost-gone');
+    expect(labels('affects red')).toContain('Almost gone at');
   });
 
   it('finds the tick and time style under Layout', () => {

@@ -263,6 +263,20 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     keywords: 'affects tint wash background recast missing expiring drop color',
     target: at('layout', 'affects', 'affects-tint'),
   },
+  {
+    label: 'Running out at',
+    description:
+      "With this many hours or fewer an affect's hours turn yellow, and one you track counts as running out.",
+    keywords: 'affects warn warning threshold hours running out yellow expiring soon',
+    target: at('layout', 'affects', 'affects-running-out'),
+  },
+  {
+    label: 'Almost gone at',
+    description:
+      "With this many hours or fewer the hours turn bold red. The game's own affects bar turns red at 1.",
+    keywords: 'affects almost gone red threshold hours danger critical last',
+    target: at('layout', 'affects', 'affects-almost-gone'),
+  },
 
   // Input, from the approved board.
   {

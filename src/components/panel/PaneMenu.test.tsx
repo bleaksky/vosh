@@ -28,9 +28,14 @@ vi.mock('./MenuSurface', async (actual) => ({
     <menu aria-label={label}>{children}</menu>
   ),
 }));
+// The display the menu reads, the default unless a test picks a style.
+const shown = vi.hoisted(() => ({ style: null as string | null }));
 vi.mock('../../lib/stores/affectsDisplayStore', async () => {
   const { DEFAULT_AFFECTS_DISPLAY } = await import('../../lib/session');
-  return { useAffectsDisplay: () => DEFAULT_AFFECTS_DISPLAY };
+  return {
+    useAffectsDisplay: () =>
+      shown.style ? { ...DEFAULT_AFFECTS_DISPLAY, style: shown.style } : DEFAULT_AFFECTS_DISPLAY,
+  };
 });
 vi.mock('../../lib/stores/chatColorsStore', () => ({ useChatColors: () => new Map() }));
 vi.mock('../../lib/useActiveTheme', async () => {
@@ -108,6 +113,7 @@ function channelRows(colors: ChatColors, open: string | null = null) {
 beforeEach(() => {
   vi.mocked(resetChatColors).mockClear();
   vi.mocked(setChatColor).mockClear();
+  shown.style = null;
 });
 
 describe('PaneMenu', () => {
@@ -119,6 +125,39 @@ describe('PaneMenu', () => {
     const leaf: PaneLeaf = { id: `leaf-${pane}`, pane, weight: 1, props: {} };
     return renderToStaticMarkup(<PaneMenu leaf={leaf} anchor={anchor} onClose={() => {}} />);
   };
+
+  /** Each menu row's text, `(off)` after a disabled one. */
+  const menuRows = (html: string) =>
+    [...html.matchAll(/<button[^>]*role="menuitem"([^>]*)>(.*?)<\/button>/g)].map(
+      ([, attrs, inner]) =>
+        `${inner.replace(/<[^>]*>/g, '')}${attrs.includes('aria-disabled="true"') ? ' (off)' : ''}`,
+    );
+
+  it('offers Style, Marker, Change when affects warn and Edit tracked affects in the Affects menu', () => {
+    const rows = menuRows(menu('affects'));
+    const at = rows.indexOf('Marker');
+    expect(rows[at - 1]).toBe('Style');
+    expect(rows[at + 1]).toBe('Change when affects warn…');
+    expect(rows[at + 2]).toBe('Edit tracked affects…');
+    for (const pane of ['map', 'chat', 'group'] as const) {
+      expect(menu(pane), pane).not.toContain('Change when affects warn');
+    }
+  });
+
+  it('quiets Marker for both chip styles', () => {
+    for (const [style, off] of [
+      ['timers', false],
+      ['countdown', false],
+      ['chips', true],
+      ['chips_drain', true],
+    ] as const) {
+      shown.style = style;
+      const rows = menuRows(menu('affects'));
+      expect(rows, style).toContain(off ? 'Marker (off)' : 'Marker');
+      // The hours apply to every style.
+      expect(rows, style).toContain('Change when affects warn…');
+    }
+  });
 
   it('offers Channel colors in the Chat pane menu alone', () => {
     expect(menu('chat')).toContain('Channel colors');
