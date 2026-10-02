@@ -1,33 +1,46 @@
-//! Streaming ANSI parser. Wraps the `vte` state machine and produces
-//! attributed text spans suitable for trigger matching.
+//! The two readers the app runs on a line the game sends. Each call
+//! starts a fresh `vte` parser on the bytes it gets, so nothing carries
+//! from one call to the next.
 
 use vte::{Params, Parser, Perform};
 
-use crate::sgr::AnsiParser;
+/// The control bytes [`plain_text`] keeps as text. Newline, carriage
+/// return, tab and backspace.
+pub(crate) fn keeps_control(byte: u8) -> bool {
+    matches!(byte, b'\n' | b'\r' | b'\t' | 0x08)
+}
 
-/// Strip every escape sequence and control byte from a buffer,
-/// returning the printable text. Useful for trigger matching.
+/// The text of a line without its escape sequences. The session reads it
+/// for every line the game sends, to match triggers and to log. On a line
+/// that holds an escape, every control byte but newline, carriage return,
+/// tab and backspace drops too.
 ///
-/// Fast path: when the input contains zero ESC bytes (0x1B), it
-/// cannot carry any SGR / CSI sequences, so we skip the full vte
-/// state machine and produce the string via a single
-/// `String::from_utf8_lossy` allocation. The slow path remains
-/// available for any line that actually carries escapes.
-///
-/// This is a per-line hot path (`session.rs`, `trigger::engine`,
-/// `log::append_raw`) — skipping the `AnsiParser` + spans Vec + per-
-/// span Strings on the no-escape case removes several per-line
-/// allocations for every prompt-style line that came through ANSI-
-/// clean (which is most prompts and many tells/says).
+/// A line with no ESC byte holds no escape sequence, so it skips the
+/// parser and costs one `String::from_utf8_lossy`. Most prompts and many
+/// says and tells arrive that way.
 pub fn plain_text(bytes: &[u8]) -> String {
+    struct Text(String);
+    impl Perform for Text {
+        fn print(&mut self, c: char) {
+            self.0.push(c);
+        }
+
+        fn execute(&mut self, byte: u8) {
+            if keeps_control(byte) {
+                self.0.push(char::from(byte));
+            }
+        }
+    }
+
     if !bytes.contains(&0x1B) {
         return String::from_utf8_lossy(bytes).into_owned();
     }
-    let mut p = AnsiParser::new();
-    p.feed(bytes)
-        .into_iter()
-        .map(|s| s.text)
-        .collect::<String>()
+    let mut machine = Parser::new();
+    let mut text = Text(String::with_capacity(bytes.len()));
+    for &b in bytes {
+        machine.advance(&mut text, b);
+    }
+    text.0
 }
 
 /// What a stretch of a line's bytes is, as [`plain_text`] reads it.
@@ -82,10 +95,10 @@ pub fn pieces(bytes: &[u8]) -> Vec<Piece> {
         }
 
         fn execute(&mut self, byte: u8) {
-            // The control bytes plain_text keeps, as the collector does.
-            match byte {
-                b'\n' | b'\r' | b'\t' | 0x08 => self.push(PieceKind::Text(char::from(byte))),
-                _ => self.push(PieceKind::Other),
+            if keeps_control(byte) {
+                self.push(PieceKind::Text(char::from(byte)));
+            } else {
+                self.push(PieceKind::Other);
             }
         }
 

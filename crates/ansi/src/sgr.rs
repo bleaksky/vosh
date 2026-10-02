@@ -1,9 +1,14 @@
-//! Select Graphic Rendition state. Tracks foreground, background, and the
-//! common attribute flags across SGR sequences.
+//! The SGR model, which only the test kit carries. [`AnsiParser`] splits
+//! bytes into [`Span`]s of text that share one set of [`Attributes`], and
+//! [`Sgr`] tracks the foreground, the background and the common flags
+//! across SGR sequences. The readable highlight tests in vosh-trigger
+//! read the color of each span, with a parser apart from the scan they
+//! check.
 
 use vte::{Params, Parser, Perform};
 
 use crate::color::Color;
+use crate::parser::keeps_control;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Attributes {
@@ -141,11 +146,10 @@ impl Perform for Collector {
     }
 
     fn execute(&mut self, byte: u8) {
-        // Treat printable control bytes (CR, LF, BS, TAB) as text. Drop the
-        // rest. xterm.js handles cursor motion on its side.
-        match byte {
-            b'\n' | b'\r' | b'\t' | 0x08 => self.pending.push(byte as char),
-            _ => {}
+        // The same text plain_text keeps. The renderers read the other
+        // control bytes from the raw line.
+        if keeps_control(byte) {
+            self.pending.push(char::from(byte));
         }
     }
 
@@ -162,13 +166,14 @@ impl Perform for Collector {
             self.flush();
             Sgr::apply(&mut self.attrs, params);
         }
-        // Cursor movement, screen control, and the rest are renderer
-        // concerns. xterm.js handles them.
+        // Cursor movement, screen control and the rest belong to the
+        // renderers, which read the raw line.
     }
 }
 
-/// Streaming ANSI parser. Hold an instance per session so escape sequences
-/// that straddle byte chunks parse correctly.
+/// Splits bytes into [`Span`]s by their SGR attributes. It keeps its state
+/// between calls to [`AnsiParser::feed`], so an escape cut across two
+/// calls still parses.
 pub struct AnsiParser {
     machine: Parser,
     collector: Collector,

@@ -745,8 +745,8 @@ mod tests {
     }
 
     /// Each run of visible text in `line` that draws in a fixed color, with
-    /// that color. The session's ANSI parser reads the line, so the check
-    /// does not lean on the scan it checks.
+    /// that color. The SGR model in the vosh-ansi test kit reads the line,
+    /// so the check does not lean on the scan it checks.
     fn fixed_runs(line: &str) -> Vec<(String, Rgb)> {
         vosh_ansi::AnsiParser::new()
             .feed(line.as_bytes())
