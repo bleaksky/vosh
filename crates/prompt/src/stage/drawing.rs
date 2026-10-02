@@ -95,7 +95,7 @@ impl Stage {
 
     /// Show `block` as sent, drawing off. `display` is what Prompts
     /// triggers left of its final line, None when one hid it.
-    pub fn show(
+    pub fn show_as_sent(
         &mut self,
         out: &mut Output,
         block: Block,

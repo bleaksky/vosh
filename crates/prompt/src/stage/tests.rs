@@ -74,13 +74,13 @@ fn with_drawing_off_the_prompt_shows_as_sent() {
     let block = stage
         .recognize(colored.as_bytes(), PROMPT, End::Line)
         .expect("the prompt");
-    stage.show(&mut out, block, None, b"", Some(colored.as_bytes()));
+    stage.show_as_sent(&mut out, block, None, b"", Some(colored.as_bytes()));
     assert_eq!(out.bytes, with(&[colored.as_bytes(), b"\r\n"]));
     assert_eq!(stage.open_row(), None);
     // A Prompts trigger that hides it leaves nothing.
     let mut out = Output::new(false);
     let block = read(&stage, PROMPT, End::Line);
-    stage.show(&mut out, block, None, b"", None);
+    stage.show_as_sent(&mut out, block, None, b"", None);
     assert!(out.is_empty());
 }
 
@@ -233,7 +233,7 @@ fn a_partial_that_settles_is_the_prompt_at_once() {
     // Shown as sent, a settled prompt keeps the cursor after it.
     let mut out = Output::new(false);
     let block = read(&stage, "<10hp> ", End::Settled);
-    stage.show(&mut out, block, None, b"", Some(b"<10hp> "));
+    stage.show_as_sent(&mut out, block, None, b"", Some(b"<10hp> "));
     assert_eq!(out.bytes, b"<10hp> ");
     // A capture that waits never reads a partial.
     let waits = self::stage(JAMES, false);
@@ -295,7 +295,7 @@ fn a_ga_after_a_prompt_that_settles_leaves_the_cursor_after_it() {
     let block = read(&stage, "<10hp> ", End::Marker);
     assert_eq!(block.final_line().end, End::Settled);
     let mut out = Output::new(false);
-    stage.show(&mut out, block, None, b"", Some(b"<10hp> "));
+    stage.show_as_sent(&mut out, block, None, b"", Some(b"<10hp> "));
     assert_eq!(out.bytes, b"<10hp> ");
 }
 
@@ -330,7 +330,7 @@ fn a_ga_ends_a_prompt_in_the_same_read_or_the_next() {
     // Drawing off, a GA ends the row after the prompt.
     let mut out = Output::new(false);
     let block = read(&stage, PROMPT, End::Marker);
-    stage.show(&mut out, block, None, b"", Some(PROMPT.as_bytes()));
+    stage.show_as_sent(&mut out, block, None, b"", Some(PROMPT.as_bytes()));
     assert_eq!(out.bytes, with(&[PROMPT.as_bytes(), b"\r\n"]));
 }
 
@@ -1488,7 +1488,7 @@ fn a_lifted_prompt_carries_its_marks_around_every_line_it_shows() {
     // Shown as sent, the whole block sits between the marks, before
     // its line end.
     let mut shown = Output::new(false);
-    stage.show(&mut shown, block, None, b"", Some(PROMPT.as_bytes()));
+    stage.show_as_sent(&mut shown, block, None, b"", Some(PROMPT.as_bytes()));
     assert_eq!(
         shown.bytes,
         with(&[
@@ -1515,7 +1515,7 @@ fn a_prompt_whole_before_its_line_end_ends_its_lift_before_it() {
     // its own space.
     let block = read(&stage, "<10hp> ", End::Settled);
     let mut out = Output::new(false);
-    stage.show(&mut out, block, None, b"", Some(b"<10hp> "));
+    stage.show_as_sent(&mut out, block, None, b"", Some(b"<10hp> "));
     assert_eq!(out.bytes, with(&[&lift_start(3), b"<10hp> ", &lift_end(3)]));
 }
 
@@ -2080,7 +2080,7 @@ fn the_open_card_lifts_the_row_that_draws_your_design_in_the_text() {
     // Drawing off, the game's line shows as sent with no band.
     let mut off = Output::new(false);
     let block = read(&stage, PROMPT, End::Line);
-    stage.show(&mut off, block, None, b"", Some(PROMPT.as_bytes()));
+    stage.show_as_sent(&mut off, block, None, b"", Some(PROMPT.as_bytes()));
     assert!(!off.bytes.windows(7).any(|w| w == b"7717;l;"));
 }
 
@@ -2615,7 +2615,7 @@ fn a_prompt_left_in_the_text_ends_the_run() {
     let mut out = Output::new(false);
     repeat(&mut stage, &mut out, DODGE);
     let block = read(&stage, PROMPT, End::Line);
-    stage.show(&mut out, block, None, b"", Some(PROMPT.as_bytes()));
+    stage.show_as_sent(&mut out, block, None, b"", Some(PROMPT.as_bytes()));
     assert_eq!(repeat(&mut stage, &mut out, DODGE), Repeat::Starts);
 }
 
