@@ -10,7 +10,6 @@ rust-version.workspace = true
 [dependencies]
 mlua = { version = "0.10", features = ["lua54", "vendored", "send"] }
 regex = "1"
-serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 
