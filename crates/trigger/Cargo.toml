@@ -14,5 +14,10 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 vosh-ansi = { path = "../ansi" }
 
+[features]
+# The test kit: the plain entry points and the trigger count the app's
+# tests use.
+testkit = []
+
 [lints]
 workspace = true
