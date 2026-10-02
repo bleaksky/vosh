@@ -478,7 +478,8 @@ function drawSquares(
 
   // Corridors under the squares, bucketed by door state so we render
   // one stroke per color. corridors() says which ones, hidden door
-  // stubs included.
+  // stubs and the ticks of bent exits included. A tick reaches just
+  // past the square it leaves.
   type Segment = { cx: number; cy: number; nx: number; ny: number };
   const buckets: Record<DoorState, Segment[]> = {
     open: [],
