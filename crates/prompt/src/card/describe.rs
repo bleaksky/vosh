@@ -10,16 +10,16 @@
 //! with a sample drawn with the values the card shows.
 //!
 //! A piece's look is the SGR state at its first cell with every condition
-//! holding, as [`crate::edit`] reads it, so the rows show what an edit
-//! keeps. A bar draws its cells in its own color, so its Color row reads
-//! the bar's color.
+//! holding, as [`crate::card::edit`] reads it, so the rows show what an
+//! edit keeps. A bar draws its cells in its own color, so its Color row
+//! reads the bar's color.
 
 use serde::Serialize;
 
-use crate::design::{FieldRef, Format, PieceKind, Template, TokenKind};
-use crate::edit::{
+use crate::card::edit::{
     self, bar_choice, choice, ColorChoice, Doc, EditOp, FormatChoice, FormatName, StyleChoice, When,
 };
+use crate::design::{FieldRef, Format, PieceKind, Template, TokenKind};
 use crate::render::{render, RenderOptions, Rendered, Values};
 use crate::values::format::{Resolved, Value};
 use crate::values::{self, Group, Kind};
@@ -418,7 +418,7 @@ fn shown_as(value: &crate::design::ValueRef) -> (FieldRef, FormatName, Option<u8
 }
 
 /// When piece `index` shows, and whether When can change it, as
-/// [`crate::edit`] decides.
+/// [`crate::card::edit`] decides.
 fn when_of(doc: &Doc, index: usize) -> (When, bool) {
     let around = doc.around(index);
     let fights: Vec<PieceKind> = around

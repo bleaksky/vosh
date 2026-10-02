@@ -19,10 +19,10 @@ use chrono::{DateTime, FixedOffset, SecondsFormat};
 use serde_json::Value as Json;
 
 use crate::aabahran::Who;
+use crate::card::state::{OpenRowState, PromptState};
 use crate::config::PromptConfig;
 use crate::design::Template;
 use crate::stage::Stage;
-use crate::state::{OpenRowState, PromptState};
 use crate::values::gmcp::{Observed, CHAR_STATE, CHAR_STATUS};
 use crate::values::overrides::PromptPreview;
 use crate::values::{forsaken_lands, Vars, Vosh};
@@ -207,7 +207,7 @@ impl PromptEngine {
             .map(crate::capture::Recognizer::reads)
             .unwrap_or_default();
         PromptState {
-            catalog: crate::state::catalog(&self.vars, vosh, &reads),
+            catalog: crate::card::state::catalog(&self.vars, vosh, &reads),
             status: self.status_report(),
             new_build: self.vars.new_build(),
             forsaken: self.forsaken(),

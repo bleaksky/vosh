@@ -532,7 +532,7 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
 
     // The card edits the design and saves it, and the open row repaints
     // at once. Every window hears which profile's table changed.
-    let op: vosh_prompt::edit::EditOp = serde_json::from_value(serde_json::json!({
+    let op: vosh_prompt::card::edit::EditOp = serde_json::from_value(serde_json::json!({
         "op": "insert_field",
         "at": 3,
         "field": "mana",

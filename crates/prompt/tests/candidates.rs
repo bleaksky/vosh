@@ -1,8 +1,8 @@
 //! The candidates ring as the card reads it: groups by shape, and the
 //! capture check with its match line (section 4).
 
-use vosh_prompt::candidates::{check, groups, shape_of, CaptureCheck, CheckRead, Mark};
 use vosh_prompt::capture::Recognizer;
+use vosh_prompt::card::candidates::{check, groups, shape_of, CaptureCheck, CheckRead, Mark};
 use vosh_prompt::config::{AabahranCapture, CaptureConfig, RegexCapture};
 use vosh_prompt::stage::Candidate;
 use vosh_prompt::testkit::mud::PROMPT;
@@ -73,7 +73,7 @@ fn candidates_group_by_shape_with_counts() {
         groups[1].entries[0].raw,
         "Tester: [===|===|===|---]\r\n[700/1020hp 790/800mn 930/930mv]"
     );
-    let leftover = &vosh_prompt::candidates::groups(std::iter::empty());
+    let leftover = &vosh_prompt::card::candidates::groups(std::iter::empty());
     assert!(leftover.is_empty(), "{leftover:?}");
 }
 

@@ -14,10 +14,6 @@
 //! - [`design`] is the template language. It parses a design into tokens
 //!   and the pieces the editor shows, writes tokens back as text, and
 //!   holds the look algebra the editor uses to keep each piece's look.
-//! - [`edit`] writes the template changes the editor makes, keeping the
-//!   look of every other piece.
-//! - [`describe`] says what each piece and token of a design is, for the
-//!   card, with the forms a value takes.
 //! - [`values`] holds the catalog of fields and their samples, the
 //!   session's sources and the resolver that answers the renderer, with
 //!   the hidden model.
@@ -30,14 +26,20 @@
 //! - [`aabahran`] holds what Vosh knows about Aabahran alone, the PROMPT
 //!   compiler among it.
 //! - [`render`] draws a template as ANSI text with a span per piece.
-//! - [`presets`] holds the designs Vosh ships, its default among them.
-//! - [`report`] says what a capture compiles to, for the card, with the
-//!   [`presets`] it offers to start from.
 //! - [`stage`] decides what Vosh writes around your prompt, in one output
 //!   per socket read, with the regions a later output replaces.
-//! - [`candidates`] groups the candidates ring by shape and checks a
-//!   capture against it and your scrollback.
-//! - [`state`] reports each field's live state and source for the card.
+//! - [`card`] is what the prompt card on the page receives.
+//!   - [`card::state`] reports each field's live state and source.
+//!   - [`card::describe`] says what each piece and token of a design is,
+//!     with the forms a value takes.
+//!   - [`card::edit`] writes the template changes the editor makes,
+//!     keeping the look of every other piece.
+//!   - [`card::report`] says what a capture compiles to, with the
+//!     [`card::presets`] it offers to start from.
+//!   - [`card::presets`] holds the designs Vosh ships, its default among
+//!     them.
+//!   - [`card::candidates`] groups the candidates ring by shape and checks
+//!     a capture against it and your scrollback.
 //! - [`wrap`] is the word wrap both renderers share.
 //! - `testkit`, behind the `testkit` feature, prints prompts the way the
 //!   game does and plays a fake Aabahran for tests and scripted runs.
@@ -55,11 +57,10 @@ pub mod testkit;
 pub mod values;
 pub mod wrap;
 
-pub use card::{candidates, describe, edit, presets, report, state};
+pub use card::presets::DEFAULT_DESIGN;
 pub use config::{CaptureConfig, PromptConfig, PromptShow};
 pub use design::{FieldRef, Template};
 pub use engine::{GamePromptSeen, PromptEngine, Status};
-pub use presets::DEFAULT_DESIGN;
 pub use render::{render, render_str, RenderOptions, Rendered, Span, Values};
 pub use values::format::{Resolved, Value};
 pub use values::{Capture, Vosh};
