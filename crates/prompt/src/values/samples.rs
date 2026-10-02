@@ -5,8 +5,9 @@ use chrono::NaiveDateTime;
 use super::catalog::{field, Field, Kind, MemberStat, CATALOG};
 use super::resolver::{exits_value, label, moon_code_value, pos_value};
 use super::{since_of, Values};
+use crate::aabahran::codes::PHASES;
 use crate::design::FieldRef;
-use crate::values::format::{Position, Resolved, Value, MOON_CODES};
+use crate::values::format::{Position, Resolved, Value};
 
 // ---------------------------------------------------------------------
 // Samples
@@ -53,7 +54,7 @@ pub fn value_of(kind: Kind, label: &str, text: &str, now: NaiveDateTime) -> Reso
         Kind::Count => Value::List(s.split(',').map(str::to_string).collect()),
         Kind::Position => return Position::from_word(s).map_or(Resolved::Absent, pos_value),
         Kind::Lang => Value::Lang(s.to_string()),
-        Kind::Moon => return moon_code_value(MOON_CODES[num(s).unwrap_or(0) as usize % 8]),
+        Kind::Moon => return moon_code_value(PHASES[num(s).unwrap_or(0) as usize % 8]),
         Kind::Exits => exits_value(s),
         Kind::Level => Value::Level {
             word: label.to_string(),
