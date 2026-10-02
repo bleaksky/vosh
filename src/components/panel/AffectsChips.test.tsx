@@ -63,6 +63,7 @@ function draw(
     hidden?: boolean;
     full?: Record<string, number>;
     box?: { width: number; height: number };
+    thresholds?: { runningOut: number; almostGone: number };
   } = {},
 ): string {
   return renderToStaticMarkup(
@@ -74,6 +75,7 @@ function draw(
         box={options.box ?? BOARD_BOX}
         full={options.full ?? FULL}
         measure={FIXED_MEASURE}
+        thresholds={options.thresholds}
       />
     </PaneLeafContext.Provider>,
   );
@@ -178,6 +180,44 @@ describe('ChipsView', () => {
     ]);
     // Nothing tracked: every chip is Other, and no group name shows.
     expect(labelsOf(html)).toEqual([]);
+  });
+
+  it('groups and tints what to recast by the hours you set', () => {
+    const edges = [
+      aff('sanctuary', 5),
+      aff('armor', 6),
+      aff('shield', 2),
+      aff('fly', 0),
+      aff('mounted', -1),
+      aff('haste', 4),
+    ];
+    const tracked = ['sanctuary', 'bless', 'armor', 'shield', 'fly', 'mounted'].map((name) => ({
+      name,
+    }));
+    // Sanctuary has no full yet, the most seen is unknown, so it reads full.
+    const full = { armor: 48, shield: 8, fly: 53 };
+    const html = draw(edges, { tracked, full, thresholds: { runningOut: 5, almostGone: 2 } });
+    expect(html).toContain('<span class="pane-meta pane-meta-warn">3 running out</span>');
+    expect(chipsOf(html)).toEqual([
+      'pane-chip-missing bless - , missing',
+      // An affect at none is empty, and its gauge with it.
+      'pane-chip-tracked is-danger is-draining fly 0(danger) gauge 0 , 0 hours, running out',
+      // Exactly at almost gone.
+      'pane-chip-tracked is-danger is-draining shield 2(danger) gauge 0.25 , 2 hours, running out',
+      // Exactly at running out, at full.
+      'pane-chip-tracked is-warn sanctuary 5(warn) , 5 hours, running out',
+      'pane-chip-tracked is-draining armor 6 gauge 0.125 , 6 hours',
+      'pane-chip-tracked mounted + , permanent',
+      'pane-chip-other haste 4(warn) , 4 hours',
+    ]);
+    expect(labelsOf(html)).toEqual(['Recast', 'Tracked', 'Other']);
+    // At two and one, sanctuary goes back to Tracked and shield is yellow.
+    expect(chipsOf(draw(edges, { tracked, full })).slice(0, 4)).toEqual([
+      'pane-chip-missing bless - , missing',
+      'pane-chip-tracked is-danger is-draining fly 0(danger) gauge 0 , 0 hours, running out',
+      'pane-chip-tracked is-warn is-draining shield 2(warn) gauge 0.25 , 2 hours, running out',
+      'pane-chip-tracked sanctuary 5 , 5 hours',
+    ]);
   });
 
   it('counts what does not fit after the last chip of the page', () => {

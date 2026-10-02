@@ -1,9 +1,11 @@
 import { useMemo, useRef, type CSSProperties } from 'react';
+import { affectThresholdsOf } from '../../lib/affectsDisplay';
 import {
   affectsPaneRows,
-  hoursTone,
+  DEFAULT_AFFECT_THRESHOLDS,
   type AffectInput,
   type AffectRow,
+  type AffectThresholds,
   type TrackedInput,
 } from '../../lib/affectsView';
 import { PANE_ROW_PX } from '../../lib/paneLayout';
@@ -47,6 +49,11 @@ import { affectHours, affectsEmptyText, affectWords } from './paneText';
 // about to drop yellow or red. The body carries data-affects-tint while
 // it is on.
 //
+// The hours at which an affect runs out and is almost gone come from
+// there as well, two and one unless you change them, and every style
+// colors the hours, the marks, the header counts and what to recast by
+// them.
+//
 // Timers first is one of three styles you pick there. Countdown
 // (AffectsCountdown.tsx) lists every affect by the hours it has left,
 // and Grouped chips (AffectsChips.tsx) puts what to recast first.
@@ -57,8 +64,19 @@ export function AffectsPane() {
   const hidden = useAffectsHidden();
   const display = useAffectsDisplay();
   const full = useAffectFull();
+  // The store keeps one display while nothing in it moves, so the views
+  // keep their rows.
+  const thresholds = useMemo(() => affectThresholdsOf(display), [display]);
   if (display.style === 'chips') {
-    return <ChipsView current={current} tracked={tracked} hidden={hidden} full={full} />;
+    return (
+      <ChipsView
+        current={current}
+        tracked={tracked}
+        hidden={hidden}
+        full={full}
+        thresholds={thresholds}
+      />
+    );
   }
   if (display.style === 'countdown') {
     return (
@@ -69,6 +87,7 @@ export function AffectsPane() {
         marker={display.marker}
         tint={display.tint}
         full={full}
+        thresholds={thresholds}
       />
     );
   }
@@ -79,6 +98,7 @@ export function AffectsPane() {
       hidden={hidden}
       marker={display.marker}
       tint={display.tint}
+      thresholds={thresholds}
     />
   );
 }
@@ -96,6 +116,9 @@ export interface AffectsPaneViewProps {
   marker?: AffectsMarker | undefined;
   /** Wash the rows to recast, missing and running out. */
   tint?: boolean | undefined;
+  /** When an affect runs out and is almost gone. Two and one hours
+   *  when left out. */
+  thresholds?: AffectThresholds | undefined;
 }
 
 /** The pane drawn from plain values, so each state renders in a test. */
@@ -106,8 +129,12 @@ export function AffectsPaneView({
   box,
   marker = 'dot',
   tint = false,
+  thresholds = DEFAULT_AFFECT_THRESHOLDS,
 }: AffectsPaneViewProps) {
-  const rows = useMemo(() => affectsPaneRows(current, tracked, hidden), [current, tracked, hidden]);
+  const rows = useMemo(
+    () => affectsPaneRows(current, tracked, hidden, thresholds),
+    [current, tracked, hidden, thresholds],
+  );
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const measured = useBoxSize(bodyRef);
   const size = box ?? measured;
@@ -229,7 +256,7 @@ function AffectCell({
   pageStart?: boolean;
   style?: CSSProperties;
 }) {
-  const tone = hoursTone(row.ticks);
+  const tone = row.tone;
   // The hours and the mark show only as glyphs and color, so a screen
   // reader hears them as words after the name.
   const words = affectWords(row.state, row.ticks);

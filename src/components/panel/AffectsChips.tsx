@@ -1,11 +1,12 @@
 import { useMemo, useRef, type CSSProperties } from 'react';
 import {
   affectsPaneRows,
+  DEFAULT_AFFECT_THRESHOLDS,
   gaugeFraction,
-  hoursTone,
   type AffectFulls,
   type AffectInput,
   type AffectRow,
+  type AffectThresholds,
   type TrackedInput,
 } from '../../lib/affectsView';
 import { useBoxSize, usePagedWindow, type Box } from './affectsHooks';
@@ -40,9 +41,9 @@ import { affectHours, affectsEmptyText, affectWords } from './paneText';
 // is a gauge: it drains from the left toward empty as the hours run
 // down, over the affect's own cast (gaugeFraction, from the fulls the
 // backend keeps), with a hairline to show the chip's full width. One
-// running out takes the board's yellow at two hours and red at one or
-// none over the whole chip, and its gauge shows stronger over that
-// while it drains. Other chips keep the board's hairline ring, and a
+// running out takes the board's yellow, and red once it is almost gone,
+// over the whole chip, at the hours you set, two and one unless you
+// change them. Its gauge shows stronger over that while it drains. Other chips keep the board's hairline ring, and a
 // harmful one its danger ring.
 
 export interface ChipsViewProps {
@@ -55,14 +56,28 @@ export interface ChipsViewProps {
   full: AffectFulls;
   /** Text widths. The live faces when left out. */
   measure?: ChipMeasure | undefined;
+  /** When an affect runs out and is almost gone. Two and one hours
+   *  when left out. */
+  thresholds?: AffectThresholds | undefined;
 }
 
 const hoursOf = (row: AffectRow) => affectHours(row.state, row.ticks);
 
 /** The Grouped chips pane drawn from plain values, so each state
  *  renders in a test. */
-export function ChipsView({ current, tracked, hidden, box, full, measure }: ChipsViewProps) {
-  const rows = useMemo(() => affectsPaneRows(current, tracked, hidden), [current, tracked, hidden]);
+export function ChipsView({
+  current,
+  tracked,
+  hidden,
+  box,
+  full,
+  measure,
+  thresholds = DEFAULT_AFFECT_THRESHOLDS,
+}: ChipsViewProps) {
+  const rows = useMemo(
+    () => affectsPaneRows(current, tracked, hidden, thresholds),
+    [current, tracked, hidden, thresholds],
+  );
   const empty = affectsEmptyText(current, hidden, rows);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const measured = useBoxSize(bodyRef);
@@ -193,7 +208,7 @@ function pageBottom(page: ChipPage): number {
 function Chip({ row, full, measure }: { row: AffectRow; full: AffectFulls; measure: ChipMeasure }) {
   const kind = chipKind(row);
   if (kind === 'missing') return <MissingChip row={row} measure={measure} />;
-  const tone = hoursTone(row.ticks);
+  const tone = row.tone;
   const chip = chipTone(row);
   // Only a tracked chip has a ground, so only it drains.
   const gauge = kind === 'tracked' ? gaugeFraction(row, full) : null;

@@ -316,6 +316,81 @@ describe('AffectsPaneView', () => {
     );
   });
 
+  // Exactly at running out and at almost gone, an affect at none, a
+  // permanent one, and one you track that is up for a while.
+  const EDGES: CurrentAffect[] = [
+    affect('sanctuary', 5),
+    affect('armor', 6),
+    affect('shield', 2),
+    affect('fly', 0),
+    affect('mounted', -1),
+    affect('haste', 4),
+  ];
+  const EDGES_TRACKED: TrackedAffect[] = [
+    'sanctuary',
+    'bless',
+    'armor',
+    'shield',
+    'fly',
+    'mounted',
+  ].map((name) => ({ name, label: null }));
+  const drawAt = (thresholds?: { runningOut: number; almostGone: number }) =>
+    renderToStaticMarkup(
+      <PaneLeafContext.Provider value={LEAF}>
+        <AffectsPaneView
+          current={EDGES}
+          tracked={EDGES_TRACKED}
+          hidden={false}
+          box={BOARD_BOX}
+          tint
+          thresholds={thresholds}
+        />
+      </PaneLeafContext.Provider>,
+    );
+
+  it('colors the hours, the marks, the counts and the tint by the hours you set', () => {
+    const html = drawAt({ runningOut: 5, almostGone: 2 });
+    expect(html).toContain('<span class="pane-meta pane-meta-danger">1 missing</span>');
+    expect(html).toContain('<span class="pane-meta pane-meta-warn">3 running out</span>');
+    expect(cellsOf(html)).toEqual([
+      'warn 5(warn) sanctuary , 5 hours, running out',
+      'missing - bless , missing',
+      'up 6 armor , 6 hours',
+      'danger 2(danger) shield , 2 hours, running out',
+      'danger 0(danger) fly , 0 hours, running out',
+      'up + mounted , permanent',
+      // Not tracked: the hours alone take the color.
+      '. 4(warn) haste , 4 hours',
+    ]);
+    // The rows running out carry the class the tint washes.
+    expect(html).toContain(
+      '<li class="pane-affect pane-affect-expiring"><span class="pane-affect-mark is-warn"',
+    );
+    expect(html.match(/pane-affect-expiring/g)).toHaveLength(3);
+  });
+
+  it('draws the same rows as before with the hours left at two and one', () => {
+    const html = drawAt();
+    expect(drawAt({ runningOut: 2, almostGone: 1 })).toBe(html);
+    expect(html).toContain('<span class="pane-meta pane-meta-warn">2 running out</span>');
+    expect(cellsOf(html)).toEqual([
+      'up 5 sanctuary , 5 hours',
+      'missing - bless , missing',
+      'up 6 armor , 6 hours',
+      'warn 2(warn) shield , 2 hours, running out',
+      'danger 0(danger) fly , 0 hours, running out',
+      'up + mounted , permanent',
+      '. 4 haste , 4 hours',
+    ]);
+  });
+
+  it('leaves no yellow stage when both hours are equal', () => {
+    const cells = cellsOf(drawAt({ runningOut: 4, almostGone: 4 }));
+    expect(cells[3]).toBe('danger 2(danger) shield , 2 hours, running out');
+    expect(cells[6]).toBe('. 4(danger) haste , 4 hours');
+    expect(cells[0]).toBe('up 5 sanctuary , 5 hours');
+  });
+
   it('sets the names and the hours in the terminal face', () => {
     expect(rule('.pane-affect-name')).toContain('font-family: var(--font-mud');
     expect(rule('.pane-affect-hours')).toContain('font-family: var(--font-mud');

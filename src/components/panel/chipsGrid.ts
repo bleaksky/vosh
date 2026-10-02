@@ -1,4 +1,4 @@
-import { hoursTone, isTrackedRow, type AffectRow } from '../../lib/affectsView';
+import { isTrackedRow, type AffectRow } from '../../lib/affectsView';
 import { AFFECTS_TWO_COLUMNS_W } from './affectsGrid';
 
 // Where each chip sits in the Grouped chips style (board Affects C).
@@ -296,9 +296,10 @@ export function chipKind(row: AffectRow): ChipKind {
   return isTrackedRow(row) ? 'tracked' : 'other';
 }
 
-/** The tone a whole chip takes: a tracked affect running out, yellow at
- *  two hours and red at one or none, as board C's Recast group draws
- *  it. Elsewhere the tone only colors the hours. */
+/** The tone a whole chip takes: a tracked affect running out, yellow
+ *  until it is almost gone and red after, at the hours you set, as
+ *  board C's Recast group draws it. Elsewhere the tone only colors the
+ *  hours. */
 export function chipTone(row: AffectRow): 'warn' | 'danger' | null {
-  return row.state === 'expiring' ? hoursTone(row.ticks) : null;
+  return row.state === 'expiring' ? row.tone : null;
 }

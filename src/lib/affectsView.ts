@@ -7,14 +7,15 @@ import { HARMFUL_AFFECTS, harmfulSet } from './harmfulAffects';
 //
 // Rows come out in two runs:
 //   1. every tracked affect in the order you set in Characters, each in
-//      its slot whether you have it or not, marked expiring at two
-//      ticks or fewer;
+//      its slot whether you have it or not, marked expiring at the hours
+//      you set it runs out at, two unless you change them;
 //   2. affects you have but do not track, harmful ones first, each run
 //      fewest ticks first, permanent after every timed one, ties broken
 //      by name.
 // Durations are server ticks, which the game prints as hours. -1 (any
 // negative) means permanent and null means the server sent no usable
-// duration.
+// duration. Each row carries the tone its hours take by the thresholds
+// you set (Settings, Layout, Affects), so every style reads one rule.
 
 export type AffectRowState = 'missing' | 'present' | 'expiring' | 'untracked' | 'harmful';
 
@@ -29,6 +30,10 @@ export interface AffectRow {
   /** Ticks left. -1 is permanent. null for a missing affect or an
    *  unknown duration. */
   ticks: number | null;
+  /** The color its hours take, by the thresholds the view was built
+   *  with. Null for a missing affect, a permanent one, one with no
+   *  duration, and one with hours to spare. */
+  tone: HoursTone | null;
 }
 
 /** The slice of a current affect the view reads. The affects store's
@@ -45,12 +50,32 @@ export interface TrackedInput {
 }
 
 /** A tracked affect at or under this many ticks reads as about to
- *  drop. An affect at 0 goes on the next tick. */
+ *  drop, unless you set another. An affect at 0 goes on the next
+ *  tick. */
 export const EXPIRING_TICKS = 2;
 
 /** The game prints the hours of an affect at or under this many ticks
- *  in bold red, in its own affects bar. */
+ *  in bold red, in its own affects bar. Vosh does too, unless you set
+ *  another. */
 export const CRITICAL_TICKS = 1;
+
+/** When an affect's hours change color, in whole ticks. The profile
+ *  keeps both (affects_running_out_hours and affects_almost_gone_hours
+ *  under [ui]), and the backend holds almost gone to at most running
+ *  out. */
+export interface AffectThresholds {
+  /** At or under this many, a tracked affect counts as running out and
+   *  its hours turn yellow. */
+  runningOut: number;
+  /** At or under this many, the hours turn bold red. */
+  almostGone: number;
+}
+
+/** Today's thresholds: yellow at two hours, red at one or none. */
+export const DEFAULT_AFFECT_THRESHOLDS: AffectThresholds = {
+  runningOut: EXPIRING_TICKS,
+  almostGone: CRITICAL_TICKS,
+};
 
 export function isTrackedRow(row: AffectRow): boolean {
   return row.state === 'missing' || row.state === 'present' || row.state === 'expiring';
@@ -60,6 +85,7 @@ export function affectsView(
   current: readonly AffectInput[],
   tracked: readonly TrackedInput[],
   harmfulNames: Iterable<string> = HARMFUL_AFFECTS,
+  thresholds: AffectThresholds = DEFAULT_AFFECT_THRESHOLDS,
 ): AffectRow[] {
   const harmful = harmfulSet(harmfulNames);
 
@@ -84,26 +110,31 @@ export function affectsView(
     const label = entry.label?.trim();
     const affect = live.get(key);
     if (!affect) {
-      slots.push({ key, name: label || entry.name, state: 'missing', ticks: null });
+      slots.push({ key, name: label || entry.name, state: 'missing', ticks: null, tone: null });
       continue;
     }
     const ticks = ticksOf(affect.duration);
+    // Any tone means the hours are at or under running out.
+    const tone = hoursTone(ticks, thresholds);
     slots.push({
       key,
       name: label || affect.name,
-      state: ticks !== null && ticks >= 0 && ticks <= EXPIRING_TICKS ? 'expiring' : 'present',
+      state: tone ? 'expiring' : 'present',
       ticks,
+      tone,
     });
   }
 
   const others: AffectRow[] = [];
   for (const [key, affect] of live) {
     if (trackedKeys.has(key)) continue;
+    const ticks = ticksOf(affect.duration);
     others.push({
       key,
       name: affect.name,
       state: harmful.has(key) ? 'harmful' : 'untracked',
-      ticks: ticksOf(affect.duration),
+      ticks,
+      tone: hoursTone(ticks, thresholds),
     });
   }
   others.sort((a, b) => {
@@ -119,13 +150,20 @@ export function affectsView(
 
 export type HoursTone = 'danger' | 'warn';
 
-/** The color of an affect's hours, by the game's rule: one hour or none
- *  in bold red. Vosh warns a tick earlier, at two, in yellow. The same
- *  rule holds for every affect, tracked or not. */
-export function hoursTone(ticks: number | null): HoursTone | null {
+/** The color of an affect's hours: bold red at almost gone or under,
+ *  yellow at running out or under. Unless you set others, that is the
+ *  game's rule, one hour or none in red, and Vosh warns a tick earlier,
+ *  at two, in yellow. The same rule holds for every affect, tracked or
+ *  not. Almost gone never reaches past running out, so equal values
+ *  leave no yellow stage. */
+export function hoursTone(
+  ticks: number | null,
+  thresholds: AffectThresholds = DEFAULT_AFFECT_THRESHOLDS,
+): HoursTone | null {
   if (ticks === null || ticks < 0) return null;
-  if (ticks <= CRITICAL_TICKS) return 'danger';
-  if (ticks <= EXPIRING_TICKS) return 'warn';
+  const { runningOut, almostGone } = thresholds;
+  if (ticks <= Math.min(almostGone, runningOut)) return 'danger';
+  if (ticks <= runningOut) return 'warn';
   return null;
 }
 
@@ -139,7 +177,7 @@ export function affectMark(row: AffectRow): AffectMark | null {
   if (row.state === 'missing') return 'missing';
   if (row.state === 'harmful') return 'harmful';
   if (row.state === 'untracked') return null;
-  return hoursTone(row.ticks) ?? 'up';
+  return row.tone ?? 'up';
 }
 
 /** Hours at full for each affect key, the most Vosh has seen for the
@@ -163,7 +201,8 @@ export function gaugeFraction(row: AffectRow, full: AffectFulls): number | null 
 }
 
 /** What the pane header counts: tracked affects you are missing, and
- *  tracked affects running out, two ticks or fewer left. */
+ *  tracked affects running out, at or under the hours you set, two
+ *  unless you change them. */
 export function affectsSummary(rows: readonly AffectRow[]): {
   missing: number;
   runningOut: number;
@@ -185,9 +224,10 @@ export function affectsPaneRows(
   current: readonly AffectInput[] | null,
   tracked: readonly TrackedInput[],
   hidden: boolean,
+  thresholds: AffectThresholds = DEFAULT_AFFECT_THRESHOLDS,
 ): AffectRow[] {
   if (current === null || hidden) return [];
-  return affectsView(current, tracked);
+  return affectsView(current, tracked, HARMFUL_AFFECTS, thresholds);
 }
 
 /** Coerce a duration into ticks: a whole number, -1 for any negative

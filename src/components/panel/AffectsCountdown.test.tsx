@@ -64,6 +64,7 @@ function draw(
     marker?: AffectsMarker;
     full?: Record<string, number>;
     box?: { width: number; height: number };
+    thresholds?: { runningOut: number; almostGone: number };
   } = {},
 ): string {
   return renderToStaticMarkup(
@@ -75,6 +76,7 @@ function draw(
         box={options.box ?? BOARD_BOX}
         marker={options.marker}
         full={options.full ?? FULL}
+        thresholds={options.thresholds}
       />
     </PaneLeafContext.Provider>,
   );
@@ -225,6 +227,45 @@ describe('CountdownView', () => {
     expect(html).toContain('grid-template-rows:repeat(8, 23px)');
     expect(html).toContain('style="grid-row:1;grid-column:2"');
     expect(html).not.toContain('more</button>');
+  });
+
+  it('colors the hours, the marks, the meter and the counts by the hours you set', () => {
+    const edges = [
+      aff('sanctuary', 5),
+      aff('armor', 6),
+      aff('shield', 2),
+      aff('fly', 0),
+      aff('mounted', -1),
+      aff('haste', 4),
+      aff('detect magic', null),
+    ];
+    const tracked = ['sanctuary', 'bless', 'armor', 'shield', 'fly', 'mounted'].map((name) => ({
+      name,
+    }));
+    // Sanctuary has no full yet, the most seen is unknown, so it reads full.
+    const full = { armor: 48, shield: 8, fly: 53, haste: 26 };
+    const html = draw(edges, { tracked, full, thresholds: { runningOut: 5, almostGone: 2 } });
+    expect(html).toContain('<span class="pane-meta pane-meta-danger">1 missing</span>');
+    expect(html).toContain('<span class="pane-meta pane-meta-warn">3 running out</span>');
+    expect(cellsOf(html)).toEqual([
+      'missing bless - 0.0% , missing',
+      'danger fly 0(danger) 0.0% , 0 hours, running out',
+      'danger shield 2(danger) 25.0% , 2 hours, running out',
+      '. haste 4(warn) 15.4% , 4 hours',
+      // Exactly at running out.
+      'warn sanctuary 5(warn) 100.0% , 5 hours, running out',
+      'up armor 6 12.5% , 6 hours',
+      'up mounted + 100.0% , permanent',
+      '. detect magic  no meter',
+    ]);
+    // The meter takes the tone of the hours.
+    expect(html).toContain('<li class="pane-countdown-cell pane-affect-expiring is-warn"');
+    expect(html).toContain('<li class="pane-countdown-cell pane-affect-untracked is-warn"');
+    // At two and one, sanctuary and haste are up again and shield only yellow.
+    const before = cellsOf(draw(edges, { tracked, full }));
+    expect(before).toContain('warn shield 2(warn) 25.0% , 2 hours, running out');
+    expect(before).toContain('up sanctuary 5 100.0% , 5 hours');
+    expect(before).toContain('. haste 4 15.4% , 4 hours');
   });
 
   it('draws no meter for an affect the server sent no hours for', () => {

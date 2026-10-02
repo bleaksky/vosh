@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AffectRow, AffectRowState } from '../../lib/affectsView';
+import { hoursTone, type AffectRow, type AffectRowState } from '../../lib/affectsView';
 import {
   AFFECTS_RULE_PX,
   AFFECTS_TWO_COLUMNS_W,
@@ -15,6 +15,7 @@ const row = (name: string, state: AffectRowState, ticks: number | null = 10): Af
   name,
   state,
   ticks,
+  tone: state === 'missing' ? null : hoursTone(ticks),
 });
 
 // Ilsabet on the approved board: eight tracked slots, bless missing,
