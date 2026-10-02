@@ -506,8 +506,11 @@ The colors MUD text draws in live in Settings under Appearance.
 
 - Open Settings and choose Appearance.
 - Under Terminal text, turn on `Use the theme's colors for MUD text` to draw what the game sends in the theme's own sixteen colors, or turn it off to keep the exact colors your MUD sends. It is on for every theme until you turn it off.
+- Leave `Keep highlight colors readable` on under Terminal text, and Vosh darkens or lightens a color your triggers set when the theme would make it faint. It is on until you turn it off.
 - Open `Advanced` and change `Base palette`, the sixteen colors MUD text uses while the theme's colors are off. Change any color with its swatch or by typing a hex color. The first change keeps all sixteen as your own list.
 - Click `Reset` beside Base palette to go back to the stock chart. It stays off until you change a color.
+
+Keep highlight colors readable covers the exact colors a trigger paints text in, such as `{#8fa7d9}` in `Replace with`. Vosh measures each one against the terminal background. When one reads too faint, Vosh keeps its hue and moves it darker on a light theme or lighter on a dark one until it reads. A color that already reads stays as you picked it, and your trigger keeps the color you saved. The game's own colors and the theme's sixteen colors never change. A theme switch reaches the lines that arrive after it, and earlier lines keep the color they were drawn in.
 
 Two more colors sit with the rows they belong to. `Sent command color` under Input, then Command line, recolors the local echo of every command you send, and the `›` before it stays grey. `Divider color` under Layout, then Split terminal, recolors the line between the history and the live tail. Press the swatch to pick a color or type a hex color like `#fffc41`. Each applies live, and emptying the field returns it to the theme default.
 
