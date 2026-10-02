@@ -2,8 +2,8 @@
 //
 // The session wraps each prompt in two private marks: ESC ] 7717 ; l ; L
 // BEL before its first line and ESC ] 7717 ; e ; L BEL after its last
-// visible byte (crates/prompt/src/stage.rs). A LiftTracker reads them as
-// xterm parses them. For each lift it keeps a marker on the first row of
+// visible byte (crates/prompt/src/stage/marks.rs). A LiftTracker reads them
+// as xterm parses them. For each lift it keeps a marker on the first row of
 // the logical line it starts in, where it starts within that logical line,
 // and how many logical lines later and how far in it ends. A marker on the
 // logical line's first row survives a reflow that joins or splits its

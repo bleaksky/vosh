@@ -96,7 +96,7 @@ export interface RegionReplace {
 /** True when rows reading `rows`, top first, show the lines `plain`
  *  holds, however xterm or the word wrap broke them. Blanks do not count,
  *  since a word wrap drops the one it breaks at. The same rule as
- *  shows_lines in crates/prompt/src/stage.rs. */
+ *  shows_lines in crates/prompt/src/stage/output.rs. */
 export function showsLines(rows: string[], plain: string): boolean {
   const want = squeeze(plain);
   return want.length > 0 && squeeze(rows.join('')) === want;
@@ -128,7 +128,8 @@ export interface RegionOutput {
  *  nothing: the first one, when only escape sequences and carriage
  *  returns come before it. `closed` says the row is closed, by that line
  *  end or by anything else that lands first. Escape sequences alone leave
- *  it open. The same rule as close_pin_row in crates/prompt/src/stage.rs. */
+ *  it open. The same rule as close_pin_row in
+ *  crates/prompt/src/stage/output.rs. */
 export function closePinRow(text: string): { text: string; closed: boolean } {
   let i = 0;
   while (i < text.length) {
