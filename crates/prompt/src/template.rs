@@ -898,8 +898,8 @@ fn parse_color_spec(spec: &str) -> Option<Code> {
 }
 
 /// What a color code paints.
-#[derive(Clone, Copy)]
-enum Layer {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Layer {
     Fg,
     Bg,
     Underline,

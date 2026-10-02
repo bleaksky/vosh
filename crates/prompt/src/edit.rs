@@ -22,8 +22,8 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::template::{
-    runs_on, takes_param, write_token, BarColor, Code, ColorSpec, FieldRef, Format, PieceKind,
-    Scale, Style, Template, TokenKind, UnderlineStyle, ValueRef, BAR_MAX_WIDTH,
+    runs_on, takes_param, write_token, BarColor, Code, ColorSpec, FieldRef, Format, Layer,
+    PieceKind, Scale, Style, Template, TokenKind, UnderlineStyle, ValueRef, BAR_MAX_WIDTH,
 };
 use crate::vars::{self, Kind};
 
@@ -682,8 +682,8 @@ impl Doc {
                 underline,
             } => {
                 let layer = match (background, underline) {
-                    (false, false) => Layer::Text,
-                    (true, false) => Layer::Background,
+                    (false, false) => Layer::Fg,
+                    (true, false) => Layer::Bg,
                     (false, true) => Layer::Underline,
                     (true, true) => {
                         return error("A color goes on the text, its ground, or its underline.")
@@ -795,7 +795,7 @@ impl Doc {
         let spec = color_spec(choice, own.as_ref())?;
         let uid = piece.uid;
         // A bar draws its cells in its own color.
-        if layer == Layer::Text {
+        if layer == Layer::Fg {
             if let [Item {
                 kind:
                     TokenKind::Value(ValueRef {
@@ -838,22 +838,22 @@ impl Doc {
         piece.codes.retain(|item| {
             !matches!(
                 (&item.kind, layer),
-                (TokenKind::Code(Code::Fg(_)), Layer::Text)
-                    | (TokenKind::Code(Code::Bg(_)), Layer::Background)
+                (TokenKind::Code(Code::Fg(_)), Layer::Fg)
+                    | (TokenKind::Code(Code::Bg(_)), Layer::Bg)
                     | (TokenKind::Code(Code::UnderlineColor(_)), Layer::Underline)
             )
         });
         let now = state.after(&piece.codes);
         let want = color(&spec);
         let current = match layer {
-            Layer::Text => now.fg,
-            Layer::Background => now.bg,
+            Layer::Fg => now.fg,
+            Layer::Bg => now.bg,
             Layer::Underline => now.underline_color,
         };
         if current != want {
             piece.codes.push(match layer {
-                Layer::Text => fg(want.as_ref()),
-                Layer::Background => bg(want.as_ref()),
+                Layer::Fg => fg(want.as_ref()),
+                Layer::Bg => bg(want.as_ref()),
                 Layer::Underline => underline_color(want.as_ref()),
             });
         }
@@ -1302,14 +1302,6 @@ pub(crate) fn underline_choice(line: UnderlineStyle) -> StyleChoice {
         UnderlineStyle::Dotted => StyleChoice::Dotted,
         UnderlineStyle::Dashed => StyleChoice::Dashed,
     }
-}
-
-/// What a color paints.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Layer {
-    Text,
-    Background,
-    Underline,
 }
 
 /// A field as the card names it, `hp`, `aff:sanctuary` or
