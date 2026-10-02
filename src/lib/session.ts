@@ -1765,10 +1765,18 @@ export function normalizeVitalsOptions(raw: unknown): VitalsOptions {
 /** The layouts the Affects pane draws. `timers` is Timers first, the
  *  default, with your tracked affects in their slots. `countdown` lists
  *  every affect by the hours it has left. `chips` groups them as chips,
- *  what to recast first. */
-export const AFFECTS_STYLES = ['timers', 'countdown', 'chips'] as const;
+ *  what to recast first. `chips_drain` groups them the same way, and a
+ *  chip running out colors only the share of it that matches the hours
+ *  it has left. */
+export const AFFECTS_STYLES = ['timers', 'countdown', 'chips', 'chips_drain'] as const;
 
 export type AffectsStyle = (typeof AFFECTS_STYLES)[number];
+
+/** Grouped chips and Draining chips, the styles that pack chips and
+ *  show the state on each, with no marker or tint of their own. */
+export function isChipsStyle(style: AffectsStyle): boolean {
+  return style === 'chips' || style === 'chips_drain';
+}
 
 /** Coerce an unknown affects layout back to Timers first. */
 export function normalizeAffectsStyle(value: unknown): AffectsStyle {

@@ -15,6 +15,7 @@ describe('the affects display choices', () => {
       timers: 'Timers first',
       countdown: 'Countdown',
       chips: 'Grouped chips',
+      chips_drain: 'Draining chips',
     });
     expect(AFFECTS_MARKER_LABELS).toEqual({
       dot: 'Dot',
@@ -34,6 +35,7 @@ describe('the affects display choices', () => {
       { value: 'timers', label: 'Timers first', checked: false },
       { value: 'countdown', label: 'Countdown', checked: true },
       { value: 'chips', label: 'Grouped chips', checked: false },
+      { value: 'chips_drain', label: 'Draining chips', checked: false },
     ]);
     expect(affectsMarkerChoices(display).filter((c) => c.checked)).toEqual([
       { value: 'plus_minus', label: 'Plus and minus', checked: true },
@@ -50,6 +52,7 @@ describe('the affects display choices', () => {
     expect(markerApplies({ ...DEFAULT_AFFECTS_DISPLAY, style: 'timers' })).toBe(true);
     expect(markerApplies({ ...DEFAULT_AFFECTS_DISPLAY, style: 'countdown' })).toBe(true);
     expect(markerApplies({ ...DEFAULT_AFFECTS_DISPLAY, style: 'chips' })).toBe(false);
+    expect(markerApplies({ ...DEFAULT_AFFECTS_DISPLAY, style: 'chips_drain' })).toBe(false);
   });
 });
 

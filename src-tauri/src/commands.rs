@@ -5072,7 +5072,7 @@ mod tests {
     fn affects_style_round_trips() {
         let mut ui = UiConfig::default();
         assert_eq!(ui.affects_style, "timers");
-        for id in ["timers", "countdown", "chips"] {
+        for id in ["timers", "countdown", "chips", "chips_drain"] {
             ui.affects_style = id.into();
             assert_eq!(through_payload(&ui).affects_style, id);
             assert_eq!(through_toml(&ui).affects_style, id);
@@ -7590,7 +7590,7 @@ mod tests {
             ui.vitals_density = pick(&["rows", "line"]);
             ui.vitals_warn_thirds = n % 2 == 1;
             ui.vitals_hide_when_pinned = n % 2 == 0;
-            ui.affects_style = pick(&["timers", "countdown", "chips"]);
+            ui.affects_style = pick(&["timers", "countdown", "chips", "chips_drain"]);
             ui.affects_marker = pick(&["dot", "square", "plus_minus", "none"]);
             ui.affects_tint = n % 2 == 0;
             ui.affects_running_out_hours = 2 + n;

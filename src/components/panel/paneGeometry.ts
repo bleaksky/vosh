@@ -1,5 +1,5 @@
 import { isTrackedRow, type AffectRow } from '../../lib/affectsView';
-import type { AffectsStyle } from '../../lib/session';
+import { isChipsStyle, type AffectsStyle } from '../../lib/session';
 import { AFFECTS_RULE_PX, affectsColumns, affectsRestMinRows } from './affectsGrid';
 import {
   chipGroups,
@@ -172,7 +172,7 @@ export function affectsStyleMinH(
 ): number {
   const columns = affectsColumns(paneW);
   if (style === 'countdown') return countdownMinH(rows, columns);
-  if (style === 'chips') return chipsMinH(rows, paneW, measure);
+  if (isChipsStyle(style)) return chipsMinH(rows, paneW, measure);
   return affectsMinH(rows, columns);
 }
 

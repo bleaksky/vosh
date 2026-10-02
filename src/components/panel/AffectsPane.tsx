@@ -54,9 +54,11 @@ import { affectHours, affectsEmptyText, affectWords } from './paneText';
 // colors the hours, the marks, the header counts and what to recast by
 // them.
 //
-// Timers first is one of three styles you pick there. Countdown
+// Timers first is one of four styles you pick there. Countdown
 // (AffectsCountdown.tsx) lists every affect by the hours it has left,
 // and Grouped chips (AffectsChips.tsx) puts what to recast first.
+// Draining chips draws the same chips, and a chip running out colors
+// only the share that matches the hours it has left.
 
 export function AffectsPane() {
   const current = useAffects();
@@ -67,7 +69,7 @@ export function AffectsPane() {
   // The store keeps one display while nothing in it moves, so the views
   // keep their rows.
   const thresholds = useMemo(() => affectThresholdsOf(display), [display]);
-  if (display.style === 'chips') {
+  if (display.style === 'chips' || display.style === 'chips_drain') {
     return (
       <ChipsView
         current={current}
@@ -75,6 +77,7 @@ export function AffectsPane() {
         hidden={hidden}
         full={full}
         thresholds={thresholds}
+        fill={display.style === 'chips_drain' ? 'drain' : 'tint'}
       />
     );
   }

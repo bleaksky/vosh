@@ -940,6 +940,34 @@
   --chip-edge: color-mix(in srgb, var(--danger) 55%, transparent);
 }
 
+/* Draining chips. A chip running out keeps no tint of its own. A
+   hairline shows its full width, and the yellow or red, at 30 percent,
+   covers only the share that matches the hours it has left, the whole
+   chip while it is at full. Every other chip, the groups and the pages
+   are Grouped chips exactly. */
+[data-chip-fill='drain'] .pane-chip-tracked.is-warn,
+[data-chip-fill='drain'] .pane-chip-tracked.is-danger {
+  --chip-track: transparent;
+  --chip-edge: var(--sep);
+  background:
+    linear-gradient(to right, var(--chip-gauge) calc(var(--gauge, 1) * 100%), transparent 0),
+    var(--chip-track);
+}
+
+[data-chip-fill='drain'] .pane-chip-tracked.is-warn,
+[data-chip-fill='drain'] .pane-chip-tracked.is-warn.is-draining {
+  --chip-track: transparent;
+  --chip-edge: var(--sep);
+  --chip-gauge: color-mix(in srgb, var(--warn) 30%, transparent);
+}
+
+[data-chip-fill='drain'] .pane-chip-tracked.is-danger,
+[data-chip-fill='drain'] .pane-chip-tracked.is-danger.is-draining {
+  --chip-track: transparent;
+  --chip-edge: var(--sep);
+  --chip-gauge: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
 /* ── Map ─────────────────────────────────────────────────────────── */
 
 .pane-map {

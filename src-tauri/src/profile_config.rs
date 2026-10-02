@@ -437,9 +437,10 @@ pub(crate) struct UiConfig {
     #[serde(default = "default_tick_count")]
     pub tick_count: String,
     /// Which layout the Affects pane draws: `timers` (the default,
-    /// Timers first), `countdown`, or `chips` (Grouped chips). Per
-    /// profile, like the rest of the panel. Unknown values coerce back
-    /// to `timers` on save.
+    /// Timers first), `countdown`, `chips` (Grouped chips), or
+    /// `chips_drain` (Draining chips). Per profile, like the rest of the
+    /// panel. Unknown values coerce back to `timers` on save, so a build
+    /// from before Draining chips saves it as Timers first.
     #[serde(default = "default_affects_style")]
     pub affects_style: String,
     /// The mark beside each tracked affect in the timers and countdown
@@ -720,7 +721,7 @@ pub(crate) fn coerce_tick_count(value: String) -> String {
 
 /// The layouts the Affects pane draws. Anything else saves as the
 /// default, Timers first.
-pub(crate) const AFFECTS_STYLES: [&str; 3] = ["timers", "countdown", "chips"];
+pub(crate) const AFFECTS_STYLES: [&str; 4] = ["timers", "countdown", "chips", "chips_drain"];
 
 fn default_affects_style() -> String {
     "timers".to_string()

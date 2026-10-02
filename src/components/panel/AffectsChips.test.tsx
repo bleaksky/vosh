@@ -2,8 +2,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import panelCss from '../../styles/panel.css?raw';
 import type { AffectInput, TrackedInput } from '../../lib/affectsView';
+import { composite, contrast, parseHex } from '../../lib/color';
+import { BUILTIN_THEMES, themeTokens } from '../../lib/themes';
 import type { PaneLeaf } from '../../lib/paneLayout';
-import { ChipsView } from './AffectsChips';
+import { ChipsView, type ChipFill } from './AffectsChips';
 import { chipDots, chipDotsPath, chipWidth, FIXED_MEASURE } from './chipsGrid';
 import { PaneLeafContext } from './paneActions';
 
@@ -64,6 +66,7 @@ function draw(
     full?: Record<string, number>;
     box?: { width: number; height: number };
     thresholds?: { runningOut: number; almostGone: number };
+    fill?: ChipFill;
   } = {},
 ): string {
   return renderToStaticMarkup(
@@ -76,6 +79,7 @@ function draw(
         full={options.full ?? FULL}
         measure={FIXED_MEASURE}
         thresholds={options.thresholds}
+        fill={options.fill}
       />
     </PaneLeafContext.Provider>,
   );
@@ -322,5 +326,94 @@ describe('ChipsView', () => {
       expect(count, `${width}`).toBe(Math.round(chipDotsPath(width).length / 3));
       expect(Math.abs(gap - 3), `${width}`).toBeLessThan(0.1);
     }
+  });
+});
+
+describe('Draining chips', () => {
+  it('draws the same chips, groups and pages as Grouped chips, with the drain fill on the body', () => {
+    for (const list of [FOURTEEN, TWENTY]) {
+      const tint = draw(list);
+      const drain = draw(list, { fill: 'drain' });
+      expect(drain).toContain('<div class="pane-body" data-chip-fill="drain">');
+      expect(tint).toContain('<div class="pane-body">');
+      expect(drain.replace(' data-chip-fill="drain"', '')).toBe(tint);
+    }
+  });
+
+  it('colors only the share of a chip running out that matches its hours, over a hairline', () => {
+    const at = (selector: string) => rule(`[data-chip-fill='drain'] ${selector}`);
+    // The share: the gauge as wide as the hours left, the whole chip at
+    // full, over no ground.
+    const ground = at(
+      ".pane-chip-tracked.is-warn,\n[data-chip-fill='drain'] .pane-chip-tracked.is-danger",
+    );
+    expect(ground).toContain('--chip-track: transparent');
+    expect(ground).toContain('--chip-edge: var(--sep)');
+    expect(ground).toContain('calc(var(--gauge, 1) * 100%)');
+    // Yellow and red at 30 percent, at full and while draining alike.
+    const warn = at(
+      ".pane-chip-tracked.is-warn,\n[data-chip-fill='drain'] .pane-chip-tracked.is-warn.is-draining",
+    );
+    expect(warn).toContain('--chip-gauge: color-mix(in srgb, var(--warn) 30%, transparent)');
+    expect(warn).toContain('--chip-track: transparent');
+    expect(warn).toContain('--chip-edge: var(--sep)');
+    const danger = at(
+      ".pane-chip-tracked.is-danger,\n[data-chip-fill='drain'] .pane-chip-tracked.is-danger.is-draining",
+    );
+    expect(danger).toContain('--chip-gauge: color-mix(in srgb, var(--danger) 30%, transparent)');
+    expect(danger).toContain('--chip-track: transparent');
+    expect(danger).toContain('--chip-edge: var(--sep)');
+    // The drain rules come after Grouped chips', so they win at equal
+    // weight, and touch only the tracked chips running out.
+    const drainAt = panelCss.indexOf("[data-chip-fill='drain']");
+    expect(drainAt).toBeGreaterThan(panelCss.indexOf('.pane-chip-tracked.is-danger.is-draining {'));
+    const drainCss = panelCss.slice(drainAt, panelCss.indexOf('/* ── Map'));
+    for (const m of drainCss.matchAll(/\[data-chip-fill='drain'\] ([^,{]+)/g)) {
+      expect(m[1].trim()).toMatch(/^\.pane-chip-tracked\.is-(warn|danger)(\.is-draining)?$/);
+    }
+  });
+
+  // The hours a chip running out shows over the 30 percent fill, on
+  // every built in theme: the warn tone in yellow, the danger text tone
+  // in bold red, and the name in the text tone. The light themes draw
+  // their warn tone at 3 to 4.3 to 1 on the bare panel, so any wash
+  // takes the yellow hours under 3. They stay where Grouped chips
+  // already draws them. These are flagged for review, and the 30
+  // percent stays as the sheet drew it.
+  const UNDER_THREE = [
+    'vellum warn',
+    'solarized-light warn',
+    'solarized-light danger',
+    'everforest-light warn',
+  ];
+
+  it('keeps the hours as readable as Grouped chips on every built in theme', () => {
+    const under: string[] = [];
+    for (const theme of BUILTIN_THEMES) {
+      const t = themeTokens(theme);
+      const hex = (value: string) => {
+        const rgb = parseHex(value);
+        expect(rgb, `${theme.id} ${value}`).not.toBeNull();
+        return rgb!;
+      };
+      const panel = hex(t.panel);
+      const text = hex(t.text);
+      for (const [tone, color, hours, shipped] of [
+        // Grouped chips: 14 percent over the chip, then 20 over that.
+        ['warn', hex(t.warn), hex(t.warn), [0.14, 0.2]],
+        // Grouped chips: 16 percent over the chip, then 22 over that.
+        ['danger', hex(t.danger), hex(t.dangerText), [0.16, 0.22]],
+      ] as const) {
+        const drained = composite(color, panel, 0.3);
+        const tinted = composite(color, composite(color, panel, shipped[0]), shipped[1]);
+        const read = contrast(hours, drained);
+        // Never harder to read than Grouped chips draws the same chip.
+        expect(read, `${theme.id} ${tone}`).toBeGreaterThanOrEqual(contrast(hours, tinted) - 0.01);
+        // The name stays clear of the fill.
+        expect(contrast(text, drained), `${theme.id} ${tone} name`).toBeGreaterThanOrEqual(3);
+        if (read < 3) under.push(`${theme.id} ${tone}`);
+      }
+    }
+    expect(under).toEqual(UNDER_THREE);
   });
 });
