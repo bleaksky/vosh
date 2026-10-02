@@ -14,9 +14,10 @@
 //! [`lift_sgr`] applies that to the escapes in a line the triggers built.
 //! It changes fixed text and underline colors and never a background or one
 //! of the theme's 16 colors. A 256 color that needs a lift goes out as a
-//! true color. The engine runs it only on a line a trigger rebuilt, whose
-//! escapes all came from triggers, so the colors the game sends never reach
-//! it.
+//! true color. The engine runs it on a line a trigger rebuilt, whose escapes
+//! all came from triggers, and on the open of each highlight and base color
+//! it draws over the bytes the game sent, so the colors the game sends never
+//! reach it.
 
 use std::borrow::Cow;
 
