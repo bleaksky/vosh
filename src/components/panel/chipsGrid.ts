@@ -99,11 +99,43 @@ export const FIXED_MEASURE: ChipMeasure = {
   count: (s) => s.length * 6.6,
 };
 
-/** A chip's width: 7 px each side (6 and the 1 px dashed border while
- *  missing), the name, then 6 px and the hours when it has any. */
+/** A chip's width: 7 px each side, the name, then 6 px and the hours
+ *  when it has any. A missing chip's dotted ring draws inside it and
+ *  takes no width of its own. */
 export function chipWidth(name: string, hours: string, measure: ChipMeasure): number {
   const hoursW = measure.hours ?? measure.mono;
   return Math.ceil(7 + measure.mono(name) + (hours ? 6 + hoursW(hours) : 0) + 7);
+}
+
+/** Each dot of the missing ring, 1.5 px across. */
+export const CHIP_DOT_PX = 1.5;
+/** From one dot to the next, about. */
+export const CHIP_DOT_PITCH = 3;
+/** The chip's corner radius, panel.css .pane-chip. */
+export const CHIP_RADIUS = 4;
+
+/** The ring's path round a chip `width` wide, inset half a dot so the
+ *  dots sit inside the chip's edge: its rect and its length. */
+export function chipDotsPath(width: number): {
+  w: number;
+  h: number;
+  r: number;
+  length: number;
+} {
+  const inset = CHIP_DOT_PX / 2;
+  const w = Math.max(0, width - CHIP_DOT_PX);
+  const h = CHIP_H - CHIP_DOT_PX;
+  const r = Math.min(CHIP_RADIUS - inset, w / 2, h / 2);
+  return { w, h, r, length: 2 * w + 2 * h - 8 * r + 2 * Math.PI * r };
+}
+
+/** How the dots fall round a chip `width` wide: how many, and the gap
+ *  from one to the next. The count rounds the pitch, so the last gap
+ *  matches the rest and the ring closes evenly at any width. */
+export function chipDots(width: number): { count: number; gap: number } {
+  const { length } = chipDotsPath(width);
+  const count = Math.max(1, Math.round(length / CHIP_DOT_PITCH));
+  return { count, gap: length / count };
 }
 
 export interface ChipLine {

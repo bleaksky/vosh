@@ -903,12 +903,31 @@
   --chip-edge: transparent;
 }
 
-/* Missing: a dashed red edge and no ground. */
+/* Missing: no ground, and a ring of soft red dots, each 1.5 px across
+   on a 3 px pitch, all the way round the chip and its corners. The
+   chip draws the ring as an SVG over itself, so the dots come out
+   round and close evenly at any width. It sits inside the chip, which
+   keeps the width chipsGrid packs. */
 .pane-chip-missing {
-  padding: 0 6px;
-  border: 1px dashed var(--danger);
+  position: relative;
   background: none;
   box-shadow: none;
+}
+
+.pane-chip-dots {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.pane-chip-dots rect {
+  fill: none;
+  stroke: var(--danger);
+  stroke-width: 1.5px;
+  stroke-linecap: round;
 }
 
 /* The rest keep the board's hairline ring, and a harmful affect a

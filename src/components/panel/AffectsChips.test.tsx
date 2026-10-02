@@ -4,7 +4,7 @@ import panelCss from '../../styles/panel.css?raw';
 import type { AffectInput, TrackedInput } from '../../lib/affectsView';
 import type { PaneLeaf } from '../../lib/paneLayout';
 import { ChipsView } from './AffectsChips';
-import { FIXED_MEASURE } from './chipsGrid';
+import { chipDots, chipDotsPath, chipWidth, FIXED_MEASURE } from './chipsGrid';
 import { PaneLeafContext } from './paneActions';
 
 // The stores behind AffectsPane reach the Tauri bridge. ChipsView,
@@ -83,7 +83,7 @@ function draw(
 function chipsOf(html: string): string[] {
   const out: string[] = [];
   const chip =
-    /<li class="pane-chip ([^"]*)"(?: style="--gauge:([^"]*)")?><span class="pane-chip-name">([^<]*)(?:<span class="pane-sr">([^<]*)<\/span>)?<\/span>(?:<span class="pane-chip-hours([^"]*)"[^>]*>([^<]*)<\/span>)?<\/li>/g;
+    /<li class="pane-chip ([^"]*)"(?: style="--gauge:([^"]*)")?><span class="pane-chip-name">([^<]*)(?:<span class="pane-sr">([^<]*)<\/span>)?<\/span>(?:<span class="pane-chip-hours([^"]*)"[^>]*>([^<]*)<\/span>)?(?:<svg class="pane-chip-dots"[^>]*>.*?<\/svg>)?<\/li>/g;
   for (const m of html.matchAll(chip)) {
     const tone = (m[5] ?? '').trim().replace('is-', '');
     out.push(
@@ -228,7 +228,15 @@ describe('ChipsView', () => {
     expect(rule('.pane-chip-tracked.is-warn.is-draining')).toContain('var(--warn) 20%');
     expect(rule('.pane-chip-tracked.is-danger')).toContain('var(--danger) 16%');
     expect(rule('.pane-chip-tracked.is-danger.is-draining')).toContain('var(--danger) 22%');
-    expect(rule('.pane-chip-missing')).toContain('border: 1px dashed var(--danger)');
+    // Missing: soft round dots, never the dashed edge it had.
+    expect(rule('.pane-chip-missing')).not.toContain('border');
+    expect(rule('.pane-chip-missing')).toContain('position: relative');
+    expect(rule('.pane-chip-dots')).toContain('inset: 0');
+    expect(rule('.pane-chip-dots')).toContain('pointer-events: none');
+    expect(rule('.pane-chip-dots rect')).toContain('stroke: var(--danger)');
+    expect(rule('.pane-chip-dots rect')).toContain('stroke-width: 1.5px');
+    expect(rule('.pane-chip-dots rect')).toContain('stroke-linecap: round');
+    expect(rule('.pane-chip-dots rect')).toContain('fill: none');
     expect(rule('.pane-chip-other')).toContain('--chip-edge: var(--sep)');
     expect(rule('.pane-chip-harmful')).toContain('var(--danger) 55%');
     const chips = panelCss.slice(
@@ -236,5 +244,43 @@ describe('ChipsView', () => {
       panelCss.indexOf('/* ── Map'),
     );
     expect(chips).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    expect(chips).not.toContain('dashed');
+  });
+
+  it('rings a missing chip in soft round dots that close evenly', () => {
+    const html = draw([aff('sanctuary', 9)], {
+      tracked: [{ name: 'bless' }, { name: 'sanctuary' }],
+    });
+    const ring = /<li class="pane-chip pane-chip-missing">.*?(<svg[^>]*>(.*?)<\/svg>)<\/li>/.exec(
+      html,
+    );
+    expect(ring).not.toBeNull();
+    expect(ring![1]).toContain('class="pane-chip-dots" aria-hidden="true"');
+    // In a test the chip is never measured, so the ring takes the width
+    // the chip was packed at.
+    const width = chipWidth('bless', '-', FIXED_MEASURE);
+    expect(width).toBe(64);
+    const { count, gap } = chipDots(width);
+    const { w, length } = chipDotsPath(width);
+    expect(w).toBe(62.5);
+    // 2w + 2h - 8r + 2 pi r, with h 18.5 and r 3.25.
+    expect(length).toBeCloseTo(2 * 62.5 + 2 * 18.5 - 8 * 3.25 + 2 * Math.PI * 3.25, 6);
+    expect(count).toBe(52);
+    expect(gap * count).toBeCloseTo(length, 6);
+    expect(ring![2]).toBe(
+      `<rect x="0.75" y="0.75" width="62.5" height="18.5" rx="3.25" stroke-dasharray="0 ${
+        Math.round(gap * 1000) / 1000
+      }" stroke-dashoffset="${Math.round((gap / 2) * 1000) / 1000}"></rect>`,
+    );
+    // The chip keeps its name, its mark and its words for a screen reader.
+    expect(chipsOf(html)[0]).toBe('pane-chip-missing bless - , missing');
+  });
+
+  it('keeps the dots on a pitch close to 3 px at every chip width', () => {
+    for (const width of [24, 40, 64, 97, 160, 333]) {
+      const { count, gap } = chipDots(width);
+      expect(count, `${width}`).toBe(Math.round(chipDotsPath(width).length / 3));
+      expect(Math.abs(gap - 3), `${width}`).toBeLessThan(0.1);
+    }
   });
 });
