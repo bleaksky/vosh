@@ -28,6 +28,7 @@ import {
   usePanelLayout,
 } from './components/panel/panelLayoutStore';
 import {
+  disconnectSession,
   followReplacedUiConfig,
   getUiConfig,
   setWindowSize,
@@ -72,7 +73,6 @@ import { pushToast } from './lib/toasts';
 import { showLaunchNotices, showMigrationApplied } from './lib/launchNotices';
 import { startGamePromptToasts } from './lib/gamePromptToast';
 import { CommandPalette } from './components/CommandPalette';
-import { disconnectSession } from './lib/session';
 import {
   buildPaletteEntries,
   isMacPlatform,
@@ -1280,13 +1280,6 @@ function App() {
       unlisten?.();
     };
   }, []);
-
-  // The custom prompt renders in the backend, where the session runs the
-  // vosh-prompt engine, so the gag erase and the replacement land in one
-  // output batch. Rendering it here off the prompt-vars event put an IPC
-  // round trip between the two, and every prompt flashed a blank row. The
-  // rendered prompt reaches both renderers through the normal session
-  // output stream.
 
   useEffect(() => {
     // Live-flip the terminal palette mode when the user toggles the
