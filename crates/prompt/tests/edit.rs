@@ -673,6 +673,44 @@ fn the_writer_never_writes_an_unknown_name() {
 }
 
 #[test]
+fn the_card_reads_a_field_as_the_grammar_reads_a_braced_one() {
+    // Every name counts as known here, so only the reading can refuse.
+    let insert = |field: &str| {
+        apply(
+            "x",
+            &EditOp::InsertField {
+                at: 1,
+                field: field.into(),
+                format: None,
+            },
+            &|_| true,
+        )
+    };
+    // Spaces around the field go, the name reads in lowercase, and only
+    // a queue's parameter does too.
+    for (field, written) in [
+        (" HP ", "x%hp"),
+        ("AFF:Sanctuary", "x%{aff:Sanctuary}"),
+        ("Queue:Bash", "x%{queue:bash}"),
+        ("gmcp:Char.Vitals.ep", "x%{gmcp:Char.Vitals.ep}"),
+        ("member_hp:Rook", "x%{member_hp:Rook}"),
+    ] {
+        assert_eq!(insert(field), Ok(written.to_string()), "{field}");
+    }
+    // A parameter goes only where one belongs, holds no colon or space,
+    // and never stands empty.
+    for field in [
+        "", "aff:", "aff:a:b", "hp:", ":hp", "aff: x", "aff:a b", "h.p", "aff:x;y",
+    ] {
+        assert_eq!(
+            insert(field),
+            Err(EditError("Vosh does not know that value.".into())),
+            "{field}"
+        );
+    }
+}
+
+#[test]
 fn removing_a_piece_keeps_the_look_it_handed_on() {
     let template = "%s_italic(%hp) %mana";
     let edited = edit(template, &EditOp::Remove { piece: 0 });
