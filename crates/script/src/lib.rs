@@ -251,7 +251,7 @@ impl ScriptEngine {
                     self.gmcp_subs.remove(&package);
                 }
             }
-            self.drop_callback_inline(id);
+            self.drop_callback(id);
         }
         owned.extend(made);
         self.script_gmcp.insert(name.to_string(), owned);
@@ -273,6 +273,7 @@ impl ScriptEngine {
         for action in queued {
             match action {
                 Action::SubscribeGmcp { callback_id, .. } => {
+                    // Not `drop_callback`, which takes the lock held here.
                     s.callbacks.remove(&callback_id);
                 }
                 other => s.pending.push(other),
@@ -323,7 +324,7 @@ impl ScriptEngine {
     }
 
     /// Drop a callback's registry key. Idempotent.
-    pub fn drop_callback(&mut self, callback_id: i64) {
+    fn drop_callback(&self, callback_id: i64) {
         if let Ok(mut s) = self.state.cell.lock() {
             s.callbacks.remove(&callback_id);
         }
@@ -379,7 +380,7 @@ impl ScriptEngine {
                             }
                         });
                         for id in to_drop {
-                            self.drop_callback_inline(id);
+                            self.drop_callback(id);
                         }
                         self.triggers.push(LuaTrigger {
                             name,
@@ -393,7 +394,7 @@ impl ScriptEngine {
                         outcome.actions.push(Action::Log(format!(
                             "lua trigger `{name}` rejected: invalid regex {e}"
                         )));
-                        self.drop_callback_inline(callback_id);
+                        self.drop_callback(callback_id);
                     }
                 },
                 Action::RemoveLuaTrigger(name) => {
@@ -407,7 +408,7 @@ impl ScriptEngine {
                         }
                     });
                     for id in to_drop {
-                        self.drop_callback_inline(id);
+                        self.drop_callback(id);
                     }
                 }
                 Action::SubscribeGmcp {
@@ -420,12 +421,6 @@ impl ScriptEngine {
             }
         }
         outcome
-    }
-
-    fn drop_callback_inline(&self, callback_id: i64) {
-        if let Ok(mut s) = self.state.cell.lock() {
-            s.callbacks.remove(&callback_id);
-        }
     }
 }
 
