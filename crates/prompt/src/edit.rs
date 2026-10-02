@@ -1277,33 +1277,6 @@ fn shown<'a>(kinds: impl Iterator<Item = &'a TokenKind>) -> Vec<TokenKind> {
     out
 }
 
-fn style_of(style: StyleChoice) -> Style {
-    match style {
-        StyleChoice::Bold => Style::Bold,
-        StyleChoice::Dim => Style::Dim,
-        StyleChoice::Italic => Style::Italic,
-        StyleChoice::Underline => Style::Underline(UnderlineStyle::Single),
-        StyleChoice::Double => Style::Underline(UnderlineStyle::Double),
-        StyleChoice::Curly => Style::Underline(UnderlineStyle::Curly),
-        StyleChoice::Dotted => Style::Underline(UnderlineStyle::Dotted),
-        StyleChoice::Dashed => Style::Underline(UnderlineStyle::Dashed),
-        StyleChoice::Inverse => Style::Inverse,
-        StyleChoice::Strike => Style::Strike,
-        StyleChoice::Blink => Style::Blink,
-    }
-}
-
-/// The choice that names an underline kind, the reverse of [`style_of`].
-pub(crate) fn underline_choice(line: UnderlineStyle) -> StyleChoice {
-    match line {
-        UnderlineStyle::Single => StyleChoice::Underline,
-        UnderlineStyle::Double => StyleChoice::Double,
-        UnderlineStyle::Curly => StyleChoice::Curly,
-        UnderlineStyle::Dotted => StyleChoice::Dotted,
-        UnderlineStyle::Dashed => StyleChoice::Dashed,
-    }
-}
-
 /// A field as the card names it, `hp`, `aff:sanctuary` or
 /// `gmcp:Char.Vitals.ep`, read by the grammar as the body of a braced
 /// field with no format after it.
@@ -1521,4 +1494,67 @@ fn color_spec(choice: &ColorChoice, own: Option<&FieldRef>) -> Result<ColorSpec,
             ColorSpec::ByValue { field, scale }
         }
     })
+}
+
+/// The color a choice names for a look's text color.
+pub(crate) fn choice(spec: Option<&ColorSpec>, own: Option<&FieldRef>) -> ColorChoice {
+    match spec {
+        None | Some(ColorSpec::Default) => ColorChoice::Default,
+        Some(ColorSpec::Named(index)) => ColorChoice::Named { index: *index },
+        Some(ColorSpec::Index(index)) => ColorChoice::Index { index: *index },
+        Some(ColorSpec::Rgb(r, g, b)) => ColorChoice::Rgb {
+            r: *r,
+            g: *g,
+            b: *b,
+        },
+        Some(ColorSpec::ByValue { field, scale }) => ColorChoice::ByValue {
+            field: (Some(field) != own).then(|| field.to_string()),
+            game: *scale == Scale::Game,
+            steps: *scale == Scale::Steps,
+        },
+    }
+}
+
+/// The color a choice names for a bar's cells.
+pub(crate) fn bar_choice(color: &BarColor, own: Option<&FieldRef>) -> ColorChoice {
+    match color {
+        BarColor::Auto => ColorChoice::ByValue {
+            field: None,
+            game: false,
+            steps: false,
+        },
+        BarColor::Game => ColorChoice::ByValue {
+            field: None,
+            game: true,
+            steps: false,
+        },
+        BarColor::Color(spec) => choice(Some(spec), own),
+    }
+}
+
+fn style_of(style: StyleChoice) -> Style {
+    match style {
+        StyleChoice::Bold => Style::Bold,
+        StyleChoice::Dim => Style::Dim,
+        StyleChoice::Italic => Style::Italic,
+        StyleChoice::Underline => Style::Underline(UnderlineStyle::Single),
+        StyleChoice::Double => Style::Underline(UnderlineStyle::Double),
+        StyleChoice::Curly => Style::Underline(UnderlineStyle::Curly),
+        StyleChoice::Dotted => Style::Underline(UnderlineStyle::Dotted),
+        StyleChoice::Dashed => Style::Underline(UnderlineStyle::Dashed),
+        StyleChoice::Inverse => Style::Inverse,
+        StyleChoice::Strike => Style::Strike,
+        StyleChoice::Blink => Style::Blink,
+    }
+}
+
+/// The choice that names an underline kind, the reverse of [`style_of`].
+pub(crate) fn underline_choice(line: UnderlineStyle) -> StyleChoice {
+    match line {
+        UnderlineStyle::Single => StyleChoice::Underline,
+        UnderlineStyle::Double => StyleChoice::Double,
+        UnderlineStyle::Curly => StyleChoice::Curly,
+        UnderlineStyle::Dotted => StyleChoice::Dotted,
+        UnderlineStyle::Dashed => StyleChoice::Dashed,
+    }
 }

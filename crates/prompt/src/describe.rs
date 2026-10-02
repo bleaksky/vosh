@@ -16,12 +16,12 @@
 
 use serde::Serialize;
 
-use crate::edit::{self, ColorChoice, Doc, EditOp, FormatChoice, FormatName, StyleChoice, When};
+use crate::edit::{
+    self, bar_choice, choice, ColorChoice, Doc, EditOp, FormatChoice, FormatName, StyleChoice, When,
+};
 use crate::format::{Resolved, Value};
 use crate::render::{render, RenderOptions, Rendered, Values};
-use crate::template::{
-    BarColor, ColorSpec, FieldRef, Format, PieceKind, Scale, Template, TokenKind,
-};
+use crate::template::{FieldRef, Format, PieceKind, Template, TokenKind};
 use crate::vars::{self, Group, Kind};
 
 /// One form a value takes, for Show as and the picker's formats.
@@ -434,42 +434,6 @@ fn when_of(doc: &Doc, index: usize) -> (When, bool) {
         _ => When::Always,
     };
     (when, fights.len() > usize::from(inner.is_some()))
-}
-
-/// The color a choice names for a look's text color.
-fn choice(spec: Option<&ColorSpec>, own: Option<&FieldRef>) -> ColorChoice {
-    match spec {
-        None | Some(ColorSpec::Default) => ColorChoice::Default,
-        Some(ColorSpec::Named(index)) => ColorChoice::Named { index: *index },
-        Some(ColorSpec::Index(index)) => ColorChoice::Index { index: *index },
-        Some(ColorSpec::Rgb(r, g, b)) => ColorChoice::Rgb {
-            r: *r,
-            g: *g,
-            b: *b,
-        },
-        Some(ColorSpec::ByValue { field, scale }) => ColorChoice::ByValue {
-            field: (Some(field) != own).then(|| field.to_string()),
-            game: *scale == Scale::Game,
-            steps: *scale == Scale::Steps,
-        },
-    }
-}
-
-/// The color a choice names for a bar's cells.
-fn bar_choice(color: &BarColor, own: Option<&FieldRef>) -> ColorChoice {
-    match color {
-        BarColor::Auto => ColorChoice::ByValue {
-            field: None,
-            game: false,
-            steps: false,
-        },
-        BarColor::Game => ColorChoice::ByValue {
-            field: None,
-            game: true,
-            steps: false,
-        },
-        BarColor::Color(spec) => choice(Some(spec), own),
-    }
 }
 
 /// The value has a fullness, so By value and a bar's colors follow it.
