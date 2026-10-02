@@ -165,7 +165,7 @@ pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> b
         let trigger_disabled = p.triggers.disabled_groups();
 
         // Catalog first.
-        let mut aliases = vosh_alias::AliasStore::new();
+        let mut aliases = vosh_automation::alias::AliasStore::new();
         for a in &catalog.aliases {
             aliases.set(a.clone());
         }

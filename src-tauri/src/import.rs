@@ -17,7 +17,7 @@
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::QName;
 use quick_xml::reader::Reader;
-use vosh_alias::Alias;
+use vosh_automation::alias::Alias;
 use vosh_trigger::{Trigger, TriggerAction};
 
 use crate::profile::Macro;

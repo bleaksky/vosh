@@ -11,7 +11,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
-use vosh_alias::Alias;
+use vosh_automation::alias::Alias;
 use vosh_trigger::Trigger;
 use vosh_vars::Scope;
 
@@ -1700,7 +1700,7 @@ impl ProfileConfig {
         let mut warnings = Vec::new();
 
         // Aliases: replace the store entirely.
-        let mut aliases = vosh_alias::AliasStore::new();
+        let mut aliases = vosh_automation::alias::AliasStore::new();
         for alias in &self.aliases {
             aliases.set(alias.clone());
         }

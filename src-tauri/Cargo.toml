@@ -29,7 +29,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 thiserror = { workspace = true }
 vosh-protocol = { path = "../crates/protocol" }
-vosh-alias = { path = "../crates/alias" }
+vosh-automation = { path = "../crates/automation" }
 vosh-vars = { path = "../crates/vars" }
 vosh-trigger = { path = "../crates/trigger" }
 vosh-script = { path = "../crates/script" }
@@ -116,7 +116,7 @@ tempfile = "3"
 # real session against.
 vosh-prompt = { path = "../crates/prompt", features = ["testkit"] }
 # The alias builders the input, session, command and fake MUD tests use.
-vosh-alias = { path = "../crates/alias", features = ["testkit"] }
+vosh-automation = { path = "../crates/automation", features = ["testkit"] }
 # vosh_trigger::process and TriggerStore::len, which the session, command
 # and input tests use.
 vosh-trigger = { path = "../crates/trigger", features = ["testkit"] }

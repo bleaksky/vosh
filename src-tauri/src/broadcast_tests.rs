@@ -259,7 +259,7 @@ fn a_group_toggle_tells_the_command_line_when_a_macro_group_turned() {
         macros: vec![grouped_macro("F1", "kick", "combat")],
         ..Profile::default()
     };
-    let mut wave = vosh_alias::Alias::new("greet", "wave");
+    let mut wave = vosh_automation::alias::Alias::new("greet", "wave");
     wave.group = Some("social".into());
     p.aliases.set(wave);
     let mut heard = Report::new();

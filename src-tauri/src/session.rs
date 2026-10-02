@@ -3362,7 +3362,7 @@ impl ScriptIo<'_, '_> {
 /// How many rounds of `mud.input` lines one script result runs, each
 /// round the lines the Lua of the round before asked for. Lua that keeps
 /// asking stops here, at the depth an alias may go.
-const MUD_INPUT_DEPTH: usize = vosh_alias::DEFAULT_MAX_DEPTH;
+const MUD_INPUT_DEPTH: usize = vosh_automation::alias::DEFAULT_MAX_DEPTH;
 
 /// Perform the IO and timer bookkeeping a script result asks for. Every
 /// path that runs Lua applies its result here: the game's lines and
@@ -3830,11 +3830,12 @@ mod tests {
     #[test]
     fn a_script_alias_body_hands_on_all_it_asks_for() {
         let mut p = Profile::default();
-        p.aliases
-            .set(vosh_alias::Alias::new("kk", "ignored").with_script(
+        p.aliases.set(
+            vosh_automation::alias::Alias::new("kk", "ignored").with_script(
                 "mud.echo('ready') mud.send(captures[1]) mud.timer(1, function() end) \
              mud.input('look') mud.set_prompt_var('mark', 'on')",
-            ));
+            ),
+        );
         let ran = crate::input::run_line(&mut p, "stand;kk orc");
         let apply = super::line_script_result(ran);
         // What the body sends goes out where you typed the alias, and all
@@ -3850,7 +3851,7 @@ mod tests {
     fn a_timer_command_runs_the_body_of_a_lua_alias() {
         let mut p = Profile::default();
         p.aliases.set(
-            vosh_alias::Alias::new("kk", "ignored")
+            vosh_automation::alias::Alias::new("kk", "ignored")
                 .with_script("mud.send('kick ' .. captures[1])\nmud.echo('kicked')"),
         );
         let run = super::run_fired_locked(&mut p, "kk dragon", None);

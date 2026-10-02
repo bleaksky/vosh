@@ -20,7 +20,7 @@
 //!     every currently-active loadout (stack-by-union).
 
 use serde::{Deserialize, Serialize};
-use vosh_alias::Alias;
+use vosh_automation::alias::Alias;
 use vosh_trigger::Trigger;
 
 use crate::profile::Macro;

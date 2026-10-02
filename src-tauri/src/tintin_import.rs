@@ -9,7 +9,7 @@
 
 use std::path::Path;
 
-use vosh_alias::Alias;
+use vosh_automation::alias::Alias;
 
 #[derive(Debug, Default)]
 pub(crate) struct ImportReport {
