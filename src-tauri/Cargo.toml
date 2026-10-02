@@ -30,7 +30,6 @@ tracing-subscriber = { workspace = true }
 thiserror = { workspace = true }
 vosh-protocol = { path = "../crates/protocol" }
 vosh-automation = { path = "../crates/automation" }
-vosh-vars = { path = "../crates/vars" }
 vosh-trigger = { path = "../crates/trigger" }
 vosh-script = { path = "../crates/script" }
 vosh-log = { path = "../crates/log" }

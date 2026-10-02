@@ -5,9 +5,9 @@
 use std::collections::BTreeSet;
 
 use vosh_automation::alias::AliasStore;
+use vosh_automation::vars::VariableStore;
 use vosh_script::ScriptEngine;
 use vosh_trigger::TriggerStore;
-use vosh_vars::VariableStore;
 
 use crate::profile_config::{GroupFolders, PluginsPersist, UiConfig};
 use crate::tick::TickRuntime;

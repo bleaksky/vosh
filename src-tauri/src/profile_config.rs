@@ -12,8 +12,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use vosh_automation::alias::Alias;
+use vosh_automation::vars::Scope;
 use vosh_trigger::Trigger;
-use vosh_vars::Scope;
 
 use crate::profile::{Macro, Profile, Timer};
 use crate::profile_set::{ProfileSet, ScopeConfig};
@@ -1720,7 +1720,7 @@ impl ProfileConfig {
                 }
             })
             .collect();
-        let mut vars = vosh_vars::VariableStore::new();
+        let mut vars = vosh_automation::vars::VariableStore::new();
         for (k, v) in &self.profile_vars {
             vars.set(Scope::Profile, k.clone(), v.clone());
         }

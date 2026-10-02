@@ -11,8 +11,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
 use vosh_automation::alias::Alias;
+use vosh_automation::vars::{Scope, VariableStore};
 use vosh_script::{Action, ScriptEngine, ScriptOutcome, VarScope};
-use vosh_vars::{Scope, VariableStore};
 
 use crate::list_events::{ListChanges, ListRevisions};
 use crate::profile::Profile;

@@ -5089,7 +5089,6 @@ dependencies = [
  "vosh-protocol",
  "vosh-script",
  "vosh-trigger",
- "vosh-vars",
  "webpki-roots 0.26.11",
  "wgpu",
  "windows-sys 0.59.0",
@@ -5161,10 +5160,6 @@ dependencies = [
  "thiserror 1.0.69",
  "vosh-protocol",
 ]
-
-[[package]]
-name = "vosh-vars"
-version = "0.8.0"
 
 [[package]]
 name = "vswhom"
