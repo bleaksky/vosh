@@ -2230,34 +2230,6 @@ pub(crate) async fn open_help_window(app: AppHandle) -> Result<(), String> {
     open_aux_window(&app, &HELP_WINDOW)
 }
 
-#[tauri::command]
-pub(crate) async fn profile_export(state: State<'_, SharedState>) -> Result<String, String> {
-    let p = state.profile.lock().await;
-    let snapshot = ProfileConfig::from_profile(&p);
-    snapshot.to_toml().map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub(crate) async fn profile_import(
-    app: AppHandle,
-    state: State<'_, SharedState>,
-    toml: String,
-) -> Result<Vec<String>, String> {
-    let snapshot = ProfileConfig::from_toml(&toml).map_err(|e| e.to_string())?;
-    let applied = {
-        let mut p = state.profile.lock().await;
-        let applied = snapshot.apply_to(&mut p);
-        note_ui_config_replaced();
-        applied
-    };
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
-    // The import replaced the panes and tracked affects too, and the
-    // main window would otherwise write its old tree back.
-    broadcast_profile_ui(&app, &shared).await;
-    Ok(applied)
-}
-
 // ============================================================
 // Named profile collection (multi-profile support, Stage 1).
 //
