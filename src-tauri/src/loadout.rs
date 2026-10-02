@@ -18,16 +18,6 @@
 //!     list of currently-active ones. Multiple loadouts can stack:
 //!     the runtime enables the union of `enabled_groups` across
 //!     every currently-active loadout (stack-by-union).
-//!
-//! ## Phase B1 scope
-//!
-//! This module ships the types only. The runtime keeps using the
-//! per-profile system; nothing here drives behavior yet. Phase B2
-//! wires the runtime to read from a `LoadoutSet` and apply its
-//! union to the per-store `disabled_groups` sets. Items here have
-//! no callers until then, so `dead_code` is allowed at the module
-//! level for this phase only.
-#![allow(dead_code)]
 
 use std::collections::BTreeMap;
 

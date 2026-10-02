@@ -32,15 +32,6 @@
 //! is left untouched (and persists via the per-profile snapshot).
 //! Ungrouped items (whose `group` is `None` or empty) are never
 //! disabled because the store already treats them as always-on.
-//!
-//! ## Phase B2 scope
-//!
-//! `AppState` integration and the Tauri command surface
-//! (`loadout_list`, `loadout_set_active`, etc.) land in a follow-up
-//! commit so the runtime data path can be reviewed first. The
-//! module-level `dead_code` allow exists for the same reason as in
-//! [`crate::loadout`] and [`crate::migration`]: no callers yet.
-#![allow(dead_code)]
 
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
