@@ -11,6 +11,7 @@
 //! send, route and script actions.
 
 pub mod alias;
+mod groups;
 mod revision;
 mod split;
 pub mod trigger;

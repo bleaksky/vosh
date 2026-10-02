@@ -13,11 +13,12 @@
 //! Multiple commands separated by `;` in an expansion are split and each is
 //! re-fed through the engine, bounded by a maximum recursion depth.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::groups::GroupSwitch;
 use crate::revision::next_revision;
 use crate::split::split_commands;
 
@@ -111,12 +112,9 @@ pub const DEFAULT_MAX_DEPTH: usize = 16;
 pub struct AliasStore {
     aliases: HashMap<String, Alias>,
     max_depth: usize,
-    /// Group names the user has turned OFF as a bulk override. An
-    /// alias whose `group` is in this set is treated as disabled
-    /// regardless of its own `enabled` flag. Stored as the inverse
-    /// (disabled list) rather than enabled list so a freshly added
-    /// group defaults to enabled.
-    disabled_groups: BTreeSet<String>,
+    /// The groups you turned off. An alias in an off group passes
+    /// through whatever its own `enabled` flag says.
+    groups: GroupSwitch,
     /// See [`AliasStore::revision`].
     revision: u64,
 }
@@ -132,7 +130,7 @@ impl AliasStore {
         Self {
             aliases: HashMap::new(),
             max_depth: DEFAULT_MAX_DEPTH,
-            disabled_groups: BTreeSet::new(),
+            groups: GroupSwitch::default(),
             revision: 0,
         }
     }
@@ -149,47 +147,27 @@ impl AliasStore {
     /// for an empty / missing group name (ungrouped aliases never
     /// participate in the group-disable mechanism).
     pub fn is_group_enabled(&self, group: &str) -> bool {
-        group.is_empty() || !self.disabled_groups.contains(group)
+        self.groups.is_enabled(group)
     }
 
     /// Toggle a whole group. Calling with `enabled = true` removes
     /// the group from the disabled set; with `false` adds it.
     pub fn set_group_enabled(&mut self, group: &str, enabled: bool) {
-        if group.is_empty() {
-            return;
-        }
-        if enabled {
-            self.disabled_groups.remove(group);
-        } else {
-            self.disabled_groups.insert(group.to_string());
-        }
+        self.groups.set_enabled(group, enabled);
     }
 
     /// Sorted list of every group name referenced by at least one
     /// alias, paired with whether that group is currently enabled.
     /// Used by the Settings UI to render the per-group toggle row.
     pub fn groups(&self) -> Vec<(String, bool)> {
-        let mut names: BTreeSet<String> = BTreeSet::new();
-        for a in self.aliases.values() {
-            if let Some(g) = &a.group {
-                if !g.is_empty() {
-                    names.insert(g.clone());
-                }
-            }
-        }
-        names
-            .into_iter()
-            .map(|n| {
-                let enabled = !self.disabled_groups.contains(&n);
-                (n, enabled)
-            })
-            .collect()
+        self.groups
+            .list(self.aliases.values().filter_map(|a| a.group.as_deref()))
     }
 
     /// Persistence accessor for the disabled-groups set. Returns the
     /// names that should be saved alongside the alias list.
     pub fn disabled_groups(&self) -> Vec<String> {
-        self.disabled_groups.iter().cloned().collect()
+        self.groups.disabled()
     }
 
     /// Persistence inverse of `disabled_groups()`. Replaces the
@@ -199,11 +177,7 @@ impl AliasStore {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        self.disabled_groups = groups
-            .into_iter()
-            .map(Into::into)
-            .filter(|s| !s.is_empty())
-            .collect();
+        self.groups.set_disabled(groups);
     }
 
     /// Lowers the recursion cap so a test can reach it in a few steps.
@@ -287,12 +261,11 @@ impl AliasStore {
         // Disabled groups short-circuit to pass-through so the user
         // can flip whole "Combat" / "Crafting" loadouts off without
         // editing each row.
-        let Some(alias) = self.aliases.get(name).filter(|a| {
-            a.enabled
-                && a.group
-                    .as_deref()
-                    .map_or(true, |g| !self.disabled_groups.contains(g))
-        }) else {
+        let Some(alias) = self
+            .aliases
+            .get(name)
+            .filter(|a| a.enabled && self.groups.allows(a.group.as_deref()))
+        else {
             out.push(ExpandStep::Command(command.to_string()));
             return Ok(());
         };
