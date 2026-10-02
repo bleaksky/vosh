@@ -1,15 +1,13 @@
 //! The order launch runs its upgrades in (R2 of the refactor plan).
 //!
-//! The setup hook in lib.rs makes the scripts folder, then runs
-//! `launch::load`. It finishes a shared catalog wizard run that stopped,
-//! moves the prompt capture triggers into the profiles, turns on the
-//! presets a build adds, and loads the profile set. Then it moves the
-//! custom themes older profile files hold into global.toml, and only then
-//! loads the active profile. Each step reads what the steps before it
-//! wrote, so the order is part of what a refactor keeps. R12 gathers the
-//! steps into one list, and this order holds there too. D15 retired the
-//! copy of the app data an install under the old name left behind, so the
-//! run starts at the wizard finish.
+//! The setup hook in lib.rs runs `launch::load`. It finishes a shared
+//! catalog wizard run that stopped, moves the prompt capture triggers into
+//! the profiles, turns on the presets a build adds, and loads the profile
+//! set. Then it moves the custom themes older profile files hold into
+//! global.toml, and only then loads the active profile. Each step reads
+//! what the steps before it wrote, so the order is part of what a refactor
+//! keeps. R12 gathers the steps into one list, and this order holds there
+//! too.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -137,16 +135,9 @@ fn shared_theme_ids(set: &ProfileSet) -> Vec<String> {
     themes.into_iter().map(|t| t.id).collect()
 }
 
-/// Make the scripts folder in `app_data` the way `create_scripts_dir` in
-/// lib.rs does.
-fn create_scripts_dir(app_data: &Path) {
-    std::fs::create_dir_all(app_data.join("scripts")).unwrap();
-}
-
-/// Launch the way the setup hook in lib.rs does, over `app_data` on a fresh
-/// state. The scripts folder is made, then `launch::load` runs.
+/// Run `launch::load` over `app_data` on a fresh state, as the setup hook
+/// in lib.rs does.
 async fn launch(app_data: &Path) -> (SharedState, Launch) {
-    create_scripts_dir(app_data);
     let state: SharedState = Arc::new(AppState::default());
     let launched = crate::launch::load(&state, app_data).await;
     (state, launched)
@@ -288,9 +279,9 @@ async fn an_unfinished_wizard_run_holds_the_upgrades_after_it() {
     );
 }
 
-/// A launch leaves the app data an older `com.aabahran.mudclient` install
-/// left behind where it is, and writes no marker of a copy. A wizard run
-/// that folder holds never reaches Vosh.
+/// A launch never reads the app data an older `com.aabahran.mudclient`
+/// install left behind, so a wizard run that folder holds never reaches
+/// Vosh.
 #[tokio::test]
 async fn a_launch_leaves_an_older_mudclient_folder_alone() {
     let dir = tempfile::tempdir().unwrap();
@@ -299,10 +290,6 @@ async fn a_launch_leaves_an_older_mudclient_folder_alone() {
     save_wizard_journal(&old, &journal()).unwrap();
 
     let (state, launched) = launch(&app_data).await;
-    assert!(
-        !app_data.join(".migrated-from-mudclient").exists(),
-        "no copy marker"
-    );
     assert!(journal_path(&old).exists(), "the older folder stays");
     assert!(!journal_path(&app_data).exists(), "nothing was copied");
     assert!(!app_data.join("catalog.toml").exists(), "no wizard run");
