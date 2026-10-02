@@ -240,9 +240,10 @@ const MARKER_OPTIONS: readonly SegmentedOption<AffectsMarker>[] = AFFECTS_MARKER
  *  which an affect runs out and is almost gone. Both chip styles show
  *  the state on each chip and always mark what to recast, so Marker
  *  and Tint go quiet while one is chosen and keep your picks for the
- *  other two. The hours apply to every style. Each field bounds the
- *  other, so almost gone never goes over running out. Exported for its
- *  test. */
+ *  other two. The hours apply to every style. Almost gone never goes
+ *  over running out. Its field stops at running out, and running out
+ *  set below it takes it down too, the way the backend coerces a hand
+ *  edit. Exported for its test. */
 export function AffectsSection({
   config,
   update,
@@ -309,8 +310,15 @@ export function AffectsSection({
       >
         <NumberField
           value={config.affects_running_out_hours}
-          onChange={(hours) => update({ affects_running_out_hours: hours })}
-          min={config.affects_almost_gone_hours}
+          onChange={(hours) =>
+            update({
+              affects_running_out_hours: hours,
+              ...(hours < config.affects_almost_gone_hours
+                ? { affects_almost_gone_hours: hours }
+                : {}),
+            })
+          }
+          min={0}
           max={AFFECTS_HOURS_MAX}
           unit="h"
           unitName="hours"
