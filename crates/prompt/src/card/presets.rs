@@ -1,6 +1,7 @@
 //! Designs Vosh ships (section 7.1 of the build spec and the 2026-09-30
 //! addendum, item 10): its default, and the ones the card offers to
-//! start from.
+//! start from. The default's text, [`DEFAULT_DESIGN`], lives in
+//! [`crate::config`] with the table that takes it.
 //!
 //! On Aabahran every preset draws from the game's codes and GMCP, which
 //! sends every value they read. Same as the game is written from your
@@ -16,109 +17,11 @@ use crate::aabahran::codes::Code as GameCode;
 use crate::aabahran::colors::Color as GameColor;
 use crate::aabahran::lex::{self, Piece as GamePiece, Token as GameToken};
 use crate::aabahran::{Which, Who};
+use crate::config::DEFAULT_DESIGN;
 use crate::design::{
     write_tokens, Code, ColorSpec, FieldRef, Format, Scale, Style, TokenKind, UnderlineStyle,
     ValueRef,
 };
-
-/// Vosh's default, the design Vosh draws for a profile that has none of
-/// its own. It mirrors the pinned band of the gallery mockup, with the
-/// tank in place of your opponent, as James asked on 2026-09-30.
-///
-/// Out of a fight it draws one row: your health, mana and moves as
-/// current over max, or current alone when nothing gives the max, then
-/// the exits in brackets and your gold. In a fight a row comes first
-/// with the tank's name, a colon and the tank's health as a gauge ten
-/// cells wide, the gauge the mockup gave your opponent. Solo you are the
-/// tank, so it names you.
-///
-/// Only your three numbers and the gauge carry color, by one scale:
-/// green above two thirds, yellow above one third, red below. Every
-/// label, max and bracket is 256 color 245, a middle gray, and the
-/// tank's name keeps the terminal's color. Since the design reads the
-/// tank, the game's tank line folds into the tank row, so the prompt
-/// takes two rows at most. It ends in a space, as the game's own prompt
-/// does, so your echo never touches it.
-pub const DEFAULT_DESIGN: &str = concat!(
-    // The tank row, only in a fight and only when Vosh knows the tank.
-    // The gauge draws only when it knows the tank's health, hidden
-    // included, so a PROMPT with %n and no %P never prints it as typed.
-    "%{if:fight}%{if:tank}%tank:%{if:tank_hp} %{tank_hp:bar:10}%{end}%nl%{end}%{end}",
-    // Your vitals, each current over max and colored by how full, or
-    // current alone in the terminal's color when nothing gives the max.
-    // One that does not apply, such as mana for a class with none on
-    // another game, draws nothing.
-    "%{if:hp}%{if:maxhp}%c_hp%{end}%hp%{c:245}%{if:maxhp}/%{maxhp}%{end}hp%c_default%{end}",
-    "%{if:mana} %{if:maxmana}%c_mana%{end}%mana%{c:245}%{if:maxmana}/%{maxmana}%{end}mn%c_default%{end}",
-    "%{if:move} %{if:maxmove}%c_move%{end}%move%{c:245}%{if:maxmove}/%{maxmove}%{end}mv%c_default%{end}",
-    "%{if:exits}  %{c:245}[%c_default%exits%{c:245}]%c_default%{end}",
-    "%{if:gold}  %{gold:grouped}%{c:245}g%c_default%{end}",
-    " ",
-);
-
-/// At a glance, Vosh's default from 2026-09-30 until James asked for the
-/// mockup's band. In a fight its top row named your opponent with a
-/// gauge, the percent and the game's condition words, then the tank in a
-/// group. Its vitals row added your position and language, Wizi and
-/// Incog, and the tracked affects you were missing.
-pub const AT_A_GLANCE: &str = concat!(
-    // The fight row.
-    "%{if:fight}",
-    "%opponent %{opponent_hp:bar:10} %{opponent_hp:pct}%% ",
-    "%{c:245}%opponent_cond%c_default",
-    // Alone you are always the tank, and Group.Info is {}.
-    "%{if:group_size}%{if:tank}  %{c:245}tank %c_tank_hp%tank%c_default%{end}%{end}",
-    "%nl%{end}",
-    // Your vitals, each current over max and colored by how full, or
-    // current alone in the terminal's color when nothing gives the max.
-    // One that does not apply, such as mana for a class with none on
-    // another game, draws nothing.
-    "%{if:hp}%{if:maxhp}%c_hp%{end}%hp%{c:245}%{if:maxhp}/%{maxhp}%{end}hp%c_default%{end}",
-    "%{if:mana} %{if:maxmana}%c_mana%{end}%mana%{c:245}%{if:maxmana}/%{maxmana}%{end}mn%c_default%{end}",
-    "%{if:move} %{if:maxmove}%c_move%{end}%move%{c:245}%{if:maxmove}/%{maxmove}%{end}mv%c_default%{end}",
-    // Position and language, one space apart when both show.
-    "%{if:pos}  %{c:245}%pos%c_default%{end}",
-    "%{if:lang}%{ifnot:pos} %{end} %{c:245}%lang%c_default%{end}",
-    "%{if:exits}  %{c:245}[%c_default%exits%{c:245}]%c_default%{end}",
-    "%{if:gold}  %{gold:grouped}%{c:245}g%c_default%{end}",
-    // Wizi and Incog show only when the game prints the immortal
-    // prefix, and only out of a fight.
-    "%{ifnot:fight}",
-    "%{if:wizi}  %{c:245}wizi %wizi%c_default%{end}",
-    "%{if:incog}%{ifnot:wizi} %{end} %{c:245}incog %incog%c_default%{end}",
-    "%{end}",
-    "%{if:missing}  %{c:245}missing %c_yellow%{missing:names}%c_default%{end}",
-    " ",
-);
-
-/// At a glance as it first shipped, before the review guarded each vital.
-const AT_A_GLANCE_FIRST: &str = concat!(
-    "%{if:fight}",
-    "%opponent %{opponent_hp:bar:10} %{opponent_hp:pct}%% ",
-    "%{c:245}%opponent_cond%c_default",
-    "%{if:group_size}%{if:tank}  %{c:245}tank %c_tank_hp%tank%c_default%{end}%{end}",
-    "%nl%{end}",
-    "%c_hp%hp%{c:245}/%{maxhp}hp%c_default ",
-    "%c_mana%mana%{c:245}/%{maxmana}mn%c_default ",
-    "%c_move%move%{c:245}/%{maxmove}mv%c_default",
-    "%{if:pos}  %{c:245}%pos%c_default%{end}",
-    "%{if:lang}%{ifnot:pos} %{end} %{c:245}%lang%c_default%{end}",
-    "%{if:exits}  %{c:245}[%c_default%exits%{c:245}]%c_default%{end}",
-    "%{if:gold}  %{gold:grouped}%{c:245}g%c_default%{end}",
-    "%{ifnot:fight}",
-    "%{if:wizi}  %{c:245}wizi %wizi%c_default%{end}",
-    "%{if:incog}%{ifnot:wizi} %{end} %{c:245}incog %incog%c_default%{end}",
-    "%{end}",
-    "%{if:missing}  %{c:245}missing %c_yellow%{missing:names}%c_default%{end}",
-    " ",
-);
-
-/// The designs earlier builds shipped as Vosh's default, byte for byte.
-/// You only ever got one from Vosh, at a fresh profile, by turning
-/// drawing on with no design, or with `#prompt default`, so a profile
-/// that holds one takes [`DEFAULT_DESIGN`] when it loads
-/// ([`crate::PromptConfig::upgrade_retired_default`]).
-pub const RETIRED_DEFAULTS: [&str; 2] = [AT_A_GLANCE, AT_A_GLANCE_FIRST];
 
 /// A design to start from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
