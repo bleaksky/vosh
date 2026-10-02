@@ -162,7 +162,11 @@ fn ring_of(reads: &[Read]) -> Vec<String> {
 
 /// `line` as a run of `count` shows it, plain.
 fn times(count: u32, line: &str) -> String {
-    vosh_ansi::plain_text(&vosh_prompt::stage::counted(count, line.as_bytes()))
+    vosh_ansi::plain_text(&vosh_prompt::stage::counted(
+        count,
+        line.as_bytes(),
+        &vosh_prompt::render::SgrState::default(),
+    ))
 }
 
 fn rows(lines: &[&str]) -> Vec<String> {
@@ -462,12 +466,236 @@ fn a_run_longer_than_the_width_rewrites_every_row_it_takes() {
     assert_eq!(squeezed, format!("{} {PARRY}", times(10, REDIRECT)));
 }
 
+/// A trigger named `name` that highlights `pattern` in `style`.
+fn highlight(
+    name: &str,
+    pattern: &str,
+    style: vosh_trigger::HighlightStyle,
+) -> vosh_trigger::Trigger {
+    vosh_trigger::Trigger {
+        name: name.into(),
+        patterns: vec![vosh_trigger::TriggerPattern {
+            pattern: pattern.into(),
+            enabled: true,
+        }],
+        priority: 0,
+        enabled: true,
+        actions: vec![vosh_trigger::TriggerAction::Highlight { style }],
+        preset: None,
+        group: None,
+        target: vosh_trigger::TriggerTarget::Line,
+    }
+}
+
+/// The screen row that shows `text`, trimmed.
+fn row_of(grid: &crate::term_grid::TermGrid, text: &str) -> usize {
+    rows_of(grid)
+        .iter()
+        .position(|row| row == text)
+        .unwrap_or_else(|| panic!("{text:?} in {:?}", rows_of(grid)))
+}
+
+/// What the session writes, your prompt pinned, while a Line trigger
+/// highlights `pattern` in `style`: the login of the fake Aabahran with a
+/// compact prompt, then a pulse for each of `lines`.
+fn highlighted(pattern: &str, style: vosh_trigger::HighlightStyle, lines: &[&str]) -> Vec<Output> {
+    let mut p = collapsing(PromptShow::Pinned);
+    p.triggers
+        .set(highlight("mark", pattern, style))
+        .expect("the trigger compiles");
+    let mut session = Session::new(p);
+    let mut mud = Mud::playing(Options {
+        compact: true,
+        ..Options::new(Build::New)
+    });
+    let mut outputs = vec![session.read(&mud.login()).out];
+    for line in lines {
+        outputs.push(session.read(&mud.pulse_later(line)).out);
+    }
+    outputs
+}
+
+/// A run whose line ends on a blue background, across pinned pulses.
+fn blue_run() -> Vec<Output> {
+    let style = vosh_trigger::HighlightStyle {
+        bg: Some(vosh_trigger::NamedColor::Blue),
+        ..vosh_trigger::HighlightStyle::default()
+    };
+    highlighted(r"attack\.", style, &[DODGE, DODGE, PARRY])
+}
+
+/// A run of a line a red wash covers, across pinned pulses.
+fn washed_run() -> Vec<Output> {
+    let style = vosh_trigger::HighlightStyle {
+        fg: Some(vosh_trigger::NamedColor::Red),
+        wash: true,
+        ..vosh_trigger::HighlightStyle::default()
+    };
+    highlighted("You dodge", style, &[DODGE, DODGE, DODGE, PARRY])
+}
+
+/// A grid `columns` wide and 20 rows tall after `outputs`.
+fn grid_after(outputs: &[Output], columns: usize) -> crate::term_grid::TermGrid {
+    let mut grid = crate::term_grid::TermGrid::new(columns, 20);
+    for out in outputs {
+        grid.session_output(out);
+    }
+    grid
+}
+
+#[test]
+fn a_run_with_a_background_crossing_a_pinned_pulse_leaves_every_other_cell_plain() {
+    use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
+    let plain = Color::Named(NamedColor::Background);
+    let blue = Color::Named(NamedColor::Blue);
+    // A highlight with a background at the end of the line.
+    let grid = grid_after(&blue_run(), 40);
+    let run = row_of(&grid, &times(2, DODGE));
+    assert_eq!(row_of(&grid, PARRY), run + 1);
+    let width = times(2, DODGE).len();
+    for col in 0..40 {
+        let want = if (width - 7..width).contains(&col) {
+            blue
+        } else {
+            plain
+        };
+        assert_eq!(grid.cell(run, col).2, want, "the run's row, column {col}");
+    }
+    for col in 0..40 {
+        let want = if (PARRY.len() - 7..PARRY.len()).contains(&col) {
+            blue
+        } else {
+            plain
+        };
+        assert_eq!(
+            grid.cell(run + 1, col).2,
+            want,
+            "the parry row, column {col}"
+        );
+    }
+    for line in run + 2..20 {
+        for col in 0..40 {
+            assert_eq!(grid.cell(line, col).2, plain, "row {line}, column {col}");
+        }
+    }
+    // A wash: the count stands on it too, so the native renderer still
+    // reads the row as washed from its first cell, and the rows below
+    // stay plain.
+    let grid = grid_after(&washed_run(), 40);
+    let (r, g, b) = vosh_trigger::NamedColor::Red.wash_tint();
+    let wash = Color::Spec(Rgb { r, g, b });
+    let run = row_of(&grid, &times(3, DODGE));
+    assert_eq!(
+        grid.cell(run, 0),
+        ('(', Color::Indexed(244), wash),
+        "the count stands on the wash"
+    );
+    assert_eq!(grid.cell(run, 4).2, wash);
+    assert_eq!(grid.cell(run, 4).1, Color::Named(NamedColor::Red));
+    for col in times(3, DODGE).len()..40 {
+        assert_eq!(grid.cell(run, col).2, plain, "the run's row, column {col}");
+    }
+    for line in run + 1..20 {
+        for col in 0..40 {
+            assert_eq!(grid.cell(line, col).2, plain, "row {line}, column {col}");
+        }
+    }
+}
+
+#[test]
+fn a_line_that_relies_on_the_color_before_it_keeps_it_with_its_count() {
+    use alacritty_terminal::vte::ansi::{Color, NamedColor};
+    let green = Color::Named(NamedColor::Green);
+    let text = format!("\x1b[32m{HUNGRY}\n\r{HUNGRY}\n\r{HUNGRY}\n\r{THIRSTY}\x1b[0m\n\r");
+    for collapse in [false, true] {
+        let mut p = collapsing(PromptShow::Pinned);
+        p.ui.collapse_repeats = collapse;
+        let mut session = Session::new(p);
+        let read = session.read(text.as_bytes());
+        let mut grid = crate::term_grid::TermGrid::new(40, 10);
+        grid.session_output(&read.out);
+        let rows = rows_of(&grid);
+        for (line, row) in rows.iter().enumerate() {
+            let from = usize::from(row.starts_with('('));
+            for col in from * 4..row.len() {
+                assert_eq!(
+                    grid.cell(line, col).1,
+                    green,
+                    "collapse {collapse}, {row:?} column {col}"
+                );
+            }
+        }
+        if collapse {
+            assert_eq!(
+                rows,
+                [HUNGRY.to_string(), times(2, HUNGRY), THIRSTY.to_string()]
+            );
+            assert_eq!(grid.cell(1, 0).1, Color::Indexed(244));
+        } else {
+            assert_eq!(rows, [HUNGRY, HUNGRY, HUNGRY, THIRSTY]);
+        }
+    }
+}
+
+/// Your echo reaches the screen after one pulse of a red run, and the
+/// session builds the next pulse before it hears of it, so that pulse goes
+/// on with the run. Returns the payloads in order, how many come before
+/// your echo, and the echo.
+fn echo_before_the_run() -> (Vec<Output>, usize, &'static [u8]) {
+    let red = format!("\x1b[1;31m{DODGE}\x1b[0m");
+    let mut mud = Mud::playing(Options {
+        compact: true,
+        ..Options::new(Build::New)
+    });
+    let mut session = Session::new(collapsing(PromptShow::Pinned));
+    let login = session.read(&mud.login());
+    let first = session.read(&mud.pulse_later(&red));
+    let second = session.read(&mud.pulse_later(&red));
+    assert_eq!(second.repeats, [None, Some(Repeat::Joins(2))]);
+    // The session hears of your echo now, after the screen had the first
+    // pulse only, so the run the second pulse went on with stays.
+    session.p.prompt.stage.local_write(first.out.id());
+    let parry = session.read(&mud.pulse_later(PARRY));
+    (
+        vec![login.out, first.out, second.out, parry.out],
+        2,
+        b"kill guard\r\n",
+    )
+}
+
+#[test]
+fn a_run_your_echo_landed_before_goes_on_a_new_row_that_still_ends() {
+    use alacritty_terminal::vte::ansi::{Color, NamedColor};
+    let (outputs, before, echo) = echo_before_the_run();
+    let mut grid = crate::term_grid::TermGrid::new(60, 20);
+    for out in &outputs[..before] {
+        grid.session_output(out);
+    }
+    grid.local_write(echo);
+    for out in &outputs[before..] {
+        grid.session_output(out);
+    }
+    let mut want = rows(&LOGIN);
+    want.extend([
+        DODGE.to_string(),
+        "kill guard".to_string(),
+        times(2, DODGE),
+        PARRY.to_string(),
+    ]);
+    assert_eq!(rows_of(&grid), want);
+    let parry = row_of(&grid, PARRY);
+    assert_eq!(grid.cell(parry, 0).1, Color::Named(NamedColor::Foreground));
+}
+
 /// The payloads of every stream in [`streams`], drawing on, pinned, and
 /// the compact pulses in the text too, as one read and as two cut at
 /// every place [`cuts`] names, each after the payload of the login in one
 /// read, with the native grid's screen of one read at 40 and 12 wide. The
 /// webview test replays them into xterm and holds its screens to the
-/// grid's. The native grid test plays every stream both ways.
+/// grid's. The native grid test plays every stream both ways. Then the
+/// scenes the tests above play on the native grid: a run whose line ends
+/// on a blue background and one a wash covers, across pinned pulses, and
+/// your echo landing before the session heard of it.
 fn collapse_splits() -> serde_json::Value {
     let payloads = |reads: &[Read]| -> Vec<serde_json::Value> {
         reads
@@ -515,7 +743,49 @@ fn collapse_splits() -> serde_json::Value {
             }));
         }
     }
-    serde_json::json!({ "streams": streams })
+    // Scenes the stream replays leave out, each with the native grid's
+    // screen: runs whose line ends on a background across pinned pulses,
+    // and your echo landing before the session heard of it.
+    let scene = |name: &str,
+                 load: Option<&[u8]>,
+                 outputs: &[Output],
+                 echo: Option<(usize, &[u8])>,
+                 columns: usize| {
+        let mut grid = crate::term_grid::TermGrid::new(columns, 20);
+        if let Some(load) = load {
+            let mut loaded = Output::new(false);
+            loaded.text(load);
+            grid.session_output(&loaded);
+        }
+        for (i, out) in outputs.iter().enumerate() {
+            if let Some((_, echo)) = echo.filter(|(before, _)| *before == i) {
+                grid.local_write(echo);
+            }
+            grid.session_output(out);
+        }
+        let payloads: Vec<serde_json::Value> = outputs
+            .iter()
+            .map(|out| {
+                serde_json::to_value(OutputPayload::from_output(out)).expect("it serializes")
+            })
+            .collect();
+        serde_json::json!({
+            "name": name,
+            "cols": columns,
+            "load": load.map(|load| String::from_utf8_lossy(load).into_owned()),
+            "payloads": payloads,
+            "before": echo.map(|(before, _)| before),
+            "echo": echo.map(|(_, echo)| String::from_utf8_lossy(echo).into_owned()),
+            "screen": rows_of(&grid),
+        })
+    };
+    let (outputs, before, echo) = echo_before_the_run();
+    let scenes = vec![
+        scene("blue", None, &blue_run(), None, 40),
+        scene("wash", None, &washed_run(), None, 40),
+        scene("echo", None, &outputs, Some((before, echo)), 60),
+    ];
+    serde_json::json!({ "streams": streams, "scenes": scenes })
 }
 
 /// The file the webview test reads: the JSON of [`collapse_splits`],

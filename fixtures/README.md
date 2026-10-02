@@ -12,7 +12,10 @@ fixtures/
              on, for pulses, a fight and lines with no prompt from the fake
              Aabahran, your prompt pinned and for the pulses in the text
              too, as one read and as two cut at every place, after the
-             login, with the native grid's screen of each. Generated and
+             login, with the native grid's screen of each. It also holds
+             runs whose line ends on a background across pinned pulses,
+             and your echo landing before the session heard of it.
+             Generated and
              synthetic, from the server's own lines with an invented name,
              stored the way prompt/aabahran/pinned/ is, held to the session
              by its test, and written again with

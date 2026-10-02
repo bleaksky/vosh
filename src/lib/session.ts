@@ -82,6 +82,10 @@ export interface OutputPayload {
     /** The lines the region's prompt shows right above it, as plain
      *  text, and what goes in their place when they are there. */
     above?: { plain: string; b64: string };
+    /** The end of the region the bytes leave out, as base64, which a
+     *  terminal that writes them on a new row, or finds the region open
+     *  with nothing held back, holds back in their place. */
+    tail?: string;
   };
   /** The live render for the region this payload leaves open, as
    *  base64, written back before anything else lands. */
@@ -113,6 +117,7 @@ export interface SessionOutput {
     bytes: Uint8Array;
     fresh: boolean;
     above?: { plain: string; bytes: Uint8Array };
+    tail?: Uint8Array;
   };
   restore?: Uint8Array;
   pin?: Uint8Array;
@@ -145,6 +150,7 @@ export function decodeOutputPayload(payload: OutputPayload): SessionOutput {
     if (replace.above) {
       out.replace.above = { plain: replace.above.plain, bytes: base64Bytes(replace.above.b64) };
     }
+    if (typeof replace.tail === 'string') out.replace.tail = base64Bytes(replace.tail);
   }
   if (typeof payload.restore === 'string') out.restore = base64Bytes(payload.restore);
   if (typeof payload.pin === 'string') out.pin = base64Bytes(payload.pin);

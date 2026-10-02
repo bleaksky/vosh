@@ -65,6 +65,10 @@ export class OutputShaper {
           text: this.wrapChunk(this.replaceDecoder.decode(out.replace.above.bytes)),
         };
       }
+      // The end of the region the text leaves out follows it.
+      if (out.replace.tail) {
+        replace.tail = this.wrapChunk(this.replaceDecoder.decode(out.replace.tail));
+      }
     }
     const text = this.decoder.decode(out.bytes, { stream: true });
     const wrapped = this.wrapChunk(text);
