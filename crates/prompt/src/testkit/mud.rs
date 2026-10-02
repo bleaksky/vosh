@@ -61,9 +61,9 @@ pub mod telnet {
 
 use telnet::{DO, EOR, GA, GMCP, IAC, SB, SE, TELOPT_EOR, WILL};
 
-/// The PROMPT the fake starts with, as `do_prompt` stores it: one line
-/// out of a fight, and a tank line above it while someone in your group
-/// tanks.
+/// James's PROMPT, which the fake starts with, as `do_prompt` stores
+/// it: one line out of a fight, and a tank line above it while someone
+/// in your group tanks.
 pub const PROMPT: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c";
 
 /// `prompt all`, as `do_prompt` stores it.

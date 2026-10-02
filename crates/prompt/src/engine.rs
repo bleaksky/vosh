@@ -1030,12 +1030,10 @@ mod tests {
     use super::*;
     use crate::config::{AabahranCapture, CaptureConfig, RegexCapture};
     use crate::stage::End;
+    use crate::testkit::at;
+    use crate::testkit::mud::PROMPT;
     use crate::vars::Capture;
     use serde_json::json;
-
-    fn at() -> chrono::DateTime<chrono::FixedOffset> {
-        chrono::DateTime::parse_from_rfc3339("2026-09-29T12:58:02-05:00").unwrap()
-    }
 
     fn aabahran() -> PromptConfig {
         PromptConfig {
@@ -1978,7 +1976,7 @@ mod tests {
     /// The pattern the old capture trigger held.
     const OLD_PATTERN: &str = r"\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)/(?<maxmana>\d+)mn (?<move>\d+)/(?<maxmove>\d+)mv\]";
     /// The PROMPT that pattern was written for, as the game stores it.
-    const OLD: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c";
+    const OLD: &str = PROMPT;
     /// The PROMPT James set after the move, as the game stores it.
     const NEW: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv (%K hp) %s [%S]> ";
     /// A design that draws in place of the prompt.

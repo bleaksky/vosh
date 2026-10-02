@@ -301,8 +301,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const JAMES: &str = "%{c:100,100,100}[%c_reset%s_italic%hp(%c_hp%pct_hp%c_reset%s_italic%)h %mana(%{c:128,200,255}%pct_mana%c_reset%s_italic%)m %move(%{c:200,255,23}%pct_move%c_reset%s_italic%)v%c_reset%{c:100,100,100}] %c_reset";
+    use crate::testkit::designs::JAMES;
 
     #[test]
     fn a_default_table_reads_from_nothing() {

@@ -716,6 +716,7 @@ fn regex_read(
 mod tests {
     use super::*;
     use crate::config::AabahranCapture;
+    use crate::testkit::mud::PROMPT;
 
     /// The capture `#prompt` wrote for James's prompt, and the catalog
     /// still holds.
@@ -975,12 +976,9 @@ mod tests {
         })
     }
 
-    /// James's PROMPT, as Char.Prompt sends it.
-    const JAMES: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c";
-
     #[test]
     fn codes_read_a_one_line_prompt() {
-        let reader = Recognizer::compile(&codes(JAMES, "")).expect("it compiles");
+        let reader = Recognizer::compile(&codes(PROMPT, "")).expect("it compiles");
         assert!(reader.codes().is_some());
         let read = reader
             .line("(Wizi 60) [1020/1020hp 800/800mn 930/930mv]")
@@ -996,7 +994,7 @@ mod tests {
 
     #[test]
     fn codes_read_a_prompt_that_spans_lines_as_one_block() {
-        let reader = Recognizer::compile(&codes(JAMES, "")).expect("it compiles");
+        let reader = Recognizer::compile(&codes(PROMPT, "")).expect("it compiles");
         let head = "Tester: [===|===|---|---]";
         let last = "[159/1020hp 310/800mn 489/930mv]";
         // The tank line starts a longer shape and is no prompt alone.
@@ -1100,7 +1098,7 @@ mod tests {
 
     #[test]
     fn a_partial_is_live_while_a_shape_can_still_follow_it() {
-        let mut reader = Recognizer::compile(&codes(JAMES, "")).expect("it compiles");
+        let mut reader = Recognizer::compile(&codes(PROMPT, "")).expect("it compiles");
         for partial in [
             "",
             "[",

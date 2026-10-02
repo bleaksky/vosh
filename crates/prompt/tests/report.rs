@@ -8,9 +8,8 @@ use vosh_prompt::capture::fills;
 use vosh_prompt::config::RegexCapture;
 use vosh_prompt::report::{line_report, report, CompileRequest};
 use vosh_prompt::template::TokenKind;
+use vosh_prompt::testkit::mud::PROMPT;
 use vosh_prompt::Template;
-
-const JAMES_PROMPT: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c";
 
 const SAME_AS_THE_GAME: &str = "%{if:wizi}%c_240(Wizi %wizi)%c_reset %{end}%{if:incog}%c_240(Incog %incog)%c_reset %{end}%{if:tank}%tank: %{tank_hp:game}%nl%{end}[%{c:hp:game}%hp%c_reset/%{maxhp}hp %mana/%{maxmana}mn %move/%{maxmove}mv] ";
 
@@ -73,10 +72,10 @@ fn preset<'a>(report: &'a vosh_prompt::report::CompileReport, id: &str) -> Optio
 
 #[test]
 fn james_prompt_reads_his_vitals_and_the_tank_line() {
-    let report = codes(JAMES_PROMPT, "", false);
+    let report = codes(PROMPT, "", false);
     assert!(report.ok);
     assert_eq!(report.error, None);
-    assert_eq!(report.prompt, JAMES_PROMPT);
+    assert_eq!(report.prompt, PROMPT);
     let compiled = stored(&report.prompt, &report.fprompt);
     assert_eq!(
         compiled.reads(Which::Prompt),
@@ -126,7 +125,7 @@ fn james_prompt_reads_his_vitals_and_the_tank_line() {
 
 #[test]
 fn same_as_the_game_writes_every_code_in_the_game_look() {
-    let report = codes(JAMES_PROMPT, "", false);
+    let report = codes(PROMPT, "", false);
     assert_eq!(preset(&report, "game"), Some(SAME_AS_THE_GAME));
     let ids: Vec<&str> = report.presets.iter().map(|p| p.id).collect();
     assert_eq!(
@@ -365,7 +364,7 @@ fn a_line_another_game_prints_reports_its_numbers_and_the_names_it_reads() {
     );
     assert_eq!(json["names"], serde_json::json!({}));
     // Codes have neither.
-    let codes = codes(JAMES_PROMPT, "", false);
+    let codes = codes(PROMPT, "", false);
     assert!(codes.numbers.is_empty() && codes.names.is_empty());
     // A pattern reports the names it was handed.
     let pattern = report(
@@ -410,7 +409,7 @@ fn row(code: &str, label: &str) -> (String, String, Option<String>, bool) {
 
 #[test]
 fn the_legend_lists_every_code_and_line_end_in_the_order_the_game_prints_them() {
-    let report = codes(JAMES_PROMPT, "", false);
+    let report = codes(PROMPT, "", false);
     assert_eq!(
         legend(&report),
         [

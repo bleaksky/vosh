@@ -12,10 +12,8 @@ use vosh_prompt::aabahran::lex::PROMPT_ALL;
 use vosh_prompt::aabahran::{
     compile, Compiled, Origin, Shape, ShapeKind, Warning, WarningKind, Which, Who,
 };
+use vosh_prompt::testkit::mud::PROMPT;
 use vosh_prompt::{Capture, Vars};
-
-/// James's PROMPT, as Char.Prompt and `Current prompt:` carry it.
-const JAMES: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c";
 
 /// E section 6.6, Normal.
 const NORMAL: &str = r"^(?:\(Wizi (?<wizi>\d+)\) )?(?:\(Incog (?<incog>\d+)\) )?\[(?<hp>-?\d+)/(?<maxhp>\d+)hp (?<mana>-?\d+)/(?<maxmana>\d+)mn (?<move>-?\d+)/(?<maxmove>\d+)mv\] *$";
@@ -67,8 +65,8 @@ fn map(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
 
 #[test]
 fn james_prompt_compiles_to_the_worked_patterns() {
-    let compiled = stored(JAMES, "");
-    assert_eq!(compiled.prompt, JAMES);
+    let compiled = stored(PROMPT, "");
+    assert_eq!(compiled.prompt, PROMPT);
     assert!(compiled.warnings.is_empty(), "{:?}", compiled.warnings);
     let kinds: Vec<(Which, ShapeKind)> =
         compiled.shapes.iter().map(|s| (s.which, s.kind)).collect();
@@ -98,7 +96,7 @@ fn james_prompt_compiles_to_the_worked_patterns() {
 
 #[test]
 fn james_prompt_reads_his_lines() {
-    let compiled = stored(JAMES, "");
+    let compiled = stored(PROMPT, "");
     let normal = shape(&compiled, Which::Prompt, ShapeKind::Normal);
     let tank = shape(&compiled, Which::Prompt, ShapeKind::Tank);
     // Out of a fight, with the immortal prefix.
@@ -144,7 +142,7 @@ fn james_prompt_reads_his_lines() {
 
 #[test]
 fn the_lament_pair_reads_and_hides_everything_it_zeroed() {
-    let compiled = stored(JAMES, "");
+    let compiled = stored(PROMPT, "");
     let tank = shape(&compiled, Which::Prompt, ShapeKind::Tank);
     let read = tank
         .read(&["Tester: ", "[0/0hp 0/0mn 0/0mv]"])
@@ -274,7 +272,7 @@ fn an_empty_prompt_reads_the_fallback() {
 
 #[test]
 fn away_reads_as_its_own_shape() {
-    let compiled = stored(JAMES, "");
+    let compiled = stored(PROMPT, "");
     let afk = shape(&compiled, Which::Prompt, ShapeKind::Afk);
     assert!(afk.settle);
     assert_eq!(
@@ -419,7 +417,7 @@ fn codes_that_print_nothing_read_empty() {
 #[test]
 fn a_fight_prompt_compiles_its_own_shapes() {
     // The fight prompt in the Char.Prompt fixture, color codes kept.
-    let compiled = stored(JAMES, "`1%h``hp [%p] > ");
+    let compiled = stored(PROMPT, "`1%h``hp [%p] > ");
     let kinds: Vec<(Which, ShapeKind)> =
         compiled.shapes.iter().map(|s| (s.which, s.kind)).collect();
     assert_eq!(
@@ -508,7 +506,7 @@ fn tank_codes_that_change_no_line_merge_into_one_shape() {
 #[test]
 fn each_shape_settles_only_when_it_ends_in_a_character_you_wrote() {
     // Ends in %c: nothing left open.
-    let compiled = stored(JAMES, "");
+    let compiled = stored(PROMPT, "");
     assert!(compiled
         .shapes
         .iter()
@@ -794,7 +792,7 @@ fn a_backtick_that_takes_a_bracket_prints_nothing() {
 
 #[test]
 fn other_lines_are_no_prompt() {
-    let compiled = stored(JAMES, "");
+    let compiled = stored(PROMPT, "");
     let all = stored(PROMPT_ALL, "");
     let lines = [
         // Chat quoting a prompt.
