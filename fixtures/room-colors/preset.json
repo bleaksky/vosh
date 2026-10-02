@@ -1,5 +1,5 @@
 {
-  "notes": "Hand written. The triggers of the Room and time colors preset exactly as presetTriggers in src/lib/presets.ts makes them. presets.test.ts holds the two equal, and the Rust tests in src-tauri install these to run the preset on the session's own steps.",
+  "notes": "Hand written. The triggers of the Room, time and weather colors preset exactly as presetTriggers in src/lib/presets.ts makes them. presets.test.ts holds the two equal, and the Rust tests in src-tauri install these to run the preset on the session's own steps.",
   "triggers": [
     {
       "name": "room.exits",
@@ -44,6 +44,39 @@
       "priority": 6,
       "enabled": true,
       "actions": [{ "kind": "highlight", "style": { "fg": "blue" } }],
+      "preset": "room_and_time"
+    },
+    {
+      "name": "weather.change",
+      "patterns": [
+        { "pattern": "^The sky is getting cloudy\\.$", "enabled": true },
+        { "pattern": "^The clouds disappear\\.$", "enabled": true },
+        { "pattern": "^It starts to snow\\.$", "enabled": true },
+        { "pattern": "^It starts to sleet\\.$", "enabled": true },
+        { "pattern": "^It starts to rain\\.$", "enabled": true },
+        { "pattern": "^The snowstorm becomes a blizzard\\.$", "enabled": true },
+        { "pattern": "^The sleet turns into hail\\.$", "enabled": true },
+        { "pattern": "^Lightning flashes in the sky\\.$", "enabled": true },
+        { "pattern": "^The snow stopped\\.$", "enabled": true },
+        { "pattern": "^The sleet stopped\\.$", "enabled": true },
+        { "pattern": "^The rain stopped\\.$", "enabled": true },
+        { "pattern": "^The blizzard has slowed down\\.$", "enabled": true },
+        { "pattern": "^The hail stops and it starts sleeting\\.$", "enabled": true },
+        { "pattern": "^The lightning has stopped\\.$", "enabled": true },
+        { "pattern": "^A fierce blizzard descends, howling winds and blinding snow engulfing the area\\.$", "enabled": true },
+        { "pattern": "^The blizzard subsides, the winds dying down\\.$", "enabled": true },
+        { "pattern": "^The winds pick up violently, hurling sand in every direction\\.$", "enabled": true },
+        { "pattern": "^The sandstorm dies down, the air clearing\\.$", "enabled": true },
+        { "pattern": "^The cold bites deep as ice forms across every surface\\.$", "enabled": true },
+        { "pattern": "^The ice begins to thaw and melt away\\.$", "enabled": true },
+        { "pattern": "^The rain soaks into the ground, turning it to thick mud\\.$", "enabled": true },
+        { "pattern": "^The ground begins to dry out and firm up\\.$", "enabled": true },
+        { "pattern": "^A thick fog rolls in, shrouding the area\\.$", "enabled": true },
+        { "pattern": "^The fog lifts, revealing the surroundings once more\\.$", "enabled": true }
+      ],
+      "priority": 6,
+      "enabled": true,
+      "actions": [{ "kind": "replace", "template": "\u001b[38;2;143;167;217m$0\u001b[0m" }],
       "preset": "room_and_time"
     },
     {

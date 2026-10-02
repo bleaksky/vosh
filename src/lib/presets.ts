@@ -47,7 +47,7 @@ export const PRESET_CATEGORIES: Record<PresetCategory, string> = {
   loot: 'Loot and progress',
   labels: 'Potion and herb labels',
   chat: 'Chat',
-  world: 'Rooms and time',
+  world: 'Rooms, time and weather',
 };
 
 // Helper to build a highlight trigger compactly. Default priority of 5
@@ -121,6 +121,46 @@ const TIME_OF_DAY = [
   'The night air burns as the chilly air dances across your body.',
   'The landscape remains grey and lifeless.',
 ];
+
+// Every change in the weather the game tells you about outdoors. The first
+// fourteen are sky_event_text in update.c, which weather_update sends to
+// each player outside in a region whose sky changed, in bold white. Rain,
+// sleet or snow and their storms follow the temperature where you stand.
+// The last ten are weather_affect_room in update.c, which tells each
+// player in an outdoor room when its blizzard, sandstorm, ice, mud or fog
+// sets in or clears. Each one is a line of its own, so each pattern is
+// anchored at both ends and a say that quotes one stays plain.
+const WEATHER_CHANGES = [
+  'The sky is getting cloudy.',
+  'The clouds disappear.',
+  'It starts to snow.',
+  'It starts to sleet.',
+  'It starts to rain.',
+  'The snowstorm becomes a blizzard.',
+  'The sleet turns into hail.',
+  'Lightning flashes in the sky.',
+  'The snow stopped.',
+  'The sleet stopped.',
+  'The rain stopped.',
+  'The blizzard has slowed down.',
+  'The hail stops and it starts sleeting.',
+  'The lightning has stopped.',
+  'A fierce blizzard descends, howling winds and blinding snow engulfing the area.',
+  'The blizzard subsides, the winds dying down.',
+  'The winds pick up violently, hurling sand in every direction.',
+  'The sandstorm dies down, the air clearing.',
+  'The cold bites deep as ice forms across every surface.',
+  'The ice begins to thaw and melt away.',
+  'The rain soaks into the ground, turning it to thick mud.',
+  'The ground begins to dry out and firm up.',
+  'A thick fog rolls in, shrouding the area.',
+  'The fog lifts, revealing the surroundings once more.',
+];
+
+// The weather blue, a true color apart from the theme's cyan and blue, the
+// same on every theme. Keep highlight colors readable darkens it on a
+// light theme, where it would fade (crates/trigger/src/readable.rs).
+const WEATHER_BLUE = '{#8fa7d9}';
 
 // `text` as a regex that matches it literally.
 function escapeRegex(text: string): string {
@@ -626,7 +666,7 @@ export const PRESETS: Preset[] = [
     ],
   },
 
-  // ── ROOMS AND TIME ───────────────────────────────────────────────
+  // ── ROOMS, TIME AND WEATHER ──────────────────────────────────────
   // The look and the clock in four of the theme's terminal colors, as the
   // redesign mockups draw them, so they follow every theme. In Nord these
   // are the mockup colors exactly. The things and people a room lists
@@ -638,14 +678,18 @@ export const PRESETS: Preset[] = [
   // magenta, the mockup's mauve, where the game sends it white and grey.
   // A highlight draws over the text it matches alone, so the time and the
   // message after the tag keep the colors the game sent, such as the bold
-  // red of a corrupted pfile alert.
+  // red of a corrupted pfile alert. A change in the weather redraws its
+  // whole line in the weather blue, a true color, in place of the bold
+  // white the game sends with the sky's changes. The id keeps the name the
+  // preset had before it colored the weather, so the profiles that have it
+  // on keep it on.
   {
     id: 'room_and_time',
     category: 'world',
-    name: 'Room and time colors',
+    name: 'Room, time and weather colors',
     description:
-      'Colors the exits green, what is in the room yellow, the time of day blue, and the ' +
-      'WiZNET tag magenta.',
+      'Colors the exits green, what is in the room yellow, the time of day blue, a change ' +
+      'in the weather pale blue, and the WiZNET tag magenta.',
     defaultEnabled: true,
     triggers: [
       highlight('room.exits', EXITS_LINE, { fg: 'green', base: true }, 6),
@@ -662,6 +706,16 @@ export const PRESETS: Preset[] = [
         priority: 6,
         enabled: true,
         actions: [{ kind: 'highlight', style: { fg: 'blue' } }],
+      },
+      {
+        name: 'weather.change',
+        patterns: WEATHER_CHANGES.map((line) => ({
+          pattern: `^${escapeRegex(line)}$`,
+          enabled: true,
+        })),
+        priority: 6,
+        enabled: true,
+        actions: [{ kind: 'replace', template: colorize(`${WEATHER_BLUE}$0{reset}`) }],
       },
       highlight('wiznet.tag', '^WiZNET\\b', { fg: 'magenta', bold: true }, 6),
     ],

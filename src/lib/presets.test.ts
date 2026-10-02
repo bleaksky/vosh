@@ -79,12 +79,13 @@ describe('the Tells you send preset', () => {
 });
 
 // The preset that colors a room look and the clock as the redesign
-// mockups do. Every line comes from fixtures/room-colors/lines.json, game
-// text built from the server's own format strings and area files, and
-// its README says where each one comes from. The patterns are Rust regex
-// and use only what JavaScript reads the same way. The Rust tests run the
-// same triggers, from preset.json, through the session's own steps.
-describe('the Room and time colors preset', () => {
+// mockups do, and each change in the weather in a blue of its own. Every
+// line comes from fixtures/room-colors/lines.json, game text built from
+// the server's own format strings and area files, and its README says
+// where each one comes from. The patterns are Rust regex and use only
+// what JavaScript reads the same way. The Rust tests run the same
+// triggers, from preset.json, through the session's own steps.
+describe('the Room, time and weather colors preset', () => {
   const preset = presetById('room_and_time');
   const triggers = preset ? presetTriggers(preset) : [];
   const named = (name: string) => {
@@ -104,13 +105,13 @@ describe('the Room and time colors preset', () => {
     return null;
   };
 
-  it('is on from the start, under Rooms and time', () => {
-    expect(preset?.name).toBe('Room and time colors');
+  it('is on from the start, under Rooms, time and weather', () => {
+    expect(preset?.name).toBe('Room, time and weather colors');
     expect(preset?.description).toBe(
-      'Colors the exits green, what is in the room yellow, the time of day blue, and the WiZNET tag magenta.',
+      'Colors the exits green, what is in the room yellow, the time of day blue, a change in the weather pale blue, and the WiZNET tag magenta.',
     );
     expect(defaultEnabledIds()).toContain('room_and_time');
-    expect(preset && PRESET_CATEGORIES[preset.category]).toBe('Rooms and time');
+    expect(preset && PRESET_CATEGORIES[preset.category]).toBe('Rooms, time and weather');
     expect(triggers.every((t) => t.preset === 'room_and_time')).toBe(true);
   });
 
@@ -118,24 +119,33 @@ describe('the Room and time colors preset', () => {
     expect(triggers).toEqual(roomPreset.triggers);
   });
 
-  it("draws in the theme's own green, yellow, blue and magenta", () => {
+  it("draws in the theme's own green, yellow, blue and magenta, and the weather in #8fa7d9", () => {
     const styles = Object.fromEntries(
       triggers.map((t) => [
         t.name,
-        t.actions.map((a) => (a.kind === 'highlight' ? a.style : a.kind)),
+        t.actions.map((a) =>
+          a.kind === 'highlight' ? a.style : a.kind === 'replace' ? a.template : a.kind,
+        ),
       ]),
     );
     expect(styles).toEqual({
       'room.exits': [{ fg: 'green', base: true }],
       'room.contents': [{ fg: 'yellow', base: true }],
       'time.of_day': [{ fg: 'blue' }],
+      // The whole line in the true color 143 167 217, then a reset.
+      'weather.change': ['\x1b[38;2;143;167;217m$0\x1b[0m'],
       'wiznet.tag': [{ fg: 'magenta', bold: true }],
     });
   });
 
   it('colors what is in the room only through the Room target', () => {
     expect(named('room.contents').target).toBe('room');
-    expect(lineTriggers.map((t) => t.name)).toEqual(['room.exits', 'time.of_day', 'wiznet.tag']);
+    expect(lineTriggers.map((t) => t.name)).toEqual([
+      'room.exits',
+      'time.of_day',
+      'weather.change',
+      'wiznet.tag',
+    ]);
   });
 
   it('colors each line it names, over the text it names, and no other trigger touches it', () => {
@@ -157,7 +167,29 @@ describe('the Room and time colors preset', () => {
     expect(named('time.of_day').patterns).toHaveLength(11);
   });
 
-  it('leaves a say, a tell, a channel, a prompt and a room name alone', () => {
+  it('colors every change in the weather the game sends, the whole line', () => {
+    const weather = roomLines.lines.filter((l) => 'trigger' in l && l.trigger === 'weather.change');
+    // Fourteen from sky_event_text and ten from weather_affect_room.
+    expect(weather).toHaveLength(24);
+    expect(named('weather.change').patterns).toHaveLength(24);
+    for (const entry of weather) {
+      expect(span(named('weather.change'), plain(entry.line))).toBe(plain(entry.line));
+    }
+  });
+
+  it('leaves each weather line to this preset alone', () => {
+    const weather = roomLines.lines.filter((l) => 'trigger' in l && l.trigger === 'weather.change');
+    const others = PRESETS.filter((p) => p.id !== 'room_and_time').flatMap(presetTriggers);
+    expect(others.length).toBeGreaterThan(0);
+    for (const entry of weather) {
+      const text = plain(entry.line);
+      for (const t of others) {
+        expect(span(t, text), `${t.name} on ${text}`).toBeNull();
+      }
+    }
+  });
+
+  it('leaves a say, a tell, a channel, a prompt, a room name and the weather report alone', () => {
     const misses = roomLines.lines.filter((l) => !('trigger' in l));
     expect(misses.length).toBeGreaterThan(10);
     for (const entry of misses) {

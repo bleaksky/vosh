@@ -1048,7 +1048,7 @@ fn every_golden_still_reads_in_0_8_0_with_line_and_prompt_targets_only() {
 }
 
 #[test]
-fn the_room_and_time_colors_preset_saves_where_0_8_0_still_reads_the_file() {
+fn the_room_time_and_weather_colors_preset_saves_where_0_8_0_still_reads_the_file() {
     #[derive(serde::Deserialize)]
     struct PresetFile {
         triggers: Vec<Trigger>,
@@ -1064,13 +1064,17 @@ fn the_room_and_time_colors_preset_saves_where_0_8_0_still_reads_the_file() {
     // The profile file of per profile mode.
     let text = profile_bytes(&ProfileConfig::from_profile(&profile));
     let old = old_build_reads(&text).unwrap_or_else(|e| panic!("0.8.0 reads it: {e}\n{text}"));
-    assert_eq!(old.len(), 3, "the exits, time of day and WiZNET triggers");
+    assert_eq!(
+        old.len(),
+        4,
+        "the exits, time of day, weather and WiZNET triggers"
+    );
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("default.toml");
     std::fs::write(&path, &text).unwrap();
     let loaded = ProfileConfig::load(&path).unwrap();
     assert_eq!(room_names(&loaded.triggers), ["room.contents"]);
-    assert_eq!(loaded.triggers.len(), 4);
+    assert_eq!(loaded.triggers.len(), 5);
 
     // catalog.toml in loadout mode.
     let text = catalog_bytes(&GlobalCatalog::from_profile(&profile));
@@ -1078,11 +1082,11 @@ fn the_room_and_time_colors_preset_saves_where_0_8_0_still_reads_the_file() {
         old_build_reads(&text)
             .unwrap_or_else(|e| panic!("0.8.0 reads it: {e}\n{text}"))
             .len(),
-        3
+        4
     );
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(catalog_path(dir.path()), &text).unwrap();
     let loaded = load_global_catalog(dir.path()).unwrap();
     assert_eq!(room_names(&loaded.triggers), ["room.contents"]);
-    assert_eq!(loaded.triggers.len(), 4);
+    assert_eq!(loaded.triggers.len(), 5);
 }

@@ -1,5 +1,5 @@
-//! Room triggers and the Room and time colors preset, played through the
-//! session's own steps.
+//! Room triggers and the Room, time and weather colors preset, played
+//! through the session's own steps.
 //!
 //! A child of `session`, so it drives the same private steps the socket
 //! loop runs: the GMCP step, the Line pass and the GA step. The looks and
@@ -21,8 +21,8 @@ enum LookEvent {
     Line {
         line: String,
         room: bool,
-        /// The color the Room and time colors preset gives a line that
-        /// is not a room line, if any.
+        /// The color the Room, time and weather colors preset gives a line
+        /// that is not a room line, if any.
         #[serde(default)]
         preset: Option<String>,
     },
@@ -73,7 +73,7 @@ fn preset_lines() -> Vec<PresetLine> {
         .lines
 }
 
-/// The triggers of the Room and time colors preset, from preset.json.
+/// The triggers of the Room, time and weather colors preset, from preset.json.
 fn preset_triggers() -> Vec<vosh_trigger::Trigger> {
     #[derive(serde::Deserialize)]
     struct PresetFile {
@@ -85,7 +85,7 @@ fn preset_triggers() -> Vec<vosh_trigger::Trigger> {
         .triggers
 }
 
-/// A profile with the Room and time colors preset installed.
+/// A profile with the Room, time and weather colors preset installed.
 fn preset_profile() -> Profile {
     let mut p = Profile::default();
     for trigger in preset_triggers() {
@@ -333,6 +333,13 @@ fn the_preset_colors_each_line_it_names_and_leaves_every_near_miss_alone() {
             Some("time.of_day") => {
                 assert_eq!(case.span.as_deref(), Some(case.line.as_str()));
                 format!("\x1b[34m{}\x1b[0m", case.line)
+            }
+            // A change in the weather turns the weather blue whole, in
+            // place of the bold white the game sends with a change in the
+            // sky. With no ground the blue draws as the preset sets it.
+            Some("weather.change") => {
+                assert_eq!(case.span.as_deref(), Some(plain.as_str()));
+                format!("\x1b[38;2;143;167;217m{plain}\x1b[0m")
             }
             // The tag turns bold magenta whole, the grey i in it too, and
             // the rest of the line keeps the codes the game sent, the
