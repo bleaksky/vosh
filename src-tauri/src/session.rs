@@ -1216,8 +1216,8 @@ async fn io_loop<R: tauri::Runtime>(
 
     let line_triggers;
     // Session-only target state and the cached Room.Chars list clear
-    // on disconnect — quick-key verb bindings persist via the profile
-    // config but the active target and room snapshot are ephemeral.
+    // on disconnect. Quick-key verb bindings outlive the session (never
+    // a restart), but the active target and room snapshot end with it.
     let target_after = {
         let mut p = profile.lock().await;
         let had = p.target.name.is_some();
