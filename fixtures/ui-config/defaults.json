@@ -13,6 +13,7 @@
     "theme_terminal_colors": null,
     "bright_bold": false,
     "blink_text": null,
+    "readable_highlights": true,
     "terminal_base_ansi": null,
     "custom_themes": [],
     "split_divider_color": null,

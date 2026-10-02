@@ -39,6 +39,7 @@ import {
   presetsRemove,
   subscribeBrightBoldChanged,
   subscribeBlinkTextChanged,
+  subscribeReadableHighlightsChanged,
   subscribeBaseAnsiChanged,
   subscribeCustomThemesChanged,
   subscribeMigrationApplied,
@@ -68,6 +69,7 @@ import { listenForQuitFlush } from './lib/pendingWrites';
 import { customToAppTheme, findTheme, setCustomThemes, themeTokens } from './lib/themes';
 import { parseHex, toRgba } from './lib/color';
 import { setBaseAnsi } from './lib/baseAnsi';
+import { setReadableHighlights } from './lib/highlightGround';
 import { startStores } from './lib/stores';
 import { pushToast } from './lib/toasts';
 import { showLaunchNotices, showMigrationApplied } from './lib/launchNotices';
@@ -979,6 +981,7 @@ function App() {
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
         setBlinkChoice(cfg.blink_text);
+        setReadableHighlights(cfg.readable_highlights);
         applySplitDividerColor(cfg.split_divider_color);
 
         // Bring the preset triggers in line with the presets that are
@@ -1042,6 +1045,7 @@ function App() {
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
         setBlinkChoice(cfg.blink_text);
+        setReadableHighlights(cfg.readable_highlights);
         applySplitDividerColor(cfg.split_divider_color);
       },
       (e) => console.error('[app] reading the replaced config failed', e),
@@ -1136,6 +1140,21 @@ function App() {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
     subscribeBlinkTextChanged((value) => setBlinkChoice(value)).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Settings save broadcasts Keep highlight colors readable. The
+    // session takes it for the next line.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    subscribeReadableHighlightsChanged(setReadableHighlights).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
     });

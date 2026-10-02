@@ -130,6 +130,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('appearance', 'text', 'theme-colors'),
   },
   {
+    label: 'Keep highlight colors readable',
+    description:
+      'Vosh darkens or lightens a color your triggers set when the theme would make it faint.',
+    keywords: 'contrast trigger highlight faint legible true color hex',
+    target: at('appearance', 'text', 'readable-highlights'),
+  },
+  {
     label: 'Custom themes',
     description: 'Start from the theme you see now, then change any color.',
     keywords: 'advanced new edit delete rename theme editor',

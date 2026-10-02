@@ -1906,6 +1906,10 @@ export interface UiConfig {
    *  means none, which reads as on unless your system reduces motion.
    *  Resolve with resolveBlinkText before use. */
   blink_text: boolean | null;
+  /** Keep highlight colors readable. While on, the session draws a true
+   *  color a trigger paints text in at a lightness that reads on the
+   *  theme's terminal background. On unless you turn it off. */
+  readable_highlights: boolean;
   /** Custom base terminal palette: 16 CSS colors in ANSI 0-15 order,
    *  used whenever the tint toggle resolves off. Null = canonical
    *  xterm chart. */
@@ -2020,6 +2024,7 @@ export interface RawUiConfig {
   theme_terminal_colors?: boolean;
   bright_bold?: boolean;
   blink_text?: boolean | null;
+  readable_highlights?: boolean;
   terminal_base_ansi?: unknown;
   custom_themes?: CustomTheme[];
   split_divider_color?: string | null;
@@ -2095,6 +2100,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
       typeof cfg.theme_terminal_colors === 'boolean' ? cfg.theme_terminal_colors : null,
     bright_bold: Boolean(cfg.bright_bold),
     blink_text: typeof cfg.blink_text === 'boolean' ? cfg.blink_text : null,
+    readable_highlights: cfg.readable_highlights !== false,
     terminal_base_ansi:
       Array.isArray(cfg.terminal_base_ansi) &&
       cfg.terminal_base_ansi.length === 16 &&
@@ -2146,6 +2152,7 @@ const BLINK_TEXT_EVENT = 'vosh://blink-text-changed';
 const VITALS_DENSITY_EVENT = 'vosh://vitals-density-changed';
 const VITALS_OPTIONS_EVENT = 'vosh://vitals-options-changed';
 const AFFECTS_DISPLAY_EVENT = 'vosh://affects-display-changed';
+const READABLE_HIGHLIGHTS_EVENT = 'vosh://readable-highlights-changed';
 
 async function emitChanged<T>(
   event: string,
@@ -2221,6 +2228,11 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   // Your choice as you made it. Each window reads its own system's
   // reduce motion setting to resolve none.
   await emitChanged(BLINK_TEXT_EVENT, config.blink_text, prev?.blink_text);
+  await emitChanged(
+    READABLE_HIGHLIGHTS_EVENT,
+    config.readable_highlights,
+    prev?.readable_highlights,
+  );
   await emitChanged(
     'vosh://base-ansi-changed',
     config.terminal_base_ansi,
@@ -2485,6 +2497,7 @@ function uiConfigPayload(config: UiConfig): Record<string, unknown> {
     theme_terminal_colors: config.theme_terminal_colors,
     bright_bold: config.bright_bold,
     blink_text: config.blink_text,
+    readable_highlights: config.readable_highlights,
     terminal_base_ansi: config.terminal_base_ansi,
     custom_themes: config.custom_themes,
     split_divider_color: config.split_divider_color,
@@ -2642,6 +2655,16 @@ export async function subscribeBrightBoldChanged(
 ): Promise<UnlistenFn> {
   return listen<boolean>('vosh://bright-bold-changed', (event) => {
     cb(Boolean(event.payload));
+  });
+}
+
+/** Hear Keep highlight colors readable change, saved in Settings or
+ *  brought by another profile. */
+export async function subscribeReadableHighlightsChanged(
+  cb: (value: boolean) => void,
+): Promise<UnlistenFn> {
+  return listen<boolean>(READABLE_HIGHLIGHTS_EVENT, (event) => {
+    cb(event.payload !== false);
   });
 }
 
