@@ -51,18 +51,18 @@ const BOARD: ChatLine[] = [
     text: 'fine by me, let me finish this note first',
   }),
   packet('tell.gmcp'),
-  routed('tell', "You tell Selune 'yes, inside. north from the square'"),
+  routed('tell', "You tell Tolliver 'yes, inside. north from the square'"),
   packet('say.gmcp'),
   comm({ channel: 'say', speaker: 'Erelei', text: 'take your time', language: 'common' }),
-  comm({ channel: 'gtell', speaker: 'Tarvik', text: 'sanc is down, can someone recast?' }),
+  comm({ channel: 'gtell', speaker: 'Joral', text: 'sanc is down, can someone recast?' }),
   comm({ channel: 'gtell', speaker: 'Erelei', text: 'one tick, waiting on mana' }),
   packet('cabal.gmcp'),
   packet('yell.gmcp'),
-  comm({ channel: 'tell', speaker: 'Selune', text: 'omw, two minutes, grabbing my pack first' }),
+  comm({ channel: 'tell', speaker: 'Tolliver', text: 'omw, two minutes, grabbing my pack first' }),
   comm({
     channel: 'faction',
-    speaker: 'Kestrel',
-    text: 'Kaelith just walked into the square, careful',
+    speaker: 'Orvelle',
+    text: 'Dovic just walked into the square, careful',
   }),
   comm({
     channel: 'immortal',
@@ -114,16 +114,16 @@ describe('ChatLog', () => {
       '[newbie]Brannoc: find your guildmaster first, then type practice',
       '[immortal]Morrow: reboot at the top of the hour unless anyone objects',
       '[immortal]Erelei: fine by me, let me finish this note first',
-      '[tell]Selune: are you still at the bank?',
-      '[tell]to Selune: yes, inside. north from the square',
-      '[say]Tarvik: grabbing my bank box, back soon',
+      '[tell]Tolliver: are you still at the bank?',
+      '[tell]to Tolliver: yes, inside. north from the square',
+      '[say]Joral: grabbing my bank box, back soon',
       '[say]Erelei: take your time',
-      '[gtell]Tarvik: sanc is down, can someone recast?',
+      '[gtell]Joral: sanc is down, can someone recast?',
       '[gtell]Erelei: one tick, waiting on mana',
-      '[cabal]Aldric: the gate at Blackwatch is open again',
-      '[yell]a Blackwatch villager: Help! I am being attacked by Kaelith!',
-      '[tell]Selune: omw, two minutes, grabbing my pack first',
-      '[faction]Kestrel: Kaelith just walked into the square, careful',
+      '[cabal]Grisvald: the gate at Blackwatch is open again',
+      '[yell]a Blackwatch villager: Help! I am being attacked by Dovic!',
+      '[tell]Tolliver: omw, two minutes, grabbing my pack first',
+      '[faction]Orvelle: Dovic just walked into the square, careful',
       '[immortal]Ysolde: reboot moved to half past, builders are saving',
       '[newbie]Fallenleaves: found it, thanks!',
     ]);
@@ -167,10 +167,10 @@ describe('ChatLog', () => {
   it('sets the tag apart and the whole speaker in bold', () => {
     const [newbie, , , , tell, sent, , , , , , yell] = drawn(BOARD);
     expect(newbie).toMatchObject({ tag: '[newbie]', speaker: 'Fallenleaves' });
-    expect(tell).toMatchObject({ tag: '[tell]', speaker: 'Selune' });
-    expect(sent).toMatchObject({ tag: '[tell]', speaker: 'Selune' });
+    expect(tell).toMatchObject({ tag: '[tell]', speaker: 'Tolliver' });
+    expect(sent).toMatchObject({ tag: '[tell]', speaker: 'Tolliver' });
     expect(yell).toMatchObject({ tag: '[yell]', speaker: 'a Blackwatch villager' });
-    expect(drawn([packet('gtell-disguised.gmcp')])[0].speaker).toBe('{Tarvik} a shadow');
+    expect(drawn([packet('gtell-disguised.gmcp')])[0].speaker).toBe('{Joral} a shadow');
   });
 
   it('keeps a routed line in its own words', () => {

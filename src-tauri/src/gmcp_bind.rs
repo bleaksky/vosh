@@ -178,11 +178,11 @@ mod tests {
                 json!({
                     "condition": "a few scratches",
                     "hp_pct": 91,
-                    "target": "The Baron Helgardium",
+                    "target": "The Baron Grisvald",
                 }),
             ),
         );
-        assert_eq!(v.get("target_name"), Some("The Baron Helgardium"));
+        assert_eq!(v.get("target_name"), Some("The Baron Grisvald"));
         assert_eq!(v.get("target_hp"), Some("91"));
         assert_eq!(v.get("target_condition"), Some("a few scratches"));
     }

@@ -142,9 +142,9 @@ fn a_script_value_comes_first_for_every_field() {
         ("trains", "3"),
         ("pracs", "12"),
         ("cabal", "Nexus"),
-        ("leader", "Tarvik"),
+        ("leader", "Ketterly"),
         ("group_size", "3"),
-        ("group_low", "Tarvik 45"),
+        ("group_low", "Iskra 45"),
         ("missing", "sanctuary"),
         ("terrain", "forest"),
         ("sector", "3"),
@@ -601,13 +601,13 @@ fn tank_and_tank_health_take_a_fresh_capture_first() {
         "Tester 78 [===|===|===|=--]"
     );
     // The prompt names who the tank is when Char.Combat reads someone.
-    capture(&mut vars, &[("tank", "Tarvik"), ("tank_pct", "40")]);
-    assert_eq!(draw(&vars, "%tank %tank_hp"), "Tarvik 40");
+    capture(&mut vars, &[("tank", "Brask"), ("tank_pct", "40")]);
+    assert_eq!(draw(&vars, "%tank %tank_hp"), "Brask 40");
     // A %P bar that Char.Combat's percent does not fill reads back to the
     // highest percent that fills as many cells, since a fresh capture wins.
     capture(
         &mut vars,
-        &[("tank", "Tarvik"), ("tank_bar", "===|=--|---|---")],
+        &[("tank", "Brask"), ("tank_bar", "===|=--|---|---")],
     );
     assert_eq!(
         draw(&vars, "%tank_hp %{tank_hp:game}"),

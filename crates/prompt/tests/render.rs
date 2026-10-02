@@ -710,10 +710,10 @@ fn every_format_in_every_state() {
             "%{group_low}",
             "group_low",
             v(Value::Member {
-                name: "Tarvik".into(),
+                name: "Iskra".into(),
                 pct: 45,
             }),
-            "Tarvik 45%",
+            "Iskra 45%",
             "?",
         ),
         (

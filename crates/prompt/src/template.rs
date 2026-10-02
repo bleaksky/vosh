@@ -1657,8 +1657,8 @@ mod tests {
             vec![param("aff", "sanctuary", Format::On)]
         );
         assert_eq!(
-            kinds("%{member_hp:Tarvik:bar:6}"),
-            vec![param("member_hp", "Tarvik", bar(6, BarColor::Auto))]
+            kinds("%{member_hp:Quenby:bar:6}"),
+            vec![param("member_hp", "Quenby", bar(6, BarColor::Auto))]
         );
         assert_eq!(
             kinds("%{member_hp:id=3}"),

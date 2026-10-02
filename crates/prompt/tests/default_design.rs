@@ -32,8 +32,8 @@ const PROMPT: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv (%K hp) %s [%S]> ";
 
 const OPPONENT: &str = "a Blackwatch guard";
 
-/// A mob short description from the area files, 46 characters.
-const LONG_NAME: &str = "Davaius, Captain Commander of the Dragon Guard";
+/// A long mob short description in the area file style, 47 characters.
+const LONG_NAME: &str = "Ondrevar, Captain Commander of the Dragon Guard";
 
 /// The affects the profile tracks, for `missing`.
 const TRACKED: [&str; 5] = [
@@ -1033,7 +1033,7 @@ fn lament_hides_every_value_and_dots_the_gauge() {
 #[test]
 fn the_tank_row_is_the_name_a_colon_and_a_ten_cell_gauge() {
     let mut rows = Vec::new();
-    for tank in [("Tester", 1020), ("Ally", 1000), ("Tarvik", 640)] {
+    for tank in [("Tester", 1020), ("Ally", 1000), ("Brask", 640)] {
         for hit in [1020, 765, 500, 150, 9, 0] {
             for build in [Build::New, Build::Older] {
                 let st = St {
@@ -1088,7 +1088,7 @@ fn hero() -> St {
         gold: 45_000,
         opponent: "The Ancient Gold Dragon",
         opp_pct: 58,
-        group: vec![("Thalrin", 54, 100)],
+        group: vec![("Brask", 54, 100)],
         ..St::new("hero")
     }
     .fight(("Tester", 864, 982))
@@ -1176,12 +1176,12 @@ fn a_prompt_with_p_bar_still_draws_the_tank_gauge_as_the_dragons() {
                 opponent: "The Ancient Gold Dragon",
                 ..St::new("gauge")
             }
-            .fight(("Thalrin", pct, 100));
+            .fight(("Brask", pct, 100));
             let ours = draw_with(DEFAULT_DESIGN, prompt, &st, no_state);
             let theirs = draw_with(MOCKUP, prompt, &st, no_state);
             assert_clean("gauge", &ours);
             let (ours, theirs) = (cells(&ours.ansi), cells(&theirs.ansi));
-            let name = "Thalrin: ".len();
+            let name = "Brask: ".len();
             assert_eq!(ours[0].len(), name + 10, "{prompt} {pct}");
             assert_eq!(
                 ours[0][name..],
@@ -1190,7 +1190,7 @@ fn a_prompt_with_p_bar_still_draws_the_tank_gauge_as_the_dragons() {
             );
         }
     }
-    // Thalrin at 54 fills 5 cells, not the 6 the game's 7 twelfths read
+    // Brask at 54 fills 5 cells, not the 6 the game's 7 twelfths read
     // back to. You at 92, solo, show damage, and a tank at 3 fills none.
     let at = |name: &'static str, hit: i64, max: i64| {
         let st = St {
@@ -1202,7 +1202,7 @@ fn a_prompt_with_p_bar_still_draws_the_tank_gauge_as_the_dragons() {
         let drawn = draw_with(DEFAULT_DESIGN, PROMPT, &st, no_state).plain;
         drawn.lines().next().expect("a tank row").to_string()
     };
-    assert_eq!(at("Thalrin", 54, 100), "Thalrin: █████░░░░░");
+    assert_eq!(at("Brask", 54, 100), "Brask: █████░░░░░");
     assert_eq!(at("Tester", 904, 982), "Tester: █████████░");
     assert_eq!(at("Ally", 3, 100), "Ally: ░░░░░░░░░░");
 }

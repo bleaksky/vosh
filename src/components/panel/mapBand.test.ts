@@ -21,11 +21,11 @@ describe('mapBandRows', () => {
 });
 
 describe('mapBandPeople', () => {
-  const people = ['guard', 'Tarvik', 'merchant', 'beggar', 'Selune'];
+  const people = ['guard', 'Orla', 'merchant', 'beggar', 'Tolliver'];
 
   it('shows everyone who fits', () => {
     expect(mapBandPeople(people.slice(0, 3), 3)).toEqual({
-      shown: ['guard', 'Tarvik', 'merchant'],
+      shown: ['guard', 'Orla', 'merchant'],
       rest: [],
     });
     expect(mapBandPeople([], 3)).toEqual({ shown: [], rest: [] });
@@ -33,8 +33,8 @@ describe('mapBandPeople', () => {
 
   it('counts the rest on the last slot', () => {
     expect(mapBandPeople(people, 3)).toEqual({
-      shown: ['guard', 'Tarvik'],
-      rest: ['merchant', 'beggar', 'Selune'],
+      shown: ['guard', 'Orla'],
+      rest: ['merchant', 'beggar', 'Tolliver'],
     });
     expect(mapBandPeople(people, 1)).toEqual({ shown: [], rest: people });
   });

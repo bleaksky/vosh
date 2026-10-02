@@ -60,14 +60,14 @@ describe('people', () => {
     expect(
       parsePeople([
         { name: 'A Blackwatch villager', npc: true },
-        { name: 'Tarvik', npc: false },
+        { name: 'Orla', npc: false },
         { name: 'a rat', npc: '1' },
         { name: '' },
         'junk',
       ]),
     ).toEqual([
       { name: 'A Blackwatch villager', npc: true },
-      { name: 'Tarvik', npc: false },
+      { name: 'Orla', npc: false },
       { name: 'a rat', npc: true },
     ]);
     expect(parsePeople({})).toEqual([]);
@@ -76,12 +76,12 @@ describe('people', () => {
   it('folds duplicates and keeps their Room.Chars positions', () => {
     const groups = groupPeople([
       { name: 'a rat', npc: true },
-      { name: 'Tarvik', npc: false },
+      { name: 'Orla', npc: false },
       { name: 'a rat', npc: true },
     ]);
     expect(groups).toEqual([
       { name: 'a rat', count: 2, npc: true, positions: [1, 3] },
-      { name: 'Tarvik', count: 1, npc: false, positions: [2] },
+      { name: 'Orla', count: 1, npc: false, positions: [2] },
     ]);
   });
 });

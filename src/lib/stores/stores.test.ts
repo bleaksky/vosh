@@ -429,7 +429,7 @@ describe('stores on the event bus', () => {
     fire('vosh://tracked-affects-changed', ['fly']);
     expect(s.tracked.getTrackedAffects()).toEqual([{ name: 'fly', label: null }]);
     commands.set('ui_get_config', { tracked_affects: [{ name: 'armor', label: 'AC' }] });
-    fire('vosh://profile-switched', 'Selune');
+    fire('vosh://profile-switched', 'Tolliver');
     await settle();
     expect(s.tracked.getTrackedAffects()).toEqual([{ name: 'armor', label: 'AC' }]);
   });

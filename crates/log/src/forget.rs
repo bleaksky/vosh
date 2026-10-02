@@ -1309,7 +1309,7 @@ mod tests {
             &[
                 Sent("l"),
                 Out(""),
-                Sent("Arden"),
+                Sent("Maudrey"),
                 Out(""),
                 Sent(SECRET_OLD),
                 Out(""),
@@ -1584,7 +1584,7 @@ mod tests {
                 Out(""),
                 Sent("Zq7vellum"),
                 Also("Sparrow"),
-                Also("Wren"),
+                Also("Branwick"),
                 Out(""),
                 Out("Invalid account name or password."),
                 Out(TAGLINE),

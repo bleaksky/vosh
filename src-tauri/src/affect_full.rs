@@ -917,7 +917,7 @@ mod tests {
         seen(&store, &[("armor", 48)]);
         seen(&store, &[("armor", 31)]);
         quit(&store, &[("armor", 31)]);
-        store.character_known("aabahran.com:4000 vanek".into());
+        store.character_known("aabahran.com:4000 ondrevar".into());
         assert_eq!(seen(&store, &[("armor", 20)]), Some(map(&[("armor", 20)])));
         store.disconnect();
         let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
@@ -925,7 +925,7 @@ mod tests {
         let characters = table["characters"].as_table().unwrap();
         assert_eq!(map_of(&characters[ERELEI]), map(&[("armor", 48)]));
         assert_eq!(
-            map_of(&characters["aabahran.com:4000 vanek"]),
+            map_of(&characters["aabahran.com:4000 ondrevar"]),
             map(&[("armor", 20)])
         );
     }
@@ -970,7 +970,7 @@ mod tests {
         assert_eq!(seen(&next, &[("armor", 31)]), Some(map(&[("armor", 48)])));
         // Another character on the same world keeps its own.
         let other = store_in(&dir);
-        other.character_known("aabahran.com:4000 vanek".into());
+        other.character_known("aabahran.com:4000 ondrevar".into());
         assert_eq!(seen(&other, &[("armor", 31)]), Some(map(&[("armor", 31)])));
     }
 
@@ -980,7 +980,7 @@ mod tests {
         let path = dir.path().join(FILE_NAME);
         std::fs::write(
             &path,
-            "version = 1\nnote = \"kept\"\n\n[characters.\"aabahran.com:4000 vanek\"]\nhaste = 26\n\n[characters.\"aabahran.com:4000 erelei\"]\narmor = 12\n\"stone skin\" = \"fifty\"\n",
+            "version = 1\nnote = \"kept\"\n\n[characters.\"aabahran.com:4000 ondrevar\"]\nhaste = 26\n\n[characters.\"aabahran.com:4000 erelei\"]\narmor = 12\n\"stone skin\" = \"fifty\"\n",
         )
         .unwrap();
         let store = store_in(&dir);
@@ -995,7 +995,7 @@ mod tests {
         assert_eq!(table["note"].as_str(), Some("kept"));
         let characters = table["characters"].as_table().unwrap();
         assert_eq!(
-            characters["aabahran.com:4000 vanek"]["haste"].as_integer(),
+            characters["aabahran.com:4000 ondrevar"]["haste"].as_integer(),
             Some(26)
         );
         assert_eq!(
@@ -1032,7 +1032,7 @@ mod tests {
         let store = store_in(&dir);
         store.character_known(ERELEI.into());
         seen(&store, &[("armor", 48)]);
-        store.character_known("aabahran.com:4000 vanek".into());
+        store.character_known("aabahran.com:4000 ondrevar".into());
         assert_eq!(store.writes(), 1, "Erelei's fulls are written first");
         assert!(store.map().is_empty());
         assert_eq!(seen(&store, &[("armor", 20)]), Some(map(&[("armor", 20)])));

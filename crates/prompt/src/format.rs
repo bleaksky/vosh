@@ -909,11 +909,11 @@ mod tests {
             Some("perm")
         );
         let low = Value::Member {
-            name: "Tarvik".to_string(),
+            name: "Iskra".to_string(),
             pct: 45,
         };
-        assert_eq!(text(&low, Format::Value).as_deref(), Some("Tarvik 45%"));
-        assert_eq!(text(&low, Format::Name).as_deref(), Some("Tarvik"));
+        assert_eq!(text(&low, Format::Value).as_deref(), Some("Iskra 45%"));
+        assert_eq!(text(&low, Format::Name).as_deref(), Some("Iskra"));
         assert_eq!(text(&low, Format::Pct).as_deref(), Some("45"));
     }
 

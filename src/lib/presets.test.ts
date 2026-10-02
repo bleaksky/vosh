@@ -39,10 +39,10 @@ describe('the Tells you send preset', () => {
 
   it('catches a tell you speak or project, in any language, as one you sent', () => {
     const lines: [string, string, string, string][] = [
-      ["You tell Selune 'omw'", 'Selune', 'omw', 'common'],
+      ["You tell Tolliver 'omw'", 'Tolliver', 'omw', 'common'],
       ["You tell a city guard in Tol'khan 'it is me'", 'a city guard', 'it is me', "Tol'khan"],
-      ["You project to Selune 'omw'", 'Selune', 'omw', 'common'],
-      ["You project to Selune in Elvish 'omw'", 'Selune', 'omw', 'Elvish'],
+      ["You project to Tolliver 'omw'", 'Tolliver', 'omw', 'common'],
+      ["You project to Tolliver in Elvish 'omw'", 'Tolliver', 'omw', 'Elvish'],
     ];
     for (const [text, speaker, message, language] of lines) {
       expect(caught(text), text).toMatchObject({
@@ -67,8 +67,8 @@ describe('the Tells you send preset', () => {
 
   it('leaves the tells you receive to their packet', () => {
     for (const text of [
-      "Selune tells you 'are you still at the bank?'",
-      "[Selune] 'omw'",
+      "Tolliver tells you 'are you still at the bank?'",
+      "[Tolliver] 'omw'",
       'You project your image away from your body.',
     ]) {
       expect(matches(text), text).toBe(false);

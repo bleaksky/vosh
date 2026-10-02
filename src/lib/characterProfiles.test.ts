@@ -63,7 +63,7 @@ describe('profile names', () => {
   });
 
   it('suggests the logged in character for a new profile when the name is free', () => {
-    expect(newProfileName(identity('Vanek'), NAMES)).toBe('Vanek');
+    expect(newProfileName(identity('Ondrevar'), NAMES)).toBe('Ondrevar');
     expect(newProfileName(identity('healer'), NAMES)).toBe('');
     expect(newProfileName(identity(null), NAMES)).toBe('');
     expect(newProfileName(null, NAMES)).toBe('');
@@ -82,7 +82,7 @@ describe('profile names', () => {
     expect(takenProfileName(NAMES, ' HEALER ')).toBe('Healer');
     expect(takenProfileName(NAMES, 'test-prompt', 'Healer')).toBe('Test-Prompt');
     expect(takenProfileName(NAMES, 'Default', 'Healer')).toBe('default');
-    expect(takenProfileName(NAMES, 'Vanek')).toBeNull();
+    expect(takenProfileName(NAMES, 'Ondrevar')).toBeNull();
     expect(takenProfileName(NAMES, '  ')).toBeNull();
     // A profile may change the case of its own name.
     expect(takenProfileName(NAMES, 'healer', 'Healer')).toBeNull();
@@ -101,8 +101,10 @@ describe('profile names', () => {
 
 describe('the login toggle', () => {
   it('names the first character, else the one logged in, else nobody', () => {
-    expect(loginCharacter(JAMES[0].auto_match, identity('Vanek'))).toBe('Erelei');
-    expect(loginCharacter({ host: TFL, characters: [' ', ''] }, identity('Vanek'))).toBe('Vanek');
+    expect(loginCharacter(JAMES[0].auto_match, identity('Ondrevar'))).toBe('Erelei');
+    expect(loginCharacter({ host: TFL, characters: [' ', ''] }, identity('Ondrevar'))).toBe(
+      'Ondrevar',
+    );
     expect(loginCharacter(null, identity(null))).toBeNull();
     expect(loginCharacter(undefined, null)).toBeNull();
   });
@@ -178,10 +180,10 @@ describe('the World select', () => {
 
 describe('a new profile', () => {
   it('claims the world and character you are logged in as, toggle off until claimed', () => {
-    expect(newProfileClaim(identity('Vanek'), JAMES[0])).toEqual({
+    expect(newProfileClaim(identity('Ondrevar'), JAMES[0])).toEqual({
       host: TFL,
       port: 1848,
-      characters: ['Vanek'],
+      characters: ['Ondrevar'],
       enabled: false,
     });
   });
@@ -200,13 +202,13 @@ describe('a new profile', () => {
 
 describe('typed values', () => {
   it('reads character names as a list', () => {
-    expect(parseCharacterNames(' Erelei, Akletus ,, erelei, Vanek ')).toEqual([
+    expect(parseCharacterNames(' Erelei, Thessamy ,, erelei, Ondrevar ')).toEqual([
       'Erelei',
-      'Akletus',
-      'Vanek',
+      'Thessamy',
+      'Ondrevar',
     ]);
     expect(parseCharacterNames('')).toEqual([]);
-    expect(formatCharacterNames(['Erelei', 'Akletus'])).toBe('Erelei, Akletus');
+    expect(formatCharacterNames(['Erelei', 'Thessamy'])).toBe('Erelei, Thessamy');
     expect(formatCharacterNames(undefined)).toBe('');
   });
 
