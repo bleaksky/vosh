@@ -47,8 +47,9 @@ jobs:
 
       # rustup reads the version, components and profile from
       # rust-toolchain.toml so releases build with the same Rust as CI.
+      # --no-self-update leaves the runner rustup alone, so the job skips that download.
       - name: Install Rust toolchain
-        run: rustup toolchain install
+        run: rustup toolchain install --no-self-update
 
       - name: Add Rust target
         if: matrix.target != ''

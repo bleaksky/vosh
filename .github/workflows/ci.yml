@@ -55,8 +55,9 @@ jobs:
 
       # rustup reads the version, components and profile from
       # rust-toolchain.toml so CI builds with the same Rust as local builds.
+      # --no-self-update leaves the runner rustup alone, so the job skips that download.
       - name: Install Rust toolchain
-        run: rustup toolchain install
+        run: rustup toolchain install --no-self-update
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
