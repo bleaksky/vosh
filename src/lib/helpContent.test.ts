@@ -598,6 +598,22 @@ describe('the help on Room triggers', () => {
   });
 });
 
+describe('the help on the Room and time colors preset', () => {
+  it('names each color and says it follows your theme', () => {
+    const text = body('automate.highlight-lines');
+    expect(text).toContain(
+      'The exits line turns green, the things and people the room lists turn yellow, the day and night messages turn blue, and the WiZNET tag turns bold magenta.',
+    );
+    expect(text).toContain('Each one is a terminal color from your theme');
+  });
+
+  it('matches HELP.md word for word', () => {
+    const found = HELP_TOPICS.find((t) => t.id === 'automate.highlight-lines');
+    if (!found) throw new Error('no highlight topic');
+    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+  });
+});
+
 describe('the help body format', () => {
   it('reads paragraphs, lists and tables', () => {
     expect(

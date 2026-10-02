@@ -227,6 +227,8 @@ Example. `#trigger tell-glow {tells you} highlight bright_yellow bold` renders e
 
 The Triggers editor under Automation in Settings offers the same options. Pick `Highlight` or `Wash` in `Style`, then open `Advanced` to set `Text color` and `Background`, with `Bold`, `Underline`, and `Inverse` beside them.
 
+The `Room and time colors` preset colors a room look and the clock. The exits line turns green, the things and people the room lists turn yellow, the day and night messages turn blue, and the WiZNET tag turns bold magenta. Each one is a terminal color from your theme, so a theme switch carries them along. A say or a tell that quotes the same words stays as it was. Vosh turns the preset on for every profile, once, unless you had turned every preset off. Turn it off in Settings under Automation, then Presets.
+
 ### 3.4 Route lines to a pane
 
 A route effect sends matching lines to a named pane. Build one on a trigger in Settings under Automation, then Triggers.

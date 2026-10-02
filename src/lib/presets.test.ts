@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import roomLines from '../../fixtures/room-colors/lines.json';
+import roomPreset from '../../fixtures/room-colors/preset.json';
 import { PRESETS_OFF_MARKER } from './automationRecords';
 import { parseRoutedLine } from './chatStore';
 import {
@@ -72,6 +74,97 @@ describe('the Tells you send preset', () => {
       'You project your image away from your body.',
     ]) {
       expect(matches(text), text).toBe(false);
+    }
+  });
+});
+
+// The preset that colors a room look and the clock as the redesign
+// mockups do. Every line comes from fixtures/room-colors/lines.json, game
+// text built from the server's own format strings and area files, and
+// its README says where each one comes from. The patterns are Rust regex
+// and use only what JavaScript reads the same way. The Rust tests run the
+// same triggers, from preset.json, through the session's own steps.
+describe('the Room and time colors preset', () => {
+  const preset = presetById('room_and_time');
+  const triggers = preset ? presetTriggers(preset) : [];
+  const named = (name: string) => {
+    const found = triggers.find((t) => t.name === name);
+    if (!found) throw new Error(`no trigger ${name}`);
+    return found;
+  };
+  const lineTriggers = triggers.filter((t) => t.target === undefined);
+  // eslint-disable-next-line no-control-regex
+  const plain = (line: string) => line.replace(/\x1b\[[0-9;]*m/g, '');
+  // What a trigger's first matching pattern covers on `text`, or null.
+  const span = (trigger: (typeof triggers)[number], text: string): string | null => {
+    for (const row of trigger.patterns) {
+      const m = new RegExp(row.pattern).exec(text);
+      if (m) return m[0];
+    }
+    return null;
+  };
+
+  it('is on from the start, under Rooms and time', () => {
+    expect(preset?.name).toBe('Room and time colors');
+    expect(preset?.description).toBe(
+      'Colors the exits green, what is in the room yellow, the time of day blue, and the WiZNET tag magenta.',
+    );
+    expect(defaultEnabledIds()).toContain('room_and_time');
+    expect(preset && PRESET_CATEGORIES[preset.category]).toBe('Rooms and time');
+    expect(triggers.every((t) => t.preset === 'room_and_time')).toBe(true);
+  });
+
+  it('holds the triggers the Rust tests run', () => {
+    expect(triggers).toEqual(roomPreset.triggers);
+  });
+
+  it("draws in the theme's own green, yellow, blue and magenta", () => {
+    const styles = Object.fromEntries(
+      triggers.map((t) => [
+        t.name,
+        t.actions.map((a) => (a.kind === 'highlight' ? a.style : a.kind)),
+      ]),
+    );
+    expect(styles).toEqual({
+      'room.exits': [{ fg: 'green' }],
+      'room.contents': [{ fg: 'yellow' }],
+      'time.of_day': [{ fg: 'blue' }],
+      'wiznet.tag': [{ fg: 'magenta', bold: true }],
+    });
+  });
+
+  it('colors what is in the room only through the Room target', () => {
+    expect(named('room.contents').target).toBe('room');
+    expect(lineTriggers.map((t) => t.name)).toEqual(['room.exits', 'time.of_day', 'wiznet.tag']);
+  });
+
+  it('colors each line it names, over the text it names, and no other trigger touches it', () => {
+    const colored = roomLines.lines.filter((l) => 'trigger' in l);
+    expect(colored.length).toBeGreaterThan(0);
+    for (const entry of colored) {
+      if (!('trigger' in entry)) continue;
+      const text = plain(entry.line);
+      expect(span(named(entry.trigger), text), text).toBe(entry.match);
+      for (const other of lineTriggers.filter((t) => t.name !== entry.trigger)) {
+        expect(span(other, text), `${other.name} on ${text}`).toBeNull();
+      }
+    }
+  });
+
+  it('colors every time of day message the game sends', () => {
+    const times = roomLines.lines.filter((l) => 'trigger' in l && l.trigger === 'time.of_day');
+    expect(times).toHaveLength(11);
+    expect(named('time.of_day').patterns).toHaveLength(11);
+  });
+
+  it('leaves a say, a tell, a channel, a prompt and a room name alone', () => {
+    const misses = roomLines.lines.filter((l) => !('trigger' in l));
+    expect(misses.length).toBeGreaterThan(10);
+    for (const entry of misses) {
+      const text = plain(entry.line);
+      for (const t of lineTriggers) {
+        expect(span(t, text), `${t.name} on ${text}`).toBeNull();
+      }
     }
   });
 });

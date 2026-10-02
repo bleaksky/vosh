@@ -220,12 +220,16 @@ async fn launch_runs_the_upgrades_in_order() {
     //    recorded itself as it finished.
     assert_eq!(
         migrations(&app_data),
-        ["prompt-capture-to-profile", "preset-sent-tells-on"]
+        [
+            "prompt-capture-to-profile",
+            "preset-sent-tells-on",
+            "preset-room-and-time-on"
+        ]
     );
 
     // 4. The wizard finish ran before the rollout, so the catalog and the
     //    profile file it wrote both took the new preset.
-    let with_rollout = ["healing_basics", "sent_tells"];
+    let with_rollout = ["healing_basics", "sent_tells", "room_and_time"];
     assert_eq!(file.ui.enabled_presets, with_rollout);
     assert_eq!(
         load_global_catalog(&app_data)
@@ -295,7 +299,11 @@ async fn an_unfinished_wizard_run_holds_the_upgrades_after_it() {
     );
     assert_eq!(
         migrations(&app_data),
-        ["prompt-capture-to-profile", "preset-sent-tells-on"]
+        [
+            "prompt-capture-to-profile",
+            "preset-sent-tells-on",
+            "preset-room-and-time-on"
+        ]
     );
 }
 

@@ -79,9 +79,13 @@ fixtures/
                grid and the dock.
   room-colors/ looks.json, room looks as the Aabahran server prints them,
                each with its Room.Chars packet, for the Room trigger tests
-               in src-tauri. Hand written and synthetic, from the server's
-               own format strings and area files. Its README says where
-               each line comes from.
+               in src-tauri. lines.json, the lines the Room and time colors
+               preset colors and the near misses it leaves alone, read by
+               presets.test.ts and src-tauri. preset.json, that preset's
+               triggers, which presets.test.ts holds to presets.ts and the
+               Rust tests install. Hand written and synthetic, from the
+               server's own format strings and area files. Its README says
+               where each line comes from.
   terminal-rows/ cases.json, the rows the terminal keeps and the rows the
                game is told while your pinned prompt band borrows rows,
                shared by keptRows and gameSize on xterm and

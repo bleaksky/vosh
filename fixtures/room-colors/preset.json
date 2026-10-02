@@ -1,0 +1,58 @@
+{
+  "notes": "Hand written. The triggers of the Room and time colors preset exactly as presetTriggers in src/lib/presets.ts makes them. presets.test.ts holds the two equal, and the Rust tests in src-tauri install these to run the preset on the session's own steps.",
+  "triggers": [
+    {
+      "name": "room.exits",
+      "patterns": [
+        {
+          "pattern": "^\\[Exits:(?: none|(?: \\(?\\+?(?:north|east|south|west|up|down)\\)?)+)\\]$",
+          "enabled": true
+        }
+      ],
+      "priority": 6,
+      "enabled": true,
+      "actions": [{ "kind": "highlight", "style": { "fg": "green" } }],
+      "preset": "room_and_time"
+    },
+    {
+      "name": "room.contents",
+      "patterns": [{ "pattern": "^.+$", "enabled": true }],
+      "priority": 4,
+      "enabled": true,
+      "actions": [{ "kind": "highlight", "style": { "fg": "yellow" } }],
+      "target": "room",
+      "preset": "room_and_time"
+    },
+    {
+      "name": "time.of_day",
+      "patterns": [
+        { "pattern": "^The night is about to end\\.$", "enabled": true },
+        { "pattern": "^The day has begun\\.$", "enabled": true },
+        { "pattern": "^The sun rises in the east\\.$", "enabled": true },
+        { "pattern": "^The sun slowly disappears in the west\\.$", "enabled": true },
+        { "pattern": "^The night has begun\\.$", "enabled": true },
+        { "pattern": "^The darkness begets an unbearable chill\\.$", "enabled": true },
+        { "pattern": "^The night air is suffocating\\.$", "enabled": true },
+        { "pattern": "^Darkness covers the landscape\\.$", "enabled": true },
+        { "pattern": "^Your bones ache as the chilly air cuts through you\\.$", "enabled": true },
+        {
+          "pattern": "^The night air burns as the chilly air dances across your body\\.$",
+          "enabled": true
+        },
+        { "pattern": "^The landscape remains grey and lifeless\\.$", "enabled": true }
+      ],
+      "priority": 6,
+      "enabled": true,
+      "actions": [{ "kind": "highlight", "style": { "fg": "blue" } }],
+      "preset": "room_and_time"
+    },
+    {
+      "name": "wiznet.tag",
+      "patterns": [{ "pattern": "^WiZNET\\b", "enabled": true }],
+      "priority": 6,
+      "enabled": true,
+      "actions": [{ "kind": "highlight", "style": { "fg": "magenta", "bold": true } }],
+      "preset": "room_and_time"
+    }
+  ]
+}

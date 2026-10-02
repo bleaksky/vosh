@@ -1,5 +1,5 @@
 {
-  "notes": "Hand written and synthetic, never captured. Room looks as the Aabahran server prints them, built from its own format strings and area files, with a Room.Chars packet before the text where the server sends one. Each line says where it comes from, and room says whether it lists a thing or a person, the lines a Room trigger matches. Tolliver and Maren are invented names. README.md has the details. Read by src-tauri/src/session_room_tests.rs.",
+  "notes": "Hand written and synthetic, never captured. Room looks as the Aabahran server prints them, built from its own format strings and area files, with a Room.Chars packet before the text where the server sends one. Each line says where it comes from, room says whether it lists a thing or a person, the lines a Room trigger matches, and preset names any other color the Room and time colors preset gives it. Tolliver and Maren are invented names. README.md has the details. Read by src-tauri/src/session_room_tests.rs.",
   "cases": [
     {
       "name": "a look with things and people, then what follows it in the same pulse",
@@ -31,6 +31,7 @@
         {
           "line": "[Exits: south]",
           "room": false,
+          "preset": "green",
           "from": "do_exits with auto, room 5279 has one exit, D2 south"
         },
         {
@@ -66,6 +67,7 @@
         {
           "line": "The day has begun.",
           "room": false,
+          "preset": "blue",
           "from": "update.c weather_update at hour 6"
         },
         { "line": "", "room": false, "from": "the blank line process_output sends before the prompt" },
@@ -75,7 +77,7 @@
     {
       "name": "a look with no Room.Chars before it lists its things only",
       "events": [
-        { "line": "[Exits: south]", "room": false, "from": "do_exits with auto" },
+        { "line": "[Exits: south]", "room": false, "preset": "green", "from": "do_exits with auto" },
         {
           "line": "     A black-steel helm is here, gleaming darkly.",
           "room": true,
@@ -94,7 +96,7 @@
       "name": "a look at a room with no one else in it",
       "events": [
         { "gmcp": "Room.Chars", "data": [] },
-        { "line": "[Exits: south]", "room": false, "from": "do_exits with auto" },
+        { "line": "[Exits: south]", "room": false, "preset": "green", "from": "do_exits with auto" },
         {
           "line": "     A black-steel helm is here, gleaming darkly.",
           "room": true,
@@ -133,7 +135,12 @@
           "from": "the name of room 5279 with its `8 code"
         },
         { "line": "", "room": false, "from": "the blank line before the exits on the minimap layout" },
-        { "line": "[Exits: south]", "room": false, "from": "do_look on the minimap layout" },
+        {
+          "line": "[Exits: south]",
+          "room": false,
+          "preset": "green",
+          "from": "do_look on the minimap layout"
+        },
         {
           "line": "You spot some fresh spur.",
           "room": false,
@@ -157,7 +164,7 @@
       "name": "the prompt ends the look, so an inventory after it stays plain",
       "events": [
         { "gmcp": "Room.Chars", "data": [] },
-        { "line": "[Exits: south]", "room": false, "from": "do_exits with auto" },
+        { "line": "[Exits: south]", "room": false, "preset": "green", "from": "do_exits with auto" },
         {
           "line": "     A black-steel helm is here, gleaming darkly.",
           "room": true,

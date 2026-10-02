@@ -1,0 +1,183 @@
+{
+  "notes": "Hand written and synthetic, never captured. Lines the Aabahran server prints, built from its own format strings and area files, with the ANSI codes it sends. trigger names the Room and time colors trigger that colors the line, and match is the text its color covers. A line with no trigger is a near miss that no trigger of the preset may touch. Tolliver is an invented name. README.md has the details. Read by src/lib/presets.test.ts and src-tauri/src/session_room_tests.rs.",
+  "lines": [
+    {
+      "line": "[Exits: north east south west]",
+      "trigger": "room.exits",
+      "match": "[Exits: north east south west]",
+      "from": "do_exits with auto in room 5233, The Eastern Square, with exits D0 to D3"
+    },
+    {
+      "line": "[Exits: south]",
+      "trigger": "room.exits",
+      "match": "[Exits: south]",
+      "from": "do_exits with auto in room 5279, The Bank of Aabahran"
+    },
+    {
+      "line": "[Exits: up (down)]",
+      "trigger": "room.exits",
+      "match": "[Exits: up (down)]",
+      "from": "do_exits with auto in room 5200, Rock Bottom, with its door down closed"
+    },
+    {
+      "line": "[Exits: up (\u001b[0;1;31m+\u001b[0;0mdown)]",
+      "trigger": "room.exits",
+      "match": "[Exits: up (+down)]",
+      "from": "the same room when you see a trap on the door, the + in `! bold red"
+    },
+    {
+      "line": "[Exits: none]",
+      "trigger": "room.exits",
+      "match": "[Exits: none]",
+      "from": "do_exits with auto in a room with no exit you can see"
+    },
+    {
+      "line": "The night is about to end.",
+      "trigger": "time.of_day",
+      "match": "The night is about to end.",
+      "from": "update.c weather_update, hour 4"
+    },
+    {
+      "line": "The day has begun.",
+      "trigger": "time.of_day",
+      "match": "The day has begun.",
+      "from": "update.c weather_update, hour 6"
+    },
+    {
+      "line": "The sun rises in the east.",
+      "trigger": "time.of_day",
+      "match": "The sun rises in the east.",
+      "from": "update.c weather_update, hour 7"
+    },
+    {
+      "line": "The sun slowly disappears in the west.",
+      "trigger": "time.of_day",
+      "match": "The sun slowly disappears in the west.",
+      "from": "update.c weather_update, hour 18"
+    },
+    {
+      "line": "The night has begun.",
+      "trigger": "time.of_day",
+      "match": "The night has begun.",
+      "from": "update.c weather_update, hour 19"
+    },
+    {
+      "line": "The darkness begets an unbearable chill.",
+      "trigger": "time.of_day",
+      "match": "The darkness begets an unbearable chill.",
+      "from": "update.c weather_update in eternal darkness, hour 4"
+    },
+    {
+      "line": "The night air is suffocating.",
+      "trigger": "time.of_day",
+      "match": "The night air is suffocating.",
+      "from": "update.c weather_update in eternal darkness, hour 6"
+    },
+    {
+      "line": "Darkness covers the landscape.",
+      "trigger": "time.of_day",
+      "match": "Darkness covers the landscape.",
+      "from": "update.c weather_update in eternal darkness, hour 7"
+    },
+    {
+      "line": "Your bones ache as the chilly air cuts through you.",
+      "trigger": "time.of_day",
+      "match": "Your bones ache as the chilly air cuts through you.",
+      "from": "update.c weather_update in eternal darkness, hour 12"
+    },
+    {
+      "line": "The night air burns as the chilly air dances across your body.",
+      "trigger": "time.of_day",
+      "match": "The night air burns as the chilly air dances across your body.",
+      "from": "update.c weather_update in eternal darkness, hour 18"
+    },
+    {
+      "line": "The landscape remains grey and lifeless.",
+      "trigger": "time.of_day",
+      "match": "The landscape remains grey and lifeless.",
+      "from": "update.c weather_update in eternal darkness, hour 19"
+    },
+    {
+      "line": "\u001b[0;1;37mW\u001b[0;1;30mi\u001b[0;1;37mZNET\u001b[0;1;30m \u001b[0;0m08:20:01\u001b[0;1;30m: \u001b[0;0mTICK!",
+      "trigger": "wiznet.tag",
+      "match": "WiZNET",
+      "from": "act_wiz.c wiznet, its tag in `& bold white and `8 grey, with the TICK! message from update.c"
+    },
+    {
+      "line": "\u001b[0;1;37mW\u001b[0;1;30mi\u001b[0;1;37mZNET\u001b[0;1;30m \u001b[0;0m08:20:01\u001b[0;1;30m: \u001b[0;0mNewbie alert!  Tolliver sighted.",
+      "trigger": "wiznet.tag",
+      "match": "WiZNET",
+      "from": "act_wiz.c wiznet with Newbie alert!  $N sighted. from comm.c"
+    },
+    {
+      "line": "\u001b[0;1;37mW\u001b[0;1;30mi\u001b[0;1;37mZNET\u001b[0;1;30m \u001b[0;0m08:20:01\u001b[0;1;30m: \u001b[0;0mTolliver has posted a note.",
+      "trigger": "wiznet.tag",
+      "match": "WiZNET",
+      "from": "act_wiz.c wiznet with $N has posted a note. from recycle.c"
+    },
+    {
+      "line": "Tolliver says '\u001b[0;1;33mThe day has begun.\u001b[0;0m'",
+      "from": "languages.c, $n says with the text in `# bold yellow, quoting a time of day message"
+    },
+    {
+      "line": "Tolliver tells you '\u001b[0;32m[Exits: north east south west]\u001b[0;0m'",
+      "from": "act_comm.c, %s tells you with the text in `2 green, quoting an exits line"
+    },
+    {
+      "line": "\u001b[0;1;32mTolliver NEWBIE chats: 'The night has begun.'\u001b[0;0m",
+      "from": "act_comm.c do_newbiechat, the public channel the game has where other games have gossip"
+    },
+    {
+      "line": "Tolliver yells '\u001b[0;36mWiZNET 08:20:01: TICK!\u001b[0;0m'",
+      "from": "act_comm.c do_yell, $n yells with the text in `6 cyan, quoting a WiZNET line"
+    },
+    {
+      "line": "Welcome to Wiznet!",
+      "from": "act_wiz.c do_wiznet when you turn it on"
+    },
+    {
+      "line": "<1020hp 800m 930mv> ",
+      "from": "the prompt prompt all sets, %n%P%C<%hhp %mm %vmv>, with sample numbers"
+    },
+    {
+      "line": "[Exits: N E (S) W] ",
+      "from": "a prompt of %e alone, do_promptexit in act_info.c, which ends it with a space"
+    },
+    {
+      "line": "[Exits: --- ] ",
+      "from": "do_promptexit while you are blind"
+    },
+    {
+      "line": "[Exits: ??? ] ",
+      "from": "do_promptexit in forest mist"
+    },
+    {
+      "line": "Obvious exits:",
+      "from": "do_exits typed by hand"
+    },
+    {
+      "line": " South  - The Eastern Square",
+      "from": "do_exits typed by hand in room 5279, its one row"
+    },
+    {
+      "line": "You can't tell where the exits are.",
+      "from": "do_exits in forest mist"
+    },
+    {
+      "line": "\u001b[38;5;255m\u001b[0;1;30mThe Bank of Aabahran\u001b[0;0m\u001b[0;0m",
+      "from": "do_look, the name of room 5279 in area/fortblac.are"
+    },
+    {
+      "line": "\u001b[0;37mThe Eastern Square\u001b[0;0m",
+      "from": "the name of room 5233 in area/fortblac.are, in `7 white"
+    },
+    {
+      "line": "\u001b[0;1;30mRock Bottom\u001b[0;0m",
+      "from": "the name of room 5200 in area/fortblac.are, in `8 grey"
+    },
+    {
+      "line": "\u001b[0;1;37mThe sky is getting cloudy.\u001b[0;0m",
+      "from": "update.c sky_event_text, which can follow a time of day message"
+    }
+  ]
+}

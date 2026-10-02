@@ -2,6 +2,7 @@ active = "default"
 migrations = [
     "prompt-capture-to-profile",
     "preset-sent-tells-on",
+    "preset-room-and-time-on",
 ]
 
 [[profile]]
