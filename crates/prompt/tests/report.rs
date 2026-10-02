@@ -5,15 +5,15 @@ use std::collections::BTreeMap;
 
 use vosh_prompt::aabahran::{compile, Compiled, Origin, ShapeKind, WarningKind, Which, Who};
 use vosh_prompt::capture::fills;
+use vosh_prompt::card::report::{line_report, report, CompileRequest};
 use vosh_prompt::config::RegexCapture;
 use vosh_prompt::design::TokenKind;
-use vosh_prompt::report::{line_report, report, CompileRequest};
 use vosh_prompt::testkit::mud::PROMPT;
 use vosh_prompt::Template;
 
 const SAME_AS_THE_GAME: &str = "%{if:wizi}%c_240(Wizi %wizi)%c_reset %{end}%{if:incog}%c_240(Incog %incog)%c_reset %{end}%{if:tank}%tank: %{tank_hp:game}%nl%{end}[%{c:hp:game}%hp%c_reset/%{maxhp}hp %mana/%{maxmana}mn %move/%{maxmove}mv] ";
 
-fn codes(prompt: &str, fprompt: &str, typed: bool) -> vosh_prompt::report::CompileReport {
+fn codes(prompt: &str, fprompt: &str, typed: bool) -> vosh_prompt::card::report::CompileReport {
     report(
         &CompileRequest::Aabahran {
             prompt: prompt.into(),
@@ -25,7 +25,10 @@ fn codes(prompt: &str, fprompt: &str, typed: bool) -> vosh_prompt::report::Compi
     )
 }
 
-fn regex(lines: &[&str], supplied: &dyn Fn(&str) -> bool) -> vosh_prompt::report::CompileReport {
+fn regex(
+    lines: &[&str],
+    supplied: &dyn Fn(&str) -> bool,
+) -> vosh_prompt::card::report::CompileReport {
     report(
         &CompileRequest::Regex {
             lines: lines.iter().map(|l| (*l).to_string()).collect(),
@@ -45,7 +48,7 @@ fn stored(prompt: &str, fprompt: &str) -> Compiled {
 
 /// The names the numbers of a line read into, without the ones you left
 /// out.
-fn read_into(report: &vosh_prompt::report::CompileReport) -> Vec<String> {
+fn read_into(report: &vosh_prompt::card::report::CompileReport) -> Vec<String> {
     report
         .numbers
         .iter()
@@ -62,7 +65,7 @@ fn assert_reads_clean(template: &str) {
     );
 }
 
-fn preset<'a>(report: &'a vosh_prompt::report::CompileReport, id: &str) -> Option<&'a str> {
+fn preset<'a>(report: &'a vosh_prompt::card::report::CompileReport, id: &str) -> Option<&'a str> {
     report
         .presets
         .iter()
@@ -387,7 +390,7 @@ fn a_line_another_game_prints_reports_its_numbers_and_the_names_it_reads() {
 /// Each legend row as code, label, tag and whether it carries the warn
 /// ring, for reading a test at a glance.
 fn legend(
-    report: &vosh_prompt::report::CompileReport,
+    report: &vosh_prompt::card::report::CompileReport,
 ) -> Vec<(String, String, Option<String>, bool)> {
     report
         .legend
@@ -557,7 +560,7 @@ fn the_card_says_what_a_prompt_shows_in_one_sentence() {
 /// writes the form that rounds down the same way.
 #[test]
 fn same_as_the_game_rounds_percents_down_as_the_game_does() {
-    let game = vosh_prompt::presets::same_as_the_game(
+    let game = vosh_prompt::card::presets::same_as_the_game(
         "%h (%K) %m (%k) %v (%E)",
         "",
         vosh_prompt::aabahran::Who::default(),

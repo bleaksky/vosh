@@ -2,10 +2,10 @@
 //! and the look of every piece it does not change, and the writer never
 //! writes a token that reads back as something else.
 
-use vosh_prompt::design::{PieceKind, TokenKind};
-use vosh_prompt::edit::{
+use vosh_prompt::card::edit::{
     apply, ColorChoice, EditError, EditOp, FormatChoice, FormatName, StyleChoice, When,
 };
+use vosh_prompt::design::{PieceKind, TokenKind};
 use vosh_prompt::render::SgrState;
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
 use vosh_prompt::testkit::now;
@@ -835,13 +835,13 @@ const AT_A_GLANCE: &str = "%{if:fight}%opponent %{opponent_hp:bar:10} %{opponent
 
 #[test]
 fn every_preset_keeps_its_looks_through_every_op_on_every_piece() {
-    let game = vosh_prompt::presets::same_as_the_game(
+    let game = vosh_prompt::card::presets::same_as_the_game(
         "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c",
         "",
         vosh_prompt::aabahran::Who::default(),
     );
     assert!(game.is_some());
-    for preset in vosh_prompt::presets::aabahran(game) {
+    for preset in vosh_prompt::card::presets::aabahran(game) {
         keeps_its_looks_through_every_op_on_every_piece(&preset.template);
     }
     keeps_its_looks_through_every_op_on_every_piece(JAMES);
@@ -1002,7 +1002,7 @@ fn a_look_set_inside_a_condition_comes_back_inside_it() {
 
 /// The edit's text and where the piece it acted on now sits.
 fn edit_at(template: &str, op: &EditOp) -> (String, Option<usize>) {
-    vosh_prompt::edit::apply_at(template, op, &known)
+    vosh_prompt::card::edit::apply_at(template, op, &known)
         .unwrap_or_else(|e| panic!("{op:?} on {template}: {e}"))
 }
 

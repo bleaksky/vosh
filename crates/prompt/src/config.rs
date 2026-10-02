@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::presets::{DEFAULT_DESIGN, RETIRED_DEFAULTS};
+use crate::card::presets::{DEFAULT_DESIGN, RETIRED_DEFAULTS};
 
 /// How many earlier designs `previous_templates` keeps.
 pub const PREVIOUS_TEMPLATES: usize = 2;
@@ -507,7 +507,7 @@ mod tests {
 
     #[test]
     fn a_default_an_earlier_build_shipped_takes_todays_default() {
-        use crate::presets::RETIRED_DEFAULTS;
+        use crate::card::presets::RETIRED_DEFAULTS;
         // At a glance as it last shipped, then as it first shipped.
         assert_eq!(RETIRED_DEFAULTS.map(str::len), [884, 728]);
         for old in RETIRED_DEFAULTS {

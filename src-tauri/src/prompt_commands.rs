@@ -15,13 +15,13 @@ use std::sync::atomic::Ordering;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 use tokio::time::Instant;
-use vosh_prompt::candidates::{CandidateGroup, CaptureCheck};
 use vosh_prompt::capture::Recognizer;
+use vosh_prompt::card::candidates::{CandidateGroup, CaptureCheck};
+use vosh_prompt::card::describe::{Described, FormView};
+use vosh_prompt::card::edit::EditOp;
+use vosh_prompt::card::report::{CompileReport, CompileRequest};
+use vosh_prompt::card::state::PromptState;
 use vosh_prompt::config::PREVIOUS_TEMPLATES;
-use vosh_prompt::describe::{Described, FormView};
-use vosh_prompt::edit::EditOp;
-use vosh_prompt::report::{CompileReport, CompileRequest};
-use vosh_prompt::state::PromptState;
 use vosh_prompt::values::overrides::{Overridden, Overrides, Preview, PromptPreview};
 use vosh_prompt::values::Samples;
 use vosh_prompt::{
@@ -84,7 +84,7 @@ pub(crate) fn set_config(p: &mut Profile, mut config: PromptConfig) -> Result<bo
 /// Start empty in the card.
 pub(crate) fn set_config_as_is(p: &mut Profile, mut config: PromptConfig) -> Result<bool, String> {
     if config.capture != p.prompt.config().capture {
-        vosh_prompt::report::check_capture(&config.capture, p.prompt.who())?;
+        vosh_prompt::card::report::check_capture(&config.capture, p.prompt.who())?;
     }
     config.previous_templates.truncate(PREVIOUS_TEMPLATES);
     let before = p.prompt.revision();
@@ -190,7 +190,7 @@ pub(crate) async fn prompt_compile(
 /// The body of [`prompt_compile`]. Another game's presets read only the
 /// values whose packages came this session.
 pub(crate) fn compile(p: &Profile, request: &CompileRequest) -> CompileReport {
-    vosh_prompt::report::report(request, p.prompt.who(), &|name| supplied(p, name))
+    vosh_prompt::card::report::report(request, p.prompt.who(), &|name| supplied(p, name))
 }
 
 /// True when GMCP supplied `name` this session: its package came.
@@ -227,14 +227,14 @@ pub(crate) fn capture_from_line(
         .candidate(id)
         .ok_or_else(|| "Vosh no longer keeps that line. Pick another one.".to_string())?;
     let line = candidate.plain.lines().last().unwrap_or_default();
-    let mut report = vosh_prompt::report::line_report(line, names, &|name| supplied(p, name));
+    let mut report = vosh_prompt::card::report::line_report(line, names, &|name| supplied(p, name));
     report.gmcp_names = unknown_vitals(p);
     Ok(report)
 }
 
 /// The values in the latest Char.Vitals that Vosh has no name for, such
 /// as `mp` on a game that calls mana that, for the card's name menu.
-fn unknown_vitals(p: &Profile) -> Vec<vosh_prompt::report::GmcpName> {
+fn unknown_vitals(p: &Profile) -> Vec<vosh_prompt::card::report::GmcpName> {
     const PACKAGE: &str = "Char.Vitals";
     let Some(data) = p
         .prompt
@@ -249,7 +249,7 @@ fn unknown_vitals(p: &Profile) -> Vec<vosh_prompt::report::GmcpName> {
         .filter(|(key, value)| {
             *key != "hidden" && value.is_number() && vosh_prompt::values::entry(key).is_none()
         })
-        .map(|(key, _)| vosh_prompt::report::GmcpName {
+        .map(|(key, _)| vosh_prompt::card::report::GmcpName {
             name: key.clone(),
             package: PACKAGE.to_string(),
         })
@@ -262,7 +262,7 @@ pub(crate) async fn prompt_candidates(
     state: State<'_, SharedState>,
 ) -> Result<Vec<CandidateGroup>, String> {
     let p = state.profile.lock().await;
-    Ok(vosh_prompt::candidates::groups(p.prompt.stage.ring()))
+    Ok(vosh_prompt::card::candidates::groups(p.prompt.stage.ring()))
 }
 
 /// How a capture matches the candidates ring and the lines in your
@@ -285,7 +285,7 @@ pub(crate) async fn prompt_capture_check(
             .map(vosh_protocol::ansi::plain_text)
             .collect()
     };
-    Ok(vosh_prompt::candidates::check(
+    Ok(vosh_prompt::card::candidates::check(
         recognizer.as_ref(),
         ring.iter(),
         lines.iter().map(String::as_str),
@@ -491,7 +491,7 @@ pub(crate) fn describe(
 ) -> Described {
     let template = Template::parse(template);
     with_values(p, preview, overrides, |values, previewed| {
-        vosh_prompt::describe::describe(&template, values, previewed)
+        vosh_prompt::card::describe::describe(&template, values, previewed)
     })
 }
 
@@ -514,7 +514,7 @@ pub(crate) fn forms(p: &Profile, field: &str, preview: Option<Preview>) -> Vec<F
         None => FieldRef::new(field),
     };
     with_values(p, preview, None, |values, _| {
-        vosh_prompt::describe::forms(&field, values)
+        vosh_prompt::card::describe::forms(&field, values)
     })
 }
 
@@ -578,7 +578,8 @@ pub(crate) fn edit(p: &Profile, template: &str, op: &EditOp) -> Result<Edited, S
     let vosh = crate::session::prompt_supplies(p, Instant::now());
     let live = p.prompt.vars.resolver(&vosh);
     let known = |field: &FieldRef| !matches!(live.resolve(field), Resolved::Unknown);
-    let (template, piece) = vosh_prompt::edit::apply_at(template, op, &known).map_err(|e| e.0)?;
+    let (template, piece) =
+        vosh_prompt::card::edit::apply_at(template, op, &known).map_err(|e| e.0)?;
     let options = RenderOptions {
         placeholders: true,
         ..RenderOptions::default()
@@ -819,7 +820,7 @@ mod tests {
         let mut seventh = ProfileConfig::default();
         seventh.set_prompt(PromptConfig::from_legacy(
             false,
-            vosh_prompt::presets::RETIRED_DEFAULTS[0],
+            vosh_prompt::card::presets::RETIRED_DEFAULTS[0],
         ));
         seventh.save(&set.profile_path("Seventh")).unwrap();
         let mut active = ProfileConfig::default();

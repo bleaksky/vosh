@@ -5,7 +5,7 @@ mod common;
 
 use common::{capture, feed, packet, vosh};
 use serde_json::json;
-use vosh_prompt::state::{catalog, State};
+use vosh_prompt::card::state::{catalog, State};
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
 use vosh_prompt::testkit::now;
 use vosh_prompt::values::overrides::{lament_hides, Overridden, Overrides, Preview, PromptPreview};

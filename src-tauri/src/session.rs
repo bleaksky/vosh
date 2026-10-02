@@ -3012,14 +3012,14 @@ async fn finish_read<R: tauri::Runtime>(
 fn watched_state<R: tauri::Runtime>(
     app: &AppHandle<R>,
     p: &Profile,
-) -> Option<vosh_prompt::state::PromptState> {
+) -> Option<vosh_prompt::card::state::PromptState> {
     watching_prompt(app).then(|| crate::prompt_commands::prompt_state(p))
 }
 
 /// Send `state` on `session://prompt-state`, when there is one.
 fn emit_prompt_state<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    state: Option<vosh_prompt::state::PromptState>,
+    state: Option<vosh_prompt::card::state::PromptState>,
 ) {
     if let Some(state) = state {
         if let Err(e) = app.emit("session://prompt-state", state) {

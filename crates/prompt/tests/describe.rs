@@ -3,10 +3,10 @@
 //! reads now, the forms Show as and the picker offer, and each token of
 //! the text with its piece.
 
-use vosh_prompt::describe::{describe, forms, PieceView, TokenKindName};
+use vosh_prompt::card::describe::{describe, forms, PieceView, TokenKindName};
+use vosh_prompt::card::edit::{ColorChoice, FormatName, StyleChoice, When};
+use vosh_prompt::card::presets::DEFAULT_DESIGN;
 use vosh_prompt::design::PieceKind;
-use vosh_prompt::edit::{ColorChoice, FormatName, StyleChoice, When};
-use vosh_prompt::presets::DEFAULT_DESIGN;
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
 use vosh_prompt::testkit::now;
 use vosh_prompt::values::Samples;
@@ -362,11 +362,11 @@ const COLORED: &str = "[%c_hp%hp%c_default/%{maxhp}hp %c_mana%mana%c_default/%{m
 fn show_as(template: &str, text: &str, format: FormatName) -> String {
     let described = describe(&Template::parse(template), &Sampled { fight: false }, false);
     let at = piece(&described.pieces, text).piece;
-    vosh_prompt::edit::apply(
+    vosh_prompt::card::edit::apply(
         template,
-        &vosh_prompt::edit::EditOp::SetFormat {
+        &vosh_prompt::card::edit::EditOp::SetFormat {
             piece: at,
-            format: vosh_prompt::edit::FormatChoice::of(format),
+            format: vosh_prompt::card::edit::FormatChoice::of(format),
         },
         &|_: &FieldRef| true,
     )
