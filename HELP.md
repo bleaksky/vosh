@@ -355,13 +355,13 @@ Settings under Characters draws each character's panel under Panel layout, so yo
 The Map pane draws the map the game sends. It sits at the top of the panel at first, and its header names the area you are in.
 
 - Show or hide it with `Show map` in the View menu or the palette, or add it with `Add a pane` in the title band.
-- Read the rows under the drawing. The first names the room you stand in and its exits. The rest list the people here, with a count beside a name more than one of them shares, and when more people are here than fit, the last row counts the others. A short pane gives up rows of people before the room.
+- Read the rows under the drawing. The first names the room you stand in and its exits. The name takes the color the game gives rooms of its terrain, like bright green for a field and deep blue for a lake you cannot swim, a shade lighter or darker where the panel would wash it out. The text in the terminal shows most room names in a color their area gives them instead, which the game leaves out of `Room.Info`, so the two can differ. The second row names the terrain and the region, like `Inside` and `Coastal North`. The rest list the people here, with a count beside a name more than one of them shares, and when more people are here than fit, the last row counts the others. A short pane gives up rows of people first, then the terrain row, and keeps the room.
 - Point at the drawing and click the sliders button in its bottom right corner to open the map menu.
 - Pick `Squares`, `Glyphs`, or `Tileset` to change how the map draws.
 - Choose `Zoom in` or `Zoom out`, or hold `Cmd` or `Ctrl` and turn the wheel over the map. `Actual size` shows the zoom and goes back to 100%.
 - In Tileset, choose `Load tileset…` to use your own tile art and `Clear tileset` to drop it.
 
-Vosh remembers the style, the zoom, and the tileset. Until the game sends `Map.Tiles` the pane says the map appears when your MUD sends it. `Room.Info` names the room, its exits, and the area, and `Room.Chars` lists the people.
+Vosh remembers the style, the zoom, and the tileset. Until the game sends `Map.Tiles` the pane says the map appears when your MUD sends it. `Room.Info` names the room, its exits, its terrain, its region, and the area, and `Room.Chars` lists the people.
 
 ### 4.3 Use the chat pane
 

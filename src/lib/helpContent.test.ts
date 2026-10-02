@@ -613,6 +613,10 @@ describe('the help on the one window', () => {
   it('keeps the room and its people under the map', () => {
     const text = body('shape.use-the-map');
     expect(text).toContain('The first names the room you stand in and its exits.');
+    expect(text).toContain(
+      'The second row names the terrain and the region, like `Inside` and `Coastal North`.',
+    );
+    expect(text).toContain('A short pane gives up rows of people first, then the terrain row');
     expect(HELP_TOPICS.some((t) => t.id === 'shape.room-strip')).toBe(false);
     expect(HELP_TOPICS.some((t) => t.id === 'shape.split-the-well')).toBe(false);
   });
