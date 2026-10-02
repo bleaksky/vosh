@@ -1,8 +1,15 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { chatChannelColor, NO_CHAT_COLORS, type ChatColors } from '../../lib/chatColors';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  chatChannelSlot,
+  chatInks,
+  NO_CHAT_COLORS,
+  type ChatColors,
+  type ChatGround,
+  type ChatInk,
+} from '../../lib/chatColors';
 import { getChatLines, subscribeChatLines, type ChatLine } from '../../lib/chatStore';
 import { useChatColors } from '../../lib/stores/chatColorsStore';
-import type { XtermPalette } from '../../lib/themes';
+import { themeTokens, type XtermPalette } from '../../lib/themes';
 import { useActiveTheme } from '../../lib/useActiveTheme';
 import { MenuItem, MenuSurface } from './MenuSurface';
 import { returnToCommandLine, updateLeafProps, usePaneLeaf } from './paneActions';
@@ -14,9 +21,10 @@ import { chatTime } from './paneText';
 // (the approved Chat A board). Messages sit at the bottom like the
 // terminal, one mono line each, [channel] Speaker: text in the color
 // the game prints that channel in, or the theme color you picked for it
-// under Channel colors in the pane menu. The channel filter lives in the
-// pane's props, so it follows the profile and two chat panes can each
-// show a different channel.
+// under Channel colors in the pane menu, lifted where it would read
+// under 3:1 on the panel (chatColors.ts). The channel filter lives in
+// the pane's props, so it follows the profile and two chat panes can
+// each show a different channel.
 
 // Distance from the bottom, in pixels, that still counts as reading
 // the newest message. Scrolled further up, new lines leave you be.
@@ -26,7 +34,9 @@ export function ChatPane() {
   const leaf = usePaneLeaf();
   const channel = leaf?.props.channel ?? '';
   const [lines, setLines] = useState<ChatLine[]>(() => getChatLines());
-  const palette = useActiveTheme().xterm;
+  const theme = useActiveTheme();
+  const palette = theme.xterm;
+  const ground = useMemo(() => themeTokens(theme), [theme]);
   const colors = useChatColors();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickyRef = useRef(true);
@@ -90,7 +100,7 @@ export function ChatPane() {
               : 'Chat appears when someone talks on a channel.'}
           </p>
         ) : (
-          <ChatLog lines={visible} palette={palette} colors={colors} />
+          <ChatLog lines={visible} palette={palette} ground={ground} colors={colors} />
         )}
       </div>
     </>
@@ -112,24 +122,28 @@ function lineKey(line: ChatLine): number {
 }
 
 /** The messages, oldest first, each in its channel's color on the
- *  theme whose terminal palette is given: the slot you picked under
- *  Channel colors, or the one the game prints the channel in. */
+ *  theme whose terminal palette and panel are given: the slot you picked
+ *  under Channel colors, or the one the game prints the channel in,
+ *  lifted to 3:1 on the panel. */
 export function ChatLog({
   lines,
   palette,
+  ground,
   colors = NO_CHAT_COLORS,
 }: {
   lines: ChatLine[];
   palette: XtermPalette;
+  ground: ChatGround;
   colors?: ChatColors;
 }) {
+  const inks = useMemo(() => chatInks(palette, ground), [palette, ground]);
   return (
     <ol className="pane-chat-log">
       {lines.map((line) => (
         <ChatMessage
           key={lineKey(line)}
           line={line}
-          color={chatChannelColor(line.pane, palette, colors)}
+          ink={inks[chatChannelSlot(line.pane, colors)]}
         />
       ))}
     </ol>
@@ -138,12 +152,15 @@ export function ChatLog({
 
 // One line per message, [tell] Tolliver: text, the whole line in the
 // channel's color. A tell you send reads to Tolliver. A routed line keeps
-// its own words after the tag. The arrival time shows only when you
+// its own words after the tag. The tag steps back unless that would
+// take it under 3:1 on the panel. The arrival time shows only when you
 // point at the message.
-function ChatMessage({ line, color }: { line: ChatLine; color: string }) {
+function ChatMessage({ line, ink }: { line: ChatLine; ink: ChatInk }) {
   return (
-    <li className="pane-chat-msg" style={{ color }} title={chatTime(line.ts)}>
-      <span className="pane-chat-tag">[{line.pane}]</span>
+    <li className="pane-chat-msg" style={{ color: ink.color }} title={chatTime(line.ts)}>
+      <span className={ink.fadeTag ? 'pane-chat-tag' : 'pane-chat-tag is-solid'}>
+        [{line.pane}]
+      </span>
       {line.speaker !== null && (
         <>
           {line.direction === 'sent' && 'to '}

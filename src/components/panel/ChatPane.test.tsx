@@ -1,11 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { parseCommChannel, parseRoutedLine, type ChatLine } from '../../lib/chatStore';
-import { findTheme } from '../../lib/themes';
+import { findTheme, themeTokens } from '../../lib/themes';
 import panelCss from '../../styles/panel.css?raw';
 import { aabahranChatPacket } from '../../test/aabahranGmcp';
 import { ChatLog } from './ChatPane';
-import { normalizeChatColors } from '../../lib/chatColors';
+import { CHAT_TAG_OPACITY, normalizeChatColors } from '../../lib/chatColors';
 import { chatTime } from './paneText';
 
 // The chat store reaches the Tauri bridge when it starts. ChatLog, under
@@ -18,6 +18,8 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 const kanso = findTheme('kanso-zen').xterm;
 const vellum = findTheme('vellum').xterm;
+const kansoGround = themeTokens(findTheme('kanso-zen'));
+const vellumGround = themeTokens(findTheme('vellum'));
 const TS = new Date(2026, 8, 30, 20, 41).getTime();
 
 const comm = (data: Record<string, unknown>): ChatLine => {
@@ -76,6 +78,8 @@ interface Drawn {
   color: string | null;
   title: string | null;
   tag: string | null;
+  /** Whether the tag draws at full strength instead of a step back. */
+  solidTag: boolean;
   speaker: string | null;
   text: string;
 }
@@ -89,12 +93,13 @@ const unescape = (s: string) =>
     .replace(/&amp;/g, '&');
 
 /** Each message the log draws, read back out of its markup. */
-function drawn(lines: ChatLine[], palette = kanso): Drawn[] {
-  const html = renderToStaticMarkup(<ChatLog lines={lines} palette={palette} />);
+function drawn(lines: ChatLine[], palette = kanso, ground = kansoGround): Drawn[] {
+  const html = renderToStaticMarkup(<ChatLog lines={lines} palette={palette} ground={ground} />);
   return Array.from(html.matchAll(/<li([^>]*)>([\s\S]*?)<\/li>/g), ([, attrs, body]) => ({
     color: /style="color:([^";]+)"/.exec(attrs)?.[1] ?? null,
     title: /title="([^"]*)"/.exec(attrs)?.[1] ?? null,
-    tag: /<span class="pane-chat-tag">([^<]*)<\/span>/.exec(body)?.[1] ?? null,
+    tag: /<span class="pane-chat-tag(?: is-solid)?">([^<]*)<\/span>/.exec(body)?.[1] ?? null,
+    solidTag: body.includes('<span class="pane-chat-tag is-solid">'),
     speaker: /<span class="pane-chat-speaker">([^<]*)<\/span>/.exec(body)?.[1] ?? null,
     text: unescape(body.replace(/<[^>]+>/g, '')),
   }));
@@ -148,17 +153,28 @@ describe('ChatLog', () => {
       '#e46876',
       '#87a987',
     ]);
-    expect(drawn(BOARD.slice(4, 7), vellum).map((m) => m.color)).toEqual([
+    // Vellum's bright yellow sits at 2.87:1 on its panel, so say darkens
+    // to 3:1 there. The terminal keeps #b88226.
+    expect(drawn(BOARD.slice(4, 7), vellum, vellumGround).map((m) => m.color)).toEqual([
       '#4f7a3a',
       '#4f7a3a',
-      '#b88226',
+      '#b37d1f',
+    ]);
+  });
+
+  it('steps the tag back only where it still reads at 3:1 on the panel', () => {
+    expect(drawn(BOARD).map((m) => m.solidTag)).toEqual(BOARD.map(() => false));
+    expect(drawn(BOARD.slice(4, 7), vellum, vellumGround).map((m) => m.solidTag)).toEqual([
+      true,
+      true,
+      true,
     ]);
   });
 
   it('draws a channel you recolored in the theme slot you picked', () => {
     const picked = normalizeChatColors({ tell: 'brightRed' });
     const html = renderToStaticMarkup(
-      <ChatLog lines={BOARD.slice(4, 7)} palette={kanso} colors={picked} />,
+      <ChatLog lines={BOARD.slice(4, 7)} palette={kanso} ground={kansoGround} colors={picked} />,
     );
     const colors = [...html.matchAll(/style="color:([^";]+)"/g)].map((m) => m[1]);
     expect(colors).toEqual([kanso.brightRed, kanso.brightRed, '#e6c384']);
@@ -183,7 +199,9 @@ describe('ChatLog', () => {
   });
 
   it('prints no time on the line and shows it when you point at the message', () => {
-    const html = renderToStaticMarkup(<ChatLog lines={BOARD} palette={kanso} />);
+    const html = renderToStaticMarkup(
+      <ChatLog lines={BOARD} palette={kanso} ground={kansoGround} />,
+    );
     expect(html).not.toContain('<time');
     expect(html).not.toContain(chatTime(TS) + '<');
     for (const m of drawn(BOARD)) expect(m.title).toBe(chatTime(TS));
@@ -213,7 +231,8 @@ describe('the chat line in panel.css', () => {
     expect(tag).toContain('margin-right: 6px;');
     expect(tag).toContain('font-weight: 600;');
     expect(tag).toContain('letter-spacing: 0.02em;');
-    expect(tag).toContain('opacity: 0.7;');
+    expect(tag).toContain(`opacity: ${CHAT_TAG_OPACITY};`);
+    expect(rule('.pane-chat-tag.is-solid')).toContain('opacity: 1;');
     expect(rule('.pane-chat-speaker')).toContain('font-weight: 700;');
   });
 });

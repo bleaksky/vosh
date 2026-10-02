@@ -1167,12 +1167,18 @@
 }
 
 /* The tag takes the line's color a step back, so the message stays the
-   louder half. */
+   louder half. CHAT_TAG_OPACITY in chatColors.ts holds the same value. */
 .pane-chat-tag {
   margin-right: 6px;
   font-weight: 600;
   letter-spacing: 0.02em;
   opacity: 0.7;
+}
+
+/* A tag that would read under 3:1 on the panel a step back draws at
+   full strength instead. */
+.pane-chat-tag.is-solid {
+  opacity: 1;
 }
 
 .pane-chat-speaker {
