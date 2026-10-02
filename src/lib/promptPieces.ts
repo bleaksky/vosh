@@ -194,7 +194,7 @@ export function swatchOf(color: PromptColorChoice): Swatch {
     case 'default':
       return 'default';
     case 'by_value':
-      return color.field || color.game ? 'custom' : 'by_value';
+      return color.field || color.game || color.steps ? 'custom' : 'by_value';
     case 'named':
       return THEME_SWATCHES.some((s) => s.index === color.index) ? color.index : 'custom';
     default:
@@ -213,11 +213,12 @@ export function customText(color: PromptColorChoice, palette: (index: number) =>
 
 /** What a color field says for a color by how full a value is, which no
  *  hex can show: By value for the part's own, By and the name for
- *  another value, and By game for the game's own bands. Null for any
- *  other color. */
+ *  another value, By game for the game's own bands, and By steps for the
+ *  eleven steps from red to green. Null for any other color. */
 export function byValueName(color: PromptColorChoice): string | null {
   if (color.kind !== 'by_value') return null;
   if (color.game) return 'By game';
+  if (color.steps) return color.field ? `By ${color.field} in steps` : 'By steps';
   return color.field ? `By ${color.field}` : 'By value';
 }
 
@@ -253,16 +254,21 @@ export const THEME_HINT =
   'Theme colors follow your theme. A custom color stays the same everywhere.';
 export const BY_VALUE_HINT =
   "By value uses your theme's green, yellow, and red. It turns yellow below two thirds and red below one third.";
+export const STEPS_HINT =
+  'By steps runs from red to green in eleven fixed colors, one for each tenth of the value.';
 
 /** The line under the Color row: By value's rule while the text or its
- *  ground follows how full a value is, its own or another's. The game's
- *  own bands follow the game's rule instead. */
+ *  ground follows how full a value is, its own or another's, and the
+ *  steps' rule while either goes by steps. The game's own bands follow
+ *  the game's rule instead. */
 export function colorHint(
   color: PromptColorChoice,
   background: PromptColorChoice = { kind: 'default' },
 ): string {
-  const byValue = (c: PromptColorChoice) => c.kind === 'by_value' && !c.game;
-  return byValue(color) || byValue(background) ? BY_VALUE_HINT : THEME_HINT;
+  const byValue = (c: PromptColorChoice) => c.kind === 'by_value' && !c.game && !c.steps;
+  const steps = (c: PromptColorChoice) => c.kind === 'by_value' && !c.game && c.steps === true;
+  if (byValue(color) || byValue(background)) return BY_VALUE_HINT;
+  return steps(color) || steps(background) ? STEPS_HINT : THEME_HINT;
 }
 
 /** The line under a line break's When row (P10), or none while it shows

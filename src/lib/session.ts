@@ -997,13 +997,14 @@ export type PromptFormatName =
   | 'off';
 
 /** A color the card offers. By value with no field is the piece's own
- *  value, by how full it is, or by the game's `%h` bands with `game`. */
+ *  value, by how full it is, by the game's `%h` bands with `game`, or in
+ *  eleven steps from red to green with `steps`. */
 export type PromptColorChoice =
   | { kind: 'default' }
   | { kind: 'named'; index: number }
   | { kind: 'index'; index: number }
   | { kind: 'rgb'; r: number; g: number; b: number }
-  | { kind: 'by_value'; field?: string; game?: boolean };
+  | { kind: 'by_value'; field?: string; game?: boolean; steps?: boolean };
 
 /** How a value shows. A bar takes a width of 1 to 80 cells and a color,
  *  `trunc` how many characters it keeps. */

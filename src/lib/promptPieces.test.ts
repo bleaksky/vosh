@@ -25,6 +25,7 @@ import {
   rawMarks,
   rowsOf,
   step,
+  STEPS_HINT,
   swatchOf,
   textMapper,
   THEME_HINT,
@@ -182,6 +183,7 @@ describe('the rows of a part', () => {
     expect(swatchOf({ kind: 'default' })).toBe('default');
     expect(swatchOf({ kind: 'by_value' })).toBe('by_value');
     expect(swatchOf({ kind: 'by_value', field: 'mana' })).toBe('custom');
+    expect(swatchOf({ kind: 'by_value', steps: true })).toBe('custom');
     expect(swatchOf({ kind: 'named', index: 4 })).toBe(4);
     expect(swatchOf({ kind: 'named', index: 9 })).toBe('custom');
     expect(swatchOf({ kind: 'rgb', r: 128, g: 200, b: 255 })).toBe('custom');
@@ -206,11 +208,14 @@ describe('the rows of a part', () => {
     expect(colorHint({ kind: 'by_value', field: 'mana' })).toBe(BY_VALUE_HINT);
     expect(colorHint({ kind: 'default' }, { kind: 'by_value', field: 'mana' })).toBe(BY_VALUE_HINT);
     expect(colorHint({ kind: 'by_value', game: true })).toBe(THEME_HINT);
+    // The steps keep their own colors, so they say their own rule.
+    expect(colorHint({ kind: 'by_value', field: 'hp', steps: true })).toBe(STEPS_HINT);
+    expect(colorHint({ kind: 'default' }, { kind: 'by_value', steps: true })).toBe(STEPS_HINT);
     expect(breakHint('fight')).toBe(
       'The line above shows only in a fight, so out of a fight your prompt is one line.',
     );
     expect(breakHint('always')).toBeNull();
-    for (const text of [THEME_HINT, BY_VALUE_HINT, breakHint('not_fight') ?? '']) {
+    for (const text of [THEME_HINT, BY_VALUE_HINT, STEPS_HINT, breakHint('not_fight') ?? '']) {
       expect(text).not.toMatch(/[;:–—]| - /);
     }
   });
@@ -293,6 +298,8 @@ describe('the rows of a part', () => {
     expect(byValueName({ kind: 'by_value', field: 'mana' })).toBe('By mana');
     expect(byValueName({ kind: 'by_value', game: true })).toBe('By game');
     expect(byValueName({ kind: 'by_value', field: 'hp', game: true })).toBe('By game');
+    expect(byValueName({ kind: 'by_value', steps: true })).toBe('By steps');
+    expect(byValueName({ kind: 'by_value', field: 'hp', steps: true })).toBe('By hp in steps');
     expect(byValueName({ kind: 'default' })).toBeNull();
     expect(byValueName({ kind: 'rgb', r: 1, g: 2, b: 3 })).toBeNull();
   });

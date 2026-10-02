@@ -420,6 +420,10 @@ describe('the help on prompt design codes', () => {
     [['%{tick:since}'], 'The seconds since the last tick, as 16s.'],
     [['%c_green', '%c_hp'], "A theme color, or Health's color by how full it is."],
     [
+      ['%{c:hp:steps}'],
+      'Colors by how full Health is in eleven steps from red to green, one for each tenth.',
+    ],
+    [
       ['%{c:#80c8ff}', '%{c:128,200,255}'],
       'Any color you choose, as hex or as red, green and blue.',
     ],

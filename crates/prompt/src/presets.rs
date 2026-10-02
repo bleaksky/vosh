@@ -17,7 +17,8 @@ use crate::aabahran::colors::Color as GameColor;
 use crate::aabahran::lex::{self, Piece as GamePiece, Token as GameToken};
 use crate::aabahran::{Which, Who};
 use crate::template::{
-    write_tokens, Code, ColorSpec, FieldRef, Format, Style, TokenKind, UnderlineStyle, ValueRef,
+    write_tokens, Code, ColorSpec, FieldRef, Format, Scale, Style, TokenKind, UnderlineStyle,
+    ValueRef,
 };
 
 /// Vosh's default, the design Vosh draws for a profile that has none of
@@ -443,7 +444,7 @@ fn code_tokens(code: GameCode) -> Vec<TokenKind> {
         GameCode::Hp => vec![
             TokenKind::Code(Code::Fg(ColorSpec::ByValue {
                 field: FieldRef::new("hp"),
-                game: true,
+                scale: Scale::Game,
             })),
             plain("hp"),
             TokenKind::Code(Code::Reset),

@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::template::{
     runs_on, takes_param, write_token, BarColor, Code, ColorSpec, FieldRef, Format, PieceKind,
-    Style, Template, TokenKind, UnderlineStyle, ValueRef, BAR_MAX_WIDTH,
+    Scale, Style, Template, TokenKind, UnderlineStyle, ValueRef, BAR_MAX_WIDTH,
 };
 use crate::vars::{self, Kind};
 
@@ -150,13 +150,20 @@ pub enum ColorChoice {
         b: u8,
     },
     /// By how full a value is, the piece's own value when `field` is
-    /// None, or by the game's `%h` bands with `game`.
+    /// None, by the game's `%h` bands with `game`, or in eleven steps
+    /// from red to green with `steps`.
     ByValue {
         #[serde(default)]
         field: Option<String>,
         #[serde(default)]
         game: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        steps: bool,
     },
+}
+
+fn is_false(on: &bool) -> bool {
+    !*on
 }
 
 /// A style the card turns on or off. `Underline` is the single line, and
@@ -789,11 +796,17 @@ impl Doc {
                 let color = match &spec {
                     ColorSpec::ByValue {
                         field: f,
-                        game: false,
+                        scale: Scale::Thirds,
                     } if Some(f) == own.as_ref() => BarColor::Auto,
-                    ColorSpec::ByValue { game: true, .. } => {
+                    ColorSpec::ByValue {
+                        scale: Scale::Game, ..
+                    } => {
                         return error("A bar cannot take the game's colors for health.");
                     }
+                    ColorSpec::ByValue {
+                        scale: Scale::Steps,
+                        ..
+                    } => return error(BAR_STEPS),
                     other => BarColor::Color(other.clone()),
                 };
                 let value = ValueRef {
@@ -1452,10 +1465,12 @@ fn content_for(
                 Some(ColorChoice::ByValue {
                     field: None,
                     game: false,
+                    steps: false,
                 }) => BarColor::Auto,
                 Some(ColorChoice::ByValue { game: true, .. }) => {
                     return error("A bar cannot take the game's colors for health.");
                 }
+                Some(ColorChoice::ByValue { steps: true, .. }) => return error(BAR_STEPS),
                 Some(other) => BarColor::Color(color_spec(other, Some(field))?),
             };
             one(Format::Bar { width, color })
@@ -1480,6 +1495,10 @@ fn content_for(
     }
 }
 
+/// Why a bar takes no steps: its cells take one color, by thirds or as
+/// you choose.
+const BAR_STEPS: &str = "A bar cannot take the steps from red to green.";
+
 /// The color spec a choice names. By value with no field takes `own`,
 /// the piece's own value.
 fn color_spec(choice: &ColorChoice, own: Option<&FieldRef>) -> Result<ColorSpec, EditError> {
@@ -1489,7 +1508,15 @@ fn color_spec(choice: &ColorChoice, own: Option<&FieldRef>) -> Result<ColorSpec,
         ColorChoice::Named { .. } => return error("A theme color is one of the sixteen."),
         ColorChoice::Index { index } => ColorSpec::Index(*index),
         ColorChoice::Rgb { r, g, b } => ColorSpec::Rgb(*r, *g, *b),
-        ColorChoice::ByValue { field, game } => {
+        ColorChoice::ByValue { field, game, steps } => {
+            let scale = match (game, steps) {
+                (false, false) => Scale::Thirds,
+                (true, false) => Scale::Game,
+                (false, true) => Scale::Steps,
+                (true, true) => {
+                    return error("A color follows the game's bands or the steps, not both.")
+                }
+            };
             let field = match field {
                 Some(name) => parse_field(name)?,
                 None => match own {
@@ -1500,7 +1527,7 @@ fn color_spec(choice: &ColorChoice, own: Option<&FieldRef>) -> Result<ColorSpec,
             if field.param.is_some() {
                 return error("Only a value can take its color from how full it is.");
             }
-            ColorSpec::ByValue { field, game: *game }
+            ColorSpec::ByValue { field, scale }
         }
     })
 }

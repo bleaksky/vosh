@@ -118,7 +118,8 @@ fn the_hp_value_reads_as_health_with_its_own_codes_and_inherited_italic() {
         pct.color,
         ColorChoice::ByValue {
             field: None,
-            game: false
+            game: false,
+            steps: false
         }
     );
     assert_eq!(pct.format, Some(FormatName::Pct));
@@ -165,7 +166,8 @@ fn a_bar_in_a_fight_section_reads_in_a_fight_with_its_own_color() {
         bar.color,
         ColorChoice::ByValue {
             field: None,
-            game: false
+            game: false,
+            steps: false
         }
     );
     assert_eq!(bar.meta.as_deref(), Some("60 percent in this preview"));
@@ -386,4 +388,33 @@ fn show_as_marks_current_and_max_and_percent_once_you_choose_them() {
     let health = shown(&hp, "hp", PieceKindName::Percent);
     assert_eq!(health.format, Some(FormatName::Percent));
     assert_eq!(segments(&health), ["1020", "1020/1020", "100%", "Bar"]);
+}
+
+#[test]
+fn a_color_by_steps_reads_as_by_value_with_steps() {
+    let described = describe(
+        &Template::parse("%pct_hp%{c:hp:steps}%% %{c:mana:steps}%mana"),
+        &Sampled { fight: false },
+        false,
+    );
+    // The sign takes the steps of Health, another value than its own.
+    let sign = piece(&described.pieces, "%{c:hp:steps}%% ");
+    assert_eq!(
+        sign.color,
+        ColorChoice::ByValue {
+            field: Some("hp".into()),
+            game: false,
+            steps: true
+        }
+    );
+    // Mana takes the steps of its own value.
+    let mana = piece(&described.pieces, "%{c:mana:steps}%mana");
+    assert_eq!(
+        mana.color,
+        ColorChoice::ByValue {
+            field: None,
+            game: false,
+            steps: true
+        }
+    );
 }
