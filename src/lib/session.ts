@@ -1986,6 +1986,11 @@ export interface UiConfig {
    *  color a trigger paints text in at a lightness that reads on the
    *  theme's terminal background. On unless you turn it off. */
   readable_highlights: boolean;
+  /** Collapse repeated lines. While on, the session shows a line the
+   *  game sends that reads exactly as the line before it on screen,
+   *  colors included, once with a count before it. Off unless you turn
+   *  it on. */
+  collapse_repeats: boolean;
   /** Custom base terminal palette: 16 CSS colors in ANSI 0-15 order,
    *  used whenever the tint toggle resolves off. Null = canonical
    *  xterm chart. */
@@ -2107,6 +2112,7 @@ export interface RawUiConfig {
   bright_bold?: boolean;
   blink_text?: boolean | null;
   readable_highlights?: boolean;
+  collapse_repeats?: boolean;
   terminal_base_ansi?: unknown;
   custom_themes?: CustomTheme[];
   split_divider_color?: string | null;
@@ -2189,6 +2195,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     bright_bold: Boolean(cfg.bright_bold),
     blink_text: typeof cfg.blink_text === 'boolean' ? cfg.blink_text : null,
     readable_highlights: cfg.readable_highlights !== false,
+    collapse_repeats: cfg.collapse_repeats === true,
     terminal_base_ansi:
       Array.isArray(cfg.terminal_base_ansi) &&
       cfg.terminal_base_ansi.length === 16 &&
@@ -2583,6 +2590,7 @@ function uiConfigPayload(config: UiConfig): Record<string, unknown> {
     bright_bold: config.bright_bold,
     blink_text: config.blink_text,
     readable_highlights: config.readable_highlights,
+    collapse_repeats: config.collapse_repeats,
     terminal_base_ansi: config.terminal_base_ansi,
     custom_themes: config.custom_themes,
     split_divider_color: config.split_divider_color,

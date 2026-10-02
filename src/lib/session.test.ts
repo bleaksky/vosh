@@ -406,6 +406,23 @@ describe('Keep highlight colors readable', () => {
   });
 });
 
+describe('Collapse repeated lines', () => {
+  it('reads off for a config saved before it existed, and keeps it on once on', () => {
+    expect(normalizeUiConfig(raw()).collapse_repeats).toBe(false);
+    expect(normalizeUiConfig(raw({ collapse_repeats: true })).collapse_repeats).toBe(true);
+  });
+
+  it('saves with the rest of the config, which the session reads for the next line', async () => {
+    const invoked = vi.mocked(invoke);
+    invoked.mockClear();
+    const on = { ...normalizeUiConfig(raw()), collapse_repeats: true };
+    await setUiConfig(on);
+    const [command, args] = invoked.mock.calls[0] as [string, { config: Record<string, unknown> }];
+    expect(command).toBe('ui_set_config');
+    expect(args.config).toMatchObject({ collapse_repeats: true });
+  });
+});
+
 describe('vitals options', () => {
   it('reads the defaults for a config saved before they existed', () => {
     const ui = normalizeUiConfig(raw());

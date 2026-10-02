@@ -311,6 +311,15 @@ pub(crate) struct UiConfig {
     /// never turns it off saves the bytes it saved before.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub readable_highlights: bool,
+    /// Collapse repeated lines. While on, a line the game sends that shows
+    /// exactly as the line before it on screen, colors included, joins it,
+    /// and the screen shows the two once with a count before them. The
+    /// log keeps every line and triggers see each one. Off by default, and
+    /// a file written before this switch reads it off. Written only while
+    /// on, so a profile that never turns it on saves the bytes it saved
+    /// before.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub collapse_repeats: bool,
     /// Custom base terminal palette: 16 CSS colors (ANSI 0-15 order)
     /// used whenever tint-output-with-theme resolves off. None means
     /// the canonical xterm-256 chart. The frontend owns validation.
@@ -1399,6 +1408,7 @@ impl Default for UiConfig {
             bright_bold: false,
             blink_text: None,
             readable_highlights: true,
+            collapse_repeats: false,
             terminal_base_ansi: None,
             custom_themes: Vec::new(),
             split_divider_color: None,
@@ -1576,6 +1586,11 @@ fn default_true() -> bool {
 /// Leave a switch that is on by default out of the file while it is on.
 fn is_true(on: &bool) -> bool {
     *on
+}
+
+/// Leave a switch that is off by default out of the file while it is off.
+fn is_false(on: &bool) -> bool {
+    !*on
 }
 
 impl ProfileConfig {

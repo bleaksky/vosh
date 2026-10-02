@@ -2988,6 +2988,7 @@ pub(crate) struct UiConfigPayload {
     #[serde(default)]
     pub blink_text: Option<bool>,
     pub readable_highlights: bool,
+    pub collapse_repeats: bool,
     pub terminal_base_ansi: Option<Vec<String>>,
     pub custom_themes: Vec<crate::profile_config::CustomTheme>,
     pub split_divider_color: Option<String>,
@@ -3043,6 +3044,7 @@ impl UiConfigPayload {
             bright_bold: ui.bright_bold,
             blink_text: ui.blink_text,
             readable_highlights: ui.readable_highlights,
+            collapse_repeats: ui.collapse_repeats,
             terminal_base_ansi: ui.terminal_base_ansi.clone(),
             custom_themes: ui.custom_themes.clone(),
             split_divider_color: ui.split_divider_color.clone(),
@@ -3092,6 +3094,7 @@ impl UiConfigPayload {
             bright_bold,
             blink_text,
             readable_highlights,
+            collapse_repeats,
             terminal_base_ansi,
             custom_themes,
             split_divider_color,
@@ -3142,6 +3145,7 @@ impl UiConfigPayload {
         ui.bright_bold = bright_bold;
         ui.blink_text = blink_text;
         ui.readable_highlights = readable_highlights;
+        ui.collapse_repeats = collapse_repeats;
         ui.terminal_base_ansi = terminal_base_ansi;
         ui.custom_themes = custom_themes;
         // Empty strings get normalized to None so the picker can clear
@@ -5016,6 +5020,30 @@ mod tests {
         // A file from before the switch reads it on.
         let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
         assert!(old.ui.readable_highlights);
+    }
+
+    #[test]
+    fn collapse_repeats_round_trips() {
+        let mut ui = UiConfig::default();
+        assert!(!ui.collapse_repeats);
+        assert!(!through_payload(&ui).collapse_repeats);
+        assert!(!through_toml(&ui).collapse_repeats);
+        ui.collapse_repeats = true;
+        assert!(through_payload(&ui).collapse_repeats);
+        assert!(through_toml(&ui).collapse_repeats);
+    }
+
+    #[test]
+    fn collapse_repeats_is_written_only_while_on() {
+        let mut config = ProfileConfig::default();
+        let off = config.to_toml().unwrap();
+        assert!(!off.contains("collapse_repeats"), "{off}");
+        config.ui.collapse_repeats = true;
+        let on = config.to_toml().unwrap();
+        assert!(on.contains("collapse_repeats = true"), "{on}");
+        // A file from before the switch reads it off.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert!(!old.ui.collapse_repeats);
     }
 
     #[test]
