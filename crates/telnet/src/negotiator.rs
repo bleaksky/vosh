@@ -169,36 +169,16 @@ impl Negotiator {
     /// `vosh_gmcp::build`) in `IAC SB GMCP ... IAC SE`. Any literal
     /// 0xFF inside the payload is doubled per the telnet escape rule.
     pub fn build_gmcp_subnegotiation(payload: &[u8]) -> Vec<u8> {
-        let mut out = vec![IAC, SB, option::GMCP];
-        for &b in payload {
-            if b == IAC {
-                out.push(IAC);
-            }
-            out.push(b);
-        }
-        out.extend_from_slice(&[IAC, SE]);
-        out
+        subnegotiation(option::GMCP, payload)
     }
 
-    /// Build a NAWS subnegotiation block for the current window size, with
-    /// the IAC IAC escaping required when any byte happens to equal 0xFF.
+    /// Build a NAWS subnegotiation block for the current window size. A
+    /// size byte that equals 0xFF goes out doubled.
     pub fn naws_subnegotiation(&self) -> Vec<u8> {
         let (cols, rows) = self.window_size;
-        let bytes = [
-            cols.to_be_bytes()[0],
-            cols.to_be_bytes()[1],
-            rows.to_be_bytes()[0],
-            rows.to_be_bytes()[1],
-        ];
-        let mut out = vec![IAC, SB, option::NAWS];
-        for b in bytes {
-            if b == IAC {
-                out.push(IAC);
-            }
-            out.push(b);
-        }
-        out.extend_from_slice(&[IAC, SE]);
-        out
+        let [cols_hi, cols_lo] = cols.to_be_bytes();
+        let [rows_hi, rows_lo] = rows.to_be_bytes();
+        subnegotiation(option::NAWS, &[cols_hi, cols_lo, rows_hi, rows_lo])
     }
 
     /// The server offers to perform `opt`. An offer of an option that is
@@ -283,11 +263,9 @@ impl Negotiator {
         let idx = self.ttype_cycle;
         self.ttype_cycle += 1;
         let slot = idx.min(self.ttype_responses.len() - 1);
-        let response = &self.ttype_responses[slot];
-        let mut out = vec![IAC, SB, option::TTYPE, ttype::IS];
-        out.extend_from_slice(response.as_bytes());
-        out.extend_from_slice(&[IAC, SE]);
-        out
+        let mut reply = vec![ttype::IS];
+        reply.extend_from_slice(self.ttype_responses[slot].as_bytes());
+        subnegotiation(option::TTYPE, &reply)
     }
 
     /// Reply to an `IAC SB NEW-ENVIRON SEND ... IAC SE` request with the
@@ -307,11 +285,10 @@ impl Negotiator {
         if payload.first() != Some(&new_environ::SEND) {
             return Vec::new();
         }
-        let mut out = vec![IAC, SB, option::NEW_ENVIRON, new_environ::IS];
-        push_environ_var(&mut out, new_environ::USERVAR, b"TERM", b"xterm-256color");
-        push_environ_var(&mut out, new_environ::USERVAR, b"COLORTERM", b"truecolor");
-        out.extend_from_slice(&[IAC, SE]);
-        out
+        let mut reply = vec![new_environ::IS];
+        push_environ_var(&mut reply, new_environ::USERVAR, b"TERM", b"xterm-256color");
+        push_environ_var(&mut reply, new_environ::USERVAR, b"COLORTERM", b"truecolor");
+        subnegotiation(option::NEW_ENVIRON, &reply)
     }
 
     fn respond_charset(&self, payload: &[u8]) -> Vec<u8> {
@@ -326,14 +303,28 @@ impl Negotiator {
             .split(|&b| b == separator)
             .any(|cs| cs.eq_ignore_ascii_case(utf8));
         if accepted {
-            let mut out = vec![IAC, SB, option::CHARSET, charset::ACCEPTED];
-            out.extend_from_slice(utf8);
-            out.extend_from_slice(&[IAC, SE]);
-            out
+            let mut reply = vec![charset::ACCEPTED];
+            reply.extend_from_slice(utf8);
+            subnegotiation(option::CHARSET, &reply)
         } else {
-            vec![IAC, SB, option::CHARSET, charset::REJECTED, IAC, SE]
+            subnegotiation(option::CHARSET, &[charset::REJECTED])
         }
     }
+}
+
+/// Frame a subnegotiation as `IAC SB option payload IAC SE`. RFC 854
+/// doubles every 0xFF inside a subnegotiation, and doing it here once
+/// means no builder escapes IAC on its own.
+fn subnegotiation(option: u8, payload: &[u8]) -> Vec<u8> {
+    let mut out = vec![IAC, SB, option];
+    for &b in payload {
+        if b == IAC {
+            out.push(IAC);
+        }
+        out.push(b);
+    }
+    out.extend_from_slice(&[IAC, SE]);
+    out
 }
 
 /// Append one NEW-ENVIRON entry (a kind byte, the variable name, a
@@ -349,20 +340,18 @@ fn push_environ_var(out: &mut Vec<u8>, kind: u8, name: &[u8], value: &[u8]) {
     push_environ_token(out, value);
 }
 
+/// Append a name or value with its NEW-ENVIRON control bytes escaped by
+/// ESC. An IAC passes through as is, since `subnegotiation` doubles it
+/// when it frames the whole response.
 fn push_environ_token(out: &mut Vec<u8>, bytes: &[u8]) {
     for &b in bytes {
-        match b {
-            new_environ::VAR | new_environ::VALUE | new_environ::ESC | new_environ::USERVAR => {
-                out.push(new_environ::ESC);
-                out.push(b);
-            }
-            IAC => {
-                // IAC inside a subnegotiation must be doubled per RFC 854.
-                out.push(IAC);
-                out.push(IAC);
-            }
-            _ => out.push(b),
+        if matches!(
+            b,
+            new_environ::VAR | new_environ::VALUE | new_environ::ESC | new_environ::USERVAR
+        ) {
+            out.push(new_environ::ESC);
         }
+        out.push(b);
     }
 }
 
