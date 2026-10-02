@@ -11,7 +11,8 @@ use serde::{Serialize, Serializer};
 
 use super::catalog::Pair;
 use super::Vars;
-use crate::values::format::{lang_game, Position};
+use crate::aabahran::codes::Position;
+use crate::values::format::lang_game;
 use crate::values::gmcp::{self, Affects, CHAR_STATE, CHAR_WORTH, ROOM_WEATHER, WORLD_TIME};
 
 /// Which values the game hides right now. Worked out from the latest

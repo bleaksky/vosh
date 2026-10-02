@@ -5,9 +5,9 @@ use chrono::NaiveDateTime;
 use super::catalog::{field, Field, Kind, MemberStat, CATALOG};
 use super::resolver::{exits_value, label, moon_code_value, pos_value};
 use super::{since_of, Values};
-use crate::aabahran::codes::PHASES;
+use crate::aabahran::codes::{Position, PHASES};
 use crate::design::FieldRef;
-use crate::values::format::{Position, Resolved, Value};
+use crate::values::format::{Resolved, Value};
 
 // ---------------------------------------------------------------------
 // Samples
