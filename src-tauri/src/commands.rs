@@ -1197,71 +1197,13 @@ pub(crate) async fn timers_delete(
     Ok(updated)
 }
 
-/// One entry in a groups-list response: name + whether the group is
-/// currently enabled. Used by every per-type groups list endpoint so
-/// the frontend can render the toggle UI from a single shape.
+/// One entry in the macro groups list: name + whether the group is
+/// currently enabled. The command line reads it to know which macro
+/// keys fire.
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct GroupState {
     pub name: String,
     pub enabled: bool,
-}
-
-#[tauri::command]
-pub(crate) async fn aliases_groups_list(
-    state: State<'_, SharedState>,
-) -> Result<Vec<GroupState>, String> {
-    let p = state.profile.lock().await;
-    Ok(p.aliases
-        .groups()
-        .into_iter()
-        .map(|(name, enabled)| GroupState { name, enabled })
-        .collect())
-}
-
-#[tauri::command]
-pub(crate) async fn aliases_set_group_enabled(
-    app: AppHandle,
-    state: State<'_, SharedState>,
-    group: String,
-    enabled: bool,
-) -> Result<(), String> {
-    {
-        let mut p = state.profile.lock().await;
-        p.aliases.set_group_enabled(group.trim(), enabled);
-    }
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
-    broadcast(&app, "vosh://alias-groups-changed", &group);
-    Ok(())
-}
-
-#[tauri::command]
-pub(crate) async fn triggers_groups_list(
-    state: State<'_, SharedState>,
-) -> Result<Vec<GroupState>, String> {
-    let p = state.profile.lock().await;
-    Ok(p.triggers
-        .groups()
-        .into_iter()
-        .map(|(name, enabled)| GroupState { name, enabled })
-        .collect())
-}
-
-#[tauri::command]
-pub(crate) async fn triggers_set_group_enabled(
-    app: AppHandle,
-    state: State<'_, SharedState>,
-    group: String,
-    enabled: bool,
-) -> Result<(), String> {
-    {
-        let mut p = state.profile.lock().await;
-        p.triggers.set_group_enabled(group.trim(), enabled);
-    }
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
-    broadcast(&app, "vosh://trigger-groups-changed", &group);
-    Ok(())
 }
 
 #[tauri::command]
@@ -1287,31 +1229,6 @@ pub(crate) async fn macros_groups_list(
 }
 
 #[tauri::command]
-pub(crate) async fn macros_set_group_enabled(
-    app: AppHandle,
-    state: State<'_, SharedState>,
-    group: String,
-    enabled: bool,
-) -> Result<(), String> {
-    let group = group.trim().to_string();
-    if group.is_empty() {
-        return Ok(());
-    }
-    {
-        let mut p = state.profile.lock().await;
-        if enabled {
-            p.disabled_macro_groups.remove(&group);
-        } else {
-            p.disabled_macro_groups.insert(group.clone());
-        }
-    }
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
-    broadcast(&app, MACRO_GROUPS_CHANGED, &group);
-    Ok(())
-}
-
-#[tauri::command]
 pub(crate) async fn triggers_export(state: State<'_, SharedState>) -> Result<String, String> {
     let p = state.profile.lock().await;
     p.triggers.export_json().map_err(|e| e.to_string())
@@ -1328,13 +1245,9 @@ pub(crate) async fn triggers_import(
         p.triggers.import_json(&json).map_err(|e| e.to_string())?
     };
     // The editor's save path lands here: persist, or the "saved" state
-    // lives only in memory and vanishes on restart. Broadcast so the
-    // group checkboxes resync (the import may add or drop groups).
+    // lives only in memory and vanishes on restart.
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    // Empty string, not unit: the frontend listener types this
-    // payload as string. Empty means "more than one group changed".
-    broadcast(&app, "vosh://trigger-groups-changed", &"");
     broadcast_list_changes(&app, ListChanges::TRIGGERS);
     Ok(count)
 }
@@ -1382,9 +1295,6 @@ pub(crate) async fn aliases_import(
     // Same persistence rule as triggers_import: the editor saves here.
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    // Empty string, not unit: the frontend listener types this
-    // payload as string. Empty means "more than one group changed".
-    broadcast(&app, "vosh://alias-groups-changed", &"");
     broadcast_list_changes(&app, ListChanges::ALIASES);
     Ok(count)
 }

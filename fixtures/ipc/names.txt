@@ -1,9 +1,7 @@
 command affect_full_get()
 command affects_snapshot_get()
 command aliases_export()
-command aliases_groups_list()
 command aliases_import(json)
-command aliases_set_group_enabled(group, enabled)
 command app_quit()
 command fonts_list()
 command hidden_get()
@@ -19,7 +17,6 @@ command macros_delete(key)
 command macros_groups_list()
 command macros_list()
 command macros_set(key, command, group?, enabled?)
-command macros_set_group_enabled(group, enabled)
 command menu_copy(terminal)
 command menu_set_state(state)
 command migration_analyze(library)
@@ -104,10 +101,8 @@ command timers_list()
 command timers_set(id?, name, intervalSecs, command, enabled)
 command tracked_affects_set(list, profile?)
 command triggers_export()
-command triggers_groups_list()
 command triggers_import(json)
 command triggers_list()
-command triggers_set_group_enabled(group, enabled)
 command ui_get_chat_colors()
 command ui_get_config()
 command ui_reset_chat_colors()
@@ -133,7 +128,6 @@ event session://target app heard
 event session://tick app heard
 event vosh://affect-full-changed app heard
 event vosh://affects-display-changed app page heard
-event vosh://alias-groups-changed app heard
 event vosh://aliases-changed app heard
 event vosh://app-menu app heard
 event vosh://base-ansi-changed page heard
@@ -181,7 +175,6 @@ event vosh://tick-config-changed app heard
 event vosh://tick-count-changed app page heard
 event vosh://timers-changed app heard
 event vosh://tracked-affects-changed app page heard
-event vosh://trigger-groups-changed app heard
 event vosh://triggers-changed app heard
 event vosh://ui-config-replaced app heard
 event vosh://vitals-density-changed page heard
