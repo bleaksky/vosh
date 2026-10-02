@@ -1,7 +1,7 @@
 /* One Window frame: the AppShell grid, the title band, the input band,
    the status line, and the title band's menus. Loads after styles.css
    and the token sheet. Every rule sits under .shell or a shell- class,
-   so the Settings window, which shares .app, is untouched. Geometry and
+   over the base .app rules in styles.css. Geometry and
    colors follow SPEC 1, 3, 7, 9, and 10 and the approved artboards. */
 
 /* ── Frame ─────────────────────────────────────────────────────────── */

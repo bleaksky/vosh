@@ -3,9 +3,9 @@
    st- class and reads the One Window tokens, plus the literal fills
    SPEC 4 gives for settings controls. Geometry follows the approved
    boards SettingsAppearance, SettingsAutomation, and SettingsCharacters.
-   The root is not under .settings-app, so the legacy rules in
-   styles.css (mono inputs, custom checkboxes, underline fields) never
-   reach it. */
+   The root is not under .settings-app. In styles.css only the
+   .settings-app font rule and .settings-btn remain, for the migration
+   wizard that ImportPanel wraps in .settings-app. */
 
 /* ── Root ──────────────────────────────────────────────────────────── */
 
