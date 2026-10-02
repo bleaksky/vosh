@@ -173,13 +173,20 @@ pub fn run() {
             if window.label() != "main" {
                 return;
             }
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                let app = window.app_handle();
-                for (label, w) in app.webview_windows() {
-                    if label != "main" {
-                        let _ = w.close();
+            match event {
+                tauri::WindowEvent::CloseRequested { .. } => {
+                    let app = window.app_handle();
+                    for (label, w) in app.webview_windows() {
+                        if label != "main" {
+                            let _ = w.close();
+                        }
                     }
                 }
+                // A drag on the native grid whose release may never come
+                // ends as the main window loses focus.
+                #[cfg(native_surface)]
+                tauri::WindowEvent::Focused(false) => native_surface::window_blurred(),
+                _ => {}
             }
         })
         .plugin(tauri_plugin_updater::Builder::new().build())

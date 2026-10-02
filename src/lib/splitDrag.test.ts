@@ -498,14 +498,19 @@ describe('listenSplitDrag', () => {
           closest: (selector: string) => (onText && selector === HISTORY_TEXT ? {} : null),
         },
       });
-    return { win, listeners, send };
+    /** An event of `type` with no pointer of its own, at `target`. */
+    const fire = (type: string, target: unknown) =>
+      listeners.get(type)?.fn({ ...at(0, 0, { buttons: 0 }), target });
+    return { win, listeners, send, fire };
   }
 
   it('drives a drag from the window in the capture phase', async () => {
     const { history, drag } = await split();
     const { win, listeners, send } = fakeWindow();
     const stop = listenSplitDrag(win, drag, () => false);
-    expect([...listeners.values()].every((l) => l.capture)).toBe(true);
+    for (const type of ['mousedown', 'mousemove', 'mouseup']) {
+      expect(listeners.get(type)?.capture).toBe(true);
+    }
     send('mousedown', at(4, 15), true);
     expect(drag.state).toBe('armed');
     send('mousemove', at(40, 101));
@@ -513,6 +518,40 @@ describe('listenSplitDrag', () => {
     expect(history.text()).toBe(run(73, 79));
     send('mouseup', at(40, 101, { buttons: 0 }));
     expect(drag.state).toBe('idle');
+    stop();
+    expect(listeners.size).toBe(0);
+  });
+
+  it('ends a drag when the window loses focus or the page hides', async () => {
+    const { history, live, drag, timers } = await split();
+    const { win, listeners, send, fire } = fakeWindow();
+    const stop = listenSplitDrag(win, drag, () => false);
+    send('mousedown', at(4, 15), true);
+    send('mousemove', at(40, 101));
+    expect(drag.state).toBe('history');
+    // The command line losing focus to the press ends nothing.
+    fire('blur', {});
+    expect(drag.state).toBe('history');
+    expect(drag.tick()).toBe(true);
+    fire('blur', win);
+    expect(drag.state).toBe('idle');
+    expect(timers.running).toBe(0);
+    // A tick that comes anyway scrolls and selects nothing.
+    const seen = { at: history.bufferView().viewportY, selections: history.selections };
+    expect(drag.tick()).toBe(false);
+    expect(history.bufferView().viewportY).toBe(seen.at);
+    expect(history.selections).toBe(seen.selections);
+    // A drag that runs on in the live pane ends as the page hides.
+    send('mousedown', at(4, 15), true);
+    send('mousemove', at(40, 140));
+    for (let n = 0; n < 10 && drag.state === 'history'; n++) drag.tick();
+    expect(drag.state).toBe('live');
+    fire('visibilitychange', {});
+    expect(drag.state).toBe('idle');
+    expect(timers.running).toBe(0);
+    const selections = live.selections;
+    expect(drag.tick()).toBe(false);
+    expect(live.selections).toBe(selections);
     stop();
     expect(listeners.size).toBe(0);
   });

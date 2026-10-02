@@ -762,6 +762,21 @@ fn pointer_up() {
     }
 }
 
+/// The main window lost focus. A drag whose release may never come then,
+/// after a system gesture or a grab another window took, ends here, so no
+/// autoscroll tick runs on to the tail and closes the split behind your
+/// back. The selection stays for a copy, and nothing goes to the
+/// clipboard. Leaving the window ends nothing, as the release still comes.
+pub(crate) fn window_blurred() {
+    SELECTING.store(false, Ordering::Release);
+    DRAG_FROM_HISTORY.store(false, Ordering::Release);
+    SCROLLBAR_DRAGGING.store(false, Ordering::Release);
+    DRAGGING.store(false, Ordering::Release);
+    if let Ok(mut last) = LAST_DRAG.lock() {
+        *last = None;
+    }
+}
+
 /// Right-click. The opaque surface eats the DOM contextmenu event, so the
 /// pointer's position is forwarded in webview CSS coordinates (surface
 /// origin + the event's surface-local point) and the frontend opens its
@@ -1585,6 +1600,32 @@ mod tests {
         let lines: Vec<&str> = text.lines().collect();
         let want: Vec<String> = (41..=58).map(|n| format!("L{n:02}")).collect();
         assert_eq!(lines, want);
+        reset_pointer();
+    }
+
+    #[test]
+    fn a_window_blur_ends_a_history_drag_and_its_autoscroll() {
+        let _grid = crate::term_grid::lock_shared_grid_for_test();
+        split_surface(8);
+        pointer_down(&at(0.0, 15.0));
+        pointer_dragged(&at(40.0, 100.0));
+        assert!(SELECTING.load(Ordering::Acquire));
+        window_blurred();
+        assert!(!SELECTING.load(Ordering::Acquire));
+        assert!(!DRAG_FROM_HISTORY.load(Ordering::Acquire));
+        // The next tick scrolls nothing and stops the ticker, and the
+        // split stays open with the selection as it was.
+        AUTOSCROLL_ARMED.store(true, Ordering::Release);
+        assert!(!autoscroll_tick());
+        assert!(!AUTOSCROLL_ARMED.load(Ordering::Acquire));
+        assert_eq!(crate::term_grid::current_display_offset(), 8);
+        let text = crate::term_grid::selection_text().expect("a selection");
+        assert_eq!(text.lines().last(), Some("L47"));
+        // A drag event that still comes moves nothing.
+        pointer_dragged(&at(40.0, 110.0));
+        assert_eq!(crate::term_grid::current_display_offset(), 8);
+        let after = crate::term_grid::selection_text().expect("a selection");
+        assert_eq!(after, text);
         reset_pointer();
     }
 
