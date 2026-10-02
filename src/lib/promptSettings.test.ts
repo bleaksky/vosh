@@ -63,8 +63,6 @@ function report(over: Partial<PromptCompileReport> = {}): PromptCompileReport {
     prompt: '<%h%m %vmv> ',
     fprompt: '',
     shapes: [],
-    vars: [],
-    codes: [],
     warnings: [],
     presets: [],
     names: {},

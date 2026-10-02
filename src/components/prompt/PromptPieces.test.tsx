@@ -452,7 +452,6 @@ function field(name: string, over: Partial<PromptFieldState> = {}): PromptFieldS
     search: [],
     param: false,
     listed: true,
-    formats: ['value'],
     state: 'missing',
     source: null,
     value: null,

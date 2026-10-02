@@ -908,7 +908,16 @@ mod tests {
         let id = p.prompt.stage.ring().last().expect("the entry").id;
         let report = capture_from_line(&p, id, &[]).expect("the report");
         assert!(report.ok);
-        assert_eq!(report.vars, ["hp", "mana", "move"]);
+        // The names the numbers read into, without the ones you left out.
+        let read_into = |report: &CompileReport| -> Vec<String> {
+            report
+                .numbers
+                .iter()
+                .filter(|n| !n.name.is_empty())
+                .map(|n| n.name.clone())
+                .collect()
+        };
+        assert_eq!(read_into(&report), ["hp", "mana", "move"]);
         assert_eq!(report.numbers.len(), 3);
         // Before Char.Vitals comes, the presets draw only what the line
         // reads.
@@ -917,7 +926,7 @@ mod tests {
         };
         let renamed =
             capture_from_line(&p, id, &["health".into(), String::new()]).expect("the report");
-        assert_eq!(renamed.vars, ["health", "move"]);
+        assert_eq!(read_into(&renamed), ["health", "move"]);
         assert_eq!(
             ids(&renamed),
             ["default", "minimal", "how_full", "detailed", "empty"]
