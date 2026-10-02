@@ -1,10 +1,16 @@
-//! SQLite-backed log store for Vosh sessions.
+//! The session log in logs.sqlite, with no app state.
 //!
-//! Each connection opens a `sessions` row, every server line lands in
-//! `log_lines` with both its plain-text form (ANSI stripped) and the
-//! original ANSI-bearing bytes, and search runs as a regex scan over
-//! the `text` column. Export reproduces a session as plain text or with
-//! ANSI codes restored.
+//! [`LogStore`] holds the connection, and each module below adds the
+//! methods for its job.
+//!
+//! `sqlite` opens the file in WAL mode and creates or upgrades the tables.
+//! `sessions` starts, ends and lists sessions, writes each game line with
+//! its plain text and its raw bytes, and exports a session. It also owns
+//! the `> ` rows that record what you sent.
+//! `search` runs the regex search the log view pages through.
+//! `lookup` reads the sessions that belong to a profile's characters.
+//! `forget` finds the lines where you sent a password and blanks them for
+//! good.
 
 use rusqlite::Connection;
 use thiserror::Error;
@@ -30,6 +36,8 @@ pub enum LogError {
 
 pub type Result<T> = std::result::Result<T, LogError>;
 
+/// One connection to logs.sqlite. Its methods live in the modules the
+/// crate doc lists, and the password wipe's in `forget/wipe.rs`.
 pub struct LogStore {
     conn: Connection,
 }

@@ -1,3 +1,6 @@
+//! The SQL that finds the password lines, blanks them, and rebuilds the
+//! file so no old copy is left.
+
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 

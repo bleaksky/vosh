@@ -1,3 +1,6 @@
+//! Starts, ends and lists sessions, writes their lines, and exports one.
+//! It also owns the `> ` rows that record what you sent.
+
 use rusqlite::params;
 #[cfg(any(test, feature = "testkit"))]
 use rusqlite::OptionalExtension;

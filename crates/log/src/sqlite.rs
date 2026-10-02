@@ -1,3 +1,6 @@
+//! Opens logs.sqlite, sets the WAL pragmas, and creates or upgrades the
+//! tables.
+
 use std::path::Path;
 
 use rusqlite::{params, Connection};
