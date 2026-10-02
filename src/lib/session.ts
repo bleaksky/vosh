@@ -980,6 +980,7 @@ export type PromptFormatName =
   | 'bar'
   | 'game'
   | 'word'
+  | 'ampm'
   | 'name'
   | 'grouped'
   | 'short'

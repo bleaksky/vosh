@@ -51,6 +51,10 @@ export const PROMPT_DESIGN_CODES: readonly PromptDesignCode[] = [
   { codes: ['%hp_bar:10:auto'], text: 'A bar ten cells wide, colored by how full it is.' },
   { codes: ['%{gold:grouped}'], text: 'Any value from the picker, in any of its forms.' },
   { codes: ['%{gold:thousands}'], text: 'Gold in thousands with one decimal, as 12.3K.' },
+  {
+    codes: ['%{hour:ampm}'],
+    text: 'The game hour as 3PM, with 12AM for midnight and 12PM for noon.',
+  },
   { codes: ['%c_green', '%c_hp'], text: "A theme color, or Health's color by how full it is." },
   {
     codes: ['%{c:#80c8ff}', '%{c:128,200,255}'],

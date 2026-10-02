@@ -113,6 +113,7 @@ pub enum FormatName {
     Bar,
     Game,
     Word,
+    Ampm,
     Name,
     Grouped,
     Short,
@@ -1381,6 +1382,7 @@ fn content_for(
             FormatName::Bar => F::Bar,
             FormatName::Game => F::Game,
             FormatName::Word => F::Word,
+            FormatName::Ampm => F::Ampm,
             FormatName::Name => F::Name,
             FormatName::Grouped => F::Grouped,
             FormatName::Short => F::Short,
@@ -1458,6 +1460,7 @@ fn content_for(
         }
         FormatName::Game => one(Format::Game),
         FormatName::Word => one(Format::Word),
+        FormatName::Ampm => one(Format::Ampm),
         FormatName::Name => one(Format::Name),
         FormatName::Grouped => one(Format::Grouped),
         FormatName::Short => one(Format::Short),
