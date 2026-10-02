@@ -210,14 +210,12 @@ pub fn run() {
             // on the blocking pool, never here on the main thread.
             #[cfg(target_os = "macos")]
             fonts::warm_font_cache();
-            // The data folder and the scripts folder in it. This runs
-            // before the mudclient copy, whose guard reads the scripts
-            // folder as a folder in use.
+            // The data folder and the scripts folder in it, where
+            // `#script load` finds Lua files.
             if let Err(e) = create_scripts_dir(app) {
                 error!(error = %e, "scripts folder could not be created");
             }
             if let Ok(path) = app.path().app_data_dir() {
-                migrate_from_mudclient_dir(&path);
                 // Where `#profile save`, `#profile load` and `#script
                 // load` find their files.
                 let _ = crate::input::APP_DATA_DIR.set(path.clone());
@@ -499,96 +497,6 @@ fn flush_profile_on_exit(app_handle: &tauri::AppHandle) {
     }
 }
 
-/// One-shot rename migration: when the bundle identifier flipped from
-/// `com.aabahran.mudclient` to `com.aabahran.vosh`, the macOS/Windows/Linux
-/// app-data directory moved with it. On first run after the rename, find
-/// the old directory next to the new one and recursively copy its
-/// contents over so saved profile, scrollback, maps, logs, and plugins
-/// survive the rebrand. Skips if the new directory already has its own
-/// data (so we never clobber a real fresh install).
-fn migrate_from_mudclient_dir(new_dir: &std::path::Path) {
-    let Some(parent) = new_dir.parent() else {
-        return;
-    };
-    let Some(new_name) = new_dir.file_name().and_then(|s| s.to_str()) else {
-        return;
-    };
-    // Replace the trailing "vosh" segment with "mudclient". The
-    // identifier change is the only diff between the two paths.
-    let Some(old_name) = new_name
-        .strip_suffix("vosh")
-        .map(|prefix| format!("{prefix}mudclient"))
-    else {
-        return;
-    };
-    let old_dir = parent.join(&old_name);
-    if !old_dir.exists() {
-        return;
-    }
-    let migrated_flag = new_dir.join(".migrated-from-mudclient");
-    if migrated_flag.exists() {
-        return;
-    }
-    // Don't overwrite a real install. If the new dir already has a
-    // profile or any of the core data files, the user has already used
-    // the renamed build — leave them alone. Launch creates the scripts
-    // folder before this runs, so a launch always finds the folder in
-    // use and skips, the way it did while the map store created
-    // maps.sqlite here first. D15 decides whether the copy stays at all.
-    let occupied = [
-        "profile.toml",
-        "scrollback.bin",
-        "maps.sqlite",
-        "logs.sqlite",
-        SCRIPTS_DIR,
-    ]
-    .iter()
-    .any(|name| new_dir.join(name).exists());
-    if occupied {
-        let _ = std::fs::create_dir_all(new_dir);
-        let _ = std::fs::write(&migrated_flag, "skipped: new dir already populated\n");
-        return;
-    }
-    if let Err(e) = std::fs::create_dir_all(new_dir) {
-        error!(error = %e, "failed to create new app data dir for migration");
-        return;
-    }
-    match copy_dir_recursive(&old_dir, new_dir) {
-        Ok(count) => {
-            info!(
-                from = %old_dir.display(),
-                to = %new_dir.display(),
-                files = count,
-                "migrated app data from prior mudclient install",
-            );
-            let _ = std::fs::write(&migrated_flag, format!("copied {count} files\n"));
-        }
-        Err(e) => {
-            error!(error = %e, "app data migration failed");
-        }
-    }
-}
-
-fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<usize> {
-    let mut count = 0;
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let from = entry.path();
-        let to = dst.join(entry.file_name());
-        let file_type = entry.file_type()?;
-        if file_type.is_dir() {
-            count += copy_dir_recursive(&from, &to)?;
-        } else if file_type.is_file() {
-            std::fs::copy(&from, &to)?;
-            count += 1;
-        }
-        // Skip symlinks and other special entries; the mudclient app
-        // data dir never contained any.
-    }
-    Ok(count)
-}
-
 /// Create the app data folder and the `scripts` folder in it, where
 /// `#script load` finds Lua files. The map store's opener did this until
 /// D3 retired the store. maps.sqlite stays on disk as it is, and nothing
@@ -697,51 +605,5 @@ async fn load_enabled_plugins<R: tauri::Runtime>(
                 "plugin output at launch has nowhere to go"
             );
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Launch makes the scripts folder before the mudclient copy looks,
-    /// so the copy reads the folder as in use and leaves the older
-    /// folder where it is, as it did while the map store made
-    /// maps.sqlite there first.
-    #[test]
-    fn the_mudclient_copy_skips_a_folder_launch_already_made() {
-        let dir = tempfile::tempdir().unwrap();
-        let old = dir.path().join("com.example.mudclient");
-        let new = dir.path().join("com.example.vosh");
-        std::fs::create_dir_all(&old).unwrap();
-        std::fs::write(old.join("logs.sqlite"), "older install").unwrap();
-        std::fs::create_dir_all(new.join(SCRIPTS_DIR)).unwrap();
-
-        migrate_from_mudclient_dir(&new);
-
-        assert_eq!(
-            std::fs::read_to_string(new.join(".migrated-from-mudclient")).unwrap(),
-            "skipped: new dir already populated\n"
-        );
-        assert!(!new.join("logs.sqlite").exists(), "nothing was copied");
-        assert!(old.join("logs.sqlite").exists(), "the older folder stays");
-    }
-
-    /// The setup hook needs a Tauri app, so this reads lib.rs to pin that
-    /// the scripts folder exists before the mudclient copy runs. Without
-    /// that order a fresh install next to an older mudclient folder would
-    /// copy the old data in, which no launch has done since the map store
-    /// opened first.
-    #[test]
-    fn the_setup_hook_makes_the_scripts_folder_before_the_copy() {
-        let src = include_str!("lib.rs");
-        let hook = &src[src.find(".setup(move |app|").expect("the setup hook")..];
-        let scripts = hook
-            .find("create_scripts_dir(app)")
-            .expect("the setup hook makes the scripts folder");
-        let copy = hook
-            .find("migrate_from_mudclient_dir(&path);")
-            .expect("the setup hook copies the mudclient folder");
-        assert!(scripts < copy, "the scripts folder comes first");
     }
 }
