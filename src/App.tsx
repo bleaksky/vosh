@@ -1861,6 +1861,7 @@ function App() {
           themeTerminalColors={themeTerminalColors}
           brightBold={brightBold}
           renderer={nativeSurfaceEnabled() ? 'native' : 'xterm'}
+          blinkText={blinkText}
         />
       )}
     </div>

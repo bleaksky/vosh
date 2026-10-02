@@ -15,6 +15,8 @@ import { shownColumns } from '../../lib/sgrCells';
 import { usePinnedPrompt } from '../../lib/stores/pinnedPromptStore';
 import { usePromptReach } from '../../lib/stores/promptReachStore';
 import { useBandEnv } from '../../lib/useBandEnv';
+import { useBlinkShown } from '../../lib/blink';
+import type { Cell } from '../../lib/sgrCells';
 
 // Your prompt pinned above the command line (Where your prompt shows,
 // Pinned). The session takes each prompt out of the text and sends it on
@@ -63,6 +65,8 @@ interface PromptDockProps {
   themeTerminalColors: boolean;
   brightBold: boolean;
   renderer: BandEnv['renderer'];
+  /** Blinking text is on, so your prompt blinks with the text. */
+  blinkText: boolean;
 }
 
 export function PromptDock({
@@ -72,13 +76,29 @@ export function PromptDock({
   themeTerminalColors,
   brightBold,
   renderer,
+  blinkText,
 }: PromptDockProps) {
   const pin = usePinnedPrompt();
   const reach = usePromptReach();
   const env = useBandEnv(themeTerminalColors, brightBold, renderer);
   return (
-    <PinnedBand state={state} pin={pin} cell={cell} fontSize={fontSize} env={env} reach={reach} />
+    <PinnedBand
+      state={state}
+      pin={pin}
+      cell={cell}
+      fontSize={fontSize}
+      env={env}
+      reach={reach}
+      blinkText={blinkText}
+    />
   );
+}
+
+/** A cell that blinks with something the hidden half takes away: a
+ *  letter, an underline or a strike. */
+function blinks(cell: Cell): boolean {
+  const { attrs } = cell;
+  return attrs.blink && (cell.ch.trim().length > 0 || attrs.underline !== 0 || attrs.strike);
 }
 
 interface PinnedBandProps {
@@ -90,12 +110,25 @@ interface PinnedBandProps {
   /** How far past its widest row the band reaches for the prompt card's
    *  ↵ and caret, in px. */
   reach?: number;
+  /** Blinking text is on. The band flips on the clock the terminal
+   *  flips on, and only while a cell it draws blinks. */
+  blinkText?: boolean;
 }
 
 /** The dock drawn from what it is handed. Exported for its test. */
-export function PinnedBand({ state, pin, cell, fontSize, env, reach: extra = 0 }: PinnedBandProps) {
+export function PinnedBand({
+  state,
+  pin,
+  cell,
+  fontSize,
+  env,
+  reach: extra = 0,
+  blinkText = false,
+}: PinnedBandProps) {
   const zone = Math.max(1, state.zone);
   const rows = useMemo(() => (pin ? bandRows(pin, zone) : []), [pin, zone]);
+  const blinking = useMemo(() => rows.some((row) => row.some(blinks)), [rows]);
+  const blinkHidden = !useBlinkShown(blinkText && blinking);
   const shown = dockRows(pin, zone, state.promptsOff);
   const height = dockHeight(shown, cell.height);
   // How far the dock reaches up over the terminal: the rows it borrows.
@@ -144,7 +177,7 @@ export function PinnedBand({ state, pin, cell, fontSize, env, reach: extra = 0 }
               return (
                 <div key={r} className="prompt-band-row" style={{ top }}>
                   {runs.map((run, i) => (
-                    <Run key={i} run={run} cell={cell} text={text} />
+                    <Run key={i} run={run} cell={cell} text={text} blinkHidden={blinkHidden} />
                   ))}
                   {clipped && (
                     <span
@@ -209,12 +242,18 @@ function Run({
   run,
   cell,
   text,
+  blinkHidden,
 }: {
   run: ReturnType<typeof bandRuns>[number];
   cell: CellSize;
   text: CSSProperties;
+  /** Blinking text is in its hidden half. */
+  blinkHidden: boolean;
 }) {
   const { look } = run;
+  // The hidden half of a blink takes the letters and both lines and
+  // keeps the ground, as xterm and the native grid draw it.
+  const hidden = blinkHidden && look.blink;
   const left = BAND_OUTSET_X + run.col * cell.width;
   const width = run.cols * cell.width;
   const face: CSSProperties = {
@@ -234,7 +273,7 @@ function Run({
       {/* The underline and the strike each draw on a run of their own,
           since CSS gives the lines of one box one style and one color,
           and the strike is always straight in the text color. */}
-      {look.underline && (
+      {look.underline && !hidden && (
         <Line
           run={run}
           face={face}
@@ -245,7 +284,7 @@ function Run({
           color={look.underline.color ?? look.color}
         />
       )}
-      {look.strike && (
+      {look.strike && !hidden && (
         <Line
           run={run}
           face={face}
@@ -257,7 +296,7 @@ function Run({
         />
       )}
       {run.glyphs.map((glyph) =>
-        glyph.ch.trim().length === 0 ? null : (
+        hidden || glyph.ch.trim().length === 0 ? null : (
           <span
             key={glyph.col}
             className="prompt-band-glyph"

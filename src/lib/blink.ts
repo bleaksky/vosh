@@ -69,6 +69,33 @@ export function subscribeReduceMotion(
   return () => list.removeEventListener?.('change', onChange);
 }
 
+/** Past the flip, so a timer lands in the new half, as the native grid
+ *  waits (BLINK_SLACK in src-tauri/src/native_surface/mod.rs). */
+const BLINK_SLACK_MS = 2;
+
+/** Call `tick` with whether blinking text shows, now and at each flip
+ *  after, while `active`. Returns the stop. Inactive, it calls nothing
+ *  and runs no timer. */
+export function onBlinkFlips(active: boolean, tick: (shown: boolean) => void): () => void {
+  if (!active) return () => {};
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const step = () => {
+    const now = Date.now();
+    tick(blinkShown(now));
+    timer = setTimeout(step, untilBlinkFlip(now) + BLINK_SLACK_MS);
+  };
+  step();
+  return () => clearTimeout(timer);
+}
+
+/** Whether blinking text shows now, kept current while `active`. While
+ *  it is not, it shows and no timer runs. */
+export function useBlinkShown(active: boolean): boolean {
+  const [shown, setShown] = useState(() => blinkShown(Date.now()));
+  useEffect(() => onBlinkFlips(active, setShown), [active]);
+  return !active || shown;
+}
+
 /** Your system's reduce motion setting, kept current. */
 export function useReduceMotion(): boolean {
   const [reduce, setReduce] = useState(() => systemReducesMotion());
