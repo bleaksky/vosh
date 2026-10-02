@@ -16,7 +16,7 @@ use vosh_ansi::plain_text;
 
 mod forget;
 
-pub use forget::{is_password_prompt, Forgotten, PasswordFinder, PasswordLines, HIDDEN_SENT_TEXT};
+pub use forget::{Forgotten, PasswordLines, HIDDEN_SENT_TEXT};
 
 #[derive(Debug, Error)]
 pub enum LogError {
@@ -79,7 +79,7 @@ pub struct SearchPage {
 }
 
 /// Hosts the log view leaves out: sessions to this machine.
-pub const LOCAL_HOSTS: [&str; 2] = ["127.0.0.1", "localhost"];
+const LOCAL_HOSTS: [&str; 2] = ["127.0.0.1", "localhost"];
 
 /// True when `host` names this machine, ignoring case, spaces, and a
 /// trailing dot.
@@ -101,7 +101,7 @@ fn not_local_sql() -> String {
 }
 
 /// How many sessions a character lookup reads at most, newest first.
-pub const LOOKUP_SESSIONS: usize = 50;
+const LOOKUP_SESSIONS: usize = 50;
 
 /// The sessions a character lookup reads: those on one host and port
 /// that belong to one of the profile's characters.
@@ -512,7 +512,7 @@ impl LogStore {
     }
 
     /// Walk the sessions on `scope`'s host and port, newest first, at most
-    /// [`LOOKUP_SESSIONS`], and hand each one that belongs to one of
+    /// `LOOKUP_SESSIONS`, and hand each one that belongs to one of
     /// `scope.mine` its lines that start with one of `prefixes`, newest
     /// first, to `pick`, until `pick` returns something.
     ///
