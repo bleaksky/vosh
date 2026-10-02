@@ -272,7 +272,7 @@ impl Recognizer {
     /// read. A code Vosh does not read for any other reason, such as the
     /// second use of one, makes none. None when the capture does not read
     /// `lines`.
-    pub fn marks(&self, lines: &[&str]) -> Option<Vec<Mark>> {
+    pub(crate) fn marks(&self, lines: &[&str]) -> Option<Vec<Mark>> {
         match &self.reader {
             Reader::Regex { line, groups, .. } => {
                 let [plain] = lines else {
