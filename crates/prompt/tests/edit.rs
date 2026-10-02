@@ -459,6 +459,15 @@ fn show_as_writes_the_forms_the_card_names() {
         set("x %tick y", FormatChoice::of(FormatName::Since)),
         "x %{tick:since} y"
     );
+    // The percent as the game cuts it takes no sign, as %pct_hp does.
+    assert_eq!(
+        set(template, FormatChoice::of(FormatName::PctGame)),
+        "[%c_hp%{hp:pct:game}hp]"
+    );
+    assert_eq!(
+        set("x %pct_mana%% y", FormatChoice::of(FormatName::PctGame)),
+        "x %{mana:pct:game} y"
+    );
     for template in [
         "[%c_hp%{hp}hp]",
         "[%c_hp%pct_hp%%hp]",
@@ -467,6 +476,7 @@ fn show_as_writes_the_forms_the_card_names() {
         "x %{gold:thousands} y",
         "x %{hour:ampm} y",
         "x %{tick:since} y",
+        "[%c_hp%{hp:pct:game}hp]",
     ] {
         assert_reads_clean(template);
     }
@@ -492,6 +502,18 @@ fn show_as_writes_the_forms_the_card_names() {
             &EditOp::SetFormat {
                 piece: 1,
                 format: FormatChoice::of(FormatName::Hm)
+            },
+            &known
+        ),
+        Err(EditError("Vosh cannot show that value that way.".into()))
+    );
+    // Gold has no max, so it has no percent of any kind.
+    assert_eq!(
+        apply(
+            "x %gold",
+            &EditOp::SetFormat {
+                piece: 1,
+                format: FormatChoice::of(FormatName::PctGame)
             },
             &known
         ),
@@ -587,6 +609,17 @@ fn inserts_use_braces_when_the_next_character_would_extend_a_name() {
             }
         ),
         "$%{gold:thousands}%c_red"
+    );
+    assert_eq!(
+        edit(
+            "(%c_red)",
+            &EditOp::InsertField {
+                at: 1,
+                field: "move".into(),
+                format: Some(FormatChoice::of(FormatName::PctGame)),
+            }
+        ),
+        "(%{move:pct:game}%c_red)"
     );
     assert_eq!(
         edit("%c_red%hp", &EditOp::InsertNl { at: 0 }),

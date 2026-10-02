@@ -287,7 +287,9 @@ fn form(
         .map(|text| render(&Template::parse(&text), values, RenderOptions::default()))
         .unwrap_or_default();
     let segment = match format {
-        FormatName::Bar => label.to_string(),
+        // The game's percent reads as the rounded one most of the time,
+        // so it goes by its name, as a bar does.
+        FormatName::Bar | FormatName::PctGame => label.to_string(),
         FormatName::Game if edit::kind_of(field) == Some(Kind::TankPct) => label.to_string(),
         _ if sample.plain.is_empty() || sample.plain.chars().count() > 16 => label.to_string(),
         _ => sample.plain.clone(),
@@ -303,8 +305,9 @@ fn form(
 
 /// Each form a kind of field takes, its name, and whether Show as offers
 /// it. A gauge's max changes what the piece reads, so only the picker
-/// offers it. A gauge takes the five forms of P6 and flow 6a. Grouped,
-/// short and thousands are a number's forms (section 1.4).
+/// offers it. A gauge takes the five forms of P6 and flow 6a, and the
+/// percent the game works out. Grouped, short and thousands are a
+/// number's forms (section 1.4).
 fn form_list(kind: Option<Kind>) -> &'static [(FormatName, &'static str, bool)] {
     use FormatName as F;
     let Some(kind) = kind else {
@@ -316,6 +319,7 @@ fn form_list(kind: Option<Kind>) -> &'static [(FormatName, &'static str, bool)] 
             (F::CurMax, "Current and max", true),
             (F::Max, "Max", false),
             (F::Percent, "Percent", true),
+            (F::PctGame, "Game percent", true),
             (F::Bar, "Bar", true),
         ],
         Kind::Num => &[
@@ -393,6 +397,7 @@ fn format_label(format: FormatName) -> &'static str {
         FormatName::CurMax => "Current and max",
         FormatName::Max => "Max",
         FormatName::Pct => "Percent, no sign",
+        FormatName::PctGame => "Game percent",
         FormatName::Percent => "Percent",
         FormatName::Bar => "Bar",
         FormatName::Game => "Game style",
@@ -427,6 +432,7 @@ fn shown_as(value: &crate::template::ValueRef) -> (FieldRef, FormatName, Option<
         Format::Value => (FormatName::Value, None),
         Format::Max => (FormatName::Max, None),
         Format::Pct => (FormatName::Pct, None),
+        Format::PctGame => (FormatName::PctGame, None),
         Format::Bar { width, .. } => (FormatName::Bar, Some(*width)),
         Format::Game => (FormatName::Game, None),
         Format::Word => (FormatName::Word, None),

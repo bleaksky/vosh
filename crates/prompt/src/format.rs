@@ -504,8 +504,9 @@ impl Value {
         }
     }
 
-    /// The percent by the server's integer division, for the game's bands.
-    /// A decimal cuts its fraction off the same way.
+    /// The percent by the server's integer division, for the game's bands,
+    /// the steps and the `pct:game` format. A decimal cuts its fraction off
+    /// the same way.
     pub fn game_percent(&self) -> Option<i64> {
         match self {
             Value::Decimal {
@@ -570,6 +571,7 @@ impl Value {
                 _ => None,
             },
             Format::Pct => self.percent().map(|p| p.to_string()),
+            Format::PctGame => self.game_percent().map(|p| p.to_string()),
             Format::Game => Some(match self {
                 Value::Moon { phase, active, .. } => moon_code(*phase, *active).to_string(),
                 Value::Exits { game, .. } => game.clone(),
@@ -887,6 +889,61 @@ mod tests {
         assert_eq!(text(&zero, Format::Pct), None);
         assert_eq!(zero.fraction(), None);
         assert!(zero.has_bar());
+    }
+
+    #[test]
+    fn the_game_percent_cuts_as_the_old_tintin_prompt_did() {
+        // Each row is what tt++ 2.02.61 printed for @percent{cur;max} in
+        // the old prompt, next to the rounded percent.
+        for (cur, max, old, rounded) in [
+            (300, 800, 37, 38),
+            (610, 930, 65, 66),
+            (1019, 1020, 99, 100),
+            (408, 1020, 40, 40),
+            (918, 1020, 90, 90),
+            (930, 930, 100, 100),
+            (204, 1020, 20, 20),
+            (0, 800, 0, 0),
+        ] {
+            let gauge = Value::Gauge {
+                cur,
+                max: Some(max),
+                pct: None,
+            };
+            let game = text(&gauge, Format::PctGame);
+            assert_eq!(game, Some(old.to_string()), "{cur} of {max}");
+            assert_eq!(game, gauge.game_percent().map(|p| p.to_string()));
+            assert_eq!(text(&gauge, Format::Pct), Some(rounded.to_string()));
+        }
+        // %K alone feeds it when no max is known, as it feeds pct.
+        let pct_only = Value::Gauge {
+            cur: 300,
+            max: None,
+            pct: Some(37),
+        };
+        assert_eq!(text(&pct_only, Format::PctGame).as_deref(), Some("37"));
+        let zero = Value::Gauge {
+            cur: 0,
+            max: Some(0),
+            pct: None,
+        };
+        assert_eq!(text(&zero, Format::PctGame), None);
+        // A decimal cuts its fraction off the same way.
+        let half = Value::Decimal {
+            text: "1.5".to_string(),
+            value: 1.5,
+            max: Some(4.0),
+        };
+        assert_eq!(text(&half, Format::PctGame).as_deref(), Some("37"));
+        assert_eq!(text(&half, Format::Pct).as_deref(), Some("38"));
+        let tick = Value::Seconds {
+            secs: 14,
+            max: Some(60),
+            since: Some(46),
+        };
+        assert_eq!(text(&tick, Format::PctGame).as_deref(), Some("23"));
+        assert_eq!(text(&Value::Num(5), Format::PctGame), None);
+        assert_eq!(text(&Value::Text("full".into()), Format::PctGame), None);
     }
 
     #[test]

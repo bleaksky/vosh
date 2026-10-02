@@ -110,7 +110,10 @@ fn the_hp_value_reads_as_health_with_its_own_codes_and_inherited_italic() {
     assert!(hp.italic && !hp.bold && !hp.underline);
     assert_eq!((hp.when, hp.when_fixed), (When::Always, false));
     assert!(hp.by_value && hp.shows);
-    assert_eq!(segments(hp), ["1020", "1020/1020", "100%", "Bar"]);
+    assert_eq!(
+        segments(hp),
+        ["1020", "1020/1020", "100%", "Game percent", "Bar"]
+    );
     // The percent after it is By value, and Show as adds the percent with
     // no sign it shows now.
     let pct = piece(&described.pieces, "%c_hp%pct_hp");
@@ -123,7 +126,10 @@ fn the_hp_value_reads_as_health_with_its_own_codes_and_inherited_italic() {
         }
     );
     assert_eq!(pct.format, Some(FormatName::Pct));
-    assert_eq!(segments(pct), ["1020", "1020/1020", "100%", "Bar", "100"]);
+    assert_eq!(
+        segments(pct),
+        ["1020", "1020/1020", "100%", "Game percent", "Bar", "100"]
+    );
     // The mana percent keeps its own true color.
     let mana = piece(&described.pieces, "%{c:128,200,255}%pct_mana");
     assert_eq!(
@@ -219,7 +225,7 @@ fn a_max_alone_shows_as_its_gauge_in_the_form_max() {
     assert_eq!(max.format, Some(FormatName::Max));
     assert_eq!(
         segments(max),
-        ["1020", "1020/1020", "1020", "100%", "Bar"],
+        ["1020", "1020/1020", "1020", "100%", "Game percent", "Bar"],
         "Show as keeps the form it shows now"
     );
 }
@@ -238,6 +244,7 @@ fn the_picker_offers_every_form_with_a_live_sample() {
             ("Current and max", "1020/1020".to_string()),
             ("Max", "1020".to_string()),
             ("Percent", "100%".to_string()),
+            ("Game percent", "100".to_string()),
             ("Bar", "██████████".to_string()),
         ]
     );
@@ -285,7 +292,7 @@ fn the_picker_offers_every_form_with_a_live_sample() {
         ]
     );
     // The bar draws in theme green at full.
-    let bar = &forms(&FieldRef::new("hp"), &values)[4];
+    let bar = &forms(&FieldRef::new("hp"), &values)[5];
     assert!(
         bar.sample.ansi.starts_with("\x1b[32m"),
         "{:?}",
@@ -375,19 +382,92 @@ fn show_as_marks_current_and_max_and_percent_once_you_choose_them() {
     let cur_max = show_as(COLORED, "%c_mana%mana", FormatName::CurMax);
     let mana = shown(&cur_max, "mana", PieceKindName::CurMax);
     assert_eq!(mana.format, Some(FormatName::CurMax));
-    assert_eq!(segments(&mana), ["800", "800/800", "100%", "Bar"]);
+    assert_eq!(
+        segments(&mana),
+        ["800", "800/800", "100%", "Game percent", "Bar"]
+    );
 
     // Then as Percent, with no fifth segment for a percent with no sign.
     let percent = show_as(&cur_max, &mana.text, FormatName::Percent);
     let mana = shown(&percent, "mana", PieceKindName::Percent);
     assert_eq!(mana.format, Some(FormatName::Percent));
-    assert_eq!(segments(&mana), ["800", "800/800", "100%", "Bar"]);
+    assert_eq!(
+        segments(&mana),
+        ["800", "800/800", "100%", "Game percent", "Bar"]
+    );
 
     // Health as Percent, with the label text hp right after its sign.
     let hp = show_as(COLORED, "%c_hp%hp", FormatName::Percent);
     let health = shown(&hp, "hp", PieceKindName::Percent);
     assert_eq!(health.format, Some(FormatName::Percent));
-    assert_eq!(segments(&health), ["1020", "1020/1020", "100%", "Bar"]);
+    assert_eq!(
+        segments(&health),
+        ["1020", "1020/1020", "100%", "Game percent", "Bar"]
+    );
+}
+
+/// Mana at 300 of 800, 37.5 percent, where the rounded and the cut
+/// percent part.
+struct HalfMana;
+
+impl Values for HalfMana {
+    fn resolve(&self, field: &FieldRef) -> Resolved {
+        match field.name.as_str() {
+            "mana" => Resolved::Value(vosh_prompt::Value::Gauge {
+                cur: 300,
+                max: Some(800),
+                pct: None,
+            }),
+            _ => Samples { now: now() }.resolve(field),
+        }
+    }
+
+    fn label(&self, field: &FieldRef) -> String {
+        Samples { now: now() }.label(field)
+    }
+}
+
+#[test]
+fn the_game_percent_reads_as_its_own_form_with_the_cut_percent() {
+    // The picker draws it as the game cuts it, next to the rounded one.
+    let mana: Vec<(&str, String)> = forms(&FieldRef::new("mana"), &HalfMana)
+        .iter()
+        .filter(|f| f.label.contains("ercent"))
+        .map(|f| (f.label, f.sample.plain.clone()))
+        .collect();
+    assert_eq!(
+        mana,
+        [
+            ("Percent", "38%".to_string()),
+            ("Game percent", "37".to_string())
+        ]
+    );
+    // A piece in it reads as Health in the form Game percent, which Show
+    // as marks by its name.
+    let described = describe(
+        &Template::parse("%{c:#d0d0d0}%{hp:pct:game}%{c:hp:steps}%%"),
+        &Sampled { fight: false },
+        false,
+    );
+    let hp = piece(&described.pieces, "%{c:#d0d0d0}%{hp:pct:game}");
+    assert_eq!(hp.kind, PieceKindName::Value);
+    assert_eq!(hp.label, "Health");
+    assert_eq!(hp.format, Some(FormatName::PctGame));
+    assert_eq!(
+        segments(hp),
+        ["1020", "1020/1020", "100%", "Game percent", "Bar"]
+    );
+    // Its sign stays text of its own, so it keeps its own color.
+    let sign = piece(&described.pieces, "%{c:hp:steps}%%");
+    assert_eq!(sign.kind, PieceKindName::Text);
+    // Show as writes it, and back.
+    let game = show_as(COLORED, "%c_mana%mana", FormatName::PctGame);
+    assert!(
+        game.contains("%c_mana%{mana:pct:game}%c_default/"),
+        "{game}"
+    );
+    let back = show_as(&game, "%c_mana%{mana:pct:game}", FormatName::Value);
+    assert_eq!(back, COLORED);
 }
 
 #[test]

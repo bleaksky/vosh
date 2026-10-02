@@ -447,6 +447,36 @@ fn color_by_steps_takes_the_old_prompts_color_for_each_tenth() {
     assert_eq!(draw("%{c:hp:steps}", &hidden).ansi, "\x1b[39m\x1b[0m");
 }
 
+#[test]
+fn the_game_percent_prints_the_percent_its_step_colors_by() {
+    // In the fight the old prompt drew, it printed 37 for 300 of 800 and
+    // 65 for 610 of 930, where the rounded percent reads 38 and 66.
+    let fight = vitals(408, 300, 610);
+    assert_eq!(
+        draw(
+            "%{hp:pct:game}%% %{mana:pct:game}%% %{move:pct:game}%%",
+            &fight
+        )
+        .plain,
+        "40% 37% 65%"
+    );
+    assert_eq!(
+        draw("%pct_hp%% %pct_mana%% %pct_move%%", &fight).plain,
+        "40% 38% 66%"
+    );
+    // The sign after it takes the step of the same number.
+    assert_eq!(
+        draw("%{move:pct:game}%{c:move:steps}%%", &fight).ansi,
+        "65\x1b[38;5;190m%\x1b[0m"
+    );
+    // With no value it draws as the rounded percent does.
+    let hidden = Fixed::default().with("hp", Resolved::Hidden);
+    assert_eq!(
+        draw("%{hp:pct:game}", &hidden).ansi,
+        draw("%pct_hp", &hidden).ansi
+    );
+}
+
 // Looks, spans and restoring the color before a mark.
 
 #[test]

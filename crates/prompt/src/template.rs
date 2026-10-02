@@ -8,6 +8,8 @@
 //! %%                       a literal percent sign
 //! %name  %{name}           a value, `name` is [A-Za-z0-9_], lowercased
 //! %pct_name                the value as a percent of its max
+//! %{name:pct:game}         the percent cut to a whole number, as the game
+//!                          works it out
 //! %name_bar[:W[:C]]        a bar W cells wide (default 10, 1 to 80) in color C
 //! %bar_name[:W[:C]]        the same bar
 //! %maxname                 the max, a field of its own
@@ -238,6 +240,10 @@ pub enum Format {
     Max,
     /// A rounded percent with no sign.
     Pct,
+    /// The percent as the game works it out, cut to a whole number by
+    /// integer division, with no sign. 300 of 800 is 37, where `Pct`
+    /// rounds it to 38.
+    PctGame,
     /// A bar of `█` and `░` cells.
     Bar { width: u8, color: BarColor },
     /// Exactly as the game prints it, colors included.
@@ -705,6 +711,7 @@ fn format_body(format: &Format) -> Option<String> {
         Format::Value => return None,
         Format::Max => "max".into(),
         Format::Pct => "pct".into(),
+        Format::PctGame => "pct:game".into(),
         Format::Bar { width, color } => match color {
             BarColor::Auto => format!("bar:{width}"),
             BarColor::Game => format!("bar:{width}:game"),
@@ -1003,7 +1010,11 @@ fn parse_format(segs: &[&str]) -> Option<Format> {
     match name.as_str() {
         "value" => no_args(Format::Value),
         "max" => no_args(Format::Max),
-        "pct" => no_args(Format::Pct),
+        "pct" => match args.as_slice() {
+            [] => Some(Format::Pct),
+            [game] if game == "game" => Some(Format::PctGame),
+            _ => None,
+        },
         "game" => no_args(Format::Game),
         "word" => no_args(Format::Word),
         "ampm" => no_args(Format::Ampm),
@@ -1677,6 +1688,13 @@ mod tests {
         assert_eq!(kinds("%maxhp"), vec![val("maxhp")]);
         assert_eq!(kinds("%{hp:max}"), vec![fmt("hp", Format::Max)]);
         assert_eq!(kinds("%{hp:pct}"), vec![fmt("hp", Format::Pct)]);
+        assert_eq!(kinds("%{hp:pct:game}"), vec![fmt("hp", Format::PctGame)]);
+        assert_eq!(
+            kinds("%{Mana:PCT:Game}"),
+            vec![fmt("mana", Format::PctGame)]
+        );
+        assert_eq!(kinds("%{hp:pct:steps}"), vec![TokenKind::Unknown]);
+        assert_eq!(kinds("%{hp:pct:game:1}"), vec![TokenKind::Unknown]);
         assert_eq!(
             kinds("%{hp:bar:10:auto}"),
             vec![fmt("hp", bar(10, BarColor::Auto))]
@@ -1741,6 +1759,8 @@ mod tests {
             "%{hour:ampm}",
             "%{tick:since}",
             "%hp%{right}%mana",
+            "%{hp:pct:game}",
+            "%{c:#d0d0d0}%{mana:pct:game}%{c:mana:steps}%%",
         ] {
             let tokens = kinds(source);
             assert!(tokens.iter().all(|t| *t != TokenKind::Unknown), "{source}");
@@ -1887,6 +1907,14 @@ mod tests {
             vec![
                 (PieceKind::Percent, "%{hp:pct}%%".to_string()),
                 (PieceKind::Text, ")".to_string()),
+            ]
+        );
+        // The game's percent stays a value, its sign text of its own.
+        assert_eq!(
+            piece_kinds("%{hp:pct:game}%%)"),
+            vec![
+                (PieceKind::Value, "%{hp:pct:game}".to_string()),
+                (PieceKind::Text, "%%)".to_string()),
             ]
         );
         // Text right after the sign stays its own piece.
