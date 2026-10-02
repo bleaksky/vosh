@@ -203,15 +203,21 @@ pub struct View<'a> {
     pub plain: &'a str,
 }
 
+#[cfg(any(test, feature = "testkit"))]
 impl<'a> View<'a> {
-    /// The live render, or the game's lines with drawing off.
+    /// The live render, or the game's lines with drawing off. Test only.
+    /// The app's tests reach it through `Stage::draw` and
+    /// `Stage::repaint`, so it sits behind the `testkit` feature with
+    /// them.
     pub(crate) fn live(rendered: Option<&'a str>) -> Self {
         Self {
             shown: rendered,
             ..Self::default()
         }
     }
+}
 
+impl View<'_> {
     /// The open row `gen` showing `body`, with the live render behind it,
     /// and where the pieces of what it shows landed.
     pub(super) fn open_row(self, gen: u64, body: Vec<u8>, live: Option<Vec<u8>>) -> OpenRow {
