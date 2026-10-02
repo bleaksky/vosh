@@ -3,9 +3,10 @@
 //! reads now, the forms Show as and the picker offer, and each token of
 //! the text with its piece.
 
-use vosh_prompt::describe::{describe, forms, PieceKindName, PieceView, TokenKindName};
+use vosh_prompt::describe::{describe, forms, PieceView, TokenKindName};
 use vosh_prompt::edit::{ColorChoice, FormatName, StyleChoice, When};
 use vosh_prompt::presets::DEFAULT_DESIGN;
+use vosh_prompt::template::PieceKind;
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
 use vosh_prompt::testkit::now;
 use vosh_prompt::vars::Samples;
@@ -92,7 +93,7 @@ fn the_hp_value_reads_as_health_with_its_own_codes_and_inherited_italic() {
     // P5: the hp value piece picked in his template.
     let described = describe(&Template::parse(JAMES), &Sampled { fight: false }, false);
     let hp = piece(&described.pieces, "%c_reset%s_italic%hp");
-    assert_eq!(hp.kind, PieceKindName::Value);
+    assert_eq!(hp.kind, PieceKind::Value);
     assert_eq!(hp.label, "Health");
     assert_eq!(hp.field.as_deref(), Some("hp"));
     assert_eq!(hp.format, Some(FormatName::Value));
@@ -140,7 +141,7 @@ fn the_hp_value_reads_as_health_with_its_own_codes_and_inherited_italic() {
     );
     // The bracket is text in rgb 100 100 100.
     let bracket = piece(&described.pieces, "%{c:100,100,100}[");
-    assert_eq!(bracket.kind, PieceKindName::Text);
+    assert_eq!(bracket.kind, PieceKind::Text);
     assert_eq!(bracket.label, "Text");
     assert_eq!(bracket.literal.as_deref(), Some("["));
     assert_eq!(
@@ -178,7 +179,7 @@ fn a_bar_in_a_fight_section_reads_in_a_fight_with_its_own_color() {
     assert_eq!(segments(bar), ["60%", "Bar"]);
     // P10: the line break in the same section.
     let nl = piece(&described.pieces, "%nl");
-    assert_eq!(nl.kind, PieceKindName::Nl);
+    assert_eq!(nl.kind, PieceKind::Nl);
     assert_eq!(nl.label, "Line break");
     assert_eq!((nl.when, nl.when_fixed), (When::Fight, false));
     assert!(nl.forms.is_empty() && nl.field.is_none());
@@ -187,7 +188,7 @@ fn a_bar_in_a_fight_section_reads_in_a_fight_with_its_own_color() {
     assert_eq!((gold.when, gold.when_fixed), (When::Always, false));
     // A condition takes no cells.
     let cond = piece(&described.pieces, "%{if:fight}");
-    assert_eq!(cond.kind, PieceKindName::If);
+    assert_eq!(cond.kind, PieceKind::If);
     assert!(!cond.shows);
 }
 
@@ -373,7 +374,7 @@ fn show_as(template: &str, text: &str, format: FormatName) -> String {
 }
 
 /// The piece that shows `field` as `kind` in `template`.
-fn shown(template: &str, field: &str, kind: PieceKindName) -> PieceView {
+fn shown(template: &str, field: &str, kind: PieceKind) -> PieceView {
     describe(&Template::parse(template), &Sampled { fight: false }, false)
         .pieces
         .into_iter()
@@ -385,7 +386,7 @@ fn shown(template: &str, field: &str, kind: PieceKindName) -> PieceView {
 fn show_as_marks_current_and_max_and_percent_once_you_choose_them() {
     // Colored by how full, the mana part shown as Current and max.
     let cur_max = show_as(COLORED, "%c_mana%mana", FormatName::CurMax);
-    let mana = shown(&cur_max, "mana", PieceKindName::CurMax);
+    let mana = shown(&cur_max, "mana", PieceKind::CurMax);
     assert_eq!(mana.format, Some(FormatName::CurMax));
     assert_eq!(
         segments(&mana),
@@ -394,7 +395,7 @@ fn show_as_marks_current_and_max_and_percent_once_you_choose_them() {
 
     // Then as Percent, with no fifth segment for a percent with no sign.
     let percent = show_as(&cur_max, &mana.text, FormatName::Percent);
-    let mana = shown(&percent, "mana", PieceKindName::Percent);
+    let mana = shown(&percent, "mana", PieceKind::Percent);
     assert_eq!(mana.format, Some(FormatName::Percent));
     assert_eq!(
         segments(&mana),
@@ -403,7 +404,7 @@ fn show_as_marks_current_and_max_and_percent_once_you_choose_them() {
 
     // Health as Percent, with the label text hp right after its sign.
     let hp = show_as(COLORED, "%c_hp%hp", FormatName::Percent);
-    let health = shown(&hp, "hp", PieceKindName::Percent);
+    let health = shown(&hp, "hp", PieceKind::Percent);
     assert_eq!(health.format, Some(FormatName::Percent));
     assert_eq!(
         segments(&health),
@@ -455,7 +456,7 @@ fn the_game_percent_reads_as_its_own_form_with_the_cut_percent() {
         false,
     );
     let hp = piece(&described.pieces, "%{c:#d0d0d0}%{hp:pct:game}");
-    assert_eq!(hp.kind, PieceKindName::Value);
+    assert_eq!(hp.kind, PieceKind::Value);
     assert_eq!(hp.label, "Health");
     assert_eq!(hp.format, Some(FormatName::PctGame));
     assert_eq!(
@@ -464,7 +465,7 @@ fn the_game_percent_reads_as_its_own_form_with_the_cut_percent() {
     );
     // Its sign stays text of its own, so it keeps its own color.
     let sign = piece(&described.pieces, "%{c:hp:steps}%%");
-    assert_eq!(sign.kind, PieceKindName::Text);
+    assert_eq!(sign.kind, PieceKind::Text);
     // Show as writes it, and back.
     let game = show_as(COLORED, "%c_mana%mana", FormatName::PctGame);
     assert!(
@@ -509,7 +510,7 @@ fn a_push_to_the_right_reads_as_the_right_edge_and_a_layout_token() {
     let template = Template::parse("<%hp>%{right}%mana");
     let described = describe(&template, &Sampled { fight: false }, false);
     let push = piece(&described.pieces, "%{right}");
-    assert_eq!(push.kind, PieceKindName::Right);
+    assert_eq!(push.kind, PieceKind::Right);
     assert_eq!(push.label, "Right edge");
     assert_eq!((push.when, push.when_fixed), (When::Always, false));
     assert!(push.forms.is_empty() && push.field.is_none() && !push.shows);

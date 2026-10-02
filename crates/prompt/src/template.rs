@@ -48,6 +48,8 @@ use std::collections::BTreeSet;
 use std::fmt;
 use std::ops::Range;
 
+use serde::Serialize;
+
 /// Bar width when the template does not give one.
 pub const BAR_DEFAULT_WIDTH: u8 = 10;
 /// The widest bar a template can ask for.
@@ -319,8 +321,10 @@ pub struct Token {
     pub kind: TokenKind,
 }
 
-/// What a piece holds after its leading codes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// What a piece holds after its leading codes. The card reads it by name,
+/// as `cur_max`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PieceKind {
     /// Codes with nothing after them, at the end of the template or before
     /// a line break or a condition.
