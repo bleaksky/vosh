@@ -11,6 +11,7 @@
 
 use chrono::{Datelike, NaiveDateTime, Timelike};
 
+use crate::aabahran::codes::PHASES;
 use crate::design::Format;
 
 /// What a resolver knows about a field right now.
@@ -109,9 +110,6 @@ impl Position {
         Self::ALL.into_iter().find(|p| p.abbrev() == abbrev)
     }
 }
-
-/// What `%j` prints for phases 0 to 7.
-pub const MOON_CODES: [&str; 8] = ["new", "wax", "Hwx", "Gwx", "FUL", "Gwn", "Hwn", "wan"];
 
 /// The phase as a word, for the `word` format.
 pub const MOON_WORDS: [&str; 8] = [
@@ -667,7 +665,7 @@ pub fn moon_code(phase: u8, active: bool) -> &'static str {
     if !active {
         return "-";
     }
-    MOON_CODES.get(usize::from(phase)).copied().unwrap_or("-")
+    PHASES.get(usize::from(phase)).copied().unwrap_or("-")
 }
 
 fn clock(at: &NaiveDateTime, format: &Format) -> String {
