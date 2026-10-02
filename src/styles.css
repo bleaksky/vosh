@@ -116,8 +116,8 @@ body {
 /* Rounded, single-surface Ghostty-style window. body is transparent so
    the corners outside the radius are clipped from the OS window; .app
    carries the only visible surface color, with a hairline outer border
-   reading as the window frame. The Settings window still wears this
-   frame. The main window's One Window frame (.app.shell) replaces the
+   reading as the window frame. Only the main window's AppShell root
+   carries .app, and its One Window frame (.app.shell) replaces the
    border, radius, and top band per platform in styles/frame.css. */
 .app {
   display: flex;
@@ -132,10 +132,9 @@ body {
   border-radius: 10px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   overflow: hidden;
-  /* Breathing room above the TopBar so the brand block sits inside
-     the window with the rounded corner area visible above, matching
-     how tmux at the top of a Ghostty window has padding before its
-     status bar. */
+  /* The 6px top band the old top bar needed. `.app.shell` in
+     styles/frame.css sets padding 0, so the One Window title band
+     starts at the window edge. */
   padding-top: 6px;
 }
 
@@ -192,13 +191,12 @@ body {
   z-index: 1;
 }
 
-/* Both panes anchor to .well-splits-term (position: relative), which
-   already sits inside .terminal-area's padding, so inset 0 lands the
-   overlay exactly on the closed-state live rect. The old 8/14/14/6
-   insets predate the well-splits wrapper — back then the containing
-   block was .terminal-area itself and they replicated its padding;
-   kept, they double-inset and visibly shrink the terminal (and the
-   native surface tracking it) every time the split opens. */
+/* Both panes anchor to .terminal-well (position: relative, in
+   styles/frame.css), which already sits inside .terminal-area's
+   padding, so inset 0 lands the overlay exactly on the closed-state
+   live rect. Insets that repeat the terminal padding here would
+   double-inset and visibly shrink the terminal (and the native
+   surface tracking it) every time the split opens. */
 .terminal-area-split .terminal-pane-history {
   position: absolute;
   top: 0;
@@ -367,7 +365,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   caret-color: var(--c-accent);
   /* Lock to content height; never shrink. Without explicit
      `flex: 0 0 auto` the column flex container can hand part of this
-     row's slot to main-row when xterm hasn't refit yet, which paints
+     row's slot to the terminal when xterm hasn't refit yet, which paints
      the input ON TOP of the terminal output. */
   flex: 0 0 auto;
 }
@@ -992,10 +990,8 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   font-size: 0.85em;
 }
 
-/* Map pane — sits on the right side of the main row, separated from
-   the terminal by a 1px divider that doubles as the drag handle. The
-   pane shares the main surface so it reads as part of the same
-   window. */
+/* Resizable. The scrollback split's history pane, anchored to the top
+   of the terminal well, with its drag handle on the bottom edge. */
 
 .resizable {
   display: flex;
