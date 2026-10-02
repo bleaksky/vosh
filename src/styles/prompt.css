@@ -1135,6 +1135,34 @@
   color: var(--raised);
 }
 
+/* The underline kinds, each in its own line, as the Underline row draws
+   its segments. */
+.pc-style-sample.is-double,
+.pc-style-sample.is-curly,
+.pc-style-sample.is-dotted,
+.pc-style-sample.is-dashed {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+}
+
+.pc-style-sample.is-double {
+  text-decoration-style: double;
+}
+
+.pc-style-sample.is-curly {
+  text-decoration-style: wavy;
+}
+
+.pc-style-sample.is-dotted {
+  text-decoration-style: dotted;
+}
+
+.pc-style-sample.is-dashed {
+  text-decoration-style: dashed;
+}
+
 /* The Underline row's kinds, each word drawn in its own line: 1 px, 3
    below the baseline, through the descenders, as the styles board draws
    them. A color of its own draws the line in it. */

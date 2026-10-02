@@ -15,6 +15,7 @@ import {
   insertPlace,
   layoutMarks,
   MORE_STYLES,
+  MORE_UNDERLINES,
   moreLabel,
   moveBack,
   moveOp,
@@ -261,19 +262,30 @@ describe('the rows of a part', () => {
     ]);
   });
 
-  it('names More styles by the styles it has on', () => {
-    const off = { strike: false, dim: false, inverse: false };
+  it('names More styles by the styles and the underline kind it has on', () => {
+    const off = { strike: false, dim: false, inverse: false, blink: false, underline_style: null };
     expect(MORE_STYLES.map((s) => [s.style, s.label])).toEqual([
       ['strike', 'Strikethrough'],
       ['dim', 'Dim'],
       ['inverse', 'Reverse'],
+      ['blink', 'Blink'],
+    ]);
+    expect(MORE_UNDERLINES.map((k) => [k.style, k.label])).toEqual([
+      ['double', 'Double underline'],
+      ['curly', 'Curly underline'],
+      ['dotted', 'Dotted underline'],
+      ['dashed', 'Dashed underline'],
     ]);
     expect(moreLabel(off)).toBe('More styles');
     expect(moreLabel({ ...off, dim: true })).toBe('Dim');
+    expect(moreLabel({ ...off, blink: true })).toBe('Blink');
     expect(moreLabel({ ...off, strike: true, inverse: true })).toBe('Strikethrough, reverse');
-    expect(moreLabel({ strike: true, dim: true, inverse: true })).toBe(
-      'Strikethrough, dim, reverse',
+    expect(moreLabel({ ...off, strike: true, dim: true, inverse: true, blink: true })).toBe(
+      'Strikethrough, dim, reverse, blink',
     );
+    // The single line is U's. A kind past it reads after the styles.
+    expect(moreLabel({ ...off, underline_style: 'underline' })).toBe('More styles');
+    expect(moreLabel({ ...off, dim: true, underline_style: 'curly' })).toBe('Dim, curly underline');
   });
 
   it('names a color by value that a field shows, since no hex can', () => {

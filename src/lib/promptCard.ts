@@ -618,37 +618,46 @@ export type MenuPlace = 'below-end' | 'above-start' | 'below-start' | 'beside';
 const GAP = 4;
 const EDGE = 8;
 
-/** Where a menu `size` goes beside `anchor`, kept inside the window. */
+/** Where a menu `size` goes beside `anchor`, kept inside the window. A
+ *  menu that opens above or below its button opens on the other side
+ *  when its own side has no room for it and the other side has. With
+ *  room on neither side, it opens on the side with more and scrolls in
+ *  `maxHeight`, so it never covers its button. */
 export function menuPosition(
   anchor: { left: number; top: number; right: number; bottom: number },
   size: { width: number; height: number },
   place: MenuPlace,
   viewport: { width: number; height: number },
-): { left: number; top: number } {
+): { left: number; top: number; maxHeight?: number } {
   let left: number;
   let top: number;
-  switch (place) {
-    case 'below-end':
-      left = anchor.right - size.width;
-      top = anchor.bottom + GAP;
-      break;
-    case 'above-start':
-      left = anchor.left;
-      top = anchor.top - GAP - size.height;
-      break;
-    case 'below-start':
-      left = anchor.left;
-      top = anchor.bottom + GAP;
-      break;
-    case 'beside':
-      left = anchor.right + GAP;
-      top = anchor.top - 6;
-      break;
+  let height = size.height;
+  let maxHeight: number | undefined;
+  if (place === 'beside') {
+    left = anchor.right + GAP;
+    top = anchor.top - 6;
+  } else {
+    left = place === 'below-end' ? anchor.right - size.width : anchor.left;
+    const roomAbove = anchor.top - GAP - EDGE;
+    const roomBelow = viewport.height - EDGE - anchor.bottom - GAP;
+    const wantsAbove = place === 'above-start';
+    const [own, other] = wantsAbove ? [roomAbove, roomBelow] : [roomBelow, roomAbove];
+    let above = wantsAbove;
+    if (own < height) {
+      if (other >= height || other > own) above = !wantsAbove;
+      const room = Math.max(0, Math.max(own, other));
+      if (room < height) {
+        height = room;
+        maxHeight = room;
+      }
+    }
+    top = above ? anchor.top - GAP - height : anchor.bottom + GAP;
   }
-  return {
+  const pos = {
     left: Math.max(EDGE, Math.min(left, viewport.width - size.width - EDGE)),
-    top: Math.max(EDGE, Math.min(top, viewport.height - size.height - EDGE)),
+    top: Math.max(EDGE, Math.min(top, viewport.height - height - EDGE)),
   };
+  return maxHeight === undefined ? pos : { ...pos, maxHeight };
 }
 
 /** What Command Z puts back: the fields one change of yours made, as

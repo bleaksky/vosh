@@ -1,3 +1,4 @@
+import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { BandEnv } from '../../lib/bandCells';
@@ -15,6 +16,32 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
+
+/** Press the More styles item `label` among what MoreStyleItems returns,
+ *  through its button's click handler, since nothing here renders it. */
+function pressItem(tree: ReactNode, label: string) {
+  type Props = { role?: string; onClick?: () => void; children?: ReactNode };
+  const items: Props[] = [];
+  const walk = (node: ReactNode) => {
+    if (Array.isArray(node)) node.forEach(walk);
+    else if (isValidElement<Props>(node)) {
+      if (node.props.role?.startsWith('menuitem')) items.push(node.props);
+      walk(node.props.children);
+    }
+  };
+  walk(tree);
+  const text = (node: ReactNode): string => {
+    if (typeof node === 'string') return node;
+    if (Array.isArray(node)) return node.map(text).join('');
+    if (isValidElement<Props>(node) && typeof node.type === 'string') {
+      return text(node.props.children);
+    }
+    return '';
+  };
+  const item = items.find((props) => text(props.children) === label);
+  if (!item?.onClick) throw new Error(`no item ${label}`);
+  item.onClick();
+}
 
 // Nord's terminal colors.
 const NORD: BandEnv = {
@@ -299,29 +326,73 @@ describe('a picked part', () => {
     expect(on).toContain('class="pc-style-more is-on"');
     expect(on).toContain('aria-label="More styles, Strikethrough, dim on"');
     expect(on).toContain('<span>Strikethrough, dim</span>');
+    // An underline kind past the single line reads there too.
+    const curly = row(draw({ ...HP, underline: true, underline_style: 'curly' }), 'Style');
+    expect(curly).toContain('<span>Curly underline</span>');
+    expect(curly).toContain('class="pc-style-more is-on"');
   });
 
-  it('lists strikethrough, dim and reverse in More styles, a check on each that is on', () => {
-    const toggled: [string, boolean][] = [];
+  it('lists the styles past B, I and U, then the underline kinds, a check on each that is on', () => {
     const html = renderToStaticMarkup(
       <ul>
         <MoreStyleItems
-          piece={{ strike: true, dim: false, inverse: false }}
-          onToggle={(style, on) => toggled.push([style, on])}
+          piece={{
+            strike: true,
+            dim: false,
+            inverse: false,
+            blink: false,
+            underline_style: 'dotted',
+          }}
+          onToggle={() => undefined}
         />
       </ul>,
     );
     const items = [
       ...html.matchAll(
-        /role="menuitemcheckbox" aria-checked="(true|false)"[^>]*>(?:<svg[^]*?<\/svg>)?<span class="pc-style-sample is-([a-z]+)">([^<]*)</g,
+        /role="(menuitemcheckbox|menuitemradio)" aria-checked="(true|false)"[^>]*>(?:<svg[^]*?<\/svg>)?<span class="pc-style-sample is-([a-z]+)">([^<]*)</g,
       ),
-    ].map((m) => [m[3], m[2], m[1]]);
+    ].map((m) => [m[4], m[3], m[2], m[1]]);
+    // The styles are checkboxes, and the kinds radios, one on at a time.
     expect(items).toEqual([
-      ['Strikethrough', 'strike', 'true'],
-      ['Dim', 'dim', 'false'],
-      ['Reverse', 'inverse', 'false'],
+      ['Strikethrough', 'strike', 'true', 'menuitemcheckbox'],
+      ['Dim', 'dim', 'false', 'menuitemcheckbox'],
+      ['Reverse', 'inverse', 'false', 'menuitemcheckbox'],
+      ['Blink', 'blink', 'false', 'menuitemcheckbox'],
+      ['Double underline', 'double', 'false', 'menuitemradio'],
+      ['Curly underline', 'curly', 'false', 'menuitemradio'],
+      ['Dotted underline', 'dotted', 'true', 'menuitemradio'],
+      ['Dashed underline', 'dashed', 'false', 'menuitemradio'],
     ]);
-    expect(html.match(/pc-start-check/g)).toHaveLength(1);
+    expect(html.match(/pc-start-check/g)).toHaveLength(2);
+    // A rule sets the underline kinds apart from the styles.
+    expect(html.indexOf('role="separator"')).toBeGreaterThan(html.indexOf('>Blink<'));
+    expect(html.indexOf('role="separator"')).toBeLessThan(html.indexOf('>Double underline<'));
+  });
+
+  it('turns the underline on in a kind you pick, and off with the kind that is on', () => {
+    const picks = (underline_style: PromptPiece['underline_style']) => {
+      const toggled: [string, boolean][] = [];
+      const piece = { strike: false, dim: false, inverse: false, blink: false, underline_style };
+      for (const label of ['Blink', 'Curly underline', 'Dotted underline']) {
+        pressItem(
+          MoreStyleItems({ piece, onToggle: (style, on) => toggled.push([style, on]) }),
+          label,
+        );
+      }
+      return toggled;
+    };
+    // No underline: each kind turns it on in that kind.
+    expect(picks(null)).toEqual([
+      ['blink', true],
+      ['curly', true],
+      ['dotted', true],
+    ]);
+    // A dotted line: curly takes its place, and dotted again ends it.
+    expect(picks('dotted')).toEqual([
+      ['blink', true],
+      ['curly', true],
+      ['dotted', false],
+    ]);
   });
 
   it('shows the Underline row while U is on, its kind and its color (styles board)', () => {
