@@ -25,16 +25,16 @@ import type { ProfileEntry, SessionIdentity } from './session';
 
 const TFL = 'play.theforsakenlands.com';
 
-// James's index: default claims Erelei, Healer claims Caelaor, and
-// Test-Prompt claims Erelei too.
+// James's index: default claims Ilsabet, Healer claims Corvanne, and
+// Test-Prompt claims Ilsabet too.
 const JAMES: ProfileEntry[] = [
   {
     name: 'default',
     description: 'Immortal',
-    auto_match: { host: TFL, port: 1848, characters: ['Erelei'] },
+    auto_match: { host: TFL, port: 1848, characters: ['Ilsabet'] },
   },
-  { name: 'Healer', auto_match: { host: TFL, port: 1848, characters: ['Caelaor'] } },
-  { name: 'Test-Prompt', auto_match: { host: TFL, port: 1848, characters: ['Erelei'] } },
+  { name: 'Healer', auto_match: { host: TFL, port: 1848, characters: ['Corvanne'] } },
+  { name: 'Test-Prompt', auto_match: { host: TFL, port: 1848, characters: ['Ilsabet'] } },
 ];
 const NAMES = JAMES.map((p) => p.name);
 
@@ -43,7 +43,7 @@ const identity = (character: string | null): SessionIdentity => ({
   port: 1848,
   character,
   profile: 'default',
-  claimed_by: character === 'Erelei' ? 'default' : null,
+  claimed_by: character === 'Ilsabet' ? 'default' : null,
 });
 
 describe('profile names', () => {
@@ -101,7 +101,7 @@ describe('profile names', () => {
 
 describe('the login toggle', () => {
   it('names the first character, else the one logged in, else nobody', () => {
-    expect(loginCharacter(JAMES[0].auto_match, identity('Ondrevar'))).toBe('Erelei');
+    expect(loginCharacter(JAMES[0].auto_match, identity('Ondrevar'))).toBe('Ilsabet');
     expect(loginCharacter({ host: TFL, characters: [' ', ''] }, identity('Ondrevar'))).toBe(
       'Ondrevar',
     );
@@ -110,7 +110,7 @@ describe('the login toggle', () => {
   });
 
   it('reads as a sentence with or without the name', () => {
-    expect(loginLabel('Erelei')).toBe('Use this profile when you log in as Erelei');
+    expect(loginLabel('Ilsabet')).toBe('Use this profile when you log in as Ilsabet');
     expect(loginLabel(null)).toBe('Use this profile when you log in');
   });
 
@@ -121,16 +121,16 @@ describe('the login toggle', () => {
   });
 
   it('reports every profile a claim took the character from', () => {
-    expect(movedSentence('Erelei', ['Test-Prompt'], 'Erelei')).toBe(
-      'Vosh moved Erelei from Test-Prompt to Erelei.',
+    expect(movedSentence('Ilsabet', ['Test-Prompt'], 'Ilsabet')).toBe(
+      'Vosh moved Ilsabet from Test-Prompt to Ilsabet.',
     );
-    expect(movedSentence('Erelei', ['default', 'Test-Prompt'], 'Erelei')).toBe(
-      'Vosh moved Erelei from Default and Test-Prompt to Erelei.',
+    expect(movedSentence('Ilsabet', ['default', 'Test-Prompt'], 'Ilsabet')).toBe(
+      'Vosh moved Ilsabet from Default and Test-Prompt to Ilsabet.',
     );
-    expect(movedSentence('Erelei', ['a', 'b', 'c'], 'default')).toBe(
-      'Vosh moved Erelei from a, b, and c to Default.',
+    expect(movedSentence('Ilsabet', ['a', 'b', 'c'], 'default')).toBe(
+      'Vosh moved Ilsabet from a, b, and c to Default.',
     );
-    expect(movedSentence('Erelei', [], 'default')).toBeNull();
+    expect(movedSentence('Ilsabet', [], 'default')).toBeNull();
   });
 });
 
@@ -153,7 +153,7 @@ describe('the World select', () => {
           { name: 'Blank', auto_match: null },
         ],
         { host: 'MUD.example.org', port: 4000 },
-        { ...identity('Erelei'), host: 'localhost', port: 4000 },
+        { ...identity('Ilsabet'), host: 'localhost', port: 4000 },
       ),
     );
     expect(options).toEqual([
@@ -202,13 +202,13 @@ describe('a new profile', () => {
 
 describe('typed values', () => {
   it('reads character names as a list', () => {
-    expect(parseCharacterNames(' Erelei, Thessamy ,, erelei, Ondrevar ')).toEqual([
-      'Erelei',
+    expect(parseCharacterNames(' Ilsabet, Thessamy ,, ilsabet, Ondrevar ')).toEqual([
+      'Ilsabet',
       'Thessamy',
       'Ondrevar',
     ]);
     expect(parseCharacterNames('')).toEqual([]);
-    expect(formatCharacterNames(['Erelei', 'Thessamy'])).toBe('Erelei, Thessamy');
+    expect(formatCharacterNames(['Ilsabet', 'Thessamy'])).toBe('Ilsabet, Thessamy');
     expect(formatCharacterNames(undefined)).toBe('');
   });
 

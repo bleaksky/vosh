@@ -55,7 +55,7 @@ const PROFILES = {
   active: 'default',
   profiles: [
     { name: 'default' },
-    { name: 'erelei', auto_match: { host: 'play.theforsakenlands.com', port: 1848 } },
+    { name: 'ilsabet', auto_match: { host: 'play.theforsakenlands.com', port: 1848 } },
   ],
 };
 
@@ -542,7 +542,7 @@ async function paneMenuLinks(): Promise<string[]> {
 }
 
 /** Press each link outside search and the palette: first with the
- *  profile in use named Erelei, then while the profile list fails to
+ *  profile in use named Ilsabet, then while the profile list fails to
  *  read, so no profile is known. */
 async function senderLinks(): Promise<Record<string, string[]>> {
   const out: Record<string, string[]> = {
@@ -550,7 +550,7 @@ async function senderLinks(): Promise<Record<string, string[]>> {
     'Layout, Panes and tracked affects': [],
     'General, Search logs': [],
   };
-  for (const active of ['Erelei', null]) {
+  for (const active of ['Ilsabet', null]) {
     scene.active = active;
     out['pane menu, Edit tracked affects'].push(...(await paneMenuLinks()));
     const layout = await land({ group: 'layout' }, MAC, {

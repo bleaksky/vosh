@@ -7,15 +7,15 @@ describe('profileDisplayName', () => {
   });
 
   it('keeps every other name as it is', () => {
-    expect(profileDisplayName('Erelei')).toBe('Erelei');
-    expect(profileDisplayName('aabahran-erelei')).toBe('aabahran-erelei');
+    expect(profileDisplayName('Ilsabet')).toBe('Ilsabet');
+    expect(profileDisplayName('aabahran-ilsabet')).toBe('aabahran-ilsabet');
     expect(profileDisplayName('Default')).toBe('Default');
   });
 });
 
 describe('profilePossessive', () => {
   it('names whose panel a row changes', () => {
-    expect(profilePossessive('Erelei')).toBe("Erelei's");
+    expect(profilePossessive('Ilsabet')).toBe("Ilsabet's");
     expect(profilePossessive('default')).toBe("Default's");
   });
 });

@@ -1,5 +1,5 @@
 {
-  "notes": "Taken from the code at 7dced45. The Settings deep links that search, the palette and other windows open, where each one lands, the anchors each Settings page draws as data-st-anchor, and the help topics its book buttons open. search lists the search index rows in order. palette maps each palette row that opens Settings, by the id the palette keeps in Recent, to the link it sends. senders maps the pane menu Edit tracked affects item, the Layout panes row and the General Search logs button to the links each one sends, first with the profile in use named Erelei and then with no profile known. links maps each link string to where it lands. Its last group holds every link in senders. anchors lists what each page draws on every link, opened cold and warm, with the Prompt section on the Input page in each of its four states. src/components/settings/settingsAnchors.test.tsx holds the code to this file. Change it only in a commit tied to a numbered bug or a lettered decision, so the diff shows every link that moves.",
+  "notes": "Taken from the code at 7dced45. The Settings deep links that search, the palette and other windows open, where each one lands, the anchors each Settings page draws as data-st-anchor, and the help topics its book buttons open. search lists the search index rows in order. palette maps each palette row that opens Settings, by the id the palette keeps in Recent, to the link it sends. senders maps the pane menu Edit tracked affects item, the Layout panes row and the General Search logs button to the links each one sends, first with the profile in use named Ilsabet and then with no profile known. links maps each link string to where it lands. Its last group holds every link in senders. anchors lists what each page draws on every link, opened cold and warm, with the Prompt section on the Input page in each of its four states. src/components/settings/settingsAnchors.test.tsx holds the code to this file. Change it only in a commit tied to a numbered bug or a lettered decision, so the diff shows every link that moves.",
   "search": [
     "general:connection#world",
     "general:connection#host",
@@ -80,11 +80,11 @@
   },
   "senders": {
     "pane menu, Edit tracked affects": [
-      "characters:Erelei#tracked",
+      "characters:Ilsabet#tracked",
       "characters#tracked"
     ],
     "Layout, Panes and tracked affects": [
-      "characters:Erelei",
+      "characters:Ilsabet",
       "characters"
     ],
     "General, Search logs": [
@@ -122,9 +122,9 @@
     },
     "from other pages and windows": {
       "characters#tracked": "characters#tracked",
-      "characters:Erelei#tracked": "characters:Erelei#tracked",
+      "characters:Ilsabet#tracked": "characters:Ilsabet#tracked",
       "characters": "characters",
-      "characters:Erelei": "characters:Erelei",
+      "characters:Ilsabet": "characters:Ilsabet",
       "general:logs": "general:logs"
     }
   },

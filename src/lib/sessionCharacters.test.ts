@@ -40,26 +40,26 @@ beforeEach(() => {
 
 describe('profile wrappers', () => {
   it('creates a profile with camelCase keys and nulls for what you leave out', async () => {
-    await profileCreate('Caelaor');
+    await profileCreate('Corvanne');
     expect(tauri.invoke).toHaveBeenLastCalledWith('profile_create', {
-      name: 'Caelaor',
+      name: 'Corvanne',
       copyFrom: null,
       autoMatch: null,
     });
-    const autoMatch = { host: 'play.theforsakenlands.com', port: 1848, characters: ['Caelaor'] };
-    await profileCreate('Caelaor', 'default', autoMatch);
+    const autoMatch = { host: 'play.theforsakenlands.com', port: 1848, characters: ['Corvanne'] };
+    await profileCreate('Corvanne', 'default', autoMatch);
     expect(tauri.invoke).toHaveBeenLastCalledWith('profile_create', {
-      name: 'Caelaor',
+      name: 'Corvanne',
       copyFrom: 'default',
       autoMatch,
     });
   });
 
   it('sends the login toggle and the world as the backend names them', async () => {
-    await profileSetLogin('Test-Prompt', 'Erelei', true);
+    await profileSetLogin('Test-Prompt', 'Ilsabet', true);
     expect(tauri.invoke).toHaveBeenLastCalledWith('profile_set_login', {
       name: 'Test-Prompt',
-      character: 'Erelei',
+      character: 'Ilsabet',
       on: true,
     });
     await profileSetWorld('Test-Prompt', null, null);
@@ -126,7 +126,7 @@ describe('events', () => {
     const identity = {
       host: 'play.theforsakenlands.com',
       port: 1848,
-      character: 'Erelei',
+      character: 'Ilsabet',
       profile: 'default',
       claimed_by: 'default',
     };

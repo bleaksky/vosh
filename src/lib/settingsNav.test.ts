@@ -50,9 +50,9 @@ describe('resolveSettingsTarget', () => {
   });
 
   it('keeps the case of a profile name and lowercases ids', () => {
-    expect(resolveSettingsTarget('characters:Erelei#tracked')).toEqual({
+    expect(resolveSettingsTarget('characters:Ilsabet#tracked')).toEqual({
       group: 'characters',
-      section: 'Erelei',
+      section: 'Ilsabet',
       anchor: 'tracked',
     });
     expect(resolveSettingsTarget('characters:Test Prompt')).toEqual({
@@ -125,14 +125,14 @@ describe('formatSettingsTarget', () => {
       { group: 'general' },
       { group: 'automation', section: 'macros' },
       { group: 'automation', anchor: 'import' },
-      { group: 'characters', section: 'Erelei', anchor: 'tracked' },
+      { group: 'characters', section: 'Ilsabet', anchor: 'tracked' },
     ];
     for (const target of targets) {
       expect(resolveSettingsTarget(formatSettingsTarget(target))).toEqual(target);
     }
     expect(
-      formatSettingsTarget({ group: 'characters', section: 'Erelei', anchor: 'tracked' }),
-    ).toBe('characters:Erelei#tracked');
+      formatSettingsTarget({ group: 'characters', section: 'Ilsabet', anchor: 'tracked' }),
+    ).toBe('characters:Ilsabet#tracked');
   });
 });
 
@@ -156,7 +156,7 @@ describe('settingsScrollIds', () => {
     ]);
     expect(settingsScrollIds({ group: 'automation', section: 'macros' })).toEqual([]);
     expect(
-      settingsScrollIds({ group: 'characters', section: 'Erelei', anchor: 'tracked' }),
+      settingsScrollIds({ group: 'characters', section: 'Ilsabet', anchor: 'tracked' }),
     ).toEqual(['tracked']);
   });
 });

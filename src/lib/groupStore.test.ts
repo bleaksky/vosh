@@ -33,9 +33,9 @@ describe('parseGroupInfo', () => {
 describe('dedupeMembers', () => {
   it('keeps masked members apart when their ids differ', () => {
     const info = {
-      leader: 'Erelei',
+      leader: 'Ilsabet',
       members: [
-        { id: 1, name: 'Erelei', hp_pct: 100 },
+        { id: 1, name: 'Ilsabet', hp_pct: 100 },
         { id: 2, name: 'someone', hp_pct: 76 },
         { id: 3, name: 'someone', hp_pct: 41 },
       ],
@@ -47,13 +47,13 @@ describe('dedupeMembers', () => {
     const out = dedupeMembers({
       members: [
         { id: 2, name: 'someone', hp_pct: 90 },
-        { id: 1, name: 'Erelei', hp_pct: 100 },
+        { id: 1, name: 'Ilsabet', hp_pct: 100 },
         { id: 2, name: 'someone', hp_pct: 40 },
       ],
     });
     expect(out.members).toEqual([
       { id: 2, name: 'someone', hp_pct: 40 },
-      { id: 1, name: 'Erelei', hp_pct: 100 },
+      { id: 1, name: 'Ilsabet', hp_pct: 100 },
     ]);
   });
 

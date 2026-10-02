@@ -567,7 +567,7 @@ mod tests {
         assert_eq!(detail.generation, None);
         assert!(detail.login_on);
 
-        // Test-Prompt never saved a file and loses Erelei to default.
+        // Test-Prompt never saved a file and loses Ilsabet to default.
         let detail = profile_detail(&state, "Test-Prompt").await.unwrap();
         let leftover = &detail.tracked_affects;
         assert!(leftover.is_empty(), "{leftover:?}");
@@ -777,14 +777,14 @@ mod tests {
         assert_eq!(identity.claimed_by, None);
         assert_eq!(identity.profile, DEFAULT_PROFILE_NAME);
 
-        *state.current_character.lock().unwrap() = Some("Erelei".into());
+        *state.current_character.lock().unwrap() = Some("Ilsabet".into());
         let identity = session_identity(&state).await.unwrap();
         assert_eq!(
             identity,
             SessionIdentity {
                 host: "play.theforsakenlands.com".into(),
                 port: 1848,
-                character: Some("Erelei".into()),
+                character: Some("Ilsabet".into()),
                 profile: DEFAULT_PROFILE_NAME.into(),
                 claimed_by: Some(DEFAULT_PROFILE_NAME.into()),
             }

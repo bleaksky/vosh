@@ -141,7 +141,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
     listening.finish("broadcast_list_changes", &mut heard, &mut want);
 
     let listening = Heard::listen(&app, &[PROFILE_CHANGED_EVENT]);
-    crate::characters::broadcast_profile_changed(handle, "Erelei");
+    crate::characters::broadcast_profile_changed(handle, "Ilsabet");
     listening.finish("broadcast_profile_changed", &mut heard, &mut want);
 
     let listening = Heard::listen(&app, &[super::MIGRATION_APPLIED_EVENT]);

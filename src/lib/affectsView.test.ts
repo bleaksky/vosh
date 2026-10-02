@@ -16,9 +16,9 @@ const aff = (name: string, duration: number | null): AffectInput => ({ name, dur
 const track = (...names: string[]) => names.map((name) => ({ name, label: null }));
 const brief = (rows: AffectRow[]) => rows.map((r) => [r.name, r.state, r.ticks]);
 
-// Erelei on the approved board: his eight tracked affects in his order,
+// Ilsabet on the approved board: his eight tracked affects in his order,
 // and the list the game sends while bless has worn off.
-const ERELEI_TRACKED = track(
+const ILSABET_TRACKED = track(
   'mounted',
   'sanctuary',
   'bless',
@@ -28,7 +28,7 @@ const ERELEI_TRACKED = track(
   'fly',
   'levitate',
 );
-const ERELEI_AFFECTS = [
+const ILSABET_AFFECTS = [
   aff('pass door', 8),
   aff('levitate', 44),
   aff('detect invis', 47),
@@ -46,9 +46,9 @@ const ERELEI_AFFECTS = [
 ];
 
 describe('affectsView', () => {
-  it('reproduces the approved Affects pane for Erelei', () => {
+  it('reproduces the approved Affects pane for Ilsabet', () => {
     // The board's affects list, newest first as the game prints it.
-    const rows = affectsView(ERELEI_AFFECTS, ERELEI_TRACKED);
+    const rows = affectsView(ILSABET_AFFECTS, ILSABET_TRACKED);
     expect(brief(rows)).toEqual([
       ['mounted', 'present', -1],
       ['sanctuary', 'expiring', 1],

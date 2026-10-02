@@ -5237,8 +5237,8 @@ mod tests {
     #[test]
     fn auto_switch_line_names_the_profile_in_a_sentence() {
         assert_eq!(
-            super::auto_switch_line("Erelei"),
-            "\r\n\x1b[33mVosh switched to the Erelei profile.\x1b[0m\r\n"
+            super::auto_switch_line("Ilsabet"),
+            "\r\n\x1b[33mVosh switched to the Ilsabet profile.\x1b[0m\r\n"
         );
         assert_eq!(
             super::auto_switch_line("default"),
@@ -5614,8 +5614,8 @@ mod tests {
         *state.current_connection.lock().unwrap() =
             Some(("play.theforsakenlands.com".into(), 1848));
 
-        // Caelaor logging in picks Healer, whose file does not read.
-        let target = super::auto_switch_target(&state, "Caelaor").await;
+        // Corvanne logging in picks Healer, whose file does not read.
+        let target = super::auto_switch_target(&state, "Corvanne").await;
         assert_eq!(target.as_deref(), Some("Healer"));
         let err = super::switch_live_profile(&state, "Healer")
             .await
@@ -5627,8 +5627,8 @@ mod tests {
         );
         assert_eq!(active(&state).await, DEFAULT_PROFILE_NAME);
         assert_eq!(live_affects(&state).await, ["Sanctuary"]);
-        // Erelei belongs to the live profile, so nothing switches.
-        assert_eq!(super::auto_switch_target(&state, "Erelei").await, None);
+        // Ilsabet belongs to the live profile, so nothing switches.
+        assert_eq!(super::auto_switch_target(&state, "Ilsabet").await, None);
     }
 
     /// Launch over the profile set in `dir` the way lib.rs runs it, and
@@ -8783,7 +8783,7 @@ mod tests {
             let (state, before) = converted_three(dir.path()).await;
             assert_eq!(items_on(&*state.profile.lock().await), before[0]);
 
-            // Caelaor logs in, and Vosh switches to Healer.
+            // Corvanne logs in, and Vosh switches to Healer.
             super::super::switch_profile(&state, Some(dir.path()), "Healer")
                 .await
                 .unwrap();
