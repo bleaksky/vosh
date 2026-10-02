@@ -126,6 +126,7 @@ import { usePromptReach } from './lib/stores/promptReachStore';
 import { lentRows, type CellSize } from './lib/promptBand';
 import { noteReader } from './lib/readerBusy';
 import { resolveBlinkText, useReduceMotion } from './lib/blink';
+import { listenSplitDrag, SplitDrag } from './lib/splitDrag';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
 
@@ -586,6 +587,24 @@ function App() {
       unsubHist();
     };
   }, [historyReady]);
+
+  // A drag that starts on the history pane's text and goes below it
+  // scrolls the history down and hands its selection to the live pane
+  // when the split closes at the bottom (src/lib/splitDrag.ts). One
+  // controller for the window's life, since the drag outlives the split.
+  const historyReadyRef = useRef(false);
+  useEffect(() => {
+    historyReadyRef.current = historyReady;
+  }, [historyReady]);
+  useEffect(() => {
+    const drag = new SplitDrag({
+      history: () =>
+        splitOpenRef.current && historyReadyRef.current ? historyTermRef.current : null,
+      live: () => termRef.current,
+      closeSplit: () => setSplitOpen(false),
+    });
+    return listenSplitDrag(window, drag, nativeSurfaceEnabled);
+  }, []);
 
   // Showing, hiding, or resizing the panel changes the terminal
   // column's width. FitAddon's own internal observers do not always
