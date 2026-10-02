@@ -150,7 +150,7 @@ describe('LiftTracker on a change of where your prompt shows', () => {
       replace: { gen: 2, text: '', fresh: false, above: { plain: tank, text: '' } },
     });
     // Text that lands where the prompt was never takes its band.
-    writer.output({ text: 'Tarvik tells you something\r\nand more\r\n' });
+    writer.output({ text: 'Joral tells you something\r\nand more\r\n' });
     await parsed(writer);
     expect(lifts.size).toBe(0);
     expect(extents(term, lifts)).toEqual([]);
@@ -174,7 +174,7 @@ describe('LiftTracker with your echo after a prompt of several rows', () => {
 
   it('keeps one rectangle while nothing follows on the last row', async () => {
     const { term, writer, lifts } = setup(60);
-    writer.output({ text: `${fight}\r\nTarvik tells you 'hi'\r\n` });
+    writer.output({ text: `${fight}\r\nJoral tells you 'hi'\r\n` });
     await parsed(writer);
     expect(extents(term, lifts)).toEqual([
       { id: 1, top: 0, bottom: 2, left: 0, right: guard.length },

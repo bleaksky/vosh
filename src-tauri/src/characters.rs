@@ -792,7 +792,7 @@ mod tests {
 
         // A character no profile claims keeps the live profile and
         // reports no claim, so Characters can offer a new profile.
-        *state.current_character.lock().unwrap() = Some("Vanek".into());
+        *state.current_character.lock().unwrap() = Some("Ondrevar".into());
         let identity = session_identity(&state).await.unwrap();
         assert_eq!(identity.claimed_by, None);
         assert_eq!(identity.profile, DEFAULT_PROFILE_NAME);

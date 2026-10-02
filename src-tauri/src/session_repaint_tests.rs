@@ -172,7 +172,7 @@ fn a_packet_after_the_prompt_in_its_read_repaints_it_late() {
     let mut session = Session::new(profile(CODES, HOUR, true));
     let mut bytes = wire_fixture("quiet");
     bytes.extend(time(14));
-    bytes.extend_from_slice(b"\n\rTarvik tells you 'back soon'\n\r");
+    bytes.extend_from_slice(b"\n\rQuenby tells you 'back soon'\n\r");
     let (_, waiting) = read_then_wait(&mut session, &bytes, None, now);
     assert_eq!(waiting, None);
 }
@@ -232,7 +232,7 @@ fn text_after_the_packet_cancels_the_late_repaint() {
     let _ = session.read(&wire_fixture("quiet"));
     let (_, waiting) = read_then_wait(&mut session, &time(14), None, now);
     assert!(waiting.is_some());
-    let tell = b"\n\rTarvik tells you 'back soon'\n\r";
+    let tell = b"\n\rQuenby tells you 'back soon'\n\r";
     let (_, after) = read_then_wait(&mut session, tell, waiting, now);
     assert_eq!(after, None);
     // The text closed the row, so a repaint changes nothing.
@@ -267,7 +267,7 @@ fn the_pinned_band_repaints_late_whatever_text_came() {
     let mut session = Session::new(showing(profile(CODES, HOUR, true), PromptShow::Pinned));
     let _ = session.read(&wire_fixture("quiet"));
     let mut bytes = time(14);
-    bytes.extend_from_slice(b"\n\rTarvik tells you 'back soon'\n\r");
+    bytes.extend_from_slice(b"\n\rQuenby tells you 'back soon'\n\r");
     let (read, waiting) = read_then_wait(&mut session, &bytes, None, now);
     assert!(read.out.writes_text());
     assert_eq!(waiting, Some(now + LATE_REPAINT));

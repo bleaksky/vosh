@@ -19,14 +19,14 @@ describe('OutputShaper', () => {
   it('hands the recent names cache the same text with no wrapping when it writes nothing', () => {
     // A copy the native underlay hides writes nothing, but Tab still
     // completes the names it saw, a character split across reads too.
-    const bytes = new TextEncoder().encode('Ælfric says hello to Tarvik.\r\n');
+    const bytes = new TextEncoder().encode('Ælfric says hello to Orla.\r\n');
     // Æ takes two bytes, and the first read ends after one.
     const first = decodeOutputPayload({ b64: btoa(String.fromCharCode(...bytes.slice(0, 1))) });
     const rest = decodeOutputPayload({ b64: btoa(String.fromCharCode(...bytes.slice(1))) });
     const shaper = new OutputShaper(10);
     const a = shaper.text(first);
     const b = shaper.text(rest);
-    expect(a.text + b.text).toBe('Ælfric says hello to Tarvik.\r\n');
+    expect(a.text + b.text).toBe('Ælfric says hello to Orla.\r\n');
     expect(b.replace).toBeNull();
     const shaped = new OutputShaper(10);
     expect(shaped.shape(first).text + shaped.shape(rest).text).toBe(a.text + b.text);
@@ -35,8 +35,8 @@ describe('OutputShaper', () => {
   it('decodes a replace for the names cache too', () => {
     const out = decodeOutputPayload({
       b64: '',
-      replace: { gen: 3, b64: btoa('Selune waves.'), fresh: false },
+      replace: { gen: 3, b64: btoa('Tolliver waves.'), fresh: false },
     });
-    expect(new OutputShaper(80).text(out)).toEqual({ text: '', replace: 'Selune waves.' });
+    expect(new OutputShaper(80).text(out)).toEqual({ text: '', replace: 'Tolliver waves.' });
   });
 });

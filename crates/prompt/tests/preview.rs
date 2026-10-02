@@ -102,7 +102,7 @@ fn lament_hides_every_value_the_song_hides() {
         assert!(lament_hides(&FieldRef::new(name)), "{name}");
     }
     assert!(lament_hides(&FieldRef::with_param("aff", "sanctuary")));
-    assert!(lament_hides(&FieldRef::with_param("member_hp", "Tarvik")));
+    assert!(lament_hides(&FieldRef::with_param("member_hp", "Quenby")));
     assert!(lament_hides(&FieldRef::with_param(
         "gmcp",
         "Char.Vitals.hp"

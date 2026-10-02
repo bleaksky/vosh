@@ -3131,14 +3131,14 @@ mod tests {
         assert!(next.bytes.is_empty() && next.hold.is_empty());
         stage.line(
             &mut next,
-            b"Tarvik tells you 'hi'",
-            "Tarvik tells you 'hi'",
+            b"Joral tells you 'hi'",
+            "Joral tells you 'hi'",
             None,
-            b"Tarvik tells you 'hi'\r\n",
+            b"Joral tells you 'hi'\r\n",
         );
         stage.line(&mut next, b"", "", None, b"\r\n");
         pin_prompt(&mut stage, &mut next);
-        assert_eq!(next.bytes, b"Tarvik tells you 'hi'");
+        assert_eq!(next.bytes, b"Joral tells you 'hi'");
         assert_eq!(next.hold, b"\r\n\r\n");
         // Once text lands, the next empty line writes again.
         let mut more = Output::new(false);

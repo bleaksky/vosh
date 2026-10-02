@@ -244,7 +244,7 @@ const EXITS: &[&str] = &[
     "[Exits: east south west]",
 ];
 const PLAYERS: &[&str] = &[
-    "Tester", "Healer", "Aldric", "Brennan", "Corwyn", "Dalia", "Elsbeth", "Fenrik",
+    "Tester", "Healer", "Grisvald", "Brennan", "Corwyn", "Ottile", "Elsbeth", "Orla",
 ];
 const CHANNELS: &[&str] = &["gossips", "says", "tells you", "tells the group", "cabal"];
 const TICKS: &[&str] = &[

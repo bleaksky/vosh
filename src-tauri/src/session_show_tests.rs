@@ -286,7 +286,7 @@ fn digest_play(template: &str, draw: bool) -> u64 {
     let read = session.read(&wire_fixture("fight-tank"));
     take(&mut hash, &read);
     let read = session.read(
-        b"\n\rTarvik tells you 'back soon'\n\r\n\r[1020/1020hp 800/800mn 930/930mv]\n\r\xff\xf9",
+        b"\n\rQuenby tells you 'back soon'\n\r\n\r[1020/1020hp 800/800mn 930/930mv]\n\r\xff\xf9",
     );
     take(&mut hash, &read);
     let read = session.send("");
@@ -311,7 +311,9 @@ fn digest_play(template: &str, draw: bool) -> u64 {
 
 /// The digests this build sent with your prompt in the text, taken at
 /// c740298 before `[prompt] show` existed. A change to any payload, log
-/// row or kept line in the default moves one of them.
+/// row or kept line in the default moves one of them. The play and fake
+/// digests were taken again when the tell in those plays came from an
+/// invented name of the same length, which moves no other byte.
 const TODAY: &[(&str, u64)] = &[
     ("quiet/draw", 0x6b7a_023c_8b04_abfd),
     ("quiet/off", 0x2b93_76d7_c674_7515),
@@ -333,11 +335,11 @@ const TODAY: &[(&str, u64)] = &[
     ("prompt-x-new/off", 0xfbe5_12b8_1b87_5e7c),
     ("prompts-off-new/draw", 0x76ce_32ae_ec99_c147),
     ("prompts-off-new/off", 0x76ce_32ae_ec99_c147),
-    ("play/draw", 0x6254_1a27_8206_5293),
-    ("play/off", 0x92b6_97ce_7920_2a31),
-    ("play/wide", 0x0178_5623_acd2_18ea),
-    ("fake/draw", 0xf420_67e4_71b0_4f7c),
-    ("fake/off", 0xf136_3c56_a088_17c2),
+    ("play/draw", 0xb6b1_2efa_a899_905a),
+    ("play/off", 0xa85b_aac6_79e2_64ee),
+    ("play/wide", 0x3540_8029_97dc_bbd7),
+    ("fake/draw", 0x3bef_33ab_eb32_df7b),
+    ("fake/off", 0x4ce7_97fb_5fe8_d121),
 ];
 
 fn digests() -> Vec<(String, u64)> {
@@ -400,7 +402,7 @@ fn fake_play(p: Profile) -> Vec<Step> {
         }
     };
     send(&mut session, &mut mud, "look", &mut steps);
-    let tell = mud.pulse_later("Tarvik tells you 'grabbing my bank box, back soon'");
+    let tell = mud.pulse_later("Quenby tells you 'grabbing my bank box, back soon'");
     read(&mut session, &tell, &mut steps);
     send(&mut session, &mut mud, "fight", &mut steps);
     for round in [
@@ -839,7 +841,7 @@ pub(super) fn pinned_streams() -> Vec<(String, Vec<u8>, &'static str)> {
         .collect();
     let mut mud = Mud::playing(Options::new(Build::New));
     let mut quiet_tell = mud.login();
-    quiet_tell.extend(mud.pulse_later("Tarvik tells you 'back soon'"));
+    quiet_tell.extend(mud.pulse_later("Quenby tells you 'back soon'"));
     streams.push(("login-then-tell".into(), quiet_tell, CODES));
     let mut fight = Vec::new();
     for write in mud.command("fight") {
@@ -853,7 +855,7 @@ pub(super) fn pinned_streams() -> Vec<(String, Vec<u8>, &'static str)> {
         ..Options::new(Build::New)
     });
     let mut bytes = compact.login();
-    bytes.extend(compact.pulse_later("Tarvik tells you 'back soon'"));
+    bytes.extend(compact.pulse_later("Quenby tells you 'back soon'"));
     streams.push(("compact".into(), bytes, CODES));
     streams
 }
@@ -929,7 +931,7 @@ fn pinned_screens_keep_every_row_but_the_prompts() {
             ROOM[1],
             ROOM[2],
             "",
-            "Tarvik tells you 'back soon'"
+            "Quenby tells you 'back soon'"
         ]
     );
     assert_eq!(
@@ -953,7 +955,7 @@ fn pinned_screens_keep_every_row_but_the_prompts() {
             ROOM[0],
             ROOM[1],
             ROOM[2],
-            "Tarvik tells you 'back soon'"
+            "Quenby tells you 'back soon'"
         ]
     );
     // No prompts at all: the same as the text.
@@ -993,7 +995,7 @@ fn your_echo_takes_the_row_the_prompt_held() {
     for write in mud.command("") {
         grid.session_output(&session.read(&write.bytes).out);
     }
-    let tell = mud.pulse_later("Tarvik tells you 'back soon'");
+    let tell = mud.pulse_later("Quenby tells you 'back soon'");
     grid.session_output(&session.read(&tell).out);
     let mut rows: Vec<String> = (0..grid.screen_lines())
         .map(|line| grid.row_string(line).trim_end().to_string())
@@ -1014,7 +1016,7 @@ fn your_echo_takes_the_row_the_prompt_held() {
             "  Marble counters line the hall, and a clerk nods at you.",
             "[Exits: south]",
             "",
-            "Tarvik tells you 'back soon'"
+            "Quenby tells you 'back soon'"
         ]
     );
 }
@@ -1215,7 +1217,7 @@ fn an_echo_that_ends_the_prompt_row_takes_the_row_a_pinned_prompt_left() {
     ];
     let mut mud = Mud::playing(Options::new(Build::New));
     let login = mud.login();
-    let tell = mud.pulse_later("Tarvik tells you 'back soon'");
+    let tell = mud.pulse_later("Quenby tells you 'back soon'");
     let play = |show, draw| {
         let mut session = Session::new(showing(profile(CODES, HP, draw), show));
         let mut grid = crate::term_grid::TermGrid::new(80, 40);
@@ -1242,7 +1244,7 @@ fn an_echo_that_ends_the_prompt_row_takes_the_row_a_pinned_prompt_left() {
             "<1020>",
             "TICK IN 5s",
             "",
-            "Tarvik tells you 'back soon'",
+            "Quenby tells you 'back soon'",
             "",
             "<1020>",
             "[Not connected]"
@@ -1413,7 +1415,7 @@ fn changing_where_your_prompt_shows_mid_fight_moves_the_tank_line_with_it() {
         ] {
             let mut mud = Mud::playing(Options::new(Build::New));
             let fight = wire_fixture("fight-tank");
-            let tell = mud.pulse_later("Tarvik tells you 'back soon'");
+            let tell = mud.pulse_later("Quenby tells you 'back soon'");
             // The whole play shown as `to`, or started as `from` and
             // switched right after the fight's prompt.
             let play = |switch: bool| {

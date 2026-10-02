@@ -600,7 +600,7 @@ mod tests {
             route("log", "chat", 1),
             route("preset", "tell", 0),
         ]);
-        let r = process(&s, b"You tell Selune 'hi'");
+        let r = process(&s, b"You tell Tolliver 'hi'");
         assert_eq!(r.routes, vec!["tell".to_string(), "chat".to_string()]);
     }
 

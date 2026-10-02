@@ -30,7 +30,7 @@ describe('parseCommChannel', () => {
   it('keeps the speaker apart from the message', () => {
     expect(read('say.gmcp')).toEqual({
       pane: 'say',
-      speaker: 'Tarvik',
+      speaker: 'Joral',
       text: 'grabbing my bank box, back soon',
       language: 'common',
       understood: true,
@@ -41,13 +41,13 @@ describe('parseCommChannel', () => {
 
   it('keeps a speaker of several words whole', () => {
     expect(read('yell.gmcp')?.speaker).toBe('a Blackwatch villager');
-    expect(read('gtell-disguised.gmcp')?.speaker).toBe('{Tarvik} a shadow');
+    expect(read('gtell-disguised.gmcp')?.speaker).toBe('{Joral} a shadow');
   });
 
   it('reads the direction of a tell you receive', () => {
     expect(read('tell.gmcp')).toMatchObject({
       pane: 'tell',
-      speaker: 'Selune',
+      speaker: 'Tolliver',
       text: 'are you still at the bank?',
       direction: 'received',
     });
@@ -74,10 +74,10 @@ describe('parseCommChannel', () => {
   it('strips color codes from the speaker and the message', () => {
     expect(
       parseCommChannel(
-        { channel: 'say', speaker: '\x1b[1mTarvik\x1b[0m', text: '\x1b[33mhi\x1b[0m' },
+        { channel: 'say', speaker: '\x1b[1mJoral\x1b[0m', text: '\x1b[33mhi\x1b[0m' },
         TS,
       ),
-    ).toMatchObject({ speaker: 'Tarvik', text: 'hi' });
+    ).toMatchObject({ speaker: 'Joral', text: 'hi' });
   });
 
   it('reads the field names other games use', () => {
@@ -94,18 +94,18 @@ describe('parseCommChannel', () => {
   });
 
   it('drops a packet with no message', () => {
-    expect(parseCommChannel({ channel: 'say', speaker: 'Tarvik', text: '' }, TS)).toBeNull();
+    expect(parseCommChannel({ channel: 'say', speaker: 'Joral', text: '' }, TS)).toBeNull();
     expect(parseCommChannel(null, TS)).toBeNull();
     expect(parseCommChannel('say hi', TS)).toBeNull();
   });
 
   it('reads only the directions the protocol names', () => {
     expect(
-      parseCommChannel({ channel: 'tell', speaker: 'Selune', text: 'x', direction: 'sent' }, TS)
+      parseCommChannel({ channel: 'tell', speaker: 'Tolliver', text: 'x', direction: 'sent' }, TS)
         ?.direction,
     ).toBe('sent');
     expect(
-      parseCommChannel({ channel: 'tell', speaker: 'Selune', text: 'x', direction: 'up' }, TS)
+      parseCommChannel({ channel: 'tell', speaker: 'Tolliver', text: 'x', direction: 'up' }, TS)
         ?.direction,
     ).toBeNull();
   });
@@ -139,13 +139,13 @@ describe('parseRoutedLine', () => {
       parseRoutedLine(
         {
           pane: 'tell',
-          text: "You tell Selune '\x1b[32myes, inside. north from the square\x1b[0m'",
+          text: "You tell Tolliver '\x1b[32myes, inside. north from the square\x1b[0m'",
         },
         TS,
       ),
     ).toEqual({
       pane: 'tell',
-      speaker: 'Selune',
+      speaker: 'Tolliver',
       text: 'yes, inside. north from the square',
       language: 'common',
       understood: true,
@@ -167,14 +167,14 @@ describe('parseRoutedLine', () => {
 
   it('reads a tell a telepath projects', () => {
     expect(
-      parseRoutedLine({ pane: 'tell', text: "You project to Selune in Elvish 'omw'" }, TS),
-    ).toMatchObject({ speaker: 'Selune', text: 'omw', language: 'Elvish', direction: 'sent' });
+      parseRoutedLine({ pane: 'tell', text: "You project to Tolliver in Elvish 'omw'" }, TS),
+    ).toMatchObject({ speaker: 'Tolliver', text: 'omw', language: 'Elvish', direction: 'sent' });
   });
 
   it('leaves other lines about tells whole', () => {
     for (const text of [
-      "Selune tells you 'are you still at the bank?'",
-      "You try to tell Selune in Elvish 'omw'",
+      "Tolliver tells you 'are you still at the bank?'",
+      "You try to tell Tolliver in Elvish 'omw'",
     ]) {
       const line = parseRoutedLine({ pane: 'tell', text }, TS);
       expect(line?.speaker, text).toBeNull();
@@ -205,10 +205,10 @@ describe('the chat store', () => {
     const route = (text: string) => handler({ payload: { pane: 'tell', text } });
 
     route("You tell your group 'one tick, waiting on mana'");
-    route("You tell Selune 'omw'");
+    route("You tell Tolliver 'omw'");
 
     expect(getChatLines().map((l) => [l.pane, l.direction, l.speaker, l.text])).toEqual([
-      ['tell', 'sent', 'Selune', 'omw'],
+      ['tell', 'sent', 'Tolliver', 'omw'],
     ]);
   });
 });

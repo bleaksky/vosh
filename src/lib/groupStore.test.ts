@@ -60,11 +60,11 @@ describe('dedupeMembers', () => {
   it('falls back to the name when the server sends no id', () => {
     const out = dedupeMembers({
       members: [
-        { name: 'Tarvik', hp_pct: 90 },
-        { name: 'Tarvik', hp_pct: 70 },
+        { name: 'Dovic', hp_pct: 90 },
+        { name: 'Dovic', hp_pct: 70 },
       ],
     });
-    expect(out.members).toEqual([{ name: 'Tarvik', hp_pct: 70 }]);
+    expect(out.members).toEqual([{ name: 'Dovic', hp_pct: 70 }]);
   });
 
   it('keys by id, then name', () => {

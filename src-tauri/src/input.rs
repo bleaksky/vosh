@@ -2974,17 +2974,17 @@ mod tests {
     #[test]
     fn tar_string_keeps_literal_resolves_idx_via_substring() {
         // Non-numeric `tar <string>` stores the user's literal keyword
-        // (so `kill ${target}` sends `kill helg`, which the MUD's
+        // (so `kill ${target}` sends `kill gris`, which the MUD's
         // keyword matcher handles), but still resolves room_idx via
         // case-insensitive substring so the `>` marker lands on the
         // matching chip.
         let mut p = Profile::default();
         set_room_chars(
             &mut p,
-            vec![rc("The Baron Helgardium", true), rc("ogre", true)],
+            vec![rc("The Baron Grisvald", true), rc("ogre", true)],
         );
-        let _ = process(&mut p, "tar helg");
-        assert_eq!(p.target.name.as_deref(), Some("helg"));
+        let _ = process(&mut p, "tar gris");
+        assert_eq!(p.target.name.as_deref(), Some("gris"));
         assert_eq!(p.target.room_idx, Some(1));
     }
 
@@ -3042,16 +3042,16 @@ mod tests {
 
     #[test]
     fn quick_key_uses_literal_keyword_not_full_name() {
-        // `tar helg` keeps "helg" as the target. Quick-keys should
-        // expand to `<verb> helg` so the MUD's keyword matcher
+        // `tar gris` keeps "gris" as the target. Quick-keys should
+        // expand to `<verb> gris` so the MUD's keyword matcher
         // resolves it on its side rather than getting the full
-        // descriptor "The Baron Helgardium".
+        // descriptor "The Baron Grisvald".
         let mut p = Profile::default();
-        set_room_chars(&mut p, vec![rc("The Baron Helgardium", true)]);
-        let _ = process(&mut p, "tar helg");
+        set_room_chars(&mut p, vec![rc("The Baron Grisvald", true)]);
+        let _ = process(&mut p, "tar gris");
         let _ = process(&mut p, "#qkey gg cast 'fireball'");
         let r = process(&mut p, "gg");
-        assert_eq!(r.bytes, b"cast 'fireball' helg\r\n");
+        assert_eq!(r.bytes, b"cast 'fireball' gris\r\n");
     }
 
     #[test]

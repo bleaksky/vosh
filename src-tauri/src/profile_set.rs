@@ -1150,10 +1150,10 @@ character = "Erelei"
     fn auto_match_accepts_characters_list_shape() {
         let toml = r#"
 host = "play.theforsakenlands.com"
-characters = ["Erelei", "Akletus", "Vanek"]
+characters = ["Erelei", "Thessamy", "Ondrevar"]
 "#;
         let am: AutoMatch = toml::from_str(toml).unwrap();
-        assert_eq!(am.characters, vec!["Erelei", "Akletus", "Vanek"]);
+        assert_eq!(am.characters, vec!["Erelei", "Thessamy", "Ondrevar"]);
     }
 
     #[test]
@@ -1164,20 +1164,20 @@ characters = ["Erelei", "Akletus", "Vanek"]
         let toml = r#"
 host = "h"
 character = "Erelei"
-characters = ["Akletus", "Vanek"]
+characters = ["Thessamy", "Ondrevar"]
 "#;
         let am: AutoMatch = toml::from_str(toml).unwrap();
-        assert_eq!(am.characters, vec!["Erelei", "Akletus", "Vanek"]);
+        assert_eq!(am.characters, vec!["Erelei", "Thessamy", "Ondrevar"]);
 
         let toml_with_dup = r#"
 host = "h"
 character = "Erelei"
-characters = ["Erelei", "Vanek"]
+characters = ["Erelei", "Ondrevar"]
 "#;
         let am: AutoMatch = toml::from_str(toml_with_dup).unwrap();
         // Dedup keeps the existing position; legacy entry is not
         // re-inserted.
-        assert_eq!(am.characters, vec!["Erelei", "Vanek"]);
+        assert_eq!(am.characters, vec!["Erelei", "Ondrevar"]);
     }
 
     #[test]
@@ -1387,7 +1387,7 @@ characters = ["Erelei", "Vanek"]
             &mut set,
             DEFAULT_PROFILE_NAME,
             None,
-            claim("play.theforsakenlands.com", None, &["Vanek"]),
+            claim("play.theforsakenlands.com", None, &["Ondrevar"]),
         );
         assert!(set.login_on(DEFAULT_PROFILE_NAME));
         // A profile pinned to the real port outscores it at login.
@@ -1396,7 +1396,7 @@ characters = ["Erelei", "Vanek"]
             &mut set,
             "Pinned",
             None,
-            claim("play.theforsakenlands.com", Some(1848), &["Vanek"]),
+            claim("play.theforsakenlands.com", Some(1848), &["Ondrevar"]),
         );
         assert!(!set.login_on(DEFAULT_PROFILE_NAME));
         assert!(set.login_on("Pinned"));
@@ -1465,7 +1465,7 @@ characters = ["Erelei", "Vanek"]
             &mut set,
             DEFAULT_PROFILE_NAME,
             None,
-            claim(world, Some(1848), &["Erelei", "Akletus"]),
+            claim(world, Some(1848), &["Erelei", "Thessamy"]),
         );
         set.create("Elsewhere").unwrap();
         put_claim(
@@ -1484,8 +1484,8 @@ characters = ["Erelei", "Vanek"]
             claim.released_from,
             vec![DEFAULT_PROFILE_NAME.to_string(), "Portless".to_string()]
         );
-        // default keeps Akletus and its toggle.
-        assert_eq!(characters_of(&set, DEFAULT_PROFILE_NAME), vec!["Akletus"]);
+        // default keeps Thessamy and its toggle.
+        assert_eq!(characters_of(&set, DEFAULT_PROFILE_NAME), vec!["Thessamy"]);
         assert!(enabled(&set, DEFAULT_PROFILE_NAME));
         // Another world keeps its own Erelei.
         assert_eq!(characters_of(&set, "Elsewhere"), vec!["Erelei"]);
@@ -1675,15 +1675,15 @@ characters = ["Erelei", "Vanek"]
             Some("Test-Prompt".into())
         );
 
-        // A host wide fallback from an older index loads for Vanek but
+        // A host wide fallback from an older index loads for Ondrevar but
         // does not claim him.
         set.create("Fallback").unwrap();
         put_claim(&mut set, "Fallback", None, claim(world, None, &[]));
         assert_eq!(
-            set.resolve_match(world, 1848, Some("Vanek")),
+            set.resolve_match(world, 1848, Some("Ondrevar")),
             Some("Fallback".into())
         );
-        assert_eq!(set.claimed_by(world, 1848, "Vanek"), None);
+        assert_eq!(set.claimed_by(world, 1848, "Ondrevar"), None);
         assert_eq!(set.claimed_by("mud.example.org", 4000, "Erelei"), None);
     }
 
@@ -1721,7 +1721,7 @@ characters = ["Erelei", "Vanek"]
             set.resolve_match(world, 1848, Some("Erelei")),
             Some("Healer".into())
         );
-        assert_eq!(set.resolve_match(world, 1848, Some("Vanek")), None);
+        assert_eq!(set.resolve_match(world, 1848, Some("Ondrevar")), None);
         let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         assert!(!enabled(&reloaded, DEFAULT_PROFILE_NAME));
         assert!(reloaded.login_on("Healer"));
@@ -1740,7 +1740,7 @@ characters = ["Erelei", "Vanek"]
         assert!(!am.enabled);
         // No fallback appeared for logins nobody claims.
         assert_eq!(set.resolve_match(world, 1848, None), None);
-        assert_eq!(set.resolve_match(world, 1848, Some("Vanek")), None);
+        assert_eq!(set.resolve_match(world, 1848, Some("Ondrevar")), None);
 
         // Clearing a character list turns the toggle off and keeps the
         // world.
