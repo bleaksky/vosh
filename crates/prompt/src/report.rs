@@ -12,9 +12,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::aabahran::lex::{self, Token as GameToken};
 use crate::aabahran::{self, Origin, WarningKind, Which, Who};
-use crate::capture;
+use crate::capture::{self, generic};
 use crate::config::{CaptureConfig, RegexCapture};
-use crate::generic;
 use crate::presets::{self, Preset};
 
 /// What `prompt_compile` reads.

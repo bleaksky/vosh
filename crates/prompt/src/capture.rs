@@ -44,7 +44,7 @@ pub fn settle(pattern: &str) -> bool {
 /// True when a stored settle flag can hold for `pattern`: anchored at both
 /// ends, with a last item that is a literal or a literal one or more
 /// times, such as the run of spaces ` +` a line you point at ends in
-/// ([`crate::generic`]). Either way a match ends on that literal, so it
+/// ([`generic`]). Either way a match ends on that literal, so it
 /// cannot stop on a prefix of a longer line. [`settle`] derives the flag
 /// for a pattern you write, and only from a plain literal.
 fn can_settle(pattern: &str) -> bool {
