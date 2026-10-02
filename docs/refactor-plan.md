@@ -15,7 +15,7 @@ The last commit of each phase updates this table and the Phase Status line in CL
 | R4    | Dead page code and old files              | Done. 7e8199f to e347469, with D8, D20, D27 and D31                                                                                                                                                                |
 | R5    | Dead styles                               | Done. d2357d2 to b99934a                                                                                                                                                                                           |
 | R6    | Dead backend commands and app code        | Done. ba9284b to 3ac5cb9, with D3, D5, D6, D7, D12, D14 and the D20 exporter. The stand in functions stay with D9 option B                                                                                         |
-| R7    | Small crates tidied in place              | Done. 16e7410 to 7ba2001. vosh-ansi keeps its parser, testkit features in vosh-alias, vosh-trigger and vosh-log hold with_script and the other items the app tests use, and vosh-log needs vosh-ansi only in tests |
+| R7    | Small crates tidied in place              | Done. 16e7410 to 7ba2001, then ca8c95e and a141b97 from the review. vosh-ansi keeps plain_text and pieces, and the test kits in vosh-ansi, vosh-alias, vosh-trigger and vosh-log hold the items only the tests use |
 | R8    | Crates merged, log crate split            | Current. Stage B runs R7 to R13 as one stage                                                                                                                                                                       |
 | R9    | Prompt crate                              | Not started                                                                                                                                                                                                        |
 | R10   | App frame and the command layer           | Not started                                                                                                                                                                                                        |
@@ -55,7 +55,7 @@ Features that landed before stage B. These landed on `one-window` after R6, in t
 - The Rust 1.99.0 pin in rust-toolchain.toml.
 - Smaller work, such as the affects thresholds, the Draining chips style, Settings in the terminal menu and the history drag through the split.
 
-readable.rs reads the parser and colors in `crates/ansi`, and the trigger engine reads `pieces`, so the ansi row in 3.7 and R7 item 3 no longer hold as written. R7 removes from that crate only what nothing uses.
+The trigger engine reads `pieces` in `crates/ansi`, and the readable.rs tests read the SGR model there, so the ansi row in 3.7 and R7 item 3 no longer hold as written. R7 keeps `plain_text` and `pieces` and puts the SGR model behind a vosh-ansi `testkit` feature that the vosh-trigger tests turn on.
 
 ## Decisions taken
 
@@ -606,7 +606,7 @@ These items are only used by tests. Items only a crate's own unit tests use move
 - Prompt crate. `MapValues` (to testkit), `Stage::stale`, `pin_drawn`, `repaint`, `set_capture`, `card_open`, `shows`, `pinned`, `swallows`, `Recognizer::codes`, `settles`, `compile`, `hidden`, `disagreements`, `Hidden::none`, `Snapshot::new`, `colors::Color::sgr`, `Template::is_empty`, `Span::look`, and the root exports MapValues and SpanColor. `Vars::new` (61 uses in `crates/prompt/tests`) and the root export Vars sit behind `testkit`.
 - App. `input::process` stays as a test helper. The Forsaken Lands test port seam and the render counter go in R11 once `spawn` takes the known host flag from its caller.
 
-Once `LogStore::append_raw` and `vosh_trigger::process` are test only, vosh-log and vosh-trigger no longer need vosh-ansi outside tests.
+Once `LogStore::append_raw` is test only, vosh-log no longer needs vosh-ansi outside tests. vosh-trigger still does, for `pieces`.
 
 ### 3.12 Looks dead, is live. Do not remove
 
