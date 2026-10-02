@@ -857,6 +857,13 @@
   color: var(--danger-text);
 }
 
+/* On a light theme the yellow hours read under 3 to 1 on the tinted
+   chip (Solarized Light and Everforest Light), so a light theme draws
+   them in the deeper warn text tone, in both chip styles. */
+:root[data-appearance='light'] .pane-chip-tracked.is-warn .pane-chip-hours {
+  color: var(--warn-text);
+}
+
 .pane-chip-other .pane-chip-name {
   color: var(--secondary);
 }
@@ -977,17 +984,11 @@
    That holds the hours at 3 to 1 or better over the fill on every built
    in light theme and on the common imported light palettes, and still
    stands the drain at least 1.3 to 1 off the bare panel on the built in
-   ones. The yellow keeps its 30. Dark themes stay as drawn. */
+   ones. The yellow keeps its 30, and its hours take warn text by the
+   rule both chip styles share. Dark themes stay as drawn. */
 :root[data-appearance='light'] [data-chip-fill='drain'] .pane-chip-tracked.is-danger,
 :root[data-appearance='light'] [data-chip-fill='drain'] .pane-chip-tracked.is-danger.is-draining {
   --chip-gauge: color-mix(in srgb, var(--danger) 24%, transparent);
-}
-
-:root[data-appearance='light']
-  [data-chip-fill='drain']
-  .pane-chip-tracked.is-warn
-  .pane-chip-hours {
-  color: var(--warn-text);
 }
 
 /* ── Map ─────────────────────────────────────────────────────────── */

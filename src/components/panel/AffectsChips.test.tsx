@@ -387,7 +387,7 @@ describe('Draining chips', () => {
     const selectors = [...drainCss.matchAll(/([^{}]+)\{[^}]*\}/g)].flatMap((m) =>
       m[1].split(',').map((s) => s.trim()),
     );
-    expect(selectors).toHaveLength(9);
+    expect(selectors).toHaveLength(8);
     for (const s of selectors) {
       expect(s).toMatch(
         /^(:root\[data-appearance='light'\] )?\[data-chip-fill='drain'\] \.pane-chip-tracked\.is-(warn|danger)(\.is-draining)?( \.pane-chip-hours)?$/,
@@ -411,9 +411,9 @@ describe('Draining chips', () => {
   // and over the bare panel. An imported light palette whose red sits at
   // or near 4.5 to 1 draws its hours close to the fill color over itself.
   // The common ones hold 3 to 1 at 24 percent where 28 dropped them under
-  // it, as the next test pins. Grouped chips stays as drawn, with the
-  // yellow on Solarized Light and Everforest Light under 3 to 1.
-  const GROUPED_UNDER_THREE = ['solarized-light warn', 'everforest-light warn'];
+  // it, as the next test pins. On a light theme Grouped chips draws its
+  // yellow hours in warn text too, so no theme reads under 3 to 1 there.
+  const GROUPED_UNDER_THREE: string[] = [];
   // How far the fill stands off the bare panel on a light theme, so the
   // drain stays clear. The Grouped chips track stands off it 1.15 to 1.25.
   const LIGHT_FILL_FLOOR = 1.3;
@@ -422,7 +422,7 @@ describe('Draining chips', () => {
   const HOURS_READ: Record<string, string> = {
     'obsidian-ember warn': '9.59 to 6.10',
     'obsidian-ember danger': '6.53 to 4.79',
-    'vellum warn': '3.63 to 3.13',
+    'vellum warn': '3.86 to 3.13',
     'vellum danger': '4.02 to 3.59',
     'kanso-zen warn': '7.98 to 5.15',
     'kanso-zen danger': '4.57 to 3.61',
@@ -446,7 +446,7 @@ describe('Draining chips', () => {
     'one-half-dark danger': '4.04 to 3.36',
     'solarized-dark warn': '4.57 to 3.40',
     'solarized-dark danger': '4.47 to 3.97',
-    'solarized-light warn': '2.63 to 3.36',
+    'solarized-light warn': '3.94 to 3.36',
     'solarized-light danger': '3.67 to 3.27',
     'tango-dark warn': '6.09 to 4.05',
     'tango-dark danger': '4.29 to 3.68',
@@ -456,7 +456,7 @@ describe('Draining chips', () => {
     'high-contrast danger': '6.01 to 4.39',
     'everforest-dark warn': '4.41 to 3.21',
     'everforest-dark danger': '3.99 to 3.26',
-    'everforest-light warn': '2.61 to 3.41',
+    'everforest-light warn': '4.03 to 3.41',
     'everforest-light danger': '3.81 to 3.46',
     'green-screen warn': '11.51 to 6.50',
     'green-screen danger': '4.74 to 3.72',
@@ -481,9 +481,9 @@ describe('Draining chips', () => {
         ".pane-chip-tracked.is-danger, :root[data-appearance='light'] [data-chip-fill='drain'] .pane-chip-tracked.is-danger.is-draining",
       ),
     ).toContain('--chip-gauge: color-mix(in srgb, var(--danger) 24%, transparent)');
-    expect(light('.pane-chip-tracked.is-warn .pane-chip-hours')).toContain(
-      'color: var(--warn-text)',
-    );
+    expect(
+      flatRule(":root[data-appearance='light'] .pane-chip-tracked.is-warn .pane-chip-hours"),
+    ).toContain('color: var(--warn-text)');
     const read: Record<string, string> = {};
     const groupedUnder: string[] = [];
     for (const theme of BUILTIN_THEMES) {
@@ -497,7 +497,14 @@ describe('Draining chips', () => {
       const panel = hex(t.panel);
       const text = hex(t.text);
       for (const [tone, color, groupedHours, drainHours, track, fill] of [
-        ['warn', hex(t.warn), hex(t.warn), hex(isLight ? t.warnText : t.warn), 0.14, 0.3],
+        [
+          'warn',
+          hex(t.warn),
+          hex(isLight ? t.warnText : t.warn),
+          hex(isLight ? t.warnText : t.warn),
+          0.14,
+          0.3,
+        ],
         ['danger', hex(t.danger), hex(t.dangerText), hex(t.dangerText), 0.16, isLight ? 0.24 : 0.3],
       ] as const) {
         const key = `${theme.id} ${tone}`;
