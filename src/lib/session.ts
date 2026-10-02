@@ -2411,8 +2411,8 @@ async function emitChanged<T>(
   }
 }
 
-// Cheap deep-equality for the structured fields. Both vitals and
-// custom_themes are small bounded objects, so JSON round-trip is
+// Cheap deep-equality for the structured fields. Each one, like
+// custom_themes, is a small bounded object, so JSON round-trip is
 // faster (and more predictable) than a hand-rolled walker.
 function deepEqual<T>(a: T, b: T): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -2485,11 +2485,6 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   );
   await emitChanged('vosh://echo-macros-changed', config.echo_macros, prev?.echo_macros);
   await emitChanged(
-    'vosh://side-panels-fill-height-changed',
-    config.side_panels_fill_height,
-    prev?.side_panels_fill_height,
-  );
-  await emitChanged(
     'vosh://paste-line-delay-changed',
     config.paste_line_delay_ms,
     prev?.paste_line_delay_ms,
@@ -2504,7 +2499,6 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     config.input_cursor_style,
     prev?.input_cursor_style,
   );
-  await emitChanged('vosh://vitals-config-changed', config.vitals, prev?.vitals, deepEqual);
   await emitChanged(VITALS_DENSITY_EVENT, config.vitals_density, prev?.vitals_density);
   await emitChanged(
     VITALS_OPTIONS_EVENT,
@@ -2512,7 +2506,6 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     prev ? vitalsOptionsOf(prev) : undefined,
     deepEqual,
   );
-  await emitChanged('vosh://moons-position-changed', config.moons_position, prev?.moons_position);
   await emitChanged('vosh://chip-style-changed', config.chip_style, prev?.chip_style);
   await emitChanged('vosh://tick-count-changed', config.tick_count, prev?.tick_count);
   const display = affectsDisplayOf(config);
@@ -2792,14 +2785,6 @@ export async function subscribeTickCountChanged(
 ): Promise<UnlistenFn> {
   return listen<unknown>('vosh://tick-count-changed', (event) => {
     cb(normalizeTickCount(event.payload));
-  });
-}
-
-export async function subscribeSidePanelsFillHeightChanged(
-  cb: (value: boolean) => void,
-): Promise<UnlistenFn> {
-  return listen<boolean>('vosh://side-panels-fill-height-changed', (event) => {
-    cb(Boolean(event.payload));
   });
 }
 
