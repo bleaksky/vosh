@@ -50,6 +50,7 @@ import { noteReader } from '../lib/readerBusy';
 import { ingestRecentNames } from '../lib/recentNames';
 import { underlayShows, XtermMirror } from '../lib/xtermMirror';
 import { XtermBlink } from '../lib/xtermBlink';
+import type { BufferView, LineMark } from '../lib/splitDrag';
 
 /** Session flag set when the native surface never came up, so the page
  *  falls back to xterm instead of leaving a transparent hole. */
@@ -189,6 +190,16 @@ export interface TerminalHandle {
   onSelectionChange: (cb: () => void) => () => void;
   /** Current selected text, or empty string when no selection. */
   getSelection: () => string;
+  /** Select `length` cells from `column` of buffer row `row`, rows
+   *  counted whole. A drag across the scrollback split selects through
+   *  it (src/lib/splitDrag.ts). */
+  select: (column: number, row: number, length: number) => void;
+  /** The buffer as a drag reads it: the size, where the viewport and the
+   *  bottom page start, and the cursor's row on the screen. */
+  bufferView: () => BufferView;
+  /** Keep track of buffer row `row` through new output and trimmed
+   *  history, or null on the alternate screen. */
+  markLine: (row: number) => LineMark | null;
   /** Select the whole buffer, scrollback included. */
   selectAll: () => void;
   /** Where the open region starts on this pane's screen, as the renderer
@@ -1291,6 +1302,22 @@ export function Terminal({
       clearSelection: () => term.clearSelection(),
       hasSelection: () => term.hasSelection(),
       getSelection: () => term.getSelection(),
+      select: (column, row, length) => term.select(column, row, length),
+      bufferView: () => {
+        const buffer = term.buffer.active;
+        return {
+          cols: term.cols,
+          rows: term.rows,
+          viewportY: buffer.viewportY,
+          baseY: buffer.baseY,
+          cursorY: buffer.cursorY,
+        };
+      },
+      markLine: (row) => {
+        const buffer = term.buffer.active;
+        if (buffer.type !== 'normal') return null;
+        return term.registerMarker(Math.max(0, row) - (buffer.baseY + buffer.cursorY)) ?? null;
+      },
       selectAll: () => term.selectAll(),
       onSelectionChange: (cb) => {
         const disposable = term.onSelectionChange(cb);
