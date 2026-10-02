@@ -2901,7 +2901,7 @@ fn end_prompt(p: &mut Profile) {
 
 /// Keep a GMCP packet for the custom prompt, stamped with the local
 /// time it arrived.
-fn observe_prompt_gmcp(p: &mut Profile, msg: &vosh_gmcp::Message) {
+fn observe_prompt_gmcp(p: &mut Profile, msg: &vosh_protocol::gmcp::Message) {
     p.prompt.observe(
         &msg.package,
         msg.data.clone(),
@@ -3104,7 +3104,7 @@ async fn handle_gmcp<R: tauri::Runtime>(
     batch: &mut ReadBatch,
     perf: &mut PerfCounters,
 ) -> std::io::Result<()> {
-    let msg = match vosh_gmcp::parse(payload) {
+    let msg = match vosh_protocol::gmcp::parse(payload) {
         Ok(m) => m,
         Err(e) => {
             warn!(error = %e, "failed to parse GMCP payload");
@@ -3195,7 +3195,7 @@ async fn handle_gmcp<R: tauri::Runtime>(
 /// handlers asked for, which the caller delivers once the lock drops.
 fn gmcp_step(
     p: &mut Profile,
-    msg: &vosh_gmcp::Message,
+    msg: &vosh_protocol::gmcp::Message,
     now: Instant,
 ) -> (Option<TickStep>, ApplyResult) {
     gmcp_bind::apply(&mut p.vars, msg);
@@ -3257,7 +3257,7 @@ fn gmcp_step(
 /// deliver when the change counted as a tick.
 fn observe_world_time_for_tick(
     tick: &mut TickRuntime,
-    msg: &vosh_gmcp::Message,
+    msg: &vosh_protocol::gmcp::Message,
     now: Instant,
 ) -> Option<TickStep> {
     if msg.package != "World.Time" {
@@ -3276,7 +3276,7 @@ fn observe_world_time_for_tick(
 }
 
 fn hello_subnegotiation() -> Vec<u8> {
-    let body = vosh_gmcp::build(
+    let body = vosh_protocol::gmcp::build(
         "Core.Hello",
         &json!({
             "client": "vosh",
@@ -3288,7 +3288,7 @@ fn hello_subnegotiation() -> Vec<u8> {
 }
 
 fn supports_subnegotiation() -> Vec<u8> {
-    let body = vosh_gmcp::build("Core.Supports.Set", &REQUESTED_GMCP_PACKAGES.to_vec())
+    let body = vosh_protocol::gmcp::build("Core.Supports.Set", &REQUESTED_GMCP_PACKAGES.to_vec())
         .unwrap_or_default();
     Negotiator::build_gmcp_subnegotiation(&body)
 }
@@ -3771,12 +3771,12 @@ mod tests {
 
     #[test]
     fn core_supports_set_names_every_package_vosh_reads() {
-        let body = vosh_gmcp::build(
+        let body = vosh_protocol::gmcp::build(
             "Core.Supports.Set",
             &super::REQUESTED_GMCP_PACKAGES.to_vec(),
         )
         .expect("the list serializes");
-        let msg = vosh_gmcp::parse(&body).expect("the body parses");
+        let msg = vosh_protocol::gmcp::parse(&body).expect("the body parses");
         let modules: Vec<&str> = msg
             .data
             .as_array()
@@ -3991,8 +3991,8 @@ mod tests {
         assert!(p.ui.keep_last_command);
     }
 
-    fn world_time(hour: serde_json::Value) -> vosh_gmcp::Message {
-        vosh_gmcp::Message {
+    fn world_time(hour: serde_json::Value) -> vosh_protocol::gmcp::Message {
+        vosh_protocol::gmcp::Message {
             package: "World.Time".into(),
             data: serde_json::json!({ "hour": hour }),
         }
@@ -4028,12 +4028,12 @@ mod tests {
         assert!(step.payload.fired);
 
         // Other packages and a World.Time without an hour are no tick.
-        let other = vosh_gmcp::Message {
+        let other = vosh_protocol::gmcp::Message {
             package: "Char.Vitals".into(),
             data: serde_json::json!({ "hour": 12 }),
         };
         assert!(super::observe_world_time_for_tick(&mut tick, &other, at(80)).is_none());
-        let no_hour = vosh_gmcp::Message {
+        let no_hour = vosh_protocol::gmcp::Message {
             package: "World.Time".into(),
             data: serde_json::json!({ "sunlight": "light" }),
         };
@@ -4221,7 +4221,8 @@ mod tests {
                     super::TelnetEvent::Subnegotiation { option, payload }
                         if option == super::telnet_option::GMCP =>
                     {
-                        let msg = vosh_gmcp::parse(&payload).expect("every packet parses");
+                        let msg =
+                            vosh_protocol::gmcp::parse(&payload).expect("every packet parses");
                         let _ = super::gmcp_step(&mut self.p, &msg, now);
                     }
                     super::TelnetEvent::Command(byte)
@@ -5079,14 +5080,14 @@ mod tests {
             env!("CARGO_MANIFEST_DIR")
         );
         let bytes = std::fs::read(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
-        let msg = vosh_gmcp::parse(&bytes).unwrap_or_else(|e| panic!("{file}: {e}"));
+        let msg = vosh_protocol::gmcp::parse(&bytes).unwrap_or_else(|e| panic!("{file}: {e}"));
         super::observe_prompt_gmcp(p, &msg);
     }
 
     fn feed_inline(p: &mut Profile, package: &str, data: serde_json::Value) {
         super::observe_prompt_gmcp(
             p,
-            &vosh_gmcp::Message {
+            &vosh_protocol::gmcp::Message {
                 package: package.into(),
                 data,
             },

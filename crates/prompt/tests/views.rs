@@ -37,7 +37,7 @@ fn field_json(resolved: Resolved) -> Json {
 /// The room as the prompt engine reads it on the new build, the only
 /// build whose Room.Info feeds Exits (D26). Exits read as direction
 /// words in the game's door order.
-fn room_view(msg: &vosh_gmcp::Message) -> Json {
+fn room_view(msg: &vosh_protocol::gmcp::Message) -> Json {
     let mut vars = Vars::new(true);
     vars.observe(
         "Char.Prompt",
@@ -77,7 +77,7 @@ fn room_view(msg: &vosh_gmcp::Message) -> Json {
 
 /// The engine's view of one packet.
 fn view(file: &str, text: &str) -> Json {
-    let msg = vosh_gmcp::parse(text.as_bytes()).unwrap_or_else(|e| panic!("{file}: {e}"));
+    let msg = vosh_protocol::gmcp::parse(text.as_bytes()).unwrap_or_else(|e| panic!("{file}: {e}"));
     if msg.package == "Room.Info" {
         return room_view(&msg);
     }

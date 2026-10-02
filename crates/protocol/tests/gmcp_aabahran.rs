@@ -5,7 +5,7 @@
 //! packets two older server builds send under lamented tears.
 
 use serde_json::{json, Value};
-use vosh_gmcp::{parse, Message};
+use vosh_protocol::gmcp::{parse, Message};
 
 macro_rules! fixture {
     ($file:literal, $package:literal) => {

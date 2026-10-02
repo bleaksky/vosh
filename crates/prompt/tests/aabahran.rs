@@ -832,7 +832,7 @@ const CHAR_PROMPT: [&str; 3] = [
 #[test]
 fn every_char_prompt_fixture_compiles_as_sent() {
     for file in CHAR_PROMPT {
-        let msg = vosh_gmcp::parse(file.trim_end().as_bytes()).expect("a packet");
+        let msg = vosh_protocol::gmcp::parse(file.trim_end().as_bytes()).expect("a packet");
         let prompt = msg.data["prompt"].as_str().expect("prompt");
         let fprompt = msg.data["fprompt"].as_str().expect("fprompt");
         let compiled = compile(prompt, fprompt, Origin::Stored, Who::default())

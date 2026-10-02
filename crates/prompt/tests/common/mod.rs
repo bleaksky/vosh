@@ -77,7 +77,7 @@ pub fn feed(vars: &mut Vars, file: &str) {
         .iter()
         .find(|(name, _)| *name == file)
         .unwrap_or_else(|| panic!("no fixture {file}"));
-    let msg = vosh_gmcp::parse(text.as_bytes()).unwrap_or_else(|e| panic!("{file}: {e}"));
+    let msg = vosh_protocol::gmcp::parse(text.as_bytes()).unwrap_or_else(|e| panic!("{file}: {e}"));
     vars.observe(&msg.package, msg.data, at());
 }
 

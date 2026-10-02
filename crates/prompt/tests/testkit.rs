@@ -40,7 +40,7 @@ fn parts(raw: &[u8]) -> Vec<Part> {
                 .position(|w| w == [telnet::IAC, telnet::SE])
                 .expect("a packet ends")
                 + i;
-            let msg = vosh_gmcp::parse(&raw[i + 3..end]).expect("every packet parses");
+            let msg = vosh_protocol::gmcp::parse(&raw[i + 3..end]).expect("every packet parses");
             parts.push(Part::Packet(msg.package, msg.data));
             i = end + 2;
         } else {

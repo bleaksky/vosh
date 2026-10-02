@@ -7,5 +7,10 @@ authors.workspace = true
 description = "The wire protocols Vosh speaks, with no app state."
 rust-version.workspace = true
 
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
 [lints]
 workspace = true
