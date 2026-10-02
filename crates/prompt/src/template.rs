@@ -443,7 +443,7 @@ impl Template {
 }
 
 /// The characters a braced body may hold.
-fn brace_char(c: char) -> bool {
+pub(crate) fn brace_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, '_' | ':' | ',' | '#' | '.' | '=' | '[' | ']')
 }
 
@@ -980,7 +980,7 @@ fn parse_name(name: &str, source: &str, end: &mut usize) -> TokenKind {
 
 /// Parse the field at the start of `segs`, taking its parameter when it
 /// has one. Returns the field and the segments after it.
-fn parse_field<'a>(segs: &'a [&'a str]) -> Option<(FieldRef, &'a [&'a str])> {
+pub(crate) fn parse_field<'a>(segs: &'a [&'a str]) -> Option<(FieldRef, &'a [&'a str])> {
     let name = segs.first()?.to_ascii_lowercase();
     if !valid_name(&name) {
         return None;

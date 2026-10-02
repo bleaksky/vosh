@@ -22,8 +22,8 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::template::{
-    runs_on, takes_param, write_token, BarColor, Code, ColorSpec, FieldRef, Format, Layer,
-    PieceKind, Scale, Style, Template, TokenKind, UnderlineStyle, ValueRef, BAR_MAX_WIDTH,
+    self, runs_on, write_token, BarColor, Code, ColorSpec, FieldRef, Format, Layer, PieceKind,
+    Scale, Style, Template, TokenKind, UnderlineStyle, ValueRef, BAR_MAX_WIDTH,
 };
 use crate::vars::{self, Kind};
 
@@ -1305,33 +1305,17 @@ pub(crate) fn underline_choice(line: UnderlineStyle) -> StyleChoice {
 }
 
 /// A field as the card names it, `hp`, `aff:sanctuary` or
-/// `gmcp:Char.Vitals.ep`, read as the grammar reads a braced field.
+/// `gmcp:Char.Vitals.ep`, read by the grammar as the body of a braced
+/// field with no format after it.
 fn parse_field(text: &str) -> Result<FieldRef, EditError> {
-    let valid = |name: &str| {
-        !name.is_empty()
-            && name
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
-    };
-    let (name, param) = match text.trim().split_once(':') {
-        Some((name, param)) => (name.to_ascii_lowercase(), Some(param)),
-        None => (text.trim().to_ascii_lowercase(), None),
-    };
-    let body_char =
-        |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | ',' | '#' | '.' | '=' | '[' | ']');
-    match param {
-        _ if !valid(&name) => error("Vosh does not know that value."),
-        Some(param) if takes_param(&name) && !param.is_empty() && param.chars().all(body_char) => {
-            let param = if name == "queue" {
-                param.to_ascii_lowercase()
-            } else {
-                param.to_string()
-            };
-            Ok(FieldRef::with_param(name, param))
+    let text = text.trim();
+    if text.chars().all(template::brace_char) {
+        let segs: Vec<&str> = text.split(':').collect();
+        if let Some((field, [])) = template::parse_field(&segs) {
+            return Ok(field);
         }
-        None if !takes_param(&name) => Ok(FieldRef::new(name)),
-        _ => error("Vosh does not know that value."),
     }
+    error("Vosh does not know that value.")
 }
 
 /// The catalog kind of a field, None for a name only scripts set.
