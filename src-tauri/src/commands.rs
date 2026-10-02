@@ -3278,12 +3278,12 @@ fn apply_ui_config(
 #[tauri::command]
 pub(crate) async fn hidden_get(
     state: State<'_, SharedState>,
-) -> Result<vosh_prompt::vars::Hidden, String> {
+) -> Result<vosh_prompt::values::Hidden, String> {
     Ok(reported_hidden(state.inner()).await)
 }
 
 /// The body of [`hidden_get`].
-async fn reported_hidden(state: &SharedState) -> vosh_prompt::vars::Hidden {
+async fn reported_hidden(state: &SharedState) -> vosh_prompt::values::Hidden {
     state.profile.lock().await.prompt.vars.reported()
 }
 

@@ -15,7 +15,7 @@ use super::show_tests::{
     HP,
 };
 use super::*;
-use vosh_prompt::overrides::{Overrides, Preview, PromptPreview};
+use vosh_prompt::values::overrides::{Overrides, Preview, PromptPreview};
 use vosh_prompt::PromptShow;
 
 /// The card's Low health preview, which draws `<180>` for [`HP`].

@@ -20,10 +20,10 @@ use vosh_prompt::capture::Recognizer;
 use vosh_prompt::config::PREVIOUS_TEMPLATES;
 use vosh_prompt::describe::{Described, FormView};
 use vosh_prompt::edit::EditOp;
-use vosh_prompt::overrides::{Overridden, Overrides, Preview, PromptPreview};
 use vosh_prompt::report::{CompileReport, CompileRequest};
 use vosh_prompt::state::PromptState;
-use vosh_prompt::vars::Samples;
+use vosh_prompt::values::overrides::{Overridden, Overrides, Preview, PromptPreview};
+use vosh_prompt::values::Samples;
 use vosh_prompt::{
     CaptureConfig, FieldRef, PromptConfig, RenderOptions, Rendered, Resolved, Template, Values,
 };
@@ -195,7 +195,7 @@ pub(crate) fn compile(p: &Profile, request: &CompileRequest) -> CompileReport {
 
 /// True when GMCP supplied `name` this session: its package came.
 fn supplied(p: &Profile, name: &str) -> bool {
-    vosh_prompt::vars::entry(name)
+    vosh_prompt::values::entry(name)
         .and_then(|e| e.package)
         .is_some_and(|package| p.prompt.vars.gmcp().has(package))
 }
@@ -247,7 +247,7 @@ fn unknown_vitals(p: &Profile) -> Vec<vosh_prompt::report::GmcpName> {
     };
     data.iter()
         .filter(|(key, value)| {
-            *key != "hidden" && value.is_number() && vosh_prompt::vars::entry(key).is_none()
+            *key != "hidden" && value.is_number() && vosh_prompt::values::entry(key).is_none()
         })
         .map(|(key, _)| vosh_prompt::report::GmcpName {
             name: key.clone(),

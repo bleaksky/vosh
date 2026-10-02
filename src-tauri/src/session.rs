@@ -2777,7 +2777,7 @@ fn prompt_view(p: &Profile, now: Instant) -> PromptView {
     let overrides = preview.overrides(&resolver);
     let shown = vosh_prompt::render_str(
         &p.prompt.config().template,
-        &vosh_prompt::overrides::Overridden::new(
+        &vosh_prompt::values::overrides::Overridden::new(
             &resolver,
             &overrides,
             chrono::Local::now().naive_local(),
@@ -2866,7 +2866,7 @@ async fn end_read<R: tauri::Runtime>(
 /// target, the profile's name and the affects you track. The clock reads
 /// the local time.
 pub(crate) fn prompt_supplies(p: &Profile, now: Instant) -> vosh_prompt::Vosh {
-    let tick = p.tick.remaining(now).map(|left| vosh_prompt::vars::Tick {
+    let tick = p.tick.remaining(now).map(|left| vosh_prompt::values::Tick {
         remaining: i64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(i64::MAX),
         interval: i64::try_from(p.tick.config.interval.as_secs()).ok(),
         since: p
@@ -5306,7 +5306,7 @@ mod tests {
         let interval = i64::try_from(p.tick.config.interval.as_secs()).expect("seconds");
         assert_eq!(
             supplied.tick,
-            Some(vosh_prompt::vars::Tick {
+            Some(vosh_prompt::values::Tick {
                 remaining: interval,
                 interval: Some(interval),
                 since: Some(0),

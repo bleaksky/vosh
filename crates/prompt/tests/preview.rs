@@ -5,11 +5,11 @@ mod common;
 
 use common::{capture, feed, packet, vosh};
 use serde_json::json;
-use vosh_prompt::overrides::{lament_hides, Overridden, Overrides, Preview, PromptPreview};
 use vosh_prompt::state::{catalog, State};
 use vosh_prompt::testkit::designs::{DETAILED, JAMES};
 use vosh_prompt::testkit::now;
-use vosh_prompt::vars::{Group, Samples, Source};
+use vosh_prompt::values::overrides::{lament_hides, Overridden, Overrides, Preview, PromptPreview};
+use vosh_prompt::values::{Group, Samples, Source};
 use vosh_prompt::{render_str, FieldRef, PromptEngine, RenderOptions, Vars};
 
 fn overrides(values: serde_json::Value, lament: bool) -> Overrides {

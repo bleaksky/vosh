@@ -26,7 +26,7 @@ use crate::design::{
     BarColor, Code, ColorSpec, FieldRef, Format, Item, Layer, Look, PieceKind, Scale, Style,
     Template, TokenKind, UnderlineStyle, ValueRef, BAR_MAX_WIDTH,
 };
-use crate::vars::{self, Kind};
+use crate::values::{self, Kind};
 
 /// One change to a design.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -1039,7 +1039,7 @@ fn parse_field(text: &str) -> Result<FieldRef, EditError> {
 
 /// The catalog kind of a field, None for a name only scripts set.
 pub(crate) fn kind_of(field: &FieldRef) -> Option<Kind> {
-    vars::entry_for(field).map(|e| e.kind)
+    values::entry_for(field).map(|e| e.kind)
 }
 
 /// The field a value shows and whether it is a gauge's max: `%{maxhp}`
@@ -1048,7 +1048,7 @@ pub(crate) fn kind_of(field: &FieldRef) -> Option<Kind> {
 pub(crate) fn gauge_of(value: &ValueRef) -> (FieldRef, bool) {
     let field = &value.field;
     if value.format == Format::Value && field.param.is_none() {
-        if let Some(pair) = vars::Pair::of(&field.name) {
+        if let Some(pair) = values::Pair::of(&field.name) {
             if field.name != pair.cur() && field.name != pair.pct() {
                 return (FieldRef::new(pair.cur()), true);
             }
@@ -1059,7 +1059,7 @@ pub(crate) fn gauge_of(value: &ValueRef) -> (FieldRef, bool) {
 
 /// The name of a gauge's max as Current and max writes it.
 fn max_name(field: &FieldRef) -> String {
-    match vars::Pair::of(&field.name) {
+    match values::Pair::of(&field.name) {
         Some(pair) => pair.max().to_string(),
         None => format!("max{}", field.name),
     }
@@ -1084,7 +1084,7 @@ fn content_for(
     choice: &FormatChoice,
     was: Option<&Format>,
 ) -> Result<(PieceKind, Vec<Item>), EditError> {
-    use vars::FormatId as F;
+    use values::FormatId as F;
     let kind = kind_of(field);
     let offered = |name: FormatName| -> bool {
         let Some(kind) = kind else {
@@ -1142,7 +1142,7 @@ fn content_for(
     }
     match choice.format {
         FormatName::Value => one(Format::Value),
-        FormatName::Max if vars::Pair::of(&field.name).is_some() && field.param.is_none() => {
+        FormatName::Max if values::Pair::of(&field.name).is_some() && field.param.is_none() => {
             Ok((PieceKind::Value, vec![max_item(field)]))
         }
         FormatName::Max => one(Format::Max),

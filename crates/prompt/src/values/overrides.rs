@@ -14,9 +14,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 
 use crate::design::FieldRef;
-use crate::format::{Resolved, Value};
 use crate::render::Values;
-use crate::vars::{self, Kind, Pair};
+use crate::values::format::{Resolved, Value};
+use crate::values::{self, Kind, Pair};
 
 /// What a preview draws in place of the live values.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -46,7 +46,7 @@ impl Overrides {
             let key = key.to_ascii_lowercase();
             key == field.name
                 || matches!(
-                    (vars::entry(&key), vars::entry(&field.name)),
+                    (values::entry(&key), values::entry(&field.name)),
                     (Some(a), Some(b)) if a.name == b.name
                 )
         };
@@ -97,7 +97,7 @@ impl Preview {
             }
             Preview::Fight => {
                 let sample =
-                    |name: &str| vars::entry(name).map_or(Json::Null, |e| Json::from(e.sample));
+                    |name: &str| values::entry(name).map_or(Json::Null, |e| Json::from(e.sample));
                 values.insert("fight".to_string(), Json::Bool(true));
                 for name in ["opponent", "opponent_hp", "opponent_cond"] {
                     values.insert(name.to_string(), sample(name));
@@ -253,7 +253,7 @@ impl<'a> Overridden<'a> {
         if text.is_empty() {
             return Resolved::Absent;
         }
-        let Some(entry) = vars::entry_for(field) else {
+        let Some(entry) = values::entry_for(field) else {
             return Resolved::Value(
                 Value::parse_number(&text).unwrap_or_else(|| Value::Text(text.clone())),
             );
@@ -272,7 +272,7 @@ impl<'a> Overridden<'a> {
             }
             Kind::Count if text == "0" => Resolved::Absent,
             Kind::Gauge if !text.contains('/') => {
-                let cur = vars::value_of(Kind::Gauge, entry.label, &text, self.now);
+                let cur = values::value_of(Kind::Gauge, entry.label, &text, self.now);
                 let Resolved::Value(Value::Gauge { cur, .. }) = cur else {
                     return cur;
                 };
@@ -292,7 +292,7 @@ impl<'a> Overridden<'a> {
                     pct: None,
                 })
             }
-            kind => vars::value_of(kind, entry.label, &text, self.now),
+            kind => values::value_of(kind, entry.label, &text, self.now),
         }
     }
 }

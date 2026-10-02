@@ -8,8 +8,8 @@ use serde::{Serialize, Serializer};
 use super::catalog::Pair;
 use super::Vars;
 use crate::aabahran;
-use crate::format::{lang_game, Position};
-use crate::gmcp::{self, CHAR_STATE, CHAR_WORTH, ROOM_WEATHER, WORLD_TIME};
+use crate::values::format::{lang_game, Position};
+use crate::values::gmcp::{self, CHAR_STATE, CHAR_WORTH, ROOM_WEATHER, WORLD_TIME};
 
 /// Which values the game hides right now. Worked out from the latest
 /// packets and the fresh prompt values, never stored (D23).

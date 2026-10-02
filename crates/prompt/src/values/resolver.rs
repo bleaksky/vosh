@@ -6,12 +6,12 @@ use serde_json::Value as Json;
 use super::catalog::{entry, field, Entry, Field, MemberStat, Pair};
 use super::{since_of, Vars, Vosh};
 use crate::design::FieldRef;
-use crate::format::{lang_game, tank_bar_cells, Position, Resolved, Value, MOON_CODES};
-use crate::gmcp::{
+use crate::render::Values;
+use crate::values::format::{lang_game, tank_bar_cells, Position, Resolved, Value, MOON_CODES};
+use crate::values::gmcp::{
     self, Find, Snapshot, CHAR_COMBAT, CHAR_STATUS, CHAR_VITALS, CHAR_WORTH, GROUP_INFO,
     IMM_QUEUES, ROOM_CHARS, ROOM_INFO, ROOM_ITEMS, ROOM_WEATHER, WORLD_MOONS, WORLD_TIME,
 };
-use crate::render::Values;
 
 // ---------------------------------------------------------------------
 // The resolver

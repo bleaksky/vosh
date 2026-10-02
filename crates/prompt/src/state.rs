@@ -6,9 +6,9 @@ use serde::Serialize;
 
 use crate::design::{FieldRef, Format};
 use crate::engine::StatusReport;
-use crate::format::{Resolved, Value};
 use crate::render::{Span, Values};
-use crate::vars::{self, Entry, Group, Kind, Source, Vars, Vosh, CATALOG};
+use crate::values::format::{Resolved, Value};
+use crate::values::{self, Entry, Group, Kind, Source, Vars, Vosh, CATALOG};
 
 /// A field's state now (D4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -126,7 +126,7 @@ fn field_state(
     e: &'static Entry,
     vars: &Vars,
     vosh: &Vosh,
-    resolver: &vars::Resolver<'_>,
+    resolver: &values::Resolver<'_>,
     reads: &[String],
 ) -> FieldState {
     let (state, value, max, source) = if e.param {
@@ -169,7 +169,7 @@ fn field_state(
         sent: e.package.map_or(true, |p| {
             vars.gmcp().has(p) && (!e.new_build || vars.new_build())
         }),
-        in_prompt: reads.iter().any(|r| vars::feeds(r) == e.name),
+        in_prompt: reads.iter().any(|r| values::feeds(r) == e.name),
     }
 }
 

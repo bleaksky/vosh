@@ -30,7 +30,9 @@ use crate::design::{
     BarColor, Code, ColorSpec, FieldRef, Format, Layer, PieceKind, Scale, Template, TokenKind,
     ValueRef,
 };
-use crate::format::{h_band, how_full, p_band, step_color, tank_bar_cells, Band, Resolved, Value};
+use crate::values::format::{
+    h_band, how_full, p_band, step_color, tank_bar_cells, Band, Resolved, Value,
+};
 
 /// Ends every non-empty render, so an unclosed color never bleeds into the
 /// game output that follows.
