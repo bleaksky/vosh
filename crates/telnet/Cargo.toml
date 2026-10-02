@@ -7,10 +7,5 @@ authors.workspace = true
 description = "Telnet protocol parser and option negotiator for Vosh."
 rust-version.workspace = true
 
-[dependencies]
-thiserror = { workspace = true }
-
-[dev-dependencies]
-
 [lints]
 workspace = true
