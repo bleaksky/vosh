@@ -953,10 +953,6 @@ pub(crate) async fn target_get(state: State<'_, SharedState>) -> Result<TargetPa
     })
 }
 
-/// Snapshot of every keyboard macro binding. Used by the Settings
-/// macros tab to render the existing list and by Input.tsx (via the
-/// same payload) to seed its in-memory binding lookup before any
-/// `vosh://macros-changed` event fires.
 /// Detect which import format a file uses, based on content sniffing.
 /// Frontend extension-checks first; this is the fallback. Returns
 /// `null` when nothing recognized so the UI can ask the user.
@@ -1050,6 +1046,10 @@ pub(crate) async fn import_apply(
     })
 }
 
+/// Snapshot of every keyboard macro binding. Used by the Settings
+/// macros tab to render the existing list and by Input.tsx (via the
+/// same payload) to seed its in-memory binding lookup before any
+/// `vosh://macros-changed` event fires.
 #[tauri::command]
 pub(crate) async fn macros_list(state: State<'_, SharedState>) -> Result<Vec<Macro>, String> {
     let p = state.profile.lock().await;
