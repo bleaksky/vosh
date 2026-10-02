@@ -64,6 +64,8 @@ pub use config::{CaptureConfig, PromptConfig, PromptShow};
 pub use engine::{GamePromptSeen, PromptEngine, Status};
 pub use format::{Resolved, Value};
 pub use presets::DEFAULT_DESIGN;
-pub use render::{render, render_str, MapValues, RenderOptions, Rendered, Span, SpanColor, Values};
+pub use render::{render, render_str, RenderOptions, Rendered, Span, SpanColor, Values};
 pub use template::{FieldRef, Template};
+#[cfg(feature = "testkit")]
+pub use testkit::map_values::MapValues;
 pub use vars::{Capture, Vars, Vosh};
