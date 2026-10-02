@@ -377,12 +377,17 @@ fn show_as_writes_the_forms_the_card_names() {
         set("x %gold y", FormatChoice::of(FormatName::Thousands)),
         "x %{gold:thousands} y"
     );
+    assert_eq!(
+        set("x %{hour:word} y", FormatChoice::of(FormatName::Ampm)),
+        "x %{hour:ampm} y"
+    );
     for template in [
         "[%c_hp%{hp}hp]",
         "[%c_hp%pct_hp%%hp]",
         "[%c_hp%{hp:bar:6}hp]",
         "x %{pos:word} y",
         "x %{gold:thousands} y",
+        "x %{hour:ampm} y",
     ] {
         assert_reads_clean(template);
     }

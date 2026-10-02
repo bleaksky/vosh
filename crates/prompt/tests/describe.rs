@@ -254,6 +254,20 @@ fn the_picker_offers_every_form_with_a_live_sample() {
             ("Thousands", "1.2K".to_string()),
         ]
     );
+    // The game hour reads as a number, as Vosh's clock, and as the old
+    // TinTin prompt wrote it.
+    let hour: Vec<(&str, String)> = forms(&FieldRef::new("hour"), &values)
+        .iter()
+        .map(|f| (f.label, f.sample.plain.clone()))
+        .collect();
+    assert_eq!(
+        hour,
+        [
+            ("Number", "14".to_string()),
+            ("Clock", "2 pm".to_string()),
+            ("Compact clock", "2PM".to_string()),
+        ]
+    );
     // The bar draws in theme green at full.
     let bar = &forms(&FieldRef::new("hp"), &values)[4];
     assert!(

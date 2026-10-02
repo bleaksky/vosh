@@ -275,6 +275,18 @@ pub fn hour_word(hour: u8) -> String {
     format!("{twelve} {half}")
 }
 
+/// The game hour as the old tt++ prompt printed it, `3PM`, with `12AM`
+/// for midnight and `12PM` for noon.
+pub fn hour_ampm(hour: u8) -> String {
+    let h = hour % 24;
+    let half = if h < 12 { "AM" } else { "PM" };
+    let twelve = match h % 12 {
+        0 => 12,
+        n => n,
+    };
+    format!("{twelve}{half}")
+}
+
 /// A language as `%s` prints it, first letter lowercased.
 pub fn lang_game(lang: &str) -> String {
     let mut chars = lang.chars();
@@ -563,6 +575,10 @@ impl Value {
                 Value::Text(s) => Some(s.clone()),
                 _ => None,
             },
+            Format::Ampm => match self {
+                Value::Hour(h) => Some(hour_ampm(*h)),
+                _ => None,
+            },
             Format::Name => match self {
                 Value::Moon { name, active, .. } => Some(if *active {
                     name.clone().unwrap_or_default()
@@ -709,6 +725,27 @@ mod tests {
         };
         assert_eq!(text(&gauge, Format::Thousands).as_deref(), Some("0.5K"));
         assert_eq!(text(&Value::Text("lots".into()), Format::Thousands), None);
+    }
+
+    #[test]
+    fn the_hour_reads_as_the_old_tintin_prompt_did() {
+        // What tt++ 2.02.61 printed for @time{n} in the old prompt.
+        for (hour, old) in [
+            (0, "12AM"),
+            (1, "1AM"),
+            (3, "3AM"),
+            (9, "9AM"),
+            (11, "11AM"),
+            (12, "12PM"),
+            (13, "1PM"),
+            (15, "3PM"),
+            (23, "11PM"),
+        ] {
+            assert_eq!(hour_ampm(hour), old, "{hour}");
+            let value = Value::Hour(hour);
+            assert_eq!(text(&value, Format::Ampm).as_deref(), Some(old));
+        }
+        assert_eq!(text(&Value::Num(15), Format::Ampm), None);
     }
 
     #[test]

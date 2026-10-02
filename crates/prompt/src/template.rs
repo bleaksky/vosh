@@ -227,6 +227,8 @@ pub enum Format {
     Game,
     /// An enum as a word, the hour as `2 pm`.
     Word,
+    /// The hour on a 12 hour clock with no space, `3PM`, `12AM`.
+    Ampm,
     /// A moon's phase name, a member's name.
     Name,
     /// A number with thousands separators, `1,250`.
@@ -675,6 +677,7 @@ fn format_body(format: &Format) -> Option<String> {
         },
         Format::Game => "game".into(),
         Format::Word => "word".into(),
+        Format::Ampm => "ampm".into(),
         Format::Name => "name".into(),
         Format::Grouped => "grouped".into(),
         Format::Short => "short".into(),
@@ -961,6 +964,7 @@ fn parse_format(segs: &[&str]) -> Option<Format> {
         "pct" => no_args(Format::Pct),
         "game" => no_args(Format::Game),
         "word" => no_args(Format::Word),
+        "ampm" => no_args(Format::Ampm),
         "name" => no_args(Format::Name),
         "grouped" => no_args(Format::Grouped),
         "short" => no_args(Format::Short),
@@ -1633,6 +1637,8 @@ mod tests {
         );
         assert_eq!(kinds("%{tank_hp:game}"), vec![fmt("tank_hp", Format::Game)]);
         assert_eq!(kinds("%{pos:word}"), vec![fmt("pos", Format::Word)]);
+        assert_eq!(kinds("%{hour:ampm}"), vec![fmt("hour", Format::Ampm)]);
+        assert_eq!(kinds("%{Hour:AMPM}"), vec![fmt("hour", Format::Ampm)]);
         assert_eq!(kinds("%{moon1:name}"), vec![fmt("moon1", Format::Name)]);
         assert_eq!(kinds("%{gold:grouped}"), vec![fmt("gold", Format::Grouped)]);
         assert_eq!(kinds("%{gold:short}"), vec![fmt("gold", Format::Short)]);
@@ -1663,7 +1669,7 @@ mod tests {
 
     #[test]
     fn the_forms_of_the_old_prompt_write_back_as_they_read() {
-        for source in ["%{gold:thousands}", "%{exp:thousands}"] {
+        for source in ["%{gold:thousands}", "%{exp:thousands}", "%{hour:ampm}"] {
             let tokens = kinds(source);
             assert!(tokens.iter().all(|t| *t != TokenKind::Unknown), "{source}");
             assert_eq!(write_tokens(&tokens), source, "{source}");

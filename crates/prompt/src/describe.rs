@@ -345,7 +345,11 @@ fn form_list(kind: Option<Kind>) -> &'static [(FormatName, &'static str, bool)] 
             (F::Word, "Word", true),
             (F::Name, "Phase name", true),
         ],
-        Kind::Hour => &[(F::Value, "Number", true), (F::Word, "Clock", true)],
+        Kind::Hour => &[
+            (F::Value, "Number", true),
+            (F::Word, "Clock", true),
+            (F::Ampm, "Compact clock", true),
+        ],
         Kind::Temp => &[(F::Value, "Number", true), (F::Unit, "With unit", true)],
         Kind::Seconds => &[
             (F::Value, "Seconds", true),
@@ -386,6 +390,7 @@ fn format_label(format: FormatName) -> &'static str {
         FormatName::Bar => "Bar",
         FormatName::Game => "Game style",
         FormatName::Word => "Word",
+        FormatName::Ampm => "Compact clock",
         FormatName::Name => "Name",
         FormatName::Grouped => "Grouped",
         FormatName::Short => "Short",
@@ -417,6 +422,7 @@ fn shown_as(value: &crate::template::ValueRef) -> (FieldRef, FormatName, Option<
         Format::Bar { width, .. } => (FormatName::Bar, Some(*width)),
         Format::Game => (FormatName::Game, None),
         Format::Word => (FormatName::Word, None),
+        Format::Ampm => (FormatName::Ampm, None),
         Format::Name => (FormatName::Name, None),
         Format::Grouped => (FormatName::Grouped, None),
         Format::Short => (FormatName::Short, None),
