@@ -10,7 +10,7 @@ import {
 
 const aff = (name: string, duration: number | null): AffectInput => ({ name, duration });
 
-// Erelei on the approved boards: his eight tracked slots, and what the
+// Ilsabet on the approved boards: his eight tracked slots, and what the
 // game sends while bless has worn off.
 const TRACKED = [
   'mounted',

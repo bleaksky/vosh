@@ -1134,7 +1134,7 @@ mod tests {
         config.save(&set.profile_path(name)).unwrap();
     }
 
-    /// Each profile file holds its own list from before the move. Erelei
+    /// Each profile file holds its own list from before the move. Ilsabet
     /// (default) turned the potion labels off. Healer never did.
     fn two_profiles(dir: &Path) -> ProfileSet {
         let set = crate::profile_set::tests::james_like_set(dir);
@@ -1154,11 +1154,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let set = two_profiles(dir.path());
 
-        // A launch as Erelei takes Healer's potion labels too, so the
+        // A launch as Ilsabet takes Healer's potion labels too, so the
         // launch plan does not take them away from Healer.
-        let erelei = launch(dir.path(), &set);
+        let ilsabet = launch(dir.path(), &set);
         let both = presets(&["healing_basics", "potion_labels"]);
-        assert_eq!(erelei.ui.enabled_presets, both);
+        assert_eq!(ilsabet.ui.enabled_presets, both);
         assert_eq!(
             load_global_catalog(dir.path()).unwrap().enabled_presets,
             Some(both)
@@ -1172,7 +1172,7 @@ mod tests {
     fn a_launch_as_another_character_keeps_the_presets_you_turned_off() {
         let dir = tempfile::tempdir().unwrap();
         let mut set = two_profiles(dir.path());
-        let _erelei = launch(dir.path(), &set);
+        let _ilsabet = launch(dir.path(), &set);
         // After the move you turn the potion labels off for everyone.
         save_global_catalog(
             dir.path(),
@@ -1202,8 +1202,8 @@ mod tests {
         write_presets(&set, "Healer", &[]);
         // Test-Prompt turned every preset off.
         write_presets(&set, "Test-Prompt", &["none"]);
-        let erelei = launch(dir.path(), &set);
-        let leftover = &erelei.ui.enabled_presets;
+        let ilsabet = launch(dir.path(), &set);
+        let leftover = &ilsabet.ui.enabled_presets;
         assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(
             load_global_catalog(dir.path()).unwrap().enabled_presets,
@@ -1232,11 +1232,11 @@ mod tests {
         // tells you its file does not read.
         std::fs::write(set.profile_path("Healer"), "presets = = [\n").unwrap();
 
-        let (erelei, notices) = launch_with_notices(dir.path(), &set);
+        let (ilsabet, notices) = launch_with_notices(dir.path(), &set);
         // The catalog takes every preset a character whose file reads had
         // on, so Test-Prompt keeps its herb labels.
         let on = presets(&["healing_basics", "herb_labels"]);
-        assert_eq!(erelei.ui.enabled_presets, on);
+        assert_eq!(ilsabet.ui.enabled_presets, on);
         assert_eq!(
             load_global_catalog(dir.path()).unwrap().enabled_presets,
             Some(on)
@@ -1264,8 +1264,8 @@ mod tests {
         // read, so there is no list to take.
         std::fs::write(set.active_path(), "presets = = [\n").unwrap();
 
-        let (erelei, notices) = launch_with_notices(dir.path(), &set);
-        let leftover = &erelei.ui.enabled_presets;
+        let (ilsabet, notices) = launch_with_notices(dir.path(), &set);
+        let leftover = &ilsabet.ui.enabled_presets;
         assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(
             load_global_catalog(dir.path()).unwrap().enabled_presets,

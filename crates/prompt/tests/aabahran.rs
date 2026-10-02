@@ -3,7 +3,7 @@
 //! section 6.6, one hand case per code, the shapes and their settle
 //! flags, the warnings with their copy, and the compile error.
 //!
-//! Character names in these lines are placeholders, so `Erelei` reads
+//! Character names in these lines are placeholders, so `Ilsabet` reads
 //! `Tester`.
 
 use std::collections::BTreeMap;

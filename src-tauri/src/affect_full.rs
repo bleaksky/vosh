@@ -631,7 +631,7 @@ mod tests {
         store
     }
 
-    const ERELEI: &str = "aabahran.com:4000 erelei";
+    const ILSABET: &str = "aabahran.com:4000 ilsabet";
 
     #[test]
     fn an_affect_first_seen_starts_full_at_its_hours() {
@@ -734,14 +734,14 @@ mod tests {
         // The name first, then the list.
         let before = AffectFull::default();
         assert_eq!(
-            before.character_known_with(ERELEI.into(), saved.clone()),
+            before.character_known_with(ILSABET.into(), saved.clone()),
             None
         );
         let first = seen(&before, &[("armor", 31), ("sanctuary", 9)]);
         // The list first, then the name.
         let after = AffectFull::default();
         seen(&after, &[("armor", 31), ("sanctuary", 9)]);
-        let merged = after.character_known_with(ERELEI.into(), saved);
+        let merged = after.character_known_with(ILSABET.into(), saved);
         // Armor continues the cast you left at 48. Sanctuary at 9 is
         // more than the 5 saved, a newer cast. Fly is not on you and
         // drops.
@@ -755,7 +755,7 @@ mod tests {
     #[test]
     fn the_saved_map_counts_only_for_the_first_list() {
         let store = AffectFull::default();
-        store.character_known_with(ERELEI.into(), map(&[("fly", 53)]));
+        store.character_known_with(ILSABET.into(), map(&[("fly", 53)]));
         seen(&store, &[("armor", 31)]);
         // Fly cast later in the session starts at its own hours.
         assert_eq!(
@@ -772,7 +772,7 @@ mod tests {
         assert!(!store.flush());
         assert!(!dir.path().join(FILE_NAME).exists());
         // Once the game names the character, the map built so far is its.
-        store.character_known(ERELEI.into());
+        store.character_known(ILSABET.into());
         assert!(store.flush());
         assert_eq!(store.writes(), 1);
         let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
@@ -784,7 +784,7 @@ mod tests {
     fn a_tick_with_no_change_writes_nothing() {
         let dir = tempfile::tempdir().unwrap();
         let store = store_in(&dir);
-        store.character_known(ERELEI.into());
+        store.character_known(ILSABET.into());
         seen(&store, &[("armor", 48)]);
         assert!(store.flush());
         for hours in (40..48).rev() {
@@ -798,17 +798,17 @@ mod tests {
     fn a_login_that_changes_no_full_writes_nothing() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(FILE_NAME);
-        let text = "version = 1\n\n[characters.\"aabahran.com:4000 erelei\"]\narmor = 48\n";
+        let text = "version = 1\n\n[characters.\"aabahran.com:4000 ilsabet\"]\narmor = 48\n";
         // The name first, then the list, and the list first, then the name.
         for name_first in [true, false] {
             std::fs::write(&path, text).unwrap();
             let store = store_in(&dir);
             if name_first {
-                store.character_known(ERELEI.into());
+                store.character_known(ILSABET.into());
                 seen(&store, &[("armor", 31)]);
             } else {
                 seen(&store, &[("armor", 31)]);
-                store.character_known(ERELEI.into());
+                store.character_known(ILSABET.into());
             }
             assert_eq!(store.map(), map(&[("armor", 48)]));
             assert!(!store.flush(), "the file holds these fulls already");
@@ -824,22 +824,25 @@ mod tests {
         let path = dir.path().join(FILE_NAME);
         std::fs::write(
             &path,
-            "version = 1\n\n[characters.\"aabahran.com:4000 erelei\"]\narmor = 48\nfly = 53\n",
+            "version = 1\n\n[characters.\"aabahran.com:4000 ilsabet\"]\narmor = 48\nfly = 53\n",
         )
         .unwrap();
         let store = store_in(&dir);
-        store.character_known(ERELEI.into());
+        store.character_known(ILSABET.into());
         seen(&store, &[("armor", 31)]);
         assert!(store.flush());
         let table: toml::Table = std::fs::read_to_string(&path).unwrap().parse().unwrap();
-        assert_eq!(map_of(&table["characters"][ERELEI]), map(&[("armor", 48)]));
+        assert_eq!(map_of(&table["characters"][ILSABET]), map(&[("armor", 48)]));
         // A login with nothing on you drops the character.
         let next = store_in(&dir);
-        next.character_known(ERELEI.into());
+        next.character_known(ILSABET.into());
         assert_eq!(seen(&next, &[]), None, "the pane had nothing to show");
         assert!(next.flush());
         let table: toml::Table = std::fs::read_to_string(&path).unwrap().parse().unwrap();
-        assert!(!table["characters"].as_table().unwrap().contains_key(ERELEI));
+        assert!(!table["characters"]
+            .as_table()
+            .unwrap()
+            .contains_key(ILSABET));
     }
 
     /// Quitting on the game: `free_char` takes each affect off in turn,
@@ -854,7 +857,7 @@ mod tests {
     fn quitting_takes_affects_off_one_at_a_time_and_the_file_keeps_their_fulls() {
         let dir = tempfile::tempdir().unwrap();
         let store = store_in(&dir);
-        store.character_known(ERELEI.into());
+        store.character_known(ILSABET.into());
         seen(&store, &[("armor", 48), ("sanctuary", 10)]);
         seen(&store, &[("armor", 31), ("sanctuary", 5)]);
         assert!(store.flush());
@@ -866,12 +869,12 @@ mod tests {
         let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
         let table: toml::Table = text.parse().unwrap();
         assert_eq!(
-            map_of(&table["characters"][ERELEI]),
+            map_of(&table["characters"][ILSABET]),
             map(&[("armor", 48), ("sanctuary", 10)])
         );
         // The next login picks up where you quit.
         let next = store_in(&dir);
-        next.character_known(ERELEI.into());
+        next.character_known(ILSABET.into());
         assert_eq!(
             seen(&next, &[("armor", 31), ("sanctuary", 5)]),
             Some(map(&[("armor", 48), ("sanctuary", 10)]))
@@ -881,7 +884,7 @@ mod tests {
     #[test]
     fn back_from_the_account_menu_your_affects_keep_their_fulls() {
         let store = AffectFull::default();
-        store.character_known_with(ERELEI.into(), FullMap::new());
+        store.character_known_with(ILSABET.into(), FullMap::new());
         seen(&store, &[("armor", 48), ("sanctuary", 10)]);
         seen(&store, &[("armor", 31), ("sanctuary", 5)]);
         quit(&store, &[("armor", 31), ("sanctuary", 5)]);
@@ -913,7 +916,7 @@ mod tests {
     fn quitting_to_play_another_character_writes_the_first_ones_fulls() {
         let dir = tempfile::tempdir().unwrap();
         let store = store_in(&dir);
-        store.character_known(ERELEI.into());
+        store.character_known(ILSABET.into());
         seen(&store, &[("armor", 48)]);
         seen(&store, &[("armor", 31)]);
         quit(&store, &[("armor", 31)]);
@@ -923,7 +926,7 @@ mod tests {
         let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
         let table: toml::Table = text.parse().unwrap();
         let characters = table["characters"].as_table().unwrap();
-        assert_eq!(map_of(&characters[ERELEI]), map(&[("armor", 48)]));
+        assert_eq!(map_of(&characters[ILSABET]), map(&[("armor", 48)]));
         assert_eq!(
             map_of(&characters["aabahran.com:4000 ondrevar"]),
             map(&[("armor", 20)])
@@ -934,7 +937,7 @@ mod tests {
     fn a_round_of_buffs_inside_the_wait_writes_once() {
         let dir = tempfile::tempdir().unwrap();
         let store = store_in(&dir);
-        store.character_known(ERELEI.into());
+        store.character_known(ILSABET.into());
         let mut tickets = Vec::new();
         for (i, name) in ["armor", "shield", "bless", "sanctuary"].iter().enumerate() {
             let mut affects: Vec<(&str, i64)> = ["armor", "shield", "bless", "sanctuary"][..=i]
@@ -959,14 +962,14 @@ mod tests {
     fn disconnect_writes_then_empties() {
         let dir = tempfile::tempdir().unwrap();
         let store = store_in(&dir);
-        store.character_known(ERELEI.into());
+        store.character_known(ILSABET.into());
         seen(&store, &[("armor", 48)]);
         assert!(store.disconnect(), "a map was showing");
         assert!(store.map().is_empty());
         assert_eq!(store.writes(), 1);
         // The next login reads it back.
         let next = store_in(&dir);
-        next.character_known(ERELEI.into());
+        next.character_known(ILSABET.into());
         assert_eq!(seen(&next, &[("armor", 31)]), Some(map(&[("armor", 48)])));
         // Another character on the same world keeps its own.
         let other = store_in(&dir);
@@ -980,11 +983,11 @@ mod tests {
         let path = dir.path().join(FILE_NAME);
         std::fs::write(
             &path,
-            "version = 1\nnote = \"kept\"\n\n[characters.\"aabahran.com:4000 ondrevar\"]\nhaste = 26\n\n[characters.\"aabahran.com:4000 erelei\"]\narmor = 12\n\"stone skin\" = \"fifty\"\n",
+            "version = 1\nnote = \"kept\"\n\n[characters.\"aabahran.com:4000 ondrevar\"]\nhaste = 26\n\n[characters.\"aabahran.com:4000 ilsabet\"]\narmor = 12\n\"stone skin\" = \"fifty\"\n",
         )
         .unwrap();
         let store = store_in(&dir);
-        store.character_known(ERELEI.into());
+        store.character_known(ILSABET.into());
         // The saved armor is 12, less than the 31 on you: a newer cast.
         assert_eq!(
             seen(&store, &[("armor", 31), ("stone skin", 50)]),
@@ -999,7 +1002,7 @@ mod tests {
             Some(26)
         );
         assert_eq!(
-            map_of(&characters[ERELEI]),
+            map_of(&characters[ILSABET]),
             map(&[("armor", 31), ("stone skin", 50)])
         );
         // An empty list is what quitting ends with, so it keeps them.
@@ -1007,7 +1010,7 @@ mod tests {
         assert!(!store.flush());
         let table: toml::Table = std::fs::read_to_string(&path).unwrap().parse().unwrap();
         assert_eq!(
-            map_of(&table["characters"][ERELEI]),
+            map_of(&table["characters"][ILSABET]),
             map(&[("armor", 31), ("stone skin", 50)])
         );
     }
@@ -1018,7 +1021,7 @@ mod tests {
         let path = dir.path().join(FILE_NAME);
         std::fs::write(&path, "this is [not toml").unwrap();
         let store = store_in(&dir);
-        store.character_known(ERELEI.into());
+        store.character_known(ILSABET.into());
         assert_eq!(seen(&store, &[("armor", 31)]), Some(map(&[("armor", 31)])));
         assert!(!store.flush());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "this is [not toml");
@@ -1030,10 +1033,10 @@ mod tests {
     fn another_character_on_the_same_connection_writes_the_first_and_starts_over() {
         let dir = tempfile::tempdir().unwrap();
         let store = store_in(&dir);
-        store.character_known(ERELEI.into());
+        store.character_known(ILSABET.into());
         seen(&store, &[("armor", 48)]);
         store.character_known("aabahran.com:4000 ondrevar".into());
-        assert_eq!(store.writes(), 1, "Erelei's fulls are written first");
+        assert_eq!(store.writes(), 1, "Ilsabet's fulls are written first");
         assert!(store.map().is_empty());
         assert_eq!(seen(&store, &[("armor", 20)]), Some(map(&[("armor", 20)])));
         let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
@@ -1043,7 +1046,7 @@ mod tests {
     #[test]
     fn a_new_connection_forgets_the_old_one() {
         let store = AffectFull::default();
-        store.character_known_with(ERELEI.into(), FullMap::new());
+        store.character_known_with(ILSABET.into(), FullMap::new());
         seen(&store, &[("armor", 48)]);
         assert!(store.connect());
         assert!(store.map().is_empty());
@@ -1056,8 +1059,8 @@ mod tests {
     fn keys_match_the_pane() {
         assert_eq!(affect_key("  Stone   Skin "), "stone skin");
         assert_eq!(
-            character_key("aabahran.com", 4000, "Erelei"),
-            "aabahran.com:4000 erelei"
+            character_key("aabahran.com", 4000, "Ilsabet"),
+            "aabahran.com:4000 ilsabet"
         );
     }
 }

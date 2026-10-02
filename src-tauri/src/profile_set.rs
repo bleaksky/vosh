@@ -1132,28 +1132,28 @@ pub(crate) mod tests {
     #[test]
     fn auto_match_accepts_legacy_single_character_shape() {
         // Older profile.toml files (pre-multi-character feature) saved
-        // `character = "Erelei"`. Loading must still succeed and the
+        // `character = "Ilsabet"`. Loading must still succeed and the
         // resulting struct must hold one entry in the new `characters`
         // list so the resolver treats it identically.
         let toml = r#"
 host = "play.theforsakenlands.com"
 port = 1848
-character = "Erelei"
+character = "Ilsabet"
 "#;
         let am: AutoMatch = toml::from_str(toml).unwrap();
         assert_eq!(am.host.as_deref(), Some("play.theforsakenlands.com"));
         assert_eq!(am.port, Some(1848));
-        assert_eq!(am.characters, vec!["Erelei".to_string()]);
+        assert_eq!(am.characters, vec!["Ilsabet".to_string()]);
     }
 
     #[test]
     fn auto_match_accepts_characters_list_shape() {
         let toml = r#"
 host = "play.theforsakenlands.com"
-characters = ["Erelei", "Thessamy", "Ondrevar"]
+characters = ["Ilsabet", "Thessamy", "Ondrevar"]
 "#;
         let am: AutoMatch = toml::from_str(toml).unwrap();
-        assert_eq!(am.characters, vec!["Erelei", "Thessamy", "Ondrevar"]);
+        assert_eq!(am.characters, vec!["Ilsabet", "Thessamy", "Ondrevar"]);
     }
 
     #[test]
@@ -1163,21 +1163,21 @@ characters = ["Erelei", "Thessamy", "Ondrevar"]
         // duplicating an existing entry.
         let toml = r#"
 host = "h"
-character = "Erelei"
+character = "Ilsabet"
 characters = ["Thessamy", "Ondrevar"]
 "#;
         let am: AutoMatch = toml::from_str(toml).unwrap();
-        assert_eq!(am.characters, vec!["Erelei", "Thessamy", "Ondrevar"]);
+        assert_eq!(am.characters, vec!["Ilsabet", "Thessamy", "Ondrevar"]);
 
         let toml_with_dup = r#"
 host = "h"
-character = "Erelei"
-characters = ["Erelei", "Ondrevar"]
+character = "Ilsabet"
+characters = ["Ilsabet", "Ondrevar"]
 "#;
         let am: AutoMatch = toml::from_str(toml_with_dup).unwrap();
         // Dedup keeps the existing position; legacy entry is not
         // re-inserted.
-        assert_eq!(am.characters, vec!["Erelei", "Ondrevar"]);
+        assert_eq!(am.characters, vec!["Ilsabet", "Ondrevar"]);
     }
 
     #[test]
@@ -1197,7 +1197,7 @@ characters = ["Erelei", "Ondrevar"]
 
     #[test]
     fn auto_match_login_toggle_defaults_on_and_stays_out_of_the_file_while_on() {
-        let am: AutoMatch = toml::from_str("host = \"h\"\ncharacters = [\"Erelei\"]\n").unwrap();
+        let am: AutoMatch = toml::from_str("host = \"h\"\ncharacters = [\"Ilsabet\"]\n").unwrap();
         assert!(am.enabled, "files written before the toggle load as on");
         let text = toml::to_string_pretty(&am).unwrap();
         assert!(!text.contains("enabled"), "{text}");
@@ -1210,7 +1210,7 @@ characters = ["Erelei", "Ondrevar"]
         assert!(text.contains("enabled = false"), "{text}");
         let parsed: AutoMatch = toml::from_str(&text).unwrap();
         assert!(!parsed.enabled);
-        assert_eq!(parsed.characters, vec!["Erelei"]);
+        assert_eq!(parsed.characters, vec!["Ilsabet"]);
         assert_eq!(parsed.host.as_deref(), Some("h"));
     }
 
@@ -1222,7 +1222,7 @@ characters = ["Erelei", "Ondrevar"]
                 AutoMatch {
                     host: Some("h".into()),
                     port: Some(1848),
-                    characters: vec!["Erelei".into()],
+                    characters: vec!["Ilsabet".into()],
                     enabled: false,
                 },
             ),
@@ -1236,7 +1236,7 @@ characters = ["Erelei", "Ondrevar"]
                 },
             ),
         ]);
-        assert_eq!(set.resolve_match("h", 1848, Some("Erelei")), None);
+        assert_eq!(set.resolve_match("h", 1848, Some("Ilsabet")), None);
         // A host-only entry that is off is no fallback at connect.
         assert_eq!(set.resolve_match("h", 1848, None), None);
     }
@@ -1329,8 +1329,8 @@ characters = ["Erelei", "Ondrevar"]
         set.save_index().unwrap();
     }
 
-    /// James's index: default and Test-Prompt both claim Erelei on the
-    /// same world, and Healer claims Caelaor.
+    /// James's index: default and Test-Prompt both claim Ilsabet on the
+    /// same world, and Healer claims Corvanne.
     pub(crate) fn james_like_set(dir: &std::path::Path) -> ProfileSet {
         let mut set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
         let world = "play.theforsakenlands.com";
@@ -1338,21 +1338,21 @@ characters = ["Erelei", "Ondrevar"]
             &mut set,
             DEFAULT_PROFILE_NAME,
             Some("Immortal"),
-            claim(world, Some(1848), &["Erelei"]),
+            claim(world, Some(1848), &["Ilsabet"]),
         );
         set.create("Healer").unwrap();
         put_claim(
             &mut set,
             "Healer",
             None,
-            claim(world, Some(1848), &["Caelaor"]),
+            claim(world, Some(1848), &["Corvanne"]),
         );
         set.create("Test-Prompt").unwrap();
         put_claim(
             &mut set,
             "Test-Prompt",
             None,
-            claim(world, Some(1848), &["Erelei"]),
+            claim(world, Some(1848), &["Ilsabet"]),
         );
         set
     }
@@ -1363,11 +1363,11 @@ characters = ["Erelei", "Ondrevar"]
         let mut set = james_like_set(dir.path());
         assert!(set.login_on(DEFAULT_PROFILE_NAME));
         assert!(set.login_on("Healer"));
-        // Test-Prompt claims Erelei too but loses the tie in index order.
+        // Test-Prompt claims Ilsabet too but loses the tie in index order.
         assert!(!set.login_on("Test-Prompt"));
 
         // Off, or with no world or no character, reads off.
-        let mut off = claim("play.theforsakenlands.com", Some(1848), &["Caelaor"]);
+        let mut off = claim("play.theforsakenlands.com", Some(1848), &["Corvanne"]);
         off.enabled = false;
         set.set_metadata("Healer", None, Some(off)).unwrap();
         assert!(!set.login_on("Healer"));
@@ -1416,12 +1416,12 @@ characters = ["Erelei", "Ondrevar"]
     }
 
     #[test]
-    fn turning_login_on_takes_erelei_from_every_other_profile_on_the_world() {
+    fn turning_login_on_takes_ilsabet_from_every_other_profile_on_the_world() {
         let dir = tempdir().unwrap();
         let mut set = james_like_set(dir.path());
-        let claim = set.set_login("Test-Prompt", "erelei", true).unwrap();
+        let claim = set.set_login("Test-Prompt", "ilsabet", true).unwrap();
         assert_eq!(claim.released_from, vec![DEFAULT_PROFILE_NAME.to_string()]);
-        assert_eq!(characters_of(&set, "Test-Prompt"), vec!["Erelei"]);
+        assert_eq!(characters_of(&set, "Test-Prompt"), vec!["Ilsabet"]);
         assert!(claim.entry.auto_match.as_ref().unwrap().enabled);
 
         // default kept its world but lost its only character, so its
@@ -1439,10 +1439,10 @@ characters = ["Erelei", "Ondrevar"]
             None
         );
 
-        // Erelei now loads Test-Prompt, Caelaor still loads Healer, and
+        // Ilsabet now loads Test-Prompt, Corvanne still loads Healer, and
         // nothing switched.
         assert_eq!(
-            set.resolve_match("play.theforsakenlands.com", 1848, Some("Erelei")),
+            set.resolve_match("play.theforsakenlands.com", 1848, Some("Ilsabet")),
             Some("Test-Prompt".into())
         );
         assert!(set.login_on("Test-Prompt"));
@@ -1465,21 +1465,21 @@ characters = ["Erelei", "Ondrevar"]
             &mut set,
             DEFAULT_PROFILE_NAME,
             None,
-            claim(world, Some(1848), &["Erelei", "Thessamy"]),
+            claim(world, Some(1848), &["Ilsabet", "Thessamy"]),
         );
         set.create("Elsewhere").unwrap();
         put_claim(
             &mut set,
             "Elsewhere",
             None,
-            claim("mud.example.org", None, &["Erelei"]),
+            claim("mud.example.org", None, &["Ilsabet"]),
         );
         set.create("Portless").unwrap();
-        put_claim(&mut set, "Portless", None, claim(world, None, &["Erelei"]));
+        put_claim(&mut set, "Portless", None, claim(world, None, &["Ilsabet"]));
         set.create("New").unwrap();
         put_claim(&mut set, "New", None, claim(world, Some(1848), &[]));
 
-        let claim = set.set_login("New", "Erelei", true).unwrap();
+        let claim = set.set_login("New", "Ilsabet", true).unwrap();
         assert_eq!(
             claim.released_from,
             vec![DEFAULT_PROFILE_NAME.to_string(), "Portless".to_string()]
@@ -1487,30 +1487,30 @@ characters = ["Erelei", "Ondrevar"]
         // default keeps Thessamy and its toggle.
         assert_eq!(characters_of(&set, DEFAULT_PROFILE_NAME), vec!["Thessamy"]);
         assert!(enabled(&set, DEFAULT_PROFILE_NAME));
-        // Another world keeps its own Erelei.
-        assert_eq!(characters_of(&set, "Elsewhere"), vec!["Erelei"]);
-        assert_eq!(characters_of(&set, "New"), vec!["Erelei"]);
+        // Another world keeps its own Ilsabet.
+        assert_eq!(characters_of(&set, "Elsewhere"), vec!["Ilsabet"]);
+        assert_eq!(characters_of(&set, "New"), vec!["Ilsabet"]);
     }
 
     #[test]
     fn turning_login_off_keeps_the_world_and_the_name() {
         let dir = tempdir().unwrap();
         let mut set = james_like_set(dir.path());
-        let claim = set.set_login("Healer", "Caelaor", false).unwrap();
+        let claim = set.set_login("Healer", "Corvanne", false).unwrap();
         let leftover = &claim.released_from;
         assert!(leftover.is_empty(), "{leftover:?}");
         let am = claim.entry.auto_match.unwrap();
         assert!(!am.enabled);
-        assert_eq!(am.characters, vec!["Caelaor"]);
+        assert_eq!(am.characters, vec!["Corvanne"]);
         assert_eq!(am.host.as_deref(), Some("play.theforsakenlands.com"));
         assert_eq!(am.port, Some(1848));
         assert!(!set.login_on("Healer"));
         assert_eq!(
-            set.resolve_match("play.theforsakenlands.com", 1848, Some("Caelaor")),
+            set.resolve_match("play.theforsakenlands.com", 1848, Some("Corvanne")),
             None
         );
         // On again restores it without taking anything from anyone.
-        let claim = set.set_login("Healer", "Caelaor", true).unwrap();
+        let claim = set.set_login("Healer", "Corvanne", true).unwrap();
         let leftover = &claim.released_from;
         assert!(leftover.is_empty(), "{leftover:?}");
         assert!(set.login_on("Healer"));
@@ -1522,7 +1522,7 @@ characters = ["Erelei", "Ondrevar"]
         let mut set = james_like_set(dir.path());
         set.create("Blank").unwrap();
         assert!(matches!(
-            set.set_login("Blank", "Erelei", true),
+            set.set_login("Blank", "Ilsabet", true),
             Err(ProfileSetError::NoWorld(_))
         ));
         assert!(set.get("Blank").unwrap().auto_match.is_none());
@@ -1531,11 +1531,11 @@ characters = ["Erelei", "Ondrevar"]
             Err(ProfileSetError::NoCharacter)
         ));
         assert!(matches!(
-            set.set_login("Nobody", "Erelei", true),
+            set.set_login("Nobody", "Ilsabet", true),
             Err(ProfileSetError::NotFound(_))
         ));
         assert_eq!(
-            set.set_login("Blank", "Erelei", true)
+            set.set_login("Blank", "Ilsabet", true)
                 .unwrap_err()
                 .to_string(),
             "Choose a world for Blank first."
@@ -1559,11 +1559,11 @@ characters = ["Erelei", "Ondrevar"]
         let am = entry.auto_match.unwrap();
         assert_eq!(am.host.as_deref(), Some("mud.example.org"));
         assert_eq!(am.port, Some(4000));
-        assert_eq!(am.characters, vec!["Erelei"]);
+        assert_eq!(am.characters, vec!["Ilsabet"]);
         assert!(am.enabled);
-        // Erelei on the old world now loads Test-Prompt.
+        // Ilsabet on the old world now loads Test-Prompt.
         assert_eq!(
-            set.resolve_match("play.theforsakenlands.com", 1848, Some("Erelei")),
+            set.resolve_match("play.theforsakenlands.com", 1848, Some("Ilsabet")),
             Some("Test-Prompt".into())
         );
         let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
@@ -1612,29 +1612,29 @@ characters = ["Erelei", "Ondrevar"]
         let mut seed = claim(
             " play.theforsakenlands.com ",
             Some(1848),
-            &[" Caelaor ", "caelaor", ""],
+            &[" Corvanne ", "corvanne", ""],
         );
         seed.enabled = true;
         let entry = set
-            .create_from(" Caelaor ", Some(DEFAULT_PROFILE_NAME), Some(seed))
+            .create_from(" Corvanne ", Some(DEFAULT_PROFILE_NAME), Some(seed))
             .unwrap();
-        assert_eq!(entry.name, "Caelaor");
+        assert_eq!(entry.name, "Corvanne");
         assert_eq!(entry.description.as_deref(), Some("Immortal"));
         let am = entry.auto_match.unwrap();
         assert_eq!(am.host.as_deref(), Some("play.theforsakenlands.com"));
-        assert_eq!(am.characters, vec!["Caelaor"]);
+        assert_eq!(am.characters, vec!["Corvanne"]);
         assert_eq!(
-            std::fs::read_to_string(set.profile_path("Caelaor")).unwrap(),
+            std::fs::read_to_string(set.profile_path("Corvanne")).unwrap(),
             "marker = true\n"
         );
-        // Creating claims nothing away: Healer keeps Caelaor and still
+        // Creating claims nothing away: Healer keeps Corvanne and still
         // wins the tie in index order.
-        assert_eq!(characters_of(&set, "Healer"), vec!["Caelaor"]);
+        assert_eq!(characters_of(&set, "Healer"), vec!["Corvanne"]);
         assert!(set.login_on("Healer"));
-        assert!(!set.login_on("Caelaor"));
+        assert!(!set.login_on("Corvanne"));
         assert_eq!(set.active_name(), DEFAULT_PROFILE_NAME);
         let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
-        assert!(reloaded.get("Caelaor").is_some());
+        assert!(reloaded.get("Corvanne").is_some());
     }
 
     #[test]
@@ -1662,16 +1662,16 @@ characters = ["Erelei", "Ondrevar"]
         let mut set = james_like_set(dir.path());
         let world = "play.theforsakenlands.com";
         assert_eq!(
-            set.claimed_by(world, 1848, "erelei"),
+            set.claimed_by(world, 1848, "ilsabet"),
             Some(DEFAULT_PROFILE_NAME.into())
         );
         assert_eq!(
-            set.claimed_by(world, 1848, "Caelaor"),
+            set.claimed_by(world, 1848, "Corvanne"),
             Some("Healer".into())
         );
-        set.set_login("Test-Prompt", "Erelei", true).unwrap();
+        set.set_login("Test-Prompt", "Ilsabet", true).unwrap();
         assert_eq!(
-            set.claimed_by(world, 1848, "Erelei"),
+            set.claimed_by(world, 1848, "Ilsabet"),
             Some("Test-Prompt".into())
         );
 
@@ -1684,7 +1684,7 @@ characters = ["Erelei", "Ondrevar"]
             Some("Fallback".into())
         );
         assert_eq!(set.claimed_by(world, 1848, "Ondrevar"), None);
-        assert_eq!(set.claimed_by("mud.example.org", 4000, "Erelei"), None);
+        assert_eq!(set.claimed_by("mud.example.org", 4000, "Ilsabet"), None);
     }
 
     #[test]
@@ -1698,7 +1698,7 @@ characters = ["Erelei", "Ondrevar"]
             .set_metadata(
                 "Healer",
                 Some("Both".into()),
-                Some(claim(world, Some(1848), &["Caelaor", "erelei"])),
+                Some(claim(world, Some(1848), &["Corvanne", "ilsabet"])),
             )
             .unwrap();
         assert_eq!(
@@ -1706,7 +1706,7 @@ characters = ["Erelei", "Ondrevar"]
             vec![DEFAULT_PROFILE_NAME.to_string(), "Test-Prompt".to_string()]
         );
         assert!(result.entry.auto_match.as_ref().unwrap().enabled);
-        assert_eq!(characters_of(&set, "Healer"), vec!["Caelaor", "erelei"]);
+        assert_eq!(characters_of(&set, "Healer"), vec!["Corvanne", "ilsabet"]);
         assert_eq!(
             set.get("Healer").unwrap().description.as_deref(),
             Some("Both")
@@ -1718,7 +1718,7 @@ characters = ["Erelei", "Ondrevar"]
             assert!(!enabled(&set, name), "{name}");
         }
         assert_eq!(
-            set.resolve_match(world, 1848, Some("Erelei")),
+            set.resolve_match(world, 1848, Some("Ilsabet")),
             Some("Healer".into())
         );
         assert_eq!(set.resolve_match(world, 1848, Some("Ondrevar")), None);
@@ -1747,7 +1747,7 @@ characters = ["Erelei", "Ondrevar"]
         set.set_metadata("Healer", None, Some(claim(world, Some(1848), &[" "])))
             .unwrap();
         assert!(!enabled(&set, "Healer"));
-        assert_eq!(set.resolve_match(world, 1848, Some("Caelaor")), None);
+        assert_eq!(set.resolve_match(world, 1848, Some("Corvanne")), None);
 
         // A claim with nothing in it goes away.
         let empty = AutoMatch {
@@ -1763,15 +1763,15 @@ characters = ["Erelei", "Ondrevar"]
         let dir = tempdir().unwrap();
         let mut set = james_like_set(dir.path());
         let world = "play.theforsakenlands.com";
-        set.set_login("Healer", "Caelaor", false).unwrap();
+        set.set_login("Healer", "Corvanne", false).unwrap();
 
         // A description edit sends the same claim back with no toggle.
-        // It neither turns Healer back on nor takes Erelei from default
+        // It neither turns Healer back on nor takes Ilsabet from default
         // for Test-Prompt.
         set.set_metadata(
             "Healer",
             Some("Resting".into()),
-            Some(claim(world, Some(1848), &["Caelaor"])),
+            Some(claim(world, Some(1848), &["Corvanne"])),
         )
         .unwrap();
         assert!(!enabled(&set, "Healer"));
@@ -1783,21 +1783,21 @@ characters = ["Erelei", "Ondrevar"]
             .set_metadata(
                 "Test-Prompt",
                 Some("Prompt tests".into()),
-                Some(claim(world, Some(1848), &["Erelei"])),
+                Some(claim(world, Some(1848), &["Ilsabet"])),
             )
             .unwrap();
         let leftover = &result.released_from;
         assert!(leftover.is_empty(), "{leftover:?}");
-        assert_eq!(characters_of(&set, DEFAULT_PROFILE_NAME), vec!["Erelei"]);
+        assert_eq!(characters_of(&set, DEFAULT_PROFILE_NAME), vec!["Ilsabet"]);
         assert!(set.login_on(DEFAULT_PROFILE_NAME));
 
         // An explicit off still turns a claim off.
-        let mut off = claim(world, Some(1848), &["Erelei"]);
+        let mut off = claim(world, Some(1848), &["Ilsabet"]);
         off.enabled = false;
         set.set_metadata(DEFAULT_PROFILE_NAME, None, Some(off))
             .unwrap();
         assert!(!enabled(&set, DEFAULT_PROFILE_NAME));
-        assert_eq!(characters_of(&set, "Test-Prompt"), vec!["Erelei"]);
+        assert_eq!(characters_of(&set, "Test-Prompt"), vec!["Ilsabet"]);
     }
 
     fn read_profile(set: &ProfileSet, name: &str) -> String {
@@ -1982,13 +1982,13 @@ characters = ["Erelei", "Ondrevar"]
             AutoMatch {
                 host: Some("h".into()),
                 port: None,
-                characters: vec!["Erelei".into()],
+                characters: vec!["Ilsabet".into()],
                 enabled: true,
             },
         )]);
         assert_eq!(set.resolve_match("h", 0, None), None);
         assert_eq!(
-            set.resolve_match("h", 0, Some("Erelei")),
+            set.resolve_match("h", 0, Some("Ilsabet")),
             Some(DEFAULT_PROFILE_NAME.to_string())
         );
     }
@@ -2013,13 +2013,13 @@ characters = ["Erelei", "Ondrevar"]
                 AutoMatch {
                     host: Some("h".into()),
                     port: None,
-                    characters: vec!["Erelei".into()],
+                    characters: vec!["Ilsabet".into()],
                     enabled: true,
                 },
             ),
         ]);
         assert_eq!(
-            set.resolve_match("h", 0, Some("Erelei")),
+            set.resolve_match("h", 0, Some("Ilsabet")),
             Some("warrior".to_string())
         );
         // Without the character, the host-only profile wins.

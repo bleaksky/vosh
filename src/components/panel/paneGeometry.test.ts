@@ -122,7 +122,7 @@ describe('affectsMinH', () => {
 });
 
 describe('affectsMinIn', () => {
-  // Erelei's eight slots and twelve more, faerie fire harmful among them.
+  // Ilsabet's eight slots and twelve more, faerie fire harmful among them.
   const twenty = rowsOf(...times(8, 'present'), 'harmful', ...times(11, 'untracked'));
 
   it('counts two columns for the Affects pane across the whole panel', () => {
@@ -146,7 +146,7 @@ describe('affectsMinIn', () => {
   });
 });
 
-// The boards' scenes by what the game sends, Erelei's eight tracked.
+// The boards' scenes by what the game sends, Ilsabet's eight tracked.
 const tracked = [
   'mounted',
   'sanctuary',

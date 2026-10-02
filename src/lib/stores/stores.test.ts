@@ -563,7 +563,7 @@ describe('stores on the event bus', () => {
     fire('vosh://chip-style-changed', 'sparkles');
     expect(s.chipStyle.getChipStyle()).toBe('value_only');
     commands.set('ui_get_config', { tracked_affects: [], chip_style: 'icon_value' });
-    fire('vosh://profile-switched', 'Erelei');
+    fire('vosh://profile-switched', 'Ilsabet');
     await settle();
     expect(s.chipStyle.getChipStyle()).toBe('icon_value');
   });
@@ -578,7 +578,7 @@ describe('stores on the event bus', () => {
     expect(s.tickCount.getTickCount()).toBe('up');
     commands.set('ui_get_config', { tracked_affects: [] });
     fire('vosh://tick-count-changed', 'down');
-    fire('vosh://profile-switched', 'Erelei');
+    fire('vosh://profile-switched', 'Ilsabet');
     await settle();
     // A profile saved before the setting counts up.
     expect(s.tickCount.getTickCount()).toBe('up');
@@ -590,7 +590,7 @@ describe('stores on the event bus', () => {
     const s = await load();
     // A profile switch starts a read that lands late.
     commands.set('ui_get_config', new Promise((resolve) => (answer = resolve)));
-    fire('vosh://profile-switched', 'Erelei');
+    fire('vosh://profile-switched', 'Ilsabet');
     fire('vosh://tick-count-changed', 'down_past_zero');
     answer({ tracked_affects: [], tick_count: 'up' });
     await settle();
@@ -646,7 +646,7 @@ describe('stores on the event bus', () => {
       tint: false,
     });
     commands.set('ui_get_config', { tracked_affects: [], affects_tint: true });
-    fire('vosh://profile-switched', 'Erelei');
+    fire('vosh://profile-switched', 'Ilsabet');
     await settle();
     expect(s.affectsDisplay.getAffectsDisplay()).toEqual({
       style: 'timers',
@@ -672,7 +672,7 @@ describe('stores on the event bus', () => {
     fire('vosh://chat-colors-changed', {});
     expect(entries()).toEqual([]);
     commands.set('ui_get_chat_colors', { gtell: 'cyan' });
-    fire('vosh://profile-switched', 'Erelei');
+    fire('vosh://profile-switched', 'Ilsabet');
     await settle();
     expect(entries()).toEqual([['gtell', 'cyan']]);
   });
@@ -682,7 +682,7 @@ describe('stores on the event bus', () => {
     commands.set('ui_get_chat_colors', {});
     const s = await load();
     commands.set('ui_get_chat_colors', new Promise((resolve) => (answer = resolve)));
-    fire('vosh://profile-switched', 'Erelei');
+    fire('vosh://profile-switched', 'Ilsabet');
     fire('vosh://chat-colors-changed', { say: 'red' });
     answer({ say: 'blue' });
     await settle();
@@ -694,7 +694,7 @@ describe('stores on the event bus', () => {
     commands.set('ui_get_config', { tracked_affects: [], affects_style: 'countdown' });
     const s = await load();
     commands.set('ui_get_config', new Promise((resolve) => (answer = resolve)));
-    fire('vosh://profile-switched', 'Erelei');
+    fire('vosh://profile-switched', 'Ilsabet');
     fire('vosh://affects-display-changed', { style: 'chips', marker: 'dot', tint: false });
     answer({ tracked_affects: [], affects_style: 'timers' });
     await settle();
@@ -722,7 +722,7 @@ describe('stores on the event bus', () => {
     fire('vosh://vitals-options-changed', { ...sent });
     expect(s.vitalsOptions.getVitalsOptions()).toBe(heard);
     commands.set('ui_get_config', { tracked_affects: [], vitals_warn_thirds: true });
-    fire('vosh://profile-switched', 'Erelei');
+    fire('vosh://profile-switched', 'Ilsabet');
     await settle();
     expect(s.vitalsOptions.getVitalsOptions()).toEqual({
       values: 'current-max',

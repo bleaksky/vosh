@@ -19,12 +19,12 @@ describe('a Settings section with help', () => {
     const html = renderToStaticMarkup(
       <Section
         title="Prompt"
-        actions={<span className="st-meta">Saved for Erelei</span>}
+        actions={<span className="st-meta">Saved for Ilsabet</span>}
         help={{ topic: 'shape.prompt-show', subject: 'your prompt' }}
       />,
     );
     expect(html).toMatch(
-      /<div class="st-section-actions"><span class="st-meta">Saved for Erelei<\/span><button type="button" aria-label="Help on your prompt" class="st-icon-button"><svg/,
+      /<div class="st-section-actions"><span class="st-meta">Saved for Ilsabet<\/span><button type="button" aria-label="Help on your prompt" class="st-icon-button"><svg/,
     );
   });
 

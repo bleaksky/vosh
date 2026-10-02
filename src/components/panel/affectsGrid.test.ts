@@ -17,7 +17,7 @@ const row = (name: string, state: AffectRowState, ticks: number | null = 10): Af
   ticks,
 });
 
-// Erelei on the approved board: eight tracked slots, bless missing,
+// Ilsabet on the approved board: eight tracked slots, bless missing,
 // then seven he does not track, by hours left.
 const TRACKED = [
   row('mounted', 'present', -1),

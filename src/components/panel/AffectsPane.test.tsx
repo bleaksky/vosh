@@ -43,9 +43,9 @@ const affect = (name: string, duration: number): CurrentAffect => ({
   modifiers: [],
 });
 
-// Erelei on the approved board: his eight tracked affects in his order,
+// Ilsabet on the approved board: his eight tracked affects in his order,
 // and what the game sends while bless has worn off.
-const ERELEI_TRACKED: TrackedAffect[] = [
+const ILSABET_TRACKED: TrackedAffect[] = [
   'mounted',
   'sanctuary',
   'bless',
@@ -55,7 +55,7 @@ const ERELEI_TRACKED: TrackedAffect[] = [
   'fly',
   'levitate',
 ].map((name) => ({ name, label: null }));
-const ERELEI: CurrentAffect[] = [
+const ILSABET: CurrentAffect[] = [
   affect('pass door', 8),
   affect('levitate', 44),
   affect('detect invis', 47),
@@ -123,7 +123,7 @@ describe('AffectsPaneView', () => {
   });
 
   it('draws the approved board, your slots in your order and the rest under a hairline', () => {
-    const html = draw(ERELEI, false, ERELEI_TRACKED, BOARD_BOX);
+    const html = draw(ILSABET, false, ILSABET_TRACKED, BOARD_BOX);
     expect(html).toContain('<span class="pane-meta pane-meta-danger">1 missing</span>');
     expect(html).toContain('<span class="pane-meta pane-meta-warn">2 running out</span>');
     expect(cellsOf(html)).toEqual([
@@ -154,14 +154,14 @@ describe('AffectsPaneView', () => {
 
   it('counts the affects that do not fit in the last cell', () => {
     const fight = [
-      ...ERELEI,
+      ...ILSABET,
       affect('faerie fire', 3),
       affect('protective shield', 6),
       affect('frenzy', 9),
       affect('giant strength', 40),
       affect('detect magic', 45),
     ];
-    const html = draw(fight, false, ERELEI_TRACKED, BOARD_BOX);
+    const html = draw(fight, false, ILSABET_TRACKED, BOARD_BOX);
     const cells = cellsOf(html);
     expect(cells[8]).toBe('harmful 3 faerie fire , 3 hours, harmful');
     expect(html).toContain('aria-label="5 more affects, scroll to them"');
@@ -172,10 +172,10 @@ describe('AffectsPaneView', () => {
 
   it('widens the hours column for a four digit duration', () => {
     // The inner calm psalm lasts 1200 hours.
-    const calm = draw([...ERELEI, affect('inner calm', 1200)], false, ERELEI_TRACKED, BOARD_BOX);
+    const calm = draw([...ILSABET, affect('inner calm', 1200)], false, ILSABET_TRACKED, BOARD_BOX);
     expect(calm).toContain('<div class="pane-body" style="--affect-hours-ch:4">');
     expect(cellsOf(calm)).toContain('. 1200 inner calm , 1200 hours');
-    expect(draw(ERELEI, false, ERELEI_TRACKED, BOARD_BOX)).toContain(
+    expect(draw(ILSABET, false, ILSABET_TRACKED, BOARD_BOX)).toContain(
       '<div class="pane-body" style="--affect-hours-ch:3">',
     );
     // Every cell's hours column takes the widest count, so the names
@@ -188,14 +188,14 @@ describe('AffectsPaneView', () => {
 
   it('lines the count up with the names over the same hours column', () => {
     const fight = [
-      ...ERELEI,
+      ...ILSABET,
       affect('faerie fire', 3),
       affect('protective shield', 6),
       affect('frenzy', 9),
       affect('giant strength', 40),
       affect('detect magic', 45),
     ];
-    const html = draw(fight, false, ERELEI_TRACKED, BOARD_BOX);
+    const html = draw(fight, false, ILSABET_TRACKED, BOARD_BOX);
     expect(html).toMatch(
       /<li class="pane-affects-more-cell"[^>]*><span class="pane-affect-hours" aria-hidden="true"><\/span><button type="button" class="pane-affects-more"/,
     );
@@ -208,13 +208,13 @@ describe('AffectsPaneView', () => {
   });
 
   it('keeps the dot on a body with no marker attribute, as before the choice', () => {
-    const html = draw(ERELEI, false, ERELEI_TRACKED, BOARD_BOX);
+    const html = draw(ILSABET, false, ILSABET_TRACKED, BOARD_BOX);
     expect(html).not.toContain('data-affects-marker');
     const dot = renderToStaticMarkup(
       <PaneLeafContext.Provider value={LEAF}>
         <AffectsPaneView
-          current={ERELEI}
-          tracked={ERELEI_TRACKED}
+          current={ILSABET}
+          tracked={ILSABET_TRACKED}
           hidden={false}
           box={BOARD_BOX}
           marker="dot"
@@ -229,8 +229,8 @@ describe('AffectsPaneView', () => {
       const html = renderToStaticMarkup(
         <PaneLeafContext.Provider value={LEAF}>
           <AffectsPaneView
-            current={ERELEI}
-            tracked={ERELEI_TRACKED}
+            current={ILSABET}
+            tracked={ILSABET_TRACKED}
             hidden={false}
             box={BOARD_BOX}
             marker={marker}
@@ -283,15 +283,15 @@ describe('AffectsPaneView', () => {
       renderToStaticMarkup(
         <PaneLeafContext.Provider value={LEAF}>
           <AffectsPaneView
-            current={ERELEI}
-            tracked={ERELEI_TRACKED}
+            current={ILSABET}
+            tracked={ILSABET_TRACKED}
             hidden={false}
             box={BOARD_BOX}
             tint={tint}
           />
         </PaneLeafContext.Provider>,
       );
-    expect(drawTint(false)).toBe(draw(ERELEI, false, ERELEI_TRACKED, BOARD_BOX));
+    expect(drawTint(false)).toBe(draw(ILSABET, false, ILSABET_TRACKED, BOARD_BOX));
     expect(drawTint(true)).toContain(
       '<div class="pane-body" style="--affect-hours-ch:3" data-affects-tint="">',
     );

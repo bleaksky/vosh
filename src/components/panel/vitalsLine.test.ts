@@ -5,8 +5,8 @@ import { vitalsLineFit, type VitalsLineItem } from './vitalsLine';
 // values at 500 with tabular digits.
 const labels = { Health: 37, Mana: 31, Moves: 37 };
 
-// Erelei at full: 1020 / 1020, 800 / 800, 930 / 930.
-const ERELEI: VitalsLineItem[] = [
+// Ilsabet at full: 1020 / 1020, 800 / 800, 930 / 930.
+const ILSABET: VitalsLineItem[] = [
   { label: labels.Health, value: 73 },
   { label: labels.Mana, value: 57 },
   { label: labels.Moves, value: 57 },
@@ -19,7 +19,7 @@ const NEWER: VitalsLineItem[] = [
   { label: labels.Moves, value: 43 },
 ];
 
-// Erelei at full under Values Current (1020, 800, 930) and Percent
+// Ilsabet at full under Values Current (1020, 800, 930) and Percent
 // (100% three times).
 const CURRENT: VitalsLineItem[] = [
   { label: labels.Health, value: 29 },
@@ -42,28 +42,28 @@ describe('vitalsLineFit', () => {
   it('keeps the labels at 300 pt for Current and Percent', () => {
     expect(vitalsLineFit(300, CURRENT)).toBe('labels');
     expect(vitalsLineFit(300, PERCENT)).toBe('labels');
-    expect(vitalsLineFit(300, ERELEI)).toBe('values');
+    expect(vitalsLineFit(300, ILSABET)).toBe('values');
   });
 
   it('drops the labels until they fit beside longer values', () => {
     // 30 of padding, two 16 gaps, three labels 6 before their values.
-    expect(vitalsLineFit(371, ERELEI)).toBe('values');
-    expect(vitalsLineFit(372, ERELEI)).toBe('labels');
-    expect(vitalsLineFit(494, ERELEI)).toBe('labels');
+    expect(vitalsLineFit(371, ILSABET)).toBe('values');
+    expect(vitalsLineFit(372, ILSABET)).toBe('labels');
+    expect(vitalsLineFit(494, ILSABET)).toBe('labels');
   });
 
   it('keeps the values on a narrow panel', () => {
-    expect(vitalsLineFit(300, ERELEI)).toBe('values');
-    expect(vitalsLineFit(249, ERELEI)).toBe('values');
+    expect(vitalsLineFit(300, ILSABET)).toBe('values');
+    expect(vitalsLineFit(249, ILSABET)).toBe('values');
   });
 
   it('stacks the vitals in rows when even the values do not fit', () => {
-    expect(vitalsLineFit(248, ERELEI)).toBe('rows');
-    expect(vitalsLineFit(200, ERELEI)).toBe('rows');
-    expect(vitalsLineFit(0, ERELEI)).toBe('rows');
+    expect(vitalsLineFit(248, ILSABET)).toBe('rows');
+    expect(vitalsLineFit(200, ILSABET)).toBe('rows');
+    expect(vitalsLineFit(0, ILSABET)).toBe('rows');
   });
 
   it('makes room for two vitals when the MUD sends no moves', () => {
-    expect(vitalsLineFit(200, ERELEI.slice(0, 2))).toBe('values');
+    expect(vitalsLineFit(200, ILSABET.slice(0, 2))).toBe('values');
   });
 });
