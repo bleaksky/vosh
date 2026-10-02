@@ -78,6 +78,7 @@ mod fonts;
 mod forget_passwords;
 mod gmcp_bind;
 mod hidden_input;
+mod highlight_ground;
 mod import;
 mod input;
 #[cfg(test)]
@@ -357,6 +358,7 @@ pub fn run() {
             open_settings_window,
             open_help_window,
             window_backdrop::window_backdrop_set,
+            highlight_ground::highlight_ground_set,
             commands::pane_layout_get,
             commands::pane_layout_set,
             commands::tracked_affects_set,
