@@ -235,20 +235,50 @@ describe('AffectsSection', () => {
     expect(hours(chips)).toEqual(['2 hours', '1 hours']);
   });
 
-  it('keeps almost gone at or under running out, each field bounding the other', () => {
-    const update = vi.fn();
-    const config5 = config({ affects_running_out_hours: 5, affects_almost_gone_hours: 2 });
-    const element = AffectsSection({ config: config5, update });
-    const rows = (element.props as { children: { props: { children: unknown } }[] }).children;
+  it('keeps almost gone at or under running out, running out winning as the backend does', () => {
     type Field = { props: { min: number; max: number; onChange: (n: number) => void } };
-    const runningOut = rows[3].props.children as Field;
-    const almostGone = rows[4].props.children as Field;
-    expect([runningOut.props.min, runningOut.props.max]).toEqual([2, 99]);
+    const fields = (runningOut: number, almostGone: number) => {
+      const update = vi.fn();
+      const element = AffectsSection({
+        config: config({
+          affects_running_out_hours: runningOut,
+          affects_almost_gone_hours: almostGone,
+        }),
+        update,
+      });
+      const rows = (element.props as { children: { props: { children: unknown } }[] }).children;
+      return {
+        update,
+        runningOut: rows[3].props.children as Field,
+        almostGone: rows[4].props.children as Field,
+      };
+    };
+    const { update, runningOut, almostGone } = fields(5, 2);
+    // Running out takes any hours. Almost gone stops at running out.
+    expect([runningOut.props.min, runningOut.props.max]).toEqual([0, 99]);
     expect([almostGone.props.min, almostGone.props.max]).toEqual([0, 5]);
     runningOut.props.onChange(7);
     expect(update).toHaveBeenLastCalledWith({ affects_running_out_hours: 7 });
+    // Down to almost gone, almost gone stays.
+    runningOut.props.onChange(2);
+    expect(update).toHaveBeenLastCalledWith({ affects_running_out_hours: 2 });
+    // Under almost gone, running out takes almost gone down with it.
+    runningOut.props.onChange(1);
+    expect(update).toHaveBeenLastCalledWith({
+      affects_running_out_hours: 1,
+      affects_almost_gone_hours: 1,
+    });
     almostGone.props.onChange(0);
     expect(update).toHaveBeenLastCalledWith({ affects_almost_gone_hours: 0 });
+    // At the defaults, 0 in Running out saves 0 for both, and no
+    // longer snaps back up to 1.
+    const defaults = fields(2, 1);
+    expect(defaults.runningOut.props.min).toBe(0);
+    defaults.runningOut.props.onChange(0);
+    expect(defaults.update).toHaveBeenLastCalledWith({
+      affects_running_out_hours: 0,
+      affects_almost_gone_hours: 0,
+    });
   });
 
   it('renders every search anchor Layout, Affects lists', () => {
