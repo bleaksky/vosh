@@ -4,6 +4,7 @@ import {
   parseExits,
   parseMapAreas,
   parsePeople,
+  parseRegion,
   parseRoomInfo,
   resolveArea,
 } from './roomStore';
@@ -28,7 +29,16 @@ describe('parseRoomInfo', () => {
       exits: ['south'],
       sector: 0,
       terrain: 'inside',
+      region: 'temperate',
     });
+  });
+
+  it('reads no region from a build that sends none', () => {
+    // The made up room under rhapsody of delusion, and the older builds.
+    expect(
+      parseRoomInfo({ num: 0, name: 'A Wondrous Place', terrain: 'unknown', sector: -1 })?.region,
+    ).toBeNull();
+    expect(parseRoomInfo({ name: 'Between Ice Bars', terrain: 'inside' })?.region).toBeNull();
   });
 
   it('falls back to the terrain name when the sector is missing or unknown', () => {
@@ -40,6 +50,22 @@ describe('parseRoomInfo', () => {
   it('needs a room name', () => {
     expect(parseRoomInfo({ num: 1 })).toBeNull();
     expect(parseRoomInfo(null)).toBeNull();
+  });
+});
+
+describe('parseRegion', () => {
+  it('takes the climate name, or else names the region index as tables.c does', () => {
+    expect(parseRegion('Coastal North', 1)).toBe('Coastal North');
+    expect(parseRegion(undefined, 0)).toBe('Temperate');
+    expect(parseRegion(null, 4)).toBe('Tundra');
+    expect(parseRegion('', '7')).toBe('Mountain East');
+  });
+
+  it('names nothing for an index past the table', () => {
+    expect(parseRegion(undefined, 8)).toBeNull();
+    expect(parseRegion(undefined, -1)).toBeNull();
+    expect(parseRegion(undefined, 1.5)).toBeNull();
+    expect(parseRegion(undefined, undefined)).toBeNull();
   });
 });
 

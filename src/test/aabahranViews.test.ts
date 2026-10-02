@@ -85,6 +85,7 @@ function view(name: string): unknown {
         area: info.area,
         terrain: info.terrain,
         sector: info.sector,
+        region: info.region,
         exits: info.exits,
       };
     }
