@@ -12,7 +12,7 @@ regex = "1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-vosh-ansi = { path = "../ansi" }
+vosh-protocol = { path = "../protocol" }
 
 [features]
 # The test kit: the plain entry points and the trigger count the app's
@@ -21,7 +21,7 @@ testkit = []
 
 [dev-dependencies]
 # The SGR model, whose span colors the readable highlight tests read.
-vosh-ansi = { path = "../ansi", features = ["testkit"] }
+vosh-protocol = { path = "../protocol", features = ["testkit"] }
 
 [lints]
 workspace = true

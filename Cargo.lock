@@ -5054,13 +5054,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vosh-ansi"
-version = "0.8.0"
-dependencies = [
- "vte",
-]
-
-[[package]]
 name = "vosh-app"
 version = "0.8.0"
 dependencies = [
@@ -5099,7 +5092,6 @@ dependencies = [
  "tracing-subscriber",
  "urlencoding",
  "vosh-alias",
- "vosh-ansi",
  "vosh-log",
  "vosh-prompt",
  "vosh-protocol",
@@ -5120,8 +5112,8 @@ dependencies = [
  "rusqlite",
  "serde",
  "thiserror 1.0.69",
- "vosh-ansi",
  "vosh-log",
+ "vosh-protocol",
 ]
 
 [[package]]
@@ -5146,6 +5138,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "vte",
 ]
 
 [[package]]
@@ -5166,7 +5159,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
- "vosh-ansi",
+ "vosh-protocol",
 ]
 
 [[package]]

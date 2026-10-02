@@ -13,7 +13,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use thiserror::Error;
 #[cfg(any(test, feature = "testkit"))]
-use vosh_ansi::plain_text;
+use vosh_protocol::ansi::plain_text;
 
 mod forget;
 

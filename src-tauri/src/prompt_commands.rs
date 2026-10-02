@@ -280,7 +280,10 @@ pub(crate) async fn prompt_capture_check(
     };
     let lines: Vec<String> = {
         let scrollback = state.scrollback.lock().await;
-        scrollback.lines().map(vosh_ansi::plain_text).collect()
+        scrollback
+            .lines()
+            .map(vosh_protocol::ansi::plain_text)
+            .collect()
     };
     Ok(vosh_prompt::candidates::check(
         recognizer.as_ref(),

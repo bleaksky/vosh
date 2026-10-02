@@ -14,7 +14,7 @@ use vosh_prompt::PromptShow;
 const TICK: &str = "<%hp> %tick";
 
 fn plain(bytes: &[u8]) -> String {
-    vosh_ansi::plain_text(bytes)
+    vosh_protocol::ansi::plain_text(bytes)
 }
 
 /// What `f` gives, and how many times the session drew your design while

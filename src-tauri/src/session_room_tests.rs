@@ -142,7 +142,7 @@ fn read(p: &mut Profile, data: &[u8]) -> String {
         match event {
             TelnetEvent::Data(bytes) => {
                 for line in acc.feed(&bytes) {
-                    let plain = vosh_ansi::plain_text(&line.bytes);
+                    let plain = vosh_protocol::ansi::plain_text(&line.bytes);
                     let _ = line_step(p, &mut batch, line, plain, now, None);
                 }
             }
@@ -214,7 +214,7 @@ fn targeting(case: &LookCase) -> Profile {
 /// the game ends with its own reset, as `show_room_armies` ends each army
 /// line, keeps that reset in place of the highlight's.
 fn wrapped(open: &str, line: &str) -> String {
-    let plain = vosh_ansi::plain_text(line.as_bytes());
+    let plain = vosh_protocol::ansi::plain_text(line.as_bytes());
     if line.ends_with(GAME_RESET) {
         format!("{open}{plain}{GAME_RESET}")
     } else {
@@ -354,7 +354,7 @@ fn line_triggers_still_see_every_line_of_a_look() {
             // The yellow opens on each line's text, after any codes the
             // game sent ahead of it, a reset first where the game had set
             // a color.
-            let plain = vosh_ansi::plain_text(line.as_bytes());
+            let plain = vosh_protocol::ansi::plain_text(line.as_bytes());
             if !plain.is_empty() {
                 assert!(
                     shown.contains(&format!("\x1b[33m{plain}"))
@@ -411,7 +411,7 @@ fn the_preset_colors_each_line_it_names_and_leaves_every_near_miss_alone() {
     for case in &lines {
         let mut p = preset_profile();
         let shown = read(&mut p, format!("{}\n\r", case.line).as_bytes());
-        let plain = vosh_ansi::plain_text(case.line.as_bytes());
+        let plain = vosh_protocol::ansi::plain_text(case.line.as_bytes());
         let want = match case.trigger.as_deref() {
             None => case.line.clone(),
             // The exits line keeps the game's codes, such as a trap's red +.

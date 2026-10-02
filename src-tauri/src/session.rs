@@ -1615,7 +1615,7 @@ async fn handle_event<R: tauri::Runtime>(
             // flush in one transaction once the socket is quiet.
             for line in accumulator.feed(&bytes) {
                 perf.lines_processed += 1;
-                let plain = vosh_ansi::plain_text(&line.bytes);
+                let plain = vosh_protocol::ansi::plain_text(&line.bytes);
                 let trigger_t0 = std::time::Instant::now();
                 // Phase 5 perf fix: take the tick step for a line that
                 // matches the Reset on pattern under the same lock as
@@ -2283,7 +2283,7 @@ fn marker_step(
         p.room_block.end();
         return steps;
     };
-    let plain = vosh_ansi::plain_text(&partial.bytes);
+    let plain = vosh_protocol::ansi::plain_text(&partial.bytes);
     let painted = partial.painted.map(|(gen, _)| gen);
     let offered = p
         .prompt
@@ -2330,7 +2330,7 @@ fn partial_step(
     let mut step = None;
     if let Some(bytes) = accumulator.partial().map(<[u8]>::to_vec) {
         p.prompt.note_text();
-        let plain = vosh_ansi::plain_text(&bytes);
+        let plain = vosh_protocol::ansi::plain_text(&bytes);
         match p.prompt.stage.settle(&bytes, &plain) {
             Some((block, region)) => {
                 let painted = accumulator
@@ -2590,7 +2590,7 @@ async fn sleep_until_hold(until: Option<Instant>) {
 fn send_step(p: &mut Profile, accumulator: &LineAccumulator, sent: &[u8], at_ms: i64) -> bool {
     let partial = accumulator
         .partial()
-        .map(|bytes| (bytes.to_vec(), vosh_ansi::plain_text(bytes)));
+        .map(|bytes| (bytes.to_vec(), vosh_protocol::ansi::plain_text(bytes)));
     p.prompt.record(
         partial
             .as_ref()
@@ -3539,7 +3539,7 @@ async fn capture_pending_line<R: tauri::Runtime>(
     let Some(Partial { bytes, painted }) = accumulator.take_partial() else {
         return;
     };
-    let plain = vosh_ansi::plain_text(&bytes);
+    let plain = vosh_protocol::ansi::plain_text(&bytes);
     // Terminate the line on screen. Write only what the end of its read
     // did not paint, to avoid printing the goodbye twice.
     let shown = painted.map_or(0, |(_, len)| len.min(bytes.len()));
@@ -4084,7 +4084,7 @@ mod tests {
                 bytes: line.as_bytes().to_vec(),
                 painted: None,
             },
-            vosh_ansi::plain_text(line.as_bytes()),
+            vosh_protocol::ansi::plain_text(line.as_bytes()),
             tokio::time::Instant::now(),
             None,
         );
@@ -4102,7 +4102,7 @@ mod tests {
     }
 
     fn plain(ansi: &str) -> String {
-        vosh_ansi::plain_text(ansi.as_bytes())
+        vosh_protocol::ansi::plain_text(ansi.as_bytes())
     }
 
     fn mark(gen: u64) -> Vec<u8> {
@@ -4146,7 +4146,7 @@ mod tests {
             batch.out = vosh_prompt::stage::Output::new(other);
             let now = tokio::time::Instant::now();
             for line in self.acc.feed(data) {
-                let plain = vosh_ansi::plain_text(&line.bytes);
+                let plain = vosh_protocol::ansi::plain_text(&line.bytes);
                 let _ = super::line_step(&mut self.p, &mut batch, line, plain, now, None);
             }
             if ga {
@@ -4166,7 +4166,7 @@ mod tests {
             let mut batch = super::ReadBatch::new(super::output_count());
             let now = tokio::time::Instant::now();
             for line in self.acc.feed(data) {
-                let plain = vosh_ansi::plain_text(&line.bytes);
+                let plain = vosh_protocol::ansi::plain_text(&line.bytes);
                 let _ = super::line_step(&mut self.p, &mut batch, line, plain, now, None);
             }
             let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
@@ -4213,7 +4213,7 @@ mod tests {
                 match event {
                     super::TelnetEvent::Data(bytes) => {
                         for line in self.acc.feed(&bytes) {
-                            let plain = vosh_ansi::plain_text(&line.bytes);
+                            let plain = vosh_protocol::ansi::plain_text(&line.bytes);
                             let _ =
                                 super::line_step(&mut self.p, &mut batch, line, plain, now, None);
                         }
@@ -4250,7 +4250,7 @@ mod tests {
                 match event {
                     Ev::Data(data) => {
                         for line in self.acc.feed(data) {
-                            let plain = vosh_ansi::plain_text(&line.bytes);
+                            let plain = vosh_protocol::ansi::plain_text(&line.bytes);
                             let _ =
                                 super::line_step(&mut self.p, &mut batch, line, plain, now, None);
                         }
@@ -5623,7 +5623,7 @@ mod tests {
         let mut acc = super::LineAccumulator::new();
         let mut steps = Vec::new();
         for line in acc.feed(format!("{TANK_LINE}\n\rYou are hungry.\n\r").as_bytes()) {
-            let plain = vosh_ansi::plain_text(&line.bytes);
+            let plain = vosh_protocol::ansi::plain_text(&line.bytes);
             steps.extend(super::line_step(
                 &mut p,
                 &mut batch,
@@ -5657,7 +5657,7 @@ mod tests {
         let now = tokio::time::Instant::now();
         let mut acc = super::LineAccumulator::new();
         for line in acc.feed(format!("{TANK_LINE}\n\r{FIGHT_LINE}\n\r").as_bytes()) {
-            let plain = vosh_ansi::plain_text(&line.bytes);
+            let plain = vosh_protocol::ansi::plain_text(&line.bytes);
             let _ = super::line_step(&mut wire.p, &mut batch, line, plain, now, Some(3));
         }
         let logged: Vec<&str> = batch.log.iter().map(|e| e.text.as_str()).collect();
@@ -5672,7 +5672,7 @@ mod tests {
         let mut acc = super::LineAccumulator::new();
         let mut kept = Vec::new();
         for line in acc.feed(text.as_bytes()) {
-            let plain = vosh_ansi::plain_text(&line.bytes);
+            let plain = vosh_protocol::ansi::plain_text(&line.bytes);
             for step in super::line_step(p, &mut batch, line, plain, now, Some(3)) {
                 kept.extend(step.scrollback);
             }

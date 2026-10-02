@@ -920,7 +920,11 @@ fn repaints(h: &Harness) -> Vec<String> {
         .filter(|out| out.bytes.is_empty())
         .filter_map(|out| {
             let bytes = out.replace.map(|r| r.bytes)?;
-            Some(vosh_ansi::plain_text(&bytes).trim_end().to_string())
+            Some(
+                vosh_protocol::ansi::plain_text(&bytes)
+                    .trim_end()
+                    .to_string(),
+            )
         })
         .collect()
 }
