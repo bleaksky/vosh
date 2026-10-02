@@ -72,7 +72,7 @@ pub trait Values {
 /// `is_max_of` in design/pieces.rs knows the same four spellings, in
 /// another order, to find a current and max piece. The order matters only
 /// here, where the first spelling a session holds a value for wins, so it
-/// stays the first renderer's (D26).
+/// stays the first renderer's (refactor plan D26).
 pub(crate) fn max_spellings(name: &str) -> [String; 4] {
     [
         format!("m{name}"),

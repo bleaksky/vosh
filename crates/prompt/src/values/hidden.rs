@@ -165,8 +165,9 @@ impl Vars {
         // names the song. The two differ on Char.Combat. Here a path that
         // reads the whole packet or the whole tank hides too, through the
         // resolver's `path_hidden`, and the preview hides only their
-        // health and condition keys. Both stay as they are (D26), since a
-        // merge would change what the live prompt or the preview draws.
+        // health and condition keys. Both stay as they are (refactor plan
+        // D26), since a merge would change what the live prompt or the
+        // preview draws.
         let h7 = a_flag || affects.as_ref().is_some_and(names_lament);
         // Z, Group.Info is {}.
         let z = group.as_ref().is_some_and(|g| g.empty);
