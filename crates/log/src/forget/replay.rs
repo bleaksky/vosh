@@ -1,3 +1,6 @@
+//! Replays each session's login row by row to find the lines that answered
+//! a password prompt.
+
 use std::collections::HashMap;
 
 use super::aabahran::{

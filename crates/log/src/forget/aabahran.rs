@@ -1,3 +1,6 @@
+//! The game's login strings, and the matchers that read password prompts
+//! and the commands that carry a password.
+
 use std::sync::OnceLock;
 
 use regex::{Regex, RegexBuilder};

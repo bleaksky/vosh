@@ -1,3 +1,6 @@
+//! Reads the lines of the sessions that belong to a profile's characters,
+//! newest first.
+
 use rusqlite::{params, OptionalExtension};
 
 use crate::{LogStore, Result};

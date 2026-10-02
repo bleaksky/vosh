@@ -1,3 +1,5 @@
+//! The prompt matcher and the login replay, fed rows with no store.
+
 use super::*;
 use crate::forget::aabahran::is_password_prompt;
 use crate::forget::replay::PasswordFinder;

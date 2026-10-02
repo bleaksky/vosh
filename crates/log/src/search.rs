@@ -1,3 +1,5 @@
+//! The regex search the log view runs, one page at a time.
+
 use regex::{Regex, RegexBuilder};
 use serde::Serialize;
 

@@ -1,3 +1,6 @@
+//! Finding and blanking the lines in a log file, and the rebuild that
+//! clears their old copies.
+
 use rusqlite::Connection;
 
 use super::*;
