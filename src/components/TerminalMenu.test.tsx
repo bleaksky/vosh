@@ -419,6 +419,40 @@ describe('the Settings list in the terminal menu', () => {
     expect(lit(m.row('Settings'))).toBe(true);
   });
 
+  it('keeps Settings the row the keys act on once the pointer leaves the menu', async () => {
+    const m = await mount();
+    // The pointer opens the list, then stops in the gap or the list
+    // padding, or moves past the list, without landing on a list row.
+    const pointAndLeave = async () => {
+      await act(async () => on(m.row('Settings')).onPointerMove());
+      await act(async () => on(m.menu).onPointerLeave());
+      expect(m.list()).not.toBeNull();
+      expect(lit(m.row('Settings'))).toBe(true);
+      expect(doc.activeElement).toBe(m.menu);
+    };
+
+    // ArrowRight, Enter and Space move into the list on its first row.
+    for (const k of ['ArrowRight', 'Enter', ' ']) {
+      await pointAndLeave();
+      await m.key(k);
+      expect(doc.activeElement, k).toBe(m.listRow('Triggers'));
+      await m.listKey('ArrowLeft');
+      expect(m.list(), k).toBeNull();
+    }
+    expect(m.onClose).not.toHaveBeenCalled();
+
+    // ArrowDown goes on to the row after Settings, not back to the top.
+    await pointAndLeave();
+    await m.key('ArrowDown');
+    expect(m.list()).toBeNull();
+    expect(lit(m.row('Clear scrollback'))).toBe(true);
+    expect(lit(m.row('Settings'))).toBe(false);
+
+    // With the list shut, leaving the menu still clears the highlight.
+    await act(async () => on(m.menu).onPointerLeave());
+    expect(lit(m.row('Clear scrollback'))).toBe(false);
+  });
+
   it('counts a press in the list as inside the menu', async () => {
     const m = await mount();
     await act(async () => on(m.row('Settings')).onPointerMove());
