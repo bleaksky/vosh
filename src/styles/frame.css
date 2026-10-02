@@ -24,6 +24,15 @@
   font-family: var(--font-ui);
 }
 
+/* The frame never scrolls. The legacy .app rule clips with overflow
+   hidden, which still lets script scroll the box and slide the whole
+   window. Clip refuses it wherever the web view knows clip. */
+@supports (overflow: clip) {
+  .app.shell {
+    overflow: clip;
+  }
+}
+
 /* Window edge (SPEC 1) for the frameless window on Windows and Linux,
    drawn over the bands and the panel but under every floating
    surface. */
