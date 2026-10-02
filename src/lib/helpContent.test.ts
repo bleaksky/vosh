@@ -417,6 +417,7 @@ describe('the help on prompt design codes', () => {
     [['%{gold:grouped}'], 'Any value from the picker, in any of its forms.'],
     [['%{gold:thousands}'], 'Gold in thousands with one decimal, as 12.3K.'],
     [['%{hour:ampm}'], 'The game hour as 3PM, with 12AM for midnight and 12PM for noon.'],
+    [['%{tick:since}'], 'The seconds since the last tick, as 16s.'],
     [['%c_green', '%c_hp'], "A theme color, or Health's color by how full it is."],
     [
       ['%{c:#80c8ff}', '%{c:128,200,255}'],

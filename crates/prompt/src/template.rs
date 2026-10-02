@@ -239,6 +239,8 @@ pub enum Format {
     Thousands,
     /// With its unit, `14s`, `61°F`.
     Unit,
+    /// The seconds since the tick, counting up, `16s`.
+    Since,
     /// The first N characters.
     Trunc(usize),
     /// A clock as `08:42`.
@@ -683,6 +685,7 @@ fn format_body(format: &Format) -> Option<String> {
         Format::Short => "short".into(),
         Format::Thousands => "thousands".into(),
         Format::Unit => "unit".into(),
+        Format::Since => "since".into(),
         Format::Trunc(n) => format!("trunc:{n}"),
         Format::Hm => "hm".into(),
         Format::Hms => "hms".into(),
@@ -970,6 +973,7 @@ fn parse_format(segs: &[&str]) -> Option<Format> {
         "short" => no_args(Format::Short),
         "thousands" => no_args(Format::Thousands),
         "unit" => no_args(Format::Unit),
+        "since" => no_args(Format::Since),
         "hm" => no_args(Format::Hm),
         "hms" => no_args(Format::Hms),
         "md" => no_args(Format::Md),
@@ -1648,6 +1652,7 @@ mod tests {
         );
         assert_eq!(kinds("%{gold:thousands:1}"), vec![TokenKind::Unknown]);
         assert_eq!(kinds("%{temp:unit}"), vec![fmt("temp", Format::Unit)]);
+        assert_eq!(kinds("%{tick:since}"), vec![fmt("tick", Format::Since)]);
         assert_eq!(
             kinds("%{room:trunc:20}"),
             vec![fmt("room", Format::Trunc(20))]
@@ -1669,7 +1674,12 @@ mod tests {
 
     #[test]
     fn the_forms_of_the_old_prompt_write_back_as_they_read() {
-        for source in ["%{gold:thousands}", "%{exp:thousands}", "%{hour:ampm}"] {
+        for source in [
+            "%{gold:thousands}",
+            "%{exp:thousands}",
+            "%{hour:ampm}",
+            "%{tick:since}",
+        ] {
             let tokens = kinds(source);
             assert!(tokens.iter().all(|t| *t != TokenKind::Unknown), "{source}");
             assert_eq!(write_tokens(&tokens), source, "{source}");

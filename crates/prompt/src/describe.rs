@@ -354,6 +354,7 @@ fn form_list(kind: Option<Kind>) -> &'static [(FormatName, &'static str, bool)] 
         Kind::Seconds => &[
             (F::Value, "Seconds", true),
             (F::Unit, "With unit", true),
+            (F::Since, "Since the tick", true),
             (F::Bar, "Bar", true),
         ],
         Kind::Clock => &[
@@ -396,6 +397,7 @@ fn format_label(format: FormatName) -> &'static str {
         FormatName::Short => "Short",
         FormatName::Thousands => "Thousands",
         FormatName::Unit => "With unit",
+        FormatName::Since => "Since the tick",
         FormatName::Trunc => "Shortened",
         FormatName::Hm => "Hours and minutes",
         FormatName::Hms => "With seconds",
@@ -428,6 +430,7 @@ fn shown_as(value: &crate::template::ValueRef) -> (FieldRef, FormatName, Option<
         Format::Short => (FormatName::Short, None),
         Format::Thousands => (FormatName::Thousands, None),
         Format::Unit => (FormatName::Unit, None),
+        Format::Since => (FormatName::Since, None),
         Format::Trunc(_) => (FormatName::Trunc, None),
         Format::Hm => (FormatName::Hm, None),
         Format::Hms => (FormatName::Hms, None),

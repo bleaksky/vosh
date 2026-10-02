@@ -215,3 +215,26 @@ fn a_band_repaint_between_your_echo_and_its_word_keeps_the_next_line_end() {
         ["look", "", "Someone arrives from the south."]
     );
 }
+
+#[test]
+fn the_seconds_since_the_tick_count_up_past_a_late_tick() {
+    for show in [PromptShow::Text, PromptShow::Lifted, PromptShow::Pinned] {
+        let (mut session, t0) = at_prompt("<%hp> %{tick:since}", show);
+        let turned = session.p.tick.last_tick.expect("the tick runs");
+        let later = t0 + Duration::from_millis(1_500);
+        let out = clock_step(&mut session.p, false, false, later);
+        assert_eq!(shown(&out, show).as_deref(), Some("<1020> 1s"), "{show:?}");
+        // The tick is late, so no second is left of it, and the count
+        // goes on as the old TinTin prompt counted.
+        let late = turned + Duration::from_millis(31_500);
+        assert_eq!(session.p.tick.remaining(late), Some(Duration::ZERO));
+        let out = clock_step(&mut session.p, false, false, late);
+        assert_eq!(shown(&out, show).as_deref(), Some("<1020> 31s"), "{show:?}");
+        // The next repaint lands on its next second.
+        assert_eq!(
+            clock_after(&session.p, late),
+            Some(turned + Duration::from_secs(32) + CLOCK_SLACK),
+            "{show:?}"
+        );
+    }
+}
