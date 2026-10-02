@@ -373,22 +373,81 @@ describe('Draining chips', () => {
     }
   });
 
-  // The hours a chip running out shows over the 30 percent fill, on
-  // every built in theme: the warn tone in yellow, the danger text tone
-  // in bold red, and the name in the text tone. The light themes draw
-  // their warn tone at 3 to 4.3 to 1 on the bare panel, so any wash
-  // takes the yellow hours under 3. They stay where Grouped chips
-  // already draws them. These are flagged for review, and the 30
+  // The hours a chip running out shows, on every built in theme, the warn
+  // tone in yellow and the danger text tone in bold red. They sit at the
+  // chip's right end. In Grouped chips that end is the plain track, 14
+  // percent yellow or 16 percent red, at full and while the gauge over the
+  // left share stops short of it. In Draining chips they sit on the 30
+  // percent fill while the chip is at full, has no gauge or has no full yet,
+  // and on the bare panel once the fill draws back past them. On the fill
+  // they read harder than in Grouped chips on every theme. The yellow on
+  // Solarized Light and Everforest Light is under 3 to 1 in Grouped chips
+  // already. The yellow on Vellum and the red on Solarized Light fall under
+  // 3 only in Draining chips. These are flagged for review, and the 30
   // percent stays as the sheet drew it.
-  const UNDER_THREE = [
+  const GROUPED_UNDER_THREE = ['solarized-light warn', 'everforest-light warn'];
+  const DRAINING_UNDER_THREE = [
     'vellum warn',
     'solarized-light warn',
     'solarized-light danger',
     'everforest-light warn',
   ];
+  // The hours' contrast on each theme, on the Grouped chips track and
+  // then on the Draining chips fill.
+  const HOURS_READ: Record<string, string> = {
+    'obsidian-ember warn': '9.59 to 6.10',
+    'obsidian-ember danger': '6.53 to 4.79',
+    'vellum warn': '3.63 to 2.94',
+    'vellum danger': '4.02 to 3.28',
+    'kanso-zen warn': '7.98 to 5.15',
+    'kanso-zen danger': '4.57 to 3.61',
+    'tokyo-night warn': '5.83 to 4.01',
+    'tokyo-night danger': '4.50 to 3.45',
+    'nord warn': '5.77 to 3.93',
+    'nord danger': '4.11 to 3.49',
+    'rose-pine warn': '7.03 to 4.66',
+    'rose-pine danger': '4.31 to 3.37',
+    'gruvbox warn': '5.58 to 3.82',
+    'gruvbox danger': '4.12 to 3.46',
+    'catppuccin warn': '7.76 to 4.85',
+    'catppuccin danger': '4.67 to 3.52',
+    'dracula warn': '9.44 to 5.63',
+    'dracula danger': '4.39 to 3.42',
+    'monokai warn': '5.61 to 3.87',
+    'monokai danger': '4.32 to 3.73',
+    'one-dark warn': '5.19 to 3.64',
+    'one-dark danger': '4.04 to 3.36',
+    'one-half-dark warn': '5.19 to 3.64',
+    'one-half-dark danger': '4.04 to 3.36',
+    'solarized-dark warn': '4.57 to 3.40',
+    'solarized-dark danger': '4.47 to 3.97',
+    'solarized-light warn': '2.63 to 2.24',
+    'solarized-light danger': '3.67 to 2.98',
+    'tango-dark warn': '6.09 to 4.05',
+    'tango-dark danger': '4.29 to 3.68',
+    'classic-vivid warn': '11.89 to 6.74',
+    'classic-vivid danger': '4.21 to 3.53',
+    'high-contrast warn': '11.46 to 6.54',
+    'high-contrast danger': '6.01 to 4.39',
+    'everforest-dark warn': '4.41 to 3.21',
+    'everforest-dark danger': '3.99 to 3.26',
+    'everforest-light warn': '2.61 to 2.21',
+    'everforest-light danger': '3.81 to 3.22',
+    'green-screen warn': '11.51 to 6.50',
+    'green-screen danger': '4.74 to 3.72',
+  };
 
-  it('keeps the hours as readable as Grouped chips on every built in theme', () => {
-    const under: string[] = [];
+  it('reads the hours on the fill harder than on the Grouped chips track, pinned per theme', () => {
+    // The track under the hours in Grouped chips, as the sheet draws it.
+    expect(rule('.pane-chip-tracked.is-warn')).toContain(
+      '--chip-track: color-mix(in srgb, var(--warn) 14%, transparent)',
+    );
+    expect(rule('.pane-chip-tracked.is-danger')).toContain(
+      '--chip-track: color-mix(in srgb, var(--danger) 16%, transparent)',
+    );
+    const read: Record<string, string> = {};
+    const groupedUnder: string[] = [];
+    const drainingUnder: string[] = [];
     for (const theme of BUILTIN_THEMES) {
       const t = themeTokens(theme);
       const hex = (value: string) => {
@@ -398,22 +457,27 @@ describe('Draining chips', () => {
       };
       const panel = hex(t.panel);
       const text = hex(t.text);
-      for (const [tone, color, hours, shipped] of [
-        // Grouped chips: 14 percent over the chip, then 20 over that.
-        ['warn', hex(t.warn), hex(t.warn), [0.14, 0.2]],
-        // Grouped chips: 16 percent over the chip, then 22 over that.
-        ['danger', hex(t.danger), hex(t.dangerText), [0.16, 0.22]],
+      for (const [tone, color, hours, track] of [
+        ['warn', hex(t.warn), hex(t.warn), 0.14],
+        ['danger', hex(t.danger), hex(t.dangerText), 0.16],
       ] as const) {
+        const key = `${theme.id} ${tone}`;
+        const grouped = contrast(hours, composite(color, panel, track));
         const drained = composite(color, panel, 0.3);
-        const tinted = composite(color, composite(color, panel, shipped[0]), shipped[1]);
-        const read = contrast(hours, drained);
-        // Never harder to read than Grouped chips draws the same chip.
-        expect(read, `${theme.id} ${tone}`).toBeGreaterThanOrEqual(contrast(hours, tinted) - 0.01);
+        const draining = contrast(hours, drained);
+        expect(draining, key).toBeLessThan(grouped);
+        // Once the fill draws back past them, the bare panel reads
+        // better than the Grouped chips track.
+        expect(contrast(hours, panel), key).toBeGreaterThan(grouped);
         // The name stays clear of the fill.
-        expect(contrast(text, drained), `${theme.id} ${tone} name`).toBeGreaterThanOrEqual(3);
-        if (read < 3) under.push(`${theme.id} ${tone}`);
+        expect(contrast(text, drained), `${key} name`).toBeGreaterThanOrEqual(3);
+        read[key] = `${grouped.toFixed(2)} to ${draining.toFixed(2)}`;
+        if (grouped < 3) groupedUnder.push(key);
+        if (draining < 3) drainingUnder.push(key);
       }
     }
-    expect(under).toEqual(UNDER_THREE);
+    expect(read).toEqual(HOURS_READ);
+    expect(groupedUnder).toEqual(GROUPED_UNDER_THREE);
+    expect(drainingUnder).toEqual(DRAINING_UNDER_THREE);
   });
 });
