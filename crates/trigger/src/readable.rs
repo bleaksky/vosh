@@ -733,21 +733,13 @@ mod tests {
     fn replace_store(template: &str) -> crate::TriggerStore {
         let mut store = crate::TriggerStore::new();
         store
-            .set(crate::Trigger {
-                name: "preset".into(),
-                patterns: vec![crate::TriggerPattern {
-                    pattern: r"^(\S+) (\S+) (\S+) (\S+)$".into(),
-                    enabled: true,
-                }],
-                priority: 0,
-                enabled: true,
-                actions: vec![crate::TriggerAction::Replace {
+            .set(crate::Trigger::new(
+                "preset",
+                r"^(\S+) (\S+) (\S+) (\S+)$",
+                crate::TriggerAction::Replace {
                     template: template.into(),
-                }],
-                preset: None,
-                group: None,
-                target: crate::TriggerTarget::Line,
-            })
+                },
+            ))
             .unwrap();
         store
     }
