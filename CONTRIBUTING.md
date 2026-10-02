@@ -12,7 +12,7 @@ On Linux you also need the WebKitGTK and related dev packages. On Debian and Ubu
 
 ## Rust Version
 
-`rust-toolchain.toml` at the repo root pins one Rust version along with `clippy` and `rustfmt`. Your machine, CI, and the release builds all read that file, so a lint that passes for you passes in CI too.
+`rust-toolchain.toml` at the repo root pins one Rust version along with `clippy` and `rustfmt`. Your machine, CI, and the release builds all read that file, so you lint with the same clippy and rustfmt that CI runs. CI also runs clippy on Linux and Windows, where platform code compiles that a Mac never builds.
 
 rustup installs the pinned version on your first build. Run any `cargo` command in the repo and rustup downloads that version once, then reuses it. Older versions you installed stay on disk until you run `rustup toolchain uninstall` on them.
 
