@@ -586,15 +586,7 @@
   flex: none;
 }
 
-/* Quiet copy inside a card, and meta text beside a heading. */
-.st-note {
-  margin: 0;
-  padding: 14px 16px;
-  color: var(--secondary);
-  font-size: 12px;
-  line-height: 16px;
-}
-
+/* Meta text beside a heading. */
 .st-meta {
   color: var(--secondary);
   font-size: 11px;
@@ -1935,23 +1927,6 @@
 
 .st-seg-item[aria-pressed='true'] .st-marker {
   color: var(--accent);
-}
-
-/* ── Interim blocks ────────────────────────────────────────────────── */
-
-/* General, Layout, and Input have no approved board yet, and the
-   boarded groups keep their old editors until the new pages land.
-   Those editors render inside a card as they did before, under the
-   legacy .settings-app rules, and carry data-interim so the next pass
-   finds them. */
-.st-legacy.settings-body {
-  min-height: auto;
-  padding: 16px;
-  overflow: visible;
-}
-
-.st-legacy .settings-pane-title {
-  display: none;
 }
 
 /* ── Automation ────────────────────────────────────────────────────── */
