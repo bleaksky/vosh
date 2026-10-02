@@ -43,6 +43,15 @@
 //! stays in the text between two more private marks, `ESC ] 7717 ; l ; L
 //! BEL` before its first line and `ESC ] 7717 ; e ; L BEL` after its last
 //! visible byte, so each renderer can draw a band under it.
+//!
+//! While Collapse repeated lines is on, [`Stage::repeat_line`] writes each
+//! line the Line pass left as a region of its own. A line that shows the
+//! same bytes as the run the text ends on joins it: the run's region is
+//! written again in place with the count before the line, `(3) `, the way
+//! a repaint rewrites the open row, so both renderers show the run once.
+//! Anything else written after the run ends it, and so do your echo,
+//! output from elsewhere and a new connection. A pinned prompt leaves the
+//! text, so it ends nothing, and neither does a hidden line.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -98,6 +107,42 @@ pub fn with_lift_end(body: &[u8], id: u64) -> Vec<u8> {
     }
     out.extend_from_slice(ends);
     out
+}
+
+/// The count a run of repeated lines shows before its line, `(N) `, in
+/// the gray of 256 color 244 with the default color after it. The
+/// restored scrollback banner draws in the same gray, since dim draws in
+/// a shade of its own on each renderer.
+pub fn count_prefix(count: u32) -> Vec<u8> {
+    format!("\x1b[38;5;244m({count})\x1b[39m ").into_bytes()
+}
+
+/// `line` as a run of `count` repeated lines shows it: the line alone for
+/// one, and the count before it from two on.
+pub fn counted(count: u32, line: &[u8]) -> Vec<u8> {
+    if count < 2 {
+        return line.to_vec();
+    }
+    let mut bytes = count_prefix(count);
+    bytes.extend_from_slice(line);
+    bytes
+}
+
+/// True when a line that shows as `line` can be part of a run of repeated
+/// lines: something in it shows, and it takes one row of its own, with no
+/// line end or carriage return inside it.
+pub fn collapsible(line: &[u8]) -> bool {
+    shows_anything(line) && !line.iter().any(|&b| b == b'\r' || b == b'\n')
+}
+
+/// What [`Stage::repeat_line`] made of a line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Repeat {
+    /// The line starts a run of its own.
+    Starts,
+    /// The line joined the run the text ends on, which now holds this
+    /// many lines and shows once with the count before it.
+    Joins(u32),
 }
 
 /// The last byte of `bytes` that shows, escape sequences skipped.
@@ -402,6 +447,43 @@ impl Output {
         if let Some(replace) = self.replace.as_mut().filter(|r| r.gen == gen) {
             replace.above = above;
         }
+    }
+
+    /// How much this output wrote to the text at the cursor, its bytes and
+    /// the line ends it holds back together. Holding line ends back moves
+    /// them and leaves this the same, so only a new write or a rewrite
+    /// changes it.
+    fn written(&self) -> usize {
+        self.bytes.len() + self.hold.len()
+    }
+
+    /// Write `bytes` in place of everything this output wrote from `at`
+    /// on, the line ends it holds back included, as a run of repeated
+    /// lines this output wrote last does when the next line joins it.
+    fn rewrite_from(&mut self, at: usize, bytes: &[u8]) {
+        self.hold.clear();
+        self.bytes.truncate(at);
+        self.push(bytes);
+        self.closed = true;
+    }
+
+    /// Write `bytes` in place of what this output's replace writes, and in
+    /// place of what it writes from the lines above its region when it
+    /// carries them, as a run of repeated lines this output rewrote does
+    /// when the next line joins it. The new text lands on the row a pinned
+    /// prompt left, as a write at the cursor would.
+    fn rewrite_replace(&mut self, bytes: Vec<u8>) {
+        let Some(replace) = self.replace.as_mut() else {
+            return;
+        };
+        if let Some(above) = replace.above.as_mut() {
+            above.bytes.clone_from(&bytes);
+        }
+        replace.bytes = bytes;
+        replace.fresh = true;
+        self.visible += 1;
+        self.row_open = false;
+        self.closed = true;
     }
 
     /// End the row the cursor sits on, unless this output already left it
@@ -958,6 +1040,52 @@ struct PinnedShown {
     text: Vec<u8>,
 }
 
+/// Where the line of a run of repeated lines sits in the output that last
+/// wrote it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RunPlace {
+    /// In the output's bytes, from this index.
+    Bytes(usize),
+    /// In the output's replace, which rewrites an earlier region whole.
+    Replace,
+}
+
+/// The region right after the line of a run: a partial a read ended on,
+/// which the next line completes, or the empty region a pinned prompt
+/// left where it erased one, which the next line writes after. Either way
+/// the line of the run sits right above it, so a renderer finds it there
+/// by its text (see [`Above`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RunAfter {
+    gen: u64,
+    empty: bool,
+}
+
+/// The run of repeated lines the text ends on, while Collapse repeated
+/// lines is on (see [`Stage::repeat_line`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Run {
+    /// The line as it shows, colors included, which the next line has to
+    /// show byte for byte to join the run.
+    line: Vec<u8>,
+    /// How many lines the run holds.
+    count: u32,
+    /// The region the run shows in.
+    gen: u64,
+    /// The output that last wrote the run, or the region after it.
+    output: u64,
+    /// What that output had written at the cursor right after it (see
+    /// [`Output::written`]), so anything written later shows.
+    end: usize,
+    place: RunPlace,
+    /// How many bytes at the end of the run's region each renderer keeps
+    /// back as held line ends while your prompt shows pinned. A rewrite
+    /// leaves them out, so the line ends each renderer holds still follow
+    /// it.
+    held: usize,
+    after: Option<RunAfter>,
+}
+
 /// A line the ring may record.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct Seen {
@@ -1034,6 +1162,9 @@ pub struct Stage {
     /// design borrows the band of Lifted (the 2026-09-30 addendum, item
     /// 2).
     card: bool,
+    /// The run of repeated lines the text ends on, while Collapse repeated
+    /// lines is on.
+    run: Option<Run>,
 }
 
 impl Stage {
@@ -1207,6 +1338,12 @@ impl Stage {
         if self.swallow.is_some_and(|swallow| swallow.output <= after) {
             self.swallow = None;
         }
+        // The text landed after the run of repeated lines, so the next
+        // line starts a run of its own. A run a later output wrote came
+        // after the text, so it stays.
+        if self.run.as_ref().is_some_and(|run| run.output <= after) {
+            self.run = None;
+        }
     }
 
     /// True when the stage finished output newer than `after` with
@@ -1228,8 +1365,60 @@ impl Stage {
 
     /// `out` goes out next when it has anything to write.
     fn note_sent(&mut self, out: &Output) {
+        self.settle_run(out);
         if !out.is_empty() {
             self.sent = self.sent.max(out.id.0);
+        }
+    }
+
+    /// Catch the run of repeated lines up with `out` before it goes out.
+    /// Anything written after the run ends it: later bytes in the output
+    /// that wrote it, or any text in a later output. Output from elsewhere
+    /// that came before a later output ends it too. While the run is the
+    /// last thing its own output wrote, note the line ends at its end that
+    /// the output holds back, which each renderer keeps after it.
+    fn settle_run(&mut self, out: &Output) {
+        let Some(run) = self.run.as_mut() else {
+            return;
+        };
+        if run.output != out.id.0 {
+            if out.other || out.writes_text() {
+                self.run = None;
+            }
+            return;
+        }
+        if out.written() != run.end {
+            self.run = None;
+        } else if run.after.is_none() && matches!(run.place, RunPlace::Bytes(_)) {
+            run.held = out.hold.len();
+        }
+    }
+
+    /// True when the run of repeated lines, and the region after it if
+    /// any, is still the last thing written as of `out`: nothing came after
+    /// it in the output that wrote it, or `out` is a later output that has
+    /// written nothing yet with no output from elsewhere before it. Every
+    /// output between the two went through [`Stage::settle_run`], which
+    /// ends the run when one wrote text.
+    fn run_last(&self, out: &Output) -> bool {
+        match &self.run {
+            None => false,
+            Some(run) if run.output == out.id.0 => out.written() == run.end,
+            Some(_) => !out.other && out.untouched(),
+        }
+    }
+
+    /// Note a complete line that is not your prompt for the candidates
+    /// ring.
+    fn note_line(&mut self, raw: &[u8], plain: &str) {
+        self.unrecorded = true;
+        if !plain.trim().is_empty() {
+            // Reuse the buffers, since this runs for every line.
+            let seen = self.last_line.get_or_insert_with(Seen::default);
+            seen.raw.clear();
+            seen.raw.extend_from_slice(raw);
+            seen.plain.clear();
+            seen.plain.push_str(plain);
         }
     }
 
@@ -1421,6 +1610,13 @@ impl Stage {
                 return (region.gen, partial.len());
             }
         }
+        // Held lines painted right after a run of repeated lines follow
+        // the run, as a partial does, so the prompt they start can leave
+        // the run where it is.
+        let follows = match self.held_region {
+            Some(old) => self.run_partial(out, old.gen),
+            None => self.run_open_after(out),
+        };
         let gen = self.next_gen();
         let mut bytes = mark(gen);
         for line in &self.held {
@@ -1434,6 +1630,9 @@ impl Stage {
                 out.push(&bytes);
                 out.closed = true;
             }
+        }
+        if follows {
+            self.run_followed_by(out, gen);
         }
         self.open = None;
         self.unrecorded = true;
@@ -1658,6 +1857,21 @@ impl Stage {
     ) {
         self.sync(out);
         match painted {
+            // The prompt completes a partial painted right after a run of
+            // repeated lines. Its region empties and stays open, so the
+            // next line can still find the run right above it.
+            Some(gen) if before.is_empty() && out.untouched() && self.run_partial(out, gen) => {
+                let empty = self.next_gen();
+                out.replace(gen, mark(empty), false);
+                if let Some(run) = self.run.as_mut() {
+                    run.after = Some(RunAfter {
+                        gen: empty,
+                        empty: true,
+                    });
+                    run.output = out.id.0;
+                    run.end = out.written();
+                }
+            }
             Some(gen) => out.replace(gen, before.to_vec(), !before.is_empty()),
             None => out.text(before),
         }
@@ -1697,16 +1911,179 @@ impl Stage {
             && plain.trim().is_empty()
             && !shows_anything(bytes);
         if !swallowed {
+            // Anything written ends a run of repeated lines. A hidden line
+            // that was never painted writes nothing, so the run goes on.
+            if !bytes.is_empty() || painted.is_some() {
+                self.run = None;
+            }
             write(out, &mut self.open, painted, bytes.to_vec());
         }
-        self.unrecorded = true;
-        if !plain.trim().is_empty() {
-            // Reuse the buffers, since this runs for every line.
-            let seen = self.last_line.get_or_insert_with(Seen::default);
-            seen.raw.clear();
-            seen.raw.extend_from_slice(raw);
-            seen.plain.clear();
-            seen.plain.push_str(plain);
+        self.note_line(raw, plain);
+    }
+
+    /// Write a complete line that is not your prompt while Collapse
+    /// repeated lines is on. `line` is what the Line pass left of it, which
+    /// shows on one row of its own (see [`collapsible`]), and `painted` is
+    /// the region an earlier read painted its start as.
+    ///
+    /// A line that shows the same bytes as the run of repeated lines the
+    /// text ends on joins the run. The run's region is written again in
+    /// place, the line once with the count before it: in this output's
+    /// own bytes or replace when it wrote the run, as the replace of the
+    /// run's region in a later output, or, past a region right after the
+    /// run, as the replace of that region with the run found right above
+    /// it. A renderer that finds the region closed writes the counted line
+    /// on a new row. Any other line starts a run of its own, written as a
+    /// region over `painted` or after everything else.
+    pub fn repeat_line(
+        &mut self,
+        out: &mut Output,
+        raw: &[u8],
+        plain: &str,
+        painted: Option<u64>,
+        line: &[u8],
+    ) -> Repeat {
+        self.sync(out);
+        self.note_line(raw, plain);
+        self.open = None;
+        let joins = self.run_last(out)
+            && self.run.as_ref().is_some_and(|run| {
+                run.line == line
+                    && match run.after {
+                        None => painted.is_none(),
+                        Some(after) if after.empty => painted.is_none(),
+                        // The line completes the partial an earlier read
+                        // painted right after the run.
+                        Some(after) => painted == Some(after.gen) && run.output != out.id.0,
+                    }
+            });
+        if joins {
+            return self.join_run(out);
+        }
+        let gen = self.next_gen();
+        let mut bytes = mark(gen);
+        bytes.extend_from_slice(line);
+        bytes.extend_from_slice(b"\r\n");
+        let place = match painted {
+            Some(old) if out.untouched() => {
+                out.replace(old, bytes, true);
+                RunPlace::Replace
+            }
+            Some(old) => {
+                let len = bytes.len();
+                out.replace(old, bytes, true);
+                RunPlace::Bytes(out.bytes.len() - len)
+            }
+            None => {
+                out.text(&bytes);
+                RunPlace::Bytes(out.bytes.len() - bytes.len())
+            }
+        };
+        self.run = Some(Run {
+            line: line.to_vec(),
+            count: 1,
+            gen,
+            output: out.id.0,
+            end: out.written(),
+            place,
+            held: 0,
+            after: None,
+        });
+        Repeat::Starts
+    }
+
+    /// The next line joins the run of repeated lines, which [`run_last`]
+    /// found is still the last thing written. See [`Stage::repeat_line`].
+    ///
+    /// [`run_last`]: Stage::run_last
+    fn join_run(&mut self, out: &mut Output) -> Repeat {
+        let gen = self.next_gen();
+        let Some(run) = self.run.as_mut() else {
+            return Repeat::Starts;
+        };
+        // What the run shows now, which a renderer finds above the region
+        // after it.
+        let shows = plain_text(&String::from_utf8_lossy(&counted(run.count, &run.line)));
+        run.count += 1;
+        let mut whole = mark(gen);
+        whole.extend(counted(run.count, &run.line));
+        whole.extend_from_slice(b"\r\n");
+        // Without the line ends each renderer keeps back after the run, so
+        // they still follow it.
+        let mut kept = whole.clone();
+        if run.held <= run.line.len() + 2 {
+            kept.truncate(kept.len() - run.held);
+        }
+        let same = run.output == out.id.0;
+        match (run.after, same) {
+            (None, true) => match run.place {
+                RunPlace::Bytes(at) => out.rewrite_from(at, &whole),
+                RunPlace::Replace => out.rewrite_replace(kept),
+            },
+            (None, false) => {
+                out.replace(run.gen, kept, true);
+                run.place = RunPlace::Replace;
+            }
+            (Some(_), true) => {
+                // A pinned prompt in this output emptied the region after
+                // the run, and its replace now writes the run in its place.
+                if let Some(replace) = out.replace.as_mut() {
+                    replace.above = Some(Above {
+                        plain: shows,
+                        bytes: Vec::new(),
+                    });
+                }
+                out.rewrite_replace(whole);
+                run.place = RunPlace::Replace;
+                run.held = 0;
+            }
+            (Some(after), false) => {
+                out.replace(after.gen, whole.clone(), true);
+                if let Some(replace) = out.replace.as_mut() {
+                    replace.above = Some(Above {
+                        plain: shows,
+                        bytes: whole,
+                    });
+                }
+                run.place = RunPlace::Replace;
+                run.held = 0;
+            }
+        }
+        run.gen = gen;
+        run.after = None;
+        run.output = out.id.0;
+        run.end = out.written();
+        Repeat::Joins(run.count)
+    }
+
+    /// True when the partial region `gen` is the one painted right after
+    /// the run of repeated lines, which is still the last thing written.
+    fn run_partial(&self, out: &Output, gen: u64) -> bool {
+        self.run_last(out)
+            && self
+                .run
+                .as_ref()
+                .is_some_and(|run| run.after == Some(RunAfter { gen, empty: false }))
+    }
+
+    /// True when a region written at the cursor now lands right after the
+    /// run of repeated lines: the run is still the last thing written, and
+    /// nothing follows it but the empty region a pinned prompt left.
+    fn run_open_after(&self, out: &Output) -> bool {
+        self.run_last(out)
+            && self
+                .run
+                .as_ref()
+                .is_some_and(|run| run.after.map_or(true, |after| after.empty))
+    }
+
+    /// Note that the region `gen`, a partial or held lines, now follows
+    /// the run of repeated lines.
+    fn run_followed_by(&mut self, out: &Output, gen: u64) {
+        if let Some(run) = self.run.as_mut() {
+            run.after = Some(RunAfter { gen, empty: false });
+            run.output = out.id.0;
+            run.end = out.written();
         }
     }
 
@@ -1728,18 +2105,30 @@ impl Stage {
         match painted {
             Some((gen, len)) if len == raw.len() => Some((gen, len)),
             Some((old, _)) => {
+                // A partial right after a run of repeated lines that grew
+                // still follows the run.
+                let follows = self.run_partial(out, old);
                 let gen = self.next_gen();
                 let mut bytes = mark(gen);
                 bytes.extend_from_slice(raw);
                 out.replace(old, bytes, true);
                 self.open = None;
+                if follows {
+                    self.run_followed_by(out, gen);
+                }
                 Some((gen, raw.len()))
             }
             None if raw.is_empty() => None,
             None => {
+                // A partial painted right after a run of repeated lines
+                // follows the run, so the line it becomes can join it.
+                let follows = self.run_open_after(out);
                 let gen = self.next_gen();
                 out.region(gen, raw);
                 self.open = None;
+                if follows {
+                    self.run_followed_by(out, gen);
+                }
                 Some((gen, raw.len()))
             }
         }
@@ -4582,5 +4971,472 @@ mod tests {
         let mut out = Output::new(false);
         out.replace(3, Vec::new(), false);
         assert!(out.writes_text());
+    }
+
+    // Collapse repeated lines. The lines are the game's own, from `fight.c`
+    // in the server source, with an invented name.
+
+    const DODGE: &[u8] = b"You dodge Quenby's attack.";
+    const PARRY: &[u8] = b"You parry Quenby's attack.";
+
+    /// Region `gen` holding `line` as a run of `count` shows it, with its
+    /// line end.
+    fn run_region(gen: u64, count: u32, line: &[u8]) -> Vec<u8> {
+        with(&[&mark(gen), &counted(count, line), b"\r\n"])
+    }
+
+    /// Offer `line` to `stage` as the session does while Collapse repeated
+    /// lines is on.
+    fn repeat(stage: &mut Stage, out: &mut Output, line: &[u8]) -> Repeat {
+        let plain = String::from_utf8_lossy(line).into_owned();
+        stage.repeat_line(out, line, &plain, None, line)
+    }
+
+    #[test]
+    fn the_count_draws_gray_before_the_line_from_the_second_on() {
+        assert_eq!(counted(1, DODGE), DODGE);
+        assert_eq!(
+            counted(3, DODGE),
+            b"\x1b[38;5;244m(3)\x1b[39m You dodge Quenby's attack."
+        );
+        assert!(collapsible(DODGE));
+        assert!(collapsible(b"\x1b[1;31mYou are hungry.\x1b[0m"));
+        assert!(!collapsible(b""));
+        assert!(!collapsible(b"   \x1b[0m"));
+        assert!(!collapsible(b"one\r\ntwo"));
+        assert!(!collapsible(b"over\rwrite"));
+    }
+
+    #[test]
+    fn repeated_lines_in_one_output_show_once_with_the_count() {
+        let mut stage = Stage::default();
+        let mut out = Output::new(false);
+        out.text(b"You are hungry.\r\n");
+        assert_eq!(repeat(&mut stage, &mut out, DODGE), Repeat::Starts);
+        assert_eq!(
+            out.bytes,
+            with(&[b"You are hungry.\r\n", &run_region(1, 1, DODGE)])
+        );
+        assert_eq!(repeat(&mut stage, &mut out, DODGE), Repeat::Joins(2));
+        assert_eq!(repeat(&mut stage, &mut out, DODGE), Repeat::Joins(3));
+        assert_eq!(
+            out.bytes,
+            with(&[b"You are hungry.\r\n", &run_region(3, 3, DODGE)])
+        );
+        // Another line starts a run of its own.
+        assert_eq!(repeat(&mut stage, &mut out, PARRY), Repeat::Starts);
+        assert_eq!(repeat(&mut stage, &mut out, DODGE), Repeat::Starts);
+        assert_eq!(
+            out.bytes,
+            with(&[
+                b"You are hungry.\r\n",
+                &run_region(3, 3, DODGE),
+                &run_region(4, 1, PARRY),
+                &run_region(5, 1, DODGE),
+            ])
+        );
+        assert_eq!(out.replace, None);
+    }
+
+    #[test]
+    fn a_run_goes_on_in_the_next_output_as_a_replace_of_its_region() {
+        let mut stage = Stage::default();
+        let mut first = Output::new(false);
+        repeat(&mut stage, &mut first, DODGE);
+        stage.finish(&mut first);
+        let mut second = Output::new(false);
+        assert_eq!(repeat(&mut stage, &mut second, DODGE), Repeat::Joins(2));
+        assert_eq!(
+            second.replace,
+            Some(Replace {
+                gen: 1,
+                bytes: run_region(2, 2, DODGE),
+                fresh: true,
+                above: None,
+            })
+        );
+        // Another one in the same output rewrites the replace.
+        assert_eq!(repeat(&mut stage, &mut second, DODGE), Repeat::Joins(3));
+        assert_eq!(
+            second.replace.as_ref().map(|r| &r.bytes),
+            Some(&run_region(3, 3, DODGE))
+        );
+        let leftover = &second.bytes;
+        assert!(leftover.is_empty(), "{leftover:?}");
+        stage.finish(&mut second);
+        let mut third = Output::new(false);
+        assert_eq!(repeat(&mut stage, &mut third, DODGE), Repeat::Joins(4));
+        assert_eq!(third.replace.as_ref().map(|r| r.gen), Some(3));
+        // A line after the replace writes after the run.
+        assert_eq!(repeat(&mut stage, &mut third, PARRY), Repeat::Starts);
+        assert_eq!(third.bytes, run_region(5, 1, PARRY));
+    }
+
+    #[test]
+    fn anything_written_after_the_run_ends_it() {
+        let started = |stage: &mut Stage| {
+            let mut out = Output::new(false);
+            repeat(stage, &mut out, DODGE);
+            stage.finish(&mut out);
+            out
+        };
+        // Your echo, after the output that wrote the run.
+        let mut stage = Stage::default();
+        let out = started(&mut stage);
+        stage.local_write(out.id());
+        assert_eq!(
+            repeat(&mut stage, &mut Output::new(false), DODGE),
+            Repeat::Starts
+        );
+        // An echo the session hears of late, after an output that went on
+        // with the run, leaves it, since the run came after the echo.
+        let mut stage = Stage::default();
+        let out = started(&mut stage);
+        let mut next = Output::new(false);
+        assert_eq!(repeat(&mut stage, &mut next, DODGE), Repeat::Joins(2));
+        stage.finish(&mut next);
+        stage.local_write(out.id());
+        assert_eq!(
+            repeat(&mut stage, &mut Output::new(false), DODGE),
+            Repeat::Joins(3)
+        );
+        // Output from elsewhere, such as a slash command's reply.
+        let mut stage = Stage::default();
+        started(&mut stage);
+        assert_eq!(
+            repeat(&mut stage, &mut Output::new(true), DODGE),
+            Repeat::Starts
+        );
+        // Text in a later output, such as a script's echo.
+        let mut stage = Stage::default();
+        started(&mut stage);
+        let mut echo = Output::new(false);
+        echo.text(b"\r\nYou are hungry.\r\n");
+        stage.finish(&mut echo);
+        assert_eq!(
+            repeat(&mut stage, &mut Output::new(false), DODGE),
+            Repeat::Starts
+        );
+        // Text later in the same output, and before the line in a new one.
+        let mut stage = Stage::default();
+        let mut out = Output::new(false);
+        repeat(&mut stage, &mut out, DODGE);
+        out.text(b"\r\nYou are hungry.\r\n");
+        assert_eq!(repeat(&mut stage, &mut out, DODGE), Repeat::Starts);
+        stage.finish(&mut out);
+        let mut next = Output::new(false);
+        next.text(b"\r\nYou are hungry.\r\n");
+        assert_eq!(repeat(&mut stage, &mut next, DODGE), Repeat::Starts);
+        // A blank line, and a line written while collapse is off.
+        let mut stage = Stage::default();
+        let mut out = Output::new(false);
+        repeat(&mut stage, &mut out, DODGE);
+        stage.line(&mut out, b"", "", None, b"\r\n");
+        assert_eq!(repeat(&mut stage, &mut out, DODGE), Repeat::Starts);
+        stage.line(
+            &mut out,
+            DODGE,
+            "You dodge Quenby's attack.",
+            None,
+            b"You dodge Quenby's attack.\r\n",
+        );
+        assert_eq!(repeat(&mut stage, &mut out, DODGE), Repeat::Starts);
+        // A new connection.
+        let mut stage = Stage::default();
+        started(&mut stage);
+        stage.reset();
+        assert_eq!(
+            repeat(&mut stage, &mut Output::new(false), DODGE),
+            Repeat::Starts
+        );
+    }
+
+    #[test]
+    fn a_hidden_line_and_a_repaint_of_the_band_leave_the_run() {
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        repeat(&mut stage, &mut out, DODGE);
+        stage.line(&mut out, b"spam", "spam", None, b"");
+        assert_eq!(repeat(&mut stage, &mut out, DODGE), Repeat::Joins(2));
+        pin_prompt(&mut stage, &mut out);
+        stage.finish(&mut out);
+        let mut band = Output::new(false);
+        stage.repaint_view(&mut band, View::live(Some("NEW")));
+        assert!(!band.writes_text());
+        let mut next = Output::new(false);
+        stage.line(&mut next, b"spam", "spam", None, b"");
+        assert_eq!(repeat(&mut stage, &mut next, DODGE), Repeat::Joins(3));
+    }
+
+    #[test]
+    fn a_prompt_left_in_the_text_ends_the_run() {
+        let mut stage = stage(JAMES, false);
+        let mut out = Output::new(false);
+        repeat(&mut stage, &mut out, DODGE);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        stage.finish(&mut out);
+        let mut next = Output::new(false);
+        stage.line(&mut next, b"", "", None, b"\r\n");
+        assert_eq!(repeat(&mut stage, &mut next, DODGE), Repeat::Starts);
+        // In the same output too, drawing off.
+        let mut out = Output::new(false);
+        repeat(&mut stage, &mut out, DODGE);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.show(&mut out, block, None, b"", Some(PROMPT.as_bytes()));
+        assert_eq!(repeat(&mut stage, &mut out, DODGE), Repeat::Starts);
+    }
+
+    #[test]
+    fn a_pinned_prompt_between_repeats_leaves_the_run_and_its_held_line_ends() {
+        let mut stage = pinned_stage();
+        let red: &[u8] = b"\x1b[1;31mYou dodge Quenby's attack.\x1b[0m";
+        let shown: &[u8] = b"\x1b[1;31mYou dodge Quenby's attack.";
+        let mut out = Output::new(false);
+        repeat(&mut stage, &mut out, red);
+        pin_prompt(&mut stage, &mut out);
+        // The next pulse in the same read: the empty line writes nothing.
+        stage.line(&mut out, b"", "", None, b"\r\n");
+        assert_eq!(repeat(&mut stage, &mut out, red), Repeat::Joins(2));
+        pin_prompt(&mut stage, &mut out);
+        // The run's color reset and line end wait with the prompt's.
+        assert_eq!(out.bytes, with(&[&mark(2), &counted(2, shown)]));
+        assert_eq!(out.hold, b"\x1b[0m\r\n");
+        stage.finish(&mut out);
+        assert_eq!(out.pin_row, Some(true));
+
+        // The next read rewrites the run without what each renderer holds
+        // back, so the held line ends still follow it.
+        let mut next = Output::new(false);
+        stage.line(&mut next, b"", "", None, b"\r\n");
+        assert_eq!(repeat(&mut stage, &mut next, red), Repeat::Joins(3));
+        pin_prompt(&mut stage, &mut next);
+        assert_eq!(
+            next.replace,
+            Some(Replace {
+                gen: 2,
+                bytes: with(&[&mark(3), &counted(3, shown)]),
+                fresh: true,
+                above: None,
+            })
+        );
+        assert!(next.bytes.is_empty() && next.hold.is_empty());
+        stage.finish(&mut next);
+        assert_eq!(next.pin_row, Some(true));
+
+        // A blank line before the prompt shows, so the next pulse starts a
+        // run of its own.
+        let mut last = Output::new(false);
+        stage.line(&mut last, b"", "", None, b"\r\n");
+        repeat(&mut stage, &mut last, PARRY);
+        stage.line(&mut last, b"", "", None, b"\r\n");
+        pin_prompt(&mut stage, &mut last);
+        stage.finish(&mut last);
+        let mut after = Output::new(false);
+        stage.line(&mut after, b"", "", None, b"\r\n");
+        assert_eq!(repeat(&mut stage, &mut after, PARRY), Repeat::Starts);
+    }
+
+    #[test]
+    fn a_line_a_read_split_joins_the_run_through_the_partial_after_it() {
+        let mut stage = Stage::default();
+        let mut first = Output::new(false);
+        repeat(&mut stage, &mut first, DODGE);
+        let painted = stage.paint_partial(&mut first, b"You dodge Q", None);
+        assert_eq!(painted, Some((2, 11)));
+        stage.finish(&mut first);
+        // The partial grows in a read of its own.
+        let mut second = Output::new(false);
+        let painted = stage.paint_partial(&mut second, b"You dodge Quenby", painted);
+        assert_eq!(painted, Some((3, 16)));
+        stage.finish(&mut second);
+        let mut third = Output::new(false);
+        let made = stage.repeat_line(
+            &mut third,
+            DODGE,
+            "You dodge Quenby's attack.",
+            Some(3),
+            DODGE,
+        );
+        assert_eq!(made, Repeat::Joins(2));
+        // The replace of the partial finds the run right above it and
+        // writes the run there. A renderer that finds no run there writes
+        // it over the partial.
+        let whole = run_region(4, 2, DODGE);
+        assert_eq!(
+            third.replace,
+            Some(Replace {
+                gen: 3,
+                bytes: whole.clone(),
+                fresh: true,
+                above: Some(Above {
+                    plain: "You dodge Quenby's attack.".into(),
+                    bytes: whole,
+                }),
+            })
+        );
+        assert_eq!(repeat(&mut stage, &mut third, DODGE), Repeat::Joins(3));
+        let whole = run_region(5, 3, DODGE);
+        assert_eq!(third.replace.as_ref().map(|r| &r.bytes), Some(&whole));
+        assert_eq!(
+            third
+                .replace
+                .as_ref()
+                .and_then(|r| r.above.as_ref())
+                .map(|a| &a.bytes),
+            Some(&whole)
+        );
+        // A partial that becomes another line ends the run.
+        stage.finish(&mut third);
+        let mut fourth = Output::new(false);
+        let painted = stage.paint_partial(&mut fourth, b"You parry", None);
+        stage.finish(&mut fourth);
+        let mut fifth = Output::new(false);
+        let made = stage.repeat_line(
+            &mut fifth,
+            PARRY,
+            "You parry Quenby's attack.",
+            painted.map(|(gen, _)| gen),
+            PARRY,
+        );
+        assert_eq!(made, Repeat::Starts);
+        assert_eq!(
+            fifth.replace.as_ref().map(|r| r.above.is_none()),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn a_pinned_prompt_a_read_split_keeps_an_empty_region_after_the_run() {
+        let mut stage = pinned_stage();
+        let mut first = Output::new(false);
+        repeat(&mut stage, &mut first, DODGE);
+        let painted = stage.paint_partial(&mut first, b"[1020/1020hp 8", None);
+        stage.finish(&mut first);
+        // The prompt it completes leaves the text, and its region stays
+        // open with nothing in it.
+        let mut second = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.pin_drawn(
+            &mut second,
+            block,
+            painted.map(|(gen, _)| gen),
+            b"",
+            "DRAWN",
+        );
+        assert_eq!(
+            second.replace,
+            Some(Replace {
+                gen: 2,
+                bytes: mark(3),
+                fresh: false,
+                above: None,
+            })
+        );
+        // The next pulse in the same read writes the run where the region
+        // was, with the run found right above it.
+        stage.line(&mut second, b"", "", None, b"\r\n");
+        assert_eq!(repeat(&mut stage, &mut second, DODGE), Repeat::Joins(2));
+        let whole = run_region(4, 2, DODGE);
+        assert_eq!(
+            second.replace,
+            Some(Replace {
+                gen: 2,
+                bytes: whole.clone(),
+                fresh: true,
+                above: Some(Above {
+                    plain: "You dodge Quenby's attack.".into(),
+                    bytes: whole,
+                }),
+            })
+        );
+        pin_prompt(&mut stage, &mut second);
+        stage.finish(&mut second);
+        assert_eq!(second.pin_row, Some(true));
+
+        // The same in the next read.
+        let mut stage = pinned_stage();
+        let mut first = Output::new(false);
+        repeat(&mut stage, &mut first, DODGE);
+        let painted = stage.paint_partial(&mut first, b"[1020/1020hp 8", None);
+        stage.finish(&mut first);
+        let mut second = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.pin_drawn(
+            &mut second,
+            block,
+            painted.map(|(gen, _)| gen),
+            b"",
+            "DRAWN",
+        );
+        stage.finish(&mut second);
+        let mut third = Output::new(false);
+        stage.line(&mut third, b"", "", None, b"\r\n");
+        assert_eq!(repeat(&mut stage, &mut third, DODGE), Repeat::Joins(2));
+        let whole = run_region(4, 2, DODGE);
+        assert_eq!(
+            third.replace,
+            Some(Replace {
+                gen: 3,
+                bytes: whole.clone(),
+                fresh: true,
+                above: Some(Above {
+                    plain: "You dodge Quenby's attack.".into(),
+                    bytes: whole,
+                }),
+            })
+        );
+
+        // A prompt that leaves the text with echoes before it ends the
+        // run, and its region goes as it always went.
+        let mut stage = pinned_stage();
+        let mut first = Output::new(false);
+        repeat(&mut stage, &mut first, DODGE);
+        let painted = stage.paint_partial(&mut first, b"[1020/1020hp 8", None);
+        stage.finish(&mut first);
+        let mut second = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.pin_drawn(
+            &mut second,
+            block,
+            painted.map(|(gen, _)| gen),
+            b"low on mana\r\n",
+            "DRAWN",
+        );
+        assert_eq!(second.replace.as_ref().map(|r| r.fresh), Some(true));
+        stage.line(&mut second, b"", "", None, b"\r\n");
+        assert_eq!(repeat(&mut stage, &mut second, DODGE), Repeat::Starts);
+    }
+
+    #[test]
+    fn held_lines_a_read_split_after_the_run_leave_it_whole() {
+        // The PROMPT the fake Aabahran prints, whose tank line comes on a
+        // line of its own before the vitals.
+        let mut stage = Stage::default();
+        stage.set_capture(&CaptureConfig::Aabahran(crate::config::AabahranCapture {
+            prompt: "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c".to_string(),
+            ..crate::config::AabahranCapture::default()
+        }));
+        stage.set_show(PromptShow::Pinned);
+        let mut first = Output::new(false);
+        repeat(&mut stage, &mut first, DODGE);
+        // The tank line starts your prompt, and the read ends before the
+        // rest, so it paints right after the run.
+        let tank = "Tester: [===|===|===|---]";
+        let offered = stage.offer(tank.as_bytes(), tank, None, End::Line);
+        assert_eq!(offered.offer, Offer::Held);
+        stage.end_read(&mut first);
+        stage.finish(&mut first);
+        // The prompt that finishes it leaves the text with it.
+        let mut second = Output::new(false);
+        let offered = stage.offer(PROMPT.as_bytes(), PROMPT, None, End::Line);
+        let Offer::Prompt(block, painted) = offered.offer else {
+            panic!("the prompt");
+        };
+        assert_eq!(painted, Some(2));
+        stage.pin_drawn(&mut second, block, painted, b"", "DRAWN");
+        assert_eq!(second.replace.as_ref().map(|r| &r.bytes), Some(&mark(3)));
+        stage.line(&mut second, b"", "", None, b"\r\n");
+        assert_eq!(repeat(&mut stage, &mut second, DODGE), Repeat::Joins(2));
     }
 }
