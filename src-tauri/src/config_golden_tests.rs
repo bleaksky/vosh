@@ -466,6 +466,26 @@ fn full_triggers() -> Vec<Trigger> {
             group: None,
             target: TriggerTarget::Line,
         },
+        // A Room trigger, which goes under `room_triggers` (D14).
+        Trigger {
+            name: "room-items".into(),
+            patterns: vec![TriggerPattern {
+                pattern: "^.+$".into(),
+                enabled: true,
+            }],
+            priority: 4,
+            enabled: true,
+            actions: vec![TriggerAction::Highlight {
+                style: HighlightStyle {
+                    fg: Some(NamedColor::Yellow),
+                    base: true,
+                    ..HighlightStyle::default()
+                },
+            }],
+            preset: None,
+            group: None,
+            target: TriggerTarget::Room,
+        },
     ]
 }
 
@@ -956,4 +976,110 @@ fn a_catalog_without_enabled_presets_still_loads() {
     );
     let leftover = &catalog.macros;
     assert!(leftover.is_empty(), "{leftover:?}");
+}
+
+// ---- Rolling back (D14).
+
+/// A trigger as 0.8.0 and 0.7.2 read it. Their target knows `line` and
+/// `prompt` and nothing else, and a `room` fails the whole file. They
+/// skip every key they do not know.
+#[derive(serde::Deserialize)]
+struct OldTrigger {
+    #[serde(default)]
+    target: OldTarget,
+}
+
+#[derive(serde::Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+enum OldTarget {
+    #[default]
+    Line,
+    Prompt,
+}
+
+/// The triggers of any config file, as those builds read them.
+#[derive(serde::Deserialize)]
+struct OldTriggers {
+    #[serde(default)]
+    triggers: Vec<OldTrigger>,
+}
+
+/// The triggers 0.8.0 reads in `text`, or why it fails the file.
+fn old_build_reads(text: &str) -> Result<Vec<OldTrigger>, toml::de::Error> {
+    toml::from_str::<OldTriggers>(text).map(|file| file.triggers)
+}
+
+/// The names of the Room triggers in `triggers`.
+fn room_names(triggers: &[Trigger]) -> Vec<&str> {
+    triggers
+        .iter()
+        .filter(|t| t.target == TriggerTarget::Room)
+        .map(|t| t.name.as_str())
+        .collect()
+}
+
+#[test]
+fn every_golden_still_reads_in_0_8_0_with_line_and_prompt_targets_only() {
+    for name in GOLDENS {
+        let text = read(&Path::new(DIR).join(name));
+        if let Err(e) = old_build_reads(&text) {
+            panic!("0.8.0 fails fixtures/config/{name}: {e}");
+        }
+    }
+    // The full files hold a Room trigger, which 0.8.0 never sees, and
+    // this build reads back.
+    let full = read(&Path::new(DIR).join("profile.full.toml"));
+    assert!(full.contains("[[room_triggers]]"), "{full}");
+    let old = old_build_reads(&full).unwrap();
+    assert_eq!(old.len(), 2);
+    assert!(matches!(old[0].target, OldTarget::Prompt));
+    assert!(matches!(old[1].target, OldTarget::Line));
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("default.toml");
+    std::fs::write(&path, &full).unwrap();
+    let loaded = ProfileConfig::load(&path).unwrap();
+    assert_eq!(room_names(&loaded.triggers), ["room-items"]);
+    let catalog = read(&Path::new(DIR).join("catalog.full.toml"));
+    assert!(catalog.contains("[[room_triggers]]"), "{catalog}");
+    assert_eq!(old_build_reads(&catalog).unwrap().len(), 2);
+}
+
+#[test]
+fn the_room_and_time_colors_preset_saves_where_0_8_0_still_reads_the_file() {
+    #[derive(serde::Deserialize)]
+    struct PresetFile {
+        triggers: Vec<Trigger>,
+    }
+    let preset: PresetFile =
+        serde_json::from_str(include_str!("../../fixtures/room-colors/preset.json")).unwrap();
+    let mut profile = crate::profile::Profile::default();
+    for trigger in preset.triggers {
+        profile.triggers.set(trigger).unwrap();
+    }
+    assert_eq!(room_names(&profile.triggers.list()), ["room.contents"]);
+
+    // The profile file of per profile mode.
+    let text = profile_bytes(&ProfileConfig::from_profile(&profile));
+    let old = old_build_reads(&text).unwrap_or_else(|e| panic!("0.8.0 reads it: {e}\n{text}"));
+    assert_eq!(old.len(), 3, "the exits, time of day and WiZNET triggers");
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("default.toml");
+    std::fs::write(&path, &text).unwrap();
+    let loaded = ProfileConfig::load(&path).unwrap();
+    assert_eq!(room_names(&loaded.triggers), ["room.contents"]);
+    assert_eq!(loaded.triggers.len(), 4);
+
+    // catalog.toml in loadout mode.
+    let text = catalog_bytes(&GlobalCatalog::from_profile(&profile));
+    assert_eq!(
+        old_build_reads(&text)
+            .unwrap_or_else(|e| panic!("0.8.0 reads it: {e}\n{text}"))
+            .len(),
+        3
+    );
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(catalog_path(dir.path()), &text).unwrap();
+    let loaded = load_global_catalog(dir.path()).unwrap();
+    assert_eq!(room_names(&loaded.triggers), ["room.contents"]);
+    assert_eq!(loaded.triggers.len(), 4);
 }

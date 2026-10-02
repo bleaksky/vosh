@@ -72,6 +72,24 @@ enabled = true
 [[triggers.actions]]
 kind = "gag"
 
+[[room_triggers]]
+name = "room-items"
+pattern = "^.+$"
+priority = 4
+enabled = true
+target = "room"
+
+[[room_triggers.patterns]]
+pattern = "^.+$"
+enabled = true
+
+[[room_triggers.actions]]
+kind = "highlight"
+
+[room_triggers.actions.style]
+fg = "yellow"
+base = true
+
 [[macros]]
 key = "F1"
 command = "score"

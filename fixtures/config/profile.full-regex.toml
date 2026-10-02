@@ -75,6 +75,24 @@ enabled = true
 [[triggers.actions]]
 kind = "gag"
 
+[[room_triggers]]
+name = "room-items"
+pattern = "^.+$"
+priority = 4
+enabled = true
+target = "room"
+
+[[room_triggers.patterns]]
+pattern = "^.+$"
+enabled = true
+
+[[room_triggers.actions]]
+kind = "highlight"
+
+[room_triggers.actions.style]
+fg = "yellow"
+base = true
+
 [tick]
 enabled = false
 interval_secs = 45
