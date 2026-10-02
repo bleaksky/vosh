@@ -2950,7 +2950,10 @@ pub(crate) struct ScrollbackLoad {
     pub seeded_native: bool,
 }
 
+/// The Settings payload. Every field falls back to the default a fresh
+/// profile has, so a page that leaves one out still saves (D12).
 #[derive(serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub(crate) struct UiConfigPayload {
     pub theme: String,
     pub follow_system_appearance: bool,
@@ -2991,6 +2994,12 @@ pub(crate) struct UiConfigPayload {
     /// backend) applies.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation: Option<u64>,
+}
+
+impl Default for UiConfigPayload {
+    fn default() -> Self {
+        Self::from_ui(&crate::profile_config::UiConfig::default())
+    }
 }
 
 impl UiConfigPayload {
@@ -4704,6 +4713,22 @@ mod tests {
             ..vosh_prompt::PromptConfig::default()
         });
         p
+    }
+
+    #[test]
+    fn a_settings_payload_that_leaves_fields_out_still_reads() {
+        let mut json = serde_json::to_value(UiConfigPayload::default()).unwrap();
+        let fields = json.as_object_mut().unwrap();
+        fields.remove("font_size");
+        fields.remove("theme");
+        fields.insert("font_family".into(), "Iosevka".into());
+        let payload: UiConfigPayload = serde_json::from_value(json).unwrap();
+        let defaults = crate::profile_config::UiConfig::default();
+        assert_eq!(payload.font_family, "Iosevka");
+        assert_eq!(payload.font_size, defaults.font_size);
+        assert_eq!(payload.theme, defaults.theme);
+        let empty: UiConfigPayload = serde_json::from_str("{}").unwrap();
+        assert_eq!(empty.font_size, defaults.font_size);
     }
 
     #[test]
