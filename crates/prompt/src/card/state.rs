@@ -5,7 +5,7 @@
 use serde::Serialize;
 
 use crate::design::{FieldRef, Format};
-use crate::engine::StatusReport;
+use crate::engine::{PromptEngine, StatusReport};
 use crate::render::{Span, Values};
 use crate::values::format::{Resolved, Value};
 use crate::values::{self, Entry, Group, Kind, Source, Vars, Vosh, CATALOG};
@@ -85,6 +85,44 @@ pub struct PromptState {
     pub open_row: Option<OpenRowState>,
     /// The GMCP packages that came this session, for More from the game.
     pub packages: Vec<String>,
+}
+
+// The engine's state is what the card receives, so it is built here
+// beside the types it fills, and the engine never imports them.
+impl PromptEngine {
+    /// Everything the card reads about your prompt now, for
+    /// `prompt_state_get` and `session://prompt-state`: each field with its
+    /// state and source, the status, the new build sign and the open row
+    /// with where each piece of the design landed in it.
+    pub fn state(&self, vosh: &Vosh) -> PromptState {
+        let reads = self
+            .stage
+            .recognizer()
+            .map(crate::capture::Recognizer::reads)
+            .unwrap_or_default();
+        PromptState {
+            catalog: catalog(&self.vars, vosh, &reads),
+            status: self.status_report(),
+            new_build: self.vars.new_build(),
+            forsaken: self.forsaken(),
+            open_row: self.stage.open_row().map(|open| {
+                let block = self.stage.last_raw();
+                let replaced = block.map(|b| b.replaced.clone()).unwrap_or_default();
+                OpenRowState {
+                    gen: open.gen,
+                    spans: open.spans.clone(),
+                    plain: open.plain.clone(),
+                    raw_lines: replaced
+                        .iter()
+                        .filter_map(|i| block.and_then(|b| b.lines.get(*i)))
+                        .map(|line| line.plain.clone())
+                        .collect(),
+                    raw_from: replaced.first().copied().unwrap_or(0),
+                }
+            }),
+            packages: self.vars.gmcp().packages().map(str::to_string).collect(),
+        }
+    }
 }
 
 /// Every catalog field and every name only scripts set, with its state

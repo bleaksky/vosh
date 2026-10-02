@@ -19,13 +19,12 @@ use chrono::{DateTime, FixedOffset, SecondsFormat};
 use serde_json::Value as Json;
 
 use crate::aabahran::Who;
-use crate::card::state::{OpenRowState, PromptState};
 use crate::config::PromptConfig;
 use crate::design::Template;
 use crate::stage::Stage;
 use crate::values::gmcp::{Observed, CHAR_STATE, CHAR_STATUS};
 use crate::values::overrides::PromptPreview;
-use crate::values::{forsaken_lands, Vars, Vosh};
+use crate::values::{forsaken_lands, Vars};
 
 use char_prompt::Kept;
 use replies::Observer;
@@ -194,40 +193,6 @@ impl PromptEngine {
             self.seen.push(seen);
         }
         observed
-    }
-
-    /// Everything the card reads about your prompt now, for
-    /// `prompt_state_get` and `session://prompt-state`: each field with its
-    /// state and source, the status, the new build sign and the open row
-    /// with where each piece of the design landed in it.
-    pub fn state(&self, vosh: &Vosh) -> PromptState {
-        let reads = self
-            .stage
-            .recognizer()
-            .map(crate::capture::Recognizer::reads)
-            .unwrap_or_default();
-        PromptState {
-            catalog: crate::card::state::catalog(&self.vars, vosh, &reads),
-            status: self.status_report(),
-            new_build: self.vars.new_build(),
-            forsaken: self.forsaken(),
-            open_row: self.stage.open_row().map(|open| {
-                let block = self.stage.last_raw();
-                let replaced = block.map(|b| b.replaced.clone()).unwrap_or_default();
-                OpenRowState {
-                    gen: open.gen,
-                    spans: open.spans.clone(),
-                    plain: open.plain.clone(),
-                    raw_lines: replaced
-                        .iter()
-                        .filter_map(|i| block.and_then(|b| b.lines.get(*i)))
-                        .map(|line| line.plain.clone())
-                        .collect(),
-                    raw_from: replaced.first().copied().unwrap_or(0),
-                }
-            }),
-            packages: self.vars.gmcp().packages().map(str::to_string).collect(),
-        }
     }
 
     /// Who the prompt is for.

@@ -4,7 +4,7 @@ use crate::config::{AabahranCapture, CaptureConfig, CaptureSource, RegexCapture}
 use crate::stage::End;
 use crate::testkit::at;
 use crate::testkit::mud::PROMPT;
-use crate::values::Capture;
+use crate::values::{Capture, Vosh};
 use serde_json::json;
 
 fn aabahran() -> PromptConfig {
