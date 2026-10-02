@@ -546,8 +546,11 @@ pub(crate) fn refresh_target_idx(profile: &mut Profile) {
         }
     };
     // Mirror the user target into the variable store so `${target}`
-    // works in alias expansions. Char.Combat's `target_name` stays
-    // separate (it's the server-confirmed combat target).
+    // works in alias expansions and Lua `mud.var("target")` reads it.
+    // Clearing the target removes the variable rather than leaving it
+    // empty, so an alias that names it keeps the token as typed.
+    // Char.Combat's `target_name` stays separate (it's the
+    // server-confirmed combat target).
     if let Some(name) = &profile.target.name {
         profile.vars.set(Scope::Session, "target", name.clone());
     } else {
@@ -558,24 +561,6 @@ pub(crate) fn refresh_target_idx(profile: &mut Profile) {
 pub(crate) fn set_room_chars(profile: &mut Profile, chars: Vec<RoomChar>) {
     profile.room_chars = chars;
     refresh_target_idx(profile);
-}
-
-/// Mirror `profile.target.name` into a session var named `target` so
-/// `${target}` interpolation in alias / trigger templates and Lua
-/// `mud.var("target")` resolve to the live target. Called by every
-/// path that sets or clears `profile.target.name`. Removing the var
-/// when the target clears (rather than leaving an empty string)
-/// matches the alias engine's "unknown var → leave the token
-/// alone" semantics.
-fn sync_target_var(profile: &mut Profile) {
-    match profile.target.name.clone() {
-        Some(name) => {
-            profile.vars.set(Scope::Session, "target", name);
-        }
-        None => {
-            profile.vars.remove("target");
-        }
-    }
 }
 
 fn run_target_set(profile: &mut Profile, args: &str) -> InputResult {
@@ -596,7 +581,6 @@ fn run_target_set(profile: &mut Profile, args: &str) -> InputResult {
         let name = profile.room_chars[n - 1].name.clone();
         profile.target.name = Some(name.clone());
         refresh_target_idx(profile);
-        sync_target_var(profile);
         return echo_one(format!("target: {name}"));
     }
     // Non-numeric → use the literal string the user typed. The MUD
@@ -607,7 +591,6 @@ fn run_target_set(profile: &mut Profile, args: &str) -> InputResult {
     // marker on the room chip but don't substitute the name.
     profile.target.name = Some(arg.to_string());
     refresh_target_idx(profile);
-    sync_target_var(profile);
     if profile.target.room_idx.is_some() {
         echo_one(format!("target: {arg}"))
     } else {
@@ -642,7 +625,6 @@ fn run_target_cycle(profile: &mut Profile, step: i32) -> InputResult {
     let name = profile.room_chars[(next - 1) as usize].name.clone();
     profile.target.name = Some(name.clone());
     refresh_target_idx(profile);
-    sync_target_var(profile);
     echo_one(format!("target: {name} (#{next}/{count})"))
 }
 
@@ -652,7 +634,6 @@ fn run_target_clear(profile: &mut Profile) -> InputResult {
     }
     profile.target.name = None;
     refresh_target_idx(profile);
-    sync_target_var(profile);
     echo_one("target cleared".to_string())
 }
 
