@@ -169,45 +169,6 @@ impl PromptConfig {
         self.template = DEFAULT_DESIGN.to_string();
         true
     }
-
-    /// Take the switch and the template a Settings save carries, each
-    /// only when it differs from what this table holds, so a save that
-    /// carries them unchanged leaves the table alone. Turning drawing on
-    /// with no design takes Vosh's default, [`DEFAULT_DESIGN`]. Returns
-    /// whether either changed. Nothing calls it since the Settings
-    /// payload dropped the prompt fields, and it is listed for James with
-    /// the prompt editor's orphans.
-    pub fn take_switch_and_template(&mut self, draw: bool, template: &str) -> bool {
-        let turned_on = draw && !self.draw;
-        let mut changed = false;
-        if self.draw != draw {
-            self.draw = draw;
-            changed = true;
-        }
-        if self.template != template {
-            self.template = template.to_string();
-            changed = true;
-        }
-        if turned_on && self.template.is_empty() {
-            self.template = DEFAULT_DESIGN.to_string();
-        }
-        changed
-    }
-
-    /// Take where your prompt shows from a Settings save, when it differs
-    /// from what this table holds. A name this build does not know
-    /// changes nothing. Returns whether it changed. Nothing calls it since
-    /// the Settings payload dropped the prompt fields, and it is listed
-    /// for James with the prompt editor's orphans.
-    pub fn take_show(&mut self, show: &str) -> bool {
-        match PromptShow::parse(show) {
-            Some(show) if show != self.show => {
-                self.show = show;
-                true
-            }
-            _ => false,
-        }
-    }
 }
 
 /// `[prompt.capture]`, how Vosh reads the game's prompt. The `kind` key
@@ -483,54 +444,6 @@ mod tests {
     }
 
     #[test]
-    fn a_settings_save_takes_only_what_changed() {
-        let capture = CaptureConfig::Regex(RegexCapture {
-            lines: vec!["x".into()],
-            ..RegexCapture::default()
-        });
-        let newer = PromptConfig {
-            draw: true,
-            template: "%hp".into(),
-            previous_templates: vec![JAMES.into()],
-            capture: capture.clone(),
-            show: PromptShow::Pinned,
-        };
-        let mut config = newer.clone();
-        assert!(!config.take_switch_and_template(true, "%hp"));
-        assert_eq!(config, newer);
-
-        assert!(config.take_switch_and_template(false, "%hp"));
-        assert!(!config.draw);
-        assert_eq!(config.template, "%hp");
-        assert_eq!(config.previous_templates, [JAMES]);
-        assert_eq!(config.capture, capture);
-
-        assert!(config.take_switch_and_template(false, "%mana"));
-        assert_eq!(config.template, "%mana");
-        assert_eq!(config.capture, capture);
-    }
-
-    #[test]
-    fn turning_drawing_on_with_no_design_takes_the_default() {
-        let mut config = PromptConfig::default();
-        assert!(config.take_switch_and_template(true, ""));
-        assert!(config.draw);
-        assert_eq!(config.template, DEFAULT_DESIGN);
-        let leftover = &config.previous_templates;
-        assert!(leftover.is_empty(), "{leftover:?}");
-
-        // The same save the window sends again changes nothing.
-        let mut again = config.clone();
-        assert!(!again.take_switch_and_template(true, DEFAULT_DESIGN));
-        assert_eq!(again, config);
-
-        // A design of your own stays as it is.
-        let mut yours = PromptConfig::from_legacy(false, JAMES);
-        assert!(yours.take_switch_and_template(true, JAMES));
-        assert_eq!(yours.template, JAMES);
-    }
-
-    #[test]
     fn a_fresh_profile_holds_the_default_design_and_draws_nothing_yet() {
         let fresh = PromptConfig::fresh();
         assert!(!fresh.draw);
@@ -548,11 +461,6 @@ mod tests {
         );
         let back: PromptConfig = serde_json::from_value(json).unwrap();
         assert_eq!(back, fresh);
-
-        // Turning drawing on draws it.
-        let mut on = fresh.clone();
-        assert!(on.take_switch_and_template(true, DEFAULT_DESIGN));
-        assert_eq!(on.template, DEFAULT_DESIGN);
     }
 
     #[test]
@@ -637,24 +545,6 @@ mod tests {
     }
 
     #[test]
-    fn only_turning_drawing_on_fills_an_empty_design() {
-        // Drawing already on: clearing the field to type a new design
-        // leaves it empty.
-        let mut config = PromptConfig::from_legacy(true, "%hp");
-        assert!(config.take_switch_and_template(true, ""));
-        assert_eq!(config.template, "");
-        assert!(!config.take_switch_and_template(true, ""));
-        assert_eq!(config.template, "");
-
-        // Drawing off: an empty design stays empty until you turn it on.
-        let mut config = PromptConfig::from_legacy(true, "%hp");
-        assert!(config.take_switch_and_template(false, ""));
-        assert_eq!(config.template, "");
-        assert!(config.take_switch_and_template(true, ""));
-        assert_eq!(config.template, DEFAULT_DESIGN);
-    }
-
-    #[test]
     fn where_your_prompt_shows_defaults_to_the_text_and_writes_nothing() {
         let config: PromptConfig = serde_json::from_str("{}").unwrap();
         assert_eq!(config.show, PromptShow::Text);
@@ -698,19 +588,5 @@ mod tests {
         }
         let config: PromptConfig = serde_json::from_str(r#"{"show":"Pinned"}"#).unwrap();
         assert_eq!(config.show, PromptShow::Pinned);
-    }
-
-    #[test]
-    fn a_settings_save_takes_where_your_prompt_shows_only_when_it_differs() {
-        let mut config = PromptConfig::from_legacy(true, "%hp");
-        assert!(!config.take_show("text"));
-        assert!(config.take_show("pinned"));
-        assert_eq!(config.show, PromptShow::Pinned);
-        assert!(!config.take_show("pinned"));
-        assert!(!config.take_show("sideways"));
-        assert_eq!(config.show, PromptShow::Pinned);
-        assert!(config.take_show("lifted"));
-        assert_eq!(config.show, PromptShow::Lifted);
-        assert_eq!(config.template, "%hp");
     }
 }
