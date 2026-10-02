@@ -40,6 +40,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The frame never scrolls, here or in Help, which wears it too. A box
+   with overflow hidden still scrolls from script, and a search hit once
+   slid the whole Help window up that way. Clip refuses it wherever the
+   web view knows clip, and hidden above holds everywhere else. */
+@supports (overflow: clip) {
+  .st-app {
+    overflow: clip;
+  }
+}
+
 :root[data-appearance='light'] .st-app,
 :root[data-appearance='light'] .st-controls {
   --st-fill: #ffffff;
