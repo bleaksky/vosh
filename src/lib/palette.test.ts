@@ -403,6 +403,8 @@ describe('theme order', () => {
       'Catppuccin',
       'Classic Vivid',
       'Dracula at Night',
+      'Everforest Dark',
+      'Everforest Light',
       'High Contrast',
       'Kanso Zen',
       'Monokai',

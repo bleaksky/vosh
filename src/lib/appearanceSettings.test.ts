@@ -147,14 +147,17 @@ describe('pairChoices', () => {
       'Rosé Pine',
       'Tokyo Night',
     ]);
+    expect(dark).toContain('Everforest Dark');
     expect(dark).not.toContain('Vellum');
     expect(dark).toContain('Solarized Dark');
+    expect(dark).not.toContain('Everforest Light');
     expect(dark).not.toContain('Solarized Light');
   });
 
   it('lists the light themes', () => {
     expect(pairChoices(themes, 'light', 'vellum').map((c) => c.value)).toEqual([
       'vellum',
+      'everforest-light',
       'solarized-light',
     ]);
   });
@@ -203,13 +206,15 @@ describe('stepGalleryTheme', () => {
   });
 
   it('steps between the light themes while follow is on', () => {
-    expect(stepGalleryTheme(themes, 'vellum', 1, 'light')).toBe('solarized-light');
+    expect(stepGalleryTheme(themes, 'vellum', 1, 'light')).toBe('everforest-light');
+    expect(stepGalleryTheme(themes, 'everforest-light', 1, 'light')).toBe('solarized-light');
     expect(stepGalleryTheme(themes, 'solarized-light', 1, 'light')).toBe('vellum');
     expect(stepGalleryTheme(themes, 'vellum', -1, 'light')).toBe('solarized-light');
+    expect(stepGalleryTheme(themes, 'everforest-light', -1, 'light')).toBe('vellum');
   });
 
   it('stays put when no other theme has that appearance', () => {
-    const oneLight = themes.filter((t) => t.id !== 'solarized-light');
+    const oneLight = ['nord', 'vellum', 'gruvbox'].map((id) => findTheme(id));
     expect(stepGalleryTheme(oneLight, 'vellum', 1, 'light')).toBe('vellum');
   });
 
