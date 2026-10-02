@@ -9,6 +9,8 @@
 //!   session's variables together.
 //! - [`capture`] reads patterns you point at, and the capture triggers
 //!   older builds used, into a capture.
+//!   - [`capture::generic`] builds a capture from a line another game
+//!     prints.
 //! - [`design`] is the template language. It parses a design into tokens
 //!   and the pieces the editor shows, writes tokens back as text, and
 //!   holds the look algebra the editor uses to keep each piece's look.
@@ -16,7 +18,6 @@
 //!   look of every other piece.
 //! - [`describe`] says what each piece and token of a design is, for the
 //!   card, with the forms a value takes.
-//! - [`generic`] builds a capture from a line another game prints.
 //! - [`values`] holds the catalog of fields and their samples, the
 //!   session's sources and the resolver that answers the renderer, with
 //!   the hidden model.
@@ -59,7 +60,6 @@ pub mod testkit;
 pub mod values;
 pub mod wrap;
 
-pub use capture::generic;
 pub use config::{CaptureConfig, PromptConfig, PromptShow};
 pub use design::{FieldRef, Template};
 pub use engine::{GamePromptSeen, PromptEngine, Status};

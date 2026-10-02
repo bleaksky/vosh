@@ -3,9 +3,9 @@
 
 use std::collections::BTreeMap;
 
+use vosh_prompt::capture::generic::{from_line, Generic};
 use vosh_prompt::capture::{fills, Recognizer};
 use vosh_prompt::config::CaptureConfig;
-use vosh_prompt::generic::{from_line, Generic};
 
 fn generic(line: &str, names: &[&str]) -> Generic {
     let names: Vec<String> = names.iter().map(|s| (*s).to_string()).collect();
