@@ -6,7 +6,7 @@ import { profileDisplayName } from './characterProfiles';
 
 export { profileDisplayName };
 
-/** The possessive of a profile's display name, like `Erelei's`. */
+/** The possessive of a profile's display name, like `Ilsabet's`. */
 export function profilePossessive(name: string): string {
   return `${profileDisplayName(name)}'s`;
 }

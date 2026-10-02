@@ -386,8 +386,8 @@ pub(crate) async fn profile_toml(state: &SharedState, name: &str) -> Result<Stri
     })
 }
 
-/// Where an export of `name` lands in `dir`: `Erelei profile.toml`,
-/// or `Erelei profile (2).toml` and on when that file is there, so an
+/// Where an export of `name` lands in `dir`: `Ilsabet profile.toml`,
+/// or `Ilsabet profile (2).toml` and on when that file is there, so an
 /// export never replaces a file you already have.
 pub(crate) fn export_path(dir: &Path, name: &str) -> PathBuf {
     let stem = format!("{} profile", display_name(name));

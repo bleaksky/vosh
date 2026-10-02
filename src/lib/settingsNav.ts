@@ -2,7 +2,7 @@
 // so localStorage, the goto event, and palette Recent ids need no
 // migration. The grammar is `group`, `group:section`, and
 // `group:section#anchor`, with `group#anchor` when no section applies.
-// For example `automation:macros` or `characters:Erelei#tracked`.
+// For example `automation:macros` or `characters:Ilsabet#tracked`.
 // Every tab id the old Settings window used still resolves.
 
 export type SettingsGroup =

@@ -9,7 +9,7 @@ export type ChatDirection = 'sent' | 'received';
 export interface ChatLine {
   /** The channel, or the pane a trigger route names. */
   pane: string;
-  /** Who spoke, as the game names them to you: `Selune`, `someone`,
+  /** Who spoke, as the game names them to you: `Tolliver`, `someone`,
    *  `a Blackwatch villager`. On a tell you send, who it went to.
    *  Null on a routed line, which keeps its own wording. */
   speaker: string | null;
@@ -64,7 +64,7 @@ export function parseCommChannel(data: unknown, ts: number = Date.now()): ChatLi
 }
 
 // The line the game prints for a tell you send (languages.c
-// compose_tell): `You tell Selune 'text'`, with ` in Elvish` before the
+// compose_tell): `You tell Tolliver 'text'`, with ` in Elvish` before the
 // quote when you spoke anything but common, and `You project to` for a
 // telepath. The recipient can run to several words, `a city guard`. A
 // group tell you send prints the same way to `your group`

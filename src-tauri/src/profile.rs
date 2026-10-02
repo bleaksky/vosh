@@ -145,7 +145,7 @@ pub(crate) struct MacroRecorder {
 
 #[derive(Debug, Clone)]
 pub(crate) struct TargetState {
-    /// User-selected target name, e.g. "The Baron Helgardium". Empty
+    /// User-selected target name, e.g. "The Baron Grisvald". Empty
     /// when no target is set. Session-only — cleared on disconnect.
     pub(crate) name: Option<String>,
     /// 1-based index into `room_chars` for the current target; `None`

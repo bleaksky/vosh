@@ -25,7 +25,7 @@ A page that saves as you go takes `update` from `useSettingsAutoSave` in `legacy
 
 ## Deep links and search
 
-A deep link is a string like `automation:macros` or `characters:Erelei#tracked`. `src/lib/settingsNav.ts` resolves it and maps every old tab id. `src/lib/settingsLink.ts` opens Settings on one from the main window.
+A deep link is a string like `automation:macros` or `characters:Ilsabet#tracked`. `src/lib/settingsNav.ts` resolves it and maps every old tab id. `src/lib/settingsLink.ts` opens Settings on one from the main window.
 
 What a section means depends on the group. In Automation it is the kind. In Characters it is the profile name, and no section means the active profile. Everywhere else it is a section `id` the frame scrolls to.
 
@@ -116,7 +116,7 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 
 `IconButton` is a 28×24 button that shows only a 16 px icon, the one the window controls use. It forwards its ref.
 
-- `label` is its accessible name, like `Erelei options` or `Move Haste up`. It is required, since the button shows no text.
+- `label` is its accessible name, like `Ilsabet options` or `Move Haste up`. It is required, since the button shows no text.
 - `icon` is the icon.
 
 `Keycap` draws one key. Build the keys with `shortcutKeys` from `src/lib/palette.ts` so macOS reads ⌘ and the other systems read Ctrl.

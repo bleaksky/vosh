@@ -151,7 +151,7 @@ function listNames(names: readonly string[]): string {
 }
 
 /** What turning a login toggle on took from other profiles, like
- *  `Vosh moved Erelei from Test-Prompt to Erelei.` Null when it took
+ *  `Vosh moved Ilsabet from Test-Prompt to Ilsabet.` Null when it took
  *  nothing. */
 export function movedSentence(
   character: string,
@@ -202,7 +202,7 @@ export function keepsProfileName(name: string, typed: string): boolean {
   return clean === name || clean === profileDisplayName(name);
 }
 
-/** A free name for a copy of `source`: `Erelei copy`, then `Erelei
+/** A free name for a copy of `source`: `Ilsabet copy`, then `Ilsabet
  *  copy 2` and on. */
 export function copyName(source: string, names: readonly string[]): string {
   const used = taken(names);
