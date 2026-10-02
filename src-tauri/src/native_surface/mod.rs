@@ -41,6 +41,8 @@ mod platform;
 #[path = "linux.rs"]
 mod platform;
 
+mod split_drag;
+
 // Live wgpu objects for the terminal surface.
 struct GpuState {
     _instance: wgpu::Instance,
@@ -477,33 +479,27 @@ fn load_f32(slot: &AtomicU32, default: f32) -> f32 {
     }
 }
 
+/// The surface as the last frame left it, for a surface `height_px`
+/// physical pixels tall: the cell size, the backing scale, and the
+/// divider the renderer drew.
+fn surface_frame(height_px: f64) -> split_drag::Frame {
+    split_drag::Frame {
+        cell_w: f64::from(load_f32(&CELL_W, 0.0)),
+        cell_h: f64::from(load_f32(&CELL_H, 0.0)),
+        height: height_px,
+        dpr: f64::from(load_f32(&DPR, 2.0)),
+        divider: divider_frac(),
+    }
+}
+
 /// Map a physical-pixel point inside the surface to a grid cell
 /// `(line, col)`, mirroring the renderer's split mapping: the bottom (live)
 /// region of an open split reads at offset 0, the top (history) region at
 /// the scroll offset. `height_px` is the surface height in physical pixels.
 fn phys_point_to_cell(phys_x: f64, phys_y: f64, height_px: f64) -> Option<(i32, usize)> {
-    let cell_w = f64::from(load_f32(&CELL_W, 0.0));
-    let cell_h = f64::from(load_f32(&CELL_H, 0.0));
-    if cell_w <= 0.0 || cell_h <= 0.0 {
-        return None;
-    }
-    let col = (phys_x / cell_w).floor().max(0.0) as usize;
-    let rows = (height_px / cell_h).floor() as i32;
-    let offset = crate::term_grid::current_display_offset() as i32;
-    // Mirror the renderer's pixel-smooth split: above the drawn divider is
-    // history at the scroll offset; below it are live rows at their
-    // absolute top-aligned positions (identical to the non-split view).
-    let split = offset > 0 && rows >= 6;
-    let row = (phys_y / cell_h).floor().max(0.0) as i32;
-    if split {
-        if let Some(frac) = divider_frac() {
-            let divider_px = f64::from(frac) * height_px;
-            if phys_y >= divider_px {
-                return Some((row, col));
-            }
-        }
-    }
-    Some((row - offset, col))
+    let offset = crate::term_grid::current_display_offset();
+    let view = surface_frame(height_px).view(offset)?;
+    Some(view.cell_at(phys_x, phys_y))
 }
 
 /// A pointer event in surface-physical pixels, with the surface size and
@@ -518,6 +514,15 @@ pub(super) struct PointerEvent {
 
 // A scrollbar thumb drag in progress.
 static SCROLLBAR_DRAGGING: AtomicBool = AtomicBool::new(false);
+
+// The selection drag began in the history half of an open split, so it
+// stays in the history and autoscrolls past the divider (split_drag.rs).
+static DRAG_FROM_HISTORY: AtomicBool = AtomicBool::new(false);
+// The last point of a selection drag as (x, y, surface height) in
+// physical pixels, which each autoscroll tick reads again.
+static LAST_DRAG: Mutex<Option<(f64, f64, f64)>> = Mutex::new(None);
+// An autoscroll ticker is running.
+static AUTOSCROLL_ARMED: AtomicBool = AtomicBool::new(false);
 
 /// True when the point falls in the scrollbar hit zone (right edge) while
 /// scrolled. The zone is wider than the drawn bar for forgiving grabs.
@@ -599,6 +604,7 @@ fn pointer_down(ev: &PointerEvent) {
     SCROLLBAR_DRAGGING.store(false, Ordering::Release);
     DRAGGING.store(false, Ordering::Release);
     SELECTING.store(false, Ordering::Release);
+    DRAG_FROM_HISTORY.store(false, Ordering::Release);
     let cell = phys_point_to_cell(ev.x, ev.y, ev.height);
     if ev.open_modifier {
         if let Some((line, col)) = cell {
@@ -623,6 +629,11 @@ fn pointer_down(ev: &PointerEvent) {
     if let Some((line, col)) = cell {
         crate::term_grid::start_selection(line, col);
         SELECTING.store(true, Ordering::Release);
+        let offset = crate::term_grid::current_display_offset();
+        let from_history = surface_frame(ev.height)
+            .view(offset)
+            .is_some_and(|view| view.in_history(ev.y));
+        DRAG_FROM_HISTORY.store(from_history, Ordering::Release);
         redraw_now();
     }
 }
@@ -643,6 +654,10 @@ fn pointer_dragged(ev: &PointerEvent) {
         return;
     }
     if SELECTING.load(Ordering::Acquire) {
+        if DRAG_FROM_HISTORY.load(Ordering::Acquire) {
+            history_drag(ev);
+            return;
+        }
         if let Some((line, col)) = phys_point_to_cell(ev.x, ev.y, ev.height) {
             crate::term_grid::update_selection(line, col);
             redraw_now();
@@ -650,7 +665,85 @@ fn pointer_dragged(ev: &PointerEvent) {
     }
 }
 
+/// Extend a selection drag that began in the history half. Past the
+/// divider it stops at the last history line, and a ticker scrolls the
+/// history toward the tail while the pointer stays there.
+fn history_drag(ev: &PointerEvent) {
+    if let Ok(mut last) = LAST_DRAG.lock() {
+        *last = Some((ev.x, ev.y, ev.height));
+    }
+    let frame = surface_frame(ev.height);
+    let scroll = crate::term_grid::with_grid_mut(|grid| split_drag::drag(grid, &frame, ev.x, ev.y))
+        .unwrap_or(0);
+    redraw_now();
+    if scroll > 0 {
+        arm_autoscroll();
+    }
+}
+
+/// Start the autoscroll ticker unless one runs. Each tick goes to the
+/// main thread, and the ticker stops on the first tick with nothing to
+/// scroll.
+fn arm_autoscroll() {
+    if AUTOSCROLL_ARMED.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let Some(app) = APP.get().cloned() else {
+        AUTOSCROLL_ARMED.store(false, Ordering::Release);
+        return;
+    };
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(split_drag::AUTOSCROLL_TICK).await;
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            let ran = match app.run_on_main_thread(move || {
+                let _ = tx.send(autoscroll_tick());
+            }) {
+                Ok(()) => rx.await.ok(),
+                Err(_) => None,
+            };
+            match ran {
+                Some(true) => {}
+                // The tick that ended it cleared the flag on the main
+                // thread, where a new drag may have set it again since.
+                Some(false) => break,
+                // No tick ran, so none cleared it, and none could start
+                // another ticker while it stayed set.
+                None => {
+                    AUTOSCROLL_ARMED.store(false, Ordering::Release);
+                    break;
+                }
+            }
+        }
+    });
+}
+
+/// One autoscroll tick of a drag from the history half. Runs on the main
+/// thread. False, with the ticker's flag cleared, once the drag ended,
+/// the pointer came back above the divider, or the split closed at the
+/// tail.
+fn autoscroll_tick() -> bool {
+    let point = LAST_DRAG.lock().ok().and_then(|last| *last);
+    let more = match point {
+        Some((x, y, height))
+            if SELECTING.load(Ordering::Acquire) && DRAG_FROM_HISTORY.load(Ordering::Acquire) =>
+        {
+            let frame = surface_frame(height);
+            let more = crate::term_grid::with_grid_mut(|grid| split_drag::tick(grid, &frame, x, y))
+                .unwrap_or(false);
+            redraw_now();
+            more
+        }
+        _ => false,
+    };
+    if !more {
+        AUTOSCROLL_ARMED.store(false, Ordering::Release);
+    }
+    more
+}
+
 fn pointer_up() {
+    DRAG_FROM_HISTORY.store(false, Ordering::Release);
     let was_scrollbar = SCROLLBAR_DRAGGING.swap(false, Ordering::AcqRel);
     let was_divider = DRAGGING.swap(false, Ordering::AcqRel);
     if was_divider {
@@ -1425,6 +1518,91 @@ mod tests {
         assert_ne!(scroll_report_key(5, 100), scroll_report_key(6, 100));
         assert_ne!(scroll_report_key(5, 100), scroll_report_key(5, 101));
         assert_eq!(scroll_report_key(5, 100), (5 << 32) + 100);
+    }
+
+    /// A pointer event on a 160 by 120 px surface at scale 1.
+    fn at(x: f64, y: f64) -> PointerEvent {
+        PointerEvent {
+            x,
+            y,
+            width: 160.0,
+            height: 120.0,
+            open_modifier: false,
+        }
+    }
+
+    /// Lay the shared grid out as a split at offset `offset`: 10 px rows
+    /// on 120 px, L00 to L59 with L48 to L59 on the screen, and the
+    /// divider the renderer draws at 79 px. Call with the shared grid
+    /// lock held, and `reset_pointer` after.
+    fn split_surface(offset: i32) {
+        crate::term_grid::blank_shared_grid_for_test(20, 12);
+        let text: Vec<String> = (0..60).map(|n| format!("L{n:02}")).collect();
+        crate::term_grid::with_grid_mut(|grid| {
+            grid.feed(text.join("\r\n").as_bytes());
+            grid.scroll(offset);
+        });
+        store_f32(&CELL_W, 8.0);
+        store_f32(&CELL_H, 10.0);
+        store_f32(&DPR, 1.0);
+        set_divider_frac(Some(79.0 / 120.0));
+    }
+
+    fn reset_pointer() {
+        SELECTING.store(false, Ordering::Release);
+        DRAG_FROM_HISTORY.store(false, Ordering::Release);
+        AUTOSCROLL_ARMED.store(false, Ordering::Release);
+        *LAST_DRAG.lock().unwrap() = None;
+        CELL_W.store(0, Ordering::Release);
+        CELL_H.store(0, Ordering::Release);
+        DPR.store(0, Ordering::Release);
+        set_divider_frac(None);
+        crate::term_grid::clear_selection();
+    }
+
+    #[test]
+    fn a_history_drag_autoscrolls_through_the_divider_into_one_selection() {
+        let _grid = crate::term_grid::lock_shared_grid_for_test();
+        split_surface(8);
+        pointer_down(&at(0.0, 15.0));
+        assert!(DRAG_FROM_HISTORY.load(Ordering::Acquire));
+        // Past the divider the selection ends on the last history line,
+        // L47 at offset 8, and nothing of the live half.
+        pointer_dragged(&at(40.0, 100.0));
+        let text = crate::term_grid::selection_text().expect("a selection");
+        assert_eq!(text.lines().last(), Some("L47"));
+        assert_eq!(crate::term_grid::current_display_offset(), 8);
+        // Each tick scrolls 7 lines toward the tail, and the second
+        // reaches it, which closes the split. The selection runs on to
+        // the pointer's cell in the full view.
+        assert!(autoscroll_tick());
+        assert_eq!(crate::term_grid::current_display_offset(), 1);
+        let text = crate::term_grid::selection_text().expect("a selection");
+        assert_eq!(text.lines().last(), Some("L54"));
+        assert!(!autoscroll_tick());
+        assert_eq!(crate::term_grid::current_display_offset(), 0);
+        let text = crate::term_grid::selection_text().expect("a selection");
+        let lines: Vec<&str> = text.lines().collect();
+        let want: Vec<String> = (41..=58).map(|n| format!("L{n:02}")).collect();
+        assert_eq!(lines, want);
+        reset_pointer();
+    }
+
+    #[test]
+    fn a_drag_from_the_live_half_maps_the_pointer_as_before() {
+        let _grid = crate::term_grid::lock_shared_grid_for_test();
+        split_surface(8);
+        // Live row 10 is L58. Up across the divider the pointer reads the
+        // history at the offset, row 2 there being L42.
+        pointer_down(&at(0.0, 105.0));
+        assert!(!DRAG_FROM_HISTORY.load(Ordering::Acquire));
+        pointer_dragged(&at(0.0, 25.0));
+        let text = crate::term_grid::selection_text().expect("a selection");
+        assert_eq!(text.lines().next(), Some("L42"));
+        assert_eq!(text.lines().last(), Some("L57"));
+        assert!(!autoscroll_tick());
+        assert_eq!(crate::term_grid::current_display_offset(), 8);
+        reset_pointer();
     }
 
     #[test]
