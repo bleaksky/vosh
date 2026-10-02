@@ -430,38 +430,6 @@ fn digest_steps(steps: &[Step]) -> u64 {
     hash
 }
 
-/// Write each scripted play as JSON for the screenshot harness, when
-/// `VOSH_WRITE_PLAYS` names a folder. Nothing otherwise.
-#[test]
-fn write_plays_for_the_screenshot_harness() {
-    use vosh_prompt::PromptShow;
-    let Ok(dir) = std::env::var("VOSH_WRITE_PLAYS") else {
-        return;
-    };
-    let plays = [
-        ("text-detailed", PromptShow::Text, true),
-        ("text-off", PromptShow::Text, false),
-        ("pinned-detailed", PromptShow::Pinned, true),
-        ("pinned-off", PromptShow::Pinned, false),
-        ("lifted-detailed", PromptShow::Lifted, true),
-        ("lifted-off", PromptShow::Lifted, false),
-    ];
-    for (name, show, draw) in plays {
-        let steps: Vec<serde_json::Value> = fake_play(showing(profile(CODES, DETAILED, draw), show))
-            .into_iter()
-            .map(|step| match step {
-                Step::Output(json) => serde_json::json!({
-                    "output": json.map(|j| serde_json::from_str::<serde_json::Value>(&j).expect("json")),
-                }),
-                Step::Send(line) => serde_json::json!({ "send": line }),
-            })
-            .collect();
-        let path = std::path::Path::new(&dir).join(format!("{name}.json"));
-        std::fs::write(&path, serde_json::to_string_pretty(&steps).expect("json"))
-            .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-    }
-}
-
 #[test]
 fn in_the_text_every_payload_log_row_and_kept_line_stays_as_today() {
     let now = digests();
