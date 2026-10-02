@@ -1,5 +1,6 @@
--- combat.lua — Phase 8 demo combat assistant.
--- Place at ~/Library/Application Support/com.aabahran.mudclient/scripts/combat.lua
+-- combat.lua, a sample combat assistant.
+-- Copy it into the scripts folder of your Vosh app data folder,
+-- ~/Library/Application Support/com.aabahran.vosh/scripts/ on macOS,
 -- and run "#script load combat" in the input box.
 
 mud.echo("combat assistant loaded")
