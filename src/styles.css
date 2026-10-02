@@ -89,49 +89,12 @@ body {
   overflow: hidden;
 }
 
-/* ── Ember primitives ──────────────────────────────────────────────
-   Shared across every surface so labels, key hints, and floating
-   layers stay one visual language instead of per-component copies. */
-
-/* Section label: Rajdhani caps, wide tracking, dim. */
-.caps {
-  font-family: var(--font-label);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--c-text-dim);
-}
-
-/* Keyboard hint chip. */
-.kbd {
-  display: inline-flex;
-  align-items: center;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--c-text-dim);
-  padding: 1px 5px;
-  border: 1px solid var(--c-border);
-  border-radius: 4px;
-}
-
-/* Mono opt-ins. With chrome defaulting to Inter, the surfaces that
-   carry terminal text or game data explicitly take a mono face:
-   the input row echoes commands in the user's own terminal font;
-   panes that render MUD-derived names and numbers use the chrome
-   value mono at HUD sizes. */
+/* Mono opt-in. With chrome defaulting to Inter, the input row
+   explicitly takes a mono face, so it echoes commands in the user's
+   own terminal font and size. */
 .input-row {
   font-family: var(--app-font-family);
   font-size: var(--app-font-size);
-}
-
-.vitals-bar,
-.vitals-row-template {
-  font-family: var(--font-mono);
-}
-
-.find-toolbar input {
-  font-family: var(--font-mono);
 }
 
 /* Global scrollbar theming. WebView2 (Windows) and WebKitGTK (Linux)
@@ -246,124 +209,6 @@ body {
    unchanged so the column count (and line wrapping) does not move. */
 .terminal-area-find-inset {
   padding-top: 44px;
-}
-
-/* Panel zones. The four configurable edges around the terminal where
-   user-movable panels (map, group, vitals, roomstrip, chat) land.
-   Top/bottom zones are full-width strips; left/right zones share the
-   main-row with the terminal-area and get a Resizable width handle. */
-.panel-zone {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  background: var(--c-surface);
-}
-.panel-zone-top,
-.panel-zone-bottom {
-  flex: 0 0 auto;
-  border-bottom: 1px solid var(--c-border);
-}
-.panel-zone-bottom {
-  border-bottom: none;
-  border-top: 1px solid var(--c-border);
-}
-/* Carved channel: the side zones drop their surface fill and their
-   border seams. The 8px resize handle between terminal and zone is
-   pure exposed ground, and the stack padding keeps an 8px channel
-   on the window-edge side of the cards. The terminal-facing side
-   gets no padding because the handle IS that channel. */
-.panel-zone-left,
-.panel-zone-right {
-  background: transparent;
-}
-.panel-zone-left .panel-zone-stack {
-  padding: 8px 0 8px 8px;
-  gap: 8px;
-}
-.panel-zone-right .panel-zone-stack {
-  padding: 8px 8px 8px 0;
-  gap: 8px;
-}
-.panel-zone-left .panel-zone-substack,
-.panel-zone-right .panel-zone-substack {
-  gap: 8px;
-}
-/* Every pane in a side zone becomes a card: chrome surface, radius 8,
-   clipped corners, and no border seams of its own — the exposed
-   ground between cards does the separating. The two selectors catch
-   bare panes and panes wrapped in a Resizable. */
-/* The :not(.low-hp-vignette) guard is load-bearing: VitalsBar returns
-   a fragment whose second child is the full-window fixed vignette
-   overlay, so in a side zone that overlay is ALSO a direct substack
-   child. Carding it paints an opaque surface across the entire
-   window above all chrome — the blank-app bug. Any future pane that
-   fragments a fixed overlay next to its root needs the same escape. */
-.panel-zone-left .panel-zone-substack > :not(.resizable):not(.low-hp-vignette),
-.panel-zone-right .panel-zone-substack > :not(.resizable):not(.low-hp-vignette),
-.panel-zone-left .panel-zone-substack > .resizable > .resizable-content > :only-child,
-.panel-zone-right .panel-zone-substack > .resizable > .resizable-content > :only-child {
-  /* Cards use the raised pane token, not --c-surface: several themes
-     run their chrome surface at the same tone as the terminal well,
-     and a card that matches the ground it floats on disappears. The
-     pane token is the one every theme already raises (the input row
-     proves it reads). Each pane kind then tints its card with a
-     whisper of its identity color (the chat-channel pastel family)
-     mixed over the chrome tone, so the tint tracks the theme. */
-  background: color-mix(
-    in srgb,
-    var(--c-surface-pane, var(--c-surface)) 97%,
-    var(--zone-card-tint, var(--c-surface-pane, var(--c-surface))) 3%
-  );
-  border-radius: 8px;
-  overflow: hidden;
-  border: none;
-}
-/* Card identity tints. Consumed only by the card recipe above, so
-   these are inert everywhere outside a side zone. Hues follow the
-   chat-channel pastels in chatColors.ts. */
-.vitals-bar {
-  --zone-card-tint: #ecc985;
-}
-/* Inner vertical handles (chat, roomstrip) keep their 8px strip
-   inside the wrapper, so a seam with a drag handle reads one step
-   deeper (gap + handle) than a fixed seam. An earlier pass pulled
-   the handle into the flex gap with negative margins guarded by
-   sibling selectors and :has() — reverted: WebKit's invalidation of
-   those selectors is exactly the kind of machinery under suspicion
-   for the blank-chrome compositing wedge, and the visual win was
-   marginal. */
-.panel-zone-stack {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
-}
-.panel-zone-substack {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  /* Clip so a fat panel (map) cannot draw outside its substack onto
-     the sibling cluster above or below it. */
-  overflow: hidden;
-}
-.panel-zone-substack-fixed {
-  /* Stays at its content size. Use min-content as the basis so
-     children can shrink slightly under pressure rather than
-     overflowing, but the cluster never expands beyond what its
-     content actually needs. */
-  flex: 0 0 auto;
-}
-.panel-zone-substack-grow {
-  flex: 1 1 0;
-}
-/* Empty middle slot rendered when no fill panel is in the zone.
-   Absorbs the slack so the top cluster sticks to the top edge and
-   the bottom cluster sticks to the bottom edge. */
-.panel-zone-spacer {
-  flex: 1 1 auto;
-  min-height: 0;
 }
 
 /* Split-scrollback layout. The history pane is lazy-mounted only when
@@ -1630,36 +1475,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 .caret-shape--block {
   width: 7px;
   height: 15px;
-}
-
-/* Caret picker in Settings, general. Each chip carries a live sample
-   painted by the same shape classes the real caret uses, so the
-   picker cannot drift from what the input row renders. */
-.settings-caret-picks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-/* The sample sits in a 7x15 box that matches the caret's anchor, and
-   the shape is absolutely placed inside it. That way a shape's own
-   offset moves it within the box exactly as it does inside the input
-   row, instead of pushing the sample out of its chip. */
-.caret-sample-box {
-  position: relative;
-  display: inline-block;
-  width: 7px;
-  height: 15px;
-  margin-right: 6px;
-  vertical-align: middle;
-}
-
-.caret-sample {
-  position: absolute;
-  top: 0;
-  left: 0;
-  box-sizing: border-box;
-  background: var(--c-accent);
 }
 
 .caret-shape--block_outline {
@@ -5369,21 +5184,13 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   flex: 0 0 auto;
 }
 
-.resizable-horizontal {
-  flex-direction: row;
-}
-
 .resizable-vertical {
   flex-direction: column;
 }
 
-/* Leading-anchor variants. The handle is the first DOM child in the
+/* Leading-anchor variant. The handle is the first DOM child in the
    wrapper, so reversing flex direction renders the handle on the
-   anchor-opposite edge: anchor-left → handle on right, anchor-top →
-   handle on bottom. */
-.resizable-anchor-left {
-  flex-direction: row-reverse;
-}
+   anchor-opposite edge: anchor-top → handle on bottom. */
 .resizable-anchor-top {
   flex-direction: column-reverse;
 }
@@ -5410,15 +5217,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   pointer-events: none;
 }
 
-.resizable-handle-horizontal {
-  flex: 0 0 8px;
-  cursor: col-resize;
-}
-.resizable-handle-horizontal::after {
-  width: 2px;
-  height: 24px;
-}
-
 .resizable-handle-vertical {
   flex: 0 0 8px;
   cursor: row-resize;
@@ -5440,9 +5238,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   opacity: 1;
   box-shadow: 0 0 8px color-mix(in srgb, var(--c-accent) 45%, transparent);
 }
-.resizable-handle-horizontal.is-dragging::after {
-  height: 56px;
-}
 .resizable-handle-vertical.is-dragging::after {
   width: 56px;
 }
@@ -5454,25 +5249,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   display: flex;
 }
 
-/* Right column hosts map + optional pinned group panel stacked
-   vertically. The horizontal Resizable wrapper sets the column
-   width; this inner flex column splits the height. */
-.right-column {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--c-surface);
-}
-
-/* The vertical resize handle between map and pinned group must sit
-   above its siblings so its row-resize cursor catches drags, even
-   if the chat row below has its own z-index stack. */
-.group-pinned-resizable .resizable-handle {
-  z-index: 3;
-}
-
 /* ServerMapView internals, lifted from the pre-T0 styles so the
    resurrected canvas renderer has the layout it expects. */
 
@@ -5481,123 +5257,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-/* Quiet pane header, Ember mockup geometry (11px 14px 7px). Just the
-   caps title and the 12px sliders affordance — no border of its own.
-   The hairline lives under the open controls row instead, so the
-   closed state is a bare label floating above the canvas. */
-.map-subhead {
-  padding: 11px 14px 7px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-/* Layout-only companion to the shared .caps typography on the
-   header title: long area names ellipsize instead of pushing the
-   controls toggle off the pane. */
-.map-subhead-title {
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Bare icon button that shows/hides the controls row. No border or
-   fill — the mockup forbids visible control chrome on the pane, so
-   the affordance is only the 12px sliders glyph. */
-.map-controls-toggle {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  padding: 2px;
-  color: var(--c-text-dim);
-  cursor: pointer;
-}
-
-.map-controls-toggle:hover {
-  color: var(--c-text-strong);
-}
-
-.map-controls-toggle[aria-expanded='true'] {
-  color: var(--c-accent);
-}
-
-/* Tucked-away controls row: mode chips, zoom cluster, radius status.
-   Rendered only while open, so its bottom hairline doubles as the
-   header divider the quiet header gave up. Wraps when the pane is
-   narrow instead of clipping against the parent's overflow: hidden. */
-.map-controls-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 14px 8px;
-  border-bottom: 1px solid var(--c-border-soft);
-  flex-wrap: wrap;
-  row-gap: 4px;
-}
-
-/* Radius / waiting text, right-aligned in the value mono. Truncates
-   first when the row runs out of width — the chips are essential. */
-.map-controls-status {
-  min-width: 0;
-  flex: 1 1 auto;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--c-text-faint);
-  text-align: right;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tileset-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 14px 8px;
-  border-bottom: 1px solid var(--c-border-soft);
-  /* Same wrap treatment so load/clear buttons and the status
-     pill never overflow horizontally. Status pill shrinks +
-     truncates first since the buttons are essential. */
-  flex-wrap: wrap;
-  row-gap: 4px;
-}
-
-.tileset-bar > button {
-  flex: 0 0 auto;
-}
-
-.tileset-bar button {
-  background: transparent;
-  color: var(--c-text-muted);
-  border: 1px solid var(--c-border);
-  border-radius: 6px;
-  padding: 1px 8px;
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.tileset-bar button:hover {
-  color: var(--c-text-strong);
-  border-color: var(--c-border-hover);
-}
-
-.tileset-status {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--c-text-faint);
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .map-canvas-host {
@@ -5719,83 +5378,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   justify-content: center;
   color: var(--c-text-faint);
   font-size: 0.85em;
-}
-
-/* Mode chips in the controls row. Chip idiom (see .settings-btn):
-   hairline border, radius 6, transparent ground. Sized a step
-   tighter than the settings chips so squares / glyphs / tileset plus
-   the zoom cluster fit a 300px pane on one line. */
-.map-mode-toggle {
-  display: inline-flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.map-mode-toggle button {
-  background: transparent;
-  color: var(--c-text-muted);
-  border: 1px solid var(--c-border);
-  border-radius: 6px;
-  padding: 1px 8px;
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.map-mode-toggle button:hover {
-  color: var(--c-text-strong);
-  border-color: var(--c-border-hover);
-}
-
-/* Active mode stays a quiet chip — accent ink and a soft accent
-   wash instead of the old filled block. */
-.map-mode-toggle button[aria-pressed='true'] {
-  color: var(--c-accent);
-  border-color: color-mix(in srgb, var(--c-accent) 55%, transparent);
-  background: color-mix(in srgb, var(--c-accent) 10%, transparent);
-}
-
-/* Zoom +/-/reset cluster, sits alongside the mode toggle. */
-.map-zoom {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  gap: 2px;
-  font-variant-numeric: tabular-nums;
-}
-
-.map-zoom button {
-  background: transparent;
-  color: var(--c-text-muted);
-  border: 1px solid var(--c-border);
-  border-radius: 6px;
-  padding: 1px 6px;
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-  min-width: 22px;
-  text-align: center;
-}
-
-.map-zoom button:hover:not(:disabled) {
-  color: var(--c-text-strong);
-  border-color: var(--c-border-hover);
-}
-
-.map-zoom button:disabled {
-  color: var(--c-text-dim);
-  cursor: not-allowed;
-  border-color: var(--c-border-soft);
-}
-
-.map-zoom-value {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--c-text-faint);
-  min-width: 36px;
-  text-align: center;
 }
 
 /* Your own row reads a notch brighter; the leader keeps the accent
