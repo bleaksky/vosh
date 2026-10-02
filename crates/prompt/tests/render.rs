@@ -1,7 +1,6 @@
 //! Renderer tests. The legacy cases hold the bytes the first renderer
-//! (`src-tauri/src/prompt_template.rs`) wrote for the same template and
-//! vars, next to what the new renderer writes, so every change from today
-//! is written down.
+//! wrote for the same template and vars, next to what the new renderer
+//! writes, so every change from today is written down.
 
 use std::collections::BTreeMap;
 
