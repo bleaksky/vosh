@@ -171,6 +171,7 @@ pub enum StyleChoice {
     Dashed,
     Inverse,
     Strike,
+    Blink,
 }
 
 /// When a piece shows.
@@ -270,26 +271,29 @@ pub(crate) struct Look {
     pub(crate) underline: Option<UnderlineStyle>,
     pub(crate) inverse: bool,
     pub(crate) strike: bool,
+    pub(crate) blink: bool,
 }
 
-/// The styles that are on or off, in the order the writer writes them.
-/// The underline sits between italic and inverse, as one slot that holds
-/// one kind at a time.
+/// The styles that are on or off, in the order the writer writes them,
+/// which is the order of their SGR numbers. The underline sits between
+/// italic and blink, as one slot that holds one kind at a time.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Slot {
     Bold,
     Dim,
     Italic,
     Underline,
+    Blink,
     Inverse,
     Strike,
 }
 
-const SLOTS: [Slot; 6] = [
+const SLOTS: [Slot; 7] = [
     Slot::Bold,
     Slot::Dim,
     Slot::Italic,
     Slot::Underline,
+    Slot::Blink,
     Slot::Inverse,
     Slot::Strike,
 ];
@@ -303,6 +307,7 @@ impl Look {
             Style::Underline(line) => self.underline == Some(line),
             Style::Inverse => self.inverse,
             Style::Strike => self.strike,
+            Style::Blink => self.blink,
             Style::Off => false,
         }
     }
@@ -317,6 +322,7 @@ impl Look {
             Style::Underline(line) => self.underline = on.then_some(line),
             Style::Inverse => self.inverse = on,
             Style::Strike => self.strike = on,
+            Style::Blink => self.blink = on,
             Style::Off => {
                 for slot in SLOTS {
                     self.set_slot(slot, &Look::default());
@@ -335,6 +341,7 @@ impl Look {
             Slot::Underline => self.underline.map(Style::Underline),
             Slot::Inverse => on(self.inverse, Style::Inverse),
             Slot::Strike => on(self.strike, Style::Strike),
+            Slot::Blink => on(self.blink, Style::Blink),
         }
     }
 
@@ -347,6 +354,7 @@ impl Look {
             Slot::Underline => self.underline = from.underline,
             Slot::Inverse => self.inverse = from.inverse,
             Slot::Strike => self.strike = from.strike,
+            Slot::Blink => self.blink = from.blink,
         }
     }
 
@@ -1252,6 +1260,7 @@ fn style_of(style: StyleChoice) -> Style {
         StyleChoice::Dashed => Style::Underline(UnderlineStyle::Dashed),
         StyleChoice::Inverse => Style::Inverse,
         StyleChoice::Strike => Style::Strike,
+        StyleChoice::Blink => Style::Blink,
     }
 }
 

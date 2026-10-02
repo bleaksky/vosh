@@ -18,8 +18,8 @@
 //! %bg_<spec> %{bg:<spec>}  background, same specs
 //! %{ul:<spec>}             the underline's color, same specs. Braced only,
 //!                          so a value named `ul_...` stays a value
-//! %s_<style> %{s:<style>}  bold dim italic underline inverse strike off
-//!                          reset, and the underline kinds double curly
+//! %s_<style> %{s:<style>}  bold dim italic underline inverse strike blink
+//!                          off reset, and the underline kinds double curly
 //!                          dotted dashed
 //! %{field:format:args}     a value in a format (see [`Format`])
 //! %{field:param:format}    for the fields that take a parameter, `aff`,
@@ -165,7 +165,9 @@ pub enum Style {
     Underline(UnderlineStyle),
     Inverse,
     Strike,
-    /// Every style off, colors kept (SGR 22;23;24;27;29).
+    /// Blinking text, SGR 5.
+    Blink,
+    /// Every style off, colors kept (SGR 22;23;24;25;27;29).
     Off,
 }
 
@@ -179,7 +181,8 @@ impl Style {
             Style::Underline(line) => line.sgr(),
             Style::Inverse => "7",
             Style::Strike => "9",
-            Style::Off => "22;23;24;27;29",
+            Style::Blink => "5",
+            Style::Off => "22;23;24;25;27;29",
         }
     }
 }
@@ -651,6 +654,7 @@ pub fn style_name(style: Style) -> &'static str {
         Style::Underline(UnderlineStyle::Dashed) => "dashed",
         Style::Inverse => "inverse",
         Style::Strike => "strike",
+        Style::Blink => "blink",
         Style::Off => "off",
     }
 }
@@ -865,6 +869,7 @@ fn style_code(name: &str) -> TokenKind {
         "dashed" => Style::Underline(UnderlineStyle::Dashed),
         "inverse" | "inv" => Style::Inverse,
         "strike" => Style::Strike,
+        "blink" => Style::Blink,
         "off" => Style::Off,
         "reset" => return TokenKind::Code(Code::Reset),
         _ => return TokenKind::Unknown,
@@ -1290,6 +1295,7 @@ mod tests {
             ("inverse", Style::Inverse),
             ("inv", Style::Inverse),
             ("strike", Style::Strike),
+            ("blink", Style::Blink),
         ] {
             assert_eq!(
                 kinds(&format!("%s_{name}")),
@@ -1393,7 +1399,8 @@ mod tests {
         assert_eq!(sgr(Style::Underline(UnderlineStyle::Dashed)), "4:5");
         assert_eq!(sgr(Style::Inverse), "7");
         assert_eq!(sgr(Style::Strike), "9");
-        assert_eq!(sgr(Style::Off), "22;23;24;27;29");
+        assert_eq!(sgr(Style::Blink), "5");
+        assert_eq!(sgr(Style::Off), "22;23;24;25;27;29");
     }
 
     #[test]
@@ -1406,6 +1413,7 @@ mod tests {
             "%s_strike",
             "%s_dim",
             "%s_inverse",
+            "%s_blink",
             "%{ul:red}",
             "%{ul:default}",
             "%{ul:#bf616a}",

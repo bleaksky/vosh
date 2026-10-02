@@ -56,6 +56,7 @@ function piece(index: number, kind: PromptPieceKind, literal: string | null = nu
     underline_color: { kind: 'default' },
     inverse: false,
     strike: false,
+    blink: false,
     literal,
     meta: null,
     forms: [],

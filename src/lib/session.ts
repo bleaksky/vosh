@@ -1023,7 +1023,8 @@ export type PromptStyleChoice =
   | 'italic'
   | PromptUnderlineStyle
   | 'inverse'
-  | 'strike';
+  | 'strike'
+  | 'blink';
 
 export type PromptWhen = 'always' | 'fight' | 'not_fight';
 
@@ -1115,6 +1116,7 @@ export interface PromptPiece {
   underline_color: PromptColorChoice;
   inverse: boolean;
   strike: boolean;
+  blink: boolean;
   literal: string | null;
 
   meta: string | null;

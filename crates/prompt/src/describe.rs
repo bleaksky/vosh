@@ -113,6 +113,7 @@ pub struct PieceView {
     pub underline_color: ColorChoice,
     pub inverse: bool,
     pub strike: bool,
+    pub blink: bool,
     /// What a text piece prints.
     pub literal: Option<String>,
     /// What the value reads now, `1020 of 1020` or `60 percent`, with
@@ -225,6 +226,7 @@ pub fn describe(template: &Template, values: &dyn Values, preview: bool) -> Desc
                 underline_color: choice(look.underline_color.as_ref(), field.as_ref()),
                 inverse: look.inverse,
                 strike: look.strike,
+                blink: look.blink,
 
                 literal,
                 meta: field.as_ref().and_then(|f| meta(f, values, preview)),

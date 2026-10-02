@@ -161,6 +161,16 @@ fn prompt_all_and_a_fight_prompt_with_colors_draw_as_the_game_does() {
 }
 
 #[test]
+fn a_blinking_backtick_color_blinks_in_same_as_the_game() {
+    // `q is the game's blinking red, ESC[0;5;31m.
+    let report = codes("`qHP`` %h ", "", false);
+    assert!(report.ok);
+    let game = preset(&report, "game").expect("same as the game");
+    assert!(game.contains("%c_reset%s_blink%{c:red}HP"), "{game}");
+    assert_reads_clean(game);
+}
+
+#[test]
 fn a_color_that_runs_into_a_code_does_not_compile() {
     let report = codes("<`%h> ", "", false);
     assert!(!report.ok);

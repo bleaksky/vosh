@@ -93,8 +93,8 @@ pub struct Span {
     pub italic: bool,
     pub underline: bool,
     /// The whole look at the piece's first cell, dim, the underline's
-    /// kind and color, inverse and strike included, so a test can check
-    /// an edit kept it. The webview reads the fields above alone.
+    /// kind and color, inverse, strike and blink included, so a test can
+    /// check an edit kept it. The webview reads the fields above alone.
     #[serde(skip)]
     pub look: SgrState,
 }
@@ -208,6 +208,9 @@ pub struct SgrState {
     pub underline_color: Color,
     pub inverse: bool,
     pub strike: bool,
+    /// SGR 5. The rapid 6 draws steady in every renderer, as xterm
+    /// draws it, so it is no blink here either.
+    pub blink: bool,
 }
 
 impl SgrState {
@@ -242,6 +245,7 @@ impl SgrState {
                         None => Some(UnderlineStyle::Single),
                     };
                 }
+                5 => self.blink = true,
                 7 => self.inverse = true,
                 9 => self.strike = true,
                 21 => self.underline = Some(UnderlineStyle::Double),
@@ -251,6 +255,7 @@ impl SgrState {
                 }
                 23 => self.italic = false,
                 24 => self.underline = None,
+                25 => self.blink = false,
                 27 => self.inverse = false,
                 29 => self.strike = false,
                 30..=37 => self.fg = Color::Ansi((n - 30) as u8),
@@ -312,6 +317,7 @@ impl SgrState {
             p.push(to.underline.map_or("24", UnderlineStyle::sgr).into());
         }
         for (from, want, on, off) in [
+            (self.blink, to.blink, "5", "25"),
             (self.inverse, to.inverse, "7", "27"),
             (self.strike, to.strike, "9", "29"),
         ] {
