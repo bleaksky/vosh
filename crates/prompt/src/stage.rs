@@ -1262,7 +1262,9 @@ pub struct Stage {
 
 impl Stage {
     /// Compile the capture a profile's `[prompt]` table holds, for a
-    /// mortal. See [`Stage::set_capture_for`].
+    /// mortal. See [`Stage::set_capture_for`]. Test only. The app's tests
+    /// reach it through the `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn set_capture(&mut self, capture: &CaptureConfig) {
         self.set_capture_for(capture, Who::default());
     }
@@ -1344,7 +1346,8 @@ impl Stage {
         self.card = open;
     }
 
-    /// The prompt card is open.
+    /// The prompt card is open. Test only.
+    #[cfg(test)]
     pub fn card_open(&self) -> bool {
         self.card
     }
@@ -1355,17 +1358,21 @@ impl Stage {
         self.show = show;
     }
 
-    /// Where your prompt shows.
+    /// Where your prompt shows. Test only.
+    #[cfg(test)]
     pub fn shows(&self) -> PromptShow {
         self.show
     }
 
-    /// What the band shows, while your prompt shows pinned.
+    /// What the band shows, while your prompt shows pinned. Test only.
+    #[cfg(test)]
     pub fn pinned(&self) -> Option<&[u8]> {
         self.pinned.as_deref()
     }
 
-    /// The next empty line writes nothing.
+    /// The next empty line writes nothing. Test only. The app's tests
+    /// reach it through the `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn swallows(&self) -> bool {
         self.swallow.is_some()
     }
@@ -1890,9 +1897,8 @@ impl Stage {
         self.note_recognized(block);
     }
 
-    /// Pin `block` drawn as `rendered`: it leaves the text, and the band
-    /// shows the lines above the last one that show as sent, then the
-    /// design. See [`Stage::pin`].
+    /// [`Stage::pin_view`] with `rendered` as the live render. Test only.
+    #[cfg(test)]
     pub fn pin_drawn(
         &mut self,
         out: &mut Output,
@@ -1904,10 +1910,11 @@ impl Stage {
         self.pin_view(out, block, painted, before, View::live(Some(rendered)));
     }
 
-    /// [`Stage::pin_drawn`] with what the open card shows. The band shows
-    /// it, and needs no restore, since nothing on the band reaches
-    /// history. It shows the live render again at the next repaint
-    /// without a preview.
+    /// Pin `block` with what the open card shows: it leaves the text, and
+    /// the band shows the lines above the last one that show as sent, then
+    /// the design `view` holds. The band needs no restore, since nothing
+    /// on it reaches history. It shows the live render again at the next
+    /// repaint without a preview.
     pub fn pin_view(
         &mut self,
         out: &mut Output,
@@ -2330,17 +2337,19 @@ impl Stage {
         write(out, &mut self.open, painted, bytes);
     }
 
-    /// Repaint the open row as the `[prompt]` table now says: `rendered`
-    /// while drawing is on, else the lines the drawn prompt replaced, as
-    /// the game sent them. Nothing when no row is open or it already shows
-    /// that. A repaint is dropped by a renderer that wrote anything after
-    /// the row.
+    /// [`Stage::repaint_view`] with `rendered` as the live render. Test
+    /// only. The app's tests reach it through the `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn repaint(&mut self, out: &mut Output, rendered: Option<&str>) {
         self.repaint_view(out, View::live(rendered));
     }
 
-    /// [`Stage::repaint`] with what the open card shows, as a preview the
-    /// card sets or clears asks. In the text and lifted, the row carries
+    /// Repaint the open row as the `[prompt]` table now says, with what
+    /// the open card shows, as a preview the card sets or clears asks: the
+    /// design `view` holds while drawing is on, else the lines the drawn
+    /// prompt replaced, as the game sent them. Nothing when no row is open
+    /// or it already shows that. A repaint is dropped by a renderer that
+    /// wrote anything after the row. In the text and lifted, the row carries
     /// the live render as its restore while it shows anything else, so a
     /// renderer writes the live render back before anything lands after
     /// it. The band shows the preview with no restore.
@@ -2362,8 +2371,7 @@ impl Stage {
     /// could change: the open row, or the band while your prompt shows
     /// pinned. False while a change of where your prompt shows waits for
     /// its own repaint. It draws nothing, so the session asks it after
-    /// every read that brought GMCP packets, and [`Stage::stale`] says
-    /// whether a repaint would change anything.
+    /// every read that brought GMCP packets.
     pub fn repaintable(&self) -> bool {
         if self.last_raw.is_none() {
             return false;
@@ -2379,7 +2387,8 @@ impl Stage {
     /// shows, the open row or the band, such as after a GMCP packet that
     /// arrived with no prompt after it. False while there is nothing to
     /// repaint, and while a change of where your prompt shows waits for
-    /// its own repaint.
+    /// its own repaint. Test only.
+    #[cfg(test)]
     pub fn stale(&self, view: View) -> bool {
         let Some(block) = &self.last_raw else {
             return false;

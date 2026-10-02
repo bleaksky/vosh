@@ -380,6 +380,9 @@ impl Template {
         &self.source
     }
 
+    /// The template has no source. Test only. The tests in `tests/` reach
+    /// it through the `testkit` feature.
+    #[cfg(any(test, feature = "testkit"))]
     pub fn is_empty(&self) -> bool {
         self.source.is_empty()
     }
