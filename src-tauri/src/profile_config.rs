@@ -828,7 +828,7 @@ fn default_pane_root() -> PaneNode {
 }
 
 /// Where each old dock panel sat on a fresh install, as
-/// `(id, zone, align)`. Copied from `PANELS` in src/lib/panels.ts so
+/// `(id, zone, align)`. Copied from the old frontend's panel table so
 /// the migration fills ids a saved layout never mentioned the same
 /// way the old frontend did.
 const OLD_DOCK_DEFAULTS: [(&str, &str, &str); 8] = [
@@ -905,14 +905,13 @@ impl PaneLayoutPersist {
     }
 
     /// Seed a profile's tree from the old zone layout the first time
-    /// the profile opens in the one-window build. Mirrors
-    /// `panelLayoutFromDock` in src/lib/panels.ts: unknown ids and bad
-    /// zones are skipped, and ids the list never mentions take their
-    /// old default placement. Vitals is pinned now, the room strip
-    /// moved into the map pane, and the combat target moved into the
-    /// vitals footer, so those three never become panes. An empty list
-    /// (a fresh install, or someone who never customized) gives the
-    /// default layout.
+    /// the profile opens in the one-window build. Mirrors how the old
+    /// frontend read a dock layout: unknown ids and bad zones are
+    /// skipped, and ids the list never mentions take their old default
+    /// placement. Vitals is pinned now, the room strip moved into the
+    /// map pane, and the combat target moved into the vitals footer, so
+    /// those three never become panes. An empty list (a fresh install,
+    /// or someone who never customized) gives the default layout.
     pub(crate) fn from_dock(entries: &[DockEntryPersist]) -> Self {
         if entries.is_empty() {
             return Self::default_layout();
