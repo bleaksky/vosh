@@ -843,16 +843,23 @@ describe('a run of repeated lines the session collapses', () => {
     expect(screen(term)).toEqual([dodge, 'wake', `(3) ${dodge}`]);
   });
 
-  it('goes on in the history of the split, which took the run from your scrollback', async () => {
+  it('goes on in place in the history of the split, which took the run from your scrollback', async () => {
     // The history pane fills from the scrollback ring, which keeps the
-    // run as the screen shows it but with no region. The run the session
-    // goes on with lands once on a new row, and then in place.
+    // run as the screen shows it, its region marked while it is the last
+    // line. Your prompt shows pinned, so the session rewrites the run
+    // without the line end the live screen still holds back, and hands it
+    // over as the tail, which this pane, holding nothing, holds instead.
     const { term, writer } = setup(40, 6);
-    writer.local(`You are hungry.\r\n${count(2, dodge)}\r\n`);
-    writer.output(replace(7, `${mark(8)}${count(3, dodge)}\r\n`, true));
-    writer.output(replace(8, `${mark(9)}${count(4, dodge)}\r\n`, true));
+    writer.local(`You are hungry.\r\n${mark(7)}${count(2, dodge)}\r\n`);
+    const tail = (gen: number, text: string): RegionOutput => ({
+      text: '',
+      replace: { gen, text, fresh: true, tail: '\r\n' },
+    });
+    writer.output(tail(7, `${mark(8)}${count(3, dodge)}`));
+    writer.output(tail(8, `${mark(9)}${count(4, dodge)}`));
+    writer.output({ text: `${mark(10)}${parry}\r\n` });
     await parsed(writer);
-    expect(screen(term)).toEqual(['You are hungry.', `(2) ${dodge}`, `(4) ${dodge}`]);
+    expect(screen(term)).toEqual(['You are hungry.', `(4) ${dodge}`, parry]);
   });
 
   it('holds the tail back once it writes the run on a new row', async () => {

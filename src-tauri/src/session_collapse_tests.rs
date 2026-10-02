@@ -145,18 +145,31 @@ fn grid_rows(reads: &[Read], columns: usize) -> Vec<String> {
     rows_of(&grid)
 }
 
-/// The lines the scrollback ring keeps after `reads`, as the session
-/// keeps them, plain, the blank ones left out.
-fn ring_of(reads: &[Read]) -> Vec<String> {
+/// The scrollback ring after `reads`, kept as the session keeps it.
+fn ring_after(reads: &[Read]) -> crate::log_state::Scrollback {
     let mut ring = crate::log_state::Scrollback::default();
     for read in reads {
         for (line, repeat) in read.kept.iter().zip(&read.repeats) {
             ring.keep(line.clone(), *repeat);
         }
     }
-    ring.lines()
+    ring
+}
+
+/// The lines the scrollback ring keeps after `reads`, as the session
+/// keeps them, plain, blank ones included.
+fn ring_of(reads: &[Read]) -> Vec<String> {
+    ring_after(reads)
+        .lines()
         .map(vosh_ansi::plain_text)
-        .filter(|line| !line.is_empty())
+        .collect()
+}
+
+/// What Collapse repeated lines made of each line `read` kept.
+fn made(read: &Read) -> Vec<Option<Repeat>> {
+    read.repeats
+        .iter()
+        .map(|run| run.map(|run| run.repeat))
         .collect()
 }
 
@@ -277,31 +290,133 @@ fn every_line_is_logged_and_triggers_see_each_one() {
     }
 }
 
+/// A profile like [`collapsing`] that pins your prompt with drawing off,
+/// so the ring keeps each prompt as the game sent it.
+fn collapsing_undrawn() -> Profile {
+    let mut p = showing(profile(CODES, HP, false), PromptShow::Pinned);
+    p.ui.collapse_repeats = true;
+    p
+}
+
 #[test]
-fn the_scrollback_ring_keeps_each_run_once() {
+fn the_scrollback_ring_keeps_each_run_once_in_the_order_it_came() {
     let streams = streams();
-    let (_, login, bytes) = &streams[0];
-    for show in [PromptShow::Pinned, PromptShow::Text] {
-        let mut session = Session::new(collapsing(show));
+    let stream = |name: &str| {
+        streams
+            .iter()
+            .find(|(n, _, _)| *n == name)
+            .map(|(_, login, bytes)| (login.clone(), bytes.clone()))
+            .expect("the stream")
+    };
+    let prompt = "[1020/1020hp 800/800mn 930/930mv]";
+    let hurt = "[765/1020hp 800/800mn 930/930mv]";
+    let tank = "Tester: [===|===|===|---]";
+    let battle = "A Blackwatch guard has quite a few wounds. ";
+    let cases: Vec<(&str, Profile, &str, Vec<String>)> = vec![
+        // Pinned, the ring keeps what the screen shows, and the line end
+        // each pinned prompt's row took stays out of it.
+        (
+            "compact pinned",
+            collapsing(PromptShow::Pinned),
+            "compact",
+            [times(4, DODGE), times(3, REDIRECT), PARRY.to_string()].to_vec(),
+        ),
+        // In the text, the line end after each prompt shows, as before.
+        (
+            "compact in the text",
+            collapsing(PromptShow::Text),
+            "compact",
+            [
+                "",
+                DODGE,
+                "",
+                DODGE,
+                "",
+                &times(2, DODGE),
+                "",
+                REDIRECT,
+                "",
+                &times(2, REDIRECT),
+                "",
+                PARRY,
+            ]
+            .map(str::to_string)
+            .to_vec(),
+        ),
+        // Each round's tank line leaves the text with your prompt, and the
+        // ring keeps it as before. The battle line that comes round after
+        // it comes after it in the ring too.
+        (
+            "fight pinned",
+            collapsing(PromptShow::Pinned),
+            "fight",
+            [
+                "A Blackwatch guard attacks you!",
+                tank,
+                tank,
+                &times(3, battle),
+                tank,
+                DODGE,
+                battle,
+                tank,
+            ]
+            .map(str::to_string)
+            .to_vec(),
+        ),
+        // Drawing off, the ring keeps each pinned prompt as the game sent
+        // it, and the run comes after the prompts it went on past.
+        (
+            "compact pinned, drawing off",
+            collapsing_undrawn(),
+            "compact",
+            [
+                prompt,
+                prompt,
+                prompt,
+                &times(4, DODGE),
+                prompt,
+                prompt,
+                &times(3, REDIRECT),
+                prompt,
+                PARRY,
+                prompt,
+            ]
+            .map(str::to_string)
+            .to_vec(),
+        ),
+        (
+            "fight pinned, drawing off",
+            collapsing_undrawn(),
+            "fight",
+            [
+                prompt,
+                "A Blackwatch guard attacks you!",
+                tank,
+                hurt,
+                tank,
+                hurt,
+                &times(3, battle),
+                tank,
+                hurt,
+                DODGE,
+                battle,
+                tank,
+                hurt,
+            ]
+            .map(str::to_string)
+            .to_vec(),
+        ),
+    ];
+    for (label, profile, name, lines) in cases {
+        let (login, bytes) = stream(name);
+        let mut session = Session::new(profile);
+        let mut want = rows(&LOGIN);
+        want.extend(lines);
         let mut splits = vec![Vec::new()];
-        splits.extend(cuts(bytes).into_iter().map(|at| vec![at]));
+        splits.extend(cuts(&bytes).into_iter().map(|at| vec![at]));
         for at in &splits {
-            let reads = replay(&mut session, login, bytes, at);
-            let mut want = rows(&LOGIN);
-            match show {
-                PromptShow::Pinned => {
-                    want.extend([times(4, DODGE), times(3, REDIRECT), PARRY.to_string()]);
-                }
-                _ => want.extend([
-                    DODGE.to_string(),
-                    DODGE.to_string(),
-                    times(2, DODGE),
-                    REDIRECT.to_string(),
-                    times(2, REDIRECT),
-                    PARRY.to_string(),
-                ]),
-            }
-            assert_eq!(ring_of(&reads), want, "{show:?} cut {at:?}");
+            let reads = replay(&mut session, &login, &bytes, at);
+            assert_eq!(ring_of(&reads), want, "{label}, cut {at:?}");
         }
     }
 }
@@ -364,7 +479,7 @@ fn your_echo_output_from_elsewhere_and_a_new_connection_start_a_new_run() {
     // A new connection starts over.
     session.restart();
     let read = session.read(&mud.pulse_later(DODGE));
-    assert_eq!(read.repeats, [None, Some(Repeat::Starts)]);
+    assert_eq!(made(&read), [None, Some(Repeat::Starts)]);
 }
 
 #[test]
@@ -396,7 +511,7 @@ fn a_hidden_line_leaves_the_run_and_another_color_starts_a_new_one() {
     // The hidden line is neither logged nor kept, as before.
     assert_eq!(read.log, [HUNGRY, HUNGRY, HUNGRY]);
     assert_eq!(
-        read.repeats,
+        made(&read),
         [
             Some(Repeat::Starts),
             Some(Repeat::Joins(2)),
@@ -412,7 +527,7 @@ fn with_collapse_off_every_line_shows_as_before() {
     let mut session = Session::new(p);
     let read = session.read(format!("{HUNGRY}\n\r{HUNGRY}\n\r").as_bytes());
     assert_eq!(read.out.bytes, b"You are hungry.\r\nYou are hungry.\r\n");
-    assert_eq!(read.repeats, [None, None]);
+    assert_eq!(made(&read), [None, None]);
 }
 
 /// The rows a grid shows at its display offset, trimmed.
@@ -651,7 +766,8 @@ fn echo_before_the_run() -> (Vec<Output>, usize, &'static [u8]) {
     let login = session.read(&mud.login());
     let first = session.read(&mud.pulse_later(&red));
     let second = session.read(&mud.pulse_later(&red));
-    assert_eq!(second.repeats, [None, Some(Repeat::Joins(2))]);
+    // The line end your pinned prompt's row took is not kept.
+    assert_eq!(made(&second), [Some(Repeat::Joins(2))]);
     // The session hears of your echo now, after the screen had the first
     // pulse only, so the run the second pulse went on with stays.
     session.p.prompt.stage.local_write(first.out.id());
@@ -687,6 +803,53 @@ fn a_run_your_echo_landed_before_goes_on_a_new_row_that_still_ends() {
     assert_eq!(grid.cell(parry, 0).1, Color::Named(NamedColor::Foreground));
 }
 
+/// A pane that opens during a run of three dodges, such as the history
+/// of the split, and loads the scrollback the session kept so far, then
+/// two more dodges and a parry. Returns what the session wrote before the
+/// pane opened, what the pane loads, and what the session wrote after.
+fn pane_during_a_run() -> (Vec<Output>, Vec<u8>, Vec<Output>) {
+    let mut mud = Mud::playing(Options {
+        compact: true,
+        ..Options::new(Build::New)
+    });
+    let mut session = Session::new(collapsing(PromptShow::Pinned));
+    let mut reads = vec![session.read(&mud.login())];
+    for _ in 0..3 {
+        reads.push(session.read(&mud.pulse_later(DODGE)));
+    }
+    let load = ring_after(&reads).dump_live();
+    let after = [DODGE, DODGE, PARRY]
+        .iter()
+        .map(|line| session.read(&mud.pulse_later(line)).out)
+        .collect();
+    (
+        reads.into_iter().map(|read| read.out).collect(),
+        load,
+        after,
+    )
+}
+
+#[test]
+fn a_pane_that_loads_the_scrollback_during_a_run_goes_on_with_it_in_place() {
+    let (before, load, after) = pane_during_a_run();
+    let mut live = crate::term_grid::TermGrid::new(60, 20);
+    for out in before.iter().chain(&after) {
+        live.session_output(out);
+    }
+    // The pane takes every byte it loads as xterm does, marks included.
+    let mut pane = crate::term_grid::TermGrid::new(60, 20);
+    let mut loaded = Output::new(false);
+    loaded.text(&load);
+    pane.session_output(&loaded);
+    for out in &after {
+        pane.session_output(out);
+    }
+    let mut want = rows(&LOGIN);
+    want.extend([times(5, DODGE), PARRY.to_string()]);
+    assert_eq!(rows_of(&live), want);
+    assert_eq!(rows_of(&pane), want);
+}
+
 /// The payloads of every stream in [`streams`], drawing on, pinned, and
 /// the compact pulses in the text too, as one read and as two cut at
 /// every place [`cuts`] names, each after the payload of the login in one
@@ -694,8 +857,9 @@ fn a_run_your_echo_landed_before_goes_on_a_new_row_that_still_ends() {
 /// webview test replays them into xterm and holds its screens to the
 /// grid's. The native grid test plays every stream both ways. Then the
 /// scenes the tests above play on the native grid: a run whose line ends
-/// on a blue background and one a wash covers, across pinned pulses, and
-/// your echo landing before the session heard of it.
+/// on a blue background and one a wash covers, across pinned pulses, your
+/// echo landing before the session heard of it, and a pane that loads
+/// the scrollback during a run.
 fn collapse_splits() -> serde_json::Value {
     let payloads = |reads: &[Read]| -> Vec<serde_json::Value> {
         reads
@@ -780,10 +944,12 @@ fn collapse_splits() -> serde_json::Value {
         })
     };
     let (outputs, before, echo) = echo_before_the_run();
+    let (_, load, after) = pane_during_a_run();
     let scenes = vec![
         scene("blue", None, &blue_run(), None, 40),
         scene("wash", None, &washed_run(), None, 40),
         scene("echo", None, &outputs, Some((before, echo)), 60),
+        scene("pane", Some(&load), &after, None, 60),
     ];
     serde_json::json!({ "streams": streams, "scenes": scenes })
 }

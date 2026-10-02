@@ -2932,7 +2932,9 @@ pub(crate) async fn scrollback_load(
     feed_native: bool,
 ) -> Result<ScrollbackLoad, String> {
     let sb = state.scrollback.lock().await;
-    let bytes = sb.dump();
+    // With the run of repeated lines the screen ends on marked, so a pane
+    // that loads it during the run rewrites the count in place.
+    let bytes = sb.dump_live();
     // The native grid is fed only live output, so the persisted scrollback
     // would be missing there. The live pane asks us to seed it, and only
     // the first ask per process lands. A reloaded page asks again while
