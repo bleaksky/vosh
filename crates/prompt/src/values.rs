@@ -1,4 +1,4 @@
-//! The variables a template reads (section 1 of the build spec).
+//! The values a template reads (section 1 of the build spec).
 //!
 //! [`CATALOG`] names every field Vosh knows, with its label, kind, group,
 //! sources, a sample for previews and the words the picker searches.

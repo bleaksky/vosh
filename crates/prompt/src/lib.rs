@@ -4,48 +4,38 @@
 //! no Tauri, so each one is testable on its own. The session task feeds it
 //! and emits what it returns.
 //!
-//! - [`config`] is the `[prompt]` table of a profile file, with the
+//! - [`engine`] is [`PromptEngine`], the front door the session keeps for
+//!   the live profile. It follows Char.Prompt, reads the game's replies to
+//!   `prompt` and `fprompt`, counts misses and reports the status.
+//! - [`config`] is the `[prompt]` table a profile file saves, with the
 //!   default design a fresh table takes.
-//! - [`engine`] is the live profile's custom prompt, its table and the
-//!   session's variables together.
-//! - [`capture`] reads patterns you point at, and the capture triggers
-//!   older builds used, into a capture.
-//!   - [`capture::generic`] builds a capture from a line another game
-//!     prints.
 //! - [`design`] is the template language. It parses a design into tokens
 //!   and the pieces the editor shows, writes tokens back as text, and
 //!   holds the look algebra the editor uses to keep each piece's look.
-//! - [`values`] holds the catalog of fields and their samples, the
-//!   session's sources and the resolver that answers the renderer, with
-//!   the hidden model.
-//!   - [`values::format`] holds the values a template draws and the plain
-//!     text of each format.
-//!   - [`values::gmcp`] keeps the latest packet of each package, the pulse
-//!     and the latest Char.Prompt.
-//!   - [`values::overrides`] draws a preview's values in place of the live
-//!     ones.
+//! - [`values`] holds the value catalog, the value formats, the GMCP
+//!   snapshot, what the game hides and why, the resolver that answers the
+//!   renderer, the samples and a preview's overrides.
+//! - [`render`](mod@render) draws a design as ANSI text with a span per
+//!   piece, and tracks the SGR state as it writes.
+//! - [`capture`] recognizes your prompt in what the game sends, by your
+//!   pattern or by Aabahran's shapes. It also reads the capture triggers
+//!   older builds used, and builds a capture from a line another game
+//!   prints.
 //! - [`aabahran`] holds what Vosh knows about Aabahran alone, the PROMPT
-//!   compiler among it.
-//! - [`render`] draws a template as ANSI text with a span per piece.
-//! - [`stage`] decides what Vosh writes around your prompt, in one output
-//!   per socket read, with the regions a later output replaces.
-//! - [`card`] is what the prompt card on the page receives.
-//!   - [`card::state`] reports each field's live state and source.
-//!   - [`card::describe`] says what each piece and token of a design is,
-//!     with the forms a value takes.
-//!   - [`card::edit`] writes the template changes the editor makes,
-//!     keeping the look of every other piece.
-//!   - [`card::report`] says what a capture compiles to, with the
-//!     [`card::presets`] it offers to start from.
-//!   - [`card::presets`] holds the designs Vosh ships, its default among
-//!     them.
-//!   - [`card::candidates`] groups the candidates ring by shape and checks
-//!     a capture against it and your scrollback.
-//!   - [`card::sentences`] says what a setting reads and shows, with the
-//!     label each code and value goes by.
-//! - [`wrap`] is the word wrap both renderers share.
+//!   compiler with its codes, colors, lexing and shapes, the observer of
+//!   the game's replies, and who the prompt is for.
+//! - [`stage`] decides what Vosh writes to the terminal around your
+//!   prompt, in one output per socket read, with the regions a later
+//!   output replaces. It fills the candidates ring on each send and each
+//!   GA or EOR.
+//! - [`card`] builds what the prompt card on the page receives. It reports
+//!   each field's state, says what each piece of a design is, makes the
+//!   edits, reports what a capture compiles to, offers the presets, writes
+//!   the sentences you read and groups the candidates.
 //! - `testkit`, behind the `testkit` feature, prints prompts the way the
-//!   game does and plays a fake Aabahran for tests and scripted runs.
+//!   game does, plays a fake Aabahran for tests and scripted runs, and
+//!   holds the designs and clocks many tests share.
+//! - [`wrap`] is the word wrap both renderers share.
 
 pub mod aabahran;
 pub mod capture;

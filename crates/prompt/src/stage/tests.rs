@@ -1,3 +1,5 @@
+//! Tests of the bytes the stage writes around your prompt.
+
 use std::collections::BTreeMap;
 
 use super::marks::with_lift_end;
