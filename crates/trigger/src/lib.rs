@@ -14,7 +14,6 @@ pub mod store;
 pub use action::{HighlightStyle, TriggerAction};
 pub use color::NamedColor;
 pub use engine::{
-    matching, process, process_on_ground, process_scoped, process_with_plain, LineResult,
-    MatchScope, ScriptInvocation,
+    matching, process, process_on_ground, process_scoped, LineResult, MatchScope, ScriptInvocation,
 };
 pub use store::{Trigger, TriggerError, TriggerPattern, TriggerStore, TriggerTarget};
