@@ -15,7 +15,7 @@ use mlua::{Function, Lua, Value};
 use regex::Regex;
 use thiserror::Error;
 
-pub use actions::{Action, VarScope};
+pub use actions::Action;
 use state::EngineState;
 
 /// One Lua-defined trigger: a regex matched against incoming MUD lines and
@@ -426,6 +426,8 @@ impl ScriptEngine {
 
 #[cfg(test)]
 mod tests {
+    use vosh_automation::vars::Scope;
+
     use super::*;
 
     fn run(code: &str) -> Vec<Action> {
@@ -464,7 +466,7 @@ mod tests {
         assert!(matches!(
             actions[0],
             Action::SetVar {
-                scope: VarScope::Session,
+                scope: Scope::Session,
                 ..
             }
         ));

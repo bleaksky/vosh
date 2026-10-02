@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 use tokio::time::Instant;
 use vosh_automation::alias::Alias;
 use vosh_automation::vars::{Scope, VariableStore};
-use vosh_script::{Action, ScriptEngine, ScriptOutcome, VarScope};
+use vosh_script::{Action, ScriptEngine, ScriptOutcome};
 
 use crate::list_events::{ListChanges, ListRevisions};
 use crate::profile::Profile;
@@ -146,14 +146,13 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
                 result.durable_changed = true;
             }
             Action::SetVar { scope, name, value } => {
-                let internal = scope_to_internal(scope);
                 // Only profile-scoped vars are persisted; session vars
                 // marking durable would reset the persist debounce on
                 // every combat line for busy Lua triggers.
-                if matches!(internal, Scope::Profile) {
+                if matches!(scope, Scope::Profile) {
                     result.durable_changed = true;
                 }
-                profile.vars.set(internal, name, value);
+                profile.vars.set(scope, name, value);
             }
             Action::RemoveVar(name) => {
                 profile.vars.remove(&name);
@@ -223,13 +222,6 @@ pub(crate) fn define_alias(
         .get(&alias.name)
         .and_then(|old| old.group.clone());
     profile.aliases.set(alias);
-}
-
-fn scope_to_internal(scope: VarScope) -> Scope {
-    match scope {
-        VarScope::Profile => Scope::Profile,
-        VarScope::Session => Scope::Session,
-    }
 }
 
 /// Outcome of `toggle_group`. Reports which stores actually carried

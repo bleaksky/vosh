@@ -6,8 +6,9 @@ use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
 use std::time::Duration;
 
 use mlua::{Function, Lua, Result as LuaResult, Table, Value};
+use vosh_automation::vars::Scope;
 
-use crate::actions::{Action, VarScope};
+use crate::actions::Action;
 use crate::state::{EngineState, StateInner};
 
 /// Counter for synthetic callback ids. The Lua engine stores the actual
@@ -132,7 +133,7 @@ fn mud_var(lua: &Lua, name: String) -> LuaResult<Option<String>> {
 fn mud_set_var(lua: &Lua, (name, value): (String, String)) -> LuaResult<()> {
     with_state(lua, |s| {
         s.pending.push(Action::SetVar {
-            scope: VarScope::Session,
+            scope: Scope::Session,
             name: name.clone(),
             value: value.clone(),
         });
@@ -144,7 +145,7 @@ fn mud_set_var(lua: &Lua, (name, value): (String, String)) -> LuaResult<()> {
 fn mud_set_profile_var(lua: &Lua, (name, value): (String, String)) -> LuaResult<()> {
     with_state(lua, |s| {
         s.pending.push(Action::SetVar {
-            scope: VarScope::Profile,
+            scope: Scope::Profile,
             name: name.clone(),
             value: value.clone(),
         });
