@@ -1,6 +1,6 @@
 # Aabahran GMCP packets
 
-Each `.gmcp` file holds one GMCP payload the way the Aabahran server writes it between `IAC SB 201` and `IAC SE`. That is the package name, a space, and the JSON. The Rust tests hand the bytes to `vosh_gmcp::parse`, and the TypeScript tests split them the same way and feed the data to the stores.
+Each `.gmcp` file holds one GMCP payload the way the Aabahran server writes it between `IAC SB 201` and `IAC SE`. That is the package name, a space, and the JSON. The Rust tests hand the bytes to `vosh_protocol::gmcp::parse`, and the TypeScript tests split them the same way and feed the data to the stores.
 
 These packets are written by hand, not captured. They follow the server's `docs/gmcp-spec.md` and the emitters in `gmcp.c` as of 2026-09-29, with the lamented tears `hidden` flag, the Char.Combat `tank` field, and the Char.Prompt, Char.State and Room.Weather packages. Character names are placeholders.
 

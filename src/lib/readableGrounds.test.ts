@@ -4,9 +4,9 @@ import { PRESETS } from './presets';
 import { BUILTIN_THEMES } from './themes';
 
 // fixtures/readable/grounds.json feeds the Rust tests of Keep highlight
-// colors readable (crates/trigger/src/readable.rs). These hold it to the
-// themes and presets it was written from, so a theme, a preset color or a
-// preset template added later joins the Rust tests too.
+// colors readable (crates/automation/src/trigger/readable.rs). These hold
+// it to the themes and presets it was written from, so a theme, a preset
+// color or a preset template added later joins the Rust tests too.
 
 /** Every Replace template of the presets once, in the order they list them. */
 function presetTemplates(): string[] {

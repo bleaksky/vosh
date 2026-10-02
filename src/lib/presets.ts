@@ -158,8 +158,8 @@ const WEATHER_CHANGES = [
 ];
 
 // The weather blue, a true color apart from the theme's cyan and blue, the
-// same on every theme. Keep highlight colors readable darkens it on a
-// light theme, where it would fade (crates/trigger/src/readable.rs).
+// same on every theme. Keep highlight colors readable darkens it on a light
+// theme, where it would fade (crates/automation/src/trigger/readable.rs).
 const WEATHER_BLUE = '{#8fa7d9}';
 
 // `text` as a regex that matches it literally.

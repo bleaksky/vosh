@@ -1,7 +1,7 @@
 // The Aabahran GMCP packets in fixtures/gmcp/aabahran, for the tests.
 // Each file holds one payload the way the server writes it, the package
 // name, a space, and the JSON. The backend splits it the same way in
-// vosh_gmcp::parse and emits the JSON on session://gmcp/<package>.
+// vosh_protocol::gmcp::parse and emits the JSON on session://gmcp/<package>.
 
 const FILES = import.meta.glob<string>('../../fixtures/gmcp/aabahran/*.gmcp', {
   query: '?raw',
