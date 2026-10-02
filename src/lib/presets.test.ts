@@ -108,7 +108,7 @@ describe('the Room, time and weather colors preset', () => {
   it('is on from the start, under Rooms, time and weather', () => {
     expect(preset?.name).toBe('Room, time and weather colors');
     expect(preset?.description).toBe(
-      'Colors the exits green, what is in the room yellow, the time of day blue, a change in the weather pale blue, and the WiZNET tag magenta.',
+      'Colors the exits green, what is in the room yellow, your target in the room bright red, the time of day blue, a change in the weather pale blue, and the WiZNET tag magenta.',
     );
     expect(defaultEnabledIds()).toContain('room_and_time');
     expect(preset && PRESET_CATEGORIES[preset.category]).toBe('Rooms, time and weather');
@@ -119,7 +119,7 @@ describe('the Room, time and weather colors preset', () => {
     expect(triggers).toEqual(roomPreset.triggers);
   });
 
-  it("draws in the theme's own green, yellow, blue and magenta, and the weather in #8fa7d9", () => {
+  it("draws in the theme's own green, yellow, bright red, blue and magenta, and the weather in #8fa7d9", () => {
     const styles = Object.fromEntries(
       triggers.map((t) => [
         t.name,
@@ -131,6 +131,7 @@ describe('the Room, time and weather colors preset', () => {
     expect(styles).toEqual({
       'room.exits': [{ fg: 'green', base: true }],
       'room.contents': [{ fg: 'yellow', base: true }],
+      'room.target': [{ fg: 'bright_red', base: true }],
       'time.of_day': [{ fg: 'blue' }],
       // The whole line in the true color 143 167 217, then a reset.
       'weather.change': ['\x1b[38;2;143;167;217m$0\x1b[0m'],
@@ -138,8 +139,15 @@ describe('the Room, time and weather colors preset', () => {
     });
   });
 
+  it('colors your target over the room color, on its line alone', () => {
+    const target = named('room.target');
+    expect(target.priority).toBeGreaterThan(named('room.contents').priority);
+    expect(target.patterns).toEqual(named('room.contents').patterns);
+  });
+
   it('colors what is in the room only through the Room target', () => {
     expect(named('room.contents').target).toBe('room');
+    expect(named('room.target').target).toBe('room_target');
     expect(lineTriggers.map((t) => t.name)).toEqual([
       'room.exits',
       'time.of_day',
