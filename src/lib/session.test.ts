@@ -646,8 +646,8 @@ describe('a replaced UI config', () => {
     });
 
     // #profile load lands while a save built on the old copy waits, or
-    // while ThemesTab holds one, or right after you typed in the gap
-    // before the new copy arrived.
+    // while a Settings page holds one, or right after you typed in the
+    // gap before the new copy arrived.
     backend.replace(raw({ tick_count: 'up', chip_style: 'value_only' }));
     const sent = vi.mocked(emit);
     sent.mockClear();
