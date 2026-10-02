@@ -291,6 +291,20 @@ describe('Solarized', () => {
     }
   });
 
+  it('draws danger in Solarized red, not the orange in bright red', () => {
+    const red = rgbToOklch(hex(SOL.red));
+    const orange = rgbToOklch(hex(SOL.orange));
+    for (const { theme } of BOTH) {
+      const tokens = themeTokens(theme);
+      for (const key of ['danger', 'dangerText'] as const) {
+        const h = rgbToOklch(hex(tokens[key])).h;
+        const label = `${theme.id} ${key}`;
+        expect(Math.abs(h - red.h), label).toBeLessThan(3);
+        expect(Math.abs(h - red.h), label).toBeLessThan(Math.abs(h - orange.h));
+      }
+    }
+  });
+
   it('keeps every slot game text reads off its ground', () => {
     const slots = [
       'white',
