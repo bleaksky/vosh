@@ -34,7 +34,10 @@ use crate::profile_set::AutoMatch;
 pub(crate) struct GlobalCatalog {
     #[serde(default)]
     pub aliases: Vec<Alias>,
-    #[serde(default)]
+    /// Every trigger. Room triggers go under `room_triggers` on disk, so
+    /// an older build still reads the file (D14), see
+    /// [`crate::profile_config::trigger_lists`].
+    #[serde(flatten, with = "crate::profile_config::trigger_lists")]
     pub triggers: Vec<Trigger>,
     #[serde(default)]
     pub macros: Vec<Macro>,

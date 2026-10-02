@@ -14,7 +14,9 @@ fixtures/
              and first-save/ with the three files a fresh install writes
              on its first save. Generated and synthetic. A golden changes
              only in a commit tied to a numbered bug or a lettered
-             decision, and VOSH_WRITE_CONFIG=1 writes them again.
+             decision, and VOSH_WRITE_CONFIG=1 writes them again. Each
+             one still reads in 0.8.0, which knows Line and Prompt
+             triggers only, so Room triggers go under room_triggers (D14).
     old/     Files in the shapes older builds wrote, written by hand. They
              never change, and each one still loads.
   gmcp/      GMCP message captures.

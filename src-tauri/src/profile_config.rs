@@ -35,7 +35,9 @@ pub(crate) struct ProfileConfig {
     pub aliases: Vec<Alias>,
     #[serde(default)]
     pub profile_vars: BTreeMap<String, String>,
-    #[serde(default)]
+    /// Every trigger. Room triggers go under `room_triggers` on disk,
+    /// see [`trigger_lists`].
+    #[serde(flatten, with = "trigger_lists")]
     pub triggers: Vec<Trigger>,
     #[serde(default)]
     pub tick: TickPersistConfig,
@@ -96,6 +98,53 @@ pub(crate) struct GroupFolders {
 impl GroupFolders {
     pub(crate) fn is_empty(&self) -> bool {
         self.aliases.is_empty() && self.triggers.is_empty() && self.macros.is_empty()
+    }
+}
+
+/// The trigger list of a profile file or catalog.toml, as two keys on
+/// disk. Line and Prompt triggers go under `triggers` and Room triggers
+/// under `room_triggers`. Builds up to 0.8.0 read `triggers` with
+/// `line` and `prompt` as the only targets, and a `room` there would
+/// fail the whole file, so a rollback would start on defaults (D14).
+/// They skip the key they do not know, and a load here puts the two
+/// lists back together, so the field holds every trigger in memory. Use
+/// it on a `Vec<Trigger>` field with
+/// `#[serde(flatten, with = "trigger_lists")]`.
+pub(crate) mod trigger_lists {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use vosh_trigger::{Trigger, TriggerTarget};
+
+    #[derive(Serialize)]
+    struct Written<'a> {
+        triggers: Vec<&'a Trigger>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        room_triggers: Vec<&'a Trigger>,
+    }
+
+    #[derive(Deserialize)]
+    struct Read {
+        #[serde(default)]
+        triggers: Vec<Trigger>,
+        #[serde(default)]
+        room_triggers: Vec<Trigger>,
+    }
+
+    pub(crate) fn serialize<S: Serializer>(list: &[Trigger], s: S) -> Result<S::Ok, S::Error> {
+        let (room_triggers, triggers) = list.iter().partition(|t| t.target == TriggerTarget::Room);
+        Written {
+            triggers,
+            room_triggers,
+        }
+        .serialize(s)
+    }
+
+    pub(crate) fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Trigger>, D::Error> {
+        let Read {
+            mut triggers,
+            room_triggers,
+        } = Read::deserialize(d)?;
+        triggers.extend(room_triggers);
+        Ok(triggers)
     }
 }
 
