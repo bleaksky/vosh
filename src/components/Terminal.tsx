@@ -469,8 +469,6 @@ export function Terminal({
     // syncScrollArea because the renderer swap and a scheduled fit()
     // ran in the same frame, leaving `_renderer.value` undefined; the
     // straightforward order (sync + fit, then swap) avoids that.
-    // Escape hatch: set `window.__voshDisableWebGL = true` in the
-    // console before reload to force the DOM renderer.
     const safeFit = () => {
       // When the native surface owns the pane it is the size authority and
       // resizes xterm via the native-grid-size event. xterm is hidden behind
@@ -487,27 +485,17 @@ export function Terminal({
     // WebGL is on by default: the GPU renderer is far smoother for
     // scroll and burst output than xterm's DOM renderer. The webgl2
     // probe below still falls back to DOM when the WebView can't
-    // allocate a context. Opt out persistently with
+    // allocate a context. Opt out with
     // `localStorage.setItem('vosh.webgl', '0')` (or the Settings
-    // toggle), or for the current page only with
-    // `window.__voshDisableWebGL = true` before reload — the escape
-    // hatch for the rare case where a context allocates but paints
+    // toggle), for the rare case where a context allocates but paints
     // nothing, which against Tauri's `transparent: true` window reads
     // as see-through desktop.
     let webglAddon: WebglAddon | null = null;
     const lsVal = typeof localStorage !== 'undefined' ? localStorage.getItem('vosh.webgl') : null;
-    const winEnable =
-      typeof window !== 'undefined' &&
-      (window as { __voshEnableWebGL?: boolean }).__voshEnableWebGL === true;
-    const winDisable =
-      typeof window !== 'undefined' &&
-      (window as { __voshDisableWebGL?: boolean }).__voshDisableWebGL === true;
     // On by default (opt-out). Only the live pane uses WebGL; the history
     // pane (quiet) always stays on the DOM renderer so the
-    // split-scrollback overlay paints reliably. `__voshDisableWebGL`
-    // forces it off; `__voshEnableWebGL` forces it on even when
-    // localStorage says '0'.
-    const enableWebgl = !winDisable && !quietRef.current && (winEnable || lsVal !== '0');
+    // split-scrollback overlay paints reliably.
+    const enableWebgl = !quietRef.current && lsVal !== '0';
     if (enableWebgl) {
       // Probe webgl2 in a throwaway canvas first. If the WebView
       // can't allocate a context, the addon would load, immediately
