@@ -162,7 +162,9 @@ impl Parser {
         events
     }
 
-    /// Reset the parser to a fresh state. Use when the connection drops.
+    /// Reset the parser to a fresh state. Only tests reset a parser,
+    /// since the session builds a new one for each connection.
+    #[cfg(test)]
     pub fn reset(&mut self) {
         self.state = State::Stream;
         self.sb_option = 0;

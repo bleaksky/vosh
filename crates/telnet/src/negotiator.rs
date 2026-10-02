@@ -157,9 +157,10 @@ impl Negotiator {
         self.window_size = (cols, rows);
     }
 
-    /// Rewind the TTYPE cycle. Useful when a new session starts on an
-    /// existing Negotiator and the server is about to re-request the
-    /// terminal type from scratch.
+    /// Rewind the TTYPE cycle so the next SEND answers from the first
+    /// slot. Only tests rewind it, since the session builds a new
+    /// Negotiator for each connection.
+    #[cfg(test)]
     pub fn reset_ttype_cycle(&mut self) {
         self.ttype_cycle = 0;
     }
