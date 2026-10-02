@@ -54,7 +54,6 @@ pub enum Action {
         name: String,
         pattern: String,
         callback_id: i64,
-        priority: i32,
     },
     RemoveLuaTrigger(String),
     /// Subscribe a Lua callback to a GMCP package.

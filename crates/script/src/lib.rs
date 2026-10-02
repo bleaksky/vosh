@@ -26,19 +26,13 @@ struct LuaTrigger {
     regex: Regex,
     callback_id: i64,
     capture_names: Vec<Option<String>>,
-    priority: i32,
-    enabled: bool,
 }
 
-/// Public Lua-trigger record (mirrors `vosh_trigger::Trigger` for the
-/// listing UI but holds the Lua callback id rather than a structured
-/// action).
+/// One Lua trigger as the `#scripts` listing shows it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LuaTriggerInfo {
     pub name: String,
     pub pattern: String,
-    pub priority: i32,
-    pub enabled: bool,
 }
 
 #[derive(Debug, Error)]
@@ -139,11 +133,9 @@ impl ScriptEngine {
             .map(|t| LuaTriggerInfo {
                 name: t.name.clone(),
                 pattern: t.pattern.clone(),
-                priority: t.priority,
-                enabled: t.enabled,
             })
             .collect();
-        out.sort_by(|a, b| b.priority.cmp(&a.priority).then(a.name.cmp(&b.name)));
+        out.sort_by(|a, b| a.name.cmp(&b.name));
         out
     }
 
@@ -288,23 +280,14 @@ impl ScriptEngine {
         }
     }
 
-    /// Run every Lua trigger against `line`. For each match the callback
-    /// fires with a captures table.
+    /// Run every Lua trigger against `line`, in the order they were
+    /// registered. For each match the callback fires with a captures
+    /// table.
     pub fn match_line(&mut self, line: &str) -> Result<ScriptOutcome, ScriptError> {
-        let order: Vec<usize> = (0..self.triggers.len()).collect();
-        let mut sorted: Vec<usize> = order;
-        sorted.sort_by(|a, b| self.triggers[*b].priority.cmp(&self.triggers[*a].priority));
-        for idx in sorted {
-            let trigger = &self.triggers[idx];
-            if !trigger.enabled {
-                continue;
-            }
-            let regex = trigger.regex.clone();
-            let callback_id = trigger.callback_id;
-            let capture_names = trigger.capture_names.clone();
-            for caps in regex.captures_iter(line) {
-                let table = api::captures_to_lua(&self.lua, &caps, &capture_names)?;
-                self.invoke_callback(callback_id, Value::Table(table))?;
+        for trigger in &self.triggers {
+            for caps in trigger.regex.captures_iter(line) {
+                let table = api::captures_to_lua(&self.lua, &caps, &trigger.capture_names)?;
+                self.invoke_callback(trigger.callback_id, Value::Table(table))?;
             }
         }
         Ok(self.drain())
@@ -379,7 +362,6 @@ impl ScriptEngine {
                     name,
                     pattern,
                     callback_id,
-                    priority,
                 } => match Regex::new(&pattern) {
                     Ok(regex) => {
                         let capture_names: Vec<Option<String>> = regex
@@ -405,8 +387,6 @@ impl ScriptEngine {
                             regex,
                             callback_id,
                             capture_names,
-                            priority,
-                            enabled: true,
                         });
                     }
                     Err(e) => {
