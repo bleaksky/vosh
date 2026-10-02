@@ -8,16 +8,6 @@ dormant = true
 name = "shared"
 enabled_groups = []
 
-[loadouts.tick]
-enabled = true
-interval_secs = 30
-sound = true
-
-[loadouts.connection]
-host = "play.theforsakenlands.com"
-port = 1848
-tls = false
-
 [[loadouts]]
 name = "warrior"
 description = "Melee main"
@@ -34,21 +24,3 @@ characters = [
     "Testalt",
 ]
 enabled = false
-
-[loadouts.profile_vars]
-target = "orc"
-
-[loadouts.tick]
-enabled = false
-interval_secs = 45
-auto_fire = "score"
-sound = false
-reset_pattern = '^The day has begun\.$'
-warn_at_secs = 5
-warn_message = "tick soon"
-warn_color = "#ffcc00"
-
-[loadouts.connection]
-host = "mud.example.org"
-port = 4000
-tls = true

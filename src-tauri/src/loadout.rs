@@ -19,14 +19,11 @@
 //!     the runtime enables the union of `enabled_groups` across
 //!     every currently-active loadout (stack-by-union).
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 use vosh_alias::Alias;
 use vosh_trigger::Trigger;
 
 use crate::profile::Macro;
-use crate::profile_config::{ConnectionConfig, TickPersistConfig};
 use crate::profile_set::AutoMatch;
 
 /// The global catalog. Every alias, trigger, macro lives here as a
@@ -65,9 +62,10 @@ impl GlobalCatalog {
 }
 
 /// One named loadout. A loadout has no items of its own — it only
-/// references groups in the global catalog. The vars, tick, and
-/// connection fields below are planned but not applied; the profile
-/// file holds that state.
+/// references groups in the global catalog. Each character's vars,
+/// tick and connection live in its profile file. A loadouts.toml that
+/// an older build wrote with `profile_vars`, `tick` or `connection`
+/// tables still loads, and the next save leaves them out (D12).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Loadout {
     pub name: String,
@@ -89,21 +87,6 @@ pub(crate) struct Loadout {
     /// Settings group checkboxes govern instead.
     #[serde(default)]
     pub enabled_groups: Vec<String>,
-    /// Per-loadout profile-scoped vars, planned but not applied: no
-    /// runtime code reads them, and the profile file holds each
-    /// character's vars in loadout mode as it does per profile. The
-    /// shared catalog wizard leaves this empty. Kept so loadouts.toml
-    /// files that carry a copy still read.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub profile_vars: BTreeMap<String, String>,
-    /// Per-loadout tick config, planned but not applied, like
-    /// `profile_vars`. The profile file holds the tick config.
-    #[serde(default)]
-    pub tick: TickPersistConfig,
-    /// Default host / port / TLS for the connect form, planned but not
-    /// applied, like `profile_vars`.
-    #[serde(default)]
-    pub connection: ConnectionConfig,
 }
 
 impl Loadout {
@@ -116,9 +99,6 @@ impl Loadout {
             description: None,
             auto_match: None,
             enabled_groups: Vec::new(),
-            profile_vars: BTreeMap::new(),
-            tick: TickPersistConfig::default(),
-            connection: ConnectionConfig::default(),
         }
     }
 }
@@ -275,8 +255,6 @@ mod tests {
         let mut warrior = Loadout::empty("warrior");
         warrior.description = Some("Melee main".into());
         warrior.enabled_groups = vec!["combat-melee".into(), "wartools".into()];
-        warrior.connection.host = "play.theforsakenlands.com".into();
-        warrior.connection.port = 1848;
         set.loadouts = vec![warrior];
         set.active = vec!["warrior".into()];
 
@@ -293,5 +271,43 @@ mod tests {
             parsed.loadouts[0].enabled_groups,
             vec!["combat-melee", "wartools"]
         );
+    }
+
+    /// A loadouts.toml from before D12 carries the vars, tick and
+    /// connection tables every save used to write. It still loads, with
+    /// the rest of each loadout intact, and a save leaves the tables out.
+    #[test]
+    fn a_file_with_the_old_loadout_tables_still_loads() {
+        let older = r#"active = ["warrior"]
+dormant = false
+
+[[loadouts]]
+name = "warrior"
+description = "Melee main"
+enabled_groups = ["combat-melee"]
+
+[loadouts.profile_vars]
+target = "orc"
+
+[loadouts.tick]
+enabled = true
+interval_secs = 30
+sound = true
+
+[loadouts.connection]
+host = "play.theforsakenlands.com"
+port = 1848
+tls = false
+"#;
+        let set: LoadoutSet = toml::from_str(older).unwrap();
+        assert_eq!(set.active, ["warrior"]);
+        let warrior = set.get("warrior").unwrap();
+        assert_eq!(warrior.description.as_deref(), Some("Melee main"));
+        assert_eq!(warrior.enabled_groups, ["combat-melee"]);
+
+        let text = toml::to_string_pretty(&set).unwrap();
+        for table in ["profile_vars", "tick", "connection"] {
+            assert!(!text.contains(table), "{table} is written again");
+        }
     }
 }

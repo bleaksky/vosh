@@ -1364,24 +1364,6 @@ fn default_input_cursor_style() -> String {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct ConnectionConfig {
-    pub host: String,
-    pub port: u16,
-    #[serde(default)]
-    pub tls: bool,
-}
-
-impl Default for ConnectionConfig {
-    fn default() -> Self {
-        Self {
-            host: "play.theforsakenlands.com".to_string(),
-            port: 1848,
-            tls: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct TickPersistConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
