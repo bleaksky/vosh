@@ -6,7 +6,7 @@ The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, but 
 
 ## Status
 
-Phase 9 complete. The active profile (aliases, profile-scoped variables, triggers, tick config) saves to `<app_data_dir>/profile.toml` and auto-loads on startup. Use `#profile save`, `#profile load`, `#profile reset` to manage it from the input box. The new **profile** button in the header opens a settings drawer that edits the TOML directly with apply/copy/paste/download/upload. `#import-tintin <path>` reads a TinTin++ `.tin` file, imports its `#alias` and `#variable` lines, and reports any directives it skipped. Phase 10 lands logging, scrollback, and search.
+Phase 9 complete. The active profile (aliases, profile-scoped variables, triggers, tick config) saves to `<app_data_dir>/profile.toml` and auto-loads on startup. Use `#profile save`, `#profile load`, `#profile reset` to manage it from the input box. `#import-tintin <path>` reads a TinTin++ `.tin` file, imports its `#alias` and `#variable` lines, and reports any directives it skipped. Phase 10 lands logging, scrollback, and search.
 
 See `prompt.md` for the full phase plan and `CLAUDE.md` for stack and workflow rules.
 
@@ -21,7 +21,7 @@ See `prompt.md` for the full phase plan and `CLAUDE.md` for stack and workflow r
 
 ## Stack
 
-Tauri 2 shell. Rust backend with Tokio for async. TypeScript and React frontend. xterm.js for terminal rendering. Lua via mlua for scripting. SQLite for logs and map storage. TOML for human edited profile config.
+Tauri 2 shell. Rust backend with Tokio for async. TypeScript and React frontend. xterm.js for terminal rendering. Lua via mlua for scripting. SQLite for logs. TOML for human edited profile config.
 
 ## Run It
 

@@ -32,11 +32,9 @@ pub(crate) const ALIASES_CHANGED: &str = "vosh://aliases-changed";
 /// changed. The payload names the profile, `{profile}`, see
 /// [`PromptConfigChanged`].
 pub(crate) const PROMPT_CONFIG_CHANGED: &str = "vosh://prompt-config-changed";
-/// Sent to every window when a macro group turned on or off: a Settings
-/// checkbox, a `#group` line, a Lua `mud.set_group_enabled`, or a
-/// loadout switch. The command line reads the groups again on it. The
-/// payload names the group a checkbox turned, and is an empty string
-/// otherwise.
+/// Sent to every window when a macro group turned on or off: a `#group`
+/// line, a Lua `mud.set_group_enabled`, or a loadout switch. The command
+/// line reads the groups again on it. The payload is an empty string.
 pub(crate) const MACRO_GROUPS_CHANGED: &str = "vosh://macro-groups-changed";
 
 /// The payload of [`PROMPT_CONFIG_CHANGED`]: the active profile whose
