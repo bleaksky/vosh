@@ -8,6 +8,7 @@ use regex::Regex;
 use vosh_protocol::ansi::plain_text;
 use vosh_protocol::ansi::PieceKind;
 
+use crate::split::split_commands;
 use crate::trigger::action::{HighlightStyle, TriggerAction};
 use crate::trigger::readable;
 use crate::trigger::store::{Trigger, TriggerStore, TriggerTarget};
@@ -197,7 +198,7 @@ pub fn process_on_ground(
                             // the alias engine). Without this the
                             // server sees a single line whose item
                             // name is `1.;wield 1.`.
-                            for piece in split_send_template(&buf) {
+                            for piece in split_commands(&buf) {
                                 let trimmed = piece.trim();
                                 if trimmed.is_empty() {
                                     continue;
@@ -628,41 +629,6 @@ fn leaves_default_fg(params: &str) -> bool {
         }
     }
     default
-}
-
-/// Split a Send-action template into one command per `;` / `\n`.
-/// Mirrors `vosh_automation::alias::AliasStore::expand_line`'s splitter so a
-/// trigger-driven `get 1.;wield 1.` fires the same way as a typed
-/// `get 1.;wield 1.`. `\;` and `\\` are escape-passthroughs so the
-/// user can embed a literal semicolon when a server actually wants
-/// one in a single argument. CRs are dropped (Windows-safe).
-fn split_send_template(input: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut current = String::new();
-    let mut chars = input.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            if let Some(&next) = chars.peek() {
-                if next == ';' || next == '\\' || next == '\n' {
-                    current.push(next);
-                    chars.next();
-                    continue;
-                }
-            }
-            current.push(ch);
-            continue;
-        }
-        if ch == '\r' {
-            continue;
-        }
-        if ch == ';' || ch == '\n' {
-            out.push(std::mem::take(&mut current));
-            continue;
-        }
-        current.push(ch);
-    }
-    out.push(current);
-    out
 }
 
 fn bytes_to_string_lossy(bytes: &[u8]) -> String {
