@@ -418,7 +418,7 @@ mod tests {
 
     /// The design the default profile draws, as its file keeps it in
     /// `[ui]`.
-    const TEMPLATE: &str = "%{c:100,100,100}[%c_reset%s_italic%hp(%c_hp%pct_hp%c_reset%s_italic%)h %mana(%{c:128,200,255}%pct_mana%c_reset%s_italic%)m %move(%{c:200,255,23}%pct_move%c_reset%s_italic%)v%c_reset%{c:100,100,100}] %c_reset";
+    const TEMPLATE: &str = vosh_prompt::testkit::designs::JAMES;
 
     /// The pattern of the capture `#prompt` wrote into the catalog.
     const PATTERN: &str = r"\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)/(?<maxmana>\d+)mn (?<move>\d+)/(?<maxmove>\d+)mv\]";
