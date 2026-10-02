@@ -628,30 +628,66 @@ describe('stores on the event bus', () => {
       affects_marker: 'square',
     });
     const s = await load();
+    // The hours read 2 and 1 for a profile that never set them.
+    const hours = { running_out: 2, almost_gone: 1 };
     expect(s.affectsDisplay.getAffectsDisplay()).toEqual({
       style: 'countdown',
       marker: 'square',
       tint: false,
+      ...hours,
     });
-    fire('vosh://affects-display-changed', { style: 'chips', marker: 'none', tint: true });
+    fire('vosh://affects-display-changed', {
+      style: 'chips',
+      marker: 'none',
+      tint: true,
+      ...hours,
+    });
     const heard = s.affectsDisplay.getAffectsDisplay();
-    expect(heard).toEqual({ style: 'chips', marker: 'none', tint: true });
+    expect(heard).toEqual({ style: 'chips', marker: 'none', tint: true, ...hours });
     // The same display again keeps the snapshot, so nothing renders.
-    fire('vosh://affects-display-changed', { style: 'chips', marker: 'none', tint: true });
+    fire('vosh://affects-display-changed', {
+      style: 'chips',
+      marker: 'none',
+      tint: true,
+      ...hours,
+    });
     expect(s.affectsDisplay.getAffectsDisplay()).toBe(heard);
+    // A new threshold alone renders again.
+    fire('vosh://affects-display-changed', {
+      style: 'chips',
+      marker: 'none',
+      tint: true,
+      running_out: 5,
+      almost_gone: 2,
+    });
+    expect(s.affectsDisplay.getAffectsDisplay()).toEqual({
+      style: 'chips',
+      marker: 'none',
+      tint: true,
+      running_out: 5,
+      almost_gone: 2,
+    });
     fire('vosh://affects-display-changed', { style: 'grid', marker: 'check' });
     expect(s.affectsDisplay.getAffectsDisplay()).toEqual({
       style: 'timers',
       marker: 'dot',
       tint: false,
+      ...hours,
     });
-    commands.set('ui_get_config', { tracked_affects: [], affects_tint: true });
+    commands.set('ui_get_config', {
+      tracked_affects: [],
+      affects_tint: true,
+      affects_running_out_hours: 4,
+      affects_almost_gone_hours: 0,
+    });
     fire('vosh://profile-switched', 'Ilsabet');
     await settle();
     expect(s.affectsDisplay.getAffectsDisplay()).toEqual({
       style: 'timers',
       marker: 'dot',
       tint: true,
+      running_out: 4,
+      almost_gone: 0,
     });
   });
 

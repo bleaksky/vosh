@@ -372,6 +372,8 @@ fn full_ui() -> UiConfig {
         affects_style: "chips".into(),
         affects_marker: "plus_minus".into(),
         affects_tint: true,
+        affects_running_out_hours: 2,
+        affects_almost_gone_hours: 1,
         chat_colors: BTreeMap::from([
             ("ooc".into(), "brightBlue".into()),
             ("tell".into(), "magenta".into()),

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type ComponentType } from 're
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
+  affectsDisplayFields,
+  affectsDisplayOf,
   followReplacedUiConfig,
   getUiConfig,
   isOwnAffectsDisplayEcho,
@@ -10,6 +12,7 @@ import {
   primeUiConfigAffectsDisplay,
   primeUiConfigTheme,
   primeUiConfigThemePrefs,
+  sameAffectsDisplay,
   subscribeAffectsDisplayChanged,
   subscribeLoadoutsChanged,
   subscribeProfilesChanged,
@@ -319,10 +322,12 @@ export function SettingsApp() {
     };
   }, []);
 
-  // The Affects pane menu picks a style or a marker in the main window.
-  // The config copy takes it, the way it takes a palette theme pick, so
-  // the next full save from any page carries it instead of writing the
-  // old one back. This window's own save comes back too, and is skipped.
+  // The Affects pane menu picks a style or a marker in the main window,
+  // and a profile switch brings the whole display, the tint and the
+  // hours too. The config copy takes it, the way it takes a palette
+  // theme pick, so the next full save from any page carries it instead
+  // of writing the old one back. This window's own save comes back too,
+  // and is skipped.
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
@@ -330,16 +335,8 @@ export function SettingsApp() {
       if (isOwnAffectsDisplayEcho(display)) return;
       primeUiConfigAffectsDisplay(display);
       setConfig((prev) =>
-        prev &&
-        (prev.affects_style !== display.style ||
-          prev.affects_marker !== display.marker ||
-          prev.affects_tint !== display.tint)
-          ? {
-              ...prev,
-              affects_style: display.style,
-              affects_marker: display.marker,
-              affects_tint: display.tint,
-            }
+        prev && !sameAffectsDisplay(affectsDisplayOf(prev), display)
+          ? { ...prev, ...affectsDisplayFields(display) }
           : prev,
       );
     })

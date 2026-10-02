@@ -3007,6 +3007,10 @@ pub(crate) struct UiConfigPayload {
     pub affects_style: String,
     pub affects_marker: String,
     pub affects_tint: bool,
+    #[serde(deserialize_with = "crate::profile_config::deserialize_affects_running_out_hours")]
+    pub affects_running_out_hours: u32,
+    #[serde(deserialize_with = "crate::profile_config::deserialize_affects_almost_gone_hours")]
+    pub affects_almost_gone_hours: u32,
     /// The [`UI_CONFIG_GENERATION`] this copy was read at. Never reaches
     /// disk. A save without one (a config that never came from the
     /// backend) applies.
@@ -3058,6 +3062,8 @@ impl UiConfigPayload {
             affects_style: ui.affects_style.clone(),
             affects_marker: ui.affects_marker.clone(),
             affects_tint: ui.affects_tint,
+            affects_running_out_hours: ui.affects_running_out_hours,
+            affects_almost_gone_hours: ui.affects_almost_gone_hours,
             generation: None,
         }
     }
@@ -3105,6 +3111,8 @@ impl UiConfigPayload {
             affects_style,
             affects_marker,
             affects_tint,
+            affects_running_out_hours,
+            affects_almost_gone_hours,
             generation: _,
         } = self;
         ui.theme = theme;
@@ -3184,6 +3192,11 @@ impl UiConfigPayload {
         ui.affects_style = crate::profile_config::coerce_affects_style(affects_style);
         ui.affects_marker = crate::profile_config::coerce_affects_marker(affects_marker);
         ui.affects_tint = affects_tint;
+        (ui.affects_running_out_hours, ui.affects_almost_gone_hours) =
+            crate::profile_config::coerce_affects_thresholds(
+                affects_running_out_hours,
+                affects_almost_gone_hours,
+            );
     }
 }
 
@@ -3417,7 +3430,8 @@ fn apply_theme_pick(
     changed
 }
 
-/// Sent to every window with the Affects pane's style, marker, and tint
+/// Sent to every window with the Affects pane's style, marker, tint,
+/// and the hours at which an affect runs out and is almost gone,
 /// whenever they change: a pick from the pane menu, a Settings save
 /// (which the frontend sends itself), or a replace.
 pub(crate) const AFFECTS_DISPLAY_CHANGED_EVENT: &str = "vosh://affects-display-changed";
@@ -3429,6 +3443,10 @@ pub(crate) struct AffectsDisplay {
     pub(crate) style: String,
     pub(crate) marker: String,
     pub(crate) tint: bool,
+    /// `affects_running_out_hours`.
+    pub(crate) running_out: u32,
+    /// `affects_almost_gone_hours`.
+    pub(crate) almost_gone: u32,
 }
 
 impl AffectsDisplay {
@@ -3437,16 +3455,29 @@ impl AffectsDisplay {
             style: ui.affects_style.clone(),
             marker: ui.affects_marker.clone(),
             tint: ui.affects_tint,
+            running_out: ui.affects_running_out_hours,
+            almost_gone: ui.affects_almost_gone_hours,
         }
     }
 }
 
-/// Change the Affects pane's style, marker, or tint without touching the
-/// rest of the UI config, for the picks in the pane's own menu. The
-/// main window holds no whole config to save, and Settings may hold one
-/// with newer fields, so a whole config write from either would put
-/// stale values back. Only what is given changes. Nothing is saved or
-/// sent when the pick changes nothing.
+/// What one affects display pick changes. Each field left out stays as
+/// it is.
+#[derive(Debug, Default)]
+pub(crate) struct AffectsDisplayPick {
+    pub(crate) style: Option<String>,
+    pub(crate) marker: Option<String>,
+    pub(crate) tint: Option<bool>,
+    pub(crate) running_out: Option<u32>,
+    pub(crate) almost_gone: Option<u32>,
+}
+
+/// Change how the Affects pane draws without touching the rest of the
+/// UI config, for the picks in the pane's own menu. The main window
+/// holds no whole config to save, and Settings may hold one with newer
+/// fields, so a whole config write from either would put stale values
+/// back. Only what is given changes. Nothing is saved or sent when the
+/// pick changes nothing.
 #[tauri::command]
 pub(crate) async fn ui_set_affects_display(
     app: AppHandle,
@@ -3454,10 +3485,19 @@ pub(crate) async fn ui_set_affects_display(
     style: Option<String>,
     marker: Option<String>,
     tint: Option<bool>,
+    running_out: Option<u32>,
+    almost_gone: Option<u32>,
 ) -> Result<(), String> {
+    let pick = AffectsDisplayPick {
+        style,
+        marker,
+        tint,
+        running_out,
+        almost_gone,
+    };
     let changed = {
         let mut p = state.profile.lock().await;
-        apply_affects_display(&mut p.ui, style, marker, tint)
+        apply_affects_display(&mut p.ui, pick)
     };
     let Some(display) = changed else {
         return Ok(());
@@ -3469,24 +3509,34 @@ pub(crate) async fn ui_set_affects_display(
 }
 
 /// Write an affects display pick onto the live UI config, coercing an
-/// unknown style or marker to the default. Returns the new display when
+/// unknown style or marker to the default and the hours to 0 to 99,
+/// almost gone never over running out. Returns the new display when
 /// anything changed, so an unchanged pick saves and sends nothing.
 fn apply_affects_display(
     ui: &mut crate::profile_config::UiConfig,
-    style: Option<String>,
-    marker: Option<String>,
-    tint: Option<bool>,
+    pick: AffectsDisplayPick,
 ) -> Option<AffectsDisplay> {
     let before = AffectsDisplay::of(ui);
-    if let Some(style) = style {
+    if let Some(style) = pick.style {
         ui.affects_style = crate::profile_config::coerce_affects_style(style);
     }
-    if let Some(marker) = marker {
+    if let Some(marker) = pick.marker {
         ui.affects_marker = crate::profile_config::coerce_affects_marker(marker);
     }
-    if let Some(tint) = tint {
+    if let Some(tint) = pick.tint {
         ui.affects_tint = tint;
     }
+    if let Some(hours) = pick.running_out {
+        ui.affects_running_out_hours = hours;
+    }
+    if let Some(hours) = pick.almost_gone {
+        ui.affects_almost_gone_hours = hours;
+    }
+    (ui.affects_running_out_hours, ui.affects_almost_gone_hours) =
+        crate::profile_config::coerce_affects_thresholds(
+            ui.affects_running_out_hours,
+            ui.affects_almost_gone_hours,
+        );
     let after = AffectsDisplay::of(ui);
     (after != before).then_some(after)
 }
@@ -5092,7 +5142,15 @@ mod tests {
             affects_tint: true,
             ..UiConfig::default()
         };
-        let display = super::apply_affects_display(&mut ui, Some("countdown".into()), None, None)
+        let pick = |style: Option<&str>, marker: Option<&str>, tint: Option<bool>| {
+            super::AffectsDisplayPick {
+                style: style.map(Into::into),
+                marker: marker.map(Into::into),
+                tint,
+                ..super::AffectsDisplayPick::default()
+            }
+        };
+        let display = super::apply_affects_display(&mut ui, pick(Some("countdown"), None, None))
             .expect("a new style changes the display");
         assert_eq!(display.style, "countdown");
         assert_eq!(display.marker, "square");
@@ -5103,20 +5161,196 @@ mod tests {
 
         // The same pick again changes nothing, so nothing is saved or sent.
         assert_eq!(
-            super::apply_affects_display(&mut ui, Some("countdown".into()), None, Some(true)),
+            super::apply_affects_display(&mut ui, pick(Some("countdown"), None, Some(true))),
             None
         );
 
         // An unknown value coerces to the default before it compares.
         let display =
-            super::apply_affects_display(&mut ui, None, Some("sparkle".into()), Some(false))
+            super::apply_affects_display(&mut ui, pick(None, Some("sparkle"), Some(false)))
                 .expect("the marker and the tint change");
         assert_eq!(display.marker, "dot");
         assert!(!display.tint);
         assert_eq!(ui.affects_style, "countdown");
         assert_eq!(
-            super::apply_affects_display(&mut ui, None, Some("dot".into()), None),
+            super::apply_affects_display(&mut ui, pick(None, Some("dot"), None)),
             None
+        );
+        // No pick touched the hours.
+        assert_eq!(display.running_out, 2);
+        assert_eq!(display.almost_gone, 1);
+    }
+
+    #[test]
+    fn affects_thresholds_round_trip() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.affects_running_out_hours, 2);
+        assert_eq!(ui.affects_almost_gone_hours, 1);
+        for (running_out, almost_gone) in [(2, 1), (5, 2), (0, 0), (3, 3), (99, 0), (99, 99)] {
+            ui.affects_running_out_hours = running_out;
+            ui.affects_almost_gone_hours = almost_gone;
+            for read in [through_payload(&ui), through_toml(&ui)] {
+                assert_eq!(read.affects_running_out_hours, running_out);
+                assert_eq!(read.affects_almost_gone_hours, almost_gone);
+            }
+        }
+    }
+
+    #[test]
+    fn a_save_holds_the_affects_thresholds_to_whole_hours_in_order() {
+        // Almost gone never goes over running out, which wins.
+        let mut ui = UiConfig {
+            affects_running_out_hours: 3,
+            affects_almost_gone_hours: 7,
+            ..UiConfig::default()
+        };
+        let saved = through_payload(&ui);
+        assert_eq!(saved.affects_running_out_hours, 3);
+        assert_eq!(saved.affects_almost_gone_hours, 3);
+        // Neither goes past 99.
+        ui.affects_running_out_hours = 500;
+        ui.affects_almost_gone_hours = 120;
+        let saved = through_payload(&ui);
+        assert_eq!(saved.affects_running_out_hours, 99);
+        assert_eq!(saved.affects_almost_gone_hours, 99);
+    }
+
+    #[test]
+    fn a_page_that_sends_odd_affects_thresholds_still_saves() {
+        let read = |json: &str| {
+            let payload: UiConfigPayload = serde_json::from_str(json).unwrap();
+            let mut ui = UiConfig::default();
+            payload.apply_to(&mut ui);
+            (ui.affects_running_out_hours, ui.affects_almost_gone_hours)
+        };
+        assert_eq!(read("{}"), (2, 1));
+        assert_eq!(
+            read(r#"{"affects_running_out_hours": 4.6, "affects_almost_gone_hours": -3}"#),
+            (5, 0)
+        );
+        assert_eq!(
+            read(r#"{"affects_running_out_hours": "6", "affects_almost_gone_hours": null}"#),
+            (6, 1)
+        );
+    }
+
+    #[test]
+    fn a_profile_without_the_affects_thresholds_reads_two_and_one_and_writes_nothing_new() {
+        let file = "[ui]\ntheme = \"nord\"\naffects_style = \"chips\"\n";
+        let config = ProfileConfig::from_toml(file).unwrap();
+        assert_eq!(config.ui.affects_running_out_hours, 2);
+        assert_eq!(config.ui.affects_almost_gone_hours, 1);
+        let toml = config.to_toml().unwrap();
+        assert!(!toml.contains("affects_running_out_hours"));
+        assert!(!toml.contains("affects_almost_gone_hours"));
+    }
+
+    #[test]
+    fn the_affects_thresholds_stay_with_each_character_once_you_change_them() {
+        let ui = UiConfig {
+            affects_running_out_hours: 5,
+            affects_almost_gone_hours: 2,
+            ..UiConfig::default()
+        };
+        let toml = ProfileConfig {
+            ui,
+            ..ProfileConfig::default()
+        }
+        .to_toml()
+        .unwrap();
+        assert!(toml.contains("affects_running_out_hours = 5"));
+        assert!(toml.contains("affects_almost_gone_hours = 2"));
+        // Changing one writes that one alone.
+        let ui = UiConfig {
+            affects_running_out_hours: 4,
+            ..UiConfig::default()
+        };
+        let toml = ProfileConfig {
+            ui,
+            ..ProfileConfig::default()
+        }
+        .to_toml()
+        .unwrap();
+        assert!(toml.contains("affects_running_out_hours = 4"));
+        assert!(!toml.contains("affects_almost_gone_hours"));
+    }
+
+    #[test]
+    fn a_hand_edited_affects_threshold_never_stops_a_profile_loading() {
+        let read = |lines: &str| {
+            let ui = ProfileConfig::from_toml(&format!("[ui]\n{lines}\n"))
+                .unwrap()
+                .ui;
+            (ui.affects_running_out_hours, ui.affects_almost_gone_hours)
+        };
+        assert_eq!(
+            read("affects_running_out_hours = 6\naffects_almost_gone_hours = 3"),
+            (6, 3)
+        );
+        // Out of range clamps to 0 to 99.
+        assert_eq!(
+            read("affects_running_out_hours = 400\naffects_almost_gone_hours = -2"),
+            (99, 0)
+        );
+        // A decimal rounds, and a string that holds a number reads as one.
+        assert_eq!(
+            read("affects_running_out_hours = 3.6\naffects_almost_gone_hours = \" 2 \""),
+            (4, 2)
+        );
+        // Anything else reads as the default.
+        assert_eq!(
+            read("affects_running_out_hours = \"soon\"\naffects_almost_gone_hours = true"),
+            (2, 1)
+        );
+        assert_eq!(
+            read("affects_running_out_hours = [3]\naffects_almost_gone_hours = { at = 1 }"),
+            (2, 1)
+        );
+        // Almost gone over running out reads as running out.
+        assert_eq!(
+            read("affects_running_out_hours = 1\naffects_almost_gone_hours = 4"),
+            (1, 1)
+        );
+    }
+
+    #[test]
+    fn an_affects_threshold_pick_keeps_almost_gone_under_running_out() {
+        let mut ui = UiConfig::default();
+        let display = super::apply_affects_display(
+            &mut ui,
+            super::AffectsDisplayPick {
+                running_out: Some(5),
+                almost_gone: Some(2),
+                ..super::AffectsDisplayPick::default()
+            },
+        )
+        .expect("the hours change");
+        assert_eq!((display.running_out, display.almost_gone), (5, 2));
+        assert_eq!(display.style, "timers");
+        // Running out under almost gone pulls almost gone down with it.
+        let display = super::apply_affects_display(
+            &mut ui,
+            super::AffectsDisplayPick {
+                running_out: Some(1),
+                ..super::AffectsDisplayPick::default()
+            },
+        )
+        .expect("the hours change");
+        assert_eq!((display.running_out, display.almost_gone), (1, 1));
+        // Almost gone over running out stops at it, which changes nothing.
+        assert_eq!(
+            super::apply_affects_display(
+                &mut ui,
+                super::AffectsDisplayPick {
+                    almost_gone: Some(9),
+                    ..super::AffectsDisplayPick::default()
+                },
+            ),
+            None
+        );
+        assert_eq!(
+            (ui.affects_running_out_hours, ui.affects_almost_gone_hours),
+            (1, 1)
         );
     }
 
@@ -5217,11 +5451,19 @@ mod tests {
         file.ui.affects_style = "chips".into();
         file.ui.affects_marker = "plus_minus".into();
         file.ui.affects_tint = true;
+        file.ui.affects_running_out_hours = 5;
+        file.ui.affects_almost_gone_hours = 2;
         let _ = file.apply_to(&mut profile);
         let events = super::profile_ui_events(&profile);
         assert_eq!(
             event_payload(&events, "vosh://affects-display-changed"),
-            serde_json::json!({ "style": "chips", "marker": "plus_minus", "tint": true })
+            serde_json::json!({
+                "style": "chips",
+                "marker": "plus_minus",
+                "tint": true,
+                "running_out": 5,
+                "almost_gone": 2,
+            })
         );
 
         let ran = crate::input::run_line(&mut profile, "#profile reset");
@@ -5231,7 +5473,13 @@ mod tests {
                 &super::profile_ui_events(&profile),
                 "vosh://affects-display-changed"
             ),
-            serde_json::json!({ "style": "timers", "marker": "dot", "tint": false })
+            serde_json::json!({
+                "style": "timers",
+                "marker": "dot",
+                "tint": false,
+                "running_out": 2,
+                "almost_gone": 1,
+            })
         );
     }
 
@@ -7345,6 +7593,8 @@ mod tests {
             ui.affects_style = pick(&["timers", "countdown", "chips"]);
             ui.affects_marker = pick(&["dot", "square", "plus_minus", "none"]);
             ui.affects_tint = n % 2 == 0;
+            ui.affects_running_out_hours = 2 + n;
+            ui.affects_almost_gone_hours = n;
             ui.vitals.show_delta = n % 2 == 0;
             ui.tracked_affects = vec![
                 TrackedAffect {

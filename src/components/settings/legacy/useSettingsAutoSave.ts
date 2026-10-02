@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createDebouncedWrite, pendingWrites } from '../../../lib/pendingWrites';
 import {
+  affectsDisplayFields,
   isOwnAffectsDisplayEcho,
   isOwnThemeEcho,
   setUiConfig,
@@ -153,12 +154,7 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
       if (isOwnAffectsDisplayEcho(display)) return;
       autoSave.patch((job) => ({
         ...job,
-        cfg: {
-          ...job.cfg,
-          affects_style: display.style,
-          affects_marker: display.marker,
-          affects_tint: display.tint,
-        },
+        cfg: { ...job.cfg, ...affectsDisplayFields(display) },
       }));
     })
       .then((fn) => {
