@@ -217,11 +217,15 @@ fn lift_toward(start: Oklch, end: f64, ground: Rgb) -> Option<Rgb> {
 /// What text draws on, as far as the line's own escapes tell.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum Under {
-    /// The terminal ground: no background, or a wash. The native renderer
-    /// paints a wash's field from the ground, a fifth of the way toward the
-    /// mark color, so the ground stands in for it.
+    /// The terminal ground: no background.
     #[default]
     Ground,
+    /// A wash, which carries one of the [`NamedColor::wash_tint`] signals.
+    /// The two renderers draw it apart. The native one paints the field
+    /// from the ground, 18 percent of the way toward the mark color, so the
+    /// ground stands in for it there. xterm.js draws the tint itself, a
+    /// quarter strength color such as #333300 for yellow.
+    Wash(Rgb),
     /// A true color or a 256 color past the 16.
     Fixed(Rgb),
     /// One of the theme's 16 colors, which the session does not know.
@@ -349,11 +353,7 @@ impl Pen {
             k += 1;
         }
 
-        let on = match self.under {
-            Under::Ground => Some(ground),
-            Under::Fixed(rgb) => Some(rgb),
-            Under::Palette => None,
-        };
+        let on = |asked: Rgb| readable_on(asked, self.under, ground);
         let text = settle(&mut self.fg, set_text, on, Kind::Text, &mut items);
         let underline = settle(
             &mut self.underline,
@@ -366,6 +366,31 @@ impl Pen {
     }
 }
 
+/// The color `asked` draws in on `under`, with `ground` the terminal
+/// background.
+fn readable_on(asked: Rgb, under: Under, ground: Rgb) -> Rgb {
+    match under {
+        Under::Ground => lift_to_contrast(asked, ground),
+        Under::Fixed(rgb) => lift_to_contrast(asked, rgb),
+        // The theme's own background, the theme's to keep readable.
+        Under::Palette => asked,
+        // The same bytes go to both renderers, so a lift has to read on
+        // the ground the native renderer paints and on the tint xterm.js
+        // draws. When the lift reads on only one, the color asked for
+        // stays. The tint is always dark, so on a light theme that is
+        // nearly every color.
+        Under::Wash(tint) => {
+            let lifted = lift_to_contrast(lift_to_contrast(asked, ground), tint);
+            let reads = |on: Rgb| contrast(lifted, on) >= READABLE_CONTRAST;
+            if reads(ground) && reads(tint) {
+                lifted
+            } else {
+                asked
+            }
+        }
+    }
+}
+
 fn paint(rgb: Rgb) -> Paint {
     Paint {
         asked: rgb,
@@ -375,7 +400,7 @@ fn paint(rgb: Rgb) -> Paint {
 
 fn fixed_under(rgb: Rgb) -> Under {
     if is_wash(rgb) {
-        Under::Ground
+        Under::Wash(rgb)
     } else {
         Under::Fixed(rgb)
     }
@@ -387,21 +412,20 @@ fn indexed_under(index: Option<u8>) -> Under {
         .map_or(Under::Palette, Under::Fixed)
 }
 
-/// Give a color in force the lightness that reads on `on`, or the color
-/// asked for where the ground is unknown. A color this sequence set is
-/// rewritten in place. One set earlier gets a new color appended when the
-/// ground under it changed. True when the items changed.
+/// Give a color in force the color `on` draws it in. A color this sequence
+/// set is rewritten in place. One set earlier gets a new color appended
+/// when the ground under it changed. True when the items changed.
 fn settle(
     paint: &mut Option<Paint>,
     set_here: Option<At>,
-    on: Option<Rgb>,
+    on: impl Fn(Rgb) -> Rgb,
     kind: Kind,
     items: &mut Vec<String>,
 ) -> bool {
     let Some(paint) = paint else {
         return false;
     };
-    let want = on.map_or(paint.asked, |ground| lift_to_contrast(paint.asked, ground));
+    let want = on(paint.asked);
     let changed = match set_here {
         Some(_) if want == paint.asked => false,
         Some(At::Semicolons(i)) => {
@@ -438,7 +462,8 @@ fn settle(
 /// on: `ground`, the terminal background, unless the line set a fixed
 /// background of its own. Text on one of the theme's 16 background colors
 /// keeps the color asked for, since that background is the theme's to
-/// know. Backgrounds never change, and neither does anything but SGR
+/// know, and text on a wash changes only to a color that reads under both
+/// renderers. Backgrounds never change, and neither does anything but SGR
 /// sequences. Borrows `text` back when nothing needed a change.
 pub fn lift_sgr(text: &str, ground: Rgb) -> Cow<'_, str> {
     if !text.contains("\x1b[") {
@@ -772,15 +797,40 @@ mod tests {
         );
     }
 
+    /// `color` as text on a yellow wash, and the wash tint.
+    fn on_a_wash(color: Rgb) -> (String, Rgb) {
+        let tint = NamedColor::Yellow.wash_tint();
+        let ((tr, tg, tb), (r, g, b)) = (tint, color);
+        let line = format!("\x1b[33;48;2;{tr};{tg};{tb}m\x1b[38;2;{r};{g};{b}mrain\x1b[0m");
+        (line, tint)
+    }
+
     #[test]
-    fn a_wash_field_counts_as_the_ground() {
-        let (tr, tg, tb) = NamedColor::Yellow.wash_tint();
-        let line = format!("\x1b[33;48;2;{tr};{tg};{tb}m\x1b[38;2;143;167;217mrain\x1b[0m");
-        let (r, g, b) = lift_to_contrast(WEATHER, VELLUM);
-        assert_eq!(
-            lift_sgr(&line, VELLUM),
-            format!("\x1b[33;48;2;{tr};{tg};{tb}m\x1b[38;2;{r};{g};{b}mrain\x1b[0m")
-        );
+    fn a_wash_keeps_the_color_asked_for_when_no_lift_reads_under_both_renderers() {
+        // xterm.js draws the tint itself, #333300, and the weather blue
+        // reads there at about 5.4:1. The lift Vellum wants, #5a709e,
+        // would fall to about 2.6:1 on it, so the blue stays.
+        let (line, tint) = on_a_wash(WEATHER);
+        assert_eq!(tint, (0x33, 0x33, 0x00));
+        assert!(contrast(WEATHER, tint) >= READABLE_CONTRAST);
+        assert!(contrast(lift_to_contrast(WEATHER, VELLUM), tint) < READABLE_CONTRAST);
+        assert_eq!(lift_sgr(&line, VELLUM), line);
+        // On a dark ground the blue reads on the ground and the tint alike.
+        assert_eq!(lift_sgr(&line, NORD), line);
+    }
+
+    #[test]
+    fn a_wash_lifts_a_color_to_read_on_the_ground_and_the_tint() {
+        // A dim blue fades on Nord and on the tint. The lift reads on both,
+        // since both renderers draw the same bytes.
+        let dim = (0x30, 0x40, 0x80);
+        let (line, tint) = on_a_wash(dim);
+        let out = lift_sgr(&line, NORD);
+        let (r, g, b) = readable_on(dim, Under::Wash(tint), NORD);
+        assert_ne!((r, g, b), dim);
+        assert!(contrast((r, g, b), NORD) >= READABLE_CONTRAST);
+        assert!(contrast((r, g, b), tint) >= READABLE_CONTRAST);
+        assert_eq!(out, line.replace("48;64;128", &format!("{r};{g};{b}")));
     }
 
     #[test]
