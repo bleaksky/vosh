@@ -206,8 +206,8 @@ use crate::map_state::SharedMap;
 use crate::plugins::{PluginRecord, SharedPluginManager};
 use crate::profile::{Macro, Profile, Timer};
 use crate::profile_config::{
-    hand_out_shared, share_custom_themes, strip_global_fields, DockEntryPersist, GlobalConfig,
-    HeldCustomThemes, PaneLayoutPersist, ProfileConfig, SharedLayer,
+    hand_out_shared, share_custom_themes, strip_global_fields, GlobalConfig, HeldCustomThemes,
+    PaneLayoutPersist, ProfileConfig, SharedLayer,
 };
 use crate::script_state::{ApplyResult, SharedTimers};
 use crate::session::{self, SessionHandle, TargetPayload};
@@ -1853,38 +1853,6 @@ pub(crate) fn native_surface_scroll(kind: String) {
     }
 }
 
-/// Read the persistent dock layout. Returns the same shape as the
-/// frontend `DockEntry` (id + zone) so the layout editor can render
-/// from it directly.
-#[tauri::command]
-pub(crate) async fn dock_layout_get(
-    state: State<'_, SharedState>,
-) -> Result<Vec<DockEntryPersist>, String> {
-    let p = state.profile.lock().await;
-    Ok(p.ui.dock_layout.clone())
-}
-
-/// Replace the persistent dock layout. Persists to profile.toml and
-/// broadcasts `vosh://dock-layout-changed` so other open windows
-/// (specifically the main window) can re-apply without a relaunch.
-#[tauri::command]
-pub(crate) async fn dock_layout_set(
-    app: AppHandle,
-    state: State<'_, SharedState>,
-    entries: Vec<DockEntryPersist>,
-) -> Result<(), String> {
-    {
-        let mut p = state.profile.lock().await;
-        p.ui.dock_layout.clone_from(&entries);
-    }
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
-    if let Err(e) = app.emit("vosh://dock-layout-changed", &entries) {
-        warn!(error = %e, "failed to broadcast dock-layout-changed");
-    }
-    Ok(())
-}
-
 /// A pane tree as the frontend receives it: the layout plus the
 /// [`PANES_GENERATION`] it was read at. The generation never reaches
 /// disk, and an inactive profile's tree carries none, since no pane
@@ -3290,8 +3258,8 @@ impl UiConfigPayload {
     /// Write every field onto the live UI config, normalizing as it
     /// goes. `ui_set_config` calls this, and each Settings tab saves the
     /// whole snapshot, so a field left out here would reset on the next
-    /// save from any tab. `dock_layout` stays out on purpose because it
-    /// travels through `dock_layout_get` and `dock_layout_set`.
+    /// save from any tab. `dock_layout` stays out on purpose, since only
+    /// the conversion from the old dock to panes reads it.
     pub(crate) fn apply_to(self, ui: &mut crate::profile_config::UiConfig) {
         let UiConfigPayload {
             theme,

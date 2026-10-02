@@ -86,7 +86,6 @@ describe('resetPanelLayout', () => {
     expect(getPanelLayout()?.root).toEqual(defaultLayout().root);
     // The backend saves the reset, so this window writes nothing.
     expect(calls('pane_layout_set')).toHaveLength(0);
-    expect(calls('dock_layout_get')).toHaveLength(0);
     // The next edit targets the tree the reset made.
     expect(getPanelLayout()?.generation).toBe(before + 1);
     expect(tauri.pushToast).toHaveBeenCalledWith({

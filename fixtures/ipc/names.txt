@@ -6,8 +6,6 @@ command aliases_import(json)
 command aliases_set_group_enabled(group, enabled)
 command app_quit()
 command app_version()
-command dock_layout_get()
-command dock_layout_set(entries)
 command fonts_list()
 command hidden_get()
 command import_apply(format, text)
@@ -152,7 +150,6 @@ event vosh://chat-colors-changed app heard
 event vosh://chip-style-changed app page heard
 event vosh://connection-target-changed page heard
 event vosh://custom-themes-changed app page heard
-event vosh://dock-layout-changed app heard
 event vosh://echo-macros-changed page heard
 event vosh://flush-pending-writes app heard
 event vosh://font-changed page heard

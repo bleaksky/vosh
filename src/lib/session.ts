@@ -2691,7 +2691,7 @@ export async function setUiTheme(
 export async function setUiConfig(config: UiConfig): Promise<boolean> {
   // Single snake_case payload matching the Rust `UiConfigPayload` DTO,
   // the same shape `ui_get_config` returns. `dock_layout` is omitted on
-  // purpose; it travels through dock_layout_get/set.
+  // purpose, since only the old dock to panes conversion reads it.
   const applied = await invoke<boolean | undefined>('ui_set_config', {
     config: {
       theme: config.theme,
@@ -3351,28 +3351,4 @@ export async function setPluginEnabled(name: string, enabled: boolean): Promise<
 
 export async function reloadPlugin(name: string): Promise<void> {
   await invoke('plugins_reload', { name });
-}
-
-export interface DockEntryPersist {
-  id: string;
-  zone: string;
-  /** Vertical alignment within a left/right zone: 'top' or 'bottom'.
-   *  Missing means top. Ignored for full-width zones (top/bottom/hidden). */
-  align?: string;
-}
-
-export async function dockLayoutGet(): Promise<DockEntryPersist[]> {
-  return invoke('dock_layout_get');
-}
-
-export async function dockLayoutSet(entries: DockEntryPersist[]): Promise<void> {
-  await invoke('dock_layout_set', { entries });
-}
-
-export async function subscribeDockLayoutChanged(
-  cb: (entries: DockEntryPersist[]) => void,
-): Promise<UnlistenFn> {
-  return listen<DockEntryPersist[]>('vosh://dock-layout-changed', (event) => {
-    cb(Array.isArray(event.payload) ? event.payload : []);
-  });
 }
