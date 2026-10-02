@@ -92,17 +92,6 @@ impl AnsiParser {
         self.collector.flush();
         std::mem::take(&mut self.collector.spans)
     }
-
-    /// Current SGR attributes after all bytes consumed so far.
-    pub fn current_attributes(&self) -> Attributes {
-        self.collector.attrs
-    }
-
-    /// Reset attributes and pending state. Call when the connection drops.
-    pub fn reset(&mut self) {
-        self.machine = Parser::new();
-        self.collector = Collector::default();
-    }
 }
 
 /// Strip every escape sequence and control byte from a buffer,
