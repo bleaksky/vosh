@@ -177,11 +177,7 @@ fn prompt_all_and_a_fight_prompt_with_colors_draw_as_the_game_does() {
 
     // The fight prompt the game sends in the fixture, with its backtick
     // colors, draws only in a fight.
-    let fight = codes(
-        "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c",
-        "`1%h``hp [%p] > ",
-        false,
-    );
+    let fight = codes(PROMPT, "`1%h``hp [%p] > ", false);
     assert!(fight.ok);
     let game = preset(&fight, "game").expect("same as the game");
     assert!(game.contains("%{ifnot:fight}"), "{game}");
