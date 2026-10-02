@@ -376,14 +376,6 @@ function App() {
   // unreliable: that callback may fire before or after the live pane
   // refits, and the answer is different in each case.
   const preSplitLiveRowsRef = useRef(0);
-  // TEMPORARY: counts split opens for the blank-split diagnostic log.
-  const splitDebugCountRef = useRef(0);
-  // On-screen readout of the history pane internals for diagnosing a
-  // blank split from a screenshot without devtools. Off unless turned on
-  // with localStorage.setItem('vosh.splitdebug', '1').
-  const splitDebugEnabled =
-    typeof localStorage !== 'undefined' && localStorage.getItem('vosh.splitdebug') === '1';
-  const [splitDebug, setSplitDebug] = useState<string | null>(null);
   const pendingFindRef = useRef<{
     query: string;
     opts: { caseSensitive?: boolean; wholeWord?: boolean; regex?: boolean };
@@ -1837,24 +1829,6 @@ function App() {
                 const scrollBack = preSplitLiveRowsRef.current;
                 if (scrollBack > 0) historyTermRef.current?.scrollLines(-scrollBack);
                 setHistoryReady(true);
-                // Optional split diagnostic, enabled via
-                // localStorage.setItem('vosh.splitdebug', '1'). Snapshots
-                // the history pane internals into the on-screen overlay.
-                if (splitDebugEnabled) {
-                  const openN = (splitDebugCountRef.current += 1);
-                  const lines: string[] = [`open#${openN} scrollBack=${scrollBack}`];
-                  const snap = (tag: string) => {
-                    const d = historyTermRef.current?.debug();
-                    const line = `${tag} ${JSON.stringify(d)}`;
-                    // eslint-disable-next-line no-console
-                    console.log(`[vosh-split-debug] open#${openN} ${line}`);
-                    lines.push(line);
-                    setSplitDebug(lines.join('\n'));
-                  };
-                  snap('t0');
-                  window.setTimeout(() => snap('t250'), 250);
-                  window.setTimeout(() => snap('t600'), 600);
-                }
               }}
               onScrollPosition={(back, max) => setHistoryScrollPos({ back, max })}
             />
@@ -1862,9 +1836,6 @@ function App() {
               <div className="scrollback-indicator" aria-live="polite">
                 ↑ {historyScrollPos.back} / {historyScrollPos.max}
               </div>
-            )}
-            {splitDebugEnabled && splitDebug && (
-              <pre className="split-debug-overlay">{splitDebug}</pre>
             )}
           </Resizable>
         )}
