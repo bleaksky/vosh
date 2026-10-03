@@ -1,9 +1,10 @@
 //! The ground the colors your triggers paint text in must read on.
 //!
 //! While Keep highlight colors readable is on, the page reports the
-//! theme's terminal background here (`highlight_ground_set`) on every
-//! theme change, and the session hands it to the trigger engine with each
-//! line it runs (`vosh_automation::trigger::process_on_ground`). The engine lifts each
+//! theme's terminal background here, through
+//! `ipc::terminal::highlight_ground_set`, on every theme change, and the
+//! session hands it to the trigger engine with each line it runs
+//! (`vosh_automation::trigger::process_on_ground`). The engine lifts each
 //! fixed color a trigger paints, a true color or a 256 color past the 16,
 //! until it reads on that ground. While the switch is off, and before the
 //! page reports, there is no ground, and trigger colors draw as you set
@@ -12,13 +13,13 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use vosh_automation::trigger::readable::{self, Rgb};
+use vosh_automation::trigger::readable::Rgb;
 
 /// The ground packed as `0x01_rr_gg_bb`, so black is still a ground, or 0
 /// for none.
-static GROUND: AtomicU32 = AtomicU32::new(0);
+pub(crate) static GROUND: AtomicU32 = AtomicU32::new(0);
 
-fn pack(ground: Option<Rgb>) -> u32 {
+pub(crate) fn pack(ground: Option<Rgb>) -> u32 {
     ground.map_or(0, |(r, g, b)| {
         0x0100_0000 | (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b)
     })
@@ -31,15 +32,6 @@ fn unpack(bits: u32) -> Option<Rgb> {
 /// The ground trigger colors must read on, or `None` to draw them as set.
 pub(crate) fn get() -> Option<Rgb> {
     unpack(GROUND.load(Ordering::Acquire))
-}
-
-/// Keep highlight colors readable. `background` is the theme's terminal
-/// background as `#rrggbb` while the setting is on, and `None` while it is
-/// off. A background that does not read turns lifting off too.
-#[tauri::command]
-pub(crate) fn highlight_ground_set(background: Option<String>) {
-    let ground = background.as_deref().and_then(readable::parse_hex);
-    GROUND.store(pack(ground), Ordering::Release);
 }
 
 #[cfg(test)]
