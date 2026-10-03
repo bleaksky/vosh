@@ -26,9 +26,10 @@ pub(crate) struct Loadout {
     /// Optional free-form description shown in the loadout picker.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// Same auto-match shape as today's per-profile auto-match
-    /// (host + port + characters list). The connect-time resolver
-    /// walks every loadout in turn looking for a hit.
+    /// A world and character list in the profile `auto_match` shape.
+    /// Nothing reads it and nothing matches on it (D33). It stays a
+    /// stored value so a hand edited loadouts.toml that carries one
+    /// keeps it across a save.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_match: Option<AutoMatch>,
     /// Group names whose items become effective when this loadout
