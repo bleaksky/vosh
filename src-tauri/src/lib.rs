@@ -23,6 +23,7 @@ mod hidden_input;
 mod highlight_ground;
 mod import;
 mod input;
+mod ipc;
 #[cfg(test)]
 mod ipc_contract_tests;
 #[cfg(all(test, native_surface))]
@@ -60,17 +61,13 @@ use commands::{
     aliases_export, aliases_import, app_quit, import_apply, import_detect, loadouts_get_state,
     loadouts_set_active, logs_export, logs_list_sessions, logs_search_page, macros_delete,
     macros_groups_list, macros_list, macros_set, migration_analyze, migration_apply,
-    native_surface_copy, native_surface_find, native_surface_find_clear, native_surface_pointer,
-    native_surface_ready, native_surface_scroll, native_surface_set_bounds,
-    native_surface_set_bright_bold, native_surface_set_cell_metrics,
-    native_surface_set_divider_color, native_surface_set_font, native_surface_set_theme,
-    native_surface_set_visible, native_surface_wheel, open_help_window, open_settings_window,
-    presets_install, presets_remove, profile_create, profile_delete, profile_duplicate,
-    profile_get_scope, profile_rename, profile_resolve_match, profile_set_scope, profile_switch,
-    profiles_list, scrollback_load, session_connect, session_disconnect, session_send_input,
-    session_send_masked, session_set_window_size, target_get, tick_get_config, tick_set_config,
-    timers_delete, timers_list, timers_set, triggers_export, triggers_import, triggers_list,
-    ui_get_config, ui_set_config, updater_check, updater_install_and_relaunch,
+    open_help_window, open_settings_window, presets_install, presets_remove, profile_create,
+    profile_delete, profile_duplicate, profile_get_scope, profile_rename, profile_resolve_match,
+    profile_set_scope, profile_switch, profiles_list, scrollback_load, session_connect,
+    session_disconnect, session_send_input, session_send_masked, session_set_window_size,
+    target_get, tick_get_config, tick_set_config, timers_delete, timers_list, timers_set,
+    triggers_export, triggers_import, triggers_list, ui_get_config, ui_set_config, updater_check,
+    updater_install_and_relaunch,
 };
 use fonts::{fonts_list, handle_font_uri};
 
@@ -126,29 +123,29 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            native_surface_set_bounds,
-            native_surface_scroll,
-            native_surface_copy,
-            commands::native_surface_select_all,
-            native_surface_set_theme,
-            native_surface_set_font,
+            ipc::native_surface::native_surface_set_bounds,
+            ipc::native_surface::native_surface_scroll,
+            ipc::native_surface::native_surface_copy,
+            ipc::native_surface::native_surface_select_all,
+            ipc::native_surface::native_surface_set_theme,
+            ipc::native_surface::native_surface_set_font,
             commands::terminal_local_write,
             commands::terminal_cursor,
             commands::terminal_reader_busy,
             commands::terminal_screen_rows,
-            native_surface_find,
-            native_surface_find_clear,
-            native_surface_set_visible,
-            native_surface_pointer,
-            native_surface_ready,
-            native_surface_wheel,
-            native_surface_set_cell_metrics,
-            native_surface_set_bright_bold,
-            native_surface_set_divider_color,
-            commands::native_surface_set_tokens,
-            commands::native_surface_set_prompt_bands,
-            commands::native_surface_set_prompt_reach,
-            commands::native_surface_set_blink_text,
+            ipc::native_surface::native_surface_find,
+            ipc::native_surface::native_surface_find_clear,
+            ipc::native_surface::native_surface_set_visible,
+            ipc::native_surface::native_surface_pointer,
+            ipc::native_surface::native_surface_ready,
+            ipc::native_surface::native_surface_wheel,
+            ipc::native_surface::native_surface_set_cell_metrics,
+            ipc::native_surface::native_surface_set_bright_bold,
+            ipc::native_surface::native_surface_set_divider_color,
+            ipc::native_surface::native_surface_set_tokens,
+            ipc::native_surface::native_surface_set_prompt_bands,
+            ipc::native_surface::native_surface_set_prompt_reach,
+            ipc::native_surface::native_surface_set_blink_text,
             session_connect,
             session_send_input,
             session_send_masked,
