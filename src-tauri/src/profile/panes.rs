@@ -506,11 +506,10 @@ fn normalize_weights(nodes: &mut [PaneNode]) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::profile::Profile;
     use crate::profile_config::{strip_global_fields, GlobalConfig, ProfileConfig};
-    use crate::profile_set::ScopeConfig;
 
     fn dock(entries: &[(&str, &str, Option<&str>)]) -> Vec<DockEntryPersist> {
         entries
@@ -537,7 +536,7 @@ mod tests {
 
     /// A layout with a nested row, a panel width and per-pane props,
     /// so round trips cover every field.
-    fn custom_layout() -> PaneLayoutPersist {
+    pub(crate) fn custom_layout() -> PaneLayoutPersist {
         let mut chat = PaneNode::leaf("chat", 0.5);
         chat.props.insert("channel".into(), "tell".into());
         let row = PaneNode {
@@ -748,19 +747,6 @@ mod tests {
         assert_eq!(ui.pane_layout(), custom_layout());
         // The dock layout stays untouched for a rollback.
         assert_eq!(ui.dock_layout.len(), 1);
-    }
-
-    #[test]
-    fn panes_stay_out_of_global_config() {
-        let mut profile = Profile::default();
-        profile.ui.panes = Some(custom_layout());
-        let scope = ScopeConfig::default();
-        let mut per_profile = ProfileConfig::from_profile(&profile);
-        strip_global_fields(&mut per_profile, &scope);
-        assert_eq!(per_profile.ui.panes, Some(custom_layout()));
-        let global = GlobalConfig::from_profile(&profile, &scope);
-        let global_text = toml::to_string_pretty(&global).unwrap();
-        assert!(!global_text.contains("panes"), "{global_text}");
     }
 
     #[test]
