@@ -26,6 +26,7 @@ import {
   isFiltering,
   neighborUid,
   sectionKeyOf,
+  sectionOrder,
   visibleOrder,
   type ListEntry,
 } from '../../../../lib/automationList';
@@ -263,15 +264,17 @@ export function DraftEditor<T>({
     [pinned, sections, folds.folded],
   );
 
-  // Keep a selection: the first row you can see when none is set or
-  // the selected item is gone.
+  // Keep a selection when none is set or the selected item is gone: the
+  // first row you can see, else the first row a folded group hides. A
+  // selection then exists whenever a row does, so opening a group never
+  // picks one, and the heading that hides it takes Tab.
   useEffect(() => {
     if (!draft) return;
     const exists =
       selected !== null &&
       ((pinned !== null && selected === pinned.uid) || findDraftItem(draft, selected));
-    if (!exists) setSelected(order[0] ?? null);
-  }, [draft, selected, order, pinned]);
+    if (!exists) setSelected(order[0] ?? sectionOrder(sections)[0] ?? null);
+  }, [draft, selected, order, pinned, sections]);
 
   // Select the pinned block once per request, as soon as it has loaded.
   const pinnedSeqDone = useRef(0);
