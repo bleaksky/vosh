@@ -88,18 +88,6 @@ pub(crate) fn menu_copy(app: AppHandle, terminal: bool) {
 #[cfg(target_os = "macos")]
 pub(crate) use mac::{build, on_event};
 
-/// The event a menu command reaches the main window on.
-#[cfg(target_os = "macos")]
-const APP_MENU_EVENT: &str = "vosh://app-menu";
-
-/// Find, chosen while Settings is in front, focuses the settings search.
-#[cfg(target_os = "macos")]
-const SETTINGS_FIND_EVENT: &str = "vosh://settings-find";
-
-/// Find, chosen while Help is in front, focuses the help search.
-#[cfg(target_os = "macos")]
-const HELP_FIND_EVENT: &str = "vosh://help-find";
-
 /// The shortcut specs the menu, the palette keycaps, and the page's
 /// keydown handler share, so they cannot drift apart.
 #[cfg(target_os = "macos")]
@@ -257,9 +245,9 @@ mod mac {
 
     use super::{
         accelerator, connect_label, is_check_id, route, staff_listed, theme_rows, MenuState,
-        MenuTheme, Route, ThemeRow, APP_MENU_EVENT, HELP_FIND_EVENT, PANE_ROWS, QUIT_ACCELERATOR,
-        SETTINGS_FIND_EVENT,
+        MenuTheme, Route, ThemeRow, PANE_ROWS, QUIT_ACCELERATOR,
     };
+    use crate::app::events::{APP_MENU_EVENT, HELP_FIND_EVENT, SETTINGS_FIND_EVENT};
 
     const COPYRIGHT: &str = "Copyright © 2026 James Wright";
 

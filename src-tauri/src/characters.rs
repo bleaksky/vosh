@@ -17,13 +17,12 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 use tracing::warn;
 
+use crate::app::events::{broadcast, PROFILE_CHANGED_EVENT, SESSION_IDENTITY_EVENT};
 use crate::app::state::{
     bump_panes_generation, panes_generation, SharedState, AUTO_PERSIST_SUPPRESSED,
     MIGRATION_RELAUNCH_PENDING, PROFILES_NOT_LOADED,
 };
-use crate::commands::{
-    broadcast, pane_layout_envelope, persist_profile, PaneLayoutEnvelope, PERSIST_LOCK,
-};
+use crate::commands::{pane_layout_envelope, persist_profile, PaneLayoutEnvelope, PERSIST_LOCK};
 use crate::profile_config::{
     GlobalConfig, PaneLayoutPersist, ProfileConfig, TrackedAffect, UiConfig,
 };
@@ -126,12 +125,6 @@ pub(crate) fn stored_ui(set: &ProfileSet, name: &str) -> Result<UiConfig, String
     apply_global_dock(set, &mut ui);
     Ok(ui)
 }
-
-/// Sent after an edit to one profile's detail, active or not, naming
-/// it as `{ name }`. Unlike `vosh://tracked-affects-changed` and
-/// `vosh://pane-layout-changed` it carries no data, so an edit to an
-/// inactive profile can never reach the main window's stores.
-pub(crate) const PROFILE_CHANGED_EVENT: &str = "vosh://profile-changed";
 
 #[derive(Clone, Serialize)]
 struct ProfileChanged {
@@ -459,12 +452,6 @@ pub(crate) struct SessionIdentity {
     /// None when no profile claims it. See [`ProfileSet::claimed_by`].
     pub claimed_by: Option<String>,
 }
-
-/// Sent with the new [`SessionIdentity`], or null, after a connect, a
-/// disconnect, and the first sight of a character name after login.
-/// Settings is its own webview and may open after all of those, so it
-/// also reads the current value with `session_identity_get`.
-pub(crate) const SESSION_IDENTITY_EVENT: &str = "vosh://session-identity-changed";
 
 /// The session identity, or None while no connection is up.
 pub(crate) async fn session_identity(state: &SharedState) -> Option<SessionIdentity> {

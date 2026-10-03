@@ -15,12 +15,11 @@ use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{App, EventId, Listener, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::app::events::{
-    broadcast_list_changes, ListChanges, ListRevisions, ALIASES_CHANGED, MACRO_GROUPS_CHANGED,
-    PROMPT_CONFIG_CHANGED, TRIGGERS_CHANGED,
+    broadcast_list_changes, ListChanges, ListRevisions, ALIASES_CHANGED, FLUSH_REQUEST_EVENT,
+    MACRO_GROUPS_CHANGED, PROFILE_CHANGED_EVENT, PROMPT_CONFIG_CHANGED, SESSION_IDENTITY_EVENT,
+    TRIGGERS_CHANGED,
 };
 use crate::app::state::{AppState, SharedState};
-use crate::characters::{PROFILE_CHANGED_EVENT, SESSION_IDENTITY_EVENT};
-use crate::exit_flush::FLUSH_REQUEST_EVENT;
 use crate::input::LineEffects;
 use crate::profile::{Macro, Profile};
 
@@ -117,7 +116,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
     let mut want = Report::new();
 
     let listening = Heard::listen(&app, &["vosh://any-event"]);
-    crate::commands::broadcast(handle, "vosh://any-event", &"payload");
+    crate::app::events::broadcast(handle, "vosh://any-event", &"payload");
     listening.finish("broadcast", &mut heard, &mut want);
 
     let listening = Heard::listen(
@@ -144,7 +143,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
     crate::characters::broadcast_profile_changed(handle, "Ilsabet");
     listening.finish("broadcast_profile_changed", &mut heard, &mut want);
 
-    let listening = Heard::listen(&app, &[crate::commands::MIGRATION_APPLIED_EVENT]);
+    let listening = Heard::listen(&app, &[crate::app::events::MIGRATION_APPLIED_EVENT]);
     crate::commands::announce_migration_applied(handle);
     listening.finish("announce_migration_applied", &mut heard, &mut want);
 
@@ -165,7 +164,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
         listening.finish("broadcast_profile_ui", &mut heard, &mut want);
 
         // A `#tick` command.
-        let listening = Heard::listen(&app, &[crate::commands::TICK_CONFIG_CHANGED_EVENT]);
+        let listening = Heard::listen(&app, &[crate::app::events::TICK_CONFIG_CHANGED_EVENT]);
         let tick = LineEffects {
             tick_changed: true,
             ..LineEffects::default()
