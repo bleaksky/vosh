@@ -219,6 +219,7 @@ mod mac {
         MenuTheme, Route, ThemeRow, PANE_ROWS, QUIT_ACCELERATOR,
     };
     use crate::app::events::{APP_MENU, HELP_FIND, SETTINGS_FIND};
+    use crate::app::windows::{open_aux_window, HELP_WINDOW, SETTINGS_WINDOW};
 
     const COPYRIGHT: &str = "Copyright © 2026 James Wright";
 
@@ -422,8 +423,10 @@ mod mac {
         match route(id) {
             Route::OpenSettings => {
                 let app = app.clone();
+                // Open on the async runtime, as the page's command does,
+                // not on the main thread the click arrives on.
                 tauri::async_runtime::spawn(async move {
-                    if let Err(e) = crate::ipc::windows::open_settings_window(app).await {
+                    if let Err(e) = open_aux_window(&app, &SETTINGS_WINDOW) {
                         warn!(error = %e, "menu: opening settings failed");
                     }
                 });
@@ -431,7 +434,7 @@ mod mac {
             Route::OpenHelp => {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Err(e) = crate::ipc::windows::open_help_window(app).await {
+                    if let Err(e) = open_aux_window(&app, &HELP_WINDOW) {
                         warn!(error = %e, "menu: opening help failed");
                     }
                 });
