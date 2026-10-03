@@ -322,7 +322,7 @@ fn a_loadout_switch_tells_the_command_line_when_a_macro_group_turned() {
         ];
         let switch = |active: &[&str]| {
             let active = active.iter().copied().map(String::from).collect();
-            crate::ipc::loadouts::set_active_loadouts(handle, dir.path(), active)
+            crate::loadouts::set::set_active_loadouts(handle, dir.path(), active)
         };
         let off = || async {
             let p = state.profile.lock().await;

@@ -1,8 +1,11 @@
-//! Which trigger presets are on in loadout mode. The preset triggers
-//! live in the catalog every character shares, so the catalog owns the
-//! list too, and takes it from the profile files the first time.
+//! The trigger presets. Their install runs the same way in both modes.
+//! In loadout mode the preset triggers live in the catalog every
+//! character shares, so the catalog owns the list of presets that are on
+//! too, and takes it from the profile files the first time.
 
 use std::collections::BTreeSet;
+
+use vosh_automation::trigger::Trigger;
 
 use super::catalog::GlobalCatalog;
 use crate::profile::file::ProfileConfig;
@@ -157,6 +160,35 @@ pub(crate) fn adopt_catalog_presets(
     profile.ui.enabled_presets.clone_from(&adopted);
     catalog.enabled_presets = Some(adopted);
     true
+}
+
+/// The body of [`presets_install`] over the live profile `p`, so a test
+/// can run the preset install launch runs. Presets install the same way
+/// in both modes. Per profile mode saves the triggers to the profile
+/// file, and in loadout mode the live profile holds the catalog's
+/// triggers, so the save writes them to catalog.toml. Returns the number
+/// installed.
+///
+/// [`presets_install`]: crate::ipc::automation::presets_install
+pub(crate) fn install_preset_triggers(
+    p: &mut Profile,
+    triggers: Vec<Trigger>,
+) -> Result<usize, String> {
+    let mut installed = 0usize;
+    for mut t in triggers {
+        // The startup re-install overwrites same-named presets so
+        // pattern/template updates land, but the group is the user's
+        // organization: carry it over so putting a preset into a group
+        // survives relaunch.
+        if t.group.is_none() {
+            if let Some(existing) = p.triggers.get(&t.name) {
+                t.group.clone_from(&existing.group);
+            }
+        }
+        p.triggers.set(t).map_err(|e| e.to_string())?;
+        installed += 1;
+    }
+    Ok(installed)
 }
 
 #[cfg(test)]
