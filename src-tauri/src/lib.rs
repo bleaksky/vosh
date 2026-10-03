@@ -8,7 +8,6 @@ mod app;
 mod app_menu;
 #[cfg(native_surface)]
 mod cell_render;
-mod characters;
 mod disk;
 mod fonts;
 mod import;
@@ -37,6 +36,9 @@ mod tintin_import;
 
 use app::state::{AppState, SharedState};
 use fonts::handle_font_uri;
+// Callers outside the inactive profile reading still reach it by its old
+// path, until they point at crate::profile::inactive.
+use profile::inactive as characters;
 // Callers outside the profile file still reach it by its old path, until
 // they point at crate::profile::file.
 use profile::file as profile_config;
