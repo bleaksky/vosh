@@ -9,14 +9,13 @@ use crate::disk::save::mark_profile_dirty;
 use crate::loadouts::set::set_active_loadouts;
 
 /// One loadout as the frontend cares about it: the user-visible
-/// identifying fields, the `enabled_groups` list (chips for the picker),
-/// and the auto-match block.
+/// identifying fields and the `enabled_groups` list (chips for the
+/// picker).
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct LoadoutSummary {
     pub name: String,
     pub description: Option<String>,
     pub enabled_groups: Vec<String>,
-    pub auto_match: Option<crate::profile::login_match::AutoMatch>,
 }
 
 /// Shape returned by [`loadouts_get_state`]. Carries the active list,
@@ -55,7 +54,6 @@ pub(crate) async fn loadouts_get_state(
             name: l.name.clone(),
             description: l.description.clone(),
             enabled_groups: l.enabled_groups.clone(),
-            auto_match: l.auto_match.clone(),
         })
         .collect();
     Ok(LoadoutsState {

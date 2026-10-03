@@ -3107,17 +3107,10 @@ export async function appQuit(): Promise<void> {
 // Path B loadout state for the Settings UI. `path_b_active` is the
 // flag the frontend reads to decide whether to render the Loadouts
 // tab at all; in legacy mode it returns false and empty lists.
-export interface LoadoutAutoMatch {
-  host?: string | null;
-  port?: number | null;
-  characters: string[];
-}
-
 export interface LoadoutSummary {
   name: string;
   description?: string | null;
   enabled_groups: string[];
-  auto_match?: LoadoutAutoMatch | null;
 }
 
 export interface LoadoutsState {

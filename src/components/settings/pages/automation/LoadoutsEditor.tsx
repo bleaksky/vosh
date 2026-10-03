@@ -90,9 +90,6 @@ function LoadoutDetail({
   summary,
 }: DetailProps<LoadoutToggle> & { summary: LoadoutSummary | undefined }) {
   const groups = summary?.enabled_groups ?? [];
-  const auto = summary?.auto_match ?? null;
-  const world = auto?.host ? `${auto.host}${auto.port ? ` ${auto.port}` : ''}` : '';
-  const characters = auto?.characters ?? [];
   return (
     <Card className="st-auto-card">
       <Row label={t.name} description={summary?.description ?? undefined}>
@@ -111,16 +108,6 @@ function LoadoutDetail({
           <span className="st-auto-value">None</span>
         )}
       </Row>
-      {world && (
-        <Row label="World">
-          <span className="st-auto-value st-auto-mono">{world}</span>
-        </Row>
-      )}
-      {characters.length > 0 && (
-        <Row label="Characters">
-          <span className="st-auto-value">{characters.join(', ')}</span>
-        </Row>
-      )}
     </Card>
   );
 }
