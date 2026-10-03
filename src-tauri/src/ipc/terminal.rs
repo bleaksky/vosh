@@ -138,7 +138,7 @@ pub(crate) struct ScrollbackLoad {
 /// off. A background that does not read turns lifting off too.
 #[tauri::command]
 pub(crate) fn highlight_ground_set(background: Option<String>) {
-    crate::highlight_ground::set(background.as_deref().and_then(readable::parse_hex));
+    crate::session::highlight_ground::set(background.as_deref().and_then(readable::parse_hex));
 }
 
 #[cfg(test)]

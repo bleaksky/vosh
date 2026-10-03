@@ -4,7 +4,9 @@
 mod connection;
 pub(crate) mod echo;
 mod gmcp_vars;
+pub(crate) mod highlight_ground;
 mod lines;
+pub(crate) mod room_block;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
@@ -24,7 +26,6 @@ use vosh_protocol::telnet::{
 };
 
 use crate::app::events::{self, broadcast_list_changes, ListChanges, ListRevisions};
-use crate::highlight_ground;
 use crate::input;
 use crate::profile::Profile;
 use crate::profile_config::SharedLayer;
@@ -1259,7 +1260,7 @@ async fn io_loop<R: tauri::Runtime>(
         p.target.name = None;
         p.target.room_idx = None;
         p.room_chars.clear();
-        p.room_block = crate::room_block::RoomBlock::default();
+        p.room_block = room_block::RoomBlock::default();
         p.vars.remove("target");
         line_triggers = p.prompt.stage.line_trigger_notice();
         end_prompt(&mut p);
@@ -1930,7 +1931,7 @@ enum Shows {
 /// line. The look's Room.Chars packet comes before its text, so the
 /// place is one in this look, the one `tar` marks with `>`.
 fn room_scope(p: &mut Profile, plain: &str, bytes: &[u8]) -> MatchScope {
-    use crate::room_block::RoomLine;
+    use room_block::RoomLine;
     match p.room_block.line(plain, bytes) {
         RoomLine::Other => MatchScope::Line,
         RoomLine::Person(place) if p.target.room_idx == Some(place) => MatchScope::RoomTarget,

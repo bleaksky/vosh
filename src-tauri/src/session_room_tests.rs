@@ -392,7 +392,7 @@ fn the_preset_opens_a_look_on_the_line_the_session_reads_as_its_exits() {
         .expect("the preset colors the exits");
     assert_eq!(
         exits.first_pattern(),
-        crate::room_block::EXITS_PATTERN,
+        crate::session::room_block::EXITS_PATTERN,
         "the preset and the session read the same exits line"
     );
 }
