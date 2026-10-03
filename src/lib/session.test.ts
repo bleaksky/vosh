@@ -1143,8 +1143,8 @@ describe('onGmcpPackage', () => {
 });
 
 // What Rust sends for a profile that sets nothing under [ui]
-// (UiConfigPayload in src-tauri/src/commands.rs, whose test reads the
-// same file).
+// (UiConfigPayload in src-tauri/src/ipc/ui_config.rs, whose test reads
+// the same file).
 describe('the UI config defaults Rust sends', () => {
   const defaults: Record<string, unknown> = uiDefaults.defaults;
   const passedThrough: readonly string[] = uiDefaults.passed_through;
