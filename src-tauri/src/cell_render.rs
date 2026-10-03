@@ -6,9 +6,8 @@
 //! triangle. The pipeline reads the grid each frame and draws a
 //! background quad plus a glyph quad per cell.
 //!
-//! Compiles on every `native_surface` platform. Glyph rasterization is the
-//! one platform-varying piece: CoreGraphics on macOS (smoothing off, to
-//! match the webview), font-kit's DirectWrite/FreeType elsewhere.
+//! Glyphs rasterize through CoreGraphics with smoothing off, to match the
+//! webview.
 
 #![cfg(native_surface)]
 // Pixel-coordinate float math on small integers (atlas dimensions, glyph
@@ -981,24 +980,15 @@ fn curl_coverage(w: u32, h: u32, t: u32) -> Vec<u8> {
 use std::collections::HashMap;
 use std::sync::Arc;
 
-#[cfg(target_os = "macos")]
 use core_graphics::color_space::CGColorSpace;
-#[cfg(target_os = "macos")]
 use core_graphics::context::{CGContext, CGTextDrawingMode};
-#[cfg(target_os = "macos")]
 use core_graphics::font::CGGlyph;
-#[cfg(target_os = "macos")]
 use core_graphics::geometry::{CGAffineTransform, CGPoint, CGRect, CGSize};
-#[cfg(target_os = "macos")]
 use core_text::font::CTFont;
 use font_kit::canvas::RasterizationOptions;
-#[cfg(not(target_os = "macos"))]
-use font_kit::canvas::{Canvas, Format};
 use font_kit::font::Font;
 use font_kit::hinting::HintingOptions;
 use pathfinder_geometry::transform2d::Transform2F;
-#[cfg(not(target_os = "macos"))]
-use pathfinder_geometry::vector::Vector2I;
 
 // Italic slant: shear the top of the glyph rightward. The CoreGraphics text
 // matrix's `c` term is the horizontal shear; positive leans the top right.
@@ -1291,20 +1281,8 @@ impl GlyphAtlas {
             0
         };
         let w = bw as usize + extra;
-        #[cfg(target_os = "macos")]
         let coverage = rasterize_glyph_cg(
             &face.native_font(),
-            glyph_id,
-            self.px,
-            skew,
-            bounds.origin_x(),
-            bounds.origin_y(),
-            w,
-            h,
-        );
-        #[cfg(not(target_os = "macos"))]
-        let coverage = rasterize_glyph_fk(
-            face,
             glyph_id,
             self.px,
             skew,
@@ -1340,56 +1318,11 @@ impl GlyphAtlas {
     }
 }
 
-/// Rasterize one glyph through font-kit's platform rasterizer
-/// (`DirectWrite` on Windows, `FreeType` on Linux) into a `w * h` alpha
-/// coverage buffer.
-/// The glyph's bounding box is shifted to the buffer origin; `skew` is the
-/// italic shear and `origin_x/origin_y` come from `raster_bounds`.
-#[cfg(not(target_os = "macos"))]
-#[allow(clippy::too_many_arguments)]
-fn rasterize_glyph_fk(
-    font: &Font,
-    glyph_id: u32,
-    px: f32,
-    skew: f32,
-    origin_x: i32,
-    origin_y: i32,
-    w: usize,
-    h: usize,
-) -> Vec<u8> {
-    let mut canvas = Canvas::new(Vector2I::new(w as i32, h as i32), Format::A8);
-    // Shift the glyph so its bounding box sits at the canvas origin; the
-    // negated shear matches the sign convention used for raster_bounds.
-    let transform =
-        Transform2F::row_major(1.0, 0.0, -skew, 1.0, -origin_x as f32, -origin_y as f32);
-    if font
-        .rasterize_glyph(
-            &mut canvas,
-            glyph_id,
-            px,
-            transform,
-            HintingOptions::None,
-            RasterizationOptions::GrayscaleAa,
-        )
-        .is_err()
-    {
-        return vec![0u8; w * h];
-    }
-    // Repack: the canvas stride can exceed the row width.
-    let mut pixels = vec![0u8; w * h];
-    for row in 0..h {
-        let src = row * canvas.stride;
-        pixels[row * w..(row + 1) * w].copy_from_slice(&canvas.pixels[src..src + w]);
-    }
-    pixels
-}
-
 /// Rasterize one glyph through CoreGraphics with font smoothing disabled, so
 /// the coverage matches the webview's antialiased text rather than the heavier
 /// smoothed look. Returns a `w * h` alpha coverage buffer (0 = no ink, 255 =
 /// full ink). The glyph's bounding box is shifted to the buffer origin; `skew`
 /// is the italic shear and `origin_x/origin_y` come from `raster_bounds`.
-#[cfg(target_os = "macos")]
 #[allow(clippy::too_many_arguments)]
 fn rasterize_glyph_cg(
     font: &CTFont,
@@ -1481,10 +1414,10 @@ const JETBRAINS_REGULAR: &[u8] =
 const JETBRAINS_BOLD: &[u8] =
     include_bytes!("../../src/assets/fonts/JetBrainsMonoNerdFont-Bold.ttf");
 
-fn font_from_handle(handle: font_kit::handle::Handle) -> Option<(Font, font_kit::handle::Handle)> {
+fn font_from_handle(handle: font_kit::handle::Handle) -> Option<Font> {
     let kit_font = handle.load().ok()?;
     tracing::info!(font = %kit_font.full_name(), "native-surface: atlas font (system)");
-    Some((kit_font, handle))
+    Some(kit_font)
 }
 
 /// The regular and bold faces an atlas rasterizes from. Loading them
@@ -1502,77 +1435,10 @@ impl AtlasFonts {
     /// `family_stack`, falling back to the system monospace. The bold
     /// face falls back to the regular one. None if no font loads.
     pub(crate) fn load(family_stack: &str) -> Option<Self> {
-        let regular = load_font(family_stack, false)?;
-        let bold = load_font(family_stack, true).unwrap_or_else(|| regular.clone());
+        let regular = load_face(family_stack, false)?;
+        let bold = load_face(family_stack, true).unwrap_or_else(|| regular.clone());
         Some(Self { regular, bold })
     }
-}
-
-/// The faces of a font change on their way from the blocking pool to the
-/// main thread. A `CoreText` font may cross threads, so on macOS the faces
-/// load on the pool. `DirectWrite` and `FreeType` fonts may not, so on
-/// Windows and Linux each face crosses as its file bytes and loads again on
-/// the main thread, which only parses them.
-#[cfg(target_os = "macos")]
-pub(crate) struct FontsInTransit(AtlasFonts);
-
-#[cfg(not(target_os = "macos"))]
-pub(crate) struct FontsInTransit {
-    regular: font_kit::handle::Handle,
-    bold: font_kit::handle::Handle,
-}
-
-impl FontsInTransit {
-    /// Resolve and load the faces of `family_stack`, as
-    /// [`AtlasFonts::load`] does. Runs on the blocking pool.
-    #[cfg(target_os = "macos")]
-    pub(crate) fn load(family_stack: &str) -> Option<Self> {
-        AtlasFonts::load(family_stack).map(Self)
-    }
-
-    /// Resolve and load the faces of `family_stack`, as
-    /// [`AtlasFonts::load`] does, and keep the bytes they loaded from.
-    /// Runs on the blocking pool.
-    #[cfg(not(target_os = "macos"))]
-    pub(crate) fn load(family_stack: &str) -> Option<Self> {
-        let (_, regular) = load_face(family_stack, false)?;
-        let bold = load_face(family_stack, true).map_or_else(|| regular.clone(), |(_, h)| h);
-        Some(Self {
-            regular: in_memory(regular)?,
-            bold: in_memory(bold)?,
-        })
-    }
-
-    /// The faces, ready for an atlas. Runs on the main thread.
-    #[cfg(target_os = "macos")]
-    #[allow(clippy::unnecessary_wraps)] // Windows and Linux can fail here.
-    pub(crate) fn arrive(self) -> Option<AtlasFonts> {
-        Some(self.0)
-    }
-
-    /// The faces, ready for an atlas. Runs on the main thread.
-    #[cfg(not(target_os = "macos"))]
-    pub(crate) fn arrive(self) -> Option<AtlasFonts> {
-        Some(AtlasFonts {
-            regular: self.regular.load().ok()?,
-            bold: self.bold.load().ok()?,
-        })
-    }
-}
-
-/// `handle` with its file read, so loading it again reads no disk.
-#[cfg(not(target_os = "macos"))]
-fn in_memory(handle: font_kit::handle::Handle) -> Option<font_kit::handle::Handle> {
-    match handle {
-        font_kit::handle::Handle::Path { path, font_index } => std::fs::read(path)
-            .ok()
-            .map(|bytes| font_kit::handle::Handle::from_memory(Arc::new(bytes), font_index)),
-        memory @ font_kit::handle::Handle::Memory { .. } => Some(memory),
-    }
-}
-
-fn load_font(family_stack: &str, bold: bool) -> Option<Font> {
-    load_face(family_stack, bold).map(|(font, _)| font)
 }
 
 /// The CSS family of the font Vosh bundles.
@@ -1625,9 +1491,8 @@ fn rendered_families(stack: &str) -> Vec<String> {
     out
 }
 
-/// The first face of `family_stack` that loads, with the handle it
-/// loaded from.
-fn load_face(family_stack: &str, bold: bool) -> Option<(Font, font_kit::handle::Handle)> {
+/// The first face of `family_stack` that loads.
+fn load_face(family_stack: &str, bold: bool) -> Option<Font> {
     let source = font_kit::source::SystemSource::new();
     let weight = if bold { 700.0 } else { 400.0 };
 
@@ -1653,15 +1518,14 @@ fn load_face(family_stack: &str, bold: bool) -> Option<(Font, font_kit::handle::
             } else {
                 JETBRAINS_REGULAR
             };
-            let handle = font_kit::handle::Handle::from_memory(Arc::new(bytes.to_vec()), 0);
-            if let Ok(font) = handle.load() {
+            if let Ok(font) = Font::from_bytes(Arc::new(bytes.to_vec()), 0) {
                 tracing::info!(bold, "native-surface: atlas font = bundled JetBrainsMono");
-                return Some((font, handle));
+                return Some(font);
             }
         }
         // Otherwise a system font, upright face closest to the weight.
-        if let Some(face) = weighted_face(&source, &name, weight).and_then(font_from_handle) {
-            return Some(face);
+        if let Some(font) = weighted_face(&source, &name, weight).and_then(font_from_handle) {
+            return Some(font);
         }
     }
 

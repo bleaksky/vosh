@@ -4,14 +4,10 @@
 //! scroll/split/selection/hover state, and the command-facing API. The
 //! platform submodule owns the child window/view plumbing (creating a
 //! native view over the webview, moving it, hiding it, clipboard, URL
-//! open) and the platform's mouse/cursor handlers:
-//!
-//! - macOS: `NSView` + `CAMetalLayer` composited over the `WKWebView`,
-//!   drawn by wgpu's Metal backend (`macos.rs`).
-//! - Windows: a child `HWND` over the `WebView2`, drawn by D3D12
-//!   (`windows.rs`).
-//! - Linux: a raw X11 child window over the GTK toplevel, drawn by Vulkan;
-//!   Wayland falls back to xterm (`linux.rs`).
+//! open) and the platform's mouse/cursor handlers. macOS is the one
+//! platform: an `NSView` + `CAMetalLayer` composited with the
+//! `WKWebView`, drawn by wgpu's Metal backend (`macos.rs`). Windows and
+//! Linux draw with xterm.
 //!
 //! Every window touch happens on the main thread (creation inside
 //! `with_webview` / install, updates via `AppHandle::run_on_main_thread`).
@@ -20,10 +16,6 @@
 // Platform window plumbing and the wgpu raw-handle surface are unsafe;
 // the workspace forbids unsafe by default.
 #![allow(unsafe_code)]
-// The Linux surface is display-only for now (input propagates through the
-// child X window to the webview), so the shared pointer layer sits unused
-// there. macOS and Windows still enforce dead-code on it.
-#![cfg_attr(target_os = "linux", allow(dead_code))]
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -39,12 +31,6 @@ use crate::app::events::{
 #[cfg(target_os = "macos")]
 #[path = "macos.rs"]
 mod platform;
-#[cfg(target_os = "windows")]
-#[path = "windows.rs"]
-mod platform;
-#[cfg(target_os = "linux")]
-#[path = "linux.rs"]
-mod platform;
 
 mod split_drag;
 
@@ -59,9 +45,8 @@ struct GpuState {
 }
 
 // The installed surface: the platform's window/view handles plus the GPU
-// state. Platform handles are raw pointers and the atlas's font-kit face is
-// a platform font object (DirectWrite's is not Send), but every access is
-// funnelled through the main thread, so the assertion is sound.
+// state. Platform handles are raw pointers, but every access is funnelled
+// through the main thread, so the assertion is sound.
 struct SurfaceHandle {
     platform: platform::PlatformSurface,
     gpu: GpuState,
@@ -224,7 +209,6 @@ fn redraw_now() {
         if let Some(handle) = slot.as_mut() {
             // A theme change repaints through here, so the backdrop that
             // shows during a resize follows it. Cached, so cheap.
-            #[cfg(target_os = "macos")]
             if UNDERLAY {
                 platform::set_backdrop(&handle.platform, crate::cell_render::theme_bg_rgb());
             }
@@ -1079,15 +1063,11 @@ fn request_font_rebuild(family: String, font_px: f32) {
     let app = app.clone();
     load_latest(
         &FONT_TICKETS,
-        move || crate::cell_render::FontsInTransit::load(&family),
+        move || crate::cell_render::AtlasFonts::load(&family),
         move |swap| {
             let _ = app.run_on_main_thread(swap);
         },
-        move |fonts| {
-            if let Some(fonts) = fonts.arrive() {
-                swap_font(fonts, font_px);
-            }
-        },
+        move |fonts| swap_font(fonts, font_px),
     );
 }
 
@@ -1176,8 +1156,6 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64, lent
     store_f32(&DPR, dpr as f32);
     store_f32(&ORIGIN_X, x as f32);
     store_f32(&ORIGIN_Y, y as f32);
-    // The underlay helpers exist only in the macOS glue.
-    #[cfg(target_os = "macos")]
     if UNDERLAY {
         // The view already spans the window (AppKit resizes it with the
         // window), so the report only moves the grid inside it. Snap to
