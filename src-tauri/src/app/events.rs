@@ -204,7 +204,7 @@ pub(crate) const AFFECTS_DISPLAY_CHANGED: &str = "vosh://affects-display-changed
 pub(crate) const CHAT_COLORS_CHANGED: &str = "vosh://chat-colors-changed";
 /// Sent to every window with the tick settings whenever they change:
 /// a Settings Tick save, a `#tick` command, or a replace. The payload is
-/// a [`crate::commands::TickConfigPayload`].
+/// a [`crate::tick::TickConfigPayload`].
 /// `subscribeTickConfigChanged` hears it.
 pub(crate) const TICK_CONFIG_CHANGED: &str = "vosh://tick-config-changed";
 

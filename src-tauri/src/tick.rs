@@ -27,6 +27,7 @@ use std::time::Duration;
 use regex::Regex;
 use serde::Serialize;
 use tokio::time::Instant;
+use tracing::warn;
 
 /// Default tick interval in seconds. Matches the typical ROM 2.4 tick.
 pub(crate) const DEFAULT_INTERVAL_SECS: u64 = 30;
@@ -525,6 +526,113 @@ impl TickPayload {
             sound: runtime.config.sound,
         }
     }
+}
+
+/// Snapshot of the per-session tick timer config. Mirrors
+/// `tick::TickConfig` with `Duration` flattened to a `u64` of seconds
+/// so the frontend can edit it cleanly. Reset pattern, auto-fire
+/// command, warning timer / message / color are all optional — empty
+/// means the feature is off.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct TickConfigPayload {
+    pub enabled: bool,
+    pub interval_secs: u64,
+    pub auto_fire: Option<String>,
+    pub sound: bool,
+    pub reset_pattern: Option<String>,
+    pub warn_at_secs: Option<u64>,
+    pub warn_message: Option<String>,
+    pub warn_color: Option<String>,
+}
+
+/// The live tick configuration as `tick_get_config` reads it.
+pub(crate) fn tick_config_payload(cfg: &crate::tick::TickConfig) -> TickConfigPayload {
+    TickConfigPayload {
+        enabled: cfg.enabled,
+        interval_secs: cfg.interval.as_secs(),
+        auto_fire: cfg.auto_fire.clone(),
+        sound: cfg.sound,
+        reset_pattern: cfg.reset_pattern.clone(),
+        warn_at_secs: cfg.warn_at_secs,
+        warn_message: cfg.warn_message.clone(),
+        warn_color: cfg.warn_color.clone(),
+    }
+}
+
+/// The error `tick_set_config` returns for a Reset on pattern that does
+/// not compile.
+const TICK_RESET_PATTERN_ERROR: &str =
+    "Vosh could not read the Reset on pattern. Check it and save again.";
+
+/// Apply a tick configuration from Settings to `tick`. Checks the Reset
+/// on pattern before it changes anything, so a pattern that does not
+/// compile leaves the running tick exactly as it was and returns a
+/// sentence. Routes interval changes through `TickRuntime::set_interval`
+/// so the next-fire deadline rebuilds. Other fields are direct
+/// assignments. Returns the configuration as it now reads.
+pub(crate) fn apply_tick_config(
+    tick: &mut crate::tick::TickRuntime,
+    config: &TickConfigPayload,
+    now: tokio::time::Instant,
+) -> Result<TickConfigPayload, String> {
+    // Normalize string options: empty / whitespace-only -> None so the
+    // persisted state does not carry an empty placeholder.
+    let auto_fire = config
+        .auto_fire
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let reset_pattern = config
+        .reset_pattern
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let warn_message = config
+        .warn_message
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let warn_color = config
+        .warn_color
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    // Everything that can fail runs before the first change.
+    let reset_regex =
+        crate::tick::compile_reset_pattern(reset_pattern.as_deref()).map_err(|e| {
+            warn!(error = %e, "tick reset pattern did not compile");
+            TICK_RESET_PATTERN_ERROR.to_string()
+        })?;
+
+    if config.enabled {
+        if !tick.config.enabled {
+            tick.enable(now);
+        }
+        tick.set_interval(config.interval_secs, now);
+    } else {
+        tick.disable();
+        // Still record the interval so the user can flip enabled
+        // back on without re-typing it.
+        tick.config.interval = std::time::Duration::from_secs(config.interval_secs.max(1));
+    }
+    tick.set_compiled_reset_pattern(reset_pattern.clone(), reset_regex);
+    tick.config.auto_fire.clone_from(&auto_fire);
+    tick.config.sound = config.sound;
+    tick.config.warn_at_secs = config.warn_at_secs.filter(|s| *s > 0);
+    tick.config.warn_message.clone_from(&warn_message);
+    tick.config.warn_color.clone_from(&warn_color);
+
+    Ok(TickConfigPayload {
+        enabled: tick.config.enabled,
+        interval_secs: tick.config.interval.as_secs(),
+        auto_fire,
+        sound: tick.config.sound,
+        reset_pattern,
+        warn_at_secs: tick.config.warn_at_secs,
+        warn_message,
+        warn_color,
+    })
 }
 
 #[cfg(test)]
@@ -1159,5 +1267,136 @@ mod tests {
         assert_eq!(warn_color_escape(Some("chartreuse-ish")), "\x1b[1;31m");
         assert_eq!(warn_color_escape(Some("#ff88")), "\x1b[1;31m");
         assert_eq!(warn_color_escape(None), "\x1b[1;31m");
+    }
+
+    /// A Tick block from Settings: off, every minute, with every option
+    /// filled in and `reset_pattern` as the Reset on pattern.
+    fn tick_payload(reset_pattern: &str) -> super::TickConfigPayload {
+        super::TickConfigPayload {
+            enabled: false,
+            interval_secs: 60,
+            auto_fire: Some(" score ".into()),
+            sound: false,
+            reset_pattern: Some(reset_pattern.into()),
+            warn_at_secs: Some(5),
+            warn_message: Some("Tick soon".into()),
+            warn_color: Some("red".into()),
+        }
+    }
+
+    /// A running 30 second tick that resets on `^You feel`.
+    fn running_tick(now: tokio::time::Instant) -> crate::tick::TickRuntime {
+        let mut tick = crate::tick::TickRuntime::default();
+        tick.enable(now);
+        tick.set_reset_pattern(Some("^You feel".into())).unwrap();
+        tick
+    }
+
+    #[test]
+    fn a_tick_config_with_a_bad_reset_pattern_changes_nothing() {
+        let now = tokio::time::Instant::now();
+        let mut tick = running_tick(now);
+        let before = format!("{:?}", tick.config);
+        let next_fire = tick.next_fire();
+
+        let err = super::apply_tick_config(&mut tick, &tick_payload("[bad"), now).unwrap_err();
+        assert_eq!(
+            err,
+            "Vosh could not read the Reset on pattern. Check it and save again."
+        );
+        // Still on, still every 30 seconds, still on the same clock, and
+        // still resetting on the old pattern.
+        assert_eq!(format!("{:?}", tick.config), before);
+        assert!(tick.config.enabled);
+        assert_eq!(tick.config.interval.as_secs(), 30);
+        assert_eq!(tick.next_fire(), next_fire);
+        assert!(tick.check_reset_match("You feel less tired."));
+    }
+
+    #[test]
+    fn a_tick_config_that_reads_applies_every_field() {
+        let now = tokio::time::Instant::now();
+        let mut tick = running_tick(now);
+
+        let saved = super::apply_tick_config(&mut tick, &tick_payload(" ^Dawn "), now).unwrap();
+        assert!(!saved.enabled);
+        assert_eq!(saved.interval_secs, 60);
+        assert_eq!(saved.auto_fire.as_deref(), Some("score"));
+        assert_eq!(saved.reset_pattern.as_deref(), Some("^Dawn"));
+        assert_eq!(saved.warn_at_secs, Some(5));
+        assert!(!tick.config.enabled);
+        assert_eq!(tick.next_fire(), None);
+        assert_eq!(tick.config.interval.as_secs(), 60);
+        assert!(!tick.config.sound);
+        assert!(tick.check_reset_match("Dawn breaks."));
+        assert!(!tick.check_reset_match("You feel less tired."));
+
+        // Turned back on, the tick runs at the saved interval, and a
+        // blank pattern clears the reset.
+        let mut on = tick_payload("  ");
+        on.enabled = true;
+        let saved = super::apply_tick_config(&mut tick, &on, now).unwrap();
+        assert!(saved.enabled);
+        assert_eq!(saved.reset_pattern, None);
+        assert_eq!(
+            tick.next_fire(),
+            Some(now + std::time::Duration::from_secs(60))
+        );
+        assert!(!tick.check_reset_match("Dawn breaks."));
+    }
+
+    #[test]
+    fn a_tick_save_inside_the_warn_window_does_not_warn_twice() {
+        let t0 = tokio::time::Instant::now();
+        let at = |s: f64| t0 + std::time::Duration::from_secs_f64(s);
+        let mut tick = crate::tick::TickRuntime::default();
+        tick.start_session(t0);
+        tick.config.warn_at_secs = Some(5);
+        assert!(tick.on_game_tick(at(1.0)).is_some());
+        let mut warns = 0;
+        let mut now = 1.0;
+        while now < 40.0 {
+            if (now - 28.0_f64).abs() < f64::EPSILON {
+                // Untick Play a sound in Settings, which saves the whole
+                // Tick block at the same interval.
+                let mut quiet = tick_payload("");
+                quiet.enabled = true;
+                quiet.interval_secs = 30;
+                quiet.sound = false;
+                super::apply_tick_config(&mut tick, &quiet, at(now)).unwrap();
+            }
+            if tick.poll(at(now)).warn_echo.is_some() {
+                warns += 1;
+            }
+            now += 0.25;
+        }
+        assert_eq!(warns, 1);
+        assert!(tick.synced);
+    }
+
+    #[test]
+    fn a_tick_save_with_a_shorter_interval_does_not_fire_while_the_game_ticks() {
+        let t0 = tokio::time::Instant::now();
+        let at = |s: f64| t0 + std::time::Duration::from_secs_f64(s);
+        let mut tick = crate::tick::TickRuntime::default();
+        tick.start_session(t0);
+        tick.config.auto_fire = Some("score".into());
+        assert!(tick.on_game_tick(at(1.0)).is_some());
+        // 25 seconds into the tick, Settings saves Every 10.
+        let mut shorter = tick_payload("");
+        shorter.enabled = true;
+        shorter.interval_secs = 10;
+        super::apply_tick_config(&mut tick, &shorter, at(26.0)).unwrap();
+        let mut now = 26.0;
+        while now < 31.0 {
+            let step = tick.poll(at(now));
+            assert!(!step.payload.fired, "no fallback at {now}");
+            assert_eq!(step.command, None);
+            now += 0.25;
+        }
+        assert!(tick.synced);
+        let step = tick.on_game_tick(at(31.0)).expect("the tick lands");
+        assert!(step.payload.fired);
+        assert_eq!(step.command.as_deref(), Some("score"));
     }
 }
