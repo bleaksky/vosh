@@ -37,7 +37,9 @@ use connection::{ConnectionError, Stream};
 use echo::ServerEcho;
 use lines::{Line, LineAccumulator, Partial};
 
-const TICK_EMIT_INTERVAL: Duration = Duration::from_millis(250);
+/// The 250 ms poll that drives the tick, the Lua timers and the Settings
+/// timers.
+const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 const READ_BUFFER_BYTES: usize = 8 * 1024;
 
@@ -481,7 +483,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
     tls: bool,
     known_host: bool,
     profile: Arc<Mutex<Profile>>,
-    timers: SharedTimers,
+    lua_timers: SharedTimers,
     logs: crate::logs::SharedLogStore,
     scrollback: crate::logs::SharedScrollback,
     scrollback_path: Option<std::path::PathBuf>,
@@ -550,7 +552,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         stream,
         rx_outgoing,
         profile,
-        timers,
+        lua_timers,
         logs,
         log_session_id,
         scrollback,
@@ -575,7 +577,7 @@ async fn io_loop<R: tauri::Runtime>(
     mut stream: Stream,
     mut rx_outgoing: mpsc::UnboundedReceiver<OutgoingMsg>,
     profile: Arc<Mutex<Profile>>,
-    timers: SharedTimers,
+    lua_timers: SharedTimers,
     logs: crate::logs::SharedLogStore,
     log_session_id: Option<i64>,
     scrollback: crate::logs::SharedScrollback,
@@ -604,7 +606,7 @@ async fn io_loop<R: tauri::Runtime>(
         p.prompt.set_cols(usize::from(negotiator.window_size.0));
     }
 
-    let mut tick_interval = tokio::time::interval(TICK_EMIT_INTERVAL);
+    let mut tick_interval = tokio::time::interval(POLL_INTERVAL);
     tick_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     // Per-timer next-fire deadlines for the Settings interval timers.
     // Seeded on first sight in fire_due_profile_timers; cleared here so
@@ -659,7 +661,7 @@ async fn io_loop<R: tauri::Runtime>(
                         &app,
                         &mut stream,
                         &profile,
-                        &timers,
+                        &lua_timers,
                         &scrollback,
                         &logs,
                         &mut log_session,
@@ -784,7 +786,7 @@ async fn io_loop<R: tauri::Runtime>(
                             &app,
                             &mut stream,
                             &profile,
-                            &timers,
+                            &lua_timers,
                             &scrollback,
                             &logs,
                             &mut log_session,
@@ -839,7 +841,7 @@ async fn io_loop<R: tauri::Runtime>(
                             &mut negotiator,
                             &mut accumulator,
                             &profile,
-                            &timers,
+                            &lua_timers,
                             log_session_id,
                             &scrollback,
                             &mut server_echo,
@@ -856,7 +858,7 @@ async fn io_loop<R: tauri::Runtime>(
                         &mut stream,
                         &mut accumulator,
                         &profile,
-                        &timers,
+                        &lua_timers,
                         log_session_id,
                         &scrollback,
                         &mut batch,
@@ -921,7 +923,7 @@ async fn io_loop<R: tauri::Runtime>(
                                         &mut negotiator,
                                         &mut accumulator,
                                         &profile,
-                                        &timers,
+                                        &lua_timers,
                                         log_session_id,
                                         &scrollback,
                                         &mut server_echo,
@@ -943,7 +945,7 @@ async fn io_loop<R: tauri::Runtime>(
                                     &mut stream,
                                     &mut accumulator,
                                     &profile,
-                                    &timers,
+                                    &lua_timers,
                                     log_session_id,
                                     &scrollback,
                                     &mut batch,
@@ -1024,18 +1026,20 @@ async fn io_loop<R: tauri::Runtime>(
                 emit_prompt_state(&app, state);
             }
             _ = tick_interval.tick() => {
-                if let Err(e) = handle_tick(&app, &mut stream, &profile, &timers).await {
+                if let Err(e) = handle_tick(&app, &mut stream, &profile, &lua_timers).await {
                     error!(error = %e, "tick handling failed");
                     break Some(format!("tick handling failed: {e}"));
                 }
-                if let Err(e) = fire_due_script_timers(&app, &mut stream, &profile, &timers).await {
+                if let Err(e) =
+                    fire_due_script_timers(&app, &mut stream, &profile, &lua_timers).await
+                {
                     error!(error = %e, "script timer firing failed");
                 }
                 if let Err(e) = fire_due_profile_timers(
                     &app,
                     &mut stream,
                     &profile,
-                    &timers,
+                    &lua_timers,
                     &mut timer_next,
                 )
                 .await
@@ -1173,7 +1177,7 @@ async fn handle_tick<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
-    timers: &SharedTimers,
+    lua_timers: &SharedTimers,
 ) -> std::io::Result<()> {
     // Take the firing decision under the lock, then run the Send each
     // tick command, if the timer fired, after releasing it.
@@ -1187,7 +1191,15 @@ async fn handle_tick<R: tauri::Runtime>(
     if let Some(text) = &step.warn_echo {
         emit_output(app, text.clone().into_bytes());
     }
-    deliver_tick_step(app, stream, profile, timers, step, &mut OutputSink::Direct).await
+    deliver_tick_step(
+        app,
+        stream,
+        profile,
+        lua_timers,
+        step,
+        &mut OutputSink::Direct,
+    )
+    .await
 }
 
 /// Report a tick step on `session://tick`, so the frontend counts and
@@ -1197,7 +1209,7 @@ async fn deliver_tick_step<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
-    timers: &SharedTimers,
+    lua_timers: &SharedTimers,
     step: TickStep,
     sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
@@ -1205,7 +1217,7 @@ async fn deliver_tick_step<R: tauri::Runtime>(
         warn!(error = %e, "failed to emit tick payload");
     }
     if let Some(command) = step.command {
-        run_fired_command(app, stream, profile, timers, &command, sink).await?;
+        run_fired_command(app, stream, profile, lua_timers, &command, sink).await?;
     }
     Ok(())
 }
@@ -1221,7 +1233,7 @@ async fn fire_due_profile_timers<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
-    timers: &SharedTimers,
+    lua_timers: &SharedTimers,
     timer_next: &mut HashMap<u32, Instant>,
 ) -> std::io::Result<()> {
     let now = Instant::now();
@@ -1263,7 +1275,7 @@ async fn fire_due_profile_timers<R: tauri::Runtime>(
             app,
             stream,
             profile,
-            timers,
+            lua_timers,
             &command,
             &mut OutputSink::Direct,
         )
@@ -1422,7 +1434,7 @@ async fn run_fired_command<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
-    timers: &SharedTimers,
+    lua_timers: &SharedTimers,
     command: &str,
     sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
@@ -1438,7 +1450,7 @@ async fn run_fired_command<R: tauri::Runtime>(
     crate::disk::save::settle_line_effects(app, effects).await;
     shown.send(app);
     let mut io = ScriptIo::Session(stream, sink);
-    apply_script_result(app, &mut io, profile, timers, apply).await
+    apply_script_result(app, &mut io, profile, lua_timers, apply).await
 }
 
 /// Echo lines outside a trigger's own line, each on its own row with a
@@ -1460,7 +1472,7 @@ async fn handle_event<R: tauri::Runtime>(
     negotiator: &mut Negotiator,
     accumulator: &mut LineAccumulator,
     profile: &Arc<Mutex<Profile>>,
-    timers: &SharedTimers,
+    lua_timers: &SharedTimers,
     log_session_id: Option<i64>,
     scrollback: &crate::logs::SharedScrollback,
     server_echo: &mut ServerEcho,
@@ -1510,8 +1522,10 @@ async fn handle_event<R: tauri::Runtime>(
                 };
                 perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
                 for step in steps {
-                    deliver_line_step(app, stream, profile, timers, scrollback, batch, step, perf)
-                        .await?;
+                    deliver_line_step(
+                        app, stream, profile, lua_timers, scrollback, batch, step, perf,
+                    )
+                    .await?;
                 }
             }
             Ok(())
@@ -1519,7 +1533,7 @@ async fn handle_event<R: tauri::Runtime>(
         TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
             perf.gmcp_packets += 1;
             batch.gmcp = true;
-            handle_gmcp(app, profile, timers, stream, &payload, batch, perf).await?;
+            handle_gmcp(app, profile, lua_timers, stream, &payload, batch, perf).await?;
             Ok(())
         }
         TelnetEvent::Command(byte) if byte == telnet_codes::EOR || byte == telnet_codes::GA => {
@@ -1535,8 +1549,10 @@ async fn handle_event<R: tauri::Runtime>(
                 marker_step(&mut p, accumulator, batch, Instant::now(), log_session_id)
             };
             for step in steps {
-                deliver_line_step(app, stream, profile, timers, scrollback, batch, step, perf)
-                    .await?;
+                deliver_line_step(
+                    app, stream, profile, lua_timers, scrollback, batch, step, perf,
+                )
+                .await?;
             }
             Ok(())
         }
@@ -2293,7 +2309,7 @@ async fn let_go_held_lines<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
-    timers: &SharedTimers,
+    lua_timers: &SharedTimers,
     scrollback: &crate::logs::SharedScrollback,
     logs: &crate::logs::SharedLogStore,
     log_session: &mut LogSession,
@@ -2311,7 +2327,7 @@ async fn let_go_held_lines<R: tauri::Runtime>(
     };
     for step in steps {
         deliver_line_step(
-            app, stream, profile, timers, scrollback, &mut batch, step, perf,
+            app, stream, profile, lua_timers, scrollback, &mut batch, step, perf,
         )
         .await?;
     }
@@ -2676,7 +2692,7 @@ async fn deliver_line_step<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
-    timers: &SharedTimers,
+    lua_timers: &SharedTimers,
     scrollback: &crate::logs::SharedScrollback,
     batch: &mut ReadBatch,
     step: LineStep,
@@ -2707,12 +2723,12 @@ async fn deliver_line_step<R: tauri::Runtime>(
         app,
         &mut ScriptIo::Session(stream, &mut sink),
         profile,
-        timers,
+        lua_timers,
         apply,
     )
     .await?;
     if let Some(step) = tick_step {
-        deliver_tick_step(app, stream, profile, timers, step, &mut sink).await?;
+        deliver_tick_step(app, stream, profile, lua_timers, step, &mut sink).await?;
     }
     Ok(())
 }
@@ -2724,7 +2740,7 @@ async fn end_read<R: tauri::Runtime>(
     stream: &mut Stream,
     accumulator: &mut LineAccumulator,
     profile: &Arc<Mutex<Profile>>,
-    timers: &SharedTimers,
+    lua_timers: &SharedTimers,
     log_session_id: Option<i64>,
     scrollback: &crate::logs::SharedScrollback,
     batch: &mut ReadBatch,
@@ -2735,7 +2751,10 @@ async fn end_read<R: tauri::Runtime>(
         partial_step(&mut p, accumulator, batch, Instant::now(), log_session_id)
     };
     if let Some(step) = step {
-        deliver_line_step(app, stream, profile, timers, scrollback, batch, step, perf).await?;
+        deliver_line_step(
+            app, stream, profile, lua_timers, scrollback, batch, step, perf,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -2981,7 +3000,7 @@ impl LogSession {
 async fn handle_gmcp<R: tauri::Runtime>(
     app: &AppHandle<R>,
     profile: &Arc<Mutex<Profile>>,
-    timers: &SharedTimers,
+    lua_timers: &SharedTimers,
     stream: &mut Stream,
     payload: &[u8],
     batch: &mut ReadBatch,
@@ -3038,13 +3057,13 @@ async fn handle_gmcp<R: tauri::Runtime>(
     let mut sink = OutputSink::Batch(batch);
     if let Some(step) = tick_step {
         perf.tick_emits += 1;
-        deliver_tick_step(app, stream, profile, timers, step, &mut sink).await?;
+        deliver_tick_step(app, stream, profile, lua_timers, step, &mut sink).await?;
     }
     apply_script_result(
         app,
         &mut ScriptIo::Session(stream, &mut sink),
         profile,
-        timers,
+        lua_timers,
         script_apply,
     )
     .await?;
@@ -3239,7 +3258,7 @@ async fn apply_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
     io: &mut ScriptIo<'_, '_>,
     profile: &Arc<Mutex<Profile>>,
-    timers: &SharedTimers,
+    lua_timers: &SharedTimers,
     apply: ApplyResult,
 ) -> std::io::Result<()> {
     let mut apply = apply;
@@ -3265,7 +3284,7 @@ async fn apply_script_result<R: tauri::Runtime>(
             // one result both starts and cancels never fires. Lua never
             // gives two timers the same id, so a cancel only ever takes
             // the timer it names.
-            let mut guard = timers.lock().await;
+            let mut guard = lua_timers.lock().await;
             guard.extend(apply.new_timers);
             guard.retain(|t| !apply.cancel_timers.contains(&t.timer_id));
         }
@@ -3313,7 +3332,7 @@ async fn apply_script_result<R: tauri::Runtime>(
 pub(crate) async fn collect_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
     profile: &Arc<Mutex<Profile>>,
-    timers: &SharedTimers,
+    lua_timers: &SharedTimers,
     apply: ApplyResult,
 ) -> (Vec<u8>, Vec<String>) {
     let mut bytes = Vec::new();
@@ -3323,7 +3342,7 @@ pub(crate) async fn collect_script_result<R: tauri::Runtime>(
         echoes: &mut echoes,
     };
     // Collecting writes to no stream, so it never fails.
-    if let Err(e) = apply_script_result(app, &mut io, profile, timers, apply).await {
+    if let Err(e) = apply_script_result(app, &mut io, profile, lua_timers, apply).await {
         warn!(error = %e, "applying a script result failed");
     }
     (bytes, echoes)
@@ -3357,11 +3376,11 @@ async fn fire_due_script_timers<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
-    timers: &SharedTimers,
+    lua_timers: &SharedTimers,
 ) -> std::io::Result<()> {
     let now = Instant::now();
     let due: Vec<PendingTimer> = {
-        let mut guard = timers.lock().await;
+        let mut guard = lua_timers.lock().await;
         let (ready, keep): (Vec<_>, Vec<_>) = std::mem::take(&mut *guard)
             .into_iter()
             .partition(|t| t.deadline <= now);
@@ -3385,7 +3404,7 @@ async fn fire_due_script_timers<R: tauri::Runtime>(
     };
     let mut sink = OutputSink::Direct;
     let mut io = ScriptIo::Session(stream, &mut sink);
-    apply_script_result(app, &mut io, profile, timers, apply).await
+    apply_script_result(app, &mut io, profile, lua_timers, apply).await
 }
 
 /// Flush a partial line still buffered when the session ends so the MUD's
