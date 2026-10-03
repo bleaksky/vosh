@@ -18,8 +18,7 @@ use crate::profile::live::{Macro, Profile};
 
 /// The global catalog. Every alias, trigger, macro lives here as a
 /// flat list with its `group` tag carrying the loadout association.
-/// Persisted at `<app_data_dir>/catalog.toml` once Phase B2 wires
-/// it as the authoritative source.
+/// Saved at `<app_data>/catalog.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub(crate) struct GlobalCatalog {
     #[serde(default)]

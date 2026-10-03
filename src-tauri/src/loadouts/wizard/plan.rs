@@ -93,8 +93,9 @@ pub(crate) struct Conflict {
     pub default_source: String,
 }
 
-/// Result of analyzing the existing profiles. Phase B2 turns this
-/// into actual on-disk state once the user resolves conflicts.
+/// Result of analyzing the existing profiles.
+/// [`super::apply::apply_migration`] writes it to disk once you resolve
+/// the conflicts.
 #[derive(Debug, Clone, Serialize, Default)]
 pub(crate) struct MigrationPlan {
     /// Items that need no user decision — single source, or every

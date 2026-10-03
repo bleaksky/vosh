@@ -58,10 +58,10 @@ impl Loadout {
     }
 }
 
-/// Persisted top-level loadout collection. Saved to
-/// `<app_data_dir>/loadouts.toml`. The `active` list is the
-/// currently-stacked set — Phase B2's runtime gates the catalog on
-/// the union of every active loadout's `enabled_groups`.
+/// Persisted top-level loadout collection. Saved at
+/// `<app_data>/loadouts.toml`. The `active` list is the stacked set.
+/// The runtime gates the catalog on the union of every active loadout's
+/// `enabled_groups`, see [`super::gating`].
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub(crate) struct LoadoutSet {
     /// Loadouts currently considered active. Stack-by-union
@@ -91,8 +91,9 @@ impl LoadoutSet {
     }
 
     /// The effective enabled-group set across every currently-active
-    /// loadout. Phase B2 uses this output to compute each store's
-    /// `disabled_groups` complement at switch time.
+    /// loadout. [`super::gating`] turns it into each store's
+    /// `disabled_groups` complement at launch, at a profile switch, and
+    /// when the active list changes.
     pub(crate) fn effective_enabled_groups(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for active_name in &self.active {
