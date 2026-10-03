@@ -2,7 +2,8 @@
 
 use tokio::time::Instant;
 
-use super::{echo_one, error_echo, parse_braced_pattern, split_first_word, InputResult};
+use super::slash::parse_braced_pattern;
+use super::{echo_one, error_echo, split_first_word, InputResult};
 use crate::profile::Profile;
 
 pub(super) fn slash_tick(profile: &mut Profile, args: &str) -> InputResult {

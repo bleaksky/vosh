@@ -4,7 +4,8 @@
 
 use vosh_prompt::card::sentences::and_list;
 
-use super::{echo_one, error_echo, parse_braced_pattern, split_first_word, InputResult};
+use super::slash::parse_braced_pattern;
+use super::{echo_one, error_echo, split_first_word, InputResult};
 use crate::profile::Profile;
 
 /// `#prompt {regex}`: read your prompt with a pattern. It becomes the
