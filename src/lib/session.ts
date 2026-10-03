@@ -3141,7 +3141,7 @@ export async function subscribeLoadoutsChanged(cb: () => void): Promise<Unlisten
   return listen('vosh://loadouts-changed', () => cb());
 }
 
-// Live tick-timer configuration. Mirrors TickConfigPayload on the
+// Live tick-timer configuration. Mirrors TickConfig in tick.rs on the
 // backend. Optional fields use null to mean "feature off / use
 // default"; the backend trims empty strings to null on write.
 export interface TickConfig {

@@ -2765,7 +2765,7 @@ async fn end_read<R: tauri::Runtime>(
 pub(crate) fn client_values(p: &Profile, now: Instant) -> vosh_prompt::ClientValues {
     let tick = p.tick.remaining(now).map(|left| vosh_prompt::values::Tick {
         remaining: i64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(i64::MAX),
-        interval: i64::try_from(p.tick.config.interval.as_secs()).ok(),
+        interval: i64::try_from(p.tick.config.interval_secs).ok(),
         since: p
             .tick
             .elapsed(now)
