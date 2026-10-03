@@ -128,7 +128,7 @@ pub(crate) async fn persist_profile(state: &SharedState) {
     // exit-time flush can overlap each other or an inline command
     // persist, and Settings can write an inactive profile's file.
     let _persist_guard = PERSIST_LOCK.lock().await;
-    persist_profile_locked(state).await;
+    persist_state(state).await;
 }
 
 /// When [`save_then_broadcast`] saves the live profile. Each command
@@ -173,17 +173,10 @@ pub(crate) async fn save_then_broadcast<R: tauri::Runtime, S: serde::Serialize +
     broadcast(app, event, payload);
 }
 
-/// The body of [`persist_profile`]. Call with [`PERSIST_LOCK`] held.
-pub(crate) async fn persist_profile_locked(state: &SharedState) {
-    let app_data = state.app_data.get().map(std::path::PathBuf::as_path);
-    persist_state(state, app_data).await;
-}
-
-/// [`persist_profile_locked`] over the app data folder `app_data`, so a
-/// test can run it over a folder of its own. Call with [`PERSIST_LOCK`]
-/// held. A file Vosh could not read at launch is never written, see
+/// The body of [`persist_profile`]. Call with [`PERSIST_LOCK`] held. A
+/// file Vosh could not read at launch is never written, see
 /// [`crate::disk::atomic::hold_unread`].
-pub(crate) async fn persist_state(state: &SharedState, app_data: Option<&std::path::Path>) {
+pub(crate) async fn persist_state(state: &SharedState) {
     // Loadout mode branch. When `state.global_catalog` is `Some`, the user is
     // post-migration: authored items live in catalog.toml and the live
     // Profile is the cache. Write the live aliases / triggers / macros
@@ -191,7 +184,7 @@ pub(crate) async fn persist_state(state: &SharedState, app_data: Option<&std::pa
     // to the active profile file; the per-profile branch below is
     // skipped entirely.
     if state.global_catalog.lock().await.is_some() {
-        if let Some(dir) = app_data {
+        if let Some(dir) = state.app_data.get() {
             persist_loadout_mode(state, dir).await;
         }
         return;
@@ -404,13 +397,14 @@ pub(crate) mod tests {
         let set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
         crate::app::launch::load_profiles(&state, set).await;
         assert!(state.profile_set.lock().await.is_some());
+        state.app_data.set(dir.to_path_buf()).unwrap();
         state
     }
 
     /// The save a Settings edit, a slash command debounce, or quit runs.
-    pub(crate) async fn persist(state: &super::SharedState, dir: &std::path::Path) {
+    pub(crate) async fn persist(state: &super::SharedState) {
         let _persist_guard = super::PERSIST_LOCK.lock().await;
-        super::persist_state(state, Some(dir)).await;
+        super::persist_state(state).await;
     }
 
     async fn change_scope(state: &super::SharedState) -> Result<(), String> {
@@ -448,7 +442,7 @@ pub(crate) mod tests {
 
         // The app keeps running on the defaults, and an edit saves.
         state.profile.lock().await.ui.tracked_affects = vec![affect("Haste")];
-        persist(&state, dir.path()).await;
+        persist(&state).await;
         assert_eq!(read(&set.active_path()), UNREADABLE);
         // global.toml read, so the shared settings still save.
         assert!(set.global_path().exists());
@@ -478,7 +472,7 @@ pub(crate) mod tests {
             p.ui.theme = "nord".into();
             p.ui.tracked_affects = vec![affect("Fly")];
         }
-        persist(&state, dir.path()).await;
+        persist(&state).await;
 
         assert_eq!(read(&set.global_path()), UNREADABLE);
         // The profile file read, so what it owns still saves.
@@ -504,7 +498,7 @@ pub(crate) mod tests {
             let mut guard = state.profile_set.lock().await;
             guard.as_mut().unwrap().rename("Healer", "Cleric").unwrap();
         }
-        persist(&state, dir.path()).await;
+        persist(&state).await;
         assert_eq!(read(&set.profile_path("Cleric")), UNREADABLE);
     }
 
@@ -527,7 +521,7 @@ pub(crate) mod tests {
         crate::app::launch::load(&state, dir.path()).await;
         assert!(state.profile_set.lock().await.is_none());
         state.profile.lock().await.ui.tracked_affects = vec![affect("Haste")];
-        persist(&state, dir.path()).await;
+        persist(&state).await;
         assert!(!dir.path().join("profile.toml").exists());
 
         // You delete profiles.toml to recover and launch again.
@@ -543,6 +537,7 @@ pub(crate) mod tests {
         use std::sync::Arc;
         let dir = tempfile::tempdir().unwrap();
         let state: super::SharedState = Arc::new(AppState::default());
+        state.app_data.set(dir.path().to_path_buf()).unwrap();
         *state.profile_set.lock().await = Some(james_like_set(dir.path()));
         // No profile file read at launch, so the catalog took no list and
         // the live profile kept its own.
@@ -550,7 +545,7 @@ pub(crate) mod tests {
             Some(crate::loadouts::catalog::GlobalCatalog::default());
         state.profile.lock().await.ui.enabled_presets = vec!["healing_basics".into()];
 
-        persist(&state, dir.path()).await;
+        persist(&state).await;
         let saved = crate::loadouts::catalog::load_global_catalog(dir.path()).unwrap();
         assert_eq!(saved.enabled_presets, None);
 
@@ -562,7 +557,7 @@ pub(crate) mod tests {
             .as_mut()
             .unwrap()
             .enabled_presets = Some(Vec::new());
-        persist(&state, dir.path()).await;
+        persist(&state).await;
         let saved = crate::loadouts::catalog::load_global_catalog(dir.path()).unwrap();
         assert_eq!(saved.enabled_presets, Some(vec!["healing_basics".into()]));
     }

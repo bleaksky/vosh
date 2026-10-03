@@ -779,7 +779,7 @@ async fn a_fresh_install_writes_these_files_on_its_first_save() {
     crate::app::launch::load(&state, root).await;
     {
         let _persist = PERSIST_LOCK.lock().await;
-        crate::disk::save::persist_state(&state, Some(root)).await;
+        crate::disk::save::persist_state(&state).await;
     }
     assert_eq!(
         written_files(root),

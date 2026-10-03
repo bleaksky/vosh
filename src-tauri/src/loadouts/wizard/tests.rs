@@ -84,9 +84,9 @@ fn loadout_mode(set: &ProfileSet, dir: &std::path::Path) {
     save_loadout_set(dir, &loadouts).unwrap();
 }
 
-async fn refused(state: &SharedState, dir: &std::path::Path) -> String {
-    let analyze = analyze_migration(state, dir, LIBRARY).await.unwrap_err();
-    let apply = apply_migration(state, dir, &[], LIBRARY).await.unwrap_err();
+async fn refused(state: &SharedState) -> String {
+    let analyze = analyze_migration(state, LIBRARY).await.unwrap_err();
+    let apply = apply_migration(state, &[], LIBRARY).await.unwrap_err();
     assert_eq!(analyze, apply);
     apply
 }
@@ -139,7 +139,7 @@ async fn a_loadout_save_leaves_the_macros_to_the_catalog() {
         .await
         .macros
         .push(macro_on("f1", "look"));
-    persist(&state, dir.path()).await;
+    persist(&state).await;
     let saved = crate::loadouts::catalog::load_global_catalog(dir.path()).unwrap();
     assert_eq!(macro_keys(&saved.macros), ["f1"]);
     let leftover = &ProfileConfig::load(&set.active_path()).unwrap().macros;
@@ -148,7 +148,7 @@ async fn a_loadout_save_leaves_the_macros_to_the_catalog() {
     // You delete the macro while you play Healer.
     let state = relaunch_as(dir.path(), "Healer").await;
     state.profile.lock().await.macros.clear();
-    persist(&state, dir.path()).await;
+    persist(&state).await;
 
     // Back on Default, the macro stays deleted.
     let state = relaunch_as(dir.path(), crate::profile::set::DEFAULT_PROFILE_NAME).await;
@@ -173,8 +173,8 @@ async fn a_catalog_that_does_not_read_is_held_and_never_replaced() {
 
     // The wizard would build the catalog from profile files that
     // hold none of your shared items.
-    assert_eq!(refused(&state, dir.path()).await, HELD);
-    persist(&state, dir.path()).await;
+    assert_eq!(refused(&state).await, HELD);
+    persist(&state).await;
     assert!(save_global_catalog(dir.path(), &GlobalCatalog::default()).is_err());
     assert!(save_loadout_set(dir.path(), &LoadoutSet::default()).is_err());
 
@@ -198,7 +198,7 @@ async fn a_loadouts_file_that_does_not_read_holds_the_catalog_too() {
         load_at_launch(dir.path()).unwrap_err(),
         [crate::loadouts::set::UNREAD_LOADOUTS_NOTICE]
     );
-    assert_eq!(refused(&state, dir.path()).await, HELD);
+    assert_eq!(refused(&state).await, HELD);
     assert!(save_global_catalog(dir.path(), &GlobalCatalog::default()).is_err());
     assert_eq!(read(&catalog_path(dir.path())), catalog);
     assert_eq!(read(&loadouts_path(dir.path())), UNREADABLE);
@@ -214,7 +214,7 @@ async fn the_wizard_never_builds_over_a_catalog_you_already_use() {
     assert!(load_at_launch(dir.path()).is_ok());
 
     assert_eq!(
-        refused(&state, dir.path()).await,
+        refused(&state).await,
         "You already have a shared catalog, so Vosh will not build another one over it."
     );
     assert_eq!(read(&catalog_path(dir.path())), catalog);
@@ -229,9 +229,7 @@ async fn the_wizard_never_runs_in_a_session_that_uses_a_catalog() {
     let set = james_like_set(dir.path());
     write_alias(&set, "Healer", "hh");
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
     assert!(state.global_catalog.lock().await.is_some());
 
@@ -245,7 +243,7 @@ async fn the_wizard_never_runs_in_a_session_that_uses_a_catalog() {
     std::fs::rename(legacy_dir(dir.path()), aside.path().join("legacy")).unwrap();
     let healer = read(&set.profile_path("Healer"));
 
-    assert_eq!(refused(&state, dir.path()).await, LOADOUT_SESSION_REFUSAL);
+    assert_eq!(refused(&state).await, LOADOUT_SESSION_REFUSAL);
     assert!(!catalog_path(dir.path()).exists());
     assert!(!loadouts_path(dir.path()).exists());
     assert!(!legacy_dir(dir.path()).exists());
@@ -254,7 +252,7 @@ async fn the_wizard_never_runs_in_a_session_that_uses_a_catalog() {
     // The refusal used to say to quit and open Vosh again before
     // the wizard. The save at quit writes the catalog and the
     // loadouts back, so the wizard refused again after that.
-    persist(&state, dir.path()).await;
+    persist(&state).await;
     drop(state);
     assert!(catalog_path(dir.path()).exists());
     assert!(loadouts_path(dir.path()).exists());
@@ -271,9 +269,7 @@ async fn the_wizard_never_runs_in_a_session_that_uses_a_catalog() {
         std::fs::copy(entry.path(), back).unwrap();
     }
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     let state = relaunch_as(dir.path(), "Healer").await;
     assert!(state.global_catalog.lock().await.is_some());
     assert_eq!(items_on(&*state.profile.lock().await), ["alias hh"]);
@@ -286,11 +282,9 @@ async fn a_session_on_the_catalog_says_so_before_it_names_the_backups() {
     let set = james_like_set(dir.path());
     write_alias(&set, "Healer", "hh");
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    assert_eq!(refused(&state, dir.path()).await, LOADOUT_SESSION_REFUSAL);
+    assert_eq!(refused(&state).await, LOADOUT_SESSION_REFUSAL);
 
     // While Vosh runs on the catalog, you move the catalog out, then
     // the loadouts. The refusals over loadouts.toml and the backups
@@ -300,9 +294,9 @@ async fn a_session_on_the_catalog_says_so_before_it_names_the_backups() {
     let aside = tempfile::tempdir().unwrap();
     for path in [catalog_path(dir.path()), loadouts_path(dir.path())] {
         std::fs::rename(&path, aside.path().join(path.file_name().unwrap())).unwrap();
-        assert_eq!(refused(&state, dir.path()).await, LOADOUT_SESSION_REFUSAL);
+        assert_eq!(refused(&state).await, LOADOUT_SESSION_REFUSAL);
     }
-    persist(&state, dir.path()).await;
+    persist(&state).await;
     assert!(catalog_path(dir.path()).exists());
     assert!(loadouts_path(dir.path()).exists());
 }
@@ -317,7 +311,7 @@ async fn the_wizard_never_saves_over_a_loadouts_file_it_did_not_read() {
     let state = launch_state(dir.path()).await;
 
     assert_eq!(
-        refused(&state, dir.path()).await,
+        refused(&state).await,
         "Vosh found loadouts.toml from an earlier shared catalog and will not save over \
          it. Move the file out of the Vosh folder to build a new catalog."
     );
@@ -332,13 +326,9 @@ async fn the_wizard_builds_a_catalog_once() {
     write_alias(&set, "Healer", "hh");
     let state = launch_state(dir.path()).await;
 
-    let plan = analyze_migration(&state, dir.path(), LIBRARY)
-        .await
-        .unwrap();
+    let plan = analyze_migration(&state, LIBRARY).await.unwrap();
     assert_eq!(plan.auto_resolved.aliases.len(), 1);
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     // Every save waits for the relaunch, and `#profile` only echoes.
     assert!(state.relaunch_pending.load(Ordering::Acquire));
     assert!(state.loadout_mode.load(Ordering::Acquire));
@@ -363,7 +353,7 @@ async fn the_wizard_builds_a_catalog_once() {
     // files, which hold no items now, and write that over the
     // catalog.
     let before = read(&catalog_path(dir.path()));
-    refused(&state, dir.path()).await;
+    refused(&state).await;
     assert_eq!(read(&catalog_path(dir.path())), before);
     let leftover = &ProfileConfig::load(&healer).unwrap().aliases;
     assert!(leftover.is_empty(), "{leftover:?}");
@@ -388,16 +378,12 @@ async fn a_conflict_you_leave_alone_keeps_the_version_that_was_on() {
         .push(vosh_automation::alias::Alias::new("kk", "kick 1."));
     config.save(&set.profile_path("Healer")).unwrap();
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    let plan = analyze_migration(&state, dir.path(), LIBRARY)
-        .await
-        .unwrap();
+    let plan = analyze_migration(&state, LIBRARY).await.unwrap();
     assert_eq!(plan.conflicts[0].default_source, "Healer");
 
     // You apply without a pick, and the Healer keeps the kk it
     // used. It used to get the version Default had off.
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     let state = relaunch_as(dir.path(), "Healer").await;
     let p = state.profile.lock().await;
     assert_eq!(p.aliases.get("kk").unwrap().expansion, "kick 1.");
@@ -414,9 +400,7 @@ async fn the_wizard_never_writes_over_a_copy_an_earlier_run_left_in_legacy() {
     let set = james_like_set(dir.path());
     write_alias(&set, "Healer", "hh");
     let state = launch_state(dir.path()).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     let legacy = crate::disk::paths::legacy_dir(dir.path()).join("Healer.toml");
     let copy = read(&legacy);
 
@@ -431,7 +415,7 @@ async fn the_wizard_never_writes_over_a_copy_an_earlier_run_left_in_legacy() {
 
     // A second run would copy the files without their items over
     // the only copy that still holds them.
-    assert_eq!(refused(&state, dir.path()).await, LEGACY_REFUSAL);
+    assert_eq!(refused(&state).await, LEGACY_REFUSAL);
     assert_eq!(read(&legacy), copy);
     assert_eq!(ProfileConfig::load(&legacy).unwrap().aliases[0].name, "hh");
     assert_eq!(read(&set.profile_path("Healer")), healer);
@@ -457,9 +441,7 @@ async fn putting_the_catalog_back_keeps_every_item_you_added_since() {
     let set = james_like_set(dir.path());
     write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     // In loadout mode you add an alias and set a variable, which
     // the backups in legacy never saw.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
@@ -470,7 +452,7 @@ async fn putting_the_catalog_back_keeps_every_item_you_added_since() {
         p.vars
             .set(vosh_automation::vars::Scope::Profile, "target", "dragon");
     }
-    persist(&state, dir.path()).await;
+    persist(&state).await;
 
     // You move the catalog and the loadouts out, and the wizard
     // refuses over the backups. It used to say that only the
@@ -481,7 +463,7 @@ async fn putting_the_catalog_back_keeps_every_item_you_added_since() {
         std::fs::rename(&path, aside.path().join(path.file_name().unwrap())).unwrap();
     }
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    assert_eq!(refused(&state, dir.path()).await, LEGACY_REFUSAL);
+    assert_eq!(refused(&state).await, LEGACY_REFUSAL);
 
     // You put them back, as it says, and keep everything.
     for path in [catalog_path(dir.path()), loadouts_path(dir.path())] {
@@ -502,9 +484,7 @@ async fn a_backup_copied_back_beside_the_catalog_spreads_its_old_items() {
     write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
     write_alias(&set, "Healer", "hh");
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
     state
         .profile
@@ -512,7 +492,7 @@ async fn a_backup_copied_back_beside_the_catalog_spreads_its_old_items() {
         .await
         .aliases
         .set(vosh_automation::alias::Alias::new("zz", "sleep"));
-    persist(&state, dir.path()).await;
+    persist(&state).await;
     let state = relaunch_as(dir.path(), "Healer").await;
     assert_eq!(
         items_on(&*state.profile.lock().await),
@@ -536,7 +516,7 @@ async fn a_backup_copied_back_beside_the_catalog_spreads_its_old_items() {
         items_on(&*state.profile.lock().await),
         ["alias hh", "alias kk", "alias zz"]
     );
-    persist(&state, dir.path()).await;
+    persist(&state).await;
     let state = relaunch_as(dir.path(), "Healer").await;
     assert_eq!(
         items_on(&*state.profile.lock().await),
@@ -562,27 +542,25 @@ async fn following_the_refusals_builds_the_catalog_again_with_every_item() {
         ));
     }
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     // Later you want to build the catalog again, and you do what
     // each refusal says, in turn, with Vosh closed.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
     let aside = tempfile::tempdir().unwrap();
-    assert_eq!(refused(&state, dir.path()).await, LOADOUT_SESSION_REFUSAL);
-    persist(&state, dir.path()).await;
+    assert_eq!(refused(&state).await, LOADOUT_SESSION_REFUSAL);
+    persist(&state).await;
     drop(state);
     let catalog = catalog_path(dir.path());
     std::fs::rename(&catalog, aside.path().join("catalog.toml")).unwrap();
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    assert!(refused(&state, dir.path())
+    assert!(refused(&state)
         .await
         .starts_with("Vosh found loadouts.toml"));
     let loadouts = loadouts_path(dir.path());
     std::fs::rename(&loadouts, aside.path().join("loadouts.toml")).unwrap();
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    assert_eq!(refused(&state, dir.path()).await, LEGACY_REFUSAL);
+    assert_eq!(refused(&state).await, LEGACY_REFUSAL);
     // The refusal used to say only to move the legacy folder out.
     // The wizard then built the catalog from the files without
     // their items, and every character came back with nothing.
@@ -595,9 +573,7 @@ async fn following_the_refusals_builds_the_catalog_again_with_every_item() {
     std::fs::rename(&legacy, aside.path().join("legacy")).unwrap();
 
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     for (n, name) in names.iter().enumerate() {
         let state = relaunch_as(dir.path(), name).await;
         assert!(state.global_catalog.lock().await.is_some());
@@ -621,7 +597,7 @@ async fn the_wizard_never_rewrites_a_profile_file_it_held_at_launch() {
     std::fs::write(set.active_path(), &fixed).unwrap();
 
     assert_eq!(
-        refused(&state, dir.path()).await,
+        refused(&state).await,
         "Vosh could not read the Default profile file when it started, so it will not \
          change the file. Restart Vosh and try again."
     );
@@ -650,9 +626,7 @@ async fn the_wizard_keeps_off_a_preset_every_character_had_off() {
     );
     write_presets(&set, "Healer", &["healing_basics", "herb_labels"]);
     let state = launch_state(dir.path()).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     let on = vec!["healing_basics".to_string(), "herb_labels".to_string()];
     let (catalog, _) = load_at_launch(dir.path()).unwrap();
@@ -680,9 +654,7 @@ async fn the_preview_holds_the_shared_preset_list_and_each_characters_own() {
     // and the shared list leaves out the ones no saved profile has
     // on.
     let state = launch_state(dir.path()).await;
-    let plan = analyze_migration(&state, dir.path(), LIBRARY)
-        .await
-        .unwrap();
+    let plan = analyze_migration(&state, LIBRARY).await.unwrap();
     let list = |ids: &[&str]| ids.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
     assert_eq!(
         plan.shared_presets,
@@ -697,9 +669,7 @@ async fn the_preview_holds_the_shared_preset_list_and_each_characters_own() {
         ]
     );
     // The catalog takes the list the preview showed.
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     let (catalog, _) = load_at_launch(dir.path()).unwrap();
     assert_eq!(catalog.enabled_presets, Some(plan.shared_presets));
 }
@@ -714,7 +684,7 @@ async fn the_preview_counts_the_live_presets_of_a_profile_that_never_saved() {
     // You create Test-Prompt, switch to it, and open the wizard
     // before anything saves it. Its live list is the defaults.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    crate::profile::switch::switch_profile(&state, Some(dir.path()), "Test-Prompt")
+    crate::profile::switch::switch_profile(&state, "Test-Prompt")
         .await
         .unwrap();
     assert!(!set.profile_path("Test-Prompt").exists());
@@ -722,9 +692,7 @@ async fn the_preview_counts_the_live_presets_of_a_profile_that_never_saved() {
     // Apply saves the live profile first, so the catalog takes
     // every preset on. The preview used to leave Test-Prompt out
     // as a profile without a file and show healing_basics alone.
-    let plan = analyze_migration(&state, dir.path(), LIBRARY)
-        .await
-        .unwrap();
+    let plan = analyze_migration(&state, LIBRARY).await.unwrap();
     let list = |ids: &[&str]| ids.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
     assert_eq!(plan.shared_presets, Vec::<String>::new());
     assert_eq!(
@@ -735,9 +703,7 @@ async fn the_preview_counts_the_live_presets_of_a_profile_that_never_saved() {
             Vec::new()
         ]
     );
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     let (catalog, _) = load_at_launch(dir.path()).unwrap();
     assert_eq!(catalog.enabled_presets, Some(plan.shared_presets));
 }
@@ -755,13 +721,9 @@ async fn the_preview_reads_the_files_after_a_profile_reset() {
     // preview.
     state.profile.lock().await.ui.enabled_presets.clear();
     state.auto_persist_suppressed.store(true, Ordering::Release);
-    let plan = analyze_migration(&state, dir.path(), LIBRARY)
-        .await
-        .unwrap();
+    let plan = analyze_migration(&state, LIBRARY).await.unwrap();
     assert_eq!(plan.shared_presets, ["healing_basics"]);
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     let (catalog, _) = load_at_launch(dir.path()).unwrap();
     assert_eq!(catalog.enabled_presets, Some(plan.shared_presets));
 }
@@ -983,11 +945,9 @@ async fn the_wizard_keeps_every_setting_of_every_profile() {
     // live profile has run by then, as one runs at every launch.
     // The wizard saves it again first.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    persist(&state, dir.path()).await;
+    persist(&state).await;
     originals[0] = read(&set.profile_path(DEFAULT_PROFILE_NAME));
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     let (catalog, loadouts) = load_at_launch(dir.path()).unwrap();
     let leftover = &loadouts.active;
@@ -1063,7 +1023,7 @@ async fn the_wizard_keeps_every_setting_of_every_profile() {
         }
 
         // The first save in loadout mode.
-        persist(&state, dir.path()).await;
+        persist(&state).await;
         let saved = ProfileConfig::load(&set.profile_path(name)).unwrap();
         assert!(saved.aliases.is_empty(), "{name}");
         assert!(saved.triggers.is_empty(), "{name}");
@@ -1124,9 +1084,7 @@ async fn each_loadout_turns_on_the_items_its_character_shared() {
     }
 
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     let (catalog, _) = load_at_launch(dir.path()).unwrap();
     let group = |alias: &str| {
         let found = catalog.aliases.iter().find(|a| a.name == alias).unwrap();
@@ -1185,9 +1143,7 @@ async fn each_loadout_keeps_off_the_groups_its_character_had_off() {
     assert!(leftover.is_empty(), "{leftover:?}");
 
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     let (_, loadouts) = load_at_launch(dir.path()).unwrap();
     let groups = |name: &str| loadouts.get(name).unwrap().enabled_groups.clone();
     assert_eq!(groups("Healer"), ["(Healer)"]);
@@ -1220,7 +1176,7 @@ async fn each_loadout_keeps_off_the_groups_its_character_had_off() {
             save_loadout_set(dir.path(), &loadouts).unwrap();
             let state = relaunch_as(dir.path(), name).await;
             assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
-            persist(&state, dir.path()).await;
+            persist(&state).await;
             let state = relaunch_as(dir.path(), name).await;
             assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
         }
@@ -1248,9 +1204,7 @@ async fn group_turns_a_folder_on_and_off_as_before_after_the_wizard() {
     config.triggers.push(in_combat("bash"));
     config.save(&set.profile_path("Healer")).unwrap();
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     // The Healer folder landed in two catalog groups. `#group
     // combat` used to find no group of that name at all.
@@ -1307,13 +1261,9 @@ async fn each_character_keeps_its_own_version_of_a_trigger() {
         .unwrap();
     }
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    let plan = analyze_migration(&state, dir.path(), LIBRARY)
-        .await
-        .unwrap();
+    let plan = analyze_migration(&state, LIBRARY).await.unwrap();
     assert!(plan.conflicts.is_empty());
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     // The wizard kept one version for both, so the Healer waved.
     for (name, sent) in [
@@ -1360,9 +1310,7 @@ async fn triggers_on_one_line_fire_in_the_order_they_had() {
     };
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
     assert_eq!(fired(&state).await, ["stand", "bash"]);
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     // They used to run in name order, so Default bashed while it
     // was still on the ground.
@@ -1372,7 +1320,7 @@ async fn triggers_on_one_line_fire_in_the_order_they_had() {
     ] {
         let state = relaunch_as(dir.path(), name).await;
         assert_eq!(fired(&state).await, sends, "{name}");
-        persist(&state, dir.path()).await;
+        persist(&state).await;
         let state = relaunch_as(dir.path(), name).await;
         assert_eq!(fired(&state).await, sends, "{name}");
     }
@@ -1409,9 +1357,7 @@ async fn a_trigger_group_you_had_off_stays_off_beside_its_aliases() {
     assert_eq!(before, ["alias loot"]);
 
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     // The trigger used to come back on with the alias group of the
     // same name, and looted every kill.
@@ -1449,9 +1395,7 @@ async fn a_shared_item_one_character_had_off_stays_off_for_it() {
     assert!(leftover.is_empty(), "{leftover:?}");
 
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     // The trigger used to land in one group on for both.
     for (n, name) in names.iter().enumerate() {
@@ -1480,7 +1424,7 @@ async fn launch_with_presets(dir: &std::path::Path, name: &str) -> SharedState {
     };
     if let Some(result) = installed {
         result.unwrap();
-        persist(&state, dir).await;
+        persist(&state).await;
     }
     state
 }
@@ -1520,9 +1464,7 @@ async fn a_preset_stays_on_for_a_character_whose_file_lacked_it() {
     }
 
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     // The trigger used to sit in the default group, which the
     // Healer file kept off, while the Presets tab showed it on,
@@ -1553,9 +1495,7 @@ async fn a_preset_stays_on_for_a_character_that_never_saved_a_file() {
     }
 
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     for _ in 0..2 {
         let state = launch_with_presets(dir.path(), "Test-Prompt").await;
@@ -1599,9 +1539,7 @@ async fn the_wizard_keeps_what_you_changed_since_the_last_save() {
             .set(vosh_automation::alias::Alias::new("zz", "sleep"));
     }
 
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     // Nothing saves between the wizard and the relaunch, so these
     // used to be lost.
@@ -1625,9 +1563,7 @@ async fn the_wizard_leaves_a_profile_you_reset_to_its_file() {
     ProfileConfig::default().apply_to(&mut *state.profile.lock().await);
     state.auto_persist_suppressed.store(true, Ordering::Release);
 
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
     let p = state.profile.lock().await;
@@ -1645,14 +1581,12 @@ async fn a_switch_waits_for_the_relaunch_after_the_wizard() {
     write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
     write_alias(&set, "Healer", "hh");
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     // The Healer file holds no aliases now, and the catalog loads
     // only at launch, so a switch would leave you with none. A
     // login that picks the Healer says why on the terminal.
-    let err = crate::profile::switch::switch_profile(&state, Some(dir.path()), "Healer")
+    let err = crate::profile::switch::switch_profile(&state, "Healer")
         .await
         .unwrap_err();
     assert_eq!(
@@ -1668,7 +1602,7 @@ async fn a_switch_waits_for_the_relaunch_after_the_wizard() {
 
     // Once Vosh opens again, the switch runs.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    crate::profile::switch::switch_profile(&state, Some(dir.path()), "Healer")
+    crate::profile::switch::switch_profile(&state, "Healer")
         .await
         .unwrap();
     assert_eq!(items_on(&*state.profile.lock().await), ["alias hh"]);
@@ -1700,14 +1634,13 @@ async fn renames_and_copies_are_refused(state: &SharedState, dir: &std::path::Pa
     );
     let copy = "Quit Vosh and open it again to finish the move to loadouts, then copy \
                 the profile.";
-    let duplicate = crate::profile::set::duplicate_profile(state, Some(dir), "Healer", "Cleric")
+    let duplicate = crate::profile::set::duplicate_profile(state, "Healer", "Cleric")
         .await
         .unwrap_err();
     assert_eq!(duplicate, copy);
-    let create =
-        crate::profile::set::create_profile(state, Some(dir), "Cleric", Some("Healer"), None)
-            .await
-            .unwrap_err();
+    let create = crate::profile::set::create_profile(state, "Cleric", Some("Healer"), None)
+        .await
+        .unwrap_err();
     assert_eq!(create, copy);
 
     assert_eq!(read(&dir.join("profiles.toml")), index);
@@ -1731,7 +1664,7 @@ async fn the_live_profile_keeps_the_name_the_prompt_draws() {
         shown(&*state.profile.lock().await).as_deref(),
         Some("Default")
     );
-    crate::profile::switch::switch_profile(&state, Some(dir.path()), "Healer")
+    crate::profile::switch::switch_profile(&state, "Healer")
         .await
         .unwrap();
     assert_eq!(
@@ -1772,19 +1705,17 @@ async fn renames_and_copies_wait_for_the_relaunch_after_the_wizard() {
     write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
     write_alias(&set, "Healer", "hh");
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     renames_and_copies_are_refused(&state, dir.path()).await;
     // A new profile that copies nothing only joins the index.
-    crate::profile::set::create_profile(&state, Some(dir.path()), "Bard", None, None)
+    crate::profile::set::create_profile(&state, "Bard", None, None)
         .await
         .unwrap();
 
     // Once Vosh opens again, the rename and the copy run.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    crate::profile::set::duplicate_profile(&state, Some(dir.path()), "Healer", "Cleric")
+    crate::profile::set::duplicate_profile(&state, "Healer", "Cleric")
         .await
         .unwrap();
     crate::profile::set::rename_profile(&state, "Cleric", "Priest")
@@ -1829,8 +1760,7 @@ async fn a_wizard_run_that_stops_partway_finishes_at_the_next_launch() {
         WIZARD_WRITES_BEFORE_A_CRASH.set(Some(stop));
         let run = tokio::spawn({
             let state = state.clone();
-            let dir = dir.path().to_path_buf();
-            async move { apply_migration(&state, &dir, &[], LIBRARY).await }
+            async move { apply_migration(&state, &[], LIBRARY).await }
         })
         .await;
         WIZARD_WRITES_BEFORE_A_CRASH.set(None);
@@ -1893,8 +1823,7 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
     WIZARD_WRITES_BEFORE_A_CRASH.set(Some(3));
     let run = tokio::spawn({
         let state = state.clone();
-        let dir = dir.path().to_path_buf();
-        async move { apply_migration(&state, &dir, &[], LIBRARY).await }
+        async move { apply_migration(&state, &[], LIBRARY).await }
     })
     .await;
     WIZARD_WRITES_BEFORE_A_CRASH.set(None);
@@ -1930,12 +1859,12 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
         .set(vosh_automation::vars::Scope::Profile, "target", "dragon");
     {
         let _persist_guard = PERSIST_LOCK.lock().await;
-        crate::disk::save::persist_state(&state, Some(dir.path())).await;
+        crate::disk::save::persist_state(&state).await;
     }
     assert_eq!(read(&set.profile_path("Healer")), healer_file);
     assert_eq!(read(&catalog_path(dir.path())), catalog);
     assert!(
-        crate::profile::switch::switch_profile(&state, Some(dir.path()), DEFAULT_PROFILE_NAME)
+        crate::profile::switch::switch_profile(&state, DEFAULT_PROFILE_NAME)
             .await
             .is_err()
     );
@@ -1975,8 +1904,7 @@ async fn the_wizard_waits_while_an_earlier_run_is_unfinished() {
     WIZARD_WRITES_BEFORE_A_CRASH.set(Some(3));
     let run = tokio::spawn({
         let state = state.clone();
-        let dir = dir.path().to_path_buf();
-        async move { apply_migration(&state, &dir, &[], LIBRARY).await }
+        async move { apply_migration(&state, &[], LIBRARY).await }
     })
     .await;
     WIZARD_WRITES_BEFORE_A_CRASH.set(None);
@@ -1993,7 +1921,7 @@ async fn the_wizard_waits_while_an_earlier_run_is_unfinished() {
     // and write a journal without them over the one that holds
     // them, so Default would come back with nothing.
     assert_eq!(
-        refused(&state, dir.path()).await,
+        refused(&state).await,
         "Vosh has not finished an earlier move to loadouts. Quit Vosh and open it again \
          to finish it."
     );
@@ -2018,9 +1946,7 @@ async fn a_script_that_sets_its_own_alias_again_keeps_it_to_its_character() {
     write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
     write_alias(&set, "Healer", "hl");
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     // A script the Healer runs at launch sets its alias again.
     let state = relaunch_as(dir.path(), "Healer").await;
@@ -2032,7 +1958,7 @@ async fn a_script_that_sets_its_own_alias_again_keeps_it_to_its_character() {
     };
     crate::script::apply_actions(&mut *state.profile.lock().await, outcome);
     assert_eq!(items_on(&*state.profile.lock().await), ["alias hl"]);
-    persist(&state, dir.path()).await;
+    persist(&state).await;
 
     // The alias lost its group, so it came on for Default too.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
@@ -2060,7 +1986,7 @@ async fn a_wizard_that_cannot_finish_puts_every_file_back() {
     // Each file as launch and a save of the live profile left it,
     // with its custom themes moved to global.toml. The wizard
     // saves the live profile first, as any save does.
-    persist(&state, dir.path()).await;
+    persist(&state).await;
     let files: Vec<(std::path::PathBuf, Option<String>)> = set
         .list()
         .iter()
@@ -2076,9 +2002,7 @@ async fn a_wizard_that_cannot_finish_puts_every_file_back() {
     // or a lock on the file would.
     let blocked = set.profile_path("Bard").with_extension("toml.tmp");
     std::fs::create_dir(&blocked).unwrap();
-    let err = apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap_err();
+    let err = apply_migration(&state, &[], LIBRARY).await.unwrap_err();
     // The raw error text of the failed write, with its colons, no
     // longer shows.
     assert_eq!(
@@ -2114,9 +2038,7 @@ async fn a_wizard_that_cannot_finish_puts_every_file_back() {
 
     // Once the file saves again, the wizard runs.
     std::fs::remove_dir(&blocked).unwrap();
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     assert!(state.relaunch_pending.load(Ordering::Acquire));
     assert!(state.loadout_mode.load(Ordering::Acquire));
     assert!(catalog_path(dir.path()).exists());
@@ -2143,9 +2065,7 @@ async fn a_wizard_that_cannot_copy_or_journal_says_what_to_do() {
     // A file sits where the legacy folder goes, so no copy lands.
     let legacy = legacy_dir(dir.path());
     std::fs::write(&legacy, "").unwrap();
-    let err = apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap_err();
+    let err = apply_migration(&state, &[], LIBRARY).await.unwrap_err();
     assert!(err.starts_with("Vosh could not copy "), "{err}");
     assert!(
         err.ends_with(&format!(
@@ -2159,9 +2079,7 @@ async fn a_wizard_that_cannot_copy_or_journal_says_what_to_do() {
     // The journal does not save.
     let blocked = journal_path(dir.path()).with_extension("toml.tmp");
     std::fs::create_dir(&blocked).unwrap();
-    let err = apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap_err();
+    let err = apply_migration(&state, &[], LIBRARY).await.unwrap_err();
     assert_eq!(
         err,
         format!(
@@ -2174,9 +2092,7 @@ async fn a_wizard_that_cannot_copy_or_journal_says_what_to_do() {
     // Both changed nothing, so the wizard runs once you fix it.
     assert!(!catalog_path(dir.path()).exists());
     assert_eq!(read(&set.profile_path("Healer")), healer);
-    apply_migration(&state, dir.path(), &[], LIBRARY)
-        .await
-        .unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 }
 
 #[tokio::test]
@@ -2191,7 +2107,7 @@ async fn a_profile_file_that_stops_reading_is_named_without_the_raw_error() {
     std::fs::remove_file(&healer).unwrap();
     std::fs::create_dir(&healer).unwrap();
     assert_eq!(
-        refused(&state, dir.path()).await,
+        refused(&state).await,
         "Vosh could not read the Healer profile file, so it changed nothing. Check that \
          you can open the file, then try again."
     );
@@ -2217,7 +2133,7 @@ async fn converted_three(dir: &std::path::Path) -> (SharedState, Vec<Vec<String>
         before.push(items_on(&*state.profile.lock().await));
     }
     let state = relaunch_as(dir, DEFAULT_PROFILE_NAME).await;
-    apply_migration(&state, dir, &[], LIBRARY).await.unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
     (relaunch_as(dir, DEFAULT_PROFILE_NAME).await, before)
 }
 
@@ -2244,7 +2160,7 @@ async fn a_save_right_after_a_switch_keeps_the_catalog() {
             .await
             .unwrap();
     }
-    persist(&state, dir.path()).await;
+    persist(&state).await;
 
     let (saved, _) = load_at_launch(dir.path()).unwrap();
     assert_eq!(
@@ -2262,26 +2178,26 @@ async fn each_character_keeps_its_own_items_across_switches_after_the_wizard() {
     assert_eq!(items_on(&*state.profile.lock().await), before[0]);
 
     // Corvanne logs in, and Vosh switches to Healer.
-    crate::profile::switch::switch_profile(&state, Some(dir.path()), "Healer")
+    crate::profile::switch::switch_profile(&state, "Healer")
         .await
         .unwrap();
     assert_eq!(items_on(&*state.profile.lock().await), before[1]);
-    persist(&state, dir.path()).await;
+    persist(&state).await;
 
     // The next launch opens as Healer.
     let state = relaunch_as(dir.path(), "Healer").await;
     assert_eq!(items_on(&*state.profile.lock().await), before[1]);
 
     // Back to Default, then on to Test-Prompt.
-    crate::profile::switch::switch_profile(&state, Some(dir.path()), DEFAULT_PROFILE_NAME)
+    crate::profile::switch::switch_profile(&state, DEFAULT_PROFILE_NAME)
         .await
         .unwrap();
     assert_eq!(items_on(&*state.profile.lock().await), before[0]);
-    crate::profile::switch::switch_profile(&state, Some(dir.path()), "Test-Prompt")
+    crate::profile::switch::switch_profile(&state, "Test-Prompt")
         .await
         .unwrap();
     assert_eq!(items_on(&*state.profile.lock().await), before[2]);
-    persist(&state, dir.path()).await;
+    persist(&state).await;
 
     // Every save along the way kept each character as it was.
     for (n, name) in [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt"]
@@ -2332,13 +2248,13 @@ async fn a_switch_keeps_the_items_a_profile_file_holds_as_launch_does() {
 
     // A switch to Healer does the same.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    crate::profile::switch::switch_profile(&state, Some(dir.path()), "Healer")
+    crate::profile::switch::switch_profile(&state, "Healer")
         .await
         .unwrap();
     assert_eq!(live_rows(&state).await, rows);
 
     // And the save after it keeps them for the next launch.
-    persist(&state, dir.path()).await;
+    persist(&state).await;
     let state = relaunch_as(dir.path(), "Healer").await;
     assert_eq!(live_rows(&state).await, rows);
 }

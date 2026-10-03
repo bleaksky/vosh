@@ -504,7 +504,7 @@ pub(crate) fn sanitize_name(name: &str) -> Result<String, ProfileSetError> {
 /// that file, when `source` is the live profile. Call with
 /// [`PERSIST_LOCK`] held across this and the copy, so the copy reads
 /// what the flush wrote and no persist rewrites the source mid copy.
-async fn flush_before_copy(shared: &SharedState, app_data: Option<&std::path::Path>, source: &str) {
+async fn flush_before_copy(shared: &SharedState, source: &str) {
     let copying_live = shared
         .profile_set
         .lock()
@@ -519,17 +519,15 @@ async fn flush_before_copy(shared: &SharedState, app_data: Option<&std::path::Pa
             .auto_persist_suppressed
             .load(std::sync::atomic::Ordering::Acquire)
     {
-        persist_state(shared, app_data).await;
+        persist_state(shared).await;
     }
 }
 
-/// The body of [`profile_create`] over the app data folder `app_data`, so
-/// a test can run it over a folder of its own.
+/// The body of [`profile_create`].
 ///
 /// [`profile_create`]: crate::ipc::profiles::profile_create
 pub(crate) async fn create_profile(
     state: &SharedState,
-    app_data: Option<&std::path::Path>,
     name: &str,
     copy_from: Option<&str>,
     auto_match: Option<AutoMatch>,
@@ -544,7 +542,7 @@ pub(crate) async fn create_profile(
         {
             return Err(COPY_MIGRATION_PENDING.into());
         }
-        flush_before_copy(state, app_data, source).await;
+        flush_before_copy(state, source).await;
     }
     let mut set = state.loaded_profile_set().await?;
     set.create_from(name, copy_from, auto_match)
@@ -596,13 +594,11 @@ pub(crate) async fn rename_profile(
     Ok(())
 }
 
-/// The body of [`profile_duplicate`] over the app data folder
-/// `app_data`, so a test can run it over a folder of its own.
+/// The body of [`profile_duplicate`].
 ///
 /// [`profile_duplicate`]: crate::ipc::profiles::profile_duplicate
 pub(crate) async fn duplicate_profile(
     state: &SharedState,
-    app_data: Option<&std::path::Path>,
     source: &str,
     new: &str,
 ) -> Result<(), String> {
@@ -614,7 +610,7 @@ pub(crate) async fn duplicate_profile(
     {
         return Err(COPY_MIGRATION_PENDING.into());
     }
-    flush_before_copy(state, app_data, source).await;
+    flush_before_copy(state, source).await;
     let mut set = state.loaded_profile_set().await?;
     set.duplicate(source, new).map_err(|e| e.to_string())
 }
