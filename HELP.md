@@ -195,6 +195,8 @@ Captures pull words from the line you typed. `%1` through `%9` pull the first th
 
 Give related aliases a shared name in `Group` to turn them on and off together with `#group <name> on|off`. Under `Advanced`, `Run Lua instead` runs a Lua script in place of the expansion, with the words you typed in its captures table.
 
+Triggers, Aliases, and Macros each list your items under a heading for every group. The items with no group sit at the top under no heading. Click a heading to fold its group away, and click it again to open it. The chevron turns down while the group is open, and a folded heading counts the items it holds. With a heading in focus, `ArrowLeft` folds it and `ArrowRight` opens it, and `ArrowUp` and `ArrowDown` move through the headings and items as one list. Each list remembers the groups you fold. Type in the filter and every folded group with a match opens until you clear it. Pick an item from the matches and its group stays open.
+
 Example. An alias named `kk` with the expansion `kick %1; backstab %1` turns `kk dragon` into `kick dragon` followed by `backstab dragon`.
 
 The command line defines aliases too. `#alias gc get all corpse` sets one and echoes `alias gc set`, `#aliases` lists every alias, and `#unalias gc` removes one. Setting an alias again, with `#alias`, `#endrec`, or `mud.alias` in Lua, keeps it in its group.
@@ -750,6 +752,8 @@ In the command palette. `ArrowUp` and `ArrowDown` move the selection, `Enter` ru
 In the terminal menu. `ArrowUp` and `ArrowDown` move through the items, `Enter` picks one, `ArrowRight` opens the Settings list, `ArrowLeft` steps back out of it, and `Escape` closes the list, then the menu.
 
 In Settings and Help. `Cmd+F` puts the caret in the search, `ArrowUp` and `ArrowDown` move through the results, and `Escape` clears the search. In Help, `Enter` steps to the next match in the topic you read and `Shift+Enter` to the previous one.
+
+In an Automation list in Settings. `ArrowUp` and `ArrowDown` move through the group headings and items, and `Home` and `End` jump to the first and the last. On a heading, `ArrowLeft` folds its group and `ArrowRight` opens it.
 
 Mouse on the terminal. Wheel up opens the scrollback split. Middle click closes the split and snaps to the live tail. Right click opens the terminal menu.
 

@@ -774,3 +774,35 @@ describe('the help body format', () => {
     ]);
   });
 });
+
+describe('the help on folding groups in Automation', () => {
+  it('says how a heading folds its group and what the list remembers', () => {
+    const text = body('automate.first-alias');
+    expect(text).toContain(
+      'Triggers, Aliases, and Macros each list your items under a heading for every group.',
+    );
+    expect(text).toContain(
+      'Click a heading to fold its group away, and click it again to open it.',
+    );
+    expect(text).toContain('a folded heading counts the items it holds');
+    expect(text).toContain('`ArrowLeft` folds it and `ArrowRight` opens it');
+    expect(text).toContain('Each list remembers the groups you fold.');
+    expect(text).toContain(
+      'Type in the filter and every folded group with a match opens until you clear it.',
+    );
+  });
+
+  it('lists the keys with the other shortcuts', () => {
+    expect(body('reference.keyboard-shortcuts')).toContain(
+      'In an Automation list in Settings. `ArrowUp` and `ArrowDown` move through the group headings and items',
+    );
+  });
+
+  it('keeps colons and semicolons out of the prose', () => {
+    const paragraph =
+      body('automate.first-alias')
+        .split('\n\n')
+        .find((p) => p.startsWith('Triggers, Aliases, and Macros')) ?? '';
+    expect(paragraph.replace(/`[^`]*`/g, '')).not.toMatch(/[:;–—]| - /);
+  });
+});
