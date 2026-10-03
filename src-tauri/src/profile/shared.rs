@@ -590,7 +590,7 @@ mod tests {
     use super::*;
     use crate::profile::panes::tests::custom_layout;
     use crate::profile::tests::{persist_live, styled_profile, theme_ids};
-    use crate::profile_config::{TrackedAffect, RETIRED_DEFAULT_FONT_FAMILY};
+    use crate::profile::ui::{TrackedAffect, RETIRED_DEFAULT_FONT_FAMILY};
 
     #[test]
     fn global_split_round_trip() {

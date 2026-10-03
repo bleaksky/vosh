@@ -7,6 +7,7 @@ pub(crate) mod shared;
 pub(crate) mod switch;
 #[cfg(test)]
 pub(crate) mod tests;
+pub(crate) mod ui;
 
 use std::collections::BTreeSet;
 
