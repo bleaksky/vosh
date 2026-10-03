@@ -4,12 +4,16 @@
 //! capture compiles to and which Line triggers it takes over, renders
 //! with live or sample values and preview overrides, applies the edits
 //! the card makes, and builds the state the card watches and where your
-//! prompt shows.
+//! prompt shows. It also holds what Vosh itself supplies your prompt and
+//! the report of what the game said of your prompt settings, which the
+//! session and the profile switch both use.
 
 pub(crate) mod last_seen;
 
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
 use tokio::time::Instant;
+use tracing::warn;
 use vosh_prompt::capture::Recognizer;
 use vosh_prompt::card::describe::{Described, FormView};
 use vosh_prompt::card::edit::EditOp;
@@ -22,10 +26,10 @@ use vosh_prompt::{
     CaptureConfig, FieldRef, PromptConfig, RenderOptions, Rendered, Resolved, Template, Values,
 };
 
+use crate::app::events::{self, broadcast_list_changes, ListChanges};
 use crate::app::state::SharedState;
 use crate::disk::save::PERSIST_LOCK;
 use crate::profile::Profile;
-use crate::session::prompt_view::client_values;
 
 /// The body of [`prompt_config_set`]: check and take the table. Returns
 /// whether it changed anything. Only a capture that differs from the one
@@ -81,6 +85,52 @@ pub(crate) fn prompt_look(p: &crate::profile::Profile) -> (bool, String, vosh_pr
 pub(crate) async fn request_prompt_repaint(state: &SharedState) {
     if let Some(handle) = state.session.lock().await.as_ref() {
         let _ = handle.prompt_repaint();
+    }
+}
+
+/// What Vosh itself supplies to the custom prompt: the tick timer, your
+/// target, the profile's name and the affects you track. The clock reads
+/// the local time.
+pub(crate) fn client_values(p: &Profile, now: Instant) -> vosh_prompt::ClientValues {
+    let tick = p.tick.remaining(now).map(|left| vosh_prompt::values::Tick {
+        remaining: i64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(i64::MAX),
+        interval: i64::try_from(p.tick.config.interval_secs).ok(),
+        since: p
+            .tick
+            .elapsed(now)
+            .and_then(|since| i64::try_from(since.as_secs()).ok()),
+    });
+    vosh_prompt::ClientValues {
+        tick,
+        target: p.target.name.clone(),
+        profile: p.display_name.clone(),
+        now: None,
+        tracked: p
+            .ui
+            .tracked_affects
+            .iter()
+            .map(|t| t.name.clone())
+            .collect(),
+    }
+}
+
+/// Tell the webview what the game said of your prompt settings, on
+/// `session://game-prompt-seen`. When the active profile's capture took
+/// a new setting, the profile saves shortly and every window reads the
+/// `[prompt]` table again.
+pub(crate) fn report_game_prompt_seen<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    seen: Vec<vosh_prompt::GamePromptSeen>,
+) {
+    let applied = seen.iter().any(|s| s.applied);
+    for payload in seen {
+        if let Err(e) = app.emit(events::GAME_PROMPT_SEEN, payload) {
+            warn!(error = %e, "failed to emit the game's prompt settings");
+        }
+    }
+    if applied {
+        crate::disk::save::mark_profile_dirty(app);
+        broadcast_list_changes(app, ListChanges::PROMPT);
     }
 }
 
