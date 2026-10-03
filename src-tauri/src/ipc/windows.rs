@@ -3,11 +3,11 @@
 //! ground a new window opens on, a window's answer when a quit asks for
 //! the writes it holds, and the macOS menu bar's state and Copy.
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 use crate::app::exit::ANSWERS;
 use crate::app::state::SharedState;
-use crate::app::windows::{open_aux_window, record, DRESSED_WINDOWS, HELP_WINDOW, SETTINGS_WINDOW};
+use crate::app::windows::{open_aux_window, set_backdrop, HELP_WINDOW, SETTINGS_WINDOW};
 use crate::app_menu::MenuState;
 
 /// What launch has to tell you, for the main window to show once in the
@@ -47,22 +47,15 @@ pub(crate) async fn app_quit(app: AppHandle) -> Result<(), String> {
 }
 
 /// A theme paint in a window reports the ground and appearance a new
-/// window should open on. An open Settings or Help window takes the
-/// ground now, so a theme change while it is open leaves no old color
-/// under it.
+/// window should open on, and an open Settings or Help window takes the
+/// ground now.
 #[tauri::command]
 pub(crate) fn window_backdrop_set(
     app: AppHandle,
     background: Option<String>,
     appearance: Option<String>,
 ) -> Result<(), String> {
-    let backdrop = record(background.as_deref(), appearance.as_deref())?;
-    for label in DRESSED_WINDOWS {
-        if let Some(window) = app.get_webview_window(label) {
-            backdrop.redress(&window.as_ref().window());
-        }
-    }
-    Ok(())
+    set_backdrop(&app, background.as_deref(), appearance.as_deref())
 }
 
 /// A window answers the quit request once it has sent what it held.
