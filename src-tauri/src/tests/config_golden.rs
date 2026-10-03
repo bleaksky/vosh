@@ -1060,7 +1060,7 @@ fn the_room_time_and_weather_colors_preset_saves_where_0_8_0_still_reads_the_fil
         triggers: Vec<Trigger>,
     }
     let preset: PresetFile =
-        serde_json::from_str(include_str!("../../fixtures/room-colors/preset.json")).unwrap();
+        serde_json::from_str(include_str!("../../../fixtures/room-colors/preset.json")).unwrap();
     let mut profile = crate::profile::Profile::default();
     for trigger in preset.triggers {
         profile.triggers.set(trigger).unwrap();

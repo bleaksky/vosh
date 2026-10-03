@@ -9,12 +9,8 @@ mod app_menu;
 #[cfg(native_surface)]
 mod cell_render;
 mod characters;
-#[cfg(test)]
-mod config_golden_tests;
 mod connection;
 mod disk;
-#[cfg(test)]
-mod fake_mud_tests;
 mod fonts;
 mod forget_passwords;
 mod gmcp_bind;
@@ -23,8 +19,6 @@ mod highlight_ground;
 mod import;
 mod input;
 mod ipc;
-#[cfg(test)]
-mod ipc_contract_tests;
 #[cfg(all(test, native_surface))]
 mod latency_tests;
 mod line_accumulator;
@@ -48,12 +42,8 @@ mod session;
 mod term_grid;
 #[cfg(test)]
 mod tests;
-#[cfg(all(test, native_surface))]
-mod throughput_tests;
 mod tick;
 mod tintin_import;
-#[cfg(test)]
-mod upgrade_order_tests;
 
 use app::state::{AppState, SharedState};
 use fonts::handle_font_uri;
