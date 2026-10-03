@@ -14,8 +14,6 @@ mod fonts;
 mod import;
 mod input;
 mod ipc;
-#[cfg(all(test, native_surface))]
-mod latency_tests;
 mod loadout;
 mod loadout_store;
 mod loadouts;
