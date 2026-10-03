@@ -22,6 +22,8 @@ use vosh_automation::trigger::{Trigger, TriggerAction};
 
 use crate::profile::live::Macro;
 
+pub(crate) mod tintin;
+
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct ImportReport {
     pub aliases: Vec<Alias>,

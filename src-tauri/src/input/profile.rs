@@ -4,9 +4,9 @@
 use vosh_automation::vars::Scope;
 
 use super::{split_first_word, InputResult, APP_DATA_DIR, PATH_B_ACTIVE};
+use crate::import::tintin;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
-use crate::tintin_import;
 
 /// What `#profile save`, `load`, and `reset` answer between the shared
 /// catalog wizard and the relaunch that finishes it. Nothing saves in
@@ -126,7 +126,7 @@ pub(super) fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputRes
         return InputResult::error("usage #import-tintin <path>");
     }
     let expanded = expand_home(path);
-    let report = match tintin_import::import_file(&expanded) {
+    let report = match tintin::import_file(&expanded) {
         Ok(r) => r,
         Err(e) => return InputResult::error(format!("read failed: {e}")),
     };

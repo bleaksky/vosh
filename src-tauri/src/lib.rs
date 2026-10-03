@@ -27,7 +27,6 @@ mod term_grid;
 #[cfg(test)]
 mod tests;
 mod tick;
-mod tintin_import;
 
 use app::state::{AppState, SharedState};
 use fonts::handle_font_uri;
