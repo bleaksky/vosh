@@ -1114,7 +1114,7 @@ mud.set_prompt_var('move', captures[4])"""
             std::sync::Arc::new(crate::app::state::AppState::default());
         // Before the profile set loads, nothing is recorded.
         note_line_triggers(&state, vec!["early".to_string()]).await;
-        crate::launch::load(&state, root).await;
+        crate::app::launch::load(&state, root).await;
         let leftover = &state.take_launch_notices();
         assert!(leftover.is_empty(), "{leftover:?}");
 
@@ -1128,7 +1128,7 @@ mud.set_prompt_var('move', captures[4])"""
         // The next launch names it once.
         let next: crate::app::state::SharedState =
             std::sync::Arc::new(crate::app::state::AppState::default());
-        crate::launch::load(&next, root).await;
+        crate::app::launch::load(&next, root).await;
         let notices = next.take_launch_notices();
         assert_eq!(notices.len(), 1, "{notices:?}");
         assert!(
@@ -1137,7 +1137,7 @@ mud.set_prompt_var('move', captures[4])"""
         );
         let again: crate::app::state::SharedState =
             std::sync::Arc::new(crate::app::state::AppState::default());
-        crate::launch::load(&again, root).await;
+        crate::app::launch::load(&again, root).await;
         let leftover = &again.take_launch_notices();
         assert!(leftover.is_empty(), "{leftover:?}");
     }
@@ -1148,7 +1148,7 @@ mud.set_prompt_var('move', captures[4])"""
         let root = dir.path();
         let state: crate::app::state::SharedState =
             std::sync::Arc::new(crate::app::state::AppState::default());
-        let launched = crate::launch::load(&state, root).await;
+        let launched = crate::app::launch::load(&state, root).await;
         assert!(launched.loadout_mode);
         assert_eq!(state.take_launch_notices(), [MOVED_INTO_DEFAULT]);
 

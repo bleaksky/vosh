@@ -213,7 +213,7 @@ pub(crate) static AUTO_PERSIST_SUPPRESSED: std::sync::atomic::AtomicBool =
 /// Profile is still pre-migration state and must not be persisted.
 /// Launch sets it too when it could not finish a wizard run that stopped
 /// partway, since the next launch writes the run's journal again over
-/// anything the session saved (see `launch::load`).
+/// anything the session saved (see `app::launch::load`).
 /// Deliberately in-process (not a disk sniff): catalog.toml existing
 /// while `state.global_catalog` is None also describes a corrupt
 /// catalog falling back to legacy mode at startup, and that session

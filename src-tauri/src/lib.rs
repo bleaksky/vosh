@@ -30,7 +30,6 @@ mod input;
 mod ipc_contract_tests;
 #[cfg(all(test, native_surface))]
 mod latency_tests;
-mod launch;
 mod line_accumulator;
 mod loadout;
 mod loadout_store;
@@ -171,8 +170,8 @@ pub fn run() {
 
                 // The profile set and the active profile, then the
                 // shared catalog and loadouts in loadout mode. See
-                // launch.rs.
-                let launched = tauri::async_runtime::block_on(launch::load(&state, &path));
+                // app/launch.rs.
+                let launched = tauri::async_runtime::block_on(app::launch::load(&state, &path));
                 if launched.loadout_mode {
                     crate::input::PATH_B_ACTIVE.store(true, std::sync::atomic::Ordering::Release);
                 }

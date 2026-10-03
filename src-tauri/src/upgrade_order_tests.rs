@@ -1,6 +1,6 @@
 //! The order launch runs its upgrades in (R2 of the refactor plan).
 //!
-//! The setup hook in lib.rs runs `launch::load`. It finishes a shared
+//! The setup hook in lib.rs runs `app::launch::load`. It finishes a shared
 //! catalog wizard run that stopped, moves the prompt capture triggers into
 //! the profiles, turns on the presets a build adds, and loads the profile
 //! set. Then it moves the custom themes older profile files hold into
@@ -15,9 +15,9 @@ use std::sync::Arc;
 use vosh_prompt::config::CaptureSource;
 use vosh_prompt::CaptureConfig;
 
+use crate::app::launch::Launch;
 use crate::app::state::{AppState, SharedState};
 use crate::disk::save::{persist_state, PERSIST_LOCK};
-use crate::launch::Launch;
 use crate::loadout_store::load_global_catalog;
 use crate::loadouts::wizard::journal::{
     journal_path, save_wizard_journal, JournalFile, WizardJournal, WIZARD_FINISHED_NOTICE,
@@ -137,11 +137,11 @@ fn shared_theme_ids(set: &ProfileSet) -> Vec<String> {
     themes.into_iter().map(|t| t.id).collect()
 }
 
-/// Run `launch::load` over `app_data` on a fresh state, as the setup hook
-/// in lib.rs does.
+/// Run `app::launch::load` over `app_data` on a fresh state, as the
+/// setup hook in lib.rs does.
 async fn launch(app_data: &Path) -> (SharedState, Launch) {
     let state: SharedState = Arc::new(AppState::default());
-    let launched = crate::launch::load(&state, app_data).await;
+    let launched = crate::app::launch::load(&state, app_data).await;
     (state, launched)
 }
 
