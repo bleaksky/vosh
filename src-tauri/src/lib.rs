@@ -4,9 +4,7 @@ use tracing_subscriber::EnvFilter;
 
 mod affects;
 mod app;
-mod app_menu;
 mod disk;
-mod fonts;
 mod import;
 mod input;
 mod ipc;
@@ -24,6 +22,7 @@ mod tests;
 mod tick;
 
 use app::state::{AppState, SharedState};
+use app::{menu as app_menu, system_fonts as fonts};
 use fonts::handle_font_uri;
 
 pub fn run() {
