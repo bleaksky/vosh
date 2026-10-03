@@ -23,7 +23,6 @@ use std::path::Path;
 
 use crate::loadouts::catalog::{load_global_catalog, path_b_mode_active, save_global_catalog};
 use crate::loadouts::presets::PRESETS_OFF;
-use crate::profile::file::ProfileConfig;
 use crate::profile::set::ProfileSet;
 
 /// Each preset that comes on once, with the id the step is recorded
@@ -55,13 +54,12 @@ pub(crate) fn run(set: &mut ProfileSet, app_data: &Path) {
 /// before any is written.
 fn roll_out(set: &ProfileSet, app_data: &Path, preset: &str) -> Result<(), String> {
     let mut files = Vec::new();
-    for entry in set.list() {
-        let path = set.profile_path(&entry.name);
-        if !path.exists() {
-            continue;
+    for stored in set.read_all() {
+        match stored.file {
+            Some(Ok(file)) => files.push((stored.path, file.config)),
+            Some(Err(e)) => return Err(format!("{}: {e}", stored.path.display())),
+            None => {}
         }
-        let config = ProfileConfig::load(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-        files.push((path, config));
     }
     let mut catalog = if path_b_mode_active(app_data) {
         Some(load_global_catalog(app_data).map_err(|e| e.to_string())?)
@@ -102,6 +100,8 @@ fn add_preset(list: &mut Vec<String>, preset: &str) -> bool {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    use crate::profile::file::ProfileConfig;
 
     const INDEX: &str = r#"active = "default"
 

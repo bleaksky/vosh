@@ -155,36 +155,38 @@ struct HeldFile {
 }
 
 impl HeldCustomThemes {
-    /// Read every profile file in `set` except `skip` and keep the ones
-    /// that hold custom themes. The active profile comes first and the
+    /// Keep the profile files in `set` that hold custom themes, leaving
+    /// out the file of `skip`. The active profile comes first and the
     /// rest follow in index order, so when two files hold one id the
     /// themes you see now keep it. A file Vosh cannot read stays as it is.
     pub(crate) fn find(set: &ProfileSet, skip: Option<&str>) -> Self {
-        let active = set.active_name();
-        let mut names: Vec<&str> = set.list().iter().map(|e| e.name.as_str()).collect();
-        names.sort_by_key(|name| *name != active);
         let mut files = Vec::new();
-        for name in names {
-            if skip == Some(name) {
+        for stored in set.read_all() {
+            if skip == Some(stored.name) {
                 continue;
             }
-            let path = set.profile_path(name);
-            if !path.exists() {
-                continue;
-            }
-            match ProfileConfig::load(&path) {
-                Ok(config) if !config.ui.custom_themes.is_empty() => files.push(HeldFile {
-                    name: name.to_string(),
-                    path,
-                    config,
-                    landed: Vec::new(),
-                }),
-                Ok(_) => {}
-                Err(e) => {
-                    tracing::warn!(error = %e, path = %path.display(), "profile file unreadable");
+            match stored.file {
+                Some(Ok(file)) if !file.config.ui.custom_themes.is_empty() => {
+                    files.push(HeldFile {
+                        name: stored.name.to_string(),
+                        path: stored.path,
+                        config: file.config,
+                        landed: Vec::new(),
+                    });
+                }
+                Some(Ok(_)) | None => {}
+                Some(Err(e)) => {
+                    tracing::warn!(
+                        error = %e,
+                        path = %stored.path.display(),
+                        "profile file unreadable",
+                    );
                 }
             }
         }
+        // A stable sort, so the rest keep index order.
+        let active = set.active_name();
+        files.sort_by_key(|file| file.name != active);
         Self { files }
     }
 

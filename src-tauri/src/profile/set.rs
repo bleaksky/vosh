@@ -24,13 +24,14 @@
 //! - Else create an empty index with one "default" profile entry (its
 //!   file is created on the first save).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED};
 use crate::disk::save::{persist_state, PERSIST_LOCK};
+use crate::profile::file::{ConfigError, ProfileConfig};
 use crate::profile::login_match::AutoMatch;
 use crate::profile::shared::ScopeConfig;
 
@@ -120,6 +121,28 @@ pub(crate) const DEFAULT_PROFILE_NAME: &str = "default";
 pub(crate) struct ProfileSet {
     root: PathBuf,
     pub(super) index: ProfilesIndex,
+}
+
+/// One profile as [`ProfileSet::read_all`] reads it.
+pub(crate) struct StoredProfile<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) path: PathBuf,
+    /// None for a profile that never saved a file.
+    pub(crate) file: Option<Result<SavedFile, ConfigError>>,
+}
+
+/// A profile file that reads, with the text it holds.
+pub(crate) struct SavedFile {
+    pub(crate) text: String,
+    pub(crate) config: ProfileConfig,
+}
+
+/// Read the profile file at `path` the way [`ProfileConfig::load`] does,
+/// keeping its text.
+fn read_saved(path: &Path) -> Result<SavedFile, ConfigError> {
+    let text = std::fs::read_to_string(path)?;
+    let config = ProfileConfig::from_toml(&text)?;
+    Ok(SavedFile { text, config })
 }
 
 impl ProfileSet {
@@ -212,6 +235,21 @@ impl ProfileSet {
 
     pub(crate) fn get(&self, name: &str) -> Option<&ProfileEntry> {
         self.index.profiles.iter().find(|p| p.name == name)
+    }
+
+    /// Every profile in index order with its file. Each file reads only
+    /// when the caller asks for its profile, so a caller that stops at a
+    /// file that does not read reads no further.
+    pub(crate) fn read_all(&self) -> impl Iterator<Item = StoredProfile<'_>> + '_ {
+        self.index.profiles.iter().map(|entry| {
+            let path = self.profile_path(&entry.name);
+            let file = path.exists().then(|| read_saved(&path));
+            StoredProfile {
+                name: &entry.name,
+                path,
+                file,
+            }
+        })
     }
 
     /// Refuse `name` for a new or renamed profile when another profile

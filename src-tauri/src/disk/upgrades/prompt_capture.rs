@@ -239,20 +239,19 @@ fn still_hides(trigger: &Trigger, why: NotACapture) -> bool {
 /// changed, then the catalog. The caller records the move.
 pub(crate) fn migrate(set: &ProfileSet, app_data: &Path, loadout: bool) -> Result<Moved, String> {
     let mut files: Vec<ProfileFile> = Vec::new();
-    for entry in set.list() {
-        let path = set.profile_path(&entry.name);
-        let config = if path.exists() {
+    for stored in set.read_all() {
+        let config = match stored.file {
+            Some(Ok(file)) => file.config,
             // A file that does not read may be the one that draws, so the
             // whole move waits. Launch holds the file, and the move never
             // writes over it.
-            ProfileConfig::load(&path).map_err(|e| format!("{}: {e}", path.display()))?
-        } else {
-            ProfileConfig::fresh()
+            Some(Err(e)) => return Err(format!("{}: {e}", stored.path.display())),
+            None => ProfileConfig::fresh(),
         };
         files.push(ProfileFile {
-            name: entry.name.clone(),
-            lost_prompt: lost_prompt(&path),
-            path,
+            name: stored.name.to_string(),
+            lost_prompt: lost_prompt(&stored.path),
+            path: stored.path,
             config,
             changed: false,
         });
