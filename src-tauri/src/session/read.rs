@@ -240,6 +240,7 @@ async fn deliver_line_step<R: tauri::Runtime>(
     )
     .await?;
     if let Some(step) = tick_step {
+        conn.perf.ticks += 1;
         deliver_tick_step(
             &conn.app,
             &mut conn.stream,

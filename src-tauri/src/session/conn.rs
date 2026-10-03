@@ -414,7 +414,6 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 {
                     error!(error = %e, "settings timer firing failed");
                 }
-                conn.perf.tick_emits += 1;
             }
             _ = perf_report_interval.tick() => {
                 conn.perf.report_and_reset();
