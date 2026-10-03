@@ -2608,10 +2608,10 @@ thread_local! {
 fn render_prompt(p: &Profile, now: Instant) -> vosh_prompt::Rendered {
     #[cfg(test)]
     RENDERS.with(|n| n.set(n.get() + 1));
-    let vosh = prompt_supplies(p, now);
+    let client = client_values(p, now);
     vosh_prompt::render_str(
         &p.prompt.config().template,
-        &p.prompt.vars.resolver(&vosh),
+        &p.prompt.vars.resolver(&client),
         p.prompt.render_options(false),
     )
 }
@@ -2666,8 +2666,8 @@ fn prompt_view(p: &Profile, now: Instant) -> PromptView {
             live: Some(live),
         };
     }
-    let vosh = prompt_supplies(p, now);
-    let resolver = p.prompt.vars.resolver(&vosh);
+    let client = client_values(p, now);
+    let resolver = p.prompt.vars.resolver(&client);
     let overrides = preview.overrides(&resolver);
     let shown = vosh_prompt::render_str(
         &p.prompt.config().template,
@@ -2762,7 +2762,7 @@ async fn end_read<R: tauri::Runtime>(
 /// What Vosh itself supplies to the custom prompt: the tick timer, your
 /// target, the profile's name and the affects you track. The clock reads
 /// the local time.
-pub(crate) fn prompt_supplies(p: &Profile, now: Instant) -> vosh_prompt::ClientValues {
+pub(crate) fn client_values(p: &Profile, now: Instant) -> vosh_prompt::ClientValues {
     let tick = p.tick.remaining(now).map(|left| vosh_prompt::values::Tick {
         remaining: i64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(i64::MAX),
         interval: i64::try_from(p.tick.config.interval.as_secs()).ok(),

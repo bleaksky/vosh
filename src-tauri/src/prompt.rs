@@ -263,8 +263,8 @@ pub(crate) struct RenderRequest {
 /// [`prompt_render`]: crate::ipc::prompt::prompt_render
 /// [`prompt_render_many`]: crate::ipc::prompt::prompt_render_many
 pub(crate) fn render_all(p: &Profile, requests: &[RenderRequest]) -> Vec<Rendered> {
-    let vosh = crate::session::prompt_supplies(p, Instant::now());
-    let live = p.prompt.vars.resolver(&vosh);
+    let client = crate::session::client_values(p, Instant::now());
+    let live = p.prompt.vars.resolver(&client);
     let now = chrono::Local::now().naive_local();
     let samples = Samples { now };
     requests
@@ -302,8 +302,8 @@ fn with_values<T>(
     overrides: Option<Overrides>,
     then: impl FnOnce(&dyn Values, bool) -> T,
 ) -> T {
-    let vosh = crate::session::prompt_supplies(p, Instant::now());
-    let live = p.prompt.vars.resolver(&vosh);
+    let client = crate::session::client_values(p, Instant::now());
+    let live = p.prompt.vars.resolver(&client);
     let now = chrono::Local::now().naive_local();
     let over = PromptPreview {
         preview,
@@ -361,8 +361,8 @@ pub(crate) struct Edited {
 ///
 /// [`prompt_edit`]: crate::ipc::prompt::prompt_edit
 pub(crate) fn edit(p: &Profile, template: &str, op: &EditOp) -> Result<Edited, String> {
-    let vosh = crate::session::prompt_supplies(p, Instant::now());
-    let live = p.prompt.vars.resolver(&vosh);
+    let client = crate::session::client_values(p, Instant::now());
+    let live = p.prompt.vars.resolver(&client);
     let known = |field: &FieldRef| !matches!(live.resolve(field), Resolved::Unknown);
     let (template, piece) =
         vosh_prompt::card::edit::apply_at(template, op, &known).map_err(|e| e.0)?;
@@ -384,7 +384,7 @@ pub(crate) fn edit(p: &Profile, template: &str, op: &EditOp) -> Result<Edited, S
 /// [`prompt_state_get`]: crate::ipc::prompt::prompt_state_get
 pub(crate) fn prompt_state(p: &Profile) -> PromptState {
     p.prompt
-        .state(&crate::session::prompt_supplies(p, Instant::now()))
+        .state(&crate::session::client_values(p, Instant::now()))
 }
 
 /// The body of [`hidden_get`](crate::ipc::prompt::hidden_get).
