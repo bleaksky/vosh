@@ -227,7 +227,7 @@ pub(crate) struct TermGrid {
     term: Term<NoopListener>,
     parser: Processor,
     size: GridSize,
-    /// The region the last session write left open, if any (D22).
+    /// The region the last session write left open, if any.
     region: Option<Region>,
     /// The start of a character the last session write split, held
     /// until the rest arrives so it decodes whole before wrapping.
@@ -277,7 +277,7 @@ pub(crate) struct LiftSpan {
 }
 
 /// Where the grid's cursor sits and where the open region starts, for
-/// `terminal_cursor` (section 6). Lines count from the top of the live
+/// `terminal_cursor`. Lines count from the top of the live
 /// screen, negative in history, as alacritty counts them, so while you are
 /// at the bottom a line is the screen row the renderer draws it on. The
 /// webview maps a pointer to a piece of your prompt from it: the cell under
@@ -314,7 +314,7 @@ pub(crate) struct RegionStart {
 }
 
 /// A region Vosh may replace later, such as the drawn prompt, as this
-/// grid holds it (D22). It starts at a mark `ESC ] 7717 ; o ; G BEL` and
+/// grid holds it. It starts at a mark `ESC ] 7717 ; o ; G BEL` and
 /// stays open while nothing else is written after it. The grid keeps
 /// the bytes it wrote after the mark, so it can count the rows they take
 /// at the width it has when a replace comes, a resize included.
@@ -365,7 +365,7 @@ impl TermGrid {
     }
 
     /// Write one session output, as `session://output` carries it to
-    /// xterm: its replace, then its bytes, then its restore (D22).
+    /// xterm: its replace, then its bytes, then its restore.
     ///
     /// A replace for the open region moves to the region's start,
     /// erases to the end of the screen and writes its bytes there. For a
@@ -997,7 +997,7 @@ impl TermGrid {
     /// the cursor. So the grid first takes the empty rows off, narrows,
     /// and then grows back, which pulls those rows out of history again.
     /// A nearly empty screen keeps what it shows, as xterm does, and a
-    /// region near its top stays within reach of a replace (D22).
+    /// region near its top stays within reach of a replace.
     pub(crate) fn resize(&mut self, columns: usize, screen_lines: usize) {
         let columns = columns.max(1);
         let screen_lines = screen_lines.max(1);
@@ -1132,12 +1132,14 @@ fn region_extent(columns: usize, region: &Region) -> Option<Extent> {
     })
 }
 
-/// Move the cursor from the end of a region to its start, `above` rows
-/// up at `col`, then erase to the end of the screen (D22 rule c). The
-/// erase fills with the default background. The cells it clears take the
-/// background in force, and a line the region ends on can leave its own
-/// on while the line ends after it wait, so without it the rows below
-/// would take that color too. What the replace writes sets its own.
+/// Move the cursor from the end of a region to its start, `above` rows up
+/// at `col`, then erase to the end of the screen. Nothing is written after
+/// an open region, so the erase clears its old render and nothing else,
+/// however many rows it took. The erase fills with the default background.
+/// The cells it clears take the background in force, and a line the region
+/// ends on can leave its own on while the line ends after it wait, so
+/// without it the rows below would take that color too. What the replace
+/// writes sets its own.
 fn erase_back(above: usize, col: usize) -> Vec<u8> {
     let mut out = b"\r".to_vec();
     if above > 0 {
@@ -1150,7 +1152,8 @@ fn erase_back(above: usize, col: usize) -> Vec<u8> {
     out
 }
 
-/// A private mark the session writes (D22, and Where your prompt shows).
+/// A private mark the session writes, where a region it may replace starts
+/// or where a lifted prompt starts or ends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mark {
     /// `o;G`, where region G starts.
@@ -1374,7 +1377,8 @@ pub(crate) fn current_display_offset() -> usize {
 }
 
 /// You are selecting text in the shared grid or reading back in it, so a
-/// clock repaint of your prompt waits (decision 6). False with no grid.
+/// clock repaint of your prompt waits and the row you select or read never
+/// moves. False with no grid.
 pub(crate) fn reader_busy() -> bool {
     grid_slot().lock().is_ok_and(|slot| {
         slot.as_ref().is_some_and(|grid| {
@@ -2918,7 +2922,7 @@ mod tests {
     }
 
     /// The stage's output driven into the grid, as the session and the
-    /// native renderer pass it along (section 9, stage into `TermGrid`).
+    /// native renderer pass it along.
     mod stage_into_grid {
         use super::*;
         use vosh_prompt::config::RegexCapture;

@@ -1,6 +1,5 @@
 //! The real session against the fake Aabahran of the test kit, over a
-//! local port, in the new build and in the older build (the phase 3 gate
-//! of the prompt editor build spec).
+//! local port, in the new build and in the older build.
 //!
 //! Each test runs the session loop, the typed input path and the prompt
 //! lookup with the mock runtime, and serves the fake game on a port of

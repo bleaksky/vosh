@@ -1,5 +1,5 @@
 //! Where each piece of your prompt lands on screen, for the prompt card's
-//! pointer mapping (section 7 step 6, and addendum item 4).
+//! pointer mapping.
 //!
 //! The webview maps a pointer to a piece from the open row's spans and
 //! plain rows, laid out from the region's start at the renderer's width

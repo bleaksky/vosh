@@ -1,9 +1,9 @@
-//! The clock repaint (decision 6, section 4, addendum item 7), played
-//! through the session's own steps. While your design draws the tick, the
-//! time or the date, your idle prompt repaints as what the piece shows
-//! changes, at most once a second: the open row in the text and lifted
-//! while it is the last thing on screen and you neither select nor read
-//! back, and the band while pinned, which no selection or read back holds.
+//! The clock repaint, played through the session's own steps. While your
+//! design draws the tick, the time or the date, your idle prompt repaints
+//! as what the piece shows changes, at most once a second: the open row in
+//! the text and lifted while it is the last thing on screen and you neither
+//! select nor read back, and the band while pinned, which no selection or
+//! read back holds.
 
 use super::show_tests::{profile, showing, wire_fixture, Session, CODES};
 use super::*;

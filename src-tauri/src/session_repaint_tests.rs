@@ -1,9 +1,9 @@
-//! The late GMCP repaint (section 4, and addendum item 7), played through
-//! the session's own steps. A packet after the last prompt of its read,
-//! with no text after it, starts a repaint 60 ms later, which writes your
-//! prompt again when the packet changed a value your design reads: the
-//! open row in the text and lifted, and the band while pinned, which no
-//! text cancels, since it is not in the text.
+//! The late GMCP repaint, played through the session's own steps. A packet
+//! after the last prompt of its read, with no text after it, starts a
+//! repaint 60 ms later, which writes your prompt again when the packet
+//! changed a value your design reads: the open row in the text and lifted,
+//! and the band while pinned, which no text cancels, since it is not in the
+//! text.
 
 use super::show_tests::{profile, showing, wire_fixture, Read, Session, CODES};
 use super::*;
