@@ -401,12 +401,12 @@ fn hand_out_shared_with(
 ) -> Result<usize, String> {
     let active = set.active_name();
     let mut changed = Vec::new();
-    for entry in set.list() {
-        if entry.name == active {
+    for stored in set.read_all() {
+        if stored.name == active {
             continue;
         }
-        let path = set.profile_path(&entry.name);
-        let owner = crate::profile::set::display_name(&entry.name);
+        let path = stored.path;
+        let owner = crate::profile::set::display_name(stored.name);
         let unreadable = |e: &dyn std::fmt::Display| {
             tracing::warn!(error = %e, path = %path.display(), "profile file unreadable");
             format!(
@@ -414,14 +414,12 @@ fn hand_out_shared_with(
             )
         };
         // The text as it stands, so a failed save can put it back exactly.
-        let before = if path.exists() {
-            Some(std::fs::read_to_string(&path).map_err(|e| unreadable(&e))?)
-        } else {
-            None
-        };
-        let mut config = match &before {
-            Some(text) => ProfileConfig::from_toml(text).map_err(|e| unreadable(&e))?,
-            None => ProfileConfig::fresh(),
+        let (before, mut config) = match stored.file {
+            Some(Ok(file)) => (Some(file.text), file.config),
+            // The log shows a read error as the file system gave it.
+            Some(Err(ConfigError::Io(e))) => return Err(unreadable(&e)),
+            Some(Err(e)) => return Err(unreadable(&e)),
+            None => (None, ProfileConfig::fresh()),
         };
         if shared.hand_out(&mut config.ui, &owner) {
             changed.push((owner, path, before, config));

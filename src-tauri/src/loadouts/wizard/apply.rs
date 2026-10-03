@@ -20,7 +20,8 @@ use crate::disk::save::{active_profile_file, persist_state, PERSIST_LOCK};
 use crate::loadouts::catalog::catalog_path;
 use crate::loadouts::presets::first_catalog_presets;
 use crate::loadouts::set::{loadouts_path, LoadoutSet};
-use crate::profile::file::ProfileConfig;
+use crate::profile::file::{ConfigError, ProfileConfig};
+use crate::profile::set::SavedFile;
 
 /// [`migration_analyze`] over the app data folder `app_data`, so a test
 /// can run it over a folder of its own. `library` holds the id of every
@@ -225,43 +226,50 @@ fn migration_sources(
         preset_lists: Vec::new(),
         files: Vec::new(),
     };
-    for entry in set.list() {
-        let path = set.profile_path(&entry.name);
-        if crate::disk::atomic::is_unread(&path) {
+    for stored in set.read_all() {
+        if crate::disk::atomic::is_unread(&stored.path) {
             return Err(format!(
                 "Vosh could not read the {} profile file when it started, so it will not change \
                  the file. Restart Vosh and try again.",
-                crate::profile::set::display_name(&entry.name)
+                crate::profile::set::display_name(stored.name)
             ));
         }
-        let text = if let Some(live) = live.filter(|_| entry.name == set.active_name()) {
-            Some(live.to_toml().map_err(|e| e.to_string())?)
-        } else if path.exists() {
-            // The error goes to the log. Its text can hold colons and a
-            // path, which a sentence for you leaves out.
-            Some(std::fs::read_to_string(&path).map_err(|e| {
-                warn!(error = %e, path = %path.display(), "wizard could not read a profile file");
-                format!(
-                    "Vosh could not read the {} profile file, so it changed nothing. Check that \
-                     you can open the file, then try again.",
-                    crate::profile::set::display_name(&entry.name)
-                )
-            })?)
+        let file = if let Some(live) = live.filter(|_| stored.name == set.active_name()) {
+            let text = live.to_toml().map_err(|e| e.to_string())?;
+            let config = ProfileConfig::from_toml(&text).map_err(|e| e.to_string())?;
+            Some(SavedFile { text, config })
         } else {
-            None
-        };
-        let cfg = match &text {
-            Some(text) => {
-                let cfg = ProfileConfig::from_toml(text).map_err(|e| e.to_string())?;
-                sources.preset_lists.push(cfg.ui.enabled_presets.clone());
-                cfg
+            match stored.file {
+                Some(Ok(file)) => Some(file),
+                // The error goes to the log. Its text can hold colons and a
+                // path, which a sentence for you leaves out.
+                Some(Err(ConfigError::Io(e))) => {
+                    warn!(
+                        error = %e,
+                        path = %stored.path.display(),
+                        "wizard could not read a profile file",
+                    );
+                    return Err(format!(
+                        "Vosh could not read the {} profile file, so it changed nothing. Check \
+                         that you can open the file, then try again.",
+                        crate::profile::set::display_name(stored.name)
+                    ));
+                }
+                Some(Err(e)) => return Err(e.to_string()),
+                None => None,
             }
-            None => ProfileConfig::fresh(),
         };
-        sources.profiles.push((entry.name.clone(), cfg));
+        let (text, cfg) = match file {
+            Some(SavedFile { text, config }) => {
+                sources.preset_lists.push(config.ui.enabled_presets.clone());
+                (Some(text), config)
+            }
+            None => (None, ProfileConfig::fresh()),
+        };
+        sources.profiles.push((stored.name.to_string(), cfg));
         sources.files.push(MigrationFile {
-            name: entry.name.clone(),
-            path,
+            name: stored.name.to_string(),
+            path: stored.path,
             text,
         });
     }

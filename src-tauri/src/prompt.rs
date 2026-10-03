@@ -29,6 +29,7 @@ use vosh_prompt::{
 use crate::app::events::{self, broadcast_list_changes, ListChanges};
 use crate::app::state::SharedState;
 use crate::disk::save::PERSIST_LOCK;
+use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
 
 /// The body of [`prompt_config_set`]: check and take the table. Returns
@@ -154,20 +155,25 @@ pub(crate) async fn designs(state: &SharedState) -> Result<Vec<PromptDesign>, St
     let set = state.loaded_profile_set().await?;
     let active = set.active_name().to_string();
     let mut out = Vec::new();
-    for entry in set.list() {
-        if entry.name == active {
+    for stored in set.read_all() {
+        if stored.name == active {
             continue;
         }
-        let Ok(config) = crate::profile::inactive::load_profile_file(&set, &entry.name) else {
-            continue;
+        let config = match stored.file {
+            Some(Ok(file)) => file.config,
+            Some(Err(e)) => {
+                warn!(error = %e, path = %stored.path.display(), "profile file unreadable");
+                continue;
+            }
+            None => ProfileConfig::fresh(),
         };
         let template = config.prompt_config().template;
         if template.is_empty() || template == vosh_prompt::DEFAULT_DESIGN {
             continue;
         }
         out.push(PromptDesign {
-            display_name: crate::profile::set::display_name(&entry.name),
-            profile: entry.name.clone(),
+            display_name: crate::profile::set::display_name(stored.name),
+            profile: stored.name.to_string(),
             template,
         });
     }

@@ -8,7 +8,6 @@ use std::collections::BTreeSet;
 use vosh_automation::trigger::Trigger;
 
 use super::catalog::GlobalCatalog;
-use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
 use crate::profile::set::ProfileSet;
 
@@ -74,20 +73,17 @@ impl ProfilePresetLists {
 /// named in `unread` and never written.
 pub(crate) fn profile_preset_lists(set: &ProfileSet) -> ProfilePresetLists {
     let mut found = ProfilePresetLists::default();
-    for entry in set.list() {
-        let path = set.profile_path(&entry.name);
-        if !path.exists() {
-            continue;
-        }
-        match ProfileConfig::load(&path) {
-            Ok(config) => found.lists.push(config.ui.enabled_presets),
-            Err(e) => {
+    for stored in set.read_all() {
+        match stored.file {
+            None => {}
+            Some(Ok(file)) => found.lists.push(file.config.ui.enabled_presets),
+            Some(Err(e)) => {
                 tracing::warn!(
                     error = %e,
-                    path = %path.display(),
+                    path = %stored.path.display(),
                     "profile file unreadable; its enabled presets are unknown",
                 );
-                found.unread.push(entry.name.clone());
+                found.unread.push(stored.name.to_string());
             }
         }
     }
@@ -198,6 +194,7 @@ mod tests {
     use std::path::Path;
 
     use crate::loadouts::catalog::{load_global_catalog, save_global_catalog};
+    use crate::profile::file::ProfileConfig;
 
     fn presets(list: &[&str]) -> Vec<String> {
         list.iter().map(|s| (*s).to_string()).collect()
