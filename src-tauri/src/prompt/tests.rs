@@ -611,3 +611,93 @@ fn opening_the_card_keeps_the_design_it_found_first() {
     assert_eq!(set_config(&mut p, third), Ok(true));
     assert_eq!(card_open(&mut p).0.previous_templates, ["%move", "%hp"]);
 }
+
+/// A live profile whose `[prompt]` table holds more than Settings
+/// shows: a capture and an earlier design.
+pub(crate) fn prompt_profile() -> crate::profile::Profile {
+    let mut p = crate::profile::Profile::default();
+    p.set_prompt_config(vosh_prompt::PromptConfig {
+        draw: true,
+        template: "%hp".into(),
+        previous_templates: vec!["%mana".into()],
+        capture: vosh_prompt::CaptureConfig::Regex(vosh_prompt::config::RegexCapture {
+            lines: vec![r"\[(?<hp>\d+)hp\]".into()],
+            ..vosh_prompt::config::RegexCapture::default()
+        }),
+        ..vosh_prompt::PromptConfig::default()
+    });
+    p
+}
+
+#[test]
+fn the_prompt_show_state_says_where_it_shows_and_whether_a_capture_reads_it() {
+    let mut p = crate::profile::Profile::default();
+    assert_eq!(
+        super::prompt_show_state(&p),
+        super::PromptShowState {
+            show: "text".into(),
+            capture: false,
+            draw: false,
+            game_sent: false,
+            zone: 1,
+            prompts_off: false,
+        }
+    );
+    p = prompt_profile();
+    let mut config = p.prompt.config().clone();
+    config.show = vosh_prompt::PromptShow::Lifted;
+    p.set_prompt_config(config);
+    p.prompt.connect(true);
+    p.prompt.observe(
+        "Char.Prompt",
+        serde_json::json!({"enabled": true, "prompt": "<%hhp> ", "fprompt": ""}),
+        chrono::Local::now().fixed_offset(),
+    );
+    let state = super::prompt_show_state(&p);
+    assert_eq!(state.show, "lifted");
+    assert!(state.capture);
+    assert_eq!(state.draw, p.prompt.config().draw);
+    assert!(state.game_sent);
+    assert_eq!(state.zone, 1);
+    assert!(!state.prompts_off);
+    p.prompt.observe(
+        "Char.Prompt",
+        serde_json::json!({"enabled": false, "prompt": "<%hhp> ", "fprompt": ""}),
+        chrono::Local::now().fixed_offset(),
+    );
+    assert!(super::prompt_show_state(&p).prompts_off);
+}
+
+#[tokio::test]
+async fn hidden_get_answers_what_the_session_last_reported() {
+    let state: super::SharedState = std::sync::Arc::new(AppState::default());
+    let nothing = serde_json::json!({
+        "vitals": false, "tank": false, "opponent": false, "affects": false, "group": false,
+    });
+    let json = |h| serde_json::to_value(h).unwrap();
+    assert_eq!(json(super::reported_hidden(&state).await), nothing);
+    {
+        let mut p = state.profile.lock().await;
+        p.prompt.connect(true);
+        let at = chrono::Local::now().fixed_offset();
+        // The older build names the song and sends the true values.
+        p.prompt.vars.observe(
+            "Char.Affects",
+            serde_json::json!({"affects":[{"name":"lamented tears","kind":"song","duration":3}]}),
+            at,
+        );
+        p.prompt.vars.observe(
+            "Char.Vitals",
+            serde_json::json!({"hp":850,"maxhp":900,"mana":760,"maxmana":820,"move":250,"maxmove":250}),
+            at,
+        );
+    }
+    // Worked out, but the session has not reported it yet.
+    assert_eq!(json(super::reported_hidden(&state).await), nothing);
+    let reported = state.profile.lock().await.prompt.vars.take_hidden_change();
+    assert!(reported.is_some_and(|h| h.vitals() && h.affects && h.group));
+    assert_eq!(
+        super::reported_hidden(&state).await,
+        reported.expect("a report")
+    );
+}

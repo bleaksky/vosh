@@ -130,6 +130,22 @@ async fn request_repaint(state: &SharedState) {
     }
 }
 
+/// What decides how your prompt looks on screen: the switch, the design
+/// and where it shows. A line that changes any of them repaints it.
+pub(crate) fn prompt_look(p: &crate::profile::Profile) -> (bool, String, vosh_prompt::PromptShow) {
+    let config = p.prompt.config();
+    (config.draw, config.template.clone(), config.show)
+}
+
+/// Ask the session to repaint the open row as the `[prompt]` table now
+/// says. Nothing happens with no connection, or when no drawn prompt is
+/// the last thing on screen.
+pub(crate) async fn request_prompt_repaint(state: &SharedState) {
+    if let Some(handle) = state.session.lock().await.as_ref() {
+        let _ = handle.prompt_repaint();
+    }
+}
+
 /// A design another profile holds, for From another profile.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct PromptDesign {
@@ -617,5 +633,42 @@ pub(crate) fn prompt_watch(state: State<'_, SharedState>, on: bool) {
     state.prompt_watch.store(on, Ordering::Release);
 }
 
+/// The body of [`hidden_get`](crate::commands::hidden_get).
+pub(crate) async fn reported_hidden(state: &SharedState) -> vosh_prompt::values::Hidden {
+    state.profile.lock().await.prompt.vars.reported()
+}
+
+/// Where your prompt shows, with what the Settings row and the main
+/// window need beside it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct PromptShowState {
+    /// `text`, `lifted` or `pinned`, from `[prompt] show`.
+    pub show: String,
+    /// The profile has a capture that reads a prompt. Without one Vosh
+    /// finds no prompt to lift or pin.
+    pub capture: bool,
+    /// Draw your prompt is on, for the palette's row.
+    pub draw: bool,
+    /// The game sent Char.Prompt this session.
+    pub game_sent: bool,
+    /// The rows the band above the command line keeps while your prompt
+    /// shows pinned, the most any prompt the capture reads can take.
+    pub zone: usize,
+    /// You turned prompts off in the game.
+    pub prompts_off: bool,
+}
+
+/// The body of [`prompt_show_get`](crate::commands::prompt_show_get).
+pub(crate) fn prompt_show_state(p: &crate::profile::Profile) -> PromptShowState {
+    PromptShowState {
+        show: p.prompt.show().name().to_string(),
+        capture: p.prompt.stage.has_recognizer(),
+        draw: p.prompt.config().draw,
+        game_sent: p.prompt.vars.gmcp().prompt_seen(),
+        zone: p.prompt.zone(),
+        prompts_off: p.prompt.prompts_off(),
+    }
+}
+
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
