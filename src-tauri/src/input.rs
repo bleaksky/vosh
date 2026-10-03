@@ -11,7 +11,7 @@ use vosh_prompt::card::sentences::and_list;
 
 use crate::profile::{MacroRecorder, Profile, QuickKey, RoomChar};
 use crate::profile_config::ProfileConfig;
-use crate::script_state;
+use crate::script;
 use crate::tintin_import;
 
 /// What the input pipeline produced.
@@ -189,7 +189,7 @@ pub(crate) struct Ran {
     /// echo lines sit in `result` instead, in the order you typed them.
     /// The caller hands it to `session::apply_script_result` after the
     /// line's own output.
-    pub(crate) lua: script_state::ApplyResult,
+    pub(crate) lua: script::ApplyResult,
     /// A `#profile reset`, or a `#profile load` that read its file,
     /// replaced the live profile.
     pub(crate) replaced: bool,
@@ -203,7 +203,7 @@ pub(crate) struct Ran {
 /// [`LineEffects::note_ran`].
 pub(crate) fn run_line(profile: &mut Profile, line: &str) -> Ran {
     let mut replaced = false;
-    let mut lua = script_state::ApplyResult::default();
+    let mut lua = script::ApplyResult::default();
     let tick_before = profile.tick.config.clone();
     let result = process_line(profile, line, &mut replaced, &mut lua);
     let tick_changed = profile.tick.config != tick_before;
@@ -289,7 +289,7 @@ fn process_line(
     profile: &mut Profile,
     line: &str,
     replaced: &mut bool,
-    lua: &mut script_state::ApplyResult,
+    lua: &mut script::ApplyResult,
 ) -> InputResult {
     let trimmed = line.trim_start();
 
@@ -377,7 +377,7 @@ fn process_line(
                 bytes.extend_from_slice(b"\r\n");
             }
             ExpandStep::Script(call) => {
-                let mut apply = script_state::run_alias_body(profile, &call);
+                let mut apply = script::run_alias_body(profile, &call);
                 bytes.append(&mut apply.send_bytes);
                 echo.append(&mut apply.echoes);
                 lua.append(apply);
@@ -391,7 +391,7 @@ fn handle_slash(
     profile: &mut Profile,
     rest: &str,
     replaced: &mut bool,
-    lua: &mut script_state::ApplyResult,
+    lua: &mut script::ApplyResult,
 ) -> InputResult {
     let (cmd, args) = split_first_word(rest);
     match cmd {
@@ -454,7 +454,7 @@ fn slash_alias(profile: &mut Profile, args: &str) -> InputResult {
             "quick-key `{name}` exists — `#qkey clear {name}` first if you want this name"
         ));
     }
-    crate::script_state::define_alias(profile, name, expansion);
+    crate::script::define_alias(profile, name, expansion);
     echo_one(format!("alias {name} set"))
 }
 
@@ -513,7 +513,7 @@ fn slash_endrec(profile: &mut Profile) -> InputResult {
     let expansion = recorder.commands.join(";");
     let name = recorder.name.clone();
     let count = recorder.commands.len();
-    crate::script_state::define_alias(profile, name.clone(), expansion);
+    crate::script::define_alias(profile, name.clone(), expansion);
     echo_one(format!(
         "saved macro `{name}` ({count} command(s)) — invoke by typing `{name}`"
     ))
@@ -1142,7 +1142,7 @@ fn slash_group(profile: &mut Profile, args: &str) -> InputResult {
         "" => slash_group_show(profile, name),
         "on" | "off" => {
             let enabled = state == "on";
-            let report = crate::script_state::toggle_group(profile, name, enabled);
+            let report = crate::script::toggle_group(profile, name, enabled);
             if !report.touched() {
                 return error_echo(format!(
                     "group `{name}` not found in triggers, aliases, or macros"
@@ -1171,9 +1171,8 @@ fn slash_group(profile: &mut Profile, args: &str) -> InputResult {
 }
 
 fn slash_group_show(profile: &Profile, name: &str) -> InputResult {
-    use crate::script_state::GroupState;
-    let [trigger_state, alias_state, macro_state] =
-        crate::script_state::group_states(profile, name);
+    use crate::script::GroupState;
+    let [trigger_state, alias_state, macro_state] = crate::script::group_states(profile, name);
     if trigger_state.is_none() && alias_state.is_none() && macro_state.is_none() {
         return error_echo(format!(
             "group `{name}` not found in triggers, aliases, or macros"
@@ -1628,11 +1627,7 @@ fn expand_home(path: &str) -> std::path::PathBuf {
     std::path::PathBuf::from(path)
 }
 
-fn slash_script(
-    profile: &mut Profile,
-    args: &str,
-    lua: &mut script_state::ApplyResult,
-) -> InputResult {
+fn slash_script(profile: &mut Profile, args: &str, lua: &mut script::ApplyResult) -> InputResult {
     let (cmd, rest) = split_first_word(args);
     match cmd {
         "load" => slash_script_load(profile, rest, lua),
@@ -1645,7 +1640,7 @@ fn slash_script(
 fn slash_script_load(
     profile: &mut Profile,
     args: &str,
-    lua: &mut script_state::ApplyResult,
+    lua: &mut script::ApplyResult,
 ) -> InputResult {
     let app_data = APP_DATA_DIR.get().map(std::path::PathBuf::as_path);
     slash_script_load_in(profile, args, lua, app_data)
@@ -1656,7 +1651,7 @@ fn slash_script_load(
 fn slash_script_load_in(
     profile: &mut Profile,
     args: &str,
-    lua: &mut script_state::ApplyResult,
+    lua: &mut script::ApplyResult,
     app_data: Option<&std::path::Path>,
 ) -> InputResult {
     let name = args.trim();
@@ -1671,22 +1666,22 @@ fn slash_script_load_in(
         Ok(c) => c,
         Err(e) => return error_echo(format!("read failed: {e} ({})", path.display())),
     };
-    script_state::snapshot_vars(&profile.script, &profile.vars);
+    script::snapshot_vars(&profile.script, &profile.vars);
     let outcome = match profile.script.load_script(name, code) {
         Ok(o) => o,
         Err(e) => return error_echo(format!("script error: {e}")),
     };
-    lua.append(script_state::apply_actions(profile, outcome));
+    lua.append(script::apply_actions(profile, outcome));
     echo_one(format!("loaded {}", path.display()))
 }
 
-fn slash_script_reload(profile: &mut Profile, lua: &mut script_state::ApplyResult) -> InputResult {
-    script_state::snapshot_vars(&profile.script, &profile.vars);
+fn slash_script_reload(profile: &mut Profile, lua: &mut script::ApplyResult) -> InputResult {
+    script::snapshot_vars(&profile.script, &profile.vars);
     let outcome = match profile.script.reload_scripts() {
         Ok(o) => o,
         Err(e) => return error_echo(format!("reload error: {e}")),
     };
-    lua.append(script_state::apply_actions(profile, outcome));
+    lua.append(script::apply_actions(profile, outcome));
     echo_one("scripts reloaded".to_string())
 }
 
@@ -1716,21 +1711,17 @@ fn slash_scripts_list(profile: &Profile) -> InputResult {
     }
 }
 
-fn slash_lua(
-    profile: &mut Profile,
-    args: &str,
-    lua: &mut script_state::ApplyResult,
-) -> InputResult {
+fn slash_lua(profile: &mut Profile, args: &str, lua: &mut script::ApplyResult) -> InputResult {
     let code = args.trim_start();
     if code.is_empty() {
         return error_echo("usage #lua <code>".to_string());
     }
-    script_state::snapshot_vars(&profile.script, &profile.vars);
+    script::snapshot_vars(&profile.script, &profile.vars);
     let outcome = match profile.script.eval(code, "#lua") {
         Ok(o) => o,
         Err(e) => return error_echo(format!("lua error: {e}")),
     };
-    lua.append(script_state::apply_actions(profile, outcome));
+    lua.append(script::apply_actions(profile, outcome));
     InputResult {
         bytes: Vec::new(),
         echo: Vec::new(),
@@ -2738,7 +2729,7 @@ mod tests {
         let loaded = slash_script_load_in(
             &mut fresh,
             "greet",
-            &mut script_state::ApplyResult::default(),
+            &mut script::ApplyResult::default(),
             Some(app_data),
         );
         assert_eq!(loaded.echo, [format!("loaded {}", script.display())]);

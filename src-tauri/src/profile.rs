@@ -53,7 +53,7 @@ pub(crate) struct Profile {
     /// `MacroStore` wrapper.
     pub(crate) disabled_macro_groups: BTreeSet<String>,
     /// Moves each time `#group` or a Lua `mud.set_group_enabled` turns a
-    /// macro group on or off, see [`crate::script_state::toggle_group`].
+    /// macro group on or off, see [`crate::script::toggle_group`].
     /// [`crate::app::events::ListRevisions`] reads it, so every path that
     /// runs lines or Lua tells the command line, which keeps its own map
     /// of the macro keys that fire. A Settings checkbox and a loadout

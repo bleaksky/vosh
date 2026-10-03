@@ -672,7 +672,7 @@ mod tests {
                 expansion: "kick".into(),
             }],
         };
-        let apply = crate::script_state::apply_actions(&mut p, outcome);
+        let apply = crate::script::apply_actions(&mut p, outcome);
         assert_eq!(apply.lists, ListChanges::ALIASES);
     }
 
@@ -691,12 +691,12 @@ mod tests {
                 enabled,
             }],
         };
-        let apply = crate::script_state::apply_actions(&mut p, toggle(false));
+        let apply = crate::script::apply_actions(&mut p, toggle(false));
         assert_eq!(apply.lists.events(), [MACRO_GROUPS_CHANGED]);
-        let apply = crate::script_state::apply_actions(&mut p, toggle(false));
+        let apply = crate::script::apply_actions(&mut p, toggle(false));
         let leftover = &apply.lists.events();
         assert!(leftover.is_empty(), "{leftover:?}");
-        let apply = crate::script_state::apply_actions(&mut p, toggle(true));
+        let apply = crate::script::apply_actions(&mut p, toggle(true));
         assert_eq!(apply.lists.events(), [MACRO_GROUPS_CHANGED]);
     }
 

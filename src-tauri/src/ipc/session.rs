@@ -10,7 +10,7 @@ use crate::disk::save::settle_line_effects;
 use crate::input;
 use crate::profile::switch::read_shared_layer;
 use crate::prompt::{prompt_look, request_prompt_repaint};
-use crate::script_state::ApplyResult;
+use crate::script::ApplyResult;
 use crate::session::{self, TargetPayload};
 
 #[tauri::command]

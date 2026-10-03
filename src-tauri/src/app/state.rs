@@ -9,7 +9,7 @@ use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
 use crate::app::plugins::SharedPluginManager;
 use crate::log_state::{SharedLogStore, SharedScrollback};
 use crate::profile::Profile;
-use crate::script_state::SharedTimers;
+use crate::script::SharedTimers;
 use crate::session::SessionHandle;
 
 /// What every command, window and session shares. The one session slot,

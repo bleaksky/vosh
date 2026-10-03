@@ -36,7 +36,7 @@ mod profile_set;
 mod prompt;
 mod prompt_migration;
 mod room_block;
-mod script_state;
+mod script;
 mod session;
 #[cfg(native_surface)]
 mod term_grid;
