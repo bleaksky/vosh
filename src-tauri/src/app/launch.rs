@@ -6,6 +6,7 @@
 //! own.
 
 use std::path::Path;
+use std::sync::atomic::Ordering;
 
 use tauri::Manager;
 use tracing::{error, info};
@@ -38,19 +39,7 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
 
         // The profile set and the active profile, then the
         // shared catalog and loadouts in loadout mode. See `load`.
-        let launched = tauri::async_runtime::block_on(load(state, &path));
-        if launched.loadout_mode {
-            state
-                .loadout_mode
-                .store(true, std::sync::atomic::Ordering::Release);
-        }
-        if launched.wizard_unfinished {
-            // The next launch writes the wizard journal again, over
-            // anything this session would save.
-            state
-                .relaunch_pending
-                .store(true, std::sync::atomic::Ordering::Release);
-        }
+        tauri::async_runtime::block_on(load(state, &path));
         match open_log_store(&path) {
             Ok(store) => {
                 // Searches read through a second connection so
@@ -110,45 +99,34 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
     }
 }
 
-/// What [`load`] found.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Launch {
-    /// Loadout mode is live, so the caller turns on
-    /// [`AppState::loadout_mode`].
-    ///
-    /// [`AppState::loadout_mode`]: crate::app::state::AppState::loadout_mode
-    pub(crate) loadout_mode: bool,
-    /// A shared catalog wizard run is still not done, see
-    /// [`WizardRun::Unfinished`]. The caller holds every save and every
-    /// profile switch until the next launch finishes the run.
-    pub(crate) wizard_unfinished: bool,
-}
-
 /// Everything launch loads, in order, from `app_data`, which it keeps as
 /// the state's app data folder first. A shared catalog wizard run that
 /// stopped partway finishes first, so nothing loads a file it had yet to
 /// write. Then launch reads profiles.toml, once, and runs the one time
 /// upgrades over the set, see [`crate::disk::upgrades::run`]. Then the
 /// profiles load, see [`load_profiles`], and loadout mode starts when
-/// catalog.toml is on disk, see [`load_loadout_mode`]. While the run
-/// stays unfinished, the prompt capture move, the preset rollouts and
-/// loadout mode wait, since a profile file may still hold its items under
-/// their old group names and would lay them over the catalog for every
-/// character. The session runs on the active profile file alone. When
+/// catalog.toml is on disk, see [`load_loadout_mode`]. Launch then turns
+/// on [`AppState::loadout_mode`]. While the run stays unfinished, the
+/// prompt capture move, the preset rollouts and loadout mode wait, since
+/// a profile file may still hold its items under their old group names
+/// and would lay them over the catalog for every character. The session
+/// runs on the active profile file alone, and launch turns on
+/// [`AppState::relaunch_pending`], which holds every save and every
+/// profile switch until the next launch finishes the run. When
 /// profiles.toml does not read, the upgrades and the profiles wait for
 /// the next launch, and the session runs on the defaults.
-pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
+///
+/// [`AppState::loadout_mode`]: crate::app::state::AppState::loadout_mode
+/// [`AppState::relaunch_pending`]: crate::app::state::AppState::relaunch_pending
+pub(crate) async fn load(state: &SharedState, app_data: &Path) {
     // Every command and `#profile` or `#script` line finds its files
     // under it from here on. Launch runs once, so the folder never moves.
     let _ = state.app_data.set(app_data.to_path_buf());
     let run = journal::finish_wizard_run(app_data);
     state.add_launch_notices(run.notices());
+    let wizard_settled = run != WizardRun::Unfinished;
     match ProfileSet::load_or_migrate(app_data.to_path_buf()) {
         Ok(mut set) => {
-            let relaunch_pending = state
-                .relaunch_pending
-                .load(std::sync::atomic::Ordering::Acquire);
-            let wizard_settled = run != WizardRun::Unfinished && !relaunch_pending;
             let notices = crate::disk::upgrades::run(&mut set, app_data, wizard_settled).await;
             state.add_launch_notices(notices);
             load_profiles(state, set).await;
@@ -157,15 +135,14 @@ pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
             error!(error = %e, "failed to load profile set; skipping the upgrades and using in-memory defaults");
         }
     }
-    if run == WizardRun::Unfinished {
-        return Launch {
-            loadout_mode: false,
-            wizard_unfinished: true,
-        };
+    if !wizard_settled {
+        // The next launch writes the wizard journal again, over
+        // anything this session would save.
+        state.relaunch_pending.store(true, Ordering::Release);
+        return;
     }
-    Launch {
-        loadout_mode: load_loadout_mode(state, app_data).await,
-        wizard_unfinished: false,
+    if load_loadout_mode(state, app_data).await {
+        state.loadout_mode.store(true, Ordering::Release);
     }
 }
 
