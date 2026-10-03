@@ -488,7 +488,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // next launch.
     if let Some(names) = line_triggers {
         let state = conn.app.state::<crate::app::state::SharedState>();
-        crate::prompt_migration::note_line_triggers(state.inner(), names).await;
+        crate::disk::upgrades::line_triggers::note_line_triggers(state.inner(), names).await;
     }
     if let Some(payload) = target_after {
         let _ = conn.app.emit(events::TARGET, payload);
@@ -499,7 +499,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // fulls are written for the next login, then cleared.
     let shared = conn.app.state::<crate::app::state::SharedState>();
     shared.last_affects.clear();
-    crate::affect_full::disconnect(&conn.app, shared.inner());
+    crate::affects::full::disconnect(&conn.app, shared.inner());
     // Reset password mode on disconnect so the next session starts with
     // a normal-text input even if the server bailed mid-password-prompt.
     emit_input_mode(&conn.app, false);

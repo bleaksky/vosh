@@ -56,7 +56,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager};
 use tracing::warn;
 
-use crate::affects_snapshot::AFFECTS_PACKAGE;
+use crate::affects::snapshot::AFFECTS_PACKAGE;
 use crate::app::events::{broadcast, AFFECT_FULL_CHANGED};
 use crate::app::state::SharedState;
 

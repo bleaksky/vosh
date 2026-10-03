@@ -36,7 +36,7 @@ use vosh_automation::trigger::{Trigger, TriggerAction, TriggerPattern, TriggerTa
 
 use crate::app::state::{AppState, SharedState};
 use crate::disk::save::PERSIST_LOCK;
-use crate::migration::{ItemKind, ItemPayload};
+use crate::loadouts::wizard::plan::{ItemKind, ItemPayload};
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::{Macro, Profile, Timer};
 use crate::profile::panes::PaneLayoutPersist;
@@ -918,7 +918,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
     // The catalog turns the trigger of a preset the library no longer has
     // on for no character whose file lacked it. A launch takes it out, so
     // the checks below never see it.
-    let (catalog, _) = crate::loadout_store::load_path_b_at_launch(dir)
+    let (catalog, _) = crate::loadouts::load_path_b_at_launch(dir)
         .map_err(|e| format!("the catalog does not read: {e:?}"))?;
     let dropped: Vec<&Trigger> = catalog
         .triggers

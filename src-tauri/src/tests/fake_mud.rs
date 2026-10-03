@@ -1715,7 +1715,7 @@ async fn a_reconnect_keeps_the_moved_pattern_until_the_game_sends_your_prompt() 
 }
 
 /// The affect fulls `pairs`, as the store keeps them.
-fn fulls(pairs: &[(&str, i64)]) -> crate::affect_full::FullMap {
+fn fulls(pairs: &[(&str, i64)]) -> crate::affects::full::FullMap {
     pairs.iter().map(|(k, v)| ((*k).to_string(), *v)).collect()
 }
 
@@ -1726,7 +1726,7 @@ fn fulls(pairs: &[(&str, i64)]) -> crate::affect_full::FullMap {
 async fn affect_fulls_follow_a_cast_and_come_back_at_the_next_login() {
     let grid = crate::term_grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
-    let file = h.dir.path().join(crate::affect_full::FILE_NAME);
+    let file = h.dir.path().join(crate::affects::full::FILE_NAME);
     h.state.affect_full.set_path(file.clone());
     h.connect().await;
     // Tester logs in with bless at 6 and armor at 44, both first seen.
@@ -1795,8 +1795,8 @@ async fn affect_fulls_follow_a_cast_and_come_back_at_the_next_login() {
 }
 
 /// The fulls saved for Tester on the fake game, from the file.
-fn saved_fulls(h: &Harness) -> crate::affect_full::FullMap {
-    let file = h.dir.path().join(crate::affect_full::FILE_NAME);
+fn saved_fulls(h: &Harness) -> crate::affects::full::FullMap {
+    let file = h.dir.path().join(crate::affects::full::FILE_NAME);
     let text = std::fs::read_to_string(file).expect("the fulls are written");
     let table: toml::Table = text.parse().expect("the file reads");
     let key = format!("127.0.0.1:{} tester", h.port);
@@ -1820,7 +1820,7 @@ async fn affect_fulls_outlast_quitting_to_the_menu_and_out_of_the_game() {
     let h = Harness::new(Options::new(Build::New)).await;
     h.state
         .affect_full
-        .set_path(h.dir.path().join(crate::affect_full::FILE_NAME));
+        .set_path(h.dir.path().join(crate::affects::full::FILE_NAME));
     h.connect().await;
     h.until("the login fulls", |h| {
         h.state.affect_full.map() == fulls(&[("armor", 44), ("bless", 6)])

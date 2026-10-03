@@ -34,10 +34,11 @@ use vosh_prompt::{CaptureConfig, PromptConfig, PromptShow};
 
 use crate::app::state::{AppState, SharedState};
 use crate::disk::save::PERSIST_LOCK;
-use crate::loadout::{GlobalCatalog, Loadout, LoadoutSet};
-use crate::loadout_store::{
-    catalog_path, load_global_catalog, load_loadout_set, loadouts_path, save_global_catalog,
-    save_loadout_set,
+use crate::loadouts::catalog::{
+    catalog_path, load_global_catalog, save_global_catalog, GlobalCatalog,
+};
+use crate::loadouts::set::{
+    load_loadout_set, loadouts_path, save_loadout_set, Loadout, LoadoutSet,
 };
 use crate::profile::file::{GroupFolders, PluginsPersist, ProfileConfig};
 use crate::profile::live::{Macro, Timer};

@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::disk::atomic::write_with_backup;
-use crate::loadout_store::{catalog_path, loadouts_path, LoadoutStoreError};
+use crate::loadouts::catalog::catalog_path;
+use crate::loadouts::set::loadouts_path;
+use crate::loadouts::LoadoutStoreError;
 
 /// Filename of the journal the shared catalog wizard keeps while it
 /// writes, see [`WizardJournal`].

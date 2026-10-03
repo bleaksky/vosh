@@ -46,7 +46,7 @@ use vosh_prompt::card::sentences::and_list;
 use vosh_prompt::config::RegexCapture;
 use vosh_prompt::CaptureConfig;
 
-use crate::loadout_store;
+use crate::loadouts::catalog::{load_global_catalog, path_b_mode_active, save_global_catalog};
 use crate::profile::file::{before_prompt_editor_path, ProfileConfig};
 use crate::profile::set::{display_name, ProfileSet};
 
@@ -75,7 +75,7 @@ pub(crate) fn run(app_data: &Path) -> Vec<String> {
     if set.migrated(MIGRATION) && !returned {
         return Vec::new();
     }
-    let loadout = loadout_store::path_b_mode_active(app_data);
+    let loadout = path_b_mode_active(app_data);
     let moved = match migrate(&set, app_data, loadout) {
         Ok(moved) => moved,
         Err(e) => {
@@ -267,7 +267,7 @@ pub(crate) fn migrate(set: &ProfileSet, app_data: &Path, loadout: bool) -> Resul
 
     // The shared catalog, in loadout mode.
     let mut catalog = if loadout {
-        Some(loadout_store::load_global_catalog(app_data).map_err(|e| e.to_string())?)
+        Some(load_global_catalog(app_data).map_err(|e| e.to_string())?)
     } else {
         None
     };
@@ -342,7 +342,7 @@ pub(crate) fn migrate(set: &ProfileSet, app_data: &Path, loadout: bool) -> Resul
             .map_err(|e| format!("{}: {e}", file.path.display()))?;
     }
     if let (Some(catalog), true) = (catalog.as_ref(), catalog_changed) {
-        loadout_store::save_global_catalog(app_data, catalog).map_err(|e| e.to_string())?;
+        save_global_catalog(app_data, catalog).map_err(|e| e.to_string())?;
     }
     // Profiles listed in index order.
     moved.into.sort_by_key(|name| {
@@ -363,7 +363,7 @@ mod tests {
     use vosh_prompt::{CaptureConfig, PromptConfig};
 
     use super::{run, MIGRATION};
-    use crate::loadout_store::load_global_catalog;
+    use crate::loadouts::catalog::load_global_catalog;
     use crate::profile::file::{before_prompt_editor_path, ProfileConfig};
     use crate::profile::set::ProfileSet;
 

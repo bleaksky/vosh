@@ -6,7 +6,7 @@
 use serde_json::Value;
 use tauri::{AppHandle, State};
 
-use crate::affect_full::FullMap;
+use crate::affects::full::FullMap;
 use crate::app::events::{AffectsDisplay, AFFECTS_DISPLAY_CHANGED, TRACKED_AFFECTS_CHANGED};
 use crate::app::state::SharedState;
 use crate::disk::save::{save_then_broadcast, SavePolicy};

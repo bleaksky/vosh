@@ -168,7 +168,7 @@ pub(crate) const LOADOUTS_CHANGED: &str = "vosh://loadouts-changed";
 /// null. `subscribeMigrationApplied` hears it.
 pub(crate) const MIGRATION_APPLIED: &str = "vosh://migration-applied";
 /// Sent to every window with the whole map whenever it changes, see
-/// [`crate::affect_full::FullMap`]. `subscribeAffectFullChanged` hears
+/// [`crate::affects::full::FullMap`]. `subscribeAffectFullChanged` hears
 /// it.
 pub(crate) const AFFECT_FULL_CHANGED: &str = "vosh://affect-full-changed";
 
