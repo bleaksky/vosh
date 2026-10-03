@@ -2,5 +2,6 @@
 //! the state every command, window and session shares.
 
 pub(crate) mod events;
+pub(crate) mod plugins;
 pub(crate) mod state;
 pub(crate) mod windows;
