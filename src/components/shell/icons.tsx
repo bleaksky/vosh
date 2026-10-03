@@ -63,6 +63,19 @@ export function PanelIcon() {
   );
 }
 
+/** The Settings button. A six tooth gear around a hole, its teeth 6.25
+ *  out and its body 4.5, as wide as the panel glyph beside it. The
+ *  spoked gear Settings draws beside General reads as a sun at this
+ *  size, which here looks like a light theme toggle. */
+export function GearIcon() {
+  return (
+    <Glyph>
+      <path d="M7.02 1.83A6.25 6.25 0 0 1 8.98 1.83L9.32 3.7A4.5 4.5 0 0 1 11.07 4.71L12.86 4.07A6.25 6.25 0 0 1 13.83 5.76L12.38 6.99A4.5 4.5 0 0 1 12.38 9.01L13.83 10.24A6.25 6.25 0 0 1 12.86 11.93L11.07 11.29A4.5 4.5 0 0 1 9.32 12.3L8.98 14.17A6.25 6.25 0 0 1 7.02 14.17L6.68 12.3A4.5 4.5 0 0 1 4.93 11.29L3.14 11.93A6.25 6.25 0 0 1 2.17 10.24L3.62 9.01A4.5 4.5 0 0 1 3.62 6.99L2.17 5.76A6.25 6.25 0 0 1 3.14 4.07L4.93 4.71A4.5 4.5 0 0 1 6.68 3.7Z" />
+      <circle cx="8" cy="8" r="2" />
+    </Glyph>
+  );
+}
+
 /** The 12 px chevron after the session title. The stroke keeps its
  *  1.25 px weight at the smaller size. */
 export function ChevronDownIcon() {
