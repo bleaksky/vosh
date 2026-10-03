@@ -64,12 +64,14 @@ pub(crate) async fn session_connect(
     // `session_set_window_size` before this connect.
     let initial_size = state.window_size.lock().map_or((80, 24), |g| *g);
     let target = (host.clone(), port);
+    let known_host = crate::profile_set::is_forsaken_lands(&host);
 
     let spawned = session::spawn(
         app.clone(),
         host,
         port,
         tls,
+        known_host,
         state.profile.clone(),
         state.script_timers.clone(),
         state.logs.clone(),

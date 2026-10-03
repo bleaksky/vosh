@@ -469,12 +469,17 @@ impl SessionHandle {
 /// `session_connect`) reads this from `AppState.window_size` so the
 /// server's first wrap-width decision is based on the actual
 /// terminal geometry instead of the negotiator's 80×24 fallback.
+///
+/// `known_host` is whether the host is The Forsaken Lands, whose rules
+/// the custom prompt follows. The caller says so, which lets a test have
+/// a fake game on a local port count as it.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn spawn<R: tauri::Runtime>(
     app: AppHandle<R>,
     host: String,
     port: u16,
     tls: bool,
+    known_host: bool,
     profile: Arc<Mutex<Profile>>,
     timers: SharedTimers,
     logs: crate::logs::SharedLogStore,
@@ -551,61 +556,10 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         scrollback,
         scrollback_path,
         negotiator,
-        forsaken_host(&host, port),
+        known_host,
     ));
 
     Ok(SessionHandle { tx_outgoing, task })
-}
-
-/// True when the host is The Forsaken Lands, whose rules the custom
-/// prompt follows (D17). A test can have the fake Aabahran on a local
-/// port count as The Forsaken Lands too.
-fn forsaken_host(host: &str, port: u16) -> bool {
-    crate::profile_set::is_forsaken_lands(host) || forsaken_for_test(port)
-}
-
-/// The local ports tests have count as The Forsaken Lands. Each fake game
-/// listens on a port of its own, and a port leaves the list when its test
-/// ends, so one test never changes another, even when a later fake game
-/// gets the same port.
-#[cfg(test)]
-static FORSAKEN_TEST_PORTS: std::sync::Mutex<Vec<u16>> = std::sync::Mutex::new(Vec::new());
-
-/// A local port that counts as The Forsaken Lands until this drops.
-#[cfg(test)]
-#[derive(Debug)]
-pub(crate) struct ForsakenTestPort(u16);
-
-#[cfg(test)]
-impl Drop for ForsakenTestPort {
-    fn drop(&mut self) {
-        if let Ok(mut ports) = FORSAKEN_TEST_PORTS.lock() {
-            ports.retain(|&port| port != self.0);
-        }
-    }
-}
-
-/// Have the fake game on the local `port` count as The Forsaken Lands, so
-/// a capture that reads no Aabahran codes plays by its rules there, until
-/// the returned guard drops.
-#[cfg(test)]
-pub(crate) fn count_as_forsaken_lands(port: u16) -> ForsakenTestPort {
-    if let Ok(mut ports) = FORSAKEN_TEST_PORTS.lock() {
-        ports.push(port);
-    }
-    ForsakenTestPort(port)
-}
-
-#[cfg(test)]
-fn forsaken_for_test(port: u16) -> bool {
-    FORSAKEN_TEST_PORTS
-        .lock()
-        .is_ok_and(|ports| ports.contains(&port))
-}
-
-#[cfg(not(test))]
-fn forsaken_for_test(_port: u16) -> bool {
-    false
 }
 
 fn now_ms() -> i64 {
@@ -3534,18 +3488,6 @@ fn emit_input_mode<R: tauri::Runtime>(app: &AppHandle<R>, password: bool) {
 mod tests {
     use crate::input::LineEffects;
     use crate::profile::Profile;
-
-    #[test]
-    fn a_test_port_counts_as_the_forsaken_lands_only_while_its_guard_lives() {
-        // Port 1 is never a fake game's, which binds port 0.
-        assert!(!super::forsaken_host("127.0.0.1", 1));
-        let guard = super::count_as_forsaken_lands(1);
-        assert!(super::forsaken_host("127.0.0.1", 1));
-        assert!(!super::forsaken_host("127.0.0.1", 2));
-        drop(guard);
-        assert!(!super::forsaken_host("127.0.0.1", 1));
-        assert!(super::forsaken_host("play.theforsakenlands.com", 1));
-    }
 
     #[test]
     fn core_supports_set_names_every_package_vosh_reads() {

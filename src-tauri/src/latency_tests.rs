@@ -83,6 +83,7 @@ impl Harness {
             "127.0.0.1".into(),
             port,
             false,
+            false,
             state.profile.clone(),
             state.script_timers.clone(),
             state.logs.clone(),
