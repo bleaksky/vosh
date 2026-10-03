@@ -35,6 +35,7 @@ import { NumberField } from './fields';
 import type { DetailProps, DirtyReport, KindSpec } from './types';
 
 const TIMERS_SPEC: KindSpec<TimerRecord> = {
+  id: 'timers',
   noun: { one: 'timer', many: 'timers' },
   filterLabel: 'Filter timers',
   newLabel: 'New timer',

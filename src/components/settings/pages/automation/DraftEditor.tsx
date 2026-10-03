@@ -118,7 +118,7 @@ export function DraftEditor<T>({
   /** Goes up after each delete, so focus moves once the list redraws. */
   const [deleteSeq, setDeleteSeq] = useState(0);
   const afterDeleteRef = useRef<string | null>(null);
-  const folds = useListFolds(spec.noun.many, filter);
+  const folds = useListFolds(spec.id, filter);
   /** The selection when the filter took its first letter. */
   const filterFromRef = useRef<string | null>(null);
 

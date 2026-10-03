@@ -34,6 +34,7 @@ let things: Thing[] = THINGS;
 let detail: DetailProps<Thing> | null = null;
 
 const SPEC: KindSpec<Thing> = {
+  id: 'things',
   noun: { one: 'thing', many: 'things' },
   filterLabel: 'Filter things',
   newLabel: 'New thing',

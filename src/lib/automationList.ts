@@ -260,7 +260,7 @@ export function saveFolded(
     if (folded.size === 0) storage?.removeItem(key);
     else storage?.setItem(key, JSON.stringify([...folded].sort()));
   } catch {
-    // Storage can refuse to write. The folds last until the page closes.
+    // Storage can refuse to write. The folds then last while the list stays open.
   }
 }
 
