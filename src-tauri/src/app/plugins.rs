@@ -239,9 +239,13 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
                 continue;
             }
         };
-        let (bytes, echoes) =
-            crate::session::collect_script_result(app, &state.profile, &state.script_timers, apply)
-                .await;
+        let (bytes, echoes) = crate::session::effects::collect_script_result(
+            app,
+            &state.profile,
+            &state.script_timers,
+            apply,
+        )
+        .await;
         if !bytes.is_empty() || !echoes.is_empty() {
             info!(
                 name = %name,

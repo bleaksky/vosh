@@ -24,9 +24,10 @@ use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
 use super::connection::Stream;
+use super::effects::{apply_script_result, deliver_tick_step, OutputSink, ScriptIo};
+use super::gmcp_vars;
 use super::perf::PerfCounters;
 use super::prompt_view::observe_prompt_gmcp;
-use super::{apply_script_result, deliver_tick_step, gmcp_vars, OutputSink, ScriptIo};
 
 /// GMCP packages we ask the server to enable in Core.Supports.Set. Char,
 /// Room, and Comm cover the player view; World powers the tick timer reset
