@@ -24,7 +24,6 @@ mod native_surface;
 mod output;
 mod preset_rollout;
 mod profile;
-mod profile_config;
 mod profile_set;
 mod prompt;
 mod prompt_migration;
@@ -39,6 +38,9 @@ mod tintin_import;
 
 use app::state::{AppState, SharedState};
 use fonts::handle_font_uri;
+// Callers outside the profile file still reach it by its old path, until
+// they point at crate::profile::file.
+use profile::file as profile_config;
 
 pub fn run() {
     tracing_subscriber::fmt()
