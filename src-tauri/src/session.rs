@@ -1,6 +1,11 @@
 //! Per-session task. Wires the connection, the telnet parser, the line
 //! accumulator, and the trigger engine together. Emits Tauri events.
 
+mod connection;
+pub(crate) mod echo;
+mod gmcp_vars;
+mod lines;
+
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,16 +24,16 @@ use vosh_protocol::telnet::{
 };
 
 use crate::app::events::{self, broadcast_list_changes, ListChanges, ListRevisions};
-use crate::connection::{self, ConnectionError, Stream};
-use crate::gmcp_bind;
-use crate::hidden_input::ServerEcho;
 use crate::highlight_ground;
 use crate::input;
-use crate::line_accumulator::{Line, LineAccumulator, Partial};
 use crate::profile::Profile;
 use crate::profile_config::SharedLayer;
 use crate::script::{self, ApplyResult, PendingTimer, SharedTimers};
 use crate::tick::{TickRuntime, TickStep};
+
+use connection::{ConnectionError, Stream};
+use echo::ServerEcho;
+use lines::{Line, LineAccumulator, Partial};
 
 const TICK_EMIT_INTERVAL: Duration = Duration::from_millis(250);
 
@@ -3211,7 +3216,7 @@ fn gmcp_step(
     msg: &vosh_protocol::gmcp::Message,
     now: Instant,
 ) -> (Option<TickStep>, ApplyResult) {
-    gmcp_bind::apply(&mut p.vars, msg);
+    gmcp_vars::apply(&mut p.vars, msg);
     // Before Lua, so a value a GMCP handler sets with
     // `mud.set_prompt_var` belongs to the pulse this packet starts.
     observe_prompt_gmcp(p, msg);

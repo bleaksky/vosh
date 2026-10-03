@@ -9,18 +9,14 @@ mod app_menu;
 #[cfg(native_surface)]
 mod cell_render;
 mod characters;
-mod connection;
 mod disk;
 mod fonts;
-mod gmcp_bind;
-mod hidden_input;
 mod highlight_ground;
 mod import;
 mod input;
 mod ipc;
 #[cfg(all(test, native_surface))]
 mod latency_tests;
-mod line_accumulator;
 mod loadout;
 mod loadout_store;
 mod loadouts;
