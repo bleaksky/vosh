@@ -1093,4 +1093,385 @@ name = "haste"
         assert!(!off.ui.input_echo_caret);
         assert!(off.to_toml().unwrap().contains("input_echo_caret = false"));
     }
+
+    /// Save `ui` to a profile file and read it back.
+    fn through_toml(ui: &UiConfig) -> UiConfig {
+        let config = ProfileConfig {
+            ui: ui.clone(),
+            ..ProfileConfig::default()
+        };
+        ProfileConfig::from_toml(&config.to_toml().unwrap())
+            .unwrap()
+            .ui
+    }
+
+    #[test]
+    fn blinking_text_keeps_your_choice_and_none_until_you_make_one() {
+        // None is no choice, which the page reads from the system's reduce
+        // motion setting, so it never reaches the file as a value.
+        let mut ui = UiConfig::default();
+        assert_eq!(through_toml(&ui).blink_text, None);
+        let written = ProfileConfig::default().to_toml().unwrap();
+        assert!(!written.contains("blink_text"), "{written}");
+        for choice in [true, false] {
+            ui.blink_text = Some(choice);
+            assert_eq!(through_toml(&ui).blink_text, Some(choice));
+        }
+    }
+
+    #[test]
+    fn follow_system_appearance_round_trips() {
+        let ui = UiConfig {
+            follow_system_appearance: true,
+            ..UiConfig::default()
+        };
+        assert!(through_toml(&ui).follow_system_appearance);
+    }
+
+    #[test]
+    fn light_theme_round_trips() {
+        let ui = UiConfig {
+            light_theme: "classic-vivid".into(),
+            ..UiConfig::default()
+        };
+        assert_eq!(through_toml(&ui).light_theme, "classic-vivid");
+    }
+
+    #[test]
+    fn dark_theme_round_trips() {
+        let ui = UiConfig {
+            dark_theme: "nord".into(),
+            ..UiConfig::default()
+        };
+        assert_eq!(through_toml(&ui).dark_theme, "nord");
+    }
+
+    #[test]
+    fn terminal_line_height_round_trips() {
+        let mut ui = UiConfig::default();
+        for id in ["compact", "default", "loose"] {
+            ui.terminal_line_height = id.into();
+            assert_eq!(through_toml(&ui).terminal_line_height, id);
+        }
+    }
+
+    #[test]
+    fn vitals_density_round_trips() {
+        let mut ui = UiConfig::default();
+        for id in ["rows", "line"] {
+            ui.vitals_density = id.into();
+            assert_eq!(through_toml(&ui).vitals_density, id);
+        }
+    }
+
+    #[test]
+    fn vitals_values_round_trips() {
+        let mut ui = UiConfig::default();
+        for id in ["current-max", "current", "percent"] {
+            ui.vitals_values = id.into();
+            assert_eq!(through_toml(&ui).vitals_values, id);
+        }
+    }
+
+    #[test]
+    fn vitals_meter_round_trips() {
+        let mut ui = UiConfig::default();
+        for id in ["line", "bar", "none"] {
+            ui.vitals_meter = id.into();
+            assert_eq!(through_toml(&ui).vitals_meter, id);
+        }
+    }
+
+    #[test]
+    fn vitals_warn_thirds_round_trips() {
+        let ui = UiConfig {
+            vitals_warn_thirds: true,
+            ..UiConfig::default()
+        };
+        assert!(through_toml(&ui).vitals_warn_thirds);
+    }
+
+    #[test]
+    fn readable_highlights_round_trips() {
+        let mut ui = UiConfig::default();
+        assert!(through_toml(&ui).readable_highlights);
+        ui.readable_highlights = false;
+        assert!(!through_toml(&ui).readable_highlights);
+    }
+
+    #[test]
+    fn readable_highlights_is_written_only_while_off() {
+        let mut config = ProfileConfig::default();
+        let on = config.to_toml().unwrap();
+        assert!(!on.contains("readable_highlights"), "{on}");
+        config.ui.readable_highlights = false;
+        let off = config.to_toml().unwrap();
+        assert!(off.contains("readable_highlights = false"), "{off}");
+        // A file from before the switch reads it on.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert!(old.ui.readable_highlights);
+    }
+
+    #[test]
+    fn collapse_repeats_round_trips() {
+        let mut ui = UiConfig::default();
+        assert!(!through_toml(&ui).collapse_repeats);
+        ui.collapse_repeats = true;
+        assert!(through_toml(&ui).collapse_repeats);
+    }
+
+    #[test]
+    fn collapse_repeats_is_written_only_while_on() {
+        let mut config = ProfileConfig::default();
+        let off = config.to_toml().unwrap();
+        assert!(!off.contains("collapse_repeats"), "{off}");
+        config.ui.collapse_repeats = true;
+        let on = config.to_toml().unwrap();
+        assert!(on.contains("collapse_repeats = true"), "{on}");
+        // A file from before the switch reads it off.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert!(!old.ui.collapse_repeats);
+    }
+
+    #[test]
+    fn vitals_hide_when_pinned_round_trips() {
+        let ui = UiConfig {
+            vitals_hide_when_pinned: false,
+            ..UiConfig::default()
+        };
+        assert!(!through_toml(&ui).vitals_hide_when_pinned);
+    }
+
+    #[test]
+    fn tick_count_round_trips() {
+        let mut ui = UiConfig::default();
+        for id in ["up", "down", "down_past_zero"] {
+            ui.tick_count = id.into();
+            assert_eq!(through_toml(&ui).tick_count, id);
+        }
+    }
+
+    #[test]
+    fn a_profile_without_the_tick_count_counts_up() {
+        let ui = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n")
+            .unwrap()
+            .ui;
+        assert_eq!(ui.tick_count, "up");
+    }
+
+    #[test]
+    fn the_tick_count_stays_with_each_character() {
+        // Like the tick and time style, the count is not one of the
+        // settings you can keep the same for every character, so the
+        // shared file never holds it and each profile file does.
+        let ui = UiConfig {
+            tick_count: "down".into(),
+            ..UiConfig::default()
+        };
+        let toml = ProfileConfig {
+            ui,
+            ..ProfileConfig::default()
+        }
+        .to_toml()
+        .unwrap();
+        assert!(toml.contains("tick_count = \"down\""));
+    }
+
+    #[test]
+    fn affects_style_round_trips() {
+        let mut ui = UiConfig::default();
+        for id in ["timers", "countdown", "chips", "chips_drain"] {
+            ui.affects_style = id.into();
+            assert_eq!(through_toml(&ui).affects_style, id);
+        }
+    }
+
+    #[test]
+    fn affects_marker_round_trips() {
+        let mut ui = UiConfig::default();
+        for id in ["dot", "square", "plus_minus", "none"] {
+            ui.affects_marker = id.into();
+            assert_eq!(through_toml(&ui).affects_marker, id);
+        }
+    }
+
+    #[test]
+    fn affects_tint_round_trips() {
+        let ui = UiConfig {
+            affects_tint: true,
+            ..UiConfig::default()
+        };
+        assert!(through_toml(&ui).affects_tint);
+    }
+
+    #[test]
+    fn a_profile_without_the_affects_display_loads_the_defaults() {
+        let ui = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n")
+            .unwrap()
+            .ui;
+        assert_eq!(ui.affects_style, "timers");
+        assert_eq!(ui.affects_marker, "dot");
+        assert!(!ui.affects_tint);
+    }
+
+    #[test]
+    fn the_affects_display_stays_with_each_character() {
+        let ui = UiConfig {
+            affects_style: "chips".into(),
+            affects_marker: "square".into(),
+            affects_tint: true,
+            ..UiConfig::default()
+        };
+        let toml = ProfileConfig {
+            ui,
+            ..ProfileConfig::default()
+        }
+        .to_toml()
+        .unwrap();
+        assert!(toml.contains("affects_style = \"chips\""));
+        assert!(toml.contains("affects_marker = \"square\""));
+        assert!(toml.contains("affects_tint = true"));
+    }
+
+    #[test]
+    fn affects_thresholds_round_trip() {
+        let mut ui = UiConfig::default();
+        for (running_out, almost_gone) in [(2, 1), (5, 2), (0, 0), (3, 3), (99, 0), (99, 99)] {
+            ui.affects_running_out_hours = running_out;
+            ui.affects_almost_gone_hours = almost_gone;
+            let read = through_toml(&ui);
+            assert_eq!(read.affects_running_out_hours, running_out);
+            assert_eq!(read.affects_almost_gone_hours, almost_gone);
+        }
+    }
+
+    #[test]
+    fn a_profile_without_the_affects_thresholds_reads_two_and_one_and_writes_nothing_new() {
+        let file = "[ui]\ntheme = \"nord\"\naffects_style = \"chips\"\n";
+        let config = ProfileConfig::from_toml(file).unwrap();
+        assert_eq!(config.ui.affects_running_out_hours, 2);
+        assert_eq!(config.ui.affects_almost_gone_hours, 1);
+        let toml = config.to_toml().unwrap();
+        assert!(!toml.contains("affects_running_out_hours"));
+        assert!(!toml.contains("affects_almost_gone_hours"));
+    }
+
+    #[test]
+    fn the_affects_thresholds_stay_with_each_character_once_you_change_them() {
+        let ui = UiConfig {
+            affects_running_out_hours: 5,
+            affects_almost_gone_hours: 2,
+            ..UiConfig::default()
+        };
+        let toml = ProfileConfig {
+            ui,
+            ..ProfileConfig::default()
+        }
+        .to_toml()
+        .unwrap();
+        assert!(toml.contains("affects_running_out_hours = 5"));
+        assert!(toml.contains("affects_almost_gone_hours = 2"));
+        // Changing one writes that one alone.
+        let ui = UiConfig {
+            affects_running_out_hours: 4,
+            ..UiConfig::default()
+        };
+        let toml = ProfileConfig {
+            ui,
+            ..ProfileConfig::default()
+        }
+        .to_toml()
+        .unwrap();
+        assert!(toml.contains("affects_running_out_hours = 4"));
+        assert!(!toml.contains("affects_almost_gone_hours"));
+    }
+
+    #[test]
+    fn a_hand_edited_affects_threshold_never_stops_a_profile_loading() {
+        let read = |lines: &str| {
+            let ui = ProfileConfig::from_toml(&format!("[ui]\n{lines}\n"))
+                .unwrap()
+                .ui;
+            (ui.affects_running_out_hours, ui.affects_almost_gone_hours)
+        };
+        assert_eq!(
+            read("affects_running_out_hours = 6\naffects_almost_gone_hours = 3"),
+            (6, 3)
+        );
+        // Out of range clamps to 0 to 99.
+        assert_eq!(
+            read("affects_running_out_hours = 400\naffects_almost_gone_hours = -2"),
+            (99, 0)
+        );
+        // A decimal rounds, and a string that holds a number reads as one.
+        assert_eq!(
+            read("affects_running_out_hours = 3.6\naffects_almost_gone_hours = \" 2 \""),
+            (4, 2)
+        );
+        // Anything else reads as the default.
+        assert_eq!(
+            read("affects_running_out_hours = \"soon\"\naffects_almost_gone_hours = true"),
+            (2, 1)
+        );
+        assert_eq!(
+            read("affects_running_out_hours = [3]\naffects_almost_gone_hours = { at = 1 }"),
+            (2, 1)
+        );
+        // Almost gone over running out reads as running out.
+        assert_eq!(
+            read("affects_running_out_hours = 1\naffects_almost_gone_hours = 4"),
+            (1, 1)
+        );
+    }
+
+    #[test]
+    fn chat_colors_stay_with_each_character_and_out_of_the_whole_config_save() {
+        let mut ui = UiConfig::default();
+        assert!(ui.chat_colors.is_empty());
+        // A profile with no recolor writes no table.
+        let plain = ProfileConfig {
+            ui: ui.clone(),
+            ..ProfileConfig::default()
+        }
+        .to_toml()
+        .unwrap();
+        assert!(!plain.contains("chat_colors"));
+
+        ui.chat_colors.insert("say".into(), "brightBlue".into());
+        assert_eq!(
+            through_toml(&ui).chat_colors.get("say").map(String::as_str),
+            Some("brightBlue")
+        );
+    }
+
+    #[test]
+    fn a_profile_without_the_vitals_options_loads_the_defaults() {
+        let ui = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n")
+            .unwrap()
+            .ui;
+        assert_eq!(ui.vitals_values, "current-max");
+        assert_eq!(ui.vitals_meter, "line");
+        assert!(!ui.vitals_warn_thirds);
+        assert!(ui.vitals_hide_when_pinned);
+    }
+
+    #[test]
+    fn a_profile_without_the_vitals_density_loads_rows() {
+        let ui = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n")
+            .unwrap()
+            .ui;
+        assert_eq!(ui.vitals_density, "rows");
+    }
+
+    #[test]
+    fn a_profile_without_the_appearance_fields_loads_the_defaults() {
+        let ui = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n")
+            .unwrap()
+            .ui;
+        assert_eq!(ui.theme, "nord");
+        assert!(!ui.follow_system_appearance);
+        assert_eq!(ui.light_theme, "vellum");
+        assert_eq!(ui.dark_theme, "");
+        assert_eq!(ui.terminal_line_height, "default");
+    }
 }
