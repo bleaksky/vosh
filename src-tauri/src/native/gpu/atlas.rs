@@ -90,20 +90,10 @@ pub(crate) struct GlyphAtlas {
 }
 
 impl GlyphAtlas {
-    /// Build an atlas from loaded `fonts` at `px` pixels.
-    pub(crate) fn from_fonts(fonts: AtlasFonts, px: f32) -> Self {
-        Self::with_reported(
-            fonts,
-            px,
-            crate::native::surface::device::reported_cell(),
-            crate::native::surface::device::reported_char_height(),
-        )
-    }
-
-    /// Build the atlas against xterm's reported device cell and glyph box
-    /// height, or against the font's own metrics when the page has not
-    /// reported yet.
-    pub(super) fn with_reported(
+    /// Build an atlas from loaded `fonts` at `px` pixels, against xterm's
+    /// reported device cell and glyph box height, or against the font's
+    /// own metrics when the page has not reported yet.
+    pub(crate) fn from_fonts(
         fonts: AtlasFonts,
         px: f32,
         reported: Option<(u32, u32)>,

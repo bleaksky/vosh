@@ -439,7 +439,7 @@ fn atlas_rasterizes_glyph_coverage() {
     let Some(fonts) = AtlasFonts::load("monospace") else {
         return;
     };
-    let mut atlas = GlyphAtlas::from_fonts(fonts, 16.0);
+    let mut atlas = GlyphAtlas::from_fonts(fonts, 16.0, None, None);
     assert!(atlas.cell_w() > 0 && atlas.cell_h() > 0);
     let _ = atlas.glyph_uv('A', false, false);
     let _ = atlas.glyph_uv(' ', false, false);
@@ -525,13 +525,13 @@ fn a_taller_cell_drops_each_glyph_to_the_centered_baseline() {
     // 44 px cell xterm reports at the default line height.
     let jetbrains =
         || AtlasFonts::load("JetBrainsMono Bundled").expect("Vosh bundles JetBrains Mono");
-    let mut flat = GlyphAtlas::with_reported(jetbrains(), 28.0, Some((17, 44)), None);
-    let mut centered = GlyphAtlas::with_reported(jetbrains(), 28.0, Some((17, 44)), Some(37));
+    let mut flat = GlyphAtlas::from_fonts(jetbrains(), 28.0, Some((17, 44)), None);
+    let mut centered = GlyphAtlas::from_fonts(jetbrains(), 28.0, Some((17, 44)), Some(37));
     assert_eq!(centered.glyph_top, 4);
     assert_eq!(centered.baseline(), flat.baseline() + 4);
     assert_eq!(lowest_ink(&mut centered), lowest_ink(&mut flat) + 4);
     // No report yet means the font's own cell and no drop.
-    let unreported = GlyphAtlas::with_reported(jetbrains(), 28.0, None, Some(37));
+    let unreported = GlyphAtlas::from_fonts(jetbrains(), 28.0, None, Some(37));
     assert_eq!(unreported.glyph_top, 0);
 }
 
@@ -1157,7 +1157,7 @@ fn the_curl_sprite_redraws_only_when_its_size_changes() {
     let Some(fonts) = AtlasFonts::load("JetBrainsMono Bundled") else {
         return;
     };
-    let mut atlas = GlyphAtlas::with_reported(fonts, 24.0, Some((14, 34)), Some(29));
+    let mut atlas = GlyphAtlas::from_fonts(fonts, 24.0, Some((14, 34)), Some(29));
     let (uv, drawn) = atlas.curl_uv(2, 7);
     assert!(drawn);
     assert_eq!(atlas.curl_uv(2, 7), (uv, false));
@@ -1304,11 +1304,10 @@ fn render_frame(
     let px = 12.0 * scale;
     // xterm's device cell: the font's advance and glyph box, and the
     // box times the line height.
-    let probe =
-        GlyphAtlas::with_reported(AtlasFonts::load("JetBrainsMono Bundled")?, px, None, None);
+    let probe = GlyphAtlas::from_fonts(AtlasFonts::load("JetBrainsMono Bundled")?, px, None, None);
     let (cell_w, char_h) = (probe.cell_w(), probe.cell_h());
     let cell_h = (char_h as f32 * line_height).floor() as u32;
-    let atlas = GlyphAtlas::with_reported(
+    let atlas = GlyphAtlas::from_fonts(
         AtlasFonts::load("JetBrainsMono Bundled")?,
         px,
         Some((cell_w, cell_h)),

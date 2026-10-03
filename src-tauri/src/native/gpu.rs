@@ -126,22 +126,29 @@ impl CellRenderer {
         format: wgpu::TextureFormat,
         font_stack: &str,
         font_px: f32,
+        reported: Option<(u32, u32)>,
+        char_h: Option<u32>,
     ) -> Option<Self> {
         let fonts = AtlasFonts::load(font_stack)?;
-        Some(Self::with_fonts(device, queue, format, fonts, font_px))
+        Some(Self::with_fonts(
+            device, queue, format, fonts, font_px, reported, char_h,
+        ))
     }
 
     /// Build the atlas from loaded `fonts` (printable ASCII
     /// pre-rasterized and uploaded once), the bind group, and the
-    /// pipeline.
+    /// pipeline. `reported` and `char_h` are xterm's device cell and
+    /// glyph box height, as [`GlyphAtlas::from_fonts`] takes them.
     pub(crate) fn with_fonts(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
         fonts: AtlasFonts,
         font_px: f32,
+        reported: Option<(u32, u32)>,
+        char_h: Option<u32>,
     ) -> Self {
-        let atlas = GlyphAtlas::from_fonts(fonts, font_px);
+        let atlas = GlyphAtlas::from_fonts(fonts, font_px, reported, char_h);
         Self::with_atlas(device, queue, format, atlas)
     }
 
