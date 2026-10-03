@@ -87,8 +87,8 @@ pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(app: &AppHandle<R>) {
 /// `#profile reset` and `#profile load` are deliberate exceptions:
 /// reset blanks the LIVE profile only (the help documents `#profile
 /// save` as the explicit write and `load` as the undo), so
-/// auto-persisting it would wipe the on-disk profile, and in Path B the
-/// shared catalog. They also suppress the passive flushes (exit,
+/// auto-persisting it would wipe the on-disk profile, and in loadout
+/// mode the shared catalog. They also suppress the passive flushes (exit,
 /// debounce) until the next durable change says the in-memory state is
 /// wanted again. The pipeline itself says when one replaced the profile
 /// (see [`crate::input::run_line`]), so a `#profile load` whose file does
@@ -194,7 +194,7 @@ pub(crate) async fn persist_state_with(
     app_data: Option<&std::path::Path>,
     relaunch_pending: &std::sync::atomic::AtomicBool,
 ) {
-    // Path B branch. When `state.global_catalog` is `Some`, the user is
+    // Loadout mode branch. When `state.global_catalog` is `Some`, the user is
     // post-migration: authored items live in catalog.toml and the live
     // Profile is the cache. Write the live aliases / triggers / macros
     // back to the catalog plus the loadout set, and every other setting
@@ -202,7 +202,7 @@ pub(crate) async fn persist_state_with(
     // skipped entirely.
     if state.global_catalog.lock().await.is_some() {
         if let Some(dir) = app_data {
-            persist_path_b(state, dir).await;
+            persist_loadout_mode(state, dir).await;
         }
         return;
     }
@@ -266,13 +266,13 @@ pub(crate) fn active_profile_file(
     snapshot
 }
 
-/// Path B persistence. Snapshots the live `Profile`'s authored items
+/// Saves in loadout mode. Snapshots the live `Profile`'s authored items
 /// into `catalog.toml` and the in-memory `LoadoutSet` into
 /// `loadouts.toml`, both via the same atomic-write-with-backup
 /// pipeline the per-profile branch uses. Falls through to the legacy
 /// `global.toml` write so theme / font / `dock_layout` edits land on
 /// the same path in both modes.
-async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
+async fn persist_loadout_mode(state: &SharedState, dir: &std::path::Path) {
     // A catalog that has not taken the enabled presets yet waits for a
     // launch that reads a profile file (see
     // `loadouts::presets::adopt_catalog_presets`), so a save leaves the list
@@ -284,7 +284,7 @@ async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
         .as_ref()
         .is_some_and(|c| c.enabled_presets.is_none());
     // Catalog. Pull aliases / triggers / macros directly from the live
-    // Profile. The catalog is the authoritative source in Path B mode
+    // Profile. The catalog is the authoritative source in loadout mode
     // so an overwrite here is correct — anything the user typed via
     // #alias / Settings made it into Profile and now into the file.
     let (catalog, global_snapshot, scope) = {
@@ -316,11 +316,11 @@ async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
     let set_snapshot = state.loadout_set.lock().await.clone();
 
     if let Err(e) = crate::loadouts::catalog::save_global_catalog(dir, &catalog) {
-        warn!(error = %e, "Path B catalog auto-save failed");
+        warn!(error = %e, "catalog auto-save failed");
     }
     if let Some(set) = set_snapshot {
         if let Err(e) = crate::loadouts::set::save_loadout_set(dir, &set) {
-            warn!(error = %e, "Path B loadout set auto-save failed");
+            warn!(error = %e, "loadout set auto-save failed");
         }
     }
 
@@ -333,10 +333,10 @@ async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
     };
     if let Some(g) = global_path {
         if let Err(e) = global_snapshot.save(&g) {
-            warn!(error = %e, path = %g.display(), "Path B global auto-save failed");
+            warn!(error = %e, path = %g.display(), "loadout mode global auto-save failed");
         }
     }
-    // Per-profile snapshot. Before this, Path B only wrote catalog /
+    // Per-profile snapshot. Before this, loadout mode only wrote catalog /
     // loadouts / global, which meant every UI field outside the five
     // scope-controlled ones (tracked_affects, theme_terminal_colors,
     // vitals config, custom themes, paste pacing, moons position,
@@ -357,7 +357,7 @@ async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
         };
         per_profile_snapshot.clear_catalog_items();
         // The disabled-group lists STAY: they are where the Settings
-        // group checkboxes persist in Path B mode. Clearing them here
+        // group checkboxes persist in loadout mode. Clearing them here
         // (as this used to) meant group toggles could not survive a
         // restart at all — the catalog has no field for them and the
         // startup rebuild recomputed them from loadout enabled_groups.
@@ -370,7 +370,7 @@ async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
             warn!(
                 error = %e,
                 path = %p.display(),
-                "Path B per-profile auto-save failed",
+                "loadout mode per-profile auto-save failed",
             );
         }
     }

@@ -73,7 +73,7 @@ impl InputResult {
     }
 }
 
-/// Set at startup (and at migration time) when Path B is live: the
+/// Set at startup (and at migration time) when loadout mode is live: the
 /// catalog owns authored items and persistence is automatic, so the
 /// legacy #profile save/load/reset trio switches to echo-only.
 pub(crate) static PATH_B_ACTIVE: std::sync::atomic::AtomicBool =
@@ -180,7 +180,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         return Ok(());
     }
     // `#profile reset` and `#profile load` replace the live profile
-    // wholesale, panes and tracked affects included. Path B turns them
+    // wholesale, panes and tracked affects included. Loadout mode turns them
     // into echoes, so there they change nothing. The profile file they
     // read holds none of the shared settings, so global.toml goes back
     // over the result the way a switch lays it.

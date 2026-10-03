@@ -35,7 +35,7 @@ pub(crate) async fn open_help_window(app: AppHandle) -> Result<(), String> {
 /// Cleanly exit the app. Surfaces a "quit" event first so any window
 /// can flush state, then calls `app.exit(0)`. Used by the post-
 /// migration prompt to take the user out of the legacy-mode session
-/// in one click; on relaunch the Path B startup hook picks up the
+/// in one click; on relaunch the loadout mode startup hook picks up the
 /// new catalog.
 #[tauri::command]
 pub(crate) async fn app_quit(app: AppHandle) -> Result<(), String> {

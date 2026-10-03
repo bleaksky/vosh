@@ -46,7 +46,7 @@ use vosh_prompt::card::sentences::and_list;
 use vosh_prompt::config::RegexCapture;
 use vosh_prompt::CaptureConfig;
 
-use crate::loadouts::catalog::{load_global_catalog, path_b_mode_active, save_global_catalog};
+use crate::loadouts::catalog::{load_global_catalog, loadout_mode_on, save_global_catalog};
 use crate::profile::file::{before_prompt_editor_path, ProfileConfig};
 use crate::profile::set::{display_name, ProfileSet};
 
@@ -69,7 +69,7 @@ pub(crate) fn run(set: &mut ProfileSet, app_data: &Path) -> Vec<String> {
     if set.migrated(MIGRATION) && !returned {
         return Vec::new();
     }
-    let loadout = path_b_mode_active(app_data);
+    let loadout = loadout_mode_on(app_data);
     let moved = match migrate(set, app_data, loadout) {
         Ok(moved) => moved,
         Err(e) => {

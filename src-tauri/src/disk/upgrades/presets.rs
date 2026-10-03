@@ -21,7 +21,7 @@
 
 use std::path::Path;
 
-use crate::loadouts::catalog::{load_global_catalog, path_b_mode_active, save_global_catalog};
+use crate::loadouts::catalog::{load_global_catalog, loadout_mode_on, save_global_catalog};
 use crate::loadouts::presets::PRESETS_OFF;
 use crate::profile::set::ProfileSet;
 
@@ -61,7 +61,7 @@ fn roll_out(set: &ProfileSet, app_data: &Path, preset: &str) -> Result<(), Strin
             None => {}
         }
     }
-    let mut catalog = if path_b_mode_active(app_data) {
+    let mut catalog = if loadout_mode_on(app_data) {
         Some(load_global_catalog(app_data).map_err(|e| e.to_string())?)
     } else {
         None

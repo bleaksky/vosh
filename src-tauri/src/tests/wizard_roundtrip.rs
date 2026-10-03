@@ -918,7 +918,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
     // The catalog turns the trigger of a preset the library no longer has
     // on for no character whose file lacked it. A launch takes it out, so
     // the checks below never see it.
-    let (catalog, _) = crate::loadouts::load_path_b_at_launch(dir)
+    let (catalog, _) = crate::loadouts::load_at_launch(dir)
         .map_err(|e| format!("the catalog does not read: {e:?}"))?;
     let dropped: Vec<&Trigger> = catalog
         .triggers

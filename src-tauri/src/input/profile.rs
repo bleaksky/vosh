@@ -42,7 +42,7 @@ pub(super) fn slash_profile_with(
     if migration_pending && matches!(cmd, "save" | "load" | "reset") {
         return InputResult::error(PROFILE_MIGRATION_PENDING);
     }
-    // Path B keeps authored items in the catalog and persists them
+    // Loadout mode keeps authored items in the catalog and persists them
     // automatically. The legacy save/load/reset trio would write, load,
     // or blank the wrong files there, so it bows out with a pointer.
     if PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire) {
