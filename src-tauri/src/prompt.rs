@@ -25,6 +25,7 @@ use vosh_prompt::{
 use crate::app::state::SharedState;
 use crate::disk::save::PERSIST_LOCK;
 use crate::profile::Profile;
+use crate::session::prompt_view::client_values;
 
 /// The body of [`prompt_config_set`]: check and take the table. Returns
 /// whether it changed anything. Only a capture that differs from the one
@@ -263,7 +264,7 @@ pub(crate) struct RenderRequest {
 /// [`prompt_render`]: crate::ipc::prompt::prompt_render
 /// [`prompt_render_many`]: crate::ipc::prompt::prompt_render_many
 pub(crate) fn render_all(p: &Profile, requests: &[RenderRequest]) -> Vec<Rendered> {
-    let client = crate::session::client_values(p, Instant::now());
+    let client = client_values(p, Instant::now());
     let live = p.prompt.vars.resolver(&client);
     let now = chrono::Local::now().naive_local();
     let samples = Samples { now };
@@ -302,7 +303,7 @@ fn with_values<T>(
     overrides: Option<Overrides>,
     then: impl FnOnce(&dyn Values, bool) -> T,
 ) -> T {
-    let client = crate::session::client_values(p, Instant::now());
+    let client = client_values(p, Instant::now());
     let live = p.prompt.vars.resolver(&client);
     let now = chrono::Local::now().naive_local();
     let over = PromptPreview {
@@ -361,7 +362,7 @@ pub(crate) struct Edited {
 ///
 /// [`prompt_edit`]: crate::ipc::prompt::prompt_edit
 pub(crate) fn edit(p: &Profile, template: &str, op: &EditOp) -> Result<Edited, String> {
-    let client = crate::session::client_values(p, Instant::now());
+    let client = client_values(p, Instant::now());
     let live = p.prompt.vars.resolver(&client);
     let known = |field: &FieldRef| !matches!(live.resolve(field), Resolved::Unknown);
     let (template, piece) =
@@ -383,8 +384,7 @@ pub(crate) fn edit(p: &Profile, template: &str, op: &EditOp) -> Result<Edited, S
 ///
 /// [`prompt_state_get`]: crate::ipc::prompt::prompt_state_get
 pub(crate) fn prompt_state(p: &Profile) -> PromptState {
-    p.prompt
-        .state(&crate::session::client_values(p, Instant::now()))
+    p.prompt.state(&client_values(p, Instant::now()))
 }
 
 /// The body of [`hidden_get`](crate::ipc::prompt::hidden_get).

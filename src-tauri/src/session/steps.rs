@@ -18,7 +18,8 @@ use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
 use super::lines::{Line, LineAccumulator, Partial};
-use super::{highlight_ground, now_ms, prompt_view, room_block};
+use super::prompt_view::prompt_view;
+use super::{highlight_ground, now_ms, room_block};
 
 /// What the Line pass decided for one line that is not your prompt.
 struct LinePass {
