@@ -5,24 +5,18 @@
 //! trigger presets that are on. `wizard/` builds the catalog from the
 //! profile files.
 //!
-//! ## Concept
+//! ## Types
 //!
-//! Today every alias / trigger / macro lives inside a specific
-//! profile, and switching profiles swaps the whole authored content
-//! base. Loadout mode inverts that:
-//!
-//!   - **[`GlobalCatalog`]** holds every item the user ever defined.
-//!     Items are gated for effective enable/disable by their `group`
-//!     field — the same per-store `disabled_groups` machinery added
-//!     in v0.3.0.
-//!   - **[`Loadout`]** is a named set of groups to enable. The
-//!     per-character state (vars, tick config, timers, UI settings)
-//!     stays in each profile file, which loadout mode loads as per
-//!     profile mode does.
-//!   - **[`LoadoutSet`]** holds every loadout the user has plus a
-//!     list of currently-active ones. Multiple loadouts can stack:
-//!     the runtime enables the union of `enabled_groups` across
-//!     every currently-active loadout (stack-by-union).
+//!   - [`GlobalCatalog`] holds every alias, trigger, and macro you
+//!     define. Each item's `group` field turns it on or off through the
+//!     same per store `disabled_groups` that the Settings group
+//!     checkboxes set.
+//!   - [`Loadout`] is a named set of groups to enable. Each character's
+//!     own state (vars, tick config, timers, UI settings) stays in its
+//!     profile file, which loadout mode loads as per profile mode does.
+//!   - [`LoadoutSet`] holds every loadout you have plus the list of
+//!     active ones. Loadouts stack, and the runtime enables the union
+//!     of `enabled_groups` across every active loadout.
 //!
 //! [`Loadout`]: set::Loadout
 
