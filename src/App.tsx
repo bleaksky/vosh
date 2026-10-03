@@ -1935,6 +1935,7 @@ function App() {
           panelOpen={panelOpen}
           onTogglePanel={() => togglePanelKeepingCaret(() => inputRef.current?.focus())}
           onTogglePalette={() => (paletteOpen ? closePalette() : setPaletteOpen(true))}
+          onOpenSettings={() => runCommand('settings')}
           paneTree={panelLayout?.root ?? null}
           onAddPane={addPaneType}
           onMenuClosed={() => inputRef.current?.focus()}

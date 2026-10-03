@@ -173,6 +173,19 @@
   padding: 0 96px;
 }
 
+/* With the panel hidden the right buttons sit over the terminal column
+   as well, so the insets grow to clear them with 10 px to spare. On
+   macOS that is Search commands, the panel toggle, and Settings, 102 px
+   from the edge. Windows and Linux add minimize, maximize, and close,
+   206 px from the edge. */
+.shell[data-panel='hidden'] .shell-band-title {
+  padding: 0 112px;
+}
+
+:root:not([data-platform='macos']) .shell[data-panel='hidden'] .shell-band-title {
+  padding: 0 216px;
+}
+
 .shell-band-actions {
   position: absolute;
   top: 4.5px;
