@@ -5,12 +5,12 @@ use super::atlas::{
 use super::bands::{BandRect, BAND_RADIUS, BAND_X, BAND_Y, BAND_Y_ADJACENT, LIGHT_RING};
 use super::decor::{curl_coverage, underline_rects, Decor};
 use super::style::{
-    blink_shown, color_to_rgba, linear_to_srgb, parse_css_color, resolve_chrome, until_blink_flip,
-    ChromeTokens, Paint, ANSI_16, CURRENT_MATCH_FALLBACK_ALPHA, DIVIDER_FALLBACK_ALPHA,
-    FIND_MATCH_FALLBACK_ALPHA, SCROLLBAR_FALLBACK_ALPHA, SELECTION_FALLBACK_ALPHA,
-    SELROW_FALLBACK_ALPHA,
+    blink_shown, color_to_rgba, linear_to_srgb, resolve_chrome, until_blink_flip, ChromeTokens,
+    ANSI_16, CURRENT_MATCH_FALLBACK_ALPHA, DIVIDER_FALLBACK_ALPHA, FIND_MATCH_FALLBACK_ALPHA,
+    SCROLLBAR_FALLBACK_ALPHA, SELECTION_FALLBACK_ALPHA, SELROW_FALLBACK_ALPHA,
 };
 use super::*;
+use crate::color::Paint;
 use crate::native::grid::regions::LiftSpan;
 use crate::native::grid::CellFlags;
 use font_kit::font::Font;
@@ -582,51 +582,6 @@ fn a_berkeley_name_without_the_font_lands_on_the_bundled_jetbrains_mono() {
 
 fn paint(r: u8, g: u8, b: u8, a: f32) -> Paint {
     Paint { r, g, b, a }
-}
-
-#[test]
-fn parse_css_color_accepts_hex_and_rgb_forms() {
-    assert_eq!(
-        parse_css_color("#3a404c"),
-        Some(paint(0x3a, 0x40, 0x4c, 1.0))
-    );
-    assert_eq!(
-        parse_css_color("3a404c"),
-        Some(paint(0x3a, 0x40, 0x4c, 1.0))
-    );
-    assert_eq!(parse_css_color("#fff"), Some(paint(255, 255, 255, 1.0)));
-    assert_eq!(parse_css_color("rgb(1, 2, 3)"), Some(paint(1, 2, 3, 1.0)));
-    assert_eq!(
-        parse_css_color("rgba(10,20,30,0.5)"),
-        Some(paint(10, 20, 30, 0.5))
-    );
-    assert_eq!(parse_css_color("bright-red"), None);
-    assert_eq!(parse_css_color(""), None);
-}
-
-#[test]
-fn parse_css_color_reads_alpha_in_every_form() {
-    assert_eq!(
-        parse_css_color("#ffffff80"),
-        Some(paint(255, 255, 255, 128.0 / 255.0))
-    );
-    assert_eq!(
-        parse_css_color("#0008"),
-        Some(paint(0, 0, 0, 136.0 / 255.0))
-    );
-    assert_eq!(
-        parse_css_color("rgba(136, 192, 208, 0.22)"),
-        Some(paint(136, 192, 208, 0.22))
-    );
-    assert_eq!(
-        parse_css_color("rgb(136 192 208 / 22%)"),
-        Some(paint(136, 192, 208, 0.22))
-    );
-    // Alpha clamps into 0..1, and a bad channel or alpha rejects.
-    assert_eq!(parse_css_color("rgba(1,2,3,4)"), Some(paint(1, 2, 3, 1.0)));
-    assert_eq!(parse_css_color("rgba(1,2,3,x)"), None);
-    assert_eq!(parse_css_color("rgb(1,2)"), None);
-    assert_eq!(parse_css_color("rgb(1,2,3,4,5)"), None);
 }
 
 #[test]
