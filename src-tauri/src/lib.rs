@@ -58,11 +58,10 @@ mod upgrade_order_tests;
 
 use app::state::{AppState, SharedState};
 use commands::{
-    app_quit, loadouts_get_state, loadouts_set_active, logs_export, logs_list_sessions,
-    logs_search_page, migration_analyze, migration_apply, open_help_window, open_settings_window,
-    profile_create, profile_delete, profile_duplicate, profile_get_scope, profile_rename,
-    profile_resolve_match, profile_set_scope, profile_switch, profiles_list, updater_check,
-    updater_install_and_relaunch,
+    app_quit, loadouts_get_state, loadouts_set_active, migration_analyze, migration_apply,
+    open_help_window, open_settings_window, profile_create, profile_delete, profile_duplicate,
+    profile_get_scope, profile_rename, profile_resolve_match, profile_set_scope, profile_switch,
+    profiles_list, updater_check, updater_install_and_relaunch,
 };
 use fonts::handle_font_uri;
 
@@ -154,9 +153,9 @@ pub fn run() {
             ipc::automation::aliases_import,
             ipc::automation::presets_install,
             ipc::automation::presets_remove,
-            logs_list_sessions,
-            logs_search_page,
-            logs_export,
+            ipc::logs::logs_list_sessions,
+            ipc::logs::logs_search_page,
+            ipc::logs::logs_export,
             ipc::terminal::scrollback_load,
             ipc::ui_config::ui_get_config,
             ipc::ui_config::ui_set_config,
