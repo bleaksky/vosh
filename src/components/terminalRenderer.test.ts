@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { NATIVE_FAILED_KEY, nativeSurfaceEnabled, nativeUnderlay } from './Terminal';
+import { NATIVE_FAILED_KEY, nativeSurfaceEnabled } from './Terminal';
 
 // Which renderer draws the live terminal, as the page decides it. The
 // xterm copy draws whenever the native underlay does not, so these hold
@@ -36,18 +36,16 @@ describe('the renderer that draws the live terminal', () => {
   it('is the native underlay on macOS by default', () => {
     platform(true);
     expect(nativeSurfaceEnabled()).toBe(true);
-    expect(nativeUnderlay()).toBe(true);
   });
 
   it('is xterm on macOS once the native surface failed to come up', () => {
     platform(true, {}, { [NATIVE_FAILED_KEY]: '1' });
     expect(nativeSurfaceEnabled()).toBe(false);
-    expect(nativeUnderlay()).toBe(false);
   });
 
   it('is xterm on macOS when you turned the native surface off', () => {
     platform(true, { 'vosh.nativesurface': '0' });
-    expect(nativeUnderlay()).toBe(false);
+    expect(nativeSurfaceEnabled()).toBe(false);
   });
 
   it('is xterm on Windows and Linux, even with the native surface forced on', () => {
@@ -55,6 +53,5 @@ describe('the renderer that draws the live terminal', () => {
     expect(nativeSurfaceEnabled()).toBe(false);
     platform(false, { 'vosh.nativesurface': '1' });
     expect(nativeSurfaceEnabled()).toBe(false);
-    expect(nativeUnderlay()).toBe(false);
   });
 });
