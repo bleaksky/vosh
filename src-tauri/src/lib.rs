@@ -57,9 +57,7 @@ mod tintin_import;
 mod upgrade_order_tests;
 
 use app::state::{AppState, SharedState};
-use commands::{
-    app_quit, open_help_window, open_settings_window, updater_check, updater_install_and_relaunch,
-};
+use commands::{app_quit, open_help_window, open_settings_window};
 use fonts::handle_font_uri;
 
 pub fn run() {
@@ -156,8 +154,8 @@ pub fn run() {
             ipc::terminal::scrollback_load,
             ipc::ui_config::ui_get_config,
             ipc::ui_config::ui_set_config,
-            updater_check,
-            updater_install_and_relaunch,
+            ipc::updater::updater_check,
+            ipc::updater::updater_install_and_relaunch,
             ipc::profiles::profiles_list,
             ipc::profiles::profile_create,
             ipc::profiles::profile_delete,
