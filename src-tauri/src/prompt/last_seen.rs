@@ -1,5 +1,4 @@
-//! Where Vosh last saw your prompt settings, for the card's first step
-//! (section 3 of the build spec).
+//! Where Vosh last saw your prompt settings, for the card's first step.
 //!
 //! On the new build the latest Char.Prompt says it. Without one this
 //! session, the setting the game showed after your own `prompt` does,

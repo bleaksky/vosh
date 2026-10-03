@@ -1,10 +1,10 @@
-//! What the prompt editor's commands do (section 6 of the build spec),
-//! behind the thin wrappers in [`ipc::prompt`](crate::ipc::prompt). It
-//! takes a `[prompt]` table for the active profile, reads the designs
-//! other profiles hold, says what a capture compiles to and which Line
-//! triggers it takes over, renders with live or sample values and preview
-//! overrides, applies the edits the card makes, and builds the state the
-//! card watches and where your prompt shows.
+//! What the prompt editor's commands do, behind the thin wrappers in
+//! [`ipc::prompt`](crate::ipc::prompt). It takes a `[prompt]` table for
+//! the active profile, reads the designs other profiles hold, says what a
+//! capture compiles to and which Line triggers it takes over, renders
+//! with live or sample values and preview overrides, applies the edits
+//! the card makes, and builds the state the card watches and where your
+//! prompt shows.
 
 pub(crate) mod last_seen;
 
@@ -182,9 +182,9 @@ fn unknown_vitals(p: &Profile) -> Vec<vosh_prompt::card::report::GmcpName> {
 }
 
 /// A Line trigger that matched your prompt as a line, for the card's row
-/// after it saves a capture (D6). `pattern` is its first pattern, and
-/// `preset` says a highlight preset installed it, which only the preset
-/// changes.
+/// after it saves a capture, since a Line trigger no longer sees a prompt
+/// the profile reads. `pattern` is its first pattern, and `preset` says a
+/// highlight preset installed it, which only the preset changes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct LineTrigger {
     pub name: String,
@@ -253,7 +253,7 @@ pub(crate) struct RenderRequest {
     #[serde(default)]
     pub overrides: Option<Overrides>,
     /// Draw each value with nothing to show as its label, as the open
-    /// card does (D4).
+    /// card does.
     #[serde(default)]
     pub placeholders: bool,
 }

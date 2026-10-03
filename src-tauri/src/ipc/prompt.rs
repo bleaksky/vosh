@@ -1,11 +1,11 @@
-//! The prompt editor's commands (section 6 of the build spec): the active
-//! profile's `[prompt]` table, the designs other profiles hold, what a
-//! capture compiles to, the candidates ring and the capture check, renders
-//! with live or sample values and preview overrides, the preview the card
-//! shows on your prompt, the edits the card makes, the state the card
-//! watches, and where Vosh last saw your prompt settings. Every window
-//! reads where your prompt shows, what the game hides and the triggers
-//! that hid your prompt while the profile reads none.
+//! The prompt editor's commands: the active profile's `[prompt]` table,
+//! the designs other profiles hold, what a capture compiles to, the
+//! candidates ring and the capture check, renders with live or sample
+//! values and preview overrides, the preview the card shows on your
+//! prompt, the edits the card makes, the state the card watches, and
+//! where Vosh last saw your prompt settings. Every window reads where
+//! your prompt shows, what the game hides and the triggers that hid your
+//! prompt while the profile reads none.
 //!
 //! Every command reads or writes the live profile under its lock and lets
 //! go before it emits anything. A change to the table repaints the open
@@ -71,7 +71,7 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
 
 /// The card opened. When the design differs from the newest earlier one,
 /// it goes first among the earlier designs, so trying a preset and
-/// closing never loses it (section 5). Returns the table as it now
+/// closing never loses it. Returns the table as it now
 /// stands. It saves shortly and tells every window when it changed.
 #[tauri::command]
 pub(crate) async fn prompt_card_open<R: tauri::Runtime>(
@@ -159,8 +159,8 @@ pub(crate) async fn prompt_capture_check(
 }
 
 /// The Line triggers that match a prompt `capture` reads in the
-/// candidates ring, which no longer see it once the profile reads it
-/// (D6). Each comes once, in the order they first match.
+/// candidates ring, which no longer see it once the profile reads it.
+/// Each comes once, in the order they first match.
 #[tauri::command]
 pub(crate) async fn prompt_line_triggers(
     state: State<'_, SharedState>,
@@ -249,7 +249,7 @@ pub(crate) async fn prompt_preview_set(
 /// The open card chose Aabahran's code reader on a host Vosh does not
 /// know (More > Use Forsaken Lands prompt codes…), or let it go as it
 /// closed. While it holds, the Forsaken Lands rules hold, so the game's
-/// reply to `prompt` fills the card's fields on an older build (D17). It
+/// reply to `prompt` fills the card's fields on an older build. It
 /// lasts until the card lets it go, the main window loads again, or
 /// another profile takes over.
 #[tauri::command]

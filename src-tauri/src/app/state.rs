@@ -83,7 +83,7 @@ pub(crate) struct AppState {
     pub(crate) prompt_watch: std::sync::atomic::AtomicBool,
     /// You are selecting text in xterm or reading back in its split, as
     /// the webview last said. A clock repaint of your prompt waits while
-    /// it holds (decision 6).
+    /// it holds, so the row you select or read never moves.
     pub(crate) reader_busy: std::sync::atomic::AtomicBool,
 }
 

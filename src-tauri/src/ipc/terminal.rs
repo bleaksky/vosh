@@ -47,7 +47,7 @@ pub(crate) async fn terminal_local_write(
 /// You started or stopped selecting text or reading back in xterm. While
 /// you do, a clock piece in your design does not repaint your prompt in
 /// the text, so the row under your selection or above your reading never
-/// moves (decision 6). The native grid holds its own selection and scroll,
+/// moves. The native grid holds its own selection and scroll,
 /// which the session reads itself.
 #[tauri::command]
 pub(crate) fn terminal_reader_busy(state: State<'_, SharedState>, busy: bool) {
@@ -58,7 +58,7 @@ pub(crate) fn terminal_reader_busy(state: State<'_, SharedState>, busy: bool) {
 
 /// Where the native grid's cursor sits and where the open region starts,
 /// so the webview can map a pointer to a piece of your prompt while the
-/// native renderer draws the terminal (section 6). Lines count from the
+/// native renderer draws the terminal. Lines count from the
 /// top of the live screen. Null before the grid exists. xterm reads its
 /// own buffer and marker instead.
 #[cfg(native_surface)]

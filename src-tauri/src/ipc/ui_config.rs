@@ -221,7 +221,7 @@ pub(crate) async fn ui_get_config(
 /// What `ui_get_config` hands the webview for the live profile `p`, read
 /// at `generation`. Your prompt is not in it: the prompt section reads and
 /// writes the `[prompt]` table through the prompt commands, and `[ui]`
-/// keeps only a copy of its switch and design for an older build (D20).
+/// keeps only a copy of its switch and design for an older build.
 fn ui_config_of(p: &crate::profile::Profile, generation: u64) -> UiConfigPayload {
     let mut payload = UiConfigPayload::from_ui(&p.ui);
     payload.generation = Some(generation);
