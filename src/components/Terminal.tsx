@@ -83,14 +83,10 @@ export function nativeSurfaceEnabled(): boolean {
 // macOS draws the native surface BELOW the webview (the underlay). The
 // page leaves the terminal pane unpainted so the grid shows through, DOM
 // overlays draw over it with no renderer swap, and pointer input over the
-// pane is forwarded to the surface. Windows and Linux keep the on-top
-// surface when a tester forces it on.
+// pane is forwarded to the surface. The surface runs only on macOS, so it
+// is the underlay whenever it is on.
 export function nativeUnderlay(): boolean {
-  if (!nativeSurfaceEnabled()) return false;
-  return (
-    typeof navigator !== 'undefined' &&
-    (navigator.platform.startsWith('Mac') || navigator.userAgent.includes('Mac OS'))
-  );
+  return nativeSurfaceEnabled();
 }
 
 // Report the active theme's terminal background to the session, which
@@ -628,17 +624,13 @@ export function Terminal({
 
     // Tier 3 (docs/native-renderer.md): report this pane's screen
     // rectangle to the native wgpu surface so it tracks the terminal.
-    // Live pane only, and only when opted in via the localStorage flag,
-    // because the surface is opaque and would otherwise occlude xterm.
-    // Set vosh.nativesurface to "1" and reload to see it.
+    // Live pane only, and only while the surface draws it.
     //
     // The rows the pinned band borrows go along, so the grid gives them
     // up in the same frame as the new bounds, and the game keeps its size.
     // While the grid keeps to the bottom of the pane under the underlay,
     // the bounds start lower by the pixels its rows leave over
-    // (`nativeSpare`), and pointer positions count from there. The on top
-    // surface of Windows and Linux keeps to the top, since moving it would
-    // show xterm through the gap.
+    // (`nativeSpare`), and pointer positions count from there.
     const nativeSurfaceOn = !quietRef.current && nativeSurfaceEnabled();
     let lastNativeBounds = '';
     let nativeSpare = 0;

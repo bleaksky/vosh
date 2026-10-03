@@ -1756,9 +1756,7 @@ function App() {
   const terminalAreaElement = (
     <div
       ref={terminalAreaRef}
-      className={`terminal-area${splitOpen ? ' terminal-area-split' : ''}${
-        findOpen && nativeSurfaceEnabled() && !nativeUnderlay() ? ' terminal-area-find-inset' : ''
-      }`}
+      className={`terminal-area${splitOpen ? ' terminal-area-split' : ''}`}
       onMouseUp={handleTerminalMouseUp}
       onContextMenu={(event) => {
         // Replace the webview's default context menu with ours.
