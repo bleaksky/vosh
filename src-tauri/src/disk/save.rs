@@ -114,6 +114,43 @@ pub(crate) async fn persist_profile<R: tauri::Runtime>(app: &AppHandle<R>, state
     persist_profile_locked(app, state).await;
 }
 
+/// When [`save_then_broadcast`] saves the live profile. Each command
+/// names the policy it has always had.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum SavePolicy {
+    /// Save at once, through [`persist_profile`].
+    Now,
+    /// Save at once, unless `#profile reset` or `#profile load` left the
+    /// live profile apart from disk and no durable change has wanted it
+    /// saved since ([`AUTO_PERSIST_SUPPRESSED`]).
+    NowUnlessHeld,
+    /// Save once the burst settles, through [`schedule_profile_persist`],
+    /// which keeps that hold. For edits that land several times a second.
+    SoonUnlessHeld,
+}
+
+/// Save the live profile by `policy`, then send `event` with `payload`
+/// to every window. A command that changed one part of the profile ends
+/// this way, so the save always comes before the event.
+pub(crate) async fn save_then_broadcast<R: tauri::Runtime, S: serde::Serialize + ?Sized>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    policy: SavePolicy,
+    event: &str,
+    payload: &S,
+) {
+    match policy {
+        SavePolicy::Now => persist_profile(app, state).await,
+        SavePolicy::NowUnlessHeld => {
+            if !AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
+                persist_profile(app, state).await;
+            }
+        }
+        SavePolicy::SoonUnlessHeld => schedule_profile_persist(app),
+    }
+    broadcast(app, event, payload);
+}
+
 /// The body of [`persist_profile`]. Call with [`PERSIST_LOCK`] held.
 pub(crate) async fn persist_profile_locked<R: tauri::Runtime>(
     app: &AppHandle<R>,

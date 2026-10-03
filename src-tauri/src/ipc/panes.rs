@@ -3,18 +3,14 @@
 //! panes. The command palette and Settings > Characters put a profile's
 //! panes back to the stock tree.
 
-use std::sync::atomic::Ordering;
-
 use tauri::{AppHandle, State};
 
-use crate::app::events::{
-    broadcast, pane_layout_envelope, PaneLayoutEnvelope, PANE_LAYOUT_CHANGED,
-};
-use crate::app::state::{panes_generation, SharedState, AUTO_PERSIST_SUPPRESSED};
+use crate::app::events::{pane_layout_envelope, PaneLayoutEnvelope, PANE_LAYOUT_CHANGED};
+use crate::app::state::{panes_generation, SharedState};
 use crate::characters::{
     active_name, broadcast_profile_changed, reset_inactive_panes, reset_live_panes,
 };
-use crate::disk::save::{persist_profile, schedule_profile_persist};
+use crate::disk::save::{save_then_broadcast, SavePolicy};
 use crate::profile_config::PaneLayoutPersist;
 
 /// Read the active profile's pane layout. A profile that has never
@@ -32,7 +28,7 @@ pub(crate) async fn pane_layout_get(
 /// sanitized tree as `vosh://pane-layout-changed` to every window.
 /// Splitter drags land here several times a second even after the
 /// frontend debounce, so the disk write goes through the debounced
-/// `mark_profile_dirty` rather than rotating a backup per drag step.
+/// `schedule_profile_persist` rather than rotating a backup per drag step.
 /// A profile switch or quit flushes it right away.
 ///
 /// `generation` is the one the edited tree was read at. A write made
@@ -59,15 +55,17 @@ pub(crate) async fn pane_layout_set(
     };
     // A layout tweak after `#profile reset` must not save the blanked
     // profile, so this schedules without clearing the suppression.
-    schedule_profile_persist(&app);
-    broadcast(
+    save_then_broadcast(
         &app,
+        &state,
+        SavePolicy::SoonUnlessHeld,
         PANE_LAYOUT_CHANGED,
         &PaneLayoutEnvelope {
             layout,
             generation: Some(current),
         },
-    );
+    )
+    .await;
     Ok(true)
 }
 
@@ -98,10 +96,14 @@ pub(crate) async fn pane_layout_reset(
         }
     }
     let envelope = reset_live_panes(&shared).await;
-    if !AUTO_PERSIST_SUPPRESSED.load(Ordering::Acquire) {
-        persist_profile(&app, &shared).await;
-    }
-    broadcast(&app, PANE_LAYOUT_CHANGED, &envelope);
+    save_then_broadcast(
+        &app,
+        &shared,
+        SavePolicy::NowUnlessHeld,
+        PANE_LAYOUT_CHANGED,
+        &envelope,
+    )
+    .await;
     if let Some(active) = active_name(&shared).await {
         broadcast_profile_changed(&app, &active);
     }

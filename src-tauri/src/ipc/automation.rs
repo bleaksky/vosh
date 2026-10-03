@@ -12,7 +12,7 @@ use crate::app::events::{
     broadcast, broadcast_list_changes, ListChanges, ListRevisions, MACROS_CHANGED, TIMERS_CHANGED,
 };
 use crate::app::state::SharedState;
-use crate::disk::save::persist_profile;
+use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
 use crate::import::ImportFormat;
 use crate::profile::{Macro, Profile, Timer};
 
@@ -149,9 +149,7 @@ pub(crate) async fn macros_set(
         }
         p.macros.clone()
     };
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
-    broadcast(&app, MACROS_CHANGED, &updated);
+    save_then_broadcast(&app, &state, SavePolicy::Now, MACROS_CHANGED, &updated).await;
     Ok(updated)
 }
 
@@ -167,9 +165,7 @@ pub(crate) async fn macros_delete(
         p.macros.retain(|m| m.key != key);
         p.macros.clone()
     };
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
-    broadcast(&app, MACROS_CHANGED, &updated);
+    save_then_broadcast(&app, &state, SavePolicy::Now, MACROS_CHANGED, &updated).await;
     Ok(updated)
 }
 
@@ -252,9 +248,7 @@ pub(crate) async fn timers_set(
         }
         p.timers.clone()
     };
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
-    broadcast(&app, TIMERS_CHANGED, &updated);
+    save_then_broadcast(&app, &state, SavePolicy::Now, TIMERS_CHANGED, &updated).await;
     Ok(updated)
 }
 
@@ -270,9 +264,7 @@ pub(crate) async fn timers_delete(
         p.timers.retain(|t| t.id != id);
         p.timers.clone()
     };
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
-    broadcast(&app, TIMERS_CHANGED, &updated);
+    save_then_broadcast(&app, &state, SavePolicy::Now, TIMERS_CHANGED, &updated).await;
     Ok(updated)
 }
 

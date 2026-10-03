@@ -7,11 +7,9 @@ use serde_json::Value;
 use tauri::{AppHandle, State};
 
 use crate::affect_full::FullMap;
-use crate::app::events::{
-    broadcast, AffectsDisplay, AFFECTS_DISPLAY_CHANGED, TRACKED_AFFECTS_CHANGED,
-};
+use crate::app::events::{AffectsDisplay, AFFECTS_DISPLAY_CHANGED, TRACKED_AFFECTS_CHANGED};
 use crate::app::state::SharedState;
-use crate::disk::save::persist_profile;
+use crate::disk::save::{save_then_broadcast, SavePolicy};
 
 /// Replace a profile's tracked affects without touching the rest of
 /// its UI config, so an editor outside Settings cannot write a stale
@@ -46,8 +44,14 @@ pub(crate) async fn tracked_affects_set(
         let mut p = state.profile.lock().await;
         p.ui.tracked_affects.clone_from(&list);
     }
-    persist_profile(&app, &shared).await;
-    broadcast(&app, TRACKED_AFFECTS_CHANGED, &list);
+    save_then_broadcast(
+        &app,
+        &shared,
+        SavePolicy::Now,
+        TRACKED_AFFECTS_CHANGED,
+        &list,
+    )
+    .await;
     if let Some(active) = crate::characters::active_name(&shared).await {
         crate::characters::broadcast_profile_changed(&app, &active);
     }
@@ -95,9 +99,14 @@ pub(crate) async fn ui_set_affects_display(
     let Some(display) = changed else {
         return Ok(());
     };
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
-    broadcast(&app, AFFECTS_DISPLAY_CHANGED, &display);
+    save_then_broadcast(
+        &app,
+        &state,
+        SavePolicy::Now,
+        AFFECTS_DISPLAY_CHANGED,
+        &display,
+    )
+    .await;
     Ok(())
 }
 
