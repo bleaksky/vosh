@@ -1456,13 +1456,13 @@ const PROFILE_SAVE_BUSY: &str = "Vosh is saving this profile. Try again.";
 
 fn slash_profile(profile: &mut Profile, args: &str, replaced: &mut bool) -> InputResult {
     let pending =
-        crate::commands::MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
+        crate::app::state::MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
     let app_data = APP_DATA_DIR.get().map(std::path::PathBuf::as_path);
     slash_profile_with(profile, args, replaced, pending, app_data)
 }
 
 /// [`slash_profile`] with `migration_pending` in place of
-/// [`crate::commands::MIGRATION_RELAUNCH_PENDING`] and `app_data` in
+/// [`crate::app::state::MIGRATION_RELAUNCH_PENDING`] and `app_data` in
 /// place of [`APP_DATA_DIR`], so a test can run it after the wizard, or
 /// over a folder of its own, without touching what every other test
 /// reads.

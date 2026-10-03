@@ -28,7 +28,8 @@ use vosh_prompt::{
     CaptureConfig, FieldRef, PromptConfig, RenderOptions, Rendered, Resolved, Template, Values,
 };
 
-use crate::commands::{mark_profile_dirty, SharedState, PERSIST_LOCK, PROFILES_NOT_LOADED};
+use crate::app::state::{SharedState, PROFILES_NOT_LOADED};
+use crate::commands::{mark_profile_dirty, PERSIST_LOCK};
 use crate::list_events::broadcast_prompt_config_changed;
 use crate::profile::Profile;
 
@@ -622,7 +623,7 @@ mod tests {
     use vosh_prompt::config::{AabahranCapture, RegexCapture};
 
     use super::*;
-    use crate::commands::AppState;
+    use crate::app::state::AppState;
     use crate::profile_config::ProfileConfig;
     use crate::profile_set::{ProfileSet, DEFAULT_PROFILE_NAME};
 

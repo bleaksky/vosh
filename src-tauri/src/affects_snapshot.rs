@@ -7,7 +7,7 @@
 use serde_json::Value;
 use tauri::State;
 
-use crate::commands::SharedState;
+use crate::app::state::SharedState;
 
 /// The package whose payload the snapshot keeps.
 pub(crate) const AFFECTS_PACKAGE: &str = "Char.Affects";

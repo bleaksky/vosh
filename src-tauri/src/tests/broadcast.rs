@@ -14,8 +14,8 @@ use std::sync::{Arc, Mutex};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{App, EventId, Listener, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
+use crate::app::state::{AppState, SharedState};
 use crate::characters::{PROFILE_CHANGED_EVENT, SESSION_IDENTITY_EVENT};
-use crate::commands::{AppState, SharedState};
 use crate::exit_flush::FLUSH_REQUEST_EVENT;
 use crate::input::LineEffects;
 use crate::list_events::{

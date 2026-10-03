@@ -20,7 +20,7 @@ use tokio::net::{TcpListener, TcpStream};
 use vosh_prompt::testkit::mud::{PROMPT, PROMPT_ALL};
 use vosh_prompt::testkit::{Build, Mud, Options};
 
-use crate::commands::{AppState, SharedState};
+use crate::app::state::{AppState, SharedState};
 use crate::profile_set::{AutoMatch, ProfileSet, DEFAULT_PROFILE_NAME};
 
 /// The events the tests read, as the webview would hear them.

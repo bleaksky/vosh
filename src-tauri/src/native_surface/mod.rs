@@ -304,7 +304,7 @@ fn report_sizes(cols: usize, rows: usize, game_rows: usize) {
     if !game_news {
         return;
     }
-    let state = app.state::<crate::commands::SharedState>();
+    let state = app.state::<crate::app::state::SharedState>();
     if let Ok(mut ws) = state.window_size.lock() {
         *ws = (cols, game_rows);
     }
@@ -317,7 +317,7 @@ fn report_sizes(cols: usize, rows: usize, game_rows: usize) {
 /// for it instead and then sends the size that is newest by then. The
 /// frames after this one see no new size, so without the task the game
 /// would wrap at the old width until the window changed again.
-fn tell_session(state: &crate::commands::SharedState, newest: &'static AtomicU32) {
+fn tell_session(state: &crate::app::state::SharedState, newest: &'static AtomicU32) {
     if let Ok(session) = state.session.try_lock() {
         send_game_size(session.as_ref(), newest);
         return;
@@ -1132,7 +1132,7 @@ fn font_atlas_params(scale: f64) -> (String, f32) {
     let Some(app) = APP.get() else {
         return ("monospace".to_string(), size_for(14.0));
     };
-    let state = app.state::<crate::commands::SharedState>();
+    let state = app.state::<crate::app::state::SharedState>();
     let guard = state.profile.try_lock();
     if let Ok(p) = guard {
         (p.ui.font_family.clone(), size_for(p.ui.font_size as f32))
@@ -1903,7 +1903,7 @@ mod tests {
     /// A live session against a local game that asked for your window
     /// size and heard the one the session started with, 100 by 40.
     struct SizedGame {
-        state: crate::commands::SharedState,
+        state: crate::app::state::SharedState,
         /// The game's end of the socket.
         game: tokio::net::TcpStream,
         /// What the game read so far.
@@ -1923,7 +1923,7 @@ mod tests {
         use tokio::io::AsyncWriteExt;
         use vosh_protocol::telnet::codes::{option::NAWS, DO, IAC};
 
-        use crate::commands::{AppState, SharedState};
+        use crate::app::state::{AppState, SharedState};
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -1966,7 +1966,7 @@ mod tests {
     }
 
     /// End the session `state` holds.
-    async fn end_session(state: &crate::commands::SharedState) {
+    async fn end_session(state: &crate::app::state::SharedState) {
         let handle = state.session.lock().await.take();
         if let Some(handle) = handle {
             handle.shutdown().await;
