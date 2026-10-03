@@ -18,14 +18,14 @@ use tauri::{AppHandle, Manager, State};
 use tracing::warn;
 
 use crate::app::events::{
-    broadcast, pane_layout_envelope, PaneLayoutEnvelope, PANE_LAYOUT_CHANGED, PROFILES_CHANGED,
-    PROFILE_CHANGED, SESSION_IDENTITY_CHANGED,
+    broadcast, pane_layout_envelope, PaneLayoutEnvelope, PROFILES_CHANGED, PROFILE_CHANGED,
+    SESSION_IDENTITY_CHANGED,
 };
 use crate::app::state::{
-    bump_panes_generation, panes_generation, SharedState, AUTO_PERSIST_SUPPRESSED,
-    MIGRATION_RELAUNCH_PENDING, PROFILES_NOT_LOADED,
+    bump_panes_generation, panes_generation, SharedState, MIGRATION_RELAUNCH_PENDING,
+    PROFILES_NOT_LOADED,
 };
-use crate::disk::save::{persist_profile, PERSIST_LOCK};
+use crate::disk::save::PERSIST_LOCK;
 use crate::profile_config::{
     GlobalConfig, PaneLayoutPersist, ProfileConfig, TrackedAffect, UiConfig,
 };
@@ -252,45 +252,8 @@ pub(crate) async fn profile_detail(
     })
 }
 
-/// Put a profile's panes back to the stock map over affects tree,
-/// keeping whether its panel shows and how wide it is. The active
-/// profile when `profile` is absent.
-///
-/// The live path bumps the pane generation under the profile lock, so
-/// a splitter drag still in flight is refused rather than undoing the
-/// reset, persists at once (unless `#profile reset` or `load` left the
-/// profile diverged from disk), and broadcasts
-/// `vosh://pane-layout-changed`. An inactive profile has its file
-/// rewritten and only `vosh://profile-changed` goes out.
-#[tauri::command]
-pub(crate) async fn pane_layout_reset(
-    app: AppHandle,
-    state: State<'_, SharedState>,
-    profile: Option<String>,
-) -> Result<PaneLayoutEnvelope, String> {
-    let shared: SharedState = state.inner().clone();
-    if let Some(name) = profile.as_deref() {
-        if let Some(layout) = reset_inactive_panes(&shared, name).await? {
-            broadcast_profile_changed(&app, name);
-            return Ok(PaneLayoutEnvelope {
-                layout,
-                generation: None,
-            });
-        }
-    }
-    let envelope = reset_live_panes(&shared).await;
-    if !AUTO_PERSIST_SUPPRESSED.load(Ordering::Acquire) {
-        persist_profile(&app, &shared).await;
-    }
-    broadcast(&app, PANE_LAYOUT_CHANGED, &envelope);
-    if let Some(active) = active_name(&shared).await {
-        broadcast_profile_changed(&app, &active);
-    }
-    Ok(envelope)
-}
-
 /// Reset an inactive profile's saved tree. Ok(None) when `name` is live.
-async fn reset_inactive_panes(
+pub(crate) async fn reset_inactive_panes(
     state: &SharedState,
     name: &str,
 ) -> Result<Option<PaneLayoutPersist>, String> {
@@ -305,7 +268,7 @@ async fn reset_inactive_panes(
 }
 
 /// Reset the live profile's tree and hand back its new envelope.
-async fn reset_live_panes(state: &SharedState) -> PaneLayoutEnvelope {
+pub(crate) async fn reset_live_panes(state: &SharedState) -> PaneLayoutEnvelope {
     let mut p = state.profile.lock().await;
     let layout = p.ui.pane_layout().with_default_tree();
     p.ui.panes = Some(layout);

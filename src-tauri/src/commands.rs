@@ -5,26 +5,22 @@ use tracing::warn;
 use vosh_log::{SearchOptions, SearchPage, SessionRow};
 
 use crate::app::events::{
-    broadcast, pane_layout_envelope, PaneLayoutEnvelope, CUSTOM_THEMES_CHANGED, LOADOUTS_CHANGED,
-    MACRO_GROUPS_CHANGED, PANE_LAYOUT_CHANGED, PROFILES_CHANGED, TICK_CONFIG_CHANGED,
+    broadcast, CUSTOM_THEMES_CHANGED, LOADOUTS_CHANGED, MACRO_GROUPS_CHANGED, PROFILES_CHANGED,
+    TICK_CONFIG_CHANGED,
 };
 use crate::app::state::{
-    panes_generation, AppState, SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING,
-    PROFILES_NOT_LOADED,
+    AppState, SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING, PROFILES_NOT_LOADED,
 };
 use crate::app::windows::{open_aux_window, HELP_WINDOW, SETTINGS_WINDOW};
 use crate::disk::save::{
-    mark_profile_dirty, persist_profile, persist_profile_locked, persist_state,
-    schedule_profile_persist, PERSIST_LOCK,
+    mark_profile_dirty, persist_profile, persist_profile_locked, persist_state, PERSIST_LOCK,
 };
 use crate::loadouts::wizard::apply::{
     analyze_migration, announce_migration_applied, apply_migration, ConflictResolution,
 };
 
 use crate::profile::switch::apply_profile_switch;
-use crate::profile_config::{
-    hand_out_shared, share_custom_themes, GlobalConfig, HeldCustomThemes, PaneLayoutPersist,
-};
+use crate::profile_config::{hand_out_shared, share_custom_themes, GlobalConfig, HeldCustomThemes};
 use crate::prompt::{prompt_show_state, reported_hidden, PromptShowState};
 use crate::tick::{apply_tick_config, tick_config_payload, TickConfigPayload};
 
@@ -33,60 +29,6 @@ use crate::tick::{apply_tick_config, tick_config_payload, TickConfigPayload};
 #[tauri::command]
 pub(crate) fn launch_notices_take(state: State<'_, SharedState>) -> Vec<String> {
     state.take_launch_notices()
-}
-
-/// Read the active profile's pane layout. A profile that has never
-/// saved one gets a tree migrated from its dock layout (or the
-/// default), with nothing written to disk until the first edit.
-#[tauri::command]
-pub(crate) async fn pane_layout_get(
-    state: State<'_, SharedState>,
-) -> Result<PaneLayoutEnvelope, String> {
-    let p = state.profile.lock().await;
-    Ok(pane_layout_envelope(&p))
-}
-
-/// Replace the active profile's pane layout and broadcast the
-/// sanitized tree as `vosh://pane-layout-changed` to every window.
-/// Splitter drags land here several times a second even after the
-/// frontend debounce, so the disk write goes through the debounced
-/// `mark_profile_dirty` rather than rotating a backup per drag step.
-/// A profile switch or quit flushes it right away.
-///
-/// `generation` is the one the edited tree was read at. A write made
-/// against a profile that has since been swapped out is refused and
-/// returns false, and the caller reads the current tree again. An
-/// untagged write (a tree that never came from the backend) applies.
-#[tauri::command]
-pub(crate) async fn pane_layout_set(
-    app: AppHandle,
-    state: State<'_, SharedState>,
-    layout: PaneLayoutPersist,
-    generation: Option<u64>,
-) -> Result<bool, String> {
-    let mut layout = layout;
-    layout.sanitize();
-    let current = {
-        let mut p = state.profile.lock().await;
-        let current = panes_generation();
-        if generation.is_some_and(|g| g != current) {
-            return Ok(false);
-        }
-        p.ui.panes = Some(layout.clone());
-        current
-    };
-    // A layout tweak after `#profile reset` must not save the blanked
-    // profile, so this schedules without clearing the suppression.
-    schedule_profile_persist(&app);
-    broadcast(
-        &app,
-        PANE_LAYOUT_CHANGED,
-        &PaneLayoutEnvelope {
-            layout,
-            generation: Some(current),
-        },
-    );
-    Ok(true)
 }
 
 /// Open (or focus, if already open) the standalone settings window,
