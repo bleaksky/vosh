@@ -11,17 +11,7 @@ use std::path::Path;
 
 use vosh_automation::alias::Alias;
 
-#[derive(Debug, Default)]
-pub(crate) struct ImportReport {
-    pub aliases: Vec<Alias>,
-    pub vars: Vec<(String, String)>,
-    /// Lines we recognized but cannot model yet (event, ticker, function,
-    /// etc). Each entry is `(directive, source_line)`.
-    pub unsupported: Vec<(String, String)>,
-    /// Lines that started with `#` but did not match any recognized
-    /// directive form. Useful for catching typos.
-    pub unparsed: Vec<String>,
-}
+use super::ImportReport;
 
 pub(crate) fn import_file(path: &Path) -> std::io::Result<ImportReport> {
     // TinTin++ scripts often stash raw telnet bytes (IAC, DO, etc.) inside
@@ -33,6 +23,8 @@ pub(crate) fn import_file(path: &Path) -> std::io::Result<ImportReport> {
     Ok(parse(text.as_ref()))
 }
 
+/// A `.tin` file holds no triggers or macros this reads, so those two
+/// lists of the report stay empty.
 pub(crate) fn parse(text: &str) -> ImportReport {
     let mut report = ImportReport::default();
     for raw in text.lines() {
