@@ -171,13 +171,6 @@ pub(crate) fn theme_bg_rgb() -> (u8, u8, u8) {
 pub(crate) struct Placement {
     pub x: u32,
     pub y: u32,
-    /// Draw the sunk-well strips. Off under the underlay, where the page
-    /// draws its own vignette over the grid.
-    pub vignette: bool,
-    /// Draw the scroll-depth pill and the copy toast. Off under the
-    /// underlay, where the page shows both from the scroll and copy events
-    /// and can place them around its own find bar.
-    pub indicators: bool,
     /// Device pixels per CSS pixel, which the prompt bands scale by.
     pub scale: f32,
     /// The render target's size in device pixels. A prompt band reaches
@@ -2691,43 +2684,8 @@ impl CellRenderer {
             region_ranges.push(start..instances.len() as u32);
         }
         // Overlays draw unscissored: the divider line at its exact pixel
-        // and the scroll-depth pill.
+        // and the scrollbar.
         let overlay_start = instances.len() as u32;
-        // Sunk-well vignette: stacked translucent black strips fading in
-        // from the top and left edges, approximating the mockup's two
-        // inset shadows (the DOM cannot draw over the opaque surface, so
-        // the renderer carries the cue itself). The pipeline blends
-        // premultiplied alpha and black is zero in every channel, so each
-        // strip just darkens whatever it covers by its alpha. Drawn in
-        // the overlay pass so the split view gets the strips once at the
-        // surface top, not repeated per region; the divider and pills
-        // push after and stay crisp on top. Reach scales with the cell so
-        // it lands near 14 physical px (top) and 10 (left) at the default
-        // hidpi metrics.
-        let top_vignette: [f32; 5] = [0.30, 0.22, 0.15, 0.09, 0.04];
-        let left_vignette: [f32; 5] = [0.20, 0.15, 0.10, 0.06, 0.03];
-        let top_step = (cell_h * 0.42).clamp(8.0, 20.0) / top_vignette.len() as f32;
-        let left_step = (cell_h * 0.30).clamp(6.0, 14.0) / left_vignette.len() as f32;
-        if placement.vignette {
-            for (i, &alpha) in top_vignette.iter().enumerate() {
-                instances.push(CellInstance {
-                    offset: [0.0, i as f32 * top_step],
-                    size: [surface_w as f32, top_step],
-                    color: [0.0, 0.0, 0.0, alpha],
-                    uv_min: solid_uv.0,
-                    uv_max: solid_uv.1,
-                });
-            }
-            for (i, &alpha) in left_vignette.iter().enumerate() {
-                instances.push(CellInstance {
-                    offset: [i as f32 * left_step, 0.0],
-                    size: [left_step, surface_h as f32],
-                    color: [0.0, 0.0, 0.0, alpha],
-                    uv_min: solid_uv.0,
-                    uv_max: solid_uv.1,
-                });
-            }
-        }
         if let Some(divider_px) = divider_px {
             let thickness = 2.0_f32;
             instances.push(CellInstance {
@@ -2739,83 +2697,9 @@ impl CellRenderer {
             });
         }
 
-        // Scroll-depth indicator: "<back>/<max>" in a pill at the top-right
-        // when scrolled up. On the on-top path the DOM cannot show this (it
-        // sits behind the opaque surface), so it is drawn here. Under the
-        // underlay the page shows it from the native-scroll event.
-        if placement.indicators && offset > 0 {
-            let text = format!("{offset}/{}", grid.scrollback_len());
-            let n = text.chars().count() as f32;
-            let pill_w = (n + 1.0) * cell_w;
-            let x0 = (surface_w as f32 - pill_w).max(0.0);
-            let ind_fg = rgb_to_rgba(Rgb {
-                r: 0xc0,
-                g: 0xc8,
-                b: 0xd4,
-            });
-            let ind_bg = rgb_to_rgba(Rgb {
-                r: 0x1a,
-                g: 0x20,
-                b: 0x2c,
-            });
-            instances.push(CellInstance {
-                offset: [x0, 0.0],
-                size: [pill_w, cell_h],
-                color: ind_bg,
-                uv_min: solid_uv.0,
-                uv_max: solid_uv.1,
-            });
-            for (i, ch) in text.chars().enumerate() {
-                let uv = atlas.uv_if_cached(ch, false, false).unwrap_or(space_uv);
-                instances.push(CellInstance {
-                    offset: [x0 + (i as f32 + 0.5) * cell_w, 0.0],
-                    size: [slot_w, cell_h],
-                    color: ind_fg,
-                    uv_min: uv.0,
-                    uv_max: uv.1,
-                });
-            }
-        }
-        // Transient "copied N chars" toast in the bottom-right, confirming
-        // a selection copy. Same pill styling as the scroll indicator, and
-        // the page's own toast under the underlay.
-        if let Some(text) = crate::native_surface::copy_notice().filter(|_| placement.indicators) {
-            let n = text.chars().count() as f32;
-            let pill_w = (n + 1.0) * cell_w;
-            let x0 = (surface_w as f32 - pill_w - cell_w).max(0.0);
-            let y0 = (surface_h as f32 - cell_h * 1.5).max(0.0);
-            let toast_fg = rgb_to_rgba(Rgb {
-                r: 0xc0,
-                g: 0xc8,
-                b: 0xd4,
-            });
-            let toast_bg = rgb_to_rgba(Rgb {
-                r: 0x1a,
-                g: 0x20,
-                b: 0x2c,
-            });
-            instances.push(CellInstance {
-                offset: [x0, y0],
-                size: [pill_w, cell_h],
-                color: toast_bg,
-                uv_min: solid_uv.0,
-                uv_max: solid_uv.1,
-            });
-            for (i, ch) in text.chars().enumerate() {
-                let uv = atlas.uv_if_cached(ch, false, false).unwrap_or(space_uv);
-                instances.push(CellInstance {
-                    offset: [x0 + (i as f32 + 0.5) * cell_w, y0],
-                    size: [slot_w, cell_h],
-                    color: toast_fg,
-                    uv_min: uv.0,
-                    uv_max: uv.1,
-                });
-            }
-        }
-
         // Overlay scrollbar on the right edge while scrolled: a subtle
-        // track and a proportional thumb (the xterm scrollbar sits hidden
-        // behind the opaque surface). Drag mapping lives in native_surface.
+        // track and a proportional thumb (the page keeps its xterm copy
+        // hidden). Drag mapping lives in native_surface.
         let scrollback = grid.scrollback_len();
         if offset > 0 && scrollback > 0 {
             let total = (scrollback + rows) as f32;
@@ -4360,8 +4244,6 @@ mod tests {
         let placement = Placement {
             x: 0,
             y: 0,
-            vignette: false,
-            indicators: false,
             scale,
             target: [w, h],
             blink_hidden,

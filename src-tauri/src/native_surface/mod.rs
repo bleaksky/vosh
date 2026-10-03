@@ -343,10 +343,9 @@ fn scroll_report_key(offset: usize, max: usize) -> u64 {
 }
 
 /// Send the page the display offset and the history length as
-/// `vosh://native-scroll` `[offset, max]` on every platform. The page
-/// learns from it whether the scrollback split is open, and under the
-/// underlay it also draws the scroll depth, since the surface draws no
-/// pill there. Only fires when `scroll_report_key` changes, so the live
+/// `vosh://native-scroll` `[offset, max]`. The page learns from it
+/// whether the scrollback split is open, and draws the scroll depth from
+/// it. Only fires when `scroll_report_key` changes, so the live
 /// tail reports once as `[0, max]` and then stays quiet.
 fn report_scroll_if_changed() {
     let (offset, max) = crate::term_grid::scroll_metrics();
@@ -916,24 +915,9 @@ pub(crate) fn forward_wheel(delta_y: f64) {
     wheel_scroll(delta_y);
 }
 
-// The transient "copied N chars" toast: text plus the moment it was set.
-// Cleared by a delayed task; the renderer reads it via `copy_notice`.
-static COPY_NOTICE: Mutex<Option<(String, std::time::Instant)>> = Mutex::new(None);
-static COPY_NOTICE_GEN: AtomicU32 = AtomicU32::new(0);
-const COPY_NOTICE_MS: u64 = 1600;
-
-/// The active copy toast text, if one is showing. Read by the renderer,
-/// which draws it as a pill in the bottom-right of the surface.
-pub(crate) fn copy_notice() -> Option<String> {
-    let guard = COPY_NOTICE.lock().ok()?;
-    let (text, at) = guard.as_ref()?;
-    (at.elapsed().as_millis() < u128::from(COPY_NOTICE_MS)).then(|| text.clone())
-}
-
-/// Copy the current selection to the clipboard (no-op when empty) and show
-/// the "copied N chars" toast for a moment so the copy is visibly
-/// confirmed. Under the underlay the page shows the toast, so the count
-/// goes out as `vosh://native-copied` instead.
+/// Copy the current selection to the clipboard (no-op when empty) and send
+/// the count of characters copied as `vosh://native-copied`, so the page
+/// shows the copy toast.
 fn copy_selection() {
     let Some(text) = crate::term_grid::selection_text() else {
         return;
@@ -942,33 +926,9 @@ fn copy_selection() {
         return;
     }
     platform::set_clipboard(&text);
-    let chars = text.chars().count();
-    if UNDERLAY {
-        if let Some(app) = APP.get() {
-            let _ = app.emit(NATIVE_COPIED, chars);
-        }
-        return;
+    if let Some(app) = APP.get() {
+        let _ = app.emit(NATIVE_COPIED, text.chars().count());
     }
-    let plural = if chars == 1 { "" } else { "s" };
-    if let Ok(mut guard) = COPY_NOTICE.lock() {
-        *guard = Some((
-            format!("copied {chars} char{plural}"),
-            std::time::Instant::now(),
-        ));
-    }
-    let gen = COPY_NOTICE_GEN.fetch_add(1, Ordering::AcqRel) + 1;
-    redraw_now();
-    // Clear the toast after it expires (unless a newer copy replaced it)
-    // and repaint so it actually disappears without waiting for output.
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(COPY_NOTICE_MS)).await;
-        if COPY_NOTICE_GEN.load(Ordering::Acquire) == gen {
-            if let Ok(mut guard) = COPY_NOTICE.lock() {
-                *guard = None;
-            }
-            request_redraw();
-        }
-    });
 }
 
 /// Copy the native selection, dispatched to the main thread. Called by the
@@ -1318,8 +1278,6 @@ fn render(state: &mut GpuState) {
     let placement = crate::cell_render::Placement {
         x: pane_x,
         y: pane_y,
-        vignette: !UNDERLAY,
-        indicators: !UNDERLAY,
         scale: load_f32(&DPR, 2.0),
         target: [state.config.width, state.config.height],
         blink_hidden: now_ms.is_some_and(|now| !crate::cell_render::blink_shown(now)),
