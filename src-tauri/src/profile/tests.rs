@@ -1,5 +1,5 @@
-//! The tests of live.rs, and the helpers that the tests of more than
-//! one profile file share.
+//! The tests of live.rs, and the helpers that more than one profile
+//! test module shares.
 
 use std::collections::BTreeMap;
 
@@ -34,6 +34,15 @@ pub(crate) fn styled_profile() -> Profile {
     profile.ui.custom_themes = vec![theme("night-ink", "#000000")];
     profile.ui.font_size = 16;
     profile.ui.terminal_line_height = "loose".into();
+    profile
+}
+
+/// Every shared setting off its default, custom themes included.
+pub(crate) fn shared_profile() -> Profile {
+    let mut profile = styled_profile();
+    profile.ui.font_family = "Iosevka".into();
+    profile.ui.keep_last_command = true;
+    profile.ui.auto_update = true;
     profile
 }
 
