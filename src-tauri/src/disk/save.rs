@@ -351,7 +351,7 @@ pub(crate) mod tests {
     /// hand back the app state with the notices launch kept.
     pub(crate) async fn launch_state(dir: &std::path::Path) -> super::SharedState {
         let state: super::SharedState = std::sync::Arc::new(AppState::default());
-        crate::launch::load_profiles(&state, dir).await;
+        crate::app::launch::load_profiles(&state, dir).await;
         assert!(state.profile_set.lock().await.is_some());
         state
     }
@@ -473,7 +473,7 @@ pub(crate) mod tests {
         // Launch cannot read the index, so the session runs on the
         // defaults. You change a setting and Vosh saves.
         let state: super::SharedState = std::sync::Arc::new(AppState::default());
-        crate::launch::load_profiles(&state, dir.path()).await;
+        crate::app::launch::load_profiles(&state, dir.path()).await;
         assert!(state.profile_set.lock().await.is_none());
         state.profile.lock().await.ui.tracked_affects = vec![affect("Haste")];
         persist(&state, dir.path()).await;

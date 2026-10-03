@@ -176,7 +176,7 @@ async fn launch_as(dir: &Path, name: &str) -> SharedState {
         .switch(name)
         .unwrap();
     let state: SharedState = Arc::new(AppState::default());
-    crate::launch::load(&state, dir).await;
+    crate::app::launch::load(&state, dir).await;
     preset_launch_plan(&state, dir).await;
     state
 }

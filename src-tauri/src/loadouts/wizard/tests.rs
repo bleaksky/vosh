@@ -104,14 +104,14 @@ async fn relaunch_as(dir: &std::path::Path, name: &str) -> SharedState {
 /// had every preset rollout already, as one this build opened
 /// before has, so each list stays as the test wrote it. The
 /// rollouts have tests of their own in `preset_rollout`.
-async fn relaunch(dir: &std::path::Path, name: &str) -> (SharedState, crate::launch::Launch) {
+async fn relaunch(dir: &std::path::Path, name: &str) -> (SharedState, crate::app::launch::Launch) {
     let mut set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
     for (id, _) in crate::preset_rollout::ROLLOUTS {
         set.record_migration(id).unwrap();
     }
     set.switch(name).unwrap();
     let state: SharedState = std::sync::Arc::new(AppState::default());
-    let launched = crate::launch::load(&state, dir).await;
+    let launched = crate::app::launch::load(&state, dir).await;
     assert!(state.profile_set.lock().await.is_some());
     (state, launched)
 }

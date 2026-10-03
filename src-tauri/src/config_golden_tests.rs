@@ -776,7 +776,7 @@ async fn a_fresh_install_writes_these_files_on_its_first_save() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     let state: SharedState = Arc::new(AppState::default());
-    crate::launch::load(&state, root).await;
+    crate::app::launch::load(&state, root).await;
     {
         let _persist = PERSIST_LOCK.lock().await;
         crate::disk::save::persist_state(&state, Some(root)).await;

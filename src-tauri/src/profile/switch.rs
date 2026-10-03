@@ -20,7 +20,7 @@ use crate::session;
 /// `p`, right after a switch loaded a profile file into it. The catalog
 /// fills the stores, and the aliases, triggers, and macros the profile
 /// file still holds go on top, the way launch lays them in
-/// [`crate::launch::load_loadout_mode`]. An item of the file wins over
+/// [`crate::app::launch::load_loadout_mode`]. An item of the file wins over
 /// the catalog item of the same name, or for a macro the same key. The
 /// group state of `set` then applies to the result.
 fn lay_catalog_over(
