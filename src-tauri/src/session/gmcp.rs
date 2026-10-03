@@ -2,7 +2,9 @@
 //! says hello and names the packages it reads. Each packet the game sends
 //! then updates the variables, your prompt, the room lists and the tick
 //! under the profile lock, runs the Lua that listens for it, and goes on
-//! to the windows.
+//! to the windows. A new character name in Char.Status or Char.Name is a
+//! login, which loads its affect fulls, may switch the profile and sends
+//! the session identity.
 
 use std::sync::Arc;
 
@@ -13,7 +15,9 @@ use tokio::time::Instant;
 use tracing::{info, warn};
 use vosh_protocol::telnet::Negotiator;
 
+use crate::app::state::SharedState;
 use crate::input;
+use crate::profile::switch::auto_switch_for_character;
 use crate::profile::Profile;
 use crate::script::{self, ApplyResult, SharedTimers};
 use crate::tick::TickStep;
@@ -92,12 +96,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
                     batch.character = Some(owned.clone());
                 }
                 let state = app.state::<crate::app::state::SharedState>();
-                crate::profile::switch::handle_char_known_for_auto_switch(
-                    app,
-                    state.inner(),
-                    &owned,
-                )
-                .await;
+                handle_char_known_for_auto_switch(app, state.inner(), &owned).await;
             }
         }
     }
@@ -139,6 +138,45 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     // we ran. This `emit` count would otherwise duplicate that, so
     // we leave gmcp_packets as the single source.
     Ok(())
+}
+
+/// Called by the session GMCP handler when Char.Status or Char.Name
+/// reports a character name. Suppresses duplicate observations so the
+/// resolver does not re-run on every Char.Status tick, then resolves
+/// (host, port, character) against the profile set. When the resolved
+/// profile differs from the currently-active one, swap to it and
+/// announce on the terminal so the user knows the active profile
+/// changed. Either way, a new name updates the session identity.
+async fn handle_char_known_for_auto_switch<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    character: &str,
+) {
+    let trimmed = character.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    // Short-circuit on duplicate observations. Char.Status is sent on
+    // every vitals update, so without this gate the resolver would
+    // run every tick.
+    let should_resolve = {
+        let Ok(mut guard) = state.current_character.lock() else {
+            return;
+        };
+        if guard.as_deref() == Some(trimmed) {
+            false
+        } else {
+            *guard = Some(trimmed.to_string());
+            true
+        }
+    };
+    if !should_resolve {
+        return;
+    }
+    // The affect gauges read this character's saved fulls.
+    crate::affect_full::character_known(app, state, trimmed);
+    auto_switch_for_character(app, state, trimmed).await;
+    crate::characters::broadcast_session_identity(app, state).await;
 }
 
 /// What a GMCP packet does to the profile, under the profile lock the

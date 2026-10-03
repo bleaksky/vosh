@@ -205,7 +205,7 @@ pub(crate) async fn switch_live_profile(state: &SharedState, name: &str) -> Resu
 
 /// Shared body for switching the active profile. The
 /// `profile_switch` Tauri command and the Char.Status auto-switch
-/// path in `handle_char_known_for_auto_switch` both call this so the
+/// path in `auto_switch_for_character` both call this so the
 /// persist + load + flip sequence stays identical. An error is a
 /// sentence for you, and leaves the index and the live profile on the
 /// profile you were using.
@@ -280,48 +280,9 @@ pub(crate) async fn switch_profile_with(
     switch_live_profile(state, name).await
 }
 
-/// Called by the session GMCP handler when Char.Status or Char.Name
-/// reports a character name. Suppresses duplicate observations so the
-/// resolver does not re-run on every Char.Status tick, then resolves
-/// (host, port, character) against the profile set. When the resolved
-/// profile differs from the currently-active one, swap to it and
-/// announce on the terminal so the user knows the active profile
-/// changed. Either way, a new name updates the session identity.
-pub(crate) async fn handle_char_known_for_auto_switch<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    state: &SharedState,
-    character: &str,
-) {
-    let trimmed = character.trim();
-    if trimmed.is_empty() {
-        return;
-    }
-    // Short-circuit on duplicate observations. Char.Status is sent on
-    // every vitals update, so without this gate the resolver would
-    // run every tick.
-    let should_resolve = {
-        let Ok(mut guard) = state.current_character.lock() else {
-            return;
-        };
-        if guard.as_deref() == Some(trimmed) {
-            false
-        } else {
-            *guard = Some(trimmed.to_string());
-            true
-        }
-    };
-    if !should_resolve {
-        return;
-    }
-    // The affect gauges read this character's saved fulls.
-    crate::affect_full::character_known(app, state, trimmed);
-    auto_switch_for_character(app, state, trimmed).await;
-    crate::characters::broadcast_session_identity(app, state).await;
-}
-
 /// Switch to the profile that claims `character` on the live
 /// connection, when that is not the active one already.
-async fn auto_switch_for_character<R: tauri::Runtime>(
+pub(crate) async fn auto_switch_for_character<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
     character: &str,
