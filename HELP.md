@@ -313,7 +313,7 @@ Slash commands drive Vosh from the command line without opening Settings. Vosh h
 - Import TinTin++ files with `#import-tintin <path>`.
 - Clear old passwords out of your session log with `#logs forget-passwords`, then `#logs forget-passwords now`.
 - Work targets with `#target <args>`, or bare `tar`, `tarn`, `tarp`, and `tarclear` with no `#` at all.
-- Switch renderers with `#nativesurface on|off|default`, applied on restart.
+- Switch renderers on macOS with `#nativesurface on|off|default`, applied on restart.
 
 An unknown command echoes a pointer to `#help`, and errors come back wrapped in square brackets.
 
@@ -626,11 +626,11 @@ Updates download from the project's GitHub releases, and Vosh checks every build
 
 ### 8.1 Switch terminal renderers
 
-Vosh ships two terminal renderers. The native GPU surface is the default on macOS and the xterm renderer is the default on Windows and Linux. The `#nativesurface` command switches between them from the command line.
+Vosh ships two terminal renderers. On macOS the native GPU surface draws the terminal by default, and the `#nativesurface` command switches between it and the xterm renderer from the command line. Windows and Linux always draw with the xterm renderer, whatever the switch says.
 
-- Type `#nativesurface off` to force the xterm renderer everywhere.
-- Type `#nativesurface on` to force the native surface everywhere.
-- Type `#nativesurface default` to return to the platform default.
+- Type `#nativesurface off` to draw with the xterm renderer.
+- Type `#nativesurface on` to draw with the native surface.
+- Type `#nativesurface default` to return to the macOS default, the native surface.
 - Restart Vosh. The switch applies only on restart, and the echo reminds you with `restart Vosh to apply`.
 
 The command runs entirely in the frontend and stores your choice locally under the key `vosh.nativesurface`. A bad argument echoes `usage #nativesurface on | off | default (takes effect on restart)`.
@@ -708,7 +708,7 @@ This is every slash command Vosh understands today.
 - `#record <name>` starts recording, `#record` shows status, `#record cancel` discards, `#endrec` saves the recording as an alias.
 - `#qkey <name> <verb>` configures a quick key, `#qkey clear <name>` clears, `#qkeys` lists.
 - `#target <args>` mirrors `tar`, with `#target clear|next|prev`, `#tarn`, `#tarp`, `#tarclear` as slash forms.
-- `#nativesurface on|off|default` forces the renderer, applied on restart.
+- `#nativesurface on|off|default` forces the renderer on macOS, applied on restart.
 
 Targeting also works bare with no `#`. Type `tar` to list, `tar <N>` or `tar <substr>` to pick, `tarn` and `tarp` to cycle, `tarclear` to clear.
 

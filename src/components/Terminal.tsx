@@ -58,10 +58,11 @@ export const NATIVE_FAILED_KEY = 'vosh.nativesurface.failed';
 
 // Tier 3: the native wgpu terminal surface. Default ON on macOS, where it
 // reached visual parity with xterm (docs/native-renderer.md, M4) and had
-// its hardware pass. The Windows and Linux surfaces ship compile-verified
-// but untested, so they default OFF there — setting vosh.nativesurface to
-// '1' explicitly forces the surface on for testing on any platform, and
-// '0' falls back to xterm anywhere.
+// its hardware pass. There vosh.nativesurface '0' falls back to xterm.
+// Windows and Linux always draw with xterm and never read the flag. Vosh
+// keeps no native surface for them, and in native mode the page waits for
+// the surface to size the grid, so a forced flag there would leave the
+// terminal without a size.
 export function nativeSurfaceEnabled(): boolean {
   if (typeof localStorage === 'undefined') return false;
   // The surface failed to come up earlier in this session. Stay on xterm
@@ -69,15 +70,14 @@ export function nativeSurfaceEnabled(): boolean {
   try {
     if (sessionStorage.getItem(NATIVE_FAILED_KEY) === '1') return false;
   } catch {
-    // storage unavailable; fall through to the flag
+    // storage unavailable; fall through to the platform
   }
-  const flag = localStorage.getItem('vosh.nativesurface');
-  if (flag === '1') return true;
-  if (flag === '0') return false;
-  return (
+  const mac =
     typeof navigator !== 'undefined' &&
-    (navigator.platform.startsWith('Mac') || navigator.userAgent.includes('Mac OS'))
-  );
+    (navigator.platform.startsWith('Mac') || navigator.userAgent.includes('Mac OS'));
+  if (!mac) return false;
+  // '1' and no flag both leave the macOS default on.
+  return localStorage.getItem('vosh.nativesurface') !== '0';
 }
 
 // macOS draws the native surface BELOW the webview (the underlay). The
