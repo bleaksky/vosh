@@ -393,10 +393,6 @@ fn pointer_up() {
     POINTER.from_history.store(false, Ordering::Release);
     let was_scrollbar = POINTER.dragging_scrollbar.swap(false, Ordering::AcqRel);
     let was_divider = POINTER.dragging_divider.swap(false, Ordering::AcqRel);
-    if was_divider {
-        // Divider drag over; redraw so the cursor rect refreshes.
-        redraw_now();
-    }
     if !was_scrollbar && !was_divider && POINTER.selecting.swap(false, Ordering::AcqRel) {
         // Copy the selection to the clipboard on release.
         copy_selection();
