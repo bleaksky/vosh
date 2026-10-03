@@ -205,7 +205,7 @@ describe('drawing off (P11)', () => {
     const html = renderToStaticMarkup(
       <DrawOff name="Tester" other={false} confirming={false} onForget={() => {}} />,
     );
-    expect(html).toContain('You see the game&#x27;s own prompt again.');
+    expect(html).toContain('You see the game&#x27;s own prompt.');
     expect(html).toContain('Vosh keeps your design for Tester.');
     expect(html).toContain('st-button-danger');
     expect(html).toContain('Forget your game&#x27;s prompt');

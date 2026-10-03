@@ -16,6 +16,7 @@ describe('loadMapStyle', () => {
     expect(loadMapStyle(store({ [MAP_STYLE_KEY]: 'squares' }))).toBe('squares');
     expect(loadMapStyle(store({ [MAP_STYLE_KEY]: 'glyphs' }))).toBe('glyphs');
     expect(loadMapStyle(store({ [MAP_STYLE_KEY]: 'tileset' }))).toBe('tileset');
+    expect(loadMapStyle(store({ [MAP_STYLE_KEY]: '3d' }))).toBe('3d');
   });
 
   it('sets aside the plain drawing the redesign stored by default', () => {
@@ -41,7 +42,7 @@ describe('loadMapStyle', () => {
 });
 
 describe('MAP_STYLE_CHOICES', () => {
-  it('offers the styles from before the redesign, squares first', () => {
-    expect(MAP_STYLE_CHOICES).toEqual(['squares', 'glyphs', 'tileset']);
+  it('offers the styles from before the redesign, squares first, then 3D', () => {
+    expect(MAP_STYLE_CHOICES).toEqual(['squares', 'glyphs', 'tileset', '3d']);
   });
 });

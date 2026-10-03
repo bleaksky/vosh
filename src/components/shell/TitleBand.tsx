@@ -6,7 +6,15 @@ import { isMacPlatform, shortcutLabel } from '../../lib/palette';
 import type { PaneSplit, PaneType } from '../../lib/paneLayout';
 import { PANE_LABELS, paneTypesToAdd } from '../panel/paneTypes';
 import type { Connection } from '../../lib/useConnection';
-import { CloseIcon, MaximizeIcon, MinimizeIcon, PanelIcon, PlusIcon, SearchIcon } from './icons';
+import {
+  CloseIcon,
+  GearIcon,
+  MaximizeIcon,
+  MinimizeIcon,
+  PanelIcon,
+  PlusIcon,
+  SearchIcon,
+} from './icons';
 import { SessionMenu } from './SessionMenu';
 import { ShellMenu, ShellMenuItem } from './ShellMenu';
 import { TitleButton } from './TitleButton';
@@ -15,9 +23,12 @@ import { TitleButton } from './TitleButton';
 // fill and no line of its own: the terminal ground runs up under it and
 // the panel ground runs up on the right. Its empty areas drag the
 // window. The session button sits centered over the terminal column.
-// Add a pane, Search commands, and the panel toggle sit at the right,
-// over the panel. On macOS the native traffic lights own the left
-// corner. Windows and Linux draw minimize, maximize, and close here.
+// Add a pane, Search commands, the panel toggle, and Settings sit at
+// the right, over the panel. On macOS the native traffic lights own the
+// left corner. Windows and Linux draw minimize, maximize, and close
+// here, after Settings, and the panel draws at least 248 px wide there
+// to keep all seven over it. They have no menu bar, so there the gear
+// is how you find Settings.
 
 const ADD_MENU_WIDTH = 200;
 
@@ -27,12 +38,14 @@ interface Props {
   onTogglePanel: () => void;
   /** Open the palette, or close it when it is open. */
   onTogglePalette: () => void;
+  /** Open Settings, the same as its shortcut. */
+  onOpenSettings: () => void;
   /** The panel's pane tree. Add a pane lists the pane types it does
    *  not show yet. */
   paneTree: PaneSplit | null;
   onAddPane: (pane: PaneType) => void;
-  /** Runs after a menu closes, to hand the caret back to the command
-   *  line. */
+  /** Runs after a menu closes, or after the gear opens Settings, to
+   *  hand the caret back to the command line. */
   onMenuClosed: () => void;
 }
 
@@ -41,6 +54,7 @@ export function TitleBand({
   panelOpen,
   onTogglePanel,
   onTogglePalette,
+  onOpenSettings,
   paneTree,
   onAddPane,
   onMenuClosed,
@@ -126,6 +140,21 @@ export function TitleBand({
           onClick={onTogglePanel}
         >
           <PanelIcon />
+        </button>
+        <button
+          type="button"
+          className="shell-icon-button"
+          aria-label="Settings"
+          title={`Settings (${shortcutLabel(APP_SHORTCUTS.settings)})`}
+          onClick={(e) => {
+            onOpenSettings();
+            // WebView2 and WebKitGTK focus a button on click. Left on the
+            // gear, the caret would take your next Space and open Settings
+            // again, so it goes back to the command line.
+            if (document.activeElement === e.currentTarget) onMenuClosed();
+          }}
+        >
+          <GearIcon />
         </button>
         {!mac && <WindowControls />}
       </div>

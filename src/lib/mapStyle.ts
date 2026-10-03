@@ -3,13 +3,14 @@
 
 /** How the map draws. `squares` is the default, as it was before the
  *  One Window redesign: your room held at the center, doors in their
- *  state colors, the floors above and below, and the terrain. The
- *  redesign drew a `plain` style for a while. That drawing is gone,
- *  and a stored one is ignored. */
-export type MapStyle = 'squares' | 'glyphs' | 'tileset';
+ *  state colors, the floors above and below, and the terrain. `3d`
+ *  stacks the floors as boxes you can turn and tilt. The redesign drew
+ *  a `plain` style for a while. That drawing is gone, and a stored one
+ *  is ignored. */
+export type MapStyle = 'squares' | 'glyphs' | 'tileset' | '3d';
 
 /** The styles the map's menu offers, in its order. */
-export const MAP_STYLE_CHOICES: readonly MapStyle[] = ['squares', 'glyphs', 'tileset'];
+export const MAP_STYLE_CHOICES: readonly MapStyle[] = ['squares', 'glyphs', 'tileset', '3d'];
 
 export const MAP_STYLE_KEY = 'vosh.map.style';
 // The key before the redesign. It held `squares` by default, written
@@ -22,7 +23,7 @@ const LEGACY_STYLE_KEY = 'vosh.layout.serverMapStyle';
 export function loadMapStyle(storage: Pick<Storage, 'getItem'>): MapStyle {
   try {
     const value = storage.getItem(MAP_STYLE_KEY);
-    if (value === 'squares' || value === 'glyphs' || value === 'tileset') return value;
+    if (MAP_STYLE_CHOICES.includes(value as MapStyle)) return value as MapStyle;
     const legacy = storage.getItem(LEGACY_STYLE_KEY);
     if (legacy === 'glyphs' || legacy === 'tileset') return legacy;
   } catch {

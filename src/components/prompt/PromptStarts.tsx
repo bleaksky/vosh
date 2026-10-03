@@ -276,7 +276,9 @@ export function Starts({
     return (
       <div className="pc-body is-list">
         <p className="pc-hint">
-          Start from one of these, or click any part of your prompt to change it.
+          {config.draw
+            ? 'Start from one of these, or click any part of your prompt to change it.'
+            : 'Start from one of these. Picking one turns on Draw your prompt.'}
         </p>
         {children}
         <StartList
@@ -362,7 +364,7 @@ interface DrawOffProps {
 export function DrawOff({ name, other, confirming, onForget }: DrawOffProps) {
   return (
     <div className="pc-body">
-      <p className="pc-question">You see the game&apos;s own prompt again.</p>
+      <p className="pc-question">You see the game&apos;s own prompt.</p>
       <p className="pc-copy">
         {other
           ? `Vosh keeps your design for ${name} and still reads the values in your prompt.`

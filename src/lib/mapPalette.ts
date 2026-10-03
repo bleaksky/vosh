@@ -87,9 +87,51 @@ export const MAP_COLORS = {
   pathLine: 'rgba(196,168,114,0.7)',
 };
 
+/** The theme colors the 3D style paints with, read as it draws. */
+export interface MapInks {
+  light: boolean;
+  /** The panel, which the drawing sits on. */
+  ground: string;
+  text: string;
+  secondary: string;
+  tertiary: string;
+  sep: string;
+  accent: string;
+  /** The accent at 13 percent, the fill of your cell in Squares. */
+  accentSoft: string;
+  /** The interface face, for the floor numbers. */
+  font: string;
+}
+
+export function mapInks(): MapInks {
+  const light =
+    typeof document !== 'undefined' && document.documentElement.dataset.appearance === 'light';
+  return {
+    light,
+    ground: MAP_COLORS.panel,
+    text: readCssVar('--text', '#c0bdbb'),
+    secondary: readCssVar('--secondary', '#918e8c'),
+    tertiary: readCssVar('--tertiary', '#646260'),
+    sep: readCssVar('--sep', '#1d1b19'),
+    accent: MAP_COLORS.origin,
+    accentSoft: MAP_COLORS.originFill,
+    font: readCssVar('--font-ui', 'system-ui, sans-serif'),
+  };
+}
+
 // Every custom property a map style reads. A change to any of them
 // means the canvas needs a fresh paint.
-const THEME_VARS = ['--panel', '--c-surface', '--c-accent', '--c-accent-soft', '--c-text-faint'];
+const THEME_VARS = [
+  '--panel',
+  '--c-surface',
+  '--c-accent',
+  '--c-accent-soft',
+  '--c-text-faint',
+  '--text',
+  '--secondary',
+  '--tertiary',
+  '--sep',
+];
 
 /** One string that changes whenever a color the map paints with does. */
 export function mapThemeSignature(): string {
@@ -122,10 +164,13 @@ const SERVER_CODE_TO_SECTOR: Record<string, number> = {
   '12': 12, // Snow
 };
 
+/** The SECTORS index of a sector code, 0 (Inside) for one we do not know. */
+export function sectorIndex(code: string | undefined): number {
+  return (code && SERVER_CODE_TO_SECTOR[code]) || 0;
+}
+
 export function sectorForCode(code: string | undefined): SectorTheme {
-  if (!code) return SECTORS[0];
-  const idx = SERVER_CODE_TO_SECTOR[code];
-  return SECTORS[idx ?? 0];
+  return SECTORS[sectorIndex(code)];
 }
 
 // Convert a hex string like "#aabbcc" to an rgba() string at the given alpha.

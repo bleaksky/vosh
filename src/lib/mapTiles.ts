@@ -244,16 +244,35 @@ export function gridRooms(payload: MapTilesPayload, rows: number, cols: number):
   return out;
 }
 
-/** One corridor stroke from a room's center toward the next cell, in
- *  grid units. `reach` is 1 when it meets the room there and 0.5 for
- *  the stub a hidden door draws toward a cell with no room. */
-export interface Corridor {
-  row: number;
-  col: number;
+/** What a stroke out of a room says. A `join` runs to the room in the
+ *  next cell. A `stub` is the half pitch a hidden door draws when its
+ *  exit leads elsewhere. A `tick` is the short mark of a bent exit, one
+ *  the game sends in uppercase because it leads past the next cell. */
+export type StrokeKind = 'join' | 'stub' | 'tick';
+
+/** How far a stroke of each kind reaches from its room's center in
+ *  Squares and Tileset, in cells. A join meets the room in the next cell
+ *  and a stub stops in the middle of the gap. A tick clears a room in
+ *  Squares and stops short of the middle of the gap, so two ticks that
+ *  face each other never read as a join. */
+export const REACH: Record<StrokeKind, number> = { join: 1, stub: 0.5, tick: 0.42 };
+
+/** One stroke from a room's center toward the next cell, in grid
+ *  units. */
+export interface Stroke {
   dx: number;
   dy: number;
-  reach: number;
   state: DoorState;
+  kind: StrokeKind;
+  /** A join the room in the next cell leads back along, so the two
+   *  rooms share one line. */
+  mutual: boolean;
+}
+
+/** A stroke out of the room at a row and column of your floor. */
+export interface Corridor extends Stroke {
+  row: number;
+  col: number;
 }
 
 const DIR_OFFSETS: Array<[Dir, Dir, number, number]> = [
@@ -263,33 +282,52 @@ const DIR_OFFSETS: Array<[Dir, Dir, number, number]> = [
   ['w', 'e', -1, 0],
 ];
 
-/** The corridors the squares and tileset styles stroke under the rooms.
+/** The strokes one room draws toward the cells around it, north, east,
+ *  south, then west. `next` finds the room dx, dy away on its floor.
  *
- *  A corridor reaches the next cell only along a lowercase exit, the one
+ *  A join reaches the next cell only along a lowercase exit, the one
  *  that lands on the room there. Its door color comes from this room's
  *  door that way and from the neighbor's door back, but only when the
  *  neighbor's letter back is lowercase too. An uppercase letter there is
  *  an exit to somewhere else, and its door belongs to that exit.
  *
+ *  An uppercase letter draws a tick in its own door's color, so you see
+ *  an exit leave that way without a line that joins the room beside it.
+ *
  *  An immortal sees secret exits. The game sends them in `e` like any
  *  other exit, uppercase when they lead elsewhere, and marks their door
  *  `d[dir] = "hidden"`. A hidden door whose exit does not land on the
- *  next room draws a half pitch stub, so the line says "secret exit"
- *  without joining this room to the room beside it. */
+ *  next room draws a half pitch stub instead, so the line says "secret
+ *  exit" without joining this room to the room beside it. */
+export function exitStrokes(
+  cell: ServerCell,
+  next: (dx: number, dy: number) => ServerCell | null,
+): Stroke[] {
+  const out: Stroke[] = [];
+  for (const [dir, opp, dx, dy] of DIR_OFFSETS) {
+    const neighbor = next(dx, dy);
+    const here = doorStateAt(cell, dir);
+    if (neighbor && hasExit(cell, dir)) {
+      const mutual = hasExit(neighbor, opp);
+      const there = mutual ? doorStateAt(neighbor, opp) : null;
+      const state = combineDoorStates(here, there) ?? 'open';
+      out.push({ dx, dy, state, kind: 'join', mutual });
+    } else if (here === 'hidden') {
+      out.push({ dx, dy, state: 'hidden', kind: 'stub', mutual: false });
+    } else if (cell.e?.includes(dir.toUpperCase())) {
+      out.push({ dx, dy, state: here ?? 'open', kind: 'tick', mutual: false });
+    }
+  }
+  return out;
+}
+
+/** The strokes the squares and tileset styles draw under the rooms of
+ *  your floor, each room's in exitStrokes order. */
 export function corridors(payload: MapTilesPayload, rows: number, cols: number): Corridor[] {
   const out: Corridor[] = [];
   for (const { row, col, cell } of gridRooms(payload, rows, cols)) {
-    for (const [dir, opp, dx, dy] of DIR_OFFSETS) {
-      const neighbor = getCell(payload, row + dy, col + dx);
-      const here = doorStateAt(cell, dir);
-      if (neighbor && hasExit(cell, dir)) {
-        const there = hasExit(neighbor, opp) ? doorStateAt(neighbor, opp) : null;
-        const state = combineDoorStates(here, there) ?? 'open';
-        out.push({ row, col, dx, dy, reach: 1, state });
-      } else if (here === 'hidden') {
-        out.push({ row, col, dx, dy, reach: 0.5, state: 'hidden' });
-      }
-    }
+    const next = (dx: number, dy: number) => getCell(payload, row + dy, col + dx);
+    for (const stroke of exitStrokes(cell, next)) out.push({ row, col, ...stroke });
   }
   return out;
 }

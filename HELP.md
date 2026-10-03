@@ -195,6 +195,8 @@ Captures pull words from the line you typed. `%1` through `%9` pull the first th
 
 Give related aliases a shared name in `Group` to turn them on and off together with `#group <name> on|off`. Under `Advanced`, `Run Lua instead` runs a Lua script in place of the expansion, with the words you typed in its captures table.
 
+Triggers, Aliases, and Macros each list your items under a heading for every group, and Presets under a heading for each category. The items with no group sit at the top under no heading. Click a heading to fold its group away, and click it again to open it. The chevron turns down while the group is open, and a folded heading counts the items it holds. With a heading in focus, `ArrowLeft` folds it and `ArrowRight` opens it, and `ArrowUp` and `ArrowDown` move through the headings and items as one list. Each list remembers the groups you fold. Type in the filter and every folded group with a match opens until you clear it. Pick an item from the matches and its group stays open.
+
 Example. An alias named `kk` with the expansion `kick %1; backstab %1` turns `kk dragon` into `kick dragon` followed by `backstab dragon`.
 
 The command line defines aliases too. `#alias gc get all corpse` sets one and echoes `alias gc set`, `#aliases` lists every alias, and `#unalias gc` removes one. Setting an alias again, with `#alias`, `#endrec`, or `mud.alias` in Lua, keeps it in its group.
@@ -352,6 +354,8 @@ To start over, choose `Reset panel layout` in the View menu or the palette, or `
 
 Settings under Characters draws each character's panel under Panel layout, so you can see how each one is arranged.
 
+Open Settings with the gear at the right end of the title band, after the panel button, or press `Cmd+,` on macOS or `Ctrl+,` elsewhere. `Open settings` in the palette and the `Settings` list in the terminal right click menu reach it too.
+
 ### 4.2 Use the map
 
 The Map pane draws the map the game sends. It sits at the top of the panel at first, and its header names the area you are in.
@@ -359,11 +363,13 @@ The Map pane draws the map the game sends. It sits at the top of the panel at fi
 - Show or hide it with `Show map` in the View menu or the palette, or add it with `Add a pane` in the title band.
 - Read the rows under the drawing. The first names the room you stand in and its exits. The name takes the color the terminal shows it in, from your theme's colors, like gray for a room inside, yellow for a field, and blue for a lake you cannot swim. Where the panel would wash that color out, the pane draws it a shade lighter or darker. A few rooms take a color of their own from their area, which the game leaves out of `Room.Info`, so the pane shows the usual color for their terrain. The second row names the terrain and the region, like `Inside` and `Coastal North`. The rest list the people here, with a count beside a name more than one of them shares, and when more people are here than fit, the last row counts the others. A short pane gives up rows of people first, then the terrain row, and keeps the room.
 - Point at the drawing and click the sliders button in its bottom right corner to open the map menu.
-- Pick `Squares`, `Glyphs`, or `Tileset` to change how the map draws.
-- Choose `Zoom in` or `Zoom out`, or hold `Cmd` or `Ctrl` and turn the wheel over the map. `Actual size` shows the zoom and goes back to 100%.
+- Pick `Squares`, `Glyphs`, `Tileset`, or `3D` to change how the map draws. In Squares and 3D, a short tick out of a room marks an exit that leads past the room beside it.
+- Scroll or pinch over the map to zoom it, in any style, or choose `Zoom in` or `Zoom out`. `Actual size` shows the zoom and goes back to 100%.
 - In Tileset, choose `Load tileset…` to use your own tile art and `Clear tileset` to drop it.
+- In 3D, drag the map to turn and tilt it. Double click it or choose `Reset view` to put north back at the top. You can also press `Tab` to reach the map and turn and tilt it with the arrow keys. While the map is turned, a compass in its top right corner points north.
+- In 3D, choose `Your floor`, `One floor up and down`, or `Every floor` to pick the floors it draws. The floors above you draw as outlines and the floors below fade, and `Every floor` numbers each floor by its steps from yours. Turn on `Terrain sprites` to paint the terrain of each room on its roof.
 
-Vosh remembers the style, the zoom, and the tileset. Until the game sends `Map.Tiles` the pane says the map appears when your MUD sends it. `Room.Info` names the room, its exits, its terrain, its region, and the area, and `Room.Chars` lists the people.
+Vosh remembers the style, the zoom, the 3D view, and the tileset. Until the game sends `Map.Tiles` the pane says the map appears when your MUD sends it. `Room.Info` names the room, its exits, its terrain, its region, and the area, and `Room.Chars` lists the people.
 
 ### 4.3 Use the chat pane
 
@@ -746,6 +752,8 @@ In the command palette. `ArrowUp` and `ArrowDown` move the selection, `Enter` ru
 In the terminal menu. `ArrowUp` and `ArrowDown` move through the items, `Enter` picks one, `ArrowRight` opens the Settings list, `ArrowLeft` steps back out of it, and `Escape` closes the list, then the menu.
 
 In Settings and Help. `Cmd+F` puts the caret in the search, `ArrowUp` and `ArrowDown` move through the results, and `Escape` clears the search. In Help, `Enter` steps to the next match in the topic you read and `Shift+Enter` to the previous one.
+
+In an Automation list in Settings. `ArrowUp` and `ArrowDown` move through the group headings and items, and `Home` and `End` jump to the first and the last. On a heading, `ArrowLeft` folds its group and `ArrowRight` opens it.
 
 Mouse on the terminal. Wheel up opens the scrollback split. Middle click closes the split and snaps to the live tail. Right click opens the terminal menu.
 

@@ -10,11 +10,13 @@ import {
   hasExit,
   offFloorLayers,
   playerCellOf,
+  REACH,
   type Corridor,
   type Dir,
   type GlyphCell,
   type GlyphGrid,
   type MapTilesPayload,
+  type StrokeKind,
 } from './mapTiles';
 
 // The packets come from fixtures/gmcp/aabahran/map, built by the game's
@@ -39,11 +41,17 @@ const DARK_CASTLE = 'dark-castle-maw-immortal.gmcp';
 
 const DIRS: Record<string, Dir> = { '0,-1': 'n', '1,0': 'e', '0,1': 's', '-1,0': 'w' };
 
-/** The directions the corridors from one room head, in stroke order. */
-function strokesFrom(payload: MapTilesPayload, row: number, col: number): Dir[] {
+/** The directions the strokes of one kind from one room head, in
+ *  stroke order. */
+function strokesFrom(
+  payload: MapTilesPayload,
+  row: number,
+  col: number,
+  kind: StrokeKind = 'join',
+): Dir[] {
   const { rows, cols } = gridDims(payload);
   return corridors(payload, rows, cols)
-    .filter((c) => c.row === row && c.col === col)
+    .filter((c) => c.row === row && c.col === col && c.kind === kind)
     .map((c) => DIRS[`${c.dx},${c.dy}`]);
 }
 
@@ -101,23 +109,30 @@ describe('hasExit', () => {
 });
 
 describe('corridors', () => {
-  it('draws no corridor along an exit that leads past the room next door', () => {
+  it('ticks an exit that leads past the room next door and joins no room along it', () => {
     const p = tiles(CARANDUIN);
     // The Common Road leads north to the Potion Shop and south to the
     // Trading Post, but the cells beside it hold the Pill Shop and The
-    // Meat Store. Only its east and west exits reach the next cell.
+    // Meat Store. Only its east and west exits reach the next cell, and
+    // the other two draw ticks.
     expect(getCell(p, 7, 6)?.ex).toEqual({ n: 4508, e: 4406, s: 4514, w: 4404 });
     expect(strokesFrom(p, 7, 6)).toEqual(['e', 'w']);
+    expect(strokesFrom(p, 7, 6, 'tick')).toEqual(['n', 's']);
+    expect(corridorFrom(p, 7, 6, 'n')).toMatchObject({ kind: 'tick', state: 'open' });
     // Under a Battlement Ladder leads east to The South Road, and the
     // Edge of the Pond beside it leads west to Outside the Monastery.
-    // No corridor joins the two.
+    // No corridor joins the two, and a tick from each faces the other.
     expect(getCell(p, 9, 2)?.e).toBe('nESu');
     expect(getCell(p, 9, 3)?.e).toBe('esW');
     expect(strokesFrom(p, 9, 2)).toEqual(['n']);
     expect(strokesFrom(p, 9, 3)).toEqual(['e', 's']);
+    expect(strokesFrom(p, 9, 2, 'tick')).toEqual(['e', 's']);
+    expect(strokesFrom(p, 9, 3, 'tick')).toEqual(['w']);
+    // Each tick stops short of the middle of the gap.
+    expect(2 * REACH.tick).toBeLessThan(1);
   });
 
-  it('strokes every lowercase exit toward a room and no other one to the next cell', () => {
+  it('joins every lowercase exit toward a room and ticks every uppercase one', () => {
     for (const name of aabahranMapFixtureNames()) {
       const p = tiles(name);
       const { rows, cols } = gridDims(p);
@@ -138,10 +153,12 @@ describe('corridors', () => {
           const stroke = drawn.get(key);
           if (letter === dir && next) {
             lower++;
-            expect(stroke?.reach, `${name} ${key}`).toBe(1);
+            expect(stroke?.kind, `${name} ${key}`).toBe('join');
           } else if (cell.d?.[dir] === 'hidden') {
             // A secret exit that leads elsewhere keeps its half stub.
-            expect(stroke, `${name} ${key}`).toMatchObject({ reach: 0.5, state: 'hidden' });
+            expect(stroke, `${name} ${key}`).toMatchObject({ kind: 'stub', state: 'hidden' });
+          } else if (letter !== dir) {
+            expect(stroke, `${name} ${key}`).toMatchObject({ kind: 'tick' });
           } else {
             expect(stroke, `${name} ${key}`).toBeUndefined();
           }
@@ -157,7 +174,11 @@ describe('corridors', () => {
     // Long Tunnel, whose locked door north leads back.
     expect(getCell(p, 7, 7)).toMatchObject({ e: 'su', d: { s: 'locked' } });
     expect(getCell(p, 8, 7)).toMatchObject({ e: 'ns', d: { n: 'locked' } });
-    expect(corridorFrom(p, 7, 7, 's')).toMatchObject({ reach: 1, state: 'locked' });
+    expect(corridorFrom(p, 7, 7, 's')).toMatchObject({
+      kind: 'join',
+      state: 'locked',
+      mutual: true,
+    });
     // The next Long Tunnel leads south to A Four-Way Intersection with no
     // door. The closed door north of that intersection leads to another
     // one, so the game sends its letter as N, and the tunnel stays open.
@@ -167,8 +188,13 @@ describe('corridors', () => {
       d: { n: 'closed' },
       ex: { n: 18372, s: 18369 },
     });
-    expect(corridorFrom(p, 9, 7, 's')).toMatchObject({ reach: 1, state: 'open' });
-    expect(corridorFrom(p, 10, 7, 'n')).toBeUndefined();
+    expect(corridorFrom(p, 9, 7, 's')).toMatchObject({
+      kind: 'join',
+      state: 'open',
+      mutual: false,
+    });
+    // That closed door draws a tick of its own color instead.
+    expect(corridorFrom(p, 10, 7, 'n')).toMatchObject({ kind: 'tick', state: 'closed' });
   });
 
   it('joins two rooms at a hidden door only when its exit lands on the other', () => {
@@ -181,21 +207,22 @@ describe('corridors', () => {
       ex: { s: 20705 },
     });
     expect(getCell(p, 13, 16)).toMatchObject({ e: 'ns', d: { n: 'hidden' }, ex: { n: 20635 } });
-    expect(corridorFrom(p, 12, 16, 's')).toMatchObject({ reach: 1, state: 'hidden' });
-    expect(corridorFrom(p, 13, 16, 'n')).toMatchObject({ reach: 1, state: 'hidden' });
+    expect(corridorFrom(p, 12, 16, 's')).toMatchObject({ kind: 'join', state: 'hidden' });
+    expect(corridorFrom(p, 13, 16, 'n')).toMatchObject({ kind: 'join', state: 'hidden' });
     // The hidden door south of the Mausoleum of Innocence leads to
     // Ingress of Shadows, past Lord Corim Street in the cell below. The
     // closed door north of the street leads elsewhere too. The mausoleum
-    // keeps a stub, and no corridor joins the two.
+    // keeps a stub, the street a closed tick, and no corridor joins the
+    // two.
     expect(getCell(p, 12, 9)).toMatchObject({ e: 'nS', d: { s: 'hidden' }, ex: { s: 27062 } });
     expect(getCell(p, 13, 9)).toMatchObject({ e: 'New', d: { n: 'closed' }, ex: { n: 20759 } });
-    expect(corridorFrom(p, 12, 9, 's')).toMatchObject({ reach: 0.5, state: 'hidden' });
-    expect(corridorFrom(p, 13, 9, 'n')).toBeUndefined();
+    expect(corridorFrom(p, 12, 9, 's')).toMatchObject({ kind: 'stub', state: 'hidden' });
+    expect(corridorFrom(p, 13, 9, 'n')).toMatchObject({ kind: 'tick', state: 'closed' });
     // A cobbled road into the forest has a hidden door south to A
     // Peaceful Clearing, and the cell below it is empty. It keeps a stub.
     expect(getCell(p, 16, 14)).toMatchObject({ e: 'nSW', d: { s: 'hidden' }, ex: { s: 2524 } });
     expect(getCell(p, 17, 14)).toBeNull();
-    expect(corridorFrom(p, 16, 14, 's')).toMatchObject({ reach: 0.5, state: 'hidden' });
+    expect(corridorFrom(p, 16, 14, 's')).toMatchObject({ kind: 'stub', state: 'hidden' });
   });
 });
 

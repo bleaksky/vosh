@@ -74,6 +74,17 @@ export interface PaneLayout {
 export const PANE_LAYOUT_VERSION = 1;
 export const PANEL_WIDTH_MIN = 200;
 export const PANEL_WIDTH_MAX = 800;
+/** The narrowest panel Windows and Linux draw. The title band carries
+ *  the window controls there, and its right buttons reach 238 px in
+ *  from the window edge. At this width every one of them sits over the
+ *  panel, 10 px in from its edge as at the window edge. A saved width
+ *  under this stays saved and draws at this width. */
+export const PANEL_WIDTH_MIN_FRAMELESS = 248;
+
+/** The narrowest panel the window draws, PANEL_WIDTH_MIN on macOS. */
+export function panelWidthFloor(mac: boolean): number {
+  return mac ? PANEL_WIDTH_MIN : PANEL_WIDTH_MIN_FRAMELESS;
+}
 // Deepest depth a split may sit at, counting the root as 0.
 const MAX_SPLIT_DEPTH = 3;
 const MAX_WEIGHT = 1_000_000;

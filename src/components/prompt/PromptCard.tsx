@@ -1061,7 +1061,8 @@ export function PromptCard({
               }
               onPick={(template) => {
                 setPointing(NOWHERE);
-                // Start empty keeps its empty design as drawing turns on.
+                // Picking a start is how you ask Vosh to draw it, so
+                // drawing turns on. Start empty keeps its empty design.
                 save({ ...config, template, draw: true }, true, template === '');
               }}
               onInsertValue={() => openPicker('design')}

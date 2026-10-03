@@ -1,10 +1,26 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } from 'react';
 import { onGmcpPackage } from '../lib/session';
-import { MAP_COLORS, hexToRgba, mapThemeSignature, sectorForCode } from '../lib/mapPalette';
+import { drawMap3D } from '../lib/map3dDraw';
+import {
+  DEFAULT_MAP_3D_VIEW,
+  MAP_3D_VIEW_KEY,
+  loadMap3dView,
+  type Map3dView,
+} from '../lib/map3dView';
+import {
+  MAP_COLORS,
+  hexToRgba,
+  mapInks,
+  mapThemeSignature,
+  sectorForCode,
+} from '../lib/mapPalette';
 import { MAP_STYLE_KEY, loadMapStyle, type MapStyle } from '../lib/mapStyle';
+import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom } from '../lib/mapZoom';
 import {
   DOOR_COLORS,
+  REACH,
   corridors,
+  getCell,
   glyphGrid,
   gridDims,
   gridRooms,
@@ -19,24 +35,26 @@ import {
 import { subscribeThemeChanges } from '../lib/theme';
 import { pushToast } from '../lib/toasts';
 import { MapPaneControls } from './panel/MapPaneControls';
+import { useMapGestures } from './useMapGestures';
 
 type Style = MapStyle;
 
 const TILESET_KEY = 'vosh.layout.serverMapTileset';
 const ZOOM_KEY = 'vosh.layout.serverMapZoom';
 
-// Zoom multiplier applied to the base 20-pixel pitch. 1.0 = default
-// (20px cells), 2.0 = 40px, 0.5 = 10px. Stepping at 0.25 increments
-// keeps cell sizes on whole-pixel boundaries.
-const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 3.0;
-const ZOOM_STEP = 0.25;
-
 function loadStyle(): Style {
   try {
     return loadMapStyle(localStorage);
   } catch {
     return 'squares';
+  }
+}
+
+function loadView3d(): Map3dView {
+  try {
+    return loadMap3dView(localStorage);
+  } catch {
+    return DEFAULT_MAP_3D_VIEW;
   }
 }
 
@@ -56,13 +74,6 @@ function loadZoom(): number {
   } catch {
     return 1.0;
   }
-}
-
-function clampZoom(z: number): number {
-  // Snap to the nearest step to avoid drift from arithmetic on
-  // wheel-delta increments accumulating sub-step fractions.
-  const snapped = Math.round(z / ZOOM_STEP) * ZOOM_STEP;
-  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, snapped));
 }
 
 // Default sector code order in a horizontal sprite strip. A tileset PNG
@@ -120,6 +131,8 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
   // row, so a failure there says so in a toast.
   const pickedRef = useRef(false);
   const [zoom, setZoom] = useState<number>(loadZoom);
+  // How you look at the 3D style: its turn, tilt, floors and sprites.
+  const [view3d, setView3d] = useState<Map3dView>(loadView3d);
   // Snapshot of the persistent mapping store. We use it to translate the
   // player-centric Map.Tiles grid into stable world coordinates so cells
   // do not shift on canvas as the player walks.
@@ -159,21 +172,23 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
     }
   }, [zoom]);
 
-  // Ctrl/Cmd + wheel zooms in/out, mirroring the convention used by
-  // map apps. Attached non-passively so we can preventDefault and stop
-  // the browser from scrolling the surrounding pane in lieu of zooming.
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const handler = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-      const direction = e.deltaY < 0 ? 1 : -1;
-      setZoom((z) => clampZoom(z + direction * ZOOM_STEP));
-    };
-    el.addEventListener('wheel', handler, { passive: false });
-    return () => el.removeEventListener('wheel', handler);
-  }, []);
+    try {
+      localStorage.setItem(MAP_3D_VIEW_KEY, JSON.stringify(view3d));
+    } catch {
+      // ignore
+    }
+  }, [view3d]);
+
+  // Plain scroll and a pinch zoom the map in every style. In 3D a drag,
+  // a double click and the arrow keys turn and tilt it.
+  const is3d = style === '3d';
+  useMapGestures(containerRef, {
+    zoom,
+    setZoom,
+    view: is3d ? view3d : null,
+    setView: setView3d,
+  });
 
   useEffect(() => {
     if (!tilesetUrl) {
@@ -250,6 +265,11 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
       return;
     }
 
+    if (style === '3d') {
+      drawMap3D(ctx, cssWidth, cssHeight, tiles, view3d, zoom, mapInks());
+      return;
+    }
+
     const { row: centerR, col: centerC } = playerCellOf(tiles, rows, cols);
 
     const anchor = computeAnchor(tiles, rows, cols, centerR, centerC, cssWidth, cssHeight, zoom);
@@ -284,9 +304,10 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
   // runs after the browser paints, so waiting there and then on a
   // frame showed each step a frame or two after the terminal and the
   // room row had moved on. A layout effect draws before that paint.
+  // A change to the 3D view repaints the same way, once per drag step.
   useLayoutEffect(() => {
     drawRef.current();
-  }, [tiles]);
+  }, [tiles, view3d]);
 
   // Style/layout-driven redraw keeps the settle sequence. Layout after
   // a mode toggle can take a frame or two to settle. Schedule a couple
@@ -392,7 +413,13 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
         onChange={handleLoadTileset}
         hidden
       />
-      <div ref={containerRef} className="map-canvas-host">
+      <div
+        ref={containerRef}
+        className={`map-canvas-host${is3d ? ' is-3d' : ''}`}
+        tabIndex={is3d ? 0 : undefined}
+        role={is3d ? 'group' : undefined}
+        aria-label={is3d ? 'Map. Drag or use the arrow keys to turn and tilt it.' : undefined}
+      >
         <canvas ref={canvasRef} />
         {style === 'glyphs' && tilesSnap && (
           <GlyphsOverlay payload={tilesSnap.payload} payloadJson={tilesSnap.json} zoom={zoom} />
@@ -410,6 +437,8 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
           tilesetLoaded={tilesetUrl !== null}
           onLoadTileset={() => fileInputRef.current?.click()}
           onClearTileset={clearTileset}
+          view3d={view3d}
+          onView3d={setView3d}
         />
       </div>
     </div>
@@ -478,7 +507,10 @@ function drawSquares(
 
   // Corridors under the squares, bucketed by door state so we render
   // one stroke per color. corridors() says which ones, hidden door
-  // stubs included.
+  // stubs and the ticks of bent exits included. A tick clears its square
+  // by a few pixels at any zoom. Toward a room it stops a pixel short of
+  // the middle of the gap, so it never reads as a join, which leaves it
+  // no room at the smallest zoom.
   type Segment = { cx: number; cy: number; nx: number; ny: number };
   const buckets: Record<DoorState, Segment[]> = {
     open: [],
@@ -486,15 +518,15 @@ function drawSquares(
     locked: [],
     hidden: [],
   };
-  for (const { row, col, dx, dy, reach, state } of corridors(payload, rows, cols)) {
+  for (const { row, col, dx, dy, kind, state } of corridors(payload, rows, cols)) {
     const cx = ox + col * pitch;
     const cy = oy + row * pitch;
-    buckets[state].push({
-      cx,
-      cy,
-      nx: cx + dx * reach * pitch,
-      ny: cy + dy * reach * pitch,
-    });
+    let reach = REACH[kind] * pitch;
+    if (kind === 'tick') {
+      reach = Math.max(reach, size / 2 + 3);
+      if (getCell(payload, row + dy, col + dx)) reach = Math.min(reach, pitch / 2 - 1);
+    }
+    buckets[state].push({ cx, cy, nx: cx + dx * reach, ny: cy + dy * reach });
   }
   ctx.lineWidth = 1.25;
   const flushSolid = (state: 'open' | 'closed' | 'locked') => {
@@ -832,15 +864,11 @@ function drawTileset(
     locked: [],
     hidden: [],
   };
-  for (const { row, col, dx, dy, reach, state } of corridors(payload, rows, cols)) {
+  for (const { row, col, dx, dy, kind, state } of corridors(payload, rows, cols)) {
     const cx = ox + col * pitch;
     const cy = oy + row * pitch;
-    buckets[state].push({
-      x1: cx,
-      y1: cy,
-      x2: cx + dx * reach * pitch,
-      y2: cy + dy * reach * pitch,
-    });
+    const reach = REACH[kind] * pitch;
+    buckets[state].push({ x1: cx, y1: cy, x2: cx + dx * reach, y2: cy + dy * reach });
   }
   const flushSolid = (state: 'open' | 'closed' | 'locked') => {
     const segs = buckets[state];
