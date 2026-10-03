@@ -10,7 +10,7 @@ use tracing::warn;
 use super::gating::apply_effective_state;
 use super::LoadoutStoreError;
 use crate::app::events::{broadcast, MACRO_GROUPS_CHANGED};
-use crate::app::state::SharedState;
+use crate::app::state::{SharedState, NO_APP_DATA};
 use crate::disk::atomic::write_with_backup;
 use crate::disk::paths::loadouts_path;
 use crate::profile::login_match::AutoMatch;
@@ -134,9 +134,9 @@ pub(crate) const UNREAD_LOADOUTS_NOTICE: &str =
 
 /// The part of [`loadouts_set_active`] that runs under the loadout and
 /// profile locks: take the new active list, lay the group state it
-/// imposes over the live profile, and save loadouts.toml in `app_data`.
-/// The command looks up the app data folder and queues the profile
-/// save, so a test can run this against a mock app and a scratch folder.
+/// imposes over the live profile, and save loadouts.toml in the app data
+/// folder. The command queues the profile save, so a test can run this
+/// against a mock app and a scratch folder.
 /// When the switch turned a macro group on or off, every window hears it
 /// once the locks are released, since the command line keeps its own map
 /// of the macro keys that fire.
@@ -144,10 +144,10 @@ pub(crate) const UNREAD_LOADOUTS_NOTICE: &str =
 /// [`loadouts_set_active`]: crate::ipc::loadouts::loadouts_set_active
 pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    app_data: &std::path::Path,
     active: Vec<String>,
 ) -> Result<(), String> {
     let state: SharedState = app.state::<SharedState>().inner().clone();
+    let app_data = state.app_data.get().ok_or(NO_APP_DATA)?;
     let macro_groups_changed = {
         let mut guard = state.loadout_set.lock().await;
         let Some(set) = guard.as_mut() else {

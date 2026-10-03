@@ -240,7 +240,7 @@ async fn launch_runs_the_upgrades_in_order() {
     //    stays.
     {
         let _persist = PERSIST_LOCK.lock().await;
-        persist_state(&state, Some(&app_data)).await;
+        persist_state(&state).await;
     }
     assert_eq!(shared_theme_ids(&set), ["custom-dusk"]);
 }

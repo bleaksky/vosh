@@ -13,7 +13,7 @@ use super::plan::{
     analyze_profiles, profile_file_for_catalog, ItemKind, ItemPayload, MigrationPlan,
 };
 use crate::app::events::{broadcast, MIGRATION_APPLIED};
-use crate::app::state::SharedState;
+use crate::app::state::{SharedState, NO_APP_DATA};
 use crate::disk::paths::{catalog_path, journal_path, legacy_dir, loadouts_path};
 use crate::disk::save::{active_profile_file, persist_state, PERSIST_LOCK};
 use crate::loadouts::presets::first_catalog_presets;
@@ -21,8 +21,7 @@ use crate::loadouts::set::LoadoutSet;
 use crate::profile::file::{ConfigError, ProfileConfig};
 use crate::profile::set::SavedFile;
 
-/// [`migration_analyze`] over the app data folder `app_data`, so a test
-/// can run it over a folder of its own. `library` holds the id of every
+/// The body of [`migration_analyze`]. `library` holds the id of every
 /// preset in the library the frontend installs from. Apply saves the live
 /// profile before it reads the files, unless `#profile reset` or `load`
 /// holds the saves back, see [`apply_migration`]. The preview reads the
@@ -33,9 +32,9 @@ use crate::profile::set::SavedFile;
 /// [`migration_analyze`]: crate::ipc::wizard::migration_analyze
 pub(crate) async fn analyze_migration(
     state: &SharedState,
-    app_data: &std::path::Path,
     library: &[&str],
 ) -> Result<MigrationPlan, String> {
+    let app_data = state.app_data.get().ok_or(NO_APP_DATA)?;
     // No switch or save lands between the read of the live profile and
     // the read of the files, as in apply.
     let _persist_guard = PERSIST_LOCK.lock().await;
@@ -277,8 +276,7 @@ pub(crate) fn announce_migration_applied<R: tauri::Runtime>(app: &AppHandle<R>) 
     broadcast(app, MIGRATION_APPLIED, &());
 }
 
-/// [`migration_apply`] over the app data folder `app_data`, so a test
-/// can run it over a folder of its own. `library` holds the id of every
+/// The body of [`migration_apply`]. `library` holds the id of every
 /// preset in the library the frontend installs from. Once catalog.toml,
 /// loadouts.toml, and every profile file are on disk, the state holds
 /// every save for the relaunch and turns loadout mode on, see
@@ -290,10 +288,10 @@ pub(crate) fn announce_migration_applied<R: tauri::Runtime>(app: &AppHandle<R>) 
 /// [`migration_apply`]: crate::ipc::wizard::migration_apply
 pub(crate) async fn apply_migration(
     state: &SharedState,
-    app_data: &std::path::Path,
     resolutions: &[ConflictResolution],
     library: &[&str],
 ) -> Result<(), String> {
+    let app_data = state.app_data.get().ok_or(NO_APP_DATA)?;
     // Every save of a profile file takes this lock, so none lands
     // between the read of a file below and its rewrite without the items.
     let _persist_guard = PERSIST_LOCK.lock().await;
@@ -311,7 +309,7 @@ pub(crate) async fn apply_migration(
         .auto_persist_suppressed
         .load(std::sync::atomic::Ordering::Acquire)
     {
-        persist_state(state, Some(app_data)).await;
+        persist_state(state).await;
     }
 
     // Re-load sources from disk — the analyze call has to walk the

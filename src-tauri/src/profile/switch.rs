@@ -153,8 +153,7 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
     state: &SharedState,
     name: &str,
 ) -> Result<(), String> {
-    let app_data = state.app_data.get().map(std::path::PathBuf::as_path);
-    switch_profile(state, app_data, name).await?;
+    switch_profile(state, name).await?;
     // The new profile's capture took the game's latest prompt settings.
     let seen = state.profile.lock().await.prompt.take_seen();
     crate::prompt::report_game_prompt_seen(app, seen);
@@ -178,13 +177,9 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
 const SWITCH_MIGRATION_PENDING: &str =
     "Quit Vosh and open it again to finish the move to loadouts, then switch profiles.";
 
-/// Steps 1 to 3 of [`apply_profile_switch`] over the app data folder
-/// `app_data`, so a test can run them over a folder of its own.
-pub(crate) async fn switch_profile(
-    state: &SharedState,
-    app_data: Option<&std::path::Path>,
-    name: &str,
-) -> Result<(), String> {
+/// Steps 1 to 3 of [`apply_profile_switch`], which need no app handle,
+/// so a test can run them.
+pub(crate) async fn switch_profile(state: &SharedState, name: &str) -> Result<(), String> {
     // Hold the persist lock from the flush through loading the next
     // file, so a Settings write to the incoming profile's file lands
     // either before the load reads it or after the switch made the
@@ -207,7 +202,7 @@ pub(crate) async fn switch_profile(
         .auto_persist_suppressed
         .load(std::sync::atomic::Ordering::Acquire)
     {
-        persist_state(state, app_data).await;
+        persist_state(state).await;
     }
 
     switch_live_profile(state, name).await
@@ -319,6 +314,7 @@ pub(crate) mod tests {
     /// and tracking Sanctuary.
     async fn switch_state(dir: &std::path::Path) -> super::SharedState {
         let state: super::SharedState = std::sync::Arc::new(AppState::default());
+        state.app_data.set(dir.to_path_buf()).unwrap();
         state.profile.lock().await.ui.tracked_affects = vec![affect("Sanctuary")];
         *state.profile_set.lock().await = Some(james_like_set(dir));
         state
@@ -466,7 +462,7 @@ pub(crate) mod tests {
         }
         // The first save writes it into the file, so the profile keeps it
         // from then on.
-        persist(&state, dir.path()).await;
+        persist(&state).await;
         let path = state
             .profile_set
             .lock()
@@ -633,12 +629,12 @@ pub(crate) mod tests {
 
         // A switch saves the profile you leave first, and that save
         // leaves the file that did not read alone.
-        persist(&state, dir.path()).await;
+        persist(&state).await;
         assert_eq!(read(&set.active_path()), UNREADABLE);
         super::switch_live_profile(&state, "Healer").await.unwrap();
         assert_eq!(live_affects(&state).await, ["Haste"]);
         state.profile.lock().await.ui.tracked_affects = vec![affect("Fly")];
-        persist(&state, dir.path()).await;
+        persist(&state).await;
 
         let saved = ProfileConfig::load(&set.profile_path("Healer")).unwrap();
         assert_eq!(saved.ui.tracked_affects[0].name, "Fly");

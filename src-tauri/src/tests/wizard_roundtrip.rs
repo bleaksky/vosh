@@ -133,7 +133,7 @@ fn presets_on(stored: &[String]) -> Vec<&'static str> {
 /// preset that is off comes out through `presets_remove`, and every one
 /// that is on installs again through `presets_install`. Each command
 /// saves, as the real commands do.
-async fn preset_launch_plan(state: &SharedState, dir: &Path) {
+async fn preset_launch_plan(state: &SharedState) {
     let (remove, install) = {
         let p = state.profile.lock().await;
         let on = presets_on(&p.ui.enabled_presets);
@@ -151,7 +151,7 @@ async fn preset_launch_plan(state: &SharedState, dir: &Path) {
     };
     for id in remove {
         state.profile.lock().await.triggers.remove_by_preset(&id);
-        save(state, dir).await;
+        save(state).await;
     }
     let triggers: Vec<Trigger> = LIBRARY
         .iter()
@@ -164,14 +164,14 @@ async fn preset_launch_plan(state: &SharedState, dir: &Path) {
             triggers,
         )
         .unwrap();
-        save(state, dir).await;
+        save(state).await;
     }
 }
 
 /// The save a Settings edit, a debounce, or a command runs.
-async fn save(state: &SharedState, dir: &Path) {
+async fn save(state: &SharedState) {
     let _persist_guard = PERSIST_LOCK.lock().await;
-    crate::disk::save::persist_state(state, Some(dir)).await;
+    crate::disk::save::persist_state(state).await;
 }
 
 /// Open Vosh as `name` over `dir` the way app/launch.rs launches it,
@@ -183,7 +183,7 @@ async fn launch_as(dir: &Path, name: &str) -> SharedState {
         .unwrap();
     let state: SharedState = Arc::new(AppState::default());
     crate::app::launch::load(&state, dir).await;
-    preset_launch_plan(&state, dir).await;
+    preset_launch_plan(&state).await;
     state
 }
 
@@ -749,7 +749,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
     // save does, and the files as they stand after that save are the
     // ones it keeps.
     let wizard = launch_as(dir, &names[set.wizard]).await;
-    save(&wizard, dir).await;
+    save(&wizard).await;
     // Now and then you switch to the profile that never saved a file and
     // open the wizard before anything saves it. The preview used to leave
     // it out of the shared list, which apply then counted.
@@ -761,7 +761,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         .filter(|_| rng.chance(50))
         .map(|n| names[n].as_str());
     if let Some(name) = unsaved {
-        crate::profile::switch::switch_profile(&wizard, Some(dir), name)
+        crate::profile::switch::switch_profile(&wizard, name)
             .await
             .map_err(|e| format!("switch: {e}"))?;
     }
@@ -779,7 +779,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
 
     // Pick a version of each item in conflict.
     let mut rng = Rng(seed ^ 0xa5a5_a5a5);
-    let plan = crate::loadouts::wizard::apply::analyze_migration(&wizard, dir, &library_ids())
+    let plan = crate::loadouts::wizard::apply::analyze_migration(&wizard, &library_ids())
         .await
         .map_err(|e| format!("analyze: {e}"))?;
     // The preview holds the preset list every character shares and the
@@ -874,7 +874,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         .map(|b| b.toggled.iter().map(|rows| kept(rows)).collect())
         .collect();
 
-    crate::loadouts::wizard::apply::apply_migration(&wizard, dir, &resolutions, &library_ids())
+    crate::loadouts::wizard::apply::apply_migration(&wizard, &resolutions, &library_ids())
         .await
         .map_err(|e| format!("apply: {e}"))?;
     drop(wizard);
@@ -962,7 +962,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
     let state = launch_as(dir, &names[start]).await;
     for step in 0..4 {
         let n = rng.below(names.len());
-        crate::profile::switch::switch_profile(&state, Some(dir), &names[n])
+        crate::profile::switch::switch_profile(&state, &names[n])
             .await
             .map_err(|e| format!("switch: {e}"))?;
         check(
@@ -974,10 +974,10 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         )
         .await?;
         if rng.chance(60) {
-            save(&state, dir).await;
+            save(&state).await;
         }
     }
-    save(&state, dir).await;
+    save(&state).await;
     drop(state);
 
     // And once more from a fresh launch as each, and after a switch to
@@ -987,7 +987,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         check(&state, name, "at the last launch", &before[n], &want[n]).await?;
         check_group_steps(&state, name, &steps, &want_toggled[n]).await?;
         let state = launch_as(dir, &names[(n + 1) % names.len()]).await;
-        crate::profile::switch::switch_profile(&state, Some(dir), name)
+        crate::profile::switch::switch_profile(&state, name)
             .await
             .map_err(|e| format!("switch: {e}"))?;
         check_group_steps(&state, name, &steps, &want_toggled[n]).await?;

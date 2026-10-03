@@ -303,6 +303,7 @@ fn a_loadout_switch_tells_the_command_line_when_a_macro_group_turned() {
     let handle = app.handle();
     let state: SharedState = app.state::<SharedState>().inner().clone();
     let dir = tempfile::tempdir().unwrap();
+    state.app_data.set(dir.path().to_path_buf()).unwrap();
     let mut fight = Loadout::empty("fight");
     fight.enabled_groups = vec!["combat".into()];
     let mut walk = Loadout::empty("walk");
@@ -322,7 +323,7 @@ fn a_loadout_switch_tells_the_command_line_when_a_macro_group_turned() {
         ];
         let switch = |active: &[&str]| {
             let active = active.iter().copied().map(String::from).collect();
-            crate::loadouts::set::set_active_loadouts(handle, dir.path(), active)
+            crate::loadouts::set::set_active_loadouts(handle, active)
         };
         let off = || async {
             let p = state.profile.lock().await;

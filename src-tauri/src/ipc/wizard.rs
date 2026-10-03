@@ -4,7 +4,7 @@
 
 use tauri::{AppHandle, State};
 
-use crate::app::state::{SharedState, NO_APP_DATA};
+use crate::app::state::SharedState;
 use crate::loadouts::wizard::apply::{
     analyze_migration, announce_migration_applied, apply_migration, ConflictResolution,
 };
@@ -32,9 +32,8 @@ pub(crate) async fn migration_analyze(
     state: State<'_, SharedState>,
     library: Vec<String>,
 ) -> Result<MigrationPlan, String> {
-    let app_data = state.app_data.get().ok_or(NO_APP_DATA)?;
     let library: Vec<&str> = library.iter().map(String::as_str).collect();
-    analyze_migration(&state, app_data, &library).await
+    analyze_migration(&state, &library).await
 }
 
 /// Commit the loadout mode migration. Saves the live profile, re-runs the
@@ -64,9 +63,8 @@ pub(crate) async fn migration_apply(
     resolutions: Vec<ConflictResolution>,
     library: Vec<String>,
 ) -> Result<(), String> {
-    let app_data = state.app_data.get().ok_or(NO_APP_DATA)?;
     let library: Vec<&str> = library.iter().map(String::as_str).collect();
-    apply_migration(&state, app_data, &resolutions, &library).await?;
+    apply_migration(&state, &resolutions, &library).await?;
 
     // Returning Ok rather than calling `app.restart()` here. Restart
     // is fragile in dev mode: it tears down the binary out from under
