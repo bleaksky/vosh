@@ -22,8 +22,7 @@ mod tests;
 mod tick;
 
 use app::state::{AppState, SharedState};
-use app::{menu as app_menu, system_fonts as fonts};
-use fonts::handle_font_uri;
+use app::system_fonts::handle_font_uri;
 
 pub fn run() {
     tracing_subscriber::fmt()
@@ -35,12 +34,12 @@ pub fn run() {
     let state: SharedState = Arc::new(AppState::default());
 
     let builder = tauri::Builder::default();
-    // The macOS menu bar (app_menu.rs). Windows and Linux get no menu, so
+    // The macOS menu bar (app/menu.rs). Windows and Linux get no menu, so
     // their frameless windows never grow a native menubar.
     #[cfg(target_os = "macos")]
     let builder = builder
-        .menu(app_menu::build)
-        .on_menu_event(app_menu::on_event);
+        .menu(app::menu::build)
+        .on_menu_event(app::menu::on_event);
 
     builder
         // Serves the regular face of a system font family. fontLoader.ts
