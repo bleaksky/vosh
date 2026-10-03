@@ -8,6 +8,7 @@
 //! each step hands on before that, so one driver for both would change
 //! what they feed.
 
+use super::batch::*;
 use super::perf::*;
 use super::*;
 use crate::output::OutputPayload;
