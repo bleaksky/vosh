@@ -2,12 +2,16 @@
 //!
 //! Platform-agnostic core: the wgpu surface + cell renderer, the shared
 //! scroll/split/selection/hover state, and the command-facing API. The
-//! platform submodule owns the child window/view plumbing (creating a
-//! native view over the webview, moving it, hiding it, clipboard, URL
-//! open) and the platform's mouse/cursor handlers. macOS is the one
-//! platform: an `NSView` + `CAMetalLayer` composited with the
-//! `WKWebView`, drawn by wgpu's Metal backend (`macos.rs`). Windows and
-//! Linux draw with xterm.
+//! platform submodule owns the view plumbing (creating the native view
+//! under the webview, showing it, its layer's scale, backdrop and
+//! corners, clipboard, URL open). macOS is the one platform: an
+//! `NSView` + `CAMetalLayer` composited with the `WKWebView`, drawn by
+//! wgpu's Metal backend (`macos.rs`). Windows and Linux draw with xterm.
+//!
+//! The surface sits BELOW the webview. It spans the whole window and
+//! never moves; the grid draws at the pane's offset, the page leaves the
+//! pane unpainted so the grid shows through, and DOM overlays composite
+//! over live terminal pixels. Pointer input arrives from the page.
 //!
 //! Every window touch happens on the main thread (creation inside
 //! `with_webview` / install, updates via `AppHandle::run_on_main_thread`).
@@ -24,8 +28,7 @@ use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use tauri::{Emitter, Manager};
 
 use crate::app::events::{
-    NATIVE_COPIED, NATIVE_GRID_SIZE, NATIVE_SCROLL, TERMINAL_CLICKED, TERMINAL_CONTEXT_MENU,
-    TERMINAL_CURSOR,
+    NATIVE_COPIED, NATIVE_GRID_SIZE, NATIVE_SCROLL, TERMINAL_CLICKED, TERMINAL_CURSOR,
 };
 
 #[cfg(target_os = "macos")]
@@ -66,30 +69,15 @@ static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
 static ACTIVE: AtomicBool = AtomicBool::new(false);
 // Coalesces redraw requests so a burst of output schedules one repaint.
 static REDRAW_PENDING: AtomicBool = AtomicBool::new(false);
-// Temporarily hide the opaque surface so a DOM overlay (dropdown, menu,
-// modal) that would otherwise be occluded by it shows through. xterm
-// renders the same content behind the surface, so the swap is seamless.
-static SUPPRESSED: AtomicBool = AtomicBool::new(false);
 
-/// The surface sits BELOW the webview instead of on top (macOS). It spans
-/// the whole window and never moves; the grid draws at the pane's offset,
-/// the page leaves the pane unpainted so the grid shows through, and DOM
-/// overlays composite over live terminal pixels. Pointer input then
-/// arrives from the page instead of the view.
-pub(crate) const UNDERLAY: bool = cfg!(target_os = "macos");
-
-// The pane rect inside the underlay surface, in device pixels
+// The pane rect inside the surface, in device pixels
 // [x, y, width, height]. None until the frontend first reports bounds.
 static VIEWPORT: Mutex<Option<[u32; 4]>> = Mutex::new(None);
 
 /// The pane rect clamped into a `target_w` x `target_h` render target.
-/// Without the underlay (or before the first report) the pane is the
-/// whole target.
+/// Before the first report the pane is the whole target.
 fn pane_rect(target_w: u32, target_h: u32) -> [u32; 4] {
     let full = [0, 0, target_w.max(1), target_h.max(1)];
-    if !UNDERLAY {
-        return full;
-    }
     let Some([x, y, w, h]) = VIEWPORT.lock().ok().and_then(|v| *v) else {
         return full;
     };
@@ -100,36 +88,12 @@ fn pane_rect(target_w: u32, target_h: u32) -> [u32; 4] {
     [x, y, w, h]
 }
 
-/// Hide or show the surface for an overlay. Hiding reveals xterm (same
-/// content) so a DOM popover over the terminal is not occluded.
-pub(crate) fn set_visible(visible: bool) {
-    // Under the underlay the page draws over the grid, so nothing ever
-    // needs to hide it.
-    if UNDERLAY {
-        return;
-    }
-    SUPPRESSED.store(!visible, Ordering::Release);
-    let Some(app) = APP.get() else {
-        return;
-    };
-    let _ = app.run_on_main_thread(move || {
-        if let Ok(slot) = surface_slot().lock() {
-            if let Some(handle) = slot.as_ref() {
-                platform::set_hidden(&handle.platform, !visible);
-            }
-        }
-    });
-    if visible {
-        request_redraw();
-    }
-}
-
 /// Request a repaint of the terminal surface. Called from the session loop
-/// after feeding the grid. No-ops until the surface is active (and not
-/// suppressed); coalesces bursts; dispatches the actual draw to the main
-/// thread (Metal requires it).
+/// after feeding the grid. No-ops until the surface is active; coalesces
+/// bursts; dispatches the actual draw to the main thread (Metal requires
+/// it).
 pub(crate) fn request_redraw() {
-    if !ACTIVE.load(Ordering::Acquire) || SUPPRESSED.load(Ordering::Acquire) {
+    if !ACTIVE.load(Ordering::Acquire) {
         return;
     }
     let Some(app) = APP.get() else {
@@ -209,11 +173,8 @@ fn redraw_now() {
         if let Some(handle) = slot.as_mut() {
             // A theme change repaints through here, so the backdrop that
             // shows during a resize follows it. Cached, so cheap.
-            if UNDERLAY {
-                platform::set_backdrop(&handle.platform, crate::cell_render::theme_bg_rgb());
-            }
+            platform::set_backdrop(&handle.platform, crate::cell_render::theme_bg_rgb());
             render(&mut handle.gpu);
-            platform::after_redraw(&handle.platform);
         }
     }
 }
@@ -232,28 +193,15 @@ static LAST_GAME_SIZE: AtomicU32 = AtomicU32::new(0);
 
 /// The rows the grid takes and the rows the game is told, for a pane whose
 /// surface fits `fit` rows while the pinned prompt band borrows `lent`.
-/// Under the underlay the surface keeps the whole pane and the grid gives
-/// the rows up from its top, so its newest line sits right above the band.
-/// Elsewhere the surface itself stops short of the band, so `fit` already
-/// leaves them out. Either way the game is told the rows the pane holds
-/// with a one row band. A fight that grows the band by a row only moves
-/// the text, so the game hears of no new size and wraps as before.
-/// `keptRows` and `gameSize` in src/lib/terminalRows.ts do the same for
-/// xterm, and both run fixtures/terminal-rows/cases.json, so keep them in
-/// step.
-fn grid_and_game_rows(fit: usize, lent: usize, underlay: bool) -> (usize, usize) {
-    if underlay {
-        (fit.saturating_sub(lent).max(1), fit)
-    } else {
-        (fit, fit + lent)
-    }
-}
-
-/// The device pixels of a surface `full` tall that stops `lent` rows of
-/// `cell` px short of the pane's bottom, where the band reaches up. At
-/// least one.
-fn short_of_band(full: u32, lent: u32, cell: u32) -> u32 {
-    full.saturating_sub(lent.saturating_mul(cell)).max(1)
+/// The surface keeps the whole pane and the grid gives the rows up from
+/// its top, so its newest line sits right above the band. The game is
+/// told the rows the pane holds with a one row band. A fight that grows
+/// the band by a row only moves the text, so the game hears of no new
+/// size and wraps as before. `keptRows` and `gameSize` in
+/// src/lib/terminalRows.ts do the same for xterm, and both run
+/// fixtures/terminal-rows/cases.json, so keep them in step.
+fn grid_and_game_rows(fit: usize, lent: usize) -> (usize, usize) {
+    (fit.saturating_sub(lent).max(1), fit)
 }
 
 fn clamp_u16(n: usize) -> u16 {
@@ -399,10 +347,6 @@ static SELECTING: AtomicBool = AtomicBool::new(false);
 static DPR: AtomicU32 = AtomicU32::new(0);
 static CELL_W: AtomicU32 = AtomicU32::new(0);
 static CELL_H: AtomicU32 = AtomicU32::new(0);
-// The surface's origin in the webview's CSS coordinate space (set with
-// the bounds), so a right-click can be reported at its viewport position.
-static ORIGIN_X: AtomicU32 = AtomicU32::new(0);
-static ORIGIN_Y: AtomicU32 = AtomicU32::new(0);
 // xterm's reported device cell size. When set, the atlas uses it instead of
 // deriving from font metrics, so the surface matches xterm's density exactly
 // (0 = unset, fall back to the font's metrics).
@@ -491,8 +435,8 @@ fn phys_point_to_cell(phys_x: f64, phys_y: f64, height_px: f64) -> Option<(i32, 
 }
 
 /// A pointer event in surface-physical pixels, with the surface size and
-/// the platform's open-link modifier (Cmd / Ctrl) state.
-pub(super) struct PointerEvent {
+/// the open-link modifier (Cmd) state.
+struct PointerEvent {
     pub x: f64,
     pub y: f64,
     pub width: f64,
@@ -554,20 +498,17 @@ fn middle_click() {
         crate::term_grid::scroll_page(true);
     }
     redraw_now();
-    // A middle-click still pulls key focus off the command input like
-    // any click on the surface, but it arrives as otherMouseDown /
-    // WM_MBUTTONDOWN and never reaches pointer_up, so the refocus
-    // event has to fire here too. Without it, Enter stops resending
-    // the highlighted command and macros go dead after closing the
-    // split.
+    // A middle click never reaches pointer_up, so it sends the event that
+    // gives the command line focus here, as a left click does there.
     if let Some(app) = APP.get() {
         let _ = app.emit(TERMINAL_CLICKED, ());
     }
 }
 
-/// Accumulate a wheel delta (positive = reveal older lines) and scroll the
-/// grid by whole lines. Shared by every platform's wheel handler.
-fn wheel_scroll(delta_y: f64) {
+/// A wheel delta forwarded from the page. Positive reveals older lines.
+/// The grid scrolls by whole lines and the accumulator keeps the rest.
+/// Main thread only.
+pub(crate) fn forward_wheel(delta_y: f64) {
     let Ok(mut acc) = SCROLL_ACCUM.lock() else {
         return;
     };
@@ -582,7 +523,7 @@ fn wheel_scroll(delta_y: f64) {
     }
 }
 
-/// Cmd/Ctrl+click on a URL opens it; a press in the scrollbar zone starts
+/// Cmd+click on a URL opens it; a press in the scrollbar zone starts
 /// a thumb drag; a press on the divider starts a divider drag; anything
 /// else starts a selection.
 fn pointer_down(ev: &PointerEvent) {
@@ -743,8 +684,9 @@ fn pointer_up() {
         copy_selection();
     }
     // Clicking the terminal focuses the command input, like clicking any
-    // other part of the window. The opaque surface eats the DOM mouseup
-    // that used to do this, so the frontend listens for the event instead.
+    // other part of the window. The page cancels the press it forwards,
+    // so no DOM mouseup follows to do this, and the page listens for the
+    // event instead.
     if let Some(app) = APP.get() {
         let _ = app.emit(TERMINAL_CLICKED, ());
     }
@@ -765,22 +707,6 @@ pub(crate) fn window_blurred() {
     }
 }
 
-/// Right-click. The opaque surface eats the DOM contextmenu event, so the
-/// pointer's position is forwarded in webview CSS coordinates (surface
-/// origin + the event's surface-local point) and the frontend opens its
-/// terminal context menu there.
-fn context_click(ev: &PointerEvent) {
-    let dpr = f64::from(load_f32(&DPR, 2.0));
-    if dpr <= 0.0 {
-        return;
-    }
-    let x = f64::from(load_f32(&ORIGIN_X, 0.0)) + ev.x / dpr;
-    let y = f64::from(load_f32(&ORIGIN_Y, 0.0)) + ev.y / dpr;
-    if let Some(app) = APP.get() {
-        let _ = app.emit(TERMINAL_CONTEXT_MENU, (x, y));
-    }
-}
-
 /// Track the URL under the pointer so the renderer can underline it. Only
 /// repaints when the hovered range actually changes.
 fn pointer_moved(ev: Option<&PointerEvent>) {
@@ -790,10 +716,10 @@ fn pointer_moved(ev: Option<&PointerEvent>) {
     set_hover_url(next);
 }
 
-/// A pointer event forwarded from the page under the underlay, where the
-/// webview sits on top and receives every click. `x` and `y` are CSS px
-/// relative to the pane's top-left corner. `kind` is "down", "drag",
-/// "up", "move", "leave", or "middle". Must run on the main thread.
+/// A pointer event forwarded from the page, which sits on top and
+/// receives every click. `x` and `y` are CSS px relative to the pane's
+/// top-left corner. `kind` is "down", "drag", "up", "move", "leave", or
+/// "middle". Must run on the main thread.
 pub(crate) fn forward_pointer(kind: &str, x: f64, y: f64, open_modifier: bool) {
     let dpr = f64::from(load_f32(&DPR, 2.0));
     let (width, height) = VIEWPORT
@@ -832,8 +758,8 @@ pub(crate) fn forward_pointer(kind: &str, x: f64, y: f64, open_modifier: bool) {
 }
 
 /// Half the height of the divider's grab band, in points. A press inside
-/// it starts a divider drag, and under the underlay the page shows the
-/// resize cursor across the same band.
+/// it starts a divider drag, and the page shows the resize cursor across
+/// the same band.
 const DIVIDER_GRAB_PT: f64 = 8.0;
 
 /// True when the point sits on the divider as drawn, within the grab band.
@@ -845,9 +771,9 @@ fn near_divider(ev: &PointerEvent) -> bool {
     ev.height > 0.0 && (ev.y - f64::from(drawn) * ev.height).abs() <= DIVIDER_GRAB_PT * dpr
 }
 
-/// The pointer cursor the page should show over the pane. Under the
-/// underlay the page owns the cursor, so the surface reports what the
-/// pointer is over and the page sets it.
+/// The pointer cursor the page should show over the pane. The page owns
+/// the cursor, so the surface reports what the pointer is over and the
+/// page sets it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CursorHint {
     Default = 0,
@@ -907,12 +833,6 @@ fn report_cursor(hint: CursorHint) {
 /// install falls back to xterm instead of a see-through hole.
 pub(crate) fn is_ready() -> bool {
     surface_slot().lock().is_ok_and(|s| s.is_some())
-}
-
-/// A wheel delta forwarded from the page under the underlay. Positive
-/// reveals older lines, matching the platform handlers. Main thread only.
-pub(crate) fn forward_wheel(delta_y: f64) {
-    wheel_scroll(delta_y);
 }
 
 /// Copy the current selection to the clipboard (no-op when empty) and send
@@ -1086,16 +1006,16 @@ fn font_atlas_params(scale: f64) -> (String, f32) {
     }
 }
 
-/// Install the native surface over the main window's content view.
+/// Install the native surface under the main window's webview.
 /// Best-effort: logs and returns on any missing handle. Runs on the main
-/// thread. The surface starts at a placeholder frame; the frontend's first
-/// `set_bounds` call snaps it to the terminal pane.
+/// thread. The surface spans the window and starts hidden; the frontend's
+/// first `set_bounds` call shows it and places the grid in the pane.
 pub(crate) fn install_probe(window: &tauri::WebviewWindow) -> Result<(), tauri::Error> {
     let _ = APP.set(window.app_handle().clone());
     platform::install(window)
 }
 
-/// Reposition and resize the surface to the terminal pane. `x`/`y`/`w`/`h`
+/// Place the grid in the terminal pane and show the surface. `x`/`y`/`w`/`h`
 /// are CSS pixels in the webview's top-left coordinate space; `dpr` is the
 /// device pixel ratio. `lent` is the rows at the pane's bottom the pinned
 /// prompt band borrows (`grid_and_game_rows`). Must run on the main thread.
@@ -1114,47 +1034,21 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64, lent
     ACTIVE.store(true, Ordering::Release);
     LENT_ROWS.store(lent, Ordering::Release);
     store_f32(&DPR, dpr as f32);
-    store_f32(&ORIGIN_X, x as f32);
-    store_f32(&ORIGIN_Y, y as f32);
-    if UNDERLAY {
-        // The view already spans the window (AppKit resizes it with the
-        // window), so the report only moves the grid inside it. Snap to
-        // whole device pixels so glyphs land on the pixel grid.
-        let snap = |v: f64| (v * dpr).round().max(0.0) as u32;
-        if let Ok(mut vp) = VIEWPORT.lock() {
-            *vp = Some([snap(x), snap(y), snap(width).max(1), snap(height).max(1)]);
-        }
-        let (px_w, px_h) = platform::view_size_px(&handle.platform, dpr);
-        let (px_w, px_h) = clamp_to_device(&handle.gpu.device, px_w, px_h);
-        platform::set_scale(&handle.platform, dpr);
-        platform::set_hidden(&handle.platform, false);
-        platform::set_backdrop(&handle.platform, crate::cell_render::theme_bg_rgb());
-        // The window reports its real radius once it is on screen, and a
-        // fullscreen switch also resizes the pane, so re-check here.
-        platform::sync_corner_radius(&handle.platform);
-        if px_w != handle.gpu.config.width || px_h != handle.gpu.config.height {
-            handle.gpu.config.width = px_w;
-            handle.gpu.config.height = px_h;
-            handle
-                .gpu
-                .surface
-                .configure(&handle.gpu.device, &handle.gpu.config);
-        }
-        render(&mut handle.gpu);
-        return;
+    // The view already spans the window (AppKit resizes it with the
+    // window), so the report only moves the grid inside it. Snap to whole
+    // device pixels so glyphs land on the pixel grid.
+    let snap = |v: f64| (v * dpr).round().max(0.0) as u32;
+    if let Ok(mut vp) = VIEWPORT.lock() {
+        *vp = Some([snap(x), snap(y), snap(width).max(1), snap(height).max(1)]);
     }
-    // The surface sits over the page here, so it stops short of the rows
-    // the band borrows, or it would hide them.
-    let cell_px = handle.gpu.cell_renderer.cell_size_px().1.round() as u32;
-    let px_w = (width * dpr).max(1.0) as u32;
-    let px_h = short_of_band((height * dpr).max(1.0) as u32, lent, cell_px);
-    let height = f64::from(px_h) / dpr;
-    platform::set_frame(&handle.platform, x, y, width, height, dpr);
-    // Respect an active overlay suppression so a resize does not pop the
-    // surface back over an open dropdown.
-    platform::set_hidden(&handle.platform, SUPPRESSED.load(Ordering::Acquire));
-
+    let (px_w, px_h) = platform::view_size_px(&handle.platform, dpr);
     let (px_w, px_h) = clamp_to_device(&handle.gpu.device, px_w, px_h);
+    platform::set_scale(&handle.platform, dpr);
+    platform::set_hidden(&handle.platform, false);
+    platform::set_backdrop(&handle.platform, crate::cell_render::theme_bg_rgb());
+    // The window reports its real radius once it is on screen, and a
+    // fullscreen switch also resizes the pane, so re-check here.
+    platform::sync_corner_radius(&handle.platform);
     if px_w != handle.gpu.config.width || px_h != handle.gpu.config.height {
         handle.gpu.config.width = px_w;
         handle.gpu.config.height = px_h;
@@ -1206,9 +1100,9 @@ unsafe fn init_gpu(
 
     let (device, queue) = pollster::block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
-            // The underlay drawable spans the window, which can pass the
-            // default 8192 px cap on a window stretched across displays.
-            // Ask for what the GPU actually supports (16384 on Apple).
+            // The drawable spans the window, which can pass the default
+            // 8192 px cap on a window stretched across displays. Ask for
+            // what the GPU actually supports (16384 on Apple).
             required_limits: adapter.limits(),
             ..Default::default()
         },
@@ -1258,12 +1152,11 @@ fn render(state: &mut GpuState) {
         .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
     // Size the grid to the pane so the terminal fills it instead of a fixed
-    // 80x24 corner. Under the underlay the pane is a rect inside the
-    // window-sized target; otherwise it is the whole target.
+    // 80x24 corner. The pane is a rect inside the window-sized target.
     let [pane_x, pane_y, pane_w, pane_h] = pane_rect(state.config.width, state.config.height);
     let (cols, fit) = state.cell_renderer.grid_size_for(pane_w, pane_h);
     let lent = LENT_ROWS.load(Ordering::Acquire) as usize;
-    let (rows, game_rows) = grid_and_game_rows(fit, lent, UNDERLAY);
+    let (rows, game_rows) = grid_and_game_rows(fit, lent);
     crate::term_grid::resize_grid(cols, rows);
     report_sizes(cols, rows, game_rows);
     // Publish the cell size so the mouse handler can map points to cells.
@@ -1301,9 +1194,9 @@ fn render(state: &mut GpuState) {
     if let Some(drawn) = drawn {
         set_divider_frac(drawn.divider);
     } else {
-        // No grid yet: clear to the terminal background, since under the
-        // underlay this fills the whole window behind the page. The pass
-        // records its clear when dropped at the end of this block.
+        // No grid yet: clear to the terminal background, since this fills
+        // the whole window behind the page. The pass records its clear
+        // when dropped at the end of this block.
         let (bg_r, bg_g, bg_b) = crate::cell_render::theme_bg_rgb();
         let _clear_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("term-surface-clear"),
@@ -1633,12 +1526,12 @@ mod tests {
 
     /// The grid rows and the rows the game hears of, frame by frame, for
     /// a pane that fits `fit` rows while the band borrows `lent`.
-    fn reported(frames: &[(usize, usize)], underlay: bool) -> (Vec<u16>, Vec<u16>) {
+    fn reported(frames: &[(usize, usize)]) -> (Vec<u16>, Vec<u16>) {
         let grid = AtomicU32::new(0);
         let game = AtomicU32::new(0);
         let (mut sized, mut told) = (Vec::new(), Vec::new());
         for &(fit, lent) in frames {
-            let (rows, game_rows) = grid_and_game_rows(fit, lent, underlay);
+            let (rows, game_rows) = grid_and_game_rows(fit, lent);
             let (rows, game_rows) = (clamp_u16(rows), clamp_u16(game_rows));
             if changed(&grid, 120, rows) {
                 sized.push(rows);
@@ -1665,7 +1558,7 @@ mod tests {
             (42, 0),
             (42, 1),
         ];
-        let (sized, told) = reported(&frames, true);
+        let (sized, told) = reported(&frames);
         // The grid gives up its top row to the band and takes it back
         // each time, so the page's hidden xterm follows it.
         assert_eq!(sized, [40, 39, 40, 39, 40, 39, 40, 42, 41]);
@@ -1675,25 +1568,9 @@ mod tests {
     }
 
     #[test]
-    fn a_surface_that_stops_short_of_the_band_tells_the_game_the_same_rows() {
-        // Off the underlay the surface ends above the band, so the rows
-        // it fits already leave the borrowed ones out.
-        let frames = [(40, 0), (39, 1), (40, 0), (38, 2)];
-        let (sized, told) = reported(&frames, false);
-        assert_eq!(sized, [40, 39, 40, 38]);
-        assert_eq!(told, [40]);
-        // A pane 1415 device px tall fits 40 rows of 35 px. Cut short by
-        // one borrowed row it fits 39, never 38.
-        assert_eq!(short_of_band(1415, 1, 35) / 35, 39);
-        assert_eq!(short_of_band(1400, 1, 35) / 35, 39);
-        assert_eq!(short_of_band(30, 3, 35), 1);
-    }
-
-    #[test]
     fn the_grid_keeps_a_row_whatever_the_band_borrows() {
-        assert_eq!(grid_and_game_rows(3, 5, true), (1, 3));
-        assert_eq!(grid_and_game_rows(40, 0, true), (40, 40));
-        assert_eq!(grid_and_game_rows(40, 0, false), (40, 40));
+        assert_eq!(grid_and_game_rows(3, 5), (1, 3));
+        assert_eq!(grid_and_game_rows(40, 0), (40, 40));
     }
 
     /// fixtures/terminal-rows/cases.json, which `keptRows`, `gameSize` and
@@ -1712,25 +1589,17 @@ mod tests {
         grid: usize,
         game: Option<usize>,
         game_underlay: Option<usize>,
-        game_short: Option<usize>,
     }
 
     impl SplitCase {
-        /// The rows the case says the game is told, under the underlay or
-        /// short of the band. A pane no taller than what the band borrows
-        /// names each place apart, since the two tell the game different
-        /// rows there today.
-        fn game(&self, underlay: bool) -> usize {
-            match (self.game, self.game_underlay, self.game_short) {
-                (Some(game), None, None) => game,
-                (None, Some(under), Some(short)) => {
-                    if underlay {
-                        under
-                    } else {
-                        short
-                    }
-                }
-                _ => panic!("{} needs game, or game_underlay with game_short", self.name),
+        /// The rows the case says the game is told under the page. A pane
+        /// no taller than what the band borrows names them `game_underlay`,
+        /// since xterm tells the game other rows there (`game_short`, which
+        /// only xterm reads).
+        fn game(&self) -> usize {
+            match (self.game, self.game_underlay) {
+                (Some(game), None) | (None, Some(game)) => game,
+                _ => panic!("{} needs game or game_underlay", self.name),
             }
         }
     }
@@ -1748,39 +1617,14 @@ mod tests {
         serde_json::from_str(text).expect("the row cases parse")
     }
 
-    /// The device px a row takes in the cases.
-    const CASE_CELL: u32 = 35;
-
-    /// The grid rows and the game rows for a pane that fits `fit` rows
-    /// with `spare` px left over while the band borrows `lent`. Under the
-    /// underlay the grid gives the rows up itself. Elsewhere the surface
-    /// stops short of the band and the grid fits what is left, at least
-    /// one row, as `grid_size_for` counts it.
-    fn split(fit: usize, lent: usize, underlay: bool, spare: u32) -> (usize, usize) {
-        if underlay {
-            return grid_and_game_rows(fit, lent, true);
-        }
-        let full = u32::try_from(fit).unwrap() * CASE_CELL + spare;
-        let short = short_of_band(full, u32::try_from(lent).unwrap(), CASE_CELL);
-        let fits = usize::try_from(short / CASE_CELL).unwrap().max(1);
-        grid_and_game_rows(fits, lent, false)
-    }
-
-    /// Each way the surface can sit: under the page, and over it short of
-    /// the band with no px, some px, or almost a row left over.
-    const PLACES: [(bool, u32); 4] = [(true, 0), (false, 0), (false, 17), (false, CASE_CELL - 1)];
-
     #[test]
     fn rows_split_as_the_cases_xterm_runs() {
         let cases = row_cases();
         assert!(!cases.split.is_empty());
         for case in &cases.split {
-            for (underlay, spare) in PLACES {
-                let (grid, game) = split(case.fit, case.lent, underlay, spare);
-                let at = format!("{}, underlay {underlay}, {spare} px spare", case.name);
-                assert_eq!(grid, case.grid, "{at}");
-                assert_eq!(game, case.game(underlay), "{at}");
-            }
+            let (grid, game) = grid_and_game_rows(case.fit, case.lent);
+            assert_eq!(grid, case.grid, "{}", case.name);
+            assert_eq!(game, case.game(), "{}", case.name);
         }
     }
 
@@ -1793,21 +1637,18 @@ mod tests {
         let cases = row_cases();
         assert!(!cases.reports.is_empty());
         for case in &cases.reports {
-            for (underlay, spare) in PLACES {
-                let last = AtomicU32::new(0);
-                let (mut grid, mut told) = (Vec::new(), Vec::new());
-                for &(cols, fit, lent) in &case.frames {
-                    let (rows, game_rows) = split(fit, lent, underlay, spare);
-                    grid.push(rows);
-                    let game_rows = clamp_u16(game_rows);
-                    if changed(&last, cols, game_rows) {
-                        told.push((cols, game_rows));
-                    }
+            let last = AtomicU32::new(0);
+            let (mut grid, mut told) = (Vec::new(), Vec::new());
+            for &(cols, fit, lent) in &case.frames {
+                let (rows, game_rows) = grid_and_game_rows(fit, lent);
+                grid.push(rows);
+                let game_rows = clamp_u16(game_rows);
+                if changed(&last, cols, game_rows) {
+                    told.push((cols, game_rows));
                 }
-                let at = format!("{}, underlay {underlay}, {spare} px spare", case.name);
-                assert_eq!(grid, case.grid, "{at}");
-                assert_eq!(told, case.told, "{at}");
             }
+            assert_eq!(grid, case.grid, "{}", case.name);
+            assert_eq!(told, case.told, "{}", case.name);
         }
     }
 

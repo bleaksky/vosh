@@ -36,9 +36,7 @@ function startCopyToasts() {
 // accent for info. The store owns the dismiss timers, and clicking a
 // toast dismisses it early. It works inside the positioned terminal
 // area or as a direct child of the shell grid, where overlays.css pins
-// it to the terminal cell. The stack floats over the terminal, so it
-// carries data-occludes-surface for the Windows and Linux on-top
-// native path.
+// it to the terminal cell.
 export function Toasts() {
   const [toasts, setToasts] = useState<Toast[]>(getToasts);
 
@@ -48,7 +46,7 @@ export function Toasts() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="ov-toasts" role="status" aria-live="polite" data-occludes-surface="true">
+    <div className="ov-toasts" role="status" aria-live="polite">
       {toasts.map((t) => (
         <button
           key={t.id}

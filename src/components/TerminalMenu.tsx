@@ -304,7 +304,6 @@ export function TerminalMenu({
         role="menu"
         aria-label="Terminal"
         tabIndex={-1}
-        data-occludes-surface="true"
         style={{ left: pos.x, top: pos.y }}
         onKeyDown={onKeyDown}
         // Settings stays the active row while its list is open, so the

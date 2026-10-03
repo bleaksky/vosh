@@ -22,8 +22,6 @@ interface Props {
 // focused button, so Enter on Cancel cancels. Enter on the card itself,
 // after a press on its text, confirms. Enter from behind the card does
 // nothing, so it never confirms and never reaches the control there.
-// The card can overlap the terminal, so the layer opts in to hiding the
-// native surface via data-occludes-surface.
 export function ConfirmDialog({ title, body, confirmLabel, onConfirm, onCancel }: Props) {
   const titleId = useId();
   const bodyId = useId();
@@ -55,7 +53,6 @@ export function ConfirmDialog({ title, body, confirmLabel, onConfirm, onCancel }
   return (
     <div
       className="ov-confirm-layer"
-      data-occludes-surface="true"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
