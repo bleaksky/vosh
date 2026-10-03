@@ -8,7 +8,7 @@ use tauri::{AppHandle, State};
 use crate::app::events::CHAT_COLORS_CHANGED;
 use crate::app::state::{ui_config_generation, SharedState};
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
-use crate::fonts::{cached_fonts, enumerate_fonts, FontEntry, FONTS_CACHE};
+use crate::fonts::FontEntry;
 
 /// The Settings payload. Every field falls back to the default a fresh
 /// profile has, so a page that leaves one out still saves (D12).
@@ -315,24 +315,14 @@ fn apply_theme_pick(
     changed
 }
 
-/// List every distinct system font family. Sorted, deduped. Errors
-/// from font-kit surface as an empty list rather than a hard fail so
-/// the settings panel still opens on a partially-broken system.
+/// Every system font family, for the font picker.
 ///
 /// Async so it never runs on the main thread. Tauri runs a sync
 /// command there on macOS, and the first enumeration of a launch took
-/// 2 to 3 s, which froze every window until it finished. A cached list
-/// returns at once. Otherwise the enumeration runs on the blocking
-/// pool, and a call that lands while another thread enumerates waits
-/// there for that result.
+/// 2 to 3 s, which froze every window until it finished.
 #[tauri::command]
 pub(crate) async fn fonts_list() -> Vec<FontEntry> {
-    if let Some(list) = FONTS_CACHE.get() {
-        return list.clone();
-    }
-    tauri::async_runtime::spawn_blocking(|| cached_fonts(&FONTS_CACHE, enumerate_fonts).to_vec())
-        .await
-        .unwrap_or_default()
+    crate::fonts::list().await
 }
 
 /// The 16 ANSI slots a chat channel can take, in the frontend's names.
