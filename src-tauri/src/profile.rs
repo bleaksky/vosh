@@ -40,7 +40,7 @@ pub(crate) struct Profile {
     /// The room look the session is following, which tells the lines
     /// that list a room's things and people apart for Room triggers. It
     /// resets on a disconnect.
-    pub(crate) room_block: crate::room_block::RoomBlock,
+    pub(crate) room_block: crate::session::room_block::RoomBlock,
     /// Keyboard macro bindings. Each entry maps a canonical key
     /// string (e.g. "F1", "Ctrl+N", "Numpad7") to a command line
     /// (which may itself contain `;`-separated subcommands).

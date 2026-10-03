@@ -11,7 +11,6 @@ mod cell_render;
 mod characters;
 mod disk;
 mod fonts;
-mod highlight_ground;
 mod import;
 mod input;
 mod ipc;
@@ -30,7 +29,6 @@ mod profile_config;
 mod profile_set;
 mod prompt;
 mod prompt_migration;
-mod room_block;
 mod script;
 mod session;
 #[cfg(native_surface)]
