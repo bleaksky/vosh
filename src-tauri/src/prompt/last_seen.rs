@@ -10,7 +10,6 @@
 
 use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
 use serde::Serialize;
-use tauri::State;
 use vosh_log::{CharacterScope, LogStore};
 use vosh_prompt::aabahran::observer;
 
@@ -136,17 +135,9 @@ fn stamp(at: DateTime<FixedOffset>) -> String {
     at.to_rfc3339_opts(SecondsFormat::Secs, false)
 }
 
-/// Your prompt settings and where Vosh last saw them: the latest
-/// Char.Prompt, else what the game showed after your own `prompt` this
-/// session, else your log. None when none of them has one.
-#[tauri::command]
-pub(crate) async fn prompt_last_seen(
-    state: State<'_, SharedState>,
-) -> Result<Option<LastSeen>, String> {
-    Ok(last_seen(state.inner()).await)
-}
-
 /// The body of [`prompt_last_seen`].
+///
+/// [`prompt_last_seen`]: crate::ipc::prompt::prompt_last_seen
 pub(crate) async fn last_seen(state: &SharedState) -> Option<LastSeen> {
     let character = state.current_character.lock().ok().and_then(|g| g.clone());
     {

@@ -4,7 +4,6 @@ use tauri::{AppHandle, State};
 
 use crate::app::state::SharedState;
 use crate::app::windows::{open_aux_window, HELP_WINDOW, SETTINGS_WINDOW};
-use crate::prompt::{prompt_show_state, reported_hidden, PromptShowState};
 
 /// What launch has to tell you, for the main window to show once in the
 /// terminal and as a toast.
@@ -26,43 +25,6 @@ pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub(crate) async fn open_help_window(app: AppHandle) -> Result<(), String> {
     open_aux_window(&app, &HELP_WINDOW)
-}
-
-/// Which values the game hides, as every open window last heard it on
-/// `session://hidden`. The session reports each change once, so a window
-/// that opens or reloads while the game hides something, Settings among
-/// them, reads the state here. Nothing is hidden with no connection.
-#[tauri::command]
-pub(crate) async fn hidden_get(
-    state: State<'_, SharedState>,
-) -> Result<vosh_prompt::values::Hidden, String> {
-    Ok(reported_hidden(state.inner()).await)
-}
-
-/// Where the active profile's prompt shows, and whether it reads one.
-/// Every window reads it again on `vosh://prompt-config-changed`.
-#[tauri::command]
-pub(crate) async fn prompt_show_get(
-    state: State<'_, SharedState>,
-) -> Result<PromptShowState, String> {
-    Ok(prompt_show_state(&*state.profile.lock().await))
-}
-
-/// The triggers that hid your prompt this session while the profile
-/// reads no prompt, so Vosh drew nothing in its place. The session names
-/// each one once on `session://prompt-gag-without-reader`, so a window
-/// that opens later, Settings among them, reads the list here. Empty
-/// with no connection.
-#[tauri::command]
-pub(crate) async fn prompt_gags_without_reader(
-    state: State<'_, SharedState>,
-) -> Result<Vec<String>, String> {
-    let p = state.profile.lock().await;
-    Ok(p.prompt
-        .stage
-        .gags_without_reader()
-        .map(str::to_string)
-        .collect())
 }
 
 /// Cleanly exit the app. Surfaces a "quit" event first so any window
