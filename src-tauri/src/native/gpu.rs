@@ -9,11 +9,12 @@
 //! Glyphs rasterize through CoreGraphics with smoothing off, to match the
 //! webview.
 //!
-//! This file holds `CellRenderer`, the pipeline that draws a frame, with
-//! its two shaders and what a frame takes and reports. `style` holds the
-//! colors and the rules that color a cell, `atlas` the glyph atlas and
-//! its fonts, `decor` the underlines and the strike, `bands` the bands
-//! under a lifted prompt, and `frame` the quads a frame builds.
+//! This file holds `CellRenderer`, the pipeline that draws a frame, and
+//! what a frame takes and reports. Its two shaders sit in `gpu/shaders/`.
+//! `style` holds the colors and the rules that color a cell, `atlas` the
+//! glyph atlas and its fonts, `decor` the underlines and the strike,
+//! `bands` the bands under a lifted prompt, and `frame` the quads a frame
+//! builds.
 
 // Pixel-coordinate float math on small integers (atlas dimensions, glyph
 // coords) that are always far inside f32's exact-integer range.
@@ -84,62 +85,7 @@ struct Uniforms {
     _pad: [f32; 2],
 }
 
-const CELL_SHADER: &str = r"
-struct Uniforms { surface_size: vec2<f32>, _pad: vec2<f32> };
-@group(0) @binding(0) var<uniform> u: Uniforms;
-@group(0) @binding(1) var atlas_tex: texture_2d<f32>;
-@group(0) @binding(2) var atlas_samp: sampler;
-
-struct VsOut {
-    @builtin(position) pos: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-    @location(1) color: vec4<f32>,
-};
-
-@vertex
-fn vs(
-    @builtin(vertex_index) vi: u32,
-    @location(0) offset: vec2<f32>,
-    @location(1) size: vec2<f32>,
-    @location(2) color: vec4<f32>,
-    @location(3) uv_min: vec2<f32>,
-    @location(4) uv_max: vec2<f32>,
-) -> VsOut {
-    var corners = array<vec2<f32>, 6>(
-        vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
-        vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0),
-    );
-    let corner = corners[vi];
-    let px = offset + corner * size;
-    let ndc = vec2<f32>(
-        px.x / u.surface_size.x * 2.0 - 1.0,
-        1.0 - px.y / u.surface_size.y * 2.0,
-    );
-    var out: VsOut;
-    out.pos = vec4<f32>(ndc, 0.0, 1.0);
-    out.uv = mix(uv_min, uv_max, corner);
-    out.color = color;
-    return out;
-}
-
-fn lin_to_srgb(c: vec3<f32>) -> vec3<f32> {
-    let lo = c * 12.92;
-    let hi = 1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - 0.055;
-    return select(hi, lo, c <= vec3<f32>(0.0031308));
-}
-
-@fragment
-fn fs(in: VsOut) -> @location(0) vec4<f32> {
-    // Coverage from the atlas (1.0 at the solid texel for fills). Emit the
-    // color premultiplied by coverage and sRGB-encoded; the surface is a
-    // non-sRGB format so hardware alpha blending composites in gamma space,
-    // matching how xterm's canvas renderer antialiases. Premultiplied means
-    // a glyph overhanging its cell blends cleanly over the neighbor.
-    let cov = textureSample(atlas_tex, atlas_samp, in.uv).r * in.color.a;
-    let srgb = lin_to_srgb(in.color.rgb);
-    return vec4<f32>(srgb * cov, cov);
-}
-";
+const CELL_SHADER: &str = include_str!("gpu/shaders/cell.wgsl");
 
 /// The prompt band: a rounded rectangle, or its inset ring, covered by
 /// its signed distance the way a browser antialiases a border radius. The
@@ -148,80 +94,7 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
 /// the union of the rows above the last, full width down to the last
 /// row's top, and every row as wide as the last one. The output is
 /// premultiplied and sRGB encoded like the cells.
-const BAND_SHADER: &str = r"
-struct Uniforms { surface_size: vec2<f32>, _pad: vec2<f32> };
-@group(0) @binding(0) var<uniform> u: Uniforms;
-
-struct BandOut {
-    @builtin(position) pos: vec4<f32>,
-    @location(0) local: vec2<f32>,
-    @location(1) size: vec2<f32>,
-    @location(2) color: vec4<f32>,
-    @location(3) shape: vec2<f32>,
-    @location(4) notch: vec2<f32>,
-};
-
-@vertex
-fn vs(
-    @builtin(vertex_index) vi: u32,
-    @location(0) offset: vec2<f32>,
-    @location(1) size: vec2<f32>,
-    @location(2) color: vec4<f32>,
-    @location(3) uv_min: vec2<f32>,
-    @location(4) uv_max: vec2<f32>,
-) -> BandOut {
-    var corners = array<vec2<f32>, 6>(
-        vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
-        vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0),
-    );
-    let corner = corners[vi];
-    let px = offset + corner * size;
-    var out: BandOut;
-    out.pos = vec4<f32>(
-        px.x / u.surface_size.x * 2.0 - 1.0,
-        1.0 - px.y / u.surface_size.y * 2.0,
-        0.0,
-        1.0,
-    );
-    out.local = corner * size;
-    out.size = size;
-    out.color = color;
-    out.shape = uv_min;
-    out.notch = uv_max;
-    return out;
-}
-
-// The signed distance from `p` to a rectangle `size` big at the origin,
-// its corners rounded by `r`.
-fn rounded(p: vec2<f32>, size: vec2<f32>, r: f32) -> f32 {
-    let half = size * 0.5;
-    let rr = min(r, min(half.x, half.y));
-    let q = abs(p - half) - half + vec2<f32>(rr, rr);
-    return length(max(q, vec2<f32>(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - rr;
-}
-
-fn lin_to_srgb(c: vec3<f32>) -> vec3<f32> {
-    let lo = c * 12.92;
-    let hi = 1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - 0.055;
-    return select(hi, lo, c <= vec3<f32>(0.0031308));
-}
-
-@fragment
-fn fs(in: BandOut) -> @location(0) vec4<f32> {
-    var d = rounded(in.local, in.size, in.shape.x);
-    if (in.notch.x > 0.0) {
-        let upper = rounded(in.local, vec2<f32>(in.size.x, in.notch.y), in.shape.x);
-        let lower = rounded(in.local, vec2<f32>(in.notch.x, in.size.y), in.shape.x);
-        d = min(upper, lower);
-    }
-    var cov = clamp(0.5 - d, 0.0, 1.0);
-    if (in.shape.y > 0.0) {
-        cov = cov - clamp(0.5 - (d + in.shape.y), 0.0, 1.0);
-    }
-    let a = cov * in.color.a;
-    return vec4<f32>(lin_to_srgb(in.color.rgb) * a, a);
-}
-";
+const BAND_SHADER: &str = include_str!("gpu/shaders/band.wgsl");
 
 /// Owns the glyph atlas texture and the instanced pipeline that draws the
 /// terminal grid. One quad per cell; the fragment shader composites the
