@@ -219,8 +219,8 @@ pub fn run() {
 
                 let plugins_dir = path.join("plugins");
                 let _ = std::fs::create_dir_all(&plugins_dir);
-                seed_example_plugins(&plugins_dir);
-                tauri::async_runtime::block_on(load_enabled_plugins(
+                app::plugins::seed_example_plugins(&plugins_dir);
+                tauri::async_runtime::block_on(app::plugins::load_enabled_plugins(
                     app.handle(),
                     &state,
                     plugins_dir,
@@ -463,95 +463,4 @@ fn open_log_store(dir: &std::path::Path) -> Result<LogStore, Box<dyn std::error:
     let path = log_state::log_db_path(dir);
     info!(path = %path.display(), "opening log store");
     Ok(LogStore::open(&path)?)
-}
-
-/// Drop the example plugins shipped with the app into the user's plugins
-/// directory if they're not already there, so a fresh install has one
-/// to turn on in its profile file.
-fn seed_example_plugins(plugins_dir: &std::path::Path) {
-    const EXAMPLES: &[(&str, &[(&str, &str)])] = &[(
-        "vitals_alert",
-        &[
-            (
-                "manifest.toml",
-                include_str!("../../plugins/vitals_alert/manifest.toml"),
-            ),
-            (
-                "main.lua",
-                include_str!("../../plugins/vitals_alert/main.lua"),
-            ),
-        ],
-    )];
-    for (name, files) in EXAMPLES {
-        let dir = plugins_dir.join(name);
-        if dir.exists() {
-            continue;
-        }
-        if let Err(e) = std::fs::create_dir_all(&dir) {
-            error!(plugin = %name, error = %e, "failed to seed plugin directory");
-            continue;
-        }
-        for (filename, contents) in *files {
-            let path = dir.join(filename);
-            if let Err(e) = std::fs::write(&path, contents) {
-                error!(plugin = %name, file = %filename, error = %e, "failed to seed plugin file");
-            }
-        }
-        info!(plugin = %name, "seeded example plugin");
-    }
-}
-
-/// Find the plugins in `plugins_dir` and load each one the profile turns
-/// on, as launch does. What an entry script asks for applies as on every
-/// other path that runs Lua, so its timers, `mud.input` lines and prompt
-/// values take effect. No terminal shows and no game listens yet, so
-/// what it would print or send goes to the log.
-async fn load_enabled_plugins<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    state: &SharedState,
-    plugins_dir: std::path::PathBuf,
-) {
-    let mut mgr = state.plugins.lock().await;
-    mgr.set_plugins_dir(plugins_dir);
-    if let Err(e) = mgr.discover() {
-        error!(error = %e, "plugin discovery failed");
-    }
-    let enabled = {
-        let p = state.profile.lock().await;
-        p.plugins.enabled.clone()
-    };
-    mgr.set_enabled(enabled.clone());
-    for name in &enabled {
-        let apply = match mgr.read_entry(name) {
-            Ok(code) => {
-                let mut p = state.profile.lock().await;
-                crate::script_state::snapshot_vars(&p.script, &p.vars);
-                match p.script.load_script(&format!("plugin:{name}"), code) {
-                    Ok(outcome) => {
-                        info!(name = %name, "loaded plugin");
-                        crate::script_state::apply_actions(&mut p, outcome)
-                    }
-                    Err(e) => {
-                        error!(name = %name, error = %e, "plugin script error");
-                        continue;
-                    }
-                }
-            }
-            Err(e) => {
-                error!(name = %name, error = %e, "plugin entry missing");
-                continue;
-            }
-        };
-        let (bytes, echoes) =
-            crate::session::collect_script_result(app, &state.profile, &state.script_timers, apply)
-                .await;
-        if !bytes.is_empty() || !echoes.is_empty() {
-            info!(
-                name = %name,
-                bytes = bytes.len(),
-                echoes = echoes.len(),
-                "plugin output at launch has nowhere to go"
-            );
-        }
-    }
 }
