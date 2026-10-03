@@ -5,7 +5,6 @@
 //! and the band while pinned, which no text cancels, since it is not in the
 //! text.
 
-use super::show::{profile, showing, wire_fixture, Read, Session, CODES};
 use super::*;
 use vosh_prompt::values::overrides::{Preview, PromptPreview};
 use vosh_prompt::PromptShow;
@@ -51,18 +50,6 @@ fn read_then_wait(
         now,
     );
     (read, next)
-}
-
-fn plain(bytes: &[u8]) -> String {
-    vosh_protocol::ansi::plain_text(bytes)
-}
-
-/// What `f` gives, and how many times the session drew your design while
-/// it ran.
-fn drawing<T>(f: impl FnOnce() -> T) -> (T, u64) {
-    let before = RENDERS.with(std::cell::Cell::get);
-    let out = f();
-    (out, RENDERS.with(std::cell::Cell::get) - before)
 }
 
 /// Whether the late repaint waits after `read`, as the session loop

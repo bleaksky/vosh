@@ -5,7 +5,6 @@
 //! select nor read back, and the band while pinned, which no selection or
 //! read back holds.
 
-use super::show::{profile, showing, wire_fixture, Session, CODES};
 use super::*;
 use crate::output::OutputPayload;
 use vosh_prompt::values::overrides::{Preview, PromptPreview};
@@ -13,18 +12,6 @@ use vosh_prompt::PromptShow;
 
 /// Your health and the seconds left of the tick.
 const TICK: &str = "<%hp> %tick";
-
-fn plain(bytes: &[u8]) -> String {
-    vosh_protocol::ansi::plain_text(bytes)
-}
-
-/// What `f` gives, and how many times the session drew your design while
-/// it ran.
-fn drawing<T>(f: impl FnOnce() -> T) -> (T, u64) {
-    let before = RENDERS.with(std::cell::Cell::get);
-    let out = f();
-    (out, RENDERS.with(std::cell::Cell::get) - before)
-}
 
 /// A session showing `show` that drew `template` over the quiet pulse,
 /// with the tick restarted at `t0`, the moment it read the prompt.
@@ -210,7 +197,7 @@ fn a_band_repaint_between_your_echo_and_its_word_keeps_the_next_line_end() {
     grid.session_output(&band);
     session.local_write();
     grid.session_output(&session.read(b"\r\nSomeone arrives from the south.\r\n").out);
-    let rows = super::show::rows_of(&grid);
+    let rows = rows_of(&grid);
     assert_eq!(
         rows[rows.len() - 3..],
         ["look", "", "Someone arrives from the south."]
