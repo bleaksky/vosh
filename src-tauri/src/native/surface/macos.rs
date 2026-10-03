@@ -1,15 +1,17 @@
 //! macOS window glue for the native surface: a `CAMetalLayer`-backed
-//! `NSView` subclass under the `WKWebView`, with clipboard and URL-open
-//! plumbing. The page above it takes every pointer event. All raw objc2
-//! message-sends, same style as `enable_macos_spellcheck`; every view
-//! touch happens on the main thread.
+//! `NSView` subclass under the `WKWebView`, the placement of the grid in
+//! the pane, and clipboard and URL-open plumbing. The page above it takes
+//! every pointer event. All raw objc2 message-sends, same style as
+//! `enable_macos_spellcheck`; every view touch happens on the main
+//! thread.
 
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 use std::sync::OnceLock;
 
-use super::{render, surface_slot, SurfaceHandle};
+use super::device::clamp_to_device;
+use super::{render, surface_slot, SurfaceHandle, PANE};
 use objc2::declare::ClassBuilder;
 use objc2::runtime::{AnyClass, AnyObject, Sel};
 use objc2::{class, msg_send, sel, Encode, Encoding};
@@ -147,7 +149,7 @@ unsafe fn apply_corner_radius(ns_window: *mut AnyObject, metal_layer: *mut AnyOb
 
 /// Re-read the window's corner radius and fullscreen state and clip the
 /// underlay to match. Main thread only.
-pub(super) fn sync_corner_radius(platform: &PlatformSurface) {
+fn sync_corner_radius(platform: &PlatformSurface) {
     // SAFETY: main thread; the view and layer are live.
     unsafe {
         let window: *mut AnyObject = msg_send![platform.view, window];
@@ -223,7 +225,7 @@ pub(super) struct PlatformSurface {
 unsafe impl Send for PlatformSurface {}
 
 /// Hide or show the surface view. Main thread only.
-pub(super) fn set_hidden(platform: &PlatformSurface, hidden: bool) {
+fn set_hidden(platform: &PlatformSurface, hidden: bool) {
     // SAFETY: main thread; the view is live.
     unsafe {
         let _: () = msg_send![platform.view, setHidden: hidden];
@@ -233,7 +235,7 @@ pub(super) fn set_hidden(platform: &PlatformSurface, hidden: bool) {
 /// The view's size in device pixels at `dpr`. The view spans the window
 /// and `AppKit` resizes it, so the surface reads its size here instead of
 /// from the frontend. Main thread only.
-pub(super) fn view_size_px(platform: &PlatformSurface, dpr: f64) -> (u32, u32) {
+fn view_size_px(platform: &PlatformSurface, dpr: f64) -> (u32, u32) {
     // SAFETY: main thread; the view is live.
     let bounds: CGRect = unsafe { msg_send![platform.view, bounds] };
     (
@@ -245,7 +247,7 @@ pub(super) fn view_size_px(platform: &PlatformSurface, dpr: f64) -> (u32, u32) {
 /// Keep the layer's backing scale in step with the display the window is
 /// on, so text stays crisp after a move between a 2x and a 1x screen.
 /// Main thread only.
-pub(super) fn set_scale(platform: &PlatformSurface, dpr: f64) {
+fn set_scale(platform: &PlatformSurface, dpr: f64) {
     // SAFETY: main thread; the layer is live.
     unsafe {
         let current: f64 = msg_send![platform.metal_layer, contentsScale];
@@ -294,6 +296,37 @@ pub(super) fn set_backdrop(platform: &PlatformSurface, rgb: (u8, u8, u8)) {
         let _: () = msg_send![platform.metal_layer, setBackgroundColor: CGColorRef(color)];
         let _: () = msg_send![class!(CATransaction), commit];
         CGColorRelease(color);
+    }
+}
+
+/// Place the grid in the pane the page reports and show the surface.
+/// `x`/`y`/`width`/`height` are CSS pixels in the webview's top-left
+/// coordinate space at `dpr`. The layer follows the display's scale, the
+/// theme's backdrop and the window's corners, and the drawable follows the
+/// view's size. Main thread only.
+pub(super) fn place(handle: &mut SurfaceHandle, x: f64, y: f64, width: f64, height: f64, dpr: f64) {
+    // The view already spans the window (AppKit resizes it with the
+    // window), so the report only moves the grid inside it. Snap to whole
+    // device pixels so glyphs land on the pixel grid.
+    let snap = |v: f64| (v * dpr).round().max(0.0) as u32;
+    if let Ok(mut vp) = PANE.viewport.lock() {
+        *vp = Some([snap(x), snap(y), snap(width).max(1), snap(height).max(1)]);
+    }
+    let (px_w, px_h) = view_size_px(&handle.platform, dpr);
+    let (px_w, px_h) = clamp_to_device(&handle.gpu.device, px_w, px_h);
+    set_scale(&handle.platform, dpr);
+    set_hidden(&handle.platform, false);
+    set_backdrop(&handle.platform, crate::native::gpu::style::theme_bg_rgb());
+    // The window reports its real radius once it is on screen, and a
+    // fullscreen switch also resizes the pane, so re-check here.
+    sync_corner_radius(&handle.platform);
+    if px_w != handle.gpu.config.width || px_h != handle.gpu.config.height {
+        handle.gpu.config.width = px_w;
+        handle.gpu.config.height = px_h;
+        handle
+            .gpu
+            .surface
+            .configure(&handle.gpu.device, &handle.gpu.config);
     }
 }
 

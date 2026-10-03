@@ -2,11 +2,13 @@
 //!
 //! Platform-agnostic core: the wgpu surface + cell renderer, the shared
 //! scroll/split/selection/hover state, and the command-facing API. The
-//! platform submodule owns the view plumbing (creating the native view
-//! under the webview, showing it, its layer's scale, backdrop and
-//! corners, clipboard, URL open). macOS is the one platform: an
-//! `NSView` + `CAMetalLayer` composited with the `WKWebView`, drawn by
-//! wgpu's Metal backend (`macos.rs`). Windows and Linux draw with xterm.
+//! platform submodule owns the view plumbing: `install` creates the
+//! native view under the webview, `place` puts the grid in the pane and
+//! shows the view with its layer's scale, backdrop and corners, and the
+//! rest repaints the backdrop, writes the clipboard and opens a URL.
+//! macOS is the one platform: an `NSView` + `CAMetalLayer` composited
+//! with the `WKWebView`, drawn by wgpu's Metal backend (`macos.rs`).
+//! Windows and Linux draw with xterm.
 //!
 //! The surface sits BELOW the webview. It spans the whole window and
 //! never moves; the grid draws at the pane's offset, the page leaves the
@@ -41,7 +43,7 @@ pub(crate) mod pointer;
 mod report;
 mod split_drag;
 
-use device::{clamp_to_device, GpuState};
+use device::GpuState;
 use pointer::{load_f32, set_divider_frac, split_ratio, store_f32, CELLS};
 use report::{grid_and_game_rows, report_scroll_if_changed, report_sizes};
 
@@ -221,7 +223,9 @@ pub(crate) fn install(window: &tauri::WebviewWindow) -> Result<(), tauri::Error>
 /// Place the grid in the terminal pane and show the surface. `x`/`y`/`w`/`h`
 /// are CSS pixels in the webview's top-left coordinate space; `dpr` is the
 /// device pixel ratio. `lent` is the rows at the pane's bottom the pinned
-/// prompt band borrows (`grid_and_game_rows`). Must run on the main thread.
+/// prompt band borrows (`grid_and_game_rows`). The metrics a frame reads
+/// are kept here, and the platform's `place` puts the grid in the pane
+/// before the frame draws. Must run on the main thread.
 pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64, lent: u32) {
     let Ok(mut slot) = surface_slot().lock() else {
         return;
@@ -237,29 +241,7 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64, lent
     FRAMES.active.store(true, Ordering::Release);
     PANE.lent_rows.store(lent, Ordering::Release);
     store_f32(&CELLS.dpr, dpr as f32);
-    // The view already spans the window (AppKit resizes it with the
-    // window), so the report only moves the grid inside it. Snap to whole
-    // device pixels so glyphs land on the pixel grid.
-    let snap = |v: f64| (v * dpr).round().max(0.0) as u32;
-    if let Ok(mut vp) = PANE.viewport.lock() {
-        *vp = Some([snap(x), snap(y), snap(width).max(1), snap(height).max(1)]);
-    }
-    let (px_w, px_h) = platform::view_size_px(&handle.platform, dpr);
-    let (px_w, px_h) = clamp_to_device(&handle.gpu.device, px_w, px_h);
-    platform::set_scale(&handle.platform, dpr);
-    platform::set_hidden(&handle.platform, false);
-    platform::set_backdrop(&handle.platform, crate::native::gpu::style::theme_bg_rgb());
-    // The window reports its real radius once it is on screen, and a
-    // fullscreen switch also resizes the pane, so re-check here.
-    platform::sync_corner_radius(&handle.platform);
-    if px_w != handle.gpu.config.width || px_h != handle.gpu.config.height {
-        handle.gpu.config.width = px_w;
-        handle.gpu.config.height = px_h;
-        handle
-            .gpu
-            .surface
-            .configure(&handle.gpu.device, &handle.gpu.config);
-    }
+    platform::place(handle, x, y, width, height, dpr);
     render(&mut handle.gpu);
 }
 
