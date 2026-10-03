@@ -37,7 +37,8 @@ use serde::Serialize;
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::Trigger;
 
-use crate::loadout::{GlobalCatalog, Loadout};
+use crate::loadouts::catalog::GlobalCatalog;
+use crate::loadouts::set::Loadout;
 use crate::profile::file::{GroupFolders, ProfileConfig};
 use crate::profile::live::Macro;
 
@@ -113,7 +114,7 @@ pub(crate) struct MigrationPlan {
     /// The enabled preset list the catalog takes, in the
     /// `enabled_presets` shape. Every character shares it in loadout
     /// mode. The caller fills it, see
-    /// [`crate::loadout_store::first_catalog_presets`].
+    /// [`crate::loadouts::presets::first_catalog_presets`].
     pub shared_presets: Vec<String>,
     /// Each source profile's own enabled preset list, in the order of
     /// `source_profiles`, so the preview can say which characters gain or
@@ -537,7 +538,7 @@ fn content_key<T: CatalogItem>(item: &T) -> String {
 
 /// True when `list`, an `enabled_presets` list, has `preset` on. An
 /// empty list means the defaults, and every preset in the library is on
-/// by default, as `presets_on_in_any` in `loadout_store.rs` relies on too.
+/// by default, as `presets_on_in_any` in `loadouts/presets.rs` relies on too.
 pub(super) fn preset_on(list: &[String], preset: &str) -> bool {
     list.is_empty() || list.iter().any(|id| id == preset)
 }

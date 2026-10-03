@@ -11,11 +11,15 @@ use tracing::warn;
 use super::journal::{
     drop_wizard_journal, journal_path, save_wizard_journal, JournalFile, WizardJournal,
 };
+use super::plan::{
+    analyze_profiles, profile_file_for_catalog, ItemKind, ItemPayload, MigrationPlan,
+};
 use crate::app::events::{broadcast, MIGRATION_APPLIED};
 use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED};
 use crate::disk::save::{active_profile_file, persist_state, PERSIST_LOCK};
 use crate::loadouts::catalog::catalog_path;
-use crate::loadouts::set::loadouts_path;
+use crate::loadouts::presets::first_catalog_presets;
+use crate::loadouts::set::{loadouts_path, LoadoutSet};
 use crate::profile::file::ProfileConfig;
 
 /// [`migration_analyze`] over the app data folder `app_data`, so a test
@@ -27,7 +31,7 @@ pub(crate) async fn analyze_migration(
     state: &SharedState,
     app_data: &std::path::Path,
     library: &[&str],
-) -> Result<crate::migration::MigrationPlan, String> {
+) -> Result<MigrationPlan, String> {
     analyze_migration_with(state, app_data, library, &AUTO_PERSIST_SUPPRESSED).await
 }
 
@@ -43,7 +47,7 @@ pub(crate) async fn analyze_migration_with(
     app_data: &std::path::Path,
     library: &[&str],
     suppressed: &std::sync::atomic::AtomicBool,
-) -> Result<crate::migration::MigrationPlan, String> {
+) -> Result<MigrationPlan, String> {
     // No switch or save lands between the read of the live profile and
     // the read of the files, as in apply.
     let _persist_guard = PERSIST_LOCK.lock().await;
@@ -65,18 +69,16 @@ pub(crate) async fn analyze_migration_with(
 /// The plan for `sources`, with the preset list every character shares
 /// in loadout mode and the list each profile has now, so the preview can
 /// say who gains or loses a preset. The catalog takes the shared list by
-/// the rule launch uses, see
-/// [`crate::loadout_store::first_catalog_presets`], so the first launch
-/// in loadout mode keeps on every preset any saved profile had on and
-/// nothing more. `live_presets` is the live profile's list.
+/// the rule launch uses, see [`first_catalog_presets`], so the first
+/// launch in loadout mode keeps on every preset any saved profile had on
+/// and nothing more. `live_presets` is the live profile's list.
 fn plan_migration(
     sources: &MigrationSources,
     live_presets: &[String],
     library: &[&str],
-) -> crate::migration::MigrationPlan {
-    let mut plan = crate::migration::analyze_profiles(&sources.profiles, library);
-    plan.shared_presets =
-        crate::loadout_store::first_catalog_presets(&sources.preset_lists, live_presets);
+) -> MigrationPlan {
+    let mut plan = analyze_profiles(&sources.profiles, library);
+    plan.shared_presets = first_catalog_presets(&sources.preset_lists, live_presets);
     plan.profile_presets = sources
         .profiles
         .iter()
@@ -269,10 +271,10 @@ fn migration_sources(
 /// One conflict resolution from the wizard. Identifies a single
 /// conflicted item (kind + name) and the source profile whose variant
 /// should win. A conflict with no resolution in the list keeps the
-/// version of its `default_source`, see [`crate::migration::Conflict`].
+/// version of its `default_source`, see [`super::plan::Conflict`].
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ConflictResolution {
-    pub kind: crate::migration::ItemKind,
+    pub kind: ItemKind,
     pub name: String,
     pub source_profile: String,
 }
@@ -372,9 +374,9 @@ pub(crate) async fn apply_migration_with(
                 )
             })?;
         match &chosen.item {
-            crate::migration::ItemPayload::Alias { item } => catalog.aliases.push(item.clone()),
-            crate::migration::ItemPayload::Trigger { item } => catalog.triggers.push(item.clone()),
-            crate::migration::ItemPayload::Macro { item } => catalog.macros.push(item.clone()),
+            ItemPayload::Alias { item } => catalog.aliases.push(item.clone()),
+            ItemPayload::Trigger { item } => catalog.triggers.push(item.clone()),
+            ItemPayload::Macro { item } => catalog.macros.push(item.clone()),
         }
     }
 
@@ -383,7 +385,7 @@ pub(crate) async fn apply_migration_with(
     // profile you use now would turn off the items of every other
     // character you switch to. With none on, the loadouts have no opinion
     // and the group checkboxes each profile file keeps below decide.
-    let loadout_set = crate::loadout::LoadoutSet {
+    let loadout_set = LoadoutSet {
         loadouts: plan.loadouts.clone(),
         active: Vec::new(),
         dormant: false,
@@ -397,7 +399,7 @@ pub(crate) async fn apply_migration_with(
     // copies, with their old group names, over the catalog at launch.
     // Its group checkbox lists name the catalog groups of each kind that
     // are off for the profile, and its folder map names the catalog groups
-    // each of its folders became, see `migration::profile_file_for_catalog`.
+    // each of its folders became, see `profile_file_for_catalog`.
     // A profile that never saved a file gets one when it has lists or a
     // map to keep. The file keeps its own enabled preset list, which loadout
     // mode replaces with the catalog's at every load. Everything is built
@@ -409,7 +411,7 @@ pub(crate) async fn apply_migration_with(
             Some(text) => ProfileConfig::from_toml(text).map_err(|e| e.to_string())?,
             None => ProfileConfig::fresh(),
         };
-        crate::migration::profile_file_for_catalog(&mut config, &file.name, &plan);
+        profile_file_for_catalog(&mut config, &file.name, &plan);
         let lists = !config.disabled_alias_groups.is_empty()
             || !config.disabled_trigger_groups.is_empty()
             || !config.disabled_macro_groups.is_empty()

@@ -298,7 +298,7 @@ fn a_group_toggle_tells_the_command_line_when_a_macro_group_turned() {
 
 #[test]
 fn a_loadout_switch_tells_the_command_line_when_a_macro_group_turned() {
-    use crate::loadout::{Loadout, LoadoutSet};
+    use crate::loadouts::set::{Loadout, LoadoutSet};
     let app = app_with_settings_open();
     let handle = app.handle();
     let state: SharedState = app.state::<SharedState>().inner().clone();
@@ -353,5 +353,5 @@ fn a_loadout_switch_tells_the_command_line_when_a_macro_group_turned() {
 
     assert_eq!(heard, want);
     // The switch saved loadouts.toml in the scratch folder.
-    assert!(crate::loadout_store::loadouts_path(dir.path()).exists());
+    assert!(crate::loadouts::set::loadouts_path(dir.path()).exists());
 }

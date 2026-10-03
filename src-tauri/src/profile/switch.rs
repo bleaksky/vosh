@@ -25,8 +25,8 @@ use crate::profile::shared::{GlobalConfig, SharedLayer};
 /// group state of `set` then applies to the result.
 fn lay_catalog_over(
     p: &mut crate::profile::live::Profile,
-    catalog: &crate::loadout::GlobalCatalog,
-    set: Option<&crate::loadout::LoadoutSet>,
+    catalog: &crate::loadouts::catalog::GlobalCatalog,
+    set: Option<&crate::loadouts::set::LoadoutSet>,
 ) {
     // What the profile file just put into the live stores, to lay over
     // the catalog.
@@ -73,7 +73,7 @@ fn lay_catalog_over(
         p.ui.enabled_presets.clone_from(list);
     }
     if let Some(set) = set {
-        crate::loadout_store::apply_effective_state(set, p);
+        crate::loadouts::gating::apply_effective_state(set, p);
     }
 }
 
@@ -716,9 +716,9 @@ pub(crate) mod tests {
     async fn a_switch_in_loadout_mode_keeps_the_catalog_presets() {
         use std::sync::Arc;
         let state: super::SharedState = Arc::new(AppState::default());
-        *state.global_catalog.lock().await = Some(crate::loadout::GlobalCatalog {
+        *state.global_catalog.lock().await = Some(crate::loadouts::catalog::GlobalCatalog {
             enabled_presets: Some(vec!["healing_basics".into()]),
-            ..crate::loadout::GlobalCatalog::default()
+            ..crate::loadouts::catalog::GlobalCatalog::default()
         });
         // The switch just loaded Healer's file, with its own older list.
         state.profile.lock().await.ui.enabled_presets =

@@ -275,7 +275,7 @@ pub(crate) fn active_profile_file(
 async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
     // A catalog that has not taken the enabled presets yet waits for a
     // launch that reads a profile file (see
-    // `loadout_store::adopt_catalog_presets`), so a save leaves the list
+    // `loadouts::presets::adopt_catalog_presets`), so a save leaves the list
     // out rather than write the live profile's list alone.
     let presets_waiting = state
         .global_catalog
@@ -291,7 +291,7 @@ async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
         let p = state.profile.lock().await;
         // The enabled presets ride along, since the preset triggers they
         // name live in the catalog too.
-        let mut catalog = crate::loadout::GlobalCatalog::from_profile(&p);
+        let mut catalog = crate::loadouts::catalog::GlobalCatalog::from_profile(&p);
         if presets_waiting {
             catalog.enabled_presets = None;
         }
@@ -315,11 +315,11 @@ async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
     // commands. Just persist whatever the runtime currently holds.
     let set_snapshot = state.loadout_set.lock().await.clone();
 
-    if let Err(e) = crate::loadout_store::save_global_catalog(dir, &catalog) {
+    if let Err(e) = crate::loadouts::catalog::save_global_catalog(dir, &catalog) {
         warn!(error = %e, "Path B catalog auto-save failed");
     }
     if let Some(set) = set_snapshot {
-        if let Err(e) = crate::loadout_store::save_loadout_set(dir, &set) {
+        if let Err(e) = crate::loadouts::set::save_loadout_set(dir, &set) {
             warn!(error = %e, "Path B loadout set auto-save failed");
         }
     }
@@ -550,11 +550,12 @@ pub(crate) mod tests {
         *state.profile_set.lock().await = Some(james_like_set(dir.path()));
         // No profile file read at launch, so the catalog took no list and
         // the live profile kept its own.
-        *state.global_catalog.lock().await = Some(crate::loadout::GlobalCatalog::default());
+        *state.global_catalog.lock().await =
+            Some(crate::loadouts::catalog::GlobalCatalog::default());
         state.profile.lock().await.ui.enabled_presets = vec!["healing_basics".into()];
 
         persist(&state, dir.path()).await;
-        let saved = crate::loadout_store::load_global_catalog(dir.path()).unwrap();
+        let saved = crate::loadouts::catalog::load_global_catalog(dir.path()).unwrap();
         assert_eq!(saved.enabled_presets, None);
 
         // Once the catalog holds a list, the saves keep it current.
@@ -566,7 +567,7 @@ pub(crate) mod tests {
             .unwrap()
             .enabled_presets = Some(Vec::new());
         persist(&state, dir.path()).await;
-        let saved = crate::loadout_store::load_global_catalog(dir.path()).unwrap();
+        let saved = crate::loadouts::catalog::load_global_catalog(dir.path()).unwrap();
         assert_eq!(saved.enabled_presets, Some(vec!["healing_basics".into()]));
     }
 }

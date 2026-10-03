@@ -56,19 +56,19 @@ pub(crate) struct AppState {
     /// The last Char.Affects list of this connection, for a window that
     /// opens between ticks. Cleared on connect and when the session
     /// ends.
-    pub(crate) last_affects: crate::affects_snapshot::AffectsSnapshot,
+    pub(crate) last_affects: crate::affects::snapshot::AffectsSnapshot,
     /// How full each affect was cast, per character, for the Affects
-    /// pane's gauges. See [`crate::affect_full`].
-    pub(crate) affect_full: crate::affect_full::AffectFull,
+    /// pane's gauges. See [`crate::affects::full`].
+    pub(crate) affect_full: crate::affects::full::AffectFull,
     /// Path B authoring catalog. `Some` when the app started up with
     /// `catalog.toml` present (Path B mode); `None` in legacy per-
     /// profile mode. Mutated alongside the live `Profile` so on-disk
     /// state stays in step with in-memory edits.
-    pub(crate) global_catalog: Arc<Mutex<Option<crate::loadout::GlobalCatalog>>>,
+    pub(crate) global_catalog: Arc<Mutex<Option<crate::loadouts::catalog::GlobalCatalog>>>,
     /// Path B loadout collection. Same `Some`/`None` semantics as
     /// `global_catalog`. The active subset drives which catalog groups
     /// the runtime gates on (see [`crate::loadouts::gating::apply_loadout_state`]).
-    pub(crate) loadout_set: Arc<Mutex<Option<crate::loadout::LoadoutSet>>>,
+    pub(crate) loadout_set: Arc<Mutex<Option<crate::loadouts::set::LoadoutSet>>>,
     /// Sentences launch has to tell you, such as a profile file Vosh
     /// could not read and will not save over. Kept until the main window
     /// takes them through `launch_notices_take`, since launch runs before
@@ -154,8 +154,8 @@ impl Default for AppState {
             window_size: std::sync::Mutex::new((80, 24)),
             current_connection: std::sync::Mutex::new(None),
             current_character: std::sync::Mutex::new(None),
-            last_affects: crate::affects_snapshot::AffectsSnapshot::default(),
-            affect_full: crate::affect_full::AffectFull::default(),
+            last_affects: crate::affects::snapshot::AffectsSnapshot::default(),
+            affect_full: crate::affects::full::AffectFull::default(),
             global_catalog: Arc::new(Mutex::new(None)),
             loadout_set: Arc::new(Mutex::new(None)),
             launch_notices: std::sync::Mutex::new(Vec::new()),

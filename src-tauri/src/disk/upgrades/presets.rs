@@ -21,7 +21,8 @@
 
 use std::path::Path;
 
-use crate::loadout_store::{self, PRESETS_OFF};
+use crate::loadouts::catalog::{load_global_catalog, path_b_mode_active, save_global_catalog};
+use crate::loadouts::presets::PRESETS_OFF;
 use crate::profile::file::ProfileConfig;
 use crate::profile::set::ProfileSet;
 
@@ -69,8 +70,8 @@ fn roll_out(set: &ProfileSet, app_data: &Path, preset: &str) -> Result<(), Strin
         let config = ProfileConfig::load(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         files.push((path, config));
     }
-    let mut catalog = if loadout_store::path_b_mode_active(app_data) {
-        Some(loadout_store::load_global_catalog(app_data).map_err(|e| e.to_string())?)
+    let mut catalog = if path_b_mode_active(app_data) {
+        Some(load_global_catalog(app_data).map_err(|e| e.to_string())?)
     } else {
         None
     };
@@ -87,7 +88,7 @@ fn roll_out(set: &ProfileSet, app_data: &Path, preset: &str) -> Result<(), Strin
             .as_mut()
             .is_some_and(|list| add_preset(list, preset))
         {
-            loadout_store::save_global_catalog(app_data, catalog).map_err(|e| e.to_string())?;
+            save_global_catalog(app_data, catalog).map_err(|e| e.to_string())?;
         }
     }
     Ok(())
@@ -107,7 +108,6 @@ fn add_preset(list: &mut Vec<String>, preset: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::loadout_store::{load_global_catalog, save_global_catalog};
     use std::path::PathBuf;
 
     const INDEX: &str = r#"active = "default"

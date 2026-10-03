@@ -13,10 +13,14 @@ use vosh_log::LogStore;
 
 use crate::app::state::SharedState;
 use crate::disk::custom_themes::migrate_custom_themes;
+use crate::loadouts::catalog::{path_b_mode_active, save_global_catalog};
+use crate::loadouts::gating::apply_effective_state;
+use crate::loadouts::load_path_b_at_launch;
+use crate::loadouts::presets::{adopt_catalog_presets, profile_preset_lists};
 use crate::loadouts::wizard::journal::{self, WizardRun};
 use crate::profile::file::load_at_launch;
 use crate::profile::set::ProfileSet;
-use crate::{affect_full, loadout_store, logs};
+use crate::{affects, logs};
 
 /// Every startup step, in order, as the app's setup hook runs them.
 pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
@@ -37,7 +41,7 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
         // Affects pane's gauges. Read when the game names you.
         state
             .affect_full
-            .set_path(path.join(affect_full::FILE_NAME));
+            .set_path(path.join(affects::full::FILE_NAME));
 
         // The profile set and the active profile, then the
         // shared catalog and loadouts in loadout mode. See `load`.
@@ -124,14 +128,14 @@ pub(crate) struct Launch {
 /// Everything launch loads, in order. A shared catalog wizard run that
 /// stopped partway finishes first, so nothing loads a file it had yet to
 /// write. Then the prompt capture triggers move into the profiles, once,
-/// see [`crate::prompt_migration`], and each preset a build adds comes
-/// on once, see [`crate::preset_rollout`]. Then the profiles load, see
-/// [`load_profiles`], and loadout mode starts when catalog.toml is on
-/// disk, see [`load_loadout_mode`]. While the run stays unfinished, the
-/// move and loadout mode wait, since a profile file may still hold its
-/// items under their old group names and would lay them over the catalog
-/// for every character. The session runs on the active profile file
-/// alone.
+/// see [`crate::disk::upgrades::prompt_capture`], and each preset a
+/// build adds comes on once, see [`crate::disk::upgrades::presets`].
+/// Then the profiles load, see [`load_profiles`], and loadout mode starts
+/// when catalog.toml is on disk, see [`load_loadout_mode`]. While the run
+/// stays unfinished, the move and loadout mode wait, since a profile file
+/// may still hold its items under their old group names and would lay
+/// them over the catalog for every character. The session runs on the
+/// active profile file alone.
 pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
     let run = journal::finish_wizard_run(app_data);
     state.add_launch_notices(run.notices());
@@ -141,8 +145,8 @@ pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
         // Before any profile loads, so the live profile reads the files
         // as the move left them. It writes inactive profile files too.
         let _persist = crate::disk::save::PERSIST_LOCK.lock().await;
-        state.add_launch_notices(crate::prompt_migration::run(app_data));
-        crate::preset_rollout::run(app_data);
+        state.add_launch_notices(crate::disk::upgrades::prompt_capture::run(app_data));
+        crate::disk::upgrades::presets::run(app_data);
     }
     load_profiles(state, app_data).await;
     if run == WizardRun::Unfinished {
@@ -207,10 +211,10 @@ pub(crate) async fn load_profiles(state: &SharedState, app_data: &Path) {
 /// the active `enabled_groups` set. Returns true when loadout mode is
 /// live, so the caller can flip the input layer over.
 pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> bool {
-    if !loadout_store::path_b_mode_active(app_data) {
+    if !path_b_mode_active(app_data) {
         return false;
     }
-    let (mut catalog, set) = match loadout_store::load_path_b_at_launch(app_data) {
+    let (mut catalog, set) = match load_path_b_at_launch(app_data) {
         Ok(files) => files,
         // A file that does not read keeps the session on the profile
         // files alone. Both files are held so no save writes a catalog
@@ -231,19 +235,19 @@ pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> b
             .lock()
             .await
             .as_ref()
-            .map(loadout_store::profile_preset_lists)
+            .map(profile_preset_lists)
     } else {
         None
     };
     let presets_moved = {
         let mut p = state.profile.lock().await;
-        loadout_store::adopt_catalog_presets(&mut catalog, &mut p, preset_lists.as_ref())
+        adopt_catalog_presets(&mut catalog, &mut p, preset_lists.as_ref())
     };
     if let Some(lists) = &preset_lists {
         state.add_launch_notices(lists.unread_notices(presets_moved));
     }
     if presets_moved {
-        match loadout_store::save_global_catalog(app_data, &catalog) {
+        match save_global_catalog(app_data, &catalog) {
             Ok(()) => info!("moved the enabled presets into catalog.toml"),
             Err(e) => {
                 error!(error = %e, "failed to save the enabled presets to catalog.toml");
@@ -299,7 +303,7 @@ pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> b
         }
         p.macros = macros;
 
-        loadout_store::apply_effective_state(&set, &mut p);
+        apply_effective_state(&set, &mut p);
     }
     *state.global_catalog.lock().await = Some(catalog);
     *state.loadout_set.lock().await = Some(set);

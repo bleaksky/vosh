@@ -7,10 +7,9 @@ use super::apply::{
 use crate::app::state::{AppState, SharedState};
 use crate::disk::save::tests::{launch_state, persist, read, UNREADABLE};
 use crate::disk::save::PERSIST_LOCK;
-use crate::loadout::{GlobalCatalog, Loadout, LoadoutSet};
-use crate::loadout_store::{
-    catalog_path, load_path_b_at_launch, loadouts_path, save_global_catalog, save_loadout_set,
-};
+use crate::loadouts::catalog::{catalog_path, save_global_catalog, GlobalCatalog};
+use crate::loadouts::load_path_b_at_launch;
+use crate::loadouts::set::{loadouts_path, save_loadout_set, Loadout, LoadoutSet};
 use crate::profile::file::ProfileConfig;
 use crate::profile::set::ProfileSet;
 use crate::profile::tests::james_like_set;
@@ -103,10 +102,10 @@ async fn relaunch_as(dir: &std::path::Path, name: &str) -> SharedState {
 /// [`relaunch_as`] with what the launch found. The folder has
 /// had every preset rollout already, as one this build opened
 /// before has, so each list stays as the test wrote it. The
-/// rollouts have tests of their own in `preset_rollout`.
+/// rollouts have tests of their own in `disk/upgrades/presets.rs`.
 async fn relaunch(dir: &std::path::Path, name: &str) -> (SharedState, crate::app::launch::Launch) {
     let mut set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
-    for (id, _) in crate::preset_rollout::ROLLOUTS {
+    for (id, _) in crate::disk::upgrades::presets::ROLLOUTS {
         set.record_migration(id).unwrap();
     }
     set.switch(name).unwrap();
@@ -143,7 +142,7 @@ async fn a_loadout_save_leaves_the_macros_to_the_catalog() {
         .macros
         .push(macro_on("f1", "look"));
     persist(&state, dir.path()).await;
-    let saved = crate::loadout_store::load_global_catalog(dir.path()).unwrap();
+    let saved = crate::loadouts::catalog::load_global_catalog(dir.path()).unwrap();
     assert_eq!(macro_keys(&saved.macros), ["f1"]);
     let leftover = &ProfileConfig::load(&set.active_path()).unwrap().macros;
     assert!(leftover.is_empty(), "{leftover:?}");
@@ -171,7 +170,7 @@ async fn a_catalog_that_does_not_read_is_held_and_never_replaced() {
     let state = launch_state(dir.path()).await;
     assert_eq!(
         load_path_b_at_launch(dir.path()).unwrap_err(),
-        [crate::loadout_store::UNREAD_CATALOG_NOTICE]
+        [crate::loadouts::catalog::UNREAD_CATALOG_NOTICE]
     );
 
     // The wizard would build the catalog from profile files that
@@ -199,7 +198,7 @@ async fn a_loadouts_file_that_does_not_read_holds_the_catalog_too() {
     let state = launch_state(dir.path()).await;
     assert_eq!(
         load_path_b_at_launch(dir.path()).unwrap_err(),
-        [crate::loadout_store::UNREAD_LOADOUTS_NOTICE]
+        [crate::loadouts::set::UNREAD_LOADOUTS_NOTICE]
     );
     assert_eq!(refused(&state, dir.path()).await, HELD);
     assert!(save_global_catalog(dir.path(), &GlobalCatalog::default()).is_err());
@@ -226,7 +225,7 @@ async fn the_wizard_never_builds_over_a_catalog_you_already_use() {
 
 #[tokio::test]
 async fn the_wizard_never_runs_in_a_session_that_uses_a_catalog() {
-    use crate::loadout_store::legacy_dir;
+    use crate::loadouts::wizard::apply::legacy_dir;
     use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
@@ -419,7 +418,7 @@ async fn the_wizard_never_writes_over_a_copy_an_earlier_run_left_in_legacy() {
     apply_migration(&state, dir.path(), &[], LIBRARY, || {})
         .await
         .unwrap();
-    let legacy = crate::loadout_store::legacy_dir(dir.path()).join("Healer.toml");
+    let legacy = crate::loadouts::wizard::apply::legacy_dir(dir.path()).join("Healer.toml");
     let copy = read(&legacy);
 
     // You move the catalog and the loadouts out to go back to per
@@ -526,7 +525,7 @@ async fn a_backup_copied_back_beside_the_catalog_spreads_its_old_items() {
     // default character gets the alias of the Healer, and the next
     // save shares the old kk with every character. The help says
     // never to do this.
-    let legacy = crate::loadout_store::legacy_dir(dir.path());
+    let legacy = crate::loadouts::wizard::apply::legacy_dir(dir.path());
     let default_file = set.profile_path(DEFAULT_PROFILE_NAME);
     std::fs::copy(
         legacy.join(default_file.file_name().unwrap()),
@@ -588,7 +587,7 @@ async fn following_the_refusals_builds_the_catalog_again_with_every_item() {
     // The refusal used to say only to move the legacy folder out.
     // The wizard then built the catalog from the files without
     // their items, and every character came back with nothing.
-    let legacy = crate::loadout_store::legacy_dir(dir.path());
+    let legacy = crate::loadouts::wizard::apply::legacy_dir(dir.path());
     for entry in std::fs::read_dir(&legacy).unwrap() {
         let entry = entry.unwrap();
         let back = set.profile_path(entry.path().file_stem().unwrap().to_str().unwrap());
@@ -1144,7 +1143,7 @@ async fn each_loadout_turns_on_the_items_its_character_shared() {
     assert_eq!(group("tp"), "(Test-Prompt)");
 
     for (n, name) in names.iter().enumerate() {
-        let mut loadouts = crate::loadout_store::load_loadout_set(dir.path()).unwrap();
+        let mut loadouts = crate::loadouts::set::load_loadout_set(dir.path()).unwrap();
         loadouts.active = vec![(*name).to_string()];
         save_loadout_set(dir.path(), &loadouts).unwrap();
         let state = relaunch_as(dir.path(), name).await;
@@ -1215,7 +1214,7 @@ async fn each_loadout_keeps_off_the_groups_its_character_had_off() {
     // another character's, each character has on what it had.
     for (n, name) in names.iter().enumerate() {
         for other in ["", "Bard"] {
-            let mut loadouts = crate::loadout_store::load_loadout_set(dir.path()).unwrap();
+            let mut loadouts = crate::loadouts::set::load_loadout_set(dir.path()).unwrap();
             loadouts.active = vec![(*name).to_string()];
             if !other.is_empty() && other != *name {
                 loadouts.active.push(other.to_string());
@@ -1985,7 +1984,7 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
 
 #[tokio::test]
 async fn the_wizard_waits_while_an_earlier_run_is_unfinished() {
-    use crate::loadout_store::legacy_dir;
+    use crate::loadouts::wizard::apply::legacy_dir;
     use crate::loadouts::wizard::journal::journal_path;
     use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
@@ -2122,7 +2121,7 @@ async fn a_wizard_that_cannot_finish_puts_every_file_back() {
     assert!(!written);
     assert!(!catalog_path(dir.path()).exists());
     assert!(!loadouts_path(dir.path()).exists());
-    let legacy = crate::loadout_store::legacy_dir(dir.path());
+    let legacy = crate::loadouts::wizard::apply::legacy_dir(dir.path());
     assert_eq!(std::fs::read_dir(&legacy).unwrap().count(), 0);
     assert!(!crate::loadouts::wizard::journal::journal_path(dir.path()).exists());
     for (path, text) in &files {
@@ -2160,7 +2159,7 @@ const WRITE_NEXT_STEP: &str =
 
 #[tokio::test]
 async fn a_wizard_that_cannot_copy_or_journal_says_what_to_do() {
-    use crate::loadout_store::legacy_dir;
+    use crate::loadouts::wizard::apply::legacy_dir;
     use crate::loadouts::wizard::journal::journal_path;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());

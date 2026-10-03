@@ -8,11 +8,12 @@ use crate::app::state::{SharedState, MIGRATION_RELAUNCH_PENDING};
 use crate::loadouts::wizard::apply::{
     analyze_migration, announce_migration_applied, apply_migration, ConflictResolution,
 };
+use crate::loadouts::wizard::plan::MigrationPlan;
 
 /// Read-only Path B migration preview. Walks the current profile set,
 /// loads each per-profile [`ProfileConfig`] off disk, the active one as
 /// the save apply runs first would write it, and runs the analyzer in
-/// [`crate::migration`]. Returns the full plan: every
+/// [`crate::loadouts::wizard::plan`]. Returns the full plan: every
 /// auto-resolved item, every conflict (one entry per name with two or
 /// more diverging variants), and the per-source-profile loadouts the
 /// migration would generate. Nothing is written to disk; the wizard
@@ -31,7 +32,7 @@ pub(crate) async fn migration_analyze(
     app: AppHandle,
     state: State<'_, SharedState>,
     library: Vec<String>,
-) -> Result<crate::migration::MigrationPlan, String> {
+) -> Result<MigrationPlan, String> {
     let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let library: Vec<&str> = library.iter().map(String::as_str).collect();
     analyze_migration(&state, &app_data, &library).await
