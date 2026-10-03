@@ -2,6 +2,7 @@
 //! commands aim at from the characters in the room, and a quick key
 //! like `gg` sends its verb at that target.
 
+use serde_json::Value;
 use vosh_automation::vars::Scope;
 
 use super::{split_first_word, InputResult};
@@ -43,6 +44,30 @@ fn refresh_target_idx(profile: &mut Profile) {
     } else {
         profile.vars.remove("target");
     }
+}
+
+/// The characters a Room.Chars packet lists, in its order. An entry
+/// without a name, or with an empty one, is skipped. The server may send
+/// `npc` as a bool, a string or a number, so each form reads, and an
+/// entry without it counts as a player.
+pub(crate) fn read_room_chars(entries: &[Value]) -> Vec<RoomChar> {
+    entries
+        .iter()
+        .filter_map(|v| {
+            let obj = v.as_object()?;
+            let name = obj.get("name").and_then(|n| n.as_str())?.to_string();
+            if name.is_empty() {
+                return None;
+            }
+            let npc = match obj.get("npc") {
+                Some(Value::Bool(b)) => *b,
+                Some(Value::String(s)) => s == "1" || s == "true",
+                Some(Value::Number(n)) => n.as_i64().is_some_and(|x| x != 0),
+                _ => false,
+            };
+            Some(RoomChar { name, npc })
+        })
+        .collect()
 }
 
 pub(crate) fn set_room_chars(profile: &mut Profile, chars: Vec<RoomChar>) {
