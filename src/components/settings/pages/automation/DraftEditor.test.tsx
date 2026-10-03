@@ -27,6 +27,9 @@ const THINGS: Thing[] = [
   { name: 'Sleep when mana is low', group: 'idle' },
 ];
 
+/** The things the next mount loads. */
+let things: Thing[] = THINGS;
+
 /** The detail card the editor shows last, to change its item. */
 let detail: DetailProps<Thing> | null = null;
 
@@ -36,7 +39,7 @@ const SPEC: KindSpec<Thing> = {
   newLabel: 'New thing',
   emptyDetail: 'Choose a thing to edit it.',
   emptyList: 'You have no things yet.',
-  load: () => Promise.resolve(THINGS),
+  load: () => Promise.resolve(things),
   save: () => Promise.resolve(),
   entry: (t) => ({
     name: t.name,
@@ -102,6 +105,7 @@ const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const clean of cleanups.splice(0)) await clean();
   store.clear();
+  things = THINGS;
   detail = null;
 });
 
@@ -266,6 +270,31 @@ describe('folding a group in the Automation list', () => {
     expect(list.open('g:idle')).toBe(true);
     expect(list.selected()).toMatch(/^Flee below 20 percent/);
     expect(store.has(KEY)).toBe(false);
+  });
+
+  it('keeps the selection and the Tab stop when you open a group with every group folded', async () => {
+    things = THINGS.filter((t) => t.group !== '');
+    store.set(KEY, '["g:combat","g:idle"]');
+    const list = await mount();
+    expect(list.rows()).toEqual([]);
+    // The first row a folded group hides takes the selection, and its
+    // heading takes Tab.
+    expect(detail?.value.name).toBe('Flee below 20 percent');
+    expect(list.heading('g:combat')?.getAttribute('tabindex')).toBe('0');
+
+    await list.key('ArrowDown', list.heading('g:combat'));
+    expect(list.heading('g:idle')?.getAttribute('tabindex')).toBe('0');
+    await list.key('ArrowRight', list.heading('g:idle'));
+    expect(list.rows()).toEqual(['Sleep when mana is low']);
+    expect(detail?.value.name).toBe('Flee below 20 percent');
+    expect(list.selected()).toBe('');
+    expect(list.heading('g:idle')?.getAttribute('tabindex')).toBe('0');
+    expect(list.row('Sleep when mana is low')?.getAttribute('tabindex')).toBe('-1');
+
+    // A click opens a group the same way.
+    await list.click(list.heading('g:combat'));
+    expect(detail?.value.name).toBe('Flee below 20 percent');
+    expect(list.selected()).toMatch(/^Flee below 20 percent/);
   });
 
   it('never folds the ungrouped items at the top', async () => {
