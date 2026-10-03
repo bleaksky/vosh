@@ -1700,7 +1700,7 @@ async fn renames_and_copies_are_refused(
         .collect();
     let index = read(&dir.join("profiles.toml"));
 
-    let rename = crate::commands::rename_profile(state, "Healer", "Cleric", pending)
+    let rename = crate::ipc::profiles::rename_profile(state, "Healer", "Cleric", pending)
         .await
         .unwrap_err();
     assert_eq!(
@@ -1711,14 +1711,20 @@ async fn renames_and_copies_are_refused(
     let copy = "Quit Vosh and open it again to finish the move to loadouts, then copy \
                 the profile.";
     let duplicate =
-        crate::commands::duplicate_profile(state, Some(dir), "Healer", "Cleric", pending)
+        crate::ipc::profiles::duplicate_profile(state, Some(dir), "Healer", "Cleric", pending)
             .await
             .unwrap_err();
     assert_eq!(duplicate, copy);
-    let create =
-        crate::commands::create_profile(state, Some(dir), "Cleric", Some("Healer"), None, pending)
-            .await
-            .unwrap_err();
+    let create = crate::ipc::profiles::create_profile(
+        state,
+        Some(dir),
+        "Cleric",
+        Some("Healer"),
+        None,
+        pending,
+    )
+    .await
+    .unwrap_err();
     assert_eq!(create, copy);
 
     assert_eq!(read(&dir.join("profiles.toml")), index);
@@ -1752,7 +1758,7 @@ async fn the_live_profile_keeps_the_name_the_prompt_draws() {
     );
     // Renaming the live profile renames what the prompt draws.
     let pending = AtomicBool::new(false);
-    crate::commands::rename_profile(&state, "Healer", "Cleric", &pending)
+    crate::ipc::profiles::rename_profile(&state, "Healer", "Cleric", &pending)
         .await
         .unwrap();
     assert_eq!(
@@ -1760,7 +1766,7 @@ async fn the_live_profile_keeps_the_name_the_prompt_draws() {
         Some("Cleric")
     );
     // Renaming another profile leaves it alone.
-    crate::commands::rename_profile(&state, "Test-Prompt", "Scratch", &pending)
+    crate::ipc::profiles::rename_profile(&state, "Test-Prompt", "Scratch", &pending)
         .await
         .unwrap();
     assert_eq!(
@@ -1795,17 +1801,17 @@ async fn renames_and_copies_wait_for_the_relaunch_after_the_wizard() {
 
     renames_and_copies_are_refused(&state, dir.path(), &pending).await;
     // A new profile that copies nothing only joins the index.
-    crate::commands::create_profile(&state, Some(dir.path()), "Bard", None, None, &pending)
+    crate::ipc::profiles::create_profile(&state, Some(dir.path()), "Bard", None, None, &pending)
         .await
         .unwrap();
 
     // Once Vosh opens again, the rename and the copy run.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
     let pending = AtomicBool::new(false);
-    crate::commands::duplicate_profile(&state, Some(dir.path()), "Healer", "Cleric", &pending)
+    crate::ipc::profiles::duplicate_profile(&state, Some(dir.path()), "Healer", "Cleric", &pending)
         .await
         .unwrap();
-    crate::commands::rename_profile(&state, "Cleric", "Priest", &pending)
+    crate::ipc::profiles::rename_profile(&state, "Cleric", "Priest", &pending)
         .await
         .unwrap();
     let state = relaunch_as(dir.path(), "Priest").await;
