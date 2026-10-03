@@ -12,6 +12,7 @@ use tokio::sync::Mutex;
 use tracing::warn;
 
 use crate::app::events::{self, broadcast_list_changes, ListChanges, ListRevisions};
+use crate::app::state::{AppState, SharedState};
 use crate::input;
 use crate::output::emit_output;
 use crate::profile::live::Profile;
@@ -168,6 +169,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             apply.inputs.iter().map(String::as_str),
         )
         .await;
+        let state = app.state::<SharedState>();
         let LinesRun {
             apply: next,
             shown,
@@ -175,6 +177,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
         } = {
             let mut p = profile.lock().await;
             run_lines_locked(
+                &state,
                 &mut p,
                 apply.inputs.iter().map(String::as_str),
                 shared.as_ref(),
@@ -227,6 +230,7 @@ fn framed_echoes<S: AsRef<str>>(lines: &[S]) -> Vec<u8> {
 /// file it reads holds none of the shared settings, so `shared` goes
 /// back over the result.
 pub(super) fn run_and_note_line(
+    state: &AppState,
     p: &mut Profile,
     line: &str,
     effects: &mut input::LineEffects,
@@ -238,7 +242,7 @@ pub(super) fn run_and_note_line(
     };
     effects.note_ran(line, &ran);
     if ran.replaced {
-        crate::app::state::note_ui_config_replaced();
+        state.note_ui_config_replaced();
     }
     ran
 }
@@ -325,17 +329,19 @@ pub(crate) struct LinesRun {
 /// the input pipeline, which runs the Lua bodies of any script aliases
 /// in the command where they stand, and all the Lua it ran asks for.
 pub(super) fn run_fired_locked(
+    state: &AppState,
     p: &mut Profile,
     command: &str,
     shared: Option<&SharedLayer>,
 ) -> LinesRun {
-    run_lines_locked(p, [command], shared)
+    run_lines_locked(state, p, [command], shared)
 }
 
 /// Run `lines` through the input pipeline under the profile lock, each
 /// as [`line_script_result`] reads it. Every path runs its lines here: a
 /// typed line, a Settings timer, the tick command and `mud.input`.
 pub(crate) fn run_lines_locked<'a>(
+    state: &AppState,
     p: &mut Profile,
     lines: impl IntoIterator<Item = &'a str>,
     shared: Option<&SharedLayer>,
@@ -345,7 +351,7 @@ pub(crate) fn run_lines_locked<'a>(
     let mut effects = input::LineEffects::default();
     let mut apply = ApplyResult::default();
     for line in lines {
-        let ran = run_and_note_line(p, line, &mut effects, shared);
+        let ran = run_and_note_line(state, p, line, &mut effects, shared);
         apply.append(line_script_result(ran));
     }
     apply.lists = ListChanges::since(lists_before, p);
@@ -374,13 +380,14 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
     sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
     let shared = crate::profile::switch::shared_layer_for_lines(app, [command]).await;
+    let state = app.state::<SharedState>();
     let LinesRun {
         apply,
         shown,
         effects,
     } = {
         let mut p = profile.lock().await;
-        run_fired_locked(&mut p, command, shared.as_ref())
+        run_fired_locked(&state, &mut p, command, shared.as_ref())
     };
     crate::disk::save::settle_line_effects(app, effects).await;
     shown.send(app);

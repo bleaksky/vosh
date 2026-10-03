@@ -196,7 +196,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         effects,
     } = {
         let mut profile = state.profile.lock().await;
-        session::effects::run_lines_locked(&mut profile, [line], shared_layer.as_ref())
+        session::effects::run_lines_locked(state, &mut profile, [line], shared_layer.as_ref())
     };
     // `#prompt draw` and `#prompt show` change the prompt on screen at
     // once, and `#prompt default` draws the new design there. A typed

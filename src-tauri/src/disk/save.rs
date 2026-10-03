@@ -29,10 +29,6 @@ use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
 use crate::profile::shared::{strip_global_fields, GlobalConfig};
 
-/// Debounce generation for `mark_profile_dirty`: each mark bumps it, and
-/// the delayed persist only fires if no newer mark arrived while waiting.
-static PROFILE_DIRTY_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
 /// Serializes every write of a profile file: the active profile's
 /// persist, Settings edits to an inactive profile's file, a profile
 /// switch from its flush through loading the next file, and the
@@ -61,17 +57,17 @@ pub(crate) fn mark_profile_dirty<R: tauri::Runtime>(app: &AppHandle<R>) {
 /// such as a pane layout drag.
 pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(app: &AppHandle<R>) {
     use std::sync::atomic::Ordering;
-    let gen = PROFILE_DIRTY_GEN.fetch_add(1, Ordering::AcqRel) + 1;
+    let shared: SharedState = app.state::<SharedState>().inner().clone();
+    let gen = shared.profile_dirty_gen.fetch_add(1, Ordering::AcqRel) + 1;
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        if PROFILE_DIRTY_GEN.load(Ordering::Acquire) != gen {
+        if shared.profile_dirty_gen.load(Ordering::Acquire) != gen {
             return; // a newer mark restarted the clock
         }
         if AUTO_PERSIST_SUPPRESSED.load(Ordering::Acquire) {
             return; // a #profile reset/load intervened
         }
-        let shared: SharedState = app.state::<SharedState>().inner().clone();
         persist_profile(&app, &shared).await;
     });
 }
@@ -106,7 +102,7 @@ pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
         let shared: SharedState = app.state::<SharedState>().inner().clone();
         let events = {
             let p = shared.profile.lock().await;
-            line_effect_events(&effects, &p)
+            line_effect_events(&shared, &effects, &p)
         };
         for (event, payload) in events {
             broadcast(app, event, &payload);

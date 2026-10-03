@@ -2,6 +2,7 @@
 //! every command, window and session. The process wide switches sit
 //! beside it as statics.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
@@ -16,7 +17,10 @@ use crate::session::SessionHandle;
 /// the live profile, the profile set, the log store and scrollback, the
 /// plugins and Lua timers, the catalog and loadouts of loadout mode, and
 /// what the app keeps about the live connection: its target, the
-/// character logged in, the terminal size and the last affects.
+/// character logged in, the terminal size and the last affects. The
+/// generations that turn away a write read before the profile was
+/// replaced live here too, with the counter that settles a burst of
+/// changes into one save.
 pub(crate) struct AppState {
     pub(crate) session: Mutex<Option<SessionHandle>>,
     pub(crate) profile: Arc<Mutex<Profile>>,
@@ -85,6 +89,26 @@ pub(crate) struct AppState {
     /// the webview last said. A clock repaint of your prompt waits while
     /// it holds, so the row you select or read never moves.
     pub(crate) reader_busy: std::sync::atomic::AtomicBool,
+    /// Counts the times the live profile's panes have been replaced: a
+    /// wholesale replace of the UI config, or a pane reset. It moves under
+    /// the profile lock in the same step that swaps them, so a pane tree
+    /// and the generation read with it always belong together. A pane
+    /// layout write carries the generation of the tree it was edited from,
+    /// and `pane_layout_set` refuses one from before a swap so it cannot
+    /// land on the new profile.
+    panes_generation: AtomicU64,
+    /// Counts the times the live profile's whole UI config has been
+    /// replaced: a profile switch, an import, `#profile load` and `reset`.
+    /// It moves under the profile lock in the same step that swaps the
+    /// config. `ui_get_config` hands it out with the config, and a whole
+    /// config save carries back the one it was read at, so `ui_set_config`
+    /// refuses a copy from before a replace rather than write the old
+    /// profile's values over the new one.
+    ui_config_generation: AtomicU64,
+    /// Debounce generation for `mark_profile_dirty`: each mark bumps it,
+    /// and the delayed persist only fires if no newer mark arrived while
+    /// waiting.
+    pub(crate) profile_dirty_gen: AtomicU64,
 }
 
 impl AppState {
@@ -134,6 +158,30 @@ impl AppState {
                 .unwrap_or_else(std::sync::PoisonError::into_inner),
         )
     }
+
+    /// Advance the panes generation. Call with the profile lock held, in
+    /// the step that replaces the live panes.
+    pub(crate) fn bump_panes_generation(&self) {
+        self.panes_generation.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// Note that the live UI config was replaced wholesale, panes included.
+    /// Advances the UI config and panes generations. Call with the profile
+    /// lock held, in the step that swaps the config.
+    pub(crate) fn note_ui_config_replaced(&self) {
+        self.bump_panes_generation();
+        self.ui_config_generation.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// Read the UI config generation. Call with the profile lock held.
+    pub(crate) fn ui_config_generation(&self) -> u64 {
+        self.ui_config_generation.load(Ordering::Acquire)
+    }
+
+    /// Read the panes generation. Call with the profile lock held.
+    pub(crate) fn panes_generation(&self) -> u64 {
+        self.panes_generation.load(Ordering::Acquire)
+    }
 }
 
 impl Default for AppState {
@@ -162,6 +210,9 @@ impl Default for AppState {
             active_profile: std::sync::Mutex::new(None),
             prompt_watch: std::sync::atomic::AtomicBool::new(false),
             reader_busy: std::sync::atomic::AtomicBool::new(false),
+            panes_generation: AtomicU64::new(0),
+            ui_config_generation: AtomicU64::new(0),
+            profile_dirty_gen: AtomicU64::new(0),
         }
     }
 }
@@ -171,48 +222,6 @@ pub(crate) type SharedState = Arc<AppState>;
 /// The error a profile command returns before startup has loaded the
 /// profile set.
 pub(crate) const PROFILES_NOT_LOADED: &str = "Vosh has not loaded your profiles yet.";
-
-/// Counts the times the live profile's panes have been replaced: a
-/// wholesale replace of the UI config, or a pane reset. It moves under
-/// the profile lock in the same step that swaps them, so a pane tree
-/// and the generation read with it always belong together. A pane
-/// layout write carries the generation of the tree it was edited from,
-/// and `pane_layout_set` refuses one from before a swap so it cannot
-/// land on the new profile.
-static PANES_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-/// Advance [`PANES_GENERATION`]. Call with the profile lock held, in the
-/// step that replaces the live panes.
-pub(crate) fn bump_panes_generation() {
-    PANES_GENERATION.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
-}
-
-/// Counts the times the live profile's whole UI config has been
-/// replaced: a profile switch, an import, `#profile load` and `reset`.
-/// It moves under the profile lock in the same step that swaps the
-/// config. `ui_get_config` hands it out with the config, and a whole
-/// config save carries back the one it was read at, so `ui_set_config`
-/// refuses a copy from before a replace rather than write the old
-/// profile's values over the new one.
-static UI_CONFIG_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-/// Note that the live UI config was replaced wholesale, panes included.
-/// Advances [`UI_CONFIG_GENERATION`] and [`PANES_GENERATION`]. Call with
-/// the profile lock held, in the step that swaps the config.
-pub(crate) fn note_ui_config_replaced() {
-    bump_panes_generation();
-    UI_CONFIG_GENERATION.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
-}
-
-/// Read [`UI_CONFIG_GENERATION`]. Call with the profile lock held.
-pub(crate) fn ui_config_generation() -> u64 {
-    UI_CONFIG_GENERATION.load(std::sync::atomic::Ordering::Acquire)
-}
-
-/// Read [`PANES_GENERATION`]. Call with the profile lock held.
-pub(crate) fn panes_generation() -> u64 {
-    PANES_GENERATION.load(std::sync::atomic::Ordering::Acquire)
-}
 
 /// Set by `#profile reset` / `#profile load`: the in-memory profile is
 /// deliberately diverged from disk, so the passive flushes (debounce,
