@@ -6,7 +6,8 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use super::frame::CellInstance;
-use super::style::{paint_to_rgba, srgb_to_linear, Paint, Rgba};
+use super::style::{paint_to_rgba, srgb_to_linear, Rgba};
+use crate::color::Paint;
 use crate::native::grid::regions::LiftSpan;
 
 // The band under a lifted prompt in CSS px, as the prompt boards measure it

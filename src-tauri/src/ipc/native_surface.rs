@@ -158,9 +158,7 @@ pub(crate) fn native_surface_set_theme(
 pub(crate) fn native_surface_set_divider_color(color: Option<String>) {
     #[cfg(native_surface)]
     {
-        let parsed = color
-            .as_deref()
-            .and_then(crate::native::gpu::style::parse_css_color);
+        let parsed = color.as_deref().and_then(crate::color::parse_css_color);
         crate::native::gpu::style::set_divider_color(parsed);
         crate::native::surface::request_redraw();
     }
@@ -192,10 +190,7 @@ pub(crate) fn native_surface_set_tokens(
 ) {
     #[cfg(native_surface)]
     {
-        let parse = |v: Option<String>| {
-            v.as_deref()
-                .and_then(crate::native::gpu::style::parse_css_color)
-        };
+        let parse = |v: Option<String>| v.as_deref().and_then(crate::color::parse_css_color);
         crate::native::gpu::style::set_tokens(crate::native::gpu::style::ChromeTokens {
             divider: parse(divider),
             selection: parse(selection),

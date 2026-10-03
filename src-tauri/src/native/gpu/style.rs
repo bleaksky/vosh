@@ -9,6 +9,7 @@ use std::sync::Mutex;
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
 
 use super::bands::LIGHT_RING;
+use crate::color::Paint;
 use crate::native::grid::{CellFlags, Underline};
 
 /// Linear-ish rgba in 0..1, ready for a wgpu vertex/instance buffer.
@@ -178,32 +179,6 @@ pub(super) fn ansi16(idx: usize) -> Rgb {
     unpack_rgb(THEME_ANSI[idx].load(Ordering::Acquire), ANSI_16[idx])
 }
 
-/// A color with straight alpha: sRGB bytes plus an alpha in 0..1, the way
-/// CSS writes `rgba()`. The chrome tokens arrive in this form, and several
-/// of them are translucent.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct Paint {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub a: f32,
-}
-
-impl Paint {
-    pub(super) fn opaque(c: Rgb) -> Self {
-        Self::tint(c, 1.0)
-    }
-
-    pub(super) fn tint(c: Rgb, a: f32) -> Self {
-        Self {
-            r: c.r,
-            g: c.g,
-            b: c.b,
-            a,
-        }
-    }
-}
-
 // The split divider color from the settings (None = unset, theme default).
 static DIVIDER_OVERRIDE: Mutex<Option<Paint>> = Mutex::new(None);
 
@@ -342,65 +317,6 @@ pub(super) fn resolve_chrome(
             .unwrap_or_else(|| Paint::tint(fg, SELROW_FALLBACK_ALPHA)),
         ring: t.light.then_some(LIGHT_RING),
     }
-}
-
-/// Parse a CSS color: `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (the `#`
-/// optional), or `rgb()`/`rgba()` with comma or space separated channels
-/// and an optional alpha as a fraction or a percentage. None for anything
-/// else, so the caller falls back to its default.
-pub(crate) fn parse_css_color(value: &str) -> Option<Paint> {
-    let v = value.trim().to_ascii_lowercase();
-    let hex = v.strip_prefix('#').unwrap_or(&v);
-    if matches!(hex.len(), 3 | 4 | 6 | 8) && hex.chars().all(|c| c.is_ascii_hexdigit()) {
-        let digit = |i: usize| u8::from_str_radix(&hex[i..=i], 16).unwrap_or(0);
-        let pair = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).unwrap_or(0);
-        let (r, g, b, a) = if hex.len() <= 4 {
-            let a = if hex.len() == 4 { digit(3) * 17 } else { 255 };
-            (digit(0) * 17, digit(1) * 17, digit(2) * 17, a)
-        } else {
-            let a = if hex.len() == 8 { pair(6) } else { 255 };
-            (pair(0), pair(2), pair(4), a)
-        };
-        return Some(Paint {
-            r,
-            g,
-            b,
-            a: f32::from(a) / 255.0,
-        });
-    }
-    let inner = v
-        .strip_prefix("rgba(")
-        .or_else(|| v.strip_prefix("rgb("))?
-        .strip_suffix(')')?;
-    let parts: Vec<&str> = inner
-        .split(|c: char| c == ',' || c == '/' || c.is_whitespace())
-        .filter(|s| !s.is_empty())
-        .collect();
-    if parts.len() != 3 && parts.len() != 4 {
-        return None;
-    }
-    let ch = |s: &str| {
-        s.parse::<f32>()
-            .ok()
-            .filter(|n| n.is_finite())
-            .map(|n| n.round().clamp(0.0, 255.0) as u8)
-    };
-    let a = match parts.get(3) {
-        None => 1.0,
-        Some(s) => match s.strip_suffix('%') {
-            Some(pct) => pct.parse::<f32>().ok()? / 100.0,
-            None => s.parse::<f32>().ok()?,
-        },
-    };
-    if !a.is_finite() {
-        return None;
-    }
-    Some(Paint {
-        r: ch(parts[0])?,
-        g: ch(parts[1])?,
-        b: ch(parts[2])?,
-        a: a.clamp(0.0, 1.0),
-    })
 }
 
 // When set, draw bright (ANSI 8-15) colored text with the bold font weight.

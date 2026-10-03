@@ -4,6 +4,7 @@ use tracing_subscriber::EnvFilter;
 
 mod affects;
 mod app;
+mod color;
 mod disk;
 mod import;
 mod input;
