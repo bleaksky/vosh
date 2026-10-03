@@ -11,12 +11,14 @@
 use super::batch::*;
 use super::effects::*;
 use super::gmcp::*;
-use super::lines::Line;
+use super::lines::{Line, LineAccumulator};
 use super::perf::*;
 use super::prompt_view::*;
 use super::steps::*;
 use super::*;
 use crate::output::OutputPayload;
+use vosh_prompt::stage::Output;
+use vosh_protocol::telnet::{codes as telnet_codes, option as telnet_option, Event as TelnetEvent};
 
 mod batch;
 mod clock;
@@ -286,7 +288,7 @@ impl Session {
 /// session runs.
 struct Wire {
     p: Profile,
-    acc: super::LineAccumulator,
+    acc: LineAccumulator,
     /// The telnet parser, for reads of raw wire bytes.
     parser: vosh_protocol::telnet::Parser,
     /// The first generation this wire hands out, so tests can name
@@ -298,7 +300,7 @@ impl Wire {
     fn new(p: Profile) -> Self {
         let mut wire = Self {
             p,
-            acc: super::LineAccumulator::new(),
+            acc: LineAccumulator::new(),
             parser: vosh_protocol::telnet::Parser::new(),
             gen0: 0,
         };
@@ -313,35 +315,35 @@ impl Wire {
 
     /// One socket read: `data`, then `ga` when the read ends in a GA,
     /// then the end of the read. Returns what the terminal gets.
-    fn read_with(&mut self, data: &[u8], ga: bool, other: bool) -> super::ReadBatch {
-        let mut batch = super::ReadBatch::new(crate::output::output_count());
+    fn read_with(&mut self, data: &[u8], ga: bool, other: bool) -> ReadBatch {
+        let mut batch = ReadBatch::new(crate::output::output_count());
         batch.out = vosh_prompt::stage::Output::new(other);
         let now = tokio::time::Instant::now();
         for line in self.acc.feed(data) {
             let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-            let _ = super::line_step(&mut self.p, &mut batch, line, plain, now, None);
+            let _ = line_step(&mut self.p, &mut batch, line, plain, now, None);
         }
         if ga {
-            let _ = super::marker_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+            let _ = marker_step(&mut self.p, &mut self.acc, &mut batch, now, None);
         }
-        let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+        let _ = partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
         // The hold's deadline passes before the next read.
         if batch.hold {
-            super::hold_step(&mut self.p, &mut self.acc, &mut batch.out);
+            hold_step(&mut self.p, &mut self.acc, &mut batch.out);
         }
         batch
     }
 
     /// One socket read that leaves a partial waiting, as the session
     /// does until the next read or the deadline. Returns the batch.
-    fn read_holding(&mut self, data: &[u8]) -> super::ReadBatch {
-        let mut batch = super::ReadBatch::new(crate::output::output_count());
+    fn read_holding(&mut self, data: &[u8]) -> ReadBatch {
+        let mut batch = ReadBatch::new(crate::output::output_count());
         let now = tokio::time::Instant::now();
         for line in self.acc.feed(data) {
             let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-            let _ = super::line_step(&mut self.p, &mut batch, line, plain, now, None);
+            let _ = line_step(&mut self.p, &mut batch, line, plain, now, None);
         }
-        let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+        let _ = partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
         batch
     }
 
@@ -355,15 +357,15 @@ impl Wire {
 
     /// You send a line. Held lines let go first, as in the session.
     fn send(&mut self) {
-        let mut batch = super::ReadBatch::new(crate::output::output_count());
-        let _ = super::let_go_held(&mut self.p, &mut batch, tokio::time::Instant::now(), None);
-        let _ = super::send_step(&mut self.p, &self.acc, b"look\r\n", 0);
+        let mut batch = ReadBatch::new(crate::output::output_count());
+        let _ = let_go_held(&mut self.p, &mut batch, tokio::time::Instant::now(), None);
+        let _ = send_step(&mut self.p, &self.acc, b"look\r\n", 0);
         self.acc.forget_partial();
     }
 
     /// You send `line` now.
     fn send_line(&mut self, line: &str) {
-        let _ = super::send_step(
+        let _ = send_step(
             &mut self.p,
             &self.acc,
             format!("{line}\r\n").as_bytes(),
@@ -378,34 +380,34 @@ impl Wire {
     /// GA or EOR through the marker step. Then the end of the read,
     /// and the hold's deadline before the next one.
     fn read_wire(&mut self, data: &[u8]) -> vosh_prompt::stage::Output {
-        let mut batch = super::ReadBatch::new(crate::output::output_count());
+        let mut batch = ReadBatch::new(crate::output::output_count());
         batch.out = vosh_prompt::stage::Output::new(false);
         let now = tokio::time::Instant::now();
         for event in self.parser.feed(data) {
             match event {
-                super::TelnetEvent::Data(bytes) => {
+                TelnetEvent::Data(bytes) => {
                     for line in self.acc.feed(&bytes) {
                         let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-                        let _ = super::line_step(&mut self.p, &mut batch, line, plain, now, None);
+                        let _ = line_step(&mut self.p, &mut batch, line, plain, now, None);
                     }
                 }
-                super::TelnetEvent::Subnegotiation { option, payload }
-                    if option == super::telnet_option::GMCP =>
+                TelnetEvent::Subnegotiation { option, payload }
+                    if option == telnet_option::GMCP =>
                 {
                     let msg = vosh_protocol::gmcp::parse(&payload).expect("every packet parses");
                     let _ = super::gmcp::gmcp_step(&mut self.p, &msg, now);
                 }
-                super::TelnetEvent::Command(byte)
-                    if byte == super::telnet_codes::GA || byte == super::telnet_codes::EOR =>
+                TelnetEvent::Command(byte)
+                    if byte == telnet_codes::GA || byte == telnet_codes::EOR =>
                 {
-                    let _ = super::marker_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+                    let _ = marker_step(&mut self.p, &mut self.acc, &mut batch, now, None);
                 }
                 _ => {}
             }
         }
-        let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+        let _ = partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
         if batch.hold {
-            super::hold_step(&mut self.p, &mut self.acc, &mut batch.out);
+            hold_step(&mut self.p, &mut self.acc, &mut batch.out);
         }
         batch.out
     }
@@ -413,24 +415,24 @@ impl Wire {
     /// One socket read of `events` in order, as the session handles
     /// them, then the end of the read.
     fn read_events(&mut self, events: &[Ev]) -> vosh_prompt::stage::Output {
-        let mut batch = super::ReadBatch::new(crate::output::output_count());
+        let mut batch = ReadBatch::new(crate::output::output_count());
         let now = tokio::time::Instant::now();
         for event in events {
             match event {
                 Ev::Data(data) => {
                     for line in self.acc.feed(data) {
                         let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-                        let _ = super::line_step(&mut self.p, &mut batch, line, plain, now, None);
+                        let _ = line_step(&mut self.p, &mut batch, line, plain, now, None);
                     }
                 }
                 Ev::Ga => {
-                    let _ = super::marker_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+                    let _ = marker_step(&mut self.p, &mut self.acc, &mut batch, now, None);
                 }
             }
         }
-        let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+        let _ = partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
         if batch.hold {
-            super::hold_step(&mut self.p, &mut self.acc, &mut batch.out);
+            hold_step(&mut self.p, &mut self.acc, &mut batch.out);
         }
         batch.out
     }
