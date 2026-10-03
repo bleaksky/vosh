@@ -594,7 +594,7 @@ impl CellRenderer {
 
         // URL under the pointer reads as a link: the link color and
         // underlined (it opens on Cmd+click).
-        let hover = crate::native::surface::hover_url();
+        let hover = crate::native::surface::pointer::hover_url();
         let link = paint_to_rgba(chrome.link);
 
         let solid_uv = atlas.solid_uv();

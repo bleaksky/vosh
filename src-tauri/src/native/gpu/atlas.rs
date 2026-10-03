@@ -95,8 +95,8 @@ impl GlyphAtlas {
         Self::with_reported(
             fonts,
             px,
-            crate::native::surface::reported_cell(),
-            crate::native::surface::reported_char_height(),
+            crate::native::surface::device::reported_cell(),
+            crate::native::surface::device::reported_char_height(),
         )
     }
 

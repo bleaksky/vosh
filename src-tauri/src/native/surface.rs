@@ -36,17 +36,12 @@ use tauri::Manager;
 #[path = "surface/macos.rs"]
 mod platform;
 
-mod device;
-mod pointer;
+pub(crate) mod device;
+pub(crate) mod pointer;
 mod report;
 mod split_drag;
 
-// The items callers reach, re-exported until they name the module
-// that holds each.
-pub(crate) use device::{reported_cell, reported_char_height, request_set_font, set_cell_metrics};
-pub(crate) use pointer::{forward_pointer, forward_wheel, hover_url, request_copy, window_blurred};
-
-use device::{clamp_to_device, font_atlas_params, init_gpu, GpuState};
+use device::{clamp_to_device, GpuState};
 use pointer::{load_f32, set_divider_frac, split_ratio, store_f32, CELL_H, CELL_W, DPR};
 use report::{grid_and_game_rows, report_scroll_if_changed, report_sizes};
 

@@ -319,7 +319,7 @@ pub(crate) fn on_window_event(window: &Window, event: &tauri::WindowEvent) {
         // A drag on the native grid whose release may never come
         // ends as the main window loses focus.
         #[cfg(native_surface)]
-        tauri::WindowEvent::Focused(false) => crate::native::surface::window_blurred(),
+        tauri::WindowEvent::Focused(false) => crate::native::surface::pointer::window_blurred(),
         _ => {}
     }
 }
