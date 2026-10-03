@@ -168,8 +168,8 @@ async fn save(state: &SharedState, dir: &Path) {
     crate::disk::save::persist_state(state, Some(dir)).await;
 }
 
-/// Open Vosh as `name` over `dir` the way lib.rs launches it, then let
-/// the main window bring the preset triggers in line.
+/// Open Vosh as `name` over `dir` the way app/launch.rs launches it,
+/// then let the main window bring the preset triggers in line.
 async fn launch_as(dir: &Path, name: &str) -> SharedState {
     ProfileSet::load_or_migrate(dir.to_path_buf())
         .unwrap()

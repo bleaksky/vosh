@@ -94,7 +94,7 @@ async fn refused(state: &SharedState, dir: &std::path::Path) -> String {
     apply
 }
 
-/// Quit and open Vosh again as `name`, the way lib.rs launches,
+/// Quit and open Vosh again as `name`, the way app/launch.rs launches,
 /// with the shared catalog and loadouts when they are on disk.
 async fn relaunch_as(dir: &std::path::Path, name: &str) -> SharedState {
     relaunch(dir, name).await.0
@@ -1935,7 +1935,7 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
     assert!(state.global_catalog.lock().await.is_none());
     assert_eq!(items_on(&*state.profile.lock().await), before[1]);
 
-    // lib.rs holds every save and every switch, since the next
+    // app/launch.rs holds every save and every switch, since the next
     // launch writes the journal again over what this one saved.
     let pending = AtomicBool::new(launched.wizard_unfinished);
     state

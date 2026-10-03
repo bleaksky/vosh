@@ -1,6 +1,6 @@
 //! The order launch runs its upgrades in (R2 of the refactor plan).
 //!
-//! The setup hook in lib.rs runs `app::launch::load`. It finishes a shared
+//! The setup steps in app/launch.rs run `load`. It finishes a shared
 //! catalog wizard run that stopped, moves the prompt capture triggers into
 //! the profiles, turns on the presets a build adds, and loads the profile
 //! set. Then it moves the custom themes older profile files hold into
@@ -138,7 +138,7 @@ fn shared_theme_ids(set: &ProfileSet) -> Vec<String> {
 }
 
 /// Run `app::launch::load` over `app_data` on a fresh state, as the
-/// setup hook in lib.rs does.
+/// setup steps in app/launch.rs do.
 async fn launch(app_data: &Path) -> (SharedState, Launch) {
     let state: SharedState = Arc::new(AppState::default());
     let launched = crate::app::launch::load(&state, app_data).await;
