@@ -21,7 +21,7 @@ use crate::app::events::{
 };
 use crate::app::state::{AppState, SharedState};
 use crate::input::LineEffects;
-use crate::profile::{Macro, Profile};
+use crate::profile::live::{Macro, Profile};
 
 /// The main window, and Settings and Help open beside it.
 const WINDOWS: [&str; 3] = ["main", "settings", "help"];
@@ -140,7 +140,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
     listening.finish("broadcast_list_changes", &mut heard, &mut want);
 
     let listening = Heard::listen(&app, &[PROFILE_CHANGED]);
-    crate::characters::broadcast_profile_changed(handle, "Ilsabet");
+    crate::profile::inactive::broadcast_profile_changed(handle, "Ilsabet");
     listening.finish("broadcast_profile_changed", &mut heard, &mut want);
 
     let listening = Heard::listen(&app, &[crate::app::events::MIGRATION_APPLIED]);
@@ -149,7 +149,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
 
     tauri::async_runtime::block_on(async {
         let listening = Heard::listen(&app, &[SESSION_IDENTITY_CHANGED]);
-        crate::characters::broadcast_session_identity(handle, &state).await;
+        crate::session::identity::broadcast_session_identity(handle, &state).await;
         listening.finish("broadcast_session_identity", &mut heard, &mut want);
 
         // A profile switch, an import, and `#profile load` and `reset`

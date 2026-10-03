@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::profile_config::{default_true, UiConfig};
+use crate::profile::ui::{default_true, UiConfig};
 
 /// On-disk representation of a single docked bar.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -508,8 +508,9 @@ fn normalize_weights(nodes: &mut [PaneNode]) {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::profile::Profile;
-    use crate::profile_config::{strip_global_fields, GlobalConfig, ProfileConfig};
+    use crate::profile::file::ProfileConfig;
+    use crate::profile::live::Profile;
+    use crate::profile::shared::{strip_global_fields, GlobalConfig};
 
     fn dock(entries: &[(&str, &str, Option<&str>)]) -> Vec<DockEntryPersist> {
         entries
@@ -751,7 +752,7 @@ pub(crate) mod tests {
 
     #[test]
     fn profiles_keep_their_own_panes_across_a_switch() {
-        use crate::profile_set::ProfileSet;
+        use crate::profile::set::ProfileSet;
 
         // Mirrors persist_profile: per-profile file minus the global
         // fields, plus global.toml.

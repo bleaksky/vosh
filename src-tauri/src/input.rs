@@ -20,8 +20,8 @@ use crate::app::events::{self, HELP_OPEN};
 use crate::app::state::SharedState;
 use crate::disk::save::settle_line_effects;
 use crate::output;
+use crate::profile::live::Profile;
 use crate::profile::switch::read_shared_layer;
-use crate::profile::Profile;
 use crate::prompt::request_prompt_repaint;
 use crate::script::{run_alias_body, ApplyResult};
 use crate::session;
@@ -469,7 +469,7 @@ fn split_first_word(input: &str) -> (&str, &str) {
 /// the Sent command color when one is set. Mirrors `planSubmit` and
 /// `colorizeEcho` in src/lib/maskedInput.ts, so a quick key echoes like a
 /// typed command. An empty line echoes as itself.
-pub(crate) fn command_echo(line: &str, ui: &crate::profile_config::UiConfig) -> String {
+pub(crate) fn command_echo(line: &str, ui: &crate::profile::ui::UiConfig) -> String {
     if line.is_empty() {
         return String::new();
     }

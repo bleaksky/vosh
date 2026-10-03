@@ -6,7 +6,7 @@ use vosh_prompt::card::sentences::and_list;
 
 use super::slash::parse_braced_pattern;
 use super::{split_first_word, InputResult};
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 
 /// `#prompt {regex}`: read your prompt with a pattern. It becomes the
 /// active profile's capture, `[prompt.capture] kind = "regex"`, with

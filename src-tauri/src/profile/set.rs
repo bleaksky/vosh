@@ -31,18 +31,8 @@ use thiserror::Error;
 
 use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED};
 use crate::disk::save::{persist_state, PERSIST_LOCK};
-
-// Callers outside this file still reach these here, until they point at
-// crate::profile::shared.
-pub(crate) use crate::profile::shared::{Scope, ScopeConfig};
-
-// Callers outside this file still reach these here, until they point at
-// crate::profile::worlds.
-pub(crate) use crate::profile::worlds::{is_forsaken_lands, known_world, world_name};
-
-// Callers outside this file still reach these here, until they point at
-// crate::profile::login_match.
-pub(crate) use crate::profile::login_match::{AutoMatch, LoginClaim};
+use crate::profile::login_match::AutoMatch;
+use crate::profile::shared::ScopeConfig;
 
 #[derive(Debug, Error)]
 pub(crate) enum ProfileSetError {
@@ -193,7 +183,7 @@ impl ProfileSet {
         // per-profile and global config files get. A botched index
         // write would orphan every profile, so the rollback safety
         // net matters here too.
-        crate::profile_config::write_with_backup(&path, &body)?;
+        crate::disk::atomic::write_with_backup(&path, &body)?;
         Ok(())
     }
 
@@ -339,7 +329,7 @@ impl ProfileSet {
             std::fs::rename(&old_path, &new_path)?;
             // A file Vosh could not read at launch stays refused under
             // its new name.
-            crate::profile_config::follow_unread(&old_path, &new_path);
+            crate::disk::atomic::follow_unread(&old_path, &new_path);
         }
         if self.index.active == old {
             self.index.active.clone_from(&new);
@@ -596,10 +586,7 @@ pub(crate) mod tests {
     use super::*;
     use tempfile::tempdir;
 
-    use crate::profile::tests::set_with_profiles;
-    // Tests in other files still reach it here, until they point at
-    // crate::profile::tests.
-    pub(crate) use crate::profile::tests::james_like_set;
+    use crate::profile::tests::{james_like_set, set_with_profiles};
 
     #[test]
     fn creates_fresh_set_when_no_files_exist() {

@@ -3,7 +3,7 @@
 //! `#scripts` lists what is loaded.
 
 use super::{split_first_word, InputResult, APP_DATA_DIR};
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 use crate::script;
 
 pub(super) fn slash_script(

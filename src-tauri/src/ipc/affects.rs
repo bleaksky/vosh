@@ -25,18 +25,19 @@ use crate::disk::save::{save_then_broadcast, SavePolicy};
 pub(crate) async fn tracked_affects_set(
     app: AppHandle,
     state: State<'_, SharedState>,
-    list: Vec<crate::profile_config::TrackedAffect>,
+    list: Vec<crate::profile::ui::TrackedAffect>,
     profile: Option<String>,
-) -> Result<Vec<crate::profile_config::TrackedAffect>, String> {
-    let list = crate::profile_config::normalize_tracked_affects(list);
+) -> Result<Vec<crate::profile::ui::TrackedAffect>, String> {
+    let list = crate::profile::ui::normalize_tracked_affects(list);
     let shared: SharedState = state.inner().clone();
     if let Some(name) = profile.as_deref() {
-        let written = crate::characters::edit_inactive_profile(&shared, name, |_, config| {
-            config.ui.tracked_affects.clone_from(&list);
-        })
-        .await?;
+        let written =
+            crate::profile::inactive::edit_inactive_profile(&shared, name, |_, config| {
+                config.ui.tracked_affects.clone_from(&list);
+            })
+            .await?;
         if written.is_some() {
-            crate::characters::broadcast_profile_changed(&app, name);
+            crate::profile::inactive::broadcast_profile_changed(&app, name);
             return Ok(list);
         }
     }
@@ -52,8 +53,8 @@ pub(crate) async fn tracked_affects_set(
         &list,
     )
     .await;
-    if let Some(active) = crate::characters::active_name(&shared).await {
-        crate::characters::broadcast_profile_changed(&app, &active);
+    if let Some(active) = crate::profile::inactive::active_name(&shared).await {
+        crate::profile::inactive::broadcast_profile_changed(&app, &active);
     }
     Ok(list)
 }
@@ -115,15 +116,15 @@ pub(crate) async fn ui_set_affects_display(
 /// almost gone never over running out. Returns the new display when
 /// anything changed, so an unchanged pick saves and sends nothing.
 fn apply_affects_display(
-    ui: &mut crate::profile_config::UiConfig,
+    ui: &mut crate::profile::ui::UiConfig,
     pick: AffectsDisplayPick,
 ) -> Option<AffectsDisplay> {
     let before = AffectsDisplay::of(ui);
     if let Some(style) = pick.style {
-        ui.affects_style = crate::profile_config::coerce_affects_style(style);
+        ui.affects_style = crate::profile::ui::coerce_affects_style(style);
     }
     if let Some(marker) = pick.marker {
-        ui.affects_marker = crate::profile_config::coerce_affects_marker(marker);
+        ui.affects_marker = crate::profile::ui::coerce_affects_marker(marker);
     }
     if let Some(tint) = pick.tint {
         ui.affects_tint = tint;
@@ -135,7 +136,7 @@ fn apply_affects_display(
         ui.affects_almost_gone_hours = hours;
     }
     (ui.affects_running_out_hours, ui.affects_almost_gone_hours) =
-        crate::profile_config::coerce_affects_thresholds(
+        crate::profile::ui::coerce_affects_thresholds(
             ui.affects_running_out_hours,
             ui.affects_almost_gone_hours,
         );
@@ -160,7 +161,7 @@ pub(crate) async fn affect_full_get(state: State<'_, SharedState>) -> Result<Ful
 
 #[cfg(test)]
 mod tests {
-    use crate::profile_config::UiConfig;
+    use crate::profile::ui::UiConfig;
 
     #[test]
     fn an_affects_display_pick_writes_only_what_it_names() {

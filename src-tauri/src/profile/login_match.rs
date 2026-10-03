@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use super::ui::{default_true, is_true};
 use super::worlds::known_world;
-use crate::profile_set::{display_name, ProfileEntry, ProfileSet, ProfileSetError};
+use crate::profile::set::{display_name, ProfileEntry, ProfileSet, ProfileSetError};
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct AutoMatch {
@@ -436,8 +436,8 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     use crate::profile::tests::{claim, james_like_set, put_claim, set_with_profiles};
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
 
     #[test]
     fn auto_match_accepts_legacy_single_character_shape() {

@@ -876,7 +876,7 @@ fn forsaken_profile(template: &str) -> Profile {
     let mut p = capture_profile(template);
     super::start_prompt(
         &mut p,
-        crate::profile_set::is_forsaken_lands("play.theforsakenlands.com"),
+        crate::profile::worlds::is_forsaken_lands("play.theforsakenlands.com"),
     );
     p
 }
@@ -1001,7 +1001,10 @@ fn a_reconnect_in_the_song_hides_the_vitals_from_the_prompt_alone() {
 #[test]
 fn other_hosts_hide_nothing() {
     let mut p = capture_profile("%hp/%maxhp %opponent %{opponent_hp:pct}");
-    super::start_prompt(&mut p, crate::profile_set::is_forsaken_lands("127.0.0.1"));
+    super::start_prompt(
+        &mut p,
+        crate::profile::worlds::is_forsaken_lands("127.0.0.1"),
+    );
     for file in [
         "char-affects-lament.gmcp",
         "char-vitals.gmcp",
@@ -1085,7 +1088,7 @@ fn vosh_supplies_the_tick_target_tracked_affects_and_profile() {
     p.tick.enable(now);
     p.target.name = Some("guard".into());
     p.display_name = Some("Default".into());
-    p.ui.tracked_affects = vec![crate::profile_config::TrackedAffect {
+    p.ui.tracked_affects = vec![crate::profile::ui::TrackedAffect {
         name: "sanctuary".into(),
         label: None,
     }];

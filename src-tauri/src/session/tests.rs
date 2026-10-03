@@ -26,7 +26,7 @@ use super::prompt_view::*;
 use super::steps::*;
 use super::*;
 use crate::output::OutputPayload;
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 
 mod batch;
 mod clock;

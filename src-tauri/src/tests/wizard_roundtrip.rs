@@ -37,9 +37,12 @@ use vosh_automation::trigger::{Trigger, TriggerAction, TriggerPattern, TriggerTa
 use crate::app::state::{AppState, SharedState};
 use crate::disk::save::PERSIST_LOCK;
 use crate::migration::{ItemKind, ItemPayload};
-use crate::profile::{Macro, Profile, Timer};
-use crate::profile_config::{PaneLayoutPersist, ProfileConfig, TrackedAffect};
-use crate::profile_set::{ProfileSet, Scope, ScopeConfig, DEFAULT_PROFILE_NAME};
+use crate::profile::file::ProfileConfig;
+use crate::profile::live::{Macro, Profile, Timer};
+use crate::profile::panes::PaneLayoutPersist;
+use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
+use crate::profile::shared::{Scope, ScopeConfig};
+use crate::profile::ui::TrackedAffect;
 
 /// How many profile sets the round trip builds.
 const SETS: u64 = 300;
@@ -265,7 +268,7 @@ fn settings(mut config: ProfileConfig) -> String {
     config.disabled_alias_groups.clear();
     config.disabled_trigger_groups.clear();
     config.disabled_macro_groups.clear();
-    config.group_folders = crate::profile_config::GroupFolders::default();
+    config.group_folders = crate::profile::file::GroupFolders::default();
     config.to_toml().unwrap()
 }
 

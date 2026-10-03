@@ -13,7 +13,8 @@ use crate::app::state::{
 };
 use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::output;
-use crate::profile_config::{GlobalConfig, ProfileConfig, SharedLayer};
+use crate::profile::file::ProfileConfig;
+use crate::profile::shared::{GlobalConfig, SharedLayer};
 
 /// Lay loadout mode's catalog and active loadouts over the live profile
 /// `p`, right after a switch loaded a profile file into it. The catalog
@@ -23,7 +24,7 @@ use crate::profile_config::{GlobalConfig, ProfileConfig, SharedLayer};
 /// the catalog item of the same name, or for a macro the same key. The
 /// group state of `set` then applies to the result.
 fn lay_catalog_over(
-    p: &mut crate::profile::Profile,
+    p: &mut crate::profile::live::Profile,
     catalog: &crate::loadout::GlobalCatalog,
     set: Option<&crate::loadout::LoadoutSet>,
 ) {
@@ -89,10 +90,10 @@ struct SwitchFiles {
 /// keeps naming the profile the live state holds and the next persist
 /// still writes that profile to its own file.
 fn open_profile_for_switch(
-    set: &mut crate::profile_set::ProfileSet,
+    set: &mut crate::profile::set::ProfileSet,
     name: &str,
 ) -> Result<SwitchFiles, String> {
-    use crate::profile_set::{display_name, ProfileSetError};
+    use crate::profile::set::{display_name, ProfileSetError};
     if set.get(name).is_none() {
         return Err(ProfileSetError::NotFound(name.to_string()).to_string());
     }
@@ -134,7 +135,7 @@ fn open_profile_for_switch(
     // to it reads it first, so a file that did not read at launch is safe
     // from here on.
     for path in [&leaving, &path, &global_path] {
-        crate::profile_config::release_unread(path);
+        crate::disk::atomic::release_unread(path);
     }
     Ok(SwitchFiles {
         per_profile,
@@ -174,7 +175,7 @@ pub(crate) async fn switch_live_profile(state: &SharedState, name: &str) -> Resu
         // the values the last profile's prompt read. The file below hands
         // it the new profile's [prompt] table.
         p.prompt.switch_profile();
-        p.display_name = Some(crate::profile_set::display_name(name));
+        p.display_name = Some(crate::profile::set::display_name(name));
         state.note_active_profile(name);
         match per_profile {
             Some(snap) => {
@@ -322,7 +323,7 @@ async fn auto_switch_target(state: &SharedState, character: &str) -> Option<Stri
 fn auto_switch_line(profile: &str) -> String {
     format!(
         "\r\n\x1b[33mVosh switched to the {} profile.\x1b[0m\r\n",
-        crate::profile_set::display_name(profile)
+        crate::profile::set::display_name(profile)
     )
 }
 
@@ -364,9 +365,9 @@ pub(crate) async fn shared_layer_for_lines<'a, R: tauri::Runtime>(
 pub(crate) mod tests {
     use crate::app::state::AppState;
     use crate::disk::save::tests::{affect, launch_state, live_affects, persist, read, UNREADABLE};
-    use crate::profile_config::ProfileConfig;
-    use crate::profile_set::tests::james_like_set;
-    use crate::profile_set::{ProfileSet, DEFAULT_PROFILE_NAME};
+    use crate::profile::file::ProfileConfig;
+    use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
+    use crate::profile::tests::james_like_set;
 
     #[test]
     fn auto_switch_line_names_the_profile_in_a_sentence() {
@@ -550,7 +551,7 @@ pub(crate) mod tests {
         assert_eq!(live_names(&p.ui.tracked_affects), ["Haste"]);
     }
 
-    fn live_names(list: &[crate::profile_config::TrackedAffect]) -> Vec<&str> {
+    fn live_names(list: &[crate::profile::ui::TrackedAffect]) -> Vec<&str> {
         list.iter().map(|t| t.name.as_str()).collect()
     }
 

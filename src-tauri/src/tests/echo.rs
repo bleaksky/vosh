@@ -12,7 +12,7 @@ use tauri::{App, Manager};
 
 use crate::app::state::{AppState, SharedState};
 use crate::logs::forget_passwords::{self, Outcome};
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 use crate::term_grid;
 
 /// A mock app with the app state managed, no session open, and no

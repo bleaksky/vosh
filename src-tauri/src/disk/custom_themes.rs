@@ -8,9 +8,11 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::profile::Profile;
-use crate::profile_config::{ConfigError, CustomTheme, GlobalConfig, ProfileConfig, UiConfig};
-use crate::profile_set::{ProfileSet, ScopeConfig};
+use crate::profile::file::{ConfigError, ProfileConfig};
+use crate::profile::live::Profile;
+use crate::profile::set::ProfileSet;
+use crate::profile::shared::{GlobalConfig, ScopeConfig};
+use crate::profile::ui::{CustomTheme, UiConfig};
 
 /// True when two custom themes paint the same colors under the same
 /// description. Their ids and labels may differ.
@@ -195,7 +197,7 @@ impl HeldCustomThemes {
     /// theme joins under a fresh id instead of being dropped.
     fn add_to(&mut self, shared: &mut Vec<CustomTheme>) {
         for file in &mut self.files {
-            let owner = crate::profile_set::display_name(&file.name);
+            let owner = crate::profile::set::display_name(&file.name);
             file.landed = merge_custom_themes(shared, &file.config.ui.custom_themes, &owner);
         }
     }
@@ -238,7 +240,7 @@ impl HeldCustomThemes {
 /// alone while the `theme` scope category is per profile, since each
 /// file then owns its list. Returns how many files it cleared.
 pub(crate) fn migrate_custom_themes(set: &ProfileSet) -> Result<usize, ConfigError> {
-    if !matches!(set.scope().theme, crate::profile_set::Scope::Global) {
+    if !matches!(set.scope().theme, crate::profile::shared::Scope::Global) {
         return Ok(0);
     }
     let mut held = HeldCustomThemes::find(set, None);
@@ -291,8 +293,8 @@ pub(crate) fn share_custom_themes(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::profile::shared::strip_global_fields;
     use crate::profile::tests::{persist_live, styled_profile, theme, theme_ids};
-    use crate::profile_config::strip_global_fields;
 
     fn background(theme: &CustomTheme) -> &str {
         theme.xterm.get("background").map_or("", String::as_str)
@@ -409,7 +411,7 @@ mod tests {
 
     #[test]
     fn profile_scoped_custom_themes_stay_in_their_files() {
-        use crate::profile_set::Scope as Kind;
+        use crate::profile::shared::Scope as Kind;
         let dir = tempfile::tempdir().unwrap();
         let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         set.set_scope(ScopeConfig {
@@ -427,7 +429,7 @@ mod tests {
 
     #[test]
     fn turning_the_theme_scope_global_keeps_every_profile_theme() {
-        use crate::profile_set::Scope as Kind;
+        use crate::profile::shared::Scope as Kind;
         let dir = tempfile::tempdir().unwrap();
         let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         set.create("alt").unwrap();
@@ -601,7 +603,7 @@ mod tests {
 
     #[test]
     fn an_imported_theme_picked_globally_survives_a_profile_switch() {
-        use crate::profile_set::ProfileSet;
+        use crate::profile::set::ProfileSet;
 
         fn persist(set: &ProfileSet, profile: &Profile) {
             let mut snapshot = ProfileConfig::from_profile(profile);

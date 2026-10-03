@@ -22,8 +22,8 @@
 use std::path::Path;
 
 use crate::loadout_store::{self, PRESETS_OFF};
-use crate::profile_config::ProfileConfig;
-use crate::profile_set::ProfileSet;
+use crate::profile::file::ProfileConfig;
+use crate::profile::set::ProfileSet;
 
 /// Each preset that comes on once, with the id the step is recorded
 /// under in `profiles.toml`.

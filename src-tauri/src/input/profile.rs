@@ -4,8 +4,8 @@
 use vosh_automation::vars::Scope;
 
 use super::{split_first_word, InputResult, APP_DATA_DIR, PATH_B_ACTIVE};
-use crate::profile::Profile;
-use crate::profile_config::ProfileConfig;
+use crate::profile::file::ProfileConfig;
+use crate::profile::live::Profile;
 use crate::tintin_import;
 
 /// What `#profile save`, `load`, and `reset` answer between the shared
@@ -65,7 +65,7 @@ pub(super) fn slash_profile_with(
                 let Ok(_persist_guard) = crate::disk::save::PERSIST_LOCK.try_lock() else {
                     return InputResult::error(PROFILE_SAVE_BUSY);
                 };
-                if crate::profile_config::is_unread(&path) {
+                if crate::disk::atomic::is_unread(&path) {
                     return InputResult::error(
                         "Vosh could not read this profile file at launch, so it will not save \
                          over it. Fix the file or switch to another profile.",
@@ -110,7 +110,7 @@ pub(super) fn load_profile_file(
     };
     // The file reads now and the live profile holds what it says, so the
     // saves may write it again.
-    crate::profile_config::release_unread(path);
+    crate::disk::atomic::release_unread(path);
     let warnings = snapshot.apply_to(profile);
     *replaced = true;
     let mut lines = vec![format!("profile loaded from {}", path.display())];

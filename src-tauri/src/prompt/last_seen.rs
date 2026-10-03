@@ -13,7 +13,7 @@ use vosh_log::{CharacterScope, LogStore};
 use vosh_prompt::aabahran::observer;
 
 use crate::app::state::SharedState;
-use crate::profile_set::ProfileEntry;
+use crate::profile::set::ProfileEntry;
 
 /// `prompt_last_seen`: your prompt settings and where Vosh saw them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -176,7 +176,7 @@ pub(crate) async fn last_seen(state: &SharedState) -> Option<LastSeen> {
                 let host = am.host.clone()?;
                 let port = am
                     .port
-                    .or_else(|| crate::profile_set::known_world(&host).map(|w| w.port))?;
+                    .or_else(|| crate::profile::worlds::known_world(&host).map(|w| w.port))?;
                 (host, port)
             }
         };
@@ -205,7 +205,7 @@ pub(crate) async fn last_seen(state: &SharedState) -> Option<LastSeen> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::profile_set::AutoMatch;
+    use crate::profile::login_match::AutoMatch;
 
     const HOST: &str = "play.example.com";
 

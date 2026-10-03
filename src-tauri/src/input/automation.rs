@@ -6,7 +6,7 @@ use vosh_automation::trigger::{HighlightStyle, NamedColor, Trigger, TriggerActio
 use super::slash::parse_braced_pattern;
 use super::target::is_target_keyword;
 use super::{split_first_word, InputResult};
-use crate::profile::{MacroRecorder, Profile};
+use crate::profile::live::{MacroRecorder, Profile};
 
 pub(super) fn slash_alias(profile: &mut Profile, args: &str) -> InputResult {
     let (name, expansion) = split_first_word(args);

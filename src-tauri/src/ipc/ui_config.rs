@@ -23,7 +23,7 @@ pub(crate) struct UiConfigPayload {
     pub font_family: String,
     pub font_size: u32,
     pub terminal_line_height: String,
-    pub tracked_affects: Vec<crate::profile_config::TrackedAffect>,
+    pub tracked_affects: Vec<crate::profile::ui::TrackedAffect>,
     pub enabled_presets: Vec<String>,
     pub keep_last_command: bool,
     pub theme_terminal_colors: Option<bool>,
@@ -34,7 +34,7 @@ pub(crate) struct UiConfigPayload {
     pub readable_highlights: bool,
     pub collapse_repeats: bool,
     pub terminal_base_ansi: Option<Vec<String>>,
-    pub custom_themes: Vec<crate::profile_config::CustomTheme>,
+    pub custom_themes: Vec<crate::profile::ui::CustomTheme>,
     pub split_divider_color: Option<String>,
     pub input_echo_color: Option<String>,
     pub echo_macros: bool,
@@ -52,9 +52,9 @@ pub(crate) struct UiConfigPayload {
     pub affects_style: String,
     pub affects_marker: String,
     pub affects_tint: bool,
-    #[serde(deserialize_with = "crate::profile_config::deserialize_affects_running_out_hours")]
+    #[serde(deserialize_with = "crate::profile::ui::deserialize_affects_running_out_hours")]
     pub affects_running_out_hours: u32,
-    #[serde(deserialize_with = "crate::profile_config::deserialize_affects_almost_gone_hours")]
+    #[serde(deserialize_with = "crate::profile::ui::deserialize_affects_almost_gone_hours")]
     pub affects_almost_gone_hours: u32,
     /// The [`ui_config_generation`] this copy was read at. Never reaches
     /// disk. A save without one (a config that never came from the
@@ -65,13 +65,13 @@ pub(crate) struct UiConfigPayload {
 
 impl Default for UiConfigPayload {
     fn default() -> Self {
-        Self::from_ui(&crate::profile_config::UiConfig::default())
+        Self::from_ui(&crate::profile::ui::UiConfig::default())
     }
 }
 
 impl UiConfigPayload {
     /// The snapshot `ui_get_config` hands the frontend.
-    pub(crate) fn from_ui(ui: &crate::profile_config::UiConfig) -> Self {
+    pub(crate) fn from_ui(ui: &crate::profile::ui::UiConfig) -> Self {
         Self {
             theme: ui.theme.clone(),
             follow_system_appearance: ui.follow_system_appearance,
@@ -121,7 +121,7 @@ impl UiConfigPayload {
     /// the conversion from the old dock to panes reads it. So do the old
     /// `vitals`, `moons_position` and `side_panels_fill_height`, which
     /// nothing reads and every save writes back as loaded (D12, D14).
-    pub(crate) fn apply_to(self, ui: &mut crate::profile_config::UiConfig) {
+    pub(crate) fn apply_to(self, ui: &mut crate::profile::ui::UiConfig) {
         let UiConfigPayload {
             theme,
             follow_system_appearance,
@@ -164,15 +164,15 @@ impl UiConfigPayload {
         } = self;
         ui.theme = theme;
         ui.follow_system_appearance = follow_system_appearance;
-        ui.light_theme = crate::profile_config::coerce_light_theme(light_theme);
-        ui.dark_theme = crate::profile_config::normalize_dark_theme(dark_theme);
+        ui.light_theme = crate::profile::ui::coerce_light_theme(light_theme);
+        ui.dark_theme = crate::profile::ui::normalize_dark_theme(dark_theme);
         ui.auto_update = auto_update;
         ui.font_family = font_family;
-        ui.font_size = crate::profile_config::coerce_font_size(font_size);
+        ui.font_size = crate::profile::ui::coerce_font_size(font_size);
         ui.terminal_line_height =
-            crate::profile_config::coerce_terminal_line_height(terminal_line_height);
-        ui.tracked_affects = crate::profile_config::normalize_tracked_affects(tracked_affects);
-        ui.enabled_presets = crate::profile_config::normalize_enabled_presets(enabled_presets);
+            crate::profile::ui::coerce_terminal_line_height(terminal_line_height);
+        ui.tracked_affects = crate::profile::ui::normalize_tracked_affects(tracked_affects);
+        ui.enabled_presets = crate::profile::ui::normalize_enabled_presets(enabled_presets);
         ui.keep_last_command = keep_last_command;
         ui.theme_terminal_colors = theme_terminal_colors;
         ui.bright_bold = bright_bold;
@@ -181,28 +181,26 @@ impl UiConfigPayload {
         ui.collapse_repeats = collapse_repeats;
         ui.terminal_base_ansi = terminal_base_ansi;
         ui.custom_themes = custom_themes;
-        ui.split_divider_color =
-            crate::profile_config::normalize_optional_color(split_divider_color);
-        ui.input_echo_color = crate::profile_config::normalize_optional_color(input_echo_color);
+        ui.split_divider_color = crate::profile::ui::normalize_optional_color(split_divider_color);
+        ui.input_echo_color = crate::profile::ui::normalize_optional_color(input_echo_color);
         ui.echo_macros = echo_macros;
         ui.input_echo_caret = input_echo_caret;
         ui.paste_line_delay_ms =
-            crate::profile_config::coerce_paste_line_delay_ms(paste_line_delay_ms);
+            crate::profile::ui::coerce_paste_line_delay_ms(paste_line_delay_ms);
         ui.spellcheck_prompt = spellcheck_prompt;
-        ui.input_cursor_style =
-            crate::profile_config::coerce_input_cursor_style(input_cursor_style);
-        ui.vitals_density = crate::profile_config::coerce_vitals_density(vitals_density);
-        ui.vitals_values = crate::profile_config::coerce_vitals_values(vitals_values);
-        ui.vitals_meter = crate::profile_config::coerce_vitals_meter(vitals_meter);
+        ui.input_cursor_style = crate::profile::ui::coerce_input_cursor_style(input_cursor_style);
+        ui.vitals_density = crate::profile::ui::coerce_vitals_density(vitals_density);
+        ui.vitals_values = crate::profile::ui::coerce_vitals_values(vitals_values);
+        ui.vitals_meter = crate::profile::ui::coerce_vitals_meter(vitals_meter);
         ui.vitals_warn_thirds = vitals_warn_thirds;
         ui.vitals_hide_when_pinned = vitals_hide_when_pinned;
-        ui.chip_style = crate::profile_config::coerce_chip_style(chip_style);
-        ui.tick_count = crate::profile_config::coerce_tick_count(tick_count);
-        ui.affects_style = crate::profile_config::coerce_affects_style(affects_style);
-        ui.affects_marker = crate::profile_config::coerce_affects_marker(affects_marker);
+        ui.chip_style = crate::profile::ui::coerce_chip_style(chip_style);
+        ui.tick_count = crate::profile::ui::coerce_tick_count(tick_count);
+        ui.affects_style = crate::profile::ui::coerce_affects_style(affects_style);
+        ui.affects_marker = crate::profile::ui::coerce_affects_marker(affects_marker);
         ui.affects_tint = affects_tint;
         (ui.affects_running_out_hours, ui.affects_almost_gone_hours) =
-            crate::profile_config::coerce_affects_thresholds(
+            crate::profile::ui::coerce_affects_thresholds(
                 affects_running_out_hours,
                 affects_almost_gone_hours,
             );
@@ -222,7 +220,7 @@ pub(crate) async fn ui_get_config(
 /// at `generation`. Your prompt is not in it: the prompt section reads and
 /// writes the `[prompt]` table through the prompt commands, and `[ui]`
 /// keeps only a copy of its switch and design for an older build.
-fn ui_config_of(p: &crate::profile::Profile, generation: u64) -> UiConfigPayload {
+fn ui_config_of(p: &crate::profile::live::Profile, generation: u64) -> UiConfigPayload {
     let mut payload = UiConfigPayload::from_ui(&p.ui);
     payload.generation = Some(generation);
     payload
@@ -252,7 +250,7 @@ pub(crate) async fn ui_set_config(
 /// Write a whole config save onto `ui`, unless it was read at a
 /// generation other than `current`. Returns whether it applied.
 fn apply_ui_config(
-    ui: &mut crate::profile_config::UiConfig,
+    ui: &mut crate::profile::ui::UiConfig,
     config: UiConfigPayload,
     current: u64,
 ) -> bool {
@@ -293,7 +291,7 @@ pub(crate) async fn ui_set_theme(
 /// entry leaves that slot alone. Returns whether anything changed, so an
 /// unchanged pick skips the save.
 fn apply_theme_pick(
-    ui: &mut crate::profile_config::UiConfig,
+    ui: &mut crate::profile::ui::UiConfig,
     theme: String,
     light_theme: Option<String>,
     dark_theme: Option<String>,
@@ -404,7 +402,7 @@ async fn send_chat_colors(
 /// channel back to its default. Returns the new table when anything
 /// changed.
 fn apply_chat_color(
-    ui: &mut crate::profile_config::UiConfig,
+    ui: &mut crate::profile::ui::UiConfig,
     channel: String,
     color: Option<String>,
 ) -> Option<std::collections::BTreeMap<String, String>> {
@@ -422,7 +420,7 @@ fn apply_chat_color(
 
 /// Clear every chat color. Returns the empty table when there was any.
 fn reset_chat_colors(
-    ui: &mut crate::profile_config::UiConfig,
+    ui: &mut crate::profile::ui::UiConfig,
 ) -> Option<std::collections::BTreeMap<String, String>> {
     if ui.chat_colors.is_empty() {
         return None;
@@ -434,7 +432,8 @@ fn reset_chat_colors(
 #[cfg(test)]
 mod tests {
     use super::UiConfigPayload;
-    use crate::profile_config::{ProfileConfig, UiConfig};
+    use crate::profile::file::ProfileConfig;
+    use crate::profile::ui::UiConfig;
     use crate::prompt::tests::prompt_profile;
 
     /// Send `ui` the way Settings does: out through `ui_get_config`,
@@ -569,7 +568,7 @@ mod tests {
         fields.remove("theme");
         fields.insert("font_family".into(), "Iosevka".into());
         let payload: UiConfigPayload = serde_json::from_value(json).unwrap();
-        let defaults = crate::profile_config::UiConfig::default();
+        let defaults = crate::profile::ui::UiConfig::default();
         assert_eq!(payload.font_family, "Iosevka");
         assert_eq!(payload.font_size, defaults.font_size);
         assert_eq!(payload.theme, defaults.theme);
@@ -614,7 +613,7 @@ mod tests {
 
         // The file keeps the table, and [ui] its copy of the switch and
         // the design for an older build.
-        let file = crate::profile_config::ProfileConfig::from_profile(&p);
+        let file = crate::profile::file::ProfileConfig::from_profile(&p);
         assert_eq!(file.prompt_config(), table);
         assert!(file.ui.prompt_template_enabled);
         assert_eq!(file.ui.prompt_template, "%hp");

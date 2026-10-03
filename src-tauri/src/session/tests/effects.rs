@@ -2,7 +2,7 @@
 //! asks of the session and your profile.
 
 use crate::input::LineEffects;
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 
 #[test]
 fn a_timer_command_that_edits_the_profile_marks_it_dirty() {
@@ -87,7 +87,7 @@ fn a_timer_group_line_reports_a_macro_group_that_turned() {
     // so a timer or tick `#group` line that turns a macro group off
     // has to reach it, or the keys go on firing.
     let mut p = Profile::default();
-    p.macros.push(crate::profile::Macro {
+    p.macros.push(crate::profile::live::Macro {
         key: "F1".into(),
         command: "kick".into(),
         group: Some("combat".into()),
@@ -167,9 +167,9 @@ fn a_timer_reset_keeps_the_shared_settings() {
     // No global.toml yet, so the live shared values are the ones to
     // keep, as they are for a reset you type.
     let dir = tempfile::tempdir().unwrap();
-    let layer = crate::profile_config::SharedLayer::read(
+    let layer = crate::profile::shared::SharedLayer::read(
         &dir.path().join("global.toml"),
-        crate::profile_set::ScopeConfig::default(),
+        crate::profile::shared::ScopeConfig::default(),
     );
     let mut p = Profile::default();
     p.ui.theme = "night-ink".into();

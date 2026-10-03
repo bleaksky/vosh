@@ -20,7 +20,7 @@ use quick_xml::reader::Reader;
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{Trigger, TriggerAction};
 
-use crate::profile::Macro;
+use crate::profile::live::Macro;
 
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct ImportReport {

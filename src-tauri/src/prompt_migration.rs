@@ -47,8 +47,8 @@ use vosh_prompt::config::RegexCapture;
 use vosh_prompt::CaptureConfig;
 
 use crate::loadout_store;
-use crate::profile_config::{before_prompt_editor_path, ProfileConfig};
-use crate::profile_set::{display_name, ProfileSet};
+use crate::profile::file::{before_prompt_editor_path, ProfileConfig};
+use crate::profile::set::{display_name, ProfileSet};
 
 /// The id the move is recorded under in `profiles.toml`.
 pub(crate) const MIGRATION: &str = "prompt-capture-to-profile";
@@ -402,8 +402,8 @@ mod tests {
 
     use super::{line_trigger_notice, note_line_triggers, run, LINE_TRIGGERS, MIGRATION};
     use crate::loadout_store::load_global_catalog;
-    use crate::profile_config::{before_prompt_editor_path, ProfileConfig};
-    use crate::profile_set::ProfileSet;
+    use crate::profile::file::{before_prompt_editor_path, ProfileConfig};
+    use crate::profile::set::ProfileSet;
 
     /// The design the default profile draws, as its file keeps it in
     /// `[ui]`.

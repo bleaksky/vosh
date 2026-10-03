@@ -3,7 +3,7 @@
 use vosh_automation::vars::Scope;
 
 use super::{split_first_word, InputResult};
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 
 pub(super) fn slash_var(profile: &mut Profile, args: &str) -> InputResult {
     let (name, value) = split_first_word(args);

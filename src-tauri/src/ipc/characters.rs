@@ -10,10 +10,10 @@ use tracing::warn;
 
 use crate::app::events::{broadcast, PROFILES_CHANGED};
 use crate::app::state::SharedState;
-use crate::characters::{
-    export_path, profile_detail, profile_toml, session_identity, ProfileDetail, SessionIdentity,
-};
-use crate::profile_set::{display_name, LoginClaim, ProfileEntry};
+use crate::profile::inactive::{export_path, profile_detail, profile_toml, ProfileDetail};
+use crate::profile::login_match::LoginClaim;
+use crate::profile::set::{display_name, ProfileEntry};
+use crate::session::identity::{session_identity, SessionIdentity};
 
 /// Read one profile for the Characters group.
 #[tauri::command]
@@ -29,7 +29,7 @@ pub(crate) async fn profile_detail_get(
 /// them in `released_from`. Never switches the live profile, since the
 /// toggle applies at the next login. See [`ProfileSet::set_login`].
 ///
-/// [`ProfileSet::set_login`]: crate::profile_set::ProfileSet::set_login
+/// [`ProfileSet::set_login`]: crate::profile::set::ProfileSet::set_login
 #[tauri::command]
 pub(crate) async fn profile_set_login(
     app: AppHandle,
@@ -51,7 +51,7 @@ pub(crate) async fn profile_set_login(
 /// overwrite a description or characters the other window holds. See
 /// [`ProfileSet::set_world`].
 ///
-/// [`ProfileSet::set_world`]: crate::profile_set::ProfileSet::set_world
+/// [`ProfileSet::set_world`]: crate::profile::set::ProfileSet::set_world
 #[tauri::command]
 pub(crate) async fn profile_set_world(
     app: AppHandle,

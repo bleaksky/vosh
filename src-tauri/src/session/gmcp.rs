@@ -14,8 +14,8 @@ use vosh_protocol::telnet::Negotiator;
 
 use crate::app::state::SharedState;
 use crate::input;
+use crate::profile::live::Profile;
 use crate::profile::switch::auto_switch_for_character;
-use crate::profile::Profile;
 use crate::script::{self, ApplyResult};
 use crate::tick::TickStep;
 
@@ -165,7 +165,7 @@ async fn character_named<R: tauri::Runtime>(
     // The affect gauges read this character's saved fulls.
     crate::affect_full::character_known(app, state, character);
     auto_switch_for_character(app, state, character).await;
-    crate::characters::broadcast_session_identity(app, state).await;
+    crate::session::identity::broadcast_session_identity(app, state).await;
 }
 
 /// What a GMCP packet does to the profile, under the profile lock the

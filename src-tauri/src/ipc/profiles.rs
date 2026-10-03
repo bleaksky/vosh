@@ -19,7 +19,7 @@ use crate::profile::switch::apply_profile_switch;
 #[derive(serde::Serialize)]
 pub(crate) struct ProfilesListPayload {
     pub active: String,
-    pub profiles: Vec<crate::profile_set::ProfileEntry>,
+    pub profiles: Vec<crate::profile::set::ProfileEntry>,
 }
 
 #[tauri::command]
@@ -44,8 +44,8 @@ pub(crate) async fn profile_create(
     state: State<'_, SharedState>,
     name: String,
     copy_from: Option<String>,
-    auto_match: Option<crate::profile_set::AutoMatch>,
-) -> Result<crate::profile_set::ProfileEntry, String> {
+    auto_match: Option<crate::profile::login_match::AutoMatch>,
+) -> Result<crate::profile::set::ProfileEntry, String> {
     let app_data = app.path().app_data_dir().ok();
     let entry = create_profile(
         state.inner(),
@@ -115,7 +115,7 @@ pub(crate) async fn profile_duplicate(
 #[tauri::command]
 pub(crate) async fn profile_get_scope(
     state: State<'_, SharedState>,
-) -> Result<crate::profile_set::ScopeConfig, String> {
+) -> Result<crate::profile::shared::ScopeConfig, String> {
     let set = state.loaded_profile_set().await?;
     Ok(*set.scope())
 }
@@ -138,7 +138,7 @@ pub(crate) async fn profile_get_scope(
 pub(crate) async fn profile_set_scope(
     app: AppHandle,
     state: State<'_, SharedState>,
-    scope: crate::profile_set::ScopeConfig,
+    scope: crate::profile::shared::ScopeConfig,
 ) -> Result<(), String> {
     // Held from the scope change through the persist, so no other
     // profile file write lands between the moves and the save.

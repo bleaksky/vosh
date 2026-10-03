@@ -25,8 +25,9 @@ use tracing::warn;
 
 use crate::app::events::{broadcast, line_effect_events};
 use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING};
-use crate::profile::Profile;
-use crate::profile_config::{strip_global_fields, GlobalConfig, ProfileConfig};
+use crate::profile::file::ProfileConfig;
+use crate::profile::live::Profile;
+use crate::profile::shared::{strip_global_fields, GlobalConfig};
 
 /// Debounce generation for `mark_profile_dirty`: each mark bumps it, and
 /// the delayed persist only fires if no newer mark arrived while waiting.
@@ -180,7 +181,7 @@ pub(crate) async fn persist_profile_locked<R: tauri::Runtime>(
 /// [`persist_profile_locked`] over the app data folder `app_data`, so a
 /// test can run it over a folder of its own. Call with [`PERSIST_LOCK`]
 /// held. A file Vosh could not read at launch is never written, see
-/// [`crate::profile_config::hold_unread`].
+/// [`crate::disk::atomic::hold_unread`].
 pub(crate) async fn persist_state(state: &SharedState, app_data: Option<&std::path::Path>) {
     persist_state_with(state, app_data, &MIGRATION_RELAUNCH_PENDING).await;
 }
@@ -256,7 +257,7 @@ pub(crate) async fn persist_state_with(
 /// category, and a category kept per profile stays in the file.
 pub(crate) fn active_profile_file(
     p: &Profile,
-    scope: Option<&crate::profile_set::ScopeConfig>,
+    scope: Option<&crate::profile::shared::ScopeConfig>,
 ) -> ProfileConfig {
     let mut snapshot = ProfileConfig::from_profile(p);
     if let Some(scope) = scope {
@@ -381,11 +382,11 @@ async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::app::state::AppState;
-    use crate::profile_config::ProfileConfig;
-    use crate::profile_set::tests::james_like_set;
+    use crate::profile::file::ProfileConfig;
+    use crate::profile::tests::james_like_set;
 
-    pub(crate) fn affect(name: &str) -> crate::profile_config::TrackedAffect {
-        crate::profile_config::TrackedAffect {
+    pub(crate) fn affect(name: &str) -> crate::profile::ui::TrackedAffect {
+        crate::profile::ui::TrackedAffect {
             name: name.into(),
             label: None,
         }
@@ -418,9 +419,9 @@ pub(crate) mod tests {
 
     async fn change_scope(state: &super::SharedState) -> Result<(), String> {
         let _persist_guard = super::PERSIST_LOCK.lock().await;
-        let scope = crate::profile_set::ScopeConfig {
-            theme: crate::profile_set::Scope::Profile,
-            ..crate::profile_set::ScopeConfig::default()
+        let scope = crate::profile::shared::ScopeConfig {
+            theme: crate::profile::shared::Scope::Profile,
+            ..crate::profile::shared::ScopeConfig::default()
         };
         crate::profile::shared::change_scope_locked(state, scope)
             .await
@@ -474,7 +475,7 @@ pub(crate) mod tests {
         let state = launch_state(dir.path()).await;
         assert_eq!(
             state.take_launch_notices(),
-            [crate::profile_config::UNREAD_GLOBAL_NOTICE]
+            [crate::profile::file::UNREAD_GLOBAL_NOTICE]
         );
         {
             let mut p = state.profile.lock().await;

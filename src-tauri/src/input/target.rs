@@ -6,7 +6,7 @@ use serde_json::Value;
 use vosh_automation::vars::Scope;
 
 use super::{split_first_word, InputResult};
-use crate::profile::{Profile, QuickKey, RoomChar};
+use crate::profile::live::{Profile, QuickKey, RoomChar};
 
 const TARGET_KEYWORDS: &[&str] = &["tar", "tarn", "tarp", "tarclear"];
 

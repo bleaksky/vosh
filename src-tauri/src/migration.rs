@@ -42,7 +42,7 @@
 //!
 //! One folder of one profile can so land in several catalog groups. Each
 //! profile file keeps a folder map that names them (see
-//! [`crate::profile_config::GroupFolders`]), so `#group combat off` still
+//! [`crate::profile::file::GroupFolders`]), so `#group combat off` still
 //! turns off exactly what that profile had in its combat folder. Each
 //! kind keeps its own groups, as it keeps its own checkbox list.
 //!
@@ -74,8 +74,8 @@ use vosh_automation::alias::Alias;
 use vosh_automation::trigger::Trigger;
 
 use crate::loadout::{GlobalCatalog, Loadout};
-use crate::profile::Macro;
-use crate::profile_config::{GroupFolders, ProfileConfig};
+use crate::profile::file::{GroupFolders, ProfileConfig};
+use crate::profile::live::Macro;
 
 /// Which kind of item a conflict or auto-resolved entry refers to.
 /// The frontend wizard renders different summaries per kind.

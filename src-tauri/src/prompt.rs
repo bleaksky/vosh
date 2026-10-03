@@ -29,7 +29,7 @@ use vosh_prompt::{
 use crate::app::events::{self, broadcast_list_changes, ListChanges};
 use crate::app::state::SharedState;
 use crate::disk::save::PERSIST_LOCK;
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 
 /// The body of [`prompt_config_set`]: check and take the table. Returns
 /// whether it changed anything. Only a capture that differs from the one
@@ -74,7 +74,9 @@ pub(crate) fn card_open(p: &mut Profile) -> (PromptConfig, bool) {
 
 /// What decides how your prompt looks on screen: the switch, the design
 /// and where it shows. A line that changes any of them repaints it.
-pub(crate) fn prompt_look(p: &crate::profile::Profile) -> (bool, String, vosh_prompt::PromptShow) {
+pub(crate) fn prompt_look(
+    p: &crate::profile::live::Profile,
+) -> (bool, String, vosh_prompt::PromptShow) {
     let config = p.prompt.config();
     (config.draw, config.template.clone(), config.show)
 }
@@ -156,7 +158,7 @@ pub(crate) async fn designs(state: &SharedState) -> Result<Vec<PromptDesign>, St
         if entry.name == active {
             continue;
         }
-        let Ok(config) = crate::characters::load_profile_file(&set, &entry.name) else {
+        let Ok(config) = crate::profile::inactive::load_profile_file(&set, &entry.name) else {
             continue;
         };
         let template = config.prompt_config().template;
@@ -164,7 +166,7 @@ pub(crate) async fn designs(state: &SharedState) -> Result<Vec<PromptDesign>, St
             continue;
         }
         out.push(PromptDesign {
-            display_name: crate::profile_set::display_name(&entry.name),
+            display_name: crate::profile::set::display_name(&entry.name),
             profile: entry.name.clone(),
             template,
         });
@@ -463,7 +465,7 @@ pub(crate) struct PromptShowState {
 }
 
 /// The body of [`prompt_show_get`](crate::ipc::prompt::prompt_show_get).
-pub(crate) fn prompt_show_state(p: &crate::profile::Profile) -> PromptShowState {
+pub(crate) fn prompt_show_state(p: &crate::profile::live::Profile) -> PromptShowState {
     PromptShowState {
         show: p.prompt.show().name().to_string(),
         capture: p.prompt.stage.has_recognizer(),
