@@ -63,6 +63,11 @@ export const NATIVE_FAILED_KEY = 'vosh.nativesurface.failed';
 // keeps no native surface for them, and in native mode the page waits for
 // the surface to size the grid, so a forced flag there would leave the
 // terminal without a size.
+//
+// The surface sits BELOW the webview (the underlay). The page leaves the
+// terminal pane unpainted so the grid shows through, DOM overlays draw
+// over it with no renderer swap, and pointer input over the pane is
+// forwarded to the surface.
 export function nativeSurfaceEnabled(): boolean {
   if (typeof localStorage === 'undefined') return false;
   // The surface failed to come up earlier in this session. Stay on xterm
@@ -78,15 +83,6 @@ export function nativeSurfaceEnabled(): boolean {
   if (!mac) return false;
   // '1' and no flag both leave the macOS default on.
   return localStorage.getItem('vosh.nativesurface') !== '0';
-}
-
-// macOS draws the native surface BELOW the webview (the underlay). The
-// page leaves the terminal pane unpainted so the grid shows through, DOM
-// overlays draw over it with no renderer swap, and pointer input over the
-// pane is forwarded to the surface. The surface runs only on macOS, so it
-// is the underlay whenever it is on.
-export function nativeUnderlay(): boolean {
-  return nativeSurfaceEnabled();
 }
 
 // Report the active theme's terminal background to the session, which
@@ -641,7 +637,7 @@ export function Terminal({
       const lent = lentRef.current;
       let { top, height } = r;
       nativeSpare = 0;
-      if (anchorRef.current && nativeUnderlay()) {
+      if (anchorRef.current && nativeSurfaceEnabled()) {
         const cellPx = Math.round(term.dimensions?.device?.cell?.height ?? 0);
         const placed = nativeBottomBounds(r.top, r.height, dpr, cellPx);
         ({ top, height } = placed);
@@ -822,7 +818,7 @@ export function Terminal({
     // every mouse event first. Right click and Control click fall through
     // to the terminal menu's contextmenu handler.
     const detachUnderlayInput = (() => {
-      if (quietRef.current || !nativeUnderlay() || !sizer) return undefined;
+      if (quietRef.current || !nativeSurfaceEnabled() || !sizer) return undefined;
       const send = (kind: string, x: number, y: number, open: boolean) => {
         void invoke('native_surface_pointer', { kind, x, y, open }).catch(() => {});
       };
@@ -997,7 +993,8 @@ export function Terminal({
     // the screen comes back to xterm, the copy fills anew from the
     // session's scrollback, as a reload onto xterm fills it.
     const mirror = new XtermMirror({
-      owned: () => !quietRef.current && nativeUnderlay() && underlayShows(document.documentElement),
+      owned: () =>
+        !quietRef.current && nativeSurfaceEnabled() && underlayShows(document.documentElement),
       rebuild: (done) => {
         writer.dispose();
         term.reset();

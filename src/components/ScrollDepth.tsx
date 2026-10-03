@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { getNativeScroll, startNativeScroll, subscribeNativeScroll } from '../lib/nativeScroll';
-import { nativeUnderlay } from './Terminal';
+import { nativeSurfaceEnabled } from './Terminal';
 
 interface Props {
   /** True while the find bar is open, so the readout drops below it
@@ -16,7 +16,7 @@ export function ScrollDepth({ findOpen = false }: Props = {}) {
   useEffect(startNativeScroll, []);
   const { offset, max } = useSyncExternalStore(subscribeNativeScroll, getNativeScroll);
 
-  if (offset <= 0 || !nativeUnderlay()) return null;
+  if (offset <= 0 || !nativeSurfaceEnabled()) return null;
 
   return (
     <div className={`ov-depth${findOpen ? ' is-below-find' : ''}`}>

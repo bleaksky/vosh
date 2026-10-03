@@ -6,7 +6,6 @@ import {
   NATIVE_FAILED_KEY,
   Terminal,
   nativeSurfaceEnabled,
-  nativeUnderlay,
   type TerminalHandle,
 } from './components/Terminal';
 import { Input, type InputHandle } from './components/Input';
@@ -874,7 +873,7 @@ function App() {
   // Mark the root so CSS leaves the terminal pane unpainted and hides the
   // xterm copy.
   useEffect(() => {
-    if (!nativeUnderlay()) return;
+    if (!nativeSurfaceEnabled()) return;
     // Leave the pane transparent only once the backend confirms the
     // surface is up. It installs during setup, usually before this runs,
     // so poll briefly. If it never comes up, reload onto xterm for the
@@ -1188,7 +1187,7 @@ function App() {
   // wants a resize cursor and an armed link wants a hand. It reports the
   // cursor on each change and the sizer takes it through a variable.
   useEffect(() => {
-    if (!nativeUnderlay()) return;
+    if (!nativeSurfaceEnabled()) return;
     const root = document.documentElement;
     let unlisten: (() => void) | undefined;
     let cancelled = false;
