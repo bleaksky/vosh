@@ -273,7 +273,7 @@ fn render(state: &mut GpuState) {
     let (rows, game_rows) = grid_and_game_rows(fit, lent);
     crate::native::grid::resize_grid(cols, rows);
     report_sizes(cols, rows, game_rows);
-    // Publish the cell size so the mouse handler can map points to cells.
+    // Publish the cell size so the pointer code can map points to cells.
     let (cw, ch) = state.cell_renderer.cell_size_px();
     store_f32(&CELLS.cell_w, cw);
     store_f32(&CELLS.cell_h, ch);

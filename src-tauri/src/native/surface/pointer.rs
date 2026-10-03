@@ -57,8 +57,8 @@ struct Split {
     // (0 = no drag yet, so `split_ratio` gives the default).
     ratio: AtomicU32,
     // The exact divider fraction the renderer last drew (0 = no split), so
-    // the cursor rect aligns with the rendered line rather than the raw
-    // ratio.
+    // the grab band and the resize cursor the page shows across it line up
+    // with the rendered line rather than the raw ratio.
     divider_frac: AtomicU32,
 }
 
@@ -68,7 +68,7 @@ static SPLIT: Split = Split {
 };
 
 /// The backing scale and atlas cell size as f32 bits (set each frame / on
-/// bounds) so the mouse handler can map a point to a grid cell without
+/// bounds) so the pointer code can map a point to a grid cell without
 /// locking the surface.
 pub(super) struct Cells {
     pub(super) dpr: AtomicU32,

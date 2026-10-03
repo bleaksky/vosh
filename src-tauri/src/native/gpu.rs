@@ -400,7 +400,7 @@ impl CellRenderer {
         (cols, rows)
     }
 
-    /// Atlas cell size in pixels, so the mouse handler can map a point to a
+    /// Atlas cell size in pixels, so the pointer code can map a point to a
     /// grid cell.
     pub(crate) fn cell_size_px(&self) -> (f32, f32) {
         (self.atlas.cell_w() as f32, self.atlas.cell_h() as f32)
