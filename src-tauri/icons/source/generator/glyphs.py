@@ -1,6 +1,6 @@
 """JetBrains Mono glyph outlines as SVG path data, placed on the monospace cell with any x and y scale.
 
-The font is the copy Vosh bundles (src/assets/fonts), SIL Open Font License 1.1, so its outlines are safe
+The font is the copy Vosh bundles (public/fonts), SIL Open Font License 1.1, so its outlines are safe
 to embed in the app icon (see OFL-JetBrainsMono.txt next to the masters). Advance 600 units, x height 550,
 cap 730, g descender 180, 1000 units = em."""
 import os
@@ -8,8 +8,8 @@ from functools import lru_cache
 from fontTools.ttLib import TTFont
 from fontTools.pens.recordingPen import DecomposingRecordingPen
 
-# src-tauri/icons/source/generator -> repo root -> src/assets/fonts
-FONTS = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "src", "assets", "fonts"))
+# src-tauri/icons/source/generator -> repo root -> public/fonts
+FONTS = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "public", "fonts"))
 
 
 @lru_cache(None)

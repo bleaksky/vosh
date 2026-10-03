@@ -12,7 +12,7 @@ Masters written:
     vosh-macos-legacy.svg      Big Sur grid for icon.icns: the tile at 824 px inset 100 px, with a soft shadow
 
 The small masters (vosh-16.svg and friends) are drawn by hand and are not written here.
-Needs Python 3 with fontTools. The glyph outlines come from src/assets/fonts."""
+Needs Python 3 with fontTools. The glyph outlines come from public/fonts."""
 import filecmp
 import os
 import shutil

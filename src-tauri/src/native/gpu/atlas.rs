@@ -427,9 +427,9 @@ fn weighted_face(
 // name differs), so load the bundled faces directly to match the webview
 // exactly.
 pub(super) const JETBRAINS_REGULAR: &[u8] =
-    include_bytes!("../../../../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf");
+    include_bytes!("../../../../public/fonts/JetBrainsMonoNerdFont-Regular.ttf");
 pub(super) const JETBRAINS_BOLD: &[u8] =
-    include_bytes!("../../../../src/assets/fonts/JetBrainsMonoNerdFont-Bold.ttf");
+    include_bytes!("../../../../public/fonts/JetBrainsMonoNerdFont-Bold.ttf");
 
 fn font_from_handle(handle: font_kit::handle::Handle) -> Option<Font> {
     let kit_font = handle.load().ok()?;
