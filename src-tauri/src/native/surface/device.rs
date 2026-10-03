@@ -43,7 +43,7 @@ static XTERM_CELL: XtermCell = XtermCell {
 
 /// xterm's reported device cell size, if the frontend has sent it. The glyph
 /// atlas sizes its cells to this so spacing matches the webview.
-pub(crate) fn reported_cell() -> Option<(u32, u32)> {
+fn reported_cell() -> Option<(u32, u32)> {
     let w = XTERM_CELL.width.load(Ordering::Acquire);
     let h = XTERM_CELL.height.load(Ordering::Acquire);
     if w > 0 && h > 0 {
@@ -55,7 +55,7 @@ pub(crate) fn reported_cell() -> Option<(u32, u32)> {
 
 /// xterm's reported device glyph box height, if the frontend sent one with
 /// the cell size.
-pub(crate) fn reported_char_height() -> Option<u32> {
+fn reported_char_height() -> Option<u32> {
     let h = XTERM_CELL.char_height.load(Ordering::Acquire);
     (h > 0).then_some(h)
 }
@@ -73,6 +73,8 @@ fn swap_font(fonts: crate::native::gpu::atlas::AtlasFonts, font_px: f32) {
                 handle.gpu.config.format,
                 fonts,
                 font_px,
+                reported_cell(),
+                reported_char_height(),
             );
             render(&mut handle.gpu);
         }
@@ -266,8 +268,15 @@ pub(super) unsafe fn init_gpu(
     config.format = config.format.remove_srgb_suffix();
     surface.configure(&device, &config);
 
-    let cell_renderer =
-        crate::native::gpu::CellRenderer::new(&device, &queue, config.format, font_stack, font_px)?;
+    let cell_renderer = crate::native::gpu::CellRenderer::new(
+        &device,
+        &queue,
+        config.format,
+        font_stack,
+        font_px,
+        reported_cell(),
+        reported_char_height(),
+    )?;
 
     Some(GpuState {
         _instance: instance,
