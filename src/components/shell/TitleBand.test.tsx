@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import tauriConf from '../../../src-tauri/tauri.conf.json';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { shortcutLabel } from '../../lib/palette';
-import { PANEL_WIDTH_MIN } from '../../lib/paneLayout';
+import { PANEL_WIDTH_MIN, panelWidthFloor } from '../../lib/paneLayout';
 import type { Connection } from '../../lib/useConnection';
 import frameCss from '../../styles/frame.css?raw';
 import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
@@ -161,9 +161,10 @@ describe('the Settings button in the title band', () => {
 
 // ── Room in the band ─────────────────────────────────────────────────
 // The buttons sit at the right end. While the panel shows they sit over
-// it. With the panel hidden they sit over the terminal column, and the
-// session button's equal side insets keep it centered and clear of
-// them.
+// it, and on Windows and Linux the panel draws wide enough to hold the
+// window controls too. With the panel hidden they sit over the terminal
+// column, and the session button's equal side insets keep it centered
+// and clear of them.
 
 /** The declarations of one rule in frame.css. */
 function rule(selector: string): string {
@@ -204,6 +205,8 @@ describe('the title band with the Settings button', () => {
   );
 
   it('measures the buttons as frame.css draws them', () => {
+    expect(reach(true, true)).toBe(134);
+    expect(reach(false, true)).toBe(238);
     expect(reach(true, false)).toBe(102);
     expect(reach(false, false)).toBe(206);
   });
@@ -213,12 +216,16 @@ describe('the title band with the Settings button', () => {
     expect(hiddenElsewhere).toBeGreaterThanOrEqual(reach(false, false));
   });
 
-  it('keeps the buttons over the panel, or clear of the session button, while it shows', () => {
-    // On macOS they fit over the narrowest panel.
-    expect(reach(true, true)).toBeLessThanOrEqual(PANEL_WIDTH_MIN);
-    // Elsewhere the window controls reach past it, but not as far as
-    // the session button's inset.
-    expect(reach(false, true) - PANEL_WIDTH_MIN).toBeLessThanOrEqual(shown);
+  it('keeps every button over the panel while it shows, as far in from its edge as the window edge', () => {
+    // macOS draws the narrowest panel you can save, and the buttons fit.
+    expect(panelWidthFloor(true)).toBe(PANEL_WIDTH_MIN);
+    expect(reach(true, true) + edge).toBeLessThanOrEqual(panelWidthFloor(true));
+    // Windows and Linux draw it wider, to hold the window controls too.
+    expect(panelWidthFloor(false)).toBeGreaterThan(PANEL_WIDTH_MIN);
+    expect(reach(false, true) + edge).toBeLessThanOrEqual(panelWidthFloor(false));
+    // The terminal keeps 320 px, and at the narrowest window that still
+    // leaves the panel its floor.
+    expect(tauriConf.app.windows[0].minWidth - 320).toBeGreaterThanOrEqual(panelWidthFloor(false));
   });
 
   it('leaves the session button room at the narrowest window', () => {

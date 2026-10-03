@@ -26,8 +26,9 @@ import { TitleButton } from './TitleButton';
 // Add a pane, Search commands, the panel toggle, and Settings sit at
 // the right, over the panel. On macOS the native traffic lights own the
 // left corner. Windows and Linux draw minimize, maximize, and close
-// here, after Settings. They have no menu bar, so there the gear is how
-// you find Settings.
+// here, after Settings, and the panel draws at least 248 px wide there
+// to keep all seven over it. They have no menu bar, so there the gear
+// is how you find Settings.
 
 const ADD_MENU_WIDTH = 200;
 
