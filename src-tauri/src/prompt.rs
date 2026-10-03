@@ -67,13 +67,6 @@ pub(crate) fn card_open(p: &mut Profile) -> (PromptConfig, bool) {
     (config, true)
 }
 
-/// Ask the session to repaint the open row as the table now says.
-pub(crate) async fn request_repaint(state: &SharedState) {
-    if let Some(handle) = state.session.lock().await.as_ref() {
-        let _ = handle.prompt_repaint();
-    }
-}
-
 /// What decides how your prompt looks on screen: the switch, the design
 /// and where it shows. A line that changes any of them repaints it.
 pub(crate) fn prompt_look(p: &crate::profile::Profile) -> (bool, String, vosh_prompt::PromptShow) {

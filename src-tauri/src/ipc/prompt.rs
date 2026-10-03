@@ -30,9 +30,9 @@ use crate::disk::save::mark_profile_dirty;
 use crate::prompt::last_seen::{last_seen, LastSeen};
 use crate::prompt::{
     capture_from_line, card_open, compile, describe, designs, edit, forms, line_triggers,
-    prompt_show_state, prompt_state, render_all, reported_hidden, request_repaint, set_config,
-    set_config_as_is, Edited, LineTrigger, PromptDesign, PromptShowState, RenderRequest,
-    ValuesFrom,
+    prompt_show_state, prompt_state, render_all, reported_hidden, request_prompt_repaint,
+    set_config, set_config_as_is, Edited, LineTrigger, PromptDesign, PromptShowState,
+    RenderRequest, ValuesFrom,
 };
 
 /// The active profile's `[prompt]` table.
@@ -63,7 +63,7 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
     };
     if changed {
         mark_profile_dirty(&app);
-        request_repaint(state.inner()).await;
+        request_prompt_repaint(state.inner()).await;
         broadcast_prompt_config_changed(&app);
     }
     Ok(())
@@ -242,7 +242,7 @@ pub(crate) async fn prompt_preview_set(
     preview: Option<PromptPreview>,
 ) -> Result<(), String> {
     state.profile.lock().await.prompt.set_preview(preview);
-    request_repaint(state.inner()).await;
+    request_prompt_repaint(state.inner()).await;
     Ok(())
 }
 
