@@ -13,16 +13,20 @@
 //! runs exactly once however the events arrive. macOS can end the app
 //! with `Exit` alone (a quit from the Dock or at log out), and then
 //! there is no time to ask the windows, so the write runs at once.
+//!
+//! [`on_run_event`] takes both exit events from the app's run loop and
+//! does what the flow says.
 
 use std::collections::BTreeSet;
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tokio::sync::oneshot;
 use tracing::{info, warn};
 
 use crate::app::events::{broadcast, FLUSH_PENDING_WRITES};
+use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED};
 
 /// How long quit waits for the windows. A window gives up on its own
 /// writes a little sooner (`FLUSH_TIMEOUT_MS` in pendingWrites.ts), so
@@ -206,7 +210,6 @@ pub(crate) async fn wait_for_answers(rx: oneshot::Receiver<()>, wait: Duration) 
 /// answers up to [`WINDOW_FLUSH_WAIT`]. Then mark the flow answered, so
 /// the next exit request writes the profile.
 pub(crate) async fn ask_windows_to_flush<R: tauri::Runtime>(app: &AppHandle<R>) {
-    use tauri::Manager;
     static ROUND: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let id = ROUND.fetch_add(1, std::sync::atomic::Ordering::AcqRel) + 1;
     let labels: Vec<String> = app
@@ -235,6 +238,84 @@ pub(crate) async fn ask_windows_to_flush<R: tauri::Runtime>(app: &AppHandle<R>) 
 #[tauri::command]
 pub(crate) fn pending_writes_flushed<R: tauri::Runtime>(window: tauri::WebviewWindow<R>) {
     ANSWERS.answer(window.label());
+}
+
+/// The app's run loop hands every event here. Only the two exit events
+/// do anything.
+pub(crate) fn on_run_event(app_handle: &AppHandle, event: tauri::RunEvent) {
+    // Backstop flush: slash-command and Lua edits ride a debounced
+    // persist that may not have fired when the user quits (Cmd+Q,
+    // window close). Write the profile out before the process
+    // ends so nothing authored this session is lost. Before that
+    // write, an exit request asks the open windows for the edits
+    // they hold back (the Settings autosave, a pane width, the
+    // field you are typing in) and waits a short, bounded time
+    // for them (ask_windows_to_flush). Matches both exit events because
+    // macOS quit paths that go through NSApplication terminate
+    // can deliver Exit without a preceding ExitRequested. The
+    // exit flow keeps the write to exactly once when both arrive.
+    match event {
+        tauri::RunEvent::ExitRequested { code, api, .. } => {
+            // Tauri does not let a restart be held.
+            let can_hold = code != Some(tauri::RESTART_EXIT_CODE);
+            let windows = app_handle
+                .webview_windows()
+                .into_keys()
+                .filter(|label| holds_writes(label))
+                .count();
+            match exit_requested(can_hold, windows) {
+                ExitStep::AskWindows => {
+                    api.prevent_exit();
+                    let app = app_handle.clone();
+                    let code = code.unwrap_or(0);
+                    tauri::async_runtime::spawn(async move {
+                        ask_windows_to_flush(&app).await;
+                        app.exit(code);
+                    });
+                }
+                ExitStep::Hold => api.prevent_exit(),
+                ExitStep::Flush => flush_profile_on_exit(app_handle),
+                ExitStep::Done => {}
+            }
+        }
+        tauri::RunEvent::Exit => {
+            let step = exit();
+            if step == ExitStep::Flush {
+                flush_profile_on_exit(app_handle);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Write the live profile once on the way out. [`ExitFlow`] decides
+/// when, so this runs exactly once.
+fn flush_profile_on_exit(app_handle: &AppHandle) {
+    // The affect fulls are a cache of their own, written whatever
+    // becomes of the profile.
+    app_handle.state::<SharedState>().affect_full.flush();
+    // Honor a #profile reset/load: the in-memory profile is
+    // deliberately diverged from disk; do not write it back.
+    if AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
+        info!("exit flush: skipped, persist suppressed by profile reset or load");
+        return;
+    }
+    info!("exit flush: persisting profile");
+    let state: SharedState = app_handle.state::<SharedState>().inner().clone();
+    // Bounded: a wedged Lua trigger holding the profile lock
+    // must not turn quit into a hang. The timeout cuts the
+    // lock waits; the file writes themselves are sync and
+    // small.
+    let flush = crate::disk::save::persist_profile(app_handle, &state);
+    let outcome = tauri::async_runtime::block_on(async {
+        tokio::time::timeout(std::time::Duration::from_secs(3), flush).await
+    });
+    match outcome {
+        Ok(()) => info!("exit flush: done"),
+        Err(_) => {
+            tracing::warn!("exit flush: timed out after 3s, exiting without it");
+        }
+    }
 }
 
 #[cfg(test)]
