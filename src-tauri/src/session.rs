@@ -9,6 +9,7 @@ mod gmcp;
 mod gmcp_vars;
 pub(crate) mod highlight_ground;
 mod lines;
+mod log_sink;
 mod lua_timers;
 mod perf;
 pub(crate) mod prompt_view;
@@ -37,7 +38,8 @@ use batch::{ReadBatch, Settle};
 use connection::{ConnectionError, Stream};
 use echo::ServerEcho;
 use effects::{deliver_tick_step, run_fired_command, OutputSink};
-use lines::{LineAccumulator, Partial};
+use lines::LineAccumulator;
+use log_sink::{capture_held_lines, capture_pending_line, LogSession};
 use lua_timers::fire_due_script_timers;
 use perf::{PerfCounters, PERF_REPORT_INTERVAL};
 use prompt_view::{
@@ -46,8 +48,8 @@ use prompt_view::{
 };
 use read::{end_read, finish_read, flush_hold, handle_event, let_go_held_lines, READ_BUFFER_BYTES};
 use steps::{
-    clock_after, clock_step, end_held, end_preview_step, hold_step, late_repaint_after,
-    late_repaint_step, repaint_step, send_step, window_size_step,
+    clock_after, clock_step, end_preview_step, hold_step, late_repaint_after, late_repaint_step,
+    repaint_step, send_step, window_size_step,
 };
 
 /// The 250 ms poll that drives the tick, the Lua timers and the Settings
@@ -992,31 +994,6 @@ async fn fire_due_profile_timers<R: tauri::Runtime>(
     Ok(())
 }
 
-/// Log the lines the stage still holds as the session ends, and keep them
-/// for scrollback, through [`end_held`].
-async fn capture_held_lines(
-    profile: &Arc<Mutex<Profile>>,
-    logs: &crate::logs::SharedLogStore,
-    log_session_id: Option<i64>,
-    scrollback: &crate::logs::SharedScrollback,
-) {
-    let (log, kept) = end_held(&mut *profile.lock().await, log_session_id);
-    if !kept.is_empty() {
-        let mut ring = scrollback.lock().await;
-        for text in kept {
-            ring.push(text);
-        }
-    }
-    if !log.is_empty() {
-        let mut guard = logs.lock().await;
-        if let Some(store) = guard.as_mut() {
-            if let Err(e) = store.append_batch(&log) {
-                warn!(error = %e, "disconnect held lines log append failed");
-            }
-        }
-    }
-}
-
 /// You are selecting text or reading back in the terminal. The webview
 /// says so for xterm (`terminal_reader_busy`), and the native grid holds
 /// its own selection and scroll.
@@ -1051,78 +1028,6 @@ async fn sleep_until_hold(until: Option<Instant>) {
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct GagWithoutReaderPayload {
     pub trigger: String,
-}
-
-/// The log's row for this connection, and whether it names the
-/// character yet.
-struct LogSession {
-    id: Option<i64>,
-    named: bool,
-}
-
-impl LogSession {
-    fn new(id: Option<i64>) -> Self {
-        Self { id, named: false }
-    }
-
-    /// Name the character the row belongs to, the first time Char.Status
-    /// names one, so the prompt lookup can tell whose session it was.
-    /// Char.Status comes again on later pulses, and those write nothing.
-    async fn name(&mut self, logs: &crate::logs::SharedLogStore, character: &str) {
-        let Some(id) = self.id else {
-            return;
-        };
-        if self.named {
-            return;
-        }
-        self.named = true;
-        let mut guard = logs.lock().await;
-        if let Some(store) = guard.as_mut() {
-            if let Err(e) = store.set_session_character(id, character) {
-                warn!(error = %e, "failed to name the log session's character");
-            }
-        }
-    }
-}
-
-/// Flush a partial line still buffered when the session ends so the MUD's
-/// final output (a logout banner on `quit`, most often) is captured rather
-/// than dropped with the session loop's accumulator. The end of its
-/// read painted it, so display only needs the terminating newline. The
-/// value of this pass is logging it and pushing it into the scrollback
-/// ring that the dump persists.
-async fn capture_pending_line<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    logs: &crate::logs::SharedLogStore,
-    log_session_id: Option<i64>,
-    scrollback: &crate::logs::SharedScrollback,
-    accumulator: &mut LineAccumulator,
-) {
-    let Some(Partial { bytes, painted }) = accumulator.take_partial() else {
-        return;
-    };
-    let plain = vosh_protocol::ansi::plain_text(&bytes);
-    // Terminate the line on screen. Write only what the end of its read
-    // did not paint, to avoid printing the goodbye twice.
-    let shown = painted.map_or(0, |(_, len)| len.min(bytes.len()));
-    let mut out = Vec::with_capacity(bytes.len() - shown + 2);
-    out.extend_from_slice(&bytes[shown..]);
-    out.extend_from_slice(b"\r\n");
-    emit_output(app, out);
-    scrollback.lock().await.push(bytes.clone());
-    if let Some(sid) = log_session_id {
-        let mut guard = logs.lock().await;
-        if let Some(store) = guard.as_mut() {
-            if let Err(e) = store.append_batch(&[vosh_log::LogEntry {
-                session_id: sid,
-                ts_ms: now_ms(),
-                text: plain,
-                raw: Some(bytes),
-            }]) {
-                warn!(error = %e, "disconnect partial log append failed");
-            }
-        }
-    }
 }
 
 /// Map a read-side `io::Error` to a short human-readable disconnect
