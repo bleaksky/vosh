@@ -49,19 +49,15 @@ mod read;
 pub(crate) mod room_block;
 mod steps;
 
-use std::sync::Arc;
-
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
 use vosh_protocol::telnet::{option as telnet_option, Negotiator};
 
 use crate::app::events;
 use crate::app::state::SharedState;
-use crate::profile::Profile;
-use crate::script::SharedTimers;
 
 use conn::io_loop;
 use connection::ConnectionError;
@@ -262,14 +258,11 @@ pub(crate) async fn connect<R: tauri::Runtime>(
 
     let spawned = spawn(
         app.clone(),
+        state,
         host,
         port,
         tls,
         known_host,
-        state.profile.clone(),
-        state.script_timers.clone(),
-        state.logs.clone(),
-        state.scrollback.clone(),
         scrollback_path,
         initial_size,
     )
@@ -339,17 +332,17 @@ pub(crate) async fn disconnect<R: tauri::Runtime>(app: &AppHandle<R>, state: &Sh
 /// `known_host` is whether the host is The Forsaken Lands, whose rules
 /// the custom prompt follows. The caller says so, which lets a test have
 /// a fake game on a local port count as it.
+///
+/// The session shares the live profile, the Lua timers, the log store and
+/// the scrollback ring in `state` with the rest of the app.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn spawn<R: tauri::Runtime>(
     app: AppHandle<R>,
+    state: &SharedState,
     host: String,
     port: u16,
     tls: bool,
     known_host: bool,
-    profile: Arc<Mutex<Profile>>,
-    lua_timers: SharedTimers,
-    logs: crate::logs::SharedLogStore,
-    scrollback: crate::logs::SharedScrollback,
     scrollback_path: Option<std::path::PathBuf>,
     initial_window_size: (u16, u16),
 ) -> Result<SessionHandle, ConnectionError> {
@@ -393,15 +386,22 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         },
     );
 
-    let sink = LogSink::open(logs, scrollback, scrollback_path, &host, port).await;
+    let sink = LogSink::open(
+        state.logs.clone(),
+        state.scrollback.clone(),
+        scrollback_path,
+        &host,
+        port,
+    )
+    .await;
 
     let (tx_outgoing, rx_outgoing) = mpsc::unbounded_channel::<OutgoingMsg>();
     let task = tokio::spawn(io_loop(
         app,
         stream,
         rx_outgoing,
-        profile,
-        lua_timers,
+        state.profile.clone(),
+        state.script_timers.clone(),
         sink,
         negotiator,
         known_host,

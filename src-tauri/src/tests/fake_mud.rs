@@ -187,14 +187,11 @@ impl Harness {
         }
         let handle = crate::session::spawn(
             self.app.handle().clone(),
+            state,
             "127.0.0.1".into(),
             self.port,
             false,
             self.forsaken.load(Ordering::SeqCst),
-            state.profile.clone(),
-            state.script_timers.clone(),
-            state.logs.clone(),
-            state.scrollback.clone(),
             None,
             (100, 40),
         )
