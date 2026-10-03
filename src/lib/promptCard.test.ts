@@ -242,7 +242,7 @@ describe('where the codes came from', () => {
     });
   });
 
-  it('turns drawing on with the first capture, so P4 draws the start you check', () => {
+  it('leaves drawing off when the first capture saves, so only you turn it on', () => {
     const fresh: PromptConfig = {
       draw: false,
       template: 'DEFAULT',
@@ -250,13 +250,12 @@ describe('where the codes came from', () => {
       capture: none,
       show: 'text',
     };
-    expect(withCapture(fresh, codes)).toEqual({ ...fresh, capture: codes, draw: true });
-    // The pattern the old trigger left counts as no capture of yours.
-    expect(withCapture({ ...fresh, capture: migrated }, codes).draw).toBe(true);
-    // Once the profile reads its prompt, the switch stays as you set it.
-    const off = { ...fresh, capture: codes };
+    expect(withCapture(fresh, codes)).toEqual({ ...fresh, capture: codes });
+    expect(withCapture({ ...fresh, capture: migrated }, codes).draw).toBe(false);
+    // A switch you turned on stays on through a new capture.
+    const on = { ...fresh, draw: true, capture: codes };
     const other: PromptCapture = { ...codes, prompt: '<%hhp> ' };
-    expect(withCapture(off, other)).toEqual({ ...off, capture: other });
+    expect(withCapture(on, other)).toEqual({ ...on, capture: other });
   });
 });
 
