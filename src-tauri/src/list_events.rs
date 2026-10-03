@@ -48,7 +48,7 @@ pub(crate) struct PromptConfigChanged {
 pub(crate) fn broadcast_prompt_config_changed<R: tauri::Runtime>(app: &AppHandle<R>) {
     use tauri::Manager;
     let profile = app
-        .try_state::<crate::commands::SharedState>()
+        .try_state::<crate::app::state::SharedState>()
         .and_then(|state| state.active_profile());
     crate::commands::broadcast(app, PROMPT_CONFIG_CHANGED, &PromptConfigChanged { profile });
 }

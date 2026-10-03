@@ -7,7 +7,7 @@ use std::path::Path;
 
 use tracing::{error, info};
 
-use crate::commands::SharedState;
+use crate::app::state::SharedState;
 use crate::loadout_store::WizardRun;
 use crate::{loadout_store, profile_config, profile_set};
 
@@ -37,7 +37,7 @@ pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
     let run = loadout_store::finish_wizard_run(app_data);
     state.add_launch_notices(run.notices());
     let relaunch_pending =
-        crate::commands::MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
+        crate::app::state::MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
     if run != WizardRun::Unfinished && !relaunch_pending {
         // Before any profile loads, so the live profile reads the files
         // as the move left them. It writes inactive profile files too.

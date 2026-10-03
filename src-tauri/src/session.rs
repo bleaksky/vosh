@@ -1262,7 +1262,7 @@ async fn io_loop<R: tauri::Runtime>(
     // The first session that read your prompt names the Line triggers
     // that matched it, once, at the next launch (D6).
     if let Some(names) = line_triggers {
-        let state = app.state::<crate::commands::SharedState>();
+        let state = app.state::<crate::app::state::SharedState>();
         crate::prompt_migration::note_line_triggers(state.inner(), names).await;
     }
     if let Some(quick_keys) = target_after {
@@ -1279,7 +1279,7 @@ async fn io_loop<R: tauri::Runtime>(
     // The affects list goes stale with the session, as the frontend
     // store drops its copy on the disconnected state below. The affect
     // fulls are written for the next login, then cleared.
-    let shared = app.state::<crate::commands::SharedState>();
+    let shared = app.state::<crate::app::state::SharedState>();
     shared.last_affects.clear();
     crate::affect_full::disconnect(&app, shared.inner());
     // Reset password mode on disconnect so the next session starts with
@@ -1415,7 +1415,7 @@ fn process_fired_line(
     };
     effects.note_ran(line, &ran);
     if ran.replaced {
-        crate::commands::note_ui_config_replaced();
+        crate::app::state::note_ui_config_replaced();
     }
     ran
 }
@@ -1481,7 +1481,10 @@ impl ShownChanges {
     /// handle's lock while it waits for this session to end.
     fn send<R: tauri::Runtime>(self, app: &AppHandle<R>) {
         if self.repaint {
-            let state = app.state::<crate::commands::SharedState>().inner().clone();
+            let state = app
+                .state::<crate::app::state::SharedState>()
+                .inner()
+                .clone();
             tokio::spawn(async move { crate::commands::request_prompt_repaint(&state).await });
         }
         if let Some(payload) = self.target {
@@ -2564,7 +2567,7 @@ fn clock_step(p: &mut Profile, other: bool, reading: bool, now: Instant) -> Outp
 /// its own selection and scroll.
 fn reader_busy<R: tauri::Runtime>(app: &AppHandle<R>) -> bool {
     let webview = app
-        .try_state::<crate::commands::SharedState>()
+        .try_state::<crate::app::state::SharedState>()
         .is_some_and(|state| state.reader_busy.load(std::sync::atomic::Ordering::Acquire));
     webview || native_reader_busy()
 }
@@ -3031,7 +3034,7 @@ fn emit_prompt_state<R: tauri::Runtime>(
 /// The prompt card watches your prompt (`prompt_watch`), so the prompt
 /// state follows each prompt Vosh reads.
 fn watching_prompt<R: tauri::Runtime>(app: &AppHandle<R>) -> bool {
-    app.try_state::<crate::commands::SharedState>()
+    app.try_state::<crate::app::state::SharedState>()
         .is_some_and(|state| {
             state
                 .prompt_watch
@@ -3147,7 +3150,7 @@ async fn handle_gmcp<R: tauri::Runtime>(
                 if msg.package == "Char.Status" {
                     batch.character = Some(owned.clone());
                 }
-                let state = app.state::<crate::commands::SharedState>();
+                let state = app.state::<crate::app::state::SharedState>();
                 crate::commands::handle_char_known_for_auto_switch(app, state.inner(), &owned)
                     .await;
             }
@@ -3176,7 +3179,7 @@ async fn handle_gmcp<R: tauri::Runtime>(
     // `onGmcpPackage` helper does the same replacement when
     // computing its listen target.
     // Keep the last affects list for a window that opens between ticks.
-    app.state::<crate::commands::SharedState>()
+    app.state::<crate::app::state::SharedState>()
         .last_affects
         .observe(&msg.package, &msg.data);
     // A list that changes the affect fulls sends them first, so the
@@ -3938,9 +3941,9 @@ mod tests {
     fn a_reset_from_a_timer_turns_away_a_config_save_read_before_it() {
         let mut p = Profile::default();
         let mut effects = LineEffects::default();
-        let before = crate::commands::ui_config_generation();
+        let before = crate::app::state::ui_config_generation();
         let _ = super::process_fired_line(&mut p, "#profile reset", &mut effects, None);
-        assert!(crate::commands::ui_config_generation() > before);
+        assert!(crate::app::state::ui_config_generation() > before);
     }
 
     #[test]

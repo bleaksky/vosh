@@ -19,7 +19,7 @@ use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
-use crate::commands::{AppState, SharedState};
+use crate::app::state::{AppState, SharedState};
 
 const IAC: u8 = 255;
 const GA: [u8; 2] = [IAC, 249];

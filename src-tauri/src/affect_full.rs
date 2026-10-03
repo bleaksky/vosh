@@ -57,7 +57,7 @@ use tauri::{AppHandle, Manager, State};
 use tracing::warn;
 
 use crate::affects_snapshot::AFFECTS_PACKAGE;
-use crate::commands::SharedState;
+use crate::app::state::SharedState;
 
 /// Sent to every window with the whole map whenever it changes.
 pub(crate) const AFFECT_FULL_CHANGED_EVENT: &str = "vosh://affect-full-changed";
@@ -163,7 +163,7 @@ struct Left {
     hours: i64,
 }
 
-/// The store. One per app, in [`crate::commands::AppState`].
+/// The store. One per app, in [`crate::app::state::AppState`].
 #[derive(Debug, Default)]
 pub(crate) struct AffectFull {
     inner: Mutex<Inner>,

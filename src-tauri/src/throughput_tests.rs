@@ -39,7 +39,7 @@ use tauri::test::{mock_builder, mock_context, noop_assets};
 use tauri::{Listener, Manager};
 use vosh_prompt::testkit::mud::{Build, Mud, Options, PROMPT};
 
-use crate::commands::{AppState, SharedState};
+use crate::app::state::{AppState, SharedState};
 
 /// Rounds in the session, about 9.5 MB on the wire.
 const CYCLES: usize = 3000;

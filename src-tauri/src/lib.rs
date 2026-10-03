@@ -118,6 +118,7 @@ mod tintin_import;
 mod upgrade_order_tests;
 mod window_backdrop;
 
+use app::state::{AppState, SharedState};
 use commands::{
     aliases_export, aliases_import, app_quit, import_apply, import_detect, loadouts_get_state,
     loadouts_set_active, logs_export, logs_list_sessions, logs_search_page, macros_delete,
@@ -132,8 +133,7 @@ use commands::{
     profiles_list, scrollback_load, session_connect, session_disconnect, session_send_input,
     session_send_masked, session_set_window_size, target_get, tick_get_config, tick_set_config,
     timers_delete, timers_list, timers_set, triggers_export, triggers_import, triggers_list,
-    ui_get_config, ui_set_config, updater_check, updater_install_and_relaunch, AppState,
-    SharedState,
+    ui_get_config, ui_set_config, updater_check, updater_install_and_relaunch,
 };
 use fonts::{fonts_list, handle_font_uri};
 
@@ -238,7 +238,7 @@ pub fn run() {
                 if launched.wizard_unfinished {
                     // The next launch writes the wizard journal again, over
                     // anything this session would save.
-                    crate::commands::MIGRATION_RELAUNCH_PENDING
+                    crate::app::state::MIGRATION_RELAUNCH_PENDING
                         .store(true, std::sync::atomic::Ordering::Release);
                 }
                 match open_log_store(&path) {
@@ -473,17 +473,20 @@ fn flush_profile_on_exit(app_handle: &tauri::AppHandle) {
     // The affect fulls are a cache of their own, written whatever
     // becomes of the profile.
     app_handle
-        .state::<commands::SharedState>()
+        .state::<app::state::SharedState>()
         .affect_full
         .flush();
     // Honor a #profile reset/load: the in-memory profile is
     // deliberately diverged from disk; do not write it back.
-    if commands::AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
+    if app::state::AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
         info!("exit flush: skipped, persist suppressed by profile reset or load");
         return;
     }
     info!("exit flush: persisting profile");
-    let state: commands::SharedState = app_handle.state::<commands::SharedState>().inner().clone();
+    let state: app::state::SharedState = app_handle
+        .state::<app::state::SharedState>()
+        .inner()
+        .clone();
     // Bounded: a wedged Lua trigger holding the profile lock
     // must not turn quit into a hang. The timeout cuts the
     // lock waits; the file writes themselves are sync and

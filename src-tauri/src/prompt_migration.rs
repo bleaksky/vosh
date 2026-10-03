@@ -67,7 +67,7 @@ pub(crate) const LINE_TRIGGERS: &str = "prompt-line-triggers";
 /// longer see it. The next launch names them once, and no later session
 /// checks again. Nothing is recorded before the profile set loads, so the
 /// check waits for a later session.
-pub(crate) async fn note_line_triggers(state: &crate::commands::SharedState, names: Vec<String>) {
+pub(crate) async fn note_line_triggers(state: &crate::app::state::SharedState, names: Vec<String>) {
     let _persist = crate::commands::PERSIST_LOCK.lock().await;
     let mut guard = state.profile_set.lock().await;
     let Some(set) = guard.as_mut() else {
@@ -1110,8 +1110,8 @@ mud.set_prompt_var('move', captures[4])"""
     async fn the_first_session_that_read_a_prompt_leaves_the_notice_once() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        let state: crate::commands::SharedState =
-            std::sync::Arc::new(crate::commands::AppState::default());
+        let state: crate::app::state::SharedState =
+            std::sync::Arc::new(crate::app::state::AppState::default());
         // Before the profile set loads, nothing is recorded.
         note_line_triggers(&state, vec!["early".to_string()]).await;
         crate::launch::load(&state, root).await;
@@ -1126,8 +1126,8 @@ mud.set_prompt_var('move', captures[4])"""
         assert!(!index.contains("other"), "{index}");
 
         // The next launch names it once.
-        let next: crate::commands::SharedState =
-            std::sync::Arc::new(crate::commands::AppState::default());
+        let next: crate::app::state::SharedState =
+            std::sync::Arc::new(crate::app::state::AppState::default());
         crate::launch::load(&next, root).await;
         let notices = next.take_launch_notices();
         assert_eq!(notices.len(), 1, "{notices:?}");
@@ -1135,8 +1135,8 @@ mud.set_prompt_var('move', captures[4])"""
             notices[0].contains("The trigger hp-watch matched"),
             "{notices:?}"
         );
-        let again: crate::commands::SharedState =
-            std::sync::Arc::new(crate::commands::AppState::default());
+        let again: crate::app::state::SharedState =
+            std::sync::Arc::new(crate::app::state::AppState::default());
         crate::launch::load(&again, root).await;
         let leftover = &again.take_launch_notices();
         assert!(leftover.is_empty(), "{leftover:?}");
@@ -1146,8 +1146,8 @@ mud.set_prompt_var('move', captures[4])"""
     async fn launch_moves_the_capture_before_the_profile_loads() {
         let dir = james_like(CAPTURE_TRIGGER);
         let root = dir.path();
-        let state: crate::commands::SharedState =
-            std::sync::Arc::new(crate::commands::AppState::default());
+        let state: crate::app::state::SharedState =
+            std::sync::Arc::new(crate::app::state::AppState::default());
         let launched = crate::launch::load(&state, root).await;
         assert!(launched.loadout_mode);
         assert_eq!(state.take_launch_notices(), [MOVED_INTO_DEFAULT]);

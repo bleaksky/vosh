@@ -14,7 +14,7 @@ use tauri::State;
 use vosh_log::{CharacterScope, LogStore};
 use vosh_prompt::aabahran::observer;
 
-use crate::commands::SharedState;
+use crate::app::state::SharedState;
 use crate::profile_set::ProfileEntry;
 
 /// `prompt_last_seen`: your prompt settings and where Vosh saw them.
@@ -371,7 +371,7 @@ mod tests {
 
     #[tokio::test]
     async fn last_seen_prefers_char_prompt_then_the_session() {
-        let state: SharedState = std::sync::Arc::new(crate::commands::AppState::default());
+        let state: SharedState = std::sync::Arc::new(crate::app::state::AppState::default());
         assert_eq!(last_seen(&state).await, None, "nothing anywhere");
         {
             let mut p = state.profile.lock().await;

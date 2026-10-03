@@ -32,7 +32,8 @@ use vosh_automation::trigger::{
 use vosh_prompt::config::{AabahranCapture, CaptureSource, RegexCapture};
 use vosh_prompt::{CaptureConfig, PromptConfig, PromptShow};
 
-use crate::commands::{AppState, SharedState, PERSIST_LOCK};
+use crate::app::state::{AppState, SharedState};
+use crate::commands::PERSIST_LOCK;
 use crate::loadout::{GlobalCatalog, Loadout, LoadoutSet};
 use crate::loadout_store::{
     catalog_path, load_global_catalog, load_loadout_set, loadouts_path, save_global_catalog,

@@ -17,10 +17,12 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 use tracing::warn;
 
+use crate::app::state::{
+    bump_panes_generation, panes_generation, SharedState, AUTO_PERSIST_SUPPRESSED,
+    MIGRATION_RELAUNCH_PENDING, PROFILES_NOT_LOADED,
+};
 use crate::commands::{
-    broadcast, bump_panes_generation, pane_layout_envelope, panes_generation, persist_profile,
-    PaneLayoutEnvelope, SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING,
-    PERSIST_LOCK, PROFILES_NOT_LOADED,
+    broadcast, pane_layout_envelope, persist_profile, PaneLayoutEnvelope, PERSIST_LOCK,
 };
 use crate::profile_config::{
     GlobalConfig, PaneLayoutPersist, ProfileConfig, TrackedAffect, UiConfig,
@@ -506,7 +508,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::commands::AppState;
+    use crate::app::state::AppState;
     use crate::profile_config::DockEntryPersist;
     use crate::profile_set::tests::james_like_set;
     use crate::profile_set::{ScopeConfig, DEFAULT_PROFILE_NAME};

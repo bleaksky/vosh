@@ -34,7 +34,8 @@ use std::sync::Arc;
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{Trigger, TriggerAction, TriggerPattern, TriggerTarget};
 
-use crate::commands::{AppState, SharedState, PERSIST_LOCK};
+use crate::app::state::{AppState, SharedState};
+use crate::commands::PERSIST_LOCK;
 use crate::migration::{ItemKind, ItemPayload};
 use crate::profile::{Macro, Profile, Timer};
 use crate::profile_config::{PaneLayoutPersist, ProfileConfig, TrackedAffect};

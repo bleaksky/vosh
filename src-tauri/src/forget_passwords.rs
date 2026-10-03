@@ -11,7 +11,7 @@ use tauri::{AppHandle, Manager};
 use tracing::warn;
 use vosh_log::{Forgotten, PasswordLines};
 
-use crate::commands::SharedState;
+use crate::app::state::SharedState;
 use crate::input::LogsCommand;
 use crate::log_state::SharedLogStore;
 
