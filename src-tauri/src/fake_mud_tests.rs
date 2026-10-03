@@ -481,7 +481,7 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
     let h = Harness::new(Options::new(Build::New)).await;
     h.set_prompt(codes(PROMPT)).await;
     h.state.note_active_profile(DEFAULT_PROFILE_NAME);
-    crate::prompt::prompt_watch(h.app.state(), true);
+    crate::ipc::prompt::prompt_watch(h.app.state(), true);
     h.connect().await;
 
     // While the card watches, the state follows each prompt, with the
@@ -545,7 +545,7 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
         template: edited.template,
         ..h.prompt_table().await
     };
-    crate::prompt::prompt_config_set(h.app.handle().clone(), h.app.state(), config, None)
+    crate::ipc::prompt::prompt_config_set(h.app.handle().clone(), h.app.state(), config, None)
         .await
         .expect("the table saves");
     h.until_last_row("<1020>800").await;
@@ -568,7 +568,7 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
     assert_eq!(state["open_row"]["spans"][3]["col"], 6);
 
     // Once the card stops watching, no state follows the prompts.
-    crate::prompt::prompt_watch(h.app.state(), false);
+    crate::ipc::prompt::prompt_watch(h.app.state(), false);
     let watched = h.events("session://prompt-state").len();
     h.type_line("pulses 2").await;
     h.until_shown("Pulse 2 of 2.").await;
@@ -616,7 +616,7 @@ async fn a_new_width_tells_the_card_where_the_push_draws_now() {
         ..codes(PROMPT)
     })
     .await;
-    crate::prompt::prompt_watch(h.app.state(), true);
+    crate::ipc::prompt::prompt_watch(h.app.state(), true);
     h.connect().await;
 
     // The session starts 100 wide, so mana takes the last three columns.
@@ -694,7 +694,7 @@ async fn an_echo_the_session_hears_of_late_leaves_the_prompt_after_it_open() {
         template: "<%hp>%mana".into(),
         ..h.prompt_table().await
     };
-    crate::prompt::prompt_config_set(h.app.handle().clone(), h.app.state(), config, None)
+    crate::ipc::prompt::prompt_config_set(h.app.handle().clone(), h.app.state(), config, None)
         .await
         .expect("the table saves");
     h.until_last_row("<1020>800").await;
@@ -1056,7 +1056,7 @@ async fn the_code_reader_the_card_chose_hears_your_prompt_on_another_host() {
 
     // More > Use Forsaken Lands prompt codes… in the card, then prompt in
     // the game: the reply fills the card's fields (P2).
-    crate::prompt::prompt_code_reader_set(h.app.state(), true)
+    crate::ipc::prompt::prompt_code_reader_set(h.app.state(), true)
         .await
         .expect("the card chose the code reader");
     h.type_line("prompt").await;
