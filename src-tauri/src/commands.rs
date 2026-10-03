@@ -21,6 +21,9 @@ use crate::disk::save::{
     persist_state, schedule_profile_persist, settle_line_effects, PERSIST_LOCK,
 };
 use crate::input;
+use crate::loadouts::wizard::journal::{
+    drop_wizard_journal, save_wizard_journal, JournalFile, WizardJournal,
+};
 
 use crate::profile::switch::{apply_profile_switch, read_shared_layer};
 use crate::profile::{Macro, Profile, Timer};
@@ -3072,14 +3075,14 @@ async fn apply_migration_with(
 
     // Every write the run makes, in a journal saved before the first one,
     // so a run that stops partway finishes at the next launch, see
-    // `loadout_store::finish_wizard_run`. Built before any write, so a
+    // `journal::finish_wizard_run`. Built before any write, so a
     // file that does not serialize changes nothing.
-    let journal = crate::loadout_store::WizardJournal {
+    let journal = WizardJournal {
         catalog: toml::to_string_pretty(&catalog).map_err(|e| e.to_string())?,
         loadouts: toml::to_string_pretty(&loadout_set).map_err(|e| e.to_string())?,
         profiles: kept
             .iter()
-            .map(|(file, text)| crate::loadout_store::JournalFile {
+            .map(|(file, text)| JournalFile {
                 path: file
                     .path
                     .strip_prefix(app_data)
@@ -3115,7 +3118,7 @@ async fn apply_migration_with(
         copies.push(copy);
     }
 
-    if let Err(e) = crate::loadout_store::save_wizard_journal(app_data, &journal) {
+    if let Err(e) = save_wizard_journal(app_data, &journal) {
         warn!(error = %e, "wizard could not save its journal");
         take_out_copies(&copies);
         return Err(format!(
@@ -3136,7 +3139,7 @@ async fn apply_migration_with(
             Some(text) => std::fs::read_to_string(path).ok().as_deref() == Some(text.as_str()),
             None => !path.exists(),
         });
-        if restored && crate::loadout_store::drop_wizard_journal(app_data).is_ok() {
+        if restored && drop_wizard_journal(app_data).is_ok() {
             take_out_copies(&copies);
             return Err(format!(
                 "Vosh could not save {what}, so it put back every file it changed. Your profiles \
@@ -3155,7 +3158,7 @@ async fn apply_migration_with(
     }
     // Every file holds its text. A journal that stays only writes the same
     // text again at the next launch.
-    if let Err(e) = crate::loadout_store::drop_wizard_journal(app_data) {
+    if let Err(e) = drop_wizard_journal(app_data) {
         warn!(error = %e, "wizard journal could not be taken out");
     }
     written();
@@ -3187,7 +3190,7 @@ fn take_out_copies(copies: &[std::path::PathBuf]) {
 /// you, and the error.
 fn write_shared_catalog(
     app_data: &std::path::Path,
-    journal: &crate::loadout_store::WizardJournal,
+    journal: &WizardJournal,
     kept: &[(&MigrationFile, String)],
     touched: &mut Vec<(std::path::PathBuf, Option<String>)>,
 ) -> Result<(), (String, String)> {
@@ -5052,7 +5055,7 @@ mod tests {
             let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
             assert_eq!(catalog.aliases[0].name, "hh");
             // A run that wrote every file takes its journal out.
-            assert!(!crate::loadout_store::journal_path(dir.path()).exists());
+            assert!(!crate::loadouts::wizard::journal::journal_path(dir.path()).exists());
             // The alias left the profile file, and the copy in legacy
             // still holds it.
             let healer = set.profile_path("Healer");
@@ -6595,7 +6598,7 @@ mod tests {
                     .await;
                 super::super::WIZARD_WRITES_BEFORE_A_CRASH.set(None);
                 assert!(run.is_err(), "stop {stop}");
-                let journal = crate::loadout_store::journal_path(dir.path());
+                let journal = crate::loadouts::wizard::journal::journal_path(dir.path());
                 assert!(journal.exists(), "stop {stop}");
 
                 // The next launch writes what the run did not, before
@@ -6605,7 +6608,8 @@ mod tests {
                 for (n, name) in names.iter().enumerate() {
                     let state = relaunch_as(dir.path(), name).await;
                     let notices = state.take_launch_notices();
-                    let finished = [crate::loadout_store::WIZARD_FINISHED_NOTICE.to_string()];
+                    let finished =
+                        [crate::loadouts::wizard::journal::WIZARD_FINISHED_NOTICE.to_string()];
                     if n == 0 {
                         assert_eq!(notices, finished, "stop {stop}");
                     } else {
@@ -6625,7 +6629,7 @@ mod tests {
 
         #[tokio::test]
         async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
-            use crate::loadout_store::{journal_path, WIZARD_UNFINISHED_NOTICE};
+            use crate::loadouts::wizard::journal::{journal_path, WIZARD_UNFINISHED_NOTICE};
             use crate::profile_set::DEFAULT_PROFILE_NAME;
             use std::sync::atomic::AtomicBool;
             let names = [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt"];
@@ -6718,7 +6722,8 @@ mod tests {
 
         #[tokio::test]
         async fn the_wizard_waits_while_an_earlier_run_is_unfinished() {
-            use crate::loadout_store::{journal_path, legacy_dir};
+            use crate::loadout_store::legacy_dir;
+            use crate::loadouts::wizard::journal::journal_path;
             use crate::profile_set::DEFAULT_PROFILE_NAME;
             let dir = tempfile::tempdir().unwrap();
             let set = james_like_set(dir.path());
@@ -6857,7 +6862,7 @@ mod tests {
             assert!(!loadouts_path(dir.path()).exists());
             let legacy = crate::loadout_store::legacy_dir(dir.path());
             assert_eq!(std::fs::read_dir(&legacy).unwrap().count(), 0);
-            assert!(!crate::loadout_store::journal_path(dir.path()).exists());
+            assert!(!crate::loadouts::wizard::journal::journal_path(dir.path()).exists());
             for (path, text) in &files {
                 match text {
                     Some(text) => assert_eq!(&read(path), text, "{}", path.display()),
@@ -6893,7 +6898,8 @@ mod tests {
 
         #[tokio::test]
         async fn a_wizard_that_cannot_copy_or_journal_says_what_to_do() {
-            use crate::loadout_store::{journal_path, legacy_dir};
+            use crate::loadout_store::legacy_dir;
+            use crate::loadouts::wizard::journal::journal_path;
             let dir = tempfile::tempdir().unwrap();
             let set = james_like_set(dir.path());
             write_alias(&set, "Healer", "hh");

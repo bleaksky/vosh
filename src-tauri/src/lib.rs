@@ -91,6 +91,7 @@ mod launch;
 mod line_accumulator;
 mod loadout;
 mod loadout_store;
+mod loadouts;
 mod log_state;
 mod migration;
 #[cfg(native_surface)]

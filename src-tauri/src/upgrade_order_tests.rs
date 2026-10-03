@@ -18,9 +18,10 @@ use vosh_prompt::CaptureConfig;
 use crate::app::state::{AppState, SharedState};
 use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::launch::Launch;
-use crate::loadout_store::{
-    journal_path, load_global_catalog, save_wizard_journal, JournalFile, WizardJournal,
-    WIZARD_FINISHED_NOTICE, WIZARD_UNFINISHED_NOTICE,
+use crate::loadout_store::load_global_catalog;
+use crate::loadouts::wizard::journal::{
+    journal_path, save_wizard_journal, JournalFile, WizardJournal, WIZARD_FINISHED_NOTICE,
+    WIZARD_UNFINISHED_NOTICE,
 };
 use crate::profile_config::{before_prompt_editor_path, CustomTheme, GlobalConfig, ProfileConfig};
 use crate::profile_set::ProfileSet;
