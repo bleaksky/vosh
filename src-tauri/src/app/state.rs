@@ -1,8 +1,9 @@
 //! The state the whole app shares. Tauri holds one [`AppState`] for
 //! every command, window and session.
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
 
@@ -14,12 +15,13 @@ use crate::session::SessionHandle;
 
 /// What every command, window and session shares. The one session slot,
 /// the live profile, the profile set, the log store and scrollback, the
-/// plugins and Lua timers, the catalog and loadouts of loadout mode, and
-/// what the app keeps about the live connection: its target, the
-/// character logged in, the terminal size and the last affects. The
-/// generations that turn away a write read before the profile was
-/// replaced live here too, with the counter that settles a burst of
-/// changes into one save and the flags that hold the saves back.
+/// plugins and Lua timers, the catalog and loadouts of loadout mode, the
+/// app data folder, and what the app keeps about the live connection:
+/// its target, the character logged in, the terminal size and the last
+/// affects. The generations that turn away a write read before the
+/// profile was replaced live here too, with the counter that settles a
+/// burst of changes into one save, the flags that hold the saves back
+/// and the flag that says loadout mode is live.
 pub(crate) struct AppState {
     pub(crate) session: Mutex<Option<SessionHandle>>,
     pub(crate) profile: Arc<Mutex<Profile>>,
@@ -123,6 +125,16 @@ pub(crate) struct AppState {
     /// falling back to legacy mode at startup, and that session must keep
     /// persisting normally.
     pub(crate) relaunch_pending: AtomicBool,
+    /// Set when loadout mode is live: launch loaded catalog.toml, or the
+    /// wizard wrote it this session. The catalog owns your aliases,
+    /// triggers and macros and saves on its own, so `#profile save`,
+    /// `load` and `reset` only echo.
+    pub(crate) loadout_mode: AtomicBool,
+    /// The app data folder, which holds every file Vosh keeps. Launch
+    /// sets it once, see [`crate::app::launch::load`]. It stays unset
+    /// only when launch could not resolve the folder, and then nothing
+    /// loads from it.
+    pub(crate) app_data: OnceLock<PathBuf>,
 }
 
 impl AppState {
@@ -229,6 +241,8 @@ impl Default for AppState {
             profile_dirty_gen: AtomicU64::new(0),
             auto_persist_suppressed: AtomicBool::new(false),
             relaunch_pending: AtomicBool::new(false),
+            loadout_mode: AtomicBool::new(false),
+            app_data: OnceLock::new(),
         }
     }
 }
@@ -238,3 +252,7 @@ pub(crate) type SharedState = Arc<AppState>;
 /// The error a profile command returns before startup has loaded the
 /// profile set.
 pub(crate) const PROFILES_NOT_LOADED: &str = "Vosh has not loaded your profiles yet.";
+
+/// The error a command that needs the app data folder returns when launch
+/// could not resolve it.
+pub(crate) const NO_APP_DATA: &str = "Vosh could not find its data folder at launch.";

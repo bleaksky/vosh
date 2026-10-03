@@ -2,47 +2,40 @@
 //! files from the scripts folder, `#lua` runs a line of Lua, and
 //! `#scripts` lists what is loaded.
 
-use super::{split_first_word, InputResult, APP_DATA_DIR};
+use super::{split_first_word, InputResult};
+use crate::app::state::AppState;
 use crate::disk::paths;
 use crate::profile::live::Profile;
 use crate::script;
 
 pub(super) fn slash_script(
+    state: &AppState,
     profile: &mut Profile,
     args: &str,
     lua: &mut script::ApplyResult,
 ) -> InputResult {
     let (cmd, rest) = split_first_word(args);
     match cmd {
-        "load" => slash_script_load(profile, rest, lua),
+        "load" => slash_script_load(state, profile, rest, lua),
         "reload" => slash_script_reload(profile, lua),
         "" => InputResult::error("usage #script load <name> | #script reload"),
         other => InputResult::error(format!("unknown #script subcommand `{other}`")),
     }
 }
 
+/// `#script load <name>`, from the scripts folder in the app data folder
+/// `state` holds.
 fn slash_script_load(
+    state: &AppState,
     profile: &mut Profile,
     args: &str,
     lua: &mut script::ApplyResult,
-) -> InputResult {
-    let app_data = APP_DATA_DIR.get().map(std::path::PathBuf::as_path);
-    slash_script_load_in(profile, args, lua, app_data)
-}
-
-/// [`slash_script_load`] over the app data folder `app_data` in place of
-/// [`APP_DATA_DIR`], so a test can load from a folder of its own.
-pub(super) fn slash_script_load_in(
-    profile: &mut Profile,
-    args: &str,
-    lua: &mut script::ApplyResult,
-    app_data: Option<&std::path::Path>,
 ) -> InputResult {
     let name = args.trim();
     if name.is_empty() {
         return InputResult::error("usage #script load <name>");
     }
-    let Some(app_data) = app_data else {
+    let Some(app_data) = state.app_data.get() else {
         return InputResult::error("could not resolve scripts directory");
     };
     let path = script_path_for(app_data, name);

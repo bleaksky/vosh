@@ -61,7 +61,6 @@ pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(app: &AppHandle<R>) {
     use std::sync::atomic::Ordering;
     let shared: SharedState = app.state::<SharedState>().inner().clone();
     let gen = shared.profile_dirty_gen.fetch_add(1, Ordering::AcqRel) + 1;
-    let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         if shared.profile_dirty_gen.load(Ordering::Acquire) != gen {
@@ -70,7 +69,7 @@ pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(app: &AppHandle<R>) {
         if shared.auto_persist_suppressed.load(Ordering::Acquire) {
             return; // a #profile reset/load intervened
         }
-        persist_profile(&app, &shared).await;
+        persist_profile(&shared).await;
     });
 }
 
@@ -124,12 +123,12 @@ pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
 /// but not surfaced — callers don't want a UI toggle to fail because
 /// the disk is full mid-flight, and the in-memory state is still
 /// correct for the rest of the session.
-pub(crate) async fn persist_profile<R: tauri::Runtime>(app: &AppHandle<R>, state: &SharedState) {
+pub(crate) async fn persist_profile(state: &SharedState) {
     // Serialize whole-persist runs. The debounced dirty-persist and the
     // exit-time flush can overlap each other or an inline command
     // persist, and Settings can write an inactive profile's file.
     let _persist_guard = PERSIST_LOCK.lock().await;
-    persist_profile_locked(app, state).await;
+    persist_profile_locked(state).await;
 }
 
 /// When [`save_then_broadcast`] saves the live profile. Each command
@@ -160,13 +159,13 @@ pub(crate) async fn save_then_broadcast<R: tauri::Runtime, S: serde::Serialize +
     payload: &S,
 ) {
     match policy {
-        SavePolicy::Now => persist_profile(app, state).await,
+        SavePolicy::Now => persist_profile(state).await,
         SavePolicy::NowUnlessHeld => {
             if !state
                 .auto_persist_suppressed
                 .load(std::sync::atomic::Ordering::Acquire)
             {
-                persist_profile(app, state).await;
+                persist_profile(state).await;
             }
         }
         SavePolicy::SoonUnlessHeld => schedule_profile_persist(app),
@@ -175,12 +174,9 @@ pub(crate) async fn save_then_broadcast<R: tauri::Runtime, S: serde::Serialize +
 }
 
 /// The body of [`persist_profile`]. Call with [`PERSIST_LOCK`] held.
-pub(crate) async fn persist_profile_locked<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    state: &SharedState,
-) {
-    let app_data = app.path().app_data_dir().ok();
-    persist_state(state, app_data.as_deref()).await;
+pub(crate) async fn persist_profile_locked(state: &SharedState) {
+    let app_data = state.app_data.get().map(std::path::PathBuf::as_path);
+    persist_state(state, app_data).await;
 }
 
 /// [`persist_profile_locked`] over the app data folder `app_data`, so a

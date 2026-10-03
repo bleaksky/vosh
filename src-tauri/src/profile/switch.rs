@@ -153,8 +153,8 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
     state: &SharedState,
     name: &str,
 ) -> Result<(), String> {
-    let app_data = app.path().app_data_dir().ok();
-    switch_profile(state, app_data.as_deref(), name).await?;
+    let app_data = state.app_data.get().map(std::path::PathBuf::as_path);
+    switch_profile(state, app_data, name).await?;
     // The new profile's capture took the game's latest prompt settings.
     let seen = state.profile.lock().await.prompt.take_seen();
     crate::prompt::report_game_prompt_seen(app, seen);
@@ -285,11 +285,13 @@ pub(crate) async fn shared_layer_for_lines<'a, R: tauri::Runtime>(
     app: &AppHandle<R>,
     lines: impl IntoIterator<Item = &'a str>,
 ) -> Option<SharedLayer> {
-    let replaces = lines.into_iter().any(crate::input::may_replace_profile);
+    let state: SharedState = app.state::<SharedState>().inner().clone();
+    let replaces = lines
+        .into_iter()
+        .any(|line| crate::input::may_replace_profile(&state, line));
     if !replaces {
         return None;
     }
-    let state: SharedState = app.state::<SharedState>().inner().clone();
     read_shared_layer(&state).await
 }
 

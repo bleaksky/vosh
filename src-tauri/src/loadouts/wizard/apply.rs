@@ -279,11 +279,13 @@ pub(crate) fn announce_migration_applied<R: tauri::Runtime>(app: &AppHandle<R>) 
 
 /// [`migration_apply`] over the app data folder `app_data`, so a test
 /// can run it over a folder of its own. `library` holds the id of every
-/// preset in the library the frontend installs from. `written` runs once catalog.toml,
-/// loadouts.toml, and every profile file are on disk. A write that fails
-/// puts back every file the run changed and skips `written`, unless a
-/// file stays changed. The journal then stays for the next launch to
-/// finish the run, and `written` runs.
+/// preset in the library the frontend installs from. Once catalog.toml,
+/// loadouts.toml, and every profile file are on disk, the state holds
+/// every save for the relaunch and turns loadout mode on, see
+/// [`hold_for_relaunch`]. A write that fails puts back every file the
+/// run changed and leaves the state as it was, unless a file stays
+/// changed. The journal then stays for the next launch to finish the
+/// run, and the state holds for the relaunch too.
 ///
 /// [`migration_apply`]: crate::ipc::wizard::migration_apply
 pub(crate) async fn apply_migration(
@@ -291,7 +293,6 @@ pub(crate) async fn apply_migration(
     app_data: &std::path::Path,
     resolutions: &[ConflictResolution],
     library: &[&str],
-    written: impl FnOnce(),
 ) -> Result<(), String> {
     // Every save of a profile file takes this lock, so none lands
     // between the read of a file below and its rewrite without the items.
@@ -469,7 +470,7 @@ pub(crate) async fn apply_migration(
         // The journal stays, so the next launch writes every file the run
         // did not, and loadout mode starts over files without their
         // items. Nothing may save or switch the live profile until then.
-        written();
+        hold_for_relaunch(state);
         return Err(format!(
             "Vosh could not save {what} and could not put back every file it changed. Quit Vosh \
              and open it again to finish the move to loadouts. A full copy of each profile file \
@@ -481,8 +482,23 @@ pub(crate) async fn apply_migration(
     if let Err(e) = drop_wizard_journal(app_data) {
         warn!(error = %e, "wizard journal could not be taken out");
     }
-    written();
+    hold_for_relaunch(state);
     Ok(())
+}
+
+/// The catalog is on disk, or the next launch writes it, but the live
+/// session still holds the profile from before the move. Hold every save
+/// until the relaunch loads the catalog, and turn loadout mode on so
+/// `#profile save`, `load` and `reset` stop writing files. Set under
+/// [`PERSIST_LOCK`], which a save or a switch takes before it reads the
+/// relaunch flag.
+fn hold_for_relaunch(state: &SharedState) {
+    state
+        .relaunch_pending
+        .store(true, std::sync::atomic::Ordering::Release);
+    state
+        .loadout_mode
+        .store(true, std::sync::atomic::Ordering::Release);
 }
 
 /// What to do when the wizard could not write the copies in

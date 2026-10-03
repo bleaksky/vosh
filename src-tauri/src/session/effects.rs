@@ -236,7 +236,7 @@ pub(super) fn run_and_note_line(
     effects: &mut input::LineEffects,
     shared: Option<&SharedLayer>,
 ) -> input::Ran {
-    let ran = match shared.filter(|_| input::may_replace_profile(line)) {
+    let ran = match shared.filter(|_| input::may_replace_profile(state, line)) {
         Some(layer) => layer.keep_across(p, |p| input::run_line(state, p, line)),
         None => input::run_line(state, p, line),
     };

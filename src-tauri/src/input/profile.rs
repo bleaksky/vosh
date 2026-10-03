@@ -3,7 +3,7 @@
 
 use vosh_automation::vars::Scope;
 
-use super::{split_first_word, InputResult, APP_DATA_DIR, PATH_B_ACTIVE};
+use super::{split_first_word, InputResult};
 use crate::app::state::AppState;
 use crate::disk::paths;
 use crate::import::tintin;
@@ -21,25 +21,13 @@ const PROFILE_MIGRATION_PENDING: &str =
 /// [`crate::disk::save::PERSIST_LOCK`].
 pub(super) const PROFILE_SAVE_BUSY: &str = "Vosh is saving this profile. Try again.";
 
+/// `#profile save`, `load` and `reset` on the active profile's file in
+/// the app data folder `state` holds.
 pub(super) fn slash_profile(
     state: &AppState,
     profile: &mut Profile,
     args: &str,
     replaced: &mut bool,
-) -> InputResult {
-    let app_data = APP_DATA_DIR.get().map(std::path::PathBuf::as_path);
-    slash_profile_with(state, profile, args, replaced, app_data)
-}
-
-/// [`slash_profile`] with `app_data` in place of [`APP_DATA_DIR`], so a
-/// test can run it over a folder of its own without touching what every
-/// other test reads.
-pub(super) fn slash_profile_with(
-    state: &AppState,
-    profile: &mut Profile,
-    args: &str,
-    replaced: &mut bool,
-    app_data: Option<&std::path::Path>,
 ) -> InputResult {
     let (cmd, _rest) = split_first_word(args);
     let migration_pending = state
@@ -51,7 +39,10 @@ pub(super) fn slash_profile_with(
     // Loadout mode keeps authored items in the catalog and persists them
     // automatically. The legacy save/load/reset trio would write, load,
     // or blank the wrong files there, so it bows out with a pointer.
-    if PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire) {
+    if state
+        .loadout_mode
+        .load(std::sync::atomic::Ordering::Acquire)
+    {
         return match cmd {
             "save" => InputResult::echo_line("loadout mode saves your changes automatically"),
             "load" => InputResult::echo_line("loadout mode loads the catalog at startup"),
@@ -62,6 +53,7 @@ pub(super) fn slash_profile_with(
             other => InputResult::error(format!("unknown #profile subcommand `{other}`")),
         };
     }
+    let app_data = state.app_data.get().map(std::path::PathBuf::as_path);
     match cmd {
         "save" => match app_data.and_then(profile_path) {
             Some(path) => {

@@ -236,7 +236,6 @@ fn ui_config_of(p: &crate::profile::live::Profile, generation: u64) -> UiConfigP
 /// config again.
 #[tauri::command]
 pub(crate) async fn ui_set_config(
-    app: AppHandle,
     state: State<'_, SharedState>,
     config: UiConfigPayload,
 ) -> Result<bool, String> {
@@ -248,7 +247,7 @@ pub(crate) async fn ui_set_config(
         return Ok(false);
     }
     let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
+    persist_profile(&shared).await;
     Ok(true)
 }
 
@@ -275,7 +274,6 @@ fn apply_ui_config(
 /// caller also sends the pair.
 #[tauri::command]
 pub(crate) async fn ui_set_theme(
-    app: AppHandle,
     state: State<'_, SharedState>,
     theme: String,
     light_theme: Option<String>,
@@ -288,7 +286,7 @@ pub(crate) async fn ui_set_theme(
         }
     }
     let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
+    persist_profile(&shared).await;
     Ok(())
 }
 

@@ -2,9 +2,9 @@
 //! plan that moves your profiles to loadout mode, then applies it once
 //! you pick a winner for each conflict.
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
-use crate::app::state::SharedState;
+use crate::app::state::{SharedState, NO_APP_DATA};
 use crate::loadouts::wizard::apply::{
     analyze_migration, announce_migration_applied, apply_migration, ConflictResolution,
 };
@@ -29,13 +29,12 @@ use crate::loadouts::wizard::plan::MigrationPlan;
 /// [`migration_refusal`]: crate::loadouts::wizard::apply::migration_refusal
 #[tauri::command]
 pub(crate) async fn migration_analyze(
-    app: AppHandle,
     state: State<'_, SharedState>,
     library: Vec<String>,
 ) -> Result<MigrationPlan, String> {
-    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data = state.app_data.get().ok_or(NO_APP_DATA)?;
     let library: Vec<&str> = library.iter().map(String::as_str).collect();
-    analyze_migration(&state, &app_data, &library).await
+    analyze_migration(&state, app_data, &library).await
 }
 
 /// Commit the loadout mode migration. Saves the live profile, re-runs the
@@ -65,19 +64,9 @@ pub(crate) async fn migration_apply(
     resolutions: Vec<ConflictResolution>,
     library: Vec<String>,
 ) -> Result<(), String> {
-    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data = state.app_data.get().ok_or(NO_APP_DATA)?;
     let library: Vec<&str> = library.iter().map(String::as_str).collect();
-    apply_migration(&state, &app_data, &resolutions, &library, || {
-        // The catalog is now on disk but the live session still holds the
-        // pre-migration profile. Block every persist until the relaunch
-        // loads the catalog, and flip the input layer into loadout mode
-        // so the legacy #profile trio stops writing files.
-        state
-            .relaunch_pending
-            .store(true, std::sync::atomic::Ordering::Release);
-        crate::input::PATH_B_ACTIVE.store(true, std::sync::atomic::Ordering::Release);
-    })
-    .await?;
+    apply_migration(&state, app_data, &resolutions, &library).await?;
 
     // Returning Ok rather than calling `app.restart()` here. Restart
     // is fragile in dev mode: it tears down the binary out from under

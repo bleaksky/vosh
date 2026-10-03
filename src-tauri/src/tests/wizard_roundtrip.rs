@@ -874,15 +874,9 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         .map(|b| b.toggled.iter().map(|rows| kept(rows)).collect())
         .collect();
 
-    crate::loadouts::wizard::apply::apply_migration(
-        &wizard,
-        dir,
-        &resolutions,
-        &library_ids(),
-        || {},
-    )
-    .await
-    .map_err(|e| format!("apply: {e}"))?;
+    crate::loadouts::wizard::apply::apply_migration(&wizard, dir, &resolutions, &library_ids())
+        .await
+        .map_err(|e| format!("apply: {e}"))?;
     drop(wizard);
 
     // Every file keeps its settings, and a copy of each waits in legacy.
