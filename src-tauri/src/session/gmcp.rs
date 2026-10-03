@@ -1,0 +1,207 @@
+//! What the session does with GMCP. When the game offers it, the session
+//! says hello and names the packages it reads. Each packet the game sends
+//! then updates the variables, your prompt, the room lists and the tick
+//! under the profile lock, runs the Lua that listens for it, and goes on
+//! to the windows.
+
+use std::sync::Arc;
+
+use serde_json::json;
+use tauri::{AppHandle, Emitter, Manager};
+use tokio::sync::Mutex;
+use tokio::time::Instant;
+use tracing::{info, warn};
+use vosh_protocol::telnet::Negotiator;
+
+use crate::input;
+use crate::profile::Profile;
+use crate::script::{self, ApplyResult, SharedTimers};
+use crate::tick::TickStep;
+
+use super::batch::ReadBatch;
+use super::connection::Stream;
+use super::perf::PerfCounters;
+use super::prompt_view::observe_prompt_gmcp;
+use super::{apply_script_result, deliver_tick_step, gmcp_vars, OutputSink, ScriptIo};
+
+/// GMCP packages we ask the server to enable in Core.Supports.Set. Char,
+/// Room, and Comm cover the player view; World powers the tick timer reset
+/// (Aabahran ticks fire the moment its `World.Time.hour` field advances);
+/// Map carries the server-rendered tile grid for the map pane's server
+/// mode; Imm.Queues carries the staff work-queue counters the imm panel
+/// renders (the server only sends it to immortals, so declaring it costs
+/// mortals nothing). Group carries the roster the Group pane shows.
+/// Aabahran sends every package without this list, so it names them
+/// for servers that honor it.
+pub(super) const REQUESTED_GMCP_PACKAGES: &[&str] = &[
+    "Char 1",
+    "Room 1",
+    "Comm 1",
+    "World 1",
+    "Map 1",
+    "Imm.Queues 1",
+    "Group 1",
+];
+
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn handle_gmcp<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    profile: &Arc<Mutex<Profile>>,
+    lua_timers: &SharedTimers,
+    stream: &mut Stream,
+    payload: &[u8],
+    batch: &mut ReadBatch,
+    perf: &mut PerfCounters,
+) -> std::io::Result<()> {
+    let msg = match vosh_protocol::gmcp::parse(payload) {
+        Ok(m) => m,
+        Err(e) => {
+            warn!(error = %e, "failed to parse GMCP payload");
+            return Ok(());
+        }
+    };
+    // Package name at info; the full payload only at debug. Display-
+    // formatting every radius-7 Map.Tiles grid into a log line sat on
+    // the session hot path per movement. Capture raw payloads with
+    // RUST_LOG=vosh_app_lib=debug when needed (e.g. the Group.Info
+    // duplicate-member server bug).
+    info!(package = %msg.package, "gmcp received");
+    tracing::debug!(package = %msg.package, data = %msg.data, "gmcp payload");
+    // Phase 5: same fold as the per-line path. Take the tick step for a
+    // World.Time hour change under the existing lock so it does not force
+    // a second `profile.lock().await` after release.
+    let (tick_step, script_apply) = {
+        let lock_t0 = std::time::Instant::now();
+        let mut p = profile.lock().await;
+        perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
+        perf.mutex_acquires += 1;
+        gmcp_step(&mut p, &msg, Instant::now())
+    };
+
+    // Char.Status / Char.Name carry the logged-in character name on
+    // Aabahran (and most ROM derivatives). Extract it so the auto-
+    // switch path can re-resolve profiles against the now-known
+    // character. The handler short-circuits on duplicate observations
+    // so this is cheap even though Char.Status fires every vitals
+    // update.
+    if msg.package == "Char.Status" || msg.package == "Char.Name" {
+        if let Some(name) = msg.data.get("name").and_then(|v| v.as_str()) {
+            let owned = name.trim().to_string();
+            if !owned.is_empty() {
+                if msg.package == "Char.Status" {
+                    batch.character = Some(owned.clone());
+                }
+                let state = app.state::<crate::app::state::SharedState>();
+                crate::profile::switch::handle_char_known_for_auto_switch(
+                    app,
+                    state.inner(),
+                    &owned,
+                )
+                .await;
+            }
+        }
+    }
+    let mut sink = OutputSink::Batch(batch);
+    if let Some(step) = tick_step {
+        perf.tick_emits += 1;
+        deliver_tick_step(app, stream, profile, lua_timers, step, &mut sink).await?;
+    }
+    apply_script_result(
+        app,
+        &mut ScriptIo::Session(stream, &mut sink),
+        profile,
+        lua_timers,
+        script_apply,
+    )
+    .await?;
+    // Phase 4 perf fix: emit on a per-package event channel so each
+    // frontend listener subscribes only to the packages it cares
+    // about, instead of all 12 listeners running on every packet and
+    // filtering by `payload.package === '...'`. Tauri event names
+    // only allow alphanumeric, `-`, `/`, `:`, `_`, so we have to
+    // encode the `.` that GMCP packages use as a namespace
+    // separator (`Char.Vitals` → `Char-Vitals`). The frontend's
+    // `onGmcpPackage` helper does the same replacement when
+    // computing its listen target.
+    // Keep the last affects list for a window that opens between ticks.
+    app.state::<crate::app::state::SharedState>()
+        .last_affects
+        .observe(&msg.package, &msg.data);
+    // A list that changes the affect fulls sends them first, so the
+    // windows never draw the list against the old ones (a recast at
+    // fewer hours than the old full).
+    crate::affect_full::observe(app, &msg.package, &msg.data);
+    let event_name = format!("session://gmcp/{}", msg.package.replace('.', "-"));
+    if let Err(e) = app.emit(&event_name, &msg.data) {
+        warn!(error = %e, package = %msg.package, "failed to emit GMCP event");
+    }
+    // `perf.gmcp_packets` already incremented by the caller before
+    // we ran. This `emit` count would otherwise duplicate that, so
+    // we leave gmcp_packets as the single source.
+    Ok(())
+}
+
+/// What a GMCP packet does to the profile, under the profile lock the
+/// caller holds: the variables and the custom prompt take it, Room.Chars
+/// is kept for the target commands, a World.Time hour change is the
+/// tick, and Lua GMCP handlers run. Returns the tick step and what the
+/// handlers asked for, which the caller delivers once the lock drops.
+pub(super) fn gmcp_step(
+    p: &mut Profile,
+    msg: &vosh_protocol::gmcp::Message,
+    now: Instant,
+) -> (Option<TickStep>, ApplyResult) {
+    gmcp_vars::apply(&mut p.vars, msg);
+    // Before Lua, so a value a GMCP handler sets with
+    // `mud.set_prompt_var` belongs to the pulse this packet starts.
+    observe_prompt_gmcp(p, msg);
+    // Cache the latest Room.Chars snapshot in the profile so
+    // bare `tar <index>` / `tarn` / `tarp` commands can resolve
+    // against the current room without round-tripping to the
+    // frontend.
+    if msg.package == "Room.Chars" {
+        if let Some(arr) = msg.data.as_array() {
+            // The look this packet goes with lists one line for each
+            // entry after its things.
+            p.room_block.room_chars(arr.len());
+            let chars = input::target::read_room_chars(arr);
+            input::target::set_room_chars(p, chars);
+        }
+    }
+    // The look this packet goes with lists a line for each long text its
+    // objects share, five spaces or their count before it.
+    if msg.package == "Room.Items" {
+        if let Some(arr) = msg.data.as_array() {
+            p.room_block.room_items(arr.len());
+        }
+    }
+    let tick_step = crate::tick::observe_world_time_for_tick(&mut p.tick, msg, now);
+    script::snapshot_vars(&p.script, &p.vars);
+    let outcome = match p.script.dispatch_gmcp(&msg.package, &msg.data) {
+        Ok(o) => o,
+        Err(err) => {
+            warn!(error = %err, "lua dispatch_gmcp failed");
+            vosh_script::ScriptOutcome::default()
+        }
+    };
+    let apply = script::apply_actions(p, outcome);
+    (tick_step, apply)
+}
+
+pub(super) fn hello_subnegotiation() -> Vec<u8> {
+    let body = vosh_protocol::gmcp::build(
+        "Core.Hello",
+        &json!({
+            "client": "vosh",
+            "version": env!("CARGO_PKG_VERSION"),
+        }),
+    )
+    .unwrap_or_default();
+    Negotiator::build_gmcp_subnegotiation(&body)
+}
+
+pub(super) fn supports_subnegotiation() -> Vec<u8> {
+    let body = vosh_protocol::gmcp::build("Core.Supports.Set", &REQUESTED_GMCP_PACKAGES.to_vec())
+        .unwrap_or_default();
+    Negotiator::build_gmcp_subnegotiation(&body)
+}
