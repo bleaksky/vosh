@@ -7,12 +7,11 @@ use std::path::PathBuf;
 use vosh_automation::alias::Alias;
 
 use super::catalog::{
-    catalog_path, load_global_catalog, save_global_catalog, GlobalCatalog, UNREAD_CATALOG_NOTICE,
+    load_global_catalog, save_global_catalog, GlobalCatalog, UNREAD_CATALOG_NOTICE,
 };
 use super::load_at_launch;
-use super::set::{
-    load_loadout_set, loadouts_path, save_loadout_set, LoadoutSet, UNREAD_LOADOUTS_NOTICE,
-};
+use super::set::{load_loadout_set, save_loadout_set, LoadoutSet, UNREAD_LOADOUTS_NOTICE};
+use crate::disk::paths::{catalog_path, loadouts_path};
 
 pub(super) fn tmpdir() -> PathBuf {
     let dir = std::env::temp_dir().join(format!(

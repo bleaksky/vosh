@@ -7,18 +7,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::disk::atomic::write_with_backup;
-use crate::loadouts::catalog::catalog_path;
-use crate::loadouts::set::loadouts_path;
+use crate::disk::paths::{catalog_path, journal_path, loadouts_path};
 use crate::loadouts::LoadoutStoreError;
-
-/// Filename of the journal the shared catalog wizard keeps while it
-/// writes, see [`WizardJournal`].
-const JOURNAL_FILE: &str = "catalog.journal.toml";
-
-/// Path to the shared catalog wizard's journal, see [`WizardJournal`].
-pub(crate) fn journal_path(app_data: &Path) -> PathBuf {
-    app_data.join(JOURNAL_FILE)
-}
 
 /// Every file the shared catalog wizard writes, with its new text. The
 /// wizard saves it before its first write and takes it out after its

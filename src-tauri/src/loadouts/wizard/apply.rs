@@ -3,23 +3,21 @@
 //! step saves the journal, then writes catalog.toml, loadouts.toml, and
 //! each profile file without its aliases, triggers, and macros.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use tauri::AppHandle;
 use tracing::warn;
 
-use super::journal::{
-    drop_wizard_journal, journal_path, save_wizard_journal, JournalFile, WizardJournal,
-};
+use super::journal::{drop_wizard_journal, save_wizard_journal, JournalFile, WizardJournal};
 use super::plan::{
     analyze_profiles, profile_file_for_catalog, ItemKind, ItemPayload, MigrationPlan,
 };
 use crate::app::events::{broadcast, MIGRATION_APPLIED};
 use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED};
+use crate::disk::paths::{catalog_path, journal_path, legacy_dir, loadouts_path};
 use crate::disk::save::{active_profile_file, persist_state, PERSIST_LOCK};
-use crate::loadouts::catalog::catalog_path;
 use crate::loadouts::presets::first_catalog_presets;
-use crate::loadouts::set::{loadouts_path, LoadoutSet};
+use crate::loadouts::set::LoadoutSet;
 use crate::profile::file::{ConfigError, ProfileConfig};
 use crate::profile::set::SavedFile;
 
@@ -111,12 +109,6 @@ pub(crate) async fn migration_refusal(
         );
     }
     folder_refusal(app_data)
-}
-
-/// The folder the shared catalog wizard copies each profile file into
-/// before it changes any.
-pub(crate) fn legacy_dir(app_data: &Path) -> PathBuf {
-    app_data.join("profiles").join("legacy")
 }
 
 /// True when the legacy folder holds a copy of a profile file.

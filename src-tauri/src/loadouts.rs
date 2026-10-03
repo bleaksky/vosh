@@ -38,8 +38,9 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use catalog::{catalog_path, load_global_catalog, GlobalCatalog, UNREAD_CATALOG_NOTICE};
-use set::{load_loadout_set, loadouts_path, LoadoutSet, UNREAD_LOADOUTS_NOTICE};
+use crate::disk::paths::{catalog_path, loadouts_path};
+use catalog::{load_global_catalog, GlobalCatalog, UNREAD_CATALOG_NOTICE};
+use set::{load_loadout_set, LoadoutSet, UNREAD_LOADOUTS_NOTICE};
 
 #[derive(Debug, Error)]
 pub(crate) enum LoadoutStoreError {

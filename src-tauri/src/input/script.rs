@@ -3,6 +3,7 @@
 //! `#scripts` lists what is loaded.
 
 use super::{split_first_word, InputResult, APP_DATA_DIR};
+use crate::disk::paths;
 use crate::profile::live::Profile;
 use crate::script;
 
@@ -112,7 +113,7 @@ pub(super) fn slash_lua(
 /// The file `#script load <name>` reads, `<app_data>/scripts/<name>.lua`
 /// under the app data folder `app_data`.
 fn script_path_for(app_data: &std::path::Path, name: &str) -> std::path::PathBuf {
-    let dir = app_data.join("scripts");
+    let dir = paths::scripts_dir(app_data);
     if std::path::Path::new(name)
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("lua"))

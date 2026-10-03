@@ -2,7 +2,7 @@
 //! characters share in loadout mode. Vosh runs in loadout mode while the
 //! file is on disk.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use tracing::warn;
@@ -13,10 +13,8 @@ use super::gating::apply_effective_state;
 use super::set::LoadoutSet;
 use super::LoadoutStoreError;
 use crate::disk::atomic::write_with_backup;
+use crate::disk::paths::catalog_path;
 use crate::profile::live::{Macro, Profile};
-
-/// Filename of the global catalog inside the app data directory.
-const CATALOG_FILE: &str = "catalog.toml";
 
 /// The global catalog. Every alias, trigger, macro lives here as a
 /// flat list with its `group` tag carrying the loadout association.
@@ -111,11 +109,6 @@ pub(crate) fn lay_catalog_over(p: &mut Profile, catalog: &GlobalCatalog, set: Op
     if let Some(set) = set {
         apply_effective_state(set, p);
     }
-}
-
-/// Path to `catalog.toml` under the given app data directory.
-pub(crate) fn catalog_path(app_data: &Path) -> PathBuf {
-    app_data.join(CATALOG_FILE)
 }
 
 /// True when `catalog.toml` is in the app data folder, which is what
