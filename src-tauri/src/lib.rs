@@ -88,7 +88,6 @@ mod ipc_contract_tests;
 mod latency_tests;
 mod launch;
 mod line_accumulator;
-mod list_events;
 mod loadout;
 mod loadout_store;
 mod log_state;

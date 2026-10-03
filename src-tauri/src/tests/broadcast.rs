@@ -14,14 +14,14 @@ use std::sync::{Arc, Mutex};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{App, EventId, Listener, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
+use crate::app::events::{
+    broadcast_list_changes, ListChanges, ListRevisions, ALIASES_CHANGED, MACRO_GROUPS_CHANGED,
+    PROMPT_CONFIG_CHANGED, TRIGGERS_CHANGED,
+};
 use crate::app::state::{AppState, SharedState};
 use crate::characters::{PROFILE_CHANGED_EVENT, SESSION_IDENTITY_EVENT};
 use crate::exit_flush::FLUSH_REQUEST_EVENT;
 use crate::input::LineEffects;
-use crate::list_events::{
-    broadcast_list_changes, ListChanges, ListRevisions, ALIASES_CHANGED, MACRO_GROUPS_CHANGED,
-    PROMPT_CONFIG_CHANGED, TRIGGERS_CHANGED,
-};
 use crate::profile::{Macro, Profile};
 
 /// The main window, and Settings and Help open beside it.
@@ -199,10 +199,10 @@ fn the_prompt_table_event_names_the_active_profile() {
         heard.lock().unwrap().push(event.payload().to_string());
     });
     // Before any profile loads it names none.
-    crate::list_events::broadcast_list_changes(handle, ListChanges::PROMPT);
+    crate::app::events::broadcast_list_changes(handle, ListChanges::PROMPT);
     let state: SharedState = app.state::<SharedState>().inner().clone();
     state.note_active_profile("Second");
-    crate::list_events::broadcast_prompt_config_changed(handle);
+    crate::app::events::broadcast_prompt_config_changed(handle);
     app.unlisten(id);
     assert_eq!(
         *payloads.lock().unwrap(),

@@ -34,7 +34,7 @@ const EVENTS: [&str; 10] = [
     "session://state",
     "session://target",
     crate::affect_full::AFFECT_FULL_CHANGED_EVENT,
-    crate::list_events::PROMPT_CONFIG_CHANGED,
+    crate::app::events::PROMPT_CONFIG_CHANGED,
 ];
 
 /// What the prompts off status says in `#prompt`.
@@ -550,7 +550,7 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
         .expect("the table saves");
     h.until_last_row("<1020>800").await;
     assert_eq!(
-        h.events(crate::list_events::PROMPT_CONFIG_CHANGED),
+        h.events(crate::app::events::PROMPT_CONFIG_CHANGED),
         [serde_json::json!({"profile": DEFAULT_PROFILE_NAME})]
     );
     // The state follows the repaint too, so the card maps a pointer with
