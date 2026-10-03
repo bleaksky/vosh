@@ -75,11 +75,9 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     };
 
     // Char.Status / Char.Name carry the logged-in character name on
-    // Aabahran (and most ROM derivatives). Extract it so the auto-
-    // switch path can re-resolve profiles against the now-known
-    // character. The handler short-circuits on duplicate observations
-    // so this is cheap even though Char.Status fires every vitals
-    // update.
+    // Aabahran (and most ROM derivatives). A name the session has not
+    // seen yet is a login. Char.Status fires every vitals update, and
+    // `character_named` returns at once for a name it already saw.
     if msg.package == "Char.Status" || msg.package == "Char.Name" {
         if let Some(name) = msg.data.get("name").and_then(|v| v.as_str()) {
             let owned = name.trim().to_string();
@@ -88,7 +86,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
                     batch.character = Some(owned.clone());
                 }
                 let state = conn.app.state::<crate::app::state::SharedState>();
-                handle_char_known_for_auto_switch(&conn.app, state.inner(), &owned).await;
+                character_named(&conn.app, state.inner(), &owned).await;
             }
         }
     }
@@ -141,42 +139,35 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     Ok(())
 }
 
-/// Called by the session GMCP handler when Char.Status or Char.Name
-/// reports a character name. Suppresses duplicate observations so the
-/// resolver does not re-run on every Char.Status tick, then resolves
-/// (host, port, character) against the profile set. When the resolved
-/// profile differs from the currently-active one, swap to it and
-/// announce on the terminal so the user knows the active profile
-/// changed. Either way, a new name updates the session identity.
-async fn handle_char_known_for_auto_switch<R: tauri::Runtime>(
+/// Char.Status or Char.Name named the character, trimmed and not empty.
+/// A name the session already saw does nothing. A new one is a login:
+/// it becomes the current character, its affect fulls load, the profile
+/// that claims it on this connection becomes the active one, with a
+/// note on the terminal, and the session identity goes out.
+async fn character_named<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
     character: &str,
 ) {
-    let trimmed = character.trim();
-    if trimmed.is_empty() {
-        return;
-    }
-    // Short-circuit on duplicate observations. Char.Status is sent on
-    // every vitals update, so without this gate the resolver would
-    // run every tick.
-    let should_resolve = {
+    // Char.Status is sent on every vitals update, so without this gate
+    // the login would run every pulse.
+    let is_new = {
         let Ok(mut guard) = state.current_character.lock() else {
             return;
         };
-        if guard.as_deref() == Some(trimmed) {
+        if guard.as_deref() == Some(character) {
             false
         } else {
-            *guard = Some(trimmed.to_string());
+            *guard = Some(character.to_string());
             true
         }
     };
-    if !should_resolve {
+    if !is_new {
         return;
     }
     // The affect gauges read this character's saved fulls.
-    crate::affect_full::character_known(app, state, trimmed);
-    auto_switch_for_character(app, state, trimmed).await;
+    crate::affect_full::character_known(app, state, character);
+    auto_switch_for_character(app, state, character).await;
     crate::characters::broadcast_session_identity(app, state).await;
 }
 
