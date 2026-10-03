@@ -13,7 +13,7 @@ use vosh_log::{Forgotten, PasswordLines};
 
 use crate::app::state::SharedState;
 use crate::input::LogsCommand;
-use crate::log_state::SharedLogStore;
+use crate::logs::SharedLogStore;
 
 /// How a run ended.
 #[derive(Debug, Clone, PartialEq, Eq)]

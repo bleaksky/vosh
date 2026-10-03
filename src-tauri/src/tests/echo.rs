@@ -11,7 +11,7 @@ use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{App, Manager};
 
 use crate::app::state::{AppState, SharedState};
-use crate::forget_passwords::{self, Outcome};
+use crate::logs::forget_passwords::{self, Outcome};
 use crate::profile::Profile;
 use crate::term_grid;
 

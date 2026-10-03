@@ -138,8 +138,8 @@ fn grid_rows(reads: &[Read], columns: usize) -> Vec<String> {
 }
 
 /// The scrollback ring after `reads`, kept as the session keeps it.
-fn ring_after(reads: &[Read]) -> crate::log_state::Scrollback {
-    let mut ring = crate::log_state::Scrollback::default();
+fn ring_after(reads: &[Read]) -> crate::logs::Scrollback {
+    let mut ring = crate::logs::Scrollback::default();
     for read in reads {
         for (line, repeat) in read.kept.iter().zip(&read.repeats) {
             ring.keep(line.clone(), *repeat);

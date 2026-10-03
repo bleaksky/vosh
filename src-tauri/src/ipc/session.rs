@@ -54,7 +54,7 @@ pub(crate) async fn session_connect(
     let scrollback_path = tauri::Manager::path(&app)
         .app_data_dir()
         .ok()
-        .map(|dir| crate::log_state::scrollback_path(&dir));
+        .map(|dir| crate::logs::scrollback_path(&dir));
 
     // Seed the negotiator with the most recently reported terminal
     // size so the initial `DO NAWS` reply during the handshake
@@ -148,7 +148,7 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
     // while on a large log, so it runs on its own task and echoes when
     // done.
     if let Some(command) = crate::input::logs_command(&line) {
-        crate::forget_passwords::start(&app, command);
+        crate::logs::forget_passwords::start(&app, command);
         return Ok(());
     }
     // `#profile reset` and `#profile load` replace the live profile

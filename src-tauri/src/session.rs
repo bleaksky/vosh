@@ -412,7 +412,7 @@ impl Settle {
     fn overdue_now<R: tauri::Runtime>(
         &mut self,
         app: &AppHandle<R>,
-        logs: &crate::log_state::SharedLogStore,
+        logs: &crate::logs::SharedLogStore,
         perf: &mut PerfCounters,
     ) {
         if self.frame_overdue() {
@@ -557,8 +557,8 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
     tls: bool,
     profile: Arc<Mutex<Profile>>,
     timers: SharedTimers,
-    logs: crate::log_state::SharedLogStore,
-    scrollback: crate::log_state::SharedScrollback,
+    logs: crate::logs::SharedLogStore,
+    scrollback: crate::logs::SharedScrollback,
     scrollback_path: Option<std::path::PathBuf>,
     initial_window_size: (u16, u16),
 ) -> Result<SessionHandle, ConnectionError> {
@@ -702,9 +702,9 @@ async fn io_loop<R: tauri::Runtime>(
     mut rx_outgoing: mpsc::UnboundedReceiver<OutgoingMsg>,
     profile: Arc<Mutex<Profile>>,
     timers: SharedTimers,
-    logs: crate::log_state::SharedLogStore,
+    logs: crate::logs::SharedLogStore,
     log_session_id: Option<i64>,
-    scrollback: crate::log_state::SharedScrollback,
+    scrollback: crate::logs::SharedScrollback,
     scrollback_path: Option<std::path::PathBuf>,
     mut negotiator: Negotiator,
     known_host: bool,
@@ -1588,7 +1588,7 @@ async fn handle_event<R: tauri::Runtime>(
     profile: &Arc<Mutex<Profile>>,
     timers: &SharedTimers,
     log_session_id: Option<i64>,
-    scrollback: &crate::log_state::SharedScrollback,
+    scrollback: &crate::logs::SharedScrollback,
     server_echo: &mut ServerEcho,
     event: TelnetEvent,
     batch: &mut ReadBatch,
@@ -1783,7 +1783,7 @@ struct LineStep {
     /// the region the run shows in: the line kept starts a run of repeated
     /// lines, or takes the place of the run's line in the ring, the count
     /// before it, as on screen.
-    repeat: Option<crate::log_state::KeptRun>,
+    repeat: Option<crate::logs::KeptRun>,
 }
 
 /// Handle one complete line under the profile lock. The stage reads it
@@ -2002,7 +2002,7 @@ fn text_line_step(
                 .stage
                 .run_shown()
                 .unwrap_or_else(|| (text.to_vec(), 0));
-            repeat = Some(crate::log_state::KeptRun { repeat: made, gen });
+            repeat = Some(crate::logs::KeptRun { repeat: made, gen });
             Some(shows)
         }
         Shows::Now(painted) => {
@@ -2420,8 +2420,8 @@ async fn let_go_held_lines<R: tauri::Runtime>(
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
     timers: &SharedTimers,
-    scrollback: &crate::log_state::SharedScrollback,
-    logs: &crate::log_state::SharedLogStore,
+    scrollback: &crate::logs::SharedScrollback,
+    logs: &crate::logs::SharedLogStore,
     log_session: &mut LogSession,
     seen: &mut u64,
     settle: &mut Settle,
@@ -2449,9 +2449,9 @@ async fn let_go_held_lines<R: tauri::Runtime>(
 /// for scrollback, through [`end_held`].
 async fn capture_held_lines(
     profile: &Arc<Mutex<Profile>>,
-    logs: &crate::log_state::SharedLogStore,
+    logs: &crate::logs::SharedLogStore,
     log_session_id: Option<i64>,
-    scrollback: &crate::log_state::SharedScrollback,
+    scrollback: &crate::logs::SharedScrollback,
 ) {
     let (log, kept) = end_held(&mut *profile.lock().await, log_session_id);
     if !kept.is_empty() {
@@ -2803,7 +2803,7 @@ async fn deliver_line_step<R: tauri::Runtime>(
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
     timers: &SharedTimers,
-    scrollback: &crate::log_state::SharedScrollback,
+    scrollback: &crate::logs::SharedScrollback,
     batch: &mut ReadBatch,
     step: LineStep,
     perf: &mut PerfCounters,
@@ -2852,7 +2852,7 @@ async fn end_read<R: tauri::Runtime>(
     profile: &Arc<Mutex<Profile>>,
     timers: &SharedTimers,
     log_session_id: Option<i64>,
-    scrollback: &crate::log_state::SharedScrollback,
+    scrollback: &crate::logs::SharedScrollback,
     batch: &mut ReadBatch,
     perf: &mut PerfCounters,
 ) -> std::io::Result<()> {
@@ -2943,7 +2943,7 @@ async fn emit_hidden_change<R: tauri::Runtime>(app: &AppHandle<R>, profile: &Arc
 async fn finish_read<R: tauri::Runtime>(
     app: &AppHandle<R>,
     profile: &Arc<Mutex<Profile>>,
-    logs: &crate::log_state::SharedLogStore,
+    logs: &crate::logs::SharedLogStore,
     log_session: &mut LogSession,
     batch: ReadBatch,
     seen: &mut u64,
@@ -3086,7 +3086,7 @@ impl LogSession {
     /// Name the character the row belongs to, the first time Char.Status
     /// names one, so the prompt lookup can tell whose session it was.
     /// Char.Status comes again on later pulses, and those write nothing.
-    async fn name(&mut self, logs: &crate::log_state::SharedLogStore, character: &str) {
+    async fn name(&mut self, logs: &crate::logs::SharedLogStore, character: &str) {
         let Some(id) = self.id else {
             return;
         };
@@ -3546,9 +3546,9 @@ async fn fire_due_script_timers<R: tauri::Runtime>(
 /// ring that the dump persists.
 async fn capture_pending_line<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    logs: &crate::log_state::SharedLogStore,
+    logs: &crate::logs::SharedLogStore,
     log_session_id: Option<i64>,
-    scrollback: &crate::log_state::SharedScrollback,
+    scrollback: &crate::logs::SharedScrollback,
     accumulator: &mut LineAccumulator,
 ) {
     let Some(Partial { bytes, painted }) = accumulator.take_partial() else {
@@ -5938,7 +5938,7 @@ mod tests {
     async fn the_log_row_takes_the_first_character_char_status_names() {
         let mut store = vosh_log::LogStore::in_memory().unwrap();
         let id = store.start_session("h", 1, 0).unwrap();
-        let logs: crate::log_state::SharedLogStore =
+        let logs: crate::logs::SharedLogStore =
             std::sync::Arc::new(tokio::sync::Mutex::new(Some(store)));
         let mut session = super::LogSession::new(Some(id));
         session.name(&logs, "Tester").await;

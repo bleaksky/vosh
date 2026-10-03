@@ -1,9 +1,15 @@
-//! Shared log store state. Wraps `vosh_log::LogStore` in an async
-//! mutex so the session `io_loop`, the search commands, and the scrollback
-//! flush path can all reach the same `SQLite` handle.
+//! Your logs. This module keeps the session log and the scrollback ring,
+//! and [`forget_passwords`] blanks the lines in that log where you sent a
+//! password.
 //!
-//! Also owns a ring buffer of the most recent terminal lines that
-//! survives across runs as a plain text scrollback file.
+//! The shared log store wraps `vosh_log::LogStore` in an async mutex so
+//! the session `io_loop`, the search commands, and the scrollback flush
+//! path can all reach the same `SQLite` handle.
+//!
+//! The ring buffer holds the most recent terminal lines and survives
+//! across runs as a plain text scrollback file.
+
+pub(crate) mod forget_passwords;
 
 use std::collections::VecDeque;
 use std::path::PathBuf;

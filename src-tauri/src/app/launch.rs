@@ -13,7 +13,7 @@ use vosh_log::LogStore;
 
 use crate::app::state::SharedState;
 use crate::loadouts::wizard::journal::{self, WizardRun};
-use crate::{affect_full, loadout_store, log_state, profile_config, profile_set};
+use crate::{affect_full, loadout_store, logs, profile_config, profile_set};
 
 /// Every startup step, in order, as the app's setup hook runs them.
 pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
@@ -72,7 +72,7 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
                 error!(error = %e, "log store failed to open; logging disabled");
             }
         }
-        let scrollback_path = log_state::scrollback_path(&path);
+        let scrollback_path = logs::scrollback_path(&path);
         if let Ok(bytes) = std::fs::read(&scrollback_path) {
             let scrollback = state.scrollback.clone();
             tauri::async_runtime::block_on(async move {
@@ -319,7 +319,7 @@ const SCRIPTS_DIR: &str = "scripts";
 
 fn open_log_store(dir: &std::path::Path) -> Result<LogStore, Box<dyn std::error::Error>> {
     std::fs::create_dir_all(dir)?;
-    let path = log_state::log_db_path(dir);
+    let path = logs::log_db_path(dir);
     info!(path = %path.display(), "opening log store");
     Ok(LogStore::open(&path)?)
 }
