@@ -9,7 +9,7 @@ use vosh_automation::alias::Alias;
 use super::catalog::{
     catalog_path, load_global_catalog, save_global_catalog, GlobalCatalog, UNREAD_CATALOG_NOTICE,
 };
-use super::load_path_b_at_launch;
+use super::load_at_launch;
 use super::set::{
     load_loadout_set, loadouts_path, save_loadout_set, LoadoutSet, UNREAD_LOADOUTS_NOTICE,
 };
@@ -28,7 +28,7 @@ pub(super) fn tmpdir() -> PathBuf {
 }
 
 #[test]
-fn a_path_b_file_that_does_not_read_holds_both_files() {
+fn a_loadout_mode_file_that_does_not_read_holds_both_files() {
     let dir = tempfile::tempdir().unwrap();
     let mut catalog = GlobalCatalog::default();
     catalog.aliases.push(Alias::new("kk", "kick %1"));
@@ -37,7 +37,7 @@ fn a_path_b_file_that_does_not_read_holds_both_files() {
     let catalog_text = fs::read_to_string(catalog_path(dir.path())).unwrap();
 
     assert_eq!(
-        load_path_b_at_launch(dir.path()).unwrap_err(),
+        load_at_launch(dir.path()).unwrap_err(),
         [UNREAD_LOADOUTS_NOTICE]
     );
     // The session runs without your shared items, so a save from it
@@ -59,7 +59,7 @@ fn a_catalog_that_does_not_read_is_named_in_the_notice() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(catalog_path(dir.path()), "aliases = = [\n").unwrap();
     assert_eq!(
-        load_path_b_at_launch(dir.path()).unwrap_err(),
+        load_at_launch(dir.path()).unwrap_err(),
         [UNREAD_CATALOG_NOTICE]
     );
     assert!(save_global_catalog(dir.path(), &GlobalCatalog::default()).is_err());

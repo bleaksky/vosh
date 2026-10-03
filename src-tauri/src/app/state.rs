@@ -60,12 +60,12 @@ pub(crate) struct AppState {
     /// How full each affect was cast, per character, for the Affects
     /// pane's gauges. See [`crate::affects::full`].
     pub(crate) affect_full: crate::affects::full::AffectFull,
-    /// Path B authoring catalog. `Some` when the app started up with
-    /// `catalog.toml` present (Path B mode); `None` in legacy per-
+    /// The shared catalog of loadout mode. `Some` when the app started
+    /// up with `catalog.toml` present (loadout mode), `None` in per
     /// profile mode. Mutated alongside the live `Profile` so on-disk
     /// state stays in step with in-memory edits.
     pub(crate) global_catalog: Arc<Mutex<Option<crate::loadouts::catalog::GlobalCatalog>>>,
-    /// Path B loadout collection. Same `Some`/`None` semantics as
+    /// The loadouts of loadout mode. Same `Some`/`None` semantics as
     /// `global_catalog`. The active subset drives which catalog groups
     /// the runtime gates on (see [`crate::loadouts::gating::apply_loadout_state`]).
     pub(crate) loadout_set: Arc<Mutex<Option<crate::loadouts::set::LoadoutSet>>>,

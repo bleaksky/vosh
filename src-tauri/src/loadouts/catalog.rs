@@ -45,7 +45,7 @@ pub(crate) struct GlobalCatalog {
 
 impl GlobalCatalog {
     /// The catalog as the live profile holds it: its aliases, triggers,
-    /// macros, and enabled presets. Path B persistence writes this.
+    /// macros, and enabled presets. A save in loadout mode writes this.
     pub(crate) fn from_profile(profile: &crate::profile::live::Profile) -> Self {
         Self {
             aliases: profile.aliases.list().into_iter().cloned().collect(),
@@ -118,15 +118,15 @@ pub(crate) fn catalog_path(app_data: &Path) -> PathBuf {
     app_data.join(CATALOG_FILE)
 }
 
-/// True iff `catalog.toml` exists at the app data root. The wizard in
-/// Phase B3 is what writes that file the first time; until then this
-/// returns false and `AppState` stays on the legacy per-profile path.
-pub(crate) fn path_b_mode_active(app_data: &Path) -> bool {
+/// True when `catalog.toml` is in the app data folder, which is what
+/// puts Vosh in loadout mode. The wizard writes that file the first
+/// time, and until then Vosh runs in per profile mode.
+pub(crate) fn loadout_mode_on(app_data: &Path) -> bool {
     catalog_path(app_data).exists()
 }
 
 /// Load the global catalog. Missing file yields an empty catalog
-/// rather than an error so first-launch and Path-A-only installs do
+/// rather than an error so a first launch and a per profile install do
 /// not have to special-case absent state.
 pub(crate) fn load_global_catalog(app_data: &Path) -> Result<GlobalCatalog, LoadoutStoreError> {
     let path = catalog_path(app_data);
@@ -197,17 +197,17 @@ mod tests {
     }
 
     #[test]
-    fn path_b_mode_active_false_when_catalog_missing() {
+    fn loadout_mode_off_when_catalog_missing() {
         let dir = tmpdir();
-        assert!(!path_b_mode_active(&dir));
+        assert!(!loadout_mode_on(&dir));
         fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
-    fn path_b_mode_active_true_after_save() {
+    fn loadout_mode_on_after_catalog_save() {
         let dir = tmpdir();
         save_global_catalog(&dir, &GlobalCatalog::default()).unwrap();
-        assert!(path_b_mode_active(&dir));
+        assert!(loadout_mode_on(&dir));
         fs::remove_dir_all(&dir).ok();
     }
 

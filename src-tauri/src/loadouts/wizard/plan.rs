@@ -1,5 +1,5 @@
-//! Migration analyzer for the Path B "global catalog + loadouts"
-//! model. Reads every existing per-profile [`ProfileConfig`] and
+//! Migration analyzer for loadout mode, the "global catalog +
+//! loadouts" model. Reads every existing per-profile [`ProfileConfig`] and
 //! produces a [`MigrationPlan`] without touching disk.
 //!
 //! ## What it does

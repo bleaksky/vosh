@@ -9,7 +9,7 @@
 //!
 //! Today every alias / trigger / macro lives inside a specific
 //! profile, and switching profiles swaps the whole authored content
-//! base. Path B inverts that:
+//! base. Loadout mode inverts that:
 //!
 //!   - **[`GlobalCatalog`]** holds every item the user ever defined.
 //!     Items are gated for effective enable/disable by their `group`
@@ -57,9 +57,7 @@ pub(crate) enum LoadoutStoreError {
 /// Vosh then holds both files with [`crate::disk::atomic::hold_unread`],
 /// since the pair only makes sense together, and the error carries the
 /// sentences that tell you so.
-pub(crate) fn load_path_b_at_launch(
-    app_data: &Path,
-) -> Result<(GlobalCatalog, LoadoutSet), Vec<String>> {
+pub(crate) fn load_at_launch(app_data: &Path) -> Result<(GlobalCatalog, LoadoutSet), Vec<String>> {
     let catalog = load_global_catalog(app_data);
     let set = load_loadout_set(app_data);
     let mut notices = Vec::new();

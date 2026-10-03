@@ -12,13 +12,12 @@ use tracing::{error, info};
 use vosh_log::LogStore;
 
 use crate::app::state::SharedState;
-use crate::loadouts::catalog::{lay_catalog_over, path_b_mode_active, save_global_catalog};
-use crate::loadouts::load_path_b_at_launch;
+use crate::loadouts::catalog::{lay_catalog_over, loadout_mode_on, save_global_catalog};
 use crate::loadouts::presets::{adopt_catalog_presets, profile_preset_lists};
 use crate::loadouts::wizard::journal::{self, WizardRun};
 use crate::profile::file::load_at_launch;
 use crate::profile::set::ProfileSet;
-use crate::{affects, logs};
+use crate::{affects, loadouts, logs};
 
 /// Every startup step, in order, as the app's setup hook runs them.
 pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
@@ -192,16 +191,18 @@ pub(crate) async fn load_profiles(state: &SharedState, mut set: ProfileSet) {
 /// the active `enabled_groups` set. Returns true when loadout mode is
 /// live, so the caller can flip the input layer over.
 pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> bool {
-    if !path_b_mode_active(app_data) {
+    if !loadout_mode_on(app_data) {
         return false;
     }
-    let (mut catalog, set) = match load_path_b_at_launch(app_data) {
+    let (mut catalog, set) = match loadouts::load_at_launch(app_data) {
         Ok(files) => files,
         // A file that does not read keeps the session on the profile
         // files alone. Both files are held so no save writes a catalog
         // without your shared items, and the notices tell you so.
         Err(notices) => {
-            error!("Path B files present but failed to load; falling back to per-profile state");
+            error!(
+                "catalog.toml or loadouts.toml failed to load; falling back to per-profile state"
+            );
             state.add_launch_notices(notices);
             return false;
         }
@@ -240,7 +241,7 @@ pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> b
     lay_catalog_over(&mut *state.profile.lock().await, &catalog, Some(&set));
     *state.global_catalog.lock().await = Some(catalog);
     *state.loadout_set.lock().await = Some(set);
-    info!("loaded Path B catalog + loadout set");
+    info!("loaded catalog.toml and loadouts.toml");
     true
 }
 

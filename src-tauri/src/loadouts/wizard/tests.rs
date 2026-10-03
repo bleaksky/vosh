@@ -8,7 +8,7 @@ use crate::app::state::{AppState, SharedState};
 use crate::disk::save::tests::{launch_state, persist, read, UNREADABLE};
 use crate::disk::save::PERSIST_LOCK;
 use crate::loadouts::catalog::{catalog_path, save_global_catalog, GlobalCatalog};
-use crate::loadouts::load_path_b_at_launch;
+use crate::loadouts::load_at_launch;
 use crate::loadouts::set::{loadouts_path, save_loadout_set, Loadout, LoadoutSet};
 use crate::profile::file::ProfileConfig;
 use crate::profile::set::ProfileSet;
@@ -169,7 +169,7 @@ async fn a_catalog_that_does_not_read_is_held_and_never_replaced() {
     // Launch tells you and runs on the profile files alone.
     let state = launch_state(dir.path()).await;
     assert_eq!(
-        load_path_b_at_launch(dir.path()).unwrap_err(),
+        load_at_launch(dir.path()).unwrap_err(),
         [crate::loadouts::catalog::UNREAD_CATALOG_NOTICE]
     );
 
@@ -197,7 +197,7 @@ async fn a_loadouts_file_that_does_not_read_holds_the_catalog_too() {
 
     let state = launch_state(dir.path()).await;
     assert_eq!(
-        load_path_b_at_launch(dir.path()).unwrap_err(),
+        load_at_launch(dir.path()).unwrap_err(),
         [crate::loadouts::set::UNREAD_LOADOUTS_NOTICE]
     );
     assert_eq!(refused(&state, dir.path()).await, HELD);
@@ -213,7 +213,7 @@ async fn the_wizard_never_builds_over_a_catalog_you_already_use() {
     loadout_mode(&set, dir.path());
     let catalog = read(&catalog_path(dir.path()));
     let state = launch_state(dir.path()).await;
-    assert!(load_path_b_at_launch(dir.path()).is_ok());
+    assert!(load_at_launch(dir.path()).is_ok());
 
     assert_eq!(
         refused(&state, dir.path()).await,
@@ -343,7 +343,7 @@ async fn the_wizard_builds_a_catalog_once() {
         .await
         .unwrap();
     assert!(written);
-    let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+    let (catalog, _) = load_at_launch(dir.path()).unwrap();
     assert_eq!(catalog.aliases[0].name, "hh");
     // A run that wrote every file takes its journal out.
     assert!(!crate::loadouts::wizard::journal::journal_path(dir.path()).exists());
@@ -656,7 +656,7 @@ async fn the_wizard_keeps_off_a_preset_every_character_had_off() {
         .unwrap();
 
     let on = vec!["healing_basics".to_string(), "herb_labels".to_string()];
-    let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+    let (catalog, _) = load_at_launch(dir.path()).unwrap();
     assert_eq!(catalog.enabled_presets, Some(on.clone()));
 
     // The first launch in loadout mode, as either character, keeps
@@ -701,7 +701,7 @@ async fn the_preview_holds_the_shared_preset_list_and_each_characters_own() {
     apply_migration(&state, dir.path(), &[], LIBRARY, || {})
         .await
         .unwrap();
-    let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+    let (catalog, _) = load_at_launch(dir.path()).unwrap();
     assert_eq!(catalog.enabled_presets, Some(plan.shared_presets));
 }
 
@@ -739,7 +739,7 @@ async fn the_preview_counts_the_live_presets_of_a_profile_that_never_saved() {
     apply_migration(&state, dir.path(), &[], LIBRARY, || {})
         .await
         .unwrap();
-    let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+    let (catalog, _) = load_at_launch(dir.path()).unwrap();
     assert_eq!(catalog.enabled_presets, Some(plan.shared_presets));
 }
 
@@ -764,7 +764,7 @@ async fn the_preview_reads_the_files_after_a_profile_reset() {
     apply_migration_with(&state, dir.path(), &[], LIBRARY, &suppressed, || {})
         .await
         .unwrap();
-    let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+    let (catalog, _) = load_at_launch(dir.path()).unwrap();
     assert_eq!(catalog.enabled_presets, Some(plan.shared_presets));
 }
 
@@ -991,7 +991,7 @@ async fn the_wizard_keeps_every_setting_of_every_profile() {
         .await
         .unwrap();
 
-    let (catalog, loadouts) = load_path_b_at_launch(dir.path()).unwrap();
+    let (catalog, loadouts) = load_at_launch(dir.path()).unwrap();
     let leftover = &loadouts.active;
     assert!(leftover.is_empty(), "{leftover:?}");
     assert!(!loadouts.dormant);
@@ -1071,7 +1071,7 @@ async fn the_wizard_keeps_every_setting_of_every_profile() {
         assert!(saved.triggers.is_empty(), "{name}");
         assert!(saved.macros.is_empty(), "{name}");
         assert_eq!(settings(saved), before[n].2, "{name}");
-        let (saved_catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+        let (saved_catalog, _) = load_at_launch(dir.path()).unwrap();
         assert_eq!(
             item_rows(
                 &saved_catalog.aliases,
@@ -1129,7 +1129,7 @@ async fn each_loadout_turns_on_the_items_its_character_shared() {
     apply_migration(&state, dir.path(), &[], LIBRARY, || {})
         .await
         .unwrap();
-    let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+    let (catalog, _) = load_at_launch(dir.path()).unwrap();
     let group = |alias: &str| {
         let found = catalog.aliases.iter().find(|a| a.name == alias).unwrap();
         found.group.clone().unwrap()
@@ -1190,7 +1190,7 @@ async fn each_loadout_keeps_off_the_groups_its_character_had_off() {
     apply_migration(&state, dir.path(), &[], LIBRARY, || {})
         .await
         .unwrap();
-    let (_, loadouts) = load_path_b_at_launch(dir.path()).unwrap();
+    let (_, loadouts) = load_at_launch(dir.path()).unwrap();
     let groups = |name: &str| loadouts.get(name).unwrap().enabled_groups.clone();
     assert_eq!(groups("Healer"), ["(Healer)"]);
     let leftover = &groups("Test-Prompt");
@@ -2261,7 +2261,7 @@ async fn live_rows(state: &SharedState) -> Vec<String> {
 async fn a_save_right_after_a_switch_keeps_the_catalog() {
     let dir = tempfile::tempdir().unwrap();
     let (state, _) = converted_three(dir.path()).await;
-    let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+    let (catalog, _) = load_at_launch(dir.path()).unwrap();
     let rows = item_rows(&catalog.aliases, &catalog.triggers, &catalog.macros);
     assert_eq!(rows.len(), 18);
 
@@ -2275,7 +2275,7 @@ async fn a_save_right_after_a_switch_keeps_the_catalog() {
     }
     persist(&state, dir.path()).await;
 
-    let (saved, _) = load_path_b_at_launch(dir.path()).unwrap();
+    let (saved, _) = load_at_launch(dir.path()).unwrap();
     assert_eq!(
         item_rows(&saved.aliases, &saved.triggers, &saved.macros),
         rows
@@ -2343,7 +2343,7 @@ async fn a_switch_keeps_the_items_a_profile_file_holds_as_launch_does() {
     healer.save(&set.profile_path("Healer")).unwrap();
     // The catalog holds an alias, a trigger, and a macro of the
     // same name or key, each with another body.
-    let (mut catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+    let (mut catalog, _) = load_at_launch(dir.path()).unwrap();
     catalog
         .triggers
         .push(send_trigger("Healer greet", "^hello$", "say shared"));

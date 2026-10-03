@@ -158,7 +158,7 @@ pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
     let macro_groups_changed = {
         let mut guard = state.loadout_set.lock().await;
         let Some(set) = guard.as_mut() else {
-            return Err("Path B not active".into());
+            return Err("loadout mode is off".into());
         };
         // Filter to known loadout names. A stale name (e.g. from a
         // future-truncated payload) is silently dropped rather than
