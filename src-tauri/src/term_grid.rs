@@ -1991,13 +1991,13 @@ mod tests {
     fn terminal_cursor_reports_the_shared_grid() {
         let _shared = lock_shared_grid_for_test();
         *grid_slot().lock().unwrap() = None;
-        assert_eq!(crate::commands::terminal_cursor(), None, "no grid yet");
+        assert_eq!(crate::ipc::terminal::terminal_cursor(), None, "no grid yet");
         blank_shared_grid_for_test(40, 10);
         let mut out = Output::new(false);
         out.text(b"You are hungry.\r\n");
         out.text(&marked(3, b"<1020hp> "));
         feed_session_output(&out, Some(out.id()));
-        let report = serde_json::to_value(crate::commands::terminal_cursor()).expect("json");
+        let report = serde_json::to_value(crate::ipc::terminal::terminal_cursor()).expect("json");
         assert_eq!(
             report,
             serde_json::json!({
@@ -2016,12 +2016,17 @@ mod tests {
     fn terminal_screen_rows_reads_the_shared_screen_as_text() {
         let _shared = lock_shared_grid_for_test();
         *grid_slot().lock().unwrap() = None;
-        assert_eq!(crate::commands::terminal_screen_rows(), None, "no grid yet");
+        assert_eq!(
+            crate::ipc::terminal::terminal_screen_rows(),
+            None,
+            "no grid yet"
+        );
         blank_shared_grid_for_test(20, 4);
         let mut out = Output::new(false);
         out.text("You rest.\r\n<1020hp> 中文 ".as_bytes());
         feed_session_output(&out, Some(out.id()));
-        let report = serde_json::to_value(crate::commands::terminal_screen_rows()).expect("json");
+        let report =
+            serde_json::to_value(crate::ipc::terminal::terminal_screen_rows()).expect("json");
         // A wide character takes two cells and reads once.
         assert_eq!(
             report,
