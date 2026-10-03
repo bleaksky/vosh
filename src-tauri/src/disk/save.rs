@@ -2,6 +2,23 @@
 //! file and global.toml, and in loadout mode to catalog.toml and
 //! loadouts.toml too. A durable change saves a couple of seconds after
 //! its burst settles, and [`PERSIST_LOCK`] keeps two writes off one file.
+//!
+//! The lock order. A step that holds two of these locks at once takes
+//! them in this order, so no two tasks wait on each other for good.
+//!
+//! 1. [`PERSIST_LOCK`]. Nothing waits for it while holding another lock,
+//!    so `#profile save`, which runs under the profile lock, only tries
+//!    it.
+//! 2. The loadouts and the plugin manager in [`AppState`].
+//! 3. The profile.
+//! 4. The profile set. The save in loadout mode reads the sharing scope
+//!    from it while it holds the profile, so a step that holds the set
+//!    never waits for the profile.
+//!
+//! The session slot comes before every lock the session task takes, and
+//! the log before the log reader. docs/architecture.md says why.
+//!
+//! [`AppState`]: crate::app::state::AppState
 
 use tauri::{AppHandle, Manager};
 use tracing::warn;
