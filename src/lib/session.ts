@@ -241,7 +241,7 @@ export interface TriggerRecord {
    *  so #prompt-style triggers can capture from prompt text that
    *  arrives without a trailing newline. 'room' fires only on the
    *  lines a room look lists after its exits line, the armies, the
-   *  things and the people in the room (src-tauri/src/room_block.rs).
+   *  things and the people in the room (src-tauri/src/session/room_block.rs).
    *  'room_target' fires only on the line of the person you target with
    *  `tar` among them. Omitted on the wire when the value is 'line' (the
    *  backend's default). */

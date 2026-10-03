@@ -91,7 +91,7 @@ const BUILT_AT_RUN_TIME: &[BuiltAtRunTime] = &[
         names: Names::Family("session://gmcp/"),
         why: "onGmcpPackage hears one GMCP package. The app sends each package \
               on session://gmcp/ and the package name with its dots turned to \
-              dashes, in session.rs.",
+              dashes, in session/gmcp.rs.",
     },
     BuiltAtRunTime {
         function: "emitChanged",
