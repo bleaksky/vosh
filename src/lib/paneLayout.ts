@@ -3,7 +3,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { pendingWrites } from './pendingWrites';
 
 // The one-window panel's pane tree, saved per profile. Mirrors
-// PaneLayoutPersist and PaneNode in src-tauri/src/profile_config.rs.
+// PaneLayoutPersist and PaneNode in src-tauri/src/profile/panes.rs.
 //
 // The backend owns the saved copy. getPaneLayout reads the active
 // profile's tree, setPaneLayout writes one (debounced for splitter

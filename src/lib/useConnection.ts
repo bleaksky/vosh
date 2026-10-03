@@ -58,7 +58,7 @@ export interface KnownWorld {
 }
 
 /** Worlds known by name. Any other host shows as typed. Mirrors
- *  KNOWN_WORLDS in src-tauri/src/profile_set.rs, where a test reads this
+ *  KNOWN_WORLDS in src-tauri/src/profile/worlds.rs, where a test reads this
  *  list. */
 export const KNOWN_WORLDS: readonly KnownWorld[] = [
   {

@@ -182,7 +182,7 @@ export function affectMark(row: AffectRow): AffectMark | null {
 
 /** Hours at full for each affect key, the most Vosh has seen for the
  *  affect on this character since it was last cast. The backend keeps
- *  them (src-tauri/src/affect_full.rs), the one place that decides
+ *  them (src-tauri/src/affects/full.rs), the one place that decides
  *  full, and nothing here computes one. An affect with no entry reads
  *  as full. */
 export type AffectFulls = Readonly<Record<string, number>>;
