@@ -779,7 +779,7 @@ describe('the help on folding groups in Automation', () => {
   it('says how a heading folds its group and what the list remembers', () => {
     const text = body('automate.first-alias');
     expect(text).toContain(
-      'Triggers, Aliases, and Macros each list your items under a heading for every group.',
+      'Triggers, Aliases, and Macros each list your items under a heading for every group, and Presets under a heading for each category.',
     );
     expect(text).toContain(
       'Click a heading to fold its group away, and click it again to open it.',
