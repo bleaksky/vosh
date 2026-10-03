@@ -30,6 +30,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED};
+use crate::disk::paths;
 use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::profile::file::{ConfigError, ProfileConfig};
 use crate::profile::login_match::AutoMatch;
@@ -107,10 +108,6 @@ pub(crate) struct ProfilesIndex {
     pub notices: Vec<String>,
 }
 
-const INDEX_FILENAME: &str = "profiles.toml";
-const PROFILES_DIR: &str = "profiles";
-const LEGACY_PROFILE_FILENAME: &str = "profile.toml";
-const GLOBAL_FILENAME: &str = "global.toml";
 pub(crate) const DEFAULT_PROFILE_NAME: &str = "default";
 
 /// Live in-memory view of the profile collection. Held in `AppState`
@@ -151,8 +148,7 @@ impl ProfileSet {
     /// install it returns a single-entry "default" set whose
     /// profile file does not exist yet.
     pub(crate) fn load_or_migrate(root: PathBuf) -> Result<Self, ProfileSetError> {
-        let index_path = root.join(INDEX_FILENAME);
-        let profiles_dir = root.join(PROFILES_DIR);
+        let index_path = paths::profiles_index_path(&root);
 
         if index_path.exists() {
             let text = std::fs::read_to_string(&index_path)?;
@@ -176,10 +172,10 @@ impl ProfileSet {
 
         // No index file. Migrate the legacy single-profile layout if
         // present, otherwise seed a fresh empty index.
-        std::fs::create_dir_all(&profiles_dir)?;
-        let legacy = root.join(LEGACY_PROFILE_FILENAME);
+        std::fs::create_dir_all(paths::profiles_dir(&root))?;
+        let legacy = paths::root_profile_path(&root);
         if legacy.exists() {
-            let target = profiles_dir.join(format!("{DEFAULT_PROFILE_NAME}.toml"));
+            let target = paths::profile_path(&root, DEFAULT_PROFILE_NAME);
             std::fs::rename(&legacy, &target)?;
         }
 
@@ -200,7 +196,7 @@ impl ProfileSet {
     }
 
     pub(crate) fn save_index(&self) -> Result<(), ProfileSetError> {
-        let path = self.root.join(INDEX_FILENAME);
+        let path = paths::profiles_index_path(&self.root);
         let body = toml::to_string_pretty(&self.index)?;
         // Atomic write with rotating backups; same protection the
         // per-profile and global config files get. A botched index
@@ -219,14 +215,14 @@ impl ProfileSet {
     }
 
     pub(crate) fn profile_path(&self, name: &str) -> PathBuf {
-        self.root.join(PROFILES_DIR).join(format!("{name}.toml"))
+        paths::profile_path(&self.root, name)
     }
 
     /// Path to the shared global.toml. Holds UI preferences (theme,
     /// font, dock layout, keep-last, auto-update) that survive
     /// profile switches.
     pub(crate) fn global_path(&self) -> PathBuf {
-        self.root.join(GLOBAL_FILENAME)
+        paths::global_path(&self.root)
     }
 
     pub(crate) fn list(&self) -> &[ProfileEntry] {
@@ -632,8 +628,8 @@ pub(crate) mod tests {
         let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         assert_eq!(set.active_name(), DEFAULT_PROFILE_NAME);
         assert_eq!(set.list().len(), 1);
-        assert!(dir.path().join(INDEX_FILENAME).exists());
-        assert!(dir.path().join(PROFILES_DIR).exists());
+        assert!(paths::profiles_index_path(dir.path()).exists());
+        assert!(paths::profiles_dir(dir.path()).exists());
     }
 
     #[test]
@@ -645,7 +641,7 @@ pub(crate) mod tests {
         // A step that already ran leaves nothing more.
         set.record_with_notice("step", Some("Twice.".to_string()))
             .unwrap();
-        let text = std::fs::read_to_string(dir.path().join(INDEX_FILENAME)).unwrap();
+        let text = std::fs::read_to_string(paths::profiles_index_path(dir.path())).unwrap();
         assert!(text.contains("notices = [\"Once.\"]"), "{text}");
 
         let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
@@ -655,7 +651,7 @@ pub(crate) mod tests {
         assert!(leftover.is_empty(), "{leftover:?}");
         let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         assert!(set.index.notices.is_empty(), "the take saved");
-        let text = std::fs::read_to_string(dir.path().join(INDEX_FILENAME)).unwrap();
+        let text = std::fs::read_to_string(paths::profiles_index_path(dir.path())).unwrap();
         assert!(!text.contains("notices"), "{text}");
 
         // A step with nothing to say is still recorded.
@@ -669,16 +665,13 @@ pub(crate) mod tests {
     #[test]
     fn migrates_legacy_profile_toml() {
         let dir = tempdir().unwrap();
-        let legacy = dir.path().join(LEGACY_PROFILE_FILENAME);
+        let legacy = paths::root_profile_path(dir.path());
         std::fs::write(&legacy, "# pretend this is a profile\n").unwrap();
 
         let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         assert_eq!(set.active_name(), DEFAULT_PROFILE_NAME);
         assert!(!legacy.exists(), "legacy file should be moved");
-        let new = dir
-            .path()
-            .join(PROFILES_DIR)
-            .join(format!("{DEFAULT_PROFILE_NAME}.toml"));
+        let new = paths::profiles_dir(dir.path()).join(format!("{DEFAULT_PROFILE_NAME}.toml"));
         assert!(new.exists(), "should be at profiles/default.toml now");
     }
 
@@ -843,7 +836,7 @@ pub(crate) mod tests {
         set.create("alt").unwrap();
         // A folder where the index writes its temporary file makes the
         // save fail.
-        std::fs::create_dir(dir.path().join(format!("{INDEX_FILENAME}.tmp"))).unwrap();
+        std::fs::create_dir(dir.path().join("profiles.toml.tmp")).unwrap();
         assert!(set.switch("alt").is_err());
         assert_eq!(set.active_name(), DEFAULT_PROFILE_NAME);
     }

@@ -60,9 +60,6 @@ use crate::affects::snapshot::AFFECTS_PACKAGE;
 use crate::app::events::{broadcast, AFFECT_FULL_CHANGED};
 use crate::app::state::SharedState;
 
-/// The file under the app data folder.
-pub(crate) const FILE_NAME: &str = "affect_full.toml";
-
 /// The shape this build writes.
 const FILE_VERSION: i64 = 1;
 
@@ -595,6 +592,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::disk::paths::affect_full_path;
 
     fn list(affects: &[(&str, i64)]) -> Value {
         json!({
@@ -619,7 +617,7 @@ mod tests {
     /// A store over its own temporary folder, never app data.
     fn store_in(dir: &tempfile::TempDir) -> AffectFull {
         let store = AffectFull::default();
-        store.set_path(dir.path().join(FILE_NAME));
+        store.set_path(affect_full_path(dir.path()));
         store
     }
 
@@ -762,12 +760,12 @@ mod tests {
         let store = store_in(&dir);
         seen(&store, &[("armor", 48)]);
         assert!(!store.flush());
-        assert!(!dir.path().join(FILE_NAME).exists());
+        assert!(!affect_full_path(dir.path()).exists());
         // Once the game names the character, the map built so far is its.
         store.character_known(ILSABET.into());
         assert!(store.flush());
         assert_eq!(store.writes(), 1);
-        let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
+        let text = std::fs::read_to_string(affect_full_path(dir.path())).unwrap();
         assert!(text.contains("version = 1"), "{text}");
         assert!(text.contains("armor = 48"), "{text}");
     }
@@ -789,7 +787,7 @@ mod tests {
     #[test]
     fn a_login_that_changes_no_full_writes_nothing() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join(FILE_NAME);
+        let path = affect_full_path(dir.path());
         let text = "version = 1\n\n[characters.\"aabahran.com:4000 ilsabet\"]\narmor = 48\n";
         // The name first, then the list, and the list first, then the name.
         for name_first in [true, false] {
@@ -813,7 +811,7 @@ mod tests {
     #[test]
     fn a_login_drops_the_saved_fulls_of_affects_not_on_you() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join(FILE_NAME);
+        let path = affect_full_path(dir.path());
         std::fs::write(
             &path,
             "version = 1\n\n[characters.\"aabahran.com:4000 ilsabet\"]\narmor = 48\nfly = 53\n",
@@ -858,7 +856,7 @@ mod tests {
         assert!(!store.flush(), "the file keeps the fulls");
         store.disconnect();
         assert_eq!(store.writes(), 1);
-        let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
+        let text = std::fs::read_to_string(affect_full_path(dir.path())).unwrap();
         let table: toml::Table = text.parse().unwrap();
         assert_eq!(
             map_of(&table["characters"][ILSABET]),
@@ -915,7 +913,7 @@ mod tests {
         store.character_known("aabahran.com:4000 ondrevar".into());
         assert_eq!(seen(&store, &[("armor", 20)]), Some(map(&[("armor", 20)])));
         store.disconnect();
-        let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
+        let text = std::fs::read_to_string(affect_full_path(dir.path())).unwrap();
         let table: toml::Table = text.parse().unwrap();
         let characters = table["characters"].as_table().unwrap();
         assert_eq!(map_of(&characters[ILSABET]), map(&[("armor", 48)]));
@@ -972,7 +970,7 @@ mod tests {
     #[test]
     fn the_file_keeps_other_characters_and_fields_it_does_not_know() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join(FILE_NAME);
+        let path = affect_full_path(dir.path());
         std::fs::write(
             &path,
             "version = 1\nnote = \"kept\"\n\n[characters.\"aabahran.com:4000 ondrevar\"]\nhaste = 26\n\n[characters.\"aabahran.com:4000 ilsabet\"]\narmor = 12\n\"stone skin\" = \"fifty\"\n",
@@ -1010,7 +1008,7 @@ mod tests {
     #[test]
     fn a_file_that_does_not_read_is_left_alone() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join(FILE_NAME);
+        let path = affect_full_path(dir.path());
         std::fs::write(&path, "this is [not toml").unwrap();
         let store = store_in(&dir);
         store.character_known(ILSABET.into());
@@ -1031,7 +1029,7 @@ mod tests {
         assert_eq!(store.writes(), 1, "Ilsabet's fulls are written first");
         assert!(store.map().is_empty());
         assert_eq!(seen(&store, &[("armor", 20)]), Some(map(&[("armor", 20)])));
-        let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
+        let text = std::fs::read_to_string(affect_full_path(dir.path())).unwrap();
         assert!(text.contains("armor = 48"), "{text}");
     }
 

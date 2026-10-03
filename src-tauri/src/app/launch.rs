@@ -12,12 +12,13 @@ use tracing::{error, info};
 use vosh_log::LogStore;
 
 use crate::app::state::SharedState;
+use crate::disk::paths;
+use crate::loadouts;
 use crate::loadouts::catalog::{lay_catalog_over, loadout_mode_on, save_global_catalog};
 use crate::loadouts::presets::{adopt_catalog_presets, profile_preset_lists};
 use crate::loadouts::wizard::journal::{self, WizardRun};
 use crate::profile::file::load_at_launch;
 use crate::profile::set::ProfileSet;
-use crate::{affects, loadouts, logs};
 
 /// Every startup step, in order, as the app's setup hook runs them.
 pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
@@ -36,9 +37,7 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
         let _ = crate::input::APP_DATA_DIR.set(path.clone());
         // How full each affect was cast, per character, for the
         // Affects pane's gauges. Read when the game names you.
-        state
-            .affect_full
-            .set_path(path.join(affects::full::FILE_NAME));
+        state.affect_full.set_path(paths::affect_full_path(&path));
 
         // The profile set and the active profile, then the
         // shared catalog and loadouts in loadout mode. See `load`.
@@ -76,7 +75,7 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
                 error!(error = %e, "log store failed to open; logging disabled");
             }
         }
-        let scrollback_path = logs::scrollback_path(&path);
+        let scrollback_path = paths::scrollback_path(&path);
         if let Ok(bytes) = std::fs::read(&scrollback_path) {
             let scrollback = state.scrollback.clone();
             tauri::async_runtime::block_on(async move {
@@ -86,7 +85,7 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
             info!(path = %scrollback_path.display(), "loaded scrollback");
         }
 
-        let plugins_dir = path.join("plugins");
+        let plugins_dir = paths::plugins_dir(&path);
         let _ = std::fs::create_dir_all(&plugins_dir);
         crate::app::plugins::seed_example_plugins(&plugins_dir);
         tauri::async_runtime::block_on(crate::app::plugins::load_enabled_plugins(
@@ -251,16 +250,13 @@ pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> b
 /// reads or writes it.
 fn create_scripts_dir(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let dir = app.path().app_data_dir()?;
-    std::fs::create_dir_all(dir.join(SCRIPTS_DIR))?;
+    std::fs::create_dir_all(paths::scripts_dir(&dir))?;
     Ok(())
 }
 
-/// The folder under the app data folder that holds Lua scripts.
-const SCRIPTS_DIR: &str = "scripts";
-
 fn open_log_store(dir: &std::path::Path) -> Result<LogStore, Box<dyn std::error::Error>> {
     std::fs::create_dir_all(dir)?;
-    let path = logs::log_db_path(dir);
+    let path = paths::log_db_path(dir);
     info!(path = %path.display(), "opening log store");
     Ok(LogStore::open(&path)?)
 }

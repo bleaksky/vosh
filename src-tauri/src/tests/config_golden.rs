@@ -33,13 +33,10 @@ use vosh_prompt::config::{AabahranCapture, CaptureSource, RegexCapture};
 use vosh_prompt::{CaptureConfig, PromptConfig, PromptShow};
 
 use crate::app::state::{AppState, SharedState};
+use crate::disk::paths::{catalog_path, loadouts_path};
 use crate::disk::save::PERSIST_LOCK;
-use crate::loadouts::catalog::{
-    catalog_path, load_global_catalog, save_global_catalog, GlobalCatalog,
-};
-use crate::loadouts::set::{
-    load_loadout_set, loadouts_path, save_loadout_set, Loadout, LoadoutSet,
-};
+use crate::loadouts::catalog::{load_global_catalog, save_global_catalog, GlobalCatalog};
+use crate::loadouts::set::{load_loadout_set, save_loadout_set, Loadout, LoadoutSet};
 use crate::profile::file::{GroupFolders, PluginsPersist, ProfileConfig};
 use crate::profile::live::{Macro, Timer};
 use crate::profile::login_match::AutoMatch;

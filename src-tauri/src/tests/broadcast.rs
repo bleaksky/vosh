@@ -353,5 +353,5 @@ fn a_loadout_switch_tells_the_command_line_when_a_macro_group_turned() {
 
     assert_eq!(heard, want);
     // The switch saved loadouts.toml in the scratch folder.
-    assert!(crate::loadouts::set::loadouts_path(dir.path()).exists());
+    assert!(crate::disk::paths::loadouts_path(dir.path()).exists());
 }

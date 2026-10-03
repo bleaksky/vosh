@@ -1,7 +1,7 @@
 //! loadouts.toml, which holds the loadouts you have and which of them
 //! are on, and the switch that turns them on and off.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
@@ -12,10 +12,8 @@ use super::LoadoutStoreError;
 use crate::app::events::{broadcast, MACRO_GROUPS_CHANGED};
 use crate::app::state::SharedState;
 use crate::disk::atomic::write_with_backup;
+use crate::disk::paths::loadouts_path;
 use crate::profile::login_match::AutoMatch;
-
-/// Filename of the loadout collection inside the app data directory.
-const LOADOUTS_FILE: &str = "loadouts.toml";
 
 /// One named loadout. A loadout has no items of its own — it only
 /// references groups in the global catalog. Each character's vars,
@@ -108,11 +106,6 @@ impl LoadoutSet {
         }
         out
     }
-}
-
-/// Path to `loadouts.toml` under the given app data directory.
-pub(crate) fn loadouts_path(app_data: &Path) -> PathBuf {
-    app_data.join(LOADOUTS_FILE)
 }
 
 /// Load the loadout collection. Missing file yields an empty

@@ -12,7 +12,6 @@
 pub(crate) mod forget_passwords;
 
 use std::collections::VecDeque;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
@@ -171,14 +170,6 @@ impl Scrollback {
 }
 
 pub(crate) type SharedScrollback = Arc<Mutex<Scrollback>>;
-
-pub(crate) fn scrollback_path(base: &std::path::Path) -> PathBuf {
-    base.join("scrollback.txt")
-}
-
-pub(crate) fn log_db_path(base: &std::path::Path) -> PathBuf {
-    base.join("logs.sqlite")
-}
 
 #[cfg(test)]
 mod tests {

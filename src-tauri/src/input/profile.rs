@@ -4,6 +4,7 @@
 use vosh_automation::vars::Scope;
 
 use super::{split_first_word, InputResult, APP_DATA_DIR, PATH_B_ACTIVE};
+use crate::disk::paths;
 use crate::import::tintin;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
@@ -172,10 +173,10 @@ pub(super) fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputRes
 /// a stray, and a later launch without an index would move it over the
 /// default profile.
 fn profile_path(app_data: &std::path::Path) -> Option<std::path::PathBuf> {
-    let body = std::fs::read_to_string(app_data.join("profiles.toml")).ok()?;
+    let body = std::fs::read_to_string(paths::profiles_index_path(app_data)).ok()?;
     let value = body.parse::<toml::Value>().ok()?;
     let active = value.get("active")?.as_str()?;
-    Some(app_data.join("profiles").join(format!("{active}.toml")))
+    Some(paths::profile_path(app_data, active))
 }
 
 fn expand_home(path: &str) -> std::path::PathBuf {
