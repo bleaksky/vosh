@@ -5,9 +5,9 @@
 
 use tauri::{AppHandle, State};
 
-use crate::app::events::{broadcast, CHAT_COLORS_CHANGED};
+use crate::app::events::CHAT_COLORS_CHANGED;
 use crate::app::state::{ui_config_generation, SharedState};
-use crate::disk::save::persist_profile;
+use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
 use crate::fonts::{cached_fonts, enumerate_fonts, FontEntry, FONTS_CACHE};
 
 /// The Settings payload. Every field falls back to the default a fresh
@@ -445,9 +445,7 @@ async fn send_chat_colors(
     let Some(colors) = changed else {
         return;
     };
-    let shared: SharedState = state.clone();
-    persist_profile(app, &shared).await;
-    broadcast(app, CHAT_COLORS_CHANGED, &colors);
+    save_then_broadcast(app, state, SavePolicy::Now, CHAT_COLORS_CHANGED, &colors).await;
 }
 
 /// Write a chat color pick onto the live UI config. The channel matches
