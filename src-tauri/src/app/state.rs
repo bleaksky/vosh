@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
+use crate::app::plugins::SharedPluginManager;
 use crate::log_state::{SharedLogStore, SharedScrollback};
-use crate::plugins::SharedPluginManager;
 use crate::profile::Profile;
 use crate::script_state::SharedTimers;
 use crate::session::SessionHandle;
