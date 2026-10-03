@@ -116,7 +116,7 @@ impl Backdrop {
 
     /// Give an open window this backdrop's ground. Its appearance is the
     /// page's to set, since the page follows the theme itself.
-    fn redress<R: Runtime>(self, window: &Window<R>) {
+    pub(crate) fn redress<R: Runtime>(self, window: &Window<R>) {
         if PAINTS_WINDOW {
             let _ = window.set_background_color(self.window_color());
         }
@@ -124,7 +124,10 @@ impl Backdrop {
 }
 
 /// Keep a reported backdrop for the next window.
-fn record(background: Option<&str>, appearance: Option<&str>) -> Result<Backdrop, String> {
+pub(crate) fn record(
+    background: Option<&str>,
+    appearance: Option<&str>,
+) -> Result<Backdrop, String> {
     let backdrop = parse(background, appearance)
         .ok_or_else(|| format!("not a window backdrop: {background:?} {appearance:?}"))?;
     set(backdrop);
@@ -133,26 +136,7 @@ fn record(background: Option<&str>, appearance: Option<&str>) -> Result<Backdrop
 
 /// The windows that open on the reported backdrop and take each new
 /// ground while open.
-const DRESSED_WINDOWS: [&str; 2] = ["settings", "help"];
-
-/// A theme paint in a window reports the ground and appearance a new
-/// window should open on. An open Settings or Help window takes the
-/// ground now, so a theme change while it is open leaves no old color
-/// under it.
-#[tauri::command]
-pub(crate) fn window_backdrop_set(
-    app: AppHandle,
-    background: Option<String>,
-    appearance: Option<String>,
-) -> Result<(), String> {
-    let backdrop = record(background.as_deref(), appearance.as_deref())?;
-    for label in DRESSED_WINDOWS {
-        if let Some(window) = app.get_webview_window(label) {
-            backdrop.redress(&window.as_ref().window());
-        }
-    }
-    Ok(())
-}
+pub(crate) const DRESSED_WINDOWS: [&str; 2] = ["settings", "help"];
 
 /// A window beside the main one that loads the same bundle with its own
 /// `?view=`, like Settings and Help. Each opens hidden on the theme's

@@ -14,4 +14,5 @@ pub(crate) mod terminal;
 pub(crate) mod tick;
 pub(crate) mod ui_config;
 pub(crate) mod updater;
+pub(crate) mod windows;
 pub(crate) mod wizard;

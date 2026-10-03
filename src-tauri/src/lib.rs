@@ -9,7 +9,6 @@ mod app_menu;
 #[cfg(native_surface)]
 mod cell_render;
 mod characters;
-mod commands;
 #[cfg(test)]
 mod config_golden_tests;
 mod connection;
@@ -57,7 +56,6 @@ mod tintin_import;
 mod upgrade_order_tests;
 
 use app::state::{AppState, SharedState};
-use commands::{app_quit, open_help_window, open_settings_window};
 use fonts::handle_font_uri;
 
 pub fn run() {
@@ -165,18 +163,18 @@ pub fn run() {
             ipc::profiles::profile_resolve_match,
             ipc::wizard::migration_analyze,
             ipc::wizard::migration_apply,
-            app_quit,
-            commands::launch_notices_take,
-            app::exit::pending_writes_flushed,
+            ipc::windows::app_quit,
+            ipc::windows::launch_notices_take,
+            ipc::windows::pending_writes_flushed,
             ipc::loadouts::loadouts_get_state,
             ipc::loadouts::loadouts_set_active,
             ipc::tick::tick_get_config,
             ipc::tick::tick_set_config,
             ipc::profiles::profile_get_scope,
             ipc::profiles::profile_set_scope,
-            open_settings_window,
-            open_help_window,
-            app::windows::window_backdrop_set,
+            ipc::windows::open_settings_window,
+            ipc::windows::open_help_window,
+            ipc::windows::window_backdrop_set,
             ipc::terminal::highlight_ground_set,
             ipc::panes::pane_layout_get,
             ipc::panes::pane_layout_set,
@@ -226,8 +224,8 @@ pub fn run() {
             ipc::automation::timers_delete,
             ipc::automation::import_detect,
             ipc::automation::import_apply,
-            app_menu::menu_set_state,
-            app_menu::menu_copy,
+            ipc::windows::menu_set_state,
+            ipc::windows::menu_copy,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

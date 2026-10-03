@@ -178,7 +178,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
         for window in app.webview_windows().into_values() {
             let answer = window.clone();
             window.listen(FLUSH_PENDING_WRITES, move |_| {
-                crate::app::exit::pending_writes_flushed(answer.clone());
+                crate::ipc::windows::pending_writes_flushed(answer.clone());
             });
         }
         let listening = Heard::listen(&app, &[FLUSH_PENDING_WRITES]);
