@@ -723,7 +723,7 @@ const NOT_CONNECTED: &[u8] = b"\r\n[not connected]\r\n";
 /// Print the lines a typed line echoes, such as a slash command's
 /// reply, one to a row. They go through [`session::emit_output`] like
 /// every other terminal write, so the native renderer shows them too.
-fn echo_lines<R: tauri::Runtime>(app: &AppHandle<R>, lines: &[String]) {
+pub(crate) fn echo_lines<R: tauri::Runtime>(app: &AppHandle<R>, lines: &[String]) {
     if lines.is_empty() {
         return;
     }
@@ -2712,7 +2712,7 @@ const SWITCH_MIGRATION_PENDING: &str =
 
 /// Steps 1 to 3 of [`apply_profile_switch`] over the app data folder
 /// `app_data`, so a test can run them over a folder of its own.
-async fn switch_profile(
+pub(crate) async fn switch_profile(
     state: &SharedState,
     app_data: Option<&std::path::Path>,
     name: &str,
@@ -3780,7 +3780,7 @@ pub(crate) async fn migration_analyze(
 /// [`migration_analyze`] over the app data folder `app_data`, so a test
 /// can run it over a folder of its own. `library` holds the id of every
 /// preset in the library the frontend installs from.
-async fn analyze_migration(
+pub(crate) async fn analyze_migration(
     state: &SharedState,
     app_data: &std::path::Path,
     library: &[&str],
@@ -4016,12 +4016,12 @@ pub(crate) async fn migration_apply(
 }
 
 /// What every window hears once the wizard wrote its files.
-const MIGRATION_APPLIED_EVENT: &str = "vosh://migration-applied";
+pub(crate) const MIGRATION_APPLIED_EVENT: &str = "vosh://migration-applied";
 
 /// Tell every window once that the wizard wrote its files. The settings
 /// window runs the wizard and the main window listens, and puts the
 /// notice up once for each time it hears the event.
-fn announce_migration_applied<R: tauri::Runtime>(app: &AppHandle<R>) {
+pub(crate) fn announce_migration_applied<R: tauri::Runtime>(app: &AppHandle<R>) {
     broadcast(app, MIGRATION_APPLIED_EVENT, &());
 }
 
@@ -4032,7 +4032,7 @@ fn announce_migration_applied<R: tauri::Runtime>(app: &AppHandle<R>) {
 /// puts back every file the run changed and skips `written`, unless a
 /// file stays changed. The journal then stays for the next launch to
 /// finish the run, and `written` runs.
-async fn apply_migration(
+pub(crate) async fn apply_migration(
     state: &SharedState,
     app_data: &std::path::Path,
     resolutions: &[ConflictResolution],
@@ -4420,7 +4420,7 @@ pub(crate) async fn loadouts_set_active(app: AppHandle, active: Vec<String>) -> 
 /// When the switch turned a macro group on or off, every window hears it
 /// once the locks are released, since the command line keeps its own map
 /// of the macro keys that fire.
-async fn set_active_loadouts<R: tauri::Runtime>(
+pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
     app: &AppHandle<R>,
     app_data: &std::path::Path,
     active: Vec<String>,
@@ -9181,15 +9181,3 @@ mod tests {
         }
     }
 }
-
-#[cfg(test)]
-#[path = "wizard_roundtrip_tests.rs"]
-mod wizard_roundtrip_tests;
-
-#[cfg(test)]
-#[path = "broadcast_tests.rs"]
-mod broadcast_tests;
-
-#[cfg(all(test, native_surface))]
-#[path = "echo_tests.rs"]
-mod echo_tests;

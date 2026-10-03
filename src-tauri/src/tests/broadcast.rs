@@ -14,8 +14,8 @@ use std::sync::{Arc, Mutex};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{App, EventId, Listener, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-use super::{AppState, SharedState};
 use crate::characters::{PROFILE_CHANGED_EVENT, SESSION_IDENTITY_EVENT};
+use crate::commands::{AppState, SharedState};
 use crate::exit_flush::FLUSH_REQUEST_EVENT;
 use crate::input::LineEffects;
 use crate::list_events::{
@@ -117,7 +117,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
     let mut want = Report::new();
 
     let listening = Heard::listen(&app, &["vosh://any-event"]);
-    super::broadcast(handle, "vosh://any-event", &"payload");
+    crate::commands::broadcast(handle, "vosh://any-event", &"payload");
     listening.finish("broadcast", &mut heard, &mut want);
 
     let listening = Heard::listen(
@@ -144,8 +144,8 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
     crate::characters::broadcast_profile_changed(handle, "Ilsabet");
     listening.finish("broadcast_profile_changed", &mut heard, &mut want);
 
-    let listening = Heard::listen(&app, &[super::MIGRATION_APPLIED_EVENT]);
-    super::announce_migration_applied(handle);
+    let listening = Heard::listen(&app, &[crate::commands::MIGRATION_APPLIED_EVENT]);
+    crate::commands::announce_migration_applied(handle);
     listening.finish("announce_migration_applied", &mut heard, &mut want);
 
     tauri::async_runtime::block_on(async {
@@ -155,22 +155,22 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
 
         // A profile switch, an import, and `#profile load` and `reset`
         // send these.
-        let replaced: Vec<&'static str> = super::profile_ui_events(&Profile::default())
+        let replaced: Vec<&'static str> = crate::commands::profile_ui_events(&Profile::default())
             .events()
             .into_iter()
             .map(|(event, _)| event)
             .collect();
         let listening = Heard::listen(&app, &replaced);
-        super::broadcast_profile_ui(handle, &state).await;
+        crate::commands::broadcast_profile_ui(handle, &state).await;
         listening.finish("broadcast_profile_ui", &mut heard, &mut want);
 
         // A `#tick` command.
-        let listening = Heard::listen(&app, &[super::TICK_CONFIG_CHANGED_EVENT]);
+        let listening = Heard::listen(&app, &[crate::commands::TICK_CONFIG_CHANGED_EVENT]);
         let tick = LineEffects {
             tick_changed: true,
             ..LineEffects::default()
         };
-        super::settle_line_effects(handle, tick).await;
+        crate::commands::settle_line_effects(handle, tick).await;
         listening.finish("settle_line_effects", &mut heard, &mut want);
 
         // Each window answers the quit request the way its page does, so
@@ -322,7 +322,7 @@ fn a_loadout_switch_tells_the_command_line_when_a_macro_group_turned() {
         ];
         let switch = |active: &[&str]| {
             let active = active.iter().copied().map(String::from).collect();
-            super::set_active_loadouts(handle, dir.path(), active)
+            crate::commands::set_active_loadouts(handle, dir.path(), active)
         };
         let off = || async {
             let p = state.profile.lock().await;

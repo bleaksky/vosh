@@ -34,7 +34,7 @@ use std::sync::Arc;
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{Trigger, TriggerAction, TriggerPattern, TriggerTarget};
 
-use super::{AppState, SharedState, PERSIST_LOCK};
+use crate::commands::{AppState, SharedState, PERSIST_LOCK};
 use crate::migration::{ItemKind, ItemPayload};
 use crate::profile::{Macro, Profile, Timer};
 use crate::profile_config::{PaneLayoutPersist, ProfileConfig, TrackedAffect};
@@ -155,7 +155,8 @@ async fn preset_launch_plan(state: &SharedState, dir: &Path) {
         .flat_map(|(id, names)| names.iter().map(|n| preset_trigger(id, n, false)))
         .collect();
     if !triggers.is_empty() {
-        super::install_preset_triggers(&mut *state.profile.lock().await, triggers).unwrap();
+        crate::commands::install_preset_triggers(&mut *state.profile.lock().await, triggers)
+            .unwrap();
         save(state, dir).await;
     }
 }
@@ -163,7 +164,7 @@ async fn preset_launch_plan(state: &SharedState, dir: &Path) {
 /// The save a Settings edit, a debounce, or a command runs.
 async fn save(state: &SharedState, dir: &Path) {
     let _persist_guard = PERSIST_LOCK.lock().await;
-    super::persist_state(state, Some(dir)).await;
+    crate::commands::persist_state(state, Some(dir)).await;
 }
 
 /// Open Vosh as `name` over `dir` the way lib.rs launches it, then let
@@ -753,7 +754,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         .filter(|_| rng.chance(50))
         .map(|n| names[n].as_str());
     if let Some(name) = unsaved {
-        super::switch_profile(&wizard, Some(dir), name)
+        crate::commands::switch_profile(&wizard, Some(dir), name)
             .await
             .map_err(|e| format!("switch: {e}"))?;
     }
@@ -771,7 +772,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
 
     // Pick a version of each item in conflict.
     let mut rng = Rng(seed ^ 0xa5a5_a5a5);
-    let plan = super::analyze_migration(&wizard, dir, &library_ids())
+    let plan = crate::commands::analyze_migration(&wizard, dir, &library_ids())
         .await
         .map_err(|e| format!("analyze: {e}"))?;
     // The preview holds the preset list every character shares and the
@@ -838,7 +839,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
             default
         } else {
             let variant = &conflict.variants[rng.below(conflict.variants.len())];
-            resolutions.push(super::ConflictResolution {
+            resolutions.push(crate::commands::ConflictResolution {
                 kind: conflict.kind,
                 name: conflict.name.clone(),
                 source_profile: variant.source_profile.clone(),
@@ -866,7 +867,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         .map(|b| b.toggled.iter().map(|rows| kept(rows)).collect())
         .collect();
 
-    super::apply_migration(&wizard, dir, &resolutions, &library_ids(), || {})
+    crate::commands::apply_migration(&wizard, dir, &resolutions, &library_ids(), || {})
         .await
         .map_err(|e| format!("apply: {e}"))?;
     drop(wizard);
@@ -954,7 +955,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
     let state = launch_as(dir, &names[start]).await;
     for step in 0..4 {
         let n = rng.below(names.len());
-        super::switch_profile(&state, Some(dir), &names[n])
+        crate::commands::switch_profile(&state, Some(dir), &names[n])
             .await
             .map_err(|e| format!("switch: {e}"))?;
         check(
@@ -979,7 +980,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         check(&state, name, "at the last launch", &before[n], &want[n]).await?;
         check_group_steps(&state, name, &steps, &want_toggled[n]).await?;
         let state = launch_as(dir, &names[(n + 1) % names.len()]).await;
-        super::switch_profile(&state, Some(dir), name)
+        crate::commands::switch_profile(&state, Some(dir), name)
             .await
             .map_err(|e| format!("switch: {e}"))?;
         check_group_steps(&state, name, &steps, &want_toggled[n]).await?;
