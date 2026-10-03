@@ -22,7 +22,6 @@ use crate::app::events::{
 };
 use crate::app::state::{
     bump_panes_generation, panes_generation, SharedState, MIGRATION_RELAUNCH_PENDING,
-    PROFILES_NOT_LOADED,
 };
 use crate::disk::save::PERSIST_LOCK;
 use crate::profile_config::{
@@ -191,10 +190,9 @@ pub(crate) async fn edit_inactive_profile<R>(
     edit: impl FnOnce(&ProfileSet, &mut ProfileConfig) -> R + Send,
 ) -> Result<Option<R>, String> {
     let _persist_guard = PERSIST_LOCK.lock().await;
-    let guard = state.profile_set.lock().await;
-    let set = guard.as_ref().ok_or(PROFILES_NOT_LOADED)?;
+    let set = state.loaded_profile_set().await?;
     rewrite_inactive(
-        set,
+        &set,
         name,
         MIGRATION_RELAUNCH_PENDING.load(Ordering::Acquire),
         edit,
@@ -223,14 +221,13 @@ pub(crate) async fn profile_detail(
 ) -> Result<ProfileDetail, String> {
     let _persist_guard = PERSIST_LOCK.lock().await;
     let (entry, active, login_on, stored) = {
-        let guard = state.profile_set.lock().await;
-        let set = guard.as_ref().ok_or(PROFILES_NOT_LOADED)?;
+        let set = state.loaded_profile_set().await?;
         let entry = set.get(name).cloned().ok_or_else(|| not_found(name))?;
         let active = set.active_name() == name;
         let stored = if active {
             None
         } else {
-            Some(stored_ui(set, name)?)
+            Some(stored_ui(&set, name)?)
         };
         (entry, active, set.login_on(name), stored)
     };
@@ -274,15 +271,14 @@ pub(crate) async fn reset_live_panes(state: &SharedState) -> PaneLayoutEnvelope 
 pub(crate) async fn profile_toml(state: &SharedState, name: &str) -> Result<String, String> {
     let _persist_guard = PERSIST_LOCK.lock().await;
     let stored = {
-        let guard = state.profile_set.lock().await;
-        let set = guard.as_ref().ok_or(PROFILES_NOT_LOADED)?;
+        let set = state.loaded_profile_set().await?;
         if set.get(name).is_none() {
             return Err(not_found(name));
         }
         if set.active_name() == name {
             None
         } else {
-            Some(load_profile_file(set, name)?)
+            Some(load_profile_file(&set, name)?)
         }
     };
     let config = match stored {

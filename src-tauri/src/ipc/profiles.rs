@@ -11,9 +11,7 @@ use tauri::{AppHandle, Manager, State};
 use tracing::warn;
 
 use crate::app::events::{broadcast, CUSTOM_THEMES_CHANGED, PROFILES_CHANGED};
-use crate::app::state::{
-    SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING, PROFILES_NOT_LOADED,
-};
+use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING};
 use crate::disk::save::{persist_profile_locked, persist_state, PERSIST_LOCK};
 use crate::profile::switch::apply_profile_switch;
 use crate::profile_config::{hand_out_shared, share_custom_themes, GlobalConfig, HeldCustomThemes};
@@ -28,10 +26,7 @@ pub(crate) struct ProfilesListPayload {
 pub(crate) async fn profiles_list(
     state: State<'_, SharedState>,
 ) -> Result<ProfilesListPayload, String> {
-    let guard = state.profile_set.lock().await;
-    let Some(set) = guard.as_ref() else {
-        return Err(PROFILES_NOT_LOADED.into());
-    };
+    let set = state.loaded_profile_set().await?;
     Ok(ProfilesListPayload {
         active: set.active_name().to_string(),
         profiles: set.list().to_vec(),
@@ -104,10 +99,7 @@ pub(crate) async fn create_profile(
         }
         flush_before_copy(state, app_data, source).await;
     }
-    let mut guard = state.profile_set.lock().await;
-    let Some(set) = guard.as_mut() else {
-        return Err(PROFILES_NOT_LOADED.into());
-    };
+    let mut set = state.loaded_profile_set().await?;
     set.create_from(name, copy_from, auto_match)
         .map_err(|e| e.to_string())
 }
@@ -133,10 +125,7 @@ pub(crate) async fn profile_delete(
 ) -> Result<(), String> {
     {
         let _persist_guard = PERSIST_LOCK.lock().await;
-        let mut guard = state.profile_set.lock().await;
-        let Some(set) = guard.as_mut() else {
-            return Err(PROFILES_NOT_LOADED.into());
-        };
+        let mut set = state.loaded_profile_set().await?;
         set.delete(&name).map_err(|e| e.to_string())?;
     }
     broadcast(&app, PROFILES_CHANGED, &name);
@@ -169,10 +158,7 @@ pub(crate) async fn rename_profile(
         return Err(RENAME_MIGRATION_PENDING.into());
     }
     let live = {
-        let mut guard = state.profile_set.lock().await;
-        let Some(set) = guard.as_mut() else {
-            return Err(PROFILES_NOT_LOADED.into());
-        };
+        let mut set = state.loaded_profile_set().await?;
         let renames_live = set.active_name() == old;
         set.rename(old, new).map_err(|e| e.to_string())?;
         if renames_live {
@@ -226,10 +212,7 @@ pub(crate) async fn duplicate_profile(
         return Err(COPY_MIGRATION_PENDING.into());
     }
     flush_before_copy(state, app_data, source).await;
-    let mut guard = state.profile_set.lock().await;
-    let Some(set) = guard.as_mut() else {
-        return Err(PROFILES_NOT_LOADED.into());
-    };
+    let mut set = state.loaded_profile_set().await?;
     set.duplicate(source, new).map_err(|e| e.to_string())
 }
 
@@ -239,10 +222,7 @@ pub(crate) async fn duplicate_profile(
 pub(crate) async fn profile_get_scope(
     state: State<'_, SharedState>,
 ) -> Result<crate::profile_set::ScopeConfig, String> {
-    let guard = state.profile_set.lock().await;
-    let Some(set) = guard.as_ref() else {
-        return Err(PROFILES_NOT_LOADED.into());
-    };
+    let set = state.loaded_profile_set().await?;
     Ok(*set.scope())
 }
 
@@ -319,9 +299,8 @@ pub(crate) async fn change_scope_locked(
     use crate::profile_set::Scope;
     let migration_pending = MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
     let before = {
-        let guard = state.profile_set.lock().await;
-        let set = guard.as_ref().ok_or(PROFILES_NOT_LOADED)?;
-        if let Some(refusal) = scope_refusal_for_unread(set) {
+        let set = state.loaded_profile_set().await?;
+        if let Some(refusal) = scope_refusal_for_unread(&set) {
             return Err(refusal);
         }
         *set.scope()
@@ -338,15 +317,11 @@ pub(crate) async fn change_scope_locked(
             let p = state.profile.lock().await;
             GlobalConfig::from_profile(&p, &stopped)
         };
-        let guard = state.profile_set.lock().await;
-        let set = guard.as_ref().ok_or(PROFILES_NOT_LOADED)?;
-        hand_out_shared(set, &values)?;
+        let set = state.loaded_profile_set().await?;
+        hand_out_shared(&set, &values)?;
     }
     let (held, global_path) = {
-        let mut guard = state.profile_set.lock().await;
-        let Some(set) = guard.as_mut() else {
-            return Err(PROFILES_NOT_LOADED.into());
-        };
+        let mut set = state.loaded_profile_set().await?;
         let theme_was_global = matches!(set.scope().theme, Scope::Global);
         set.set_scope(scope).map_err(|e| e.to_string())?;
         // Nothing may write profile files while a migration relaunch is
@@ -354,7 +329,7 @@ pub(crate) async fn change_scope_locked(
         let theme_turned_global =
             !theme_was_global && matches!(scope.theme, Scope::Global) && !migration_pending;
         let held =
-            theme_turned_global.then(|| HeldCustomThemes::find(set, Some(set.active_name())));
+            theme_turned_global.then(|| HeldCustomThemes::find(&set, Some(set.active_name())));
         (held, set.global_path())
     };
     let mut gained = None;

@@ -10,7 +10,6 @@ use tracing::warn;
 use crate::app::events::{broadcast, broadcast_profile_ui, PROFILE_SWITCHED};
 use crate::app::state::{
     note_ui_config_replaced, SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING,
-    PROFILES_NOT_LOADED,
 };
 use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::profile_config::{GlobalConfig, ProfileConfig, SharedLayer};
@@ -156,11 +155,8 @@ pub(crate) async fn switch_live_profile(state: &SharedState, name: &str) -> Resu
         per_profile,
         global,
     } = {
-        let mut guard = state.profile_set.lock().await;
-        let Some(set) = guard.as_mut() else {
-            return Err(PROFILES_NOT_LOADED.into());
-        };
-        open_profile_for_switch(set, name)?
+        let mut set = state.loaded_profile_set().await?;
+        open_profile_for_switch(&mut set, name)?
     };
 
     // In loadout mode the catalog holds the aliases, triggers, and

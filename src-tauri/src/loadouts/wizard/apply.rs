@@ -8,7 +8,7 @@ use tracing::warn;
 
 use super::journal::{drop_wizard_journal, save_wizard_journal, JournalFile, WizardJournal};
 use crate::app::events::{broadcast, MIGRATION_APPLIED};
-use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED, PROFILES_NOT_LOADED};
+use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED};
 use crate::disk::save::{active_profile_file, persist_state, PERSIST_LOCK};
 use crate::profile_config::ProfileConfig;
 
@@ -51,11 +51,8 @@ pub(crate) async fn analyze_migration_with(
             .then(|| active_profile_file(&p, scope.as_ref()));
         (live, p.ui.enabled_presets.clone())
     };
-    let guard = state.profile_set.lock().await;
-    let Some(set) = guard.as_ref() else {
-        return Err(PROFILES_NOT_LOADED.into());
-    };
-    let sources = migration_sources(set, live.as_ref())?;
+    let set = state.loaded_profile_set().await?;
+    let sources = migration_sources(&set, live.as_ref())?;
     Ok(plan_migration(&sources, &live_presets, library))
 }
 
@@ -266,11 +263,8 @@ pub(crate) async fn apply_migration_with(
     // passed and we want the fresh snapshot rather than caching across
     // commands.
     let sources = {
-        let guard = state.profile_set.lock().await;
-        let Some(set) = guard.as_ref() else {
-            return Err(PROFILES_NOT_LOADED.into());
-        };
-        migration_sources(set, None)?
+        let set = state.loaded_profile_set().await?;
+        migration_sources(&set, None)?
     };
     let live_presets = state.profile.lock().await.ui.enabled_presets.clone();
 

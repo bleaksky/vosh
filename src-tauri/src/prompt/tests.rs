@@ -4,7 +4,7 @@ use serde_json::json;
 use vosh_prompt::config::{AabahranCapture, RegexCapture};
 
 use super::*;
-use crate::app::state::AppState;
+use crate::app::state::{AppState, PROFILES_NOT_LOADED};
 use crate::profile_config::ProfileConfig;
 use crate::profile_set::{ProfileSet, DEFAULT_PROFILE_NAME};
 
