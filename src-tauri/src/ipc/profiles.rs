@@ -10,8 +10,9 @@
 use tauri::{AppHandle, Manager, State};
 
 use crate::app::events::{broadcast, CUSTOM_THEMES_CHANGED, PROFILES_CHANGED};
-use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING};
-use crate::disk::save::{persist_profile_locked, persist_state, PERSIST_LOCK};
+use crate::app::state::{SharedState, MIGRATION_RELAUNCH_PENDING};
+use crate::disk::save::{persist_profile_locked, PERSIST_LOCK};
+use crate::profile::set::{create_profile, duplicate_profile, rename_profile};
 use crate::profile::shared::change_scope_locked;
 use crate::profile::switch::apply_profile_switch;
 
@@ -30,25 +31,6 @@ pub(crate) async fn profiles_list(
         active: set.active_name().to_string(),
         profiles: set.list().to_vec(),
     })
-}
-
-/// Write the live profile to its file before a copy of `source` reads
-/// that file, when `source` is the live profile. Call with
-/// [`PERSIST_LOCK`] held across this and the copy, so the copy reads
-/// what the flush wrote and no persist rewrites the source mid copy.
-async fn flush_before_copy(shared: &SharedState, app_data: Option<&std::path::Path>, source: &str) {
-    let copying_live = shared
-        .profile_set
-        .lock()
-        .await
-        .as_ref()
-        .is_some_and(|set| set.active_name() == source);
-    // The live profile can run two seconds ahead of its file. After
-    // `#profile reset` or `load` it is deliberately diverged, and the
-    // copy takes the file as it stands.
-    if copying_live && !AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
-        persist_state(shared, app_data).await;
-    }
 }
 
 /// Create a profile with `auto_match` as its login claim, starting as a
@@ -78,44 +60,6 @@ pub(crate) async fn profile_create(
     Ok(entry)
 }
 
-/// The body of [`profile_create`] over the app data folder `app_data`,
-/// with `relaunch_pending` in place of [`MIGRATION_RELAUNCH_PENDING`], so
-/// a test can run it after the wizard.
-pub(crate) async fn create_profile(
-    state: &SharedState,
-    app_data: Option<&std::path::Path>,
-    name: &str,
-    copy_from: Option<&str>,
-    auto_match: Option<crate::profile_set::AutoMatch>,
-    relaunch_pending: &std::sync::atomic::AtomicBool,
-) -> Result<crate::profile_set::ProfileEntry, String> {
-    let _persist_guard = PERSIST_LOCK.lock().await;
-    if let Some(source) = copy_from {
-        // Read under the lock, which the wizard holds until it sets the
-        // flag.
-        if relaunch_pending.load(std::sync::atomic::Ordering::Acquire) {
-            return Err(COPY_MIGRATION_PENDING.into());
-        }
-        flush_before_copy(state, app_data, source).await;
-    }
-    let mut set = state.loaded_profile_set().await?;
-    set.create_from(name, copy_from, auto_match)
-        .map_err(|e| e.to_string())
-}
-
-/// Why a profile cannot be renamed between `migration_apply` and the
-/// relaunch that finishes it, or while launch could not finish a wizard
-/// run. The next launch writes each profile file the run names under the
-/// name it had, and the renamed file would keep what the move took out.
-const RENAME_MIGRATION_PENDING: &str =
-    "Quit Vosh and open it again to finish the move to loadouts, then rename the profile.";
-
-/// Why a profile cannot be copied in the same window. The copy would take
-/// a file the next launch has yet to finish, or the live profile a copy of
-/// it saves first, which still holds the items the move took out.
-const COPY_MIGRATION_PENDING: &str =
-    "Quit Vosh and open it again to finish the move to loadouts, then copy the profile.";
-
 #[tauri::command]
 pub(crate) async fn profile_delete(
     app: AppHandle,
@@ -143,35 +87,6 @@ pub(crate) async fn profile_rename(
     Ok(())
 }
 
-/// The body of [`profile_rename`], with `relaunch_pending` in place of
-/// [`MIGRATION_RELAUNCH_PENDING`], so a test can run it after the wizard.
-pub(crate) async fn rename_profile(
-    state: &SharedState,
-    old: &str,
-    new: &str,
-    relaunch_pending: &std::sync::atomic::AtomicBool,
-) -> Result<(), String> {
-    let _persist_guard = PERSIST_LOCK.lock().await;
-    // Read under the lock, which the wizard holds until it sets the flag.
-    if relaunch_pending.load(std::sync::atomic::Ordering::Acquire) {
-        return Err(RENAME_MIGRATION_PENDING.into());
-    }
-    let live = {
-        let mut set = state.loaded_profile_set().await?;
-        let renames_live = set.active_name() == old;
-        set.rename(old, new).map_err(|e| e.to_string())?;
-        if renames_live {
-            state.note_active_profile(set.active_name());
-        }
-        renames_live.then(|| crate::profile_set::display_name(set.active_name()))
-    };
-    // The custom prompt draws the live profile's new name.
-    if let Some(name) = live {
-        state.profile.lock().await.display_name = Some(name);
-    }
-    Ok(())
-}
-
 /// Copy `source` under a new name without its login claim. Duplicating
 /// the live profile writes it first, so the copy holds your latest
 /// changes.
@@ -193,26 +108,6 @@ pub(crate) async fn profile_duplicate(
     .await?;
     broadcast(&app, PROFILES_CHANGED, &new);
     Ok(())
-}
-
-/// The body of [`profile_duplicate`] over the app data folder `app_data`,
-/// with `relaunch_pending` in place of [`MIGRATION_RELAUNCH_PENDING`], so
-/// a test can run it after the wizard.
-pub(crate) async fn duplicate_profile(
-    state: &SharedState,
-    app_data: Option<&std::path::Path>,
-    source: &str,
-    new: &str,
-    relaunch_pending: &std::sync::atomic::AtomicBool,
-) -> Result<(), String> {
-    let _persist_guard = PERSIST_LOCK.lock().await;
-    // Read under the lock, which the wizard holds until it sets the flag.
-    if relaunch_pending.load(std::sync::atomic::Ordering::Acquire) {
-        return Err(COPY_MIGRATION_PENDING.into());
-    }
-    flush_before_copy(state, app_data, source).await;
-    let mut set = state.loaded_profile_set().await?;
-    set.duplicate(source, new).map_err(|e| e.to_string())
 }
 
 /// Read the per-category scope map. Frontend uses this to render
