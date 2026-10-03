@@ -267,7 +267,7 @@ pub(crate) async fn session_send_masked<R: tauri::Runtime>(
         session::emit_output(&app, NOT_CONNECTED.to_vec());
         return Ok(());
     };
-    if !handle.send_masked(crate::hidden_input::masked_line_bytes(&line)) {
+    if !handle.send_masked(crate::session::echo::masked_line_bytes(&line)) {
         return Err("session task gone".to_string());
     }
     Ok(())

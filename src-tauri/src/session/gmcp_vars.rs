@@ -210,15 +210,15 @@ mod tests {
         vosh_protocol::gmcp::parse(text.as_bytes()).expect("fixture parses")
     }
 
-    const VITALS: &str = include_str!("../../fixtures/gmcp/aabahran/char-vitals.gmcp");
+    const VITALS: &str = include_str!("../../../fixtures/gmcp/aabahran/char-vitals.gmcp");
     const VITALS_HIDDEN: &str =
-        include_str!("../../fixtures/gmcp/aabahran/char-vitals-hidden.gmcp");
-    const COMBAT: &str = include_str!("../../fixtures/gmcp/aabahran/char-combat.gmcp");
+        include_str!("../../../fixtures/gmcp/aabahran/char-vitals-hidden.gmcp");
+    const COMBAT: &str = include_str!("../../../fixtures/gmcp/aabahran/char-combat.gmcp");
     const COMBAT_HIDDEN: &str =
-        include_str!("../../fixtures/gmcp/aabahran/char-combat-hidden.gmcp");
-    const COMBAT_TANK: &str = include_str!("../../fixtures/gmcp/aabahran/char-combat-tank.gmcp");
+        include_str!("../../../fixtures/gmcp/aabahran/char-combat-hidden.gmcp");
+    const COMBAT_TANK: &str = include_str!("../../../fixtures/gmcp/aabahran/char-combat-tank.gmcp");
     const COMBAT_TANK_HIDDEN: &str =
-        include_str!("../../fixtures/gmcp/aabahran/char-combat-tank-hidden.gmcp");
+        include_str!("../../../fixtures/gmcp/aabahran/char-combat-tank-hidden.gmcp");
 
     #[test]
     fn char_combat_withheld_health_clears_the_last_reading() {
