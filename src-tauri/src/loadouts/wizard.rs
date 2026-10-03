@@ -3,3 +3,5 @@
 
 pub(crate) mod apply;
 pub(crate) mod journal;
+#[cfg(test)]
+mod tests;
