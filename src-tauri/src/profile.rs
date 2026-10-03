@@ -3,6 +3,7 @@
 //! cycles.
 
 pub(crate) mod panes;
+pub(crate) mod shared;
 pub(crate) mod switch;
 #[cfg(test)]
 pub(crate) mod tests;

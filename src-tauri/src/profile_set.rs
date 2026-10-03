@@ -29,6 +29,10 @@ use std::path::PathBuf;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
+// Callers outside this file still reach these here, until they point at
+// crate::profile::shared.
+pub(crate) use crate::profile::shared::{Scope, ScopeConfig};
+
 #[derive(Debug, Error)]
 pub(crate) enum ProfileSetError {
     #[error("Vosh could not read or write a profile file ({0}).")]
@@ -249,85 +253,6 @@ pub(crate) struct ProfilesIndex {
     /// the Line triggers that matched your prompt and no longer see it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<String>,
-}
-
-/// Per-category scope choice. Per-profile fields move with the
-/// active profile; global fields are shared across every profile.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum Scope {
-    /// Lives in `profiles/<active>.toml`. Changes when the active
-    /// profile changes.
-    #[default]
-    Profile,
-    /// Lives in `global.toml`. Identical across every profile.
-    Global,
-}
-
-/// User-controllable mapping of UI categories to scope. `theme`
-/// covers `theme`, the follow switch, the light and dark pair, and
-/// `custom_themes`, so a custom theme travels with the theme that
-/// names it. `font` covers `font_family`, `font_size`, and
-/// `terminal_line_height` since they move together visually.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub(crate) struct ScopeConfig {
-    #[serde(default = "scope_default_global")]
-    pub theme: Scope,
-    #[serde(default = "scope_default_global")]
-    pub font: Scope,
-    #[serde(default = "scope_default_global")]
-    pub dock_layout: Scope,
-    #[serde(default = "scope_default_global")]
-    pub keep_last_command: Scope,
-    #[serde(default = "scope_default_global")]
-    pub auto_update: Scope,
-}
-
-fn scope_default_global() -> Scope {
-    Scope::Global
-}
-
-impl Default for ScopeConfig {
-    fn default() -> Self {
-        Self {
-            theme: Scope::Global,
-            font: Scope::Global,
-            dock_layout: Scope::Global,
-            keep_last_command: Scope::Global,
-            auto_update: Scope::Global,
-        }
-    }
-}
-
-impl ScopeConfig {
-    /// The categories `self` shares that `next` keeps per profile, marked
-    /// `Global`, with every other category `Profile`. None when no
-    /// category stops being shared.
-    pub(crate) fn stopped_sharing(&self, next: &ScopeConfig) -> Option<ScopeConfig> {
-        let stop = |was: Scope, now: Scope| {
-            if was == Scope::Global && now == Scope::Profile {
-                Scope::Global
-            } else {
-                Scope::Profile
-            }
-        };
-        let stopped = ScopeConfig {
-            theme: stop(self.theme, next.theme),
-            font: stop(self.font, next.font),
-            dock_layout: stop(self.dock_layout, next.dock_layout),
-            keep_last_command: stop(self.keep_last_command, next.keep_last_command),
-            auto_update: stop(self.auto_update, next.auto_update),
-        };
-        let any = [
-            stopped.theme,
-            stopped.font,
-            stopped.dock_layout,
-            stopped.keep_last_command,
-            stopped.auto_update,
-        ]
-        .contains(&Scope::Global);
-        any.then_some(stopped)
-    }
 }
 
 const INDEX_FILENAME: &str = "profiles.toml";
