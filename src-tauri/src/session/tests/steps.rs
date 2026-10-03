@@ -1089,7 +1089,7 @@ fn vosh_supplies_the_tick_target_tracked_affects_and_profile() {
         name: "sanctuary".into(),
         label: None,
     }];
-    let supplied = super::client_values(&p, now);
+    let supplied = crate::prompt::client_values(&p, now);
     let interval = i64::try_from(p.tick.config.interval_secs).expect("seconds");
     assert_eq!(
         supplied.tick,

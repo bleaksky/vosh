@@ -16,6 +16,7 @@ use vosh_protocol::telnet::{codes as telnet_codes, option as telnet_option, Even
 
 use crate::app::events;
 use crate::output::output_count;
+use crate::prompt::report_game_prompt_seen;
 
 use super::batch::{emit_session_output, ReadBatch};
 use super::conn::Conn;
@@ -23,9 +24,7 @@ use super::connection::Stream;
 use super::effects::{apply_script_result, deliver_tick_step, OutputSink, ScriptIo};
 use super::gmcp::{handle_gmcp, hello_subnegotiation, supports_subnegotiation};
 use super::log_sink::LogSink;
-use super::prompt_view::{
-    emit_prompt_state, report_game_prompt_seen, send_prompt_vars, watching_prompt,
-};
+use super::prompt_view::{emit_prompt_state, send_prompt_vars, watching_prompt};
 use super::steps::{
     clock_after, hold_step, let_go_held, line_step, marker_step, partial_step, LineStep,
 };
