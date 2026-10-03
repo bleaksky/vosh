@@ -415,6 +415,30 @@ impl TickRuntime {
     }
 }
 
+/// Detect the game's tick from a GMCP `World.Time` push. Aabahran (and
+/// most ROM derivatives that ship World.Time) advance the `hour` field
+/// every server tick, so an hour change is the tick. Returns the step to
+/// deliver when the change counted as a tick.
+pub(crate) fn observe_world_time_for_tick(
+    tick: &mut TickRuntime,
+    msg: &vosh_protocol::gmcp::Message,
+    now: Instant,
+) -> Option<TickStep> {
+    if msg.package != "World.Time" {
+        return None;
+    }
+    let hour_str = match msg.data.as_object()?.get("hour")? {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Number(n) => n.to_string(),
+        _ => return None,
+    };
+    if tick.observe_world_hour(&hour_str) {
+        tick.on_game_tick(now)
+    } else {
+        None
+    }
+}
+
 /// The warning line for `config`, in its color.
 fn warn_echo(config: &TickConfig) -> String {
     let message = config
@@ -1398,5 +1422,54 @@ mod tests {
         let step = tick.on_game_tick(at(31.0)).expect("the tick lands");
         assert!(step.payload.fired);
         assert_eq!(step.command.as_deref(), Some("score"));
+    }
+
+    fn world_time(hour: serde_json::Value) -> vosh_protocol::gmcp::Message {
+        vosh_protocol::gmcp::Message {
+            package: "World.Time".into(),
+            data: serde_json::json!({ "hour": hour }),
+        }
+    }
+
+    #[test]
+    fn a_world_hour_change_is_the_tick_and_fires_once() {
+        let t0 = tokio::time::Instant::now();
+        let mut tick = crate::tick::TickRuntime::default();
+        tick.config.auto_fire = Some("score".into());
+        tick.start_session(t0);
+        let at = |s: u64| t0 + std::time::Duration::from_secs(s);
+
+        // The first hour of the session primes.
+        assert!(
+            super::observe_world_time_for_tick(&mut tick, &world_time(9.into()), at(1)).is_none()
+        );
+        // The same hour again is no tick.
+        assert!(
+            super::observe_world_time_for_tick(&mut tick, &world_time(9.into()), at(5)).is_none()
+        );
+        let step = super::observe_world_time_for_tick(&mut tick, &world_time("10".into()), at(12))
+            .expect("the hour moved");
+        assert!(step.payload.fired);
+        assert_eq!(step.command.as_deref(), Some("score"));
+        assert!(tick.synced);
+        // A Reset on line for the same tick does not fire again.
+        assert!(tick.on_game_tick(at(13)).is_none());
+        // Past the interval the timer waits for the next hour.
+        assert!(!tick.poll(at(45)).payload.fired);
+        let step = super::observe_world_time_for_tick(&mut tick, &world_time(11.into()), at(46))
+            .expect("the next tick");
+        assert!(step.payload.fired);
+
+        // Other packages and a World.Time without an hour are no tick.
+        let other = vosh_protocol::gmcp::Message {
+            package: "Char.Vitals".into(),
+            data: serde_json::json!({ "hour": 12 }),
+        };
+        assert!(super::observe_world_time_for_tick(&mut tick, &other, at(80)).is_none());
+        let no_hour = vosh_protocol::gmcp::Message {
+            package: "World.Time".into(),
+            data: serde_json::json!({ "sunlight": "light" }),
+        };
+        assert!(super::observe_world_time_for_tick(&mut tick, &no_hour, at(80)).is_none());
     }
 }
