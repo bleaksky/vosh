@@ -773,7 +773,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
 
     // Pick a version of each item in conflict.
     let mut rng = Rng(seed ^ 0xa5a5_a5a5);
-    let plan = crate::commands::analyze_migration(&wizard, dir, &library_ids())
+    let plan = crate::loadouts::wizard::apply::analyze_migration(&wizard, dir, &library_ids())
         .await
         .map_err(|e| format!("analyze: {e}"))?;
     // The preview holds the preset list every character shares and the
@@ -840,7 +840,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
             default
         } else {
             let variant = &conflict.variants[rng.below(conflict.variants.len())];
-            resolutions.push(crate::commands::ConflictResolution {
+            resolutions.push(crate::loadouts::wizard::apply::ConflictResolution {
                 kind: conflict.kind,
                 name: conflict.name.clone(),
                 source_profile: variant.source_profile.clone(),
@@ -868,9 +868,15 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         .map(|b| b.toggled.iter().map(|rows| kept(rows)).collect())
         .collect();
 
-    crate::commands::apply_migration(&wizard, dir, &resolutions, &library_ids(), || {})
-        .await
-        .map_err(|e| format!("apply: {e}"))?;
+    crate::loadouts::wizard::apply::apply_migration(
+        &wizard,
+        dir,
+        &resolutions,
+        &library_ids(),
+        || {},
+    )
+    .await
+    .map_err(|e| format!("apply: {e}"))?;
     drop(wizard);
 
     // Every file keeps its settings, and a copy of each waits in legacy.
