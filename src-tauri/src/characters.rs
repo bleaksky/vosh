@@ -358,7 +358,7 @@ mod tests {
 
     use super::*;
     use crate::app::state::AppState;
-    use crate::profile_config::DockEntryPersist;
+    use crate::profile::panes::DockEntryPersist;
     use crate::profile_set::tests::james_like_set;
     use crate::profile_set::{ScopeConfig, DEFAULT_PROFILE_NAME};
 
