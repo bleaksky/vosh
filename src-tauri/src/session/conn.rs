@@ -20,7 +20,7 @@ use crate::output::{emit_output, emit_repaint, output_count};
 use crate::profile::Profile;
 use crate::script::SharedTimers;
 
-use super::batch::{ReadBatch, Settle};
+use super::batch::Settle;
 use super::connection::Stream;
 use super::echo::ServerEcho;
 use super::effects::{deliver_tick_step, run_fired_command, OutputSink};
@@ -32,9 +32,7 @@ use super::prompt_view::{
     emit_hidden_change, emit_prompt_state, emit_prompt_vars, end_prompt, start_prompt,
     watched_state, watching_prompt,
 };
-use super::read::{
-    end_read, finish_read, flush_hold, handle_event, let_go_held_lines, READ_BUFFER_BYTES,
-};
+use super::read::{finish_read, flush_hold, let_go_held_lines, READ_BUFFER_BYTES};
 use super::steps::{
     clock_after, clock_step, end_preview_step, hold_step, late_repaint_after, late_repaint_step,
     repaint_step, send_step, window_size_step,
@@ -287,19 +285,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     break Some("server closed connection".to_string());
                 }
                 Ok(n) => {
-                    conn.perf.socket_reads += 1;
-                    conn.perf.bytes_in += n as u64;
-                    let events = conn.parser.feed(&buf[..n]);
-                    let mut batch = ReadBatch::new(conn.seen_output);
-                    for event in events {
-                        if let Err(e) = handle_event(&mut conn, &sink, event, &mut batch).await {
-                            warn!(error = %e, "event handling failed");
-                            break;
-                        }
-                    }
-                    if let Err(e) = end_read(&mut conn, &sink, &mut batch).await {
-                        warn!(error = %e, "prompt handling at the end of a read failed");
-                    }
+                    let batch = conn.handle_read(&buf[..n], &sink).await;
                     // The next read ends a hold. One that goes on holding
                     // keeps the first deadline, so a partial waits at most
                     // HOLD_MS in all.
@@ -335,25 +321,8 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                         match conn.stream.try_read(&mut buf) {
                             Ok(0) => break,
                             Ok(n) => {
-                                conn.perf.socket_reads += 1;
-                                conn.perf.bytes_in += n as u64;
                                 drained_bytes += n;
-                                let events = conn.parser.feed(&buf[..n]);
-                                let mut batch = ReadBatch::new(conn.seen_output);
-                                for event in events {
-                                    if let Err(handle_err) =
-                                        handle_event(&mut conn, &sink, event, &mut batch).await
-                                    {
-                                        warn!(
-                                            error = %handle_err,
-                                            "event handling failed during drain",
-                                        );
-                                        break;
-                                    }
-                                }
-                                if let Err(e) = end_read(&mut conn, &sink, &mut batch).await {
-                                    warn!(error = %e, "prompt handling during drain failed");
-                                }
+                                let mut batch = conn.handle_read(&buf[..n], &sink).await;
                                 // The connection is going, so nothing waits.
                                 if batch.hold {
                                     let mut p = conn.profile.lock().await;

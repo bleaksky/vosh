@@ -1,6 +1,8 @@
-//! The socket read path. Each telnet event of a read runs through the
-//! line steps, and what a step leaves for after the profile lock goes
-//! out from here, with its routes, its scrollback, what its triggers send
+//! The socket read path. [`Conn::handle_read`] takes the bytes of each
+//! read, from the loop or from the drain after a read error, through the
+//! telnet parser. Each telnet event of a read runs through the line
+//! steps, and what a step leaves for after the profile lock goes out from
+//! here, with its routes, its scrollback, what its triggers send
 //! and the IO its Lua asks for. The end of the read sends what the read
 //! gathered, once. A partial that waited for the next read, and the lines
 //! held for the rest of a prompt, go out the same way.
@@ -31,7 +33,31 @@ use super::{emit_input_mode, GagWithoutReaderPayload, RoutedPayload};
 
 pub(super) const READ_BUFFER_BYTES: usize = 8 * 1024;
 
-pub(super) async fn handle_event<R: tauri::Runtime>(
+impl<R: tauri::Runtime> Conn<R> {
+    /// Take the bytes of one socket read through the parser, each telnet
+    /// event they hold through [`handle_event`] in order, and the end of
+    /// the read through [`end_read`]. Returns the read's batch, which the
+    /// caller finishes, since the drain after a read error ends a read
+    /// apart from the loop.
+    pub(super) async fn handle_read(&mut self, bytes: &[u8], sink: &LogSink) -> ReadBatch {
+        self.perf.socket_reads += 1;
+        self.perf.bytes_in += bytes.len() as u64;
+        let events = self.parser.feed(bytes);
+        let mut batch = ReadBatch::new(self.seen_output);
+        for event in events {
+            if let Err(e) = handle_event(self, sink, event, &mut batch).await {
+                warn!(error = %e, "event handling failed");
+                break;
+            }
+        }
+        if let Err(e) = end_read(self, sink, &mut batch).await {
+            warn!(error = %e, "prompt handling at the end of a read failed");
+        }
+        batch
+    }
+}
+
+async fn handle_event<R: tauri::Runtime>(
     conn: &mut Conn<R>,
     sink: &LogSink,
     event: TelnetEvent,
@@ -228,7 +254,7 @@ async fn deliver_line_step<R: tauri::Runtime>(
 }
 
 /// The end of a read, see [`partial_step`], and the IO its prompt left.
-pub(super) async fn end_read<R: tauri::Runtime>(
+async fn end_read<R: tauri::Runtime>(
     conn: &mut Conn<R>,
     sink: &LogSink,
     batch: &mut ReadBatch,
