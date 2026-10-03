@@ -6,7 +6,7 @@
 use tauri::{AppHandle, State};
 
 use crate::app::events::{pane_layout_envelope, PaneLayoutEnvelope, PANE_LAYOUT_CHANGED};
-use crate::app::state::{panes_generation, SharedState};
+use crate::app::state::SharedState;
 use crate::disk::save::{save_then_broadcast, SavePolicy};
 use crate::profile::inactive::{
     active_name, broadcast_profile_changed, reset_inactive_panes, reset_live_panes,
@@ -21,7 +21,7 @@ pub(crate) async fn pane_layout_get(
     state: State<'_, SharedState>,
 ) -> Result<PaneLayoutEnvelope, String> {
     let p = state.profile.lock().await;
-    Ok(pane_layout_envelope(&p))
+    Ok(pane_layout_envelope(&state, &p))
 }
 
 /// Replace the active profile's pane layout and broadcast the
@@ -46,7 +46,7 @@ pub(crate) async fn pane_layout_set(
     layout.sanitize();
     let current = {
         let mut p = state.profile.lock().await;
-        let current = panes_generation();
+        let current = state.panes_generation();
         if generation.is_some_and(|g| g != current) {
             return Ok(false);
         }

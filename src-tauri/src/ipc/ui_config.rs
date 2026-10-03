@@ -6,7 +6,7 @@
 use tauri::{AppHandle, State};
 
 use crate::app::events::CHAT_COLORS_CHANGED;
-use crate::app::state::{ui_config_generation, SharedState};
+use crate::app::state::SharedState;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
 use crate::fonts::FontEntry;
 
@@ -56,9 +56,11 @@ pub(crate) struct UiConfigPayload {
     pub affects_running_out_hours: u32,
     #[serde(deserialize_with = "crate::profile::ui::deserialize_affects_almost_gone_hours")]
     pub affects_almost_gone_hours: u32,
-    /// The [`ui_config_generation`] this copy was read at. Never reaches
-    /// disk. A save without one (a config that never came from the
-    /// backend) applies.
+    /// The [`AppState::ui_config_generation`] this copy was read at. Never
+    /// reaches disk. A save without one (a config that never came from
+    /// the backend) applies.
+    ///
+    /// [`AppState::ui_config_generation`]: crate::app::state::AppState::ui_config_generation
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation: Option<u64>,
 }
@@ -207,13 +209,16 @@ impl UiConfigPayload {
     }
 }
 
-/// The live UI config and the [`ui_config_generation`] it was read at.
+/// The live UI config and the [`AppState::ui_config_generation`] it was
+/// read at.
+///
+/// [`AppState::ui_config_generation`]: crate::app::state::AppState::ui_config_generation
 #[tauri::command]
 pub(crate) async fn ui_get_config(
     state: State<'_, SharedState>,
 ) -> Result<UiConfigPayload, String> {
     let p = state.profile.lock().await;
-    Ok(ui_config_of(&p, ui_config_generation()))
+    Ok(ui_config_of(&p, state.ui_config_generation()))
 }
 
 /// What `ui_get_config` hands the webview for the live profile `p`, read
@@ -237,7 +242,7 @@ pub(crate) async fn ui_set_config(
 ) -> Result<bool, String> {
     let applied = {
         let mut p = state.profile.lock().await;
-        apply_ui_config(&mut p.ui, config, ui_config_generation())
+        apply_ui_config(&mut p.ui, config, state.ui_config_generation())
     };
     if !applied {
         return Ok(false);

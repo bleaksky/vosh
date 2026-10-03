@@ -155,7 +155,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
         // A profile switch, an import, and `#profile load` and `reset`
         // send these.
         let replaced: Vec<&'static str> =
-            crate::app::events::profile_ui_events(&Profile::default())
+            crate::app::events::profile_ui_events(&state, &Profile::default())
                 .events()
                 .into_iter()
                 .map(|(event, _)| event)

@@ -18,9 +18,7 @@ use tauri::AppHandle;
 use tracing::warn;
 
 use crate::app::events::{broadcast, pane_layout_envelope, PaneLayoutEnvelope, PROFILE_CHANGED};
-use crate::app::state::{
-    bump_panes_generation, panes_generation, SharedState, MIGRATION_RELAUNCH_PENDING,
-};
+use crate::app::state::{SharedState, MIGRATION_RELAUNCH_PENDING};
 use crate::disk::save::PERSIST_LOCK;
 use crate::profile::file::ProfileConfig;
 use crate::profile::login_match::AutoMatch;
@@ -234,7 +232,13 @@ pub(crate) async fn profile_detail(
         Some(ui) => ProfileDetail::new(entry, false, login_on, &ui, None),
         None => {
             let p = state.profile.lock().await;
-            ProfileDetail::new(entry, active, login_on, &p.ui, Some(panes_generation()))
+            ProfileDetail::new(
+                entry,
+                active,
+                login_on,
+                &p.ui,
+                Some(state.panes_generation()),
+            )
         }
     })
 }
@@ -259,8 +263,8 @@ pub(crate) async fn reset_live_panes(state: &SharedState) -> PaneLayoutEnvelope 
     let mut p = state.profile.lock().await;
     let layout = p.ui.pane_layout().with_default_tree();
     p.ui.panes = Some(layout);
-    bump_panes_generation();
-    pane_layout_envelope(&p)
+    state.bump_panes_generation();
+    pane_layout_envelope(state, &p)
 }
 
 /// A profile's settings as TOML, the way `#profile save` writes them:
@@ -507,7 +511,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = james_like_state(dir.path()).await;
         state.profile.lock().await.ui.panes = Some(arranged());
-        let before = panes_generation();
+        let before = state.panes_generation();
 
         let envelope = reset_live_panes(&state).await;
         assert_eq!(envelope.layout, arranged().with_default_tree());

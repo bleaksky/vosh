@@ -37,7 +37,7 @@
 use tauri::{AppHandle, Emitter};
 use tracing::warn;
 
-use crate::app::state::{panes_generation, SharedState};
+use crate::app::state::{AppState, SharedState};
 use crate::profile::live::Profile;
 use crate::profile::panes::PaneLayoutPersist;
 use crate::tick::TickConfig;
@@ -384,7 +384,7 @@ pub(crate) fn broadcast_list_changes<R: tauri::Runtime>(app: &AppHandle<R>, chan
 }
 
 /// A pane tree as the frontend receives it: the layout plus the
-/// [`panes_generation`] it was read at. The generation never reaches
+/// [`AppState::panes_generation`] it was read at. The generation never reaches
 /// disk, and an inactive profile's tree carries none, since no pane
 /// layout write can target it.
 #[derive(Clone, serde::Serialize)]
@@ -395,12 +395,12 @@ pub(crate) struct PaneLayoutEnvelope {
     pub(crate) generation: Option<u64>,
 }
 
-/// The active profile's pane layout and its generation. Call with the
-/// profile lock held.
-pub(crate) fn pane_layout_envelope(p: &Profile) -> PaneLayoutEnvelope {
+/// The active profile's pane layout and its generation in `state`. Call
+/// with the profile lock held.
+pub(crate) fn pane_layout_envelope(state: &AppState, p: &Profile) -> PaneLayoutEnvelope {
     PaneLayoutEnvelope {
         layout: p.ui.pane_layout(),
-        generation: Some(panes_generation()),
+        generation: Some(state.panes_generation()),
     }
 }
 
@@ -479,9 +479,9 @@ fn event_json<S: serde::Serialize>(
 
 /// Read the events [`broadcast_profile_ui`] sends. Call with the profile
 /// lock held.
-pub(crate) fn profile_ui_events(p: &Profile) -> ProfileUiEvents {
+pub(crate) fn profile_ui_events(state: &AppState, p: &Profile) -> ProfileUiEvents {
     ProfileUiEvents {
-        panes: pane_layout_envelope(p),
+        panes: pane_layout_envelope(state, p),
         tracked: p.ui.tracked_affects.clone(),
         tick_count: p.ui.tick_count.clone(),
         chip_style: p.ui.chip_style.clone(),
@@ -506,7 +506,7 @@ pub(crate) async fn broadcast_profile_ui<R: tauri::Runtime>(
 ) {
     let events = {
         let p = state.profile.lock().await;
-        profile_ui_events(&p)
+        profile_ui_events(state, &p)
     };
     for (event, payload) in events.events() {
         broadcast(app, event, &payload);
@@ -521,11 +521,12 @@ pub(crate) async fn broadcast_profile_ui<R: tauri::Runtime>(
 /// tick settings sends them alone, so the status line warns with the
 /// lead the terminal uses and the Settings Tick card shows it.
 pub(crate) fn line_effect_events(
+    state: &AppState,
     effects: &crate::input::LineEffects,
     p: &Profile,
 ) -> Vec<(&'static str, serde_json::Value)> {
     if effects.replaced {
-        return profile_ui_events(p).events();
+        return profile_ui_events(state, p).events();
     }
     if effects.tick_changed {
         return event_json(TICK_CONFIG_CHANGED, &p.tick.config)
@@ -712,17 +713,18 @@ mod tests {
 
     #[test]
     fn profile_reset_hands_every_window_the_tick_settings_it_put_back() {
+        let state = AppState::default();
         let mut profile = crate::profile::live::Profile::default();
         profile.ui.tick_count = "down".into();
         profile.tick.config.warn_at_secs = Some(8);
         profile.tick.config.sound = false;
-        let before = super::profile_ui_events(&profile);
+        let before = super::profile_ui_events(&state, &profile);
         assert_eq!(before.tick_count, "down");
         assert_eq!(before.tick.warn_at_secs, Some(8));
 
         let ran = crate::input::run_line(&mut profile, "#profile reset");
         assert!(ran.replaced);
-        let after = super::profile_ui_events(&profile);
+        let after = super::profile_ui_events(&state, &profile);
         assert_eq!(after.tick_count, "up");
         assert_eq!(after.tick.warn_at_secs, None);
         assert!(after.tick.sound);
@@ -730,9 +732,10 @@ mod tests {
 
     #[test]
     fn a_profile_reset_hands_every_window_the_chip_style_it_put_back() {
+        let state = AppState::default();
         let mut profile = crate::profile::live::Profile::default();
         profile.ui.chip_style = "icon_value".into();
-        let before = super::profile_ui_events(&profile);
+        let before = super::profile_ui_events(&state, &profile);
         assert_eq!(
             event_payload(&before, "vosh://chip-style-changed"),
             serde_json::json!("icon_value")
@@ -740,7 +743,7 @@ mod tests {
 
         let ran = crate::input::run_line(&mut profile, "#profile reset");
         assert!(ran.replaced);
-        let after = super::profile_ui_events(&profile);
+        let after = super::profile_ui_events(&state, &profile);
         assert_eq!(
             event_payload(&after, "vosh://chip-style-changed"),
             serde_json::json!("value_only")
@@ -749,12 +752,13 @@ mod tests {
 
     #[test]
     fn a_profile_load_or_import_hands_every_window_the_loaded_settings() {
+        let state = AppState::default();
         let mut profile = crate::profile::live::Profile::default();
         let mut file = crate::profile::file::ProfileConfig::default();
         file.ui.chip_style = "caption_value".into();
         file.ui.tick_count = "down_past_zero".into();
         let _ = file.apply_to(&mut profile);
-        let events = super::profile_ui_events(&profile);
+        let events = super::profile_ui_events(&state, &profile);
         assert_eq!(
             event_payload(&events, "vosh://chip-style-changed"),
             serde_json::json!("caption_value")
@@ -767,11 +771,12 @@ mod tests {
 
     #[test]
     fn a_profile_load_hands_every_window_the_chat_colors() {
+        let state = AppState::default();
         let mut profile = crate::profile::live::Profile::default();
         let mut file = crate::profile::file::ProfileConfig::default();
         file.ui.chat_colors.insert("gtell".into(), "cyan".into());
         let _ = file.apply_to(&mut profile);
-        let events = super::profile_ui_events(&profile);
+        let events = super::profile_ui_events(&state, &profile);
         assert_eq!(
             event_payload(&events, "vosh://chat-colors-changed"),
             serde_json::json!({ "gtell": "cyan" })
@@ -780,6 +785,7 @@ mod tests {
 
     #[test]
     fn a_profile_load_hands_every_window_the_affects_display() {
+        let state = AppState::default();
         let mut profile = crate::profile::live::Profile::default();
         let mut file = crate::profile::file::ProfileConfig::default();
         file.ui.affects_style = "chips".into();
@@ -788,7 +794,7 @@ mod tests {
         file.ui.affects_running_out_hours = 5;
         file.ui.affects_almost_gone_hours = 2;
         let _ = file.apply_to(&mut profile);
-        let events = super::profile_ui_events(&profile);
+        let events = super::profile_ui_events(&state, &profile);
         assert_eq!(
             event_payload(&events, "vosh://affects-display-changed"),
             serde_json::json!({
@@ -804,7 +810,7 @@ mod tests {
         assert!(ran.replaced);
         assert_eq!(
             event_payload(
-                &super::profile_ui_events(&profile),
+                &super::profile_ui_events(&state, &profile),
                 "vosh://affects-display-changed"
             ),
             serde_json::json!({
@@ -819,8 +825,9 @@ mod tests {
 
     #[test]
     fn the_profile_broadcast_ends_by_saying_the_ui_config_was_replaced() {
+        let state = AppState::default();
         let profile = crate::profile::live::Profile::default();
-        let names: Vec<&str> = super::profile_ui_events(&profile)
+        let names: Vec<&str> = super::profile_ui_events(&state, &profile)
             .events()
             .into_iter()
             .map(|(event, _)| event)
@@ -850,12 +857,13 @@ mod tests {
         profile: &mut crate::profile::live::Profile,
         lines: &[&str],
     ) -> Vec<(&'static str, serde_json::Value)> {
+        let state = AppState::default();
         let mut effects = crate::input::LineEffects::default();
         for line in lines {
             let ran = crate::input::run_line(profile, line);
             effects.note_ran(line, &ran);
         }
-        super::line_effect_events(&effects, profile)
+        super::line_effect_events(&state, &effects, profile)
     }
 
     #[test]

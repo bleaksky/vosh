@@ -8,9 +8,7 @@ use tauri::{AppHandle, Manager};
 use tracing::warn;
 
 use crate::app::events::{broadcast, broadcast_profile_ui, PROFILE_SWITCHED};
-use crate::app::state::{
-    note_ui_config_replaced, SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING,
-};
+use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING};
 use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::loadouts::catalog::lay_catalog_over;
 use crate::output;
@@ -139,7 +137,7 @@ pub(crate) async fn switch_live_profile(state: &SharedState, name: &str) -> Resu
         // Under the same lock as the swap, so a pane layout write edited
         // from the old profile's tree, or a whole config save read from
         // the old profile, is refused from here on.
-        note_ui_config_replaced();
+        state.note_ui_config_replaced();
     }
     Ok(())
 }
