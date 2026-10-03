@@ -57,10 +57,8 @@ use tauri::{AppHandle, Manager, State};
 use tracing::warn;
 
 use crate::affects_snapshot::AFFECTS_PACKAGE;
+use crate::app::events::{broadcast, AFFECT_FULL_CHANGED_EVENT};
 use crate::app::state::SharedState;
-
-/// Sent to every window with the whole map whenever it changes.
-pub(crate) const AFFECT_FULL_CHANGED_EVENT: &str = "vosh://affect-full-changed";
 
 /// The file under the app data folder.
 pub(crate) const FILE_NAME: &str = "affect_full.toml";
@@ -533,7 +531,7 @@ fn write_character(job: &WriteJob) -> Result<(), WriteError> {
 /// Tell every window the map changed, and write it once the burst
 /// settles.
 pub(crate) fn changed<R: tauri::Runtime>(app: &AppHandle<R>, map: &FullMap) {
-    crate::commands::broadcast(app, AFFECT_FULL_CHANGED_EVENT, map);
+    broadcast(app, AFFECT_FULL_CHANGED_EVENT, map);
     schedule_write(app);
 }
 
@@ -581,14 +579,14 @@ pub(crate) fn character_known<R: tauri::Runtime>(
 /// A new connection: nothing shows until its first list.
 pub(crate) fn connect<R: tauri::Runtime>(app: &AppHandle<R>, state: &SharedState) {
     if state.affect_full.connect() {
-        crate::commands::broadcast(app, AFFECT_FULL_CHANGED_EVENT, &FullMap::new());
+        broadcast(app, AFFECT_FULL_CHANGED_EVENT, &FullMap::new());
     }
 }
 
 /// The connection ended: write the map, then clear it everywhere.
 pub(crate) fn disconnect<R: tauri::Runtime>(app: &AppHandle<R>, state: &SharedState) {
     if state.affect_full.disconnect() {
-        crate::commands::broadcast(app, AFFECT_FULL_CHANGED_EVENT, &FullMap::new());
+        broadcast(app, AFFECT_FULL_CHANGED_EVENT, &FullMap::new());
     }
 }
 

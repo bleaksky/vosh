@@ -22,8 +22,7 @@ use tauri::AppHandle;
 use tokio::sync::oneshot;
 use tracing::{info, warn};
 
-/// The event each window hears on quit, with the round number.
-pub(crate) const FLUSH_REQUEST_EVENT: &str = "vosh://flush-pending-writes";
+use crate::app::events::{broadcast, FLUSH_REQUEST_EVENT};
 
 /// How long quit waits for the windows. A window gives up on its own
 /// writes a little sooner (`FLUSH_TIMEOUT_MS` in pendingWrites.ts), so
@@ -216,7 +215,7 @@ pub(crate) async fn ask_windows_to_flush<R: tauri::Runtime>(app: &AppHandle<R>) 
         .filter(|label| holds_writes(label))
         .collect();
     let rx = ANSWERS.start(id, labels.iter().cloned());
-    crate::commands::broadcast(app, FLUSH_REQUEST_EVENT, &id);
+    broadcast(app, FLUSH_REQUEST_EVENT, &id);
     if wait_for_answers(rx, WINDOW_FLUSH_WAIT).await {
         info!(
             windows = labels.len(),

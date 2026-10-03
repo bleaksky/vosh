@@ -18,9 +18,27 @@
 //! to read the groups again, or the keys of a group that is off go on
 //! firing.
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
+use tracing::warn;
 
 use crate::profile::Profile;
+
+/// Send `event` to every open window, once. One emit reaches every
+/// listener in every window, main and Settings alike, whichever handle
+/// it goes out through. This used to emit once through each open window,
+/// so each listener heard the event once per open window. A page listens
+/// through `listen`, which hears an event sent to any target, so
+/// `emit_to` with a window label still reaches the page listeners in the
+/// other windows.
+pub(crate) fn broadcast<R: tauri::Runtime, S: serde::Serialize + ?Sized>(
+    app: &AppHandle<R>,
+    event: &str,
+    payload: &S,
+) {
+    if let Err(e) = app.emit(event, payload) {
+        warn!(error = %e, event, "broadcast failed");
+    }
+}
 
 /// Sent to every window when the trigger list changed. The payload is an
 /// empty string.
@@ -37,6 +55,62 @@ pub(crate) const PROMPT_CONFIG_CHANGED: &str = "vosh://prompt-config-changed";
 /// line reads the groups again on it. The payload is an empty string.
 pub(crate) const MACRO_GROUPS_CHANGED: &str = "vosh://macro-groups-changed";
 
+/// Sent after an edit to one profile's detail, active or not, naming
+/// it as `{ name }`. Unlike `vosh://tracked-affects-changed` and
+/// `vosh://pane-layout-changed` it carries no data, so an edit to an
+/// inactive profile can never reach the main window's stores.
+pub(crate) const PROFILE_CHANGED_EVENT: &str = "vosh://profile-changed";
+
+/// Sent with the new [`crate::characters::SessionIdentity`], or null, after a connect, a
+/// disconnect, and the first sight of a character name after login.
+/// Settings is its own webview and may open after all of those, so it
+/// also reads the current value with `session_identity_get`.
+pub(crate) const SESSION_IDENTITY_EVENT: &str = "vosh://session-identity-changed";
+
+/// What every window hears once the wizard wrote its files.
+pub(crate) const MIGRATION_APPLIED_EVENT: &str = "vosh://migration-applied";
+
+/// Sent to every window with the whole map whenever it changes.
+pub(crate) const AFFECT_FULL_CHANGED_EVENT: &str = "vosh://affect-full-changed";
+
+/// Sent last by [`crate::commands::broadcast_profile_ui`]. The live profile's whole UI
+/// config was replaced, by a switch, an import, `#profile load` or
+/// `reset`. A window that saves the whole config (Settings) reads it
+/// again here, or its next save writes the old profile's values back.
+pub(crate) const UI_CONFIG_REPLACED_EVENT: &str = "vosh://ui-config-replaced";
+
+/// Sent to every window with the Affects pane's style, marker, tint,
+/// and the hours at which an affect runs out and is almost gone,
+/// whenever they change: a pick from the pane menu, a Settings save
+/// (which the frontend sends itself), or a replace.
+pub(crate) const AFFECTS_DISPLAY_CHANGED_EVENT: &str = "vosh://affects-display-changed";
+
+/// Sent to every window with the chat pane's channel colors whenever
+/// they change: a pick or a reset from the pane menu, or a replace.
+pub(crate) const CHAT_COLORS_CHANGED_EVENT: &str = "vosh://chat-colors-changed";
+
+/// Sent to every window with the tick settings whenever they change:
+/// a Settings Tick save, a `#tick` command, or a replace.
+pub(crate) const TICK_CONFIG_CHANGED_EVENT: &str = "vosh://tick-config-changed";
+
+/// The main window hears `#help <words>` here, with the words.
+pub(crate) const HELP_OPEN_EVENT: &str = "vosh://help-open";
+
+/// The event each window hears on quit, with the round number.
+pub(crate) const FLUSH_REQUEST_EVENT: &str = "vosh://flush-pending-writes";
+
+/// The event a menu command reaches the main window on.
+#[cfg(target_os = "macos")]
+pub(crate) const APP_MENU_EVENT: &str = "vosh://app-menu";
+
+/// Find, chosen while Settings is in front, focuses the settings search.
+#[cfg(target_os = "macos")]
+pub(crate) const SETTINGS_FIND_EVENT: &str = "vosh://settings-find";
+
+/// Find, chosen while Help is in front, focuses the help search.
+#[cfg(target_os = "macos")]
+pub(crate) const HELP_FIND_EVENT: &str = "vosh://help-find";
+
 /// The payload of [`PROMPT_CONFIG_CHANGED`]: the active profile whose
 /// table changed, None before any profile loads.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -50,7 +124,7 @@ pub(crate) fn broadcast_prompt_config_changed<R: tauri::Runtime>(app: &AppHandle
     let profile = app
         .try_state::<crate::app::state::SharedState>()
         .and_then(|state| state.active_profile());
-    crate::commands::broadcast(app, PROMPT_CONFIG_CHANGED, &PromptConfigChanged { profile });
+    broadcast(app, PROMPT_CONFIG_CHANGED, &PromptConfigChanged { profile });
 }
 
 /// The trigger and alias list revisions, the prompt table's, and the
@@ -150,7 +224,7 @@ pub(crate) fn broadcast_list_changes<R: tauri::Runtime>(app: &AppHandle<R>, chan
         if event == PROMPT_CONFIG_CHANGED {
             broadcast_prompt_config_changed(app);
         } else {
-            crate::commands::broadcast(app, event, &"");
+            broadcast(app, event, &"");
         }
     }
 }

@@ -6,7 +6,9 @@ use vosh_automation::trigger::Trigger;
 use vosh_log::{SearchOptions, SearchPage, SessionRow};
 
 use crate::app::events::{
-    broadcast_list_changes, ListChanges, ListRevisions, MACRO_GROUPS_CHANGED,
+    broadcast, broadcast_list_changes, ListChanges, ListRevisions, AFFECTS_DISPLAY_CHANGED_EVENT,
+    CHAT_COLORS_CHANGED_EVENT, HELP_OPEN_EVENT, MACRO_GROUPS_CHANGED, MIGRATION_APPLIED_EVENT,
+    TICK_CONFIG_CHANGED_EVENT, UI_CONFIG_REPLACED_EVENT,
 };
 use crate::app::state::{
     note_ui_config_replaced, panes_generation, ui_config_generation, AppState, SharedState,
@@ -127,22 +129,6 @@ pub(crate) fn line_effect_events(
     Vec::new()
 }
 
-/// Send `event` to every open window, once. One emit reaches every
-/// listener in every window, main and Settings alike, whichever handle
-/// it goes out through. This used to emit once through each open window,
-/// so each listener heard the event once per open window. A page listens
-/// through `listen`, which hears an event sent to any target, so
-/// `emit_to` with a window label still reaches the page listeners in the
-/// other windows.
-pub(crate) fn broadcast<R: tauri::Runtime, S: serde::Serialize + ?Sized>(
-    app: &AppHandle<R>,
-    event: &str,
-    payload: &S,
-) {
-    if let Err(e) = app.emit(event, payload) {
-        warn!(error = %e, event, "broadcast failed");
-    }
-}
 use crate::profile::{Macro, Profile, Timer};
 use crate::profile_config::{
     hand_out_shared, share_custom_themes, strip_global_fields, GlobalConfig, HeldCustomThemes,
@@ -504,9 +490,6 @@ pub(crate) async fn shared_layer_for_lines<'a, R: tauri::Runtime>(
     let state: SharedState = app.state::<SharedState>().inner().clone();
     read_shared_layer(&state).await
 }
-
-/// The main window hears `#help <words>` here, with the words.
-pub(crate) const HELP_OPEN_EVENT: &str = "vosh://help-open";
 
 /// What the terminal prints when you send a line with no connection.
 const NOT_CONNECTED: &[u8] = b"\r\n[not connected]\r\n";
@@ -1583,16 +1566,6 @@ pub(crate) fn pane_layout_envelope(p: &Profile) -> PaneLayoutEnvelope {
         generation: Some(panes_generation()),
     }
 }
-
-/// Sent to every window with the tick settings whenever they change:
-/// a Settings Tick save, a `#tick` command, or a replace.
-pub(crate) const TICK_CONFIG_CHANGED_EVENT: &str = "vosh://tick-config-changed";
-
-/// Sent last by [`broadcast_profile_ui`]. The live profile's whole UI
-/// config was replaced, by a switch, an import, `#profile load` or
-/// `reset`. A window that saves the whole config (Settings) reads it
-/// again here, or its next save writes the old profile's values back.
-pub(crate) const UI_CONFIG_REPLACED_EVENT: &str = "vosh://ui-config-replaced";
 
 /// What [`broadcast_profile_ui`] hands every window, read from the live
 /// profile.
@@ -3229,12 +3202,6 @@ fn apply_theme_pick(
     changed
 }
 
-/// Sent to every window with the Affects pane's style, marker, tint,
-/// and the hours at which an affect runs out and is almost gone,
-/// whenever they change: a pick from the pane menu, a Settings save
-/// (which the frontend sends itself), or a replace.
-pub(crate) const AFFECTS_DISPLAY_CHANGED_EVENT: &str = "vosh://affects-display-changed";
-
 /// How the Affects pane draws, as every window hears it. Read from the
 /// live profile's `[ui]`.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -3339,10 +3306,6 @@ fn apply_affects_display(
     let after = AffectsDisplay::of(ui);
     (after != before).then_some(after)
 }
-
-/// Sent to every window with the chat pane's channel colors whenever
-/// they change: a pick or a reset from the pane menu, or a replace.
-pub(crate) const CHAT_COLORS_CHANGED_EVENT: &str = "vosh://chat-colors-changed";
 
 /// The 16 ANSI slots a chat channel can take, in the frontend's names.
 const CHAT_COLOR_SLOTS: [&str; 16] = [
@@ -3805,9 +3768,6 @@ pub(crate) async fn migration_apply(
     announce_migration_applied(&app);
     Ok(())
 }
-
-/// What every window hears once the wizard wrote its files.
-pub(crate) const MIGRATION_APPLIED_EVENT: &str = "vosh://migration-applied";
 
 /// Tell every window once that the wizard wrote its files. The settings
 /// window runs the wizard and the main window listens, and puts the
@@ -6055,10 +6015,13 @@ mod tests {
                 "vosh://affects-display-changed",
                 "vosh://chat-colors-changed",
                 "vosh://tick-config-changed",
-                super::UI_CONFIG_REPLACED_EVENT,
+                crate::app::events::UI_CONFIG_REPLACED_EVENT,
             ]
         );
-        assert_eq!(super::UI_CONFIG_REPLACED_EVENT, "vosh://ui-config-replaced");
+        assert_eq!(
+            crate::app::events::UI_CONFIG_REPLACED_EVENT,
+            "vosh://ui-config-replaced"
+        );
     }
 
     /// Run `lines` the way the typed path does and hand back what every
@@ -6124,7 +6087,10 @@ mod tests {
             .collect();
         assert_eq!(ticks.len(), 1, "{heard:?}");
         assert_eq!(ticks[0].1["warn_at_secs"], serde_json::json!(10));
-        assert_eq!(heard.last().unwrap().0, super::UI_CONFIG_REPLACED_EVENT);
+        assert_eq!(
+            heard.last().unwrap().0,
+            crate::app::events::UI_CONFIG_REPLACED_EVENT
+        );
     }
 
     #[test]
