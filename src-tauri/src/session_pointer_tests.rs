@@ -11,7 +11,7 @@
 //! renderers drew and to the dock's own grid.
 
 use super::show_tests::{profile, showing, wire_fixture, Session, CODES, HP};
-use super::*;
+use crate::output::OutputPayload;
 use vosh_prompt::PromptShow;
 
 /// A design of one row, which word wraps at a narrow width.

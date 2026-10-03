@@ -156,7 +156,7 @@ async fn play(session: Arc<Vec<u8>>) -> Run {
     let frames = Arc::new(AtomicUsize::new(0));
     {
         let frames = frames.clone();
-        app.listen_any(crate::session::TEST_FRAME_EVENT, move |_| {
+        app.listen_any(crate::output::TEST_FRAME_EVENT, move |_| {
             frames.fetch_add(1, Ordering::Relaxed);
         });
     }

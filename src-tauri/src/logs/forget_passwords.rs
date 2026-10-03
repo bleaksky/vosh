@@ -180,7 +180,7 @@ pub(crate) fn start<R: tauri::Runtime>(app: &AppHandle<R>, command: LogsCommand)
 /// Print `line` in the terminal pane the way other slash commands do,
 /// through the one path that feeds the native renderer and xterm alike.
 fn echo<R: tauri::Runtime>(app: &AppHandle<R>, line: &str) {
-    crate::session::emit_output(app, format!("{line}\r\n").into_bytes());
+    crate::output::emit_output(app, format!("{line}\r\n").into_bytes());
 }
 
 #[cfg(test)]

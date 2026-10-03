@@ -27,7 +27,7 @@ use vosh_protocol::telnet::{
 
 use crate::app::events::{self, broadcast_list_changes, ListChanges, ListRevisions};
 use crate::input;
-use crate::output::{emit_counted, emit_repaint, output_count, request_frame};
+use crate::output::{emit_counted, emit_output, emit_repaint, output_count, request_frame};
 use crate::profile::Profile;
 use crate::profile_config::SharedLayer;
 use crate::script::{self, ApplyResult, PendingTimer, SharedTimers};
@@ -36,12 +36,6 @@ use crate::tick::{TickRuntime, TickStep};
 use connection::{ConnectionError, Stream};
 use echo::ServerEcho;
 use lines::{Line, LineAccumulator, Partial};
-
-// The callers outside the session still reach these here, until the next
-// commit points them at crate::output.
-pub(crate) use crate::output::emit_output;
-#[cfg(test)]
-pub(crate) use crate::output::{base64_encode, OutputPayload, TEST_FRAME_EVENT};
 
 const TICK_EMIT_INTERVAL: Duration = Duration::from_millis(250);
 
@@ -3885,7 +3879,7 @@ mod tests {
     /// Run one complete line through the session's line step and return
     /// the drawn prompt, the bytes after its region mark, when it drew.
     fn draw_line(p: &mut Profile, line: &str) -> Option<String> {
-        let mut batch = super::ReadBatch::new(super::output_count());
+        let mut batch = super::ReadBatch::new(crate::output::output_count());
         let _ = super::line_step(
             p,
             &mut batch,
@@ -3951,7 +3945,7 @@ mod tests {
         /// One socket read: `data`, then `ga` when the read ends in a GA,
         /// then the end of the read. Returns what the terminal gets.
         fn read_with(&mut self, data: &[u8], ga: bool, other: bool) -> super::ReadBatch {
-            let mut batch = super::ReadBatch::new(super::output_count());
+            let mut batch = super::ReadBatch::new(crate::output::output_count());
             batch.out = vosh_prompt::stage::Output::new(other);
             let now = tokio::time::Instant::now();
             for line in self.acc.feed(data) {
@@ -3972,7 +3966,7 @@ mod tests {
         /// One socket read that leaves a partial waiting, as the session
         /// does until the next read or the deadline. Returns the batch.
         fn read_holding(&mut self, data: &[u8]) -> super::ReadBatch {
-            let mut batch = super::ReadBatch::new(super::output_count());
+            let mut batch = super::ReadBatch::new(crate::output::output_count());
             let now = tokio::time::Instant::now();
             for line in self.acc.feed(data) {
                 let plain = vosh_protocol::ansi::plain_text(&line.bytes);
@@ -3992,7 +3986,7 @@ mod tests {
 
         /// You send a line. Held lines let go first, as in the session.
         fn send(&mut self) {
-            let mut batch = super::ReadBatch::new(super::output_count());
+            let mut batch = super::ReadBatch::new(crate::output::output_count());
             let _ = super::let_go_held(&mut self.p, &mut batch, tokio::time::Instant::now(), None);
             let _ = super::send_step(&mut self.p, &self.acc, b"look\r\n", 0);
             self.acc.forget_partial();
@@ -4015,7 +4009,7 @@ mod tests {
         /// GA or EOR through the marker step. Then the end of the read,
         /// and the hold's deadline before the next one.
         fn read_wire(&mut self, data: &[u8]) -> vosh_prompt::stage::Output {
-            let mut batch = super::ReadBatch::new(super::output_count());
+            let mut batch = super::ReadBatch::new(crate::output::output_count());
             batch.out = vosh_prompt::stage::Output::new(false);
             let now = tokio::time::Instant::now();
             for event in self.parser.feed(data) {
@@ -4053,7 +4047,7 @@ mod tests {
         /// One socket read of `events` in order, as the session handles
         /// them, then the end of the read.
         fn read_events(&mut self, events: &[Ev]) -> vosh_prompt::stage::Output {
-            let mut batch = super::ReadBatch::new(super::output_count());
+            let mut batch = super::ReadBatch::new(crate::output::output_count());
             let now = tokio::time::Instant::now();
             for event in events {
                 match event {
@@ -4230,7 +4224,7 @@ mod tests {
         let vars = wire.p.prompt.vars.prompt_vars();
         assert_eq!(vars.get("hp").map(String::as_str), Some("1020"));
 
-        let mut batch = super::ReadBatch::new(super::output_count());
+        let mut batch = super::ReadBatch::new(crate::output::output_count());
         let step = super::line_step(
             &mut wire.p,
             &mut batch,
@@ -4247,7 +4241,7 @@ mod tests {
         assert_eq!(step[0].scrollback, [PROMPT_LINE.as_bytes()]);
         // A drawn prompt is neither logged nor kept for scrollback.
         let mut p = capture_profile(HP);
-        let mut batch = super::ReadBatch::new(super::output_count());
+        let mut batch = super::ReadBatch::new(crate::output::output_count());
         let step = super::line_step(
             &mut p,
             &mut batch,
@@ -5301,7 +5295,7 @@ mod tests {
         // You send before the next read. The line stays as it shows and
         // runs the Line pass, so its trigger answers and it is logged and
         // kept for scrollback.
-        let mut batch = super::ReadBatch::new(super::output_count());
+        let mut batch = super::ReadBatch::new(crate::output::output_count());
         let steps = super::let_go_held(
             &mut wire.p,
             &mut batch,
@@ -5347,7 +5341,7 @@ mod tests {
             .unwrap();
         let mut wire = Wire::new(p);
         let _ = wire.read(b"Bob says: \n\r");
-        let mut batch = super::ReadBatch::new(super::output_count());
+        let mut batch = super::ReadBatch::new(crate::output::output_count());
         let steps = super::let_go_held(
             &mut wire.p,
             &mut batch,
@@ -5443,7 +5437,7 @@ mod tests {
                 vosh_automation::trigger::TriggerAction::Gag,
             ))
             .unwrap();
-        let mut batch = super::ReadBatch::new(super::output_count());
+        let mut batch = super::ReadBatch::new(crate::output::output_count());
         let now = tokio::time::Instant::now();
         let mut acc = super::LineAccumulator::new();
         let mut steps = Vec::new();
@@ -5478,7 +5472,7 @@ mod tests {
             out.bytes,
             format!("{TANK_LINE}\r\n{FIGHT_LINE}\r\n").into_bytes()
         );
-        let mut batch = super::ReadBatch::new(super::output_count());
+        let mut batch = super::ReadBatch::new(crate::output::output_count());
         let now = tokio::time::Instant::now();
         let mut acc = super::LineAccumulator::new();
         for line in acc.feed(format!("{TANK_LINE}\n\r{FIGHT_LINE}\n\r").as_bytes()) {
@@ -5492,7 +5486,7 @@ mod tests {
     /// Run `text` through the Line pass as one read. Returns what it
     /// logged, what it kept for scrollback, and what it wrote.
     fn logged_and_kept(p: &mut Profile, text: &str) -> (Vec<String>, Vec<Vec<u8>>, Vec<u8>) {
-        let mut batch = super::ReadBatch::new(super::output_count());
+        let mut batch = super::ReadBatch::new(crate::output::output_count());
         let now = tokio::time::Instant::now();
         let mut acc = super::LineAccumulator::new();
         let mut kept = Vec::new();

@@ -8,14 +8,11 @@ use crate::app::events::{self, ListChanges, ListRevisions, HELP_OPEN};
 use crate::app::state::{note_ui_config_replaced, SharedState};
 use crate::disk::save::settle_line_effects;
 use crate::input;
+use crate::output;
 use crate::profile::switch::read_shared_layer;
 use crate::prompt::{prompt_look, request_prompt_repaint};
 use crate::script::ApplyResult;
 use crate::session::{self, TargetPayload};
-
-// session_send_input and the echo test still reach echo_lines here, until
-// the next commit points them at crate::output.
-pub(crate) use crate::output::echo_lines;
 
 #[tauri::command]
 pub(crate) async fn session_connect(
@@ -217,7 +214,7 @@ async fn deliver_script_result<R: tauri::Runtime>(
 ) -> Result<(), String> {
     let (bytes, echoes) =
         session::collect_script_result(app, &state.profile, &state.script_timers, apply).await;
-    echo_lines(app, &echoes);
+    output::echo_lines(app, &echoes);
 
     if bytes.is_empty() {
         return Ok(());
@@ -235,7 +232,7 @@ async fn deliver_script_result<R: tauri::Runtime>(
         // finds no connection, as after a disconnect.
         *current = None;
     }
-    session::emit_output(app, NOT_CONNECTED.to_vec());
+    output::emit_output(app, NOT_CONNECTED.to_vec());
     Ok(())
 }
 
@@ -253,7 +250,7 @@ pub(crate) async fn session_send_masked<R: tauri::Runtime>(
 ) -> Result<(), String> {
     let current = state.session.lock().await;
     let Some(handle) = current.as_ref() else {
-        session::emit_output(&app, NOT_CONNECTED.to_vec());
+        output::emit_output(&app, NOT_CONNECTED.to_vec());
         return Ok(());
     };
     if !handle.send_masked(crate::session::echo::masked_line_bytes(&line)) {

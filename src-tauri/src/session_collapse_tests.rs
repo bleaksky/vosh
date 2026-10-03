@@ -13,6 +13,7 @@
 
 use super::show_tests::{base64_decode, cuts, profile, rows_of, showing, Read, Session, CODES, HP};
 use super::*;
+use crate::output::{base64_encode, OutputPayload};
 use vosh_prompt::stage::Repeat;
 use vosh_prompt::testkit::{Build, Mud, Options};
 use vosh_prompt::PromptShow;
