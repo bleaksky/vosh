@@ -23,6 +23,7 @@ mod logs;
 mod migration;
 #[cfg(native_surface)]
 mod native_surface;
+mod output;
 mod preset_rollout;
 mod profile;
 mod profile_config;

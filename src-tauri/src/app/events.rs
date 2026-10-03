@@ -63,7 +63,7 @@ pub(crate) fn broadcast<R: tauri::Runtime, S: serde::Serialize + ?Sized>(
 
 /// Text for the terminal, from the game, an echo or a repaint, in the
 /// order the renderers take it. The payload is an
-/// [`crate::session::OutputPayload`]. `onOutput` hears it.
+/// [`crate::output::OutputPayload`]. `onOutput` hears it.
 pub(crate) const OUTPUT: &str = "session://output";
 /// The connection is connecting, up or down. The payload is a
 /// [`crate::session::StatePayload`]. `onState` hears it.

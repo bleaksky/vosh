@@ -13,6 +13,10 @@ use crate::prompt::{prompt_look, request_prompt_repaint};
 use crate::script::ApplyResult;
 use crate::session::{self, TargetPayload};
 
+// session_send_input and the echo test still reach echo_lines here, until
+// the next commit points them at crate::output.
+pub(crate) use crate::output::echo_lines;
+
 #[tauri::command]
 pub(crate) async fn session_connect(
     app: AppHandle,
@@ -114,21 +118,6 @@ pub(crate) async fn session_connect(
 
 /// What the terminal prints when you send a line with no connection.
 const NOT_CONNECTED: &[u8] = b"\r\n[not connected]\r\n";
-
-/// Print the lines a typed line echoes, such as a slash command's
-/// reply, one to a row. They go through [`session::emit_output`] like
-/// every other terminal write, so the native renderer shows them too.
-pub(crate) fn echo_lines<R: tauri::Runtime>(app: &AppHandle<R>, lines: &[String]) {
-    if lines.is_empty() {
-        return;
-    }
-    let mut buf = Vec::new();
-    for line in lines {
-        buf.extend_from_slice(line.as_bytes());
-        buf.extend_from_slice(b"\r\n");
-    }
-    session::emit_output(app, buf);
-}
 
 #[tauri::command]
 pub(crate) async fn session_send_input<R: tauri::Runtime>(
