@@ -21,17 +21,13 @@ pub(crate) use crate::disk::atomic::{
 };
 // Callers outside this file still reach these here, until they point at
 // crate::disk::custom_themes.
-pub(crate) use crate::disk::custom_themes::{
-    migrate_custom_themes, share_custom_themes, HeldCustomThemes,
-};
+pub(crate) use crate::disk::custom_themes::migrate_custom_themes;
 // Callers outside this file still reach these here, until they point at
 // crate::profile::panes.
 pub(crate) use crate::profile::panes::{DockEntryPersist, PaneLayoutPersist};
 // Callers outside this file still reach these here, until they point at
 // crate::profile::shared.
-pub(crate) use crate::profile::shared::{
-    hand_out_shared, put_back, strip_global_fields, GlobalConfig, SharedLayer,
-};
+pub(crate) use crate::profile::shared::{put_back, strip_global_fields, GlobalConfig, SharedLayer};
 use crate::profile::{Macro, Profile, Timer};
 use crate::profile_set::ProfileSet;
 use crate::tick::TickConfig;

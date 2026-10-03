@@ -7,9 +7,13 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
-use crate::disk::atomic::write_with_backup;
-use crate::disk::custom_themes::{follow_moved_ids, merge_custom_themes};
+use crate::app::state::{SharedState, MIGRATION_RELAUNCH_PENDING};
+use crate::disk::atomic::{is_unread, write_with_backup};
+use crate::disk::custom_themes::{
+    follow_moved_ids, merge_custom_themes, share_custom_themes, HeldCustomThemes,
+};
 use crate::profile::panes::DockEntryPersist;
 use crate::profile::Profile;
 use crate::profile_config::{
@@ -494,6 +498,91 @@ pub(crate) fn strip_global_fields(config: &mut ProfileConfig, scope: &ScopeConfi
     }
 }
 
+/// Why a category cannot stop being shared between `migration_apply`
+/// and the relaunch that finishes it. The shared values would have to
+/// reach profile files that nothing may write in that window.
+const SCOPE_MIGRATION_PENDING: &str =
+    "Restart Vosh to finish the move to loadouts, then turn this off.";
+
+/// Why the shared categories cannot change while Vosh holds a file it
+/// could not read at launch. The live profile holds the defaults where
+/// that file's settings belong, and a change would hand those defaults
+/// to the other profiles or share them with every character.
+fn scope_refusal_for_unread(set: &crate::profile_set::ProfileSet) -> Option<String> {
+    if is_unread(&set.global_path()) {
+        return Some(
+            "Vosh could not read global.toml, so it will not change which settings every \
+             character shares. Fix the file and restart Vosh."
+                .to_string(),
+        );
+    }
+    if is_unread(&set.active_path()) {
+        return Some(format!(
+            "Vosh could not read the {} profile file, so it will not change which settings \
+             every character shares. Fix the file or switch to another profile.",
+            crate::profile_set::display_name(set.active_name())
+        ));
+    }
+    None
+}
+
+/// The body of [`profile_set_scope`] up to its save. Call with
+/// [`PERSIST_LOCK`] held. Returns the live custom themes when turning the
+/// theme category global added to them.
+///
+/// [`profile_set_scope`]: crate::ipc::profiles::profile_set_scope
+/// [`PERSIST_LOCK`]: crate::disk::save::PERSIST_LOCK
+pub(crate) async fn change_scope_locked(
+    state: &SharedState,
+    scope: ScopeConfig,
+) -> Result<Option<Vec<crate::profile_config::CustomTheme>>, String> {
+    let migration_pending = MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
+    let before = {
+        let set = state.loaded_profile_set().await?;
+        if let Some(refusal) = scope_refusal_for_unread(&set) {
+            return Err(refusal);
+        }
+        *set.scope()
+    };
+    // Every other profile file holds the defaults for a shared category,
+    // and the save below drops the category from global.toml, so each
+    // file takes the shared values first or that profile opens with the
+    // defaults. The live profile holds the shared values.
+    if let Some(stopped) = before.stopped_sharing(&scope) {
+        if migration_pending {
+            return Err(SCOPE_MIGRATION_PENDING.into());
+        }
+        let values = {
+            let p = state.profile.lock().await;
+            GlobalConfig::from_profile(&p, &stopped)
+        };
+        let set = state.loaded_profile_set().await?;
+        hand_out_shared(&set, &values)?;
+    }
+    let (held, global_path) = {
+        let mut set = state.loaded_profile_set().await?;
+        let theme_was_global = matches!(set.scope().theme, Scope::Global);
+        set.set_scope(scope).map_err(|e| e.to_string())?;
+        // Nothing may write profile files while a migration relaunch is
+        // pending. The next launch moves the themes instead.
+        let theme_turned_global =
+            !theme_was_global && matches!(scope.theme, Scope::Global) && !migration_pending;
+        let held =
+            theme_turned_global.then(|| HeldCustomThemes::find(&set, Some(set.active_name())));
+        (held, set.global_path())
+    };
+    let mut gained = None;
+    if let Some(held) = held {
+        let mut p = state.profile.lock().await;
+        match share_custom_themes(held, &scope, &global_path, &mut p) {
+            Ok(true) => gained = Some(p.ui.custom_themes.clone()),
+            Ok(false) => {}
+            Err(e) => warn!(error = %e, "custom themes stayed in their profile files"),
+        }
+    }
+    Ok(gained)
+}
+
 #[cfg(test)]
 mod tests {
     use vosh_automation::alias::Alias;
@@ -857,5 +946,298 @@ mod tests {
 
         assert!(refused.is_err());
         assert!(!set.profile_path("Bard").exists());
+    }
+}
+
+/// Changing which categories every profile shares, the way Settings >
+/// General does through `profile_set_scope`.
+#[cfg(test)]
+mod scope_change_tests {
+    use std::sync::Arc;
+
+    use super::{change_scope_locked, strip_global_fields, GlobalConfig, Scope, ScopeConfig};
+    use crate::app::state::{AppState, SharedState};
+    use crate::disk::save::PERSIST_LOCK;
+    use crate::profile::Profile;
+    use crate::profile_config::{CustomTheme, ProfileConfig, TrackedAffect, UiConfig};
+    use crate::profile_set::tests::james_like_set;
+    use crate::profile_set::{ProfileSet, DEFAULT_PROFILE_NAME};
+
+    fn theme(id: &str, background: &str) -> CustomTheme {
+        CustomTheme {
+            id: id.into(),
+            label: id.into(),
+            xterm: [("background".to_string(), background.to_string())]
+                .into_iter()
+                .collect(),
+            ..CustomTheme::default()
+        }
+    }
+
+    fn ids(themes: &[CustomTheme]) -> Vec<&str> {
+        themes.iter().map(|t| t.id.as_str()).collect()
+    }
+
+    /// The live profile with every shared setting off its default.
+    fn shared_profile() -> Profile {
+        let mut profile = Profile::default();
+        profile.ui.theme = "night-ink".into();
+        profile.ui.follow_system_appearance = true;
+        profile.ui.light_theme = "classic-vivid".into();
+        profile.ui.dark_theme = "night-ink".into();
+        profile.ui.custom_themes = vec![theme("night-ink", "#000000")];
+        profile.ui.font_family = "Iosevka".into();
+        profile.ui.font_size = 16;
+        profile.ui.terminal_line_height = "loose".into();
+        profile.ui.keep_last_command = true;
+        profile.ui.auto_update = true;
+        profile
+    }
+
+    /// Mirror `persist_profile` for the active profile.
+    fn persist(set: &ProfileSet, profile: &Profile) {
+        let mut snapshot = ProfileConfig::from_profile(profile);
+        strip_global_fields(&mut snapshot, set.scope());
+        snapshot.save(&set.active_path()).unwrap();
+        GlobalConfig::from_profile(profile, set.scope())
+            .save(&set.global_path())
+            .unwrap();
+    }
+
+    /// Mirror a switch. The active profile file loads first, then the
+    /// shared part of global.toml over it.
+    fn load(set: &ProfileSet) -> Profile {
+        let mut profile = Profile::default();
+        let path = set.active_path();
+        if path.exists() {
+            ProfileConfig::load(&path).unwrap().apply_to(&mut profile);
+        }
+        if let Some(global) = GlobalConfig::load_shared(&set.global_path(), set.scope()).unwrap() {
+            global.apply_to(&mut profile);
+        }
+        profile
+    }
+
+    fn file(set: &ProfileSet, name: &str) -> ProfileConfig {
+        ProfileConfig::load(&set.profile_path(name)).unwrap()
+    }
+
+    fn per_profile() -> ScopeConfig {
+        ScopeConfig {
+            theme: Scope::Profile,
+            font: Scope::Profile,
+            keep_last_command: Scope::Profile,
+            auto_update: Scope::Profile,
+            ..ScopeConfig::default()
+        }
+    }
+
+    /// Default is live and shares everything. Healer saved its file
+    /// while everything was shared, so it holds the defaults. Test-Prompt
+    /// saved its own theme, font, and custom theme before they were
+    /// shared, under the id the live custom theme holds.
+    async fn three_profiles(dir: &std::path::Path) -> SharedState {
+        let set = james_like_set(dir);
+        let live = shared_profile();
+        persist(&set, &live);
+
+        let mut healer = ProfileConfig::default();
+        healer.ui.tracked_affects = vec![TrackedAffect {
+            name: "Fly".into(),
+            label: None,
+        }];
+        healer.save(&set.profile_path("Healer")).unwrap();
+
+        let mut prompt = ProfileConfig::default();
+        prompt.ui.theme = "night-ink".into();
+        prompt.ui.custom_themes = vec![theme("night-ink", "#ffffff")];
+        prompt.ui.font_size = 13;
+        prompt.save(&set.profile_path("Test-Prompt")).unwrap();
+
+        let state: SharedState = Arc::new(AppState::default());
+        *state.profile.lock().await = live;
+        *state.profile_set.lock().await = Some(set);
+        state
+    }
+
+    /// Mirror `profile_set_scope`. The persist that follows the change
+    /// runs under the same lock.
+    async fn set_scope(state: &SharedState, scope: ScopeConfig) {
+        let _persist_guard = PERSIST_LOCK.lock().await;
+        change_scope_locked(state, scope).await.unwrap();
+        let live = state.profile.lock().await;
+        let guard = state.profile_set.lock().await;
+        persist(guard.as_ref().unwrap(), &live);
+    }
+
+    #[tokio::test]
+    async fn turning_sharing_off_hands_the_shared_settings_to_every_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = three_profiles(dir.path()).await;
+        set_scope(&state, per_profile()).await;
+
+        let mut guard = state.profile_set.lock().await;
+        let set = guard.as_mut().unwrap();
+        // global.toml no longer holds the categories you turned off.
+        let global = GlobalConfig::load(&set.global_path()).unwrap();
+        assert!(global.theme.is_none());
+        assert!(global.custom_themes.is_none());
+        assert!(global.font_size.is_none());
+        assert!(global.keep_last_command.is_none());
+        assert!(global.auto_update.is_none());
+
+        // Healer held none of its own, so it takes every shared value
+        // and keeps what it owns.
+        let healer = file(set, "Healer").ui;
+        assert_eq!(healer.theme, "night-ink");
+        assert!(healer.follow_system_appearance);
+        assert_eq!(healer.light_theme, "classic-vivid");
+        assert_eq!(healer.dark_theme, "night-ink");
+        assert_eq!(ids(&healer.custom_themes), ["night-ink"]);
+        assert_eq!(healer.font_family, "Iosevka");
+        assert_eq!(healer.font_size, 16);
+        assert_eq!(healer.terminal_line_height, "loose");
+        assert!(healer.keep_last_command);
+        assert!(healer.auto_update);
+        assert_eq!(healer.tracked_affects.len(), 1);
+
+        // Test-Prompt keeps its own theme and font, and its own custom
+        // theme moves to a fresh id beside the shared one.
+        let prompt = file(set, "Test-Prompt").ui;
+        assert_eq!(ids(&prompt.custom_themes), ["night-ink", "night-ink-2"]);
+        assert_eq!(prompt.custom_themes[1], {
+            let mut own = theme("night-ink-2", "#ffffff");
+            own.label = "night-ink (Test-Prompt)".into();
+            own
+        });
+        assert_eq!(prompt.theme, "night-ink-2");
+        assert_eq!(prompt.font_size, 13);
+        assert_eq!(prompt.font_family, UiConfig::default().font_family);
+        assert!(prompt.keep_last_command);
+
+        // A switch to Healer shows what it showed while shared.
+        set.switch("Healer").unwrap();
+        let healer = load(set);
+        assert_eq!(healer.ui.theme, "night-ink");
+        assert_eq!(healer.ui.font_size, 16);
+        assert!(healer.ui.keep_last_command);
+        // The live profile kept its values in its own file.
+        set.switch(DEFAULT_PROFILE_NAME).unwrap();
+        let live = load(set);
+        assert_eq!(live.ui.theme, "night-ink");
+        assert_eq!(live.ui.font_size, 16);
+    }
+
+    #[tokio::test]
+    async fn sharing_again_after_turning_it_off_keeps_every_theme() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = three_profiles(dir.path()).await;
+        set_scope(&state, per_profile()).await;
+        set_scope(&state, ScopeConfig::default()).await;
+
+        let live = state.profile.lock().await;
+        assert_eq!(ids(&live.ui.custom_themes), ["night-ink", "night-ink-2"]);
+        let guard = state.profile_set.lock().await;
+        let set = guard.as_ref().unwrap();
+        let global = GlobalConfig::load(&set.global_path()).unwrap();
+        assert_eq!(
+            ids(&global.custom_themes.unwrap()),
+            ["night-ink", "night-ink-2"]
+        );
+        // Test-Prompt still points at its own theme for the next time
+        // you turn sharing off.
+        assert_eq!(file(set, "Test-Prompt").ui.theme, "night-ink-2");
+    }
+
+    #[tokio::test]
+    async fn a_profile_that_never_saved_takes_the_shared_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = three_profiles(dir.path()).await;
+        state
+            .profile_set
+            .lock()
+            .await
+            .as_mut()
+            .unwrap()
+            .create("Bard")
+            .unwrap();
+        set_scope(
+            &state,
+            ScopeConfig {
+                font: Scope::Profile,
+                ..ScopeConfig::default()
+            },
+        )
+        .await;
+
+        let guard = state.profile_set.lock().await;
+        let set = guard.as_ref().unwrap();
+        let bard = file(set, "Bard").ui;
+        assert_eq!(bard.font_size, 16);
+        assert_eq!(bard.terminal_line_height, "loose");
+        // The theme is still shared, so the file keeps the defaults.
+        let leftover = &bard.custom_themes;
+        assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
+    #[tokio::test]
+    async fn a_file_vosh_cannot_read_keeps_the_settings_shared() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = three_profiles(dir.path()).await;
+        let (healer_path, global_path) = {
+            let guard = state.profile_set.lock().await;
+            let set = guard.as_ref().unwrap();
+            std::fs::write(set.profile_path("Test-Prompt"), "theme = [").unwrap();
+            (set.profile_path("Healer"), set.global_path())
+        };
+        let healer_before = std::fs::read_to_string(&healer_path).unwrap();
+        let global_before = std::fs::read_to_string(&global_path).unwrap();
+
+        let refused = {
+            let _persist_guard = PERSIST_LOCK.lock().await;
+            change_scope_locked(&state, per_profile()).await
+        };
+
+        let message = refused.unwrap_err();
+        assert_eq!(
+        message,
+        "Vosh could not read the Test-Prompt profile file, so these settings stay the same for every character."
+    );
+        let guard = state.profile_set.lock().await;
+        assert_eq!(guard.as_ref().unwrap().scope().theme, Scope::Global);
+        assert_eq!(
+            std::fs::read_to_string(&healer_path).unwrap(),
+            healer_before
+        );
+        assert_eq!(
+            std::fs::read_to_string(&global_path).unwrap(),
+            global_before
+        );
+    }
+
+    #[test]
+    fn stopped_sharing_names_only_the_categories_turned_off() {
+        let shared = ScopeConfig::default();
+        assert!(shared.stopped_sharing(&shared).is_none());
+        let stopped = shared.stopped_sharing(&per_profile()).unwrap();
+        assert_eq!(stopped.theme, Scope::Global);
+        assert_eq!(stopped.font, Scope::Global);
+        assert_eq!(stopped.dock_layout, Scope::Profile);
+        assert!(per_profile().stopped_sharing(&shared).is_none());
+    }
+
+    #[tokio::test]
+    async fn turning_sharing_on_writes_no_other_profile_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = three_profiles(dir.path()).await;
+        let healer_before = {
+            let guard = state.profile_set.lock().await;
+            std::fs::read_to_string(guard.as_ref().unwrap().profile_path("Healer")).unwrap()
+        };
+        set_scope(&state, ScopeConfig::default()).await;
+        let guard = state.profile_set.lock().await;
+        let healer_after =
+            std::fs::read_to_string(guard.as_ref().unwrap().profile_path("Healer")).unwrap();
+        assert_eq!(healer_after, healer_before);
     }
 }
