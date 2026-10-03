@@ -80,14 +80,11 @@ impl Harness {
         let accept = tokio::spawn(async move { listener.accept().await.expect("a client").0 });
         let handle = crate::session::spawn(
             app.handle().clone(),
+            &state,
             "127.0.0.1".into(),
             port,
             false,
             false,
-            state.profile.clone(),
-            state.script_timers.clone(),
-            state.logs.clone(),
-            state.scrollback.clone(),
             None,
             (100, 40),
         )

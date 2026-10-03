@@ -190,14 +190,11 @@ async fn play(session: Arc<Vec<u8>>) -> Run {
     // The fake Aabahran counts as The Forsaken Lands.
     let handle = crate::session::spawn(
         app.handle().clone(),
+        &state,
         "127.0.0.1".into(),
         port,
         false,
         true,
-        state.profile.clone(),
-        state.script_timers.clone(),
-        state.logs.clone(),
-        state.scrollback.clone(),
         None,
         (COLUMNS as u16, ROWS as u16),
     )
