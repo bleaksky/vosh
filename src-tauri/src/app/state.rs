@@ -12,9 +12,11 @@ use crate::profile::Profile;
 use crate::script_state::SharedTimers;
 use crate::session::SessionHandle;
 
-/// Application-wide state. Phase 1 carries a single optional session and one
-/// profile. Phase 5 widens this to a session map; Phase 9 widens to multiple
-/// profiles.
+/// What every command, window and session shares. The one session slot,
+/// the live profile, the profile set, the log store and scrollback, the
+/// plugins and Lua timers, the catalog and loadouts of loadout mode, and
+/// what the app keeps about the live connection: its target, the
+/// character logged in, the terminal size and the last affects.
 pub(crate) struct AppState {
     pub(crate) session: Mutex<Option<SessionHandle>>,
     pub(crate) profile: Arc<Mutex<Profile>>,
