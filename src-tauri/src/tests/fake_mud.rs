@@ -1957,8 +1957,8 @@ async fn prompt_default_draws_the_default_design_on_the_pinned_band_at_once() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn each_gmcp_package_goes_out_on_the_event_the_page_hears() {
     let grid = crate::term_grid::lock_shared_grid_for_test();
-    let cases: Json =
-        serde_json::from_str(include_str!("../../fixtures/ipc/gmcp-events.json")).expect("cases");
+    let cases: Json = serde_json::from_str(include_str!("../../../fixtures/ipc/gmcp-events.json"))
+        .expect("cases");
     let events: Vec<String> = cases["cases"]
         .as_array()
         .expect("a list of cases")
