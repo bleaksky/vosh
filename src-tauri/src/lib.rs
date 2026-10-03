@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use tracing_subscriber::EnvFilter;
 
-mod affect_full;
-mod affects_snapshot;
+mod affects;
 mod app;
 mod app_menu;
 #[cfg(native_surface)]
@@ -67,6 +66,11 @@ mod prompt_migration {
     pub(crate) use crate::disk::upgrades::line_triggers::note_line_triggers;
     pub(crate) use crate::disk::upgrades::prompt_capture::run;
 }
+
+// Callers still reach the affects snapshot and fulls by the paths of
+// affects_snapshot.rs and affect_full.rs, until they point at affects/.
+use affects::full as affect_full;
+use affects::snapshot as affects_snapshot;
 
 pub fn run() {
     tracing_subscriber::fmt()
