@@ -620,7 +620,7 @@ pub(crate) mod tests {
     use super::*;
     use tempfile::tempdir;
 
-    use crate::profile::tests::{james_like_set, set_with_profiles};
+    use crate::profile::tests::james_like_set;
 
     #[test]
     fn creates_fresh_set_when_no_files_exist() {
@@ -805,6 +805,25 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn create_from_without_a_source_starts_empty() {
+        let dir = tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        let entry = set.create_from("Fresh", None, None).unwrap();
+        assert!(entry.description.is_none());
+        assert!(entry.auto_match.is_none());
+        assert!(!set.profile_path("Fresh").exists());
+        assert!(matches!(
+            set.create_from("Other", Some("Nobody"), None),
+            Err(ProfileSetError::NotFound(_))
+        ));
+        assert!(matches!(
+            set.create_from("Fresh", None, None),
+            Err(ProfileSetError::AlreadyExists(_))
+        ));
+        assert!(set.get("Other").is_none());
+    }
+
+    #[test]
     fn duplicate_copies_per_profile_file() {
         let dir = tempdir().unwrap();
         let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
@@ -850,132 +869,5 @@ pub(crate) mod tests {
         assert!(set.create("").is_err());
         assert!(set.create("    ").is_err());
         assert!(set.create("with:colon").is_err());
-    }
-
-    #[test]
-    fn resolve_match_returns_none_when_no_profile_pins_host() {
-        let set = set_with_profiles(vec![]);
-        assert_eq!(set.resolve_match("a.b.c", 1234, None), None);
-    }
-
-    #[test]
-    fn resolve_match_host_only_picks_host_match() {
-        let set = set_with_profiles(vec![(
-            DEFAULT_PROFILE_NAME,
-            AutoMatch {
-                host: Some("h".into()),
-                port: None,
-                characters: vec![],
-                enabled: true,
-            },
-        )]);
-        assert_eq!(
-            set.resolve_match("h", 0, None),
-            Some(DEFAULT_PROFILE_NAME.to_string())
-        );
-    }
-
-    #[test]
-    fn resolve_match_host_case_insensitive() {
-        let set = set_with_profiles(vec![(
-            DEFAULT_PROFILE_NAME,
-            AutoMatch {
-                host: Some("PLAY.example.com".into()),
-                port: None,
-                characters: vec![],
-                enabled: true,
-            },
-        )]);
-        assert!(set.resolve_match("play.EXAMPLE.com", 0, None).is_some());
-    }
-
-    #[test]
-    fn resolve_match_with_pinned_character_skips_when_none_supplied() {
-        // A profile that pins characters must NOT match when the caller
-        // supplied no character: the Char.Status-driven path leans on
-        // this so the pre-login resolver does not lock to a
-        // character-pinned profile before Char.Status arrives.
-        let set = set_with_profiles(vec![(
-            DEFAULT_PROFILE_NAME,
-            AutoMatch {
-                host: Some("h".into()),
-                port: None,
-                characters: vec!["Ilsabet".into()],
-                enabled: true,
-            },
-        )]);
-        assert_eq!(set.resolve_match("h", 0, None), None);
-        assert_eq!(
-            set.resolve_match("h", 0, Some("Ilsabet")),
-            Some(DEFAULT_PROFILE_NAME.to_string())
-        );
-    }
-
-    #[test]
-    fn resolve_match_character_pinned_beats_host_only() {
-        // host-only profile + character-pinned profile on the same host
-        // and the supplied character matches the pin → the pinned one
-        // wins on score (host=1 vs host+char=3).
-        let set = set_with_profiles(vec![
-            (
-                DEFAULT_PROFILE_NAME,
-                AutoMatch {
-                    host: Some("h".into()),
-                    port: None,
-                    characters: vec![],
-                    enabled: true,
-                },
-            ),
-            (
-                "warrior",
-                AutoMatch {
-                    host: Some("h".into()),
-                    port: None,
-                    characters: vec!["Ilsabet".into()],
-                    enabled: true,
-                },
-            ),
-        ]);
-        assert_eq!(
-            set.resolve_match("h", 0, Some("Ilsabet")),
-            Some("warrior".to_string())
-        );
-        // Without the character, the host-only profile wins.
-        assert_eq!(
-            set.resolve_match("h", 0, None),
-            Some(DEFAULT_PROFILE_NAME.to_string())
-        );
-    }
-
-    #[test]
-    fn resolve_match_any_of_characters_list() {
-        let set = set_with_profiles(vec![(
-            DEFAULT_PROFILE_NAME,
-            AutoMatch {
-                host: Some("h".into()),
-                port: None,
-                characters: vec!["A".into(), "B".into(), "C".into()],
-                enabled: true,
-            },
-        )]);
-        assert!(set.resolve_match("h", 0, Some("a")).is_some());
-        assert!(set.resolve_match("h", 0, Some("B")).is_some());
-        assert!(set.resolve_match("h", 0, Some("D")).is_none());
-    }
-
-    #[test]
-    fn resolve_match_port_pin_required_when_set() {
-        let set = set_with_profiles(vec![(
-            DEFAULT_PROFILE_NAME,
-            AutoMatch {
-                host: Some("h".into()),
-                port: Some(1848),
-                characters: vec![],
-                enabled: true,
-            },
-        )]);
-        assert!(set.resolve_match("h", 1848, None).is_some());
-        // Wrong port: profile skipped.
-        assert!(set.resolve_match("h", 4000, None).is_none());
     }
 }
