@@ -383,6 +383,7 @@ async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
 pub(crate) mod tests {
     use crate::app::state::AppState;
     use crate::profile::file::ProfileConfig;
+    use crate::profile::set::ProfileSet;
     use crate::profile::tests::james_like_set;
 
     pub(crate) fn affect(name: &str) -> crate::profile::ui::TrackedAffect {
@@ -402,11 +403,13 @@ pub(crate) mod tests {
 
     pub(crate) const UNREADABLE: &str = "tracked = = [\n";
 
-    /// Launch over the profile set in `dir` the way app/launch.rs runs
-    /// it, and hand back the app state with the notices launch kept.
+    /// Load the profiles in `dir` the way launch loads them after its
+    /// upgrades, and hand back the app state with the notices launch
+    /// kept.
     pub(crate) async fn launch_state(dir: &std::path::Path) -> super::SharedState {
         let state: super::SharedState = std::sync::Arc::new(AppState::default());
-        crate::app::launch::load_profiles(&state, dir).await;
+        let set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
+        crate::app::launch::load_profiles(&state, set).await;
         assert!(state.profile_set.lock().await.is_some());
         state
     }
@@ -528,7 +531,7 @@ pub(crate) mod tests {
         // Launch cannot read the index, so the session runs on the
         // defaults. You change a setting and Vosh saves.
         let state: super::SharedState = std::sync::Arc::new(AppState::default());
-        crate::app::launch::load_profiles(&state, dir.path()).await;
+        crate::app::launch::load(&state, dir.path()).await;
         assert!(state.profile_set.lock().await.is_none());
         state.profile.lock().await.ui.tracked_affects = vec![affect("Haste")];
         persist(&state, dir.path()).await;

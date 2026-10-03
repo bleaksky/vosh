@@ -1,13 +1,13 @@
 //! The order launch runs its upgrades in (R2 of the refactor plan).
 //!
 //! The setup steps in app/launch.rs run `load`. It finishes a shared
-//! catalog wizard run that stopped, moves the prompt capture triggers into
-//! the profiles, turns on the presets a build adds, and loads the profile
-//! set. Then it moves the custom themes older profile files hold into
-//! global.toml, and only then loads the active profile. Each step reads
-//! what the steps before it wrote, so the order is part of what a refactor
-//! keeps. R12 gathers the steps into one list, and this order holds there
-//! too.
+//! catalog wizard run that stopped and reads the profile set. Then it
+//! moves the prompt capture triggers into the profiles, turns on the
+//! presets a build adds, and moves the custom themes older profile files
+//! hold into global.toml, and only then loads the active profile. Each
+//! step reads what the steps before it wrote, so the order is part of what
+//! a refactor keeps. `disk::upgrades::run` holds the steps after the read
+//! as one ordered list.
 
 use std::path::Path;
 use std::sync::Arc;

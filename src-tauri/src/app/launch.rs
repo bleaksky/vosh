@@ -12,7 +12,6 @@ use tracing::{error, info};
 use vosh_log::LogStore;
 
 use crate::app::state::SharedState;
-use crate::disk::custom_themes::migrate_custom_themes;
 use crate::loadouts::catalog::{path_b_mode_active, save_global_catalog};
 use crate::loadouts::gating::apply_effective_state;
 use crate::loadouts::load_path_b_at_launch;
@@ -127,28 +126,32 @@ pub(crate) struct Launch {
 
 /// Everything launch loads, in order. A shared catalog wizard run that
 /// stopped partway finishes first, so nothing loads a file it had yet to
-/// write. Then the prompt capture triggers move into the profiles, once,
-/// see [`crate::disk::upgrades::prompt_capture`], and each preset a
-/// build adds comes on once, see [`crate::disk::upgrades::presets`].
-/// Then the profiles load, see [`load_profiles`], and loadout mode starts
-/// when catalog.toml is on disk, see [`load_loadout_mode`]. While the run
-/// stays unfinished, the move and loadout mode wait, since a profile file
-/// may still hold its items under their old group names and would lay
-/// them over the catalog for every character. The session runs on the
-/// active profile file alone.
+/// write. Then launch reads profiles.toml, once, and runs the one time
+/// upgrades over the set, see [`crate::disk::upgrades::run`]. Then the
+/// profiles load, see [`load_profiles`], and loadout mode starts when
+/// catalog.toml is on disk, see [`load_loadout_mode`]. While the run
+/// stays unfinished, the prompt capture move, the preset rollouts and
+/// loadout mode wait, since a profile file may still hold its items under
+/// their old group names and would lay them over the catalog for every
+/// character. The session runs on the active profile file alone. When
+/// profiles.toml does not read, the upgrades and the profiles wait for
+/// the next launch, and the session runs on the defaults.
 pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
     let run = journal::finish_wizard_run(app_data);
     state.add_launch_notices(run.notices());
-    let relaunch_pending =
-        crate::app::state::MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
-    if run != WizardRun::Unfinished && !relaunch_pending {
-        // Before any profile loads, so the live profile reads the files
-        // as the move left them. It writes inactive profile files too.
-        let _persist = crate::disk::save::PERSIST_LOCK.lock().await;
-        state.add_launch_notices(crate::disk::upgrades::prompt_capture::run(app_data));
-        crate::disk::upgrades::presets::run(app_data);
+    match ProfileSet::load_or_migrate(app_data.to_path_buf()) {
+        Ok(mut set) => {
+            let relaunch_pending = crate::app::state::MIGRATION_RELAUNCH_PENDING
+                .load(std::sync::atomic::Ordering::Acquire);
+            let wizard_settled = run != WizardRun::Unfinished && !relaunch_pending;
+            let notices = crate::disk::upgrades::run(&mut set, app_data, wizard_settled).await;
+            state.add_launch_notices(notices);
+            load_profiles(state, set).await;
+        }
+        Err(e) => {
+            error!(error = %e, "failed to load profile set; skipping the upgrades and using in-memory defaults");
+        }
     }
-    load_profiles(state, app_data).await;
     if run == WizardRun::Unfinished {
         return Launch {
             loadout_mode: false,
@@ -161,34 +164,13 @@ pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
     }
 }
 
-/// Load (or migrate from the legacy single-file layout) the named
-/// profile collection. Then load whichever profile the index marks as
+/// Load whichever profile `set`, the profile set launch read, marks as
 /// active into the live profile, and overlay the shared global.toml
 /// (theme, font, dock layout, keep last, auto update) so those UI prefs
 /// stay the same across every profile.
-pub(crate) async fn load_profiles(state: &SharedState, app_data: &Path) {
-    let mut set = match ProfileSet::load_or_migrate(app_data.to_path_buf()) {
-        Ok(set) => set,
-        Err(e) => {
-            error!(error = %e, "failed to load profile set; using in-memory defaults");
-            return;
-        }
-    };
+pub(crate) async fn load_profiles(state: &SharedState, mut set: ProfileSet) {
     // What an earlier session left to tell you, once.
     state.add_launch_notices(set.take_notices());
-    // Before any profile loads, move the custom themes older profile
-    // files still hold into global.toml, which owns the list from here
-    // on. It writes only files it read, so a file that does not read
-    // stays as it is.
-    match migrate_custom_themes(&set) {
-        Ok(0) => {}
-        Ok(files) => {
-            info!(files, "moved custom themes into global.toml");
-        }
-        Err(e) => {
-            error!(error = %e, "failed to move custom themes into global.toml");
-        }
-    }
     // A file that does not read keeps the defaults in its place for this
     // session, and no save writes over it. The notices tell you so once
     // the main window shows.
