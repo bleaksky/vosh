@@ -63,9 +63,8 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     // duplicate-member server bug).
     info!(package = %msg.package, "gmcp received");
     tracing::debug!(package = %msg.package, data = %msg.data, "gmcp payload");
-    // Phase 5: same fold as the per-line path. Take the tick step for a
-    // World.Time hour change under the existing lock so it does not force
-    // a second `profile.lock().await` after release.
+    // Take the tick step for a World.Time hour change under this lock, as
+    // the line path does, so the tick needs no second lock after it.
     let (tick_step, script_apply) = {
         let lock_t0 = std::time::Instant::now();
         let mut p = conn.profile.lock().await;
@@ -111,15 +110,6 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         script_apply,
     )
     .await?;
-    // Phase 4 perf fix: emit on a per-package event channel so each
-    // frontend listener subscribes only to the packages it cares
-    // about, instead of all 12 listeners running on every packet and
-    // filtering by `payload.package === '...'`. Tauri event names
-    // only allow alphanumeric, `-`, `/`, `:`, `_`, so we have to
-    // encode the `.` that GMCP packages use as a namespace
-    // separator (`Char.Vitals` → `Char-Vitals`). The frontend's
-    // `onGmcpPackage` helper does the same replacement when
-    // computing its listen target.
     // Keep the last affects list for a window that opens between ticks.
     conn.app
         .state::<crate::app::state::SharedState>()
@@ -129,6 +119,13 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     // windows never draw the list against the old ones (a recast at
     // fewer hours than the old full).
     crate::affect_full::observe(&conn.app, &msg.package, &msg.data);
+    // Each package goes out on an event of its own, so a page listener
+    // hears only the packages it reads, instead of every listener running
+    // on every packet and filtering by `payload.package`. Tauri event
+    // names allow only letters, digits, `-`, `/`, `:` and `_`, so the `.`
+    // between the parts of a package name becomes `-` (`Char.Vitals`
+    // becomes `Char-Vitals`). The page's `onGmcpPackage` helper makes the
+    // same swap when it picks the event to listen to.
     let event_name = format!("session://gmcp/{}", msg.package.replace('.', "-"));
     if let Err(e) = conn.app.emit(&event_name, &msg.data) {
         warn!(error = %e, package = %msg.package, "failed to emit GMCP event");

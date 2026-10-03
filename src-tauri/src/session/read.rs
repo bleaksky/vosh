@@ -90,12 +90,12 @@ async fn handle_event<R: tauri::Runtime>(
                 conn.perf.lines_processed += 1;
                 let plain = vosh_protocol::ansi::plain_text(&line.bytes);
                 let trigger_t0 = std::time::Instant::now();
-                // Phase 5 perf fix: take the tick step for a line that
-                // matches the Reset on pattern under the same lock as
-                // trigger/Lua matching so we never reacquire `profile`
-                // later just to read the tick. The line is the game's
-                // tick, so the step fires once per tick and carries the
-                // Send each tick command to run after the lock drops.
+                // The tick step for a line that matches the Reset on
+                // pattern comes under the same lock as the triggers and
+                // Lua, so reading the tick takes no second lock. The
+                // line is the game's tick, so the step fires once per
+                // tick and carries the Send each tick command to run
+                // after the lock drops.
                 let steps = {
                     let lock_t0 = std::time::Instant::now();
                     let mut p = conn.profile.lock().await;

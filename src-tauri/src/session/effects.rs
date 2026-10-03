@@ -124,9 +124,9 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
     let mut apply = apply;
     let mut depth = 0;
     loop {
-        // Durable Lua mutations (mud.alias / set_var / group toggles
-        // fired by triggers or timers) historically never reached disk.
-        // Ride the same debounced persist the slash commands use.
+        // Durable Lua changes (mud.alias, set_var, group toggles fired
+        // by triggers or timers) ride the same debounced save the slash
+        // commands use, or they would never reach disk.
         if apply.durable_changed {
             crate::disk::save::mark_profile_dirty(app);
         }

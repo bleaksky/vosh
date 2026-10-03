@@ -213,7 +213,7 @@ pub(crate) fn emit_counted<R: tauri::Runtime>(
     } else {
         output_count()
     };
-    // Tier 3: feed the native terminal grid the same bytes xterm receives,
+    // Feed the native terminal grid the same bytes xterm receives,
     // for every output path, then repaint. This is the single choke point
     // so nothing reaches xterm without also reaching the grid.
     // Word wrapped at the grid width, matching the frontend WordWrapper
