@@ -42,7 +42,7 @@ pub(crate) async fn triggers_import(
     // The editor's save path lands here: persist, or the "saved" state
     // lives only in memory and vanishes on restart.
     let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
+    persist_profile(&shared).await;
     broadcast_list_changes(&app, ListChanges::TRIGGERS);
     Ok(count)
 }
@@ -90,7 +90,7 @@ pub(crate) async fn aliases_import(
     }
     // Same persistence rule as triggers_import: the editor saves here.
     let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
+    persist_profile(&shared).await;
     broadcast_list_changes(&app, ListChanges::ALIASES);
     Ok(count)
 }
@@ -284,7 +284,7 @@ pub(crate) async fn presets_install(
         install_preset_triggers(&mut p, triggers)?
     };
     let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
+    persist_profile(&shared).await;
     if installed > 0 {
         broadcast_list_changes(&app, ListChanges::TRIGGERS);
     }
@@ -304,7 +304,7 @@ pub(crate) async fn presets_remove(
         p.triggers.remove_by_preset(&preset_id)
     };
     let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
+    persist_profile(&shared).await;
     if removed > 0 {
         broadcast_list_changes(&app, ListChanges::TRIGGERS);
     }
@@ -382,7 +382,7 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
         lists = ListChanges::since(lists_before, &p);
     }
     let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
+    persist_profile(&shared).await;
     if macros_changed {
         broadcast(&app, MACROS_CHANGED, &macros_snapshot);
     }

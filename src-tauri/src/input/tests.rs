@@ -1,5 +1,5 @@
-use super::profile::{load_profile_file, slash_profile_with, PROFILE_SAVE_BUSY};
-use super::script::slash_script_load_in;
+use super::profile::{load_profile_file, slash_profile, PROFILE_SAVE_BUSY};
+use super::script::slash_script;
 use super::slash::{parse_braced_pattern, HELP_TEXT};
 use super::target::{read_room_chars, set_room_chars};
 use super::*;
@@ -694,7 +694,7 @@ fn profile_save_load_and_reset_wait_for_the_relaunch_after_the_wizard() {
         .set(vosh_automation::alias::Alias::new("kk", "kick %1"));
     for sub in ["save", "load", "reset"] {
         let mut replaced = false;
-        let result = slash_profile_with(&state, &mut p, sub, &mut replaced, None);
+        let result = slash_profile(&state, &mut p, sub, &mut replaced);
         assert_eq!(
             result.echo,
             ["[Quit Vosh and open it again to finish the move to loadouts.]"],
@@ -705,17 +705,17 @@ fn profile_save_load_and_reset_wait_for_the_relaunch_after_the_wizard() {
     }
 }
 
-/// `#profile save` over `app_data`, again while another test holds
-/// the persist lock the save only tries. It compares against the
-/// busy echo the save itself builds, so a new wording or format
-/// cannot stop the retry, and it panics when the lock stays held for
-/// 10 s, so a test that leaks a guard fails instead of hanging.
-fn save_profile_in(p: &mut Profile, app_data: &std::path::Path) -> InputResult {
-    let state = AppState::default();
+/// `#profile save` in the app data folder of `state`, again while
+/// another test holds the persist lock the save only tries. It
+/// compares against the busy echo the save itself builds, so a new
+/// wording or format cannot stop the retry, and it panics when the
+/// lock stays held for 10 s, so a test that leaks a guard fails
+/// instead of hanging.
+fn save_profile_in(state: &AppState, p: &mut Profile) -> InputResult {
     let busy = InputResult::error(PROFILE_SAVE_BUSY).echo;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
-        let result = slash_profile_with(&state, p, "save", &mut false, Some(app_data));
+        let result = slash_profile(state, p, "save", &mut false);
         if result.echo != busy {
             return result;
         }
@@ -732,11 +732,12 @@ fn profile_and_script_commands_use_the_app_data_folder() {
     let dir = tempfile::tempdir().unwrap();
     let app_data = dir.path();
     let state = AppState::default();
+    state.app_data.set(app_data.to_path_buf()).unwrap();
     let mut p = Profile::default();
     p.aliases
         .set(vosh_automation::alias::Alias::new("kk", "kick %1"));
     // With no index there is no active profile to save.
-    let saved = save_profile_in(&mut p, app_data);
+    let saved = save_profile_in(&state, &mut p);
     assert_eq!(saved.echo, ["[could not resolve profile path]"]);
     assert!(!app_data.join("profile.toml").exists());
 
@@ -748,7 +749,7 @@ fn profile_and_script_commands_use_the_app_data_folder() {
     )
     .unwrap();
     let healer = app_data.join("profiles").join("Healer.toml");
-    let saved = save_profile_in(&mut p, app_data);
+    let saved = save_profile_in(&state, &mut p);
     assert_eq!(
         saved.echo,
         [format!("profile saved to {}", healer.display())]
@@ -758,7 +759,7 @@ fn profile_and_script_commands_use_the_app_data_folder() {
 
     let mut fresh = Profile::default();
     let mut replaced = false;
-    let loaded = slash_profile_with(&state, &mut fresh, "load", &mut replaced, Some(app_data));
+    let loaded = slash_profile(&state, &mut fresh, "load", &mut replaced);
     assert_eq!(
         loaded.echo[0],
         format!("profile loaded from {}", healer.display())
@@ -769,11 +770,11 @@ fn profile_and_script_commands_use_the_app_data_folder() {
     let script = app_data.join("scripts").join("greet.lua");
     std::fs::create_dir_all(script.parent().unwrap()).unwrap();
     std::fs::write(&script, "local greeting = 'hi'\n").unwrap();
-    let loaded = slash_script_load_in(
+    let loaded = slash_script(
+        &state,
         &mut fresh,
-        "greet",
+        "load greet",
         &mut ApplyResult::default(),
-        Some(app_data),
     );
     assert_eq!(loaded.echo, [format!("loaded {}", script.display())]);
 }

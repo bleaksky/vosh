@@ -4,7 +4,7 @@
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::app::events::LOADOUTS_CHANGED;
-use crate::app::state::SharedState;
+use crate::app::state::{SharedState, NO_APP_DATA};
 use crate::disk::save::mark_profile_dirty;
 use crate::loadouts::set::set_active_loadouts;
 
@@ -72,8 +72,9 @@ pub(crate) async fn loadouts_get_state(
 /// in Settings, see the update.
 #[tauri::command]
 pub(crate) async fn loadouts_set_active(app: AppHandle, active: Vec<String>) -> Result<(), String> {
-    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    set_active_loadouts(&app, &app_data, active).await?;
+    let state = app.state::<SharedState>();
+    let app_data = state.app_data.get().ok_or(NO_APP_DATA)?;
+    set_active_loadouts(&app, app_data, active).await?;
     // The recomputed (or dormant) disabled lists live in the profile
     // snapshot on disk; queue a persist so a crash before the exit
     // flush cannot leave loadouts.toml and per-profile state

@@ -73,18 +73,6 @@ impl InputResult {
     }
 }
 
-/// Set at startup (and at migration time) when loadout mode is live: the
-/// catalog owns authored items and persistence is automatic, so the
-/// legacy #profile save/load/reset trio switches to echo-only.
-pub(crate) static PATH_B_ACTIVE: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
-/// The app data folder, set once at startup from Tauri's `app_data_dir`,
-/// the folder that holds every other file Vosh keeps. `#profile save`,
-/// `#profile load` and `#script load` find their files under it.
-pub(crate) static APP_DATA_DIR: std::sync::OnceLock<std::path::PathBuf> =
-    std::sync::OnceLock::new();
-
 /// True when `line` is `#profile reset` or `#profile load`, tokenized
 /// exactly like the slash dispatcher, so the persist-suppression
 /// decision in [`run_typed_line`] cannot drift from what actually
@@ -146,8 +134,11 @@ pub(crate) fn help_query(line: &str) -> Option<String> {
 /// echoes. A caller reads global.toml before such a line runs, to lay the
 /// shared settings back over the result. Whether it did replace the
 /// profile comes back from [`run_line`].
-pub(crate) fn may_replace_profile(line: &str) -> bool {
-    !PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire) && is_profile_reset_or_load(line)
+pub(crate) fn may_replace_profile(state: &AppState, line: &str) -> bool {
+    !state
+        .loadout_mode
+        .load(std::sync::atomic::Ordering::Acquire)
+        && is_profile_reset_or_load(line)
 }
 
 /// What the terminal prints when you send a line with no connection.
@@ -184,7 +175,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     // into echoes, so there they change nothing. The profile file they
     // read holds none of the shared settings, so global.toml goes back
     // over the result the way a switch lays it.
-    let shared_layer = if may_replace_profile(line) {
+    let shared_layer = if may_replace_profile(state, line) {
         read_shared_layer(state).await
     } else {
         None

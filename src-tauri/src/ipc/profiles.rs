@@ -7,7 +7,7 @@
 //! `profiles.toml` indexes the profiles, each one saves to
 //! `profiles/<name>.toml`, and `AppState.profile_set` holds the live set.
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 use crate::app::events::{broadcast, CUSTOM_THEMES_CHANGED, PROFILES_CHANGED};
 use crate::app::state::SharedState;
@@ -46,10 +46,10 @@ pub(crate) async fn profile_create(
     copy_from: Option<String>,
     auto_match: Option<crate::profile::login_match::AutoMatch>,
 ) -> Result<crate::profile::set::ProfileEntry, String> {
-    let app_data = app.path().app_data_dir().ok();
+    let app_data = state.app_data.get().map(std::path::PathBuf::as_path);
     let entry = create_profile(
         state.inner(),
-        app_data.as_deref(),
+        app_data,
         &name,
         copy_from.as_deref(),
         auto_match,
@@ -96,8 +96,8 @@ pub(crate) async fn profile_duplicate(
     source: String,
     new: String,
 ) -> Result<(), String> {
-    let app_data = app.path().app_data_dir().ok();
-    duplicate_profile(state.inner(), app_data.as_deref(), &source, &new).await?;
+    let app_data = state.app_data.get().map(std::path::PathBuf::as_path);
+    duplicate_profile(state.inner(), app_data, &source, &new).await?;
     broadcast(&app, PROFILES_CHANGED, &new);
     Ok(())
 }
@@ -137,7 +137,7 @@ pub(crate) async fn profile_set_scope(
     let persist_guard = PERSIST_LOCK.lock().await;
     let shared: SharedState = state.inner().clone();
     let gained = change_scope_locked(&shared, scope).await?;
-    persist_profile_locked(&app, &shared).await;
+    persist_profile_locked(&shared).await;
     drop(persist_guard);
     if let Some(list) = gained {
         broadcast(&app, CUSTOM_THEMES_CHANGED, &list);

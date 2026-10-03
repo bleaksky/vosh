@@ -256,10 +256,10 @@ pub(crate) async fn connect<R: tauri::Runtime>(
     state.last_affects.clear();
     crate::affects::full::connect(app, state);
 
-    let scrollback_path = tauri::Manager::path(app)
-        .app_data_dir()
-        .ok()
-        .map(|dir| crate::disk::paths::scrollback_path(&dir));
+    let scrollback_path = state
+        .app_data
+        .get()
+        .map(|dir| crate::disk::paths::scrollback_path(dir));
 
     // Seed the negotiator with the most recently reported terminal
     // size so the initial `DO NAWS` reply during the handshake

@@ -32,9 +32,6 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
         error!(error = %e, "scripts folder could not be created");
     }
     if let Ok(path) = app.path().app_data_dir() {
-        // Where `#profile save`, `#profile load` and `#script
-        // load` find their files.
-        let _ = crate::input::APP_DATA_DIR.set(path.clone());
         // How full each affect was cast, per character, for the
         // Affects pane's gauges. Read when the game names you.
         state.affect_full.set_path(paths::affect_full_path(&path));
@@ -43,7 +40,9 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
         // shared catalog and loadouts in loadout mode. See `load`.
         let launched = tauri::async_runtime::block_on(load(state, &path));
         if launched.loadout_mode {
-            crate::input::PATH_B_ACTIVE.store(true, std::sync::atomic::Ordering::Release);
+            state
+                .loadout_mode
+                .store(true, std::sync::atomic::Ordering::Release);
         }
         if launched.wizard_unfinished {
             // The next launch writes the wizard journal again, over
@@ -114,7 +113,10 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
 /// What [`load`] found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Launch {
-    /// Loadout mode is live, so the caller flips the input layer over.
+    /// Loadout mode is live, so the caller turns on
+    /// [`AppState::loadout_mode`].
+    ///
+    /// [`AppState::loadout_mode`]: crate::app::state::AppState::loadout_mode
     pub(crate) loadout_mode: bool,
     /// A shared catalog wizard run is still not done, see
     /// [`WizardRun::Unfinished`]. The caller holds every save and every
@@ -122,7 +124,8 @@ pub(crate) struct Launch {
     pub(crate) wizard_unfinished: bool,
 }
 
-/// Everything launch loads, in order. A shared catalog wizard run that
+/// Everything launch loads, in order, from `app_data`, which it keeps as
+/// the state's app data folder first. A shared catalog wizard run that
 /// stopped partway finishes first, so nothing loads a file it had yet to
 /// write. Then launch reads profiles.toml, once, and runs the one time
 /// upgrades over the set, see [`crate::disk::upgrades::run`]. Then the
@@ -135,6 +138,9 @@ pub(crate) struct Launch {
 /// profiles.toml does not read, the upgrades and the profiles wait for
 /// the next launch, and the session runs on the defaults.
 pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
+    // Every command and `#profile` or `#script` line finds its files
+    // under it from here on. Launch runs once, so the folder never moves.
+    let _ = state.app_data.set(app_data.to_path_buf());
     let run = journal::finish_wizard_run(app_data);
     state.add_launch_notices(run.notices());
     match ProfileSet::load_or_migrate(app_data.to_path_buf()) {
@@ -190,7 +196,7 @@ pub(crate) async fn load_profiles(state: &SharedState, mut set: ProfileSet) {
 /// silently wiped any trigger or alias a user authored against their
 /// profile file. Loadouts still apply on top to gate catalog groups by
 /// the active `enabled_groups` set. Returns true when loadout mode is
-/// live, so the caller can flip the input layer over.
+/// live.
 pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> bool {
     if !loadout_mode_on(app_data) {
         return false;

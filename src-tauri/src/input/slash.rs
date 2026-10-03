@@ -41,7 +41,7 @@ pub(super) fn handle_slash(
         "group" => slash_group(profile, args),
         "groups" => slash_groups_list(profile),
         "tick" => slash_tick(profile, args),
-        "script" => slash_script(profile, args, lua),
+        "script" => slash_script(state, profile, args, lua),
         "scripts" => slash_scripts_list(profile),
         "lua" => slash_lua(profile, args, lua),
         "echo" | "showme" => slash_echo(profile, args),
