@@ -1996,11 +1996,11 @@
 
 /* Group headings as typed: 12/600 tertiary. The first sits 12 below
    the filter, the rest 8 below the divider block. Each heading is a
-   24 high button that folds its group: the 12 px chevron hangs where
-   the rows' text starts and turns down while the group is open, and a
-   folded group counts its items at the rows' right edge, where their
-   dots sit. The heading row keeps the room after the button for the
-   group's on and off switch. */
+   24 high button that folds its group: the 12 px chevron sits before
+   the name and turns down while the group is open, and a folded group
+   counts its items at the rows' right edge, where their dots sit. The
+   heading row keeps the room after the button for the group's on and
+   off switch. */
 .st-auto-headrow {
   display: flex;
   align-items: center;
@@ -2114,6 +2114,13 @@
   line-height: 16px;
   font-weight: 400;
   text-align: left;
+}
+
+/* An item in a group indents under its heading, so its name lines up
+   with the group name after the chevron. Items with no group stay at
+   the edge. */
+.st-auto-group .st-auto-row {
+  padding-left: 18px;
 }
 
 .st-auto-row:hover {
