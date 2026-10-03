@@ -32,12 +32,7 @@ pub(crate) mod links;
 pub(crate) mod regions;
 
 use blink::{Blinking, BLINK};
-use regions::{LiftTrack, Region};
-
-// The callers name the module that holds each item in the next commit.
-pub(crate) use find::*;
-pub(crate) use links::*;
-pub(crate) use regions::*;
+use regions::{CursorReport, LiftTrack, Region, ScreenRows};
 
 /// How a cell is underlined: SGR 4 and its `4:x` sub parameter, where
 /// 1 is single, 2 double, 3 curly, 4 dotted, and 5 dashed.

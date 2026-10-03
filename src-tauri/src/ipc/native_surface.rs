@@ -313,7 +313,7 @@ pub(crate) fn native_surface_find(
     #[cfg(native_surface)]
     {
         let result =
-            crate::native::grid::find_run(&query, regex, case_sensitive, whole_word, forward);
+            crate::native::grid::find::find_run(&query, regex, case_sensitive, whole_word, forward);
         crate::native::surface::request_redraw();
         result
     }
@@ -330,7 +330,7 @@ pub(crate) fn native_surface_find(
 pub(crate) fn native_surface_find_clear() {
     #[cfg(native_surface)]
     {
-        crate::native::grid::find_clear();
+        crate::native::grid::find::find_clear();
         crate::native::surface::request_redraw();
     }
 }

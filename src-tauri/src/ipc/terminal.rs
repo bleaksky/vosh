@@ -63,7 +63,7 @@ pub(crate) fn terminal_reader_busy(state: State<'_, SharedState>, busy: bool) {
 /// own buffer and marker instead.
 #[cfg(native_surface)]
 #[tauri::command]
-pub(crate) fn terminal_cursor() -> Option<crate::native::grid::CursorReport> {
+pub(crate) fn terminal_cursor() -> Option<crate::native::grid::regions::CursorReport> {
     crate::native::grid::cursor_report()
 }
 
@@ -80,7 +80,7 @@ pub(crate) fn terminal_cursor() -> Option<()> {
 /// buffer instead.
 #[cfg(native_surface)]
 #[tauri::command]
-pub(crate) fn terminal_screen_rows() -> Option<crate::native::grid::ScreenRows> {
+pub(crate) fn terminal_screen_rows() -> Option<crate::native::grid::regions::ScreenRows> {
     crate::native::grid::screen_rows()
 }
 

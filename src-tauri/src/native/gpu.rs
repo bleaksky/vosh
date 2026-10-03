@@ -20,7 +20,8 @@ use std::sync::Mutex;
 
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
 
-use crate::native::grid::{CellFlags, LiftSpan, Underline};
+use crate::native::grid::regions::LiftSpan;
+use crate::native::grid::{CellFlags, Underline};
 
 /// Linear-ish rgba in 0..1, ready for a wgpu vertex/instance buffer.
 pub(crate) type Rgba = [f32; 4];
@@ -2355,7 +2356,7 @@ impl CellRenderer {
         let offset = grid.display_offset() as i32;
         // Find matches (and the active one) drive a highlight pass and
         // suppress the split so the match shows in a single full view.
-        let (find_matches, find_active_match) = crate::native::grid::find_snapshot();
+        let (find_matches, find_active_match) = crate::native::grid::find::find_snapshot();
         // Wash paint. Washed lines carry a distinctive quarter-strength
         // truecolor background (NamedColor::wash_tint in the trigger
         // crate) on the text of the line. That value is a SIGNAL, not
