@@ -25,7 +25,7 @@ use crate::session::SessionHandle;
 pub(crate) struct AppState {
     pub(crate) session: Mutex<Option<SessionHandle>>,
     pub(crate) profile: Arc<Mutex<Profile>>,
-    pub(crate) script_timers: SharedTimers,
+    pub(crate) lua_timers: SharedTimers,
     pub(crate) logs: SharedLogStore,
     /// A second connection to the same log database for the read
     /// commands. The session loop appends through `logs`, and a search
@@ -215,7 +215,7 @@ impl Default for AppState {
         Self {
             session: Mutex::new(None),
             profile: Arc::new(Mutex::new(Profile::default())),
-            script_timers: SharedTimers::default(),
+            lua_timers: SharedTimers::default(),
             logs: SharedLogStore::default(),
             log_reader: SharedLogStore::default(),
             scrollback: SharedScrollback::default(),

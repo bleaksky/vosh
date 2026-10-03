@@ -413,7 +413,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         stream,
         rx_outgoing,
         state.profile.clone(),
-        state.script_timers.clone(),
+        state.lua_timers.clone(),
         log_sink,
         negotiator,
         known_host,
