@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use tauri::Manager;
 
-use super::pointer::{load_f32, DPR};
+use super::pointer::{load_f32, CELLS};
 use super::{render, surface_slot, APP};
 
 // Live wgpu objects for the terminal surface.
@@ -21,21 +21,31 @@ pub(super) struct GpuState {
     pub(super) cell_renderer: crate::native::gpu::CellRenderer,
 }
 
-// xterm's reported device cell size. When set, the atlas uses it instead of
-// deriving from font metrics, so the surface matches xterm's density exactly
-// (0 = unset, fall back to the font's metrics).
-static XTERM_CELL_W: AtomicU32 = AtomicU32::new(0);
-static XTERM_CELL_H: AtomicU32 = AtomicU32::new(0);
-// xterm's device glyph box height, reported with the cell. The cell is the
-// box times the line height, and xterm centers the box in it, so the atlas
-// needs both to put its baseline where xterm's is (0 = unset).
-static XTERM_CHAR_H: AtomicU32 = AtomicU32::new(0);
+/// The device cell xterm reported, as the page last sent it.
+struct XtermCell {
+    // xterm's reported device cell size. When set, the atlas uses it
+    // instead of deriving from font metrics, so the surface matches xterm's
+    // density exactly (0 = unset, fall back to the font's metrics).
+    width: AtomicU32,
+    height: AtomicU32,
+    // xterm's device glyph box height, reported with the cell. The cell is
+    // the box times the line height, and xterm centers the box in it, so
+    // the atlas needs both to put its baseline where xterm's is (0 =
+    // unset).
+    char_height: AtomicU32,
+}
+
+static XTERM_CELL: XtermCell = XtermCell {
+    width: AtomicU32::new(0),
+    height: AtomicU32::new(0),
+    char_height: AtomicU32::new(0),
+};
 
 /// xterm's reported device cell size, if the frontend has sent it. The glyph
 /// atlas sizes its cells to this so spacing matches the webview.
 pub(crate) fn reported_cell() -> Option<(u32, u32)> {
-    let w = XTERM_CELL_W.load(Ordering::Acquire);
-    let h = XTERM_CELL_H.load(Ordering::Acquire);
+    let w = XTERM_CELL.width.load(Ordering::Acquire);
+    let h = XTERM_CELL.height.load(Ordering::Acquire);
     if w > 0 && h > 0 {
         Some((w, h))
     } else {
@@ -46,7 +56,7 @@ pub(crate) fn reported_cell() -> Option<(u32, u32)> {
 /// xterm's reported device glyph box height, if the frontend sent one with
 /// the cell size.
 pub(crate) fn reported_char_height() -> Option<u32> {
-    let h = XTERM_CHAR_H.load(Ordering::Acquire);
+    let h = XTERM_CELL.char_height.load(Ordering::Acquire);
     (h > 0).then_some(h)
 }
 
@@ -145,7 +155,7 @@ fn request_font_rebuild(family: String, font_px: f32) {
 /// Called when the font setting changes.
 #[allow(clippy::cast_precision_loss)]
 pub(crate) fn request_set_font(family: String, font_size: u32) {
-    let font_px = (font_size as f32 * load_f32(&DPR, 2.0)).max(6.0);
+    let font_px = (font_size as f32 * load_f32(&CELLS.dpr, 2.0)).max(6.0);
     request_font_rebuild(family, font_px);
 }
 
@@ -160,9 +170,9 @@ pub(crate) fn set_cell_metrics(width: u32, height: u32, char_height: u32) {
     }
     // Swap all three unconditionally; a short-circuiting && would skip a
     // later store and leave that value unset.
-    let prev_w = XTERM_CELL_W.swap(width, Ordering::AcqRel);
-    let prev_h = XTERM_CELL_H.swap(height, Ordering::AcqRel);
-    let prev_char = XTERM_CHAR_H.swap(char_height, Ordering::AcqRel);
+    let prev_w = XTERM_CELL.width.swap(width, Ordering::AcqRel);
+    let prev_h = XTERM_CELL.height.swap(height, Ordering::AcqRel);
+    let prev_char = XTERM_CELL.char_height.swap(char_height, Ordering::AcqRel);
     if prev_w == width && prev_h == height && prev_char == char_height {
         return;
     }
@@ -172,7 +182,7 @@ pub(crate) fn set_cell_metrics(width: u32, height: u32, char_height: u32) {
         char_height,
         "native-surface: xterm reported cell metrics"
     );
-    let scale = f64::from(load_f32(&DPR, 2.0));
+    let scale = f64::from(load_f32(&CELLS.dpr, 2.0));
     let (family, font_px) = font_atlas_params(scale);
     request_font_rebuild(family, font_px);
 }

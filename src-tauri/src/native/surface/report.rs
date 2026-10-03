@@ -12,11 +12,23 @@ use tauri::{Emitter, Manager};
 use super::APP;
 use crate::app::events::{NATIVE_GRID_SIZE, NATIVE_SCROLL};
 
-// Last (cols << 16 | rows) the grid took, which the page's hidden xterm
-// follows, and last the game was told through NAWS. Each goes out only
-// when it changes.
-static LAST_GRID_SIZE: AtomicU32 = AtomicU32::new(0);
-static LAST_GAME_SIZE: AtomicU32 = AtomicU32::new(0);
+/// What the frames last reported, so each report goes out only when it
+/// changes.
+struct Reported {
+    // Last (cols << 16 | rows) the grid took, which the page's hidden xterm
+    // follows, and last the game was told through NAWS.
+    grid_size: AtomicU32,
+    game_size: AtomicU32,
+    // The scroll state last reported to the page, as a `scroll_report_key`.
+    // Starts at a value no key reaches, so the first frame reports.
+    scroll: AtomicU64,
+}
+
+static REPORTED: Reported = Reported {
+    grid_size: AtomicU32::new(0),
+    game_size: AtomicU32::new(0),
+    scroll: AtomicU64::new(u64::MAX),
+};
 
 /// The rows the grid takes and the rows the game is told, for a pane whose
 /// surface fits `fit` rows while the pinned prompt band borrows `lent`.
@@ -51,8 +63,8 @@ pub(super) fn report_sizes(cols: usize, rows: usize, game_rows: usize) {
     let cols = clamp_u16(cols);
     let rows = clamp_u16(rows);
     let game_rows = clamp_u16(game_rows);
-    let grid_news = changed(&LAST_GRID_SIZE, cols, rows);
-    let game_news = changed(&LAST_GAME_SIZE, cols, game_rows);
+    let grid_news = changed(&REPORTED.grid_size, cols, rows);
+    let game_news = changed(&REPORTED.game_size, cols, game_rows);
     if !grid_news && !game_news {
         return;
     }
@@ -72,7 +84,7 @@ pub(super) fn report_sizes(cols: usize, rows: usize, game_rows: usize) {
     if let Ok(mut ws) = state.window_size.lock() {
         *ws = (cols, game_rows);
     }
-    tell_session(state.inner(), &LAST_GAME_SIZE);
+    tell_session(state.inner(), &REPORTED.game_size);
 }
 
 /// Tell the live session the game's size that `newest` holds, packed as
@@ -101,10 +113,6 @@ fn send_game_size(session: Option<&crate::session::SessionHandle>, newest: &Atom
     }
 }
 
-// The scroll state last reported to the page, as a `scroll_report_key`.
-// Starts at a value no key reaches, so the first frame reports.
-static LAST_SCROLL: AtomicU64 = AtomicU64::new(u64::MAX);
-
 /// The key that decides whether a scroll report is news: the display
 /// offset and the history length packed together, with the length zeroed
 /// at the live tail. The page hides the depth there, and the length grows
@@ -125,7 +133,7 @@ fn scroll_report_key(offset: usize, max: usize) -> u64 {
 pub(super) fn report_scroll_if_changed() {
     let (offset, max) = crate::native::grid::scroll_metrics();
     let key = scroll_report_key(offset, max);
-    if LAST_SCROLL.swap(key, Ordering::AcqRel) == key {
+    if REPORTED.scroll.swap(key, Ordering::AcqRel) == key {
         return;
     }
     if let Some(app) = APP.get() {
@@ -266,7 +274,7 @@ mod tests {
 
     /// Runs `changed` on a slot of its own, the way `report_sizes` does
     /// for the game, and never runs `report_sizes` itself, which keeps its
-    /// slots in statics and reaches the app. A change to the rows
+    /// slots in `REPORTED` and reaches the app. A change to the rows
     /// `report_sizes` hands `changed` passes here unseen.
     #[test]
     fn sizes_reach_the_game_as_the_cases_xterm_runs() {
@@ -395,8 +403,8 @@ mod tests {
     /// width instead of wrapping at the old one.
     #[tokio::test]
     async fn a_resize_while_the_session_is_busy_still_reaches_the_game() {
-        // The game's size the frames last reported, as `LAST_GAME_SIZE`
-        // holds it in the app.
+        // The game's size the frames last reported, as
+        // `REPORTED.game_size` holds it in the app.
         static LAST: AtomicU32 = AtomicU32::new(0);
         let SizedGame {
             state,
