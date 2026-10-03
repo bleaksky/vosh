@@ -94,10 +94,5 @@ pub(crate) async fn session_set_window_size(
 /// `session://target` events fire.
 #[tauri::command]
 pub(crate) async fn target_get(state: State<'_, SharedState>) -> Result<TargetPayload, String> {
-    let p = state.profile.lock().await;
-    Ok(TargetPayload {
-        name: p.target.name.clone(),
-        room_idx: p.target.room_idx,
-        quick_keys: p.target.quick_keys.clone(),
-    })
+    Ok(TargetPayload::of(&*state.profile.lock().await))
 }

@@ -193,9 +193,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         let mut profile = state.profile.lock().await;
         let lists_before = ListRevisions::of(&profile);
         let look_before = prompt_look(&profile);
-        let before_name = profile.target.name.clone();
-        let before_idx = profile.target.room_idx;
-        let before_keys = profile.target.quick_keys.clone();
+        let before = TargetPayload::of(&profile);
         let ran = match &shared_layer {
             Some(layer) => layer.keep_across(&mut profile, |p| run_line(p, line)),
             None => run_line(&mut profile, line),
@@ -206,20 +204,8 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         if ran.replaced {
             note_ui_config_replaced();
         }
-        let after_name = profile.target.name.clone();
-        let after_idx = profile.target.room_idx;
-        let after_keys = profile.target.quick_keys.clone();
-        let changed =
-            before_name != after_name || before_idx != after_idx || before_keys != after_keys;
-        let payload = if changed {
-            Some(TargetPayload {
-                name: after_name,
-                room_idx: after_idx,
-                quick_keys: after_keys,
-            })
-        } else {
-            None
-        };
+        let after = TargetPayload::of(&profile);
+        let payload = (after != before).then_some(after);
         // The line's own bytes and echo lines, with what the Lua bodies
         // of its script aliases send among them, then all else the Lua it
         // ran asks for. #trigger, #alias, and the Lua they run change the

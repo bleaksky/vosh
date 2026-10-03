@@ -94,6 +94,17 @@ pub(crate) struct TargetPayload {
     pub quick_keys: Vec<crate::profile::QuickKey>,
 }
 
+impl TargetPayload {
+    /// The target and quick keys `p` holds now.
+    pub(crate) fn of(p: &crate::profile::Profile) -> Self {
+        Self {
+            name: p.target.name.clone(),
+            room_idx: p.target.room_idx,
+            quick_keys: p.target.quick_keys.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct RoutedPayload {
     pub pane: String,
