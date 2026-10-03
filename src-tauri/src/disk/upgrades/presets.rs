@@ -33,21 +33,14 @@ pub(crate) const ROLLOUTS: &[(&str, &str)] = &[
     ("preset-room-and-time-on", "room_and_time"),
 ];
 
-/// Run every step in [`ROLLOUTS`] that has not run over the app data
-/// folder `app_data`.
-pub(crate) fn run(app_data: &Path) {
-    let mut set = match ProfileSet::load_or_migrate(app_data.to_path_buf()) {
-        Ok(set) => set,
-        Err(e) => {
-            tracing::error!(error = %e, "preset rollout: profiles.toml does not read");
-            return;
-        }
-    };
+/// Run every step in [`ROLLOUTS`] that has not run over `set`, the
+/// profile set launch read from the app data folder `app_data`.
+pub(crate) fn run(set: &mut ProfileSet, app_data: &Path) {
     for &(id, preset) in ROLLOUTS {
         if set.migrated(id) {
             continue;
         }
-        if let Err(e) = roll_out(&set, app_data, preset) {
+        if let Err(e) = roll_out(set, app_data, preset) {
             tracing::error!(error = %e, preset, "preset rollout stopped, it runs again at the next launch");
             continue;
         }
@@ -159,6 +152,13 @@ name = "Quiet"
         dir
     }
 
+    /// Read the profile set in `root` and run every rollout over it, as
+    /// launch does.
+    fn read_and_run(root: &Path) {
+        let mut set = ProfileSet::load_or_migrate(root.to_path_buf()).unwrap();
+        run(&mut set, root);
+    }
+
     /// How many steps in [`ROLLOUTS`] are recorded.
     fn recorded(root: &Path) -> usize {
         let set = ProfileSet::load_or_migrate(root.to_path_buf()).unwrap();
@@ -169,7 +169,7 @@ name = "Quiet"
     fn a_saved_list_takes_the_new_preset_once() {
         let dir = folder();
         let root = dir.path();
-        run(root);
+        read_and_run(root);
         assert_eq!(
             list(root, "default"),
             strings(&[
@@ -191,9 +191,9 @@ name = "Quiet"
     fn a_preset_you_turn_off_afterwards_stays_off() {
         let dir = folder();
         let root = dir.path();
-        run(root);
+        read_and_run(root);
         write_list(root, "default", &["healing_basics"]);
-        run(root);
+        read_and_run(root);
         assert_eq!(list(root, "default"), strings(&["healing_basics"]));
     }
 
@@ -204,7 +204,7 @@ name = "Quiet"
         let mut catalog = load_global_catalog(root).unwrap();
         catalog.enabled_presets = Some(strings(&["herb_labels"]));
         save_global_catalog(root, &catalog).unwrap();
-        run(root);
+        read_and_run(root);
         assert_eq!(
             load_global_catalog(root).unwrap().enabled_presets,
             Some(strings(&["herb_labels", "sent_tells", "room_and_time"]))
@@ -216,7 +216,7 @@ name = "Quiet"
         let dir = folder();
         let root = dir.path();
         save_global_catalog(root, &load_global_catalog(root).unwrap()).unwrap();
-        run(root);
+        read_and_run(root);
         assert_eq!(load_global_catalog(root).unwrap().enabled_presets, None);
     }
 
@@ -225,7 +225,7 @@ name = "Quiet"
         let dir = folder();
         let root = dir.path();
         std::fs::write(file(root, "Ranger"), "[ui\nbroken").unwrap();
-        run(root);
+        read_and_run(root);
         assert_eq!(
             list(root, "default"),
             strings(&["healing_basics", "potion_labels"])
@@ -233,7 +233,7 @@ name = "Quiet"
         assert_eq!(recorded(root), 0);
         // Once it reads, the next launch runs the step.
         write_list(root, "Ranger", &[]);
-        run(root);
+        read_and_run(root);
         assert_eq!(
             list(root, "default"),
             strings(&[

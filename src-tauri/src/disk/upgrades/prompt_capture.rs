@@ -56,18 +56,12 @@ pub(crate) const MIGRATION: &str = "prompt-capture-to-profile";
 /// The name `#prompt {regex}` gave its trigger in older builds.
 const CAPTURE_TRIGGER: &str = "prompt-capture";
 
-/// Run the move over the app data folder `app_data` unless it already
-/// ran, and return the launch notices it leaves. A catalog or index that
-/// does not read or save leaves the move unrecorded, so it runs again at
+/// Run the move over `set`, the profile set launch read from the app
+/// data folder `app_data`, unless it already ran, and return the launch
+/// notices it leaves. A catalog that does not read or save, or an index
+/// that does not save, leaves the move unrecorded, so it runs again at
 /// the next launch.
-pub(crate) fn run(app_data: &Path) -> Vec<String> {
-    let mut set = match ProfileSet::load_or_migrate(app_data.to_path_buf()) {
-        Ok(set) => set,
-        Err(e) => {
-            tracing::error!(error = %e, "prompt capture move: profiles.toml does not read");
-            return Vec::new();
-        }
-    };
+pub(crate) fn run(set: &mut ProfileSet, app_data: &Path) -> Vec<String> {
     let returned = set
         .list()
         .iter()
@@ -76,7 +70,7 @@ pub(crate) fn run(app_data: &Path) -> Vec<String> {
         return Vec::new();
     }
     let loadout = path_b_mode_active(app_data);
-    let moved = match migrate(&set, app_data, loadout) {
+    let moved = match migrate(set, app_data, loadout) {
         Ok(moved) => moved,
         Err(e) => {
             tracing::error!(error = %e, "prompt capture move stopped, it runs again at the next launch");
@@ -615,6 +609,13 @@ theme = "vellum"
         out
     }
 
+    /// Read the profile set in `root` and run the move over it, as
+    /// launch does.
+    fn read_and_run(root: &Path) -> Vec<String> {
+        let mut set = ProfileSet::load_or_migrate(root.to_path_buf()).unwrap();
+        run(&mut set, root)
+    }
+
     fn profile(root: &Path, name: &str) -> ProfileConfig {
         ProfileConfig::load(&root.join("profiles").join(format!("{name}.toml"))).unwrap()
     }
@@ -657,7 +658,7 @@ theme = "vellum"
         let dir = james_like(CAPTURE_TRIGGER);
         let root = dir.path();
 
-        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        assert_eq!(read_and_run(root), [MOVED_INTO_DEFAULT]);
 
         // Default draws the same design, now read through its own capture.
         let default = profile(root, "default").prompt_config();
@@ -709,9 +710,9 @@ theme = "vellum"
     fn a_second_run_changes_nothing() {
         let dir = james_like(CAPTURE_TRIGGER);
         let root = dir.path();
-        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        assert_eq!(read_and_run(root), [MOVED_INTO_DEFAULT]);
         let after_first = snapshot(root);
-        let leftover = &run(root);
+        let leftover = &read_and_run(root);
         assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(snapshot(root), after_first);
     }
@@ -737,7 +738,7 @@ if tonumber(captures[2]) < 100 then mud.send(\"flee\") end"""
         let dir = james_like(&format!("{alarm}{CAPTURE_TRIGGER}"));
         let root = dir.path();
         assert_eq!(
-            run(root),
+            read_and_run(root),
             [
                 MOVED_INTO_DEFAULT.to_string(),
                 "Vosh left the trigger hp-alarm as it was, since its script does more than \
@@ -767,7 +768,7 @@ mud.set_prompt_var('move', captures[4])"""
 "#;
         let dir = james_like(reader);
         let root = dir.path();
-        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        assert_eq!(read_and_run(root), [MOVED_INTO_DEFAULT]);
         let default = profile(root, "default").prompt_config();
         let capture = moved_capture(&default);
         assert_eq!(capture.lines, [r"<(?<h>\d+)hp (?<m>\d+)m (?<v>\d+)mv>"]);
@@ -810,14 +811,14 @@ mud.set_prompt_var('move', captures[4])"""
     fn a_return_from_an_older_build_moves_the_capture_again() {
         let dir = james_like(CAPTURE_TRIGGER);
         let root = dir.path();
-        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        assert_eq!(read_and_run(root), [MOVED_INTO_DEFAULT]);
         older_build_quits(root);
         assert!(ProfileSet::load_or_migrate(root.to_path_buf())
             .unwrap()
             .migrated(MIGRATION));
         assert!(profile(root, "default").prompt_config().capture.is_none());
 
-        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        assert_eq!(read_and_run(root), [MOVED_INTO_DEFAULT]);
         let default = profile(root, "default").prompt_config();
         assert_eq!(moved_capture(&default).lines, [PATTERN]);
         assert!(default.draw);
@@ -831,7 +832,7 @@ mud.set_prompt_var('move', captures[4])"""
         assert_eq!(std::fs::read_to_string(before).unwrap(), default_file());
         // Back in step, so the next launch changes nothing.
         let after = snapshot(root);
-        let leftover = &run(root);
+        let leftover = &read_and_run(root);
         assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(snapshot(root), after);
     }
@@ -840,7 +841,7 @@ mud.set_prompt_var('move', captures[4])"""
     fn a_capture_turned_on_again_in_an_older_build_moves_again() {
         let dir = james_like(CAPTURE_TRIGGER);
         let root = dir.path();
-        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        assert_eq!(read_and_run(root), [MOVED_INTO_DEFAULT]);
         older_build_quits(root);
         // You turned it back on so the older build drew your prompt.
         let path = root.join("catalog.toml");
@@ -848,7 +849,7 @@ mud.set_prompt_var('move', captures[4])"""
         std::fs::write(&path, catalog).unwrap();
         assert!(catalog_trigger(root, "prompt-capture").enabled);
 
-        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        assert_eq!(read_and_run(root), [MOVED_INTO_DEFAULT]);
         let default = profile(root, "default").prompt_config();
         assert_eq!(moved_capture(&default).lines, [PATTERN]);
         assert!(!catalog_trigger(root, "prompt-capture").enabled);
@@ -864,7 +865,7 @@ mud.set_prompt_var('move', captures[4])"""
         assert!(!catalog_trigger(root, "prompt-capture").enabled);
         let default_before = text(root, "profiles/default.toml");
 
-        let leftover = &run(root);
+        let leftover = &read_and_run(root);
         assert!(leftover.is_empty(), "{leftover:?}");
         assert!(profile(root, "default").prompt_config().capture.is_none());
         assert_eq!(text(root, "profiles/default.toml"), default_before);
@@ -878,12 +879,12 @@ mud.set_prompt_var('move', captures[4])"""
     fn a_rerun_after_an_older_build_takes_the_turned_off_capture_again() {
         let dir = james_like(CAPTURE_TRIGGER);
         let root = dir.path();
-        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        assert_eq!(read_and_run(root), [MOVED_INTO_DEFAULT]);
         older_build_saves(root);
         assert!(profile(root, "default").prompt_config().capture.is_none());
         assert!(!catalog_trigger(root, "prompt-capture").enabled);
 
-        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        assert_eq!(read_and_run(root), [MOVED_INTO_DEFAULT]);
         let default = profile(root, "default").prompt_config();
         assert_eq!(moved_capture(&default).lines, [PATTERN]);
         assert!(default.draw);
@@ -901,7 +902,7 @@ mud.set_prompt_var('move', captures[4])"""
     fn a_rolled_back_profile_takes_its_capture_again_while_another_keeps_its_own() {
         let dir = james_like(CAPTURE_TRIGGER);
         let root = dir.path();
-        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        assert_eq!(read_and_run(root), [MOVED_INTO_DEFAULT]);
         // Healer read its prompt from the game's codes meanwhile.
         let healer_path = root.join("profiles/Healer.toml");
         let mut healer = ProfileConfig::load(&healer_path).unwrap();
@@ -914,7 +915,7 @@ mud.set_prompt_var('move', captures[4])"""
         older_build_saves(root);
         let healer_before = text(root, "profiles/Healer.toml");
 
-        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        assert_eq!(read_and_run(root), [MOVED_INTO_DEFAULT]);
         let default = profile(root, "default").prompt_config();
         assert_eq!(moved_capture(&default).lines, [PATTERN]);
         assert_eq!(text(root, "profiles/Healer.toml"), healer_before);
@@ -928,7 +929,7 @@ mud.set_prompt_var('move', captures[4])"""
     fn a_turned_off_capture_stays_off_for_a_profile_an_older_build_never_saved() {
         let dir = james_like(CAPTURE_TRIGGER);
         let root = dir.path();
-        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        assert_eq!(read_and_run(root), [MOVED_INTO_DEFAULT]);
         // You took the capture out of Default in this build, and nothing
         // else draws or reads your prompt.
         let path = root.join("profiles/default.toml");
@@ -939,7 +940,7 @@ mud.set_prompt_var('move', captures[4])"""
         default.save(&path).unwrap();
         let before = snapshot(root);
 
-        let leftover = &run(root);
+        let leftover = &read_and_run(root);
         assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(snapshot(root), before);
         assert!(profile(root, "default").prompt_config().capture.is_none());
@@ -956,7 +957,7 @@ mud.set_prompt_var('move', captures[4])"""
         std::fs::write(root.join("profiles/default.toml"), off).unwrap();
 
         assert_eq!(
-            run(root),
+            read_and_run(root),
             [
                 "Vosh moved your prompt capture into the Default, Healer, and Test-Prompt \
               profiles. Profiles that do not draw a prompt now show the game's prompt."
@@ -988,7 +989,7 @@ mud.set_prompt_var('move', captures[4])"""
         let default_before = text(root, "profiles/default.toml");
 
         assert_eq!(
-            run(root),
+            read_and_run(root),
             [
                 "Vosh moved your prompt capture into the Healer profile. Profiles that do not \
               draw a prompt now show the game's prompt."
@@ -1018,13 +1019,13 @@ mud.set_prompt_var('move', captures[4])"""
             let before = snapshot(root);
             // Vosh cannot tell whether the file draws, so nothing moves
             // and nothing is written.
-            assert!(run(root).is_empty(), "{name}");
+            assert!(read_and_run(root).is_empty(), "{name}");
             assert_eq!(snapshot(root), before, "{name}");
             assert!(catalog_trigger(root, "prompt-capture").enabled, "{name}");
 
             // Fixed, the next launch moves the capture where it belongs.
             std::fs::write(&path, good).unwrap();
-            assert_eq!(run(root), [MOVED_INTO_DEFAULT], "{name}");
+            assert_eq!(read_and_run(root), [MOVED_INTO_DEFAULT], "{name}");
             assert_eq!(
                 moved_capture(&profile(root, "default").prompt_config()).lines,
                 [PATTERN]
@@ -1040,7 +1041,7 @@ mud.set_prompt_var('move', captures[4])"""
         let root = dir.path();
         std::fs::write(root.join("catalog.toml"), "not [ toml").unwrap();
         let before = snapshot(root);
-        let leftover = &run(root);
+        let leftover = &read_and_run(root);
         assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(snapshot(root), before);
     }
