@@ -4,6 +4,7 @@
 use vosh_automation::vars::Scope;
 
 use super::{split_first_word, InputResult, APP_DATA_DIR, PATH_B_ACTIVE};
+use crate::app::state::AppState;
 use crate::disk::paths;
 use crate::import::tintin;
 use crate::profile::file::ProfileConfig;
@@ -20,26 +21,30 @@ const PROFILE_MIGRATION_PENDING: &str =
 /// [`crate::disk::save::PERSIST_LOCK`].
 pub(super) const PROFILE_SAVE_BUSY: &str = "Vosh is saving this profile. Try again.";
 
-pub(super) fn slash_profile(profile: &mut Profile, args: &str, replaced: &mut bool) -> InputResult {
-    let pending =
-        crate::app::state::MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
-    let app_data = APP_DATA_DIR.get().map(std::path::PathBuf::as_path);
-    slash_profile_with(profile, args, replaced, pending, app_data)
-}
-
-/// [`slash_profile`] with `migration_pending` in place of
-/// [`crate::app::state::MIGRATION_RELAUNCH_PENDING`] and `app_data` in
-/// place of [`APP_DATA_DIR`], so a test can run it after the wizard, or
-/// over a folder of its own, without touching what every other test
-/// reads.
-pub(super) fn slash_profile_with(
+pub(super) fn slash_profile(
+    state: &AppState,
     profile: &mut Profile,
     args: &str,
     replaced: &mut bool,
-    migration_pending: bool,
+) -> InputResult {
+    let app_data = APP_DATA_DIR.get().map(std::path::PathBuf::as_path);
+    slash_profile_with(state, profile, args, replaced, app_data)
+}
+
+/// [`slash_profile`] with `app_data` in place of [`APP_DATA_DIR`], so a
+/// test can run it over a folder of its own without touching what every
+/// other test reads.
+pub(super) fn slash_profile_with(
+    state: &AppState,
+    profile: &mut Profile,
+    args: &str,
+    replaced: &mut bool,
     app_data: Option<&std::path::Path>,
 ) -> InputResult {
     let (cmd, _rest) = split_first_word(args);
+    let migration_pending = state
+        .relaunch_pending
+        .load(std::sync::atomic::Ordering::Acquire);
     if migration_pending && matches!(cmd, "save" | "load" | "reset") {
         return InputResult::error(PROFILE_MIGRATION_PENDING);
     }

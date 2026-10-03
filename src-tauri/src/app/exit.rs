@@ -26,7 +26,7 @@ use tokio::sync::oneshot;
 use tracing::{info, warn};
 
 use crate::app::events::{broadcast, FLUSH_PENDING_WRITES};
-use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED};
+use crate::app::state::SharedState;
 
 /// How long quit waits for the windows. A window gives up on its own
 /// writes a little sooner (`FLUSH_TIMEOUT_MS` in pendingWrites.ts), so
@@ -285,17 +285,20 @@ pub(crate) fn on_run_event(app_handle: &AppHandle, event: tauri::RunEvent) {
 /// Write the live profile once on the way out. [`ExitFlow`] decides
 /// when, so this runs exactly once.
 fn flush_profile_on_exit(app_handle: &AppHandle) {
+    let state: SharedState = app_handle.state::<SharedState>().inner().clone();
     // The affect fulls are a cache of their own, written whatever
     // becomes of the profile.
-    app_handle.state::<SharedState>().affect_full.flush();
+    state.affect_full.flush();
     // Honor a #profile reset/load: the in-memory profile is
     // deliberately diverged from disk; do not write it back.
-    if AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
+    if state
+        .auto_persist_suppressed
+        .load(std::sync::atomic::Ordering::Acquire)
+    {
         info!("exit flush: skipped, persist suppressed by profile reset or load");
         return;
     }
     info!("exit flush: persisting profile");
-    let state: SharedState = app_handle.state::<SharedState>().inner().clone();
     // Bounded: a wedged Lua trigger holding the profile lock
     // must not turn quit into a hang. The timeout cuts the
     // lock waits; the file writes themselves are sync and

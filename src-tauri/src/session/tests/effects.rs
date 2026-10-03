@@ -26,6 +26,7 @@ fn a_timer_command_that_edits_the_profile_marks_it_dirty() {
 
 #[test]
 fn a_script_alias_body_hands_on_all_it_asks_for() {
+    let state = AppState::default();
     let mut p = Profile::default();
     p.aliases.set(
         vosh_automation::alias::Alias::new("kk", "ignored").with_script(
@@ -33,7 +34,7 @@ fn a_script_alias_body_hands_on_all_it_asks_for() {
          mud.input('look') mud.set_prompt_var('mark', 'on')",
         ),
     );
-    let ran = crate::input::run_line(&mut p, "stand;kk orc");
+    let ran = crate::input::run_line(&state, &mut p, "stand;kk orc");
     let apply = super::line_script_result(ran);
     // What the body sends goes out where you typed the alias, and all
     // else it asks for comes with the line.

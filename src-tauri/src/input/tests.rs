@@ -18,9 +18,11 @@ fn regex_capture(p: &Profile) -> vosh_prompt::config::RegexCapture {
 
 #[test]
 fn prompt_writes_a_regex_capture_to_the_profile() {
+    let state = AppState::default();
     let mut p = Profile::default();
     p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
     let ran = run_line(
+        &state,
         &mut p,
         r"#prompt {\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)m\]}",
     );
@@ -50,14 +52,14 @@ fn prompt_writes_a_regex_capture_to_the_profile() {
     assert!(p.prompt.stage.has_recognizer());
 
     // An anchored pattern that ends in text settles.
-    let ran = run_line(&mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
+    let ran = run_line(&state, &mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
     assert_eq!(
         ran.result.echo,
         ["Vosh reads hp from your prompt with this pattern."]
     );
     assert!(regex_capture(&p).settle);
     // A pattern with no groups only says where your prompt is.
-    let ran = run_line(&mut p, "#prompt {^> $}");
+    let ran = run_line(&state, &mut p, "#prompt {^> $}");
     assert_eq!(
         ran.result.echo,
         ["Vosh reads your prompt with this pattern."]
@@ -66,17 +68,18 @@ fn prompt_writes_a_regex_capture_to_the_profile() {
 
 #[test]
 fn prompt_with_a_bad_pattern_changes_nothing() {
+    let state = AppState::default();
     let mut p = Profile::default();
-    let _ = run_line(&mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
+    let _ = run_line(&state, &mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
     let before = p.prompt.config().clone();
-    let ran = run_line(&mut p, r"#prompt {\[(?<hp>\d+}");
+    let ran = run_line(&state, &mut p, r"#prompt {\[(?<hp>\d+}");
     assert!(
         ran.result.echo[0].starts_with("[Vosh cannot read that pattern."),
         "{:?}",
         ran.result.echo
     );
     assert_eq!(*p.prompt.config(), before);
-    let ran = run_line(&mut p, "#prompt {");
+    let ran = run_line(&state, &mut p, "#prompt {");
     assert!(ran.result.echo[0].starts_with("[usage #prompt"));
 }
 
@@ -89,9 +92,14 @@ fn codes_of(p: &Profile) -> vosh_prompt::config::AabahranCapture {
 
 #[test]
 fn prompt_game_stores_the_setting_as_the_game_does_and_says_what_it_reads() {
+    let state = AppState::default();
     let mut p = Profile::default();
     p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
-    let ran = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
+    let ran = run_line(
+        &state,
+        &mut p,
+        "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
+    );
     assert_eq!(
         ran.result.echo,
         ["Vosh reads Health, Mana, and Moves with their maxes from this prompt. It also reads Tank and Tank health."]
@@ -110,21 +118,22 @@ fn prompt_game_stores_the_setting_as_the_game_does_and_says_what_it_reads() {
     assert_eq!(p.prompt.config().template, "%hp", "the design stays");
 
     // As do_prompt stores it: prompt all, and a space added.
-    let _ = run_line(&mut p, "#prompt game {all}");
+    let _ = run_line(&state, &mut p, "#prompt game {all}");
     assert_eq!(codes_of(&p).prompt, "%n%P%C<%hhp %mm %vmv> ");
-    let _ = run_line(&mut p, "#prompt game {<%hhp>}");
+    let _ = run_line(&state, &mut p, "#prompt game {<%hhp>}");
     assert_eq!(codes_of(&p).prompt, "<%hhp> ");
     // No space around the setting reaches the game.
-    let _ = run_line(&mut p, "#prompt game { <%hhp %mm> }");
+    let _ = run_line(&state, &mut p, "#prompt game { <%hhp %mm> }");
     assert_eq!(codes_of(&p).prompt, "<%hhp %mm> ");
-    let _ = run_line(&mut p, "#prompt game { all }");
+    let _ = run_line(&state, &mut p, "#prompt game { all }");
     assert_eq!(codes_of(&p).prompt, "%n%P%C<%hhp %mm %vmv> ");
 }
 
 #[test]
 fn prompt_game_says_every_warning_and_refuses_what_it_cannot_read() {
+    let state = AppState::default();
     let mut p = Profile::default();
-    let ran = run_line(&mut p, "#prompt game {<%h%m %vmv>}");
+    let ran = run_line(&state, &mut p, "#prompt game {<%h%m %vmv>}");
     assert_eq!(
         ran.result.echo,
         [
@@ -135,18 +144,18 @@ fn prompt_game_says_every_warning_and_refuses_what_it_cannot_read() {
     // The game keeps a typed backtick only from trust 55.
     trusted(&mut p);
     let before = p.prompt.config().clone();
-    let ran = run_line(&mut p, "#prompt game {<`%h>}");
+    let ran = run_line(&state, &mut p, "#prompt game {<`%h>}");
     assert_eq!(
         ran.result.echo,
         ["[A color code runs into %h. Put a space between them in the game.]"]
     );
     assert_eq!(*p.prompt.config(), before);
-    let ran = run_line(&mut p, "#prompt game {off}");
+    let ran = run_line(&state, &mut p, "#prompt game {off}");
     assert_eq!(
         ran.result.echo,
         ["[That turns prompts off in the game. Type the prompt setting you use.]"]
     );
-    let ran = run_line(&mut p, "#prompt game");
+    let ran = run_line(&state, &mut p, "#prompt game");
     assert_eq!(
         ran.result.echo,
         ["[usage #prompt game {your PROMPT setting}]"]
@@ -167,26 +176,28 @@ fn trusted(p: &mut Profile) {
 fn prompt_game_stores_what_the_game_keeps_of_your_backticks() {
     // A mortal, or anyone before Char.Status names a level, loses
     // each backtick and the character after it.
+    let state = AppState::default();
     let mut p = Profile::default();
-    let _ = run_line(&mut p, "#prompt game {`(240)[%h/%Hhp]}");
+    let _ = run_line(&state, &mut p, "#prompt game {`(240)[%h/%Hhp]}");
     assert_eq!(codes_of(&p).prompt, "240)[%h/%Hhp] ");
     trusted(&mut p);
-    let _ = run_line(&mut p, "#prompt game {`(240)[%h/%Hhp]}");
+    let _ = run_line(&state, &mut p, "#prompt game {`(240)[%h/%Hhp]}");
     assert_eq!(codes_of(&p).prompt, "`(240)[%h/%Hhp] ");
 }
 
 #[test]
 fn prompt_fight_sets_the_fight_prompt_beside_your_prompt() {
+    let state = AppState::default();
     let mut p = Profile::default();
     trusted(&mut p);
-    let ran = run_line(&mut p, "#prompt fight {`1%h``hp [%p] >}");
+    let ran = run_line(&state, &mut p, "#prompt fight {`1%h``hp [%p] >}");
     assert_eq!(
         ran.result.echo,
         ["Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start."]
     );
     assert!(p.prompt.config().capture.is_none());
-    let _ = run_line(&mut p, "#prompt game {<%hhp>}");
-    let ran = run_line(&mut p, "#prompt fight {`1%h``hp [%p] >}");
+    let _ = run_line(&state, &mut p, "#prompt game {<%hhp>}");
+    let ran = run_line(&state, &mut p, "#prompt fight {`1%h``hp [%p] >}");
     assert_eq!(
         ran.result.echo,
         ["Vosh reads Health from this fight prompt. It also reads Tank health."]
@@ -194,7 +205,7 @@ fn prompt_fight_sets_the_fight_prompt_beside_your_prompt() {
     let codes = codes_of(&p);
     assert_eq!(codes.prompt, "<%hhp> ");
     assert_eq!(codes.fprompt, "`1%h``hp [%p] > ");
-    let _ = run_line(&mut p, "#prompt fight {off}");
+    let _ = run_line(&state, &mut p, "#prompt fight {off}");
     assert_eq!(codes_of(&p).fprompt, "");
     assert_eq!(codes_of(&p).prompt, "<%hhp> ");
 }
@@ -203,13 +214,18 @@ fn prompt_fight_sets_the_fight_prompt_beside_your_prompt() {
 fn prompt_alone_says_how_vosh_reads_your_prompt() {
     let now = chrono::DateTime::parse_from_rfc3339("2026-09-29T17:30:00-05:00").unwrap();
     let status = |p: &Profile| super::prompt::prompt_status(p, now).echo;
+    let state = AppState::default();
     let mut p = Profile::default();
     assert_eq!(
         status(&p),
         ["Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start."]
     );
     p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
-    let _ = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
+    let _ = run_line(
+        &state,
+        &mut p,
+        "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
+    );
     assert_eq!(
         status(&p),
         ["Vosh reads your prompt from the codes %n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c. No prompt has matched since you connected. Drawing is on. It shows in the text."]
@@ -230,7 +246,7 @@ fn prompt_alone_says_how_vosh_reads_your_prompt() {
         status(&p)[1],
         "No prompt has matched since 5:04. If you changed it in the game, point at it again."
     );
-    let _ = run_line(&mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
+    let _ = run_line(&state, &mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
     p.set_prompt_config(vosh_prompt::PromptConfig {
         draw: false,
         ..p.prompt.config().clone()
@@ -253,9 +269,10 @@ fn prompt_alone_says_how_vosh_reads_your_prompt() {
 fn prompt_show_picks_where_your_prompt_shows_and_the_status_says_it() {
     use vosh_prompt::PromptShow;
     let now = chrono::DateTime::parse_from_rfc3339("2026-09-30T09:00:00-05:00").unwrap();
+    let state = AppState::default();
     let mut p = Profile::default();
     // With nothing reading your prompt there is nothing to show.
-    let ran = run_line(&mut p, "#prompt show pinned");
+    let ran = run_line(&state, &mut p, "#prompt show pinned");
     assert_eq!(
         ran.result.echo,
         ["Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start."]
@@ -263,7 +280,11 @@ fn prompt_show_picks_where_your_prompt_shows_and_the_status_says_it() {
     assert_eq!(p.prompt.config().show, PromptShow::Text);
 
     p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
-    let _ = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
+    let _ = run_line(
+        &state,
+        &mut p,
+        "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
+    );
     for (line, show, echo, status) in [
         (
             "#prompt show pinned",
@@ -284,7 +305,7 @@ fn prompt_show_picks_where_your_prompt_shows_and_the_status_says_it() {
             "It shows in the text.",
         ),
     ] {
-        let ran = run_line(&mut p, line);
+        let ran = run_line(&state, &mut p, line);
         assert_eq!(ran.result.echo, [echo], "{line}");
         assert_eq!(p.prompt.config().show, show, "{line}");
         let said = super::prompt::prompt_status(&p, now).echo;
@@ -298,7 +319,7 @@ fn prompt_show_picks_where_your_prompt_shows_and_the_status_says_it() {
     assert!(p.prompt.config().capture.is_aabahran());
 
     for line in ["#prompt show", "#prompt show sideways"] {
-        let ran = run_line(&mut p, line);
+        let ran = run_line(&state, &mut p, line);
         assert_eq!(
             ran.result.echo,
             ["[usage #prompt show text | lifted | pinned]"],
@@ -313,15 +334,20 @@ fn prompt_show_picks_where_your_prompt_shows_and_the_status_says_it() {
 #[test]
 fn prompt_default_puts_the_default_design_in_place_and_keeps_yours() {
     use vosh_prompt::{PromptShow, DEFAULT_DESIGN};
+    let state = AppState::default();
     let mut p = Profile::default();
     p.set_prompt_config(vosh_prompt::PromptConfig {
         show: PromptShow::Pinned,
         ..vosh_prompt::PromptConfig::from_legacy(true, "%hp")
     });
-    let _ = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
+    let _ = run_line(
+        &state,
+        &mut p,
+        "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
+    );
     let capture = p.prompt.config().capture.clone();
 
-    let ran = run_line(&mut p, "#prompt default");
+    let ran = run_line(&state, &mut p, "#prompt default");
     assert_eq!(
         ran.result.echo,
         ["Your design is now Vosh's default. Vosh keeps the one you had as an earlier design."]
@@ -339,11 +365,11 @@ fn prompt_default_puts_the_default_design_in_place_and_keeps_yours() {
     let file = crate::profile::file::ProfileConfig::from_profile(&p);
     assert_eq!(file.ui.prompt_template, DEFAULT_DESIGN);
 
-    let ran = run_line(&mut p, "#prompt default");
+    let ran = run_line(&state, &mut p, "#prompt default");
     assert_eq!(ran.result.echo, ["Your design is already Vosh's default."]);
     assert_eq!(p.prompt.config().previous_templates, ["%hp"]);
 
-    let ran = run_line(&mut p, "#prompt default please");
+    let ran = run_line(&state, &mut p, "#prompt default please");
     assert_eq!(ran.result.echo, ["[usage #prompt default]"]);
     // The help names it.
     assert!(super::slash::HELP_TEXT.contains("#prompt default "));
@@ -353,9 +379,10 @@ fn prompt_default_puts_the_default_design_in_place_and_keeps_yours() {
 fn prompt_draw_turns_drawing_on_and_off() {
     use vosh_prompt::DEFAULT_DESIGN;
     // No design and nothing reads the prompt yet.
+    let state = AppState::default();
     let mut p = Profile::default();
     p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(false, ""));
-    let ran = run_line(&mut p, "#prompt draw on");
+    let ran = run_line(&state, &mut p, "#prompt draw on");
     assert_eq!(
         ran.result.echo,
         [
@@ -372,8 +399,12 @@ fn prompt_draw_turns_drawing_on_and_off() {
     let file = crate::profile::file::ProfileConfig::from_profile(&p);
     assert!(file.ui.prompt_template_enabled);
 
-    let _ = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
-    let ran = run_line(&mut p, "#prompt draw off");
+    let _ = run_line(
+        &state,
+        &mut p,
+        "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
+    );
+    let ran = run_line(&state, &mut p, "#prompt draw off");
     assert_eq!(
         ran.result.echo,
         ["Drawing is off. You see the game's own prompt again."]
@@ -384,13 +415,13 @@ fn prompt_draw_turns_drawing_on_and_off() {
         DEFAULT_DESIGN,
         "the design stays"
     );
-    let ran = run_line(&mut p, "#prompt draw ON");
+    let ran = run_line(&state, &mut p, "#prompt draw ON");
     assert_eq!(
         ran.result.echo,
         ["Drawing is on. Vosh draws your design in place of your prompt."]
     );
     for line in ["#prompt draw", "#prompt draw maybe"] {
-        let ran = run_line(&mut p, line);
+        let ran = run_line(&state, &mut p, line);
         assert_eq!(ran.result.echo, ["[usage #prompt draw on | off]"], "{line}");
     }
     assert!(p.prompt.config().draw);
@@ -401,10 +432,15 @@ fn prompt_draw_turns_drawing_on_and_off() {
 #[test]
 fn prompt_default_says_what_else_it_takes_to_see_the_design() {
     // Drawing off.
+    let state = AppState::default();
     let mut p = Profile::default();
     p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(false, "%hp"));
-    let _ = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
-    let ran = run_line(&mut p, "#prompt default");
+    let _ = run_line(
+        &state,
+        &mut p,
+        "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
+    );
+    let ran = run_line(&state, &mut p, "#prompt default");
     assert_eq!(
         ran.result.echo,
         [
@@ -416,7 +452,7 @@ fn prompt_default_says_what_else_it_takes_to_see_the_design() {
 
     // Nothing reads your prompt yet, and there was no design to keep.
     let mut p = Profile::default();
-    let ran = run_line(&mut p, "#prompt default");
+    let ran = run_line(&state, &mut p, "#prompt default");
     assert_eq!(
         ran.result.echo,
         [
@@ -433,7 +469,7 @@ fn prompt_default_says_what_else_it_takes_to_see_the_design() {
     // hears what else it takes.
     let mut p = Profile::default();
     p.set_prompt_config(vosh_prompt::PromptConfig::fresh());
-    let ran = run_line(&mut p, "#prompt default");
+    let ran = run_line(&state, &mut p, "#prompt default");
     assert_eq!(
         ran.result.echo,
         [
@@ -442,8 +478,12 @@ fn prompt_default_says_what_else_it_takes_to_see_the_design() {
             "Turn on Draw your own prompt in Settings under Input, then Prompt, to see it."
         ]
     );
-    let _ = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
-    let ran = run_line(&mut p, "#prompt default");
+    let _ = run_line(
+        &state,
+        &mut p,
+        "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
+    );
+    let ran = run_line(&state, &mut p, "#prompt default");
     assert_eq!(
         ran.result.echo,
         [
@@ -503,10 +543,11 @@ fn prompt_says_in_one_sentence_why_the_moved_pattern_stayed() {
 #[test]
 fn a_pattern_you_set_never_switches_to_the_codes_the_game_sends() {
     let now = chrono::DateTime::parse_from_rfc3339("2026-09-30T09:00:00-05:00").unwrap();
+    let state = AppState::default();
     let mut p = Profile::default();
     p.set_prompt_config(migrated());
     p.prompt.connect(true);
-    let _ = run_line(&mut p, r"#prompt {\[(?<hp>\d+)/(?<maxhp>\d+)hp\]}");
+    let _ = run_line(&state, &mut p, r"#prompt {\[(?<hp>\d+)/(?<maxhp>\d+)hp\]}");
     let typed = p.prompt.config().clone();
     assert!(!typed.capture.is_migrated());
     p.prompt.observe(
@@ -520,7 +561,7 @@ fn a_pattern_you_set_never_switches_to_the_codes_the_game_sends() {
     let mut p = Profile::default();
     p.set_prompt_config(migrated());
     p.prompt.connect(true);
-    let _ = run_line(&mut p, "#unprompt");
+    let _ = run_line(&state, &mut p, "#unprompt");
     p.prompt.observe(
         "Char.Prompt",
         serde_json::json!({"enabled": true, "prompt": "<%hhp> ", "fprompt": ""}),
@@ -531,15 +572,16 @@ fn a_pattern_you_set_never_switches_to_the_codes_the_game_sends() {
 
 #[test]
 fn unprompt_stops_reading_and_keeps_the_design() {
+    let state = AppState::default();
     let mut p = Profile::default();
     p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
-    let ran = run_line(&mut p, "#unprompt");
+    let ran = run_line(&state, &mut p, "#unprompt");
     assert_eq!(
         ran.result.echo,
         ["Vosh does not read your prompt in this profile."]
     );
-    let _ = run_line(&mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
-    let ran = run_line(&mut p, "#unprompt");
+    let _ = run_line(&state, &mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
+    let ran = run_line(&state, &mut p, "#unprompt");
     assert_eq!(
         ran.result.echo,
         ["Vosh stopped reading your prompt. Your design stays saved."]
@@ -553,10 +595,11 @@ fn unprompt_stops_reading_and_keeps_the_design() {
 /// Run `lines` through the pipeline the way the typed path does and
 /// note each one.
 fn effects_of(lines: &[&str]) -> LineEffects {
+    let state = AppState::default();
     let mut p = Profile::default();
     let mut effects = LineEffects::default();
     for line in lines {
-        let ran = run_line(&mut p, line);
+        let ran = run_line(&state, &mut p, line);
         effects.note_ran(line, &ran);
     }
     effects
@@ -576,7 +619,7 @@ const REPLACED: LineEffects = LineEffects {
 
 /// Whether `line` changed the tick settings of `p`.
 fn changes_tick(p: &mut Profile, line: &str) -> bool {
-    run_line(p, line).tick_changed
+    run_line(&AppState::default(), p, line).tick_changed
 }
 
 #[test]
@@ -603,8 +646,9 @@ fn a_tick_command_that_changes_a_setting_says_so() {
 
 #[test]
 fn a_line_that_leaves_the_tick_settings_alone_says_nothing() {
+    let state = AppState::default();
     let mut p = Profile::default();
-    let _ = run_line(&mut p, "#tick warn at 10");
+    let _ = run_line(&state, &mut p, "#tick warn at 10");
     for line in [
         "look",
         "#tick",
@@ -641,12 +685,16 @@ fn slash_commands_mark_the_profile_dirty() {
 
 #[test]
 fn profile_save_load_and_reset_wait_for_the_relaunch_after_the_wizard() {
+    let state = AppState::default();
+    state
+        .relaunch_pending
+        .store(true, std::sync::atomic::Ordering::Release);
     let mut p = Profile::default();
     p.aliases
         .set(vosh_automation::alias::Alias::new("kk", "kick %1"));
     for sub in ["save", "load", "reset"] {
         let mut replaced = false;
-        let result = slash_profile_with(&mut p, sub, &mut replaced, true, None);
+        let result = slash_profile_with(&state, &mut p, sub, &mut replaced, None);
         assert_eq!(
             result.echo,
             ["[Quit Vosh and open it again to finish the move to loadouts.]"],
@@ -663,10 +711,11 @@ fn profile_save_load_and_reset_wait_for_the_relaunch_after_the_wizard() {
 /// cannot stop the retry, and it panics when the lock stays held for
 /// 10 s, so a test that leaks a guard fails instead of hanging.
 fn save_profile_in(p: &mut Profile, app_data: &std::path::Path) -> InputResult {
+    let state = AppState::default();
     let busy = InputResult::error(PROFILE_SAVE_BUSY).echo;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
-        let result = slash_profile_with(p, "save", &mut false, false, Some(app_data));
+        let result = slash_profile_with(&state, p, "save", &mut false, Some(app_data));
         if result.echo != busy {
             return result;
         }
@@ -682,6 +731,7 @@ fn save_profile_in(p: &mut Profile, app_data: &std::path::Path) -> InputResult {
 fn profile_and_script_commands_use_the_app_data_folder() {
     let dir = tempfile::tempdir().unwrap();
     let app_data = dir.path();
+    let state = AppState::default();
     let mut p = Profile::default();
     p.aliases
         .set(vosh_automation::alias::Alias::new("kk", "kick %1"));
@@ -708,7 +758,7 @@ fn profile_and_script_commands_use_the_app_data_folder() {
 
     let mut fresh = Profile::default();
     let mut replaced = false;
-    let loaded = slash_profile_with(&mut fresh, "load", &mut replaced, false, Some(app_data));
+    let loaded = slash_profile_with(&state, &mut fresh, "load", &mut replaced, Some(app_data));
     assert_eq!(
         loaded.echo[0],
         format!("profile loaded from {}", healer.display())
@@ -789,6 +839,7 @@ fn a_reset_or_load_that_echoes_saves_nothing() {
 
 #[test]
 fn a_lua_alias_body_that_changes_durable_state_marks_the_profile_dirty() {
+    let state = AppState::default();
     let mut p = Profile::default();
     p.aliases
         .set(Alias::new("kk", "ignored").with_script("mud.send('kick')"));
@@ -796,19 +847,21 @@ fn a_lua_alias_body_that_changes_durable_state_marks_the_profile_dirty() {
         .set(Alias::new("keep", "ignored").with_script("mud.alias('greet', 'wave')"));
     let mut effects = LineEffects::default();
     for line in ["kk", "look"] {
-        let ran = run_line(&mut p, line);
+        let ran = run_line(&state, &mut p, line);
         effects.note_ran(line, &ran);
     }
     assert_eq!(effects, LineEffects::default());
-    let ran = run_line(&mut p, "keep");
+    let ran = run_line(&state, &mut p, "keep");
     effects.note_ran("keep", &ran);
     assert_eq!(effects, DIRTY);
 }
 
 #[test]
 fn lua_a_line_runs_hands_on_all_it_asks_for() {
+    let state = AppState::default();
     let mut p = Profile::default();
     let ran = run_line(
+        &state,
         &mut p,
         "#lua mud.echo('hi') mud.send('look') mud.timer(1, function() end) \
          mud.input('#echo again') mud.set_prompt_var('mark', 'on')",
@@ -827,7 +880,7 @@ fn lua_a_line_runs_hands_on_all_it_asks_for() {
     p.script
         .load_script("t", "mud.timer(1, function() end)".into())
         .unwrap();
-    let ran = run_line(&mut p, "#script reload");
+    let ran = run_line(&state, &mut p, "#script reload");
     assert_eq!(ran.result.echo, ["scripts reloaded"]);
     assert_eq!(ran.lua.new_timers.len(), 1);
 }
@@ -919,12 +972,13 @@ fn a_lua_alias_body_reads_the_variables_as_they_are_now() {
 
 #[test]
 fn what_else_a_lua_alias_body_asks_for_comes_back_with_the_line() {
+    let state = AppState::default();
     let mut p = Profile::default();
     p.aliases.set(Alias::new("later", "ignored").with_script(
         "mud.timer(1, function() end)\nmud.input('#echo again')\n\
          mud.set_prompt_var('mark', 'on')\nmud.send('now')",
     ));
-    let ran = run_line(&mut p, "later;look");
+    let ran = run_line(&state, &mut p, "later;look");
     assert_eq!(ran.result.bytes, b"now\r\nlook\r\n");
     let leftover = &ran.lua.send_bytes;
     assert!(leftover.is_empty(), "{leftover:?}");

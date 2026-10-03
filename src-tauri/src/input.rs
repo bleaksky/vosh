@@ -17,7 +17,7 @@ use tauri::{AppHandle, Emitter};
 use vosh_automation::alias::{ExpandError, ExpandStep};
 
 use crate::app::events::{self, HELP_OPEN};
-use crate::app::state::SharedState;
+use crate::app::state::{AppState, SharedState};
 use crate::disk::save::settle_line_effects;
 use crate::output;
 use crate::profile::live::Profile;
@@ -270,11 +270,11 @@ pub(crate) struct Ran {
 /// what the Lua it ran asks for, whether it replaced the live profile,
 /// and whether it changed the tick settings, for
 /// [`LineEffects::note_ran`].
-pub(crate) fn run_line(profile: &mut Profile, line: &str) -> Ran {
+pub(crate) fn run_line(state: &AppState, profile: &mut Profile, line: &str) -> Ran {
     let mut replaced = false;
     let mut lua = ApplyResult::default();
     let tick_before = profile.tick.config.clone();
-    let result = process_line(profile, line, &mut replaced, &mut lua);
+    let result = process_line(state, profile, line, &mut replaced, &mut lua);
     let tick_changed = profile.tick.config != tick_before;
     Ran {
         result,
@@ -344,10 +344,11 @@ impl LineEffects {
 
 /// Run the input pipeline against the given profile and return what to send
 /// and what to echo locally. The app runs every line through [`run_line`],
-/// which also says whether the line replaced the profile.
+/// which also says whether the line replaced the profile. A test that
+/// needs no app state of its own runs here, on a fresh one.
 #[cfg(test)]
 pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
-    run_line(profile, line).result
+    run_line(&AppState::default(), profile, line).result
 }
 
 /// The body of [`run_line`]. Sets `replaced` when a `#profile reset` or a
@@ -355,6 +356,7 @@ pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
 /// to `lua` what the Lua the line ran asks for. A script alias body's
 /// sends and echo lines go in the result instead, where you typed it.
 fn process_line(
+    state: &AppState,
     profile: &mut Profile,
     line: &str,
     replaced: &mut bool,
@@ -364,7 +366,7 @@ fn process_line(
 
     // Slash commands target the local profile.
     if let Some(rest) = trimmed.strip_prefix('#') {
-        return handle_slash(profile, rest, replaced, lua);
+        return handle_slash(state, profile, rest, replaced, lua);
     }
 
     // A bare Enter sends a blank line to the server. MUDs use this to
@@ -407,7 +409,7 @@ fn process_line(
             return InputResult::error("no target — set one with `tar <name|index>` first");
         }
         let expansion = format!("{} {}", qk.verb, target);
-        let mut inner = process_line(profile, &expansion, replaced, lua);
+        let mut inner = process_line(state, profile, &expansion, replaced, lua);
         // Echo the resolved line like any other typed command, with the
         // caret and the Sent command color. The frontend suppresses its
         // own echo for quick-keys, so this is the only echo that lands.

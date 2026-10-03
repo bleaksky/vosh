@@ -1,8 +1,7 @@
 //! The state the whole app shares. Tauri holds one [`AppState`] for
-//! every command, window and session. The process wide switches sit
-//! beside it as statics.
+//! every command, window and session.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
@@ -20,7 +19,7 @@ use crate::session::SessionHandle;
 /// character logged in, the terminal size and the last affects. The
 /// generations that turn away a write read before the profile was
 /// replaced live here too, with the counter that settles a burst of
-/// changes into one save.
+/// changes into one save and the flags that hold the saves back.
 pub(crate) struct AppState {
     pub(crate) session: Mutex<Option<SessionHandle>>,
     pub(crate) profile: Arc<Mutex<Profile>>,
@@ -109,6 +108,21 @@ pub(crate) struct AppState {
     /// and the delayed persist only fires if no newer mark arrived while
     /// waiting.
     pub(crate) profile_dirty_gen: AtomicU64,
+    /// Set by `#profile reset` / `#profile load`: the in-memory profile is
+    /// deliberately diverged from disk, so the passive flushes (debounce,
+    /// exit) must not write it. Cleared by the next durable change.
+    pub(crate) auto_persist_suppressed: AtomicBool,
+    /// Set by `migration_apply` once catalog.toml / loadouts.toml are
+    /// written: the session is in the post-migration window where the live
+    /// Profile is still pre-migration state and must not be persisted.
+    /// Launch sets it too when it could not finish a wizard run that
+    /// stopped partway, since the next launch writes the run's journal
+    /// again over anything the session saved (see `app::launch::load`).
+    /// Deliberately in-process (not a disk sniff): catalog.toml existing
+    /// while `global_catalog` is None also describes a corrupt catalog
+    /// falling back to legacy mode at startup, and that session must keep
+    /// persisting normally.
+    pub(crate) relaunch_pending: AtomicBool,
 }
 
 impl AppState {
@@ -213,6 +227,8 @@ impl Default for AppState {
             panes_generation: AtomicU64::new(0),
             ui_config_generation: AtomicU64::new(0),
             profile_dirty_gen: AtomicU64::new(0),
+            auto_persist_suppressed: AtomicBool::new(false),
+            relaunch_pending: AtomicBool::new(false),
         }
     }
 }
@@ -222,21 +238,3 @@ pub(crate) type SharedState = Arc<AppState>;
 /// The error a profile command returns before startup has loaded the
 /// profile set.
 pub(crate) const PROFILES_NOT_LOADED: &str = "Vosh has not loaded your profiles yet.";
-
-/// Set by `#profile reset` / `#profile load`: the in-memory profile is
-/// deliberately diverged from disk, so the passive flushes (debounce,
-/// exit) must not write it. Cleared by the next durable change.
-pub(crate) static AUTO_PERSIST_SUPPRESSED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-/// Set by `migration_apply` once catalog.toml / loadouts.toml are
-/// written: the session is in the post-migration window where the live
-/// Profile is still pre-migration state and must not be persisted.
-/// Launch sets it too when it could not finish a wizard run that stopped
-/// partway, since the next launch writes the run's journal again over
-/// anything the session saved (see `app::launch::load`).
-/// Deliberately in-process (not a disk sniff): catalog.toml existing
-/// while `state.global_catalog` is None also describes a corrupt
-/// catalog falling back to legacy mode at startup, and that session
-/// must keep persisting normally.
-pub(crate) static MIGRATION_RELAUNCH_PENDING: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);

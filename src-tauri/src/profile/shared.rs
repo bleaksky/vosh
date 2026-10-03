@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
-use crate::app::state::{SharedState, MIGRATION_RELAUNCH_PENDING};
+use crate::app::state::SharedState;
 use crate::disk::atomic::{is_unread, write_with_backup};
 use crate::disk::custom_themes::{
     follow_moved_ids, merge_custom_themes, share_custom_themes, HeldCustomThemes,
@@ -533,7 +533,9 @@ pub(crate) async fn change_scope_locked(
     state: &SharedState,
     scope: ScopeConfig,
 ) -> Result<Option<Vec<crate::profile::ui::CustomTheme>>, String> {
-    let migration_pending = MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
+    let migration_pending = state
+        .relaunch_pending
+        .load(std::sync::atomic::Ordering::Acquire);
     let before = {
         let set = state.loaded_profile_set().await?;
         if let Some(refusal) = scope_refusal_for_unread(&set) {

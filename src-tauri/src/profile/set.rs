@@ -29,7 +29,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED};
+use crate::app::state::SharedState;
 use crate::disk::paths;
 use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::profile::file::{ConfigError, ProfileConfig};
@@ -514,30 +514,34 @@ async fn flush_before_copy(shared: &SharedState, app_data: Option<&std::path::Pa
     // The live profile can run two seconds ahead of its file. After
     // `#profile reset` or `load` it is deliberately diverged, and the
     // copy takes the file as it stands.
-    if copying_live && !AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
+    if copying_live
+        && !shared
+            .auto_persist_suppressed
+            .load(std::sync::atomic::Ordering::Acquire)
+    {
         persist_state(shared, app_data).await;
     }
 }
 
-/// The body of [`profile_create`] over the app data folder `app_data`,
-/// with `relaunch_pending` in place of [`MIGRATION_RELAUNCH_PENDING`], so
-/// a test can run it after the wizard.
+/// The body of [`profile_create`] over the app data folder `app_data`, so
+/// a test can run it over a folder of its own.
 ///
 /// [`profile_create`]: crate::ipc::profiles::profile_create
-/// [`MIGRATION_RELAUNCH_PENDING`]: crate::app::state::MIGRATION_RELAUNCH_PENDING
 pub(crate) async fn create_profile(
     state: &SharedState,
     app_data: Option<&std::path::Path>,
     name: &str,
     copy_from: Option<&str>,
     auto_match: Option<AutoMatch>,
-    relaunch_pending: &std::sync::atomic::AtomicBool,
 ) -> Result<ProfileEntry, String> {
     let _persist_guard = PERSIST_LOCK.lock().await;
     if let Some(source) = copy_from {
         // Read under the lock, which the wizard holds until it sets the
         // flag.
-        if relaunch_pending.load(std::sync::atomic::Ordering::Acquire) {
+        if state
+            .relaunch_pending
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
             return Err(COPY_MIGRATION_PENDING.into());
         }
         flush_before_copy(state, app_data, source).await;
@@ -560,20 +564,20 @@ const RENAME_MIGRATION_PENDING: &str =
 const COPY_MIGRATION_PENDING: &str =
     "Quit Vosh and open it again to finish the move to loadouts, then copy the profile.";
 
-/// The body of [`profile_rename`], with `relaunch_pending` in place of
-/// [`MIGRATION_RELAUNCH_PENDING`], so a test can run it after the wizard.
+/// The body of [`profile_rename`].
 ///
 /// [`profile_rename`]: crate::ipc::profiles::profile_rename
-/// [`MIGRATION_RELAUNCH_PENDING`]: crate::app::state::MIGRATION_RELAUNCH_PENDING
 pub(crate) async fn rename_profile(
     state: &SharedState,
     old: &str,
     new: &str,
-    relaunch_pending: &std::sync::atomic::AtomicBool,
 ) -> Result<(), String> {
     let _persist_guard = PERSIST_LOCK.lock().await;
     // Read under the lock, which the wizard holds until it sets the flag.
-    if relaunch_pending.load(std::sync::atomic::Ordering::Acquire) {
+    if state
+        .relaunch_pending
+        .load(std::sync::atomic::Ordering::Acquire)
+    {
         return Err(RENAME_MIGRATION_PENDING.into());
     }
     let live = {
@@ -592,22 +596,22 @@ pub(crate) async fn rename_profile(
     Ok(())
 }
 
-/// The body of [`profile_duplicate`] over the app data folder `app_data`,
-/// with `relaunch_pending` in place of [`MIGRATION_RELAUNCH_PENDING`], so
-/// a test can run it after the wizard.
+/// The body of [`profile_duplicate`] over the app data folder
+/// `app_data`, so a test can run it over a folder of its own.
 ///
 /// [`profile_duplicate`]: crate::ipc::profiles::profile_duplicate
-/// [`MIGRATION_RELAUNCH_PENDING`]: crate::app::state::MIGRATION_RELAUNCH_PENDING
 pub(crate) async fn duplicate_profile(
     state: &SharedState,
     app_data: Option<&std::path::Path>,
     source: &str,
     new: &str,
-    relaunch_pending: &std::sync::atomic::AtomicBool,
 ) -> Result<(), String> {
     let _persist_guard = PERSIST_LOCK.lock().await;
     // Read under the lock, which the wizard holds until it sets the flag.
-    if relaunch_pending.load(std::sync::atomic::Ordering::Acquire) {
+    if state
+        .relaunch_pending
+        .load(std::sync::atomic::Ordering::Acquire)
+    {
         return Err(COPY_MIGRATION_PENDING.into());
     }
     flush_before_copy(state, app_data, source).await;

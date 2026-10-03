@@ -57,9 +57,7 @@ fn slash_command_echoes_and_the_logs_reply_reach_the_native_grid() {
     // save, and a save from a mock app writes outside the test. So the
     // echo the input pipeline gives for it goes through the same helper
     // session_send_input prints echoes with.
-    let help = crate::input::run_line(&mut Profile::default(), "#help")
-        .result
-        .echo;
+    let help = crate::input::process(&mut Profile::default(), "#help").echo;
     assert_eq!(help.first().map(String::as_str), Some("slash commands:"));
     crate::output::echo_lines(handle, &help);
 

@@ -8,7 +8,7 @@ use tauri::{AppHandle, Manager};
 use tracing::warn;
 
 use crate::app::events::{broadcast, broadcast_profile_ui, PROFILE_SWITCHED};
-use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING};
+use crate::app::state::SharedState;
 use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::loadouts::catalog::lay_catalog_over;
 use crate::output;
@@ -185,25 +185,16 @@ pub(crate) async fn switch_profile(
     app_data: Option<&std::path::Path>,
     name: &str,
 ) -> Result<(), String> {
-    switch_profile_with(state, app_data, name, &MIGRATION_RELAUNCH_PENDING).await
-}
-
-/// [`switch_profile`] with `relaunch_pending` in place of
-/// [`MIGRATION_RELAUNCH_PENDING`], so a test can run a switch after the
-/// wizard without touching the flag every other test reads.
-pub(crate) async fn switch_profile_with(
-    state: &SharedState,
-    app_data: Option<&std::path::Path>,
-    name: &str,
-    relaunch_pending: &std::sync::atomic::AtomicBool,
-) -> Result<(), String> {
     // Hold the persist lock from the flush through loading the next
     // file, so a Settings write to the incoming profile's file lands
     // either before the load reads it or after the switch made the
     // profile live, never in between.
     let _persist_guard = PERSIST_LOCK.lock().await;
     // Read under the lock, which the wizard holds until it sets the flag.
-    if relaunch_pending.load(std::sync::atomic::Ordering::Acquire) {
+    if state
+        .relaunch_pending
+        .load(std::sync::atomic::Ordering::Acquire)
+    {
         return Err(SWITCH_MIGRATION_PENDING.into());
     }
 
@@ -212,7 +203,10 @@ pub(crate) async fn switch_profile_with(
     // after a #profile reset/load: the live profile is deliberately
     // diverged from disk and a passive switch (the GMCP Char.Status
     // auto-switch reaches here too) must not write it back.
-    if !AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
+    if !state
+        .auto_persist_suppressed
+        .load(std::sync::atomic::Ordering::Acquire)
+    {
         persist_state(state, app_data).await;
     }
 
