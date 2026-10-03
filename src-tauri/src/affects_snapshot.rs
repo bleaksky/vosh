@@ -5,9 +5,6 @@
 //! the affects on you at once instead of after the next tick.
 
 use serde_json::Value;
-use tauri::State;
-
-use crate::app::state::SharedState;
 
 /// The package whose payload the snapshot keeps.
 pub(crate) const AFFECTS_PACKAGE: &str = "Char.Affects";
@@ -40,15 +37,6 @@ impl AffectsSnapshot {
     pub(crate) fn get(&self) -> Option<Value> {
         self.0.lock().ok().and_then(|guard| guard.clone())
     }
-}
-
-/// The last `Char.Affects` payload of this connection, raw as the MUD
-/// sent it, or null.
-#[tauri::command]
-pub(crate) async fn affects_snapshot_get(
-    state: State<'_, SharedState>,
-) -> Result<Option<Value>, String> {
-    Ok(state.last_affects.get())
 }
 
 #[cfg(test)]

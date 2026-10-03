@@ -53,7 +53,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use serde_json::Value;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager};
 use tracing::warn;
 
 use crate::affects_snapshot::AFFECTS_PACKAGE;
@@ -588,12 +588,6 @@ pub(crate) fn disconnect<R: tauri::Runtime>(app: &AppHandle<R>, state: &SharedSt
     if state.affect_full.disconnect() {
         broadcast(app, AFFECT_FULL_CHANGED, &FullMap::new());
     }
-}
-
-/// The live map, hours at full by affect key.
-#[tauri::command]
-pub(crate) async fn affect_full_get(state: State<'_, SharedState>) -> Result<FullMap, String> {
-    Ok(state.affect_full.map())
 }
 
 #[cfg(test)]
