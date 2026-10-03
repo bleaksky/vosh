@@ -1,4 +1,4 @@
-//! The tests of profile.rs, and the helpers that the tests of more than
+//! The tests of live.rs, and the helpers that the tests of more than
 //! one profile file share.
 
 use std::collections::BTreeMap;
