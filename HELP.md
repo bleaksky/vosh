@@ -352,6 +352,8 @@ To start over, choose `Reset panel layout` in the View menu or the palette, or `
 
 Settings under Characters draws each character's panel under Panel layout, so you can see how each one is arranged.
 
+Open Settings with the gear at the right end of the title band, after the panel button, or press `Cmd+,` on macOS or `Ctrl+,` elsewhere. `Open settings` in the palette and the `Settings` list in the terminal right click menu reach it too.
+
 ### 4.2 Use the map
 
 The Map pane draws the map the game sends. It sits at the top of the panel at first, and its header names the area you are in.
