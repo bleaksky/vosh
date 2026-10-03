@@ -22,7 +22,7 @@ export interface PendingWrites {
 
 /** How long a window waits on its own writes before it gives up. On
  *  quit the backend waits a little longer on the window, see
- *  exit_flush.rs. */
+ *  app/exit.rs. */
 export const FLUSH_TIMEOUT_MS = 800;
 
 export function createPendingWrites(): PendingWrites {

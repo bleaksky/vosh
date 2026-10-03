@@ -178,11 +178,11 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
         for window in app.webview_windows().into_values() {
             let answer = window.clone();
             window.listen(FLUSH_PENDING_WRITES, move |_| {
-                crate::exit_flush::pending_writes_flushed(answer.clone());
+                crate::app::exit::pending_writes_flushed(answer.clone());
             });
         }
         let listening = Heard::listen(&app, &[FLUSH_PENDING_WRITES]);
-        crate::exit_flush::ask_windows_to_flush(handle).await;
+        crate::app::exit::ask_windows_to_flush(handle).await;
         listening.finish("ask_windows_to_flush", &mut heard, &mut want);
     });
 
