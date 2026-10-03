@@ -8,10 +8,9 @@ interface Props {
   findOpen?: boolean;
 }
 
-// Scroll depth readout for the macOS underlay. The native renderer no
-// longer draws its own pill there, so this chip shows the depth that
-// lib/nativeScroll tracks at the terminal's top right while you are
-// scrolled back. Mount it inside the positioned terminal area.
+// Scroll depth readout for the native surface. This chip shows the
+// depth that lib/nativeScroll tracks at the terminal's top right while
+// you are scrolled back. Mount it inside the positioned terminal area.
 
 export function ScrollDepth({ findOpen = false }: Props = {}) {
   useEffect(startNativeScroll, []);

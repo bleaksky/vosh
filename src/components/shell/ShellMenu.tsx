@@ -13,12 +13,10 @@ import { useEscape } from '../../lib/escapeStack';
 // pane. SPEC 7 menu recipe on the SPEC 3 floating ground. It hangs 12
 // below its button (the session popover's 28 to 40), stays 8 inside
 // the window, closes on Esc through the escape stack or on a press
-// outside it, and moves focus with the arrow keys. The role (menu, or
-// dialog while it holds a form) is what tells the Windows and Linux
-// on-top terminal to step aside while it is open. It renders into the
-// body, like the pane menus, because the band is a stacking context
-// and the find bar and the scroll depth chip would paint over a menu
-// left inside it.
+// outside it, and moves focus with the arrow keys. Its role is menu, or
+// dialog while it holds a form. It renders into the body, like the pane
+// menus, because the band is a stacking context and the find bar and
+// the scroll depth chip would paint over a menu left inside it.
 
 const GAP_BELOW_ANCHOR = 12;
 const WINDOW_INSET = 8;

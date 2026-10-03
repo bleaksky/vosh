@@ -502,9 +502,9 @@ export function Terminal({
     // straightforward order (sync + fit, then swap) avoids that.
     const safeFit = () => {
       // When the native surface owns the pane it is the size authority and
-      // resizes xterm via the native-grid-size event. xterm is hidden behind
-      // the opaque surface and mismeasures itself there, so do not let the
-      // FitAddon fight the native grid (it would wrap the MUD too narrow).
+      // resizes xterm via the native-grid-size event. The FitAddon sizes
+      // xterm from its own cells, so letting it fit here would fight the
+      // native grid.
       if (!quietRef.current && nativeSurfaceEnabled()) return;
       try {
         fitKept();
