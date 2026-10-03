@@ -8,17 +8,24 @@
 //! each step hands on before that, so one driver for both would change
 //! what they feed.
 
+use std::time::Duration;
+
+use tokio::time::Instant;
+use vosh_prompt::stage::Output;
+use vosh_protocol::telnet::{
+    codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Parser,
+};
+
 use super::batch::*;
 use super::effects::*;
 use super::gmcp::*;
 use super::lines::{Line, LineAccumulator};
+use super::log_sink::*;
 use super::perf::*;
 use super::prompt_view::*;
 use super::steps::*;
 use super::*;
 use crate::output::OutputPayload;
-use vosh_prompt::stage::Output;
-use vosh_protocol::telnet::{codes as telnet_codes, option as telnet_option, Event as TelnetEvent};
 
 mod batch;
 mod clock;
