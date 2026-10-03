@@ -94,7 +94,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     }
     let mut sink = OutputSink::Batch(batch);
     if let Some(step) = tick_step {
-        conn.perf.tick_emits += 1;
+        conn.perf.ticks += 1;
         deliver_tick_step(
             &conn.app,
             &mut conn.stream,

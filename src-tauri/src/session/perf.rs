@@ -33,12 +33,14 @@ pub(super) struct PerfCounters {
     pub(super) output_emits: u64,
     pub(super) output_emit_bytes: u64,
     pub(super) gmcp_packets: u64,
-    pub(super) tick_emits: u64,
+    /// Game ticks, from World.Time or a line that matches the Reset on
+    /// pattern.
+    pub(super) ticks: u64,
     pub(super) routed_emits: u64,
 }
 
 impl PerfCounters {
-    /// Emit a single `info!` line summarising the last second of work
+    /// Emit a single `debug!` line summarising the last second of work
     /// (or nothing at all if the session was idle) and zero the
     /// counters. Per-event averages are reported in microseconds so
     /// the user can eyeball lock contention without doing the math.
@@ -46,7 +48,7 @@ impl PerfCounters {
         let any_activity = self.socket_reads > 0
             || self.lines_processed > 0
             || self.gmcp_packets > 0
-            || self.tick_emits > 0;
+            || self.ticks > 0;
         if !any_activity {
             return;
         }
@@ -70,7 +72,7 @@ impl PerfCounters {
             emits = self.output_emits,
             emit_bytes = self.output_emit_bytes,
             gmcp = self.gmcp_packets,
-            ticks = self.tick_emits,
+            ticks = self.ticks,
             routes = self.routed_emits,
             "perf 1s"
         );
