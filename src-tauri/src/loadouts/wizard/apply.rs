@@ -16,7 +16,7 @@ use crate::profile_config::ProfileConfig;
 /// can run it over a folder of its own. `library` holds the id of every
 /// preset in the library the frontend installs from.
 ///
-/// [`migration_analyze`]: crate::commands::migration_analyze
+/// [`migration_analyze`]: crate::ipc::wizard::migration_analyze
 pub(crate) async fn analyze_migration(
     state: &SharedState,
     app_data: &std::path::Path,
@@ -214,7 +214,7 @@ pub(crate) fn announce_migration_applied<R: tauri::Runtime>(app: &AppHandle<R>) 
 /// file stays changed. The journal then stays for the next launch to
 /// finish the run, and `written` runs.
 ///
-/// [`migration_apply`]: crate::commands::migration_apply
+/// [`migration_apply`]: crate::ipc::wizard::migration_apply
 pub(crate) async fn apply_migration(
     state: &SharedState,
     app_data: &std::path::Path,
