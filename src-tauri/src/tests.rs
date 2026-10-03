@@ -7,6 +7,8 @@ mod echo;
 mod fake_mud;
 mod ipc_contract;
 #[cfg(native_surface)]
+mod latency;
+#[cfg(native_surface)]
 mod throughput;
 mod upgrade_order;
 mod wizard_roundtrip;
