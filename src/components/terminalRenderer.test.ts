@@ -50,12 +50,11 @@ describe('the renderer that draws the live terminal', () => {
     expect(nativeUnderlay()).toBe(false);
   });
 
-  it('is xterm on Windows and Linux, and an on top surface when forced on', () => {
+  it('is xterm on Windows and Linux, even with the native surface forced on', () => {
     platform(false);
     expect(nativeSurfaceEnabled()).toBe(false);
     platform(false, { 'vosh.nativesurface': '1' });
-    expect(nativeSurfaceEnabled()).toBe(true);
-    // The on top surface hides for an overlay and xterm shows under it.
+    expect(nativeSurfaceEnabled()).toBe(false);
     expect(nativeUnderlay()).toBe(false);
   });
 });
