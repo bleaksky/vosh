@@ -1,7 +1,12 @@
 //! What a frame draws from the grid. `build_frame` lays out one frame's
 //! quads from the grid and the inputs its caller reads, with the regions
 //! a split shows and the marks and selection a cell carries. It needs no
-//! GPU, so the frame tests run anywhere.
+//! GPU, so the frame tests run on a machine without one.
+//!
+//! Each cell's colors and its bold face still come from the style
+//! statics in `style`, the theme's foreground, background and ANSI
+//! palette and the bright bold setting, which the page sets. The wash
+//! inputs color only the field of a washed row.
 
 use std::collections::HashMap;
 use std::ops::Range;
@@ -202,9 +207,9 @@ pub(super) struct FrameInputs {
     pub(super) placement: Placement,
     pub(super) chrome: ChromePaint,
     /// The terminal ground and the ANSI 0 to 15 palette, which a washed
-    /// row's field mixes.
-    pub(super) ground: Rgb,
-    pub(super) palette: [Rgb; 16],
+    /// row's field mixes. The cells read theirs from the style statics.
+    pub(super) wash_ground: Rgb,
+    pub(super) wash_palette: [Rgb; 16],
     /// Your prompt shows lifted, so each lift draws on a band, and how far
     /// past its glyphs the newest band reaches, in CSS px.
     pub(super) bands: bool,
@@ -268,8 +273,8 @@ pub(super) fn build_frame(
         .enumerate()
         .map(|(idx, c)| {
             let (tr, tg, tb) = c.wash_tint();
-            let mark = inputs.palette[idx];
-            let ground = inputs.ground;
+            let mark = inputs.wash_palette[idx];
+            let ground = inputs.wash_ground;
             let mix = |m: u8, g: u8| {
                 (f32::from(g) + (f32::from(m) - f32::from(g)) * wash_field_mix).round() as u8
             };
