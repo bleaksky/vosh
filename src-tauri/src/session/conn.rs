@@ -24,7 +24,7 @@ use super::connection::Stream;
 use super::echo::ServerEcho;
 use super::effects::{deliver_tick_step, run_fired_command, OutputSink};
 use super::lines::LineAccumulator;
-use super::log_sink::{capture_held_lines, capture_pending_line, LogSession};
+use super::log_sink::{capture_held_lines, capture_pending_line, LogSink};
 use super::lua_timers::fire_due_script_timers;
 use super::perf::{PerfCounters, PERF_REPORT_INTERVAL};
 use super::prompt_view::{
@@ -53,10 +53,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     mut rx_outgoing: mpsc::UnboundedReceiver<OutgoingMsg>,
     profile: Arc<Mutex<Profile>>,
     lua_timers: SharedTimers,
-    logs: crate::logs::SharedLogStore,
-    log_session_id: Option<i64>,
-    scrollback: crate::logs::SharedScrollback,
-    scrollback_path: Option<std::path::PathBuf>,
+    mut sink: LogSink,
     mut negotiator: Negotiator,
     known_host: bool,
 ) {
@@ -91,9 +88,6 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // The output count after this session last wrote. Output from
     // elsewhere moves it, which closes the open row.
     let mut seen_output = output_count();
-    // The log's row for this connection, named once the game names the
-    // character.
-    let mut log_session = LogSession::new(log_session_id);
     // When a partial that can still become your prompt stops waiting for
     // the next read and paints raw.
     let mut hold_until: Option<Instant> = None;
@@ -105,8 +99,11 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     let mut clock_until: Option<Instant> = None;
 
     // The frame and the log rows the reads since the socket was last
-    // quiet owe.
+    // quiet owe. The arm that writes the rows waits on the log through a
+    // handle of its own, since the guard it yields would borrow the sink
+    // the other arms change.
     let mut settle = Settle::default();
+    let log_store = sink.logs.clone();
 
     // Phase 1 audit instrumentation. See `PerfCounters` doc.
     let mut perf = PerfCounters::default();
@@ -137,9 +134,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                         &mut stream,
                         &profile,
                         &lua_timers,
-                        &scrollback,
-                        &logs,
-                        &mut log_session,
+                        &mut sink,
                         &mut seen_output,
                         &mut settle,
                         &mut perf,
@@ -176,7 +171,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     // behind the rows before them for the log, which
                     // writes them once the socket is quiet, so a log
                     // write never holds your line or its answer back.
-                    let sent = log_session_id.map(|sid| {
+                    let sent = sink.id().map(|sid| {
                         let rows = vosh_log::sent_rows(&bytes, server_echo.hides(masked));
                         (sid, now_ms(), rows)
                     });
@@ -193,7 +188,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     }
                     // Lines sent back to back never wait on the log, but
                     // their rows still go in once they waited too long.
-                    settle.overdue_now(&app, &logs, &mut perf);
+                    settle.overdue_now(&app, &sink, &mut perf);
                 }
                 Some(OutgoingMsg::WindowSize { cols, rows }) => {
                     // A design that pushes part of a row to the right
@@ -262,9 +257,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                             &mut stream,
                             &profile,
                             &lua_timers,
-                            &scrollback,
-                            &logs,
-                            &mut log_session,
+                            &mut sink,
                             &mut seen_output,
                             &mut settle,
                             &mut perf,
@@ -317,8 +310,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                             &mut accumulator,
                             &profile,
                             &lua_timers,
-                            log_session_id,
-                            &scrollback,
+                            &sink,
                             &mut server_echo,
                             event,
                             &mut batch,
@@ -334,8 +326,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                         &mut accumulator,
                         &profile,
                         &lua_timers,
-                        log_session_id,
-                        &scrollback,
+                        &sink,
                         &mut batch,
                         &mut perf,
                     ).await {
@@ -353,8 +344,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     clock_until = finish_read(
                         &app,
                         &profile,
-                        &logs,
-                        &mut log_session,
+                        &mut sink,
                         batch,
                         &mut seen_output,
                         &mut settle,
@@ -368,7 +358,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     }
                     // A game that never pauses still gets its frame and
                     // its rows every FRAME_BUDGET.
-                    settle.overdue_now(&app, &logs, &mut perf);
+                    settle.overdue_now(&app, &sink, &mut perf);
                 }
                 Err(e) => {
                     error!(error = %e, "read failed");
@@ -399,8 +389,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                                         &mut accumulator,
                                         &profile,
                                         &lua_timers,
-                                        log_session_id,
-                                        &scrollback,
+                                        &sink,
                                         &mut server_echo,
                                         event,
                                         &mut batch,
@@ -421,8 +410,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                                     &mut accumulator,
                                     &profile,
                                     &lua_timers,
-                                    log_session_id,
-                                    &scrollback,
+                                    &sink,
                                     &mut batch,
                                     &mut perf,
                                 )
@@ -441,8 +429,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                                 let _ = finish_read(
                                     &app,
                                     &profile,
-                                    &logs,
-                                    &mut log_session,
+                                    &mut sink,
                                     batch,
                                     &mut seen_output,
                                     &mut settle,
@@ -534,7 +521,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
             }
             // Then the log takes the burst's rows once it is free, so a
             // busy log never holds the loop.
-            mut guard = logs.lock(), if !settle.log.is_empty() => {
+            mut guard = log_store.lock(), if !settle.log.is_empty() => {
                 settle.write_log(guard.as_mut(), &mut perf);
             }
         }
@@ -570,32 +557,16 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // The last burst still owes its frame and its rows, which go in the
     // log before the lines the session captures as it ends.
     settle.frame_now(&app);
-    settle.write_log(logs.lock().await.as_mut(), &mut perf);
-    capture_held_lines(&profile, &logs, log_session_id, &scrollback).await;
-    capture_pending_line(&app, &logs, log_session_id, &scrollback, &mut accumulator).await;
+    settle.write_log(sink.logs.lock().await.as_mut(), &mut perf);
+    capture_held_lines(&profile, &sink).await;
+    capture_pending_line(&app, &sink, &mut accumulator).await;
 
     {
         let mut p = profile.lock().await;
         p.tick.end_session();
     }
 
-    // Close the log session row and flush the scrollback ring buffer to
-    // disk so the next launch can restore it. Failures here are
-    // non-fatal; we still want the disconnect state to propagate.
-    if let Some(sid) = log_session_id {
-        let mut guard = logs.lock().await;
-        if let Some(store) = guard.as_mut() {
-            if let Err(e) = store.end_session(sid, now_ms()) {
-                warn!(error = %e, "log end_session failed");
-            }
-        }
-    }
-    if let Some(path) = scrollback_path {
-        let bytes = scrollback.lock().await.dump();
-        if let Err(e) = std::fs::write(&path, bytes) {
-            warn!(path = %path.display(), error = %e, "scrollback write failed");
-        }
-    }
+    sink.close().await;
 
     let line_triggers;
     // Session-only target state and the cached Room.Chars list clear

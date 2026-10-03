@@ -27,8 +27,8 @@
 //! - `room_block` finds the lines of a look that list what the room
 //!   holds, and `highlight_ground` keeps the ground trigger colors must
 //!   read on.
-//! - `log_sink` keeps the session log's row, and the lines the session
-//!   captures as it ends.
+//! - `log_sink` holds the session log's row and the scrollback ring of a
+//!   connection, and the lines the session captures as it ends.
 //! - `perf` counts the work on the hot path.
 //! - `tests` drives the steps the way the loop does.
 
@@ -65,6 +65,7 @@ use crate::script::SharedTimers;
 
 use conn::io_loop;
 use connection::ConnectionError;
+use log_sink::LogSink;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -392,22 +393,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         },
     );
 
-    // Open a log session row up front so every line emitted by the loop
-    // can attach to the same id. If logging is disabled or fails, the
-    // io_loop just skips the appends.
-    let log_session_id = {
-        let mut guard = logs.lock().await;
-        match guard.as_mut() {
-            Some(store) => match store.start_session(&host, port, now_ms()) {
-                Ok(id) => Some(id),
-                Err(e) => {
-                    warn!(error = %e, "failed to open log session");
-                    None
-                }
-            },
-            None => None,
-        }
-    };
+    let sink = LogSink::open(logs, scrollback, scrollback_path, &host, port).await;
 
     let (tx_outgoing, rx_outgoing) = mpsc::unbounded_channel::<OutgoingMsg>();
     let task = tokio::spawn(io_loop(
@@ -416,10 +402,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         rx_outgoing,
         profile,
         lua_timers,
-        logs,
-        log_session_id,
-        scrollback,
-        scrollback_path,
+        sink,
         negotiator,
         known_host,
     ));

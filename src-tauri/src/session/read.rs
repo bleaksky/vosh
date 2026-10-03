@@ -28,7 +28,7 @@ use super::echo::ServerEcho;
 use super::effects::{apply_script_result, deliver_tick_step, OutputSink, ScriptIo};
 use super::gmcp::{handle_gmcp, hello_subnegotiation, supports_subnegotiation};
 use super::lines::LineAccumulator;
-use super::log_sink::LogSession;
+use super::log_sink::LogSink;
 use super::perf::PerfCounters;
 use super::prompt_view::{
     emit_prompt_state, report_game_prompt_seen, send_prompt_vars, watching_prompt,
@@ -48,8 +48,7 @@ pub(super) async fn handle_event<R: tauri::Runtime>(
     accumulator: &mut LineAccumulator,
     profile: &Arc<Mutex<Profile>>,
     lua_timers: &SharedTimers,
-    log_session_id: Option<i64>,
-    scrollback: &crate::logs::SharedScrollback,
+    sink: &LogSink,
     server_echo: &mut ServerEcho,
     event: TelnetEvent,
     batch: &mut ReadBatch,
@@ -93,14 +92,12 @@ pub(super) async fn handle_event<R: tauri::Runtime>(
                     let mut p = profile.lock().await;
                     perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
                     perf.mutex_acquires += 1;
-                    line_step(&mut p, batch, line, plain, Instant::now(), log_session_id)
+                    line_step(&mut p, batch, line, plain, Instant::now(), sink.id())
                 };
                 perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
                 for step in steps {
-                    deliver_line_step(
-                        app, stream, profile, lua_timers, scrollback, batch, step, perf,
-                    )
-                    .await?;
+                    deliver_line_step(app, stream, profile, lua_timers, sink, batch, step, perf)
+                        .await?;
                 }
             }
             Ok(())
@@ -121,13 +118,11 @@ pub(super) async fn handle_event<R: tauri::Runtime>(
             // entry.
             let steps = {
                 let mut p = profile.lock().await;
-                marker_step(&mut p, accumulator, batch, Instant::now(), log_session_id)
+                marker_step(&mut p, accumulator, batch, Instant::now(), sink.id())
             };
             for step in steps {
-                deliver_line_step(
-                    app, stream, profile, lua_timers, scrollback, batch, step, perf,
-                )
-                .await?;
+                deliver_line_step(app, stream, profile, lua_timers, sink, batch, step, perf)
+                    .await?;
             }
             Ok(())
         }
@@ -186,9 +181,7 @@ pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
     lua_timers: &SharedTimers,
-    scrollback: &crate::logs::SharedScrollback,
-    logs: &crate::logs::SharedLogStore,
-    log_session: &mut LogSession,
+    sink: &mut LogSink,
     seen: &mut u64,
     settle: &mut Settle,
     perf: &mut PerfCounters,
@@ -199,15 +192,15 @@ pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
         if !p.prompt.stage.holds() {
             return Ok(());
         }
-        let_go_held(&mut p, &mut batch, Instant::now(), log_session.id)
+        let_go_held(&mut p, &mut batch, Instant::now(), sink.id())
     };
     for step in steps {
         deliver_line_step(
-            app, stream, profile, lua_timers, scrollback, &mut batch, step, perf,
+            app, stream, profile, lua_timers, sink, &mut batch, step, perf,
         )
         .await?;
     }
-    finish_read(app, profile, logs, log_session, batch, seen, settle, perf).await;
+    finish_read(app, profile, sink, batch, seen, settle, perf).await;
     Ok(())
 }
 
@@ -220,7 +213,7 @@ async fn deliver_line_step<R: tauri::Runtime>(
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
     lua_timers: &SharedTimers,
-    scrollback: &crate::logs::SharedScrollback,
+    sink: &LogSink,
     batch: &mut ReadBatch,
     step: LineStep,
     perf: &mut PerfCounters,
@@ -240,7 +233,7 @@ async fn deliver_line_step<R: tauri::Runtime>(
         let sb_t0 = std::time::Instant::now();
         // The ring keeps a run of repeated lines once, as the screen shows
         // it.
-        scrollback.lock().await.keep(text, repeat);
+        sink.scrollback.lock().await.keep(text, repeat);
         perf.scrollback_push_ns += sb_t0.elapsed().as_nanos() as u64;
         perf.scrollback_pushes += 1;
     }
@@ -268,20 +261,16 @@ pub(super) async fn end_read<R: tauri::Runtime>(
     accumulator: &mut LineAccumulator,
     profile: &Arc<Mutex<Profile>>,
     lua_timers: &SharedTimers,
-    log_session_id: Option<i64>,
-    scrollback: &crate::logs::SharedScrollback,
+    sink: &LogSink,
     batch: &mut ReadBatch,
     perf: &mut PerfCounters,
 ) -> std::io::Result<()> {
     let step = {
         let mut p = profile.lock().await;
-        partial_step(&mut p, accumulator, batch, Instant::now(), log_session_id)
+        partial_step(&mut p, accumulator, batch, Instant::now(), sink.id())
     };
     if let Some(step) = step {
-        deliver_line_step(
-            app, stream, profile, lua_timers, scrollback, batch, step, perf,
-        )
-        .await?;
+        deliver_line_step(app, stream, profile, lua_timers, sink, batch, step, perf).await?;
     }
     Ok(())
 }
@@ -295,12 +284,10 @@ pub(super) async fn end_read<R: tauri::Runtime>(
 /// count after this read's output. Returns when a clock piece in your
 /// design next shows another second, which the lock this takes anyway
 /// reads, so a read costs no other lock for it.
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn finish_read<R: tauri::Runtime>(
     app: &AppHandle<R>,
     profile: &Arc<Mutex<Profile>>,
-    logs: &crate::logs::SharedLogStore,
-    log_session: &mut LogSession,
+    sink: &mut LogSink,
     batch: ReadBatch,
     seen: &mut u64,
     settle: &mut Settle,
@@ -339,7 +326,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
     }
     settle.queue_rows(log);
     if let Some(character) = character {
-        log_session.name(logs, &character).await;
+        sink.name(&character).await;
     }
     for trigger in gag_without_reader {
         if let Err(e) = app.emit(
