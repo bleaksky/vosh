@@ -29,6 +29,7 @@ export function LoadoutsEditor({ onDirty, onError }: LoadoutsEditorProps) {
 
   const spec = useMemo<KindSpec<LoadoutToggle>>(
     () => ({
+      id: 'loadouts',
       noun: { one: 'loadout', many: 'loadouts' },
       filterLabel: 'Filter loadouts',
       emptyDetail: 'Choose a loadout to see its groups.',
