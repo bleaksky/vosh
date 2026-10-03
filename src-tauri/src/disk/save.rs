@@ -78,9 +78,9 @@ pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(app: &AppHandle<R>) {
 /// releases the profile lock, so they all save alike.
 ///
 /// Slash commands (#alias, #trigger, #var, #endrec, #import-tintin,
-/// ...) and durable Lua actions mutate the profile but historically
-/// never persisted, so anything authored this way vanished on restart
-/// unless an unrelated persisting command happened to run later.
+/// ...) and durable Lua actions change the profile without saving it, so
+/// this marks it dirty and the debounced save writes it. Without that,
+/// what you author this way would vanish on restart.
 /// `#profile reset` and `#profile load` are deliberate exceptions:
 /// reset blanks the LIVE profile only (the help documents `#profile
 /// save` as the explicit write and `load` as the undo), so
@@ -296,9 +296,8 @@ async fn persist_loadout_mode(state: &SharedState, dir: &std::path::Path) {
     // catalog/loadout writes can run without holding the profile-set
     // lock alongside them.
 
-    // Snapshot the current LoadoutSet from state. We do not mutate the
-    // active list here; that gets driven by future loadout_set_active
-    // commands. Just persist whatever the runtime currently holds.
+    // The switch in `loadouts::set::set_active_loadouts` sets the active
+    // list, and this save writes whatever the set holds.
     let set_snapshot = state.loadout_set.lock().await.clone();
 
     if let Err(e) = crate::loadouts::catalog::save_global_catalog(dir, &catalog) {
@@ -322,18 +321,14 @@ async fn persist_loadout_mode(state: &SharedState, dir: &std::path::Path) {
             warn!(error = %e, path = %g.display(), "loadout mode global auto-save failed");
         }
     }
-    // Per-profile snapshot. Before this, loadout mode only wrote catalog /
-    // loadouts / global, which meant every UI field outside the five
-    // scope-controlled ones (tracked_affects, theme_terminal_colors,
-    // vitals config, custom themes, paste pacing, moons position,
-    // chip style, side-panels fill, split-divider color, dock layout
-    // when its scope is profile, ...) silently dropped on every quit.
-    // Writing a per-profile file lets these persist per-loadout the
-    // same way legacy mode does. The catalog stays authoritative for
-    // aliases / triggers / macros, so we blank those out of the
-    // per-profile snapshot before saving — otherwise a launch as an
-    // older profile would lay its stale copy over the catalog, bringing
-    // back a deleted item or overriding fresher catalog edits. The
+    // The per-profile file keeps every UI setting outside the shared
+    // categories (tracked_affects, theme_terminal_colors, the vitals
+    // config, paste pacing, the moons position, the chip style, the dock
+    // layout when its scope is profile, ...), so loadout mode writes it
+    // too, as per profile mode does. The catalog owns the aliases,
+    // triggers, and macros, so they are left out of the file. Otherwise a
+    // launch as a profile saved earlier would lay its older copy over the
+    // catalog, bringing back a deleted item or undoing a newer edit. The
     // catalog owns the enabled presets too. The file keeps a copy of the
     // shared list, which the next load replaces with the catalog's.
     if let Some(p) = per_profile_path {
@@ -342,15 +337,11 @@ async fn persist_loadout_mode(state: &SharedState, dir: &std::path::Path) {
             ProfileConfig::from_profile(&live)
         };
         per_profile_snapshot.clear_catalog_items();
-        // The disabled-group lists STAY: they are where the Settings
-        // group checkboxes persist in loadout mode. Clearing them here
-        // (as this used to) meant group toggles could not survive a
-        // restart at all — the catalog has no field for them and the
-        // startup rebuild recomputed them from loadout enabled_groups.
-        // Known limit: when an active loadout DOES declare
-        // enabled_groups, apply_loadout_state stays authoritative and
-        // overwrites these lists on the next loadout change. A separate
-        // durable-checkbox field is the follow-up fix for that cohort.
+        // The disabled group lists stay, since they are where the
+        // Settings group checkboxes persist in loadout mode, and the
+        // catalog has no field for them. When an active loadout declares
+        // enabled_groups, the loadouts impose the group state and
+        // replace these lists at the next apply, see `loadouts::gating`.
         strip_global_fields(&mut per_profile_snapshot, &scope);
         if let Err(e) = per_profile_snapshot.save(&p) {
             warn!(
