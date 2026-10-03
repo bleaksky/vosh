@@ -28,6 +28,7 @@ use super::echo::ServerEcho;
 use super::effects::{apply_script_result, deliver_tick_step, OutputSink, ScriptIo};
 use super::gmcp::{handle_gmcp, hello_subnegotiation, supports_subnegotiation};
 use super::lines::LineAccumulator;
+use super::log_sink::LogSession;
 use super::perf::PerfCounters;
 use super::prompt_view::{
     emit_prompt_state, report_game_prompt_seen, send_prompt_vars, watching_prompt,
@@ -35,7 +36,7 @@ use super::prompt_view::{
 use super::steps::{
     clock_after, hold_step, let_go_held, line_step, marker_step, partial_step, LineStep,
 };
-use super::{emit_input_mode, GagWithoutReaderPayload, LogSession, RoutedPayload};
+use super::{emit_input_mode, GagWithoutReaderPayload, RoutedPayload};
 
 pub(super) const READ_BUFFER_BYTES: usize = 8 * 1024;
 
