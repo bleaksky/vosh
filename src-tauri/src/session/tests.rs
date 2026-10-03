@@ -9,7 +9,9 @@
 //! what they feed.
 
 use super::batch::*;
+use super::lines::Line;
 use super::perf::*;
+use super::steps::*;
 use super::*;
 use crate::output::OutputPayload;
 
