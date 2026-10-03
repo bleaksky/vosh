@@ -26,7 +26,7 @@ use super::echo::ServerEcho;
 use super::effects::{deliver_tick_step, run_fired_command, OutputSink};
 use super::lines::LineAccumulator;
 use super::log_sink::{capture_held_lines, capture_pending_line, LogSink};
-use super::lua_timers::fire_due_script_timers;
+use super::lua_timers;
 use super::perf::{PerfCounters, PERF_REPORT_INTERVAL};
 use super::prompt_view::{
     emit_hidden_change, emit_prompt_state, emit_prompt_vars, end_prompt, start_prompt,
@@ -95,10 +95,10 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         p.prompt.set_cols(usize::from(negotiator.window_size.0));
     }
 
-    let mut tick_interval = tokio::time::interval(POLL_INTERVAL);
-    tick_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut poll = tokio::time::interval(POLL_INTERVAL);
+    poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     // Per-timer next-fire deadlines for the Settings interval timers.
-    // Seeded on first sight in fire_due_profile_timers; cleared here so
+    // Seeded on first sight in fire_due_settings_timers; cleared here so
     // each connection starts its timers fresh.
     let mut timer_next: HashMap<u32, Instant> = HashMap::new();
 
@@ -386,14 +386,14 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 }
                 emit_prompt_state(&conn.app, state);
             }
-            _ = tick_interval.tick() => {
+            _ = poll.tick() => {
                 if let Err(e) =
                     handle_tick(&conn.app, &mut conn.stream, &conn.profile, &conn.lua_timers).await
                 {
                     error!(error = %e, "tick handling failed");
                     break Some(format!("tick handling failed: {e}"));
                 }
-                if let Err(e) = fire_due_script_timers(
+                if let Err(e) = lua_timers::fire_due(
                     &conn.app,
                     &mut conn.stream,
                     &conn.profile,
@@ -401,9 +401,9 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 )
                 .await
                 {
-                    error!(error = %e, "script timer firing failed");
+                    error!(error = %e, "lua timer firing failed");
                 }
-                if let Err(e) = fire_due_profile_timers(
+                if let Err(e) = fire_due_settings_timers(
                     &conn.app,
                     &mut conn.stream,
                     &conn.profile,
@@ -412,7 +412,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 )
                 .await
                 {
-                    error!(error = %e, "profile timer firing failed");
+                    error!(error = %e, "settings timer firing failed");
                 }
                 conn.perf.tick_emits += 1;
             }
@@ -555,7 +555,7 @@ async fn handle_tick<R: tauri::Runtime>(
 /// burst-fires. Disabled or deleted timers drop their deadline. Each
 /// due command runs through the same path as the tick auto-fire:
 /// `input::process`, echo its lines, send its bytes.
-async fn fire_due_profile_timers<R: tauri::Runtime>(
+async fn fire_due_settings_timers<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
