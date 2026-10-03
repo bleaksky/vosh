@@ -17,7 +17,6 @@ mod commands;
 mod config_golden_tests;
 mod connection;
 mod disk;
-mod exit_flush;
 #[cfg(test)]
 mod fake_mud_tests;
 mod fonts;
@@ -298,7 +297,7 @@ pub fn run() {
             migration_apply,
             app_quit,
             commands::launch_notices_take,
-            exit_flush::pending_writes_flushed,
+            app::exit::pending_writes_flushed,
             loadouts_get_state,
             loadouts_set_active,
             tick_get_config,
@@ -370,7 +369,7 @@ pub fn run() {
             // write, an exit request asks the open windows for the edits
             // they hold back (the Settings autosave, a pane width, the
             // field you are typing in) and waits a short, bounded time
-            // for them (exit_flush.rs). Matches both exit events because
+            // for them (app/exit.rs). Matches both exit events because
             // macOS quit paths that go through NSApplication terminate
             // can deliver Exit without a preceding ExitRequested. The
             // exit flow keeps the write to exactly once when both arrive.
@@ -381,26 +380,26 @@ pub fn run() {
                     let windows = app_handle
                         .webview_windows()
                         .into_keys()
-                        .filter(|label| exit_flush::holds_writes(label))
+                        .filter(|label| app::exit::holds_writes(label))
                         .count();
-                    match exit_flush::exit_requested(can_hold, windows) {
-                        exit_flush::ExitStep::AskWindows => {
+                    match app::exit::exit_requested(can_hold, windows) {
+                        app::exit::ExitStep::AskWindows => {
                             api.prevent_exit();
                             let app = app_handle.clone();
                             let code = code.unwrap_or(0);
                             tauri::async_runtime::spawn(async move {
-                                exit_flush::ask_windows_to_flush(&app).await;
+                                app::exit::ask_windows_to_flush(&app).await;
                                 app.exit(code);
                             });
                         }
-                        exit_flush::ExitStep::Hold => api.prevent_exit(),
-                        exit_flush::ExitStep::Flush => flush_profile_on_exit(app_handle),
-                        exit_flush::ExitStep::Done => {}
+                        app::exit::ExitStep::Hold => api.prevent_exit(),
+                        app::exit::ExitStep::Flush => flush_profile_on_exit(app_handle),
+                        app::exit::ExitStep::Done => {}
                     }
                 }
                 tauri::RunEvent::Exit => {
-                    let step = exit_flush::exit();
-                    if step == exit_flush::ExitStep::Flush {
+                    let step = app::exit::exit();
+                    if step == app::exit::ExitStep::Flush {
                         flush_profile_on_exit(app_handle);
                     }
                 }
@@ -410,7 +409,7 @@ pub fn run() {
 }
 
 /// Write the live profile once on the way out. The exit flow in
-/// [`exit_flush`] decides when, so this runs exactly once.
+/// [`app::exit`] decides when, so this runs exactly once.
 fn flush_profile_on_exit(app_handle: &tauri::AppHandle) {
     // The affect fulls are a cache of their own, written whatever
     // becomes of the profile.

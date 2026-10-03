@@ -315,7 +315,7 @@ mod mac {
                 // with Exit alone, which leaves no time to ask the
                 // windows for the edits they hold back. This one exits
                 // through the exit request, which asks them first and
-                // then saves the profile once (exit_flush.rs).
+                // then saves the profile once (app/exit.rs).
                 &MenuItem::with_id(app, "quit", "Quit Vosh", true, Some(QUIT_ACCELERATOR))?,
             ],
         )?;
