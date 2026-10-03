@@ -3,10 +3,10 @@
 //! [`broadcast`] sends an event to every window.
 //!
 //! Two names stay where they are built. The session sends each GMCP
-//! package from a `format!` template in session.rs, `session://gmcp/`
-//! and the package name, because the contract test reads that template
-//! as a family of names. `test://frame` is a test seam in session.rs
-//! that the page never hears.
+//! package from a `format!` template in session/gmcp.rs,
+//! `session://gmcp/` and the package name, because the contract test
+//! reads that template as a family of names. `test://frame` is a test
+//! seam in output.rs that the page never hears.
 //!
 //! The list events tell every window when the trigger or alias list
 //! changes, so an open Settings page follows an edit made anywhere

@@ -101,7 +101,7 @@ const RED: HighlightStyle = { fg: 'bright_red', bold: true };
 // The prompt's %e code prints single letters, `[Exits: N E (S) W]`, and a
 // blind or misty prompt prints `[Exits: --- ]` or `[Exits: ??? ]`, so
 // none of those match. The session opens a room look on the same pattern
-// (EXITS_PATTERN in src-tauri/src/room_block.rs).
+// (EXITS_PATTERN in src-tauri/src/session/room_block.rs).
 const EXITS_LINE = '^\\[Exits:(?: none|(?: \\(?\\+?(?:north|east|south|west|up|down)\\)?)+)\\]$';
 
 // Every time of day message the game sends (update.c weather_update), the
