@@ -18,7 +18,7 @@ use vosh_protocol::telnet::{
     codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Negotiator, Parser,
 };
 
-use crate::app::events::{broadcast_list_changes, ListChanges, ListRevisions};
+use crate::app::events::{self, broadcast_list_changes, ListChanges, ListRevisions};
 use crate::connection::{self, ConnectionError, Stream};
 use crate::gmcp_bind;
 use crate::hidden_input::ServerEcho;
@@ -1267,7 +1267,7 @@ async fn io_loop<R: tauri::Runtime>(
     }
     if let Some(quick_keys) = target_after {
         let _ = app.emit(
-            "session://target",
+            events::TARGET,
             TargetPayload {
                 name: None,
                 room_idx: None,
@@ -1325,7 +1325,7 @@ async fn deliver_tick_step<R: tauri::Runtime>(
     step: TickStep,
     sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
-    if let Err(e) = app.emit("session://tick", &step.payload) {
+    if let Err(e) = app.emit(events::TICK, &step.payload) {
         warn!(error = %e, "failed to emit tick payload");
     }
     if let Some(command) = step.command {
@@ -1488,7 +1488,7 @@ impl ShownChanges {
             tokio::spawn(async move { crate::commands::request_prompt_repaint(&state).await });
         }
         if let Some(payload) = self.target {
-            let _ = app.emit("session://target", payload);
+            let _ = app.emit(events::TARGET, payload);
         }
     }
 }
@@ -2923,7 +2923,7 @@ fn observe_prompt_gmcp(p: &mut Profile, msg: &vosh_protocol::gmcp::Message) {
 async fn emit_hidden_change<R: tauri::Runtime>(app: &AppHandle<R>, profile: &Arc<Mutex<Profile>>) {
     let change = profile.lock().await.prompt.vars.take_hidden_change();
     if let Some(hidden) = change {
-        if let Err(e) = app.emit("session://hidden", hidden) {
+        if let Err(e) = app.emit(events::HIDDEN, hidden) {
             warn!(error = %e, "failed to emit the hidden state");
         }
     }
@@ -2986,7 +2986,7 @@ async fn finish_read<R: tauri::Runtime>(
     }
     for trigger in gag_without_reader {
         if let Err(e) = app.emit(
-            "session://prompt-gag-without-reader",
+            events::PROMPT_GAG_WITHOUT_READER,
             GagWithoutReaderPayload { trigger },
         ) {
             warn!(error = %e, "failed to emit a trigger that hides the prompt");
@@ -2996,13 +2996,13 @@ async fn finish_read<R: tauri::Runtime>(
         send_prompt_vars(app, &vars);
     }
     if let Some(hidden) = hidden {
-        if let Err(e) = app.emit("session://hidden", hidden) {
+        if let Err(e) = app.emit(events::HIDDEN, hidden) {
             warn!(error = %e, "failed to emit the hidden state");
         }
     }
     report_game_prompt_seen(app, prompt_seen);
     if let Some(status) = status {
-        if let Err(e) = app.emit("session://prompt-status", status) {
+        if let Err(e) = app.emit(events::PROMPT_STATUS, status) {
             warn!(error = %e, "failed to emit the prompt status");
         }
     }
@@ -3025,7 +3025,7 @@ fn emit_prompt_state<R: tauri::Runtime>(
     state: Option<vosh_prompt::card::state::PromptState>,
 ) {
     if let Some(state) = state {
-        if let Err(e) = app.emit("session://prompt-state", state) {
+        if let Err(e) = app.emit(events::PROMPT_STATE, state) {
             warn!(error = %e, "failed to emit the prompt state");
         }
     }
@@ -3052,7 +3052,7 @@ pub(crate) fn report_game_prompt_seen<R: tauri::Runtime>(
 ) {
     let applied = seen.iter().any(|s| s.applied);
     for payload in seen {
-        if let Err(e) = app.emit("session://game-prompt-seen", payload) {
+        if let Err(e) = app.emit(events::GAME_PROMPT_SEEN, payload) {
             warn!(error = %e, "failed to emit the game's prompt settings");
         }
     }
@@ -3308,7 +3308,7 @@ fn emit_line_routes<R: tauri::Runtime>(app: &AppHandle<R>, result: &LineResult) 
     if let Some(text) = &result.display {
         for pane in &result.routes {
             if let Err(e) = app.emit(
-                "session://routed",
+                events::ROUTED,
                 RoutedPayload {
                     pane: pane.clone(),
                     text: text.clone(),
@@ -3491,7 +3491,7 @@ async fn emit_prompt_vars<R: tauri::Runtime>(
 }
 
 fn send_prompt_vars<R: tauri::Runtime>(app: &AppHandle<R>, vars: &BTreeMap<String, String>) {
-    if let Err(e) = app.emit("session://prompt-vars", vars) {
+    if let Err(e) = app.emit(events::PROMPT_VARS, vars) {
         warn!(error = %e, "failed to emit prompt vars");
     }
 }
@@ -3741,20 +3741,20 @@ fn emit_counted<R: tauri::Runtime>(
     if frame {
         request_frame(app);
     }
-    if let Err(e) = app.emit("session://output", payload) {
+    if let Err(e) = app.emit(events::OUTPUT, payload) {
         warn!(error = %e, "failed to emit session output");
     }
     seen
 }
 
 fn emit_state<R: tauri::Runtime>(app: &AppHandle<R>, payload: StatePayload) {
-    if let Err(e) = app.emit("session://state", payload) {
+    if let Err(e) = app.emit(events::STATE, payload) {
         warn!(error = %e, "failed to emit session state");
     }
 }
 
 fn emit_input_mode<R: tauri::Runtime>(app: &AppHandle<R>, password: bool) {
-    if let Err(e) = app.emit("session://input-mode", InputModePayload { password }) {
+    if let Err(e) = app.emit(events::INPUT_MODE, InputModePayload { password }) {
         warn!(error = %e, "failed to emit input mode");
     }
 }

@@ -15,8 +15,8 @@ use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{App, EventId, Listener, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::app::events::{
-    broadcast_list_changes, ListChanges, ListRevisions, ALIASES_CHANGED, FLUSH_REQUEST_EVENT,
-    MACRO_GROUPS_CHANGED, PROFILE_CHANGED_EVENT, PROMPT_CONFIG_CHANGED, SESSION_IDENTITY_EVENT,
+    broadcast_list_changes, ListChanges, ListRevisions, ALIASES_CHANGED, FLUSH_PENDING_WRITES,
+    MACRO_GROUPS_CHANGED, PROFILE_CHANGED, PROMPT_CONFIG_CHANGED, SESSION_IDENTITY_CHANGED,
     TRIGGERS_CHANGED,
 };
 use crate::app::state::{AppState, SharedState};
@@ -139,16 +139,16 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
     );
     listening.finish("broadcast_list_changes", &mut heard, &mut want);
 
-    let listening = Heard::listen(&app, &[PROFILE_CHANGED_EVENT]);
+    let listening = Heard::listen(&app, &[PROFILE_CHANGED]);
     crate::characters::broadcast_profile_changed(handle, "Ilsabet");
     listening.finish("broadcast_profile_changed", &mut heard, &mut want);
 
-    let listening = Heard::listen(&app, &[crate::app::events::MIGRATION_APPLIED_EVENT]);
+    let listening = Heard::listen(&app, &[crate::app::events::MIGRATION_APPLIED]);
     crate::commands::announce_migration_applied(handle);
     listening.finish("announce_migration_applied", &mut heard, &mut want);
 
     tauri::async_runtime::block_on(async {
-        let listening = Heard::listen(&app, &[SESSION_IDENTITY_EVENT]);
+        let listening = Heard::listen(&app, &[SESSION_IDENTITY_CHANGED]);
         crate::characters::broadcast_session_identity(handle, &state).await;
         listening.finish("broadcast_session_identity", &mut heard, &mut want);
 
@@ -164,7 +164,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
         listening.finish("broadcast_profile_ui", &mut heard, &mut want);
 
         // A `#tick` command.
-        let listening = Heard::listen(&app, &[crate::app::events::TICK_CONFIG_CHANGED_EVENT]);
+        let listening = Heard::listen(&app, &[crate::app::events::TICK_CONFIG_CHANGED]);
         let tick = LineEffects {
             tick_changed: true,
             ..LineEffects::default()
@@ -176,11 +176,11 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
         // the quit does not wait out the time limit.
         for window in app.webview_windows().into_values() {
             let answer = window.clone();
-            window.listen(FLUSH_REQUEST_EVENT, move |_| {
+            window.listen(FLUSH_PENDING_WRITES, move |_| {
                 crate::exit_flush::pending_writes_flushed(answer.clone());
             });
         }
-        let listening = Heard::listen(&app, &[FLUSH_REQUEST_EVENT]);
+        let listening = Heard::listen(&app, &[FLUSH_PENDING_WRITES]);
         crate::exit_flush::ask_windows_to_flush(handle).await;
         listening.finish("ask_windows_to_flush", &mut heard, &mut want);
     });

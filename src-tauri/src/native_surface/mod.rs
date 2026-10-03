@@ -31,6 +31,11 @@ use std::sync::{Arc, Mutex, OnceLock};
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use tauri::{Emitter, Manager};
 
+use crate::app::events::{
+    NATIVE_COPIED, NATIVE_GRID_SIZE, NATIVE_SCROLL, TERMINAL_CLICKED, TERMINAL_CONTEXT_MENU,
+    TERMINAL_CURSOR,
+};
+
 #[cfg(target_os = "macos")]
 #[path = "macos.rs"]
 mod platform;
@@ -299,7 +304,7 @@ fn report_sizes(cols: usize, rows: usize, game_rows: usize) {
         // Tell the frontend so it can size hidden xterm to the same grid;
         // when a DOM overlay reveals xterm it then matches the surface
         // exactly.
-        let _ = app.emit("vosh://native-grid-size", (cols, rows));
+        let _ = app.emit(NATIVE_GRID_SIZE, (cols, rows));
     }
     if !game_news {
         return;
@@ -366,7 +371,7 @@ fn report_scroll_if_changed() {
         return;
     }
     if let Some(app) = APP.get() {
-        let _ = app.emit("vosh://native-scroll", (offset, max));
+        let _ = app.emit(NATIVE_SCROLL, (offset, max));
     }
 }
 
@@ -573,7 +578,7 @@ fn middle_click() {
     // the highlighted command and macros go dead after closing the
     // split.
     if let Some(app) = APP.get() {
-        let _ = app.emit("vosh://terminal-clicked", ());
+        let _ = app.emit(TERMINAL_CLICKED, ());
     }
 }
 
@@ -758,7 +763,7 @@ fn pointer_up() {
     // other part of the window. The opaque surface eats the DOM mouseup
     // that used to do this, so the frontend listens for the event instead.
     if let Some(app) = APP.get() {
-        let _ = app.emit("vosh://terminal-clicked", ());
+        let _ = app.emit(TERMINAL_CLICKED, ());
     }
 }
 
@@ -789,7 +794,7 @@ fn context_click(ev: &PointerEvent) {
     let x = f64::from(load_f32(&ORIGIN_X, 0.0)) + ev.x / dpr;
     let y = f64::from(load_f32(&ORIGIN_Y, 0.0)) + ev.y / dpr;
     if let Some(app) = APP.get() {
-        let _ = app.emit("vosh://terminal-context-menu", (x, y));
+        let _ = app.emit(TERMINAL_CONTEXT_MENU, (x, y));
     }
 }
 
@@ -910,7 +915,7 @@ fn report_cursor(hint: CursorHint) {
         return;
     }
     if let Some(app) = APP.get() {
-        let _ = app.emit("vosh://terminal-cursor", hint.css());
+        let _ = app.emit(TERMINAL_CURSOR, hint.css());
     }
 }
 
@@ -956,7 +961,7 @@ fn copy_selection() {
     let chars = text.chars().count();
     if UNDERLAY {
         if let Some(app) = APP.get() {
-            let _ = app.emit("vosh://native-copied", chars);
+            let _ = app.emit(NATIVE_COPIED, chars);
         }
         return;
     }

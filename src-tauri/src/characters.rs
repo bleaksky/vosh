@@ -17,7 +17,9 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 use tracing::warn;
 
-use crate::app::events::{broadcast, PROFILE_CHANGED_EVENT, SESSION_IDENTITY_EVENT};
+use crate::app::events::{
+    broadcast, PANE_LAYOUT_CHANGED, PROFILES_CHANGED, PROFILE_CHANGED, SESSION_IDENTITY_CHANGED,
+};
 use crate::app::state::{
     bump_panes_generation, panes_generation, SharedState, AUTO_PERSIST_SUPPRESSED,
     MIGRATION_RELAUNCH_PENDING, PROFILES_NOT_LOADED,
@@ -134,7 +136,7 @@ struct ProfileChanged {
 pub(crate) fn broadcast_profile_changed<R: tauri::Runtime>(app: &AppHandle<R>, name: &str) {
     broadcast(
         app,
-        PROFILE_CHANGED_EVENT,
+        PROFILE_CHANGED,
         &ProfileChanged {
             name: name.to_string(),
         },
@@ -279,7 +281,7 @@ pub(crate) async fn pane_layout_reset(
     if !AUTO_PERSIST_SUPPRESSED.load(Ordering::Acquire) {
         persist_profile(&app, &shared).await;
     }
-    broadcast(&app, "vosh://pane-layout-changed", &envelope);
+    broadcast(&app, PANE_LAYOUT_CHANGED, &envelope);
     if let Some(active) = active_name(&shared).await {
         broadcast_profile_changed(&app, &active);
     }
@@ -328,7 +330,7 @@ pub(crate) async fn profile_set_login(
         set.set_login(&name, &character, on)
             .map_err(|e| e.to_string())?
     };
-    broadcast(&app, "vosh://profiles-changed", &name);
+    broadcast(&app, PROFILES_CHANGED, &name);
     Ok(claim)
 }
 
@@ -349,7 +351,7 @@ pub(crate) async fn profile_set_world(
         set.set_world(&name, host, port)
             .map_err(|e| e.to_string())?
     };
-    broadcast(&app, "vosh://profiles-changed", &name);
+    broadcast(&app, PROFILES_CHANGED, &name);
     Ok(entry)
 }
 
@@ -477,7 +479,7 @@ pub(crate) async fn broadcast_session_identity<R: tauri::Runtime>(
     state: &SharedState,
 ) {
     let identity = session_identity(state).await;
-    broadcast(app, SESSION_IDENTITY_EVENT, &identity);
+    broadcast(app, SESSION_IDENTITY_CHANGED, &identity);
 }
 
 /// Who is logged in: the connection, the character once known, the

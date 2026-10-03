@@ -1,11 +1,21 @@
-//! Tell every window when the trigger or alias list changes, so an open
-//! Settings page follows an edit made anywhere else: `#trigger`,
-//! `#alias`, `#untrigger`, `#unalias`, `#endrec`, `#import-tintin`,
-//! `#profile load`, a Lua `mud.alias` or `mud.unalias`, an import, or a
-//! preset. Each store keeps a revision that moves with its list. A step
-//! reads [`ListRevisions`] under the profile lock before it runs and
-//! again after, and [`broadcast_list_changes`] sends one event for each
-//! list that moved.
+//! Every event the app sends the page. Each name is a constant here,
+//! with the payload it carries and the page function that hears it, and
+//! [`broadcast`] sends an event to every window.
+//!
+//! Two names stay where they are built. The session sends each GMCP
+//! package from a `format!` template in session.rs, `session://gmcp/`
+//! and the package name, because the contract test reads that template
+//! as a family of names. `test://frame` is a test seam in session.rs
+//! that the page never hears.
+//!
+//! The list events tell every window when the trigger or alias list
+//! changes, so an open Settings page follows an edit made anywhere
+//! else: `#trigger`, `#alias`, `#untrigger`, `#unalias`, `#endrec`,
+//! `#import-tintin`, `#profile load`, a Lua `mud.alias` or
+//! `mud.unalias`, an import, or a preset. Each store keeps a revision
+//! that moves with its list. A step reads [`ListRevisions`] under the
+//! profile lock before it runs and again after, and
+//! [`broadcast_list_changes`] sends one event for each list that moved.
 //!
 //! The profile's `[prompt]` table rides along the same way, so a
 //! `#prompt` or `#unprompt` line tells Settings to read the prompt
@@ -40,76 +50,211 @@ pub(crate) fn broadcast<R: tauri::Runtime, S: serde::Serialize + ?Sized>(
     }
 }
 
+// The session's stream.
+
+/// Text for the terminal, from the game, an echo or a repaint, in the
+/// order the renderers take it. The payload is an
+/// [`crate::session::OutputPayload`]. `onOutput` hears it.
+pub(crate) const OUTPUT: &str = "session://output";
+/// The connection is connecting, up or down. The payload is a
+/// [`crate::session::StatePayload`]. `onState` hears it.
+pub(crate) const STATE: &str = "session://state";
+/// The game turned its echo off or on, so the command line hides what
+/// you type or shows it again. The payload is an
+/// [`crate::session::InputModePayload`]. `onInputMode` hears it.
+pub(crate) const INPUT_MODE: &str = "session://input-mode";
+/// Your target or the quick keys changed. The payload is a
+/// [`crate::session::TargetPayload`]. `onTarget` hears it.
+pub(crate) const TARGET: &str = "session://target";
+/// The tick timer, four times a second and on each tick the game
+/// sends. The payload is a [`crate::tick::TickPayload`]. `onTick` hears
+/// it.
+pub(crate) const TICK: &str = "session://tick";
+/// A line a trigger routes to a pane, once for each pane. The payload
+/// is a [`crate::session::RoutedPayload`]. `onRouted` hears it.
+pub(crate) const ROUTED: &str = "session://routed";
+/// The values the game hides changed. The payload is a
+/// [`vosh_prompt::values::Hidden`]. `onHidden` hears it.
+pub(crate) const HIDDEN: &str = "session://hidden";
+/// Your prompt values, when they changed or a prompt Vosh read sends
+/// them anyway. The payload maps each value's name to its text, with
+/// `?` for a value the game hides. `onPromptVars` hears it.
+pub(crate) const PROMPT_VARS: &str = "session://prompt-vars";
+/// Whether Vosh reads your prompt, when that changed. The payload is
+/// `{status, last_match_at}`. `onPromptStatus` and
+/// `subscribePromptShowChanges` hear it.
+pub(crate) const PROMPT_STATUS: &str = "session://prompt-status";
+/// What the prompt card shows, after each prompt Vosh reads while the
+/// card watches your prompt. The payload is a
+/// [`vosh_prompt::card::state::PromptState`]. `onPromptState` hears it.
+pub(crate) const PROMPT_STATE: &str = "session://prompt-state";
+/// The game told Vosh your prompt settings. The payload is a
+/// [`vosh_prompt::GamePromptSeen`]. `onGamePromptSeen` hears it.
+pub(crate) const GAME_PROMPT_SEEN: &str = "session://game-prompt-seen";
+/// A trigger hid your prompt while this profile reads no prompt, so
+/// Vosh drew nothing in its place. The payload is a
+/// [`crate::session::GagWithoutReaderPayload`].
+/// `onPromptGagWithoutReader` hears it.
+pub(crate) const PROMPT_GAG_WITHOUT_READER: &str = "session://prompt-gag-without-reader";
+
+// The lists.
+
 /// Sent to every window when the trigger list changed. The payload is an
-/// empty string.
+/// empty string. `subscribeTriggersChanged` hears it.
 pub(crate) const TRIGGERS_CHANGED: &str = "vosh://triggers-changed";
 /// Sent to every window when the alias list changed. The payload is an
-/// empty string.
+/// empty string. `subscribeAliasesChanged` hears it.
 pub(crate) const ALIASES_CHANGED: &str = "vosh://aliases-changed";
 /// Sent to every window when the active profile's `[prompt]` table
 /// changed. The payload names the profile, `{profile}`, see
-/// [`PromptConfigChanged`].
+/// [`PromptConfigChanged`]. `subscribePromptConfigChanged` hears it.
 pub(crate) const PROMPT_CONFIG_CHANGED: &str = "vosh://prompt-config-changed";
 /// Sent to every window when a macro group turned on or off: a `#group`
-/// line, a Lua `mud.set_group_enabled`, or a loadout switch. The command
-/// line reads the groups again on it. The payload is an empty string.
+/// line, a Lua `mud.set_group_enabled`, or a loadout switch. The payload
+/// is an empty string. `subscribeMacroGroupsChanged` hears it, and the
+/// command line reads the groups again.
 pub(crate) const MACRO_GROUPS_CHANGED: &str = "vosh://macro-groups-changed";
+/// Sent to every window when a macro was set or removed, or an import
+/// brought macros. The payload is the whole list of
+/// [`crate::profile::Macro`]. `subscribeMacrosChanged` hears it.
+pub(crate) const MACROS_CHANGED: &str = "vosh://macros-changed";
+/// Sent to every window when a timer was set or removed. The payload is
+/// the whole list of [`crate::profile::Timer`].
+/// `subscribeTimersChanged` hears it.
+pub(crate) const TIMERS_CHANGED: &str = "vosh://timers-changed";
 
+// Profiles.
+
+/// Sent to every window when a profile was made, renamed, duplicated or
+/// deleted, its login or world changed, or the sharing scope changed.
+/// The payload is the profile's name, or `"scope"` after a scope change.
+/// `subscribeProfilesChanged` hears it.
+pub(crate) const PROFILES_CHANGED: &str = "vosh://profiles-changed";
+/// Sent to every window once the active profile switched, after the
+/// events that carry its UI config. The payload is the new profile's
+/// name. `subscribeProfileSwitched` and the pane layout's
+/// `ensureListening` hear it.
+pub(crate) const PROFILE_SWITCHED: &str = "vosh://profile-switched";
 /// Sent after an edit to one profile's detail, active or not, naming
 /// it as `{ name }`. Unlike `vosh://tracked-affects-changed` and
 /// `vosh://pane-layout-changed` it carries no data, so an edit to an
 /// inactive profile can never reach the main window's stores.
-pub(crate) const PROFILE_CHANGED_EVENT: &str = "vosh://profile-changed";
+/// `subscribeProfileChanged` hears it.
+pub(crate) const PROFILE_CHANGED: &str = "vosh://profile-changed";
+/// Sent with the new [`crate::characters::SessionIdentity`], or null,
+/// after a connect, a disconnect, and the first sight of a character
+/// name after login. Settings is its own webview and may open after all
+/// of those, so it also reads the current value with
+/// `session_identity_get`. `subscribeSessionIdentity` hears it.
+pub(crate) const SESSION_IDENTITY_CHANGED: &str = "vosh://session-identity-changed";
+/// Sent to every window when sharing the theme category added to the
+/// live custom themes. The payload is the whole list of
+/// [`crate::profile_config::CustomTheme`].
+/// `subscribeCustomThemesChanged` hears it.
+pub(crate) const CUSTOM_THEMES_CHANGED: &str = "vosh://custom-themes-changed";
+/// Sent to every window when the active loadouts changed. The payload
+/// is null. `subscribeLoadoutsChanged` hears it.
+pub(crate) const LOADOUTS_CHANGED: &str = "vosh://loadouts-changed";
+/// Sent to every window once the wizard wrote its files. The payload is
+/// null. `subscribeMigrationApplied` hears it.
+pub(crate) const MIGRATION_APPLIED: &str = "vosh://migration-applied";
+/// Sent to every window with the whole map whenever it changes, see
+/// [`crate::affect_full::FullMap`]. `subscribeAffectFullChanged` hears
+/// it.
+pub(crate) const AFFECT_FULL_CHANGED: &str = "vosh://affect-full-changed";
 
-/// Sent with the new [`crate::characters::SessionIdentity`], or null, after a connect, a
-/// disconnect, and the first sight of a character name after login.
-/// Settings is its own webview and may open after all of those, so it
-/// also reads the current value with `session_identity_get`.
-pub(crate) const SESSION_IDENTITY_EVENT: &str = "vosh://session-identity-changed";
+// The profile's `[ui]` table.
 
-/// What every window hears once the wizard wrote its files.
-pub(crate) const MIGRATION_APPLIED_EVENT: &str = "vosh://migration-applied";
-
-/// Sent to every window with the whole map whenever it changes.
-pub(crate) const AFFECT_FULL_CHANGED_EVENT: &str = "vosh://affect-full-changed";
-
-/// Sent last by [`crate::commands::broadcast_profile_ui`]. The live profile's whole UI
-/// config was replaced, by a switch, an import, `#profile load` or
-/// `reset`. A window that saves the whole config (Settings) reads it
-/// again here, or its next save writes the old profile's values back.
-pub(crate) const UI_CONFIG_REPLACED_EVENT: &str = "vosh://ui-config-replaced";
-
+/// Sent last by [`crate::commands::broadcast_profile_ui`]. The live
+/// profile's whole UI config was replaced, by a switch, an import,
+/// `#profile load` or `reset`. A window that saves the whole config
+/// (Settings) reads it again here, or its next save writes the old
+/// profile's values back. The payload is null.
+/// `subscribeUiConfigReplaced` hears it.
+pub(crate) const UI_CONFIG_REPLACED: &str = "vosh://ui-config-replaced";
+/// Sent to every window with the pane layout whenever it changes: a
+/// pane edit, a reset, or a replace. The payload is a
+/// [`crate::commands::PaneLayoutEnvelope`]. The pane layout's
+/// `ensureListening` hears it.
+pub(crate) const PANE_LAYOUT_CHANGED: &str = "vosh://pane-layout-changed";
+/// Sent to every window with the tracked affects whenever they change:
+/// a Settings save or a replace. The payload is the list of
+/// [`crate::profile_config::TrackedAffect`].
+/// `subscribeTrackedAffectsChanged` hears it.
+pub(crate) const TRACKED_AFFECTS_CHANGED: &str = "vosh://tracked-affects-changed";
+/// Sent to every window with which way the status line tick counts, on
+/// a replace. Settings sends its own saves. The payload is the way,
+/// such as `"up"`. `subscribeTickCountChanged` hears it.
+pub(crate) const TICK_COUNT_CHANGED: &str = "vosh://tick-count-changed";
+/// Sent to every window with the style of the time and tick chips, on
+/// a replace. Settings sends its own saves. The payload is the style,
+/// such as `"value_only"`. `subscribeChipStyleChanged` hears it.
+pub(crate) const CHIP_STYLE_CHANGED: &str = "vosh://chip-style-changed";
 /// Sent to every window with the Affects pane's style, marker, tint,
 /// and the hours at which an affect runs out and is almost gone,
 /// whenever they change: a pick from the pane menu, a Settings save
-/// (which the frontend sends itself), or a replace.
-pub(crate) const AFFECTS_DISPLAY_CHANGED_EVENT: &str = "vosh://affects-display-changed";
-
+/// (which the frontend sends itself), or a replace. The payload is an
+/// [`crate::commands::AffectsDisplay`].
+/// `subscribeAffectsDisplayChanged` hears it.
+pub(crate) const AFFECTS_DISPLAY_CHANGED: &str = "vosh://affects-display-changed";
 /// Sent to every window with the chat pane's channel colors whenever
-/// they change: a pick or a reset from the pane menu, or a replace.
-pub(crate) const CHAT_COLORS_CHANGED_EVENT: &str = "vosh://chat-colors-changed";
-
+/// they change: a pick or a reset from the pane menu, or a replace. The
+/// payload maps each channel to its ANSI slot.
+/// `subscribeChatColorsChanged` hears it.
+pub(crate) const CHAT_COLORS_CHANGED: &str = "vosh://chat-colors-changed";
 /// Sent to every window with the tick settings whenever they change:
-/// a Settings Tick save, a `#tick` command, or a replace.
-pub(crate) const TICK_CONFIG_CHANGED_EVENT: &str = "vosh://tick-config-changed";
+/// a Settings Tick save, a `#tick` command, or a replace. The payload is
+/// a [`crate::commands::TickConfigPayload`].
+/// `subscribeTickConfigChanged` hears it.
+pub(crate) const TICK_CONFIG_CHANGED: &str = "vosh://tick-config-changed";
 
-/// The main window hears `#help <words>` here, with the words.
-pub(crate) const HELP_OPEN_EVENT: &str = "vosh://help-open";
+// Windows and the menu.
 
-/// The event each window hears on quit, with the round number.
-pub(crate) const FLUSH_REQUEST_EVENT: &str = "vosh://flush-pending-writes";
-
-/// The event a menu command reaches the main window on.
+/// Sent to the main window on `#help <words>`. The payload is the
+/// words. `App` hears it and opens Help on the best match.
+pub(crate) const HELP_OPEN: &str = "vosh://help-open";
+/// Sent to every window on quit. The payload is the round number, which
+/// each window's answer names. `listenForQuitFlush` hears it.
+pub(crate) const FLUSH_PENDING_WRITES: &str = "vosh://flush-pending-writes";
+/// Sent to the main window when you choose a menu command. The payload
+/// is the command's id. `listenAppMenu` hears it.
 #[cfg(target_os = "macos")]
-pub(crate) const APP_MENU_EVENT: &str = "vosh://app-menu";
-
+pub(crate) const APP_MENU: &str = "vosh://app-menu";
 /// Find, chosen while Settings is in front, focuses the settings search.
+/// The payload is null. `Sidebar` hears it.
 #[cfg(target_os = "macos")]
-pub(crate) const SETTINGS_FIND_EVENT: &str = "vosh://settings-find";
+pub(crate) const SETTINGS_FIND: &str = "vosh://settings-find";
+/// Find, chosen while Help is in front, focuses the help search. The
+/// payload is null. `HelpApp` hears it.
+#[cfg(target_os = "macos")]
+pub(crate) const HELP_FIND: &str = "vosh://help-find";
 
-/// Find, chosen while Help is in front, focuses the help search.
-#[cfg(target_os = "macos")]
-pub(crate) const HELP_FIND_EVENT: &str = "vosh://help-find";
+// The native renderer.
+
+/// The native surface's grid size changed, so the hidden xterm takes
+/// the same grid. The payload is `[cols, rows]`. `Terminal` hears it.
+#[cfg(native_surface)]
+pub(crate) const NATIVE_GRID_SIZE: &str = "vosh://native-grid-size";
+/// How far back the native surface shows changed. The payload is
+/// `[offset, max]` in rows. `startNativeScroll` hears it.
+#[cfg(native_surface)]
+pub(crate) const NATIVE_SCROLL: &str = "vosh://native-scroll";
+/// The native surface copied your selection. The payload is the count
+/// of characters copied. `startCopyToasts` hears it.
+#[cfg(native_surface)]
+pub(crate) const NATIVE_COPIED: &str = "vosh://native-copied";
+/// A click on the native surface, which eats the DOM mouseup, so the
+/// command line takes focus. The payload is null. `App` hears it.
+#[cfg(native_surface)]
+pub(crate) const TERMINAL_CLICKED: &str = "vosh://terminal-clicked";
+/// A right click on the native surface. The payload is `[x, y]` in CSS
+/// pixels. `App` hears it and opens the terminal menu there.
+#[cfg(native_surface)]
+pub(crate) const TERMINAL_CONTEXT_MENU: &str = "vosh://terminal-context-menu";
+/// The pointer over the native surface wants another cursor. The
+/// payload is the CSS cursor name. `App` hears it.
+#[cfg(native_surface)]
+pub(crate) const TERMINAL_CURSOR: &str = "vosh://terminal-cursor";
 
 /// The payload of [`PROMPT_CONFIG_CHANGED`]: the active profile whose
 /// table changed, None before any profile loads.
