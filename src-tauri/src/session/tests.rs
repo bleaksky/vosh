@@ -9,6 +9,7 @@
 //! what they feed.
 
 use super::batch::*;
+use super::effects::*;
 use super::gmcp::*;
 use super::lines::Line;
 use super::perf::*;

@@ -225,7 +225,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         // ran asks for. #trigger, #alias, and the Lua they run change the
         // lists an open Settings page shows, so the result carries every
         // list the line changed.
-        let mut apply = session::line_script_result(ran);
+        let mut apply = session::effects::line_script_result(ran);
         apply.lists = ListChanges::since(lists_before, &profile);
         let look_changed = prompt_look(&profile) != look_before;
         (apply, payload, look_changed)
@@ -254,7 +254,8 @@ async fn deliver_script_result<R: tauri::Runtime>(
     apply: ApplyResult,
 ) -> Result<(), String> {
     let (bytes, echoes) =
-        session::collect_script_result(app, &state.profile, &state.script_timers, apply).await;
+        session::effects::collect_script_result(app, &state.profile, &state.script_timers, apply)
+            .await;
     output::echo_lines(app, &echoes);
 
     if bytes.is_empty() {
@@ -286,8 +287,8 @@ pub(crate) struct Ran {
     /// state, which [`LineEffects::note_ran`] notes, and the sends and
     /// echo lines of the slash commands. A script alias body's sends and
     /// echo lines sit in `result` instead, in the order you typed them.
-    /// The caller hands it to `session::apply_script_result` after the
-    /// line's own output.
+    /// The caller hands it to `session::effects::apply_script_result`
+    /// after the line's own output.
     pub(crate) lua: ApplyResult,
     /// A `#profile reset`, or a `#profile load` that read its file,
     /// replaced the live profile.

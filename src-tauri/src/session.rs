@@ -4,6 +4,7 @@
 mod batch;
 mod connection;
 pub(crate) mod echo;
+pub(crate) mod effects;
 mod gmcp;
 mod gmcp_vars;
 pub(crate) mod highlight_ground;
@@ -29,17 +30,15 @@ use vosh_protocol::telnet::{
     codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Negotiator, Parser,
 };
 
-use crate::app::events::{self, broadcast_list_changes, ListChanges, ListRevisions};
-use crate::input;
+use crate::app::events;
 use crate::output::{emit_output, emit_repaint, output_count};
 use crate::profile::Profile;
-use crate::profile_config::SharedLayer;
-use crate::script::{self, ApplyResult, PendingTimer, SharedTimers};
-use crate::tick::TickStep;
+use crate::script::{self, PendingTimer, SharedTimers};
 
 use batch::{emit_session_output, ReadBatch, Settle};
 use connection::{ConnectionError, Stream};
 use echo::ServerEcho;
+use effects::{apply_script_result, deliver_tick_step, run_fired_command, OutputSink, ScriptIo};
 use gmcp::{handle_gmcp, hello_subnegotiation, supports_subnegotiation};
 use lines::{LineAccumulator, Partial};
 use perf::{PerfCounters, PERF_REPORT_INTERVAL};
@@ -126,36 +125,6 @@ pub(crate) enum OutgoingMsg {
     /// renderer that shows took before the text (`Output::id`), since
     /// the session can hear of the text after it wrote more.
     LocalWrite { after: u64 },
-}
-
-/// Where a step writes to the terminal: the batch of the read it runs
-/// in, or straight out for work outside a read, such as a timer.
-enum OutputSink<'a> {
-    Batch(&'a mut ReadBatch),
-    Direct,
-}
-
-impl OutputSink<'_> {
-    /// Write `bytes` to the terminal.
-    fn write<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, bytes: Vec<u8>) {
-        match self {
-            OutputSink::Batch(batch) => batch.out.text(&bytes),
-            OutputSink::Direct => emit_output(app, bytes),
-        }
-    }
-
-    /// A prompt var changed. A read sends the prompt vars once after its
-    /// output, and anything else sends them now.
-    async fn prompt_vars<R: tauri::Runtime>(
-        &mut self,
-        app: &AppHandle<R>,
-        profile: &Arc<Mutex<Profile>>,
-    ) {
-        match self {
-            OutputSink::Batch(batch) => batch.prompt_vars = true,
-            OutputSink::Direct => emit_prompt_vars(app, profile, true).await,
-        }
-    }
 }
 
 pub(crate) struct SessionHandle {
@@ -965,26 +934,6 @@ async fn handle_tick<R: tauri::Runtime>(
     .await
 }
 
-/// Report a tick step on `session://tick`, so the frontend counts and
-/// plays the sound when it fired, then run its Send each tick command
-/// through the full input pipeline like a timer command.
-async fn deliver_tick_step<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    stream: &mut Stream,
-    profile: &Arc<Mutex<Profile>>,
-    lua_timers: &SharedTimers,
-    step: TickStep,
-    sink: &mut OutputSink<'_>,
-) -> std::io::Result<()> {
-    if let Err(e) = app.emit(events::TICK, &step.payload) {
-        warn!(error = %e, "failed to emit tick payload");
-    }
-    if let Some(command) = step.command {
-        run_fired_command(app, stream, profile, lua_timers, &command, sink).await?;
-    }
-    Ok(())
-}
-
 /// Fire the Settings interval timers whose deadline has elapsed.
 /// `timer_next` maps timer id to its next-fire `Instant`; a timer is
 /// seeded on first sight (scheduled one interval out, not fired
@@ -1045,187 +994,6 @@ async fn fire_due_profile_timers<R: tauri::Runtime>(
         .await?;
     }
     Ok(())
-}
-
-/// Run `line` through the input pipeline for a path other than typed
-/// input, and note what it asks of the saved profile the way the typed
-/// path does. Call with the profile lock held. A `#profile reset`, or a
-/// `#profile load` that reads its file, swaps the live UI config and
-/// panes, so their generations move in the same step. The profile file it reads
-/// holds none of the shared settings, so `shared` goes back over the
-/// result as it does for typed input.
-fn process_fired_line(
-    p: &mut Profile,
-    line: &str,
-    effects: &mut input::LineEffects,
-    shared: Option<&SharedLayer>,
-) -> input::Ran {
-    let ran = match shared.filter(|_| input::may_replace_profile(line)) {
-        Some(layer) => layer.keep_across(p, |p| input::run_line(p, line)),
-        None => input::run_line(p, line),
-    };
-    effects.note_ran(line, &ran);
-    if ran.replaced {
-        crate::app::state::note_ui_config_replaced();
-    }
-    ran
-}
-
-/// What one line the input pipeline ran asks for, as one script result:
-/// its own bytes and echo lines, with what the Lua bodies of its script
-/// aliases send among them in the order you typed them, then all else
-/// the Lua it ran asks for.
-pub(crate) fn line_script_result(ran: input::Ran) -> ApplyResult {
-    let input::Ran { result, lua, .. } = ran;
-    let mut apply = ApplyResult {
-        send_bytes: result.bytes,
-        echoes: result.echo,
-        ..ApplyResult::default()
-    };
-    apply.append(lua);
-    apply
-}
-
-/// What a line can change that shows outside the terminal text: the
-/// target display and how your prompt looks.
-struct Shown {
-    target: TargetPayload,
-    look: (bool, String, vosh_prompt::PromptShow),
-}
-
-impl Shown {
-    fn of(p: &Profile) -> Self {
-        Self {
-            target: TargetPayload {
-                name: p.target.name.clone(),
-                room_idx: p.target.room_idx,
-                quick_keys: p.target.quick_keys.clone(),
-            },
-            look: crate::prompt::prompt_look(p),
-        }
-    }
-}
-
-/// What lines a timer, the tick command or Lua ran changed outside the
-/// terminal text. Typed input sends the same two things for a typed line.
-#[derive(Debug, Default, PartialEq)]
-struct ShownChanges {
-    /// The target display, sent on `session://target`.
-    target: Option<TargetPayload>,
-    /// Your prompt looks different, so the open row repaints.
-    repaint: bool,
-}
-
-impl ShownChanges {
-    /// What `p` changed since `before` was taken.
-    fn since(before: Shown, p: &Profile) -> Self {
-        let after = Shown::of(p);
-        Self {
-            repaint: after.look != before.look,
-            target: (after.target != before.target).then_some(after.target),
-        }
-    }
-
-    /// Ask for the repaint and send the target, as typed input does. The
-    /// repaint request goes through the session handle, as the typed one
-    /// does, from a task of its own, since `session_disconnect` holds the
-    /// handle's lock while it waits for this session to end.
-    fn send<R: tauri::Runtime>(self, app: &AppHandle<R>) {
-        if self.repaint {
-            let state = app
-                .state::<crate::app::state::SharedState>()
-                .inner()
-                .clone();
-            tokio::spawn(async move { crate::prompt::request_prompt_repaint(&state).await });
-        }
-        if let Some(payload) = self.target {
-            let _ = app.emit(events::TARGET, payload);
-        }
-    }
-}
-
-/// What lines from a timer, the tick or `mud.input` produced under the
-/// profile lock.
-struct FiredRun {
-    /// What the lines ask for, with every list they changed.
-    apply: ApplyResult,
-    /// What they changed outside the terminal text.
-    shown: ShownChanges,
-    effects: input::LineEffects,
-}
-
-/// The part of [`run_fired_command`] that runs under the profile lock:
-/// the input pipeline, which runs the Lua bodies of any script aliases
-/// in the command where they stand, and all the Lua it ran asks for.
-fn run_fired_locked(p: &mut Profile, command: &str, shared: Option<&SharedLayer>) -> FiredRun {
-    run_lines_locked(p, [command], shared)
-}
-
-/// Run `lines` through the input pipeline under the profile lock, for a
-/// path other than typed input, each as [`line_script_result`] reads it.
-fn run_lines_locked<'a>(
-    p: &mut Profile,
-    lines: impl IntoIterator<Item = &'a str>,
-    shared: Option<&SharedLayer>,
-) -> FiredRun {
-    let lists_before = ListRevisions::of(p);
-    let shown_before = Shown::of(p);
-    let mut effects = input::LineEffects::default();
-    let mut apply = ApplyResult::default();
-    for line in lines {
-        let ran = process_fired_line(p, line, &mut effects, shared);
-        apply.append(line_script_result(ran));
-    }
-    apply.lists = ListChanges::since(lists_before, p);
-    FiredRun {
-        apply,
-        shown: ShownChanges::since(shown_before, p),
-        effects,
-    }
-}
-
-/// Run one command produced by a timer (or any non-typed source) through
-/// the full input pipeline and deliver its results through
-/// [`apply_script_result`]: echo lines to the terminal and bytes to the
-/// server, with what the Lua bodies of its script aliases send among them
-/// in the order the command names them, and all else the Lua it ran asks
-/// for.
-/// Mirrors the typed-input handler so a timer command behaves exactly
-/// like the same line typed at the prompt, including `#lua` and
-/// script-bodied aliases.
-async fn run_fired_command<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    stream: &mut Stream,
-    profile: &Arc<Mutex<Profile>>,
-    lua_timers: &SharedTimers,
-    command: &str,
-    sink: &mut OutputSink<'_>,
-) -> std::io::Result<()> {
-    let shared = crate::profile::switch::shared_layer_for_lines(app, [command]).await;
-    let FiredRun {
-        apply,
-        shown,
-        effects,
-    } = {
-        let mut p = profile.lock().await;
-        run_fired_locked(&mut p, command, shared.as_ref())
-    };
-    crate::disk::save::settle_line_effects(app, effects).await;
-    shown.send(app);
-    let mut io = ScriptIo::Session(stream, sink);
-    apply_script_result(app, &mut io, profile, lua_timers, apply).await
-}
-
-/// Echo lines outside a trigger's own line, each on its own row with a
-/// line end before the first.
-fn framed_echoes<S: AsRef<str>>(lines: &[S]) -> Vec<u8> {
-    let mut buf = Vec::new();
-    for line in lines {
-        buf.extend_from_slice(b"\r\n");
-        buf.extend_from_slice(line.as_ref().as_bytes());
-    }
-    buf.extend_from_slice(b"\r\n");
-    buf
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1665,160 +1433,6 @@ fn emit_line_routes<R: tauri::Runtime>(app: &AppHandle<R>, result: &LineResult) 
             }
         }
     }
-}
-
-/// Where the bytes and echo lines a script result asks for go.
-enum ScriptIo<'a, 'b> {
-    /// The session loop: its connection, and the read's batch or the
-    /// terminal.
-    Session(&'a mut Stream, &'a mut OutputSink<'b>),
-    /// Anywhere else, such as a typed line or a plugin load. The bytes
-    /// and echo lines collect for the caller, which sends and prints them
-    /// with its own.
-    Collect {
-        bytes: &'a mut Vec<u8>,
-        echoes: &'a mut Vec<String>,
-    },
-}
-
-impl ScriptIo<'_, '_> {
-    async fn send(&mut self, bytes: &[u8]) -> std::io::Result<()> {
-        match self {
-            ScriptIo::Session(stream, _) => {
-                stream.write_all(bytes).await?;
-                stream.flush().await
-            }
-            ScriptIo::Collect { bytes: out, .. } => {
-                out.extend_from_slice(bytes);
-                Ok(())
-            }
-        }
-    }
-
-    fn echo<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, lines: Vec<String>) {
-        match self {
-            ScriptIo::Session(_, sink) => sink.write(app, framed_echoes(&lines)),
-            ScriptIo::Collect { echoes, .. } => echoes.extend(lines),
-        }
-    }
-
-    async fn prompt_vars<R: tauri::Runtime>(
-        &mut self,
-        app: &AppHandle<R>,
-        profile: &Arc<Mutex<Profile>>,
-    ) {
-        match self {
-            ScriptIo::Session(_, sink) => sink.prompt_vars(app, profile).await,
-            ScriptIo::Collect { .. } => emit_prompt_vars(app, profile, true).await,
-        }
-    }
-}
-
-/// How many rounds of `mud.input` lines one script result runs, each
-/// round the lines the Lua of the round before asked for. Lua that keeps
-/// asking stops here, at the depth an alias may go.
-const MUD_INPUT_DEPTH: usize = vosh_automation::alias::DEFAULT_MAX_DEPTH;
-
-/// Perform the IO and timer bookkeeping a script result asks for. Every
-/// path that runs Lua applies its result here: the game's lines and
-/// GMCP, Lua timers, the lines you type, a Settings timer, the tick
-/// command, and a plugin load. Sends and echoes flow to `io`, timers
-/// register with the shared list, values a script gave your prompt reach
-/// the windows, and `mud.input` lines are run through the input pipeline
-/// so they pick up aliases and slash commands too, with all their own Lua
-/// asks for applied in turn.
-async fn apply_script_result<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    io: &mut ScriptIo<'_, '_>,
-    profile: &Arc<Mutex<Profile>>,
-    lua_timers: &SharedTimers,
-    apply: ApplyResult,
-) -> std::io::Result<()> {
-    let mut apply = apply;
-    let mut depth = 0;
-    loop {
-        // Durable Lua mutations (mud.alias / set_var / group toggles
-        // fired by triggers or timers) historically never reached disk.
-        // Ride the same debounced persist the slash commands use.
-        if apply.durable_changed {
-            crate::disk::save::mark_profile_dirty(app);
-        }
-        // A Lua `mud.alias` changes the list an open Settings page shows.
-        broadcast_list_changes(app, apply.lists);
-
-        if !apply.send_bytes.is_empty() {
-            io.send(&apply.send_bytes).await?;
-        }
-        if !apply.echoes.is_empty() {
-            io.echo(app, apply.echoes);
-        }
-        if !apply.new_timers.is_empty() || !apply.cancel_timers.is_empty() {
-            // New timers go in before the cancels run, so a timer that
-            // one result both starts and cancels never fires. Lua never
-            // gives two timers the same id, so a cancel only ever takes
-            // the timer it names.
-            let mut guard = lua_timers.lock().await;
-            guard.extend(apply.new_timers);
-            guard.retain(|t| !apply.cancel_timers.contains(&t.timer_id));
-        }
-        if apply.prompt_vars_changed {
-            io.prompt_vars(app, profile).await;
-        }
-        if apply.inputs.is_empty() {
-            return Ok(());
-        }
-        if depth == MUD_INPUT_DEPTH {
-            warn!(depth, "mud.input went too deep");
-            io.echo(
-                app,
-                vec![format!("[mud.input recursion limit hit ({depth})]")],
-            );
-            return Ok(());
-        }
-        depth += 1;
-        let shared = crate::profile::switch::shared_layer_for_lines(
-            app,
-            apply.inputs.iter().map(String::as_str),
-        )
-        .await;
-        let FiredRun {
-            apply: next,
-            shown,
-            effects,
-        } = {
-            let mut p = profile.lock().await;
-            run_lines_locked(
-                &mut p,
-                apply.inputs.iter().map(String::as_str),
-                shared.as_ref(),
-            )
-        };
-        crate::disk::save::settle_line_effects(app, effects).await;
-        shown.send(app);
-        apply = next;
-    }
-}
-
-/// [`apply_script_result`] outside the session loop, as for a typed line
-/// or a plugin load. Returns the bytes for the game and the echo lines
-/// for the terminal, which the caller sends and prints.
-pub(crate) async fn collect_script_result<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    profile: &Arc<Mutex<Profile>>,
-    lua_timers: &SharedTimers,
-    apply: ApplyResult,
-) -> (Vec<u8>, Vec<String>) {
-    let mut bytes = Vec::new();
-    let mut echoes = Vec::new();
-    let mut io = ScriptIo::Collect {
-        bytes: &mut bytes,
-        echoes: &mut echoes,
-    };
-    // Collecting writes to no stream, so it never fails.
-    if let Err(e) = apply_script_result(app, &mut io, profile, lua_timers, apply).await {
-        warn!(error = %e, "applying a script result failed");
-    }
-    (bytes, echoes)
 }
 
 async fn fire_due_script_timers<R: tauri::Runtime>(
