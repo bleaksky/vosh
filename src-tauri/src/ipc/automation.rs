@@ -369,8 +369,8 @@ pub(crate) struct ImportSummary {
 /// Returns a summary so the UI can report what landed and what
 /// did not.
 #[tauri::command]
-pub(crate) async fn import_apply(
-    app: AppHandle,
+pub(crate) async fn import_apply<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, SharedState>,
     format: String,
     text: String,
@@ -460,5 +460,68 @@ mod tests {
             Some(json.as_str()),
             "fixtures/ipc/aliases_export.json no longer matches aliases_export"
         );
+    }
+
+    #[test]
+    fn import_answers_the_format_names_and_errors_the_page_reads() {
+        // The Import page sends back the name import_detect answers, and
+        // importErrorMessage in automationRecords.ts turns the two
+        // import_apply errors into sentences by their text.
+        use std::sync::Arc;
+
+        use tauri::test::{mock_builder, mock_context, noop_assets};
+        use tauri::Manager;
+
+        use crate::app::state::{AppState, SharedState};
+
+        let gmud = "alias [g] [get $1.gold]\n";
+        let samples = [
+            (
+                "mushclient",
+                r#"<?xml version="1.0"?><muclient><world></world></muclient>"#,
+            ),
+            (
+                "mudlet",
+                r#"<?xml version="1.0"?><MudletPackage version="1.001"></MudletPackage>"#,
+            ),
+            ("gmud", gmud),
+            (
+                "cmud",
+                "<?xml version=\"1.0\"?>\n<cmud>\n<window/>\n</cmud>\n",
+            ),
+        ];
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        app.manage::<SharedState>(Arc::new(AppState::default()));
+        tauri::async_runtime::block_on(async {
+            for (name, text) in samples {
+                let detected = super::import_detect(text.to_string()).await.unwrap();
+                assert_eq!(
+                    serde_json::to_value(detected).unwrap(),
+                    serde_json::json!(name)
+                );
+            }
+            // Both errors come back before the profile is touched, so no
+            // save writes outside the test. A name it does not know fails
+            // even when the file itself would be detected.
+            let bogus = super::import_apply(
+                app.handle().clone(),
+                app.state::<SharedState>(),
+                "bogus".to_string(),
+                gmud.to_string(),
+            )
+            .await;
+            assert_eq!(bogus.err().as_deref(), Some("unknown import format: bogus"));
+            let undetected = super::import_apply(
+                app.handle().clone(),
+                app.state::<SharedState>(),
+                String::new(),
+                "look\n".to_string(),
+            )
+            .await;
+            assert_eq!(
+                undetected.err().as_deref(),
+                Some("could not detect import format")
+            );
+        });
     }
 }
