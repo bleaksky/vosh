@@ -108,7 +108,7 @@ fn divider_frac() -> Option<f32> {
 }
 
 /// The hovered URL's cell range, for the renderer's hover underline.
-pub(crate) fn hover_url() -> Option<(i32, usize, usize)> {
+pub(super) fn hover_url() -> Option<(i32, usize, usize)> {
     POINTER.hover_url.lock().ok().and_then(|h| *h)
 }
 

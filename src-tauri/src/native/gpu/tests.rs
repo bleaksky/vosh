@@ -2,17 +2,24 @@ use super::atlas::{
     centered_glyph_top, native_baseline, rect_to_uv, rendered_families, slot_rect, JETBRAINS_BOLD,
     JETBRAINS_REGULAR,
 };
-use super::bands::{BandRect, BAND_RADIUS, BAND_X, BAND_Y, BAND_Y_ADJACENT, LIGHT_RING};
-use super::decor::{curl_coverage, underline_rects, Decor};
+use super::bands::{
+    band_instances, band_rects, band_viewport, ground_tint, lift_boxes, widen_newest, BandRect,
+    LiftBox, BAND_RADIUS, BAND_X, BAND_Y, BAND_Y_ADJACENT, LIGHT_RING, MAX_LIFT_ROWS,
+};
+use super::decor::{curl_coverage, line_instances, underline_rects, Decor};
+use super::frame::build_instances;
 use super::style::{
-    blink_shown, color_to_rgba, linear_to_srgb, resolve_chrome, until_blink_flip, ChromeTokens,
-    ANSI_16, CURRENT_MATCH_FALLBACK_ALPHA, DIVIDER_FALLBACK_ALPHA, FIND_MATCH_FALLBACK_ALPHA,
-    SCROLLBAR_FALLBACK_ALPHA, SELECTION_FALLBACK_ALPHA, SELROW_FALLBACK_ALPHA,
+    blend_over, blink_shown, blinks_visibly, color_to_rgba, draws_lines, linear_to_srgb,
+    paint_to_rgba, resolve_chrome, rgb_to_rgba, styled_colors, underline_color, until_blink_flip,
+    ChromeTokens, Rgba, ANSI_16, CURRENT_MATCH_FALLBACK_ALPHA, DIVIDER_FALLBACK_ALPHA,
+    FIND_MATCH_FALLBACK_ALPHA, SCROLLBAR_FALLBACK_ALPHA, SELECTION_FALLBACK_ALPHA,
+    SELROW_FALLBACK_ALPHA,
 };
 use super::*;
 use crate::color::Paint;
 use crate::native::grid::regions::LiftSpan;
-use crate::native::grid::CellFlags;
+use crate::native::grid::{CellFlags, Underline};
+use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
 use font_kit::font::Font;
 use std::sync::Arc;
 
@@ -1346,12 +1353,16 @@ fn render_frame(
         target: [w, h],
         blink_hidden,
     };
+    // No link under the pointer and no find.
     let drawn = renderer.draw(
         &device,
         &queue,
         &mut encoder,
         &view,
         &grid,
+        None,
+        Vec::new(),
+        None,
         w,
         h,
         0.5,
