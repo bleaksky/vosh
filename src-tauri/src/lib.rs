@@ -116,7 +116,6 @@ mod tick;
 mod tintin_import;
 #[cfg(test)]
 mod upgrade_order_tests;
-mod window_backdrop;
 
 use app::state::{AppState, SharedState};
 use commands::{
@@ -365,7 +364,7 @@ pub fn run() {
             profile_set_scope,
             open_settings_window,
             open_help_window,
-            window_backdrop::window_backdrop_set,
+            app::windows::window_backdrop_set,
             highlight_ground::highlight_ground_set,
             commands::pane_layout_get,
             commands::pane_layout_set,
