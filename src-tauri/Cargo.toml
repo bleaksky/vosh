@@ -55,7 +55,7 @@ objc2 = "0.5"
 core-graphics = "0.23"
 core-text = "20"
 # The font list reads each family's monospace trait from its CoreText
-# font descriptor (fonts.rs). 0.9 is the version core-text 20 uses.
+# font descriptor (app/system_fonts.rs). 0.9 is the version core-text 20 uses.
 core-foundation = "0.9"
 # Tier 3 native terminal renderer (docs/native-renderer.md), macOS only
 # like the `native_surface` cfg in build.rs. wgpu drives a Metal surface;

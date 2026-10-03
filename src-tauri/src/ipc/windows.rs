@@ -6,9 +6,9 @@
 use tauri::{AppHandle, State};
 
 use crate::app::exit::ANSWERS;
+use crate::app::menu::MenuState;
 use crate::app::state::SharedState;
 use crate::app::windows::{open_aux_window, set_backdrop, HELP_WINDOW, SETTINGS_WINDOW};
-use crate::app_menu::MenuState;
 
 /// What launch has to tell you, for the main window to show once in the
 /// terminal and as a toast.
@@ -69,7 +69,7 @@ pub(crate) fn pending_writes_flushed<R: tauri::Runtime>(window: tauri::WebviewWi
 #[tauri::command]
 pub(crate) fn menu_set_state(app: AppHandle, state: MenuState) {
     #[cfg(target_os = "macos")]
-    crate::app_menu::apply_state(&app, &state);
+    crate::app::menu::apply_state(&app, &state);
     #[cfg(not(target_os = "macos"))]
     let _ = (app, state);
 }
@@ -85,7 +85,7 @@ pub(crate) fn menu_copy(app: AppHandle, terminal: bool) {
         if terminal && crate::native::grid::selection_text().is_some_and(|t| !t.is_empty()) {
             crate::native::surface::request_copy();
         } else {
-            let _ = app.run_on_main_thread(crate::app_menu::system_copy);
+            let _ = app.run_on_main_thread(crate::app::menu::system_copy);
         }
     }
     #[cfg(not(target_os = "macos"))]

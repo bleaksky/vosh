@@ -26,7 +26,7 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
     // Read the font list for Appearance while the app starts,
     // on the blocking pool, never here on the main thread.
     #[cfg(target_os = "macos")]
-    crate::fonts::warm_font_cache();
+    crate::app::system_fonts::warm_font_cache();
     // The data folder and the scripts folder in it, where
     // `#script load` finds Lua files.
     if let Err(e) = create_scripts_dir(app) {

@@ -7,8 +7,8 @@ use tauri::{AppHandle, State};
 
 use crate::app::events::CHAT_COLORS_CHANGED;
 use crate::app::state::SharedState;
+use crate::app::system_fonts::FontEntry;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
-use crate::fonts::FontEntry;
 
 /// The Settings payload. Every field falls back to the default a fresh
 /// profile has, so a page that leaves one out still saves (D12).
@@ -323,7 +323,7 @@ fn apply_theme_pick(
 /// 2 to 3 s, which froze every window until it finished.
 #[tauri::command]
 pub(crate) async fn fonts_list() -> Vec<FontEntry> {
-    crate::fonts::list().await
+    crate::app::system_fonts::list().await
 }
 
 /// The 16 ANSI slots a chat channel can take, in the frontend's names.
