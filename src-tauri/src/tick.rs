@@ -25,7 +25,7 @@
 use std::time::Duration;
 
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
 use tracing::warn;
 
@@ -38,31 +38,52 @@ pub(crate) const DEFAULT_INTERVAL_SECS: u64 = 30;
 /// this close after a local fire restarts the count without firing again.
 pub(crate) const SAME_TICK_WINDOW: Duration = Duration::from_secs(2);
 
-#[derive(Debug, Clone, PartialEq)]
+/// The tick settings. The profile file's `[tick]` table, the live timer
+/// and the Settings Tick card all read this one shape, so a field keeps
+/// the same key on disk and on the wire. An optional field left empty
+/// turns its feature off.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct TickConfig {
+    #[serde(default = "default_true")]
     pub enabled: bool,
-    pub interval: Duration,
+    /// Whole seconds. Each path into the live timer clamps it to at
+    /// least 1.
+    #[serde(default = "default_interval_secs")]
+    pub interval_secs: u64,
+    #[serde(default)]
     pub auto_fire: Option<String>,
+    #[serde(default = "default_true")]
     pub sound: bool,
+    #[serde(default)]
     pub reset_pattern: Option<String>,
     /// Seconds before the next fire at which the warning echo should
     /// land. None disables the warning.
+    #[serde(default)]
     pub warn_at_secs: Option<u64>,
     /// Text printed to the terminal as the warning. None falls back to
     /// a sensible default when `warn_at_secs` is set.
+    #[serde(default)]
     pub warn_message: Option<String>,
     /// Color for the warning text. Accepts standard ANSI names ("red",
     /// "bright-red", "yellow", etc.), hex ("#rrggbb", "#rgb", with or
     /// without the #), or a 256-palette index ("196"). None defaults to
     /// bright-red.
+    #[serde(default)]
     pub warn_color: Option<String>,
+}
+
+impl TickConfig {
+    /// How long a tick is expected to take.
+    pub(crate) fn interval(&self) -> Duration {
+        Duration::from_secs(self.interval_secs)
+    }
 }
 
 impl Default for TickConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            interval: Duration::from_secs(DEFAULT_INTERVAL_SECS),
+            interval_secs: DEFAULT_INTERVAL_SECS,
             auto_fire: None,
             sound: true,
             reset_pattern: None,
@@ -71,6 +92,14 @@ impl Default for TickConfig {
             warn_color: None,
         }
     }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_interval_secs() -> u64 {
+    DEFAULT_INTERVAL_SECS
 }
 
 #[derive(Debug, Default)]
@@ -163,7 +192,7 @@ impl TickRuntime {
         now: Instant,
     ) {
         let was_on = self.config.enabled;
-        let was_interval = self.config.interval;
+        let was_interval = self.config.interval();
         if self.in_session && was_on && self.last_tick.is_some() {
             config.enabled = true;
         }
@@ -222,8 +251,8 @@ impl TickRuntime {
     /// and a warning this tick already printed does not print again. A
     /// new interval also starts the fallback's wait again.
     pub(crate) fn set_interval(&mut self, secs: u64, now: Instant) {
-        let was_interval = self.config.interval;
-        self.config.interval = Duration::from_secs(secs.max(1));
+        let was_interval = self.config.interval();
+        self.config.interval_secs = secs.max(1);
         if self.config.enabled && !self.synced {
             self.restart(now);
         } else {
@@ -236,7 +265,7 @@ impl TickRuntime {
     /// this a shorter interval could put the game's last tick past it
     /// and fire the fallback at once while the game still ticks.
     fn note_interval_change(&mut self, was_interval: Duration, now: Instant) {
-        if self.synced && self.config.interval != was_interval {
+        if self.synced && self.config.interval() != was_interval {
             self.interval_changed_at = Some(now);
         }
     }
@@ -289,7 +318,7 @@ impl TickRuntime {
         if !self.config.enabled {
             return None;
         }
-        Some(self.last_tick? + self.config.interval)
+        Some(self.last_tick? + self.config.interval())
     }
 
     /// Time left until the expected tick, zero once it has passed.
@@ -323,9 +352,9 @@ impl TickRuntime {
         };
         let due = if self.synced {
             let from = self.interval_changed_at.map_or(last, |at| at.max(last));
-            from + self.config.interval * 2
+            from + self.config.interval() * 2
         } else {
-            last + self.config.interval
+            last + self.config.interval()
         };
         if now < due {
             return false;
@@ -541,45 +570,14 @@ impl TickPayload {
         let elapsed = runtime.elapsed(now);
         Self {
             enabled: runtime.config.enabled,
-            interval_ms: millis(runtime.config.interval),
+            interval_ms: millis(runtime.config.interval()),
             remaining_ms: runtime.remaining(now).map_or(0, millis),
             elapsed_ms: elapsed.map_or(0, millis),
-            overdue: elapsed.is_some_and(|e| e >= runtime.config.interval),
+            overdue: elapsed.is_some_and(|e| e >= runtime.config.interval()),
             synced: runtime.synced,
             fired,
             sound: runtime.config.sound,
         }
-    }
-}
-
-/// Snapshot of the per-session tick timer config. Mirrors
-/// `tick::TickConfig` with `Duration` flattened to a `u64` of seconds
-/// so the frontend can edit it cleanly. Reset pattern, auto-fire
-/// command, warning timer / message / color are all optional — empty
-/// means the feature is off.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub(crate) struct TickConfigPayload {
-    pub enabled: bool,
-    pub interval_secs: u64,
-    pub auto_fire: Option<String>,
-    pub sound: bool,
-    pub reset_pattern: Option<String>,
-    pub warn_at_secs: Option<u64>,
-    pub warn_message: Option<String>,
-    pub warn_color: Option<String>,
-}
-
-/// The live tick configuration as `tick_get_config` reads it.
-pub(crate) fn tick_config_payload(cfg: &crate::tick::TickConfig) -> TickConfigPayload {
-    TickConfigPayload {
-        enabled: cfg.enabled,
-        interval_secs: cfg.interval.as_secs(),
-        auto_fire: cfg.auto_fire.clone(),
-        sound: cfg.sound,
-        reset_pattern: cfg.reset_pattern.clone(),
-        warn_at_secs: cfg.warn_at_secs,
-        warn_message: cfg.warn_message.clone(),
-        warn_color: cfg.warn_color.clone(),
     }
 }
 
@@ -596,9 +594,9 @@ const TICK_RESET_PATTERN_ERROR: &str =
 /// assignments. Returns the configuration as it now reads.
 pub(crate) fn apply_tick_config(
     tick: &mut crate::tick::TickRuntime,
-    config: &TickConfigPayload,
+    config: &TickConfig,
     now: tokio::time::Instant,
-) -> Result<TickConfigPayload, String> {
+) -> Result<TickConfig, String> {
     // Normalize string options: empty / whitespace-only -> None so the
     // persisted state does not carry an empty placeholder.
     let auto_fire = config
@@ -638,25 +636,16 @@ pub(crate) fn apply_tick_config(
         tick.disable();
         // Still record the interval so the user can flip enabled
         // back on without re-typing it.
-        tick.config.interval = std::time::Duration::from_secs(config.interval_secs.max(1));
+        tick.config.interval_secs = config.interval_secs.max(1);
     }
-    tick.set_compiled_reset_pattern(reset_pattern.clone(), reset_regex);
-    tick.config.auto_fire.clone_from(&auto_fire);
+    tick.set_compiled_reset_pattern(reset_pattern, reset_regex);
+    tick.config.auto_fire = auto_fire;
     tick.config.sound = config.sound;
     tick.config.warn_at_secs = config.warn_at_secs.filter(|s| *s > 0);
-    tick.config.warn_message.clone_from(&warn_message);
-    tick.config.warn_color.clone_from(&warn_color);
+    tick.config.warn_message = warn_message;
+    tick.config.warn_color = warn_color;
 
-    Ok(TickConfigPayload {
-        enabled: tick.config.enabled,
-        interval_secs: tick.config.interval.as_secs(),
-        auto_fire,
-        sound: tick.config.sound,
-        reset_pattern,
-        warn_at_secs: tick.config.warn_at_secs,
-        warn_message,
-        warn_color,
-    })
+    Ok(tick.config.clone())
 }
 
 #[cfg(test)]
@@ -703,7 +692,7 @@ mod tests {
         let start = Instant::now();
         t.enable(start);
         assert!(!t.try_consume_fire(start));
-        let after = start + t.config.interval;
+        let after = start + t.config.interval();
         assert!(t.try_consume_fire(after));
         // Reschedules to one interval ahead.
         let remaining = t.remaining(after).unwrap();
@@ -715,7 +704,7 @@ mod tests {
         let mut t = TickRuntime::default();
         let now = Instant::now();
         t.set_interval(0, now);
-        assert_eq!(t.config.interval, Duration::from_secs(1));
+        assert_eq!(t.config.interval(), Duration::from_secs(1));
     }
 
     #[test]
@@ -1097,7 +1086,7 @@ mod tests {
         let (mut t, tick) = synced_session(t0);
         // A switch, #profile load, reset, or an import brings Every 10.
         let mut config = t.config.clone();
-        config.interval = secs(10.0);
+        config.interval_secs = 10;
         let change = tick + secs(25.0);
         t.adopt(config, None, change);
         let leftover = &poll_span(&mut t, change, tick + secs(30.0));
@@ -1148,7 +1137,7 @@ mod tests {
         let t0 = Instant::now();
         let (mut t, tick) = synced_session(t0);
         let mut config = t.config.clone();
-        config.interval = secs(60.0);
+        config.interval_secs = 60;
         let change = tick + secs(25.0);
         t.adopt(config, None, change);
         let leftover = &poll_span(&mut t, change, tick + secs(35.0));
@@ -1295,8 +1284,8 @@ mod tests {
 
     /// A Tick block from Settings: off, every minute, with every option
     /// filled in and `reset_pattern` as the Reset on pattern.
-    fn tick_payload(reset_pattern: &str) -> super::TickConfigPayload {
-        super::TickConfigPayload {
+    fn tick_payload(reset_pattern: &str) -> super::TickConfig {
+        super::TickConfig {
             enabled: false,
             interval_secs: 60,
             auto_fire: Some(" score ".into()),
@@ -1332,7 +1321,7 @@ mod tests {
         // still resetting on the old pattern.
         assert_eq!(format!("{:?}", tick.config), before);
         assert!(tick.config.enabled);
-        assert_eq!(tick.config.interval.as_secs(), 30);
+        assert_eq!(tick.config.interval_secs, 30);
         assert_eq!(tick.next_fire(), next_fire);
         assert!(tick.check_reset_match("You feel less tired."));
     }
@@ -1350,7 +1339,7 @@ mod tests {
         assert_eq!(saved.warn_at_secs, Some(5));
         assert!(!tick.config.enabled);
         assert_eq!(tick.next_fire(), None);
-        assert_eq!(tick.config.interval.as_secs(), 60);
+        assert_eq!(tick.config.interval_secs, 60);
         assert!(!tick.config.sound);
         assert!(tick.check_reset_match("Dawn breaks."));
         assert!(!tick.check_reset_match("You feel less tired."));

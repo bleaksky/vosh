@@ -42,9 +42,10 @@ use crate::loadout_store::{
 use crate::profile::{Macro, Timer};
 use crate::profile_config::{
     CustomTheme, DockEntryPersist, GlobalConfig, GroupFolders, PaneLayoutPersist, PaneNode,
-    PluginsPersist, ProfileConfig, TickPersistConfig, TrackedAffect, UiConfig, VitalsConfig,
+    PluginsPersist, ProfileConfig, TrackedAffect, UiConfig, VitalsConfig,
 };
 use crate::profile_set::{AutoMatch, ProfileEntry, ProfileSet, ProfilesIndex, Scope, ScopeConfig};
+use crate::tick::TickConfig;
 
 /// The folder that holds the goldens and the old inputs.
 const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/config");
@@ -385,8 +386,8 @@ fn full_ui() -> UiConfig {
     }
 }
 
-fn full_tick() -> TickPersistConfig {
-    TickPersistConfig {
+fn full_tick() -> TickConfig {
+    TickConfig {
         enabled: false,
         interval_secs: 45,
         auto_fire: Some("score".into()),

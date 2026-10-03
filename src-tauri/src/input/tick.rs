@@ -134,10 +134,7 @@ fn slash_tick_show(profile: &Profile, now: Instant) -> InputResult {
     let cfg = &profile.tick.config;
     let mut lines = Vec::new();
     let state = if cfg.enabled { "enabled" } else { "disabled" };
-    lines.push(format!(
-        "tick {state}, interval {}s",
-        cfg.interval.as_secs()
-    ));
+    lines.push(format!("tick {state}, interval {}s", cfg.interval_secs));
     if let Some(remaining) = profile.tick.remaining(now) {
         lines.push(format!("  remaining {}s", remaining.as_secs()));
     } else {

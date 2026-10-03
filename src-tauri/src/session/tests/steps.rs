@@ -1090,7 +1090,7 @@ fn vosh_supplies_the_tick_target_tracked_affects_and_profile() {
         label: None,
     }];
     let supplied = super::client_values(&p, now);
-    let interval = i64::try_from(p.tick.config.interval.as_secs()).expect("seconds");
+    let interval = i64::try_from(p.tick.config.interval_secs).expect("seconds");
     assert_eq!(
         supplied.tick,
         Some(vosh_prompt::values::Tick {

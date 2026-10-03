@@ -7,15 +7,13 @@ use tauri::{AppHandle, State};
 use crate::app::events::TICK_CONFIG_CHANGED;
 use crate::app::state::SharedState;
 use crate::disk::save::{save_then_broadcast, SavePolicy};
-use crate::tick::{apply_tick_config, tick_config_payload, TickConfigPayload};
+use crate::tick::{apply_tick_config, TickConfig};
 
 /// Read the live tick configuration.
 #[tauri::command]
-pub(crate) async fn tick_get_config(
-    state: State<'_, SharedState>,
-) -> Result<TickConfigPayload, String> {
+pub(crate) async fn tick_get_config(state: State<'_, SharedState>) -> Result<TickConfig, String> {
     let p = state.profile.lock().await;
-    Ok(tick_config_payload(&p.tick.config))
+    Ok(p.tick.config.clone())
 }
 
 /// Apply a new tick configuration through [`apply_tick_config`], which
@@ -26,8 +24,8 @@ pub(crate) async fn tick_get_config(
 pub(crate) async fn tick_set_config(
     app: AppHandle,
     state: State<'_, SharedState>,
-    config: TickConfigPayload,
-) -> Result<TickConfigPayload, String> {
+    config: TickConfig,
+) -> Result<TickConfig, String> {
     let snapshot = {
         let mut p = state.profile.lock().await;
         apply_tick_config(&mut p.tick, &config, tokio::time::Instant::now())?

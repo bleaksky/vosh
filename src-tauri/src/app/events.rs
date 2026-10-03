@@ -40,7 +40,7 @@ use tracing::warn;
 use crate::app::state::{panes_generation, SharedState};
 use crate::profile::Profile;
 use crate::profile_config::PaneLayoutPersist;
-use crate::tick::{tick_config_payload, TickConfigPayload};
+use crate::tick::TickConfig;
 
 /// Send `event` to every open window, once. One emit reaches every
 /// listener in every window, main and Settings alike, whichever handle
@@ -213,7 +213,7 @@ pub(crate) const AFFECTS_DISPLAY_CHANGED: &str = "vosh://affects-display-changed
 pub(crate) const CHAT_COLORS_CHANGED: &str = "vosh://chat-colors-changed";
 /// Sent to every window with the tick settings whenever they change:
 /// a Settings Tick save, a `#tick` command, or a replace. The payload is
-/// a [`crate::tick::TickConfigPayload`].
+/// a [`crate::tick::TickConfig`].
 /// `subscribeTickConfigChanged` hears it.
 pub(crate) const TICK_CONFIG_CHANGED: &str = "vosh://tick-config-changed";
 
@@ -438,7 +438,7 @@ pub(crate) struct ProfileUiEvents {
     pub(crate) chip_style: String,
     pub(crate) affects_display: AffectsDisplay,
     pub(crate) chat_colors: std::collections::BTreeMap<String, String>,
-    pub(crate) tick: TickConfigPayload,
+    pub(crate) tick: TickConfig,
 }
 
 impl ProfileUiEvents {
@@ -487,7 +487,7 @@ pub(crate) fn profile_ui_events(p: &Profile) -> ProfileUiEvents {
         chip_style: p.ui.chip_style.clone(),
         affects_display: AffectsDisplay::of(&p.ui),
         chat_colors: p.ui.chat_colors.clone(),
-        tick: tick_config_payload(&p.tick.config),
+        tick: p.tick.config.clone(),
     }
 }
 
@@ -528,8 +528,9 @@ pub(crate) fn line_effect_events(
         return profile_ui_events(p).events();
     }
     if effects.tick_changed {
-        let tick = tick_config_payload(&p.tick.config);
-        return event_json(TICK_CONFIG_CHANGED, &tick).into_iter().collect();
+        return event_json(TICK_CONFIG_CHANGED, &p.tick.config)
+            .into_iter()
+            .collect();
     }
     Vec::new()
 }
