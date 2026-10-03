@@ -7,6 +7,7 @@
 //! before the other two choices existed, byte for byte.
 
 use super::*;
+#[cfg(native_surface)]
 use crate::output::{base64_encode, OutputPayload};
 use vosh_prompt::testkit::designs::DETAILED;
 
@@ -415,14 +416,17 @@ fn a_pinned_band_shows_the_design_or_the_game_prompt_with_its_tank_line() {
 }
 
 /// A design that draws the tank line itself, as Same as the game does.
+#[cfg(native_surface)]
 const TANK_DESIGN: &str = "%{if:tank}%tank: %{tank_hp:game}%nl%{end}<%hp>";
 
 /// Rows that show the tank line, drawn or as sent.
+#[cfg(native_surface)]
 fn tank_rows(rows: &[String]) -> usize {
     rows.iter().filter(|r| r.starts_with("Tester:")).count()
 }
 
 /// Take `template` as the design, as the card saves an edit, and repaint.
+#[cfg(native_surface)]
 fn edit_design(session: &mut Session, template: &str) -> Output {
     let mut config = session.p.prompt.config().clone();
     config.template = template.to_string();
@@ -430,6 +434,7 @@ fn edit_design(session: &mut Session, template: &str) -> Output {
     session.repaint()
 }
 
+#[cfg(native_surface)]
 #[test]
 fn an_edit_that_starts_or_stops_reading_the_tank_line_shows_it_once() {
     use vosh_prompt::PromptShow;
@@ -593,6 +598,7 @@ fn drawn_after_mark(bytes: &[u8]) -> Option<String> {
 /// The screen a native grid `columns` wide shows after `reads`, rows
 /// trimmed, up to the last row that shows anything, and where its cursor
 /// sits.
+#[cfg(native_surface)]
 fn grid_screen(reads: &[Read], columns: usize) -> (Vec<String>, (i32, usize)) {
     let mut grid = crate::term_grid::TermGrid::new(columns, 60);
     for read in reads {
@@ -608,6 +614,7 @@ fn grid_screen(reads: &[Read], columns: usize) -> (Vec<String>, (i32, usize)) {
 }
 
 /// The pinned screen of each stream in one read, drawing on, 80 wide.
+#[cfg(native_surface)]
 fn pinned_screen_of(name: &str) -> Vec<String> {
     let (_, bytes, prompt) = pinned_streams()
         .into_iter()
@@ -617,6 +624,7 @@ fn pinned_screen_of(name: &str) -> Vec<String> {
     grid_screen(&play_reads(&make, &bytes, &[]), 80).0
 }
 
+#[cfg(native_surface)]
 #[test]
 fn pinned_screens_are_the_same_at_every_split_on_the_native_grid() {
     use vosh_prompt::PromptShow;
@@ -640,6 +648,7 @@ fn pinned_screens_are_the_same_at_every_split_on_the_native_grid() {
     }
 }
 
+#[cfg(native_surface)]
 #[test]
 fn pinned_screens_keep_every_row_but_the_prompts() {
     const ROOM: [&str; 3] = [
@@ -712,6 +721,7 @@ fn pinned_screens_keep_every_row_but_the_prompts() {
     );
 }
 
+#[cfg(native_surface)]
 #[test]
 fn while_you_wait_the_text_ends_on_its_last_line() {
     use vosh_prompt::PromptShow;
@@ -721,6 +731,7 @@ fn while_you_wait_the_text_ends_on_its_last_line() {
     assert_eq!(cursor, (2, rows[2].len()));
 }
 
+#[cfg(native_surface)]
 #[test]
 fn your_echo_takes_the_row_the_prompt_held() {
     use vosh_prompt::testkit::{Build, Mud, Options};
@@ -772,6 +783,7 @@ fn your_echo_takes_the_row_the_prompt_held() {
 /// and as two cut at every place [`cuts`] names, with the native grid's
 /// screen of one read at 40 and 12 wide. The webview test replays them
 /// into xterm and holds its screens to the grid's.
+#[cfg(native_surface)]
 fn pinned_splits() -> serde_json::Value {
     use vosh_prompt::PromptShow;
     let mut streams = Vec::new();
@@ -816,6 +828,7 @@ fn pinned_splits() -> serde_json::Value {
 
 /// The file the webview test reads: the JSON of [`pinned_splits`],
 /// gzipped, as base64 text, since the webview test can import text only.
+#[cfg(native_surface)]
 fn pinned_splits_path() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../fixtures/prompt/aabahran/pinned/splits.b64")
@@ -823,6 +836,7 @@ fn pinned_splits_path() -> std::path::PathBuf {
 
 /// Write [`pinned_splits`] for the webview test when
 /// `VOSH_WRITE_PINNED_SPLITS` is set. Nothing otherwise.
+#[cfg(native_surface)]
 #[test]
 fn write_the_pinned_splits_for_the_webview() {
     use std::io::Write as _;
@@ -844,6 +858,7 @@ fn write_the_pinned_splits_for_the_webview() {
     std::fs::write(&path, lines.join("\n")).expect("the file");
 }
 
+#[cfg(native_surface)]
 #[test]
 fn the_pinned_splits_the_webview_replays_are_what_the_session_sends() {
     use std::io::Read as _;
@@ -862,6 +877,7 @@ fn the_pinned_splits_the_webview_replays_are_what_the_session_sends() {
     );
 }
 
+#[cfg(native_surface)]
 #[test]
 fn lifted_prompts_stay_in_the_text_with_marks_that_take_no_room() {
     use vosh_prompt::PromptShow;
@@ -916,6 +932,7 @@ fn lifted_prompts_stay_in_the_text_with_marks_that_take_no_room() {
     }
 }
 
+#[cfg(native_surface)]
 #[test]
 fn an_echo_that_ends_the_prompt_row_takes_the_row_a_pinned_prompt_left() {
     use vosh_prompt::testkit::{Build, Mud, Options};
@@ -971,6 +988,7 @@ fn an_echo_that_ends_the_prompt_row_takes_the_row_a_pinned_prompt_left() {
 /// Whether the row a pinned prompt left is open after `out`, the way the
 /// page tracks it from each payload (src/lib/stores/pinnedPromptStore.ts)
 /// to decide whether Enter on an empty line echoes a line end.
+#[cfg(native_surface)]
 fn pin_row_after(open: bool, out: &Output) -> bool {
     match out.pin_row {
         Some(open) => open,
@@ -978,6 +996,7 @@ fn pin_row_after(open: bool, out: &Output) -> bool {
     }
 }
 
+#[cfg(native_surface)]
 #[test]
 fn enter_on_an_empty_line_ends_the_row_of_a_prompt_left_in_the_text() {
     use vosh_prompt::PromptShow;
@@ -1030,6 +1049,7 @@ fn enter_on_an_empty_line_ends_the_row_of_a_prompt_left_in_the_text() {
 }
 
 /// `p` with a Prompts trigger on `hp` that does `action`.
+#[cfg(native_surface)]
 fn prompts_trigger(mut p: Profile, action: vosh_automation::trigger::TriggerAction) -> Profile {
     p.triggers
         .set(vosh_automation::trigger::Trigger {
@@ -1040,6 +1060,7 @@ fn prompts_trigger(mut p: Profile, action: vosh_automation::trigger::TriggerActi
     p
 }
 
+#[cfg(native_surface)]
 #[test]
 fn leaving_pinned_with_drawing_off_keeps_what_prompts_triggers_did() {
     use vosh_automation::trigger::TriggerAction;
@@ -1085,6 +1106,7 @@ fn leaving_pinned_with_drawing_off_keeps_what_prompts_triggers_did() {
 }
 
 /// Each lift on `grid`, as its rows' text, top first.
+#[cfg(native_surface)]
 fn lifted_rows(grid: &crate::term_grid::TermGrid) -> Vec<Vec<String>> {
     let mut lifts: Vec<(u64, Vec<String>)> = Vec::new();
     for span in grid.lift_spans(-1000, 1000) {
@@ -1102,6 +1124,7 @@ fn lifted_rows(grid: &crate::term_grid::TermGrid) -> Vec<Vec<String>> {
     lifts.into_iter().map(|(_, rows)| rows).collect()
 }
 
+#[cfg(native_surface)]
 #[test]
 fn changing_where_your_prompt_shows_mid_fight_moves_the_tank_line_with_it() {
     use vosh_prompt::testkit::{Build, Mud, Options};

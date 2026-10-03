@@ -4,6 +4,7 @@ mod broadcast;
 mod config_golden;
 #[cfg(native_surface)]
 mod echo;
+#[cfg(native_surface)]
 mod fake_mud;
 mod ipc_contract;
 #[cfg(native_surface)]
