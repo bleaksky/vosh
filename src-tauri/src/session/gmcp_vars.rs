@@ -1,8 +1,8 @@
-//! Auto-bind common GMCP packages onto session-scoped variables so users
-//! can reference them in aliases, triggers, and (later) scripts. Phase 4
-//! covers `Char.Vitals`, `Char.Status`, `Char.Name`, and `Room.Info`.
-//! `Char.Combat` was wired in as part of the deferred GMCP follow-ups so
-//! current target name and HP show up in the prompt-area HUD.
+//! Binds the common GMCP packages to session variables, so aliases,
+//! triggers and scripts can read them. `Char.Vitals` binds each field by
+//! its own name, `Char.Status` and `Char.Name` under `char_`, and
+//! `Room.Info` under `room_`. `Char.Combat` binds your fight target's
+//! name, health and condition under `target_`.
 
 use serde_json::Value;
 use vosh_automation::vars::{Scope, VariableStore};

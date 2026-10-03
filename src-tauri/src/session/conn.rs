@@ -62,7 +62,7 @@ pub(super) struct Conn<R: tauri::Runtime> {
     pub(super) server_echo: ServerEcho,
     pub(super) profile: Arc<Mutex<Profile>>,
     pub(super) lua_timers: SharedTimers,
-    /// Phase 1 audit instrumentation. See `PerfCounters` doc.
+    /// What the loop counts on its hot path, see [`PerfCounters`].
     pub(super) perf: PerfCounters,
     /// The output count after this session last wrote. Output from
     /// elsewhere moves it, which closes the open row.
@@ -638,12 +638,11 @@ async fn sleep_until_hold(until: Option<Instant>) {
 }
 
 /// Map a read-side `io::Error` to a short human-readable disconnect
-/// reason. The previous "read failed: Connection reset by peer (os
-/// error 54)" wording read as an internal panic; MUD quits routinely
-/// land here because Diku / ROM derivatives close with `SO_LINGER` 0 and
-/// the OS surfaces it as `ECONNRESET`. Phrase it like a normal disconnect
-/// instead, and fall back to the raw text for anything we have not
-/// classified.
+/// reason. MUD quits routinely land here, because Diku and ROM
+/// derivatives close with `SO_LINGER` 0 and the OS reports it as
+/// `ECONNRESET`, and the raw "read failed: Connection reset by peer (os
+/// error 54)" reads like an internal panic. So the common kinds read like
+/// a normal disconnect, and anything else falls back to the raw text.
 fn format_disconnect_reason(err: &std::io::Error) -> String {
     use std::io::ErrorKind;
     match err.kind() {

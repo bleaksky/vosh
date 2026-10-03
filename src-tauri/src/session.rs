@@ -359,10 +359,9 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
     info!(%host, port, tls, "session connected");
 
     // Seed the negotiator with the size we already know about so the
-    // first `DO NAWS` from the server gets a correct subneg, instead
-    // of the 80×24 default carrying through until the user nudges
-    // the window. Stale-NAWS was visible in `who` output wrapping
-    // mid-sentence before the user reported it.
+    // first `DO NAWS` from the server gets a correct subneg. Otherwise
+    // the 80×24 default carries through until you nudge the window,
+    // and `who` output wraps mid-sentence.
     let mut negotiator = Negotiator::new();
     negotiator.set_window_size(initial_window_size.0, initial_window_size.1);
     // Proactively ask for end-of-record so the server marks each prompt.

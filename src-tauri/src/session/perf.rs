@@ -9,15 +9,14 @@ pub(super) const PERF_REPORT_INTERVAL: Duration = Duration::from_secs(1);
 /// Rolled up once per second by `report_and_reset` and emitted as
 /// one `tracing::debug!` line on the `vosh::perf` target. Silent
 /// under default `RUST_LOG=info`; bring it back with
-/// `RUST_LOG=info,vosh::perf=debug` when revisiting the save/IO
-/// audit numbers, or `RUST_LOG=vosh::perf=debug` to see only the
-/// per-second rollup.
+/// `RUST_LOG=info,vosh::perf=debug` when measuring the save and IO
+/// paths, or `RUST_LOG=vosh::perf=debug` to see only the per-second
+/// rollup.
 ///
-/// Originally landed as Phase 1 instrumentation for the save/IO
-/// performance audit, kept in the code at debug level so future
-/// measurements do not need to re-instrument the hot path. The
-/// per-line `Instant::now()` cost is single-digit ns on macOS so
-/// the counters can stay live with no measurable overhead.
+/// The counters stay in the code at debug level, so a later
+/// measurement needs no new instrumenting of the hot path. The
+/// per-line `Instant::now()` costs single-digit ns on macOS, so they
+/// stay live with no measurable overhead.
 #[derive(Default)]
 pub(super) struct PerfCounters {
     pub(super) socket_reads: u64,

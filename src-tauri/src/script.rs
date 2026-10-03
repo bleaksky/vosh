@@ -161,14 +161,13 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
             }
             Action::SetPromptVar { name, value } => {
                 profile.prompt.vars.set_script(&name, &value);
-                // Always flag as changed. The previous "only fire on
-                // value change" semantics suppressed every emit after
-                // the first one when the player was at full vitals
-                // and the prompt repeated unchanged — which means the
-                // frontend never re-rendered the custom prompt template
-                // on subsequent prompts. The change-gate optimization
-                // saved a few IPC events per second; the trade-off is
-                // not worth losing the prompt-as-ready-indicator UX.
+                // Always flag as changed. A gate on change would send
+                // nothing after the first prompt while you sit at full
+                // vitals and the prompt repeats unchanged, so the page
+                // would never draw the custom prompt again for the
+                // prompts after it. The few events a second the gate
+                // would save are not worth losing the prompt as a sign
+                // that the game is ready.
                 result.prompt_vars_changed = true;
             }
             Action::RemovePromptVar(name) => {
@@ -209,9 +208,8 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
 /// Define the alias `name`, or replace the one of that name, the way
 /// `mud.alias`, `#alias`, and `#endrec` do. A replaced alias stays in its group, so
 /// the group still turns it on and off. In loadout mode that group is
-/// what keeps a character's alias to that character, and a script that
-/// set the alias again at launch used to put it in front of every other
-/// character too.
+/// what keeps a character's alias to that character, even when a script
+/// sets the alias again at launch.
 pub(crate) fn define_alias(
     profile: &mut Profile,
     name: impl Into<String>,
