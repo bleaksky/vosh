@@ -6,7 +6,7 @@
 //! These tests read the page sources in `src` and the app sources here
 //! and hold the names together, the way the preset tests read
 //! presets.ts. Every command the page invokes is registered in
-//! `generate_handler!` in lib.rs, and every invoke passes the keys its
+//! `generate_handler!` in ipc.rs, and every invoke passes the keys its
 //! `#[tauri::command]` fn reads, in camel case. Every event the page
 //! listens for has a sender, the app or the page itself. Every name
 //! either side sends has a page listener, or sits on [`UNHEARD`] with its
@@ -344,7 +344,7 @@ fn unregistered_invokes(contract: &Contract) -> Vec<String> {
         match &call.name {
             Name::Fixed(command) if !contract.commands.contains_key(command) => {
                 failures.push(format!(
-                    "{} invokes {command}, and generate_handler! in src-tauri/src/lib.rs \
+                    "{} invokes {command}, and generate_handler! in src-tauri/src/ipc.rs \
                      registers no command by that name.",
                     call.at()
                 ));
@@ -3188,7 +3188,7 @@ fn module_file(parent: &Path, m: &ModDecl) -> PathBuf {
     }
 }
 
-/// The commands `generate_handler!` registers in lib.rs.
+/// The commands `generate_handler!` registers in ipc.rs.
 fn registered(t: &[RustTok]) -> Result<BTreeSet<String>, String> {
     let start = t
         .windows(3)
@@ -3197,7 +3197,7 @@ fn registered(t: &[RustTok]) -> Result<BTreeSet<String>, String> {
                 && w[1] == RustTok::Punct('!')
                 && w[2] == RustTok::Punct('[')
         })
-        .ok_or("lib.rs has no generate_handler! the contract test can find")?;
+        .ok_or("ipc.rs has no generate_handler! the contract test can find")?;
     let open = start + 2;
     let close = matching(t, open).ok_or("generate_handler! never closes")?;
     let mut commands = BTreeSet::new();
@@ -3285,7 +3285,7 @@ fn read_app() -> App {
                 _ => {}
             }
         }
-        if rel == "src-tauri/src/lib.rs" {
+        if rel == "src-tauri/src/ipc.rs" {
             match registered(&code.tokens) {
                 Ok(commands) => registered_names = commands,
                 Err(e) => app.problems.push(e),
