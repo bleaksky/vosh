@@ -72,6 +72,7 @@ mod commands;
 #[cfg(test)]
 mod config_golden_tests;
 mod connection;
+mod disk;
 mod exit_flush;
 #[cfg(test)]
 mod fake_mud_tests;
