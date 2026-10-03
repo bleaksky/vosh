@@ -12,8 +12,8 @@ use crate::app::state::{
     note_ui_config_replaced, SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING,
 };
 use crate::disk::save::{persist_state, PERSIST_LOCK};
+use crate::output;
 use crate::profile_config::{GlobalConfig, ProfileConfig, SharedLayer};
-use crate::session;
 
 /// Lay loadout mode's catalog and active loadouts over the live profile
 /// `p`, right after a switch loaded a profile file into it. The catalog
@@ -339,7 +339,7 @@ async fn auto_switch_for_character<R: tauri::Runtime>(
             auto_switch_failed_line(&e)
         }
     };
-    session::emit_output(app, line.into_bytes());
+    output::emit_output(app, line.into_bytes());
 }
 
 /// The profile that `character` logging in on the live connection

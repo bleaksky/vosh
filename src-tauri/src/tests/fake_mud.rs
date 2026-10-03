@@ -464,10 +464,7 @@ fn base64_decodes_what_the_session_encodes() {
         b"foob",
         b"\x1b]7717;o;1\x07<1020>\xff",
     ] {
-        assert_eq!(
-            base64_decode(&crate::session::base64_encode(sample)),
-            sample
-        );
+        assert_eq!(base64_decode(&crate::output::base64_encode(sample)), sample);
     }
 }
 

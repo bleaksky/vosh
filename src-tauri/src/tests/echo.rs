@@ -61,7 +61,7 @@ fn slash_command_echoes_and_the_logs_reply_reach_the_native_grid() {
         .result
         .echo;
     assert_eq!(help.first().map(String::as_str), Some("slash commands:"));
-    crate::ipc::session::echo_lines(handle, &help);
+    crate::output::echo_lines(handle, &help);
 
     tauri::async_runtime::block_on(async {
         // `#logs` runs before anything that could save, and `look` is not

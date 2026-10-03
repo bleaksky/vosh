@@ -13,6 +13,7 @@ use super::show_tests::{
     HP,
 };
 use super::*;
+use crate::output::{base64_encode, OutputPayload};
 use vosh_prompt::values::overrides::{Overrides, Preview, PromptPreview};
 use vosh_prompt::PromptShow;
 

@@ -7,6 +7,7 @@
 //! before the other two choices existed, byte for byte.
 
 use super::*;
+use crate::output::{base64_encode, OutputPayload};
 use vosh_prompt::testkit::designs::DETAILED;
 
 /// The PROMPT the fake Aabahran prints, the one the wire fixtures carry.

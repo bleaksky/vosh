@@ -7,6 +7,7 @@
 
 use super::show_tests::{profile, showing, wire_fixture, Session, CODES};
 use super::*;
+use crate::output::OutputPayload;
 use vosh_prompt::values::overrides::{Preview, PromptPreview};
 use vosh_prompt::PromptShow;
 
