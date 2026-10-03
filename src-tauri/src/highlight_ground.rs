@@ -17,9 +17,9 @@ use vosh_automation::trigger::readable::Rgb;
 
 /// The ground packed as `0x01_rr_gg_bb`, so black is still a ground, or 0
 /// for none.
-pub(crate) static GROUND: AtomicU32 = AtomicU32::new(0);
+static GROUND: AtomicU32 = AtomicU32::new(0);
 
-pub(crate) fn pack(ground: Option<Rgb>) -> u32 {
+fn pack(ground: Option<Rgb>) -> u32 {
     ground.map_or(0, |(r, g, b)| {
         0x0100_0000 | (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b)
     })
@@ -32,6 +32,12 @@ fn unpack(bits: u32) -> Option<Rgb> {
 /// The ground trigger colors must read on, or `None` to draw them as set.
 pub(crate) fn get() -> Option<Rgb> {
     unpack(GROUND.load(Ordering::Acquire))
+}
+
+/// Set the ground for the lines that arrive from now on, or `None` to
+/// draw trigger colors as set.
+pub(crate) fn set(ground: Option<Rgb>) {
+    GROUND.store(pack(ground), Ordering::Release);
 }
 
 #[cfg(test)]

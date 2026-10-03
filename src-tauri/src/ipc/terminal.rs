@@ -3,13 +3,10 @@
 //! screen, loads the saved scrollback as a pane mounts, and reports the
 //! ground your highlight colors must read on.
 
-use std::sync::atomic::Ordering;
-
 use tauri::State;
 use vosh_automation::trigger::readable;
 
 use crate::app::state::SharedState;
-use crate::highlight_ground::{pack, GROUND};
 
 /// Write text the webview drew itself, such as your typed echo or an
 /// error notice. The native grid takes it too, as it takes every session
@@ -141,8 +138,7 @@ pub(crate) struct ScrollbackLoad {
 /// off. A background that does not read turns lifting off too.
 #[tauri::command]
 pub(crate) fn highlight_ground_set(background: Option<String>) {
-    let ground = background.as_deref().and_then(readable::parse_hex);
-    GROUND.store(pack(ground), Ordering::Release);
+    crate::highlight_ground::set(background.as_deref().and_then(readable::parse_hex));
 }
 
 #[cfg(test)]
