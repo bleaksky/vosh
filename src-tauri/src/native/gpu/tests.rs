@@ -7,21 +7,23 @@ use super::bands::{
     LiftBox, BAND_RADIUS, BAND_X, BAND_Y, BAND_Y_ADJACENT, LIGHT_RING, MAX_LIFT_ROWS,
 };
 use super::decor::{curl_coverage, line_instances, underline_rects, Decor};
-use super::frame::build_instances;
+use super::frame::{build_frame, build_instances, FrameInputs, FrameQuads};
 use super::style::{
     blend_over, blink_shown, blinks_visibly, color_to_rgba, draws_lines, linear_to_srgb,
     paint_to_rgba, resolve_chrome, rgb_to_rgba, styled_colors, underline_color, until_blink_flip,
-    ChromeTokens, Rgba, ANSI_16, CURRENT_MATCH_FALLBACK_ALPHA, DIVIDER_FALLBACK_ALPHA,
-    FIND_MATCH_FALLBACK_ALPHA, SCROLLBAR_FALLBACK_ALPHA, SELECTION_FALLBACK_ALPHA,
-    SELROW_FALLBACK_ALPHA,
+    ChromePaint, ChromeTokens, Rgba, ANSI_16, CURRENT_MATCH_FALLBACK_ALPHA, DIVIDER_FALLBACK_ALPHA,
+    FIND_MATCH_FALLBACK_ALPHA, SCROLLBAR_FALLBACK_ALPHA, SCROLLBAR_TRACK_SHARE,
+    SELECTION_FALLBACK_ALPHA, SELROW_FALLBACK_ALPHA,
 };
 use super::*;
 use crate::color::Paint;
 use crate::native::grid::regions::LiftSpan;
-use crate::native::grid::{CellFlags, Underline};
+use crate::native::grid::{CellFlags, TermGrid, Underline};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
 use font_kit::font::Font;
+use std::ops::Range;
 use std::sync::Arc;
+use vosh_prompt::stage::{lift_end, lift_start, Output};
 
 #[test]
 fn spec_passes_through() {
@@ -1628,4 +1630,274 @@ fn the_curl_clears_the_letters_at_every_line_height() {
             );
         }
     }
+}
+
+// Frame tests. They drive build_frame with a fed grid and a fixed glyph
+// lookup, so they run on a machine without a GPU, where the tests that
+// render above return early.
+
+const FRAME_CELL: (u32, u32) = (10, 20);
+const FRAME_GLYPH_UV: ([f32; 2], [f32; 2]) = ([0.25, 0.25], [0.5, 0.5]);
+const FRAME_SOLID_UV: ([f32; 2], [f32; 2]) = ([0.9, 0.9], [0.9, 0.9]);
+const FRAME_CURL_UV: ([f32; 2], [f32; 2]) = ([0.6, 0.6], [0.7, 0.7]);
+/// The size of each kind of quad in a test frame. A cell's ground, its
+/// glyph in a slot twice the cell wide, and a line one pixel thick under
+/// or through it.
+const GROUND_QUAD: [f32; 2] = [10.0, 20.0];
+const GLYPH_QUAD: [f32; 2] = [20.0, 20.0];
+const LINE_QUAD: [f32; 2] = [10.0, 1.0];
+
+/// What a frame of `grid` takes at 1x with nothing hovered, found or
+/// lifted, in a pane exactly as big as the grid. A washed row mixes its
+/// field up from a black ground, and each chrome color differs from the
+/// others and from the text.
+fn frame_inputs(grid: &TermGrid) -> FrameInputs {
+    let (cell_w, cell_h) = FRAME_CELL;
+    let w = grid.columns() as u32 * cell_w;
+    let h = grid.screen_lines() as u32 * cell_h;
+    FrameInputs {
+        hover: None,
+        find: Vec::new(),
+        find_active: None,
+        cell: FRAME_CELL,
+        slot_w: 2 * cell_w,
+        decor: decor(cell_w, cell_h, 15, 1.0),
+        solid_uv: FRAME_SOLID_UV,
+        curl_uv: FRAME_CURL_UV,
+        surface: (w, h),
+        split_ratio: 0.66,
+        placement: Placement {
+            x: 0,
+            y: 0,
+            scale: 1.0,
+            target: [w, h],
+            blink_hidden: false,
+        },
+        chrome: ChromePaint {
+            divider: paint(1, 2, 3, 1.0),
+            selection: paint(60, 80, 120, 0.5),
+            find_match: paint(200, 180, 0, 0.35),
+            current_match: paint(255, 140, 0, 0.65),
+            link: paint(90, 160, 255, 1.0),
+            scrollbar: paint(120, 120, 120, 0.45),
+            selrow: paint(40, 44, 52, 1.0),
+            ring: None,
+        },
+        ground: Rgb { r: 0, g: 0, b: 0 },
+        palette: ANSI_16,
+        bands: false,
+        reach: 0.0,
+    }
+}
+
+fn lay_out(grid: &TermGrid, inputs: &FrameInputs) -> FrameQuads {
+    build_frame(grid, inputs, |_, _, _| FRAME_GLYPH_UV)
+}
+
+/// The quads in `range` of `frame` that are `size` big, in draw order.
+fn quads_in(frame: &FrameQuads, range: &Range<u32>, size: [f32; 2]) -> Vec<CellInstance> {
+    frame.instances[range.start as usize..range.end as usize]
+        .iter()
+        .filter(|q| q.size == size)
+        .copied()
+        .collect()
+}
+
+/// Every quad of `frame` that is `size` big, in draw order.
+fn quads(frame: &FrameQuads, size: [f32; 2]) -> Vec<CellInstance> {
+    quads_in(frame, &(0..frame.instances.len() as u32), size)
+}
+
+/// The ground of the cell at `col` on screen row `row`, in a frame that
+/// is not split.
+fn ground_at(frame: &FrameQuads, col: usize, row: usize) -> Rgba {
+    let at = [col as f32 * 10.0, row as f32 * 20.0];
+    quads(frame, GROUND_QUAD)
+        .into_iter()
+        .find(|q| q.offset == at)
+        .expect("every cell has a ground")
+        .color
+}
+
+/// A grid `rows` tall fed `lines` numbered lines, scrolled `up` lines
+/// into its history.
+fn scrolled_grid(cols: usize, rows: usize, lines: usize, up: i32) -> TermGrid {
+    let mut grid = TermGrid::new(cols, rows);
+    let text: Vec<String> = (0..lines).map(|n| n.to_string()).collect();
+    grid.feed(text.join("\r\n").as_bytes());
+    grid.scroll(up);
+    grid
+}
+
+#[test]
+fn the_split_opens_two_regions_at_the_drawn_divider_and_find_closes_it() {
+    // Ten rows scrolled five lines up.
+    let grid = scrolled_grid(4, 10, 30, 5);
+    let mut inputs = frame_inputs(&grid);
+    let frame = lay_out(&grid, &inputs);
+    // 0.66 of the 200 px pane is 132 px. History fills the seven rows
+    // the divider reaches into, and the live tail the four from row 6
+    // down, each scissored at the divider.
+    assert_eq!(frame.drawn.divider, Some(132.0 / 200.0));
+    assert_eq!(frame.regions.len(), 2);
+    assert_eq!(
+        quads_in(&frame, &frame.regions[0], GROUND_QUAD).len(),
+        7 * 4
+    );
+    let live = quads_in(&frame, &frame.regions[1], GROUND_QUAD);
+    assert_eq!(live.len(), 4 * 4);
+    assert_eq!(live[0].offset, [0.0, 120.0]);
+    // The divider line, two pixels thick, centers on 132 px in the
+    // divider color.
+    let divider = quads(&frame, [40.0, 2.0]);
+    assert_eq!(divider.len(), 1);
+    assert_eq!(divider[0].offset, [0.0, 131.0]);
+    assert_eq!(divider[0].color, paint_to_rgba(inputs.chrome.divider));
+    // While find is open the view shows whole, with no divider.
+    inputs.find = vec![(0, 0, 1)];
+    let found = lay_out(&grid, &inputs);
+    assert_eq!(found.drawn.divider, None);
+    assert_eq!(found.regions.len(), 1);
+    assert_eq!(quads(&found, [40.0, 2.0]), []);
+}
+
+#[test]
+fn find_matches_take_the_match_color_and_the_one_find_is_on_takes_its_own() {
+    let mut grid = TermGrid::new(10, 1);
+    grid.feed(b"alpha beta");
+    let mut inputs = frame_inputs(&grid);
+    inputs.find = vec![(0, 0, 5), (0, 6, 10)];
+    inputs.find_active = Some((0, 6, 10));
+    let frame = lay_out(&grid, &inputs);
+    // The space between the matches keeps the plain ground.
+    let plain = ground_at(&frame, 5, 0);
+    let found = blend_over(inputs.chrome.find_match, plain);
+    let current = blend_over(inputs.chrome.current_match, plain);
+    assert_ne!(found, current);
+    for col in 0..5 {
+        assert_eq!(ground_at(&frame, col, 0), found, "column {col}");
+    }
+    for col in 6..10 {
+        assert_eq!(ground_at(&frame, col, 0), current, "column {col}");
+    }
+}
+
+#[test]
+fn a_hovered_link_takes_the_link_color_and_a_single_underline() {
+    // The link carries a double underline of its own.
+    let mut grid = TermGrid::new(30, 1);
+    grid.feed(b"go to \x1b[4:2mhttps://example.org\x1b[0m now");
+    let mut inputs = frame_inputs(&grid);
+    assert_eq!(quads(&lay_out(&grid, &inputs), LINE_QUAD).len(), 2 * 19);
+    inputs.hover = Some((0, 6, 25));
+    let frame = lay_out(&grid, &inputs);
+    let link = paint_to_rgba(inputs.chrome.link);
+    let glyphs = quads(&frame, GLYPH_QUAD);
+    assert_eq!(glyphs.len(), 26);
+    for glyph in &glyphs {
+        let col = (glyph.offset[0] / 10.0) as usize;
+        assert_eq!(glyph.color == link, (6..25).contains(&col), "column {col}");
+    }
+    // Hovered, one plain underline under each cell of the link, in the
+    // link color.
+    let lines = quads(&frame, LINE_QUAD);
+    assert_eq!(lines.len(), 19);
+    for (line, col) in lines.iter().zip(6..25) {
+        assert_eq!(line.offset, [col as f32 * 10.0, inputs.decor.under as f32]);
+        assert_eq!(line.color, link);
+    }
+}
+
+#[test]
+fn the_scrollbar_track_spans_the_pane_and_the_thumb_sits_at_the_offset() {
+    // Five rows over fifteen lines of history, scrolled five lines up.
+    // The thumb shows five rows of twenty, a quarter of the pane, and
+    // sits ten lines of fifteen down its travel.
+    let grid = scrolled_grid(4, 5, 20, 5);
+    assert_eq!(grid.scrollback_len(), 15);
+    let inputs = frame_inputs(&grid);
+    let frame = lay_out(&grid, &inputs);
+    let thumb = paint_to_rgba(inputs.chrome.scrollbar);
+    let mut track = thumb;
+    track[3] *= SCROLLBAR_TRACK_SHARE;
+    let bar = |offset, size, color| CellInstance {
+        offset,
+        size,
+        color,
+        uv_min: FRAME_SOLID_UV.0,
+        uv_max: FRAME_SOLID_UV.1,
+    };
+    // 0.45 of the 10 px cell, at the right edge of the 40 px pane.
+    assert_eq!(
+        frame.instances[frame.overlay.start as usize..frame.overlay.end as usize],
+        [
+            bar([35.5, 0.0], [4.5, 100.0], track),
+            bar([35.5, 50.0], [4.5, 25.0], thumb),
+        ]
+    );
+}
+
+#[test]
+fn blinking_text_reports_blinks_and_its_hidden_half_keeps_only_the_ground() {
+    let mut grid = TermGrid::new(7, 1);
+    grid.feed(b"\x1b[5;4;9mBlink\x1b[0m");
+    let mut inputs = frame_inputs(&grid);
+    let shown = lay_out(&grid, &inputs);
+    inputs.placement.blink_hidden = true;
+    let hidden = lay_out(&grid, &inputs);
+    assert!(shown.drawn.blinks && hidden.drawn.blinks);
+    // Shown, five letters, each underlined and struck through.
+    assert_eq!(quads(&shown, GLYPH_QUAD).len(), 5);
+    assert_eq!(quads(&shown, LINE_QUAD).len(), 10);
+    // Hidden, no glyph and no line, and every cell keeps its ground.
+    assert_eq!(quads(&hidden, GLYPH_QUAD), []);
+    assert_eq!(quads(&hidden, LINE_QUAD), []);
+    assert_eq!(quads(&hidden, GROUND_QUAD), quads(&shown, GROUND_QUAD));
+    // Steady text asks for no flip.
+    let mut steady = TermGrid::new(7, 1);
+    steady.feed(b"\x1b[4mSteady\x1b[0m");
+    assert!(!lay_out(&steady, &frame_inputs(&steady)).drawn.blinks);
+}
+
+#[test]
+fn a_lift_draws_on_a_band_only_while_bands_are_on() {
+    let mut grid = TermGrid::new(20, 2);
+    let mut out = Output::new(false);
+    out.text(&[lift_start(1).as_slice(), b"100hp", &lift_end(1)].concat());
+    grid.session_output(&out);
+    let mut inputs = frame_inputs(&grid);
+    inputs.bands = true;
+    let lifted = lay_out(&grid, &inputs);
+    // One fill in the row fill color, and no ring on a dark theme. It
+    // reaches 4 px past the five letters on each side and 2 px past
+    // the row above and below.
+    assert_eq!(lifted.bands.len(), 1);
+    let band = &lifted.instances[lifted.bands[0].start as usize..lifted.bands[0].end as usize];
+    assert_eq!(band.len(), 1);
+    assert_eq!(band[0].offset, [-4.0, -2.0]);
+    assert_eq!(band[0].size, [58.0, 24.0]);
+    assert_eq!(band[0].color, paint_to_rgba(inputs.chrome.selrow));
+    // The ground under the letters draws clear, so the band shows.
+    assert_eq!(ground_at(&lifted, 0, 0), [0.0; 4]);
+    inputs.bands = false;
+    let flat = lay_out(&grid, &inputs);
+    assert_eq!(flat.bands, []);
+    assert_eq!(ground_at(&flat, 0, 0)[3], 1.0);
+}
+
+#[test]
+fn a_washed_row_carries_its_field_across_the_row() {
+    let (r, g, b) = vosh_automation::trigger::NamedColor::Red.wash_tint();
+    let mut grid = TermGrid::new(12, 2);
+    grid.feed(format!("\x1b[48;2;{r};{g};{b}mwashed\x1b[0m line\r\nplain").as_bytes());
+    let frame = lay_out(&grid, &frame_inputs(&grid));
+    // ANSI red, 205, carried 18 percent of the way up from the black
+    // ground.
+    let field = rgb_to_rgba(Rgb { r: 37, g: 0, b: 0 });
+    // The cells that carry the signal, and the plain ground after them.
+    for col in 0..12 {
+        assert_eq!(ground_at(&frame, col, 0), field, "column {col}");
+    }
+    // The row below is not washed.
+    assert_ne!(ground_at(&frame, 0, 1), field);
 }
