@@ -252,14 +252,11 @@ pub(crate) const NATIVE_SCROLL: &str = "vosh://native-scroll";
 /// of characters copied. `startCopyToasts` hears it.
 #[cfg(native_surface)]
 pub(crate) const NATIVE_COPIED: &str = "vosh://native-copied";
-/// A click on the native surface, which eats the DOM mouseup, so the
-/// command line takes focus. The payload is null. `App` hears it.
+/// A click the page forwarded to the native surface ended. The page
+/// cancels the press, so no DOM mouseup follows, and the command line
+/// takes focus from this instead. The payload is null. `App` hears it.
 #[cfg(native_surface)]
 pub(crate) const TERMINAL_CLICKED: &str = "vosh://terminal-clicked";
-/// A right click on the native surface. The payload is `[x, y]` in CSS
-/// pixels. `App` hears it and opens the terminal menu there.
-#[cfg(native_surface)]
-pub(crate) const TERMINAL_CONTEXT_MENU: &str = "vosh://terminal-context-menu";
 /// The pointer over the native surface wants another cursor. The
 /// payload is the CSS cursor name. `App` hears it.
 #[cfg(native_surface)]

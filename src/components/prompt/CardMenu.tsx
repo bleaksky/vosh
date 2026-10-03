@@ -105,7 +105,6 @@ export function CardMenu({
       role="menu"
       aria-label={label}
       tabIndex={-1}
-      data-occludes-surface="true"
       className={['pc-menu', className].filter(Boolean).join(' ')}
       style={{
         width,

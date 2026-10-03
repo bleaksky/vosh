@@ -1,6 +1,6 @@
 //! macOS window glue for the native surface: a `CAMetalLayer`-backed
-//! `NSView` subclass composited over the `WKWebView`, with `AppKit` mouse,
-//! cursor-rect, clipboard, and URL-open plumbing. All raw objc2
+//! `NSView` subclass under the `WKWebView`, with clipboard and URL-open
+//! plumbing. The page above it takes every pointer event. All raw objc2
 //! message-sends, same style as `enable_macos_spellcheck`; every view
 //! touch happens on the main thread.
 
@@ -9,11 +9,7 @@ use std::ptr::NonNull;
 use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 use std::sync::OnceLock;
 
-use super::{
-    context_click, divider_frac, load_f32, middle_click, pointer_down, pointer_dragged,
-    pointer_moved, pointer_up, render, surface_slot, wheel_scroll, PointerEvent, SurfaceHandle,
-    DPR, DRAGGING, UNDERLAY,
-};
+use super::{render, surface_slot, SurfaceHandle};
 use objc2::declare::ClassBuilder;
 use objc2::runtime::{AnyClass, AnyObject, Sel};
 use objc2::{class, msg_send, sel, Encode, Encoding};
@@ -234,9 +230,9 @@ pub(super) fn set_hidden(platform: &PlatformSurface, hidden: bool) {
     }
 }
 
-/// The view's size in device pixels at `dpr`. Under the underlay the view
-/// spans the window and `AppKit` resizes it, so the surface reads its size
-/// here instead of from the frontend. Main thread only.
+/// The view's size in device pixels at `dpr`. The view spans the window
+/// and `AppKit` resizes it, so the surface reads its size here instead of
+/// from the frontend. Main thread only.
 pub(super) fn view_size_px(platform: &PlatformSurface, dpr: f64) -> (u32, u32) {
     // SAFETY: main thread; the view is live.
     let bounds: CGRect = unsafe { msg_send![platform.view, bounds] };
@@ -301,55 +297,6 @@ pub(super) fn set_backdrop(platform: &PlatformSurface, rgb: (u8, u8, u8)) {
     }
 }
 
-/// Move the view to the pane rect (CSS px, top-left origin) and keep the
-/// Metal layer's scale in sync. Main thread only.
-pub(super) fn set_frame(
-    platform: &PlatformSurface,
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-    dpr: f64,
-) {
-    // SAFETY: main thread; the view and layer are live.
-    unsafe {
-        // The view's superview is the content view; AppKit frames use a
-        // bottom-left origin, so flip the top-left y the webview reports.
-        let superview: *mut AnyObject = msg_send![platform.view, superview];
-        let content_h = if superview.is_null() {
-            y + height
-        } else {
-            let cv_bounds: CGRect = msg_send![superview, bounds];
-            cv_bounds.size.height
-        };
-        let frame = CGRect {
-            origin: CGPoint {
-                x,
-                y: content_h - (y + height),
-            },
-            size: CGSize { width, height },
-        };
-        let _: () = msg_send![platform.view, setFrame: frame];
-        let _: () = msg_send![platform.metal_layer, setContentsScale: dpr];
-    }
-}
-
-/// Post-redraw hook: refresh the divider cursor rect for the current split
-/// state, except mid-drag (`AppKit` holds the cursor through the drag).
-pub(super) fn after_redraw(platform: &PlatformSurface) {
-    // Under the underlay the page owns the cursor.
-    if UNDERLAY || DRAGGING.load(std::sync::atomic::Ordering::Acquire) {
-        return;
-    }
-    // SAFETY: main thread; the view and its window are live.
-    unsafe {
-        let window: *mut AnyObject = msg_send![platform.view, window];
-        if !window.is_null() {
-            let _: () = msg_send![window, invalidateCursorRectsForView: platform.view];
-        }
-    }
-}
-
 /// Put `text` on the general pasteboard (UTF-8 plain text).
 pub(super) fn set_clipboard(text: &str) {
     let Ok(text_c) = std::ffi::CString::new(text) else {
@@ -397,193 +344,22 @@ pub(super) fn open_url(url: &str) {
     }
 }
 
-/// Build the shared pointer event (surface-physical pixels, top-left
-/// origin) from an `AppKit` mouse event.
-fn pointer_event(this: *mut AnyObject, event: *mut AnyObject) -> Option<PointerEvent> {
-    if this.is_null() || event.is_null() {
-        return None;
-    }
-    let dpr = f64::from(load_f32(&DPR, 2.0));
-    // SAFETY: AppKit hands us a live NSView (`this`) and NSEvent.
-    unsafe {
-        let win_pt: CGPoint = msg_send![event, locationInWindow];
-        let view_pt: CGPoint =
-            msg_send![this, convertPoint: win_pt, fromView: std::ptr::null_mut::<AnyObject>()];
-        let bounds: CGRect = msg_send![this, bounds];
-        let flags: usize = msg_send![event, modifierFlags];
-        Some(PointerEvent {
-            x: view_pt.x * dpr,
-            // NSView is bottom-left; flip to top-down, then scale to pixels.
-            y: (bounds.size.height - view_pt.y) * dpr,
-            width: bounds.size.width * dpr,
-            height: bounds.size.height * dpr,
-            open_modifier: flags & (1 << 20) != 0, // NSEventModifierFlagCommand
-        })
-    }
+/// The view never takes a click. The webview sits above it and forwards
+/// pointer input over IPC, so hit testing skips it even if something
+/// reorders the views.
+extern "C" fn hit_test(_this: *mut AnyObject, _cmd: Sel, _point: CGPoint) -> *mut AnyObject {
+    std::ptr::null_mut()
 }
 
-/// Mouse-wheel handler. `AppKit` calls this on the main thread with a live
-/// `NSEvent`; the shared accumulator scrolls the grid by whole lines.
-extern "C" fn scroll_wheel(_this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
-    if event.is_null() {
-        return;
-    }
-    // SAFETY: AppKit hands us a valid NSEvent for the scrollWheel: selector.
-    let delta_y: f64 = unsafe { msg_send![event, scrollingDeltaY] };
-    wheel_scroll(delta_y);
-}
-
-/// Grab the scrollbar or divider if the press lands on one, otherwise
-/// begin a selection. Cmd+click opens a URL under the pointer.
-extern "C" fn mouse_down(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
-    if let Some(ev) = pointer_event(this, event) {
-        pointer_down(&ev);
-    }
-}
-
-/// Move the scrollbar thumb or divider, or extend the selection.
-extern "C" fn mouse_dragged(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
-    if let Some(ev) = pointer_event(this, event) {
-        pointer_dragged(&ev);
-    }
-}
-
-extern "C" fn mouse_up(_this: *mut AnyObject, _cmd: Sel, _event: *mut AnyObject) {
-    pointer_up();
-}
-
-/// Right-click opens the frontend's terminal context menu at the pointer.
-extern "C" fn right_mouse_down(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
-    if let Some(ev) = pointer_event(this, event) {
-        context_click(&ev);
-    }
-}
-
-/// Middle-click (buttonNumber 2) toggles the split-scrollback view.
-extern "C" fn other_mouse_down(_this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
-    if event.is_null() {
-        return;
-    }
-    // SAFETY: AppKit hands us a live NSEvent.
-    let button: isize = unsafe { msg_send![event, buttonNumber] };
-    if button == 2 {
-        middle_click();
-    }
-}
-
-/// Track the URL under the pointer so the renderer can underline it.
-extern "C" fn mouse_moved(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
-    pointer_moved(pointer_event(this, event).as_ref());
-}
-
-extern "C" fn mouse_exited(_this: *mut AnyObject, _cmd: Sel, _event: *mut AnyObject) {
-    pointer_moved(None);
-}
-
-/// Cursor rects: an arrow over the surface (so the webview's text cursor
-/// does not bleed through) and a vertical-resize cursor over the divider
-/// band while the split is open. `AppKit` holds the rect's cursor through a
-/// drag started inside it, so the divider drag shows the resize cursor.
-extern "C" fn reset_cursor_rects(this: *mut AnyObject, _cmd: Sel) {
-    // Under the underlay the view spans the whole window beneath the page.
-    // A cursor rect here would fight WebKit's cursor everywhere.
-    if UNDERLAY || this.is_null() {
-        return;
-    }
-    // SAFETY: AppKit calls this with a live NSView.
-    unsafe {
-        let bounds: CGRect = msg_send![this, bounds];
-        let arrow: *mut AnyObject = msg_send![class!(NSCursor), arrowCursor];
-        let Some(frac) = divider_frac() else {
-            // No divider: one arrow rect over the whole surface (so the
-            // webview's text cursor does not bleed through).
-            let _: () = msg_send![this, addCursorRect: bounds, cursor: arrow];
-            return;
-        };
-        // Overlapping cursor rects are undefined behavior in AppKit, so the
-        // surface splits into three DISJOINT rects: arrow below the band,
-        // the vertical-resize band on the divider, arrow above it.
-        // NSView is bottom-left; the divider sits `frac` down from the top.
-        let width = bounds.size.width;
-        let height = bounds.size.height;
-        let band = 12.0_f64;
-        let band_bottom = (height * (1.0 - f64::from(frac)) - band / 2.0).max(0.0);
-        let band_top = (band_bottom + band).min(height);
-        let rect = |y0: f64, y1: f64| CGRect {
-            origin: CGPoint { x: 0.0, y: y0 },
-            size: CGSize {
-                width,
-                height: (y1 - y0).max(0.0),
-            },
-        };
-        if band_bottom > 0.0 {
-            let _: () = msg_send![this, addCursorRect: rect(0.0, band_bottom), cursor: arrow];
-        }
-        let resize: *mut AnyObject = msg_send![class!(NSCursor), resizeUpDownCursor];
-        let _: () = msg_send![this, addCursorRect: rect(band_bottom, band_top), cursor: resize];
-        if band_top < height {
-            let _: () = msg_send![this, addCursorRect: rect(band_top, height), cursor: arrow];
-        }
-    }
-}
-
-/// Under the underlay the view never takes a click. The webview sits above
-/// it and forwards pointer input over IPC, so hit testing skips it even if
-/// something reorders the views.
-extern "C" fn hit_test(this: *mut AnyObject, _cmd: Sel, point: CGPoint) -> *mut AnyObject {
-    if UNDERLAY {
-        return std::ptr::null_mut();
-    }
-    // SAFETY: AppKit calls this with a live NSView; defer to NSView.
-    unsafe { msg_send![super(this, class!(NSView)), hitTest: point] }
-}
-
-/// A minimal `NSView` subclass that forwards mouse-wheel events to the grid.
+/// A minimal `NSView` subclass that hit testing always passes over.
 /// Registered once; the surface view is an instance of it.
 fn surface_view_class() -> &'static AnyClass {
     static CLASS: OnceLock<usize> = OnceLock::new();
     let ptr = *CLASS.get_or_init(|| {
         let mut builder = ClassBuilder::new("VoshSurfaceView", class!(NSView))
             .expect("VoshSurfaceView already registered");
-        // SAFETY: the signatures match the overridden NSView/NSResponder
-        // methods.
+        // SAFETY: the signature matches the overridden NSView method.
         unsafe {
-            builder.add_method(
-                sel!(scrollWheel:),
-                scroll_wheel as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
-            );
-            builder.add_method(
-                sel!(mouseDown:),
-                mouse_down as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
-            );
-            builder.add_method(
-                sel!(mouseDragged:),
-                mouse_dragged as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
-            );
-            builder.add_method(
-                sel!(mouseUp:),
-                mouse_up as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
-            );
-            builder.add_method(
-                sel!(rightMouseDown:),
-                right_mouse_down as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
-            );
-            builder.add_method(
-                sel!(otherMouseDown:),
-                other_mouse_down as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
-            );
-            builder.add_method(
-                sel!(resetCursorRects),
-                reset_cursor_rects as extern "C" fn(*mut AnyObject, Sel),
-            );
-            builder.add_method(
-                sel!(mouseMoved:),
-                mouse_moved as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
-            );
-            builder.add_method(
-                sel!(mouseExited:),
-                mouse_exited as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
-            );
             builder.add_method(
                 sel!(hitTest:),
                 hit_test as extern "C" fn(*mut AnyObject, Sel, CGPoint) -> *mut AnyObject,
@@ -618,23 +394,15 @@ pub(super) fn install(window: &tauri::WebviewWindow) -> Result<(), tauri::Error>
                 return;
             }
 
-            // Under the underlay the view spans the webview's parent and sits
-            // below the webview in it. Otherwise it starts at a placeholder
-            // frame that the first set_bounds moves over the pane.
+            // The view spans the webview's parent and sits below the
+            // webview in it.
             let parent: *mut AnyObject = msg_send![wk, superview];
-            let parent = if parent.is_null() { content_view } else { parent };
-            let frame = if UNDERLAY {
-                let bounds: CGRect = msg_send![parent, bounds];
-                bounds
+            let parent = if parent.is_null() {
+                content_view
             } else {
-                CGRect {
-                    origin: CGPoint { x: 0.0, y: 0.0 },
-                    size: CGSize {
-                        width: 320.0,
-                        height: 200.0,
-                    },
-                }
+                parent
             };
+            let frame: CGRect = msg_send![parent, bounds];
             let scale: f64 = msg_send![ns_window, backingScaleFactor];
 
             let view: *mut AnyObject = msg_send![surface_view_class(), alloc];
@@ -659,49 +427,26 @@ pub(super) fn install(window: &tauri::WebviewWindow) -> Result<(), tauri::Error>
             }
             let _: () = msg_send![view, setLayer: metal_layer];
             let _: () = msg_send![view, setWantsLayer: true];
-            if UNDERLAY {
-                // Pin the drawn frame to the top-left so a resize that
-                // outpaces the next render exposes backdrop at the right
-                // and bottom instead of stretching the text. Clip to the
-                // window's curve, read at runtime and square in
-                // fullscreen.
-                let top_left: *mut AnyObject = msg_send![
-                    class!(NSString),
-                    stringWithUTF8String: c"topLeft".as_ptr()
-                ];
-                let _: () = msg_send![metal_layer, setContentsGravity: top_left];
-                apply_corner_radius(ns_window, metal_layer);
-                let _: () = msg_send![metal_layer, setMasksToBounds: true];
-                UNDERLAY_LAYER.store(metal_layer, Ordering::Release);
-                observe_full_screen(ns_window);
-                // NSViewWidthSizable | NSViewHeightSizable: AppKit resizes
-                // the view with the window in the same layout pass.
-                let _: () = msg_send![view, setAutoresizingMask: 18_usize];
-                // NSWindowBelow (-1): under the webview in its parent.
-                let _: () = msg_send![parent, addSubview: view, positioned: -1_isize, relativeTo: wk];
-            } else {
-                let _: () = msg_send![content_view, addSubview: view];
-                // Tracking area for URL-hover: MouseMoved |
-                // MouseEnteredAndExited | ActiveInKeyWindow | InVisibleRect.
-                // InVisibleRect keeps it sized to the view automatically, so
-                // no manual resize tracking.
-                let opts: usize = 0x02 | 0x01 | 0x20 | 0x200;
-                let area: *mut AnyObject = msg_send![class!(NSTrackingArea), alloc];
-                let zero = CGRect {
-                    origin: CGPoint { x: 0.0, y: 0.0 },
-                    size: CGSize {
-                        width: 0.0,
-                        height: 0.0,
-                    },
-                };
-                let area: *mut AnyObject = msg_send![area, initWithRect: zero, options: opts, owner: view, userInfo: std::ptr::null_mut::<AnyObject>()];
-                if !area.is_null() {
-                    let _: () = msg_send![view, addTrackingArea: area];
-                }
-            }
-            // Start hidden. The surface is opaque and would occlude xterm,
-            // so it stays invisible until the frontend opts in (flag) and
-            // reports pane bounds, which reveals and positions it.
+            // Pin the drawn frame to the top-left so a resize that outpaces
+            // the next render exposes backdrop at the right and bottom
+            // instead of stretching the text. Clip to the window's curve,
+            // read at runtime and square in fullscreen.
+            let top_left: *mut AnyObject = msg_send![
+                class!(NSString),
+                stringWithUTF8String: c"topLeft".as_ptr()
+            ];
+            let _: () = msg_send![metal_layer, setContentsGravity: top_left];
+            apply_corner_radius(ns_window, metal_layer);
+            let _: () = msg_send![metal_layer, setMasksToBounds: true];
+            UNDERLAY_LAYER.store(metal_layer, Ordering::Release);
+            observe_full_screen(ns_window);
+            // NSViewWidthSizable | NSViewHeightSizable: AppKit resizes the
+            // view with the window in the same layout pass.
+            let _: () = msg_send![view, setAutoresizingMask: 18_usize];
+            // NSWindowBelow (-1): under the webview in its parent.
+            let _: () = msg_send![parent, addSubview: view, positioned: -1_isize, relativeTo: wk];
+            // Start hidden until the frontend opts in (flag) and reports
+            // pane bounds, which reveals the surface and places the grid.
             let _: () = msg_send![view, setHidden: true];
 
             // init_gpu clamps these to the device's texture limit.

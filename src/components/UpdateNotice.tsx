@@ -18,9 +18,7 @@ const keepCaret = (event: MouseEvent) => event.preventDefault();
 // tertiary tone, then Later and Install and restart. Install downloads,
 // installs, and relaunches from the backend. A failed install turns the
 // dot to danger, says so, and offers Try again. Toasts that arrive
-// meanwhile stack above the card (overlays.css). The card floats over
-// the terminal, so it carries data-occludes-surface for the Windows and
-// Linux on top native path.
+// meanwhile stack above the card (overlays.css).
 export function UpdateNotice() {
   const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
   const [installing, setInstalling] = useState(false);
@@ -70,12 +68,7 @@ export function UpdateNotice() {
   const meta = error ?? update.version;
 
   return (
-    <div
-      className={`ov-update${error ? ' is-error' : ''}`}
-      role="status"
-      aria-live="polite"
-      data-occludes-surface="true"
-    >
+    <div className={`ov-update${error ? ' is-error' : ''}`} role="status" aria-live="polite">
       <span className="ov-update-dot" aria-hidden="true" />
       <span className="ov-update-msg">{message}</span>
       {meta && (

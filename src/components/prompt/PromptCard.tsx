@@ -1176,7 +1176,6 @@ export function PromptCard({
         role="dialog"
         aria-label="Customize prompt"
         tabIndex={-1}
-        data-occludes-surface="true"
         style={{
           left: anchor?.left ?? 12,
           bottom: anchor?.bottom ?? 0,

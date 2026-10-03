@@ -39,7 +39,6 @@ command native_surface_set_prompt_bands(on)
 command native_surface_set_prompt_reach(px)
 command native_surface_set_theme(background, foreground, selection, ansi)
 command native_surface_set_tokens(divider?, selection?, findMatch?, currentMatch?, link?, scrollbar?, selrow?, appearance?)
-command native_surface_set_visible(visible)
 command native_surface_wheel(deltaY)
 command open_help_window()
 command open_settings_window()
@@ -169,7 +168,6 @@ event vosh://settings-goto-tab page heard
 event vosh://spellcheck-prompt-changed page heard
 event vosh://split-divider-changed page heard
 event vosh://terminal-clicked app heard
-event vosh://terminal-context-menu app heard
 event vosh://terminal-cursor app heard
 event vosh://terminal-line-height-changed page heard
 event vosh://theme-changed page heard

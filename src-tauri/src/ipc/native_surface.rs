@@ -298,20 +298,6 @@ pub(crate) fn native_surface_set_cell_metrics(width: u32, height: u32, char_heig
     }
 }
 
-/// Tier 3 native renderer (macOS): hide or show the surface so a DOM overlay
-/// (dropdown, menu, modal) that would be occluded by the opaque surface
-/// shows through. xterm renders the same content behind it. A no-op
-/// elsewhere.
-#[tauri::command]
-pub(crate) fn native_surface_set_visible(visible: bool) {
-    #[cfg(native_surface)]
-    crate::native_surface::set_visible(visible);
-    #[cfg(not(native_surface))]
-    {
-        let _ = visible;
-    }
-}
-
 /// Tier 3 native renderer (macOS): search the grid and step to the next (or
 /// previous) match, scrolling it into view and highlighting all matches.
 /// Returns `[current, total]` (1-based; `[0, 0]` when no match). A no-op

@@ -35,7 +35,6 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         terminal::terminal_screen_rows,
         native_surface::native_surface_find,
         native_surface::native_surface_find_clear,
-        native_surface::native_surface_set_visible,
         native_surface::native_surface_pointer,
         native_surface::native_surface_ready,
         native_surface::native_surface_wheel,

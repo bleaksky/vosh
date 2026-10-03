@@ -121,17 +121,15 @@ describe('the size the game hears of', () => {
   });
 });
 
-// The native grid splits its rows the same way (grid_and_game_rows and
-// short_of_band in src-tauri/src/native_surface/mod.rs), and its test runs
-// these cases too.
+// The native grid splits its rows the same way (grid_and_game_rows in
+// src-tauri/src/native_surface/mod.rs), and its test runs these cases too.
 interface SplitCase {
   name: string;
   fit: number;
   lent: number;
   grid: number;
   // A pane no taller than what the band borrows names the rows apart for
-  // the macOS grid under the page and for xterm, which tells the game what
-  // a native surface that stops short of the band does.
+  // the macOS grid under the page and for xterm.
   game?: number;
   game_underlay?: number;
   game_short?: number;
