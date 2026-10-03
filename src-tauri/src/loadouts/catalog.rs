@@ -5,12 +5,15 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use vosh_automation::alias::Alias;
-use vosh_automation::trigger::Trigger;
+use tracing::warn;
+use vosh_automation::alias::{Alias, AliasStore};
+use vosh_automation::trigger::{Trigger, TriggerStore};
 
+use super::gating::apply_effective_state;
+use super::set::LoadoutSet;
 use super::LoadoutStoreError;
 use crate::disk::atomic::write_with_backup;
-use crate::profile::live::Macro;
+use crate::profile::live::{Macro, Profile};
 
 /// Filename of the global catalog inside the app data directory.
 const CATALOG_FILE: &str = "catalog.toml";
@@ -50,6 +53,63 @@ impl GlobalCatalog {
             macros: profile.macros.clone(),
             enabled_presets: Some(profile.ui.enabled_presets.clone()),
         }
+    }
+}
+
+/// Lay loadout mode's catalog and active loadouts over the live profile
+/// `p`, right after launch or a switch loaded a profile file into it. The
+/// catalog fills the stores, and the aliases, triggers, and macros the
+/// profile file still holds go on top, so a switch keeps them the way a
+/// restart does. An item of the file wins over the catalog item of the
+/// same name, or for a macro the same key. The group state of `set` then
+/// applies to the result.
+pub(crate) fn lay_catalog_over(p: &mut Profile, catalog: &GlobalCatalog, set: Option<&LoadoutSet>) {
+    // What the profile file just put into the live stores, to lay over
+    // the catalog.
+    let per_profile_aliases: Vec<_> = p.aliases.list().into_iter().cloned().collect();
+    let per_profile_triggers: Vec<_> = p.triggers.list();
+    let per_profile_macros = p.macros.clone();
+    // The per-profile file just restored this profile's group checkbox
+    // state into the live stores; carry it across the catalog rebuild
+    // (the rebuilt stores would otherwise start with everything
+    // enabled).
+    let alias_disabled = p.aliases.disabled_groups();
+    let trigger_disabled = p.triggers.disabled_groups();
+    let mut aliases = AliasStore::new();
+    for a in &catalog.aliases {
+        aliases.set(a.clone());
+    }
+    for a in per_profile_aliases {
+        aliases.set(a);
+    }
+    aliases.set_disabled_groups(alias_disabled);
+    p.aliases = aliases;
+    let mut triggers = TriggerStore::new();
+    for t in &catalog.triggers {
+        if let Err(e) = triggers.set(t.clone()) {
+            warn!(error = %e, "catalog trigger rejected");
+        }
+    }
+    for t in per_profile_triggers {
+        if let Err(e) = triggers.set(t) {
+            warn!(error = %e, "per-profile trigger rejected");
+        }
+    }
+    triggers.set_disabled_groups(trigger_disabled);
+    p.triggers = triggers;
+    let mut macros = catalog.macros.clone();
+    for m in per_profile_macros {
+        macros.retain(|x| x.key != m.key);
+        macros.push(m);
+    }
+    p.macros = macros;
+    // The presets that are on belong to the catalog with the preset
+    // triggers, so the profile's own list gives way to it.
+    if let Some(list) = &catalog.enabled_presets {
+        p.ui.enabled_presets.clone_from(list);
+    }
+    if let Some(set) = set {
+        apply_effective_state(set, p);
     }
 }
 
