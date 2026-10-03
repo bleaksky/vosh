@@ -1,4 +1,9 @@
+use super::decor::{curl_coverage, underline_rects, Decor};
 use super::*;
+use crate::native::grid::regions::LiftSpan;
+use crate::native::grid::CellFlags;
+use font_kit::font::Font;
+use std::sync::Arc;
 
 #[test]
 fn spec_passes_through() {
