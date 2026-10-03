@@ -588,7 +588,7 @@ mod tests {
 
     use super::*;
     use crate::profile::panes::tests::custom_layout;
-    use crate::profile::tests::{persist_live, styled_profile, theme_ids};
+    use crate::profile::tests::{persist_live, shared_profile, styled_profile, theme_ids};
     use crate::profile::ui::{TrackedAffect, RETIRED_DEFAULT_FONT_FAMILY};
 
     #[test]
@@ -735,15 +735,6 @@ mod tests {
         assert_eq!(per_profile.ui.custom_themes.len(), 1);
         assert_eq!(per_profile.ui.terminal_line_height, "loose");
         assert_eq!(restored.ui.dark_theme, "night-ink");
-    }
-
-    /// Every shared setting off its default, custom themes included.
-    fn shared_profile() -> Profile {
-        let mut profile = styled_profile();
-        profile.ui.font_family = "Iosevka".into();
-        profile.ui.keep_last_command = true;
-        profile.ui.auto_update = true;
-        profile
     }
 
     fn assert_shared_settings(profile: &Profile) {
@@ -954,55 +945,14 @@ mod tests {
 mod scope_change_tests {
     use std::sync::Arc;
 
-    use super::{change_scope_locked, strip_global_fields, GlobalConfig, Scope, ScopeConfig};
+    use super::{change_scope_locked, GlobalConfig, Scope, ScopeConfig};
     use crate::app::state::{AppState, SharedState};
     use crate::disk::save::PERSIST_LOCK;
     use crate::profile::file::ProfileConfig;
     use crate::profile::live::Profile;
     use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
-    use crate::profile::tests::james_like_set;
-    use crate::profile::ui::{CustomTheme, TrackedAffect, UiConfig};
-
-    fn theme(id: &str, background: &str) -> CustomTheme {
-        CustomTheme {
-            id: id.into(),
-            label: id.into(),
-            xterm: [("background".to_string(), background.to_string())]
-                .into_iter()
-                .collect(),
-            ..CustomTheme::default()
-        }
-    }
-
-    fn ids(themes: &[CustomTheme]) -> Vec<&str> {
-        themes.iter().map(|t| t.id.as_str()).collect()
-    }
-
-    /// The live profile with every shared setting off its default.
-    fn shared_profile() -> Profile {
-        let mut profile = Profile::default();
-        profile.ui.theme = "night-ink".into();
-        profile.ui.follow_system_appearance = true;
-        profile.ui.light_theme = "classic-vivid".into();
-        profile.ui.dark_theme = "night-ink".into();
-        profile.ui.custom_themes = vec![theme("night-ink", "#000000")];
-        profile.ui.font_family = "Iosevka".into();
-        profile.ui.font_size = 16;
-        profile.ui.terminal_line_height = "loose".into();
-        profile.ui.keep_last_command = true;
-        profile.ui.auto_update = true;
-        profile
-    }
-
-    /// Mirror `persist_profile` for the active profile.
-    fn persist(set: &ProfileSet, profile: &Profile) {
-        let mut snapshot = ProfileConfig::from_profile(profile);
-        strip_global_fields(&mut snapshot, set.scope());
-        snapshot.save(&set.active_path()).unwrap();
-        GlobalConfig::from_profile(profile, set.scope())
-            .save(&set.global_path())
-            .unwrap();
-    }
+    use crate::profile::tests::{james_like_set, persist_live, shared_profile, theme, theme_ids};
+    use crate::profile::ui::{TrackedAffect, UiConfig};
 
     /// Mirror a switch. The active profile file loads first, then the
     /// shared part of global.toml over it.
@@ -1039,7 +989,7 @@ mod scope_change_tests {
     async fn three_profiles(dir: &std::path::Path) -> SharedState {
         let set = james_like_set(dir);
         let live = shared_profile();
-        persist(&set, &live);
+        persist_live(&set, &live);
 
         let mut healer = ProfileConfig::default();
         healer.ui.tracked_affects = vec![TrackedAffect {
@@ -1067,7 +1017,7 @@ mod scope_change_tests {
         change_scope_locked(state, scope).await.unwrap();
         let live = state.profile.lock().await;
         let guard = state.profile_set.lock().await;
-        persist(guard.as_ref().unwrap(), &live);
+        persist_live(guard.as_ref().unwrap(), &live);
     }
 
     #[tokio::test]
@@ -1093,7 +1043,7 @@ mod scope_change_tests {
         assert!(healer.follow_system_appearance);
         assert_eq!(healer.light_theme, "classic-vivid");
         assert_eq!(healer.dark_theme, "night-ink");
-        assert_eq!(ids(&healer.custom_themes), ["night-ink"]);
+        assert_eq!(theme_ids(&healer.custom_themes), ["night-ink"]);
         assert_eq!(healer.font_family, "Iosevka");
         assert_eq!(healer.font_size, 16);
         assert_eq!(healer.terminal_line_height, "loose");
@@ -1104,7 +1054,10 @@ mod scope_change_tests {
         // Test-Prompt keeps its own theme and font, and its own custom
         // theme moves to a fresh id beside the shared one.
         let prompt = file(set, "Test-Prompt").ui;
-        assert_eq!(ids(&prompt.custom_themes), ["night-ink", "night-ink-2"]);
+        assert_eq!(
+            theme_ids(&prompt.custom_themes),
+            ["night-ink", "night-ink-2"]
+        );
         assert_eq!(prompt.custom_themes[1], {
             let mut own = theme("night-ink-2", "#ffffff");
             own.label = "night-ink (Test-Prompt)".into();
@@ -1136,12 +1089,15 @@ mod scope_change_tests {
         set_scope(&state, ScopeConfig::default()).await;
 
         let live = state.profile.lock().await;
-        assert_eq!(ids(&live.ui.custom_themes), ["night-ink", "night-ink-2"]);
+        assert_eq!(
+            theme_ids(&live.ui.custom_themes),
+            ["night-ink", "night-ink-2"]
+        );
         let guard = state.profile_set.lock().await;
         let set = guard.as_ref().unwrap();
         let global = GlobalConfig::load(&set.global_path()).unwrap();
         assert_eq!(
-            ids(&global.custom_themes.unwrap()),
+            theme_ids(&global.custom_themes.unwrap()),
             ["night-ink", "night-ink-2"]
         );
         // Test-Prompt still points at its own theme for the next time
