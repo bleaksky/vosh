@@ -214,7 +214,7 @@ async fn deliver_script_result<R: tauri::Runtime>(
     apply: ApplyResult,
 ) -> Result<(), String> {
     let (bytes, echoes) =
-        session::effects::collect_script_result(app, &state.profile, &state.script_timers, apply)
+        session::effects::collect_script_result(app, &state.profile, &state.lua_timers, apply)
             .await;
     output::echo_lines(app, &echoes);
 

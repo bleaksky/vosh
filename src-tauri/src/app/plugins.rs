@@ -242,7 +242,7 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
         let (bytes, echoes) = crate::session::effects::collect_script_result(
             app,
             &state.profile,
-            &state.script_timers,
+            &state.lua_timers,
             apply,
         )
         .await;
