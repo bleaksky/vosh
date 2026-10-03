@@ -1,4 +1,5 @@
 use super::*;
+use alacritty_terminal::term::cell::Cell;
 use alacritty_terminal::vte::ansi::{Color, NamedColor};
 
 fn cell_fg(g: &TermGrid, line: usize, col: usize) -> Color {

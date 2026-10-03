@@ -1,0 +1,51 @@
+//! The web links in the grid's text, for Cmd+click and the hover
+//! underline.
+
+use std::sync::OnceLock;
+
+use alacritty_terminal::grid::Dimensions;
+use alacritty_terminal::index::{Column, Line};
+
+use super::grid_slot;
+
+/// Compiled URL matcher, built once.
+fn url_regex() -> &'static regex::Regex {
+    static RE: OnceLock<regex::Regex> = OnceLock::new();
+    RE.get_or_init(|| regex::Regex::new(r"https?://[^\s<>()\[\]]+").expect("valid url regex"))
+}
+
+/// The URL spanning the cell at (`grid_line`, `col`) as (url, start column,
+/// end column), if any. Trailing sentence punctuation is trimmed. Used by
+/// Cmd+click and the hover underline on the surface.
+pub(crate) fn url_at(grid_line: i32, col: usize) -> Option<(String, usize, usize)> {
+    let slot = grid_slot().lock().ok()?;
+    let g = slot.as_ref()?;
+    let grid = g.term.grid();
+    if Line(grid_line) < grid.topmost_line() || Line(grid_line) > grid.bottommost_line() {
+        return None;
+    }
+    let cols = grid.columns();
+    let text: String = (0..cols)
+        .map(|c| grid[Line(grid_line)][Column(c)].c)
+        .collect();
+    url_in_line(&text, col)
+}
+
+/// The URL spanning char index `col` in a grid line's text. `text` holds one
+/// char per grid column (wide-char spacer cells read as a space), so char
+/// offsets are grid columns even with double-width glyphs on the line.
+pub(super) fn url_in_line(text: &str, col: usize) -> Option<(String, usize, usize)> {
+    for m in url_regex().find_iter(text) {
+        let start_col = text[..m.start()].chars().count();
+        let end_col = text[..m.end()].chars().count();
+        if col >= start_col && col < end_col {
+            let url = m
+                .as_str()
+                .trim_end_matches(['.', ',', ')', ']', '!', '?'])
+                .to_string();
+            let trimmed_end = start_col + url.chars().count();
+            return Some((url, start_col, trimmed_end));
+        }
+    }
+    None
+}
