@@ -37,7 +37,10 @@ pub(crate) struct ImportReport {
     pub unparsed: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The page names a format in lowercase, so serde reads and writes
+/// these names for the import commands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum ImportFormat {
     Mushclient,
     Mudlet,

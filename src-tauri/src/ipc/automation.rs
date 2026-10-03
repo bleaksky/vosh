@@ -3,6 +3,8 @@
 //! the preset triggers, and imports another client's file into the live
 //! profile. The command line reads your macros through them too.
 
+use serde::de::value::{self, StrDeserializer};
+use serde::Deserialize;
 use tauri::{AppHandle, State};
 use vosh_automation::trigger::Trigger;
 
@@ -11,6 +13,7 @@ use crate::app::events::{
 };
 use crate::app::state::SharedState;
 use crate::disk::save::persist_profile;
+use crate::import::ImportFormat;
 use crate::profile::{Macro, Profile, Timer};
 
 #[tauri::command]
@@ -342,13 +345,8 @@ pub(crate) async fn presets_remove(
 /// Frontend extension-checks first; this is the fallback. Returns
 /// `null` when nothing recognized so the UI can ask the user.
 #[tauri::command]
-pub(crate) async fn import_detect(text: String) -> Result<Option<String>, String> {
-    Ok(crate::import::detect_format(&text).map(|f| match f {
-        crate::import::ImportFormat::Mushclient => "mushclient".to_string(),
-        crate::import::ImportFormat::Mudlet => "mudlet".to_string(),
-        crate::import::ImportFormat::Gmud => "gmud".to_string(),
-        crate::import::ImportFormat::Cmud => "cmud".to_string(),
-    }))
+pub(crate) async fn import_detect(text: String) -> Result<Option<ImportFormat>, String> {
+    Ok(crate::import::detect_format(&text))
 }
 
 #[derive(serde::Serialize)]
@@ -363,7 +361,7 @@ pub(crate) struct ImportSummary {
 }
 
 /// Parse + apply an import file to the live profile. The format
-/// string is one of `mushclient` / `mudlet` / `gmud`; pass an
+/// string is an [`ImportFormat`] name such as `mudlet`; pass an
 /// empty string to auto-detect. Aliases / triggers / macros / vars
 /// merge into the existing stores (overwrite on name collision).
 /// Returns a summary so the UI can report what landed and what
@@ -375,14 +373,12 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
     format: String,
     text: String,
 ) -> Result<ImportSummary, String> {
-    let fmt = match format.as_str() {
-        "mushclient" => crate::import::ImportFormat::Mushclient,
-        "mudlet" => crate::import::ImportFormat::Mudlet,
-        "gmud" => crate::import::ImportFormat::Gmud,
-        "cmud" => crate::import::ImportFormat::Cmud,
-        "" => crate::import::detect_format(&text)
-            .ok_or_else(|| "could not detect import format".to_string())?,
-        other => return Err(format!("unknown import format: {other}")),
+    let fmt = if format.is_empty() {
+        crate::import::detect_format(&text)
+            .ok_or_else(|| "could not detect import format".to_string())?
+    } else {
+        ImportFormat::deserialize(StrDeserializer::<value::Error>::new(&format))
+            .map_err(|_| format!("unknown import format: {format}"))?
     };
     let report = crate::import::parse(fmt, &text);
     let mut rejected: Vec<String> = Vec::new();
