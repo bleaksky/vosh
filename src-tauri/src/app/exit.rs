@@ -6,8 +6,8 @@
 //! once, so the change you made last never reached the disk. Now an
 //! exit request first asks every open window to send what it holds
 //! (`vosh://flush-pending-writes`), waits a short, bounded time for each
-//! to answer through [`pending_writes_flushed`], and exits again. That
-//! second request writes the profile once, as before.
+//! to answer through the `pending_writes_flushed` command, and exits
+//! again. That second request writes the profile once, as before.
 //!
 //! [`ExitFlow`] decides what each exit event does, so the profile write
 //! runs exactly once however the events arrive. macOS can end the app
@@ -199,7 +199,7 @@ impl WindowAnswers {
     }
 }
 
-static ANSWERS: WindowAnswers = WindowAnswers::new();
+pub(crate) static ANSWERS: WindowAnswers = WindowAnswers::new();
 
 /// Wait for `rx` up to `wait`. True when every window answered in time.
 pub(crate) async fn wait_for_answers(rx: oneshot::Receiver<()>, wait: Duration) -> bool {
@@ -232,12 +232,6 @@ pub(crate) async fn ask_windows_to_flush<R: tauri::Runtime>(app: &AppHandle<R>) 
     }
     ANSWERS.finish(id);
     windows_answered();
-}
-
-/// A window answers the quit request once it has sent what it held.
-#[tauri::command]
-pub(crate) fn pending_writes_flushed<R: tauri::Runtime>(window: tauri::WebviewWindow<R>) {
-    ANSWERS.answer(window.label());
 }
 
 /// The app's run loop hands every event here. Only the two exit events

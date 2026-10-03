@@ -7,15 +7,14 @@
 //! palette entry id as the payload, and App.tsx runs them through the
 //! same dispatcher as its keyboard shortcuts. The page owns the truth
 //! for every check mark and label: it pushes a [`MenuState`] snapshot
-//! through [`menu_set_state`] whenever one changes, and the menu only
-//! mirrors it.
+//! through the `menu_set_state` command whenever one changes, and the
+//! menu only mirrors it.
 //!
 //! Windows and Linux get no menu bar. Tauri would attach an app menu to
 //! every frameless window there, so the builder only installs this one
-//! on macOS, and the two commands below are no-ops elsewhere.
+//! on macOS, and the page's two menu commands are no-ops elsewhere.
 
 use serde::Deserialize;
-use tauri::AppHandle;
 
 /// Where the page tells the menu what to show. `camelCase` on the wire.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -57,36 +56,8 @@ pub(crate) struct MenuTheme {
     pub(crate) custom: bool,
 }
 
-/// Mirror the page's state in the menu. Sync, so it runs on the main
-/// thread and the menu setters run inline.
-#[tauri::command]
-pub(crate) fn menu_set_state(app: AppHandle, state: MenuState) {
-    #[cfg(target_os = "macos")]
-    mac::apply_state(&app, &state);
-    #[cfg(not(target_os = "macos"))]
-    let _ = (app, state);
-}
-
-/// Edit, then Copy, from the main window. `terminal` is true when the
-/// page holds no text selection of its own, and then a native terminal
-/// selection wins. Anything else copies the way the system would, from
-/// the focused field or the page selection.
-#[tauri::command]
-pub(crate) fn menu_copy(app: AppHandle, terminal: bool) {
-    #[cfg(target_os = "macos")]
-    {
-        if terminal && crate::term_grid::selection_text().is_some_and(|t| !t.is_empty()) {
-            crate::native_surface::request_copy();
-        } else {
-            let _ = app.run_on_main_thread(mac::system_copy);
-        }
-    }
-    #[cfg(not(target_os = "macos"))]
-    let _ = (app, terminal);
-}
-
 #[cfg(target_os = "macos")]
-pub(crate) use mac::{build, on_event};
+pub(crate) use mac::{apply_state, build, on_event, system_copy};
 
 /// The shortcut specs the menu, the palette keycaps, and the page's
 /// keydown handler share, so they cannot drift apart.
@@ -452,7 +423,7 @@ mod mac {
             Route::OpenSettings => {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Err(e) = crate::commands::open_settings_window(app).await {
+                    if let Err(e) = crate::ipc::windows::open_settings_window(app).await {
                         warn!(error = %e, "menu: opening settings failed");
                     }
                 });
@@ -460,7 +431,7 @@ mod mac {
             Route::OpenHelp => {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Err(e) = crate::commands::open_help_window(app).await {
+                    if let Err(e) = crate::ipc::windows::open_help_window(app).await {
                         warn!(error = %e, "menu: opening help failed");
                     }
                 });
@@ -512,7 +483,7 @@ mod mac {
     }
 
     /// Mirror the page's snapshot.
-    pub(super) fn apply_state(app: &AppHandle, state: &MenuState) {
+    pub(crate) fn apply_state(app: &AppHandle, state: &MenuState) {
         let Some(handles) = app.try_state::<MenuHandles>() else {
             return;
         };
@@ -664,7 +635,7 @@ mod mac {
 
     /// Copy the way the system Copy row would: send `copy:` down the
     /// responder chain of the key window. Main thread only.
-    pub(super) fn system_copy() {
+    pub(crate) fn system_copy() {
         send_action(objc2::sel!(copy:));
     }
 
