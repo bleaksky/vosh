@@ -267,7 +267,7 @@ export function markLifted(
   area.toggleAttribute(LIFTED_ATTR, on);
 }
 
-// The native grid draws the same bands in src-tauri/src/cell_render.rs.
+// The native grid draws the same bands in src-tauri/src/native/gpu/bands.rs.
 // Both sides run fixtures/prompt-bands/cases.json, so keep them in step.
 
 /** The band outsets the prompt boards measure, and its corner radius. */

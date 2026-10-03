@@ -101,9 +101,10 @@ function cssFamily(name: string): string {
 // the bundled JetBrains Mono follows each run of Berkeley names for a
 // machine without one. The retired bundled name becomes the installed
 // Berkeley families. A repeated name drops out. A list without Berkeley
-// Mono comes back as it is. rendered_families in cell_render.rs gives
-// the native atlas the same list, so both renderers land on the same
-// face and cell. Both run fixtures/font-stacks/cases.json.
+// Mono comes back as it is. rendered_families in
+// src-tauri/src/native/gpu/atlas.rs gives the native atlas the same list,
+// so both renderers land on the same face and cell. Both run
+// fixtures/font-stacks/cases.json.
 export function renderFontStack(stack: string): string {
   if (!/berkeley/i.test(stack)) return stack;
   const out: string[] = [];

@@ -444,9 +444,10 @@ describe('Enter on an empty line', () => {
 
 // The terminal gives the dock the rows it borrows: xterm keeps the rows
 // its pane fits less those (keptRows), and the native grid does the same
-// in term_grid.rs. Each step here lays the dock out from its real markup
-// and sizes a real xterm as the live pane does, so the gap between the
-// newest line and the band's top is what the window shows.
+// in src-tauri/src/native/surface/report.rs. Each step here lays the dock
+// out from its real markup and sizes a real xterm as the live pane does,
+// so the gap between the newest line and the band's top is what the
+// window shows.
 describe('the text above the pinned band', () => {
   /** The rows the window shows, trailing blanks trimmed, up to the last
    *  row that shows anything. */

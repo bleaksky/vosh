@@ -17,7 +17,7 @@
 // the live pane from the same line, so a copy holds one run of lines with
 // nothing doubled and nothing skipped. A wheel or Page Down that takes the
 // history to its bottom during the drag carries it on the same way. The
-// native grid does the same in src-tauri/src/native_surface/split_drag.rs.
+// native grid does the same in src-tauri/src/native/surface/split_drag.rs.
 //
 // A drag that starts in the live half, or that never leaves the history
 // pane, stays xterm's own.

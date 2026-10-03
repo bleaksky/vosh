@@ -122,7 +122,8 @@ describe('the size the game hears of', () => {
 });
 
 // The native grid splits its rows the same way (grid_and_game_rows in
-// src-tauri/src/native_surface/mod.rs), and its test runs these cases too.
+// src-tauri/src/native/surface/report.rs), and its test runs these cases
+// too.
 interface SplitCase {
   name: string;
   fit: number;

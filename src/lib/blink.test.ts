@@ -14,7 +14,7 @@ import {
 describe('the blink clock', () => {
   it('shows and hides for 600 ms each, counted from the epoch as the native grid counts', () => {
     // The same instants as blink_flips_every_600_ms_on_the_wall_clock in
-    // src-tauri/src/cell_render.rs.
+    // src-tauri/src/native/gpu/tests.rs.
     expect(BLINK_MS).toBe(600);
     expect(blinkShown(0) && blinkShown(599)).toBe(true);
     expect(blinkShown(600) || blinkShown(1199)).toBe(false);

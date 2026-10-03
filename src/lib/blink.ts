@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 // Blinking text (SGR 5), from the game or your prompt. The native
 // grid, xterm and the pinned band all flip on one clock, counted from the
 // Unix epoch, so whatever blinks on screen shows and hides together. The
-// native grid keeps the same clock in src-tauri/src/cell_render.rs
+// native grid keeps the same clock in src-tauri/src/native/gpu/style.rs
 // (BLINK_MS, blink_shown and until_blink_flip), so keep the two in step.
 
 /** How long blinking text shows and how long it hides: the blink of
@@ -70,7 +70,7 @@ export function subscribeReduceMotion(
 }
 
 /** Past the flip, so a timer lands in the new half, as the native grid
- *  waits (BLINK_SLACK in src-tauri/src/native_surface/mod.rs). */
+ *  waits (BLINK_SLACK in src-tauri/src/native/surface.rs). */
 const BLINK_SLACK_MS = 2;
 
 /** Call `tick` with whether blinking text shows, now and at each flip
