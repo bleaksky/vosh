@@ -610,6 +610,20 @@ describe('the help on the one window', () => {
     expect(text).toContain('from 200 to 800 points');
   });
 
+  it('tells you how to open Settings on every platform, the gear first', () => {
+    // Windows and Linux have no menu bar, so the title band's gear and
+    // Ctrl+, are how you find Settings there.
+    const found = HELP_TOPICS.find((t) => t.id === 'shape.arrange-panels');
+    if (!found) throw new Error('no panel topic');
+    expect(found.body).toContain(
+      'Open Settings with the gear at the right end of the title band, after the panel button, or press `Cmd+,` on macOS or `Ctrl+,` elsewhere.',
+    );
+    expect(found.body).toContain(
+      '`Open settings` in the palette and the `Settings` list in the terminal right click menu reach it too.',
+    );
+    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+  });
+
   it('keeps the room and its people under the map', () => {
     const text = body('shape.use-the-map');
     expect(text).toContain('The first names the room you stand in and its exits.');
