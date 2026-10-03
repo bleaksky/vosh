@@ -9,6 +9,7 @@ mod gmcp;
 mod gmcp_vars;
 pub(crate) mod highlight_ground;
 mod lines;
+mod lua_timers;
 mod perf;
 pub(crate) mod prompt_view;
 pub(crate) mod room_block;
@@ -33,7 +34,7 @@ use vosh_protocol::telnet::{
 use crate::app::events;
 use crate::output::{emit_output, emit_repaint, output_count};
 use crate::profile::Profile;
-use crate::script::{self, PendingTimer, SharedTimers};
+use crate::script::SharedTimers;
 
 use batch::{emit_session_output, ReadBatch, Settle};
 use connection::{ConnectionError, Stream};
@@ -41,6 +42,7 @@ use echo::ServerEcho;
 use effects::{apply_script_result, deliver_tick_step, run_fired_command, OutputSink, ScriptIo};
 use gmcp::{handle_gmcp, hello_subnegotiation, supports_subnegotiation};
 use lines::{LineAccumulator, Partial};
+use lua_timers::fire_due_script_timers;
 use perf::{PerfCounters, PERF_REPORT_INTERVAL};
 use prompt_view::{
     emit_hidden_change, emit_prompt_state, emit_prompt_vars, end_prompt, report_game_prompt_seen,
@@ -1433,41 +1435,6 @@ fn emit_line_routes<R: tauri::Runtime>(app: &AppHandle<R>, result: &LineResult) 
             }
         }
     }
-}
-
-async fn fire_due_script_timers<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    stream: &mut Stream,
-    profile: &Arc<Mutex<Profile>>,
-    lua_timers: &SharedTimers,
-) -> std::io::Result<()> {
-    let now = Instant::now();
-    let due: Vec<PendingTimer> = {
-        let mut guard = lua_timers.lock().await;
-        let (ready, keep): (Vec<_>, Vec<_>) = std::mem::take(&mut *guard)
-            .into_iter()
-            .partition(|t| t.deadline <= now);
-        *guard = keep;
-        ready
-    };
-    if due.is_empty() {
-        return Ok(());
-    }
-    let apply = {
-        let mut p = profile.lock().await;
-        script::snapshot_vars(&p.script, &p.vars);
-        let mut outcome = vosh_script::ScriptOutcome::default();
-        for t in due {
-            match p.script.fire_timer(t.callback_id) {
-                Ok(o) => outcome.actions.extend(o.actions),
-                Err(err) => warn!(error = %err, "lua timer fire failed"),
-            }
-        }
-        script::apply_actions(&mut p, outcome)
-    };
-    let mut sink = OutputSink::Direct;
-    let mut io = ScriptIo::Session(stream, &mut sink);
-    apply_script_result(app, &mut io, profile, lua_timers, apply).await
 }
 
 /// Flush a partial line still buffered when the session ends so the MUD's
