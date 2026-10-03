@@ -144,7 +144,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
     listening.finish("broadcast_profile_changed", &mut heard, &mut want);
 
     let listening = Heard::listen(&app, &[crate::app::events::MIGRATION_APPLIED]);
-    crate::commands::announce_migration_applied(handle);
+    crate::loadouts::wizard::apply::announce_migration_applied(handle);
     listening.finish("announce_migration_applied", &mut heard, &mut want);
 
     tauri::async_runtime::block_on(async {
