@@ -12,7 +12,6 @@ mod characters;
 mod connection;
 mod disk;
 mod fonts;
-mod forget_passwords;
 mod gmcp_bind;
 mod hidden_input;
 mod highlight_ground;
@@ -25,7 +24,7 @@ mod line_accumulator;
 mod loadout;
 mod loadout_store;
 mod loadouts;
-mod log_state;
+mod logs;
 mod migration;
 #[cfg(native_surface)]
 mod native_surface;

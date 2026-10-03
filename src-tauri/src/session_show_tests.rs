@@ -78,7 +78,7 @@ pub(super) struct Read {
     pub(super) kept: Vec<Vec<u8>>,
     /// What Collapse repeated lines made of each kept line, and the region
     /// its run shows in, in the same order, None for a line it left alone.
-    pub(super) repeats: Vec<Option<crate::log_state::KeptRun>>,
+    pub(super) repeats: Vec<Option<crate::logs::KeptRun>>,
     pub(super) sends: Vec<String>,
     pub(super) gmcp: bool,
     pub(super) prompt: bool,

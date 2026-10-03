@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
 
 use crate::app::plugins::SharedPluginManager;
-use crate::log_state::{SharedLogStore, SharedScrollback};
+use crate::logs::{SharedLogStore, SharedScrollback};
 use crate::profile::Profile;
 use crate::script::SharedTimers;
 use crate::session::SessionHandle;
