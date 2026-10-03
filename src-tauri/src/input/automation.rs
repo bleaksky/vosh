@@ -1,0 +1,418 @@
+//! The commands that change your aliases, triggers and groups, and
+//! the macro recorder that saves what you type as an alias.
+
+use vosh_automation::trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
+
+use super::target::is_target_keyword;
+use super::{echo_one, error_echo, parse_braced_pattern, split_first_word, InputResult};
+use crate::profile::{MacroRecorder, Profile};
+
+pub(super) fn slash_alias(profile: &mut Profile, args: &str) -> InputResult {
+    let (name, expansion) = split_first_word(args);
+    if name.is_empty() {
+        return error_echo("usage #alias <name> <expansion>".to_string());
+    }
+    if expansion.is_empty() {
+        return error_echo("usage #alias <name> <expansion>".to_string());
+    }
+    // Reserved target keywords and existing quick-keys can't be
+    // shadowed — the input pipeline checks both before alias
+    // expansion, so an alias with the same name would silently never
+    // fire.
+    if is_target_keyword(name) {
+        return error_echo(format!(
+            "`{name}` is a target keyword — pick another alias name"
+        ));
+    }
+    if profile.target.quick_keys.iter().any(|q| q.name == name) {
+        return error_echo(format!(
+            "quick-key `{name}` exists — `#qkey clear {name}` first if you want this name"
+        ));
+    }
+    crate::script::define_alias(profile, name, expansion);
+    echo_one(format!("alias {name} set"))
+}
+
+pub(super) fn slash_unalias(profile: &mut Profile, args: &str) -> InputResult {
+    let name = args.trim();
+    if name.is_empty() {
+        return error_echo("usage #unalias <name>".to_string());
+    }
+    if profile.aliases.remove(name) {
+        echo_one(format!("alias {name} removed"))
+    } else {
+        error_echo(format!("alias {name} not found"))
+    }
+}
+
+pub(super) fn slash_aliases_list(profile: &Profile) -> InputResult {
+    let aliases = profile.aliases.list();
+    if aliases.is_empty() {
+        return echo_one("no aliases defined".to_string());
+    }
+    let mut lines = Vec::with_capacity(aliases.len() + 1);
+    lines.push(format!("{} alias(es):", aliases.len()));
+    for a in aliases {
+        let mark = if a.enabled { ' ' } else { '*' };
+        lines.push(format!("  {mark} {} -> {}", a.name, a.expansion));
+    }
+    InputResult {
+        bytes: Vec::new(),
+        echo: lines,
+    }
+}
+
+pub(super) fn slash_trigger(profile: &mut Profile, args: &str) -> InputResult {
+    let (name, rest) = split_first_word(args);
+    if name.is_empty() {
+        return error_echo("usage #trigger <name> {pattern} <action> [args]".to_string());
+    }
+    let Some((pattern, after_pattern)) = parse_braced_pattern(rest) else {
+        return error_echo("usage #trigger <name> {pattern} <action> [args]".to_string());
+    };
+    let action = match parse_action(after_pattern) {
+        Ok(a) => a,
+        Err(msg) => return error_echo(msg),
+    };
+    let trigger = Trigger::new(name, pattern, action);
+    match profile.triggers.set(trigger) {
+        Ok(()) => echo_one(format!("trigger {name} set")),
+        Err(e) => error_echo(format!("trigger {name} rejected: {e}")),
+    }
+}
+
+pub(super) fn slash_untrigger(profile: &mut Profile, args: &str) -> InputResult {
+    let name = args.trim();
+    if name.is_empty() {
+        return error_echo("usage #untrigger <name>".to_string());
+    }
+    if profile.triggers.remove(name) {
+        echo_one(format!("trigger {name} removed"))
+    } else {
+        error_echo(format!("trigger {name} not found"))
+    }
+}
+
+pub(super) fn slash_triggers_list(profile: &Profile) -> InputResult {
+    let triggers = profile.triggers.list();
+    if triggers.is_empty() {
+        return echo_one("no triggers defined".to_string());
+    }
+    let mut lines = Vec::with_capacity(triggers.len() + 1);
+    lines.push(format!("{} trigger(s) by priority:", triggers.len()));
+    for t in triggers {
+        let mark = if t.enabled { ' ' } else { '*' };
+        let action = t
+            .actions
+            .iter()
+            .map(describe_action)
+            .collect::<Vec<_>>()
+            .join(" + ");
+        lines.push(format!(
+            "  {mark} [{:>3}] {} /{}/ -> {action}",
+            t.priority,
+            t.name,
+            t.first_pattern(),
+        ));
+    }
+    InputResult {
+        bytes: Vec::new(),
+        echo: lines,
+    }
+}
+
+fn parse_action(input: &str) -> Result<TriggerAction, String> {
+    let (kind, rest) = split_first_word(input);
+    match kind {
+        "highlight" => parse_highlight_action(rest),
+        "gag" => Ok(TriggerAction::Gag),
+        "replace" => {
+            if rest.is_empty() {
+                Err("usage replace <template>".to_string())
+            } else {
+                Ok(TriggerAction::Replace {
+                    template: rest.to_string(),
+                })
+            }
+        }
+        "send" => {
+            if rest.is_empty() {
+                Err("usage send <template>".to_string())
+            } else {
+                Ok(TriggerAction::Send {
+                    template: rest.to_string(),
+                })
+            }
+        }
+        "route" => {
+            if rest.is_empty() {
+                Err("usage route <pane>".to_string())
+            } else {
+                Ok(TriggerAction::Route {
+                    pane: rest.to_string(),
+                })
+            }
+        }
+        "" => Err("missing action keyword".to_string()),
+        other => Err(format!("unknown action `{other}`")),
+    }
+}
+
+fn parse_highlight_action(input: &str) -> Result<TriggerAction, String> {
+    let mut style = HighlightStyle::default();
+    for token in input.split_whitespace() {
+        match token.to_ascii_lowercase().as_str() {
+            "bold" => style.bold = true,
+            "underline" => style.underline = true,
+            "inverse" => style.inverse = true,
+            "wash" => style.wash = true,
+            other => {
+                if let Some(name) = other.strip_prefix("bg:") {
+                    let color =
+                        NamedColor::parse(name).ok_or_else(|| format!("unknown color `{name}`"))?;
+                    style.bg = Some(color);
+                } else if let Some(color) = NamedColor::parse(other) {
+                    style.fg = Some(color);
+                } else {
+                    return Err(format!("unknown highlight token `{other}`"));
+                }
+            }
+        }
+    }
+    if style.is_empty() {
+        return Err("highlight needs at least one color or attribute".to_string());
+    }
+    Ok(TriggerAction::Highlight { style })
+}
+
+fn describe_action(action: &TriggerAction) -> String {
+    match action {
+        TriggerAction::Highlight { style } => {
+            let mut parts = Vec::new();
+            if let Some(c) = style.fg {
+                parts.push(format!("fg={c:?}"));
+            }
+            if let Some(c) = style.bg {
+                parts.push(format!("bg={c:?}"));
+            }
+            if style.bold {
+                parts.push("bold".to_string());
+            }
+            if style.underline {
+                parts.push("underline".to_string());
+            }
+            if style.inverse {
+                parts.push("inverse".to_string());
+            }
+            if style.wash {
+                parts.push("wash".to_string());
+            }
+            format!("highlight {}", parts.join(" "))
+        }
+        TriggerAction::Gag => "gag".to_string(),
+        TriggerAction::Replace { template } => format!("replace `{template}`"),
+        TriggerAction::Send { template } => format!("send `{template}`"),
+        TriggerAction::Route { pane } => format!("route {pane}"),
+        TriggerAction::Script { body } => {
+            let preview: String = body.chars().take(40).collect();
+            let ellipsis = if body.chars().count() > 40 { "…" } else { "" };
+            format!("script `{preview}{ellipsis}`")
+        }
+    }
+}
+
+/// `#group <name> [on|off]` — flip a group's enabled state across
+/// triggers, aliases, and macros in one call. With no on/off arg,
+/// echo the current state in each store the group appears in.
+pub(super) fn slash_group(profile: &mut Profile, args: &str) -> InputResult {
+    let (name, rest) = split_first_word(args);
+    if name.is_empty() {
+        return error_echo("usage #group <name> [on|off]".to_string());
+    }
+    let state = rest.trim();
+    match state {
+        "" => slash_group_show(profile, name),
+        "on" | "off" => {
+            let enabled = state == "on";
+            let report = crate::script::toggle_group(profile, name, enabled);
+            if !report.touched() {
+                return error_echo(format!(
+                    "group `{name}` not found in triggers, aliases, or macros"
+                ));
+            }
+            let mut stores: Vec<&str> = Vec::with_capacity(3);
+            if report.triggers {
+                stores.push("triggers");
+            }
+            if report.aliases {
+                stores.push("aliases");
+            }
+            if report.macros {
+                stores.push("macros");
+            }
+            echo_one(format!(
+                "group `{name}` {} for {}",
+                if enabled { "enabled" } else { "disabled" },
+                stores.join(" + "),
+            ))
+        }
+        other => error_echo(format!(
+            "unknown group state `{other}`. usage #group <name> [on|off]"
+        )),
+    }
+}
+
+fn slash_group_show(profile: &Profile, name: &str) -> InputResult {
+    use crate::script::GroupState;
+    let [trigger_state, alias_state, macro_state] = crate::script::group_states(profile, name);
+    if trigger_state.is_none() && alias_state.is_none() && macro_state.is_none() {
+        return error_echo(format!(
+            "group `{name}` not found in triggers, aliases, or macros"
+        ));
+    }
+    let mut lines = vec![format!("group `{name}`:")];
+    let fmt = |store: &str, state: Option<GroupState>| match state {
+        Some(GroupState::On) => format!("  {store}: on"),
+        Some(GroupState::Off) => format!("  {store}: off"),
+        Some(GroupState::Mixed) => format!("  {store}: partly on"),
+        None => format!("  {store}: (none tagged)"),
+    };
+    lines.push(fmt("triggers", trigger_state));
+    lines.push(fmt("aliases ", alias_state));
+    lines.push(fmt("macros  ", macro_state));
+    InputResult {
+        bytes: Vec::new(),
+        echo: lines,
+    }
+}
+
+/// `#groups` — every group that any store has at least one entry
+/// tagged with, plus the current on/off state per store.
+pub(super) fn slash_groups_list(profile: &Profile) -> InputResult {
+    use std::collections::BTreeSet;
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    let trigger_map: std::collections::BTreeMap<String, bool> =
+        profile.triggers.groups().into_iter().collect();
+    let alias_map: std::collections::BTreeMap<String, bool> =
+        profile.aliases.groups().into_iter().collect();
+    for g in trigger_map.keys() {
+        names.insert(g.clone());
+    }
+    for g in alias_map.keys() {
+        names.insert(g.clone());
+    }
+    for m in &profile.macros {
+        if let Some(g) = &m.group {
+            if !g.is_empty() {
+                names.insert(g.clone());
+            }
+        }
+    }
+    if names.is_empty() {
+        return echo_one("no groups defined".to_string());
+    }
+    let mut lines = vec![format!("{} group(s):", names.len())];
+    for name in &names {
+        let has_macros = profile
+            .macros
+            .iter()
+            .any(|m| m.group.as_deref() == Some(name.as_str()));
+        let parts: Vec<String> = [
+            (
+                "triggers",
+                trigger_map
+                    .get(name)
+                    .copied()
+                    .map(|e| if e { "on" } else { "off" }),
+            ),
+            (
+                "aliases",
+                alias_map
+                    .get(name)
+                    .copied()
+                    .map(|e| if e { "on" } else { "off" }),
+            ),
+            (
+                "macros",
+                if has_macros {
+                    Some(if profile.disabled_macro_groups.contains(name) {
+                        "off"
+                    } else {
+                        "on"
+                    })
+                } else {
+                    None
+                },
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(store, state)| state.map(|s| format!("{store}={s}")))
+        .collect();
+        lines.push(format!("  {name}: {}", parts.join(", ")));
+    }
+    InputResult {
+        bytes: Vec::new(),
+        echo: lines,
+    }
+}
+
+pub(super) fn slash_record(profile: &mut Profile, args: &str) -> InputResult {
+    let trimmed = args.trim();
+    // `#record` with no args prints status.
+    if trimmed.is_empty() {
+        return match &profile.recording_macro {
+            Some(r) => echo_one(format!(
+                "recording `{}` ({} command(s) captured) — `#endrec` to save, `#record cancel` to discard",
+                r.name,
+                r.commands.len(),
+            )),
+            None => echo_one("not recording. usage: #record <name>".to_string()),
+        };
+    }
+    // `#record cancel` aborts an in-progress recording.
+    if trimmed == "cancel" {
+        return match profile.recording_macro.take() {
+            Some(r) => echo_one(format!(
+                "recording cancelled — `{}` was at {} command(s)",
+                r.name,
+                r.commands.len(),
+            )),
+            None => error_echo("not recording — nothing to cancel".to_string()),
+        };
+    }
+    if profile.recording_macro.is_some() {
+        return error_echo(
+            "already recording — `#endrec` to save or `#record cancel` to discard".to_string(),
+        );
+    }
+    let name = trimmed.split_whitespace().next().unwrap_or("");
+    if name.is_empty() {
+        return error_echo("usage #record <name>".to_string());
+    }
+    profile.recording_macro = Some(MacroRecorder {
+        name: name.to_string(),
+        commands: Vec::new(),
+    });
+    echo_one(format!(
+        "recording `{name}` — every command you type is captured until `#endrec`"
+    ))
+}
+
+pub(super) fn slash_endrec(profile: &mut Profile) -> InputResult {
+    let Some(recorder) = profile.recording_macro.take() else {
+        return error_echo("not recording. start with `#record <name>`".to_string());
+    };
+    if recorder.commands.is_empty() {
+        return error_echo(format!(
+            "recording `{}` had no commands — discarded",
+            recorder.name
+        ));
+    }
+    let expansion = recorder.commands.join(";");
+    let name = recorder.name.clone();
+    let count = recorder.commands.len();
+    crate::script::define_alias(profile, name.clone(), expansion);
+    echo_one(format!(
+        "saved macro `{name}` ({count} command(s)) — invoke by typing `{name}`"
+    ))
+}

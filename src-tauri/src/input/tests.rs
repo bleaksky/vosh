@@ -1,5 +1,8 @@
+use super::target::set_room_chars;
 use super::*;
+use crate::profile::RoomChar;
 use vosh_automation::alias::Alias;
+use vosh_automation::trigger::{NamedColor, TriggerAction};
 
 fn regex_capture(p: &Profile) -> vosh_prompt::config::RegexCapture {
     match &p.prompt.config().capture {
