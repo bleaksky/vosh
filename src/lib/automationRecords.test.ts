@@ -70,7 +70,7 @@ describe('aliases', () => {
   });
 
   it('reads every field aliases_export sends', async () => {
-    // A Rust test in commands.rs holds this file to aliases_export.
+    // A Rust test in ipc/automation.rs holds this file to aliases_export.
     const list = await loadAliases({
       exportAliases: () => Promise.resolve(aliasesExport.trimEnd()),
       importAliases: () => Promise.resolve(0),

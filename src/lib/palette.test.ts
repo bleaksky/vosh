@@ -300,10 +300,10 @@ describe('settings rows', () => {
 });
 
 describe('alias rows', () => {
-  // The reply to aliases_export, which a Rust test in commands.rs holds
-  // to the Alias serialization byte for byte. A disabled alias stays in
-  // the list, and a Lua alias keeps the expansion it had before Lua was
-  // turned on.
+  // The reply to aliases_export, which a Rust test in ipc/automation.rs
+  // holds to the Alias serialization byte for byte. A disabled alias
+  // stays in the list, and a Lua alias keeps the expansion it had before
+  // Lua was turned on.
   const exported = aliasesExport.trimEnd();
 
   async function aliasRows(over: Partial<PaletteDeps> = {}) {
