@@ -399,7 +399,7 @@ describe('dividerCut', () => {
 });
 
 // The native grid draws the same bands (band_rects and widen_newest in
-// src-tauri/src/cell_render.rs), and its test runs these cases too.
+// src-tauri/src/native/gpu/bands.rs), and its test runs these cases too.
 interface BandCase {
   name: string;
   cell: { w: number; h: number };

@@ -5,9 +5,9 @@
 // the terminal pane by the rows past its first. The pane keeps its size
 // and the grid gives those rows up: xterm keeps the rows its pane fits
 // less the lent ones, and the native grid does the same in
-// native_surface/mod.rs. Both renderers keep the newest line on their last
-// row, so the line at the top leaves for the scrollback and comes back
-// when the band shrinks again.
+// src-tauri/src/native/surface/report.rs. Both renderers keep the newest
+// line on their last row, so the line at the top leaves for the
+// scrollback and comes back when the band shrinks again.
 //
 // The game never hears of a lent row. NAWS carries the rows the pane
 // holds with a one row band, the same in a fight and out of one. A row

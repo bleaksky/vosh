@@ -7,7 +7,8 @@
 // nothing was written after it, and only then erases from its start and
 // writes the new text. The session never counts rows, since your typed
 // echo reaches xterm before the session hears of it, and xterm wraps at
-// its own width. The native grid follows the same rules in term_grid.rs.
+// its own width. The native grid follows the same rules in
+// src-tauri/src/native/grid/regions.rs.
 //
 // Every write to one xterm goes through one RegionWriter, in order. A
 // plain write passes straight to xterm while nothing waits. A write that
@@ -195,7 +196,8 @@ export function breaksAfterMark(text: string): number {
  *  the screen (rule c) with the default background. The cells it clears
  *  take the background in force, and a line the region ends on can leave
  *  its own on while the line ends after it wait. What the replace writes
- *  sets its own. The same as erase_back in src-tauri/src/term_grid.rs. */
+ *  sets its own. The same as erase_back in
+ *  src-tauri/src/native/grid/regions.rs. */
 export function eraseBack(above: number, col: number): string {
   return `\r${above > 0 ? `\x1b[${above}A` : ''}${col > 0 ? `\x1b[${col}C` : ''}\x1b[49m\x1b[0J`;
 }

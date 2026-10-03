@@ -47,8 +47,9 @@ describe('renderFontStack', () => {
       .map((piece) => piece.trim().replace(/^["']|["']$/g, ''))
       .filter((name) => name !== '');
 
-  // The same cases run against rendered_families in cell_render.rs, so
-  // xterm and the native atlas try the same families in the same order.
+  // The same cases run against rendered_families in
+  // src-tauri/src/native/gpu/atlas.rs, so xterm and the native atlas try
+  // the same families in the same order.
   for (const c of fixture.cases) {
     it(c.name, () => {
       const rendered = renderFontStack(c.stack);
