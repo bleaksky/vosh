@@ -44,7 +44,7 @@ mod report;
 mod split_drag;
 
 use device::GpuState;
-use pointer::{load_f32, set_divider_frac, split_ratio, store_f32, CELLS};
+use pointer::{hover_url, load_f32, set_divider_frac, split_ratio, store_f32, CELLS};
 use report::{grid_and_game_rows, report_scroll_if_changed, report_sizes};
 
 // The installed surface: the platform's window/view handles plus the GPU
@@ -290,12 +290,19 @@ fn render(state: &mut GpuState) {
     let cell_renderer = &mut state.cell_renderer;
     let drawn = crate::native::grid::with_grid(|grid| {
         grid.map(|grid| {
+            // Read with the grid held, so the lock order stays surface
+            // slot, then grid, then the find list and hover.
+            let (find, find_active) = crate::native::grid::find::find_snapshot();
+            let hover = hover_url();
             cell_renderer.draw(
                 device,
                 queue,
                 &mut encoder,
                 &view,
                 grid,
+                hover,
+                find,
+                find_active,
                 pane_w,
                 pane_h,
                 split_ratio(),
