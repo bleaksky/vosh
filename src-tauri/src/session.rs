@@ -3117,24 +3117,8 @@ fn gmcp_step(
             // The look this packet goes with lists one line for each
             // entry after its things.
             p.room_block.room_chars(arr.len());
-            let chars: Vec<crate::profile::RoomChar> = arr
-                .iter()
-                .filter_map(|v| {
-                    let obj = v.as_object()?;
-                    let name = obj.get("name").and_then(|n| n.as_str())?.to_string();
-                    if name.is_empty() {
-                        return None;
-                    }
-                    let npc = match obj.get("npc") {
-                        Some(serde_json::Value::Bool(b)) => *b,
-                        Some(serde_json::Value::String(s)) => s == "1" || s == "true",
-                        Some(serde_json::Value::Number(n)) => n.as_i64().is_some_and(|x| x != 0),
-                        _ => false,
-                    };
-                    Some(crate::profile::RoomChar { name, npc })
-                })
-                .collect();
-            crate::input::target::set_room_chars(p, chars);
+            let chars = input::target::read_room_chars(arr);
+            input::target::set_room_chars(p, chars);
         }
     }
     // The look this packet goes with lists a line for each long text its

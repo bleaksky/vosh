@@ -1,7 +1,7 @@
 use super::profile::{load_profile_file, slash_profile_with, PROFILE_SAVE_BUSY};
 use super::script::slash_script_load_in;
 use super::slash::{parse_braced_pattern, HELP_TEXT};
-use super::target::set_room_chars;
+use super::target::{read_room_chars, set_room_chars};
 use super::*;
 use crate::profile::RoomChar;
 use crate::profile_config::ProfileConfig;
@@ -977,6 +977,33 @@ fn rc(name: &str, npc: bool) -> RoomChar {
         name: name.to_string(),
         npc,
     }
+}
+
+#[test]
+fn room_chars_need_a_name_and_read_npc_in_each_form() {
+    let entries = serde_json::json!([
+        {"name": "Bob", "npc": false},
+        {"name": "ogre", "npc": true},
+        {"name": "rat", "npc": "1"},
+        {"name": "Ann", "npc": "0"},
+        {"name": "troll", "npc": 1},
+        {"name": "Cal"},
+        {"name": "", "npc": true},
+        {"npc": true},
+        "Dee"
+    ]);
+    let chars = read_room_chars(entries.as_array().unwrap());
+    assert_eq!(
+        chars,
+        vec![
+            rc("Bob", false),
+            rc("ogre", true),
+            rc("rat", true),
+            rc("Ann", false),
+            rc("troll", true),
+            rc("Cal", false),
+        ]
+    );
 }
 
 #[test]
