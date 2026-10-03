@@ -2,6 +2,7 @@
 //! store; lives across reconnects so user customization survives disconnect
 //! cycles.
 
+pub(crate) mod panes;
 pub(crate) mod switch;
 
 use std::collections::BTreeSet;

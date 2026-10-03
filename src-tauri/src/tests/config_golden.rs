@@ -39,10 +39,11 @@ use crate::loadout_store::{
     catalog_path, load_global_catalog, load_loadout_set, loadouts_path, save_global_catalog,
     save_loadout_set,
 };
+use crate::profile::panes::PaneNode;
 use crate::profile::{Macro, Timer};
 use crate::profile_config::{
-    CustomTheme, DockEntryPersist, GlobalConfig, GroupFolders, PaneLayoutPersist, PaneNode,
-    PluginsPersist, ProfileConfig, TrackedAffect, UiConfig, VitalsConfig,
+    CustomTheme, DockEntryPersist, GlobalConfig, GroupFolders, PaneLayoutPersist, PluginsPersist,
+    ProfileConfig, TrackedAffect, UiConfig, VitalsConfig,
 };
 use crate::profile_set::{AutoMatch, ProfileEntry, ProfileSet, ProfilesIndex, Scope, ScopeConfig};
 use crate::tick::TickConfig;
