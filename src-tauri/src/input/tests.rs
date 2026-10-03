@@ -1,8 +1,12 @@
+use super::profile::{load_profile_file, slash_profile_with, PROFILE_SAVE_BUSY};
+use super::script::slash_script_load_in;
 use super::target::set_room_chars;
 use super::*;
 use crate::profile::RoomChar;
+use crate::profile_config::ProfileConfig;
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{NamedColor, TriggerAction};
+use vosh_automation::vars::Scope;
 
 fn regex_capture(p: &Profile) -> vosh_prompt::config::RegexCapture {
     match &p.prompt.config().capture {
@@ -197,7 +201,7 @@ fn prompt_fight_sets_the_fight_prompt_beside_your_prompt() {
 #[test]
 fn prompt_alone_says_how_vosh_reads_your_prompt() {
     let now = chrono::DateTime::parse_from_rfc3339("2026-09-29T17:30:00-05:00").unwrap();
-    let status = |p: &Profile| super::prompt_status(p, now).echo;
+    let status = |p: &Profile| super::prompt::prompt_status(p, now).echo;
     let mut p = Profile::default();
     assert_eq!(
         status(&p),
@@ -282,7 +286,7 @@ fn prompt_show_picks_where_your_prompt_shows_and_the_status_says_it() {
         let ran = run_line(&mut p, line);
         assert_eq!(ran.result.echo, [echo], "{line}");
         assert_eq!(p.prompt.config().show, show, "{line}");
-        let said = super::prompt_status(&p, now).echo;
+        let said = super::prompt::prompt_status(&p, now).echo;
         assert!(
             said[0].ends_with(&format!("Drawing is on. {status}")),
             "{said:?}"
@@ -476,7 +480,7 @@ fn prompt_says_in_one_sentence_why_the_moved_pattern_stayed() {
     );
     assert_eq!(*p.prompt.config(), migrated(), "the pattern stays");
     assert_eq!(
-        super::prompt_status(&p, now).echo,
+        super::prompt::prompt_status(&p, now).echo,
         [
             "Vosh reads your prompt with a pattern you pointed at. No prompt has matched since you connected. Drawing is on. It shows in the text.",
             "Vosh kept the pattern from your old capture trigger because a color code runs into %h in the prompt the game sent.",
@@ -490,7 +494,7 @@ fn prompt_says_in_one_sentence_why_the_moved_pattern_stayed() {
         now,
     );
     assert_eq!(
-        super::prompt_status(&p, now).echo,
+        super::prompt::prompt_status(&p, now).echo,
         ["Vosh reads your prompt from the codes <%hhp>. No prompt has matched since you connected. Drawing is on. It shows in the text."]
     );
 }
@@ -717,7 +721,7 @@ fn profile_and_script_commands_use_the_app_data_folder() {
     let loaded = slash_script_load_in(
         &mut fresh,
         "greet",
-        &mut script::ApplyResult::default(),
+        &mut ApplyResult::default(),
         Some(app_data),
     );
     assert_eq!(loaded.echo, [format!("loaded {}", script.display())]);
