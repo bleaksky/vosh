@@ -67,7 +67,7 @@ pub(crate) struct AppState {
     pub(crate) global_catalog: Arc<Mutex<Option<crate::loadout::GlobalCatalog>>>,
     /// Path B loadout collection. Same `Some`/`None` semantics as
     /// `global_catalog`. The active subset drives which catalog groups
-    /// the runtime gates on (see [`crate::loadout_store::apply_loadout_state`]).
+    /// the runtime gates on (see [`crate::loadouts::gating::apply_loadout_state`]).
     pub(crate) loadout_set: Arc<Mutex<Option<crate::loadout::LoadoutSet>>>,
     /// Sentences launch has to tell you, such as a profile file Vosh
     /// could not read and will not save over. Kept until the main window

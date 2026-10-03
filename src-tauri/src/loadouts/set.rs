@@ -1,68 +1,16 @@
-//! Path B data model: global item catalog + loadouts.
-//!
-//! ## Concept
-//!
-//! Today every alias / trigger / macro lives inside a specific
-//! profile, and switching profiles swaps the whole authored content
-//! base. Path B inverts that:
-//!
-//!   - **[`GlobalCatalog`]** holds every item the user ever defined.
-//!     Items are gated for effective enable/disable by their `group`
-//!     field — the same per-store `disabled_groups` machinery added
-//!     in v0.3.0.
-//!   - **[`Loadout`]** is a named set of groups to enable. The
-//!     per-character state (vars, tick config, timers, UI settings)
-//!     stays in each profile file, which loadout mode loads as per
-//!     profile mode does.
-//!   - **[`LoadoutSet`]** holds every loadout the user has plus a
-//!     list of currently-active ones. Multiple loadouts can stack:
-//!     the runtime enables the union of `enabled_groups` across
-//!     every currently-active loadout (stack-by-union).
+//! loadouts.toml, which holds the loadouts you have and which of them
+//! are on.
+
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use vosh_automation::alias::Alias;
-use vosh_automation::trigger::Trigger;
 
-use crate::profile::live::Macro;
+use super::LoadoutStoreError;
+use crate::disk::atomic::write_with_backup;
 use crate::profile::login_match::AutoMatch;
 
-/// The global catalog. Every alias, trigger, macro lives here as a
-/// flat list with its `group` tag carrying the loadout association.
-/// Persisted at `<app_data_dir>/catalog.toml` once Phase B2 wires
-/// it as the authoritative source.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub(crate) struct GlobalCatalog {
-    #[serde(default)]
-    pub aliases: Vec<Alias>,
-    /// Every trigger. Room triggers go under `room_triggers` on disk, so
-    /// an older build still reads the file (D14), see
-    /// [`crate::profile::file::trigger_lists`].
-    #[serde(flatten, with = "crate::profile::file::trigger_lists")]
-    pub triggers: Vec<Trigger>,
-    #[serde(default)]
-    pub macros: Vec<Macro>,
-    /// The trigger presets that are on, in the `ui.enabled_presets`
-    /// shape. The preset triggers live in `triggers` above, which every
-    /// profile shares, so the list that says which presets are on is
-    /// shared too. `None` in a catalog written before the list moved
-    /// here. Startup then takes the active profile's list once, see
-    /// [`crate::loadout_store::adopt_catalog_presets`].
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub enabled_presets: Option<Vec<String>>,
-}
-
-impl GlobalCatalog {
-    /// The catalog as the live profile holds it: its aliases, triggers,
-    /// macros, and enabled presets. Path B persistence writes this.
-    pub(crate) fn from_profile(profile: &crate::profile::live::Profile) -> Self {
-        Self {
-            aliases: profile.aliases.list().into_iter().cloned().collect(),
-            triggers: profile.triggers.list(),
-            macros: profile.macros.clone(),
-            enabled_presets: Some(profile.ui.enabled_presets.clone()),
-        }
-    }
-}
+/// Filename of the loadout collection inside the app data directory.
+const LOADOUTS_FILE: &str = "loadouts.toml";
 
 /// One named loadout. A loadout has no items of its own — it only
 /// references groups in the global catalog. Each character's vars,
@@ -157,9 +105,42 @@ impl LoadoutSet {
     }
 }
 
+/// Path to `loadouts.toml` under the given app data directory.
+pub(crate) fn loadouts_path(app_data: &Path) -> PathBuf {
+    app_data.join(LOADOUTS_FILE)
+}
+
+/// Load the loadout collection. Missing file yields an empty
+/// `LoadoutSet` (no loadouts, no active stack) so callers can treat
+/// "fresh install" and "user wiped their loadouts" identically.
+pub(crate) fn load_loadout_set(app_data: &Path) -> Result<LoadoutSet, LoadoutStoreError> {
+    let path = loadouts_path(app_data);
+    if !path.exists() {
+        return Ok(LoadoutSet::default());
+    }
+    let text = std::fs::read_to_string(&path)?;
+    Ok(toml::from_str(&text)?)
+}
+
+/// Persist the loadout collection atomically with a rolling backup.
+pub(crate) fn save_loadout_set(app_data: &Path, set: &LoadoutSet) -> Result<(), LoadoutStoreError> {
+    let text = toml::to_string_pretty(set)?;
+    write_with_backup(&loadouts_path(app_data), &text)?;
+    Ok(())
+}
+
+/// What Vosh tells you at launch when loadouts.toml does not read.
+pub(crate) const UNREAD_LOADOUTS_NOTICE: &str =
+    "Vosh could not read loadouts.toml, so your shared aliases, triggers, and macros are off and \
+     Vosh will not save over it or catalog.toml. Fix the file and restart Vosh.";
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::fs;
+
+    use crate::loadouts::tests::tmpdir;
 
     #[test]
     fn effective_enabled_groups_unions_active_loadouts() {
@@ -216,40 +197,6 @@ mod tests {
         set.loadouts = vec![a];
         set.active = vec!["a".into(), "ghost".into()];
         assert_eq!(set.effective_enabled_groups(), vec!["combat"]);
-    }
-
-    #[test]
-    fn catalog_enabled_presets_round_trip_and_older_files_read_as_none() {
-        // A catalog written before the list moved here.
-        let older: GlobalCatalog = toml::from_str("").unwrap();
-        assert_eq!(older.enabled_presets, None);
-        // Nothing to write until startup fills it, so the file stays as
-        // an older build wrote it.
-        let text = toml::to_string_pretty(&GlobalCatalog::default()).unwrap();
-        assert!(!text.contains("enabled_presets"));
-
-        // An empty list means the default presets, and stays apart from
-        // a catalog that never took a list.
-        for list in [vec![], vec!["healing_basics".to_string()]] {
-            let catalog = GlobalCatalog {
-                enabled_presets: Some(list.clone()),
-                ..GlobalCatalog::default()
-            };
-            let text = toml::to_string_pretty(&catalog).unwrap();
-            let parsed: GlobalCatalog = toml::from_str(&text).unwrap();
-            assert_eq!(parsed.enabled_presets, Some(list));
-        }
-    }
-
-    #[test]
-    fn catalog_from_profile_carries_the_enabled_presets() {
-        let mut profile = crate::profile::live::Profile::default();
-        profile.ui.enabled_presets = vec!["healing_basics".into(), "potion_labels".into()];
-        let catalog = GlobalCatalog::from_profile(&profile);
-        assert_eq!(
-            catalog.enabled_presets.as_deref(),
-            Some(&["healing_basics".to_string(), "potion_labels".to_string()][..])
-        );
     }
 
     #[test]
@@ -312,5 +259,38 @@ tls = false
         for table in ["profile_vars", "tick", "connection"] {
             assert!(!text.contains(table), "{table} is written again");
         }
+    }
+
+    #[test]
+    fn loadout_set_round_trips_through_disk() {
+        let dir = tmpdir();
+        let mut set = LoadoutSet::default();
+        let mut warrior = Loadout::empty("warrior");
+        warrior.enabled_groups = vec!["combat-melee".into(), "wartools".into()];
+        set.loadouts = vec![warrior];
+        set.active = vec!["warrior".into()];
+
+        save_loadout_set(&dir, &set).unwrap();
+        let loaded = load_loadout_set(&dir).unwrap();
+        assert_eq!(loaded.active, vec!["warrior".to_string()]);
+        assert_eq!(loaded.loadouts.len(), 1);
+        assert_eq!(loaded.loadouts[0].name, "warrior");
+        assert_eq!(
+            loaded.loadouts[0].enabled_groups,
+            vec!["combat-melee", "wartools"]
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn dormant_flag_round_trips_through_disk() {
+        let dir = tmpdir();
+        let set = LoadoutSet {
+            dormant: true,
+            ..Default::default()
+        };
+        save_loadout_set(&dir, &set).unwrap();
+        assert!(load_loadout_set(&dir).unwrap().dormant);
+        fs::remove_dir_all(&dir).ok();
     }
 }

@@ -1,0 +1,168 @@
+//! catalog.toml, which holds every alias, trigger, and macro the
+//! characters share in loadout mode. Vosh runs in loadout mode while the
+//! file is on disk.
+
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+use vosh_automation::alias::Alias;
+use vosh_automation::trigger::Trigger;
+
+use super::LoadoutStoreError;
+use crate::disk::atomic::write_with_backup;
+use crate::profile::live::Macro;
+
+/// Filename of the global catalog inside the app data directory.
+const CATALOG_FILE: &str = "catalog.toml";
+
+/// The global catalog. Every alias, trigger, macro lives here as a
+/// flat list with its `group` tag carrying the loadout association.
+/// Persisted at `<app_data_dir>/catalog.toml` once Phase B2 wires
+/// it as the authoritative source.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub(crate) struct GlobalCatalog {
+    #[serde(default)]
+    pub aliases: Vec<Alias>,
+    /// Every trigger. Room triggers go under `room_triggers` on disk, so
+    /// an older build still reads the file (D14), see
+    /// [`crate::profile::file::trigger_lists`].
+    #[serde(flatten, with = "crate::profile::file::trigger_lists")]
+    pub triggers: Vec<Trigger>,
+    #[serde(default)]
+    pub macros: Vec<Macro>,
+    /// The trigger presets that are on, in the `ui.enabled_presets`
+    /// shape. The preset triggers live in `triggers` above, which every
+    /// profile shares, so the list that says which presets are on is
+    /// shared too. `None` in a catalog written before the list moved
+    /// here. Startup then takes the active profile's list once, see
+    /// [`super::presets::adopt_catalog_presets`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled_presets: Option<Vec<String>>,
+}
+
+impl GlobalCatalog {
+    /// The catalog as the live profile holds it: its aliases, triggers,
+    /// macros, and enabled presets. Path B persistence writes this.
+    pub(crate) fn from_profile(profile: &crate::profile::live::Profile) -> Self {
+        Self {
+            aliases: profile.aliases.list().into_iter().cloned().collect(),
+            triggers: profile.triggers.list(),
+            macros: profile.macros.clone(),
+            enabled_presets: Some(profile.ui.enabled_presets.clone()),
+        }
+    }
+}
+
+/// Path to `catalog.toml` under the given app data directory.
+pub(crate) fn catalog_path(app_data: &Path) -> PathBuf {
+    app_data.join(CATALOG_FILE)
+}
+
+/// True iff `catalog.toml` exists at the app data root. The wizard in
+/// Phase B3 is what writes that file the first time; until then this
+/// returns false and `AppState` stays on the legacy per-profile path.
+pub(crate) fn path_b_mode_active(app_data: &Path) -> bool {
+    catalog_path(app_data).exists()
+}
+
+/// Load the global catalog. Missing file yields an empty catalog
+/// rather than an error so first-launch and Path-A-only installs do
+/// not have to special-case absent state.
+pub(crate) fn load_global_catalog(app_data: &Path) -> Result<GlobalCatalog, LoadoutStoreError> {
+    let path = catalog_path(app_data);
+    if !path.exists() {
+        return Ok(GlobalCatalog::default());
+    }
+    let text = std::fs::read_to_string(&path)?;
+    Ok(toml::from_str(&text)?)
+}
+
+/// Persist the global catalog atomically with a rolling backup. See
+/// [`crate::disk::atomic::write_with_backup`] for the rename and
+/// retention guarantees.
+pub(crate) fn save_global_catalog(
+    app_data: &Path,
+    catalog: &GlobalCatalog,
+) -> Result<(), LoadoutStoreError> {
+    let text = toml::to_string_pretty(catalog)?;
+    write_with_backup(&catalog_path(app_data), &text)?;
+    Ok(())
+}
+
+/// What Vosh tells you at launch when catalog.toml does not read.
+pub(crate) const UNREAD_CATALOG_NOTICE: &str =
+    "Vosh could not read catalog.toml, which holds your shared aliases, triggers, and macros, so \
+     they are off and Vosh will not save over it. Fix the file and restart Vosh.";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::fs;
+
+    use crate::loadouts::tests::tmpdir;
+
+    #[test]
+    fn catalog_enabled_presets_round_trip_and_older_files_read_as_none() {
+        // A catalog written before the list moved here.
+        let older: GlobalCatalog = toml::from_str("").unwrap();
+        assert_eq!(older.enabled_presets, None);
+        // Nothing to write until startup fills it, so the file stays as
+        // an older build wrote it.
+        let text = toml::to_string_pretty(&GlobalCatalog::default()).unwrap();
+        assert!(!text.contains("enabled_presets"));
+
+        // An empty list means the default presets, and stays apart from
+        // a catalog that never took a list.
+        for list in [vec![], vec!["healing_basics".to_string()]] {
+            let catalog = GlobalCatalog {
+                enabled_presets: Some(list.clone()),
+                ..GlobalCatalog::default()
+            };
+            let text = toml::to_string_pretty(&catalog).unwrap();
+            let parsed: GlobalCatalog = toml::from_str(&text).unwrap();
+            assert_eq!(parsed.enabled_presets, Some(list));
+        }
+    }
+
+    #[test]
+    fn catalog_from_profile_carries_the_enabled_presets() {
+        let mut profile = crate::profile::live::Profile::default();
+        profile.ui.enabled_presets = vec!["healing_basics".into(), "potion_labels".into()];
+        let catalog = GlobalCatalog::from_profile(&profile);
+        assert_eq!(
+            catalog.enabled_presets.as_deref(),
+            Some(&["healing_basics".to_string(), "potion_labels".to_string()][..])
+        );
+    }
+
+    #[test]
+    fn path_b_mode_active_false_when_catalog_missing() {
+        let dir = tmpdir();
+        assert!(!path_b_mode_active(&dir));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn path_b_mode_active_true_after_save() {
+        let dir = tmpdir();
+        save_global_catalog(&dir, &GlobalCatalog::default()).unwrap();
+        assert!(path_b_mode_active(&dir));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn catalog_round_trips_through_disk() {
+        let dir = tmpdir();
+        let mut catalog = GlobalCatalog::default();
+        let mut alias = Alias::new("kk", "kick %1");
+        alias.group = Some("combat".into());
+        catalog.aliases.push(alias);
+        save_global_catalog(&dir, &catalog).unwrap();
+        let loaded = load_global_catalog(&dir).unwrap();
+        assert_eq!(loaded.aliases.len(), 1);
+        assert_eq!(loaded.aliases[0].name, "kk");
+        assert_eq!(loaded.aliases[0].group.as_deref(), Some("combat"));
+        fs::remove_dir_all(&dir).ok();
+    }
+}

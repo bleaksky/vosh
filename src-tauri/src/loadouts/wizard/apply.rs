@@ -3,13 +3,19 @@
 //! step saves the journal, then writes catalog.toml, loadouts.toml, and
 //! each profile file without its aliases, triggers, and macros.
 
+use std::path::{Path, PathBuf};
+
 use tauri::AppHandle;
 use tracing::warn;
 
-use super::journal::{drop_wizard_journal, save_wizard_journal, JournalFile, WizardJournal};
+use super::journal::{
+    drop_wizard_journal, journal_path, save_wizard_journal, JournalFile, WizardJournal,
+};
 use crate::app::events::{broadcast, MIGRATION_APPLIED};
 use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED};
 use crate::disk::save::{active_profile_file, persist_state, PERSIST_LOCK};
+use crate::loadouts::catalog::catalog_path;
+use crate::loadouts::set::loadouts_path;
 use crate::profile::file::ProfileConfig;
 
 /// [`migration_analyze`] over the app data folder `app_data`, so a test
@@ -86,10 +92,9 @@ fn plan_migration(
 /// and loadouts.toml back from the session, so the refusal says to quit
 /// before you follow the steps for a new catalog in the help. The
 /// refusals over what the app data folder holds come after it, see
-/// [`crate::loadout_store::migration_refusal`]. Those say what to do with
-/// Vosh closed, and in this session the save at quit would undo it, as a
-/// catalog written back beside the backups you copied over lays their old
-/// items over it.
+/// [`folder_refusal`]. Those say what to do with Vosh closed, and in this
+/// session the save at quit would undo it, as a catalog written back
+/// beside the backups you copied over lays their old items over it.
 pub(crate) async fn migration_refusal(
     state: &SharedState,
     app_data: &std::path::Path,
@@ -102,7 +107,83 @@ pub(crate) async fn migration_refusal(
              help.",
         );
     }
-    crate::loadout_store::migration_refusal(app_data)
+    folder_refusal(app_data)
+}
+
+/// The folder the shared catalog wizard copies each profile file into
+/// before it changes any.
+pub(crate) fn legacy_dir(app_data: &Path) -> PathBuf {
+    app_data.join("profiles").join("legacy")
+}
+
+/// True when the legacy folder holds a copy of a profile file.
+fn legacy_copies_present(app_data: &Path) -> bool {
+    std::fs::read_dir(legacy_dir(app_data)).is_ok_and(|entries| {
+        entries.filter_map(Result::ok).any(|entry| {
+            entry.path().extension().is_some_and(|ext| ext == "toml")
+                && entry.file_type().is_ok_and(|t| t.is_file())
+        })
+    })
+}
+
+/// Why the shared catalog wizard may not write catalog.toml and
+/// loadouts.toml, or None when it may. It refuses while the journal of
+/// an earlier run is on disk, since that run took the items out of some
+/// profile files and the next launch finishes it from the journal, which
+/// a new run would write over. The wizard builds the catalog
+/// from the profile files, and in loadout mode those hold no aliases or
+/// triggers, so it only writes where neither file is on disk yet. A file
+/// Vosh could not read at launch stays refused even once it is gone. It
+/// also refuses while profiles/legacy holds a copy from an earlier run,
+/// the backup of each profile as it was before that run, since a run over
+/// files an earlier run took the items out of would copy those over it.
+/// The catalog.toml of that run holds the items, with every change since,
+/// so that refusal says to put it back to keep them. It says what a
+/// backup copied back brings back and drops for a new catalog, since one
+/// built from the files without their items would leave every character
+/// with nothing. It says never to do both, since launch lays the items of
+/// a profile file over the catalog, and the next save shares them.
+fn folder_refusal(app_data: &Path) -> Option<&'static str> {
+    if journal_path(app_data).exists() {
+        return Some(
+            "Vosh has not finished an earlier move to loadouts. Quit Vosh and open it again to \
+             finish it.",
+        );
+    }
+    let catalog = catalog_path(app_data);
+    let loadouts = loadouts_path(app_data);
+    if crate::disk::atomic::is_unread(&catalog) || crate::disk::atomic::is_unread(&loadouts) {
+        return Some(
+            "Vosh could not read your shared catalog at launch, so it will not build a new one \
+             over it. Fix catalog.toml or loadouts.toml and restart Vosh.",
+        );
+    }
+    if catalog.exists() {
+        return Some(
+            "You already have a shared catalog, so Vosh will not build another one over it.",
+        );
+    }
+    if loadouts.exists() {
+        return Some(
+            "Vosh found loadouts.toml from an earlier shared catalog and will not save over it. \
+             Move the file out of the Vosh folder to build a new catalog.",
+        );
+    }
+    if legacy_copies_present(app_data) {
+        return Some(
+            "Vosh found copies of your profile files in profiles/legacy from an earlier move to \
+             loadouts and will not save over them. Each copy is a backup of its profile as it \
+             was before that move. Your aliases, triggers, and macros are in the catalog.toml \
+             that move wrote, with every change you made since. To keep them, quit Vosh and put \
+             catalog.toml and loadouts.toml back in the Vosh folder. To build a new catalog from \
+             the backups instead, quit Vosh, copy each backup over its file in the profiles \
+             folder, and move the legacy folder out of the profiles folder. A backup brings back \
+             every setting of its profile as it was before the move and drops every change you \
+             made since. Never do both, since a backup copied back beside catalog.toml lays its \
+             old items over the catalog for every character.",
+        );
+    }
+    None
 }
 
 /// What the shared catalog wizard reads, see [`migration_sources`].
@@ -362,8 +443,8 @@ pub(crate) async fn apply_migration_with(
     // A full copy of each file first, so the files as they were wait in
     // profiles/legacy before anything changes. The wizard refuses to run
     // while profiles/legacy holds a copy from an earlier run, so no copy
-    // lands over another, see `loadout_store::migration_refusal`.
-    let legacy_dir = crate::loadout_store::legacy_dir(app_data);
+    // lands over another, see `folder_refusal`.
+    let legacy_dir = legacy_dir(app_data);
     let mut copies = Vec::new();
     for file in &sources.files {
         let Some(text) = &file.text else {
