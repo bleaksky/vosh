@@ -62,9 +62,9 @@ use commands::{
     logs_search_page, migration_analyze, migration_apply, open_help_window, open_settings_window,
     profile_create, profile_delete, profile_duplicate, profile_get_scope, profile_rename,
     profile_resolve_match, profile_set_scope, profile_switch, profiles_list, tick_get_config,
-    tick_set_config, ui_get_config, ui_set_config, updater_check, updater_install_and_relaunch,
+    tick_set_config, updater_check, updater_install_and_relaunch,
 };
-use fonts::{fonts_list, handle_font_uri};
+use fonts::handle_font_uri;
 
 pub fn run() {
     tracing_subscriber::fmt()
@@ -158,8 +158,8 @@ pub fn run() {
             logs_search_page,
             logs_export,
             ipc::terminal::scrollback_load,
-            ui_get_config,
-            ui_set_config,
+            ipc::ui_config::ui_get_config,
+            ipc::ui_config::ui_set_config,
             updater_check,
             updater_install_and_relaunch,
             profiles_list,
@@ -217,12 +217,12 @@ pub fn run() {
             prompt::prompt_watch,
             commands::prompt_gags_without_reader,
             characters::profile_export_file,
-            commands::ui_set_theme,
+            ipc::ui_config::ui_set_theme,
             commands::ui_set_affects_display,
-            commands::ui_get_chat_colors,
-            commands::ui_set_chat_color,
-            commands::ui_reset_chat_colors,
-            fonts_list,
+            ipc::ui_config::ui_get_chat_colors,
+            ipc::ui_config::ui_set_chat_color,
+            ipc::ui_config::ui_reset_chat_colors,
+            ipc::ui_config::fonts_list,
             ipc::automation::macros_list,
             ipc::automation::macros_set,
             ipc::automation::macros_delete,
