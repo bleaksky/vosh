@@ -1867,11 +1867,13 @@ fn ground_tint(tints: &[Paint]) -> Rgba {
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Uniforms {
     surface_size: [f32; 2],
-    cell_size: [f32; 2],
+    // Neither shader reads past the surface size. The pad keeps the
+    // uniform at 16 bytes, the size both shaders declare.
+    _pad: [f32; 2],
 }
 
 const CELL_SHADER: &str = r"
-struct Uniforms { surface_size: vec2<f32>, cell_size: vec2<f32> };
+struct Uniforms { surface_size: vec2<f32>, _pad: vec2<f32> };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(0) @binding(1) var atlas_tex: texture_2d<f32>;
 @group(0) @binding(2) var atlas_samp: sampler;
@@ -1935,7 +1937,7 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
 /// row's top, and every row as wide as the last one. The output is
 /// premultiplied and sRGB encoded like the cells.
 const BAND_SHADER: &str = r"
-struct Uniforms { surface_size: vec2<f32>, cell_size: vec2<f32> };
+struct Uniforms { surface_size: vec2<f32>, _pad: vec2<f32> };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
 struct BandOut {
@@ -2756,13 +2758,13 @@ impl CellRenderer {
 
         let uniforms = Uniforms {
             surface_size: [surface_w as f32, surface_h as f32],
-            cell_size: [cell_w, cell_h],
+            _pad: [0.0; 2],
         };
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
         if band_ranges.iter().any(|r| !r.is_empty()) {
             let band_uniforms = Uniforms {
                 surface_size: [band_view[2] as f32, band_view[3] as f32],
-                cell_size: [cell_w, cell_h],
+                _pad: [0.0; 2],
             };
             queue.write_buffer(
                 &self.band_uniform_buffer,
