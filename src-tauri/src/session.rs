@@ -3485,36 +3485,4 @@ fn emit_input_mode<R: tauri::Runtime>(app: &AppHandle<R>, password: bool) {
 }
 
 #[cfg(test)]
-#[path = "session_show_tests.rs"]
-mod show_tests;
-
-#[cfg(test)]
-#[path = "session_preview_tests.rs"]
-mod preview_tests;
-
-#[cfg(test)]
-#[path = "session_repaint_tests.rs"]
-mod repaint_tests;
-
-#[cfg(test)]
-#[path = "session_clock_tests.rs"]
-mod clock_tests;
-
-#[cfg(test)]
-#[path = "session_right_tests.rs"]
-mod right_tests;
-
-#[cfg(test)]
-#[path = "session_pointer_tests.rs"]
-mod pointer_tests;
-
-#[cfg(test)]
-#[path = "session_room_tests.rs"]
-mod room_tests;
-
-#[cfg(test)]
-#[path = "session_collapse_tests.rs"]
-mod collapse_tests;
-
-#[cfg(test)]
 mod tests;

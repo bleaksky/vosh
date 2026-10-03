@@ -5,7 +5,7 @@
 //! select nor read back, and the band while pinned, which no selection or
 //! read back holds.
 
-use super::show_tests::{profile, showing, wire_fixture, Session, CODES};
+use super::show::{profile, showing, wire_fixture, Session, CODES};
 use super::*;
 use crate::output::OutputPayload;
 use vosh_prompt::values::overrides::{Preview, PromptPreview};
@@ -210,7 +210,7 @@ fn a_band_repaint_between_your_echo_and_its_word_keeps_the_next_line_end() {
     grid.session_output(&band);
     session.local_write();
     grid.session_output(&session.read(b"\r\nSomeone arrives from the south.\r\n").out);
-    let rows = super::show_tests::rows_of(&grid);
+    let rows = super::show::rows_of(&grid);
     assert_eq!(
         rows[rows.len() - 3..],
         ["look", "", "Someone arrives from the south."]

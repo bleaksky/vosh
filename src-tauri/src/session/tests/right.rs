@@ -4,7 +4,7 @@
 //! the width changes, on the open row or on the band. The native grid
 //! keeps a lifted band on its row and your echo on the next.
 
-use super::show_tests::{profile, rows_of, showing, wire_fixture, Session, CODES};
+use super::show::{profile, rows_of, showing, wire_fixture, Session, CODES};
 use super::*;
 use vosh_prompt::PromptShow;
 

@@ -8,7 +8,7 @@ import { RegionWriter } from './terminalRegion';
 // The session's own payloads with the prompt card's Low health preview on,
 // for every wire fixture and a few pulses written back to back, as one
 // read and as two cut at every place, in the text and lifted.
-// src-tauri/src/session_preview_tests.rs writes them from the real session
+// src-tauri/src/session/tests/preview.rs writes them from the real session
 // steps and holds the stored file to what the session sends now. Each is
 // replayed through the same decode, word wrap and writer Terminal.tsx
 // uses, into a real xterm, and then your echo lands. The preview the open
