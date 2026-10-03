@@ -12,8 +12,11 @@ use tracing::{error, info};
 use vosh_log::LogStore;
 
 use crate::app::state::SharedState;
+use crate::disk::custom_themes::migrate_custom_themes;
 use crate::loadouts::wizard::journal::{self, WizardRun};
-use crate::{affect_full, loadout_store, logs, profile_config, profile_set};
+use crate::profile::file::load_at_launch;
+use crate::profile::set::ProfileSet;
+use crate::{affect_full, loadout_store, logs};
 
 /// Every startup step, in order, as the app's setup hook runs them.
 pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
@@ -160,7 +163,7 @@ pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
 /// (theme, font, dock layout, keep last, auto update) so those UI prefs
 /// stay the same across every profile.
 pub(crate) async fn load_profiles(state: &SharedState, app_data: &Path) {
-    let mut set = match profile_set::ProfileSet::load_or_migrate(app_data.to_path_buf()) {
+    let mut set = match ProfileSet::load_or_migrate(app_data.to_path_buf()) {
         Ok(set) => set,
         Err(e) => {
             error!(error = %e, "failed to load profile set; using in-memory defaults");
@@ -173,7 +176,7 @@ pub(crate) async fn load_profiles(state: &SharedState, app_data: &Path) {
     // files still hold into global.toml, which owns the list from here
     // on. It writes only files it read, so a file that does not read
     // stays as it is.
-    match profile_config::migrate_custom_themes(&set) {
+    match migrate_custom_themes(&set) {
         Ok(0) => {}
         Ok(files) => {
             info!(files, "moved custom themes into global.toml");
@@ -187,7 +190,7 @@ pub(crate) async fn load_profiles(state: &SharedState, app_data: &Path) {
     // the main window shows.
     let notices = {
         let mut p = state.profile.lock().await;
-        profile_config::load_at_launch(&set, &mut p)
+        load_at_launch(&set, &mut p)
     };
     state.add_launch_notices(notices);
     state.note_active_profile(set.active_name());

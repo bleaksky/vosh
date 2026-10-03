@@ -12,7 +12,7 @@ use tokio::time::Instant;
 use tracing::warn;
 
 use crate::app::events;
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 use crate::prompt::client_values;
 
 #[cfg(test)]

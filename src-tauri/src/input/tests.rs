@@ -3,8 +3,8 @@ use super::script::slash_script_load_in;
 use super::slash::{parse_braced_pattern, HELP_TEXT};
 use super::target::{read_room_chars, set_room_chars};
 use super::*;
-use crate::profile::RoomChar;
-use crate::profile_config::ProfileConfig;
+use crate::profile::file::ProfileConfig;
+use crate::profile::live::RoomChar;
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{NamedColor, TriggerAction};
 use vosh_automation::vars::Scope;
@@ -336,7 +336,7 @@ fn prompt_default_puts_the_default_design_in_place_and_keeps_yours() {
     assert_eq!(config.show, PromptShow::Pinned);
     assert_eq!(config.capture, capture);
     // A save writes the [ui] copy from the table.
-    let file = crate::profile_config::ProfileConfig::from_profile(&p);
+    let file = crate::profile::file::ProfileConfig::from_profile(&p);
     assert_eq!(file.ui.prompt_template, DEFAULT_DESIGN);
 
     let ran = run_line(&mut p, "#prompt default");
@@ -369,7 +369,7 @@ fn prompt_draw_turns_drawing_on_and_off() {
     assert!(config.draw);
     // Drawing with no design draws Vosh's default, as Settings does.
     assert_eq!(config.template, DEFAULT_DESIGN);
-    let file = crate::profile_config::ProfileConfig::from_profile(&p);
+    let file = crate::profile::file::ProfileConfig::from_profile(&p);
     assert!(file.ui.prompt_template_enabled);
 
     let _ = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
@@ -1118,9 +1118,9 @@ fn the_caret_is_the_one_the_command_line_draws() {
 
 #[test]
 fn a_sent_command_color_that_does_not_read_leaves_the_command_plain() {
-    let mut ui = crate::profile_config::UiConfig {
+    let mut ui = crate::profile::ui::UiConfig {
         input_echo_caret: false,
-        ..crate::profile_config::UiConfig::default()
+        ..crate::profile::ui::UiConfig::default()
     };
     for color in ["", "red", "#12345", "#12g456", "rgb(1,2,3)"] {
         ui.input_echo_color = Some(color.into());

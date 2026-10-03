@@ -39,14 +39,13 @@ use crate::loadout_store::{
     catalog_path, load_global_catalog, load_loadout_set, loadouts_path, save_global_catalog,
     save_loadout_set,
 };
-use crate::profile::panes::{DockEntryPersist, PaneNode};
-use crate::profile::ui::VitalsConfig;
-use crate::profile::{Macro, Timer};
-use crate::profile_config::{
-    CustomTheme, GlobalConfig, GroupFolders, PaneLayoutPersist, PluginsPersist, ProfileConfig,
-    TrackedAffect, UiConfig,
-};
-use crate::profile_set::{AutoMatch, ProfileEntry, ProfileSet, ProfilesIndex, Scope, ScopeConfig};
+use crate::profile::file::{GroupFolders, PluginsPersist, ProfileConfig};
+use crate::profile::live::{Macro, Timer};
+use crate::profile::login_match::AutoMatch;
+use crate::profile::panes::{DockEntryPersist, PaneLayoutPersist, PaneNode};
+use crate::profile::set::{ProfileEntry, ProfileSet, ProfilesIndex};
+use crate::profile::shared::{GlobalConfig, Scope, ScopeConfig};
+use crate::profile::ui::{CustomTheme, TrackedAffect, UiConfig, VitalsConfig};
 use crate::tick::TickConfig;
 
 /// The folder that holds the goldens and the old inputs.
@@ -1064,7 +1063,7 @@ fn the_room_time_and_weather_colors_preset_saves_where_0_8_0_still_reads_the_fil
     }
     let preset: PresetFile =
         serde_json::from_str(include_str!("../../../fixtures/room-colors/preset.json")).unwrap();
-    let mut profile = crate::profile::Profile::default();
+    let mut profile = crate::profile::live::Profile::default();
     for trigger in preset.triggers {
         profile.triggers.set(trigger).unwrap();
     }
@@ -1111,7 +1110,7 @@ fn the_room_time_and_weather_colors_preset_saves_where_0_8_0_still_reads_the_fil
 
 #[test]
 fn a_your_target_trigger_saves_where_0_8_0_still_reads_the_file() {
-    let mut profile = crate::profile::Profile::default();
+    let mut profile = crate::profile::live::Profile::default();
     for (name, target) in [
         ("hp", TriggerTarget::Line),
         ("room", TriggerTarget::Room),

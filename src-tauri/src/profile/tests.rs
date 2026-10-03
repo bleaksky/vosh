@@ -5,10 +5,12 @@ use std::collections::BTreeMap;
 
 use tempfile::tempdir;
 
+use super::live::{Macro, Profile};
 use super::login_match::AutoMatch;
-use super::{Macro, Profile};
-use crate::profile_config::{strip_global_fields, CustomTheme, GlobalConfig, ProfileConfig};
-use crate::profile_set::{ProfileSet, DEFAULT_PROFILE_NAME};
+use crate::profile::file::ProfileConfig;
+use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
+use crate::profile::shared::{strip_global_fields, GlobalConfig};
+use crate::profile::ui::CustomTheme;
 
 pub(crate) fn theme(id: &str, background: &str) -> CustomTheme {
     CustomTheme {

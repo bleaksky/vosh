@@ -8,7 +8,7 @@ use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
 
 use crate::app::plugins::SharedPluginManager;
 use crate::logs::{SharedLogStore, SharedScrollback};
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 use crate::script::SharedTimers;
 use crate::session::SessionHandle;
 
@@ -32,7 +32,7 @@ pub(crate) struct AppState {
     /// Catalog of named profiles. Loaded (or migrated from the legacy
     /// single-file layout) once at startup; commands mutate it under
     /// this mutex.
-    pub(crate) profile_set: Arc<Mutex<Option<crate::profile_set::ProfileSet>>>,
+    pub(crate) profile_set: Arc<Mutex<Option<crate::profile::set::ProfileSet>>>,
     /// Last terminal size reported by the frontend, kept across the
     /// no-session window so a fresh `session_connect` can seed the
     /// telnet `Negotiator` with the real (cols, rows) instead of the
@@ -120,7 +120,7 @@ impl AppState {
     /// the error every profile command returns.
     pub(crate) async fn loaded_profile_set(
         &self,
-    ) -> Result<MappedMutexGuard<'_, crate::profile_set::ProfileSet>, &'static str> {
+    ) -> Result<MappedMutexGuard<'_, crate::profile::set::ProfileSet>, &'static str> {
         MutexGuard::try_map(self.profile_set.lock().await, Option::as_mut)
             .map_err(|_| PROFILES_NOT_LOADED)
     }

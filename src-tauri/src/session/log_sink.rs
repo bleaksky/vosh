@@ -14,7 +14,7 @@ use tracing::warn;
 
 use crate::logs::{SharedLogStore, SharedScrollback};
 use crate::output::emit_output;
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 
 use super::lines::{LineAccumulator, Partial};
 use super::now_ms;

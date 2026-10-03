@@ -14,7 +14,7 @@ use super::target::{
 use super::tick::slash_tick;
 use super::vars::{slash_unvar, slash_var, slash_vars_list};
 use super::{split_first_word, InputResult};
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 use crate::script::ApplyResult;
 
 pub(super) fn handle_slash(

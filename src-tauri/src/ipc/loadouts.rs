@@ -16,7 +16,7 @@ pub(crate) struct LoadoutSummary {
     pub name: String,
     pub description: Option<String>,
     pub enabled_groups: Vec<String>,
-    pub auto_match: Option<crate::profile_set::AutoMatch>,
+    pub auto_match: Option<crate::profile::login_match::AutoMatch>,
 }
 
 /// Shape returned by [`loadouts_get_state`]. Carries the active list,

@@ -9,7 +9,7 @@
 //!   1. **Persistence**: `<app_data_dir>/catalog.toml` and
 //!      `<app_data_dir>/loadouts.toml` load and save, both routed
 //!      through the same atomic backup pipeline that `profile.toml`
-//!      and `global.toml` use ([`crate::profile_config::write_with_backup`]).
+//!      and `global.toml` use ([`crate::disk::atomic::write_with_backup`]).
 //!   2. **Mode detection**: [`path_b_mode_active`] returns true iff
 //!      `catalog.toml` exists. This is the trigger `AppState` reads
 //!      at startup to decide whether to source items from the catalog
@@ -38,11 +38,12 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::disk::atomic::write_with_backup;
 use crate::loadout::{GlobalCatalog, LoadoutSet};
 use crate::loadouts::wizard::journal::journal_path;
-use crate::profile::Profile;
-use crate::profile_config::{write_with_backup, ProfileConfig};
-use crate::profile_set::ProfileSet;
+use crate::profile::file::ProfileConfig;
+use crate::profile::live::Profile;
+use crate::profile::set::ProfileSet;
 
 /// Filename of the global catalog inside the app data directory.
 const CATALOG_FILE: &str = "catalog.toml";
@@ -105,7 +106,7 @@ pub(crate) fn load_global_catalog(app_data: &Path) -> Result<GlobalCatalog, Load
 }
 
 /// Persist the global catalog atomically with a rolling backup. See
-/// [`crate::profile_config::write_with_backup`] for the rename and
+/// [`crate::disk::atomic::write_with_backup`] for the rename and
 /// retention guarantees.
 pub(crate) fn save_global_catalog(
     app_data: &Path,
@@ -148,7 +149,7 @@ pub(crate) const UNREAD_LOADOUTS_NOTICE: &str =
 /// Read catalog.toml and loadouts.toml at launch in loadout mode. When
 /// either one does not read, the session runs on the profile files alone,
 /// so a save from it would write a catalog without your shared items.
-/// Vosh then holds both files with [`crate::profile_config::hold_unread`],
+/// Vosh then holds both files with [`crate::disk::atomic::hold_unread`],
 /// since the pair only makes sense together, and the error carries the
 /// sentences that tell you so.
 pub(crate) fn load_path_b_at_launch(
@@ -176,8 +177,8 @@ pub(crate) fn load_path_b_at_launch(
     match (catalog, set) {
         (Ok(catalog), Ok(set)) => Ok((catalog, set)),
         _ => {
-            crate::profile_config::hold_unread(&catalog_path(app_data));
-            crate::profile_config::hold_unread(&loadouts_path(app_data));
+            crate::disk::atomic::hold_unread(&catalog_path(app_data));
+            crate::disk::atomic::hold_unread(&loadouts_path(app_data));
             Err(notices)
         }
     }
@@ -209,7 +210,7 @@ pub(crate) fn migration_refusal(app_data: &Path) -> Option<&'static str> {
     }
     let catalog = catalog_path(app_data);
     let loadouts = loadouts_path(app_data);
-    if crate::profile_config::is_unread(&catalog) || crate::profile_config::is_unread(&loadouts) {
+    if crate::disk::atomic::is_unread(&catalog) || crate::disk::atomic::is_unread(&loadouts) {
         return Some(
             "Vosh could not read your shared catalog at launch, so it will not build a new one \
              over it. Fix catalog.toml or loadouts.toml and restart Vosh.",
@@ -282,7 +283,7 @@ impl ProfilePresetLists {
         self.unread
             .iter()
             .map(|name| {
-                let name = crate::profile_set::display_name(name);
+                let name = crate::profile::set::display_name(name);
                 if adopted {
                     format!(
                         "Vosh could not read the {name} profile file and left its presets out of \
@@ -506,7 +507,7 @@ mod tests {
     use vosh_automation::trigger::{Trigger, TriggerAction};
 
     use crate::loadout::Loadout;
-    use crate::profile::Macro;
+    use crate::profile::live::Macro;
 
     fn make_trigger(name: &str, pattern: &str, group: Option<&str>) -> Trigger {
         Trigger {
@@ -941,7 +942,7 @@ mod tests {
     /// when it took one. Hands back the notices launch keeps for you too.
     fn launch_with_notices(dir: &Path, set: &ProfileSet) -> (Profile, Vec<String>) {
         let mut profile = Profile::default();
-        let mut notices = crate::profile_config::load_at_launch(set, &mut profile);
+        let mut notices = crate::profile::file::load_at_launch(set, &mut profile);
         let mut catalog = load_global_catalog(dir).unwrap();
         let lists = catalog
             .enabled_presets
@@ -971,10 +972,10 @@ mod tests {
     /// Each profile file holds its own list from before the move. Ilsabet
     /// (default) turned the potion labels off. Healer never did.
     fn two_profiles(dir: &Path) -> ProfileSet {
-        let set = crate::profile_set::tests::james_like_set(dir);
+        let set = crate::profile::tests::james_like_set(dir);
         write_presets(
             &set,
-            crate::profile_set::DEFAULT_PROFILE_NAME,
+            crate::profile::set::DEFAULT_PROFILE_NAME,
             &["healing_basics"],
         );
         write_presets(&set, "Healer", &["healing_basics", "potion_labels"]);
@@ -1092,7 +1093,7 @@ mod tests {
     #[test]
     fn the_catalog_waits_while_no_profile_file_reads() {
         let dir = tempfile::tempdir().unwrap();
-        let set = crate::profile_set::tests::james_like_set(dir.path());
+        let set = crate::profile::tests::james_like_set(dir.path());
         save_global_catalog(dir.path(), &GlobalCatalog::default()).unwrap();
         // The only saved file is the one you launch as, and it does not
         // read, so there is no list to take.
@@ -1108,8 +1109,8 @@ mod tests {
         assert_eq!(
             notices,
             [
-                crate::profile_config::unread_profile_notice(
-                    crate::profile_set::DEFAULT_PROFILE_NAME
+                crate::profile::file::unread_profile_notice(
+                    crate::profile::set::DEFAULT_PROFILE_NAME
                 ),
                 "Vosh could not read the Default profile file and will build the shared preset \
                  list once the file reads."

@@ -23,8 +23,8 @@ use serde::{Deserialize, Serialize};
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::Trigger;
 
-use crate::profile::Macro;
-use crate::profile_set::AutoMatch;
+use crate::profile::live::Macro;
+use crate::profile::login_match::AutoMatch;
 
 /// The global catalog. Every alias, trigger, macro lives here as a
 /// flat list with its `group` tag carrying the loadout association.
@@ -36,8 +36,8 @@ pub(crate) struct GlobalCatalog {
     pub aliases: Vec<Alias>,
     /// Every trigger. Room triggers go under `room_triggers` on disk, so
     /// an older build still reads the file (D14), see
-    /// [`crate::profile_config::trigger_lists`].
-    #[serde(flatten, with = "crate::profile_config::trigger_lists")]
+    /// [`crate::profile::file::trigger_lists`].
+    #[serde(flatten, with = "crate::profile::file::trigger_lists")]
     pub triggers: Vec<Trigger>,
     #[serde(default)]
     pub macros: Vec<Macro>,
@@ -54,7 +54,7 @@ pub(crate) struct GlobalCatalog {
 impl GlobalCatalog {
     /// The catalog as the live profile holds it: its aliases, triggers,
     /// macros, and enabled presets. Path B persistence writes this.
-    pub(crate) fn from_profile(profile: &crate::profile::Profile) -> Self {
+    pub(crate) fn from_profile(profile: &crate::profile::live::Profile) -> Self {
         Self {
             aliases: profile.aliases.list().into_iter().cloned().collect(),
             triggers: profile.triggers.list(),
@@ -243,7 +243,7 @@ mod tests {
 
     #[test]
     fn catalog_from_profile_carries_the_enabled_presets() {
-        let mut profile = crate::profile::Profile::default();
+        let mut profile = crate::profile::live::Profile::default();
         profile.ui.enabled_presets = vec!["healing_basics".into(), "potion_labels".into()];
         let catalog = GlobalCatalog::from_profile(&profile);
         assert_eq!(

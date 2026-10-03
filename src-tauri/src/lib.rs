@@ -36,15 +36,6 @@ mod tintin_import;
 
 use app::state::{AppState, SharedState};
 use fonts::handle_font_uri;
-// Callers outside the inactive profile reading still reach it by its old
-// path, until they point at crate::profile::inactive.
-use profile::inactive as characters;
-// Callers outside the profile file still reach it by its old path, until
-// they point at crate::profile::file.
-use profile::file as profile_config;
-// Callers outside the profile set still reach it by its old path, until
-// they point at crate::profile::set.
-use profile::set as profile_set;
 
 pub fn run() {
     tracing_subscriber::fmt()

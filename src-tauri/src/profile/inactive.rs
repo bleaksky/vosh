@@ -22,18 +22,13 @@ use crate::app::state::{
     bump_panes_generation, panes_generation, SharedState, MIGRATION_RELAUNCH_PENDING,
 };
 use crate::disk::save::PERSIST_LOCK;
-use crate::profile_config::{
-    GlobalConfig, PaneLayoutPersist, ProfileConfig, TrackedAffect, UiConfig,
-};
-use crate::profile_set::{
-    display_name, world_name, AutoMatch, ProfileEntry, ProfileSet, ProfileSetError, Scope,
-};
-
-// Callers still reach the session identity here, until they point at
-// crate::session::identity.
-pub(crate) use crate::session::identity::{
-    broadcast_session_identity, session_identity, SessionIdentity,
-};
+use crate::profile::file::ProfileConfig;
+use crate::profile::login_match::AutoMatch;
+use crate::profile::panes::PaneLayoutPersist;
+use crate::profile::set::{display_name, ProfileEntry, ProfileSet, ProfileSetError};
+use crate::profile::shared::{GlobalConfig, Scope};
+use crate::profile::ui::{TrackedAffect, UiConfig};
+use crate::profile::worlds::world_name;
 
 /// One profile as the Characters group shows it.
 #[derive(Debug, Clone, Serialize)]
@@ -321,8 +316,9 @@ mod tests {
     use super::*;
     use crate::app::state::AppState;
     use crate::profile::panes::DockEntryPersist;
-    use crate::profile_set::tests::james_like_set;
-    use crate::profile_set::{ScopeConfig, DEFAULT_PROFILE_NAME};
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
+    use crate::profile::shared::ScopeConfig;
+    use crate::profile::tests::james_like_set;
 
     fn affect(name: &str) -> TrackedAffect {
         TrackedAffect {

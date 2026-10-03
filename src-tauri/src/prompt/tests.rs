@@ -5,8 +5,8 @@ use vosh_prompt::config::{AabahranCapture, RegexCapture};
 
 use super::*;
 use crate::app::state::{AppState, PROFILES_NOT_LOADED};
-use crate::profile_config::ProfileConfig;
-use crate::profile_set::{ProfileSet, DEFAULT_PROFILE_NAME};
+use crate::profile::file::ProfileConfig;
+use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
 
 fn codes(prompt: &str) -> CaptureConfig {
     CaptureConfig::Aabahran(AabahranCapture {
@@ -104,7 +104,7 @@ fn a_table_that_compiles_is_taken_with_two_earlier_designs_at_most() {
     assert_eq!(p.prompt.config().previous_templates, ["a", "b"]);
     assert!(p.prompt.stage.has_recognizer());
     // A save writes the [ui] copy from the table, for older builds.
-    let file = crate::profile_config::ProfileConfig::from_profile(&p);
+    let file = crate::profile::file::ProfileConfig::from_profile(&p);
     assert!(file.ui.prompt_template_enabled);
     assert_eq!(file.ui.prompt_template, "%hp");
     // The same table again changes nothing.
@@ -614,8 +614,8 @@ fn opening_the_card_keeps_the_design_it_found_first() {
 
 /// A live profile whose `[prompt]` table holds more than Settings
 /// shows: a capture and an earlier design.
-pub(crate) fn prompt_profile() -> crate::profile::Profile {
-    let mut p = crate::profile::Profile::default();
+pub(crate) fn prompt_profile() -> crate::profile::live::Profile {
+    let mut p = crate::profile::live::Profile::default();
     p.set_prompt_config(vosh_prompt::PromptConfig {
         draw: true,
         template: "%hp".into(),
@@ -631,7 +631,7 @@ pub(crate) fn prompt_profile() -> crate::profile::Profile {
 
 #[test]
 fn the_prompt_show_state_says_where_it_shows_and_whether_a_capture_reads_it() {
-    let mut p = crate::profile::Profile::default();
+    let mut p = crate::profile::live::Profile::default();
     assert_eq!(
         super::prompt_show_state(&p),
         super::PromptShowState {

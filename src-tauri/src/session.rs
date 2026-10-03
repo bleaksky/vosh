@@ -93,12 +93,12 @@ pub(crate) struct TargetPayload {
     /// Snapshot of the current quick-key bindings (name + verb).
     /// Frontend renders them next to the target name on the
     /// `TargetBar` so the user always sees which slots are armed.
-    pub quick_keys: Vec<crate::profile::QuickKey>,
+    pub quick_keys: Vec<crate::profile::live::QuickKey>,
 }
 
 impl TargetPayload {
     /// The target and quick keys `p` holds now.
-    pub(crate) fn of(p: &crate::profile::Profile) -> Self {
+    pub(crate) fn of(p: &crate::profile::live::Profile) -> Self {
         Self {
             name: p.target.name.clone(),
             room_idx: p.target.room_idx,
@@ -268,7 +268,7 @@ pub(crate) async fn connect<R: tauri::Runtime>(
     // `session_set_window_size` before this connect.
     let initial_size = state.window_size.lock().map_or((80, 24), |g| *g);
     let target = (host.clone(), port);
-    let known_host = crate::profile_set::is_forsaken_lands(&host);
+    let known_host = crate::profile::worlds::is_forsaken_lands(&host);
 
     let spawned = spawn(
         app.clone(),
@@ -299,7 +299,7 @@ pub(crate) async fn connect<R: tauri::Runtime>(
                     *g = None;
                 }
             }
-            crate::characters::broadcast_session_identity(app, state).await;
+            crate::session::identity::broadcast_session_identity(app, state).await;
             return Err(e.to_string());
         }
     };
@@ -312,7 +312,7 @@ pub(crate) async fn connect<R: tauri::Runtime>(
         }
         *current = Some(handle);
     }
-    crate::characters::broadcast_session_identity(app, state).await;
+    crate::session::identity::broadcast_session_identity(app, state).await;
     Ok(())
 }
 
@@ -331,7 +331,7 @@ pub(crate) async fn disconnect<R: tauri::Runtime>(app: &AppHandle<R>, state: &Sh
     if let Ok(mut g) = state.current_character.lock() {
         *g = None;
     }
-    crate::characters::broadcast_session_identity(app, state).await;
+    crate::session::identity::broadcast_session_identity(app, state).await;
 }
 
 /// Open a connection, install a parser plus negotiator, and spin up the IO

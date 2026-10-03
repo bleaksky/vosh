@@ -20,7 +20,8 @@ use vosh_prompt::testkit::mud::{PROMPT, PROMPT_ALL};
 use vosh_prompt::testkit::{Build, Mud, Options};
 
 use crate::app::state::{AppState, SharedState};
-use crate::profile_set::{AutoMatch, ProfileSet, DEFAULT_PROFILE_NAME};
+use crate::profile::login_match::AutoMatch;
+use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
 
 /// The events the tests read, as the webview would hear them.
 const EVENTS: [&str; 10] = [
@@ -1328,7 +1329,7 @@ fn aabahran(capture: &vosh_prompt::CaptureConfig) -> vosh_prompt::config::Aabahr
 
 /// The capture a profile file holds on disk, once it reads.
 fn saved_capture(file: &std::path::Path) -> Option<vosh_prompt::CaptureConfig> {
-    crate::profile_config::ProfileConfig::load(file)
+    crate::profile::file::ProfileConfig::load(file)
         .ok()
         .map(|config| config.prompt_config().capture)
 }
@@ -1540,7 +1541,7 @@ async fn a_switch_to_a_profile_with_a_moved_capture_switches_it() {
     // Default reads nothing, and Healer holds the moved pattern.
     h.set_prompt(no_capture()).await;
     let healer = h.profile_file("Healer").await;
-    let mut file = crate::profile_config::ProfileConfig::default();
+    let mut file = crate::profile::file::ProfileConfig::default();
     file.set_prompt(migrated());
     file.save(&healer).expect("Healer's file");
     h.connect().await;
@@ -2187,7 +2188,7 @@ async fn lua_a_settings_timer_runs_starts_timers_and_runs_input() {
             ),
             (2, "#lua mud.input('#echo the timer ran mud.input')"),
         ] {
-            p.timers.push(crate::profile::Timer {
+            p.timers.push(crate::profile::live::Timer {
                 id,
                 name: String::new(),
                 interval_secs: 1,
@@ -2229,7 +2230,7 @@ async fn lua_that_changes_an_alias_saves_your_profile() {
 
     let file = h.profile_file(DEFAULT_PROFILE_NAME).await;
     h.until("the alias the Lua made, saved", |_| {
-        crate::profile_config::ProfileConfig::load(&file)
+        crate::profile::file::ProfileConfig::load(&file)
             .is_ok_and(|config| config.aliases.iter().any(|a| a.name == "k"))
     })
     .await;
@@ -2284,7 +2285,7 @@ async fn a_timer_line_moves_the_target_display_and_repaints_your_prompt() {
     {
         let mut p = h.state.profile.lock().await;
         for (id, command) in [(1, "tar goblin"), (2, "#prompt default")] {
-            p.timers.push(crate::profile::Timer {
+            p.timers.push(crate::profile::live::Timer {
                 id,
                 name: String::new(),
                 interval_secs: 1,

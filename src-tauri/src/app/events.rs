@@ -38,8 +38,8 @@ use tauri::{AppHandle, Emitter};
 use tracing::warn;
 
 use crate::app::state::{panes_generation, SharedState};
-use crate::profile::Profile;
-use crate::profile_config::PaneLayoutPersist;
+use crate::profile::live::Profile;
+use crate::profile::panes::PaneLayoutPersist;
 use crate::tick::TickConfig;
 
 /// Send `event` to every open window, once. One emit reaches every
@@ -125,10 +125,10 @@ pub(crate) const PROMPT_CONFIG_CHANGED: &str = "vosh://prompt-config-changed";
 pub(crate) const MACRO_GROUPS_CHANGED: &str = "vosh://macro-groups-changed";
 /// Sent to every window when a macro was set or removed, or an import
 /// brought macros. The payload is the whole list of
-/// [`crate::profile::Macro`]. `subscribeMacrosChanged` hears it.
+/// [`crate::profile::live::Macro`]. `subscribeMacrosChanged` hears it.
 pub(crate) const MACROS_CHANGED: &str = "vosh://macros-changed";
 /// Sent to every window when a timer was set or removed. The payload is
-/// the whole list of [`crate::profile::Timer`].
+/// the whole list of [`crate::profile::live::Timer`].
 /// `subscribeTimersChanged` hears it.
 pub(crate) const TIMERS_CHANGED: &str = "vosh://timers-changed";
 
@@ -150,7 +150,7 @@ pub(crate) const PROFILE_SWITCHED: &str = "vosh://profile-switched";
 /// inactive profile can never reach the main window's stores.
 /// `subscribeProfileChanged` hears it.
 pub(crate) const PROFILE_CHANGED: &str = "vosh://profile-changed";
-/// Sent with the new [`crate::characters::SessionIdentity`], or null,
+/// Sent with the new [`crate::session::identity::SessionIdentity`], or null,
 /// after a connect, a disconnect, and the first sight of a character
 /// name after login. Settings is its own webview and may open after all
 /// of those, so it also reads the current value with
@@ -158,7 +158,7 @@ pub(crate) const PROFILE_CHANGED: &str = "vosh://profile-changed";
 pub(crate) const SESSION_IDENTITY_CHANGED: &str = "vosh://session-identity-changed";
 /// Sent to every window when sharing the theme category added to the
 /// live custom themes. The payload is the whole list of
-/// [`crate::profile_config::CustomTheme`].
+/// [`crate::profile::ui::CustomTheme`].
 /// `subscribeCustomThemesChanged` hears it.
 pub(crate) const CUSTOM_THEMES_CHANGED: &str = "vosh://custom-themes-changed";
 /// Sent to every window when the active loadouts changed. The payload
@@ -188,7 +188,7 @@ pub(crate) const UI_CONFIG_REPLACED: &str = "vosh://ui-config-replaced";
 pub(crate) const PANE_LAYOUT_CHANGED: &str = "vosh://pane-layout-changed";
 /// Sent to every window with the tracked affects whenever they change:
 /// a Settings save or a replace. The payload is the list of
-/// [`crate::profile_config::TrackedAffect`].
+/// [`crate::profile::ui::TrackedAffect`].
 /// `subscribeTrackedAffectsChanged` hears it.
 pub(crate) const TRACKED_AFFECTS_CHANGED: &str = "vosh://tracked-affects-changed";
 /// Sent to every window with which way the status line tick counts, on
@@ -418,7 +418,7 @@ pub(crate) struct AffectsDisplay {
 }
 
 impl AffectsDisplay {
-    pub(crate) fn of(ui: &crate::profile_config::UiConfig) -> Self {
+    pub(crate) fn of(ui: &crate::profile::ui::UiConfig) -> Self {
         Self {
             style: ui.affects_style.clone(),
             marker: ui.affects_marker.clone(),
@@ -433,7 +433,7 @@ impl AffectsDisplay {
 /// profile.
 pub(crate) struct ProfileUiEvents {
     pub(crate) panes: PaneLayoutEnvelope,
-    pub(crate) tracked: Vec<crate::profile_config::TrackedAffect>,
+    pub(crate) tracked: Vec<crate::profile::ui::TrackedAffect>,
     pub(crate) tick_count: String,
     pub(crate) chip_style: String,
     pub(crate) affects_display: AffectsDisplay,
@@ -605,7 +605,7 @@ mod tests {
     #[test]
     fn group_toggles_report_a_macro_group_that_turned() {
         let mut p = Profile::default();
-        p.macros.push(crate::profile::Macro {
+        p.macros.push(crate::profile::live::Macro {
             key: "F1".into(),
             command: "kick".into(),
             group: Some("combat".into()),
@@ -680,7 +680,7 @@ mod tests {
     #[test]
     fn a_lua_group_toggle_reports_a_macro_group_that_turned() {
         let mut p = Profile::default();
-        p.macros.push(crate::profile::Macro {
+        p.macros.push(crate::profile::live::Macro {
             key: "F1".into(),
             command: "kick".into(),
             group: Some("combat".into()),
@@ -712,7 +712,7 @@ mod tests {
 
     #[test]
     fn profile_reset_hands_every_window_the_tick_settings_it_put_back() {
-        let mut profile = crate::profile::Profile::default();
+        let mut profile = crate::profile::live::Profile::default();
         profile.ui.tick_count = "down".into();
         profile.tick.config.warn_at_secs = Some(8);
         profile.tick.config.sound = false;
@@ -730,7 +730,7 @@ mod tests {
 
     #[test]
     fn a_profile_reset_hands_every_window_the_chip_style_it_put_back() {
-        let mut profile = crate::profile::Profile::default();
+        let mut profile = crate::profile::live::Profile::default();
         profile.ui.chip_style = "icon_value".into();
         let before = super::profile_ui_events(&profile);
         assert_eq!(
@@ -749,8 +749,8 @@ mod tests {
 
     #[test]
     fn a_profile_load_or_import_hands_every_window_the_loaded_settings() {
-        let mut profile = crate::profile::Profile::default();
-        let mut file = crate::profile_config::ProfileConfig::default();
+        let mut profile = crate::profile::live::Profile::default();
+        let mut file = crate::profile::file::ProfileConfig::default();
         file.ui.chip_style = "caption_value".into();
         file.ui.tick_count = "down_past_zero".into();
         let _ = file.apply_to(&mut profile);
@@ -767,8 +767,8 @@ mod tests {
 
     #[test]
     fn a_profile_load_hands_every_window_the_chat_colors() {
-        let mut profile = crate::profile::Profile::default();
-        let mut file = crate::profile_config::ProfileConfig::default();
+        let mut profile = crate::profile::live::Profile::default();
+        let mut file = crate::profile::file::ProfileConfig::default();
         file.ui.chat_colors.insert("gtell".into(), "cyan".into());
         let _ = file.apply_to(&mut profile);
         let events = super::profile_ui_events(&profile);
@@ -780,8 +780,8 @@ mod tests {
 
     #[test]
     fn a_profile_load_hands_every_window_the_affects_display() {
-        let mut profile = crate::profile::Profile::default();
-        let mut file = crate::profile_config::ProfileConfig::default();
+        let mut profile = crate::profile::live::Profile::default();
+        let mut file = crate::profile::file::ProfileConfig::default();
         file.ui.affects_style = "chips".into();
         file.ui.affects_marker = "plus_minus".into();
         file.ui.affects_tint = true;
@@ -819,7 +819,7 @@ mod tests {
 
     #[test]
     fn the_profile_broadcast_ends_by_saying_the_ui_config_was_replaced() {
-        let profile = crate::profile::Profile::default();
+        let profile = crate::profile::live::Profile::default();
         let names: Vec<&str> = super::profile_ui_events(&profile)
             .events()
             .into_iter()
@@ -847,7 +847,7 @@ mod tests {
     /// Run `lines` the way the typed path does and hand back what every
     /// window hears after them.
     fn heard_after(
-        profile: &mut crate::profile::Profile,
+        profile: &mut crate::profile::live::Profile,
         lines: &[&str],
     ) -> Vec<(&'static str, serde_json::Value)> {
         let mut effects = crate::input::LineEffects::default();
@@ -860,7 +860,7 @@ mod tests {
 
     #[test]
     fn a_tick_warn_command_hands_every_window_the_new_lead() {
-        let mut profile = crate::profile::Profile::default();
+        let mut profile = crate::profile::live::Profile::default();
         profile.tick.config.warn_at_secs = Some(5);
         let heard = heard_after(&mut profile, &["#tick warn at 10"]);
         assert_eq!(heard.len(), 1, "{heard:?}");
@@ -875,7 +875,7 @@ mod tests {
 
     #[test]
     fn every_tick_setting_a_command_changes_reaches_every_window() {
-        let mut profile = crate::profile::Profile::default();
+        let mut profile = crate::profile::live::Profile::default();
         let heard = heard_after(
             &mut profile,
             &["#tick interval 40", "#tick fire score", "#tick sound off"],
@@ -889,7 +889,7 @@ mod tests {
 
     #[test]
     fn lines_that_leave_the_tick_alone_send_nothing() {
-        let mut profile = crate::profile::Profile::default();
+        let mut profile = crate::profile::live::Profile::default();
         let leftover = &heard_after(
             &mut profile,
             &["look", "#tick", "#tick warn", "#tick reset"],
@@ -899,7 +899,7 @@ mod tests {
 
     #[test]
     fn a_tick_command_after_a_reset_goes_out_once_with_the_profile() {
-        let mut profile = crate::profile::Profile::default();
+        let mut profile = crate::profile::live::Profile::default();
         let heard = heard_after(&mut profile, &["#profile reset", "#tick warn at 10"]);
         let ticks: Vec<_> = heard
             .iter()

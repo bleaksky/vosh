@@ -12,7 +12,7 @@ use vosh_automation::trigger::{LineResult, MatchScope};
 use vosh_prompt::stage::{Block, BlockLine, End, Offer, Output};
 use vosh_protocol::telnet::Negotiator;
 
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 use crate::script::{self, ApplyResult};
 use crate::tick::TickStep;
 

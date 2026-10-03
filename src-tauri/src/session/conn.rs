@@ -17,7 +17,7 @@ use vosh_protocol::telnet::{option as telnet_option, Negotiator, Parser};
 
 use crate::app::events;
 use crate::output::{emit_output, emit_repaint, output_count};
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 use crate::script::SharedTimers;
 
 use super::batch::Settle;

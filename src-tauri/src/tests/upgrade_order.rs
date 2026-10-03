@@ -23,8 +23,10 @@ use crate::loadouts::wizard::journal::{
     journal_path, save_wizard_journal, JournalFile, WizardJournal, WIZARD_FINISHED_NOTICE,
     WIZARD_UNFINISHED_NOTICE,
 };
-use crate::profile_config::{before_prompt_editor_path, CustomTheme, GlobalConfig, ProfileConfig};
-use crate::profile_set::ProfileSet;
+use crate::profile::file::{before_prompt_editor_path, ProfileConfig};
+use crate::profile::set::ProfileSet;
+use crate::profile::shared::GlobalConfig;
+use crate::profile::ui::CustomTheme;
 
 /// The profile file the stopped wizard run still had to write: a capture
 /// trigger that is on, and one preset turned on.

@@ -10,7 +10,7 @@ use super::journal::{drop_wizard_journal, save_wizard_journal, JournalFile, Wiza
 use crate::app::events::{broadcast, MIGRATION_APPLIED};
 use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED};
 use crate::disk::save::{active_profile_file, persist_state, PERSIST_LOCK};
-use crate::profile_config::ProfileConfig;
+use crate::profile::file::ProfileConfig;
 
 /// [`migration_analyze`] over the app data folder `app_data`, so a test
 /// can run it over a folder of its own. `library` holds the id of every
@@ -134,7 +134,7 @@ struct MigrationFile {
 /// of those. `live`, when given, stands for the file of the active
 /// profile, as the save apply runs first would write it.
 fn migration_sources(
-    set: &crate::profile_set::ProfileSet,
+    set: &crate::profile::set::ProfileSet,
     live: Option<&ProfileConfig>,
 ) -> Result<MigrationSources, String> {
     let mut sources = MigrationSources {
@@ -144,11 +144,11 @@ fn migration_sources(
     };
     for entry in set.list() {
         let path = set.profile_path(&entry.name);
-        if crate::profile_config::is_unread(&path) {
+        if crate::disk::atomic::is_unread(&path) {
             return Err(format!(
                 "Vosh could not read the {} profile file when it started, so it will not change \
                  the file. Restart Vosh and try again.",
-                crate::profile_set::display_name(&entry.name)
+                crate::profile::set::display_name(&entry.name)
             ));
         }
         let text = if let Some(live) = live.filter(|_| entry.name == set.active_name()) {
@@ -161,7 +161,7 @@ fn migration_sources(
                 format!(
                     "Vosh could not read the {} profile file, so it changed nothing. Check that \
                      you can open the file, then try again.",
-                    crate::profile_set::display_name(&entry.name)
+                    crate::profile::set::display_name(&entry.name)
                 )
             })?)
         } else {
@@ -371,7 +371,7 @@ pub(crate) async fn apply_migration_with(
         };
         let name = file.path.file_name().unwrap_or_default();
         let copy = legacy_dir.join(name);
-        if let Err(e) = crate::profile_config::write_with_backup(&copy, text) {
+        if let Err(e) = crate::disk::atomic::write_with_backup(&copy, text) {
             warn!(error = %e, path = %copy.display(), "wizard could not copy a profile file");
             take_out_copies(&copies);
             return Err(format!(
@@ -399,7 +399,7 @@ pub(crate) async fn apply_migration_with(
     let mut touched = Vec::new();
     if let Err((what, e)) = write_shared_catalog(app_data, &journal, &kept, &mut touched) {
         warn!(error = %e, file = %what, "wizard could not save a file");
-        crate::profile_config::put_back(&touched);
+        crate::profile::shared::put_back(&touched);
         let restored = touched.iter().all(|(path, before)| match before {
             Some(text) => std::fs::read_to_string(path).ok().as_deref() == Some(text.as_str()),
             None => !path.exists(),
@@ -481,14 +481,14 @@ fn write_shared_catalog(
                 (
                     format!(
                         "the {} profile file",
-                        crate::profile_set::display_name(&file.name)
+                        crate::profile::set::display_name(&file.name)
                     ),
                     file.text.clone(),
                 )
             }
         };
         touched.push((path.clone(), before));
-        crate::profile_config::write_with_backup(&path, text).map_err(|e| (what, e.to_string()))?;
+        crate::disk::atomic::write_with_backup(&path, text).map_err(|e| (what, e.to_string()))?;
     }
     Ok(())
 }

@@ -14,7 +14,7 @@ use crate::app::events::{
 use crate::app::state::SharedState;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
 use crate::import::ImportFormat;
-use crate::profile::{Macro, Profile, Timer};
+use crate::profile::live::{Macro, Profile, Timer};
 
 #[tauri::command]
 pub(crate) async fn triggers_list(state: State<'_, SharedState>) -> Result<Vec<Trigger>, String> {

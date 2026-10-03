@@ -24,7 +24,7 @@ use crate::loadouts::wizard::apply::{
 /// an earlier run, or in a session that runs in loadout mode, see
 /// [`migration_refusal`].
 ///
-/// [`ProfileConfig`]: crate::profile_config::ProfileConfig
+/// [`ProfileConfig`]: crate::profile::file::ProfileConfig
 /// [`migration_refusal`]: crate::loadouts::wizard::apply::migration_refusal
 #[tauri::command]
 pub(crate) async fn migration_analyze(

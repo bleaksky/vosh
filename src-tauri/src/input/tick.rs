@@ -4,7 +4,7 @@ use tokio::time::Instant;
 
 use super::slash::parse_braced_pattern;
 use super::{split_first_word, InputResult};
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 
 pub(super) fn slash_tick(profile: &mut Profile, args: &str) -> InputResult {
     let (cmd, rest) = split_first_word(args);

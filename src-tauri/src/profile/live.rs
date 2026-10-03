@@ -9,7 +9,8 @@ use vosh_automation::trigger::TriggerStore;
 use vosh_automation::vars::VariableStore;
 use vosh_script::ScriptEngine;
 
-use crate::profile_config::{GroupFolders, PluginsPersist, UiConfig};
+use crate::profile::file::{GroupFolders, PluginsPersist};
+use crate::profile::ui::UiConfig;
 use crate::tick::TickRuntime;
 
 #[derive(Debug, Default)]
@@ -84,7 +85,7 @@ pub(crate) struct Profile {
 impl Profile {
     /// Take a `[prompt]` table. Nothing reads the live `[ui]` copy of its
     /// switch and design, and a save writes the file's copy from this
-    /// table, see [`crate::profile_config::ProfileConfig::from_profile`].
+    /// table, see [`crate::profile::file::ProfileConfig::from_profile`].
     pub(crate) fn set_prompt_config(&mut self, config: vosh_prompt::PromptConfig) {
         self.prompt.set_config(config);
     }

@@ -7,11 +7,11 @@ use tauri::{AppHandle, State};
 
 use crate::app::events::{pane_layout_envelope, PaneLayoutEnvelope, PANE_LAYOUT_CHANGED};
 use crate::app::state::{panes_generation, SharedState};
-use crate::characters::{
+use crate::disk::save::{save_then_broadcast, SavePolicy};
+use crate::profile::inactive::{
     active_name, broadcast_profile_changed, reset_inactive_panes, reset_live_panes,
 };
-use crate::disk::save::{save_then_broadcast, SavePolicy};
-use crate::profile_config::PaneLayoutPersist;
+use crate::profile::panes::PaneLayoutPersist;
 
 /// Read the active profile's pane layout. A profile that has never
 /// saved one gets a tree migrated from its dock layout (or the

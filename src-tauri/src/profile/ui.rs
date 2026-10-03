@@ -259,7 +259,7 @@ pub(crate) struct UiConfig {
     /// A copy of `[prompt] draw`, which holds the switch now. Every save
     /// writes it, so an older build that reads only this key still draws
     /// your prompt. A file with no `[prompt]` reads the switch from
-    /// here, see [`crate::profile_config::ProfileConfig::prompt_config`].
+    /// here, see [`crate::profile::file::ProfileConfig::prompt_config`].
     #[serde(default)]
     pub prompt_template_enabled: bool,
     /// A copy of `[prompt] template`, written and read the same way as
@@ -997,7 +997,7 @@ fn is_false(on: &bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::profile_config::ProfileConfig;
+    use crate::profile::file::ProfileConfig;
 
     #[test]
     fn tracked_affects_accept_legacy_bare_strings() {

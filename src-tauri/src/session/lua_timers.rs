@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 use tokio::time::Instant;
 use tracing::warn;
 
-use crate::profile::Profile;
+use crate::profile::live::Profile;
 use crate::script::{self, PendingTimer, SharedTimers};
 
 use super::connection::Stream;

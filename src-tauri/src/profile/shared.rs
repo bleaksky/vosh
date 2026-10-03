@@ -14,12 +14,11 @@ use crate::disk::atomic::{is_unread, write_with_backup};
 use crate::disk::custom_themes::{
     follow_moved_ids, merge_custom_themes, share_custom_themes, HeldCustomThemes,
 };
+use crate::profile::file::{ConfigError, ProfileConfig};
+use crate::profile::live::Profile;
 use crate::profile::panes::DockEntryPersist;
-use crate::profile::Profile;
-use crate::profile_config::{
-    is_default_font_family, ConfigError, CustomTheme, ProfileConfig, UiConfig,
-};
-use crate::profile_set::ProfileSet;
+use crate::profile::set::ProfileSet;
+use crate::profile::ui::{is_default_font_family, CustomTheme, UiConfig};
 
 /// Per-category scope choice. Per-profile fields move with the
 /// active profile; global fields are shared across every profile.
@@ -407,7 +406,7 @@ fn hand_out_shared_with(
             continue;
         }
         let path = set.profile_path(&entry.name);
-        let owner = crate::profile_set::display_name(&entry.name);
+        let owner = crate::profile::set::display_name(&entry.name);
         let unreadable = |e: &dyn std::fmt::Display| {
             tracing::warn!(error = %e, path = %path.display(), "profile file unreadable");
             format!(
@@ -508,7 +507,7 @@ const SCOPE_MIGRATION_PENDING: &str =
 /// could not read at launch. The live profile holds the defaults where
 /// that file's settings belong, and a change would hand those defaults
 /// to the other profiles or share them with every character.
-fn scope_refusal_for_unread(set: &crate::profile_set::ProfileSet) -> Option<String> {
+fn scope_refusal_for_unread(set: &crate::profile::set::ProfileSet) -> Option<String> {
     if is_unread(&set.global_path()) {
         return Some(
             "Vosh could not read global.toml, so it will not change which settings every \
@@ -520,7 +519,7 @@ fn scope_refusal_for_unread(set: &crate::profile_set::ProfileSet) -> Option<Stri
         return Some(format!(
             "Vosh could not read the {} profile file, so it will not change which settings \
              every character shares. Fix the file or switch to another profile.",
-            crate::profile_set::display_name(set.active_name())
+            crate::profile::set::display_name(set.active_name())
         ));
     }
     None
@@ -535,7 +534,7 @@ fn scope_refusal_for_unread(set: &crate::profile_set::ProfileSet) -> Option<Stri
 pub(crate) async fn change_scope_locked(
     state: &SharedState,
     scope: ScopeConfig,
-) -> Result<Option<Vec<crate::profile_config::CustomTheme>>, String> {
+) -> Result<Option<Vec<crate::profile::ui::CustomTheme>>, String> {
     let migration_pending = MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
     let before = {
         let set = state.loaded_profile_set().await?;
@@ -958,10 +957,11 @@ mod scope_change_tests {
     use super::{change_scope_locked, strip_global_fields, GlobalConfig, Scope, ScopeConfig};
     use crate::app::state::{AppState, SharedState};
     use crate::disk::save::PERSIST_LOCK;
-    use crate::profile::Profile;
-    use crate::profile_config::{CustomTheme, ProfileConfig, TrackedAffect, UiConfig};
-    use crate::profile_set::tests::james_like_set;
-    use crate::profile_set::{ProfileSet, DEFAULT_PROFILE_NAME};
+    use crate::profile::file::ProfileConfig;
+    use crate::profile::live::Profile;
+    use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
+    use crate::profile::tests::james_like_set;
+    use crate::profile::ui::{CustomTheme, TrackedAffect, UiConfig};
 
     fn theme(id: &str, background: &str) -> CustomTheme {
         CustomTheme {

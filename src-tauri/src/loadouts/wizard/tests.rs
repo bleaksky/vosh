@@ -11,9 +11,9 @@ use crate::loadout::{GlobalCatalog, Loadout, LoadoutSet};
 use crate::loadout_store::{
     catalog_path, load_path_b_at_launch, loadouts_path, save_global_catalog, save_loadout_set,
 };
-use crate::profile_config::ProfileConfig;
-use crate::profile_set::tests::james_like_set;
-use crate::profile_set::ProfileSet;
+use crate::profile::file::ProfileConfig;
+use crate::profile::set::ProfileSet;
+use crate::profile::tests::james_like_set;
 
 /// Every preset in the library src/lib/presets.ts holds.
 const LIBRARY: &[&str] = &[
@@ -116,8 +116,8 @@ async fn relaunch(dir: &std::path::Path, name: &str) -> (SharedState, crate::app
     (state, launched)
 }
 
-fn macro_on(key: &str, command: &str) -> crate::profile::Macro {
-    crate::profile::Macro {
+fn macro_on(key: &str, command: &str) -> crate::profile::live::Macro {
+    crate::profile::live::Macro {
         key: key.into(),
         command: command.into(),
         group: None,
@@ -125,7 +125,7 @@ fn macro_on(key: &str, command: &str) -> crate::profile::Macro {
     }
 }
 
-fn macro_keys(macros: &[crate::profile::Macro]) -> Vec<&str> {
+fn macro_keys(macros: &[crate::profile::live::Macro]) -> Vec<&str> {
     macros.iter().map(|m| m.key.as_str()).collect()
 }
 
@@ -134,7 +134,7 @@ async fn a_loadout_save_leaves_the_macros_to_the_catalog() {
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     loadout_mode(&set, dir.path());
-    let state = relaunch_as(dir.path(), crate::profile_set::DEFAULT_PROFILE_NAME).await;
+    let state = relaunch_as(dir.path(), crate::profile::set::DEFAULT_PROFILE_NAME).await;
     assert!(state.global_catalog.lock().await.is_some());
     state
         .profile
@@ -154,7 +154,7 @@ async fn a_loadout_save_leaves_the_macros_to_the_catalog() {
     persist(&state, dir.path()).await;
 
     // Back on Default, the macro stays deleted.
-    let state = relaunch_as(dir.path(), crate::profile_set::DEFAULT_PROFILE_NAME).await;
+    let state = relaunch_as(dir.path(), crate::profile::set::DEFAULT_PROFILE_NAME).await;
     let leftover = &state.profile.lock().await.macros;
     assert!(leftover.is_empty(), "{leftover:?}");
 }
@@ -227,7 +227,7 @@ async fn the_wizard_never_builds_over_a_catalog_you_already_use() {
 #[tokio::test]
 async fn the_wizard_never_runs_in_a_session_that_uses_a_catalog() {
     use crate::loadout_store::legacy_dir;
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     write_alias(&set, "Healer", "hh");
@@ -284,7 +284,7 @@ async fn the_wizard_never_runs_in_a_session_that_uses_a_catalog() {
 
 #[tokio::test]
 async fn a_session_on_the_catalog_says_so_before_it_names_the_backups() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     write_alias(&set, "Healer", "hh");
@@ -373,7 +373,7 @@ async fn the_wizard_builds_a_catalog_once() {
 
 #[tokio::test]
 async fn a_conflict_you_leave_alone_keeps_the_version_that_was_on() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     // Default keeps its kk off, and the Healer uses its own.
@@ -454,7 +454,7 @@ const LEGACY_REFUSAL: &str =
 
 #[tokio::test]
 async fn putting_the_catalog_back_keeps_every_item_you_added_since() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
@@ -498,7 +498,7 @@ async fn putting_the_catalog_back_keeps_every_item_you_added_since() {
 
 #[tokio::test]
 async fn a_backup_copied_back_beside_the_catalog_spreads_its_old_items() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
@@ -548,7 +548,7 @@ async fn a_backup_copied_back_beside_the_catalog_spreads_its_old_items() {
 
 #[tokio::test]
 async fn following_the_refusals_builds_the_catalog_again_with_every_item() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let names = [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt"];
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
@@ -647,7 +647,7 @@ async fn the_wizard_keeps_off_a_preset_every_character_had_off() {
     // Both characters turned the potion labels off.
     write_presets(
         &set,
-        crate::profile_set::DEFAULT_PROFILE_NAME,
+        crate::profile::set::DEFAULT_PROFILE_NAME,
         &["healing_basics"],
     );
     write_presets(&set, "Healer", &["healing_basics", "herb_labels"]);
@@ -662,7 +662,7 @@ async fn the_wizard_keeps_off_a_preset_every_character_had_off() {
 
     // The first launch in loadout mode, as either character, keeps
     // the potion labels off.
-    for name in [crate::profile_set::DEFAULT_PROFILE_NAME, "Healer"] {
+    for name in [crate::profile::set::DEFAULT_PROFILE_NAME, "Healer"] {
         let state = relaunch_as(dir.path(), name).await;
         assert_eq!(state.profile.lock().await.ui.enabled_presets, on);
     }
@@ -674,7 +674,7 @@ async fn the_preview_holds_the_shared_preset_list_and_each_characters_own() {
     let set = james_like_set(dir.path());
     write_presets(
         &set,
-        crate::profile_set::DEFAULT_PROFILE_NAME,
+        crate::profile::set::DEFAULT_PROFILE_NAME,
         &["healing_basics"],
     );
     write_presets(&set, "Healer", &["healing_basics", "herb_labels"]);
@@ -708,7 +708,7 @@ async fn the_preview_holds_the_shared_preset_list_and_each_characters_own() {
 
 #[tokio::test]
 async fn the_preview_counts_the_live_presets_of_a_profile_that_never_saved() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     write_presets(&set, DEFAULT_PROFILE_NAME, &["healing_basics"]);
@@ -746,7 +746,7 @@ async fn the_preview_counts_the_live_presets_of_a_profile_that_never_saved() {
 
 #[tokio::test]
 async fn the_preview_reads_the_files_after_a_profile_reset() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     use std::sync::atomic::AtomicBool;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
@@ -774,7 +774,8 @@ async fn the_preview_reads_the_files_after_a_profile_reset() {
 /// back with the defaults or with another character's values
 /// fails the comparison.
 fn character(name: &str, n: u32, presets: &[&str]) -> ProfileConfig {
-    use crate::profile_config::{CustomTheme, PaneLayoutPersist, TrackedAffect};
+    use crate::profile::panes::PaneLayoutPersist;
+    use crate::profile::ui::{CustomTheme, TrackedAffect};
     let pick = |options: &[&str]| options[n as usize % options.len()].to_string();
     let trigger =
         |what: &str, pattern: &str, group: Option<&str>| vosh_automation::trigger::Trigger {
@@ -800,12 +801,12 @@ fn character(name: &str, n: u32, presets: &[&str]) -> ProfileConfig {
     ];
     config.macros = vec![
         macro_on(&format!("f{n}"), &format!("cast {n}")),
-        crate::profile::Macro {
+        crate::profile::live::Macro {
             group: Some("combat".into()),
             ..macro_on(&format!("ctrl+{n}"), "flee")
         },
     ];
-    config.timers = vec![crate::profile::Timer {
+    config.timers = vec![crate::profile::live::Timer {
         id: n,
         name: format!("drink {n}"),
         interval_secs: 60 + n,
@@ -878,19 +879,19 @@ fn settings(mut config: ProfileConfig) -> String {
     config.disabled_alias_groups.clear();
     config.disabled_trigger_groups.clear();
     config.disabled_macro_groups.clear();
-    config.group_folders = crate::profile_config::GroupFolders::default();
+    config.group_folders = crate::profile::file::GroupFolders::default();
     config.to_toml().unwrap()
 }
 
 /// What a save writes to the file of the live profile `p`.
-fn saved_settings(p: &crate::profile::Profile, set: &ProfileSet) -> String {
+fn saved_settings(p: &crate::profile::live::Profile, set: &ProfileSet) -> String {
     let mut config = ProfileConfig::from_profile(p);
-    crate::profile_config::strip_global_fields(&mut config, set.scope());
+    crate::profile::shared::strip_global_fields(&mut config, set.scope());
     settings(config)
 }
 
 /// The aliases, triggers, and macros that are on in `p`.
-fn items_on(p: &crate::profile::Profile) -> Vec<String> {
+fn items_on(p: &crate::profile::live::Profile) -> Vec<String> {
     let on = |group: Option<&str>, off: &[String]| {
         group.is_none_or(|g| g.is_empty() || !off.iter().any(|o| o == g))
     };
@@ -926,7 +927,7 @@ fn items_on(p: &crate::profile::Profile) -> Vec<String> {
 fn item_rows(
     aliases: &[vosh_automation::alias::Alias],
     triggers: &[vosh_automation::trigger::Trigger],
-    macros: &[crate::profile::Macro],
+    macros: &[crate::profile::live::Macro],
 ) -> Vec<String> {
     let mut rows: Vec<String> = aliases
         .iter()
@@ -940,7 +941,8 @@ fn item_rows(
 
 #[tokio::test]
 async fn the_wizard_keeps_every_setting_of_every_profile() {
-    use crate::profile_set::{Scope, ScopeConfig, DEFAULT_PROFILE_NAME};
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
+    use crate::profile::shared::{Scope, ScopeConfig};
     let dir = tempfile::tempdir().unwrap();
     let mut set = james_like_set(dir.path());
     // Your themes and panels differ per character, the way James
@@ -1085,7 +1087,7 @@ async fn the_wizard_keeps_every_setting_of_every_profile() {
 
 #[tokio::test]
 async fn each_loadout_turns_on_the_items_its_character_shared() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     let save = |name: &str, aliases: &[(&str, &str)], combat: &[(&str, &str)]| {
@@ -1152,7 +1154,7 @@ async fn each_loadout_turns_on_the_items_its_character_shared() {
 
 #[tokio::test]
 async fn each_loadout_keeps_off_the_groups_its_character_had_off() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let mut set = james_like_set(dir.path());
     set.create("Bard").unwrap();
@@ -1230,7 +1232,7 @@ async fn each_loadout_keeps_off_the_groups_its_character_had_off() {
 
 #[tokio::test]
 async fn group_turns_a_folder_on_and_off_as_before_after_the_wizard() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     let in_combat = |name: &str| {
@@ -1293,7 +1295,7 @@ async fn group_turns_a_folder_on_and_off_as_before_after_the_wizard() {
 
 #[tokio::test]
 async fn each_character_keeps_its_own_version_of_a_trigger() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     for (name, command) in [
@@ -1330,7 +1332,7 @@ async fn each_character_keeps_its_own_version_of_a_trigger() {
 
 #[tokio::test]
 async fn triggers_on_one_line_fire_in_the_order_they_had() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     let down = "^You are knocked down";
@@ -1392,7 +1394,7 @@ fn send_trigger(name: &str, pattern: &str, command: &str) -> vosh_automation::tr
 
 #[tokio::test]
 async fn a_trigger_group_you_had_off_stays_off_beside_its_aliases() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     // The Healer loots by hand with its loot alias and keeps the
@@ -1422,7 +1424,7 @@ async fn a_trigger_group_you_had_off_stays_off_beside_its_aliases() {
 
 #[tokio::test]
 async fn a_shared_item_one_character_had_off_stays_off_for_it() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     // Test-Prompt began as a copy of Default, auto loot and all,
@@ -1497,7 +1499,7 @@ async fn heal_preset_on(state: &SharedState) -> (bool, bool) {
 
 #[tokio::test]
 async fn a_preset_stays_on_for_a_character_whose_file_lacked_it() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     // Default has healing basics in its file. The Healer saved its
@@ -1536,7 +1538,7 @@ async fn a_preset_stays_on_for_a_character_whose_file_lacked_it() {
 
 #[tokio::test]
 async fn a_preset_stays_on_for_a_character_that_never_saved_a_file() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     let mut default = ProfileConfig::default();
@@ -1571,18 +1573,18 @@ fn default_with_a_target(set: &ProfileSet) {
         .aliases
         .push(vosh_automation::alias::Alias::new("kk", "kick %1"));
     default.profile_vars.insert("target".into(), "orc".into());
-    default.ui.panes = Some(crate::profile_config::PaneLayoutPersist {
+    default.ui.panes = Some(crate::profile::panes::PaneLayoutPersist {
         panel_width: Some(300),
-        ..crate::profile_config::PaneLayoutPersist::default_layout()
+        ..crate::profile::panes::PaneLayoutPersist::default_layout()
     });
     default
-        .save(&set.profile_path(crate::profile_set::DEFAULT_PROFILE_NAME))
+        .save(&set.profile_path(crate::profile::set::DEFAULT_PROFILE_NAME))
         .unwrap();
 }
 
 #[tokio::test]
 async fn the_wizard_keeps_what_you_changed_since_the_last_save() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     default_with_a_target(&set);
@@ -1616,7 +1618,7 @@ async fn the_wizard_keeps_what_you_changed_since_the_last_save() {
 
 #[tokio::test]
 async fn the_wizard_leaves_a_profile_you_reset_to_its_file() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     default_with_a_target(&set);
@@ -1640,7 +1642,7 @@ async fn the_wizard_leaves_a_profile_you_reset_to_its_file() {
 
 #[tokio::test]
 async fn a_switch_waits_for_the_relaunch_after_the_wizard() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     use std::sync::atomic::{AtomicBool, Ordering};
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
@@ -1739,12 +1741,12 @@ async fn renames_and_copies_are_refused(
 
 #[tokio::test]
 async fn the_live_profile_keeps_the_name_the_prompt_draws() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     use std::sync::atomic::AtomicBool;
     let dir = tempfile::tempdir().unwrap();
     james_like_set(dir.path());
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    let shown = |p: &crate::profile::Profile| p.display_name.clone();
+    let shown = |p: &crate::profile::live::Profile| p.display_name.clone();
     assert_eq!(
         shown(&*state.profile.lock().await).as_deref(),
         Some("Default")
@@ -1785,7 +1787,7 @@ async fn the_live_profile_keeps_the_name_the_prompt_draws() {
 
 #[tokio::test]
 async fn renames_and_copies_wait_for_the_relaunch_after_the_wizard() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     use std::sync::atomic::{AtomicBool, Ordering};
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
@@ -1820,7 +1822,7 @@ async fn renames_and_copies_wait_for_the_relaunch_after_the_wizard() {
 
 #[tokio::test]
 async fn a_wizard_run_that_stops_partway_finishes_at_the_next_launch() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let names = [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt"];
     // The run writes catalog.toml, loadouts.toml, and three
     // profile files. Stop it before each of them.
@@ -1890,7 +1892,7 @@ async fn a_wizard_run_that_stops_partway_finishes_at_the_next_launch() {
 #[tokio::test]
 async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
     use crate::loadouts::wizard::journal::{journal_path, WIZARD_UNFINISHED_NOTICE};
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     use std::sync::atomic::AtomicBool;
     let names = [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt"];
     let dir = tempfile::tempdir().unwrap();
@@ -1985,7 +1987,7 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
 async fn the_wizard_waits_while_an_earlier_run_is_unfinished() {
     use crate::loadout_store::legacy_dir;
     use crate::loadouts::wizard::journal::journal_path;
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     character(DEFAULT_PROFILE_NAME, 1, &[])
@@ -2038,7 +2040,7 @@ async fn the_wizard_waits_while_an_earlier_run_is_unfinished() {
 
 #[tokio::test]
 async fn a_script_that_sets_its_own_alias_again_keeps_it_to_its_character() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
@@ -2067,7 +2069,7 @@ async fn a_script_that_sets_its_own_alias_again_keeps_it_to_its_character() {
 
 #[tokio::test]
 async fn a_wizard_that_cannot_finish_puts_every_file_back() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let mut set = james_like_set(dir.path());
     set.create("Bard").unwrap();
@@ -2229,7 +2231,7 @@ async fn a_profile_file_that_stops_reading_is_named_without_the_raw_error() {
 /// Returns the live state and the items each character had on,
 /// in that order.
 async fn converted_three(dir: &std::path::Path) -> (SharedState, Vec<Vec<String>>) {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let set = james_like_set(dir);
     let names = [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt"];
     for (n, name) in names.iter().enumerate() {
@@ -2284,7 +2286,7 @@ async fn a_save_right_after_a_switch_keeps_the_catalog() {
 
 #[tokio::test]
 async fn each_character_keeps_its_own_items_across_switches_after_the_wizard() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let (state, before) = converted_three(dir.path()).await;
     assert_eq!(items_on(&*state.profile.lock().await), before[0]);
@@ -2323,7 +2325,7 @@ async fn each_character_keeps_its_own_items_across_switches_after_the_wizard() {
 
 #[tokio::test]
 async fn a_switch_keeps_the_items_a_profile_file_holds_as_launch_does() {
-    use crate::profile_set::DEFAULT_PROFILE_NAME;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     loadout_mode(&set, dir.path());

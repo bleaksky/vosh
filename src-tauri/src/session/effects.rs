@@ -14,8 +14,8 @@ use tracing::warn;
 use crate::app::events::{self, broadcast_list_changes, ListChanges, ListRevisions};
 use crate::input;
 use crate::output::emit_output;
-use crate::profile::Profile;
-use crate::profile_config::SharedLayer;
+use crate::profile::live::Profile;
+use crate::profile::shared::SharedLayer;
 use crate::script::{ApplyResult, SharedTimers};
 use crate::tick::TickStep;
 

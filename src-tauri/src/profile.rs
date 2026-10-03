@@ -18,7 +18,3 @@ pub(crate) mod switch;
 pub(crate) mod tests;
 pub(crate) mod ui;
 pub(crate) mod worlds;
-
-// Callers outside the live profile still reach these by their old path,
-// until they point at crate::profile::live.
-pub(crate) use live::{Macro, MacroRecorder, Profile, QuickKey, RoomChar, Timer};

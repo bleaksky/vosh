@@ -1,9 +1,9 @@
 //! Per-profile TOML serialization. Phase 9.
 //!
 //! [`ProfileConfig`] is a serde-friendly snapshot of the parts of a
-//! [`crate::profile::Profile`] that survive across app launches. The runtime
-//! Profile holds extra state (compiled regex, Lua engine, tick deadlines)
-//! that does not belong in the on-disk file.
+//! [`crate::profile::live::Profile`] that survive across app launches.
+//! The runtime Profile holds extra state (compiled regex, Lua engine, tick
+//! deadlines) that does not belong in the on-disk file.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -14,33 +14,11 @@ use vosh_automation::alias::Alias;
 use vosh_automation::trigger::Trigger;
 use vosh_automation::vars::Scope;
 
-// Callers outside this file still reach these here, until they point at
-// crate::disk::atomic.
-pub(crate) use crate::disk::atomic::{
-    follow_unread, hold_unread, is_unread, release_unread, write_with_backup,
-};
-// Callers outside this file still reach these here, until they point at
-// crate::disk::custom_themes.
-pub(crate) use crate::disk::custom_themes::migrate_custom_themes;
-// Callers outside this file still reach these here, until they point at
-// crate::profile::panes.
-pub(crate) use crate::profile::panes::PaneLayoutPersist;
-// Callers outside this file still reach these here, until they point at
-// crate::profile::shared.
-pub(crate) use crate::profile::shared::{put_back, strip_global_fields, GlobalConfig, SharedLayer};
-// Callers outside this file still reach these here, until they point at
-// crate::profile::ui.
-pub(crate) use crate::profile::ui::{
-    coerce_affects_marker, coerce_affects_style, coerce_affects_thresholds, coerce_chip_style,
-    coerce_font_size, coerce_input_cursor_style, coerce_light_theme, coerce_paste_line_delay_ms,
-    coerce_terminal_line_height, coerce_tick_count, coerce_vitals_density, coerce_vitals_meter,
-    coerce_vitals_values, default_true, deserialize_affects_almost_gone_hours,
-    deserialize_affects_running_out_hours, is_default_font_family, normalize_dark_theme,
-    normalize_enabled_presets, normalize_optional_color, normalize_tracked_affects, CustomTheme,
-    TrackedAffect, UiConfig,
-};
-use crate::profile::{Macro, Profile, Timer};
-use crate::profile_set::ProfileSet;
+use crate::disk::atomic::{hold_unread, is_unread, write_with_backup};
+use crate::profile::live::{Macro, Profile, Timer};
+use crate::profile::set::ProfileSet;
+use crate::profile::shared::GlobalConfig;
+use crate::profile::ui::{coerce_affects_thresholds, UiConfig};
 use crate::tick::TickConfig;
 
 #[derive(Debug, Error)]
@@ -469,7 +447,7 @@ pub(crate) fn unread_profile_notice(name: &str) -> String {
     format!(
         "Vosh could not read the {} profile file, so it will not save over it. Fix the file or \
          switch to another profile.",
-        crate::profile_set::display_name(name)
+        crate::profile::set::display_name(name)
     )
 }
 
@@ -485,7 +463,7 @@ pub(crate) const UNREAD_GLOBAL_NOTICE: &str = "Vosh could not read global.toml, 
 /// design.
 pub(crate) fn load_at_launch(set: &ProfileSet, profile: &mut Profile) -> Vec<String> {
     let mut notices = Vec::new();
-    profile.display_name = Some(crate::profile_set::display_name(set.active_name()));
+    profile.display_name = Some(crate::profile::set::display_name(set.active_name()));
     let active_path = set.active_path();
     if active_path.exists() {
         match ProfileConfig::load(&active_path) {
@@ -799,7 +777,7 @@ mod tests {
 #[cfg(test)]
 mod prompt_tests {
     use super::*;
-    use crate::disk::atomic::BACKUP_RETENTION;
+    use crate::disk::atomic::{release_unread, BACKUP_RETENTION};
     use vosh_prompt::config::{AabahranCapture, CaptureSource, RegexCapture};
     use vosh_prompt::{CaptureConfig, PromptConfig};
 
