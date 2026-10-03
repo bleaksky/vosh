@@ -37,12 +37,13 @@ const READ_BUFFER_BYTES: usize = 8 * 1024;
 const PERF_REPORT_INTERVAL: Duration = Duration::from_secs(1);
 
 /// How long a GMCP packet that changes your prompt waits for text before
-/// Vosh repaints your prompt with it (section 4, the late GMCP repaint).
+/// Vosh repaints your prompt with it, the late GMCP repaint. A prompt that
+/// comes in that time draws with the packet, so the repaint never fires.
 const LATE_REPAINT: Duration = Duration::from_millis(60);
 
 /// How long after a clock piece turns to its next second Vosh repaints
 /// your prompt with it, so the render never lands a hair early and draws
-/// the second before (decision 6).
+/// the second before.
 const CLOCK_SLACK: Duration = Duration::from_millis(5);
 
 /// Hot-path performance counters owned by the single `io_loop` task.
@@ -1259,8 +1260,9 @@ async fn io_loop<R: tauri::Runtime>(
         end_prompt(&mut p);
         had.then(|| p.target.quick_keys.clone())
     };
-    // The first session that read your prompt names the Line triggers
-    // that matched it, once, at the next launch (D6).
+    // Line triggers no longer see a prompt the profile reads, so the first
+    // session that read yours names the ones that matched it, once, at the
+    // next launch.
     if let Some(names) = line_triggers {
         let state = app.state::<crate::app::state::SharedState>();
         crate::prompt_migration::note_line_triggers(state.inner(), names).await;
@@ -2056,7 +2058,7 @@ fn text_line_step(
 /// follows them, Prompts triggers run on its final line so Lua
 /// `mud.set_prompt_var` lands before the render, and then the design
 /// draws in its place, or with drawing off it shows as sent. Line
-/// triggers and Lua `match_line` never see it (D6), and the tick reset
+/// triggers and Lua `match_line` never see it, and the tick reset
 /// pattern still does. A drawn prompt is neither logged nor kept for
 /// scrollback, and every line of it that shows is both, as any line that
 /// shows. The prompt vars go out after the batch.
@@ -2084,7 +2086,7 @@ fn prompt_block(
             tick_step.get_or_insert(step);
         }
         // Line triggers no longer see it. Note the ones that would have
-        // fired, for the one-time notice (D6).
+        // fired, for the one-time notice.
         let matched =
             vosh_automation::trigger::matching(&p.triggers, &line.plain, MatchScope::Line);
         p.prompt
@@ -2127,8 +2129,8 @@ fn prompt_block(
         // What the open card shows, a preview among them, with the live
         // render behind it, which the region carries as its restore.
         let view = prompt_view(p, now);
-        // A line above the last one your design reads nothing on shows
-        // as the game sent it (D7).
+        // A line above the last one your design reads nothing on has
+        // nothing drawn in its place, so it shows as the game sent it.
         let last_index = block.lines.len() - 1;
         let heads_shown: Vec<BlockLine> = block.lines[..last_index]
             .iter()
@@ -2468,7 +2470,7 @@ async fn capture_held_lines(
     }
 }
 
-/// When the late GMCP repaint fires, after a read (section 4). `waiting`
+/// When the late GMCP repaint fires, after a read. `waiting`
 /// is when it was going to fire, `gmcp` says the read brought packets
 /// after the last prompt it read, `prompt` that it read one, and `wrote`
 /// that it wrote to the text. What follows the packets draws with them,
@@ -2478,7 +2480,7 @@ async fn capture_held_lines(
 /// row or a band to repaint, and one already waiting keeps its time.
 /// Whether the packets changed what your prompt shows is decided when it
 /// fires, so deciding here draws nothing, and a pulse whose packets and
-/// text come in two reads costs no render (addendum item 7).
+/// text come in two reads costs no render.
 fn late_repaint_after(
     p: &Profile,
     waiting: Option<Instant>,
@@ -2506,7 +2508,7 @@ fn late_repaint_step(p: &mut Profile, other: bool, now: Instant) -> Output {
     repaint_step(p, other, now)
 }
 
-/// When the next clock repaint looks at your prompt (decision 6): when a
+/// When the next clock repaint looks at your prompt: when a
 /// clock piece in your design next shows another second, or None while
 /// your design draws none, so a design without one never wakes the
 /// session. The tick turns on its own seconds, counted from its last
@@ -2540,12 +2542,12 @@ fn clock_after(p: &Profile, now: Instant) -> Option<Instant> {
     Some(now + wait + CLOCK_SLACK)
 }
 
-/// A clock piece shows another second (decision 6): your prompt as it
+/// A clock piece shows another second: your prompt as it
 /// shows now, the open row while it is the last thing on screen or the
 /// band while pinned, and empty when the second changed nothing it
 /// shows. The open row waits while `reading`, which says you are
 /// selecting text or reading back, and the band does not, since it is not
-/// in the text (addendum item 7). It waits while the card shows a
+/// in the text. It waits while the card shows a
 /// preview, whose render carries its own restore. Each repaint is a
 /// replace with nothing after it, so it never lands on your typed text
 /// and never reaches history. `other` says output from elsewhere landed
@@ -2611,7 +2613,7 @@ fn send_step(p: &mut Profile, accumulator: &LineAccumulator, sent: &[u8], at_ms:
 
 /// A window size message. While the card is closed, a new width closes
 /// the open row, since each renderer wraps it again at that width, and
-/// nothing repaints until the next prompt (D21). A new height wraps
+/// nothing repaints until the next prompt. A new height wraps
 /// nothing, such as when your prompt leaves the pinned band for the text
 /// and the terminal grows, so the row stays open and each renderer finds
 /// its region where it was. While the card is open, which `card_open`
@@ -2660,7 +2662,7 @@ fn repaint_step(p: &mut Profile, other: bool, now: Instant) -> Output {
 }
 
 /// The connection is going. A preview the card shows on your prompt goes
-/// with it (section 4), so a repaint puts the live render back on the
+/// with it, so a repaint puts the live render back on the
 /// row, or on the band while pinned, since nothing else may land to make
 /// the renderers write the restore they hold. Empty with no preview, and
 /// when no row or band is left to repaint.
@@ -2748,13 +2750,12 @@ impl PromptView {
     }
 }
 
-/// What your prompt shows now (section 4, Live edits and previews). With
-/// drawing on and the open card showing a preview, the design draws with
-/// the preview's values, and with the labels of values that have nothing
-/// to show while the card asks for them, or the row shows the lines the
-/// game sent while the card reads your codes. The live render rides
-/// behind it. Overrides never reach `session://prompt-vars`, so the panes
-/// keep the live values.
+/// What your prompt shows now. With drawing on and the open card showing a
+/// preview, the design draws with the preview's values, and with the labels
+/// of values that have nothing to show while the card asks for them, or the
+/// row shows the lines the game sent while the card reads your codes. The
+/// live render rides behind it. Overrides never reach
+/// `session://prompt-vars`, so the panes keep the live values.
 fn prompt_view(p: &Profile, now: Instant) -> PromptView {
     if !p.prompt.draws() {
         return PromptView {
@@ -3741,7 +3742,7 @@ fn emit_counted<R: tauri::Runtime>(
     // so nothing reaches xterm without also reaching the grid.
     // Word wrapped at the grid width, matching the frontend WordWrapper
     // that xterm receives this same stream through. The grid finds each
-    // region in its own rows, as xterm does (D22).
+    // region in its own rows, as xterm does.
     #[cfg(native_surface)]
     crate::term_grid::feed_session_output(out, id);
     if frame {
@@ -4789,7 +4790,7 @@ mod tests {
         assert!(batch.gag_without_reader.is_empty(), "once a session");
 
         // With a capture in the profile, the capture reads the prompt
-        // and the trigger never sees it (D6).
+        // and the trigger never sees it.
         let config = vosh_prompt::PromptConfig {
             capture: regex_capture(CAPTURE, false),
             ..wire.p.prompt.config().clone()
@@ -5014,7 +5015,7 @@ mod tests {
         }
 
         // A new width wraps the row again, so it closes, and nothing
-        // repaints (D21).
+        // repaints.
         super::window_size_step(&mut wire.p, &mut negotiator, 80, 43, false);
         assert_eq!(negotiator.window_size, (80, 43));
         assert!(wire.p.prompt.stage.open_row().is_none());

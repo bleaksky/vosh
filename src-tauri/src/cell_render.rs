@@ -518,8 +518,8 @@ fn prompt_bands() -> bool {
 static PROMPT_REACH: AtomicU32 = AtomicU32::new(0);
 
 /// Widen the newest lift's band by `px` CSS px, reported by the page while
-/// the prompt card draws a ↵ or its caret past the open row's last glyph
-/// (the 2026-09-30 addendum, item 3). 0 while the card is closed.
+/// the prompt card draws a ↵ or its caret past the open row's last glyph,
+/// so the band runs under them. 0 while the card is closed.
 pub(crate) fn set_prompt_reach(px: f32) {
     PROMPT_REACH.store(px.max(0.0).to_bits(), Ordering::Release);
 }

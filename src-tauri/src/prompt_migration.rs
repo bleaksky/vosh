@@ -1,5 +1,4 @@
-//! The one-time move of prompt capture triggers into the profiles
-//! (D11, section 5 of the prompt build spec).
+//! The one-time move of prompt capture triggers into the profiles.
 //!
 //! Older builds read your prompt with a trigger that hides the prompt
 //! line and hands its groups to `mud.set_prompt_var`, the kind `#prompt
@@ -58,8 +57,7 @@ pub(crate) const MIGRATION: &str = "prompt-capture-to-profile";
 const CAPTURE_TRIGGER: &str = "prompt-capture";
 
 /// The id the check of Line triggers against your prompt is recorded
-/// under in `profiles.toml`, after the first session that read a prompt
-/// (D6).
+/// under in `profiles.toml`, after the first session that read a prompt.
 pub(crate) const LINE_TRIGGERS: &str = "prompt-line-triggers";
 
 /// The first session with a capture that read your prompt ended. `names`

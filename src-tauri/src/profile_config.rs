@@ -403,7 +403,7 @@ pub(crate) struct UiConfig {
     pub input_cursor_style: String,
     /// A copy of `[prompt] draw`, which holds the switch now. Every save
     /// writes it, so an older build that reads only this key still draws
-    /// your prompt (D20). A file with no `[prompt]` reads the switch from
+    /// your prompt. A file with no `[prompt]` reads the switch from
     /// here, see [`ProfileConfig::prompt_config`].
     #[serde(default)]
     pub prompt_template_enabled: bool,
@@ -1758,7 +1758,7 @@ impl ProfileConfig {
 
     /// Set the `[prompt]` table and its `[ui]` copy of the switch and the
     /// design, which every save writes so an older build still draws
-    /// your prompt (D20). A table that says nothing a default one does
+    /// your prompt. A table that says nothing a default one does
     /// not stays out of the file.
     pub(crate) fn set_prompt(&mut self, prompt: vosh_prompt::PromptConfig) {
         self.ui.prompt_template_enabled = prompt.draw;

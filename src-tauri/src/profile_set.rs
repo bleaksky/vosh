@@ -245,8 +245,8 @@ pub(crate) struct ProfilesIndex {
     /// return, which each one allows for.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub migrations: Vec<String>,
-    /// Sentences a session left for the next launch to show once, such
-    /// as the Line triggers that matched your prompt (D6).
+    /// Sentences a session left for the next launch to show once, such as
+    /// the Line triggers that matched your prompt and no longer see it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<String>,
 }

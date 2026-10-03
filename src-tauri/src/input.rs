@@ -882,7 +882,7 @@ fn slash_prompt(profile: &mut Profile, args: &str) -> InputResult {
 /// then says what it reads and any warning. The capture becomes the
 /// active profile's `kind = "aabahran"` with source typed. On the new
 /// build the next Char.Prompt replaces it while the capture follows the
-/// game (D25).
+/// game.
 fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputResult {
     use vosh_prompt::aabahran::{self, lex, Origin, Which};
     use vosh_prompt::card::sentences;

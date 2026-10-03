@@ -1,14 +1,12 @@
-//! Previews on your prompt, played through the session's own steps
-//! (section 4, Live edits and previews, and section 7 step 8).
+//! Previews on your prompt, played through the session's own steps.
 //!
 //! The card shows a preview on the open row, and only live renders reach
-//! history: a preview left on while game text arrives, in one read or
-//! split at any byte, leaves the screen the live session leaves with the
-//! card open once your echo lands, on the native grid. In the text the
-//! open card lends the row Lifted's band, trailing space included (the
-//! 2026-09-30 addendum, item 2), so that screen keeps your echo a cell
-//! after a design that ends on a character. The webview test replays the
-//! same payloads into xterm from a stored file.
+//! history: a preview left on while game text arrives, in one read or split
+//! at any byte, leaves the screen the live session leaves with the card
+//! open once your echo lands, on the native grid. In the text the open card
+//! lends the row Lifted's band, trailing space included, so that screen
+//! keeps your echo a cell after a design that ends on a character. The
+//! webview test replays the same payloads into xterm from a stored file.
 
 use super::show_tests::{
     cuts, payload, pinned_streams, profile, rows_of, showing, wire_fixture, Read, Session, CODES,
@@ -463,7 +461,7 @@ fn the_open_row_stays_open_across_a_resize_while_the_card_is_open() {
             "{label}"
         );
 
-        // With the card closed, a new size closes the row (D21).
+        // With the card closed, a new size closes the row.
         window_size_step(&mut session.p, &mut negotiator, 80, 40, false);
         assert!(session.p.prompt.stage.open_row().is_none(), "{label}");
         assert!(session.repaint().is_empty(), "{label}");
