@@ -985,7 +985,7 @@ pub(crate) fn default_true() -> bool {
 }
 
 /// Leave a switch that is on by default out of the file while it is on.
-fn is_true(on: &bool) -> bool {
+pub(super) fn is_true(on: &bool) -> bool {
     *on
 }
 

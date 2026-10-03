@@ -3,6 +3,7 @@
 //! cycles.
 
 pub(crate) mod file;
+pub(crate) mod login_match;
 pub(crate) mod panes;
 pub(crate) mod shared;
 pub(crate) mod switch;

@@ -3,9 +3,12 @@
 
 use std::collections::BTreeMap;
 
+use tempfile::tempdir;
+
+use super::login_match::AutoMatch;
 use super::{Macro, Profile};
 use crate::profile_config::{strip_global_fields, CustomTheme, GlobalConfig, ProfileConfig};
-use crate::profile_set::ProfileSet;
+use crate::profile_set::{ProfileSet, DEFAULT_PROFILE_NAME};
 
 pub(crate) fn theme(id: &str, background: &str) -> CustomTheme {
     CustomTheme {
@@ -44,6 +47,75 @@ pub(crate) fn persist_live(set: &ProfileSet, profile: &Profile) {
     GlobalConfig::from_profile(profile, set.scope())
         .save(&set.global_path())
         .unwrap();
+}
+
+pub(crate) fn claim(host: &str, port: Option<u16>, characters: &[&str]) -> AutoMatch {
+    AutoMatch {
+        host: Some(host.into()),
+        port,
+        characters: characters.iter().map(ToString::to_string).collect(),
+        enabled: true,
+    }
+}
+
+/// Write `name`'s description and claim as they stand, the way an
+/// index saved before the login rules holds them, so a test can set
+/// up a double claim or a host wide fallback.
+pub(crate) fn put_claim(
+    set: &mut ProfileSet,
+    name: &str,
+    description: Option<&str>,
+    auto_match: AutoMatch,
+) {
+    let entry = set
+        .index
+        .profiles
+        .iter_mut()
+        .find(|p| p.name == name)
+        .unwrap();
+    entry.description = description.map(ToString::to_string);
+    entry.auto_match = Some(auto_match);
+    set.save_index().unwrap();
+}
+
+/// James's index: default and Test-Prompt both claim Ilsabet on the
+/// same world, and Healer claims Corvanne.
+pub(crate) fn james_like_set(dir: &std::path::Path) -> ProfileSet {
+    let mut set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
+    let world = "play.theforsakenlands.com";
+    put_claim(
+        &mut set,
+        DEFAULT_PROFILE_NAME,
+        Some("Immortal"),
+        claim(world, Some(1848), &["Ilsabet"]),
+    );
+    set.create("Healer").unwrap();
+    put_claim(
+        &mut set,
+        "Healer",
+        None,
+        claim(world, Some(1848), &["Corvanne"]),
+    );
+    set.create("Test-Prompt").unwrap();
+    put_claim(
+        &mut set,
+        "Test-Prompt",
+        None,
+        claim(world, Some(1848), &["Ilsabet"]),
+    );
+    set
+}
+
+pub(crate) fn set_with_profiles(profiles: Vec<(&str, AutoMatch)>) -> ProfileSet {
+    let dir = tempdir().unwrap();
+    let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+    for (name, am) in profiles {
+        if name != DEFAULT_PROFILE_NAME {
+            set.create(name).unwrap();
+        }
+        put_claim(&mut set, name, None, am);
+    }
+    set
 }
 
 #[test]
