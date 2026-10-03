@@ -3,7 +3,7 @@
 //! rules, the twin of `renderFontStack` in src/lib/fontLoader.ts.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use core_graphics::color_space::CGColorSpace;
 use core_graphics::context::{CGContext, CGTextDrawingMode};
@@ -422,14 +422,48 @@ fn weighted_face(
     best.map(|(handle, _)| handle)
 }
 
-// Vosh ships this family and the webview renders with it. font-kit often
-// fails to resolve it by its CSS family name (the file's internal family
-// name differs), so load the bundled faces directly to match the webview
-// exactly.
-pub(super) const JETBRAINS_REGULAR: &[u8] =
-    include_bytes!("../../../../public/fonts/JetBrainsMonoNerdFont-Regular.ttf");
-pub(super) const JETBRAINS_BOLD: &[u8] =
-    include_bytes!("../../../../public/fonts/JetBrainsMonoNerdFont-Bold.ttf");
+/// The files of the font Vosh bundles, which the page ships in
+/// `fonts/`, regular then bold.
+pub(crate) const BUNDLED_FILES: [&str; 2] = [
+    "JetBrainsMonoNerdFont-Regular.ttf",
+    "JetBrainsMonoNerdFont-Bold.ttf",
+];
+
+/// The faces of the font Vosh bundles, [`BUNDLED_FAMILY`], which the
+/// webview renders with. font-kit often fails to resolve the family by
+/// its CSS name (the file's internal family name differs), so the atlas
+/// loads these faces directly to match the webview exactly. Launch
+/// reads the page's copy and hands it in, so the binary carries none of
+/// its own.
+struct BundledFaces {
+    regular: Arc<Vec<u8>>,
+    bold: Arc<Vec<u8>>,
+}
+
+static BUNDLED: OnceLock<BundledFaces> = OnceLock::new();
+
+/// Hand in the bundled faces. Only the first call counts.
+pub(crate) fn hand_in_bundled(regular: Vec<u8>, bold: Vec<u8>) {
+    let _ = BUNDLED.set(BundledFaces {
+        regular: Arc::new(regular),
+        bold: Arc::new(bold),
+    });
+}
+
+/// The bundled bold or regular face, once launch has handed it in.
+pub(super) fn bundled_face(bold: bool) -> Option<Arc<Vec<u8>>> {
+    let faces = BUNDLED.get()?;
+    Some(Arc::clone(if bold { &faces.bold } else { &faces.regular }))
+}
+
+/// A bundled font file from the repo's public/fonts. A dev build reads
+/// it there, because its asset resolver reads dist, which `tauri dev`
+/// never writes, and the tests have no page assets at all.
+#[cfg(any(dev, test))]
+pub(crate) fn repo_font(file: &str) -> Option<Vec<u8>> {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../public/fonts");
+    std::fs::read(std::path::Path::new(dir).join(file)).ok()
+}
 
 fn font_from_handle(handle: font_kit::handle::Handle) -> Option<Font> {
     let kit_font = handle.load().ok()?;
@@ -528,14 +562,10 @@ fn load_face(family_stack: &str, bold: bool) -> Option<Font> {
         ) {
             continue;
         }
-        // The bundled family, matched by the webview.
+        // The bundled family, matched by the webview. Without the bundled
+        // faces it falls through to the system lookup below.
         if lower.contains("jetbrains") {
-            let bytes = if bold {
-                JETBRAINS_BOLD
-            } else {
-                JETBRAINS_REGULAR
-            };
-            if let Ok(font) = Font::from_bytes(Arc::new(bytes.to_vec()), 0) {
+            if let Some(Ok(font)) = bundled_face(bold).map(|bytes| Font::from_bytes(bytes, 0)) {
                 tracing::info!(bold, "native-surface: atlas font = bundled JetBrainsMono");
                 return Some(font);
             }

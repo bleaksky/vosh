@@ -1,6 +1,6 @@
 use super::atlas::{
-    centered_glyph_top, native_baseline, rect_to_uv, rendered_families, slot_rect, JETBRAINS_BOLD,
-    JETBRAINS_REGULAR,
+    bundled_face, centered_glyph_top, hand_in_bundled, native_baseline, rect_to_uv,
+    rendered_families, repo_font, slot_rect, BUNDLED_FILES,
 };
 use super::bands::{
     band_instances, band_rects, band_viewport, ground_tint, lift_boxes, widen_newest, BandRect,
@@ -22,7 +22,6 @@ use crate::native::grid::{CellFlags, TermGrid, Underline};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
 use font_kit::font::Font;
 use std::ops::Range;
-use std::sync::Arc;
 use vosh_prompt::stage::{lift_end, lift_start, Output};
 
 #[test]
@@ -488,10 +487,19 @@ fn xterm_baseline(cell_h: u32, ascent: f64, descent: f64) -> f64 {
     top + char_h - descent.round()
 }
 
+/// Hand the atlas the repo's copy of the bundled font, as launch hands
+/// it the page's, so the bundled family loads it.
+fn hand_in_bundled_jetbrains() {
+    let [regular, bold] = BUNDLED_FILES
+        .map(|file| repo_font(file).expect("the repo holds the bundled JetBrains Mono"));
+    hand_in_bundled(regular, bold);
+}
+
 #[test]
 fn native_baseline_matches_xterm_at_every_line_height() {
-    for bytes in [JETBRAINS_REGULAR, JETBRAINS_BOLD] {
-        let font = Font::from_bytes(Arc::new(bytes.to_vec()), 0).unwrap();
+    hand_in_bundled_jetbrains();
+    for bold in [false, true] {
+        let font = Font::from_bytes(bundled_face(bold).unwrap(), 0).unwrap();
         let m = font.metrics();
         for css_px in 11..=18u32 {
             for dpr in [1u32, 2] {
@@ -532,6 +540,7 @@ fn a_taller_cell_drops_each_glyph_to_the_centered_baseline() {
     };
     // JetBrains Mono at 14 px on a 2x screen: a 37 px glyph box in the
     // 44 px cell xterm reports at the default line height.
+    hand_in_bundled_jetbrains();
     let jetbrains =
         || AtlasFonts::load("JetBrainsMono Bundled").expect("Vosh bundles JetBrains Mono");
     let mut flat = GlyphAtlas::from_fonts(jetbrains(), 28.0, Some((17, 44)), None);
@@ -568,6 +577,7 @@ fn font_lists_match_the_shared_fixtures() {
 
 #[test]
 fn a_berkeley_name_without_the_font_lands_on_the_bundled_jetbrains_mono() {
+    hand_in_bundled_jetbrains();
     let fonts = AtlasFonts::load("\"Berkeley Mono Vosh Test\", Menlo, monospace")
         .expect("Vosh bundles JetBrains Mono");
     assert_eq!(
@@ -1163,6 +1173,7 @@ fn marks_become_whole_pixel_quads_and_the_curl_samples_its_sprite() {
 
 #[test]
 fn the_curl_sprite_redraws_only_when_its_size_changes() {
+    hand_in_bundled_jetbrains();
     let Some(fonts) = AtlasFonts::load("JetBrainsMono Bundled") else {
         return;
     };
@@ -1313,6 +1324,7 @@ fn render_frame(
     let px = 12.0 * scale;
     // xterm's device cell: the font's advance and glyph box, and the
     // box times the line height.
+    hand_in_bundled_jetbrains();
     let probe = GlyphAtlas::from_fonts(AtlasFonts::load("JetBrainsMono Bundled")?, px, None, None);
     let (cell_w, char_h) = (probe.cell_w(), probe.cell_h());
     let cell_h = (char_h as f32 * line_height).floor() as u32;

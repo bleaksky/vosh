@@ -1,7 +1,8 @@
 //! The GPU device the surface draws with and the fonts its glyph atlas
-//! loads. `init_gpu` stands the device up over the platform's view. A
-//! font or cell size the page reports rebuilds the atlas, loading the
-//! fonts off the main thread, and the newest request wins.
+//! loads. Install hands the atlas the bundled font, and `init_gpu`
+//! stands the device up over the platform's view. A font or cell size
+//! the page reports rebuilds the atlas, loading the fonts off the main
+//! thread, and the newest request wins.
 
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
@@ -10,6 +11,7 @@ use tauri::Manager;
 
 use super::pointer::{load_f32, CELLS};
 use super::{render, surface_slot, APP};
+use crate::native::gpu::atlas::{hand_in_bundled, BUNDLED_FILES};
 
 // Live wgpu objects for the terminal surface.
 pub(super) struct GpuState {
@@ -206,6 +208,35 @@ pub(super) fn font_atlas_params(scale: f64) -> (String, f32) {
     } else {
         ("monospace".to_string(), size_for(14.0))
     }
+}
+
+/// Hand the atlas the font the page ships, before the first atlas loads
+/// its fonts. Without it the atlas looks the family up among your
+/// installed fonts, as it does when a bundled face fails to load.
+pub(super) fn hand_in_bundled_fonts(app: &tauri::AppHandle) {
+    let [regular, bold] = BUNDLED_FILES.map(|file| bundled_font(app, file));
+    if let (Some(regular), Some(bold)) = (regular, bold) {
+        hand_in_bundled(regular, bold);
+    } else {
+        tracing::warn!("native-surface: the app lacks the bundled JetBrains Mono");
+    }
+}
+
+/// A bundled font file from the page's assets. The resolver answers a
+/// path it does not hold with index.html, so only a font counts.
+#[cfg(not(dev))]
+fn bundled_font(app: &tauri::AppHandle, file: &str) -> Option<Vec<u8>> {
+    app.asset_resolver()
+        .get(format!("fonts/{file}"))
+        .filter(|asset| asset.mime_type != "text/html")
+        .map(|asset| asset.bytes)
+}
+
+/// A bundled font file from the repo, which a dev build reads in place
+/// of the page's assets.
+#[cfg(dev)]
+fn bundled_font(_app: &tauri::AppHandle, file: &str) -> Option<Vec<u8>> {
+    crate::native::gpu::atlas::repo_font(file)
 }
 
 /// Clamp a drawable size to the device's texture limit. `configure` panics

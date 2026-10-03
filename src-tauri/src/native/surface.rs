@@ -209,14 +209,17 @@ pub(crate) fn is_ready() -> bool {
 }
 
 /// Install the native surface under the main window's webview, and keep
-/// the app handle every redraw and report goes through. Runs on the main
-/// thread. The surface spans the window and starts hidden, and the page's
-/// first `set_bounds` call shows it and places the grid in the pane. A
-/// missing handle or a GPU that fails to start only logs, so `is_ready`
-/// stays false and the page draws with xterm. The error comes from the
-/// webview, when it could not run the install at all.
+/// the app handle every redraw and report goes through. The atlas gets
+/// the bundled font first, so the first atlas can load it. Runs on the
+/// main thread. The surface spans the window and starts hidden, and the
+/// page's first `set_bounds` call shows it and places the grid in the
+/// pane. A missing handle or a GPU that fails to start only logs, so
+/// `is_ready` stays false and the page draws with xterm. The error comes
+/// from the webview, when it could not run the install at all.
 pub(crate) fn install(window: &tauri::WebviewWindow) -> Result<(), tauri::Error> {
-    let _ = APP.set(window.app_handle().clone());
+    let app = window.app_handle();
+    let _ = APP.set(app.clone());
+    device::hand_in_bundled_fonts(app);
     platform::install(window)
 }
 
