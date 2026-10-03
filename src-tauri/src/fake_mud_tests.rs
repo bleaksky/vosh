@@ -736,7 +736,7 @@ async fn the_new_build_gives_vosh_the_prompt_at_login_and_follows_the_game() {
         h.events("session://game-prompt-seen"),
         [serde_json::json!({"kind": "gmcp", "text": PROMPT, "applied": true})]
     );
-    let seen = crate::prompt_lookup::last_seen(&h.state)
+    let seen = crate::prompt::last_seen::last_seen(&h.state)
         .await
         .expect("the game sent it");
     assert_eq!(seen.source, "gmcp");
@@ -765,7 +765,7 @@ async fn the_new_build_gives_vosh_the_prompt_at_login_and_follows_the_game() {
         .collect();
     assert_eq!(toasts.len(), 2, "one toast at login, one for prompt x");
     assert_eq!(toasts[1]["text"], PROMPT_X);
-    let seen = crate::prompt_lookup::last_seen(&h.state)
+    let seen = crate::prompt::last_seen::last_seen(&h.state)
         .await
         .expect("seen");
     assert!(!seen.at_login);
@@ -886,7 +886,7 @@ async fn the_older_build_reads_your_prompt_from_the_game_replies() {
         ]
     );
     h.until_last_row("<1020>").await;
-    let last = crate::prompt_lookup::last_seen(&h.state)
+    let last = crate::prompt::last_seen::last_seen(&h.state)
         .await
         .expect("seen");
     assert_eq!(last.source, "session");
@@ -1090,7 +1090,7 @@ async fn the_log_lookup_finds_only_the_prompt_of_the_profiles_own_character() {
     h.disconnect().await;
 
     // Default claims Tester, so its card prefills from the log.
-    let seen = crate::prompt_lookup::last_seen(&h.state)
+    let seen = crate::prompt::last_seen::last_seen(&h.state)
         .await
         .expect("the log holds Tester's prompt");
     assert_eq!(seen.source, "log");
@@ -1105,7 +1105,7 @@ async fn the_log_lookup_finds_only_the_prompt_of_the_profiles_own_character() {
             .switch("Healer")
             .expect("the switch");
     }
-    assert_eq!(crate::prompt_lookup::last_seen(&h.state).await, None);
+    assert_eq!(crate::prompt::last_seen::last_seen(&h.state).await, None);
 
     // Healer logs in on the same game. The log still holds only
     // Tester's prompt, so Healer's card stays empty.
@@ -1122,7 +1122,7 @@ async fn the_log_lookup_finds_only_the_prompt_of_the_profiles_own_character() {
             == Some("Healer")
     })
     .await;
-    assert_eq!(crate::prompt_lookup::last_seen(&h.state).await, None);
+    assert_eq!(crate::prompt::last_seen::last_seen(&h.state).await, None);
     h.finish(grid).await;
 }
 
@@ -1222,7 +1222,7 @@ async fn a_reconnect_reads_the_prompt_until_char_prompt_comes_again() {
         h.events("session://game-prompt-seen"),
         [serde_json::json!({"kind": "gmcp", "text": PROMPT, "applied": false})]
     );
-    let seen = crate::prompt_lookup::last_seen(&h.state)
+    let seen = crate::prompt::last_seen::last_seen(&h.state)
         .await
         .expect("seen");
     assert_eq!(seen.source, "gmcp");
