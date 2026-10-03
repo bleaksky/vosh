@@ -212,6 +212,27 @@ pub(crate) fn normalize_tracked_affects(list: Vec<TrackedAffect>) -> Vec<Tracked
         .collect()
 }
 
+/// Trim the enabled preset ids, drop blank ones, and sort them without
+/// repeats.
+pub(crate) fn normalize_enabled_presets(list: Vec<String>) -> Vec<String> {
+    let mut list: Vec<String> = list
+        .into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    list.sort();
+    list.dedup();
+    list
+}
+
+/// Trim a color pick and turn a blank one into None, so a picker clears
+/// back to its default by sending an empty string.
+pub(crate) fn normalize_optional_color(value: Option<String>) -> Option<String> {
+    value
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct UiConfig {
     /// Active theme id. Matches a built-in theme (`kanso-zen`,
@@ -708,8 +729,22 @@ fn default_moons_position() -> String {
     "right-edge".to_string()
 }
 
+/// The ways the status line chips draw. Anything else saves as the
+/// default, the value alone.
+pub(crate) const CHIP_STYLES: [&str; 3] = ["value_only", "caption_value", "icon_value"];
+
 fn default_chip_style() -> String {
     "value_only".to_string()
+}
+
+/// Keep a known chip style and turn anything else into `value_only`, so
+/// the page never draws a chip with no style.
+pub(crate) fn coerce_chip_style(value: String) -> String {
+    if CHIP_STYLES.contains(&value.as_str()) {
+        value
+    } else {
+        default_chip_style()
+    }
 }
 
 /// The ways the status line tick counts. Anything else saves as the
@@ -859,6 +894,12 @@ fn default_input_echo_caret() -> bool {
 
 fn default_paste_line_delay_ms() -> u32 {
     500
+}
+
+/// Hold the paste delay to at most 10 seconds a line, so a malformed
+/// value cannot freeze the paste indicator.
+pub(crate) fn coerce_paste_line_delay_ms(ms: u32) -> u32 {
+    ms.min(10_000)
 }
 
 /// User-authored theme. All fields are colors (or strings, for
@@ -1448,6 +1489,20 @@ fn default_light_theme() -> String {
     "vellum".to_string()
 }
 
+/// Trim a light theme pick and turn a blank one into `vellum`.
+pub(crate) fn coerce_light_theme(value: String) -> String {
+    match value.trim() {
+        "" => default_light_theme(),
+        id => id.to_string(),
+    }
+}
+
+/// Trim a dark theme pick. A blank one stays blank, which the page reads
+/// as the current theme.
+pub(crate) fn normalize_dark_theme(value: String) -> String {
+    value.trim().to_string()
+}
+
 /// The line height ids the terminal knows. Anything else saves as the
 /// default.
 pub(crate) const TERMINAL_LINE_HEIGHTS: [&str; 3] = ["compact", "default", "loose"];
@@ -1534,8 +1589,36 @@ fn default_font_size() -> u32 {
     14
 }
 
+/// Hold the terminal font size to 6 to 64 pixels.
+pub(crate) fn coerce_font_size(size: u32) -> u32 {
+    size.clamp(6, 64)
+}
+
+/// The caret shapes the command line draws. Anything else saves as the
+/// default, the block.
+pub(crate) const INPUT_CURSOR_STYLES: [&str; 7] = [
+    "block",
+    "block_outline",
+    "half_block",
+    "underline",
+    "underline_thick",
+    "pipe",
+    "pipe_thick",
+];
+
 fn default_input_cursor_style() -> String {
     "block".to_string()
+}
+
+/// Keep a known caret shape and turn anything else into `block`, so the
+/// input row always paints a caret. An unknown one comes from a hand
+/// edit or a newer build.
+pub(crate) fn coerce_input_cursor_style(value: String) -> String {
+    if INPUT_CURSOR_STYLES.contains(&value.as_str()) {
+        value
+    } else {
+        default_input_cursor_style()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
