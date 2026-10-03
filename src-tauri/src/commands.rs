@@ -5,14 +5,14 @@ use tracing::warn;
 use vosh_automation::trigger::Trigger;
 use vosh_log::{SearchOptions, SearchPage, SessionRow};
 
+use crate::app::events::{
+    broadcast_list_changes, ListChanges, ListRevisions, MACRO_GROUPS_CHANGED,
+};
 use crate::app::state::{
     note_ui_config_replaced, panes_generation, ui_config_generation, AppState, SharedState,
     AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING, PROFILES_NOT_LOADED,
 };
 use crate::input;
-use crate::list_events::{
-    broadcast_list_changes, ListChanges, ListRevisions, MACRO_GROUPS_CHANGED,
-};
 
 /// Debounce generation for `mark_profile_dirty`: each mark bumps it, and
 /// the delayed persist only fires if no newer mark arrived while waiting.

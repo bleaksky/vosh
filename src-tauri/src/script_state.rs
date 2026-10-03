@@ -14,7 +14,7 @@ use vosh_automation::alias::Alias;
 use vosh_automation::vars::{Scope, VariableStore};
 use vosh_script::{Action, ScriptEngine, ScriptOutcome};
 
-use crate::list_events::{ListChanges, ListRevisions};
+use crate::app::events::{ListChanges, ListRevisions};
 use crate::profile::Profile;
 
 /// One pending one-shot Lua timer.
@@ -250,7 +250,7 @@ impl GroupToggleReport {
 /// every catalog group the profile's folder map names for it, see
 /// [`crate::profile_config::GroupFolders`]. A macro group that turned
 /// on or off moves [`Profile::macro_group_toggles`], so the windows
-/// hear it through [`crate::list_events::ListChanges`].
+/// hear it through [`crate::app::events::ListChanges`].
 pub(crate) fn toggle_group(profile: &mut Profile, name: &str, enabled: bool) -> GroupToggleReport {
     let mut report = GroupToggleReport::default();
     let folders = &profile.group_folders;

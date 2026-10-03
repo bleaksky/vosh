@@ -18,13 +18,13 @@ use vosh_protocol::telnet::{
     codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Negotiator, Parser,
 };
 
+use crate::app::events::{broadcast_list_changes, ListChanges, ListRevisions};
 use crate::connection::{self, ConnectionError, Stream};
 use crate::gmcp_bind;
 use crate::hidden_input::ServerEcho;
 use crate::highlight_ground;
 use crate::input;
 use crate::line_accumulator::{Line, LineAccumulator, Partial};
-use crate::list_events::{broadcast_list_changes, ListChanges, ListRevisions};
 use crate::profile::Profile;
 use crate::profile_config::SharedLayer;
 use crate::script_state::{self, ApplyResult, PendingTimer, SharedTimers};
