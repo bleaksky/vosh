@@ -1366,9 +1366,9 @@ fn open_aux_window(app: &AppHandle, spec: &AuxWindow) -> Result<(), String> {
     // Open on the theme's appearance, which the last theme paint
     // reported, and on macOS on its ground as well, so even a frame the
     // page has not painted yet is in your theme. Windows and Linux keep
-    // the window clear (window_backdrop explains why). Before any paint
+    // the window clear (app::windows explains why). Before any paint
     // the window keeps the defaults.
-    let builder = match crate::window_backdrop::current() {
+    let builder = match crate::app::windows::current() {
         Some(backdrop) => backdrop.dress(builder),
         None => builder,
     };
