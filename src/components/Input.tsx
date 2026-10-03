@@ -1074,7 +1074,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         //
         // Spell-check fires when (a) the user opted in via Settings AND
         // (b) the current line matches a chat verb. WKWebView's
-        // continuous spell-checking is enabled at app startup (lib.rs)
+        // continuous spell-checking is enabled at app startup (app/launch.rs)
         // so the attribute triggers the squiggle pass; plain MUD
         // commands skip it so the prompt stays clean.
         <textarea

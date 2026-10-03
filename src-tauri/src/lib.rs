@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use tauri::Manager;
-use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
-use vosh_log::LogStore;
 
 mod affect_full;
 mod affects_snapshot;
@@ -149,95 +147,7 @@ pub fn run() {
         )
         .manage(state.clone())
         .setup(move |app| {
-            // Read the font list for Appearance while the app starts,
-            // on the blocking pool, never here on the main thread.
-            #[cfg(target_os = "macos")]
-            fonts::warm_font_cache();
-            // The data folder and the scripts folder in it, where
-            // `#script load` finds Lua files.
-            if let Err(e) = create_scripts_dir(app) {
-                error!(error = %e, "scripts folder could not be created");
-            }
-            if let Ok(path) = app.path().app_data_dir() {
-                // Where `#profile save`, `#profile load` and `#script
-                // load` find their files.
-                let _ = crate::input::APP_DATA_DIR.set(path.clone());
-                // How full each affect was cast, per character, for the
-                // Affects pane's gauges. Read when the game names you.
-                state
-                    .affect_full
-                    .set_path(path.join(affect_full::FILE_NAME));
-
-                // The profile set and the active profile, then the
-                // shared catalog and loadouts in loadout mode. See
-                // app/launch.rs.
-                let launched = tauri::async_runtime::block_on(app::launch::load(&state, &path));
-                if launched.loadout_mode {
-                    crate::input::PATH_B_ACTIVE.store(true, std::sync::atomic::Ordering::Release);
-                }
-                if launched.wizard_unfinished {
-                    // The next launch writes the wizard journal again, over
-                    // anything this session would save.
-                    crate::app::state::MIGRATION_RELAUNCH_PENDING
-                        .store(true, std::sync::atomic::Ordering::Release);
-                }
-                match open_log_store(&path) {
-                    Ok(store) => {
-                        // Searches read through a second connection so
-                        // they never wait on, or hold up, the session
-                        // loop's appends. Without it they share the
-                        // writer.
-                        let reader = match open_log_store(&path) {
-                            Ok(reader) => Some(reader),
-                            Err(e) => {
-                                tracing::warn!(error = %e, "log reader failed to open; searches share the writer");
-                                None
-                            }
-                        };
-                        let logs = state.logs.clone();
-                        let log_reader = state.log_reader.clone();
-                        tauri::async_runtime::block_on(async move {
-                            *logs.lock().await = Some(store);
-                            *log_reader.lock().await = reader;
-                        });
-                    }
-                    Err(e) => {
-                        error!(error = %e, "log store failed to open; logging disabled");
-                    }
-                }
-                let scrollback_path = log_state::scrollback_path(&path);
-                if let Ok(bytes) = std::fs::read(&scrollback_path) {
-                    let scrollback = state.scrollback.clone();
-                    tauri::async_runtime::block_on(async move {
-                        let mut sb = scrollback.lock().await;
-                        sb.load_from_bytes(&bytes);
-                    });
-                    info!(path = %scrollback_path.display(), "loaded scrollback");
-                }
-
-                let plugins_dir = path.join("plugins");
-                let _ = std::fs::create_dir_all(&plugins_dir);
-                app::plugins::seed_example_plugins(&plugins_dir);
-                tauri::async_runtime::block_on(app::plugins::load_enabled_plugins(
-                    app.handle(),
-                    &state,
-                    plugins_dir,
-                ));
-            }
-            #[cfg(target_os = "macos")]
-            {
-                for (_, window) in app.webview_windows() {
-                    let _ = app::windows::enable_macos_spellcheck(&window);
-                }
-            }
-            // Tier 3: install the native terminal surface over the webview
-            // in the main window. See native_surface.
-            #[cfg(native_surface)]
-            {
-                if let Some(main) = app.get_webview_window("main") {
-                    let _ = native_surface::install_probe(&main);
-                }
-            }
+            app::launch::setup(app, &state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -361,24 +271,4 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(app::exit::on_run_event);
-}
-
-/// Create the app data folder and the `scripts` folder in it, where
-/// `#script load` finds Lua files. The map store's opener did this until
-/// D3 retired the store. maps.sqlite stays on disk as it is, and nothing
-/// reads or writes it.
-fn create_scripts_dir(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let dir = app.path().app_data_dir()?;
-    std::fs::create_dir_all(dir.join(SCRIPTS_DIR))?;
-    Ok(())
-}
-
-/// The folder under the app data folder that holds Lua scripts.
-const SCRIPTS_DIR: &str = "scripts";
-
-fn open_log_store(dir: &std::path::Path) -> Result<LogStore, Box<dyn std::error::Error>> {
-    std::fs::create_dir_all(dir)?;
-    let path = log_state::log_db_path(dir);
-    info!(path = %path.display(), "opening log store");
-    Ok(LogStore::open(&path)?)
 }

@@ -936,9 +936,9 @@ mod tests {
     }
 
     /// Startup in loadout mode over the profile files in `dir` the way
-    /// lib.rs runs it: load the active profile, then let the catalog take
-    /// or hand out the preset list, and save the catalog when it took
-    /// one. Hands back the notices launch keeps for you too.
+    /// app/launch.rs runs it: load the active profile, then let the
+    /// catalog take or hand out the preset list, and save the catalog
+    /// when it took one. Hands back the notices launch keeps for you too.
     fn launch_with_notices(dir: &Path, set: &ProfileSet) -> (Profile, Vec<String>) {
         let mut profile = Profile::default();
         let mut notices = crate::profile_config::load_at_launch(set, &mut profile);

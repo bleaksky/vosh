@@ -1,15 +1,111 @@
-//! What launch loads from the app data folder before any window opens:
-//! the profile set with the active profile, then the shared catalog and
-//! the loadouts when you use loadout mode. lib.rs runs [`load`] from its
-//! setup hook, and tests run it to relaunch over a folder of their own.
+//! lib.rs hands [`setup`] to the app's setup hook. It runs every step the
+//! app takes as it starts, in order. [`load`] is what launch loads from
+//! the app data folder before any window opens: the profile set with the
+//! active profile, then the shared catalog and the loadouts when you use
+//! loadout mode. Tests run [`load`] to relaunch over a folder of their
+//! own.
 
 use std::path::Path;
 
+use tauri::Manager;
 use tracing::{error, info};
+use vosh_log::LogStore;
 
 use crate::app::state::SharedState;
 use crate::loadouts::wizard::journal::{self, WizardRun};
-use crate::{loadout_store, profile_config, profile_set};
+use crate::{affect_full, loadout_store, log_state, profile_config, profile_set};
+
+/// Every startup step, in order, as the app's setup hook runs them.
+pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
+    // Read the font list for Appearance while the app starts,
+    // on the blocking pool, never here on the main thread.
+    #[cfg(target_os = "macos")]
+    crate::fonts::warm_font_cache();
+    // The data folder and the scripts folder in it, where
+    // `#script load` finds Lua files.
+    if let Err(e) = create_scripts_dir(app) {
+        error!(error = %e, "scripts folder could not be created");
+    }
+    if let Ok(path) = app.path().app_data_dir() {
+        // Where `#profile save`, `#profile load` and `#script
+        // load` find their files.
+        let _ = crate::input::APP_DATA_DIR.set(path.clone());
+        // How full each affect was cast, per character, for the
+        // Affects pane's gauges. Read when the game names you.
+        state
+            .affect_full
+            .set_path(path.join(affect_full::FILE_NAME));
+
+        // The profile set and the active profile, then the
+        // shared catalog and loadouts in loadout mode. See `load`.
+        let launched = tauri::async_runtime::block_on(load(state, &path));
+        if launched.loadout_mode {
+            crate::input::PATH_B_ACTIVE.store(true, std::sync::atomic::Ordering::Release);
+        }
+        if launched.wizard_unfinished {
+            // The next launch writes the wizard journal again, over
+            // anything this session would save.
+            crate::app::state::MIGRATION_RELAUNCH_PENDING
+                .store(true, std::sync::atomic::Ordering::Release);
+        }
+        match open_log_store(&path) {
+            Ok(store) => {
+                // Searches read through a second connection so
+                // they never wait on, or hold up, the session
+                // loop's appends. Without it they share the
+                // writer.
+                let reader = match open_log_store(&path) {
+                    Ok(reader) => Some(reader),
+                    Err(e) => {
+                        tracing::warn!(error = %e, "log reader failed to open; searches share the writer");
+                        None
+                    }
+                };
+                let logs = state.logs.clone();
+                let log_reader = state.log_reader.clone();
+                tauri::async_runtime::block_on(async move {
+                    *logs.lock().await = Some(store);
+                    *log_reader.lock().await = reader;
+                });
+            }
+            Err(e) => {
+                error!(error = %e, "log store failed to open; logging disabled");
+            }
+        }
+        let scrollback_path = log_state::scrollback_path(&path);
+        if let Ok(bytes) = std::fs::read(&scrollback_path) {
+            let scrollback = state.scrollback.clone();
+            tauri::async_runtime::block_on(async move {
+                let mut sb = scrollback.lock().await;
+                sb.load_from_bytes(&bytes);
+            });
+            info!(path = %scrollback_path.display(), "loaded scrollback");
+        }
+
+        let plugins_dir = path.join("plugins");
+        let _ = std::fs::create_dir_all(&plugins_dir);
+        crate::app::plugins::seed_example_plugins(&plugins_dir);
+        tauri::async_runtime::block_on(crate::app::plugins::load_enabled_plugins(
+            app.handle(),
+            state,
+            plugins_dir,
+        ));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        for (_, window) in app.webview_windows() {
+            let _ = crate::app::windows::enable_macos_spellcheck(&window);
+        }
+    }
+    // Tier 3: install the native terminal surface over the webview
+    // in the main window. See native_surface.
+    #[cfg(native_surface)]
+    {
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = crate::native_surface::install_probe(&main);
+        }
+    }
+}
 
 /// What [`load`] found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -206,4 +302,24 @@ pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> b
     *state.loadout_set.lock().await = Some(set);
     info!("loaded Path B catalog + loadout set");
     true
+}
+
+/// Create the app data folder and the `scripts` folder in it, where
+/// `#script load` finds Lua files. The map store's opener did this until
+/// D3 retired the store. maps.sqlite stays on disk as it is, and nothing
+/// reads or writes it.
+fn create_scripts_dir(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let dir = app.path().app_data_dir()?;
+    std::fs::create_dir_all(dir.join(SCRIPTS_DIR))?;
+    Ok(())
+}
+
+/// The folder under the app data folder that holds Lua scripts.
+const SCRIPTS_DIR: &str = "scripts";
+
+fn open_log_store(dir: &std::path::Path) -> Result<LogStore, Box<dyn std::error::Error>> {
+    std::fs::create_dir_all(dir)?;
+    let path = log_state::log_db_path(dir);
+    info!(path = %path.display(), "opening log store");
+    Ok(LogStore::open(&path)?)
 }

@@ -347,8 +347,8 @@ pub(crate) mod tests {
 
     pub(crate) const UNREADABLE: &str = "tracked = = [\n";
 
-    /// Launch over the profile set in `dir` the way lib.rs runs it, and
-    /// hand back the app state with the notices launch kept.
+    /// Launch over the profile set in `dir` the way app/launch.rs runs
+    /// it, and hand back the app state with the notices launch kept.
     pub(crate) async fn launch_state(dir: &std::path::Path) -> super::SharedState {
         let state: super::SharedState = std::sync::Arc::new(AppState::default());
         crate::app::launch::load_profiles(&state, dir).await;
