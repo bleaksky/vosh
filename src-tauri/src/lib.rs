@@ -15,7 +15,6 @@ mod input;
 mod ipc;
 mod loadouts;
 mod logs;
-mod migration;
 #[cfg(native_surface)]
 mod native_surface;
 mod output;
@@ -58,6 +57,10 @@ mod loadout_store {
     pub(crate) use crate::loadouts::wizard::apply::legacy_dir;
     pub(crate) use crate::loadouts::{load_path_b_at_launch, LoadoutStoreError};
 }
+
+// Callers still reach the wizard planner by the path of migration.rs,
+// until they point at loadouts/wizard/.
+use loadouts::wizard::plan as migration;
 
 pub fn run() {
     tracing_subscriber::fmt()
