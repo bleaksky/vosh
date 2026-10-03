@@ -347,9 +347,10 @@ pub(super) fn set_clipboard(text: &str) {
         // clearContents returns NSInteger (the new change count), not
         // void. Binding it as () makes objc2 encode the call as
         // returning 'v' while the selector is 'q'; a debug build's
-        // msg_send verification then panics, and because this runs in
-        // the AppKit mouseUp callback the panic cannot unwind and
-        // aborts the whole app. Bind the real return so copy is safe.
+        // msg_send verification then panics. Copy runs on the main
+        // thread inside AppKit's event loop, which a panic cannot unwind
+        // out of, so it aborts the whole app. Bind the real return so
+        // copy is safe.
         let _: isize = msg_send![pasteboard, clearContents];
         let ns_text: *mut AnyObject =
             msg_send![class!(NSString), stringWithUTF8String: text_c.as_ptr()];
@@ -511,7 +512,7 @@ pub(super) fn install(window: &tauri::WebviewWindow) -> Result<(), tauri::Error>
                     if let Ok(mut slot) = surface_slot().lock() {
                         *slot = Some(handle);
                     }
-                    tracing::info!("native-surface: M2a surface installed");
+                    tracing::info!("native-surface: surface installed");
                 }
                 None => tracing::warn!("native-surface: wgpu init failed; native view is blank"),
             }

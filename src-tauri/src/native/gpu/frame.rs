@@ -286,7 +286,8 @@ pub(super) fn build_frame(
     // A cell on screen that blinks with something to hide.
     let mut blinks = false;
     // The exact fraction of surface height where the divider is drawn,
-    // so the cursor rect and grab band line up with the rendered line.
+    // so the grab band and the page's resize cursor line up with the
+    // rendered line.
     let divider_frac = divider_px.map(|px| px / surface_h as f32);
     let chrome = &inputs.chrome;
     let divider = paint_to_rgba(chrome.divider);
