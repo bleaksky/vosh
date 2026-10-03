@@ -24,7 +24,6 @@ import { onOutput, type PromptOpenRow, type PromptPiece } from '../../lib/sessio
 import { getPinnedBand } from '../../lib/stores/pinnedPromptStore';
 import { setPromptReach } from '../../lib/stores/promptReachStore';
 import { shownColumns } from '../../lib/sgrCells';
-import { nativeSurfaceEnabled, nativeUnderlay } from '../Terminal';
 import type { PromptCardHost } from './PromptCard';
 
 // The prompt card's marks on your prompt (section 7, steps 6 and 10, and
@@ -35,8 +34,7 @@ import type { PromptCardHost } from './PromptCard';
 // value Vosh reads in the game's own line. They are DOM over the terminal,
 // tints and 1 px rings that leave the glyphs readable. The edit band under
 // them is the renderer's own band pass, never a fill here. They draw only
-// while the terminal shows its newest rows, and not at all over the native
-// surface Windows and Linux force on top of the page.
+// while the terminal shows its newest rows.
 //
 // A click on a part of your prompt picks it, a click past its last cell
 // puts the caret there, and a click on a ↵ picks the line break. Clicks
@@ -96,11 +94,9 @@ export function PromptMarks({
 }: PromptMarksProps) {
   const [layout, setLayout] = useState<MarkLayout>(NONE);
   const measured = useRef<Measured | null>(null);
-  const off = nativeSurfaceEnabled() && !nativeUnderlay();
   const pinned = show?.show === 'pinned' && show.capture;
 
   const measure = useCallback(async (): Promise<Measured | null> => {
-    if (off) return null;
     if (pinned) {
       const dock = host.dock();
       const band = getPinnedBand();
@@ -228,7 +224,7 @@ export function PromptMarks({
       return null;
     };
     return { layout, hit, textRight: grid.left + rightmost * grid.cellW };
-  }, [off, pinned, host, cell, openRow, design, raw, screen]);
+  }, [pinned, host, cell, openRow, design, raw, screen]);
 
   const run = useCallback(() => {
     let alive = true;
@@ -339,7 +335,6 @@ export function PromptMarks({
     };
   }, []);
 
-  if (off) return null;
   return (
     <>
       <div className="pc-marks" aria-hidden="true">

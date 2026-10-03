@@ -523,16 +523,6 @@
   box-shadow: inset 0 0 0 1px var(--sep);
 }
 
-/* The Windows and Linux on-top native path insets the terminal while
-   find is open so the bar clears the opaque surface: 8 above the bar,
-   40 of bar, 8 below. Scoped like the shell's own terminal padding
-   (frame.css), which would otherwise win and leave the bar under the
-   surface. */
-.terminal-area-find-inset,
-.shell .terminal-area.terminal-area-find-inset {
-  padding-top: 56px;
-}
-
 /* Toasts, bottom right of the terminal column. Each is a floating card
    with a 16 status mark, then the message and an optional detail. */
 .ov-toasts {
