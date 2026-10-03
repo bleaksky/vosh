@@ -10,7 +10,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: block;
-  src: url('./assets/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+  src: url('/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
 }
 
 @font-face {
@@ -18,7 +18,7 @@
   font-style: normal;
   font-weight: 700;
   font-display: block;
-  src: url('./assets/fonts/JetBrainsMonoNerdFont-Bold.ttf') format('truetype');
+  src: url('/fonts/JetBrainsMonoNerdFont-Bold.ttf') format('truetype');
 }
 
 /* Font stacks and the floating shadow recipe. Colors live in
