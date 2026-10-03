@@ -55,6 +55,7 @@ export function PresetsEditor({
 
   const spec = useMemo<KindSpec<PresetToggle>>(
     () => ({
+      id: 'presets',
       noun: { one: 'preset', many: 'presets' },
       filterLabel: 'Filter presets',
       emptyDetail: 'Choose a preset to see what it adds.',

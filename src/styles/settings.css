@@ -1995,23 +1995,88 @@
 }
 
 /* Group headings as typed: 12/600 tertiary. The first sits 12 below
-   the filter, the rest 8 below the divider block. */
-.st-auto-heading {
+   the filter, the rest 8 below the divider block. Each heading is a
+   24 high button that folds its group: the 12 px chevron sits before
+   the name and turns down while the group is open, and a folded group
+   counts its items at the rows' right edge, where their dots sit. The
+   heading row keeps the room after the button for the group's on and
+   off switch. */
+.st-auto-headrow {
+  display: flex;
+  align-items: center;
   height: 28px;
+  padding-top: 4px;
+}
+
+.st-auto-headrow.is-first {
+  height: 32px;
+  padding-top: 8px;
+}
+
+.st-auto-heading {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
-  padding: 8px 10px 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--tertiary);
   font-size: 12px;
   line-height: 16px;
   font-weight: 600;
 }
 
-.st-auto-heading.is-first {
-  height: 32px;
-  padding-top: 12px;
+.st-auto-fold {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  padding: 4px 11px 4px 4px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--tertiary);
+  font: inherit;
+  text-align: left;
+}
+
+.st-auto-fold:hover {
+  background: var(--hover);
+}
+
+/* The list scrolls, so the ring sits inside the heading, as on a row. */
+.st-auto-fold:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.st-auto-fold-chevron {
+  flex: none;
+  transition: transform 150ms ease;
+}
+
+.st-auto-fold[aria-expanded='true'] .st-auto-fold-chevron {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-auto-fold-chevron {
+    transition: none;
+  }
+}
+
+.st-auto-fold-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.st-auto-fold-count {
+  flex: none;
+  margin-left: auto;
+  padding-left: 8px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
 }
 
 .st-auto-divider {
@@ -2049,6 +2114,13 @@
   line-height: 16px;
   font-weight: 400;
   text-align: left;
+}
+
+/* An item in a group indents under its heading, so its name lines up
+   with the group name after the chevron. Items with no group stay at
+   the edge. */
+.st-auto-group .st-auto-row {
+  padding-left: 18px;
 }
 
 .st-auto-row:hover {

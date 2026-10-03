@@ -51,6 +51,9 @@ export interface DetailProps<T> {
  *  renders (module scope or useMemo), since the editor loads again
  *  when it changes. */
 export interface KindSpec<T> {
+  /** `triggers`, the name the list keeps its folds under on this
+   *  computer. Never shown, so a reworded noun keeps your folds. */
+  id: string;
   noun: KindNoun;
   /** `Filter triggers`, the filter field's placeholder and label. */
   filterLabel: string;

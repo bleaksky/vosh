@@ -192,16 +192,12 @@ export function firstCapture(was: PromptCapture): boolean {
   return was.kind === 'none' || (was.kind === 'regex' && was.source === 'migrated');
 }
 
-/** The table once the card saves capture `next`. The first capture in a
- *  profile turns drawing on, so the start P4 checks draws on your prompt
- *  and the footer offers its previews, as P4 draws it. Later, the switch
- *  stays as you set it. */
+/** The table once the card saves capture `next`. The draw switch stays
+ *  as you set it, so reading your prompt never starts drawing your own.
+ *  Only Draw your prompt, the Settings switch, the palette or
+ *  `#prompt draw on` turns it on. */
 export function withCapture(config: PromptConfig, next: PromptCapture): PromptConfig {
-  return {
-    ...config,
-    capture: next,
-    draw: config.draw || firstCapture(config.capture),
-  };
+  return { ...config, capture: next };
 }
 
 /** `at` as RFC 3339 local time with its offset, as the backend writes

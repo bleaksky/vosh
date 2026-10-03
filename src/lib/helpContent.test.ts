@@ -610,6 +610,20 @@ describe('the help on the one window', () => {
     expect(text).toContain('from 200 to 800 points');
   });
 
+  it('tells you how to open Settings on every platform, the gear first', () => {
+    // Windows and Linux have no menu bar, so the title band's gear and
+    // Ctrl+, are how you find Settings there.
+    const found = HELP_TOPICS.find((t) => t.id === 'shape.arrange-panels');
+    if (!found) throw new Error('no panel topic');
+    expect(found.body).toContain(
+      'Open Settings with the gear at the right end of the title band, after the panel button, or press `Cmd+,` on macOS or `Ctrl+,` elsewhere.',
+    );
+    expect(found.body).toContain(
+      '`Open settings` in the palette and the `Settings` list in the terminal right click menu reach it too.',
+    );
+    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+  });
+
   it('keeps the room and its people under the map', () => {
     const text = body('shape.use-the-map');
     expect(text).toContain('The first names the room you stand in and its exits.');
@@ -620,6 +634,19 @@ describe('the help on the one window', () => {
     expect(text).toContain('A short pane gives up rows of people first, then the terrain row');
     expect(HELP_TOPICS.some((t) => t.id === 'shape.room-strip')).toBe(false);
     expect(HELP_TOPICS.some((t) => t.id === 'shape.split-the-well')).toBe(false);
+  });
+
+  it('names the 3D style, its floors and view, the zoom gesture and bent exits', () => {
+    const text = body('shape.use-the-map');
+    expect(text).toContain('Pick `Squares`, `Glyphs`, `Tileset`, or `3D`');
+    expect(text).toContain('a short tick out of a room marks an exit that leads past the room');
+    expect(text).toContain('Scroll or pinch over the map to zoom it, in any style');
+    expect(text).not.toContain('hold `Cmd` or `Ctrl`');
+    expect(text).toContain('drag the map to turn and tilt it');
+    expect(text).toContain('`Reset view` to put north back at the top');
+    expect(text).toContain('`Your floor`, `One floor up and down`, or `Every floor`');
+    expect(text).toContain('Turn on `Terrain sprites`');
+    expect(text).toContain('Vosh remembers the style, the zoom, the 3D view, and the tileset.');
   });
 
   it('lists #help with words with the slash commands', () => {
@@ -745,5 +772,37 @@ describe('the help body format', () => {
         ],
       },
     ]);
+  });
+});
+
+describe('the help on folding groups in Automation', () => {
+  it('says how a heading folds its group and what the list remembers', () => {
+    const text = body('automate.first-alias');
+    expect(text).toContain(
+      'Triggers, Aliases, and Macros each list your items under a heading for every group, and Presets under a heading for each category.',
+    );
+    expect(text).toContain(
+      'Click a heading to fold its group away, and click it again to open it.',
+    );
+    expect(text).toContain('a folded heading counts the items it holds');
+    expect(text).toContain('`ArrowLeft` folds it and `ArrowRight` opens it');
+    expect(text).toContain('Each list remembers the groups you fold.');
+    expect(text).toContain(
+      'Type in the filter and every folded group with a match opens until you clear it.',
+    );
+  });
+
+  it('lists the keys with the other shortcuts', () => {
+    expect(body('reference.keyboard-shortcuts')).toContain(
+      'In an Automation list in Settings. `ArrowUp` and `ArrowDown` move through the group headings and items',
+    );
+  });
+
+  it('keeps colons and semicolons out of the prose', () => {
+    const paragraph =
+      body('automate.first-alias')
+        .split('\n\n')
+        .find((p) => p.startsWith('Triggers, Aliases, and Macros')) ?? '';
+    expect(paragraph.replace(/`[^`]*`/g, '')).not.toMatch(/[:;–—]| - /);
   });
 });

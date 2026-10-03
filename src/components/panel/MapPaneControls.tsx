@@ -1,4 +1,11 @@
 import { useRef, useState } from 'react';
+import {
+  FLOOR_CHOICES,
+  isResetView,
+  resetView,
+  type Floors,
+  type Map3dView,
+} from '../../lib/map3dView';
 import { MAP_STYLE_CHOICES, type MapStyle } from '../../lib/mapStyle';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from './MenuSurface';
 import { returnToCommandLine } from './paneActions';
@@ -6,13 +13,22 @@ import { CheckIcon } from './paneIcons';
 
 // The map's own control in a panel pane: a small button in the drawing
 // box's bottom right corner that shows while you point at the map or
-// tab to it, and opens a menu of map styles, zoom, and the tileset.
-// At rest the pane shows only the drawing, as in the approved boards.
+// tab to it, and opens a menu of map styles, zoom, and the rows of the
+// style you picked, the tileset in Tileset and the floors, sprites and
+// view in 3D. At rest the pane shows only the drawing, as in the
+// approved boards.
 
 const MAP_STYLE_LABELS: Record<MapStyle, string> = {
   squares: 'Squares',
   glyphs: 'Glyphs',
   tileset: 'Tileset',
+  '3d': '3D',
+};
+
+const FLOOR_LABELS: Record<Floors, string> = {
+  yours: 'Your floor',
+  adjacent: 'One floor up and down',
+  all: 'Every floor',
 };
 
 interface Props {
@@ -27,10 +43,12 @@ interface Props {
   tilesetLoaded: boolean;
   onLoadTileset: () => void;
   onClearTileset: () => void;
+  view3d: Map3dView;
+  onView3d: (view: Map3dView) => void;
 }
 
 export function MapPaneControls(props: Props) {
-  const { style, zoom, tilesetLoaded } = props;
+  const { style, zoom, tilesetLoaded, view3d } = props;
   const ref = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
   const anchor = ref.current;
@@ -97,6 +115,33 @@ export function MapPaneControls(props: Props) {
               {tilesetLoaded && (
                 <MenuItem onSelect={run(props.onClearTileset)}>Clear tileset</MenuItem>
               )}
+            </>
+          )}
+          {style === '3d' && (
+            <>
+              <MenuSeparator />
+              {FLOOR_CHOICES.map((f) => (
+                <MenuItem
+                  key={f}
+                  onSelect={run(() => props.onView3d({ ...view3d, floors: f }))}
+                  trailing={f === view3d.floors ? <CheckIcon className="pane-menu-check" /> : null}
+                >
+                  {FLOOR_LABELS[f]}
+                </MenuItem>
+              ))}
+              <MenuSeparator />
+              <MenuItem
+                onSelect={run(() => props.onView3d({ ...view3d, sprites: !view3d.sprites }))}
+                trailing={view3d.sprites ? <CheckIcon className="pane-menu-check" /> : null}
+              >
+                Terrain sprites
+              </MenuItem>
+              <MenuItem
+                disabled={isResetView(view3d)}
+                onSelect={run(() => props.onView3d(resetView(view3d)))}
+              >
+                Reset view
+              </MenuItem>
             </>
           )}
         </MenuSurface>

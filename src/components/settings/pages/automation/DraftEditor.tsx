@@ -23,8 +23,11 @@ import {
 import {
   buildSections,
   filterSections,
+  isFiltering,
   neighborUid,
+  sectionKeyOf,
   sectionOrder,
+  visibleOrder,
   type ListEntry,
 } from '../../../../lib/automationList';
 import { automationSaveError } from '../../../../lib/automationRecords';
@@ -35,6 +38,7 @@ import { ItemList, type PinnedEntry } from './ItemList';
 import { JsonPanel } from './JsonPanel';
 import { SaveBar, type SaveStatus } from './SaveBar';
 import type { DirtyReport, KindSpec } from './types';
+import { useListFolds } from './useListFolds';
 
 /** A block pinned above the list with its own detail and its own
  *  draft, like the Tick in Timers. Save and Discard cover it too. */
@@ -114,6 +118,9 @@ export function DraftEditor<T>({
   /** Goes up after each delete, so focus moves once the list redraws. */
   const [deleteSeq, setDeleteSeq] = useState(0);
   const afterDeleteRef = useRef<string | null>(null);
+  const folds = useListFolds(spec.id, filter);
+  /** The selection when the filter took its first letter. */
+  const filterFromRef = useRef<string | null>(null);
 
   const setDraft = useCallback((next: Draft<T> | null) => {
     draftRef.current = next;
@@ -251,20 +258,23 @@ export function DraftEditor<T>({
   }, [draft, spec, entryCache]);
   const allSections = useMemo(() => buildSections(entries), [entries]);
   const sections = useMemo(() => filterSections(allSections, filter), [allSections, filter]);
+  // The rows you can see. A folded group's rows leave it.
   const order = useMemo(
-    () => [...(pinned ? [pinned.uid] : []), ...sectionOrder(sections)],
-    [pinned, sections],
+    () => [...(pinned ? [pinned.uid] : []), ...visibleOrder(sections, folds.folded)],
+    [pinned, sections, folds.folded],
   );
 
-  // Keep a selection: the first row when none is set or the selected
-  // item is gone.
+  // Keep a selection when none is set or the selected item is gone: the
+  // first row you can see, else the first row a folded group hides. A
+  // selection then exists whenever a row does, so opening a group never
+  // picks one, and the heading that hides it takes Tab.
   useEffect(() => {
     if (!draft) return;
     const exists =
       selected !== null &&
       ((pinned !== null && selected === pinned.uid) || findDraftItem(draft, selected));
-    if (!exists) setSelected(order[0] ?? null);
-  }, [draft, selected, order, pinned]);
+    if (!exists) setSelected(order[0] ?? sectionOrder(sections)[0] ?? null);
+  }, [draft, selected, order, pinned, sections]);
 
   // Select the pinned block once per request, as soon as it has loaded.
   const pinnedSeqDone = useRef(0);
@@ -317,6 +327,32 @@ export function DraftEditor<T>({
     if (d) setDraft(updateDraftItem(d, uid, fn));
   };
 
+  /** Open the group that holds an item, as the draft has it now. */
+  const openGroupOf = (uid: string) => {
+    const d = draftRef.current;
+    const item = d ? findDraftItem(d, uid) : undefined;
+    if (item) folds.open(sectionKeyOf(spec.entry(item.value)));
+  };
+
+  /** Bring an item's row into view, opening its group when folded. */
+  const reveal = (uid: string) => {
+    openGroupOf(uid);
+    setRevealSeq((n) => n + 1);
+  };
+
+  // While the filter has text every group with a match shows open.
+  // Clearing it folds them again, all but the group of a row you picked
+  // from the matches, which stays open so its row still shows.
+  const onFilter = (value: string) => {
+    const was = isFiltering(filter);
+    const now = isFiltering(value);
+    if (!was && now) filterFromRef.current = selected;
+    if (was && !now && selected !== null && selected !== filterFromRef.current) {
+      openGroupOf(selected);
+    }
+    setFilter(value);
+  };
+
   const onNew = () => {
     const d = draftRef.current;
     if (!d || !spec.blank) return;
@@ -325,7 +361,7 @@ export function DraftEditor<T>({
     setFilter('');
     setSelected(uid);
     setFresh(uid);
-    setRevealSeq((n) => n + 1);
+    reveal(uid);
   };
 
   const onDelete = (uid: string) => {
@@ -461,7 +497,7 @@ export function DraftEditor<T>({
           value: selectedItem.value,
           update: update(uid),
           fresh: fresh === uid,
-          revealInList: () => setRevealSeq((n) => n + 1),
+          revealInList: () => reveal(uid),
         })}
         {canDelete && (
           <div className="st-auto-detail-actions">
@@ -496,7 +532,7 @@ export function DraftEditor<T>({
               noun={spec.noun}
               filterLabel={spec.filterLabel}
               filter={filter}
-              onFilter={setFilter}
+              onFilter={onFilter}
               sections={sections}
               hasItems={(draft?.items.length ?? 0) > 0}
               emptyText={spec.emptyList}
@@ -508,6 +544,8 @@ export function DraftEditor<T>({
               monoMeta={spec.monoMeta ?? false}
               warnNames={warnNames}
               warnNote={warnNote}
+              folded={folds.folded}
+              onFold={folds.setFold}
               footer={
                 spec.json ? (
                   <Button

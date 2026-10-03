@@ -1038,6 +1038,19 @@
   min-width: 0;
 }
 
+/* The 3D style turns and tilts as you drag it, so it shows the open
+   hand, and it takes a Tab stop for its arrow keys. */
+.pane-map-box .map-canvas-host.is-3d {
+  cursor: grab;
+  touch-action: none;
+}
+
+.pane-map-box .map-canvas-host:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  border-radius: var(--r-row);
+}
+
 .pane-map-empty {
   position: absolute;
   top: 0;

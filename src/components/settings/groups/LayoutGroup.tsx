@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AFFECTS_MARKER_LABELS, AFFECTS_STYLE_LABELS } from '../../../lib/affectsDisplay';
 import APP_SHORTCUTS from '../../../lib/appShortcuts.json';
-import { PANEL_WIDTH_MAX, PANEL_WIDTH_MIN } from '../../../lib/paneLayout';
+import { PANEL_WIDTH_MAX, panelWidthFloor } from '../../../lib/paneLayout';
 import { isMacPlatform, shortcutKeys, shortcutLabel } from '../../../lib/palette';
 import { profilePossessive } from '../../../lib/profileLabel';
 import {
@@ -103,6 +103,9 @@ export function LayoutGroup({ config, setConfig, onError, navigate }: SettingsPa
   const profile = useActiveProfile();
   const layout = usePanelLayout();
   const owner = profile === null ? null : profilePossessive(profile);
+  // The narrowest panel the main window draws here. On Windows and
+  // Linux the title band's window controls need it wider.
+  const panelFloor = panelWidthFloor(mac);
 
   return (
     <>
@@ -128,10 +131,10 @@ export function LayoutGroup({ config, setConfig, onError, navigate }: SettingsPa
         </Row>
         <Row label="Width" description="You can also drag the panel's edge." anchor="panel-width">
           <NumberField
-            value={panelWidthOf(layout)}
+            value={Math.max(panelFloor, panelWidthOf(layout))}
             disabled={layout === null}
             onChange={setPanelWidth}
-            min={PANEL_WIDTH_MIN}
+            min={panelFloor}
             max={PANEL_WIDTH_MAX}
             step={10}
             unit="pt"
