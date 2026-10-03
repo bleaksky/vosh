@@ -1,4 +1,15 @@
+use super::atlas::{
+    centered_glyph_top, native_baseline, rect_to_uv, rendered_families, slot_rect, JETBRAINS_BOLD,
+    JETBRAINS_REGULAR,
+};
+use super::bands::{BandRect, BAND_RADIUS, BAND_X, BAND_Y, BAND_Y_ADJACENT, LIGHT_RING};
 use super::decor::{curl_coverage, underline_rects, Decor};
+use super::style::{
+    blink_shown, color_to_rgba, linear_to_srgb, parse_css_color, resolve_chrome, until_blink_flip,
+    ChromeTokens, Paint, ANSI_16, CURRENT_MATCH_FALLBACK_ALPHA, DIVIDER_FALLBACK_ALPHA,
+    FIND_MATCH_FALLBACK_ALPHA, SCROLLBAR_FALLBACK_ALPHA, SELECTION_FALLBACK_ALPHA,
+    SELROW_FALLBACK_ALPHA,
+};
 use super::*;
 use crate::native::grid::regions::LiftSpan;
 use crate::native::grid::CellFlags;
