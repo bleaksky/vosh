@@ -175,7 +175,7 @@ impl Harness {
         self.state.profile.lock().await.set_prompt_config(config);
     }
 
-    /// Connect to the fake game the way `session_connect` does, with no
+    /// Connect to the fake game the way `session::connect` does, with no
     /// scrollback file.
     async fn connect(&self) {
         let state = &self.state;
@@ -203,7 +203,7 @@ impl Harness {
         *state.session.lock().await = Some(handle);
     }
 
-    /// Close the connection the way `session_disconnect` does.
+    /// Close the connection the way `session::disconnect` does.
     async fn disconnect(&self) {
         let handle = self.state.session.lock().await.take();
         if let Some(handle) = handle {

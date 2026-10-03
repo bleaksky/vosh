@@ -2,9 +2,8 @@
 //! disconnects through them, sends the lines you type, plain or masked,
 //! tells the game the size of the terminal, and reads the target you track.
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
-use crate::app::events;
 use crate::app::state::SharedState;
 use crate::input;
 use crate::output;
@@ -18,97 +17,7 @@ pub(crate) async fn session_connect(
     port: u16,
     tls: bool,
 ) -> Result<(), String> {
-    // Take any existing handle out under a brief lock and drop the lock
-    // before doing the long-running connect. This lets `session_disconnect`
-    // run concurrently to cancel a hung connect attempt.
-    let old = {
-        let mut current = state.session.lock().await;
-        current.take()
-    };
-    if let Some(handle) = old {
-        handle.shutdown().await;
-    }
-
-    // Clear session-scoped variables on reconnect; profile-scoped survive.
-    state.profile.lock().await.vars.clear_session();
-
-    // Remember the live connection target so the Char.Status-driven
-    // auto-switch path can re-resolve against it once the MUD tells us
-    // who we logged in as. Cleared in `session_disconnect`. Reset the
-    // last-known character at the same time so a reconnect to a
-    // different account triggers a fresh resolve.
-    if let Ok(mut g) = state.current_connection.lock() {
-        *g = Some((host.clone(), port));
-    }
-    if let Ok(mut g) = state.current_character.lock() {
-        *g = None;
-    }
-    // The old session cleared the list as it ended. A new connection
-    // starts with none until the MUD sends its own.
-    state.last_affects.clear();
-    crate::affect_full::connect(&app, state.inner());
-
-    let scrollback_path = tauri::Manager::path(&app)
-        .app_data_dir()
-        .ok()
-        .map(|dir| crate::logs::scrollback_path(&dir));
-
-    // Seed the negotiator with the most recently reported terminal
-    // size so the initial `DO NAWS` reply during the handshake
-    // carries the correct cols/rows. The default of (80, 24) is
-    // applied only when the frontend never called
-    // `session_set_window_size` before this connect.
-    let initial_size = state.window_size.lock().map_or((80, 24), |g| *g);
-    let target = (host.clone(), port);
-    let known_host = crate::profile_set::is_forsaken_lands(&host);
-
-    let spawned = session::spawn(
-        app.clone(),
-        host,
-        port,
-        tls,
-        known_host,
-        state.profile.clone(),
-        state.script_timers.clone(),
-        state.logs.clone(),
-        state.scrollback.clone(),
-        scrollback_path,
-        initial_size,
-    )
-    .await;
-    let handle = match spawned {
-        Ok(handle) => handle,
-        Err(e) => {
-            // Surface the disconnected state so the UI does not stay stuck
-            // on "connecting...". The frontend listens for session://state.
-            let _ = app.emit(
-                events::STATE,
-                crate::session::StatePayload::Disconnected {
-                    reason: Some(e.to_string()),
-                },
-            );
-            // Nothing reached the target, so nobody is logged in there.
-            // A connect that raced this one keeps its own target.
-            if let Ok(mut g) = state.current_connection.lock() {
-                if g.as_ref() == Some(&target) {
-                    *g = None;
-                }
-            }
-            crate::characters::broadcast_session_identity(&app, state.inner()).await;
-            return Err(e.to_string());
-        }
-    };
-
-    {
-        let mut current = state.session.lock().await;
-        if let Some(prev) = current.take() {
-            // A concurrent connect raced us. Shut down our old handle.
-            prev.shutdown().await;
-        }
-        *current = Some(handle);
-    }
-    crate::characters::broadcast_session_identity(&app, state.inner()).await;
-    Ok(())
+    session::connect(&app, state.inner(), host, port, tls).await
 }
 
 #[tauri::command]
@@ -148,19 +57,7 @@ pub(crate) async fn session_disconnect(
     app: AppHandle,
     state: State<'_, SharedState>,
 ) -> Result<(), String> {
-    {
-        let mut current = state.session.lock().await;
-        if let Some(handle) = current.take() {
-            handle.shutdown().await;
-        }
-    }
-    if let Ok(mut g) = state.current_connection.lock() {
-        *g = None;
-    }
-    if let Ok(mut g) = state.current_character.lock() {
-        *g = None;
-    }
-    crate::characters::broadcast_session_identity(&app, state.inner()).await;
+    session::disconnect(&app, state.inner()).await;
     Ok(())
 }
 
