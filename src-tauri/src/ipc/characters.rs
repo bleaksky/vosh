@@ -1,0 +1,120 @@
+//! The commands for Settings > Characters. The page reads any profile
+//! through them, active or not, turns a character's login on or off,
+//! points a profile at a world and saves a profile's settings to your
+//! Downloads folder. Settings and the prompt card also ask who is
+//! logged in.
+
+use serde::Serialize;
+use tauri::{AppHandle, Manager, State};
+use tracing::warn;
+
+use crate::app::events::{broadcast, PROFILES_CHANGED};
+use crate::app::state::{SharedState, PROFILES_NOT_LOADED};
+use crate::characters::{
+    export_path, profile_detail, profile_toml, session_identity, ProfileDetail, SessionIdentity,
+};
+use crate::profile_set::{display_name, LoginClaim, ProfileEntry};
+
+/// Read one profile for the Characters group.
+#[tauri::command]
+pub(crate) async fn profile_detail_get(
+    state: State<'_, SharedState>,
+    name: String,
+) -> Result<ProfileDetail, String> {
+    profile_detail(state.inner(), &name).await
+}
+
+/// Turn the login toggle for `name` on or off for `character`. On takes
+/// the character from every other profile on the same world and names
+/// them in `released_from`. Never switches the live profile, since the
+/// toggle applies at the next login. See [`ProfileSet::set_login`].
+///
+/// [`ProfileSet::set_login`]: crate::profile_set::ProfileSet::set_login
+#[tauri::command]
+pub(crate) async fn profile_set_login(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    name: String,
+    character: String,
+    on: bool,
+) -> Result<LoginClaim, String> {
+    let claim = {
+        let mut guard = state.profile_set.lock().await;
+        let set = guard.as_mut().ok_or(PROFILES_NOT_LOADED)?;
+        set.set_login(&name, &character, on)
+            .map_err(|e| e.to_string())?
+    };
+    broadcast(&app, PROFILES_CHANGED, &name);
+    Ok(claim)
+}
+
+/// Point `name` at a world. Edits only the host and port, so it cannot
+/// overwrite a description or characters the other window holds. See
+/// [`ProfileSet::set_world`].
+///
+/// [`ProfileSet::set_world`]: crate::profile_set::ProfileSet::set_world
+#[tauri::command]
+pub(crate) async fn profile_set_world(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    name: String,
+    host: Option<String>,
+    port: Option<u16>,
+) -> Result<ProfileEntry, String> {
+    let entry = {
+        let mut guard = state.profile_set.lock().await;
+        let set = guard.as_mut().ok_or(PROFILES_NOT_LOADED)?;
+        set.set_world(&name, host, port)
+            .map_err(|e| e.to_string())?
+    };
+    broadcast(&app, PROFILES_CHANGED, &name);
+    Ok(entry)
+}
+
+/// Where an export went, for the sentence Settings shows.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ProfileExport {
+    pub path: String,
+    pub file_name: String,
+}
+
+/// Save a profile's settings as a TOML file in your Downloads folder,
+/// active or not, and say where it went. Settings has no save panel,
+/// so the file takes a name that never replaces another.
+#[tauri::command]
+pub(crate) async fn profile_export_file(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    name: String,
+) -> Result<ProfileExport, String> {
+    let toml = profile_toml(state.inner(), &name).await?;
+    let dir = app
+        .path()
+        .download_dir()
+        .map_err(|_| "Vosh could not find your Downloads folder.".to_string())?;
+    let path = export_path(&dir, &name);
+    std::fs::write(&path, toml).map_err(|e| {
+        warn!(error = %e, path = %path.display(), "profile export write failed");
+        format!(
+            "Vosh could not save the {} profile in your Downloads folder.",
+            display_name(&name)
+        )
+    })?;
+    Ok(ProfileExport {
+        file_name: path
+            .file_name()
+            .map(|f| f.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        path: path.display().to_string(),
+    })
+}
+
+/// Who is logged in: the connection, the character once known, the
+/// live profile, and which profile claims that character. Null while
+/// no connection is up.
+#[tauri::command]
+pub(crate) async fn session_identity_get(
+    state: State<'_, SharedState>,
+) -> Result<Option<SessionIdentity>, String> {
+    Ok(session_identity(state.inner()).await)
+}
