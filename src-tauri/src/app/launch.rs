@@ -165,15 +165,11 @@ pub(crate) async fn load_profiles(state: &SharedState, mut set: ProfileSet) {
     *state.profile_set.lock().await = Some(set);
 }
 
-/// Loadout mode startup, after [`load_profiles`], see [`load`]. When catalog.toml is
-/// present, start from the catalog (shared defaults) and overlay the
-/// triggers, aliases, and macros of the profile file ON TOP. Same-name
-/// entries from the profile file win, and new names are added. Before
-/// this, the catalog overlay outright replaced per-profile state, which
-/// silently wiped any trigger or alias a user authored against their
-/// profile file. Loadouts still apply on top to gate catalog groups by
-/// the active `enabled_groups` set. Returns true when loadout mode is
-/// live.
+/// Loadout mode startup, after [`load_profiles`], see [`load`]. When
+/// catalog.toml is on disk, read it and loadouts.toml, have the catalog
+/// adopt the presets once when it holds no list yet, then lay the catalog
+/// and the active loadouts over the live profile, see
+/// [`lay_catalog_over`]. Returns true when loadout mode is live.
 pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> bool {
     if !loadout_mode_on(app_data) {
         return false;
