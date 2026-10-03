@@ -13,8 +13,6 @@ mod fonts;
 mod import;
 mod input;
 mod ipc;
-mod loadout;
-mod loadout_store;
 mod loadouts;
 mod logs;
 mod migration;
@@ -36,6 +34,30 @@ mod tintin_import;
 
 use app::state::{AppState, SharedState};
 use fonts::handle_font_uri;
+
+// Callers still reach the loadout code by the paths of loadout.rs and
+// loadout_store.rs, until they point at loadouts/.
+mod loadout {
+    pub(crate) use crate::loadouts::catalog::GlobalCatalog;
+    pub(crate) use crate::loadouts::set::{Loadout, LoadoutSet};
+}
+mod loadout_store {
+    #[cfg(test)]
+    pub(crate) use crate::loadouts::catalog::UNREAD_CATALOG_NOTICE;
+    pub(crate) use crate::loadouts::catalog::{
+        catalog_path, load_global_catalog, path_b_mode_active, save_global_catalog,
+    };
+    pub(crate) use crate::loadouts::gating::apply_effective_state;
+    pub(crate) use crate::loadouts::presets::{
+        adopt_catalog_presets, first_catalog_presets, profile_preset_lists, PRESETS_OFF,
+    };
+    #[cfg(test)]
+    pub(crate) use crate::loadouts::set::{load_loadout_set, UNREAD_LOADOUTS_NOTICE};
+    pub(crate) use crate::loadouts::set::{loadouts_path, save_loadout_set};
+    #[cfg(test)]
+    pub(crate) use crate::loadouts::wizard::apply::legacy_dir;
+    pub(crate) use crate::loadouts::{load_path_b_at_launch, LoadoutStoreError};
+}
 
 pub fn run() {
     tracing_subscriber::fmt()
