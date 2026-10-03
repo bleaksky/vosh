@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{App, Manager};
 
-use super::{AppState, SharedState};
+use crate::commands::{AppState, SharedState};
 use crate::forget_passwords::{self, Outcome};
 use crate::profile::Profile;
 use crate::term_grid;
@@ -61,17 +61,17 @@ fn slash_command_echoes_and_the_logs_reply_reach_the_native_grid() {
         .result
         .echo;
     assert_eq!(help.first().map(String::as_str), Some("slash commands:"));
-    super::echo_lines(handle, &help);
+    crate::commands::echo_lines(handle, &help);
 
     tauri::async_runtime::block_on(async {
         // `#logs` runs before anything that could save, and `look` is not
         // a slash command, so neither marks the profile to save.
         for line in ["#logs", "#logs forget-passwords", "look"] {
-            super::session_send_input(handle.clone(), app.state(), line.to_string())
+            crate::commands::session_send_input(handle.clone(), app.state(), line.to_string())
                 .await
                 .unwrap();
         }
-        super::session_send_masked(handle.clone(), app.state(), "secret".to_string())
+        crate::commands::session_send_masked(handle.clone(), app.state(), "secret".to_string())
             .await
             .unwrap();
     });
