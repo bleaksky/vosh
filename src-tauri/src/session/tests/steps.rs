@@ -2,7 +2,7 @@
 //! own steps from the capture and the draw to the held tank block and
 //! the stored wire reads.
 
-use crate::profile::Profile;
+use super::*;
 
 /// James's design, with colors by how full and the `%)h` trick that
 /// prints a percent sign.
@@ -66,174 +66,10 @@ fn drawn_in(bytes: &[u8]) -> Option<String> {
     Some(rest[end + 1..].to_string())
 }
 
+/// `ansi` as plain text. These tests write their lines as text, so this
+/// takes a str where the harness's `plain` takes bytes.
 fn plain(ansi: &str) -> String {
     vosh_protocol::ansi::plain_text(ansi.as_bytes())
-}
-
-fn mark(gen: u64) -> Vec<u8> {
-    vosh_prompt::stage::mark(gen)
-}
-
-/// A terminal's worth of the session: the profile and the line
-/// accumulator, fed one read at a time through the same steps the
-/// session runs.
-struct Wire {
-    p: Profile,
-    acc: super::LineAccumulator,
-    /// The telnet parser, for reads of raw wire bytes.
-    parser: vosh_protocol::telnet::Parser,
-    /// The first generation this wire hands out, so tests can name
-    /// the marks by number.
-    gen0: u64,
-}
-
-impl Wire {
-    fn new(p: Profile) -> Self {
-        let mut wire = Self {
-            p,
-            acc: super::LineAccumulator::new(),
-            parser: vosh_protocol::telnet::Parser::new(),
-            gen0: 0,
-        };
-        wire.gen0 = wire.p.prompt.stage.next_gen();
-        wire
-    }
-
-    /// The mark for the nth region this wire hands out, from 1.
-    fn mark(&self, n: u64) -> Vec<u8> {
-        mark(self.gen0 + n)
-    }
-
-    /// One socket read: `data`, then `ga` when the read ends in a GA,
-    /// then the end of the read. Returns what the terminal gets.
-    fn read_with(&mut self, data: &[u8], ga: bool, other: bool) -> super::ReadBatch {
-        let mut batch = super::ReadBatch::new(crate::output::output_count());
-        batch.out = vosh_prompt::stage::Output::new(other);
-        let now = tokio::time::Instant::now();
-        for line in self.acc.feed(data) {
-            let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-            let _ = super::line_step(&mut self.p, &mut batch, line, plain, now, None);
-        }
-        if ga {
-            let _ = super::marker_step(&mut self.p, &mut self.acc, &mut batch, now, None);
-        }
-        let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
-        // The hold's deadline passes before the next read.
-        if batch.hold {
-            super::hold_step(&mut self.p, &mut self.acc, &mut batch.out);
-        }
-        batch
-    }
-
-    /// One socket read that leaves a partial waiting, as the session
-    /// does until the next read or the deadline. Returns the batch.
-    fn read_holding(&mut self, data: &[u8]) -> super::ReadBatch {
-        let mut batch = super::ReadBatch::new(crate::output::output_count());
-        let now = tokio::time::Instant::now();
-        for line in self.acc.feed(data) {
-            let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-            let _ = super::line_step(&mut self.p, &mut batch, line, plain, now, None);
-        }
-        let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
-        batch
-    }
-
-    fn read(&mut self, data: &[u8]) -> vosh_prompt::stage::Output {
-        self.read_with(data, false, false).out
-    }
-
-    fn read_ga(&mut self, data: &[u8]) -> vosh_prompt::stage::Output {
-        self.read_with(data, true, false).out
-    }
-
-    /// You send a line. Held lines let go first, as in the session.
-    fn send(&mut self) {
-        let mut batch = super::ReadBatch::new(crate::output::output_count());
-        let _ = super::let_go_held(&mut self.p, &mut batch, tokio::time::Instant::now(), None);
-        let _ = super::send_step(&mut self.p, &self.acc, b"look\r\n", 0);
-        self.acc.forget_partial();
-    }
-
-    /// You send `line` now.
-    fn send_line(&mut self, line: &str) {
-        let _ = super::send_step(
-            &mut self.p,
-            &self.acc,
-            format!("{line}\r\n").as_bytes(),
-            super::now_ms(),
-        );
-        self.acc.forget_partial();
-    }
-
-    /// One socket read of raw wire bytes, through the telnet parser
-    /// and the steps the session runs for each event: text through
-    /// the Line pass, each GMCP packet through the GMCP step, and a
-    /// GA or EOR through the marker step. Then the end of the read,
-    /// and the hold's deadline before the next one.
-    fn read_wire(&mut self, data: &[u8]) -> vosh_prompt::stage::Output {
-        let mut batch = super::ReadBatch::new(crate::output::output_count());
-        batch.out = vosh_prompt::stage::Output::new(false);
-        let now = tokio::time::Instant::now();
-        for event in self.parser.feed(data) {
-            match event {
-                super::TelnetEvent::Data(bytes) => {
-                    for line in self.acc.feed(&bytes) {
-                        let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-                        let _ = super::line_step(&mut self.p, &mut batch, line, plain, now, None);
-                    }
-                }
-                super::TelnetEvent::Subnegotiation { option, payload }
-                    if option == super::telnet_option::GMCP =>
-                {
-                    let msg = vosh_protocol::gmcp::parse(&payload).expect("every packet parses");
-                    let _ = super::gmcp_step(&mut self.p, &msg, now);
-                }
-                super::TelnetEvent::Command(byte)
-                    if byte == super::telnet_codes::GA || byte == super::telnet_codes::EOR =>
-                {
-                    let _ = super::marker_step(&mut self.p, &mut self.acc, &mut batch, now, None);
-                }
-                _ => {}
-            }
-        }
-        let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
-        if batch.hold {
-            super::hold_step(&mut self.p, &mut self.acc, &mut batch.out);
-        }
-        batch.out
-    }
-
-    /// One socket read of `events` in order, as the session handles
-    /// them, then the end of the read.
-    fn read_events(&mut self, events: &[Ev]) -> vosh_prompt::stage::Output {
-        let mut batch = super::ReadBatch::new(crate::output::output_count());
-        let now = tokio::time::Instant::now();
-        for event in events {
-            match event {
-                Ev::Data(data) => {
-                    for line in self.acc.feed(data) {
-                        let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-                        let _ = super::line_step(&mut self.p, &mut batch, line, plain, now, None);
-                    }
-                }
-                Ev::Ga => {
-                    let _ = super::marker_step(&mut self.p, &mut self.acc, &mut batch, now, None);
-                }
-            }
-        }
-        let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
-        if batch.hold {
-            super::hold_step(&mut self.p, &mut self.acc, &mut batch.out);
-        }
-        batch.out
-    }
-}
-
-/// One event of a socket read.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Ev {
-    Data(Vec<u8>),
-    Ga,
 }
 
 /// What the game sends: bytes with a GA wherever `*` stands.
@@ -330,9 +166,6 @@ fn same_at_every_split(profile: &dyn Fn() -> Profile, text: &str) -> Vec<String>
 fn with(parts: &[&[u8]]) -> Vec<u8> {
     parts.concat()
 }
-
-/// Draws the hp read by the capture, so each byte of a draw is known.
-const HP: &str = "<%hp>";
 
 #[test]
 fn a_line_prompt_draws_in_place_with_no_line_end() {
@@ -1303,9 +1136,8 @@ fn a_new_connection_starts_the_prompt_over() {
     assert_eq!(p.prompt.config().template, GATE);
 }
 
-/// James's PROMPT as the game stores it, and the tank block it prints
-/// while someone in the group tanks.
-const CODES: &str = vosh_prompt::testkit::mud::PROMPT;
+/// The tank line James's PROMPT prints while someone in the group tanks,
+/// and the prompt after it in a fight.
 const TANK_LINE: &str = "Tester: [===|===|---|---]";
 const FIGHT_LINE: &str = "[159/1020hp 310/800mn 489/930mv]";
 
@@ -1877,21 +1709,10 @@ fn an_empty_setting_draws_over_the_fallback() {
     assert_eq!(out.bytes, with(&[&wire.mark(1), b"<20>\x1b[0m"]));
 }
 
-/// A synthetic socket read from fixtures/prompt/aabahran/wire.
-fn wire_fixture(name: &str) -> Vec<u8> {
-    let path = format!(
-        "{}/../fixtures/prompt/aabahran/wire/{name}.bin",
-        env!("CARGO_MANIFEST_DIR")
-    );
-    std::fs::read(&path).unwrap_or_else(|e| panic!("{path}: {e}"))
-}
-
 /// A profile that reads Aabahran's codes `prompt` on a connection to
 /// the fake game on a local port, and draws `<%hp>` in its place.
 fn fake_profile(prompt: &str) -> Profile {
-    let mut p = codes_profile(prompt, HP);
-    super::start_prompt(&mut p, false);
-    p
+    profile(prompt, HP, true)
 }
 
 /// The screen a native grid `columns` wide shows after `reads` of raw
@@ -1908,32 +1729,6 @@ fn wire_screen(wire: &mut Wire, columns: usize, reads: &[&[u8]]) -> Vec<String> 
         rows.pop();
     }
     rows
-}
-
-/// Where to cut `bytes` in two: after every byte of text, and around
-/// and inside each GMCP packet (in its IAC SB GMCP head, halfway
-/// through its body, and between its IAC and SE). A cut anywhere else
-/// in a packet's body reads the same as the one halfway through it.
-fn cuts(bytes: &[u8]) -> Vec<usize> {
-    let mut cuts = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == 255 && bytes.get(i + 1) == Some(&250) {
-            let end = bytes[i..]
-                .windows(2)
-                .position(|w| w == [255, 240])
-                .map_or(bytes.len(), |p| i + p + 2);
-            cuts.extend([i, i + 1, i + 2, i + 3, (i + end) / 2, end - 1]);
-            i = end;
-            continue;
-        }
-        cuts.push(i);
-        i += 1;
-    }
-    cuts.retain(|&c| c > 0 && c < bytes.len());
-    cuts.sort_unstable();
-    cuts.dedup();
-    cuts
 }
 
 /// Read `bytes` as one read and as two cut at every place [`cuts`]

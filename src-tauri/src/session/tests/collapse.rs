@@ -1,9 +1,9 @@
 //! Collapse repeated lines, played through the session's own steps.
 //!
 //! Inside `session`, so it drives the same private steps the socket
-//! loop runs, through the driver in `show.rs`. Lines the
-//! same as the one before them on screen show once with the count before
-//! them, on the native grid, wherever the reads split. The log keeps
+//! loop runs, through the harness's `Session` driver. Lines the same as
+//! the one before them on screen show once with the count before them,
+//! on the native grid, wherever the reads split. The log keeps
 //! every line, triggers see each one, and the scrollback ring keeps the
 //! run once, as the screen shows it. The webview test replays the same
 //! payloads into xterm from a stored file.
@@ -11,7 +11,6 @@
 //! The lines are the game's own, from `fight.c`, `act_info.c` and
 //! `update.c` in the server source, with an invented name.
 
-use super::show::{base64_decode, cuts, profile, rows_of, showing, Read, Session, CODES, HP};
 use super::*;
 use crate::output::{base64_encode, OutputPayload};
 use vosh_prompt::stage::Repeat;

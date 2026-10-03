@@ -10,7 +10,7 @@
 //! into xterm as well, and holds the layout to the characters both
 //! renderers drew and to the dock's own grid.
 
-use super::show::{profile, showing, wire_fixture, Session, CODES, HP};
+use super::*;
 use crate::output::OutputPayload;
 use vosh_prompt::PromptShow;
 
@@ -21,12 +21,6 @@ const TWO_ROWS: &str = "%{c:2}HP%c_default %hp%nl<%mana mn %move mv> ";
 
 /// The widths the native grid lays each case out at.
 const WIDTHS: [usize; 3] = [80, 30, 12];
-
-/// The native grid's screen rows, trailing blanks trimmed, up to the last
-/// row that shows anything.
-fn rows_of(grid: &crate::term_grid::TermGrid) -> Vec<String> {
-    super::show::rows_of(grid)
-}
 
 /// One case: two pulses, a quiet prompt and then a fight with a tank, so
 /// the first prompt is history the second one left behind. What the
