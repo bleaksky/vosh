@@ -35,7 +35,7 @@ use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{Trigger, TriggerAction, TriggerPattern, TriggerTarget};
 
 use crate::app::state::{AppState, SharedState};
-use crate::commands::PERSIST_LOCK;
+use crate::disk::save::PERSIST_LOCK;
 use crate::migration::{ItemKind, ItemPayload};
 use crate::profile::{Macro, Profile, Timer};
 use crate::profile_config::{PaneLayoutPersist, ProfileConfig, TrackedAffect};
@@ -165,7 +165,7 @@ async fn preset_launch_plan(state: &SharedState, dir: &Path) {
 /// The save a Settings edit, a debounce, or a command runs.
 async fn save(state: &SharedState, dir: &Path) {
     let _persist_guard = PERSIST_LOCK.lock().await;
-    crate::commands::persist_state(state, Some(dir)).await;
+    crate::disk::save::persist_state(state, Some(dir)).await;
 }
 
 /// Open Vosh as `name` over `dir` the way lib.rs launches it, then let

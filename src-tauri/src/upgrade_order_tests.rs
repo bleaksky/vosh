@@ -16,7 +16,7 @@ use vosh_prompt::config::CaptureSource;
 use vosh_prompt::CaptureConfig;
 
 use crate::app::state::{AppState, SharedState};
-use crate::commands::{persist_state, PERSIST_LOCK};
+use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::launch::Launch;
 use crate::loadout_store::{
     journal_path, load_global_catalog, save_wizard_journal, JournalFile, WizardJournal,

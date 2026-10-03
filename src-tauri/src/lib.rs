@@ -491,7 +491,7 @@ fn flush_profile_on_exit(app_handle: &tauri::AppHandle) {
     // must not turn quit into a hang. The timeout cuts the
     // lock waits; the file writes themselves are sync and
     // small.
-    let flush = commands::persist_profile(app_handle, &state);
+    let flush = disk::save::persist_profile(app_handle, &state);
     let outcome = tauri::async_runtime::block_on(async {
         tokio::time::timeout(std::time::Duration::from_secs(3), flush).await
     });

@@ -16,7 +16,7 @@ use crate::app::state::{
     note_ui_config_replaced, panes_generation, ui_config_generation, AppState, SharedState,
     AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING, PROFILES_NOT_LOADED,
 };
-pub(crate) use crate::disk::save::{
+use crate::disk::save::{
     active_profile_file, mark_profile_dirty, persist_profile, persist_profile_locked,
     persist_state, schedule_profile_persist, settle_line_effects, PERSIST_LOCK,
 };

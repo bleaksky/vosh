@@ -1451,7 +1451,7 @@ const PROFILE_MIGRATION_PENDING: &str =
     "Quit Vosh and open it again to finish the move to loadouts.";
 
 /// What `#profile save` answers while another profile write holds
-/// [`crate::commands::PERSIST_LOCK`].
+/// [`crate::disk::save::PERSIST_LOCK`].
 const PROFILE_SAVE_BUSY: &str = "Vosh is saving this profile. Try again.";
 
 fn slash_profile(profile: &mut Profile, args: &str, replaced: &mut bool) -> InputResult {
@@ -1498,7 +1498,7 @@ fn slash_profile_with(
                 // Every profile file write holds the persist lock. This
                 // runs under the profile lock, which the persist takes
                 // after the persist lock, so it only tries.
-                let Ok(_persist_guard) = crate::commands::PERSIST_LOCK.try_lock() else {
+                let Ok(_persist_guard) = crate::disk::save::PERSIST_LOCK.try_lock() else {
                     return error_echo(PROFILE_SAVE_BUSY.to_string());
                 };
                 if crate::profile_config::is_unread(&path) {

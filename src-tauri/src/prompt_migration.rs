@@ -68,7 +68,7 @@ pub(crate) const LINE_TRIGGERS: &str = "prompt-line-triggers";
 /// checks again. Nothing is recorded before the profile set loads, so the
 /// check waits for a later session.
 pub(crate) async fn note_line_triggers(state: &crate::app::state::SharedState, names: Vec<String>) {
-    let _persist = crate::commands::PERSIST_LOCK.lock().await;
+    let _persist = crate::disk::save::PERSIST_LOCK.lock().await;
     let mut guard = state.profile_set.lock().await;
     let Some(set) = guard.as_mut() else {
         return;

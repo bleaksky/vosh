@@ -41,7 +41,7 @@ pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
     if run != WizardRun::Unfinished && !relaunch_pending {
         // Before any profile loads, so the live profile reads the files
         // as the move left them. It writes inactive profile files too.
-        let _persist = crate::commands::PERSIST_LOCK.lock().await;
+        let _persist = crate::disk::save::PERSIST_LOCK.lock().await;
         state.add_launch_notices(crate::prompt_migration::run(app_data));
         crate::preset_rollout::run(app_data);
     }
