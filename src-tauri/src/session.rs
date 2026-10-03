@@ -25,6 +25,7 @@
 //!   tick or `mud.input` fires, and `lua_timers` fires the Lua timers.
 //! - `echo` keeps the text of a line you type while the server hides
 //!   your input out of the log.
+//! - `identity` says who is logged in, and sends it to every window.
 //! - `room_block` finds the lines of a look that list what the room
 //!   holds, and `highlight_ground` keeps the ground trigger colors must
 //!   read on.
@@ -41,6 +42,7 @@ pub(crate) mod effects;
 mod gmcp;
 mod gmcp_vars;
 pub(crate) mod highlight_ground;
+pub(crate) mod identity;
 mod lines;
 mod log_sink;
 mod lua_timers;
