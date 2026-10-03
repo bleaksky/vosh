@@ -9,6 +9,7 @@
 //! what they feed.
 
 use super::batch::*;
+use super::gmcp::*;
 use super::lines::Line;
 use super::perf::*;
 use super::prompt_view::*;
@@ -391,7 +392,7 @@ impl Wire {
                     if option == super::telnet_option::GMCP =>
                 {
                     let msg = vosh_protocol::gmcp::parse(&payload).expect("every packet parses");
-                    let _ = super::gmcp_step(&mut self.p, &msg, now);
+                    let _ = super::gmcp::gmcp_step(&mut self.p, &msg, now);
                 }
                 super::TelnetEvent::Command(byte)
                     if byte == super::telnet_codes::GA || byte == super::telnet_codes::EOR =>
