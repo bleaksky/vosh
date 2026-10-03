@@ -63,6 +63,7 @@ fn enable_macos_spellcheck(window: &tauri::WebviewWindow) -> Result<(), tauri::E
 
 mod affect_full;
 mod affects_snapshot;
+mod app;
 mod app_menu;
 #[cfg(native_surface)]
 mod cell_render;
