@@ -1,7 +1,7 @@
 //! Room triggers and the Room, time and weather colors preset, played
 //! through the session's own steps.
 //!
-//! A child of `session`, so it drives the same private steps the socket
+//! Inside `session`, so it drives the same private steps the socket
 //! loop runs: the GMCP step, the Line pass and the GA step. The looks and
 //! lines come from fixtures/room-colors, each one the way the Aabahran
 //! server prints it, with its Room.Chars and Room.Items packets first
@@ -50,7 +50,7 @@ struct LookFile {
 
 /// Every look in fixtures/room-colors/looks.json.
 fn looks() -> Vec<LookCase> {
-    let text = include_str!("../../fixtures/room-colors/looks.json");
+    let text = include_str!("../../../../fixtures/room-colors/looks.json");
     serde_json::from_str::<LookFile>(text)
         .expect("looks.json reads")
         .cases
@@ -73,7 +73,7 @@ struct LineFile {
 
 /// Every line in fixtures/room-colors/lines.json.
 fn preset_lines() -> Vec<PresetLine> {
-    let text = include_str!("../../fixtures/room-colors/lines.json");
+    let text = include_str!("../../../../fixtures/room-colors/lines.json");
     serde_json::from_str::<LineFile>(text)
         .expect("lines.json reads")
         .lines
@@ -85,7 +85,7 @@ fn preset_triggers() -> Vec<vosh_automation::trigger::Trigger> {
     struct PresetFile {
         triggers: Vec<vosh_automation::trigger::Trigger>,
     }
-    let text = include_str!("../../fixtures/room-colors/preset.json");
+    let text = include_str!("../../../../fixtures/room-colors/preset.json");
     serde_json::from_str::<PresetFile>(text)
         .expect("preset.json reads")
         .triggers

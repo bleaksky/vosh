@@ -256,7 +256,7 @@ const xtermRow = (term: Terminal, row: number) =>
 
 // The session's own payloads for two pulses, a quiet prompt that the
 // fight left in history and the fight's prompt with its tank line, in the
-// text and lifted (src-tauri/src/session_pointer_tests.rs). Each renderer
+// text and lifted (src-tauri/src/session/tests/pointer.rs). Each renderer
 // says where the open region starts in its own buffer, and every span
 // laid out from there lands on the very characters that renderer drew.
 // Nothing else maps: not the earlier prompt, not the tank line, not a

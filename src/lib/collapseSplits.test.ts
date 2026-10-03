@@ -11,7 +11,7 @@ import { RegionWriter } from './terminalRegion';
 // place, each after the login. Then scenes: runs whose line ends on a
 // background across pinned pulses, your echo landing before the session
 // heard of it, and a pane that loads your scrollback during a run.
-// src-tauri/src/session_collapse_tests.rs writes them from the real
+// src-tauri/src/session/tests/collapse.rs writes them from the real
 // session steps, and holds the stored file to what the session sends now.
 // Each is replayed through the same decode, word wrap and writer
 // Terminal.tsx uses, into a real xterm, and every screen has to be the

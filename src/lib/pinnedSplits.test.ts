@@ -7,7 +7,7 @@ import { RegionWriter } from './terminalRegion';
 
 // The session's own payloads with your prompt pinned, for every wire
 // fixture and a few pulses written back to back, as one read and as two
-// cut at every place. src-tauri/src/session_show_tests.rs writes them from
+// cut at every place. src-tauri/src/session/tests/show.rs writes them from
 // the real session steps, and holds the stored file to what the session
 // sends now. Each is replayed through the same decode, word wrap and
 // writer Terminal.tsx uses, into a real xterm, and every screen has to

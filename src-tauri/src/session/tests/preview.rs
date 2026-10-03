@@ -8,7 +8,7 @@
 //! keeps your echo a cell after a design that ends on a character. The
 //! webview test replays the same payloads into xterm from a stored file.
 
-use super::show_tests::{
+use super::show::{
     cuts, payload, pinned_streams, profile, rows_of, showing, wire_fixture, Read, Session, CODES,
     HP,
 };
@@ -295,7 +295,7 @@ fn a_repaint_in_a_payload_carries_the_restore_to_the_webview() {
     let json = payload(&session.repaint()).expect("a payload");
     let value: serde_json::Value = serde_json::from_str(&json).expect("json");
     let restore = value["restore"].as_str().expect("the restore");
-    let bytes = super::show_tests::base64_decode(restore);
+    let bytes = super::show::base64_decode(restore);
     assert_eq!(drawn_text(&bytes), "<1020> ");
     // The card lends the row the band of Lifted, so its live render ends
     // the lift too, with Lifted's space after it.
@@ -390,7 +390,7 @@ fn the_preview_splits_the_webview_replays_are_what_the_session_sends() {
     let stored = std::fs::read_to_string(preview_splits_path()).expect(
         "fixtures/prompt/aabahran/preview/splits.b64, written with VOSH_WRITE_PREVIEW_SPLITS=1",
     );
-    let bytes = super::show_tests::base64_decode(&stored);
+    let bytes = super::show::base64_decode(&stored);
     let mut text = String::new();
     flate2::read::GzDecoder::new(&bytes[..])
         .read_to_string(&mut text)

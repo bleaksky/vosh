@@ -5,7 +5,7 @@
 //! and the band while pinned, which no text cancels, since it is not in the
 //! text.
 
-use super::show_tests::{profile, showing, wire_fixture, Read, Session, CODES};
+use super::show::{profile, showing, wire_fixture, Read, Session, CODES};
 use super::*;
 use vosh_prompt::values::overrides::{Preview, PromptPreview};
 use vosh_prompt::PromptShow;

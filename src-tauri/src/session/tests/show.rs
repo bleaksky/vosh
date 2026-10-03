@@ -1,6 +1,6 @@
 //! Where your prompt shows, played through the session's own steps.
 //!
-//! A child of `session`, so it drives the same private steps the socket
+//! Inside `session`, so it drives the same private steps the socket
 //! loop runs: the Line pass, the GA step, the end of a read, a send, a
 //! local write and a repaint. The golden test holds the payloads the
 //! webview gets with your prompt in the text to the ones this build sent
