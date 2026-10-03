@@ -1,5 +1,6 @@
 //! The Settings and Help windows, the ground and native appearance a
-//! new window opens on, and spellcheck in the macOS webview.
+//! new window opens on, what the main window's close and blur do, and
+//! spellcheck in the macOS webview.
 //!
 //! Settings and Help open hidden and show themselves once their page has
 //! painted the theme. A frame the page has not painted yet shows the
@@ -300,6 +301,32 @@ pub(crate) fn open_aux_window(app: &AppHandle, spec: &AuxWindow) -> Result<(), S
         }
     }
     Ok(())
+}
+
+/// Closing the main window should take every auxiliary window
+/// (settings, etc.) down with it. Tauri only exits the process
+/// when the LAST window closes, so without this the settings
+/// popup hangs around alone after the user closes the main
+/// client.
+pub(crate) fn on_window_event(window: &Window, event: &tauri::WindowEvent) {
+    if window.label() != "main" {
+        return;
+    }
+    match event {
+        tauri::WindowEvent::CloseRequested { .. } => {
+            let app = window.app_handle();
+            for (label, w) in app.webview_windows() {
+                if label != "main" {
+                    let _ = w.close();
+                }
+            }
+        }
+        // A drag on the native grid whose release may never come
+        // ends as the main window loses focus.
+        #[cfg(native_surface)]
+        tauri::WindowEvent::Focused(false) => crate::native_surface::window_blurred(),
+        _ => {}
+    }
 }
 
 // macOS-only: WKWebView ignores the HTML `spellcheck` attribute
