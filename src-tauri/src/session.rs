@@ -386,7 +386,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         },
     );
 
-    let sink = LogSink::open(
+    let log_sink = LogSink::open(
         state.logs.clone(),
         state.scrollback.clone(),
         scrollback_path,
@@ -402,7 +402,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         rx_outgoing,
         state.profile.clone(),
         state.script_timers.clone(),
-        sink,
+        log_sink,
         negotiator,
         known_host,
     ));

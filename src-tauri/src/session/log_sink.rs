@@ -127,16 +127,16 @@ impl LogSession {
 
 /// Log the lines the stage still holds as the session ends, and keep them
 /// for scrollback, through [`end_held`].
-pub(super) async fn capture_held_lines(profile: &Arc<Mutex<Profile>>, sink: &LogSink) {
-    let (log, kept) = end_held(&mut *profile.lock().await, sink.id());
+pub(super) async fn capture_held_lines(profile: &Arc<Mutex<Profile>>, log_sink: &LogSink) {
+    let (log, kept) = end_held(&mut *profile.lock().await, log_sink.id());
     if !kept.is_empty() {
-        let mut ring = sink.scrollback.lock().await;
+        let mut ring = log_sink.scrollback.lock().await;
         for text in kept {
             ring.push(text);
         }
     }
     if !log.is_empty() {
-        let mut guard = sink.logs.lock().await;
+        let mut guard = log_sink.logs.lock().await;
         if let Some(store) = guard.as_mut() {
             if let Err(e) = store.append_batch(&log) {
                 warn!(error = %e, "disconnect held lines log append failed");
@@ -153,7 +153,7 @@ pub(super) async fn capture_held_lines(profile: &Arc<Mutex<Profile>>, sink: &Log
 /// ring that the dump persists.
 pub(super) async fn capture_pending_line<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    sink: &LogSink,
+    log_sink: &LogSink,
     accumulator: &mut LineAccumulator,
 ) {
     let Some(Partial { bytes, painted }) = accumulator.take_partial() else {
@@ -167,9 +167,9 @@ pub(super) async fn capture_pending_line<R: tauri::Runtime>(
     out.extend_from_slice(&bytes[shown..]);
     out.extend_from_slice(b"\r\n");
     emit_output(app, out);
-    sink.scrollback.lock().await.push(bytes.clone());
-    if let Some(sid) = sink.id() {
-        let mut guard = sink.logs.lock().await;
+    log_sink.scrollback.lock().await.push(bytes.clone());
+    if let Some(sid) = log_sink.id() {
+        let mut guard = log_sink.logs.lock().await;
         if let Some(store) = guard.as_mut() {
             if let Err(e) = store.append_batch(&[vosh_log::LogEntry {
                 session_id: sid,

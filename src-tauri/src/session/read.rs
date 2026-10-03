@@ -39,18 +39,18 @@ impl<R: tauri::Runtime> Conn<R> {
     /// the read through [`end_read`]. Returns the read's batch, which the
     /// caller finishes, since the drain after a read error ends a read
     /// apart from the loop.
-    pub(super) async fn handle_read(&mut self, bytes: &[u8], sink: &LogSink) -> ReadBatch {
+    pub(super) async fn handle_read(&mut self, bytes: &[u8], log_sink: &LogSink) -> ReadBatch {
         self.perf.socket_reads += 1;
         self.perf.bytes_in += bytes.len() as u64;
         let events = self.parser.feed(bytes);
         let mut batch = ReadBatch::new(self.seen_output);
         for event in events {
-            if let Err(e) = handle_event(self, sink, event, &mut batch).await {
+            if let Err(e) = handle_event(self, log_sink, event, &mut batch).await {
                 warn!(error = %e, "event handling failed");
                 break;
             }
         }
-        if let Err(e) = end_read(self, sink, &mut batch).await {
+        if let Err(e) = end_read(self, log_sink, &mut batch).await {
             warn!(error = %e, "prompt handling at the end of a read failed");
         }
         batch
@@ -59,7 +59,7 @@ impl<R: tauri::Runtime> Conn<R> {
 
 async fn handle_event<R: tauri::Runtime>(
     conn: &mut Conn<R>,
-    sink: &LogSink,
+    log_sink: &LogSink,
     event: TelnetEvent,
     batch: &mut ReadBatch,
 ) -> std::io::Result<()> {
@@ -101,11 +101,11 @@ async fn handle_event<R: tauri::Runtime>(
                     let mut p = conn.profile.lock().await;
                     conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
                     conn.perf.mutex_acquires += 1;
-                    line_step(&mut p, batch, line, plain, Instant::now(), sink.id())
+                    line_step(&mut p, batch, line, plain, Instant::now(), log_sink.id())
                 };
                 conn.perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
                 for step in steps {
-                    deliver_line_step(conn, sink, batch, step).await?;
+                    deliver_line_step(conn, log_sink, batch, step).await?;
                 }
             }
             Ok(())
@@ -131,11 +131,11 @@ async fn handle_event<R: tauri::Runtime>(
                     &mut conn.accumulator,
                     batch,
                     Instant::now(),
-                    sink.id(),
+                    log_sink.id(),
                 )
             };
             for step in steps {
-                deliver_line_step(conn, sink, batch, step).await?;
+                deliver_line_step(conn, log_sink, batch, step).await?;
             }
             Ok(())
         }
@@ -184,7 +184,7 @@ pub(super) async fn flush_hold<R: tauri::Runtime>(conn: &mut Conn<R>) {
 /// becomes the output count after it.
 pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
     conn: &mut Conn<R>,
-    sink: &mut LogSink,
+    log_sink: &mut LogSink,
 ) -> std::io::Result<()> {
     let mut batch = ReadBatch::new(conn.seen_output);
     let steps = {
@@ -192,12 +192,12 @@ pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
         if !p.prompt.stage.holds() {
             return Ok(());
         }
-        let_go_held(&mut p, &mut batch, Instant::now(), sink.id())
+        let_go_held(&mut p, &mut batch, Instant::now(), log_sink.id())
     };
     for step in steps {
-        deliver_line_step(conn, sink, &mut batch, step).await?;
+        deliver_line_step(conn, log_sink, &mut batch, step).await?;
     }
-    finish_read(conn, sink, batch).await;
+    finish_read(conn, log_sink, batch).await;
     Ok(())
 }
 
@@ -206,7 +206,7 @@ pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
 /// actions' IO into the batch, and run the tick command it fired.
 async fn deliver_line_step<R: tauri::Runtime>(
     conn: &mut Conn<R>,
-    sink: &LogSink,
+    log_sink: &LogSink,
     batch: &mut ReadBatch,
     step: LineStep,
 ) -> std::io::Result<()> {
@@ -225,7 +225,7 @@ async fn deliver_line_step<R: tauri::Runtime>(
         let sb_t0 = std::time::Instant::now();
         // The ring keeps a run of repeated lines once, as the screen shows
         // it.
-        sink.scrollback.lock().await.keep(text, repeat);
+        log_sink.scrollback.lock().await.keep(text, repeat);
         conn.perf.scrollback_push_ns += sb_t0.elapsed().as_nanos() as u64;
         conn.perf.scrollback_pushes += 1;
     }
@@ -256,7 +256,7 @@ async fn deliver_line_step<R: tauri::Runtime>(
 /// The end of a read, see [`partial_step`], and the IO its prompt left.
 async fn end_read<R: tauri::Runtime>(
     conn: &mut Conn<R>,
-    sink: &LogSink,
+    log_sink: &LogSink,
     batch: &mut ReadBatch,
 ) -> std::io::Result<()> {
     let step = {
@@ -266,11 +266,11 @@ async fn end_read<R: tauri::Runtime>(
             &mut conn.accumulator,
             batch,
             Instant::now(),
-            sink.id(),
+            log_sink.id(),
         )
     };
     if let Some(step) = step {
-        deliver_line_step(conn, sink, batch, step).await?;
+        deliver_line_step(conn, log_sink, batch, step).await?;
     }
     Ok(())
 }
@@ -286,7 +286,7 @@ async fn end_read<R: tauri::Runtime>(
 /// anyway reads, so a read costs no other lock for it.
 pub(super) async fn finish_read<R: tauri::Runtime>(
     conn: &mut Conn<R>,
-    sink: &mut LogSink,
+    log_sink: &mut LogSink,
     batch: ReadBatch,
 ) -> Option<Instant> {
     let ReadBatch {
@@ -323,7 +323,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
     }
     conn.settle.queue_rows(log);
     if let Some(character) = character {
-        sink.name(&character).await;
+        log_sink.name(&character).await;
     }
     for trigger in gag_without_reader {
         if let Err(e) = app.emit(

@@ -78,7 +78,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     mut rx_outgoing: mpsc::UnboundedReceiver<OutgoingMsg>,
     profile: Arc<Mutex<Profile>>,
     lua_timers: SharedTimers,
-    mut sink: LogSink,
+    mut log_sink: LogSink,
     negotiator: Negotiator,
     known_host: bool,
 ) {
@@ -126,9 +126,9 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     let mut clock_until: Option<Instant> = None;
 
     // The arm that writes a burst's log rows waits on the log through a
-    // handle of its own, since the guard it yields would borrow the sink
-    // the other arms change.
-    let log_store = sink.logs.clone();
+    // handle of its own, since the guard it yields would borrow the log
+    // sink the other arms change.
+    let log_store = log_sink.logs.clone();
 
     let mut perf_report_interval = tokio::time::interval(PERF_REPORT_INTERVAL);
     perf_report_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -145,7 +145,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     }
                     // Lines held for the rest of a prompt let go as they
                     // show, before your line leaves, since it follows them.
-                    if let Err(e) = let_go_held_lines(&mut conn, &mut sink).await {
+                    if let Err(e) = let_go_held_lines(&mut conn, &mut log_sink).await {
                         warn!(error = %e, "letting go of held lines failed");
                     }
                     // The send records a prompt candidate and closes the
@@ -176,7 +176,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     // behind the rows before them for the log, which
                     // writes them once the socket is quiet, so a log
                     // write never holds your line or its answer back.
-                    let sent = sink.id().map(|sid| {
+                    let sent = log_sink.id().map(|sid| {
                         let rows = vosh_log::sent_rows(&bytes, conn.server_echo.hides(masked));
                         (sid, now_ms(), rows)
                     });
@@ -193,7 +193,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     }
                     // Lines sent back to back never wait on the log, but
                     // their rows still go in once they waited too long.
-                    conn.settle.overdue_now(&conn.app, &sink, &mut conn.perf);
+                    conn.settle.overdue_now(&conn.app, &log_sink, &mut conn.perf);
                 }
                 Some(OutgoingMsg::WindowSize { cols, rows }) => {
                     // A design that pushes part of a row to the right
@@ -250,7 +250,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                         }
                         // Your typed echo follows the lines held for the
                         // rest of a prompt, so they let go as they show.
-                        if let Err(e) = let_go_held_lines(&mut conn, &mut sink).await {
+                        if let Err(e) = let_go_held_lines(&mut conn, &mut log_sink).await {
                             warn!(error = %e, "letting go of held lines failed");
                         }
                     }
@@ -285,7 +285,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     break Some("server closed connection".to_string());
                 }
                 Ok(n) => {
-                    let batch = conn.handle_read(&buf[..n], &sink).await;
+                    let batch = conn.handle_read(&buf[..n], &log_sink).await;
                     // The next read ends a hold. One that goes on holding
                     // keeps the first deadline, so a partial waits at most
                     // HOLD_MS in all.
@@ -295,7 +295,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                         })
                     });
                     let (gmcp, prompt, wrote) = (batch.gmcp, batch.prompt, batch.out.writes_text());
-                    clock_until = finish_read(&mut conn, &mut sink, batch).await;
+                    clock_until = finish_read(&mut conn, &mut log_sink, batch).await;
                     if gmcp || late_until.is_some() {
                         let p = conn.profile.lock().await;
                         late_until =
@@ -303,7 +303,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     }
                     // A game that never pauses still gets its frame and
                     // its rows every FRAME_BUDGET.
-                    conn.settle.overdue_now(&conn.app, &sink, &mut conn.perf);
+                    conn.settle.overdue_now(&conn.app, &log_sink, &mut conn.perf);
                 }
                 Err(e) => {
                     error!(error = %e, "read failed");
@@ -322,7 +322,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                             Ok(0) => break,
                             Ok(n) => {
                                 drained_bytes += n;
-                                let mut batch = conn.handle_read(&buf[..n], &sink).await;
+                                let mut batch = conn.handle_read(&buf[..n], &log_sink).await;
                                 // The connection is going, so nothing waits.
                                 if batch.hold {
                                     let mut p = conn.profile.lock().await;
@@ -331,7 +331,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                                 hold_until = None;
                                 // The connection is going, so no clock
                                 // repaints after it.
-                                let _ = finish_read(&mut conn, &mut sink, batch).await;
+                                let _ = finish_read(&mut conn, &mut log_sink, batch).await;
                             }
                             Err(drain_err)
                                 if drain_err.kind() == std::io::ErrorKind::WouldBlock =>
@@ -457,16 +457,16 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // log before the lines the session captures as it ends.
     conn.settle.frame_now(&conn.app);
     conn.settle
-        .write_log(sink.logs.lock().await.as_mut(), &mut conn.perf);
-    capture_held_lines(&conn.profile, &sink).await;
-    capture_pending_line(&conn.app, &sink, &mut conn.accumulator).await;
+        .write_log(log_sink.logs.lock().await.as_mut(), &mut conn.perf);
+    capture_held_lines(&conn.profile, &log_sink).await;
+    capture_pending_line(&conn.app, &log_sink, &mut conn.accumulator).await;
 
     {
         let mut p = conn.profile.lock().await;
         p.tick.end_session();
     }
 
-    sink.close().await;
+    log_sink.close().await;
 
     let line_triggers;
     // Session-only target state and the cached Room.Chars list clear

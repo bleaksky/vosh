@@ -129,14 +129,14 @@ impl Settle {
     pub(super) fn overdue_now<R: tauri::Runtime>(
         &mut self,
         app: &AppHandle<R>,
-        sink: &LogSink,
+        log_sink: &LogSink,
         perf: &mut PerfCounters,
     ) {
         if self.frame_overdue() {
             self.frame_now(app);
         }
         if self.log_overdue() {
-            if let Ok(mut guard) = sink.logs.try_lock() {
+            if let Ok(mut guard) = log_sink.logs.try_lock() {
                 self.write_log(guard.as_mut(), perf);
             }
         }
