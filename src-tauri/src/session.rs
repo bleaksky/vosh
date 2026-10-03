@@ -3115,7 +3115,7 @@ fn gmcp_step(
                     Some(crate::profile::RoomChar { name, npc })
                 })
                 .collect();
-            crate::input::set_room_chars(p, chars);
+            crate::input::target::set_room_chars(p, chars);
         }
     }
     // The look this packet goes with lists a line for each long text its
