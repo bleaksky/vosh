@@ -42,7 +42,7 @@ mod report;
 mod split_drag;
 
 use device::{clamp_to_device, GpuState};
-use pointer::{load_f32, set_divider_frac, split_ratio, store_f32, CELL_H, CELL_W, DPR};
+use pointer::{load_f32, set_divider_frac, split_ratio, store_f32, CELLS};
 use report::{grid_and_game_rows, report_scroll_if_changed, report_sizes};
 
 // The installed surface: the platform's window/view handles plus the GPU
@@ -62,21 +62,52 @@ fn surface_slot() -> &'static Mutex<Option<SurfaceHandle>> {
 
 // App handle for dispatching redraws to the main thread, set at install.
 static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
-// True once the frontend has positioned the surface (flag on); keeps
-// redraw requests from doing work while the surface is hidden.
-static ACTIVE: AtomicBool = AtomicBool::new(false);
-// Coalesces redraw requests so a burst of output schedules one repaint.
-static REDRAW_PENDING: AtomicBool = AtomicBool::new(false);
 
-// The pane rect inside the surface, in device pixels
-// [x, y, width, height]. None until the frontend first reports bounds.
-static VIEWPORT: Mutex<Option<[u32; 4]>> = Mutex::new(None);
+/// What decides when a frame is drawn: the redraw requests and the blink
+/// timer.
+struct Frames {
+    // True once the frontend has positioned the surface (flag on); keeps
+    // redraw requests from doing work while the surface is hidden.
+    active: AtomicBool,
+    // Coalesces redraw requests so a burst of output schedules one repaint.
+    redraw_pending: AtomicBool,
+    // A frame that flips blinking text waits on its timer. It is armed only
+    // by a frame that drew text that blinks, so while nothing on screen
+    // blinks no timer runs and no extra frame is drawn.
+    blink_armed: AtomicBool,
+    // Whether the last frame drawn showed text that blinks, for a frame
+    // that gets no texture to draw on.
+    last_blinks: AtomicBool,
+}
+
+static FRAMES: Frames = Frames {
+    active: AtomicBool::new(false),
+    redraw_pending: AtomicBool::new(false),
+    blink_armed: AtomicBool::new(false),
+    last_blinks: AtomicBool::new(false),
+};
+
+/// The terminal pane, from the page's latest bounds report.
+struct Pane {
+    // The pane rect inside the surface, in device pixels
+    // [x, y, width, height]. None until the frontend first reports bounds.
+    viewport: Mutex<Option<[u32; 4]>>,
+    // The rows at the bottom of the pane the pinned prompt band borrows
+    // while your prompt takes more than one row. Stored with the bounds,
+    // so a frame never pairs new bounds with an old count.
+    lent_rows: AtomicU32,
+}
+
+static PANE: Pane = Pane {
+    viewport: Mutex::new(None),
+    lent_rows: AtomicU32::new(0),
+};
 
 /// The pane rect clamped into a `target_w` x `target_h` render target.
 /// Before the first report the pane is the whole target.
 fn pane_rect(target_w: u32, target_h: u32) -> [u32; 4] {
     let full = [0, 0, target_w.max(1), target_h.max(1)];
-    let Some([x, y, w, h]) = VIEWPORT.lock().ok().and_then(|v| *v) else {
+    let Some([x, y, w, h]) = PANE.viewport.lock().ok().and_then(|v| *v) else {
         return full;
     };
     let x = x.min(target_w.saturating_sub(1));
@@ -91,30 +122,21 @@ fn pane_rect(target_w: u32, target_h: u32) -> [u32; 4] {
 /// bursts; dispatches the actual draw to the main thread (Metal requires
 /// it).
 pub(crate) fn request_redraw() {
-    if !ACTIVE.load(Ordering::Acquire) {
+    if !FRAMES.active.load(Ordering::Acquire) {
         return;
     }
     let Some(app) = APP.get() else {
         return;
     };
-    if REDRAW_PENDING.swap(true, Ordering::AcqRel) {
+    if FRAMES.redraw_pending.swap(true, Ordering::AcqRel) {
         return;
     }
     let _ = app.run_on_main_thread(redraw_now);
 }
 
-// A frame that flips blinking text waits on its timer. It is armed only
-// by a frame that drew text that blinks, so while nothing on screen
-// blinks no timer runs and no extra frame is drawn.
-static BLINK_ARMED: AtomicBool = AtomicBool::new(false);
-
 /// Past the flip, so the timer's frame lands in the new half even when
 /// its clock and the wall clock part by a millisecond.
 const BLINK_SLACK: std::time::Duration = std::time::Duration::from_millis(2);
-
-// Whether the last frame drawn showed text that blinks, for a frame
-// that gets no texture to draw on.
-static LAST_BLINKS: AtomicBool = AtomicBool::new(false);
 
 /// The moment a frame draws its blinking text at, in milliseconds since
 /// the epoch. None while Blinking text is off, so a frame then reads no
@@ -130,10 +152,10 @@ fn blink_now() -> Option<u64> {
 fn frame_blinks(drew: Option<bool>) -> bool {
     match drew {
         Some(blinks) => {
-            LAST_BLINKS.store(blinks, Ordering::Release);
+            FRAMES.last_blinks.store(blinks, Ordering::Release);
             blinks
         }
-        None => LAST_BLINKS.load(Ordering::Acquire),
+        None => FRAMES.last_blinks.load(Ordering::Acquire),
     }
 }
 
@@ -155,18 +177,18 @@ fn arm_blink(blinks: bool, now_ms: Option<u64>) {
     let Some(wait) = blink_wait(blinks, now_ms) else {
         return;
     };
-    if BLINK_ARMED.swap(true, Ordering::AcqRel) {
+    if FRAMES.blink_armed.swap(true, Ordering::AcqRel) {
         return;
     }
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(wait).await;
-        BLINK_ARMED.store(false, Ordering::Release);
+        FRAMES.blink_armed.store(false, Ordering::Release);
         request_redraw();
     });
 }
 
 fn redraw_now() {
-    REDRAW_PENDING.store(false, Ordering::Release);
+    FRAMES.redraw_pending.store(false, Ordering::Release);
     if let Ok(mut slot) = surface_slot().lock() {
         if let Some(handle) = slot.as_mut() {
             // A theme change repaints through here, so the backdrop that
@@ -176,12 +198,6 @@ fn redraw_now() {
         }
     }
 }
-
-// The rows at the bottom of the pane the pinned prompt band borrows while
-// your prompt takes more than one row, from the page's latest bounds
-// report. Stored with the bounds, so a frame never pairs new bounds with
-// an old count.
-static LENT_ROWS: AtomicU32 = AtomicU32::new(0);
 
 /// True once the surface installed and its GPU came up. The page checks
 /// this before it leaves the terminal pane transparent, so a failed
@@ -218,14 +234,14 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64, lent
     }
     // The surface is now positioned and visible, so live output should
     // trigger repaints.
-    ACTIVE.store(true, Ordering::Release);
-    LENT_ROWS.store(lent, Ordering::Release);
-    store_f32(&DPR, dpr as f32);
+    FRAMES.active.store(true, Ordering::Release);
+    PANE.lent_rows.store(lent, Ordering::Release);
+    store_f32(&CELLS.dpr, dpr as f32);
     // The view already spans the window (AppKit resizes it with the
     // window), so the report only moves the grid inside it. Snap to whole
     // device pixels so glyphs land on the pixel grid.
     let snap = |v: f64| (v * dpr).round().max(0.0) as u32;
-    if let Ok(mut vp) = VIEWPORT.lock() {
+    if let Ok(mut vp) = PANE.viewport.lock() {
         *vp = Some([snap(x), snap(y), snap(width).max(1), snap(height).max(1)]);
     }
     let (px_w, px_h) = platform::view_size_px(&handle.platform, dpr);
@@ -269,14 +285,14 @@ fn render(state: &mut GpuState) {
     // 80x24 corner. The pane is a rect inside the window-sized target.
     let [pane_x, pane_y, pane_w, pane_h] = pane_rect(state.config.width, state.config.height);
     let (cols, fit) = state.cell_renderer.grid_size_for(pane_w, pane_h);
-    let lent = LENT_ROWS.load(Ordering::Acquire) as usize;
+    let lent = PANE.lent_rows.load(Ordering::Acquire) as usize;
     let (rows, game_rows) = grid_and_game_rows(fit, lent);
     crate::native::grid::resize_grid(cols, rows);
     report_sizes(cols, rows, game_rows);
     // Publish the cell size so the mouse handler can map points to cells.
     let (cw, ch) = state.cell_renderer.cell_size_px();
-    store_f32(&CELL_W, cw);
-    store_f32(&CELL_H, ch);
+    store_f32(&CELLS.cell_w, cw);
+    store_f32(&CELLS.cell_h, ch);
 
     // Disjoint borrows of GpuState fields so the grid-reading closure can
     // hold the renderer mutably and the device/queue immutably.
@@ -285,7 +301,7 @@ fn render(state: &mut GpuState) {
     let placement = crate::native::gpu::Placement {
         x: pane_x,
         y: pane_y,
-        scale: load_f32(&DPR, 2.0),
+        scale: load_f32(&CELLS.dpr, 2.0),
         target: [state.config.width, state.config.height],
         blink_hidden: now_ms.is_some_and(|now| !crate::native::gpu::style::blink_shown(now)),
     };

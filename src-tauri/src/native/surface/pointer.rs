@@ -9,19 +9,82 @@ use std::sync::Mutex;
 
 use tauri::Emitter;
 
-use super::{platform, redraw_now, split_drag, APP, VIEWPORT};
+use super::{platform, redraw_now, split_drag, APP, PANE};
 use crate::app::events::{NATIVE_COPIED, TERMINAL_CLICKED, TERMINAL_CURSOR};
 
-// Fractional scroll accumulator so precise (trackpad) deltas are not
-// rounded away; the divider position as a fraction of surface height; and
-// whether a divider drag is in progress.
-static SCROLL_ACCUM: Mutex<f64> = Mutex::new(0.0);
-static SPLIT_RATIO: AtomicU32 = AtomicU32::new(0);
-static DRAGGING: AtomicBool = AtomicBool::new(false);
+/// The pointer input in flight: the drag a press started, the wheel's
+/// remainder, the link under the pointer and the cursor the page shows.
+struct Pointer {
+    // Text selection in progress.
+    selecting: AtomicBool,
+    // A divider drag in progress.
+    dragging_divider: AtomicBool,
+    // A scrollbar thumb drag in progress.
+    dragging_scrollbar: AtomicBool,
+    // The selection drag began in the history half of an open split, so it
+    // stays in the history and autoscrolls past the divider (split_drag.rs).
+    from_history: AtomicBool,
+    // An autoscroll ticker is running.
+    autoscroll_armed: AtomicBool,
+    // The last point of a selection drag as (x, y, surface height) in
+    // physical pixels, which each autoscroll tick reads again.
+    last_drag: Mutex<Option<(f64, f64, f64)>>,
+    // Fractional scroll accumulator so precise (trackpad) deltas are not
+    // rounded away.
+    scroll_accum: Mutex<f64>,
+    // The URL under the pointer as (grid_line, start_col, end_col), so the
+    // renderer can underline it as a clickable affordance.
+    hover_url: Mutex<Option<(i32, usize, usize)>>,
+    // The cursor last reported to the page, as a `CursorHint` discriminant.
+    cursor: AtomicU8,
+}
+
+static POINTER: Pointer = Pointer {
+    selecting: AtomicBool::new(false),
+    dragging_divider: AtomicBool::new(false),
+    dragging_scrollbar: AtomicBool::new(false),
+    from_history: AtomicBool::new(false),
+    autoscroll_armed: AtomicBool::new(false),
+    last_drag: Mutex::new(None),
+    scroll_accum: Mutex::new(0.0),
+    hover_url: Mutex::new(None),
+    cursor: AtomicU8::new(CursorHint::Default as u8),
+};
+
+/// The scrollback split's divider, as f32 bits.
+struct Split {
+    // The divider position a drag set, as a fraction of surface height
+    // (0 = no drag yet, so `split_ratio` gives the default).
+    ratio: AtomicU32,
+    // The exact divider fraction the renderer last drew (0 = no split), so
+    // the cursor rect aligns with the rendered line rather than the raw
+    // ratio.
+    divider_frac: AtomicU32,
+}
+
+static SPLIT: Split = Split {
+    ratio: AtomicU32::new(0),
+    divider_frac: AtomicU32::new(0),
+};
+
+/// The backing scale and atlas cell size as f32 bits (set each frame / on
+/// bounds) so the mouse handler can map a point to a grid cell without
+/// locking the surface.
+pub(super) struct Cells {
+    pub(super) dpr: AtomicU32,
+    pub(super) cell_w: AtomicU32,
+    pub(super) cell_h: AtomicU32,
+}
+
+pub(super) static CELLS: Cells = Cells {
+    dpr: AtomicU32::new(0),
+    cell_w: AtomicU32::new(0),
+    cell_h: AtomicU32::new(0),
+};
 
 /// Divider position as a fraction of the surface height (0.66 default).
 pub(crate) fn split_ratio() -> f32 {
-    let bits = SPLIT_RATIO.load(Ordering::Acquire);
+    let bits = SPLIT.ratio.load(Ordering::Acquire);
     if bits == 0 {
         0.66
     } else {
@@ -30,41 +93,27 @@ pub(crate) fn split_ratio() -> f32 {
 }
 
 fn set_split_ratio(ratio: f32) {
-    SPLIT_RATIO.store(ratio.to_bits(), Ordering::Release);
+    SPLIT.ratio.store(ratio.to_bits(), Ordering::Release);
 }
 
-// The exact divider fraction the renderer last drew (0 = no split), so the
-// cursor rect aligns with the rendered line rather than the raw ratio.
-static DIVIDER_FRAC: AtomicU32 = AtomicU32::new(0);
-
 pub(super) fn set_divider_frac(frac: Option<f32>) {
-    DIVIDER_FRAC.store(frac.map_or(0, f32::to_bits), Ordering::Release);
+    SPLIT
+        .divider_frac
+        .store(frac.map_or(0, f32::to_bits), Ordering::Release);
 }
 
 fn divider_frac() -> Option<f32> {
-    let bits = DIVIDER_FRAC.load(Ordering::Acquire);
+    let bits = SPLIT.divider_frac.load(Ordering::Acquire);
     (bits != 0).then(|| f32::from_bits(bits))
 }
 
-// Text selection in progress, plus the backing scale and atlas cell size
-// (set each frame / on bounds) so the mouse handler can map a point to a
-// grid cell without locking the surface.
-static SELECTING: AtomicBool = AtomicBool::new(false);
-pub(super) static DPR: AtomicU32 = AtomicU32::new(0);
-pub(super) static CELL_W: AtomicU32 = AtomicU32::new(0);
-pub(super) static CELL_H: AtomicU32 = AtomicU32::new(0);
-
-// The URL under the pointer as (grid_line, start_col, end_col), so the
-// renderer can underline it as a clickable affordance.
-static HOVER_URL: Mutex<Option<(i32, usize, usize)>> = Mutex::new(None);
-
 /// The hovered URL's cell range, for the renderer's hover underline.
 pub(crate) fn hover_url() -> Option<(i32, usize, usize)> {
-    HOVER_URL.lock().ok().and_then(|h| *h)
+    POINTER.hover_url.lock().ok().and_then(|h| *h)
 }
 
 fn set_hover_url(next: Option<(i32, usize, usize)>) {
-    let changed = if let Ok(mut h) = HOVER_URL.lock() {
+    let changed = if let Ok(mut h) = POINTER.hover_url.lock() {
         let changed = *h != next;
         *h = next;
         changed
@@ -94,10 +143,10 @@ pub(super) fn load_f32(slot: &AtomicU32, default: f32) -> f32 {
 /// divider the renderer drew.
 fn surface_frame(height_px: f64) -> split_drag::Frame {
     split_drag::Frame {
-        cell_w: f64::from(load_f32(&CELL_W, 0.0)),
-        cell_h: f64::from(load_f32(&CELL_H, 0.0)),
+        cell_w: f64::from(load_f32(&CELLS.cell_w, 0.0)),
+        cell_h: f64::from(load_f32(&CELLS.cell_h, 0.0)),
         height: height_px,
-        dpr: f64::from(load_f32(&DPR, 2.0)),
+        dpr: f64::from(load_f32(&CELLS.dpr, 2.0)),
         divider: divider_frac(),
     }
 }
@@ -122,18 +171,6 @@ struct PointerEvent {
     pub open_modifier: bool,
 }
 
-// A scrollbar thumb drag in progress.
-static SCROLLBAR_DRAGGING: AtomicBool = AtomicBool::new(false);
-
-// The selection drag began in the history half of an open split, so it
-// stays in the history and autoscrolls past the divider (split_drag.rs).
-static DRAG_FROM_HISTORY: AtomicBool = AtomicBool::new(false);
-// The last point of a selection drag as (x, y, surface height) in
-// physical pixels, which each autoscroll tick reads again.
-static LAST_DRAG: Mutex<Option<(f64, f64, f64)>> = Mutex::new(None);
-// An autoscroll ticker is running.
-static AUTOSCROLL_ARMED: AtomicBool = AtomicBool::new(false);
-
 /// True when the point falls in the scrollbar hit zone (right edge) while
 /// scrolled. The zone is wider than the drawn bar for forgiving grabs.
 fn in_scrollbar_zone(ev: &PointerEvent) -> bool {
@@ -141,7 +178,7 @@ fn in_scrollbar_zone(ev: &PointerEvent) -> bool {
     if offset == 0 || scrollback == 0 {
         return false;
     }
-    let dpr = f64::from(load_f32(&DPR, 2.0));
+    let dpr = f64::from(load_f32(&CELLS.dpr, 2.0));
     ev.width > 0.0 && ev.x >= ev.width - 12.0 * dpr
 }
 
@@ -150,7 +187,7 @@ fn in_scrollbar_zone(ev: &PointerEvent) -> bool {
 // Scrollback lengths are far inside f64's exact-integer range.
 #[allow(clippy::cast_precision_loss)]
 fn scrollbar_scroll_to(ev: &PointerEvent) {
-    let cell_h = f64::from(load_f32(&CELL_H, 0.0));
+    let cell_h = f64::from(load_f32(&CELLS.cell_h, 0.0));
     if cell_h <= 0.0 || ev.height <= 0.0 {
         return;
     }
@@ -187,7 +224,7 @@ fn middle_click() {
 /// The grid scrolls by whole lines and the accumulator keeps the rest.
 /// Main thread only.
 pub(crate) fn forward_wheel(delta_y: f64) {
-    let Ok(mut acc) = SCROLL_ACCUM.lock() else {
+    let Ok(mut acc) = POINTER.scroll_accum.lock() else {
         return;
     };
     // Positive deltaY pulls content down = reveal older lines = scroll up.
@@ -208,10 +245,10 @@ fn pointer_down(ev: &PointerEvent) {
     // A press always starts fresh. Forwarded input cannot promise that
     // every press got its release, and a stale flag would turn the next
     // selection into a divider or scrollbar drag.
-    SCROLLBAR_DRAGGING.store(false, Ordering::Release);
-    DRAGGING.store(false, Ordering::Release);
-    SELECTING.store(false, Ordering::Release);
-    DRAG_FROM_HISTORY.store(false, Ordering::Release);
+    POINTER.dragging_scrollbar.store(false, Ordering::Release);
+    POINTER.dragging_divider.store(false, Ordering::Release);
+    POINTER.selecting.store(false, Ordering::Release);
+    POINTER.from_history.store(false, Ordering::Release);
     let cell = phys_point_to_cell(ev.x, ev.y, ev.height);
     if ev.open_modifier {
         if let Some((line, col)) = cell {
@@ -222,25 +259,25 @@ fn pointer_down(ev: &PointerEvent) {
         }
     }
     if in_scrollbar_zone(ev) {
-        SCROLLBAR_DRAGGING.store(true, Ordering::Release);
+        POINTER.dragging_scrollbar.store(true, Ordering::Release);
         scrollbar_scroll_to(ev);
         return;
     }
     // Grab the divider where it is DRAWN (divider_frac), not at the raw
     // ratio, in the same band that shows the page's resize cursor.
     if near_divider(ev) {
-        DRAGGING.store(true, Ordering::Release);
+        POINTER.dragging_divider.store(true, Ordering::Release);
         return;
     }
     crate::native::grid::clear_selection();
     if let Some((line, col)) = cell {
         crate::native::grid::start_selection(line, col);
-        SELECTING.store(true, Ordering::Release);
+        POINTER.selecting.store(true, Ordering::Release);
         let offset = crate::native::grid::current_display_offset();
         let from_history = surface_frame(ev.height)
             .view(offset)
             .is_some_and(|view| view.in_history(ev.y));
-        DRAG_FROM_HISTORY.store(from_history, Ordering::Release);
+        POINTER.from_history.store(from_history, Ordering::Release);
         redraw_now();
     }
 }
@@ -248,11 +285,11 @@ fn pointer_down(ev: &PointerEvent) {
 /// Move the scrollbar thumb or the divider, or extend the selection,
 /// while dragging.
 fn pointer_dragged(ev: &PointerEvent) {
-    if SCROLLBAR_DRAGGING.load(Ordering::Acquire) {
+    if POINTER.dragging_scrollbar.load(Ordering::Acquire) {
         scrollbar_scroll_to(ev);
         return;
     }
-    if DRAGGING.load(Ordering::Acquire) {
+    if POINTER.dragging_divider.load(Ordering::Acquire) {
         if ev.height > 0.0 {
             let frac = ev.y / ev.height;
             set_split_ratio((frac.clamp(0.15, 0.85)) as f32);
@@ -260,8 +297,8 @@ fn pointer_dragged(ev: &PointerEvent) {
         }
         return;
     }
-    if SELECTING.load(Ordering::Acquire) {
-        if DRAG_FROM_HISTORY.load(Ordering::Acquire) {
+    if POINTER.selecting.load(Ordering::Acquire) {
+        if POINTER.from_history.load(Ordering::Acquire) {
             history_drag(ev);
             return;
         }
@@ -276,7 +313,7 @@ fn pointer_dragged(ev: &PointerEvent) {
 /// divider it stops at the last history line, and a ticker scrolls the
 /// history toward the tail while the pointer stays there.
 fn history_drag(ev: &PointerEvent) {
-    if let Ok(mut last) = LAST_DRAG.lock() {
+    if let Ok(mut last) = POINTER.last_drag.lock() {
         *last = Some((ev.x, ev.y, ev.height));
     }
     let frame = surface_frame(ev.height);
@@ -293,11 +330,11 @@ fn history_drag(ev: &PointerEvent) {
 /// main thread, and the ticker stops on the first tick with nothing to
 /// scroll.
 fn arm_autoscroll() {
-    if AUTOSCROLL_ARMED.swap(true, Ordering::AcqRel) {
+    if POINTER.autoscroll_armed.swap(true, Ordering::AcqRel) {
         return;
     }
     let Some(app) = APP.get().cloned() else {
-        AUTOSCROLL_ARMED.store(false, Ordering::Release);
+        POINTER.autoscroll_armed.store(false, Ordering::Release);
         return;
     };
     tauri::async_runtime::spawn(async move {
@@ -318,7 +355,7 @@ fn arm_autoscroll() {
                 // No tick ran, so none cleared it, and none could start
                 // another ticker while it stayed set.
                 None => {
-                    AUTOSCROLL_ARMED.store(false, Ordering::Release);
+                    POINTER.autoscroll_armed.store(false, Ordering::Release);
                     break;
                 }
             }
@@ -331,10 +368,11 @@ fn arm_autoscroll() {
 /// the pointer came back above the divider, or the split closed at the
 /// tail.
 fn autoscroll_tick() -> bool {
-    let point = LAST_DRAG.lock().ok().and_then(|last| *last);
+    let point = POINTER.last_drag.lock().ok().and_then(|last| *last);
     let more = match point {
         Some((x, y, height))
-            if SELECTING.load(Ordering::Acquire) && DRAG_FROM_HISTORY.load(Ordering::Acquire) =>
+            if POINTER.selecting.load(Ordering::Acquire)
+                && POINTER.from_history.load(Ordering::Acquire) =>
         {
             let frame = surface_frame(height);
             let more =
@@ -346,20 +384,20 @@ fn autoscroll_tick() -> bool {
         _ => false,
     };
     if !more {
-        AUTOSCROLL_ARMED.store(false, Ordering::Release);
+        POINTER.autoscroll_armed.store(false, Ordering::Release);
     }
     more
 }
 
 fn pointer_up() {
-    DRAG_FROM_HISTORY.store(false, Ordering::Release);
-    let was_scrollbar = SCROLLBAR_DRAGGING.swap(false, Ordering::AcqRel);
-    let was_divider = DRAGGING.swap(false, Ordering::AcqRel);
+    POINTER.from_history.store(false, Ordering::Release);
+    let was_scrollbar = POINTER.dragging_scrollbar.swap(false, Ordering::AcqRel);
+    let was_divider = POINTER.dragging_divider.swap(false, Ordering::AcqRel);
     if was_divider {
         // Divider drag over; redraw so the cursor rect refreshes.
         redraw_now();
     }
-    if !was_scrollbar && !was_divider && SELECTING.swap(false, Ordering::AcqRel) {
+    if !was_scrollbar && !was_divider && POINTER.selecting.swap(false, Ordering::AcqRel) {
         // Copy the selection to the clipboard on release.
         copy_selection();
     }
@@ -378,11 +416,11 @@ fn pointer_up() {
 /// back. The selection stays for a copy, and nothing goes to the
 /// clipboard. Leaving the window ends nothing, as the release still comes.
 pub(crate) fn window_blurred() {
-    SELECTING.store(false, Ordering::Release);
-    DRAG_FROM_HISTORY.store(false, Ordering::Release);
-    SCROLLBAR_DRAGGING.store(false, Ordering::Release);
-    DRAGGING.store(false, Ordering::Release);
-    if let Ok(mut last) = LAST_DRAG.lock() {
+    POINTER.selecting.store(false, Ordering::Release);
+    POINTER.from_history.store(false, Ordering::Release);
+    POINTER.dragging_scrollbar.store(false, Ordering::Release);
+    POINTER.dragging_divider.store(false, Ordering::Release);
+    if let Ok(mut last) = POINTER.last_drag.lock() {
         *last = None;
     }
 }
@@ -403,8 +441,9 @@ fn pointer_moved(ev: Option<&PointerEvent>) {
 /// top-left corner. `kind` is "down", "drag", "up", "move", "leave", or
 /// "middle". Must run on the main thread.
 pub(crate) fn forward_pointer(kind: &str, x: f64, y: f64, open_modifier: bool) {
-    let dpr = f64::from(load_f32(&DPR, 2.0));
-    let (width, height) = VIEWPORT
+    let dpr = f64::from(load_f32(&CELLS.dpr, 2.0));
+    let (width, height) = PANE
+        .viewport
         .lock()
         .ok()
         .and_then(|v| *v)
@@ -429,8 +468,9 @@ pub(crate) fn forward_pointer(kind: &str, x: f64, y: f64, open_modifier: bool) {
         CursorHint::Default
     } else {
         cursor_hint(
-            DRAGGING.load(Ordering::Acquire),
-            SELECTING.load(Ordering::Acquire) || SCROLLBAR_DRAGGING.load(Ordering::Acquire),
+            POINTER.dragging_divider.load(Ordering::Acquire),
+            POINTER.selecting.load(Ordering::Acquire)
+                || POINTER.dragging_scrollbar.load(Ordering::Acquire),
             // A press in the scrollbar zone grabs the thumb first.
             near_divider(&ev) && !in_scrollbar_zone(&ev),
             ev.open_modifier && hover_url().is_some(),
@@ -449,7 +489,7 @@ fn near_divider(ev: &PointerEvent) -> bool {
     let Some(drawn) = divider_frac() else {
         return false;
     };
-    let dpr = f64::from(load_f32(&DPR, 2.0));
+    let dpr = f64::from(load_f32(&CELLS.dpr, 2.0));
     ev.height > 0.0 && (ev.y - f64::from(drawn) * ev.height).abs() <= DIVIDER_GRAB_PT * dpr
 }
 
@@ -496,13 +536,10 @@ fn cursor_hint(
     }
 }
 
-// The cursor last reported to the page, as a `CursorHint` discriminant.
-static CURSOR_HINT: AtomicU8 = AtomicU8::new(CursorHint::Default as u8);
-
 /// Send `vosh://terminal-cursor` with the CSS cursor name, only when it
 /// changes.
 fn report_cursor(hint: CursorHint) {
-    if CURSOR_HINT.swap(hint as u8, Ordering::AcqRel) == hint as u8 {
+    if POINTER.cursor.swap(hint as u8, Ordering::AcqRel) == hint as u8 {
         return;
     }
     if let Some(app) = APP.get() {
@@ -561,20 +598,20 @@ mod tests {
             grid.feed(text.join("\r\n").as_bytes());
             grid.scroll(offset);
         });
-        store_f32(&CELL_W, 8.0);
-        store_f32(&CELL_H, 10.0);
-        store_f32(&DPR, 1.0);
+        store_f32(&CELLS.cell_w, 8.0);
+        store_f32(&CELLS.cell_h, 10.0);
+        store_f32(&CELLS.dpr, 1.0);
         set_divider_frac(Some(79.0 / 120.0));
     }
 
     fn reset_pointer() {
-        SELECTING.store(false, Ordering::Release);
-        DRAG_FROM_HISTORY.store(false, Ordering::Release);
-        AUTOSCROLL_ARMED.store(false, Ordering::Release);
-        *LAST_DRAG.lock().unwrap() = None;
-        CELL_W.store(0, Ordering::Release);
-        CELL_H.store(0, Ordering::Release);
-        DPR.store(0, Ordering::Release);
+        POINTER.selecting.store(false, Ordering::Release);
+        POINTER.from_history.store(false, Ordering::Release);
+        POINTER.autoscroll_armed.store(false, Ordering::Release);
+        *POINTER.last_drag.lock().unwrap() = None;
+        CELLS.cell_w.store(0, Ordering::Release);
+        CELLS.cell_h.store(0, Ordering::Release);
+        CELLS.dpr.store(0, Ordering::Release);
         set_divider_frac(None);
         crate::native::grid::clear_selection();
     }
@@ -584,7 +621,7 @@ mod tests {
         let _grid = crate::native::grid::lock_shared_grid_for_test();
         split_surface(8);
         pointer_down(&at(0.0, 15.0));
-        assert!(DRAG_FROM_HISTORY.load(Ordering::Acquire));
+        assert!(POINTER.from_history.load(Ordering::Acquire));
         // Past the divider the selection ends on the last history line,
         // L47 at offset 8, and nothing of the live half.
         pointer_dragged(&at(40.0, 100.0));
@@ -613,15 +650,15 @@ mod tests {
         split_surface(8);
         pointer_down(&at(0.0, 15.0));
         pointer_dragged(&at(40.0, 100.0));
-        assert!(SELECTING.load(Ordering::Acquire));
+        assert!(POINTER.selecting.load(Ordering::Acquire));
         window_blurred();
-        assert!(!SELECTING.load(Ordering::Acquire));
-        assert!(!DRAG_FROM_HISTORY.load(Ordering::Acquire));
+        assert!(!POINTER.selecting.load(Ordering::Acquire));
+        assert!(!POINTER.from_history.load(Ordering::Acquire));
         // The next tick scrolls nothing and stops the ticker, and the
         // split stays open with the selection as it was.
-        AUTOSCROLL_ARMED.store(true, Ordering::Release);
+        POINTER.autoscroll_armed.store(true, Ordering::Release);
         assert!(!autoscroll_tick());
-        assert!(!AUTOSCROLL_ARMED.load(Ordering::Acquire));
+        assert!(!POINTER.autoscroll_armed.load(Ordering::Acquire));
         assert_eq!(crate::native::grid::current_display_offset(), 8);
         let text = crate::native::grid::selection_text().expect("a selection");
         assert_eq!(text.lines().last(), Some("L47"));
@@ -640,7 +677,7 @@ mod tests {
         // Live row 10 is L58. Up across the divider the pointer reads the
         // history at the offset, row 2 there being L42.
         pointer_down(&at(0.0, 105.0));
-        assert!(!DRAG_FROM_HISTORY.load(Ordering::Acquire));
+        assert!(!POINTER.from_history.load(Ordering::Acquire));
         pointer_dragged(&at(0.0, 25.0));
         let text = crate::native::grid::selection_text().expect("a selection");
         assert_eq!(text.lines().next(), Some("L42"));
