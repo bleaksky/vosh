@@ -64,7 +64,10 @@ use loadouts::wizard::plan as migration;
 // prompt_migration.rs and preset_rollout.rs, until they point at
 // disk/upgrades/.
 use disk::upgrades::presets as preset_rollout;
-use disk::upgrades::prompt_capture as prompt_migration;
+mod prompt_migration {
+    pub(crate) use crate::disk::upgrades::line_triggers::note_line_triggers;
+    pub(crate) use crate::disk::upgrades::prompt_capture::run;
+}
 
 pub fn run() {
     tracing_subscriber::fmt()
