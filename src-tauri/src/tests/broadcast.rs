@@ -154,13 +154,14 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
 
         // A profile switch, an import, and `#profile load` and `reset`
         // send these.
-        let replaced: Vec<&'static str> = crate::commands::profile_ui_events(&Profile::default())
-            .events()
-            .into_iter()
-            .map(|(event, _)| event)
-            .collect();
+        let replaced: Vec<&'static str> =
+            crate::app::events::profile_ui_events(&Profile::default())
+                .events()
+                .into_iter()
+                .map(|(event, _)| event)
+                .collect();
         let listening = Heard::listen(&app, &replaced);
-        crate::commands::broadcast_profile_ui(handle, &state).await;
+        crate::app::events::broadcast_profile_ui(handle, &state).await;
         listening.finish("broadcast_profile_ui", &mut heard, &mut want);
 
         // A `#tick` command.

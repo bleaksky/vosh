@@ -18,13 +18,14 @@ use tauri::{AppHandle, Manager, State};
 use tracing::warn;
 
 use crate::app::events::{
-    broadcast, PANE_LAYOUT_CHANGED, PROFILES_CHANGED, PROFILE_CHANGED, SESSION_IDENTITY_CHANGED,
+    broadcast, pane_layout_envelope, PaneLayoutEnvelope, PANE_LAYOUT_CHANGED, PROFILES_CHANGED,
+    PROFILE_CHANGED, SESSION_IDENTITY_CHANGED,
 };
 use crate::app::state::{
     bump_panes_generation, panes_generation, SharedState, AUTO_PERSIST_SUPPRESSED,
     MIGRATION_RELAUNCH_PENDING, PROFILES_NOT_LOADED,
 };
-use crate::commands::{pane_layout_envelope, persist_profile, PaneLayoutEnvelope, PERSIST_LOCK};
+use crate::commands::{persist_profile, PERSIST_LOCK};
 use crate::profile_config::{
     GlobalConfig, PaneLayoutPersist, ProfileConfig, TrackedAffect, UiConfig,
 };
