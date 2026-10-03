@@ -105,13 +105,13 @@ fn a_timer_group_line_reports_a_macro_group_that_turned() {
 fn tick_and_lua_lines_note_what_they_ask_of_the_profile() {
     let mut p = Profile::default();
     let mut effects = LineEffects::default();
-    let _ = super::process_fired_line(&mut p, "#alias greet wave", &mut effects, None);
+    let _ = super::run_and_note_line(&mut p, "#alias greet wave", &mut effects, None);
     assert!(effects.dirty);
     assert!(p.aliases.get("greet").is_some());
 
     // A reset from a timer or a script keeps the blanked profile off
     // the disk, as it does when you type it.
-    let _ = super::process_fired_line(&mut p, "#profile reset", &mut effects, None);
+    let _ = super::run_and_note_line(&mut p, "#profile reset", &mut effects, None);
     assert_eq!(
         effects,
         LineEffects {
@@ -128,7 +128,7 @@ fn a_reset_from_a_timer_turns_away_a_config_save_read_before_it() {
     let mut p = Profile::default();
     let mut effects = LineEffects::default();
     let before = crate::app::state::ui_config_generation();
-    let _ = super::process_fired_line(&mut p, "#profile reset", &mut effects, None);
+    let _ = super::run_and_note_line(&mut p, "#profile reset", &mut effects, None);
     assert!(crate::app::state::ui_config_generation() > before);
 }
 
