@@ -1,8 +1,6 @@
 //! Tier 3 native terminal renderer (see docs/native-renderer.md).
 //!
-//! Platform-agnostic core: the wgpu surface + cell renderer, the shared
-//! scroll/split/selection/hover state, and the command-facing API. The
-//! platform submodule owns the view plumbing: `install` creates the
+//! The platform submodule owns the view plumbing: `install` creates the
 //! native view under the webview, `place` puts the grid in the pane and
 //! shows the view with its layer's scale, backdrop and corners, and the
 //! rest repaints the backdrop, writes the clipboard and opens a URL.

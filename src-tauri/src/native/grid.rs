@@ -3,11 +3,8 @@
 //! Wraps `alacritty_terminal`'s `Term` so the post-telnet byte stream
 //! (the same bytes Vosh hands xterm) builds a real cell grid: characters,
 //! colors, styles, cursor, and scrollback, with all the VT escape-code
-//! semantics handled by Alacritty's parser. M2c's wgpu renderer walks
+//! semantics handled by Alacritty's parser. The renderer in `gpu` walks
 //! this grid and draws each cell.
-//!
-//! macOS only for now (the renderer that consumes it is). The grid model
-//! itself is platform independent and ungates when other platforms land.
 //!
 //! This file holds the grid, its cells, selection, scroll and resize, and
 //! the shared grid the session feeds and the renderer reads. `regions`

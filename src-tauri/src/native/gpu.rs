@@ -1,10 +1,8 @@
 //! Tier 3 native terminal renderer, M2c (see docs/native-renderer.md).
 //!
-//! The wgpu cell renderer: turns `grid`'s cells into pixels. Built
-//! incrementally — color mapping first (this file's first commit), then a
-//! glyph atlas, then the instanced pipeline that replaces the M1 test
-//! triangle. The pipeline reads the grid each frame and draws a
-//! background quad plus a glyph quad per cell.
+//! The wgpu cell renderer: turns `grid`'s cells into pixels. The
+//! pipeline reads the grid each frame and draws a background quad plus a
+//! glyph quad per cell.
 //!
 //! Glyphs rasterize through CoreGraphics with smoothing off, to match the
 //! webview.
