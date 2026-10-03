@@ -211,7 +211,7 @@ describe('the Room, time and weather colors preset', () => {
 
 // The library lives only here, and the Rust side leans on what it holds.
 // Launch takes the defaults as every preset there is (presets_on_in_any
-// in loadout_store.rs), and Settings stores PRESETS_OFF_MARKER when you
+// in loadouts/presets.rs), and Settings stores PRESETS_OFF_MARKER when you
 // turn every preset off. Rust tests read this file as text for the rest,
 // so every read between the two languages goes from Rust to the page.
 describe('the library the Rust side leans on', () => {

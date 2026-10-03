@@ -373,7 +373,7 @@ export function normalizeTick(raw: TickConfig): TickConfig {
 /** Stored in enabled_presets when you turn every preset off. An empty
  *  list already means the defaults, so none needs a value of its own.
  *  No preset has this id, so launch installs nothing for it. PRESETS_OFF
- *  in src-tauri/src/loadout_store.rs mirrors it, and a test there reads
+ *  in src-tauri/src/loadouts/presets.rs mirrors it, and a test there reads
  *  this line. */
 export const PRESETS_OFF_MARKER = 'none';
 

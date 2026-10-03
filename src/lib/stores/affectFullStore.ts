@@ -5,7 +5,7 @@ import { createStore } from './store';
 
 // How full each affect was cast, for the Affects pane's gauges (the
 // Countdown meter and the Grouped chips). The backend decides full
-// (src-tauri/src/affect_full.rs) and sends the whole map on
+// (src-tauri/src/affects/full.rs) and sends the whole map on
 // vosh://affect-full-changed whenever it changes. Seeded from
 // affect_full_get for a window that opens mid session, and emptied on
 // the disconnected state, as the backend empties its own.
