@@ -1,8 +1,27 @@
-import { Fragment, memo, useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 import type { KindNoun } from '../../../../lib/automationDraft';
-import type { ListSection } from '../../../../lib/automationList';
+import {
+  foldKeyOf,
+  listKeyAction,
+  listStops,
+  stopId,
+  tabStopId,
+  type ListSection,
+  type ListStop,
+} from '../../../../lib/automationList';
 import { scrollWithin } from '../../../../lib/scrollWithin';
-import { cx, Field, SearchIcon, VisuallyHidden } from '../../ui';
+import { ChevronRightIcon, cx, Field, SearchIcon, VisuallyHidden } from '../../ui';
 
 /** A row pinned above the groups, like the Tick in Timers. */
 export interface PinnedEntry {
@@ -29,6 +48,7 @@ interface RowProps {
   /** Why it carries it, which a reader hears as the row's description. */
   warnNote: string | undefined;
   onSelect: (uid: string) => void;
+  onFocus: () => void;
 }
 
 // One list row: 36 high on a 38 pitch, the name ellipsized, then the
@@ -48,6 +68,7 @@ const ListRow = memo(function ListRow({
   warn,
   warnNote,
   onSelect,
+  onFocus,
 }: RowProps) {
   const noteId = warn && warnNote ? `st-auto-warn-${uid}` : undefined;
   return (
@@ -62,6 +83,7 @@ const ListRow = memo(function ListRow({
         data-st-anchor={anchor}
         data-st-flash={anchor ? '' : undefined}
         onClick={() => onSelect(uid)}
+        onFocus={onFocus}
       >
         <span
           className={cx(
@@ -110,11 +132,24 @@ export interface ItemListProps {
   /** Why a row carries the warn ring, which a reader hears as its
    *  description, since the ring is a picture. */
   warnNote?: string | undefined;
+  /** The groups that show folded, by fold key. */
+  folded: ReadonlySet<string>;
+  /** Fold or open a group from its heading. */
+  onFold: (key: string, fold: boolean) => void;
+}
+
+/** A heading you moved to, and the selection it was made under. */
+interface HeadingCursor {
+  id: string;
+  selected: string | null;
 }
 
 /** The Automation list: the filter field, then the rows under their
- *  group headings, with the divider block between groups. Arrow keys
- *  move the selection, and only the selected row takes Tab. */
+ *  group headings, with the divider block between groups. Each heading
+ *  folds its group away and opens it again. Up and Down move through
+ *  the headings and rows as one list, a row taking the selection as
+ *  you reach it, and Left and Right fold and open a heading. One stop
+ *  takes Tab, the selected row unless you moved to a heading. */
 export function ItemList({
   noun,
   filterLabel,
@@ -132,13 +167,18 @@ export function ItemList({
   footer,
   warnNames,
   warnNote,
+  folded,
+  onFold,
 }: ItemListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const order: string[] = [];
-  if (pinned) order.push(pinned.uid);
-  for (const section of sections) for (const entry of section.entries) order.push(entry.uid);
-  const tabUid = selected !== null && order.includes(selected) ? selected : (order[0] ?? null);
+  const baseId = useId();
+  const [cursor, setCursor] = useState<HeadingCursor | null>(null);
+  const stops: ListStop[] = listStops(sections, folded);
+  if (pinned) stops.unshift({ kind: 'row', uid: pinned.uid });
+  const heading = cursor !== null && cursor.selected === selected ? cursor.id : null;
+  const tabId = tabStopId(stops, sections, folded, selected, heading);
   const placeholder = `Untitled ${noun.one}`;
+  const onRowFocus = useCallback(() => setCursor(null), []);
 
   useEffect(() => {
     if (revealSeq === 0 || selected === null) return;
@@ -150,24 +190,48 @@ export function ItemList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealSeq]);
 
+  /** The element for a stop, found by its data attribute. */
+  const stopElement = (stop: ListStop): HTMLElement | null => {
+    const selector =
+      stop.kind === 'row'
+        ? `[data-uid="${CSS.escape(stop.uid)}"]`
+        : `[data-fold="${CSS.escape(stop.key)}"]`;
+    return scrollRef.current?.querySelector<HTMLElement>(selector) ?? null;
+  };
+
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (order.length === 0) return;
-    const at = tabUid === null ? -1 : order.indexOf(tabUid);
-    let next = at;
-    if (e.key === 'ArrowDown') next = Math.min(order.length - 1, at + 1);
-    else if (e.key === 'ArrowUp') next = Math.max(0, at - 1);
-    else if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = order.length - 1;
-    else return;
+    // The stop with focus, else the one that takes Tab, as when focus
+    // sits on Edit all as JSON… under the list.
+    const { uid, fold } = (e.target as HTMLElement).dataset ?? {};
+    const at =
+      uid !== undefined
+        ? stopId({ kind: 'row', uid })
+        : fold !== undefined
+          ? stopId({ kind: 'heading', key: fold })
+          : tabId;
+    const action = listKeyAction(stops, at, e.key);
+    // Left and Right fold only the heading that has focus.
+    if (!action || (action.type === 'fold' && fold === undefined)) return;
     e.preventDefault();
-    const uid = order[next];
-    onSelect(uid);
-    const row = scrollRef.current?.querySelector<HTMLElement>(`[data-uid="${CSS.escape(uid)}"]`);
-    // Focus would scroll the row into view on its own, centered when it
+    if (action.type === 'fold') {
+      if (folded.has(action.key) !== action.fold) onFold(action.key, action.fold);
+      return;
+    }
+    const stop = action.to;
+    if (stop.kind === 'row') onSelect(stop.uid);
+    const el = stopElement(stop);
+    // Focus would scroll the stop into view on its own, centered when it
     // was hidden and in every box above it. Keep that off so the list
-    // steps one row at a time and nothing else moves.
-    row?.focus({ preventScroll: true });
-    scrollWithin(row, { block: 'nearest' });
+    // steps one stop at a time and nothing else moves.
+    el?.focus({ preventScroll: true });
+    scrollWithin(el, { block: 'nearest' });
+  };
+
+  const onHeadingClick = (e: MouseEvent<HTMLButtonElement>, key: string, open: boolean) => {
+    // Keep focus on the heading, even where a click focuses no button,
+    // so focus never sits on a row the click folds away.
+    e.currentTarget.focus({ preventScroll: true });
+    onFold(key, open);
   };
 
   let empty: string | null = null;
@@ -195,7 +259,7 @@ export function ItemList({
               meta={undefined}
               enabled={pinned.enabled}
               selected={selected === pinned.uid}
-              tabbable={tabUid === pinned.uid}
+              tabbable={tabId === stopId({ kind: 'row', uid: pinned.uid })}
               placeholder={placeholder}
               monoName={false}
               monoMeta={false}
@@ -203,36 +267,84 @@ export function ItemList({
               warn={false}
               warnNote={undefined}
               onSelect={onSelect}
+              onFocus={onRowFocus}
             />
           )}
-          {sections.map((section, index) => (
-            <Fragment key={section.key}>
-              {(index > 0 || pinned) && <div className="st-auto-divider" aria-hidden="true" />}
-              {section.heading !== null && (
-                <h2 className={cx('st-auto-heading', index === 0 && !pinned && 'is-first')}>
-                  {section.heading}
-                </h2>
-              )}
-              {section.entries.map((entry) => (
-                <ListRow
-                  key={entry.uid}
-                  uid={entry.uid}
-                  name={entry.name}
-                  meta={entry.meta}
-                  enabled={entry.enabled}
-                  selected={selected === entry.uid}
-                  tabbable={tabUid === entry.uid}
-                  placeholder={placeholder}
-                  monoName={monoName}
-                  monoMeta={monoMeta}
-                  anchor={undefined}
-                  warn={entry.enabled && (warnNames?.has(entry.name) ?? false)}
-                  warnNote={warnNote}
-                  onSelect={onSelect}
-                />
-              ))}
-            </Fragment>
-          ))}
+          {sections.map((section, index) => {
+            const key = foldKeyOf(section);
+            const open = key === null || !folded.has(key);
+            const rows = open
+              ? section.entries.map((entry) => (
+                  <ListRow
+                    key={entry.uid}
+                    uid={entry.uid}
+                    name={entry.name}
+                    meta={entry.meta}
+                    enabled={entry.enabled}
+                    selected={selected === entry.uid}
+                    tabbable={tabId === stopId({ kind: 'row', uid: entry.uid })}
+                    placeholder={placeholder}
+                    monoName={monoName}
+                    monoMeta={monoMeta}
+                    anchor={undefined}
+                    warn={entry.enabled && (warnNames?.has(entry.name) ?? false)}
+                    warnNote={warnNote}
+                    onSelect={onSelect}
+                    onFocus={onRowFocus}
+                  />
+                ))
+              : null;
+            const divider = (index > 0 || pinned) && (
+              <div className="st-auto-divider" aria-hidden="true" />
+            );
+            // The ungrouped items at the top have no heading and never fold.
+            if (key === null) {
+              return (
+                <Fragment key={section.key}>
+                  {divider}
+                  {rows}
+                </Fragment>
+              );
+            }
+            const id = stopId({ kind: 'heading', key });
+            const groupId = `${baseId}-group-${index}`;
+            const count = section.entries.length;
+            return (
+              <Fragment key={section.key}>
+                {divider}
+                <div className={cx('st-auto-headrow', index === 0 && !pinned && 'is-first')}>
+                  <h2 className="st-auto-heading">
+                    <button
+                      type="button"
+                      className="st-auto-fold"
+                      aria-expanded={open}
+                      aria-controls={open ? groupId : undefined}
+                      tabIndex={tabId === id ? 0 : -1}
+                      data-fold={key}
+                      onClick={(e) => onHeadingClick(e, key, open)}
+                      onFocus={() => setCursor({ id, selected })}
+                    >
+                      <ChevronRightIcon size={12} className="st-auto-fold-chevron" />
+                      <span className="st-auto-fold-name">{section.heading}</span>
+                      {!open && (
+                        <span className="st-auto-fold-count">
+                          {count}
+                          <VisuallyHidden> {count === 1 ? noun.one : noun.many}</VisuallyHidden>
+                        </span>
+                      )}
+                    </button>
+                  </h2>
+                  {/* The slot for the group's on and off switch, after the
+                      heading, since a switch cannot sit inside a button. */}
+                </div>
+                {open && (
+                  <div id={groupId} className="st-auto-group">
+                    {rows}
+                  </div>
+                )}
+              </Fragment>
+            );
+          })}
         </div>
         {empty && <p className="st-auto-empty">{empty}</p>}
         {footer && <div className="st-auto-footer">{footer}</div>}
