@@ -164,26 +164,15 @@ impl UiConfigPayload {
         } = self;
         ui.theme = theme;
         ui.follow_system_appearance = follow_system_appearance;
-        // An empty light theme falls back to Vellum. An empty dark theme
-        // stays empty, which the frontend reads as the current theme.
-        ui.light_theme = match light_theme.trim() {
-            "" => "vellum".to_string(),
-            id => id.to_string(),
-        };
-        ui.dark_theme = dark_theme.trim().to_string();
+        ui.light_theme = crate::profile_config::coerce_light_theme(light_theme);
+        ui.dark_theme = crate::profile_config::normalize_dark_theme(dark_theme);
         ui.auto_update = auto_update;
         ui.font_family = font_family;
-        ui.font_size = font_size.clamp(6, 64);
+        ui.font_size = crate::profile_config::coerce_font_size(font_size);
         ui.terminal_line_height =
             crate::profile_config::coerce_terminal_line_height(terminal_line_height);
         ui.tracked_affects = crate::profile_config::normalize_tracked_affects(tracked_affects);
-        ui.enabled_presets = enabled_presets
-            .into_iter()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-        ui.enabled_presets.sort();
-        ui.enabled_presets.dedup();
+        ui.enabled_presets = crate::profile_config::normalize_enabled_presets(enabled_presets);
         ui.keep_last_command = keep_last_command;
         ui.theme_terminal_colors = theme_terminal_colors;
         ui.bright_bold = bright_bold;
@@ -192,50 +181,22 @@ impl UiConfigPayload {
         ui.collapse_repeats = collapse_repeats;
         ui.terminal_base_ansi = terminal_base_ansi;
         ui.custom_themes = custom_themes;
-        // Empty strings get normalized to None so the picker can clear
-        // back to the theme default by submitting "".
-        ui.split_divider_color = split_divider_color.and_then(|s| {
-            let trimmed = s.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_string())
-            }
-        });
-        ui.input_echo_color = input_echo_color.and_then(|s| {
-            let trimmed = s.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_string())
-            }
-        });
+        ui.split_divider_color =
+            crate::profile_config::normalize_optional_color(split_divider_color);
+        ui.input_echo_color = crate::profile_config::normalize_optional_color(input_echo_color);
         ui.echo_macros = echo_macros;
         ui.input_echo_caret = input_echo_caret;
-        // Clamp to a sane range so a malformed input cannot freeze the
-        // paste indicator (0–10s per line is plenty).
-        ui.paste_line_delay_ms = paste_line_delay_ms.min(10_000);
+        ui.paste_line_delay_ms =
+            crate::profile_config::coerce_paste_line_delay_ms(paste_line_delay_ms);
         ui.spellcheck_prompt = spellcheck_prompt;
-        // Coerce an unknown caret shape (hand-edited profile.toml, or a
-        // value from a newer build) back to the default so the input
-        // row always paints something.
-        ui.input_cursor_style = match input_cursor_style.as_str() {
-            "block_outline" | "half_block" | "underline" | "underline_thick" | "pipe"
-            | "pipe_thick" => input_cursor_style,
-            _ => "block".to_string(),
-        };
+        ui.input_cursor_style =
+            crate::profile_config::coerce_input_cursor_style(input_cursor_style);
         ui.vitals_density = crate::profile_config::coerce_vitals_density(vitals_density);
         ui.vitals_values = crate::profile_config::coerce_vitals_values(vitals_values);
         ui.vitals_meter = crate::profile_config::coerce_vitals_meter(vitals_meter);
         ui.vitals_warn_thirds = vitals_warn_thirds;
         ui.vitals_hide_when_pinned = vitals_hide_when_pinned;
-        // Same coercion for chip_style — an unknown variant from a
-        // hand-edited profile.toml falls back to the default rather
-        // than letting the frontend render a chip with no style.
-        ui.chip_style = match chip_style.as_str() {
-            "value_only" | "caption_value" | "icon_value" => chip_style,
-            _ => "value_only".to_string(),
-        };
+        ui.chip_style = crate::profile_config::coerce_chip_style(chip_style);
         ui.tick_count = crate::profile_config::coerce_tick_count(tick_count);
         ui.affects_style = crate::profile_config::coerce_affects_style(affects_style);
         ui.affects_marker = crate::profile_config::coerce_affects_marker(affects_marker);
