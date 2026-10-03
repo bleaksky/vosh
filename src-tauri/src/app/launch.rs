@@ -12,8 +12,7 @@ use tracing::{error, info};
 use vosh_log::LogStore;
 
 use crate::app::state::SharedState;
-use crate::loadouts::catalog::{path_b_mode_active, save_global_catalog};
-use crate::loadouts::gating::apply_effective_state;
+use crate::loadouts::catalog::{lay_catalog_over, path_b_mode_active, save_global_catalog};
 use crate::loadouts::load_path_b_at_launch;
 use crate::loadouts::presets::{adopt_catalog_presets, profile_preset_lists};
 use crate::loadouts::wizard::journal::{self, WizardRun};
@@ -236,57 +235,9 @@ pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> b
             }
         }
     }
-    {
-        let mut p = state.profile.lock().await;
-        // Snapshot what the per-profile load just put into the live
-        // stores so we can replay it on top of the catalog.
-        let per_profile_aliases: Vec<_> = p.aliases.list().into_iter().cloned().collect();
-        let per_profile_triggers: Vec<_> = p.triggers.list();
-        let per_profile_macros = p.macros.clone();
-        // The per-profile file also restored the user's group checkbox
-        // state; carry it across the catalog rebuild or every group
-        // comes back enabled.
-        let alias_disabled = p.aliases.disabled_groups();
-        let trigger_disabled = p.triggers.disabled_groups();
-
-        // Catalog first.
-        let mut aliases = vosh_automation::alias::AliasStore::new();
-        for a in &catalog.aliases {
-            aliases.set(a.clone());
-        }
-        // Per-profile overrides by name.
-        for a in per_profile_aliases {
-            aliases.set(a);
-        }
-        aliases.set_disabled_groups(alias_disabled);
-        p.aliases = aliases;
-
-        let mut triggers = vosh_automation::trigger::TriggerStore::new();
-        for t in &catalog.triggers {
-            if let Err(e) = triggers.set(t.clone()) {
-                info!(error = %e, "catalog trigger rejected at startup");
-            }
-        }
-        for t in per_profile_triggers {
-            if let Err(e) = triggers.set(t) {
-                info!(error = %e, "per-profile trigger rejected at startup");
-            }
-        }
-        triggers.set_disabled_groups(trigger_disabled);
-        p.triggers = triggers;
-
-        // Macros: catalog defaults, per-profile overrides by `key` (the
-        // canonical keypress identifier). Per-profile entries with no
-        // catalog match are simply appended.
-        let mut macros = catalog.macros.clone();
-        for m in per_profile_macros {
-            macros.retain(|x| x.key != m.key);
-            macros.push(m);
-        }
-        p.macros = macros;
-
-        apply_effective_state(&set, &mut p);
-    }
+    // adopt_catalog_presets left the live preset list equal to the
+    // catalog's, or the catalog with none, so the overlay leaves it as is.
+    lay_catalog_over(&mut *state.profile.lock().await, &catalog, Some(&set));
     *state.global_catalog.lock().await = Some(catalog);
     *state.loadout_set.lock().await = Some(set);
     info!("loaded Path B catalog + loadout set");

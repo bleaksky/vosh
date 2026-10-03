@@ -12,70 +12,10 @@ use crate::app::state::{
     note_ui_config_replaced, SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING,
 };
 use crate::disk::save::{persist_state, PERSIST_LOCK};
+use crate::loadouts::catalog::lay_catalog_over;
 use crate::output;
 use crate::profile::file::ProfileConfig;
 use crate::profile::shared::{GlobalConfig, SharedLayer};
-
-/// Lay loadout mode's catalog and active loadouts over the live profile
-/// `p`, right after a switch loaded a profile file into it. The catalog
-/// fills the stores, and the aliases, triggers, and macros the profile
-/// file still holds go on top, the way launch lays them in
-/// [`crate::app::launch::load_loadout_mode`]. An item of the file wins over
-/// the catalog item of the same name, or for a macro the same key. The
-/// group state of `set` then applies to the result.
-fn lay_catalog_over(
-    p: &mut crate::profile::live::Profile,
-    catalog: &crate::loadouts::catalog::GlobalCatalog,
-    set: Option<&crate::loadouts::set::LoadoutSet>,
-) {
-    // What the profile file just put into the live stores, to lay over
-    // the catalog.
-    let per_profile_aliases: Vec<_> = p.aliases.list().into_iter().cloned().collect();
-    let per_profile_triggers: Vec<_> = p.triggers.list();
-    let per_profile_macros = p.macros.clone();
-    // The per-profile file just restored this profile's group checkbox
-    // state into the live stores; carry it across the catalog rebuild
-    // (the rebuilt stores would otherwise start with everything
-    // enabled).
-    let alias_disabled = p.aliases.disabled_groups();
-    let trigger_disabled = p.triggers.disabled_groups();
-    let mut aliases = vosh_automation::alias::AliasStore::new();
-    for a in &catalog.aliases {
-        aliases.set(a.clone());
-    }
-    for a in per_profile_aliases {
-        aliases.set(a);
-    }
-    aliases.set_disabled_groups(alias_disabled);
-    p.aliases = aliases;
-    let mut triggers = vosh_automation::trigger::TriggerStore::new();
-    for t in &catalog.triggers {
-        if let Err(e) = triggers.set(t.clone()) {
-            warn!(error = %e, "catalog trigger rejected during profile switch");
-        }
-    }
-    for t in per_profile_triggers {
-        if let Err(e) = triggers.set(t) {
-            warn!(error = %e, "per-profile trigger rejected during profile switch");
-        }
-    }
-    triggers.set_disabled_groups(trigger_disabled);
-    p.triggers = triggers;
-    let mut macros = catalog.macros.clone();
-    for m in per_profile_macros {
-        macros.retain(|x| x.key != m.key);
-        macros.push(m);
-    }
-    p.macros = macros;
-    // The presets that are on belong to the catalog with the preset
-    // triggers, so the profile's own list gives way to it.
-    if let Some(list) = &catalog.enabled_presets {
-        p.ui.enabled_presets.clone_from(list);
-    }
-    if let Some(set) = set {
-        crate::loadouts::gating::apply_effective_state(set, p);
-    }
-}
 
 /// The files a switch to a profile loads: its own file, None for a
 /// profile that never saved one, and global.toml, None before the first
