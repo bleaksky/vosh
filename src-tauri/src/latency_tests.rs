@@ -149,7 +149,7 @@ impl Harness {
         crate::ipc::terminal::terminal_local_write(self.app.state(), format!("{line}\r\n"), None)
             .await
             .expect("the echo");
-        crate::commands::session_send_input(
+        crate::ipc::session::session_send_input(
             self.app.handle().clone(),
             self.app.state(),
             line.to_string(),
@@ -160,7 +160,7 @@ impl Harness {
 
     /// Type a line into the masked password field.
     async fn type_masked(&self, line: &str) {
-        crate::commands::session_send_masked(
+        crate::ipc::session::session_send_masked(
             self.app.handle().clone(),
             self.app.state(),
             line.to_string(),

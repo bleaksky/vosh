@@ -225,7 +225,7 @@ impl Harness {
         if let Some(handle) = self.state.session.lock().await.as_ref() {
             let _ = handle.local_write(after);
         }
-        crate::commands::session_send_input(
+        crate::ipc::session::session_send_input(
             self.app.handle().clone(),
             self.app.state(),
             line.to_string(),
@@ -678,7 +678,7 @@ async fn an_echo_the_session_hears_of_late_leaves_the_prompt_after_it_open() {
     // Your echo lands on the terminal after the login prompt, but your
     // line reaches the session first, and the game answers.
     let after = h.echo("look");
-    crate::commands::session_send_input(h.app.handle().clone(), h.app.state(), "look".into())
+    crate::ipc::session::session_send_input(h.app.handle().clone(), h.app.state(), "look".into())
         .await
         .expect("the line goes out");
     h.until_shown("[Exits: south]").await;
@@ -2368,7 +2368,7 @@ async fn a_line_typed_after_the_game_closes_the_link_says_not_connected() {
     .await;
 
     h.echo("look");
-    let sent = crate::commands::session_send_input(
+    let sent = crate::ipc::session::session_send_input(
         h.app.handle().clone(),
         h.app.state(),
         "look".to_string(),
