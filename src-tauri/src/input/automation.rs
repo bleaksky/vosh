@@ -3,8 +3,9 @@
 
 use vosh_automation::trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
 
+use super::slash::parse_braced_pattern;
 use super::target::is_target_keyword;
-use super::{echo_one, error_echo, parse_braced_pattern, split_first_word, InputResult};
+use super::{echo_one, error_echo, split_first_word, InputResult};
 use crate::profile::{MacroRecorder, Profile};
 
 pub(super) fn slash_alias(profile: &mut Profile, args: &str) -> InputResult {

@@ -1,5 +1,6 @@
 use super::profile::{load_profile_file, slash_profile_with, PROFILE_SAVE_BUSY};
 use super::script::slash_script_load_in;
+use super::slash::{parse_braced_pattern, HELP_TEXT};
 use super::target::set_room_chars;
 use super::*;
 use crate::profile::RoomChar;
@@ -306,7 +307,7 @@ fn prompt_show_picks_where_your_prompt_shows_and_the_status_says_it() {
     }
     assert_eq!(p.prompt.config().show, PromptShow::Text);
     // The help names it.
-    assert!(super::HELP_TEXT.contains("#prompt show text|lifted|pinned"));
+    assert!(super::slash::HELP_TEXT.contains("#prompt show text|lifted|pinned"));
 }
 
 #[test]
@@ -345,7 +346,7 @@ fn prompt_default_puts_the_default_design_in_place_and_keeps_yours() {
     let ran = run_line(&mut p, "#prompt default please");
     assert_eq!(ran.result.echo, ["[usage #prompt default]"]);
     // The help names it.
-    assert!(super::HELP_TEXT.contains("#prompt default "));
+    assert!(super::slash::HELP_TEXT.contains("#prompt default "));
 }
 
 #[test]
@@ -394,7 +395,7 @@ fn prompt_draw_turns_drawing_on_and_off() {
     }
     assert!(p.prompt.config().draw);
     // The help names it.
-    assert!(super::HELP_TEXT.contains("#prompt draw on|off"));
+    assert!(super::slash::HELP_TEXT.contains("#prompt draw on|off"));
 }
 
 #[test]
