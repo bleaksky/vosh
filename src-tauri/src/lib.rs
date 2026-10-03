@@ -102,7 +102,6 @@ mod profile;
 mod profile_config;
 mod profile_set;
 mod prompt;
-mod prompt_lookup;
 mod prompt_migration;
 mod room_block;
 mod script_state;
@@ -380,7 +379,7 @@ pub fn run() {
             affect_full::affect_full_get,
             commands::hidden_get,
             commands::prompt_show_get,
-            prompt_lookup::prompt_last_seen,
+            prompt::last_seen::prompt_last_seen,
             prompt::prompt_config_get,
             prompt::prompt_config_set,
             prompt::prompt_card_open,

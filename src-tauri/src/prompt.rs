@@ -10,6 +10,8 @@
 //! row through the session task, since only that task writes session
 //! output, and every window hears `vosh://prompt-config-changed`.
 
+pub(crate) mod last_seen;
+
 use std::sync::atomic::Ordering;
 
 use serde::{Deserialize, Serialize};
