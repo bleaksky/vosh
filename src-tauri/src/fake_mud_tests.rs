@@ -33,7 +33,7 @@ const EVENTS: [&str; 10] = [
     "session://hidden",
     "session://state",
     "session://target",
-    crate::app::events::AFFECT_FULL_CHANGED_EVENT,
+    crate::app::events::AFFECT_FULL_CHANGED,
     crate::app::events::PROMPT_CONFIG_CHANGED,
 ];
 
@@ -1763,7 +1763,7 @@ async fn affect_fulls_follow_a_cast_and_come_back_at_the_next_login() {
     h.type_line("tick").await;
     h.until("a third tick", |h| passes(h) == 3).await;
     // The windows heard each change, the last one the fulls now.
-    let heard = h.events(crate::app::events::AFFECT_FULL_CHANGED_EVENT);
+    let heard = h.events(crate::app::events::AFFECT_FULL_CHANGED);
     assert_eq!(
         heard,
         [

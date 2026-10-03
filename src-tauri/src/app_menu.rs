@@ -247,7 +247,7 @@ mod mac {
         accelerator, connect_label, is_check_id, route, staff_listed, theme_rows, MenuState,
         MenuTheme, Route, ThemeRow, PANE_ROWS, QUIT_ACCELERATOR,
     };
-    use crate::app::events::{APP_MENU_EVENT, HELP_FIND_EVENT, SETTINGS_FIND_EVENT};
+    use crate::app::events::{APP_MENU, HELP_FIND, SETTINGS_FIND};
 
     const COPYRIGHT: &str = "Copyright © 2026 James Wright";
 
@@ -494,9 +494,9 @@ mod mac {
             }
             Route::Find => {
                 if is_front(app, "settings") {
-                    let _ = app.emit_to("settings", SETTINGS_FIND_EVENT, ());
+                    let _ = app.emit_to("settings", SETTINGS_FIND, ());
                 } else if is_front(app, "help") {
-                    let _ = app.emit_to("help", HELP_FIND_EVENT, ());
+                    let _ = app.emit_to("help", HELP_FIND, ());
                 } else {
                     raise_main(app);
                     emit_main(app, id);
@@ -651,7 +651,7 @@ mod mac {
     }
 
     fn emit_main(app: &AppHandle, id: &str) {
-        if let Err(e) = app.emit_to("main", APP_MENU_EVENT, id) {
+        if let Err(e) = app.emit_to("main", APP_MENU, id) {
             warn!(error = %e, id, "menu: sending the command to the main window failed");
         }
     }

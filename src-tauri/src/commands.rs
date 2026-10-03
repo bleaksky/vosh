@@ -6,9 +6,11 @@ use vosh_automation::trigger::Trigger;
 use vosh_log::{SearchOptions, SearchPage, SessionRow};
 
 use crate::app::events::{
-    broadcast, broadcast_list_changes, ListChanges, ListRevisions, AFFECTS_DISPLAY_CHANGED_EVENT,
-    CHAT_COLORS_CHANGED_EVENT, HELP_OPEN_EVENT, MACRO_GROUPS_CHANGED, MIGRATION_APPLIED_EVENT,
-    TICK_CONFIG_CHANGED_EVENT, UI_CONFIG_REPLACED_EVENT,
+    self, broadcast, broadcast_list_changes, ListChanges, ListRevisions, AFFECTS_DISPLAY_CHANGED,
+    CHAT_COLORS_CHANGED, CHIP_STYLE_CHANGED, CUSTOM_THEMES_CHANGED, HELP_OPEN, LOADOUTS_CHANGED,
+    MACROS_CHANGED, MACRO_GROUPS_CHANGED, MIGRATION_APPLIED, PANE_LAYOUT_CHANGED, PROFILES_CHANGED,
+    PROFILE_SWITCHED, TICK_CONFIG_CHANGED, TICK_COUNT_CHANGED, TIMERS_CHANGED,
+    TRACKED_AFFECTS_CHANGED, UI_CONFIG_REPLACED,
 };
 use crate::app::state::{
     note_ui_config_replaced, panes_generation, ui_config_generation, AppState, SharedState,
@@ -122,9 +124,7 @@ pub(crate) fn line_effect_events(
     }
     if effects.tick_changed {
         let tick = tick_config_payload(&p.tick.config);
-        return event_json(TICK_CONFIG_CHANGED_EVENT, &tick)
-            .into_iter()
-            .collect();
+        return event_json(TICK_CONFIG_CHANGED, &tick).into_iter().collect();
     }
     Vec::new()
 }
@@ -434,7 +434,7 @@ pub(crate) async fn session_connect(
             // Surface the disconnected state so the UI does not stay stuck
             // on "connecting...". The frontend listens for session://state.
             let _ = app.emit(
-                "session://state",
+                events::STATE,
                 crate::session::StatePayload::Disconnected {
                     reason: Some(e.to_string()),
                 },
@@ -520,7 +520,7 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
     // match, or says in the terminal that none matched.
     if let Some(words) = crate::input::help_query(&line) {
         return app
-            .emit_to("main", HELP_OPEN_EVENT, words)
+            .emit_to("main", HELP_OPEN, words)
             .map_err(|e| e.to_string());
     }
     // `#logs` works on the log store, not the profile, and can take a
@@ -591,7 +591,7 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
     settle_line_effects(&app, effects).await;
 
     if let Some(payload) = target_after {
-        let _ = app.emit("session://target", payload);
+        let _ = app.emit(events::TARGET, payload);
     }
 
     deliver_script_result(&app, state.inner(), apply).await
@@ -807,7 +807,7 @@ pub(crate) async fn import_apply(
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
     if macros_changed {
-        broadcast(&app, "vosh://macros-changed", &macros_snapshot);
+        broadcast(&app, MACROS_CHANGED, &macros_snapshot);
     }
     broadcast_list_changes(&app, lists);
     Ok(ImportSummary {
@@ -878,7 +878,7 @@ pub(crate) async fn macros_set(
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    broadcast(&app, "vosh://macros-changed", &updated);
+    broadcast(&app, MACROS_CHANGED, &updated);
     Ok(updated)
 }
 
@@ -896,7 +896,7 @@ pub(crate) async fn macros_delete(
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    broadcast(&app, "vosh://macros-changed", &updated);
+    broadcast(&app, MACROS_CHANGED, &updated);
     Ok(updated)
 }
 
@@ -950,7 +950,7 @@ pub(crate) async fn timers_set(
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    broadcast(&app, "vosh://timers-changed", &updated);
+    broadcast(&app, TIMERS_CHANGED, &updated);
     Ok(updated)
 }
 
@@ -968,7 +968,7 @@ pub(crate) async fn timers_delete(
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    broadcast(&app, "vosh://timers-changed", &updated);
+    broadcast(&app, TIMERS_CHANGED, &updated);
     Ok(updated)
 }
 
@@ -1585,14 +1585,14 @@ impl ProfileUiEvents {
     /// the config again on it finds the stores these feed current.
     pub(crate) fn events(&self) -> Vec<(&'static str, serde_json::Value)> {
         [
-            event_json("vosh://pane-layout-changed", &self.panes),
-            event_json("vosh://tracked-affects-changed", &self.tracked),
-            event_json("vosh://tick-count-changed", &self.tick_count),
-            event_json("vosh://chip-style-changed", &self.chip_style),
-            event_json(AFFECTS_DISPLAY_CHANGED_EVENT, &self.affects_display),
-            event_json(CHAT_COLORS_CHANGED_EVENT, &self.chat_colors),
-            event_json(TICK_CONFIG_CHANGED_EVENT, &self.tick),
-            Some((UI_CONFIG_REPLACED_EVENT, serde_json::Value::Null)),
+            event_json(PANE_LAYOUT_CHANGED, &self.panes),
+            event_json(TRACKED_AFFECTS_CHANGED, &self.tracked),
+            event_json(TICK_COUNT_CHANGED, &self.tick_count),
+            event_json(CHIP_STYLE_CHANGED, &self.chip_style),
+            event_json(AFFECTS_DISPLAY_CHANGED, &self.affects_display),
+            event_json(CHAT_COLORS_CHANGED, &self.chat_colors),
+            event_json(TICK_CONFIG_CHANGED, &self.tick),
+            Some((UI_CONFIG_REPLACED, serde_json::Value::Null)),
         ]
         .into_iter()
         .flatten()
@@ -1637,7 +1637,7 @@ pub(crate) fn profile_ui_events(p: &Profile) -> ProfileUiEvents {
 /// the pane generation under the profile lock as they swap. Only a
 /// switch also sends `vosh://profile-switched`, so the status line hears
 /// these here after an import, a load, or a reset, and Settings reads
-/// its whole config again on [`UI_CONFIG_REPLACED_EVENT`].
+/// its whole config again on [`UI_CONFIG_REPLACED`].
 pub(crate) async fn broadcast_profile_ui<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
@@ -1696,7 +1696,7 @@ pub(crate) async fn pane_layout_set(
     schedule_profile_persist(&app);
     broadcast(
         &app,
-        "vosh://pane-layout-changed",
+        PANE_LAYOUT_CHANGED,
         &PaneLayoutEnvelope {
             layout,
             generation: Some(current),
@@ -1940,7 +1940,7 @@ pub(crate) async fn profile_create(
         &MIGRATION_RELAUNCH_PENDING,
     )
     .await?;
-    broadcast(&app, "vosh://profiles-changed", &entry.name);
+    broadcast(&app, PROFILES_CHANGED, &entry.name);
     Ok(entry)
 }
 
@@ -1999,7 +1999,7 @@ pub(crate) async fn profile_delete(
         };
         set.delete(&name).map_err(|e| e.to_string())?;
     }
-    broadcast(&app, "vosh://profiles-changed", &name);
+    broadcast(&app, PROFILES_CHANGED, &name);
     Ok(())
 }
 
@@ -2011,7 +2011,7 @@ pub(crate) async fn profile_rename(
     new: String,
 ) -> Result<(), String> {
     rename_profile(state.inner(), &old, &new, &MIGRATION_RELAUNCH_PENDING).await?;
-    broadcast(&app, "vosh://profiles-changed", &new);
+    broadcast(&app, PROFILES_CHANGED, &new);
     Ok(())
 }
 
@@ -2066,7 +2066,7 @@ pub(crate) async fn profile_duplicate(
         &MIGRATION_RELAUNCH_PENDING,
     )
     .await?;
-    broadcast(&app, "vosh://profiles-changed", &new);
+    broadcast(&app, PROFILES_CHANGED, &new);
     Ok(())
 }
 
@@ -2134,9 +2134,9 @@ pub(crate) async fn profile_set_scope(
     persist_profile_locked(&app, &shared).await;
     drop(persist_guard);
     if let Some(list) = gained {
-        broadcast(&app, "vosh://custom-themes-changed", &list);
+        broadcast(&app, CUSTOM_THEMES_CHANGED, &list);
     }
-    broadcast(&app, "vosh://profiles-changed", &"scope");
+    broadcast(&app, PROFILES_CHANGED, &"scope");
     Ok(())
 }
 
@@ -2463,7 +2463,7 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
     // switch.
     broadcast_profile_ui(app, state).await;
 
-    broadcast(app, "vosh://profile-switched", &name);
+    broadcast(app, PROFILE_SWITCHED, &name);
     Ok(())
 }
 
@@ -3143,7 +3143,7 @@ pub(crate) async fn tracked_affects_set(
         p.ui.tracked_affects.clone_from(&list);
     }
     persist_profile(&app, &shared).await;
-    broadcast(&app, "vosh://tracked-affects-changed", &list);
+    broadcast(&app, TRACKED_AFFECTS_CHANGED, &list);
     if let Some(active) = crate::characters::active_name(&shared).await {
         crate::characters::broadcast_profile_changed(&app, &active);
     }
@@ -3270,7 +3270,7 @@ pub(crate) async fn ui_set_affects_display(
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    broadcast(&app, AFFECTS_DISPLAY_CHANGED_EVENT, &display);
+    broadcast(&app, AFFECTS_DISPLAY_CHANGED, &display);
     Ok(())
 }
 
@@ -3380,7 +3380,7 @@ async fn send_chat_colors(
     };
     let shared: SharedState = state.clone();
     persist_profile(app, &shared).await;
-    broadcast(app, CHAT_COLORS_CHANGED_EVENT, &colors);
+    broadcast(app, CHAT_COLORS_CHANGED, &colors);
 }
 
 /// Write a chat color pick onto the live UI config. The channel matches
@@ -3773,7 +3773,7 @@ pub(crate) async fn migration_apply(
 /// window runs the wizard and the main window listens, and puts the
 /// notice up once for each time it hears the event.
 pub(crate) fn announce_migration_applied<R: tauri::Runtime>(app: &AppHandle<R>) {
-    broadcast(app, MIGRATION_APPLIED_EVENT, &());
+    broadcast(app, MIGRATION_APPLIED, &());
 }
 
 /// [`migration_apply`] over the app data folder `app_data`, so a test
@@ -4159,7 +4159,7 @@ pub(crate) async fn loadouts_set_active(app: AppHandle, active: Vec<String>) -> 
     // disagreeing. Also clears any stale persist suppression — this is
     // a durable change the user asked for.
     mark_profile_dirty(&app);
-    let _ = app.emit("vosh://loadouts-changed", &());
+    let _ = app.emit(LOADOUTS_CHANGED, &());
     Ok(())
 }
 
@@ -4266,7 +4266,7 @@ pub(crate) async fn tick_set_config(
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    broadcast(&app, TICK_CONFIG_CHANGED_EVENT, &snapshot);
+    broadcast(&app, TICK_CONFIG_CHANGED, &snapshot);
     Ok(snapshot)
 }
 
@@ -6015,11 +6015,11 @@ mod tests {
                 "vosh://affects-display-changed",
                 "vosh://chat-colors-changed",
                 "vosh://tick-config-changed",
-                crate::app::events::UI_CONFIG_REPLACED_EVENT,
+                crate::app::events::UI_CONFIG_REPLACED,
             ]
         );
         assert_eq!(
-            crate::app::events::UI_CONFIG_REPLACED_EVENT,
+            crate::app::events::UI_CONFIG_REPLACED,
             "vosh://ui-config-replaced"
         );
     }
@@ -6089,7 +6089,7 @@ mod tests {
         assert_eq!(ticks[0].1["warn_at_secs"], serde_json::json!(10));
         assert_eq!(
             heard.last().unwrap().0,
-            crate::app::events::UI_CONFIG_REPLACED_EVENT
+            crate::app::events::UI_CONFIG_REPLACED
         );
     }
 
