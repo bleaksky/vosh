@@ -14,7 +14,8 @@ use crate::app::events::{
 use crate::app::state::SharedState;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
 use crate::import::ImportFormat;
-use crate::profile::live::{Macro, Profile, Timer};
+use crate::loadouts::presets::install_preset_triggers;
+use crate::profile::live::{Macro, Timer};
 
 #[tauri::command]
 pub(crate) async fn triggers_list(state: State<'_, SharedState>) -> Result<Vec<Trigger>, String> {
@@ -286,29 +287,6 @@ pub(crate) async fn presets_install(
     persist_profile(&app, &shared).await;
     if installed > 0 {
         broadcast_list_changes(&app, ListChanges::TRIGGERS);
-    }
-    Ok(installed)
-}
-
-/// The body of [`presets_install`] over the live profile `p`, so a test
-/// can run the preset install launch runs. Returns the number installed.
-pub(crate) fn install_preset_triggers(
-    p: &mut Profile,
-    triggers: Vec<Trigger>,
-) -> Result<usize, String> {
-    let mut installed = 0usize;
-    for mut t in triggers {
-        // The startup re-install overwrites same-named presets so
-        // pattern/template updates land, but the group is the user's
-        // organization: carry it over so putting a preset into a group
-        // survives relaunch.
-        if t.group.is_none() {
-            if let Some(existing) = p.triggers.get(&t.name) {
-                t.group.clone_from(&existing.group);
-            }
-        }
-        p.triggers.set(t).map_err(|e| e.to_string())?;
-        installed += 1;
     }
     Ok(installed)
 }
