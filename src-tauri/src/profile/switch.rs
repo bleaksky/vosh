@@ -218,7 +218,7 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
     switch_profile(state, app_data.as_deref(), name).await?;
     // The new profile's capture took the game's latest prompt settings.
     let seen = state.profile.lock().await.prompt.take_seen();
-    crate::session::report_game_prompt_seen(app, seen);
+    crate::session::prompt_view::report_game_prompt_seen(app, seen);
 
     // Hand every window the new profile's panes, tracked affects, tick
     // settings, and chip style from here, then the replace notice, on
