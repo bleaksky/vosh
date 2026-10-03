@@ -6,11 +6,12 @@ use vosh_automation::trigger::Trigger;
 use vosh_log::{SearchOptions, SearchPage, SessionRow};
 
 use crate::app::events::{
-    self, broadcast, broadcast_list_changes, ListChanges, ListRevisions, AFFECTS_DISPLAY_CHANGED,
-    CHAT_COLORS_CHANGED, CHIP_STYLE_CHANGED, CUSTOM_THEMES_CHANGED, HELP_OPEN, LOADOUTS_CHANGED,
-    MACROS_CHANGED, MACRO_GROUPS_CHANGED, MIGRATION_APPLIED, PANE_LAYOUT_CHANGED, PROFILES_CHANGED,
-    PROFILE_SWITCHED, TICK_CONFIG_CHANGED, TICK_COUNT_CHANGED, TIMERS_CHANGED,
-    TRACKED_AFFECTS_CHANGED, UI_CONFIG_REPLACED,
+    self, broadcast, broadcast_list_changes, broadcast_profile_ui, line_effect_events,
+    pane_layout_envelope, AffectsDisplay, ListChanges, ListRevisions, PaneLayoutEnvelope,
+    AFFECTS_DISPLAY_CHANGED, CHAT_COLORS_CHANGED, CUSTOM_THEMES_CHANGED, HELP_OPEN,
+    LOADOUTS_CHANGED, MACROS_CHANGED, MACRO_GROUPS_CHANGED, MIGRATION_APPLIED, PANE_LAYOUT_CHANGED,
+    PROFILES_CHANGED, PROFILE_SWITCHED, TICK_CONFIG_CHANGED, TIMERS_CHANGED,
+    TRACKED_AFFECTS_CHANGED,
 };
 use crate::app::state::{
     note_ui_config_replaced, panes_generation, ui_config_generation, AppState, SharedState,
@@ -106,27 +107,6 @@ pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
     if effects.dirty {
         mark_profile_dirty(app);
     }
-}
-
-/// What every window hears after a run of lines, read from the live
-/// profile. After a replace, every window drops its copy of the old
-/// panes, tracked affects, and the rest through [`ProfileUiEvents`], so
-/// a later panel edit cannot write them back. The tick settings go out
-/// with those. Without a replace, a `#tick` command that changed the
-/// tick settings sends them alone, so the status line warns with the
-/// lead the terminal uses and the Settings Tick card shows it.
-pub(crate) fn line_effect_events(
-    effects: &crate::input::LineEffects,
-    p: &Profile,
-) -> Vec<(&'static str, serde_json::Value)> {
-    if effects.replaced {
-        return profile_ui_events(p).events();
-    }
-    if effects.tick_changed {
-        let tick = tick_config_payload(&p.tick.config);
-        return event_json(TICK_CONFIG_CHANGED, &tick).into_iter().collect();
-    }
-    Vec::new()
 }
 
 use crate::profile::{Macro, Profile, Timer};
@@ -1544,111 +1524,6 @@ pub(crate) fn native_surface_scroll(kind: String) {
     #[cfg(not(native_surface))]
     {
         let _ = kind;
-    }
-}
-
-/// A pane tree as the frontend receives it: the layout plus the
-/// [`panes_generation`] it was read at. The generation never reaches
-/// disk, and an inactive profile's tree carries none, since no pane
-/// layout write can target it.
-#[derive(Clone, serde::Serialize)]
-pub(crate) struct PaneLayoutEnvelope {
-    #[serde(flatten)]
-    pub(crate) layout: PaneLayoutPersist,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) generation: Option<u64>,
-}
-
-/// The active profile's pane layout and its generation. Call with the
-/// profile lock held.
-pub(crate) fn pane_layout_envelope(p: &Profile) -> PaneLayoutEnvelope {
-    PaneLayoutEnvelope {
-        layout: p.ui.pane_layout(),
-        generation: Some(panes_generation()),
-    }
-}
-
-/// What [`broadcast_profile_ui`] hands every window, read from the live
-/// profile.
-pub(crate) struct ProfileUiEvents {
-    pub(crate) panes: PaneLayoutEnvelope,
-    pub(crate) tracked: Vec<crate::profile_config::TrackedAffect>,
-    pub(crate) tick_count: String,
-    pub(crate) chip_style: String,
-    pub(crate) affects_display: AffectsDisplay,
-    pub(crate) chat_colors: std::collections::BTreeMap<String, String>,
-    pub(crate) tick: TickConfigPayload,
-}
-
-impl ProfileUiEvents {
-    /// Every event [`broadcast_profile_ui`] sends, in order, with its
-    /// payload. The replace notice goes last, so a window that reads
-    /// the config again on it finds the stores these feed current.
-    pub(crate) fn events(&self) -> Vec<(&'static str, serde_json::Value)> {
-        [
-            event_json(PANE_LAYOUT_CHANGED, &self.panes),
-            event_json(TRACKED_AFFECTS_CHANGED, &self.tracked),
-            event_json(TICK_COUNT_CHANGED, &self.tick_count),
-            event_json(CHIP_STYLE_CHANGED, &self.chip_style),
-            event_json(AFFECTS_DISPLAY_CHANGED, &self.affects_display),
-            event_json(CHAT_COLORS_CHANGED, &self.chat_colors),
-            event_json(TICK_CONFIG_CHANGED, &self.tick),
-            Some((UI_CONFIG_REPLACED, serde_json::Value::Null)),
-        ]
-        .into_iter()
-        .flatten()
-        .collect()
-    }
-}
-
-/// `payload` as JSON for `event`, or `None` with a warning when it does
-/// not serialize, so the rest still go out.
-fn event_json<S: serde::Serialize>(
-    event: &'static str,
-    payload: &S,
-) -> Option<(&'static str, serde_json::Value)> {
-    match serde_json::to_value(payload) {
-        Ok(value) => Some((event, value)),
-        Err(e) => {
-            warn!(error = %e, event, "broadcast payload did not serialize");
-            None
-        }
-    }
-}
-
-/// Read the events [`broadcast_profile_ui`] sends. Call with the profile
-/// lock held.
-pub(crate) fn profile_ui_events(p: &Profile) -> ProfileUiEvents {
-    ProfileUiEvents {
-        panes: pane_layout_envelope(p),
-        tracked: p.ui.tracked_affects.clone(),
-        tick_count: p.ui.tick_count.clone(),
-        chip_style: p.ui.chip_style.clone(),
-        affects_display: AffectsDisplay::of(&p.ui),
-        chat_colors: p.ui.chat_colors.clone(),
-        tick: tick_config_payload(&p.tick.config),
-    }
-}
-
-/// Hand every window the active profile's panes, tracked affects, tick
-/// settings, chip style, affects display, and chat colors, then say the
-/// UI config was replaced. For
-/// the paths that replace the live UI config wholesale (a profile
-/// switch, an import, `#profile load` and `reset`), which must also bump
-/// the pane generation under the profile lock as they swap. Only a
-/// switch also sends `vosh://profile-switched`, so the status line hears
-/// these here after an import, a load, or a reset, and Settings reads
-/// its whole config again on [`UI_CONFIG_REPLACED`].
-pub(crate) async fn broadcast_profile_ui<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    state: &SharedState,
-) {
-    let events = {
-        let p = state.profile.lock().await;
-        profile_ui_events(&p)
-    };
-    for (event, payload) in events.events() {
-        broadcast(app, event, &payload);
     }
 }
 
@@ -3201,31 +3076,6 @@ fn apply_theme_pick(
         set(&mut ui.dark_theme, v);
     }
     changed
-}
-
-/// How the Affects pane draws, as every window hears it. Read from the
-/// live profile's `[ui]`.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub(crate) struct AffectsDisplay {
-    pub(crate) style: String,
-    pub(crate) marker: String,
-    pub(crate) tint: bool,
-    /// `affects_running_out_hours`.
-    pub(crate) running_out: u32,
-    /// `affects_almost_gone_hours`.
-    pub(crate) almost_gone: u32,
-}
-
-impl AffectsDisplay {
-    pub(crate) fn of(ui: &crate::profile_config::UiConfig) -> Self {
-        Self {
-            style: ui.affects_style.clone(),
-            marker: ui.affects_marker.clone(),
-            tint: ui.affects_tint,
-            running_out: ui.affects_running_out_hours,
-            almost_gone: ui.affects_almost_gone_hours,
-        }
-    }
 }
 
 /// What one affects display pick changes. Each field left out stays as
@@ -5109,58 +4959,6 @@ mod tests {
     }
 
     #[test]
-    fn a_profile_load_hands_every_window_the_chat_colors() {
-        let mut profile = crate::profile::Profile::default();
-        let mut file = crate::profile_config::ProfileConfig::default();
-        file.ui.chat_colors.insert("gtell".into(), "cyan".into());
-        let _ = file.apply_to(&mut profile);
-        let events = super::profile_ui_events(&profile);
-        assert_eq!(
-            event_payload(&events, "vosh://chat-colors-changed"),
-            serde_json::json!({ "gtell": "cyan" })
-        );
-    }
-
-    #[test]
-    fn a_profile_load_hands_every_window_the_affects_display() {
-        let mut profile = crate::profile::Profile::default();
-        let mut file = crate::profile_config::ProfileConfig::default();
-        file.ui.affects_style = "chips".into();
-        file.ui.affects_marker = "plus_minus".into();
-        file.ui.affects_tint = true;
-        file.ui.affects_running_out_hours = 5;
-        file.ui.affects_almost_gone_hours = 2;
-        let _ = file.apply_to(&mut profile);
-        let events = super::profile_ui_events(&profile);
-        assert_eq!(
-            event_payload(&events, "vosh://affects-display-changed"),
-            serde_json::json!({
-                "style": "chips",
-                "marker": "plus_minus",
-                "tint": true,
-                "running_out": 5,
-                "almost_gone": 2,
-            })
-        );
-
-        let ran = crate::input::run_line(&mut profile, "#profile reset");
-        assert!(ran.replaced);
-        assert_eq!(
-            event_payload(
-                &super::profile_ui_events(&profile),
-                "vosh://affects-display-changed"
-            ),
-            serde_json::json!({
-                "style": "timers",
-                "marker": "dot",
-                "tint": false,
-                "running_out": 2,
-                "almost_gone": 1,
-            })
-        );
-    }
-
-    #[test]
     fn a_profile_without_the_vitals_options_loads_the_defaults() {
         let ui = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n")
             .unwrap()
@@ -5749,166 +5547,6 @@ mod tests {
         assert_eq!(live_affects(&state).await, ["Sanctuary"]);
         let saved = ProfileConfig::load(&set.active_path()).unwrap();
         assert_eq!(saved.ui.tracked_affects[0].name, "Sanctuary");
-    }
-
-    #[test]
-    fn profile_reset_hands_every_window_the_tick_settings_it_put_back() {
-        let mut profile = crate::profile::Profile::default();
-        profile.ui.tick_count = "down".into();
-        profile.tick.config.warn_at_secs = Some(8);
-        profile.tick.config.sound = false;
-        let before = super::profile_ui_events(&profile);
-        assert_eq!(before.tick_count, "down");
-        assert_eq!(before.tick.warn_at_secs, Some(8));
-
-        let ran = crate::input::run_line(&mut profile, "#profile reset");
-        assert!(ran.replaced);
-        let after = super::profile_ui_events(&profile);
-        assert_eq!(after.tick_count, "up");
-        assert_eq!(after.tick.warn_at_secs, None);
-        assert!(after.tick.sound);
-    }
-
-    /// The payload `events` carries for `name`.
-    fn event_payload(events: &super::ProfileUiEvents, name: &str) -> serde_json::Value {
-        events
-            .events()
-            .into_iter()
-            .find_map(|(event, payload)| (event == name).then_some(payload))
-            .unwrap_or_else(|| panic!("{name} goes out"))
-    }
-
-    #[test]
-    fn a_profile_reset_hands_every_window_the_chip_style_it_put_back() {
-        let mut profile = crate::profile::Profile::default();
-        profile.ui.chip_style = "icon_value".into();
-        let before = super::profile_ui_events(&profile);
-        assert_eq!(
-            event_payload(&before, "vosh://chip-style-changed"),
-            serde_json::json!("icon_value")
-        );
-
-        let ran = crate::input::run_line(&mut profile, "#profile reset");
-        assert!(ran.replaced);
-        let after = super::profile_ui_events(&profile);
-        assert_eq!(
-            event_payload(&after, "vosh://chip-style-changed"),
-            serde_json::json!("value_only")
-        );
-    }
-
-    #[test]
-    fn a_profile_load_or_import_hands_every_window_the_loaded_settings() {
-        let mut profile = crate::profile::Profile::default();
-        let mut file = crate::profile_config::ProfileConfig::default();
-        file.ui.chip_style = "caption_value".into();
-        file.ui.tick_count = "down_past_zero".into();
-        let _ = file.apply_to(&mut profile);
-        let events = super::profile_ui_events(&profile);
-        assert_eq!(
-            event_payload(&events, "vosh://chip-style-changed"),
-            serde_json::json!("caption_value")
-        );
-        assert_eq!(
-            event_payload(&events, "vosh://tick-count-changed"),
-            serde_json::json!("down_past_zero")
-        );
-    }
-
-    #[test]
-    fn the_profile_broadcast_ends_by_saying_the_ui_config_was_replaced() {
-        let profile = crate::profile::Profile::default();
-        let names: Vec<&str> = super::profile_ui_events(&profile)
-            .events()
-            .into_iter()
-            .map(|(event, _)| event)
-            .collect();
-        assert_eq!(
-            names,
-            [
-                "vosh://pane-layout-changed",
-                "vosh://tracked-affects-changed",
-                "vosh://tick-count-changed",
-                "vosh://chip-style-changed",
-                "vosh://affects-display-changed",
-                "vosh://chat-colors-changed",
-                "vosh://tick-config-changed",
-                crate::app::events::UI_CONFIG_REPLACED,
-            ]
-        );
-        assert_eq!(
-            crate::app::events::UI_CONFIG_REPLACED,
-            "vosh://ui-config-replaced"
-        );
-    }
-
-    /// Run `lines` the way the typed path does and hand back what every
-    /// window hears after them.
-    fn heard_after(
-        profile: &mut crate::profile::Profile,
-        lines: &[&str],
-    ) -> Vec<(&'static str, serde_json::Value)> {
-        let mut effects = crate::input::LineEffects::default();
-        for line in lines {
-            let ran = crate::input::run_line(profile, line);
-            effects.note_ran(line, &ran);
-        }
-        super::line_effect_events(&effects, profile)
-    }
-
-    #[test]
-    fn a_tick_warn_command_hands_every_window_the_new_lead() {
-        let mut profile = crate::profile::Profile::default();
-        profile.tick.config.warn_at_secs = Some(5);
-        let heard = heard_after(&mut profile, &["#tick warn at 10"]);
-        assert_eq!(heard.len(), 1, "{heard:?}");
-        assert_eq!(heard[0].0, "vosh://tick-config-changed");
-        assert_eq!(heard[0].1["warn_at_secs"], serde_json::json!(10));
-
-        let heard = heard_after(&mut profile, &["#tick warn off", "look"]);
-        assert_eq!(heard.len(), 1, "{heard:?}");
-        assert_eq!(heard[0].0, "vosh://tick-config-changed");
-        assert_eq!(heard[0].1["warn_at_secs"], serde_json::Value::Null);
-    }
-
-    #[test]
-    fn every_tick_setting_a_command_changes_reaches_every_window() {
-        let mut profile = crate::profile::Profile::default();
-        let heard = heard_after(
-            &mut profile,
-            &["#tick interval 40", "#tick fire score", "#tick sound off"],
-        );
-        assert_eq!(heard.len(), 1, "{heard:?}");
-        let tick = &heard[0].1;
-        assert_eq!(tick["interval_secs"], serde_json::json!(40));
-        assert_eq!(tick["auto_fire"], serde_json::json!("score"));
-        assert_eq!(tick["sound"], serde_json::json!(false));
-    }
-
-    #[test]
-    fn lines_that_leave_the_tick_alone_send_nothing() {
-        let mut profile = crate::profile::Profile::default();
-        let leftover = &heard_after(
-            &mut profile,
-            &["look", "#tick", "#tick warn", "#tick reset"],
-        );
-        assert!(leftover.is_empty(), "{leftover:?}");
-    }
-
-    #[test]
-    fn a_tick_command_after_a_reset_goes_out_once_with_the_profile() {
-        let mut profile = crate::profile::Profile::default();
-        let heard = heard_after(&mut profile, &["#profile reset", "#tick warn at 10"]);
-        let ticks: Vec<_> = heard
-            .iter()
-            .filter(|(event, _)| *event == "vosh://tick-config-changed")
-            .collect();
-        assert_eq!(ticks.len(), 1, "{heard:?}");
-        assert_eq!(ticks[0].1["warn_at_secs"], serde_json::json!(10));
-        assert_eq!(
-            heard.last().unwrap().0,
-            crate::app::events::UI_CONFIG_REPLACED
-        );
     }
 
     #[test]
