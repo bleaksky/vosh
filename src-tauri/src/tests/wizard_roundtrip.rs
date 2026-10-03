@@ -156,7 +156,7 @@ async fn preset_launch_plan(state: &SharedState, dir: &Path) {
         .flat_map(|(id, names)| names.iter().map(|n| preset_trigger(id, n, false)))
         .collect();
     if !triggers.is_empty() {
-        crate::commands::install_preset_triggers(&mut *state.profile.lock().await, triggers)
+        crate::ipc::automation::install_preset_triggers(&mut *state.profile.lock().await, triggers)
             .unwrap();
         save(state, dir).await;
     }

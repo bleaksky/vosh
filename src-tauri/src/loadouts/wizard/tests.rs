@@ -1477,7 +1477,7 @@ async fn launch_with_presets(dir: &std::path::Path, name: &str) -> SharedState {
         let mut p = state.profile.lock().await;
         let on = p.ui.enabled_presets.is_empty()
             || p.ui.enabled_presets.iter().any(|id| id == "healing_basics");
-        on.then(|| crate::commands::install_preset_triggers(&mut p, vec![heal_preset()]))
+        on.then(|| crate::ipc::automation::install_preset_triggers(&mut p, vec![heal_preset()]))
     };
     if let Some(result) = installed {
         result.unwrap();
