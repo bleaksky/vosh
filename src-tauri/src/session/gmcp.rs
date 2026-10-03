@@ -6,11 +6,8 @@
 //! login, which loads its affect fulls, may switch the profile and sends
 //! the session identity.
 
-use std::sync::Arc;
-
 use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::Mutex;
 use tokio::time::Instant;
 use tracing::{info, warn};
 use vosh_protocol::telnet::Negotiator;
@@ -19,14 +16,13 @@ use crate::app::state::SharedState;
 use crate::input;
 use crate::profile::switch::auto_switch_for_character;
 use crate::profile::Profile;
-use crate::script::{self, ApplyResult, SharedTimers};
+use crate::script::{self, ApplyResult};
 use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
-use super::connection::Stream;
+use super::conn::Conn;
 use super::effects::{apply_script_result, deliver_tick_step, OutputSink, ScriptIo};
 use super::gmcp_vars;
-use super::perf::PerfCounters;
 use super::prompt_view::observe_prompt_gmcp;
 
 /// GMCP packages we ask the server to enable in Core.Supports.Set. Char,
@@ -48,15 +44,10 @@ pub(super) const REQUESTED_GMCP_PACKAGES: &[&str] = &[
     "Group 1",
 ];
 
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn handle_gmcp<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    profile: &Arc<Mutex<Profile>>,
-    lua_timers: &SharedTimers,
-    stream: &mut Stream,
+    conn: &mut Conn<R>,
     payload: &[u8],
     batch: &mut ReadBatch,
-    perf: &mut PerfCounters,
 ) -> std::io::Result<()> {
     let msg = match vosh_protocol::gmcp::parse(payload) {
         Ok(m) => m,
@@ -77,9 +68,9 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     // a second `profile.lock().await` after release.
     let (tick_step, script_apply) = {
         let lock_t0 = std::time::Instant::now();
-        let mut p = profile.lock().await;
-        perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
-        perf.mutex_acquires += 1;
+        let mut p = conn.profile.lock().await;
+        conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
+        conn.perf.mutex_acquires += 1;
         gmcp_step(&mut p, &msg, Instant::now())
     };
 
@@ -96,21 +87,29 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
                 if msg.package == "Char.Status" {
                     batch.character = Some(owned.clone());
                 }
-                let state = app.state::<crate::app::state::SharedState>();
-                handle_char_known_for_auto_switch(app, state.inner(), &owned).await;
+                let state = conn.app.state::<crate::app::state::SharedState>();
+                handle_char_known_for_auto_switch(&conn.app, state.inner(), &owned).await;
             }
         }
     }
     let mut sink = OutputSink::Batch(batch);
     if let Some(step) = tick_step {
-        perf.tick_emits += 1;
-        deliver_tick_step(app, stream, profile, lua_timers, step, &mut sink).await?;
+        conn.perf.tick_emits += 1;
+        deliver_tick_step(
+            &conn.app,
+            &mut conn.stream,
+            &conn.profile,
+            &conn.lua_timers,
+            step,
+            &mut sink,
+        )
+        .await?;
     }
     apply_script_result(
-        app,
-        &mut ScriptIo::Session(stream, &mut sink),
-        profile,
-        lua_timers,
+        &conn.app,
+        &mut ScriptIo::Session(&mut conn.stream, &mut sink),
+        &conn.profile,
+        &conn.lua_timers,
         script_apply,
     )
     .await?;
@@ -124,15 +123,16 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     // `onGmcpPackage` helper does the same replacement when
     // computing its listen target.
     // Keep the last affects list for a window that opens between ticks.
-    app.state::<crate::app::state::SharedState>()
+    conn.app
+        .state::<crate::app::state::SharedState>()
         .last_affects
         .observe(&msg.package, &msg.data);
     // A list that changes the affect fulls sends them first, so the
     // windows never draw the list against the old ones (a recast at
     // fewer hours than the old full).
-    crate::affect_full::observe(app, &msg.package, &msg.data);
+    crate::affect_full::observe(&conn.app, &msg.package, &msg.data);
     let event_name = format!("session://gmcp/{}", msg.package.replace('.', "-"));
-    if let Err(e) = app.emit(&event_name, &msg.data) {
+    if let Err(e) = conn.app.emit(&event_name, &msg.data) {
         warn!(error = %e, package = %msg.package, "failed to emit GMCP event");
     }
     // `perf.gmcp_packets` already incremented by the caller before
