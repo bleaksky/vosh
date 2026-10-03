@@ -2,6 +2,20 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.8.1 - 2026-10-03
+
+- Five new themes join the gallery, Solarized Dark and Light, Everforest Dark and Light, and Green Screen, the old school look of green text on black. The gallery now holds 20 themes.
+- Text the game sets to blink now blinks in both renderers, and your prompt design can blink too. Turn off Blinking text in Settings, Appearance, Advanced to keep it still. It starts off when your system reduces motion. More styles in Customize prompt now lists blink and every underline kind.
+- Customize prompt has new forms. Gold and other numbers can group by thousands, the game hour fits a short 12 hour form, the tick can count up from the last tick, a value can step through ten colors by how full it is, a percent can round down as the game does, and a row can push the rest of its text to the right edge. Drawing your own prompt now stays off until you turn it on.
+- The Room, time and weather colors preset colors a room look, the clock and the weather. Exits turn green, the things and people a room lists turn yellow, day and night turn blue, and your target turns bright red. Triggers can match what a room lists or the line of your target, and a highlight keeps the game's colors around it. Keep highlight colors readable, on by default, lightens or darkens a trigger color that would read faint on your theme.
+- Each command you send echoes after a grey ›, which you turn off with Mark your commands. Enter on an empty line sends a bare line and echoes it, as a telnet client does.
+- Turn on Collapse repeated lines in Settings, Appearance and a line the game sends again and again takes one row with its count, on screen and in the scrollback.
+- The map has a 3D style that stacks the floors around you. Drag to turn and tilt it, and scroll or pinch to zoom. The map pane shows the room name in its terminal color with its terrain and region, and it no longer draws false corridors or drops its top row and left column.
+- Affects warn when you choose. Set Running out at and Almost gone at for each character, try the new Draining chips style, and spot a missing tracked affect by its soft dotted edge. Chip hours stay readable on light themes.
+- Text in the panes follows your terminal font size, and faint chat colors lift so they read on the panel.
+- The terminal's right click menu opens any Settings page, and a gear at the right of the title band opens Settings on every platform. The groups in each Automation list fold away, and Vosh remembers which ones you folded.
+- A selection you drag in the scrollback history keeps scrolling with you and never copies the divider or the live text below it. Room contents count armies and things correctly, and clicking through Help search results no longer shifts the window.
+
 ## v0.8.0 - 2026-10-01
 
 - Vosh has a new main window. A slim title band holds the session button, which connects to your saved world, edits it, sets up a new one, or disconnects. The terminal fills the left with a flat command line and a status line under it, and a panel of panes sits on the right. The window title names your character and world, so your taskbar tells your characters apart.
