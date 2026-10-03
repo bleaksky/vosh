@@ -59,7 +59,23 @@ pub(crate) struct FontEntry {
 /// Fill it only through `cached_fonts` on the blocking pool. Its
 /// `get_or_init` blocks for the whole enumeration, and on the main
 /// thread that freezes the app.
-pub(crate) static FONTS_CACHE: OnceLock<Vec<FontEntry>> = OnceLock::new();
+static FONTS_CACHE: OnceLock<Vec<FontEntry>> = OnceLock::new();
+
+/// List every distinct system font family. Sorted, deduped. Errors
+/// from font-kit surface as an empty list rather than a hard fail so
+/// the settings panel still opens on a partially-broken system.
+///
+/// A cached list returns at once. Otherwise the enumeration runs on the
+/// blocking pool, and a call that lands while another thread enumerates
+/// waits there for that result.
+pub(crate) async fn list() -> Vec<FontEntry> {
+    if let Some(list) = FONTS_CACHE.get() {
+        return list.clone();
+    }
+    tauri::async_runtime::spawn_blocking(|| cached_fonts(&FONTS_CACHE, enumerate_fonts).to_vec())
+        .await
+        .unwrap_or_default()
+}
 
 /// Start reading the font list on the blocking pool at launch, so the
 /// first Appearance open finds it in the cache. It returns at once.
@@ -77,14 +93,14 @@ pub(crate) fn warm_font_cache() {
 /// It blocks while the enumeration runs, in this call or in another
 /// thread's, so call it only on the blocking pool, never on the main
 /// thread.
-pub(crate) fn cached_fonts(
+fn cached_fonts(
     cache: &OnceLock<Vec<FontEntry>>,
     enumerate: impl FnOnce() -> Vec<FontEntry>,
 ) -> &[FontEntry] {
     cache.get_or_init(enumerate)
 }
 
-pub(crate) fn enumerate_fonts() -> Vec<FontEntry> {
+fn enumerate_fonts() -> Vec<FontEntry> {
     debug_assert_ne!(
         std::thread::current().name(),
         Some("main"),
@@ -594,9 +610,9 @@ mod tests {
     }
 
     #[test]
-    fn the_command_lists_off_the_main_thread() {
-        let first = tauri::async_runtime::block_on(crate::ipc::ui_config::fonts_list());
-        let again = tauri::async_runtime::block_on(crate::ipc::ui_config::fonts_list());
+    fn the_list_reads_off_the_main_thread() {
+        let first = tauri::async_runtime::block_on(list());
+        let again = tauri::async_runtime::block_on(list());
         assert!(same(&first, &enumerate_fonts()));
         assert!(same(&first, &again));
     }
