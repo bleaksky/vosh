@@ -1,7 +1,8 @@
 //! Input pipeline. Takes a typed command line, applies variable
 //! interpolation and alias expansion, and returns the bytes to send to the
 //! server. Recognizes a small set of slash commands that target the local
-//! profile rather than the connection.
+//! profile rather than the connection. [`run_typed_line`] runs a line you
+//! type from end to end and hands its bytes to the session.
 
 mod automation;
 mod profile;
@@ -12,10 +13,18 @@ pub(crate) mod target;
 mod tick;
 mod vars;
 
+use tauri::{AppHandle, Emitter};
 use vosh_automation::alias::{ExpandError, ExpandStep};
 
+use crate::app::events::{self, ListChanges, ListRevisions, HELP_OPEN};
+use crate::app::state::{note_ui_config_replaced, SharedState};
+use crate::disk::save::settle_line_effects;
+use crate::output;
+use crate::profile::switch::read_shared_layer;
 use crate::profile::Profile;
+use crate::prompt::{prompt_look, request_prompt_repaint};
 use crate::script::{run_alias_body, ApplyResult};
+use crate::session::{self, TargetPayload};
 
 use slash::handle_slash;
 use target::{run_target_clear, run_target_cycle, run_target_set};
@@ -43,7 +52,7 @@ pub(crate) static APP_DATA_DIR: std::sync::OnceLock<std::path::PathBuf> =
 
 /// True when `line` is `#profile reset` or `#profile load`, tokenized
 /// exactly like the slash dispatcher, so the persist-suppression
-/// decision in `session_send_input` cannot drift from what actually
+/// decision in [`run_typed_line`] cannot drift from what actually
 /// executes ("#profile  reset" and "# profile load" count too).
 pub(crate) fn is_profile_reset_or_load(line: &str) -> bool {
     let Some(rest) = line.trim_start().strip_prefix('#') else {
@@ -104,6 +113,134 @@ pub(crate) fn help_query(line: &str) -> Option<String> {
 /// profile comes back from [`run_line`].
 pub(crate) fn may_replace_profile(line: &str) -> bool {
     !PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire) && is_profile_reset_or_load(line)
+}
+
+/// What the terminal prints when you send a line with no connection.
+pub(crate) const NOT_CONNECTED: &[u8] = b"\r\n[not connected]\r\n";
+
+/// Run a line you typed, the body of `session_send_input`. `#help` and
+/// `#logs` take their short cuts. Any other line runs through the
+/// pipeline under the profile lock. Then the prompt repaints when the
+/// line changed how it looks, the line's saves and events go out with
+/// your target when it changed, and what it sends and echoes is
+/// delivered.
+pub(crate) async fn run_typed_line<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    line: &str,
+) -> Result<(), String> {
+    // `#help <words>` opens Help on those words. The topics live in the
+    // page, so the main window searches them, opens Help on the best
+    // match, or says in the terminal that none matched.
+    if let Some(words) = help_query(line) {
+        return app
+            .emit_to("main", HELP_OPEN, words)
+            .map_err(|e| e.to_string());
+    }
+    // `#logs` works on the log store, not the profile, and can take a
+    // while on a large log, so it runs on its own task and echoes when
+    // done.
+    if let Some(command) = logs_command(line) {
+        crate::logs::forget_passwords::start(app, command);
+        return Ok(());
+    }
+    // `#profile reset` and `#profile load` replace the live profile
+    // wholesale, panes and tracked affects included. Path B turns them
+    // into echoes, so there they change nothing.
+    let mut effects = LineEffects::default();
+    // The profile file they read holds none of the shared settings, so
+    // global.toml goes back over the result the way a switch lays it.
+    let shared_layer = if may_replace_profile(line) {
+        read_shared_layer(state).await
+    } else {
+        None
+    };
+    let (apply, target_after, look_changed) = {
+        let mut profile = state.profile.lock().await;
+        let lists_before = ListRevisions::of(&profile);
+        let look_before = prompt_look(&profile);
+        let before_name = profile.target.name.clone();
+        let before_idx = profile.target.room_idx;
+        let before_keys = profile.target.quick_keys.clone();
+        let ran = match &shared_layer {
+            Some(layer) => layer.keep_across(&mut profile, |p| run_line(p, line)),
+            None => run_line(&mut profile, line),
+        };
+        // Only a reset, or a load that read its file, replaced the
+        // profile. A load that failed leaves it for the saves to write.
+        effects.note_ran(line, &ran);
+        if ran.replaced {
+            note_ui_config_replaced();
+        }
+        let after_name = profile.target.name.clone();
+        let after_idx = profile.target.room_idx;
+        let after_keys = profile.target.quick_keys.clone();
+        let changed =
+            before_name != after_name || before_idx != after_idx || before_keys != after_keys;
+        let payload = if changed {
+            Some(TargetPayload {
+                name: after_name,
+                room_idx: after_idx,
+                quick_keys: after_keys,
+            })
+        } else {
+            None
+        };
+        // The line's own bytes and echo lines, with what the Lua bodies
+        // of its script aliases send among them, then all else the Lua it
+        // ran asks for. #trigger, #alias, and the Lua they run change the
+        // lists an open Settings page shows, so the result carries every
+        // list the line changed.
+        let mut apply = session::line_script_result(ran);
+        apply.lists = ListChanges::since(lists_before, &profile);
+        let look_changed = prompt_look(&profile) != look_before;
+        (apply, payload, look_changed)
+    };
+    // `#prompt draw` and `#prompt show` change the prompt on screen at
+    // once, and `#prompt default` draws the new design there.
+    if look_changed {
+        request_prompt_repaint(state).await;
+    }
+
+    settle_line_effects(app, effects).await;
+
+    if let Some(payload) = target_after {
+        let _ = app.emit(events::TARGET, payload);
+    }
+
+    deliver_script_result(app, state, apply).await
+}
+
+/// Apply a script result outside the session loop, the way every path
+/// applies one, then print its echo lines on the terminal and send its
+/// bytes to the game. With no connection the terminal says so.
+async fn deliver_script_result<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    apply: ApplyResult,
+) -> Result<(), String> {
+    let (bytes, echoes) =
+        session::collect_script_result(app, &state.profile, &state.script_timers, apply).await;
+    output::echo_lines(app, &echoes);
+
+    if bytes.is_empty() {
+        return Ok(());
+    }
+
+    let mut current = state.session.lock().await;
+    if let Some(handle) = current.as_ref() {
+        if handle.send(bytes) {
+            return Ok(());
+        }
+        // The game closed the connection and the session ended, but its
+        // handle stayed here. A send fails only once the session loop has
+        // returned, so its teardown is done and nothing needs to wait on
+        // it. Take the handle out, so this line and every one after it
+        // finds no connection, as after a disconnect.
+        *current = None;
+    }
+    output::emit_output(app, NOT_CONNECTED.to_vec());
+    Ok(())
 }
 
 /// One line run through the input pipeline.
