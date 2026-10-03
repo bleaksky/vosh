@@ -3,7 +3,7 @@
 use tokio::time::Instant;
 
 use super::slash::parse_braced_pattern;
-use super::{echo_one, error_echo, split_first_word, InputResult};
+use super::{split_first_word, InputResult};
 use crate::profile::Profile;
 
 pub(super) fn slash_tick(profile: &mut Profile, args: &str) -> InputResult {
@@ -14,62 +14,62 @@ pub(super) fn slash_tick(profile: &mut Profile, args: &str) -> InputResult {
         "interval" => match rest.trim().parse::<u64>() {
             Ok(secs) if secs > 0 => {
                 profile.tick.set_interval(secs, now);
-                echo_one(format!("tick interval set to {secs}s"))
+                InputResult::echo_line(format!("tick interval set to {secs}s"))
             }
-            _ => error_echo("usage #tick interval <secs>".to_string()),
+            _ => InputResult::error("usage #tick interval <secs>"),
         },
         "reset" => {
             profile.tick.reset(now);
-            echo_one("tick reset".to_string())
+            InputResult::echo_line("tick reset")
         }
         "on" => {
             let Some((pattern, _rest)) = parse_braced_pattern(rest) else {
-                return error_echo("usage #tick on {pattern}".to_string());
+                return InputResult::error("usage #tick on {pattern}");
             };
             match profile.tick.set_reset_pattern(Some(pattern.clone())) {
-                Ok(()) => echo_one(format!("tick will reset on /{pattern}/")),
-                Err(e) => error_echo(format!("invalid regex: {e}")),
+                Ok(()) => InputResult::echo_line(format!("tick will reset on /{pattern}/")),
+                Err(e) => InputResult::error(format!("invalid regex: {e}")),
             }
         }
         "off" => {
             let _ = profile.tick.set_reset_pattern(None);
-            echo_one("tick reset pattern cleared".to_string())
+            InputResult::echo_line("tick reset pattern cleared")
         }
         "fire" => {
             let trimmed = rest.trim();
             if trimmed.is_empty() {
                 profile.tick.config.auto_fire = None;
-                echo_one("tick auto-fire cleared".to_string())
+                InputResult::echo_line("tick auto-fire cleared")
             } else {
                 profile.tick.config.auto_fire = Some(trimmed.to_string());
-                echo_one(format!("tick auto-fire set to: {trimmed}"))
+                InputResult::echo_line(format!("tick auto-fire set to: {trimmed}"))
             }
         }
         "nofire" => {
             profile.tick.config.auto_fire = None;
-            echo_one("tick auto-fire cleared".to_string())
+            InputResult::echo_line("tick auto-fire cleared")
         }
         "sound" => match rest.trim() {
             "on" => {
                 profile.tick.config.sound = true;
-                echo_one("tick sound on".to_string())
+                InputResult::echo_line("tick sound on")
             }
             "off" => {
                 profile.tick.config.sound = false;
-                echo_one("tick sound off".to_string())
+                InputResult::echo_line("tick sound off")
             }
-            _ => error_echo("usage #tick sound on|off".to_string()),
+            _ => InputResult::error("usage #tick sound on|off"),
         },
         "disable" => {
             profile.tick.disable();
-            echo_one("tick disabled".to_string())
+            InputResult::echo_line("tick disabled")
         }
         "enable" => {
             profile.tick.enable(now);
-            echo_one("tick enabled".to_string())
+            InputResult::echo_line("tick enabled")
         }
         "warn" => slash_tick_warn(profile, rest),
-        other => error_echo(format!("unknown #tick subcommand `{other}`")),
+        other => InputResult::error(format!("unknown #tick subcommand `{other}`")),
     }
 }
 
@@ -91,43 +91,40 @@ fn slash_tick_warn(profile: &mut Profile, args: &str) -> InputResult {
                 "  color:   {}",
                 cfg.warn_color.as_deref().unwrap_or("bright-red")
             ));
-            InputResult {
-                bytes: Vec::new(),
-                echo: lines,
-                    }
+            InputResult::echo_lines(lines)
         }
         "at" => match rest.trim().parse::<u64>() {
             Ok(secs) if secs > 0 => {
                 profile.tick.config.warn_at_secs = Some(secs);
-                echo_one(format!("tick warn set to {secs}s before fire"))
+                InputResult::echo_line(format!("tick warn set to {secs}s before fire"))
             }
-            _ => error_echo("usage #tick warn at <secs>".to_string()),
+            _ => InputResult::error("usage #tick warn at <secs>"),
         },
         "off" => {
             profile.tick.config.warn_at_secs = None;
-            echo_one("tick warn disabled".to_string())
+            InputResult::echo_line("tick warn disabled")
         }
         "message" => {
             let trimmed = rest.trim();
             if trimmed.is_empty() {
                 profile.tick.config.warn_message = None;
-                echo_one("tick warn message cleared (default applies)".to_string())
+                InputResult::echo_line("tick warn message cleared (default applies)")
             } else {
                 profile.tick.config.warn_message = Some(trimmed.to_string());
-                echo_one(format!("tick warn message set to: {trimmed}"))
+                InputResult::echo_line(format!("tick warn message set to: {trimmed}"))
             }
         }
         "color" => {
             let trimmed = rest.trim();
             if trimmed.is_empty() {
                 profile.tick.config.warn_color = None;
-                echo_one("tick warn color cleared (default bright-red)".to_string())
+                InputResult::echo_line("tick warn color cleared (default bright-red)")
             } else {
                 profile.tick.config.warn_color = Some(trimmed.to_string());
-                echo_one(format!("tick warn color set to: {trimmed}"))
+                InputResult::echo_line(format!("tick warn color set to: {trimmed}"))
             }
         }
-        other => error_echo(format!(
+        other => InputResult::error(format!(
             "unknown #tick warn subcommand `{other}`. usage: at <secs> | off | message <text> | color <name>"
         )),
     }
@@ -165,8 +162,5 @@ fn slash_tick_show(profile: &Profile, now: Instant) -> InputResult {
         }
         None => lines.push("  warn (off)".to_string()),
     }
-    InputResult {
-        bytes: Vec::new(),
-        echo: lines,
-    }
+    InputResult::echo_lines(lines)
 }

@@ -4,7 +4,7 @@
 
 use vosh_automation::vars::Scope;
 
-use super::{echo_one, error_echo, split_first_word, InputResult};
+use super::{split_first_word, InputResult};
 use crate::profile::{Profile, QuickKey, RoomChar};
 
 const TARGET_KEYWORDS: &[&str] = &["tar", "tarn", "tarp", "tarclear"];
@@ -60,7 +60,7 @@ pub(super) fn run_target_set(profile: &mut Profile, args: &str) -> InputResult {
     // an index alone isn't usable as a command keyword.
     if let Ok(n) = arg.parse::<usize>() {
         if n == 0 || n > profile.room_chars.len() {
-            return error_echo(format!(
+            return InputResult::error(format!(
                 "no char #{n} in room (have {})",
                 profile.room_chars.len()
             ));
@@ -68,7 +68,7 @@ pub(super) fn run_target_set(profile: &mut Profile, args: &str) -> InputResult {
         let name = profile.room_chars[n - 1].name.clone();
         profile.target.name = Some(name.clone());
         refresh_target_idx(profile);
-        return echo_one(format!("target: {name}"));
+        return InputResult::echo_line(format!("target: {name}"));
     }
     // Non-numeric → use the literal string the user typed. The MUD
     // parses commands with its own keyword matching, so short forms
@@ -79,16 +79,16 @@ pub(super) fn run_target_set(profile: &mut Profile, args: &str) -> InputResult {
     profile.target.name = Some(arg.to_string());
     refresh_target_idx(profile);
     if profile.target.room_idx.is_some() {
-        echo_one(format!("target: {arg}"))
+        InputResult::echo_line(format!("target: {arg}"))
     } else {
-        echo_one(format!("target: {arg} (not in room)"))
+        InputResult::echo_line(format!("target: {arg} (not in room)"))
     }
 }
 
 pub(super) fn run_target_cycle(profile: &mut Profile, step: i32) -> InputResult {
     let n = profile.room_chars.len();
     if n == 0 {
-        return error_echo("no chars in room to cycle through".to_string());
+        return InputResult::error("no chars in room to cycle through");
     }
     let current = profile.target.room_idx.unwrap_or(0) as i32;
     let count = n as i32;
@@ -112,16 +112,16 @@ pub(super) fn run_target_cycle(profile: &mut Profile, step: i32) -> InputResult 
     let name = profile.room_chars[(next - 1) as usize].name.clone();
     profile.target.name = Some(name.clone());
     refresh_target_idx(profile);
-    echo_one(format!("target: {name} (#{next}/{count})"))
+    InputResult::echo_line(format!("target: {name} (#{next}/{count})"))
 }
 
 pub(super) fn run_target_clear(profile: &mut Profile) -> InputResult {
     if profile.target.name.is_none() {
-        return echo_one("no target to clear".to_string());
+        return InputResult::echo_line("no target to clear");
     }
     profile.target.name = None;
     refresh_target_idx(profile);
-    echo_one("target cleared".to_string())
+    InputResult::echo_line("target cleared")
 }
 
 fn list_targets(profile: &Profile) -> InputResult {
@@ -145,10 +145,7 @@ fn list_targets(profile: &Profile) -> InputResult {
         }
         lines.push("usage: tar <N> | tar <substring> | tarn | tarp | tarclear".to_string());
     }
-    InputResult {
-        bytes: Vec::new(),
-        echo: lines,
-    }
+    InputResult::echo_lines(lines)
 }
 
 /// `#target <args>` mirrors the bare `tar` shortcut.
@@ -169,34 +166,34 @@ pub(super) fn slash_target(profile: &mut Profile, args: &str) -> InputResult {
 pub(super) fn slash_qkey(profile: &mut Profile, args: &str) -> InputResult {
     let (name, rest) = split_first_word(args);
     if name.is_empty() {
-        return error_echo("usage: #qkey <name> <verb>  |  #qkey clear <name>".to_string());
+        return InputResult::error("usage: #qkey <name> <verb>  |  #qkey clear <name>");
     }
     if name == "clear" {
         let target = rest.trim();
         if target.is_empty() {
-            return error_echo("usage: #qkey clear <name>".to_string());
+            return InputResult::error("usage: #qkey clear <name>");
         }
         let before = profile.target.quick_keys.len();
         profile.target.quick_keys.retain(|q| q.name != target);
         if profile.target.quick_keys.len() == before {
-            return error_echo(format!("quick-key `{target}` not found"));
+            return InputResult::error(format!("quick-key `{target}` not found"));
         }
-        return echo_one(format!("quick-key `{target}` removed"));
+        return InputResult::echo_line(format!("quick-key `{target}` removed"));
     }
     // Reserved keywords and existing aliases can't be shadowed.
     if is_target_keyword(name) {
-        return error_echo(format!(
+        return InputResult::error(format!(
             "`{name}` is a target keyword — pick another quick-key name"
         ));
     }
     if profile.aliases.get(name).is_some() {
-        return error_echo(format!(
+        return InputResult::error(format!(
             "alias `{name}` exists — `#unalias {name}` first if you want this name"
         ));
     }
     let verb = rest.trim();
     if verb.is_empty() {
-        return error_echo(format!("usage: #qkey {name} <verb>"));
+        return InputResult::error(format!("usage: #qkey {name} <verb>"));
     }
     // Update in place if it exists, otherwise append.
     match profile
@@ -211,12 +208,12 @@ pub(super) fn slash_qkey(profile: &mut Profile, args: &str) -> InputResult {
             verb: verb.to_string(),
         }),
     }
-    echo_one(format!("quick-key `{name}` -> {verb}"))
+    InputResult::echo_line(format!("quick-key `{name}` -> {verb}"))
 }
 
 pub(super) fn slash_qkeys_list(profile: &Profile) -> InputResult {
     if profile.target.quick_keys.is_empty() {
-        return echo_one("no quick-keys defined".to_string());
+        return InputResult::echo_line("no quick-keys defined");
     }
     let mut lines = vec![format!("{} quick-key(s):", profile.target.quick_keys.len())];
     for qk in &profile.target.quick_keys {
@@ -227,8 +224,5 @@ pub(super) fn slash_qkeys_list(profile: &Profile) -> InputResult {
         };
         lines.push(format!("  {:>4}  ->  {verb}", qk.name));
     }
-    InputResult {
-        bytes: Vec::new(),
-        echo: lines,
-    }
+    InputResult::echo_lines(lines)
 }

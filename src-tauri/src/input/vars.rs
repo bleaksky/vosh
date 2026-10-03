@@ -2,33 +2,33 @@
 
 use vosh_automation::vars::Scope;
 
-use super::{echo_one, error_echo, split_first_word, InputResult};
+use super::{split_first_word, InputResult};
 use crate::profile::Profile;
 
 pub(super) fn slash_var(profile: &mut Profile, args: &str) -> InputResult {
     let (name, value) = split_first_word(args);
     if name.is_empty() {
-        return error_echo("usage #var <name> [value]".to_string());
+        return InputResult::error("usage #var <name> [value]");
     }
     if value.is_empty() {
         return match profile.vars.get(name) {
-            Some(v) => echo_one(format!("{name} = {v}")),
-            None => error_echo(format!("var {name} not set")),
+            Some(v) => InputResult::echo_line(format!("{name} = {v}")),
+            None => InputResult::error(format!("var {name} not set")),
         };
     }
     profile.vars.set(Scope::Session, name, value);
-    echo_one(format!("var {name} set"))
+    InputResult::echo_line(format!("var {name} set"))
 }
 
 pub(super) fn slash_unvar(profile: &mut Profile, args: &str) -> InputResult {
     let name = args.trim();
     if name.is_empty() {
-        return error_echo("usage #unvar <name>".to_string());
+        return InputResult::error("usage #unvar <name>");
     }
     if profile.vars.remove(name) {
-        echo_one(format!("var {name} removed"))
+        InputResult::echo_line(format!("var {name} removed"))
     } else {
-        error_echo(format!("var {name} not set"))
+        InputResult::error(format!("var {name} not set"))
     }
 }
 
@@ -40,7 +40,7 @@ pub(super) fn slash_vars_list(profile: &Profile) -> InputResult {
         .collect();
     entries.sort_by(|a, b| a.0.cmp(&b.0));
     if entries.is_empty() {
-        return echo_one("no variables defined".to_string());
+        return InputResult::echo_line("no variables defined");
     }
     let mut lines = Vec::with_capacity(entries.len() + 1);
     lines.push(format!("{} variable(s):", entries.len()));
@@ -51,8 +51,5 @@ pub(super) fn slash_vars_list(profile: &Profile) -> InputResult {
         };
         lines.push(format!("  {s:<7} {name} = {value}"));
     }
-    InputResult {
-        bytes: Vec::new(),
-        echo: lines,
-    }
+    InputResult::echo_lines(lines)
 }

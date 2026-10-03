@@ -38,6 +38,40 @@ pub(crate) struct InputResult {
     pub(crate) echo: Vec<String>,
 }
 
+impl InputResult {
+    /// Echo `lines` and send nothing, what most slash commands return.
+    fn echo_lines(lines: Vec<String>) -> Self {
+        Self {
+            bytes: Vec::new(),
+            echo: lines,
+        }
+    }
+
+    /// Echo one line and send nothing.
+    fn echo_line(line: impl Into<String>) -> Self {
+        Self::echo_lines(vec![line.into()])
+    }
+
+    /// Echo `message` in brackets, the way a command says it failed, and
+    /// send nothing.
+    fn error(message: impl std::fmt::Display) -> Self {
+        Self::echo_line(format!("[{message}]"))
+    }
+
+    /// Send `bytes` and echo nothing.
+    fn send(bytes: Vec<u8>) -> Self {
+        Self {
+            bytes,
+            echo: Vec::new(),
+        }
+    }
+
+    /// Send nothing and echo nothing.
+    fn empty() -> Self {
+        Self::send(Vec::new())
+    }
+}
+
 /// Set at startup (and at migration time) when Path B is live: the
 /// catalog owns authored items and persistence is automatic, so the
 /// legacy #profile save/load/reset trio switches to echo-only.
@@ -366,10 +400,7 @@ fn process_line(
     // A bare Enter sends a blank line to the server. MUDs use this to
     // advance prompts and paginated output.
     if trimmed.is_empty() {
-        return InputResult {
-            bytes: b"\r\n".to_vec(),
-            echo: Vec::new(),
-        };
+        return InputResult::send(b"\r\n".to_vec());
     }
 
     // Target keywords work bare (no `#` prefix) so they feel like
@@ -403,7 +434,7 @@ fn process_line(
     {
         let target = profile.target.name.clone().unwrap_or_default();
         if target.is_empty() {
-            return error_echo("no target — set one with `tar <name|index>` first".to_string());
+            return InputResult::error("no target — set one with `tar <name|index>` first");
         }
         let expansion = format!("{} {}", qk.verb, target);
         let mut inner = process_line(profile, &expansion, replaced, lua);
@@ -429,7 +460,7 @@ fn process_line(
     let steps = match profile.aliases.expand_line_full(&interpolated) {
         Ok(steps) => steps,
         Err(ExpandError::RecursionLimit(depth)) => {
-            return error_echo(format!("alias recursion limit hit ({depth})"));
+            return InputResult::error(format!("alias recursion limit hit ({depth})"));
         }
     };
 
@@ -495,27 +526,6 @@ fn echo_rgb(color: &str) -> Option<(u8, u8, u8)> {
     }
     let channel = |at: usize| u8::from_str_radix(&digits[at..at + 2], 16).ok();
     Some((channel(0)?, channel(2)?, channel(4)?))
-}
-
-fn error_echo(message: String) -> InputResult {
-    InputResult {
-        bytes: Vec::new(),
-        echo: vec![format!("[{message}]")],
-    }
-}
-
-fn echo_one(message: String) -> InputResult {
-    InputResult {
-        bytes: Vec::new(),
-        echo: vec![message],
-    }
-}
-
-fn echo_lines<'a>(lines: impl IntoIterator<Item = &'a str>) -> InputResult {
-    InputResult {
-        bytes: Vec::new(),
-        echo: lines.into_iter().map(str::to_string).collect(),
-    }
 }
 
 #[cfg(test)]

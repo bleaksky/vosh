@@ -663,7 +663,7 @@ fn profile_save_load_and_reset_wait_for_the_relaunch_after_the_wizard() {
 /// cannot stop the retry, and it panics when the lock stays held for
 /// 10 s, so a test that leaks a guard fails instead of hanging.
 fn save_profile_in(p: &mut Profile, app_data: &std::path::Path) -> InputResult {
-    let busy = error_echo(PROFILE_SAVE_BUSY.to_string()).echo;
+    let busy = InputResult::error(PROFILE_SAVE_BUSY).echo;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
         let result = slash_profile_with(p, "save", &mut false, false, Some(app_data));
