@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use tauri::Manager;
 use tracing_subscriber::EnvFilter;
 
 mod affect_full;
@@ -105,31 +104,7 @@ pub fn run() {
                 responder.respond(handle_font_uri(&uri));
             });
         })
-        // Closing the main window should take every auxiliary window
-        // (settings, etc.) down with it. Tauri only exits the process
-        // when the LAST window closes, so without this the settings
-        // popup hangs around alone after the user closes the main
-        // client.
-        .on_window_event(|window, event| {
-            if window.label() != "main" {
-                return;
-            }
-            match event {
-                tauri::WindowEvent::CloseRequested { .. } => {
-                    let app = window.app_handle();
-                    for (label, w) in app.webview_windows() {
-                        if label != "main" {
-                            let _ = w.close();
-                        }
-                    }
-                }
-                // A drag on the native grid whose release may never come
-                // ends as the main window loses focus.
-                #[cfg(native_surface)]
-                tauri::WindowEvent::Focused(false) => native_surface::window_blurred(),
-                _ => {}
-            }
-        })
+        .on_window_event(app::windows::on_window_event)
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_window_state::Builder::default()
