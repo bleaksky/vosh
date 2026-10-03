@@ -1,3 +1,6 @@
+use super::find::collect_matches;
+use super::links::url_in_line;
+use super::regions::{erase_back, find_mark, CursorReport, Mark, RegionStart};
 use super::*;
 use alacritty_terminal::term::cell::Cell;
 use alacritty_terminal::vte::ansi::{Color, NamedColor};

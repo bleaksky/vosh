@@ -536,7 +536,7 @@ fn pointer_down(ev: &PointerEvent) {
     let cell = phys_point_to_cell(ev.x, ev.y, ev.height);
     if ev.open_modifier {
         if let Some((line, col)) = cell {
-            if let Some((url, _, _)) = crate::native::grid::url_at(line, col) {
+            if let Some((url, _, _)) = crate::native::grid::links::url_at(line, col) {
                 platform::open_url(&url);
                 return;
             }
@@ -714,7 +714,7 @@ fn pointer_moved(ev: Option<&PointerEvent>) {
     let next = ev
         .and_then(|e| phys_point_to_cell(e.x, e.y, e.height))
         .and_then(|(line, col)| {
-            crate::native::grid::url_at(line, col).map(|(_, s, e)| (line, s, e))
+            crate::native::grid::links::url_at(line, col).map(|(_, s, e)| (line, s, e))
         });
     set_hover_url(next);
 }
