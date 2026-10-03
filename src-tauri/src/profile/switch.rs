@@ -641,23 +641,4 @@ pub(crate) mod tests {
         // The file that did not read was never written.
         assert_eq!(read(&set.profile_path(DEFAULT_PROFILE_NAME)), UNREADABLE);
     }
-
-    #[tokio::test]
-    async fn a_switch_in_loadout_mode_keeps_the_catalog_presets() {
-        use std::sync::Arc;
-        let state: super::SharedState = Arc::new(AppState::default());
-        *state.global_catalog.lock().await = Some(crate::loadouts::catalog::GlobalCatalog {
-            enabled_presets: Some(vec!["healing_basics".into()]),
-            ..crate::loadouts::catalog::GlobalCatalog::default()
-        });
-        // The switch just loaded Healer's file, with its own older list.
-        state.profile.lock().await.ui.enabled_presets =
-            vec!["healing_basics".into(), "potion_labels".into()];
-        let catalog = state.global_catalog.lock().await.clone().unwrap();
-        super::lay_catalog_over(&mut *state.profile.lock().await, &catalog, None);
-        assert_eq!(
-            state.profile.lock().await.ui.enabled_presets,
-            vec!["healing_basics".to_string()]
-        );
-    }
 }

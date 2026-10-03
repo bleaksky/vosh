@@ -190,6 +190,19 @@ mod tests {
     }
 
     #[test]
+    fn the_overlay_hands_the_catalog_presets_to_the_profile() {
+        let catalog = GlobalCatalog {
+            enabled_presets: Some(vec!["healing_basics".into()]),
+            ..GlobalCatalog::default()
+        };
+        // A switch just loaded the Healer file, with its own older list.
+        let mut p = Profile::default();
+        p.ui.enabled_presets = vec!["healing_basics".into(), "potion_labels".into()];
+        lay_catalog_over(&mut p, &catalog, None);
+        assert_eq!(p.ui.enabled_presets, ["healing_basics"]);
+    }
+
+    #[test]
     fn loadout_mode_off_when_catalog_missing() {
         let dir = tmpdir();
         assert!(!loadout_mode_on(&dir));
