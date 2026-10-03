@@ -32,7 +32,7 @@ use crate::app::events::{
 };
 
 #[cfg(target_os = "macos")]
-#[path = "macos.rs"]
+#[path = "surface/macos.rs"]
 mod platform;
 
 mod split_drag;

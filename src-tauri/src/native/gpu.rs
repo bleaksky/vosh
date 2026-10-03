@@ -1403,9 +1403,9 @@ fn weighted_face(
 // name differs), so load the bundled faces directly to match the webview
 // exactly.
 const JETBRAINS_REGULAR: &[u8] =
-    include_bytes!("../../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf");
+    include_bytes!("../../../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf");
 const JETBRAINS_BOLD: &[u8] =
-    include_bytes!("../../src/assets/fonts/JetBrainsMonoNerdFont-Bold.ttf");
+    include_bytes!("../../../src/assets/fonts/JetBrainsMonoNerdFont-Bold.ttf");
 
 fn font_from_handle(handle: font_kit::handle::Handle) -> Option<Font> {
     let kit_font = handle.load().ok()?;
@@ -3398,7 +3398,7 @@ mod tests {
         // The same cases run against renderFontStack in
         // src/lib/fontLoader.ts, so xterm and the atlas try the same
         // families in the same order.
-        let text = include_str!("../../fixtures/font-stacks/cases.json");
+        let text = include_str!("../../../fixtures/font-stacks/cases.json");
         let fixture: serde_json::Value = serde_json::from_str(text).unwrap();
         let cases = fixture["cases"].as_array().unwrap();
         assert!(!cases.is_empty(), "expected entries");
@@ -3839,7 +3839,7 @@ mod tests {
 
     #[test]
     fn bands_match_the_cases_xterm_draws() {
-        let text = include_str!("../../fixtures/prompt-bands/cases.json");
+        let text = include_str!("../../../fixtures/prompt-bands/cases.json");
         let fixture: BandCases = serde_json::from_str(text).expect("the band cases parse");
         let c = &fixture.constants;
         assert_eq!(
