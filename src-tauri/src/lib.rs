@@ -101,7 +101,7 @@ mod preset_rollout;
 mod profile;
 mod profile_config;
 mod profile_set;
-mod prompt_commands;
+mod prompt;
 mod prompt_lookup;
 mod prompt_migration;
 mod room_block;
@@ -381,24 +381,24 @@ pub fn run() {
             commands::hidden_get,
             commands::prompt_show_get,
             prompt_lookup::prompt_last_seen,
-            prompt_commands::prompt_config_get,
-            prompt_commands::prompt_config_set,
-            prompt_commands::prompt_card_open,
-            prompt_commands::prompt_code_reader_set,
-            prompt_commands::prompt_designs_list,
-            prompt_commands::prompt_compile,
-            prompt_commands::prompt_candidates,
-            prompt_commands::prompt_capture_check,
-            prompt_commands::prompt_capture_from_line,
-            prompt_commands::prompt_render,
-            prompt_commands::prompt_render_many,
-            prompt_commands::prompt_preview_set,
-            prompt_commands::prompt_edit,
-            prompt_commands::prompt_describe,
-            prompt_commands::prompt_forms,
-            prompt_commands::prompt_line_triggers,
-            prompt_commands::prompt_state_get,
-            prompt_commands::prompt_watch,
+            prompt::prompt_config_get,
+            prompt::prompt_config_set,
+            prompt::prompt_card_open,
+            prompt::prompt_code_reader_set,
+            prompt::prompt_designs_list,
+            prompt::prompt_compile,
+            prompt::prompt_candidates,
+            prompt::prompt_capture_check,
+            prompt::prompt_capture_from_line,
+            prompt::prompt_render,
+            prompt::prompt_render_many,
+            prompt::prompt_preview_set,
+            prompt::prompt_edit,
+            prompt::prompt_describe,
+            prompt::prompt_forms,
+            prompt::prompt_line_triggers,
+            prompt::prompt_state_get,
+            prompt::prompt_watch,
             commands::prompt_gags_without_reader,
             characters::profile_export_file,
             commands::ui_set_theme,

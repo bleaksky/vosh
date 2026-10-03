@@ -2969,7 +2969,7 @@ async fn finish_read<R: tauri::Runtime>(
             p.prompt.vars.take_hidden_change(),
             p.prompt.take_seen(),
             p.prompt.take_status_change(),
-            watched.then(|| crate::prompt_commands::prompt_state(&p)),
+            watched.then(|| crate::prompt::prompt_state(&p)),
             clock_after(&p, Instant::now()),
         )
     };
@@ -3016,7 +3016,7 @@ fn watched_state<R: tauri::Runtime>(
     app: &AppHandle<R>,
     p: &Profile,
 ) -> Option<vosh_prompt::card::state::PromptState> {
-    watching_prompt(app).then(|| crate::prompt_commands::prompt_state(p))
+    watching_prompt(app).then(|| crate::prompt::prompt_state(p))
 }
 
 /// Send `state` on `session://prompt-state`, when there is one.

@@ -42,7 +42,7 @@ fn case(template: &str, show: PromptShow) -> serde_json::Value {
         .filter(|read| !read.out.is_empty())
         .map(|read| serde_json::to_value(OutputPayload::from_output(&read.out)).expect("json"))
         .collect();
-    let state = crate::prompt_commands::prompt_state(&session.p);
+    let state = crate::prompt::prompt_state(&session.p);
     let native: serde_json::Map<String, serde_json::Value> = WIDTHS
         .into_iter()
         .filter(|_| show != PromptShow::Pinned)
