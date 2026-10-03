@@ -118,7 +118,6 @@ async fn play(session: Arc<Vec<u8>>) -> Run {
     crate::term_grid::blank_shared_grid_for_test(COLUMNS, ROWS);
     let listener = TcpListener::bind("127.0.0.1:0").expect("a local port");
     let port = listener.local_addr().expect("an address").port();
-    let _forsaken = crate::session::count_as_forsaken_lands(port);
     let dir = tempfile::tempdir().expect("a temporary folder");
     let state: SharedState = Arc::new(AppState::default());
     let log = dir.path().join("logs.sqlite");
@@ -188,11 +187,13 @@ async fn play(session: Arc<Vec<u8>>) -> Run {
         socket.write_all(&session).expect("the session");
         socket.shutdown(Shutdown::Write).expect("the close");
     });
+    // The fake Aabahran counts as The Forsaken Lands.
     let handle = crate::session::spawn(
         app.handle().clone(),
         "127.0.0.1".into(),
         port,
         false,
+        true,
         state.profile.clone(),
         state.script_timers.clone(),
         state.logs.clone(),

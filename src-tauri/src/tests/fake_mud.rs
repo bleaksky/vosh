@@ -7,7 +7,7 @@
 //! listeners, and a native grid replays the output the way the terminal
 //! shows it. The profile folder and the log live in a temporary folder.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
@@ -113,9 +113,9 @@ struct Harness {
     fake: Arc<StdMutex<Options>>,
     /// How many times a client asked the fake game for EOR.
     eor_asks: Arc<AtomicUsize>,
-    /// The fake game counts as The Forsaken Lands while this holds a
-    /// guard, which drops with the harness.
-    forsaken: StdMutex<Option<crate::session::ForsakenTestPort>>,
+    /// Whether the fake game counts as The Forsaken Lands when the
+    /// session connects.
+    forsaken: AtomicBool,
 }
 
 impl Harness {
@@ -166,7 +166,7 @@ impl Harness {
             port,
             fake,
             eor_asks,
-            forsaken: StdMutex::new(None),
+            forsaken: AtomicBool::new(false),
         }
     }
 
@@ -190,6 +190,7 @@ impl Harness {
             "127.0.0.1".into(),
             self.port,
             false,
+            self.forsaken.load(Ordering::SeqCst),
             state.profile.clone(),
             state.script_timers.clone(),
             state.logs.clone(),
@@ -343,10 +344,9 @@ impl Harness {
 
     /// Have the fake game count as The Forsaken Lands, as the real host
     /// does, so a capture that reads no Aabahran codes plays by its rules.
-    /// It stops counting when the harness goes.
+    /// It counts from the next connect on.
     fn count_as_forsaken_lands(&self) {
-        let guard = crate::session::count_as_forsaken_lands(self.port);
-        *self.forsaken.lock().expect("the guard") = Some(guard);
+        self.forsaken.store(true, Ordering::SeqCst);
     }
 
     /// Where the profile `name` keeps its file.
