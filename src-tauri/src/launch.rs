@@ -8,7 +8,7 @@ use std::path::Path;
 use tracing::{error, info};
 
 use crate::app::state::SharedState;
-use crate::loadout_store::WizardRun;
+use crate::loadouts::wizard::journal::{self, WizardRun};
 use crate::{loadout_store, profile_config, profile_set};
 
 /// What [`load`] found.
@@ -34,7 +34,7 @@ pub(crate) struct Launch {
 /// for every character. The session runs on the active profile file
 /// alone.
 pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
-    let run = loadout_store::finish_wizard_run(app_data);
+    let run = journal::finish_wizard_run(app_data);
     state.add_launch_notices(run.notices());
     let relaunch_pending =
         crate::app::state::MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
