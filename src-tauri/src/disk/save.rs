@@ -368,7 +368,7 @@ pub(crate) mod tests {
             theme: crate::profile_set::Scope::Profile,
             ..crate::profile_set::ScopeConfig::default()
         };
-        crate::commands::change_scope_locked(state, scope)
+        crate::ipc::profiles::change_scope_locked(state, scope)
             .await
             .map(|_| ())
     }

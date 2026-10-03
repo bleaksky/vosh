@@ -59,9 +59,7 @@ mod upgrade_order_tests;
 use app::state::{AppState, SharedState};
 use commands::{
     app_quit, loadouts_get_state, loadouts_set_active, migration_analyze, migration_apply,
-    open_help_window, open_settings_window, profile_create, profile_delete, profile_duplicate,
-    profile_get_scope, profile_rename, profile_resolve_match, profile_set_scope, profile_switch,
-    profiles_list, updater_check, updater_install_and_relaunch,
+    open_help_window, open_settings_window, updater_check, updater_install_and_relaunch,
 };
 use fonts::handle_font_uri;
 
@@ -161,13 +159,13 @@ pub fn run() {
             ipc::ui_config::ui_set_config,
             updater_check,
             updater_install_and_relaunch,
-            profiles_list,
-            profile_create,
-            profile_delete,
-            profile_rename,
-            profile_duplicate,
-            profile_switch,
-            profile_resolve_match,
+            ipc::profiles::profiles_list,
+            ipc::profiles::profile_create,
+            ipc::profiles::profile_delete,
+            ipc::profiles::profile_rename,
+            ipc::profiles::profile_duplicate,
+            ipc::profiles::profile_switch,
+            ipc::profiles::profile_resolve_match,
             migration_analyze,
             migration_apply,
             app_quit,
@@ -177,8 +175,8 @@ pub fn run() {
             loadouts_set_active,
             ipc::tick::tick_get_config,
             ipc::tick::tick_set_config,
-            profile_get_scope,
-            profile_set_scope,
+            ipc::profiles::profile_get_scope,
+            ipc::profiles::profile_set_scope,
             open_settings_window,
             open_help_window,
             app::windows::window_backdrop_set,
