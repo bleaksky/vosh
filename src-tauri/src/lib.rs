@@ -58,8 +58,8 @@ mod upgrade_order_tests;
 
 use app::state::{AppState, SharedState};
 use commands::{
-    app_quit, loadouts_get_state, loadouts_set_active, migration_analyze, migration_apply,
-    open_help_window, open_settings_window, updater_check, updater_install_and_relaunch,
+    app_quit, migration_analyze, migration_apply, open_help_window, open_settings_window,
+    updater_check, updater_install_and_relaunch,
 };
 use fonts::handle_font_uri;
 
@@ -171,8 +171,8 @@ pub fn run() {
             app_quit,
             commands::launch_notices_take,
             app::exit::pending_writes_flushed,
-            loadouts_get_state,
-            loadouts_set_active,
+            ipc::loadouts::loadouts_get_state,
+            ipc::loadouts::loadouts_set_active,
             ipc::tick::tick_get_config,
             ipc::tick::tick_set_config,
             ipc::profiles::profile_get_scope,
