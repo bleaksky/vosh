@@ -4,6 +4,13 @@
 //! `grid` is the cell grid the game's output builds, `gpu` turns its
 //! cells into pixels with wgpu, and `surface` places those pixels under
 //! the webview and answers the page's commands.
+//!
+//! Lock order. A frame runs on the main thread. It holds the surface
+//! slot, then the shared grid, and with both held it reads the find
+//! list, the hovered link and the style statics, one at a time. Nothing
+//! that holds a lock later in that order takes an earlier one, so no two
+//! threads can each wait for the other. docs/architecture.md gives the
+//! same order beside the app's.
 
 pub(crate) mod gpu;
 pub(crate) mod grid;

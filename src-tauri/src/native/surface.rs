@@ -137,7 +137,8 @@ pub(crate) fn request_redraw() {
 }
 
 /// Past the flip, so the timer's frame lands in the new half even when
-/// its clock and the wall clock part by a millisecond.
+/// its clock and the wall clock part by a millisecond. The page's blink
+/// timer waits the same (`BLINK_SLACK_MS` in src/lib/blink.ts).
 const BLINK_SLACK: std::time::Duration = std::time::Duration::from_millis(2);
 
 /// The moment a frame draws its blinking text at, in milliseconds since
