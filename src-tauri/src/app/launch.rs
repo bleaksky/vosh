@@ -89,12 +89,12 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
             let _ = crate::app::windows::enable_macos_spellcheck(&window);
         }
     }
-    // Tier 3: install the native terminal surface over the webview
-    // in the main window. See native/surface.rs.
+    // The native terminal surface goes under the main window's webview.
+    // See native/surface.rs.
     #[cfg(native_surface)]
     {
         if let Some(main) = app.get_webview_window("main") {
-            let _ = crate::native::surface::install_probe(&main);
+            let _ = crate::native::surface::install(&main);
         }
     }
 }
