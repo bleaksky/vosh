@@ -1695,8 +1695,8 @@ fn frame_inputs(grid: &TermGrid) -> FrameInputs {
             selrow: paint(40, 44, 52, 1.0),
             ring: None,
         },
-        ground: Rgb { r: 0, g: 0, b: 0 },
-        palette: ANSI_16,
+        wash_ground: Rgb { r: 0, g: 0, b: 0 },
+        wash_palette: ANSI_16,
         bands: false,
         reach: 0.0,
     }

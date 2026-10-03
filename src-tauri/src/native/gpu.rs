@@ -497,8 +497,8 @@ impl CellRenderer {
             split_ratio,
             placement,
             chrome: chrome_paint(),
-            ground: theme_bg(),
-            palette: std::array::from_fn(ansi16),
+            wash_ground: theme_bg(),
+            wash_palette: std::array::from_fn(ansi16),
             bands: prompt_bands(),
             reach: prompt_reach(),
         };
@@ -543,7 +543,7 @@ impl CellRenderer {
         // Clear to the terminal background so any sliver beyond the grid
         // matches the cells. The surface is a non-sRGB format and the shader
         // writes sRGB-encoded values, so the clear is the raw sRGB bg.
-        let bg = inputs.ground;
+        let bg = theme_bg();
         let clear = [
             f32::from(bg.r) / 255.0,
             f32::from(bg.g) / 255.0,
