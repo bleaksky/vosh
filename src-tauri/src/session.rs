@@ -4,9 +4,10 @@
 //! and [`disconnect`] ends it. The payloads of the events the session
 //! emits sit here too. Each file under `session/` does one job.
 //!
-//! - `conn` is the loop. It sends your lines, takes each socket read,
-//!   repaints your prompt when a deadline passes, polls the tick and the
-//!   timers, and ends the connection.
+//! - `conn` is the loop and the `Conn` that holds what it owns for a
+//!   connection. It sends your lines, takes each socket read, repaints
+//!   your prompt when a deadline passes, polls the tick and the timers,
+//!   and ends the connection.
 //! - `connection` opens the plain or TLS socket.
 //! - `read` is the socket read path, from each telnet event to what the
 //!   end of a read sends.
@@ -335,7 +336,6 @@ pub(crate) async fn disconnect<R: tauri::Runtime>(app: &AppHandle<R>, state: &Sh
 ///
 /// The session shares the live profile, the Lua timers, the log store and
 /// the scrollback ring in `state` with the rest of the app.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn spawn<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: &SharedState,

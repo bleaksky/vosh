@@ -5,31 +5,22 @@
 //! gathered, once. A partial that waited for the next read, and the lines
 //! held for the rest of a prompt, go out the same way.
 
-use std::sync::Arc;
-
 use tauri::{AppHandle, Emitter};
-use tokio::sync::Mutex;
 use tokio::time::Instant;
 use tracing::warn;
 use vosh_automation::trigger::LineResult;
 use vosh_prompt::stage::Output;
-use vosh_protocol::telnet::{
-    codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Negotiator,
-};
+use vosh_protocol::telnet::{codes as telnet_codes, option as telnet_option, Event as TelnetEvent};
 
 use crate::app::events;
 use crate::output::output_count;
-use crate::profile::Profile;
-use crate::script::SharedTimers;
 
-use super::batch::{emit_session_output, ReadBatch, Settle};
+use super::batch::{emit_session_output, ReadBatch};
+use super::conn::Conn;
 use super::connection::Stream;
-use super::echo::ServerEcho;
 use super::effects::{apply_script_result, deliver_tick_step, OutputSink, ScriptIo};
 use super::gmcp::{handle_gmcp, hello_subnegotiation, supports_subnegotiation};
-use super::lines::LineAccumulator;
 use super::log_sink::LogSink;
-use super::perf::PerfCounters;
 use super::prompt_view::{
     emit_prompt_state, report_game_prompt_seen, send_prompt_vars, watching_prompt,
 };
@@ -40,27 +31,19 @@ use super::{emit_input_mode, GagWithoutReaderPayload, RoutedPayload};
 
 pub(super) const READ_BUFFER_BYTES: usize = 8 * 1024;
 
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn handle_event<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    stream: &mut Stream,
-    negotiator: &mut Negotiator,
-    accumulator: &mut LineAccumulator,
-    profile: &Arc<Mutex<Profile>>,
-    lua_timers: &SharedTimers,
+    conn: &mut Conn<R>,
     sink: &LogSink,
-    server_echo: &mut ServerEcho,
     event: TelnetEvent,
     batch: &mut ReadBatch,
-    perf: &mut PerfCounters,
 ) -> std::io::Result<()> {
     // WILL ECHO means the server takes over echoing what you type, which
     // ROM derivatives do for a password prompt. WONT ECHO hands echo back.
     // Note it before anything else in the event runs, then tell the
     // frontend to mask or unmask the input row. The negotiation reply
     // goes out through the catch all arm below.
-    if let Some(held) = server_echo.observe(&event) {
-        emit_input_mode(app, held);
+    if let Some(held) = conn.server_echo.observe(&event) {
+        emit_input_mode(&conn.app, held);
     }
     match event {
         TelnetEvent::Data(bytes) => {
@@ -77,8 +60,8 @@ pub(super) async fn handle_event<R: tauri::Runtime>(
             // they have ordering semantics (a `gag` action mutates the
             // line's display before it lands in the batch). Log rows
             // flush in one transaction once the socket is quiet.
-            for line in accumulator.feed(&bytes) {
-                perf.lines_processed += 1;
+            for line in conn.accumulator.feed(&bytes) {
+                conn.perf.lines_processed += 1;
                 let plain = vosh_protocol::ansi::plain_text(&line.bytes);
                 let trigger_t0 = std::time::Instant::now();
                 // Phase 5 perf fix: take the tick step for a line that
@@ -89,23 +72,22 @@ pub(super) async fn handle_event<R: tauri::Runtime>(
                 // Send each tick command to run after the lock drops.
                 let steps = {
                     let lock_t0 = std::time::Instant::now();
-                    let mut p = profile.lock().await;
-                    perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
-                    perf.mutex_acquires += 1;
+                    let mut p = conn.profile.lock().await;
+                    conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
+                    conn.perf.mutex_acquires += 1;
                     line_step(&mut p, batch, line, plain, Instant::now(), sink.id())
                 };
-                perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
+                conn.perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
                 for step in steps {
-                    deliver_line_step(app, stream, profile, lua_timers, sink, batch, step, perf)
-                        .await?;
+                    deliver_line_step(conn, sink, batch, step).await?;
                 }
             }
             Ok(())
         }
         TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
-            perf.gmcp_packets += 1;
+            conn.perf.gmcp_packets += 1;
             batch.gmcp = true;
-            handle_gmcp(app, profile, lua_timers, stream, &payload, batch, perf).await?;
+            handle_gmcp(conn, &payload, batch).await?;
             Ok(())
         }
         TelnetEvent::Command(byte) if byte == telnet_codes::EOR || byte == telnet_codes::GA => {
@@ -117,12 +99,17 @@ pub(super) async fn handle_event<R: tauri::Runtime>(
             // with one too. Either way the candidates ring records one
             // entry.
             let steps = {
-                let mut p = profile.lock().await;
-                marker_step(&mut p, accumulator, batch, Instant::now(), sink.id())
+                let mut p = conn.profile.lock().await;
+                marker_step(
+                    &mut p,
+                    &mut conn.accumulator,
+                    batch,
+                    Instant::now(),
+                    sink.id(),
+                )
             };
             for step in steps {
-                deliver_line_step(app, stream, profile, lua_timers, sink, batch, step, perf)
-                    .await?;
+                deliver_line_step(conn, sink, batch, step).await?;
             }
             Ok(())
         }
@@ -130,93 +117,72 @@ pub(super) async fn handle_event<R: tauri::Runtime>(
             // Accept GMCP via the negotiator, then immediately announce
             // ourselves and the packages we want. A WILL GMCP once it is
             // on gets no answer and no second hello.
-            let was_on = negotiator.server_does(opt);
-            let response = negotiator.handle(&TelnetEvent::Will(opt));
-            stream.write_all(&response).await?;
-            if !was_on && negotiator.server_does(opt) {
-                stream.write_all(&hello_subnegotiation()).await?;
-                stream.write_all(&supports_subnegotiation()).await?;
+            let was_on = conn.negotiator.server_does(opt);
+            let response = conn.negotiator.handle(&TelnetEvent::Will(opt));
+            conn.stream.write_all(&response).await?;
+            if !was_on && conn.negotiator.server_does(opt) {
+                conn.stream.write_all(&hello_subnegotiation()).await?;
+                conn.stream.write_all(&supports_subnegotiation()).await?;
             }
-            stream.flush().await?;
+            conn.stream.flush().await?;
             Ok(())
         }
         other => {
-            let response = negotiator.handle(&other);
+            let response = conn.negotiator.handle(&other);
             if !response.is_empty() {
-                stream.write_all(&response).await?;
-                stream.flush().await?;
+                conn.stream.write_all(&response).await?;
+                conn.stream.flush().await?;
             }
             Ok(())
         }
     }
 }
 
-/// Paint a partial that waited and send it out. `seen` becomes the output
-/// count after it.
-pub(super) async fn flush_hold<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    profile: &Arc<Mutex<Profile>>,
-    accumulator: &mut LineAccumulator,
-    seen: &mut u64,
-    settle: &mut Settle,
-) {
+/// Paint a partial that waited and send it out. `seen_output` becomes
+/// the output count after it.
+pub(super) async fn flush_hold<R: tauri::Runtime>(conn: &mut Conn<R>) {
     let out = {
-        let mut p = profile.lock().await;
-        let mut out = Output::new(output_count() != *seen);
-        hold_step(&mut p, accumulator, &mut out);
+        let mut p = conn.profile.lock().await;
+        let mut out = Output::new(output_count() != conn.seen_output);
+        hold_step(&mut p, &mut conn.accumulator, &mut out);
         out
     };
     if !out.is_empty() {
-        *seen = emit_session_output(app, &out, settle);
+        conn.seen_output = emit_session_output(&conn.app, &out, &mut conn.settle);
     }
 }
 
 /// Let go of the lines the stage holds for the rest of a prompt, through
 /// [`let_go_held`], and send what their Line pass left: the routes, the
-/// scrollback, what their triggers send, and the log rows. `seen`
+/// scrollback, what their triggers send, and the log rows. `seen_output`
 /// becomes the output count after it.
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    stream: &mut Stream,
-    profile: &Arc<Mutex<Profile>>,
-    lua_timers: &SharedTimers,
+    conn: &mut Conn<R>,
     sink: &mut LogSink,
-    seen: &mut u64,
-    settle: &mut Settle,
-    perf: &mut PerfCounters,
 ) -> std::io::Result<()> {
-    let mut batch = ReadBatch::new(*seen);
+    let mut batch = ReadBatch::new(conn.seen_output);
     let steps = {
-        let mut p = profile.lock().await;
+        let mut p = conn.profile.lock().await;
         if !p.prompt.stage.holds() {
             return Ok(());
         }
         let_go_held(&mut p, &mut batch, Instant::now(), sink.id())
     };
     for step in steps {
-        deliver_line_step(
-            app, stream, profile, lua_timers, sink, &mut batch, step, perf,
-        )
-        .await?;
+        deliver_line_step(conn, sink, &mut batch, step).await?;
     }
-    finish_read(app, profile, sink, batch, seen, settle, perf).await;
+    finish_read(conn, sink, batch).await;
     Ok(())
 }
 
 /// Do what a line step left for after the profile lock: emit its routes,
 /// keep it for scrollback, send what its triggers send, apply its Lua
 /// actions' IO into the batch, and run the tick command it fired.
-#[allow(clippy::too_many_arguments)]
 async fn deliver_line_step<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    stream: &mut Stream,
-    profile: &Arc<Mutex<Profile>>,
-    lua_timers: &SharedTimers,
+    conn: &mut Conn<R>,
     sink: &LogSink,
     batch: &mut ReadBatch,
     step: LineStep,
-    perf: &mut PerfCounters,
 ) -> std::io::Result<()> {
     let LineStep {
         result,
@@ -226,51 +192,59 @@ async fn deliver_line_step<R: tauri::Runtime>(
         repeat,
     } = step;
     if !result.routes.is_empty() {
-        perf.routed_emits += result.routes.len() as u64;
+        conn.perf.routed_emits += result.routes.len() as u64;
     }
-    emit_line_routes(app, &result);
+    emit_line_routes(&conn.app, &result);
     for text in kept {
         let sb_t0 = std::time::Instant::now();
         // The ring keeps a run of repeated lines once, as the screen shows
         // it.
         sink.scrollback.lock().await.keep(text, repeat);
-        perf.scrollback_push_ns += sb_t0.elapsed().as_nanos() as u64;
-        perf.scrollback_pushes += 1;
+        conn.perf.scrollback_push_ns += sb_t0.elapsed().as_nanos() as u64;
+        conn.perf.scrollback_pushes += 1;
     }
-    send_trigger_outputs(stream, &result.sends).await?;
+    send_trigger_outputs(&mut conn.stream, &result.sends).await?;
     let mut sink = OutputSink::Batch(batch);
     apply_script_result(
-        app,
-        &mut ScriptIo::Session(stream, &mut sink),
-        profile,
-        lua_timers,
+        &conn.app,
+        &mut ScriptIo::Session(&mut conn.stream, &mut sink),
+        &conn.profile,
+        &conn.lua_timers,
         apply,
     )
     .await?;
     if let Some(step) = tick_step {
-        deliver_tick_step(app, stream, profile, lua_timers, step, &mut sink).await?;
+        deliver_tick_step(
+            &conn.app,
+            &mut conn.stream,
+            &conn.profile,
+            &conn.lua_timers,
+            step,
+            &mut sink,
+        )
+        .await?;
     }
     Ok(())
 }
 
 /// The end of a read, see [`partial_step`], and the IO its prompt left.
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn end_read<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    stream: &mut Stream,
-    accumulator: &mut LineAccumulator,
-    profile: &Arc<Mutex<Profile>>,
-    lua_timers: &SharedTimers,
+    conn: &mut Conn<R>,
     sink: &LogSink,
     batch: &mut ReadBatch,
-    perf: &mut PerfCounters,
 ) -> std::io::Result<()> {
     let step = {
-        let mut p = profile.lock().await;
-        partial_step(&mut p, accumulator, batch, Instant::now(), sink.id())
+        let mut p = conn.profile.lock().await;
+        partial_step(
+            &mut p,
+            &mut conn.accumulator,
+            batch,
+            Instant::now(),
+            sink.id(),
+        )
     };
     if let Some(step) = step {
-        deliver_line_step(app, stream, profile, lua_timers, sink, batch, step, perf).await?;
+        deliver_line_step(conn, sink, batch, step).await?;
     }
     Ok(())
 }
@@ -280,18 +254,14 @@ pub(super) async fn end_read<R: tauri::Runtime>(
 /// a prompt was read or they changed, and the hidden state when it
 /// changed. Once per read, so the packets of one pulse never show the
 /// panes a state between them. Its frame and its log rows wait in
-/// `settle` for the end of the burst of reads. `seen` becomes the output
-/// count after this read's output. Returns when a clock piece in your
-/// design next shows another second, which the lock this takes anyway
-/// reads, so a read costs no other lock for it.
+/// `settle` for the end of the burst of reads. `seen_output` becomes the
+/// output count after this read's output. Returns when a clock piece in
+/// your design next shows another second, which the lock this takes
+/// anyway reads, so a read costs no other lock for it.
 pub(super) async fn finish_read<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    profile: &Arc<Mutex<Profile>>,
+    conn: &mut Conn<R>,
     sink: &mut LogSink,
     batch: ReadBatch,
-    seen: &mut u64,
-    settle: &mut Settle,
-    perf: &mut PerfCounters,
 ) -> Option<Instant> {
     let ReadBatch {
         mut out,
@@ -303,9 +273,10 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         hold: _,
         gmcp: _,
     } = batch;
+    let app = &conn.app;
     let watched = prompt && watching_prompt(app);
     let (vars, hidden, prompt_seen, status, prompt_state, clock) = {
-        let mut p = profile.lock().await;
+        let mut p = conn.profile.lock().await;
         // Echoes the end of the read wrote close the open row.
         p.prompt.stage.finish(&mut out);
         (
@@ -318,13 +289,13 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         )
     };
     if !out.is_empty() {
-        perf.output_emits += 1;
-        perf.output_emit_bytes +=
+        conn.perf.output_emits += 1;
+        conn.perf.output_emit_bytes +=
             (out.bytes.len() + out.hold.len() + out.replace.as_ref().map_or(0, |r| r.bytes.len()))
                 as u64;
-        *seen = emit_session_output(app, &out, settle);
+        conn.seen_output = emit_session_output(app, &out, &mut conn.settle);
     }
-    settle.queue_rows(log);
+    conn.settle.queue_rows(log);
     if let Some(character) = character {
         sink.name(&character).await;
     }
