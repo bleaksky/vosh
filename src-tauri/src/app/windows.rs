@@ -1,10 +1,11 @@
-//! The ground and native appearance a new window opens on.
+//! The Settings and Help windows, the ground and native appearance a
+//! new window opens on, and spellcheck in the macOS webview.
 //!
 //! Settings and Help open hidden and show themselves once their page has
 //! painted the theme. A frame the page has not painted yet shows the
 //! window's own background, so every theme paint in any window reports
-//! the theme's ground here (`window_backdrop_set`), and the window opener
-//! in commands.rs builds the window on it. An open Settings or Help
+//! the theme's ground here (`window_backdrop_set`), and
+//! [`open_aux_window`] builds the window on it. An open Settings or Help
 //! window takes each new ground as it arrives. The appearance pins the light or dark native
 //! appearance while the theme is your pick, and is `None` while the
 //! theme follows the system, so the window follows the system too. A
@@ -13,7 +14,10 @@
 
 use std::sync::Mutex;
 
-use tauri::{window::Color, AppHandle, Manager, Runtime, Theme, WebviewWindowBuilder, Window};
+use tauri::{
+    window::Color, AppHandle, Manager, Runtime, Theme, WebviewUrl, WebviewWindowBuilder, Window,
+};
+use tracing::warn;
 
 /// What a new window opens on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -149,9 +153,217 @@ pub(crate) fn window_backdrop_set(
     Ok(())
 }
 
+/// A window beside the main one that loads the same bundle with its own
+/// `?view=`, like Settings and Help. Each opens hidden on the theme's
+/// ground and shows itself once its page has painted your theme.
+pub(crate) struct AuxWindow {
+    /// The window label, which the capabilities and the menu name.
+    label: &'static str,
+    /// The page the bundle renders, `index.html?view=...`.
+    url: &'static str,
+    title: &'static str,
+    /// The default size, the approved boards' window.
+    size: (f64, f64),
+    /// The smallest size whose layout still fits.
+    min_size: (f64, f64),
+}
+
+/// Settings, at the approved boards' 880×600. Under 820×560 its two
+/// column layouts no longer fit.
+pub(crate) const SETTINGS_WINDOW: AuxWindow = AuxWindow {
+    label: "settings",
+    url: "index.html?view=settings",
+    title: "Settings",
+    size: (880.0, 600.0),
+    min_size: (820.0, 560.0),
+};
+
+/// Help, at the approved Help boards' 1040×700. Under 860 wide the
+/// article no longer keeps its measure beside the 280 px sidebar.
+pub(crate) const HELP_WINDOW: AuxWindow = AuxWindow {
+    label: "help",
+    url: "index.html?view=help",
+    title: "Help",
+    size: (1040.0, 700.0),
+    min_size: (860.0, 560.0),
+};
+
+/// The logical size a window should take when the window state plugin
+/// restored it at `restored`, or None when it already fits. A side under
+/// the minimum, saved by an older and smaller window, goes back to the
+/// default. The system does not apply the minimum to a size set from
+/// code, so this has to.
+fn window_fit(window: &AuxWindow, restored: (f64, f64)) -> Option<(f64, f64)> {
+    let (width, height) = restored;
+    let (min_width, min_height) = window.min_size;
+    if width >= min_width && height >= min_height {
+        return None;
+    }
+    Some((
+        if width < min_width {
+            window.size.0
+        } else {
+            width
+        },
+        if height < min_height {
+            window.size.1
+        } else {
+            height
+        },
+    ))
+}
+
+/// Whether opening a window again brings the open one forward now. A
+/// window neither on screen nor minimized is still loading. Its page
+/// shows it once it has painted your theme, and showing it sooner would
+/// put a frame without your theme on screen.
+fn shows_on_reopen(visible: bool, minimized: bool) -> bool {
+    visible || minimized
+}
+
+/// How long a window may stay hidden after an open before the backend
+/// shows it anyway. The page shows it well before this, within its own
+/// 500 ms fallback once it runs. This covers a page that never gets
+/// that far, so the window always opens.
+const SHOW_BACKSTOP: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Show `window` after [`SHOW_BACKSTOP`] if its page has not shown it by
+/// then.
+fn show_backstop(window: tauri::WebviewWindow) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(SHOW_BACKSTOP).await;
+        if !window.is_visible().unwrap_or(true) && !window.is_minimized().unwrap_or(false) {
+            warn!(
+                window = window.label(),
+                "the page never showed its window, showing it now"
+            );
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    });
+}
+
+/// Open `spec`, or bring it forward when it is already open. The window
+/// is a separate webview on the same frontend bundle, and its `?view=`
+/// tells the React entry which page to render. Every window shares the
+/// one Rust backend state.
+pub(crate) fn open_aux_window(app: &AppHandle, spec: &AuxWindow) -> Result<(), String> {
+    if let Some(existing) = app.get_webview_window(spec.label) {
+        let visible = existing.is_visible().unwrap_or(true);
+        let minimized = existing.is_minimized().unwrap_or(false);
+        if shows_on_reopen(visible, minimized) {
+            existing.show().map_err(|e| e.to_string())?;
+            existing.set_focus().map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+    let builder = WebviewWindowBuilder::new(app, spec.label, WebviewUrl::App(spec.url.into()))
+        .title(spec.title)
+        .inner_size(spec.size.0, spec.size.1)
+        .min_inner_size(spec.min_size.0, spec.min_size.1)
+        .resizable(true)
+        .transparent(true)
+        // Stay hidden until the page has painted your theme and shows
+        // the window itself, so the first frame is never the dark
+        // stylesheet defaults.
+        .visible(false)
+        // Disable Tauri's OS file-drop handler. When enabled it
+        // intercepts HTML5 drag-and-drop inside the webview, which
+        // can break overlay drag interactions.
+        .disable_drag_drop_handler();
+    // Open on the theme's appearance, which the last theme paint
+    // reported, and on macOS on its ground as well, so even a frame the
+    // page has not painted yet is in your theme. Windows and Linux keep
+    // the window clear (PAINTS_WINDOW explains why). Before any paint
+    // the window keeps the defaults.
+    let builder = match current() {
+        Some(backdrop) => backdrop.dress(builder),
+        None => builder,
+    };
+    // macOS gives the window the main window's titled frame: native
+    // traffic lights over the sidebar at the same centers, a hidden
+    // title, and the system's corners and rim. Windows and Linux stay
+    // frameless, and the page draws its own window controls.
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .decorations(true)
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true);
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.decorations(false);
+    let window = builder.build().map_err(|e| e.to_string())?;
+    show_backstop(window.clone());
+    if let (Ok(size), Ok(scale)) = (window.inner_size(), window.scale_factor()) {
+        let current = size.to_logical::<f64>(scale);
+        if let Some((width, height)) = window_fit(spec, (current.width, current.height)) {
+            let _ = window.set_size(tauri::LogicalSize::new(width, height));
+        }
+    }
+    Ok(())
+}
+
+// macOS-only: WKWebView ignores the HTML `spellcheck` attribute
+// until continuous spell-checking is enabled at the NSView level.
+// The context-menu "Check Spelling While Typing" item works, which
+// means the action `toggleContinuousSpellChecking:` is dispatchable
+// through the responder chain. We mirror that path: query
+// isContinuousSpellCheckingEnabled first, then send the toggle
+// action only if it is off, so we never flip it back off. All
+// sends are gated with respondsToSelector: — earlier unguarded
+// sends of NSTextView-only selectors crashed the app at launch.
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+pub(crate) fn enable_macos_spellcheck(window: &tauri::WebviewWindow) -> Result<(), tauri::Error> {
+    use objc2::runtime::{AnyObject, Bool, Sel};
+    window.with_webview(|webview| {
+        let raw = webview.inner().cast::<AnyObject>();
+        if raw.is_null() {
+            tracing::warn!("macos spellcheck: webview.inner() was null");
+            return;
+        }
+        unsafe {
+            let setter: Sel = objc2::sel!(setContinuousSpellCheckingEnabled:);
+            let getter: Sel = objc2::sel!(isContinuousSpellCheckingEnabled);
+            let toggler: Sel = objc2::sel!(toggleContinuousSpellChecking:);
+            let r_set: Bool = objc2::msg_send![raw, respondsToSelector: setter];
+            let r_get: Bool = objc2::msg_send![raw, respondsToSelector: getter];
+            let r_tog: Bool = objc2::msg_send![raw, respondsToSelector: toggler];
+            tracing::info!(
+                set = r_set.as_bool(),
+                get = r_get.as_bool(),
+                toggle = r_tog.as_bool(),
+                "macos spellcheck: selectors reachable on WKWebView"
+            );
+            if r_set.as_bool() {
+                let _: () = objc2::msg_send![raw, setContinuousSpellCheckingEnabled: true];
+                tracing::info!("macos spellcheck: setContinuousSpellCheckingEnabled:YES sent");
+                return;
+            }
+            if r_tog.as_bool() {
+                let enabled: Bool = if r_get.as_bool() {
+                    objc2::msg_send![raw, isContinuousSpellCheckingEnabled]
+                } else {
+                    Bool::NO
+                };
+                if enabled.as_bool() {
+                    tracing::info!("macos spellcheck: already enabled, no toggle needed");
+                } else {
+                    let _: () = objc2::msg_send![raw, toggleContinuousSpellChecking: raw];
+                    tracing::info!("macos spellcheck: toggleContinuousSpellChecking: sent");
+                }
+            } else {
+                tracing::warn!("macos spellcheck: no reachable setter or toggle on WKWebView");
+            }
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{current, parse, record, Backdrop, PAINTS_WINDOW};
+    use super::{
+        current, parse, record, shows_on_reopen, window_fit, Backdrop, HELP_WINDOW, PAINTS_WINDOW,
+        SETTINGS_WINDOW,
+    };
     use tauri::{window::Color, Theme};
 
     #[test]
@@ -279,5 +491,46 @@ mod tests {
                 appearance: Some(Theme::Light),
             })
         );
+    }
+
+    #[test]
+    fn settings_window_keeps_a_size_that_fits() {
+        let fit = |size| window_fit(&SETTINGS_WINDOW, size);
+        assert_eq!(fit((880.0, 600.0)), None);
+        assert_eq!(fit((820.0, 560.0)), None);
+        assert_eq!(fit((1200.0, 900.0)), None);
+    }
+
+    #[test]
+    fn reopening_a_window_leaves_a_loading_one_to_its_page() {
+        // On screen, or minimized: bring it forward now.
+        assert!(shows_on_reopen(true, false));
+        assert!(shows_on_reopen(false, true));
+        assert!(shows_on_reopen(true, true));
+        // Neither: the page has not painted your theme yet, and shows
+        // the window itself once it has.
+        assert!(!shows_on_reopen(false, false));
+    }
+
+    #[test]
+    fn settings_window_grows_a_side_left_under_the_minimum() {
+        let fit = |size| window_fit(&SETTINGS_WINDOW, size);
+        // The old Settings window opened at 780×640.
+        assert_eq!(fit((780.0, 640.0)), Some((880.0, 640.0)));
+        assert_eq!(fit((900.0, 420.0)), Some((900.0, 600.0)));
+        assert_eq!(fit((520.0, 420.0)), Some((880.0, 600.0)));
+    }
+
+    #[test]
+    fn help_opens_at_the_board_size_on_its_own_page() {
+        assert_eq!(HELP_WINDOW.label, "help");
+        assert_eq!(HELP_WINDOW.url, "index.html?view=help");
+        assert_eq!(HELP_WINDOW.size, (1040.0, 700.0));
+        let fit = |size| window_fit(&HELP_WINDOW, size);
+        assert_eq!(fit((1040.0, 700.0)), None);
+        assert_eq!(fit((860.0, 560.0)), None);
+        // A side under the minimum goes back to the board size.
+        assert_eq!(fit((700.0, 800.0)), Some((1040.0, 800.0)));
+        assert_eq!(fit((900.0, 400.0)), Some((900.0, 700.0)));
     }
 }
