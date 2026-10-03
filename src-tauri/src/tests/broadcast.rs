@@ -244,7 +244,7 @@ fn toggle_from_lua(
             enabled,
         }],
     };
-    let apply = crate::script_state::apply_actions(p, outcome);
+    let apply = crate::script::apply_actions(p, outcome);
     broadcast_list_changes(handle, apply.lists);
 }
 

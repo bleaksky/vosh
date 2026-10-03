@@ -27,7 +27,7 @@ use crate::input;
 use crate::line_accumulator::{Line, LineAccumulator, Partial};
 use crate::profile::Profile;
 use crate::profile_config::SharedLayer;
-use crate::script_state::{self, ApplyResult, PendingTimer, SharedTimers};
+use crate::script::{self, ApplyResult, PendingTimer, SharedTimers};
 use crate::tick::{TickRuntime, TickStep};
 
 const TICK_EMIT_INTERVAL: Duration = Duration::from_millis(250);
@@ -1721,7 +1721,7 @@ fn line_pass(
         highlight_ground::get(),
     );
     let tick_step = tick_reset(p, plain, now);
-    script_state::snapshot_vars(&p.script, &p.vars);
+    script::snapshot_vars(&p.script, &p.vars);
     let mut outcome = match p.script.match_line(plain) {
         Ok(o) => o,
         Err(err) => {
@@ -1734,7 +1734,7 @@ fn line_pass(
     outcome
         .actions
         .extend(run_trigger_scripts(p, &result, "trigger-script"));
-    let apply = script_state::apply_actions(p, outcome);
+    let apply = script::apply_actions(p, outcome);
     LinePass {
         result,
         tick_step,
@@ -2103,12 +2103,12 @@ fn prompt_block(
         highlight_ground::get(),
     );
     if !result.scripts.is_empty() {
-        script_state::snapshot_vars(&p.script, &p.vars);
+        script::snapshot_vars(&p.script, &p.vars);
     }
     let outcome = vosh_script::ScriptOutcome {
         actions: run_trigger_scripts(p, &result, "prompt-trigger-script"),
     };
-    let mut apply = script_state::apply_actions(p, outcome);
+    let mut apply = script::apply_actions(p, outcome);
     batch.prompt_vars = true;
     batch.prompt = true;
     // The prompt draws with the packets that came before it.
@@ -2238,11 +2238,11 @@ fn unread_partial(
         || !result.scripts.is_empty();
     let mut apply = ApplyResult::default();
     if effect {
-        script_state::snapshot_vars(&p.script, &p.vars);
+        script::snapshot_vars(&p.script, &p.vars);
         let outcome = vosh_script::ScriptOutcome {
             actions: run_trigger_scripts(p, &result, "prompt-trigger-script"),
         };
-        apply = script_state::apply_actions(p, outcome);
+        apply = script::apply_actions(p, outcome);
         // The webview hears every prompt a Prompts trigger acted on.
         batch.prompt_vars = true;
     }
@@ -3252,7 +3252,7 @@ fn gmcp_step(
         }
     }
     let tick_step = observe_world_time_for_tick(&mut p.tick, msg, now);
-    script_state::snapshot_vars(&p.script, &p.vars);
+    script::snapshot_vars(&p.script, &p.vars);
     let outcome = match p.script.dispatch_gmcp(&msg.package, &msg.data) {
         Ok(o) => o,
         Err(err) => {
@@ -3260,7 +3260,7 @@ fn gmcp_step(
             vosh_script::ScriptOutcome::default()
         }
     };
-    let apply = script_state::apply_actions(p, outcome);
+    let apply = script::apply_actions(p, outcome);
     (tick_step, apply)
 }
 
@@ -3523,7 +3523,7 @@ async fn fire_due_script_timers<R: tauri::Runtime>(
     }
     let apply = {
         let mut p = profile.lock().await;
-        script_state::snapshot_vars(&p.script, &p.vars);
+        script::snapshot_vars(&p.script, &p.vars);
         let mut outcome = vosh_script::ScriptOutcome::default();
         for t in due {
             match p.script.fire_timer(t.callback_id) {
@@ -3531,7 +3531,7 @@ async fn fire_due_script_timers<R: tauri::Runtime>(
                 Err(err) => warn!(error = %err, "lua timer fire failed"),
             }
         }
-        script_state::apply_actions(&mut p, outcome)
+        script::apply_actions(&mut p, outcome)
     };
     let mut sink = OutputSink::Direct;
     let mut io = ScriptIo::Session(stream, &mut sink);

@@ -222,11 +222,11 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
         let apply = match mgr.read_entry(name) {
             Ok(code) => {
                 let mut p = state.profile.lock().await;
-                crate::script_state::snapshot_vars(&p.script, &p.vars);
+                crate::script::snapshot_vars(&p.script, &p.vars);
                 match p.script.load_script(&format!("plugin:{name}"), code) {
                     Ok(outcome) => {
                         info!(name = %name, "loaded plugin");
-                        crate::script_state::apply_actions(&mut p, outcome)
+                        crate::script::apply_actions(&mut p, outcome)
                     }
                     Err(e) => {
                         error!(name = %name, error = %e, "plugin script error");
