@@ -61,8 +61,8 @@ use commands::{
     app_quit, loadouts_get_state, loadouts_set_active, logs_export, logs_list_sessions,
     logs_search_page, migration_analyze, migration_apply, open_help_window, open_settings_window,
     profile_create, profile_delete, profile_duplicate, profile_get_scope, profile_rename,
-    profile_resolve_match, profile_set_scope, profile_switch, profiles_list, tick_get_config,
-    tick_set_config, updater_check, updater_install_and_relaunch,
+    profile_resolve_match, profile_set_scope, profile_switch, profiles_list, updater_check,
+    updater_install_and_relaunch,
 };
 use fonts::handle_font_uri;
 
@@ -176,8 +176,8 @@ pub fn run() {
             app::exit::pending_writes_flushed,
             loadouts_get_state,
             loadouts_set_active,
-            tick_get_config,
-            tick_set_config,
+            ipc::tick::tick_get_config,
+            ipc::tick::tick_set_config,
             profile_get_scope,
             profile_set_scope,
             open_settings_window,

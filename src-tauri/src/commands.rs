@@ -6,15 +6,12 @@ use vosh_log::{SearchOptions, SearchPage, SessionRow};
 
 use crate::app::events::{
     broadcast, CUSTOM_THEMES_CHANGED, LOADOUTS_CHANGED, MACRO_GROUPS_CHANGED, PROFILES_CHANGED,
-    TICK_CONFIG_CHANGED,
 };
 use crate::app::state::{
     AppState, SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING, PROFILES_NOT_LOADED,
 };
 use crate::app::windows::{open_aux_window, HELP_WINDOW, SETTINGS_WINDOW};
-use crate::disk::save::{
-    mark_profile_dirty, persist_profile, persist_profile_locked, persist_state, PERSIST_LOCK,
-};
+use crate::disk::save::{mark_profile_dirty, persist_profile_locked, persist_state, PERSIST_LOCK};
 use crate::loadouts::wizard::apply::{
     analyze_migration, announce_migration_applied, apply_migration, ConflictResolution,
 };
@@ -22,7 +19,6 @@ use crate::loadouts::wizard::apply::{
 use crate::profile::switch::apply_profile_switch;
 use crate::profile_config::{hand_out_shared, share_custom_themes, GlobalConfig, HeldCustomThemes};
 use crate::prompt::{prompt_show_state, reported_hidden, PromptShowState};
-use crate::tick::{apply_tick_config, tick_config_payload, TickConfigPayload};
 
 /// What launch has to tell you, for the main window to show once in the
 /// terminal and as a toast.
@@ -789,35 +785,6 @@ pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
         broadcast(app, MACRO_GROUPS_CHANGED, &"");
     }
     Ok(())
-}
-
-/// Read the live tick configuration.
-#[tauri::command]
-pub(crate) async fn tick_get_config(
-    state: State<'_, SharedState>,
-) -> Result<TickConfigPayload, String> {
-    let p = state.profile.lock().await;
-    Ok(tick_config_payload(&p.tick.config))
-}
-
-/// Apply a new tick configuration through [`apply_tick_config`], which
-/// changes every field or none. Persists the active profile and
-/// broadcasts `vosh://tick-config-changed` only after the whole
-/// configuration applied.
-#[tauri::command]
-pub(crate) async fn tick_set_config(
-    app: AppHandle,
-    state: State<'_, SharedState>,
-    config: TickConfigPayload,
-) -> Result<TickConfigPayload, String> {
-    let snapshot = {
-        let mut p = state.profile.lock().await;
-        apply_tick_config(&mut p.tick, &config, tokio::time::Instant::now())?
-    };
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
-    broadcast(&app, TICK_CONFIG_CHANGED, &snapshot);
-    Ok(snapshot)
 }
 
 /// Download + install the pending update and restart the app. Errors
