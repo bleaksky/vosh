@@ -12,8 +12,8 @@ use tauri::{App, Manager};
 
 use crate::app::state::{AppState, SharedState};
 use crate::logs::forget_passwords::{self, Outcome};
+use crate::native::grid;
 use crate::profile::live::Profile;
-use crate::term_grid;
 
 /// A mock app with the app state managed, no session open, and no
 /// session log.
@@ -37,7 +37,7 @@ fn rows_showing(rows: &[String], text: &str) -> Vec<usize> {
 fn screen_once_it_shows(text: &str) -> Vec<String> {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        let rows = term_grid::shared_screen_rows_for_test();
+        let rows = grid::shared_screen_rows_for_test();
         if !rows_showing(&rows, text).is_empty() || Instant::now() >= deadline {
             return rows;
         }
@@ -47,9 +47,9 @@ fn screen_once_it_shows(text: &str) -> Vec<String> {
 
 #[test]
 fn slash_command_echoes_and_the_logs_reply_reach_the_native_grid() {
-    let _shared = term_grid::lock_shared_grid_for_test();
+    let _shared = grid::lock_shared_grid_for_test();
     // Tall and wide enough that nothing wraps or scrolls off.
-    term_grid::blank_shared_grid_for_test(160, 200);
+    grid::blank_shared_grid_for_test(160, 200);
     let app = app();
     let handle = app.handle();
 

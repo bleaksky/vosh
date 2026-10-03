@@ -132,7 +132,7 @@ fn replay(session: &mut Session, login: &[u8], bytes: &[u8], at: &[usize]) -> Ve
 /// The rows a native grid `columns` wide shows after `reads`, trimmed.
 #[cfg(native_surface)]
 fn grid_rows(reads: &[Read], columns: usize) -> Vec<String> {
-    let mut grid = crate::term_grid::TermGrid::new(columns, 60);
+    let mut grid = crate::native::grid::TermGrid::new(columns, 60);
     for read in reads {
         grid.session_output(&read.out);
     }
@@ -425,7 +425,7 @@ fn your_echo_output_from_elsewhere_and_a_new_connection_start_a_new_run() {
         ..Options::new(Build::New)
     });
     let mut session = Session::new(collapsing(PromptShow::Pinned));
-    let mut grid = crate::term_grid::TermGrid::new(60, 30);
+    let mut grid = crate::native::grid::TermGrid::new(60, 30);
     grid.session_output(&session.read(&mud.login()).out);
     grid.session_output(&session.read(&mud.pulse_later(DODGE)).out);
     // You type `wake`: your echo lands after the run.
@@ -453,7 +453,7 @@ fn your_echo_output_from_elsewhere_and_a_new_connection_start_a_new_run() {
     // With no prompt and no blank line between them, your echo and a
     // reply from elsewhere still keep the lines on either side apart.
     let mut session = Session::new(collapsing(PromptShow::Pinned));
-    let mut grid = crate::term_grid::TermGrid::new(60, 30);
+    let mut grid = crate::native::grid::TermGrid::new(60, 30);
     let hungry = format!("{HUNGRY}\n\r");
     grid.session_output(&session.read(hungry.as_bytes()).out);
     let _ = session.send("eat");
@@ -522,7 +522,7 @@ fn with_collapse_off_every_line_shows_as_before() {
 
 /// The rows a grid shows at its display offset, trimmed.
 #[cfg(native_surface)]
-fn in_view(grid: &crate::term_grid::TermGrid) -> Vec<String> {
+fn in_view(grid: &crate::native::grid::TermGrid) -> Vec<String> {
     (0..grid.screen_lines())
         .map(|line| {
             let row: String = (0..grid.columns())
@@ -537,7 +537,7 @@ fn in_view(grid: &crate::term_grid::TermGrid) -> Vec<String> {
 #[test]
 fn a_run_goes_on_at_the_live_tail_while_you_read_back() {
     let mut session = Session::new(collapsing(PromptShow::Pinned));
-    let mut grid = crate::term_grid::TermGrid::new(40, 10);
+    let mut grid = crate::native::grid::TermGrid::new(40, 10);
     // Lines that take turns, so none of them collapse.
     let history = format!("{HUNGRY}\n\r{THIRSTY}\n\r").repeat(15);
     grid.session_output(&session.read(history.as_bytes()).out);
@@ -561,7 +561,7 @@ fn a_run_goes_on_at_the_live_tail_while_you_read_back() {
 #[test]
 fn a_run_longer_than_the_width_rewrites_every_row_it_takes() {
     let mut session = Session::new(collapsing(PromptShow::Pinned));
-    let mut grid = crate::term_grid::TermGrid::new(12, 20);
+    let mut grid = crate::native::grid::TermGrid::new(12, 20);
     let mut reads = Vec::new();
     for _ in 0..10 {
         let read = session.read(format!("{REDIRECT}\n\r").as_bytes());
@@ -590,7 +590,7 @@ fn highlight(
 
 /// The screen row that shows `text`, trimmed.
 #[cfg(native_surface)]
-fn row_of(grid: &crate::term_grid::TermGrid, text: &str) -> usize {
+fn row_of(grid: &crate::native::grid::TermGrid, text: &str) -> usize {
     rows_of(grid)
         .iter()
         .position(|row| row == text)
@@ -645,8 +645,8 @@ fn washed_run() -> Vec<Output> {
 
 /// A grid `columns` wide and 20 rows tall after `outputs`.
 #[cfg(native_surface)]
-fn grid_after(outputs: &[Output], columns: usize) -> crate::term_grid::TermGrid {
-    let mut grid = crate::term_grid::TermGrid::new(columns, 20);
+fn grid_after(outputs: &[Output], columns: usize) -> crate::native::grid::TermGrid {
+    let mut grid = crate::native::grid::TermGrid::new(columns, 20);
     for out in outputs {
         grid.session_output(out);
     }
@@ -724,7 +724,7 @@ fn a_line_that_relies_on_the_color_before_it_keeps_it_with_its_count() {
         p.ui.collapse_repeats = collapse;
         let mut session = Session::new(p);
         let read = session.read(text.as_bytes());
-        let mut grid = crate::term_grid::TermGrid::new(40, 10);
+        let mut grid = crate::native::grid::TermGrid::new(40, 10);
         grid.session_output(&read.out);
         let rows = rows_of(&grid);
         for (line, row) in rows.iter().enumerate() {
@@ -782,7 +782,7 @@ fn echo_before_the_run() -> (Vec<Output>, usize, &'static [u8]) {
 fn a_run_your_echo_landed_before_goes_on_a_new_row_that_still_ends() {
     use alacritty_terminal::vte::ansi::{Color, NamedColor};
     let (outputs, before, echo) = echo_before_the_run();
-    let mut grid = crate::term_grid::TermGrid::new(60, 20);
+    let mut grid = crate::native::grid::TermGrid::new(60, 20);
     for out in &outputs[..before] {
         grid.session_output(out);
     }
@@ -833,12 +833,12 @@ fn pane_during_a_run() -> (Vec<Output>, Vec<u8>, Vec<Output>) {
 #[test]
 fn a_pane_that_loads_the_scrollback_during_a_run_goes_on_with_it_in_place() {
     let (before, load, after) = pane_during_a_run();
-    let mut live = crate::term_grid::TermGrid::new(60, 20);
+    let mut live = crate::native::grid::TermGrid::new(60, 20);
     for out in before.iter().chain(&after) {
         live.session_output(out);
     }
     // The pane takes every byte it loads as xterm does, marks included.
-    let mut pane = crate::term_grid::TermGrid::new(60, 20);
+    let mut pane = crate::native::grid::TermGrid::new(60, 20);
     let mut loaded = Output::new(false);
     loaded.text(&load);
     pane.session_output(&loaded);
@@ -917,7 +917,7 @@ fn collapse_splits() -> serde_json::Value {
                  outputs: &[Output],
                  echo: Option<(usize, &[u8])>,
                  columns: usize| {
-        let mut grid = crate::term_grid::TermGrid::new(columns, 20);
+        let mut grid = crate::native::grid::TermGrid::new(columns, 20);
         if let Some(load) = load {
             let mut loaded = Output::new(false);
             loaded.text(load);

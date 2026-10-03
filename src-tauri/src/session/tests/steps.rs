@@ -131,7 +131,7 @@ fn stream_len(events: &[Ev]) -> usize {
 #[cfg(native_surface)]
 fn screen_of(profile: &dyn Fn() -> Profile, columns: usize, reads: &[Vec<Ev>]) -> Vec<String> {
     let mut wire = Wire::new(profile());
-    let mut grid = crate::term_grid::TermGrid::new(columns, 40);
+    let mut grid = crate::native::grid::TermGrid::new(columns, 40);
     for read in reads {
         grid.session_output(&wire.read_events(read));
     }
@@ -1735,7 +1735,7 @@ fn fake_profile(prompt: &str) -> Profile {
 /// wire bytes, rows trimmed, up to the last row that shows anything.
 #[cfg(native_surface)]
 fn wire_screen(wire: &mut Wire, columns: usize, reads: &[&[u8]]) -> Vec<String> {
-    let mut grid = crate::term_grid::TermGrid::new(columns, 60);
+    let mut grid = crate::native::grid::TermGrid::new(columns, 60);
     for read in reads {
         grid.session_output(&wire.read_wire(read));
     }

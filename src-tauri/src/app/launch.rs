@@ -90,11 +90,11 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
         }
     }
     // Tier 3: install the native terminal surface over the webview
-    // in the main window. See native_surface.
+    // in the main window. See native/surface.rs.
     #[cfg(native_surface)]
     {
         if let Some(main) = app.get_webview_window("main") {
-            let _ = crate::native_surface::install_probe(&main);
+            let _ = crate::native::surface::install_probe(&main);
         }
     }
 }

@@ -443,7 +443,7 @@ fn an_edit_that_starts_or_stops_reading_the_tank_line_shows_it_once() {
         for (from, to) in [(HP, TANK_DESIGN), (TANK_DESIGN, HP)] {
             let label = format!("{show:?} from {from:?} to {to:?}");
             let mut session = Session::new(showing(profile(CODES, from, true), show));
-            let mut grid = crate::term_grid::TermGrid::new(80, 40);
+            let mut grid = crate::native::grid::TermGrid::new(80, 40);
             grid.session_output(&session.read(&fight).out);
             assert_eq!(tank_rows(&rows_of(&grid)), 1, "{label}");
             let out = edit_design(&mut session, to);
@@ -458,7 +458,7 @@ fn an_edit_that_starts_or_stops_reading_the_tank_line_shows_it_once() {
             // The design the edit made reads the fight as a fresh read of
             // the same prompt would.
             let mut fresh = Session::new(showing(profile(CODES, to, true), show));
-            let mut want = crate::term_grid::TermGrid::new(80, 40);
+            let mut want = crate::native::grid::TermGrid::new(80, 40);
             want.session_output(&fresh.read(&fight).out);
             assert_eq!(rows, rows_of(&want), "{label}");
         }
@@ -600,7 +600,7 @@ fn drawn_after_mark(bytes: &[u8]) -> Option<String> {
 /// sits.
 #[cfg(native_surface)]
 fn grid_screen(reads: &[Read], columns: usize) -> (Vec<String>, (i32, usize)) {
-    let mut grid = crate::term_grid::TermGrid::new(columns, 60);
+    let mut grid = crate::native::grid::TermGrid::new(columns, 60);
     for read in reads {
         grid.session_output(&read.out);
     }
@@ -738,7 +738,7 @@ fn your_echo_takes_the_row_the_prompt_held() {
     use vosh_prompt::PromptShow;
     let mut mud = Mud::playing(Options::new(Build::New));
     let mut session = Session::new(showing(profile(CODES, HP, true), PromptShow::Pinned));
-    let mut grid = crate::term_grid::TermGrid::new(60, 30);
+    let mut grid = crate::native::grid::TermGrid::new(60, 30);
     grid.session_output(&session.read(&mud.login()).out);
     // You type look: the echo lands after the held line ends, and the
     // reply follows it.
@@ -947,7 +947,7 @@ fn an_echo_that_ends_the_prompt_row_takes_the_row_a_pinned_prompt_left() {
     let tell = mud.pulse_later("Quenby tells you 'back soon'");
     let play = |show, draw| {
         let mut session = Session::new(showing(profile(CODES, HP, draw), show));
-        let mut grid = crate::term_grid::TermGrid::new(80, 40);
+        let mut grid = crate::native::grid::TermGrid::new(80, 40);
         grid.session_output(&session.read(&login).out);
         // The tick warning, framed to end the prompt's row first.
         let warn = session.emitted(b"\r\n\x1b[33mTICK IN 5s\x1b[0m\r\n");
@@ -1014,7 +1014,7 @@ fn enter_on_an_empty_line_ends_the_row_of_a_prompt_left_in_the_text() {
     for (name, (first, next)) in [("pager", &pager), ("editor", &editor)] {
         let play = |show, draw| {
             let mut session = Session::new(showing(profile(CODES, HP, draw), show));
-            let mut grid = crate::term_grid::TermGrid::new(80, 40);
+            let mut grid = crate::native::grid::TermGrid::new(80, 40);
             let mut open = false;
             for bytes in [wire_fixture("quiet"), first.clone()] {
                 let read = session.read(&bytes);
@@ -1078,12 +1078,12 @@ fn leaving_pinned_with_drawing_off_keeps_what_prompts_triggers_did() {
         let quiet = wire_fixture("quiet");
         // In the text all along.
         let mut text = Session::new(make(PromptShow::Text));
-        let mut want = crate::term_grid::TermGrid::new(80, 30);
+        let mut want = crate::native::grid::TermGrid::new(80, 30);
         want.session_output(&text.read(&quiet).out);
         // Pinned, then back before anything else lands.
         for back in [PromptShow::Text, PromptShow::Lifted] {
             let mut session = Session::new(make(PromptShow::Pinned));
-            let mut grid = crate::term_grid::TermGrid::new(80, 30);
+            let mut grid = crate::native::grid::TermGrid::new(80, 30);
             let read = session.read(&quiet);
             let band = read.out.pin.clone().expect("the band");
             grid.session_output(&read.out);
@@ -1107,7 +1107,7 @@ fn leaving_pinned_with_drawing_off_keeps_what_prompts_triggers_did() {
 
 /// Each lift on `grid`, as its rows' text, top first.
 #[cfg(native_surface)]
-fn lifted_rows(grid: &crate::term_grid::TermGrid) -> Vec<Vec<String>> {
+fn lifted_rows(grid: &crate::native::grid::TermGrid) -> Vec<Vec<String>> {
     let mut lifts: Vec<(u64, Vec<String>)> = Vec::new();
     for span in grid.lift_spans(-1000, 1000) {
         let row: String = grid
@@ -1145,7 +1145,7 @@ fn changing_where_your_prompt_shows_mid_fight_moves_the_tank_line_with_it() {
             let play = |switch: bool| {
                 let start = if switch { from } else { to };
                 let mut session = Session::new(showing(profile(CODES, HP, draw), start));
-                let mut grid = crate::term_grid::TermGrid::new(columns, 40);
+                let mut grid = crate::native::grid::TermGrid::new(columns, 40);
                 grid.session_output(&session.read(&fight).out);
                 let mut band = None;
                 if switch {

@@ -270,7 +270,7 @@ impl Harness {
 
     /// What the terminal shows, 100 wide, rows trimmed.
     fn screen(&self) -> Vec<String> {
-        let mut grid = crate::term_grid::TermGrid::new(100, 200);
+        let mut grid = crate::native::grid::TermGrid::new(100, 200);
         for heard in self.heard() {
             match heard {
                 Heard::Echo(text) => grid.local_write(text.as_bytes()),
@@ -471,7 +471,7 @@ fn base64_decodes_what_the_session_encodes() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.set_prompt(codes(PROMPT)).await;
     h.state.note_active_profile(DEFAULT_PROFILE_NAME);
@@ -603,7 +603,7 @@ fn state_at(h: &Harness, cols: usize) -> Option<Json> {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_new_width_tells_the_card_where_the_push_draws_now() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.set_prompt(vosh_prompt::PromptConfig {
         template: "<%hp>%{right}%mana".into(),
@@ -662,7 +662,7 @@ async fn a_new_width_tells_the_card_where_the_push_draws_now() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_echo_the_session_hears_of_late_leaves_the_prompt_after_it_open() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.set_prompt(codes(PROMPT)).await;
     h.state.note_active_profile(DEFAULT_PROFILE_NAME);
@@ -709,7 +709,7 @@ async fn an_echo_the_session_hears_of_late_leaves_the_prompt_after_it_open() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_new_build_gives_vosh_the_prompt_at_login_and_follows_the_game() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     // A capture that follows the game, on another setting than the one
     // the game holds.
@@ -808,7 +808,7 @@ async fn the_new_build_gives_vosh_the_prompt_at_login_and_follows_the_game() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_older_build_reads_your_prompt_from_the_game_replies() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     // No GA, so a prompt with no line end draws by the settle rule.
     let h = Harness::new(Options {
         ga: false,
@@ -928,7 +928,7 @@ fn repaints(h: &Harness) -> Vec<String> {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_tick_counts_down_in_your_idle_prompt_and_waits_while_you_read() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.set_prompt(codes(PROMPT)).await;
     h.connect().await;
@@ -995,7 +995,7 @@ async fn the_tick_counts_down_in_your_idle_prompt_and_waits_while_you_read() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_game_that_answers_each_do_eor_ends_negotiation_in_one_round() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     // A game that answers every DO EOR with WILL EOR and then marks each
     // prompt with EOR alone. prompt all ends in no line end, and a
     // pattern that never settles waits for a mark, so only the EOR makes
@@ -1033,7 +1033,7 @@ async fn a_game_that_answers_each_do_eor_ends_negotiation_in_one_round() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_code_reader_the_card_chose_hears_your_prompt_on_another_host() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     // A local server of the older build, which Vosh does not know as The
     // Forsaken Lands, and a profile that reads no prompt yet.
     let h = Harness::new(Options::new(Build::Older)).await;
@@ -1071,7 +1071,7 @@ async fn the_code_reader_the_card_chose_hears_your_prompt_on_another_host() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_log_lookup_finds_only_the_prompt_of_the_profiles_own_character() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::Older)).await;
     h.set_prompt(no_capture()).await;
 
@@ -1136,7 +1136,7 @@ fn hidden(vitals: bool, tank: bool, opponent: bool, affects: bool, group: bool) 
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn lament_and_blindness_hide_what_each_build_hides() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let mut done = Vec::new();
     for build in [Build::New, Build::Unflagged, Build::Older] {
         let h = Harness::new(Options::new(build)).await;
@@ -1189,7 +1189,7 @@ async fn lament_and_blindness_hide_what_each_build_hides() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_reconnect_reads_the_prompt_until_char_prompt_comes_again() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options {
         reconnect: true,
         ..Options::new(Build::New)
@@ -1243,7 +1243,7 @@ const PROMPT_NEW: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv (%K hp) %s [%S]> ";
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_changed_prompt_the_pattern_misses_says_no_prompt_matched() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let mut done = Vec::new();
     // On The Forsaken Lands three pulses miss, and elsewhere three sends.
     for forsaken in [true, false] {
@@ -1347,7 +1347,7 @@ fn toasts(h: &Harness) -> Vec<Json> {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_moved_capture_switches_at_login_and_draws_his_new_prompt() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     // James plays an immortal, so (Wizi 60) and (Incog 60) come first.
     let h = Harness::new(Options {
         wizi: 60,
@@ -1416,7 +1416,7 @@ async fn a_moved_capture_switches_at_login_and_draws_his_new_prompt() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_older_build_switches_a_moved_capture_from_the_reply_to_prompt() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::Older)).await;
     h.count_as_forsaken_lands();
     h.set_prompt(migrated()).await;
@@ -1479,7 +1479,7 @@ async fn the_older_build_switches_a_moved_capture_from_the_reply_to_prompt() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_pattern_you_set_or_took_away_never_switches() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let mut done = Vec::new();
     for (build, kind) in [(Build::New, "gmcp"), (Build::Older, "prompt")] {
         let h = Harness::new(Options::new(build)).await;
@@ -1535,7 +1535,7 @@ async fn a_pattern_you_set_or_took_away_never_switches() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_switch_to_a_profile_with_a_moved_capture_switches_it() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.count_as_forsaken_lands();
     // Default reads nothing, and Healer holds the moved pattern.
@@ -1586,7 +1586,7 @@ async fn a_switch_to_a_profile_with_a_moved_capture_switches_it() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_prompt_vosh_cannot_read_keeps_the_moved_pattern_and_prompt_says_why() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     // A color code runs into %h, so the game prints a digit as a color.
     let h = Harness::new(Options {
         prompt: "<`%h> ".into(),
@@ -1626,7 +1626,7 @@ async fn a_prompt_vosh_cannot_read_keeps_the_moved_pattern_and_prompt_says_why()
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_moved_pattern_that_fills_a_name_of_its_own_stays_and_draws() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.count_as_forsaken_lands();
     // The old trigger handed its first group to health, which no code
@@ -1687,7 +1687,7 @@ async fn a_moved_pattern_that_fills_a_name_of_its_own_stays_and_draws() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_reconnect_keeps_the_moved_pattern_until_the_game_sends_your_prompt() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options {
         reconnect: true,
         ..Options::new(Build::New)
@@ -1724,7 +1724,7 @@ fn fulls(pairs: &[(&str, i64)]) -> crate::affects::full::FullMap {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn affect_fulls_follow_a_cast_and_come_back_at_the_next_login() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     let file = crate::disk::paths::affect_full_path(h.dir.path());
     h.state.affect_full.set_path(file.clone());
@@ -1816,7 +1816,7 @@ fn saved_fulls(h: &Harness) -> crate::affects::full::FullMap {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn affect_fulls_outlast_quitting_to_the_menu_and_out_of_the_game() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.state
         .affect_full
@@ -1896,7 +1896,7 @@ fn pins(h: &Harness) -> Vec<String> {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn prompt_default_draws_the_default_design_on_the_pinned_band_at_once() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.set_prompt(vosh_prompt::PromptConfig {
         show: vosh_prompt::PromptShow::Pinned,
@@ -1950,7 +1950,7 @@ async fn prompt_default_draws_the_default_design_on_the_pinned_band_at_once() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn each_gmcp_package_goes_out_on_the_event_the_page_hears() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let cases: Json = serde_json::from_str(include_str!("../../../fixtures/ipc/gmcp-events.json"))
         .expect("cases");
     let events: Vec<String> = cases["cases"]
@@ -1982,7 +1982,7 @@ async fn each_gmcp_package_goes_out_on_the_event_the_page_hears() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_lua_alias_you_type_runs_its_body_and_the_game_hears_it() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.set_prompt(codes(PROMPT)).await;
     h.connect().await;
@@ -2020,7 +2020,7 @@ async fn a_lua_alias_you_type_runs_its_body_and_the_game_hears_it() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_lua_alias_that_mud_input_names_runs_its_body() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.set_prompt(codes(PROMPT)).await;
     h.connect().await;
@@ -2061,7 +2061,7 @@ async fn a_lua_alias_that_mud_input_names_runs_its_body() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn lua_you_type_starts_timers_runs_input_and_sets_prompt_values() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.set_prompt(codes(PROMPT)).await;
     h.connect().await;
@@ -2128,7 +2128,7 @@ async fn lua_you_type_starts_timers_runs_input_and_sets_prompt_values() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     let plugins = h.dir.path().join("plugins");
     let plugin = plugins.join("on_load");
@@ -2177,7 +2177,7 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn lua_a_settings_timer_runs_starts_timers_and_runs_input() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     {
         let mut p = h.state.profile.lock().await;
@@ -2211,7 +2211,7 @@ async fn lua_a_settings_timer_runs_starts_timers_and_runs_input() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn lua_that_changes_an_alias_saves_your_profile() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.state
         .profile
@@ -2277,7 +2277,7 @@ async fn until_goblin_and_the_default_band(h: &Harness) {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_timer_line_moves_the_target_display_and_repaints_your_prompt() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = pinned_band().await;
 
     // Two Settings timers run the lines you would type. The tick command
@@ -2303,7 +2303,7 @@ async fn a_timer_line_moves_the_target_display_and_repaints_your_prompt() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_line_from_mud_input_moves_the_target_display_and_repaints_your_prompt() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = pinned_band().await;
 
     // The game answers Huh? and its prompt. The trigger starts a Lua
@@ -2338,7 +2338,7 @@ async fn a_line_from_mud_input_moves_the_target_display_and_repaints_your_prompt
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_line_typed_after_the_game_closes_the_link_says_not_connected() {
-    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.connect().await;
     h.until_shown("Welcome to the fake Aabahran").await;

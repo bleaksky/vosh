@@ -38,7 +38,7 @@ fn band(out: &Output) -> Option<String> {
 fn a_push_reaches_the_last_column_the_session_knows() {
     for show in [PromptShow::Text, PromptShow::Lifted] {
         let (mut session, _) = at(show, 40);
-        let mut grid = crate::term_grid::TermGrid::new(40, 20);
+        let mut grid = crate::native::grid::TermGrid::new(40, 20);
         grid.session_output(&session.read(&wire_fixture("quiet")).out);
         let rows = rows_of(&grid);
         assert_eq!(rows.last(), Some(&row(40)), "{show:?}: {rows:?}");
@@ -72,7 +72,7 @@ fn a_push_reaches_the_last_column_the_session_knows() {
 fn a_new_width_draws_the_push_again_where_your_prompt_shows() {
     for show in [PromptShow::Text, PromptShow::Lifted] {
         let (mut session, mut negotiator) = at(show, 40);
-        let mut grid = crate::term_grid::TermGrid::new(40, 20);
+        let mut grid = crate::native::grid::TermGrid::new(40, 20);
         grid.session_output(&session.read(&wire_fixture("quiet")).out);
         // The size the session holds draws nothing again.
         assert!(!window_size_step(
@@ -159,7 +159,7 @@ fn a_design_with_no_push_still_closes_the_row_at_a_new_width() {
 #[test]
 fn a_lifted_band_that_fills_its_row_stays_on_it_and_your_echo_takes_the_next() {
     let (mut session, _) = at(PromptShow::Lifted, 40);
-    let mut grid = crate::term_grid::TermGrid::new(40, 20);
+    let mut grid = crate::native::grid::TermGrid::new(40, 20);
     grid.session_output(&session.read(&wire_fixture("quiet")).out);
     session.local_write();
     grid.local_write(b"look\r\n");

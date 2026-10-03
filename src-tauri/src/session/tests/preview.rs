@@ -60,7 +60,7 @@ fn screen_after_echo<'a>(
     outputs: impl IntoIterator<Item = &'a Output>,
     columns: usize,
 ) -> Vec<String> {
-    let mut grid = crate::term_grid::TermGrid::new(columns, 60);
+    let mut grid = crate::native::grid::TermGrid::new(columns, 60);
     for out in outputs {
         grid.session_output(out);
     }
@@ -71,7 +71,7 @@ fn screen_after_echo<'a>(
 /// The native grid's screen, `columns` wide, after `outputs`.
 #[cfg(native_surface)]
 fn screen<'a>(outputs: impl IntoIterator<Item = &'a Output>, columns: usize) -> Vec<String> {
-    let mut grid = crate::term_grid::TermGrid::new(columns, 60);
+    let mut grid = crate::native::grid::TermGrid::new(columns, 60);
     for out in outputs {
         grid.session_output(out);
     }
@@ -415,7 +415,7 @@ fn the_preview_splits_the_webview_replays_are_what_the_session_sends() {
 /// The native grid `columns` wide after `outputs`, as its rows.
 #[cfg(native_surface)]
 fn grid_after<'a>(
-    grid: &mut crate::term_grid::TermGrid,
+    grid: &mut crate::native::grid::TermGrid,
     outputs: impl IntoIterator<Item = &'a Output>,
 ) -> Vec<String> {
     for out in outputs {
@@ -432,7 +432,7 @@ fn the_open_row_stays_open_across_a_resize_while_the_card_is_open() {
         let mut session = Session::new(showing(profile(CODES, HP, true), show));
         let mut negotiator = vosh_protocol::telnet::Negotiator::new();
         negotiator.set_window_size(80, 40);
-        let mut grid = crate::term_grid::TermGrid::new(80, 40);
+        let mut grid = crate::native::grid::TermGrid::new(80, 40);
         let quiet = session.read(&wire_fixture("quiet"));
         let _ = grid_after(&mut grid, [&quiet.out]);
 
@@ -489,7 +489,7 @@ fn a_new_height_leaves_the_open_row_open_with_the_card_closed() {
         let mut session = Session::new(showing(profile(CODES, HP, true), show));
         let mut negotiator = vosh_protocol::telnet::Negotiator::new();
         negotiator.set_window_size(80, 40);
-        let mut grid = crate::term_grid::TermGrid::new(80, 40);
+        let mut grid = crate::native::grid::TermGrid::new(80, 40);
         let quiet = session.read(&wire_fixture("quiet"));
         let _ = grid_after(&mut grid, [&quiet.out]);
 
@@ -530,7 +530,7 @@ fn the_live_render_comes_back_when_the_connection_ends_during_a_preview() {
     for show in [PromptShow::Text, PromptShow::Lifted, PromptShow::Pinned] {
         let label = format!("{show:?}");
         let mut session = Session::new(showing(profile(CODES, HP, true), show));
-        let mut grid = crate::term_grid::TermGrid::new(80, 40);
+        let mut grid = crate::native::grid::TermGrid::new(80, 40);
         let quiet = session.read(&wire_fixture("quiet"));
         session.p.prompt.set_preview(Some(low_health()));
         let low = session.repaint();

@@ -614,7 +614,7 @@ fn reader_busy<R: tauri::Runtime>(app: &AppHandle<R>) -> bool {
 
 #[cfg(native_surface)]
 fn native_reader_busy() -> bool {
-    crate::term_grid::reader_busy()
+    crate::native::grid::reader_busy()
 }
 
 #[cfg(not(native_surface))]

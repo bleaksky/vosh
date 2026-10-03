@@ -9,8 +9,6 @@
 //! macOS only for now (the renderer that consumes it is). The grid model
 //! itself is platform independent and ungates when other platforms land.
 
-#![cfg(native_surface)]
-
 use std::sync::{Mutex, OnceLock};
 
 use alacritty_terminal::event::{Event, EventListener};

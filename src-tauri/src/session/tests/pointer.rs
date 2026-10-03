@@ -41,7 +41,7 @@ fn case(template: &str, show: PromptShow) -> serde_json::Value {
         .into_iter()
         .filter(|_| show != PromptShow::Pinned)
         .map(|columns| {
-            let mut grid = crate::term_grid::TermGrid::new(columns, 24);
+            let mut grid = crate::native::grid::TermGrid::new(columns, 24);
             for read in &reads {
                 grid.session_output(&read.out);
             }

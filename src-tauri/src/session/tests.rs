@@ -473,7 +473,7 @@ fn payload(out: &Output) -> Option<String> {
 
 /// The rows a grid shows, trimmed, up to the last row that shows anything.
 #[cfg(native_surface)]
-fn rows_of(grid: &crate::term_grid::TermGrid) -> Vec<String> {
+fn rows_of(grid: &crate::native::grid::TermGrid) -> Vec<String> {
     let mut rows: Vec<String> = (0..grid.screen_lines())
         .map(|line| grid.row_string(line).trim_end().to_string())
         .collect();

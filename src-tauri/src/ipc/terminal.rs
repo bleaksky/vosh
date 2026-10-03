@@ -27,8 +27,8 @@ pub(crate) async fn terminal_local_write(
 ) -> Result<(), String> {
     #[cfg(native_surface)]
     let taken = {
-        let taken = crate::term_grid::feed_local(text.as_bytes());
-        crate::native_surface::request_redraw();
+        let taken = crate::native::grid::feed_local(text.as_bytes());
+        crate::native::surface::request_redraw();
         taken
     };
     // With no grid, text whose renderer named nothing lands after
@@ -63,8 +63,8 @@ pub(crate) fn terminal_reader_busy(state: State<'_, SharedState>, busy: bool) {
 /// own buffer and marker instead.
 #[cfg(native_surface)]
 #[tauri::command]
-pub(crate) fn terminal_cursor() -> Option<crate::term_grid::CursorReport> {
-    crate::term_grid::cursor_report()
+pub(crate) fn terminal_cursor() -> Option<crate::native::grid::CursorReport> {
+    crate::native::grid::cursor_report()
 }
 
 /// No native grid on this build, so there is nothing to report.
@@ -80,8 +80,8 @@ pub(crate) fn terminal_cursor() -> Option<()> {
 /// buffer instead.
 #[cfg(native_surface)]
 #[tauri::command]
-pub(crate) fn terminal_screen_rows() -> Option<crate::term_grid::ScreenRows> {
-    crate::term_grid::screen_rows()
+pub(crate) fn terminal_screen_rows() -> Option<crate::native::grid::ScreenRows> {
+    crate::native::grid::screen_rows()
 }
 
 /// No native grid on this build, so there is nothing to read.
@@ -106,11 +106,11 @@ pub(crate) async fn scrollback_load(
     // the grid still holds everything. The seed is claimed even when the
     // scrollback is empty, since the grid then gets every line live.
     #[cfg(native_surface)]
-    let seeded_native = feed_native && crate::term_grid::claim_seed() && !bytes.is_empty();
+    let seeded_native = feed_native && crate::native::grid::claim_seed() && !bytes.is_empty();
     #[cfg(native_surface)]
     if seeded_native {
-        crate::term_grid::feed_local(&bytes);
-        crate::native_surface::request_redraw();
+        crate::native::grid::feed_local(&bytes);
+        crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
     let seeded_native = {
