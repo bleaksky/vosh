@@ -1051,8 +1051,10 @@ mud.set_prompt_var('move', captures[4])"""
         let root = dir.path();
         let state: crate::app::state::SharedState =
             std::sync::Arc::new(crate::app::state::AppState::default());
-        let launched = crate::app::launch::load(&state, root).await;
-        assert!(launched.loadout_mode);
+        crate::app::launch::load(&state, root).await;
+        assert!(state
+            .loadout_mode
+            .load(std::sync::atomic::Ordering::Acquire));
         assert_eq!(state.take_launch_notices(), [MOVED_INTO_DEFAULT]);
 
         let p = state.profile.lock().await;

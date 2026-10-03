@@ -10,12 +10,12 @@
 //! as one ordered list.
 
 use std::path::Path;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use vosh_prompt::config::CaptureSource;
 use vosh_prompt::CaptureConfig;
 
-use crate::app::launch::Launch;
 use crate::app::state::{AppState, SharedState};
 use crate::disk::paths::journal_path;
 use crate::disk::save::{persist_state, PERSIST_LOCK};
@@ -142,10 +142,10 @@ fn shared_theme_ids(set: &ProfileSet) -> Vec<String> {
 
 /// Run `app::launch::load` over `app_data` on a fresh state, as the
 /// setup steps in app/launch.rs do.
-async fn launch(app_data: &Path) -> (SharedState, Launch) {
+async fn launch(app_data: &Path) -> SharedState {
     let state: SharedState = Arc::new(AppState::default());
-    let launched = crate::app::launch::load(&state, app_data).await;
-    (state, launched)
+    crate::app::launch::load(&state, app_data).await;
+    state
 }
 
 #[tokio::test]
@@ -161,9 +161,9 @@ async fn launch_runs_the_upgrades_in_order() {
     std::fs::write(set.profile_path("alt"), ALT_PROFILE).unwrap();
     let profile_path = set.profile_path("default");
 
-    let (state, launched) = launch(&app_data).await;
-    assert!(launched.loadout_mode);
-    assert!(!launched.wizard_unfinished);
+    let state = launch(&app_data).await;
+    assert!(state.loadout_mode.load(Ordering::Acquire));
+    assert!(!state.relaunch_pending.load(Ordering::Acquire));
 
     // 1. The wizard finish ran first and wrote every file the journal
     //    names.
@@ -254,9 +254,9 @@ async fn an_unfinished_wizard_run_holds_the_upgrades_after_it() {
     let blocked = app_data.join("profiles").join("default.toml.tmp");
     std::fs::create_dir_all(&blocked).unwrap();
 
-    let (state, launched) = launch(&app_data).await;
-    assert!(launched.wizard_unfinished);
-    assert!(!launched.loadout_mode);
+    let state = launch(&app_data).await;
+    assert!(state.relaunch_pending.load(Ordering::Acquire));
+    assert!(!state.loadout_mode.load(Ordering::Acquire));
     assert_eq!(state.take_launch_notices(), [WIZARD_UNFINISHED_NOTICE]);
     // The prompt upgrade and the rollout wait for the run, and the
     // profiles still load.
@@ -267,9 +267,9 @@ async fn an_unfinished_wizard_run_holds_the_upgrades_after_it() {
     // Once the file takes writes, the next launch finishes the run, then
     // runs the upgrades after it in order.
     std::fs::remove_dir(&blocked).unwrap();
-    let (state, launched) = launch(&app_data).await;
-    assert!(launched.loadout_mode);
-    assert!(!launched.wizard_unfinished);
+    let state = launch(&app_data).await;
+    assert!(state.loadout_mode.load(Ordering::Acquire));
+    assert!(!state.relaunch_pending.load(Ordering::Acquire));
     assert_eq!(
         state.take_launch_notices(),
         [WIZARD_FINISHED_NOTICE, MOVED_INTO_DEFAULT]
@@ -294,12 +294,12 @@ async fn a_launch_leaves_an_older_mudclient_folder_alone() {
     let app_data = dir.path().join("com.example.vosh");
     save_wizard_journal(&old, &journal()).unwrap();
 
-    let (state, launched) = launch(&app_data).await;
+    let state = launch(&app_data).await;
     assert!(journal_path(&old).exists(), "the older folder stays");
     assert!(!journal_path(&app_data).exists(), "nothing was copied");
     assert!(!app_data.join("catalog.toml").exists(), "no wizard run");
-    assert!(!launched.loadout_mode);
-    assert!(!launched.wizard_unfinished);
+    assert!(!state.loadout_mode.load(Ordering::Acquire));
+    assert!(!state.relaunch_pending.load(Ordering::Acquire));
     let leftover = &state.take_launch_notices();
     assert!(leftover.is_empty(), "{leftover:?}");
 }

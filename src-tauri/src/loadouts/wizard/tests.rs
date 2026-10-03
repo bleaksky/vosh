@@ -92,25 +92,20 @@ async fn refused(state: &SharedState) -> String {
 }
 
 /// Quit and open Vosh again as `name`, the way app/launch.rs launches,
-/// with the shared catalog and loadouts when they are on disk.
-async fn relaunch_as(dir: &std::path::Path, name: &str) -> SharedState {
-    relaunch(dir, name).await.0
-}
-
-/// [`relaunch_as`] with what the launch found. The folder has
-/// had every preset rollout already, as one this build opened
-/// before has, so each list stays as the test wrote it. The
+/// with the shared catalog and loadouts when they are on disk. The
+/// folder has had every preset rollout already, as one this build
+/// opened before has, so each list stays as the test wrote it. The
 /// rollouts have tests of their own in `disk/upgrades/presets.rs`.
-async fn relaunch(dir: &std::path::Path, name: &str) -> (SharedState, crate::app::launch::Launch) {
+async fn relaunch_as(dir: &std::path::Path, name: &str) -> SharedState {
     let mut set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
     for (id, _) in crate::disk::upgrades::presets::ROLLOUTS {
         set.record_migration(id).unwrap();
     }
     set.switch(name).unwrap();
     let state: SharedState = std::sync::Arc::new(AppState::default());
-    let launched = crate::app::launch::load(&state, dir).await;
+    crate::app::launch::load(&state, dir).await;
     assert!(state.profile_set.lock().await.is_some());
-    (state, launched)
+    state
 }
 
 fn macro_on(key: &str, command: &str) -> crate::profile::live::Macro {
@@ -1835,9 +1830,9 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
     let blocked = set.profile_path("Healer").with_extension("toml.tmp");
     std::fs::create_dir(&blocked).unwrap();
     let healer_file = read(&set.profile_path("Healer"));
-    let (state, launched) = relaunch(dir.path(), "Healer").await;
-    assert!(launched.wizard_unfinished);
-    assert!(!launched.loadout_mode);
+    let state = relaunch_as(dir.path(), "Healer").await;
+    assert!(state.relaunch_pending.load(Ordering::Acquire));
+    assert!(!state.loadout_mode.load(Ordering::Acquire));
     assert_eq!(state.take_launch_notices(), [WIZARD_UNFINISHED_NOTICE]);
     // Loadout mode used to start over the Healer file, which still
     // holds its items under their old groups, so the Healer got
@@ -1846,11 +1841,8 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
     assert!(state.global_catalog.lock().await.is_none());
     assert_eq!(items_on(&*state.profile.lock().await), before[1]);
 
-    // app/launch.rs holds every save and every switch, since the next
-    // launch writes the journal again over what this one saved.
-    state
-        .relaunch_pending
-        .store(launched.wizard_unfinished, Ordering::Release);
+    // Launch holds every save and every switch, since the next launch
+    // writes the journal again over what this one saved.
     state
         .profile
         .lock()
@@ -1877,9 +1869,9 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
     // the run and each character has on what it had before.
     std::fs::remove_dir(&blocked).unwrap();
     for (n, name) in names.iter().enumerate() {
-        let (state, launched) = relaunch(dir.path(), name).await;
-        assert!(launched.loadout_mode, "{name}");
-        assert!(!launched.wizard_unfinished, "{name}");
+        let state = relaunch_as(dir.path(), name).await;
+        assert!(state.loadout_mode.load(Ordering::Acquire), "{name}");
+        assert!(!state.relaunch_pending.load(Ordering::Acquire), "{name}");
         assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
     }
     assert!(!journal_path(dir.path()).exists());
