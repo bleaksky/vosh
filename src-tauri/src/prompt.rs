@@ -22,7 +22,7 @@ use vosh_prompt::{
     CaptureConfig, FieldRef, PromptConfig, RenderOptions, Rendered, Resolved, Template, Values,
 };
 
-use crate::app::state::{SharedState, PROFILES_NOT_LOADED};
+use crate::app::state::SharedState;
 use crate::disk::save::PERSIST_LOCK;
 use crate::profile::Profile;
 
@@ -98,15 +98,14 @@ pub(crate) struct PromptDesign {
 /// [`prompt_designs_list`]: crate::ipc::prompt::prompt_designs_list
 pub(crate) async fn designs(state: &SharedState) -> Result<Vec<PromptDesign>, String> {
     let _persist_guard = PERSIST_LOCK.lock().await;
-    let guard = state.profile_set.lock().await;
-    let set = guard.as_ref().ok_or(PROFILES_NOT_LOADED)?;
+    let set = state.loaded_profile_set().await?;
     let active = set.active_name().to_string();
     let mut out = Vec::new();
     for entry in set.list() {
         if entry.name == active {
             continue;
         }
-        let Ok(config) = crate::characters::load_profile_file(set, &entry.name) else {
+        let Ok(config) = crate::characters::load_profile_file(&set, &entry.name) else {
             continue;
         };
         let template = config.prompt_config().template;

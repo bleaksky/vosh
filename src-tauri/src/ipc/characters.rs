@@ -9,7 +9,7 @@ use tauri::{AppHandle, Manager, State};
 use tracing::warn;
 
 use crate::app::events::{broadcast, PROFILES_CHANGED};
-use crate::app::state::{SharedState, PROFILES_NOT_LOADED};
+use crate::app::state::SharedState;
 use crate::characters::{
     export_path, profile_detail, profile_toml, session_identity, ProfileDetail, SessionIdentity,
 };
@@ -39,8 +39,7 @@ pub(crate) async fn profile_set_login(
     on: bool,
 ) -> Result<LoginClaim, String> {
     let claim = {
-        let mut guard = state.profile_set.lock().await;
-        let set = guard.as_mut().ok_or(PROFILES_NOT_LOADED)?;
+        let mut set = state.loaded_profile_set().await?;
         set.set_login(&name, &character, on)
             .map_err(|e| e.to_string())?
     };
@@ -62,8 +61,7 @@ pub(crate) async fn profile_set_world(
     port: Option<u16>,
 ) -> Result<ProfileEntry, String> {
     let entry = {
-        let mut guard = state.profile_set.lock().await;
-        let set = guard.as_mut().ok_or(PROFILES_NOT_LOADED)?;
+        let mut set = state.loaded_profile_set().await?;
         set.set_world(&name, host, port)
             .map_err(|e| e.to_string())?
     };

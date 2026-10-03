@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
+use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
 
 use crate::app::plugins::SharedPluginManager;
 use crate::log_state::{SharedLogStore, SharedScrollback};
@@ -112,6 +112,15 @@ impl AppState {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
+    }
+
+    /// The profile set, locked, once startup has loaded it. Before that,
+    /// the error every profile command returns.
+    pub(crate) async fn loaded_profile_set(
+        &self,
+    ) -> Result<MappedMutexGuard<'_, crate::profile_set::ProfileSet>, &'static str> {
+        MutexGuard::try_map(self.profile_set.lock().await, Option::as_mut)
+            .map_err(|_| PROFILES_NOT_LOADED)
     }
 
     /// Hand over the notices kept so far, once. A second call gets none.
