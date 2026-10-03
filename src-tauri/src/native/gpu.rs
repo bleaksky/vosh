@@ -33,13 +33,18 @@ mod decor;
 mod frame;
 pub(crate) mod style;
 
+use atlas::{AtlasFonts, GlyphAtlas};
+use bands::{
+    band_instances, band_rects, band_viewport, draw_bands, ground_tint, lift_boxes, prompt_bands,
+    prompt_reach, set_stage, widen_newest, LiftBox, MAX_LIFT_ROWS,
+};
 use decor::{decor, line_instances};
-
-// The callers name the module that holds each item in the next commit.
-pub(crate) use atlas::*;
-pub(crate) use bands::*;
-pub(crate) use frame::*;
-pub(crate) use style::*;
+use frame::{build_instances, cell_in_selection, CellInstance, Marks, Region};
+use style::{
+    ansi16, blend_over, blinks_visibly, chrome_paint, drawn_char, draws_lines, paint_to_rgba,
+    rgb_to_rgba, styled_colors, theme_bg, underline_color, wants_bold_font, Rgba,
+    SCROLLBAR_TRACK_SHARE,
+};
 
 /// Where the pane sits inside the render target, in device pixels. The
 /// macOS underlay surface spans the whole window, so the grid draws at the

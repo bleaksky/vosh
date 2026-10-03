@@ -121,7 +121,7 @@ static LAST_BLINKS: AtomicBool = AtomicBool::new(false);
 /// the epoch. None while Blinking text is off, so a frame then reads no
 /// clock.
 fn blink_now() -> Option<u64> {
-    crate::native::gpu::blink_text().then(crate::native::gpu::epoch_ms)
+    crate::native::gpu::style::blink_text().then(crate::native::gpu::style::epoch_ms)
 }
 
 /// Whether a frame leaves text on screen that blinks: what it drew when
@@ -143,7 +143,7 @@ fn frame_blinks(drew: Option<bool>) -> bool {
 /// (`blinks`) or Blinking text is off (no `now_ms`): then nothing waits.
 fn blink_wait(blinks: bool, now_ms: Option<u64>) -> Option<std::time::Duration> {
     let now_ms = now_ms.filter(|_| blinks)?;
-    Some(crate::native::gpu::until_blink_flip(now_ms) + BLINK_SLACK)
+    Some(crate::native::gpu::style::until_blink_flip(now_ms) + BLINK_SLACK)
 }
 
 /// After a frame that left text that blinks, ask for a frame at the next
@@ -172,7 +172,7 @@ fn redraw_now() {
         if let Some(handle) = slot.as_mut() {
             // A theme change repaints through here, so the backdrop that
             // shows during a resize follows it. Cached, so cheap.
-            platform::set_backdrop(&handle.platform, crate::native::gpu::theme_bg_rgb());
+            platform::set_backdrop(&handle.platform, crate::native::gpu::style::theme_bg_rgb());
             render(&mut handle.gpu);
         }
     }
@@ -867,7 +867,7 @@ pub(crate) fn request_copy() {
 /// thread. It keeps the surface and device. The fonts arrive loaded from
 /// the blocking pool, so all that is left here is rasterizing the ASCII
 /// glyphs and uploading the atlas.
-fn swap_font(fonts: crate::native::gpu::AtlasFonts, font_px: f32) {
+fn swap_font(fonts: crate::native::gpu::atlas::AtlasFonts, font_px: f32) {
     if let Ok(mut slot) = surface_slot().lock() {
         if let Some(handle) = slot.as_mut() {
             handle.gpu.cell_renderer = crate::native::gpu::CellRenderer::with_fonts(
@@ -946,7 +946,7 @@ fn request_font_rebuild(family: String, font_px: f32) {
     let app = app.clone();
     load_latest(
         &FONT_TICKETS,
-        move || crate::native::gpu::AtlasFonts::load(&family),
+        move || crate::native::gpu::atlas::AtlasFonts::load(&family),
         move |swap| {
             let _ = app.run_on_main_thread(swap);
         },
@@ -1048,7 +1048,7 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64, lent
     let (px_w, px_h) = clamp_to_device(&handle.gpu.device, px_w, px_h);
     platform::set_scale(&handle.platform, dpr);
     platform::set_hidden(&handle.platform, false);
-    platform::set_backdrop(&handle.platform, crate::native::gpu::theme_bg_rgb());
+    platform::set_backdrop(&handle.platform, crate::native::gpu::style::theme_bg_rgb());
     // The window reports its real radius once it is on screen, and a
     // fullscreen switch also resizes the pane, so re-check here.
     platform::sync_corner_radius(&handle.platform);
@@ -1176,7 +1176,7 @@ fn render(state: &mut GpuState) {
         y: pane_y,
         scale: load_f32(&DPR, 2.0),
         target: [state.config.width, state.config.height],
-        blink_hidden: now_ms.is_some_and(|now| !crate::native::gpu::blink_shown(now)),
+        blink_hidden: now_ms.is_some_and(|now| !crate::native::gpu::style::blink_shown(now)),
     };
     let cell_renderer = &mut state.cell_renderer;
     let drawn = crate::native::grid::with_grid(|grid| {
@@ -1200,7 +1200,7 @@ fn render(state: &mut GpuState) {
         // No grid yet: clear to the terminal background, since this fills
         // the whole window behind the page. The pass records its clear
         // when dropped at the end of this block.
-        let (bg_r, bg_g, bg_b) = crate::native::gpu::theme_bg_rgb();
+        let (bg_r, bg_g, bg_b) = crate::native::gpu::style::theme_bg_rgb();
         let _clear_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("term-surface-clear"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {

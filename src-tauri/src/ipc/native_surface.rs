@@ -138,10 +138,10 @@ pub(crate) fn native_surface_set_theme(
             parse_hex(&foreground),
             parse_hex(&selection),
         ) {
-            crate::native::gpu::set_theme(bg, fg, sel);
+            crate::native::gpu::style::set_theme(bg, fg, sel);
             let palette: Vec<(u8, u8, u8)> = ansi.iter().filter_map(|s| parse_hex(s)).collect();
             if palette.len() == 16 {
-                crate::native::gpu::set_palette(&palette);
+                crate::native::gpu::style::set_palette(&palette);
             }
             crate::native::surface::request_redraw();
         }
@@ -160,8 +160,8 @@ pub(crate) fn native_surface_set_divider_color(color: Option<String>) {
     {
         let parsed = color
             .as_deref()
-            .and_then(crate::native::gpu::parse_css_color);
-        crate::native::gpu::set_divider_color(parsed);
+            .and_then(crate::native::gpu::style::parse_css_color);
+        crate::native::gpu::style::set_divider_color(parsed);
         crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
@@ -192,8 +192,11 @@ pub(crate) fn native_surface_set_tokens(
 ) {
     #[cfg(native_surface)]
     {
-        let parse = |v: Option<String>| v.as_deref().and_then(crate::native::gpu::parse_css_color);
-        crate::native::gpu::set_tokens(crate::native::gpu::ChromeTokens {
+        let parse = |v: Option<String>| {
+            v.as_deref()
+                .and_then(crate::native::gpu::style::parse_css_color)
+        };
+        crate::native::gpu::style::set_tokens(crate::native::gpu::style::ChromeTokens {
             divider: parse(divider),
             selection: parse(selection),
             find_match: parse(find_match),
@@ -226,7 +229,7 @@ pub(crate) fn native_surface_set_tokens(
 pub(crate) fn native_surface_set_prompt_bands(on: bool) {
     #[cfg(native_surface)]
     {
-        crate::native::gpu::set_prompt_bands(on);
+        crate::native::gpu::bands::set_prompt_bands(on);
         crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
@@ -243,7 +246,7 @@ pub(crate) fn native_surface_set_prompt_reach(px: f64) {
     #[cfg(native_surface)]
     {
         #[allow(clippy::cast_possible_truncation)]
-        crate::native::gpu::set_prompt_reach(px as f32);
+        crate::native::gpu::bands::set_prompt_reach(px as f32);
         crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
@@ -258,7 +261,7 @@ pub(crate) fn native_surface_set_prompt_reach(px: f64) {
 pub(crate) fn native_surface_set_bright_bold(on: bool) {
     #[cfg(native_surface)]
     {
-        crate::native::gpu::set_bright_bold(on);
+        crate::native::gpu::style::set_bright_bold(on);
         crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
@@ -274,7 +277,7 @@ pub(crate) fn native_surface_set_bright_bold(on: bool) {
 pub(crate) fn native_surface_set_blink_text(on: bool) {
     #[cfg(native_surface)]
     {
-        crate::native::gpu::set_blink_text(on);
+        crate::native::gpu::style::set_blink_text(on);
         crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
