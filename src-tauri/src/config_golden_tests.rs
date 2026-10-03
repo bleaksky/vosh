@@ -33,7 +33,7 @@ use vosh_prompt::config::{AabahranCapture, CaptureSource, RegexCapture};
 use vosh_prompt::{CaptureConfig, PromptConfig, PromptShow};
 
 use crate::app::state::{AppState, SharedState};
-use crate::commands::PERSIST_LOCK;
+use crate::disk::save::PERSIST_LOCK;
 use crate::loadout::{GlobalCatalog, Loadout, LoadoutSet};
 use crate::loadout_store::{
     catalog_path, load_global_catalog, load_loadout_set, loadouts_path, save_global_catalog,
@@ -779,7 +779,7 @@ async fn a_fresh_install_writes_these_files_on_its_first_save() {
     crate::launch::load(&state, root).await;
     {
         let _persist = PERSIST_LOCK.lock().await;
-        crate::commands::persist_state(&state, Some(root)).await;
+        crate::disk::save::persist_state(&state, Some(root)).await;
     }
     assert_eq!(
         written_files(root),

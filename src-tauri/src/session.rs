@@ -1559,7 +1559,7 @@ async fn run_fired_command<R: tauri::Runtime>(
         let mut p = profile.lock().await;
         run_fired_locked(&mut p, command, shared.as_ref())
     };
-    crate::commands::settle_line_effects(app, effects).await;
+    crate::disk::save::settle_line_effects(app, effects).await;
     shown.send(app);
     let mut io = ScriptIo::Session(stream, sink);
     apply_script_result(app, &mut io, profile, timers, apply).await
@@ -3057,7 +3057,7 @@ pub(crate) fn report_game_prompt_seen<R: tauri::Runtime>(
         }
     }
     if applied {
-        crate::commands::mark_profile_dirty(app);
+        crate::disk::save::mark_profile_dirty(app);
         broadcast_list_changes(app, ListChanges::PROMPT);
     }
 }
@@ -3394,7 +3394,7 @@ async fn apply_script_result<R: tauri::Runtime>(
         // fired by triggers or timers) historically never reached disk.
         // Ride the same debounced persist the slash commands use.
         if apply.durable_changed {
-            crate::commands::mark_profile_dirty(app);
+            crate::disk::save::mark_profile_dirty(app);
         }
         // A Lua `mud.alias` changes the list an open Settings page shows.
         broadcast_list_changes(app, apply.lists);
@@ -3444,7 +3444,7 @@ async fn apply_script_result<R: tauri::Runtime>(
                 shared.as_ref(),
             )
         };
-        crate::commands::settle_line_effects(app, effects).await;
+        crate::disk::save::settle_line_effects(app, effects).await;
         shown.send(app);
         apply = next;
     }

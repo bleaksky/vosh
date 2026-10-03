@@ -30,7 +30,7 @@ use vosh_prompt::{
 
 use crate::app::events::broadcast_prompt_config_changed;
 use crate::app::state::{SharedState, PROFILES_NOT_LOADED};
-use crate::commands::{mark_profile_dirty, PERSIST_LOCK};
+use crate::disk::save::{mark_profile_dirty, PERSIST_LOCK};
 use crate::profile::Profile;
 
 /// The active profile's `[prompt]` table.

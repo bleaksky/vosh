@@ -25,7 +25,7 @@ use crate::app::state::{
     bump_panes_generation, panes_generation, SharedState, AUTO_PERSIST_SUPPRESSED,
     MIGRATION_RELAUNCH_PENDING, PROFILES_NOT_LOADED,
 };
-use crate::commands::{persist_profile, PERSIST_LOCK};
+use crate::disk::save::{persist_profile, PERSIST_LOCK};
 use crate::profile_config::{
     GlobalConfig, PaneLayoutPersist, ProfileConfig, TrackedAffect, UiConfig,
 };

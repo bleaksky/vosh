@@ -170,7 +170,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
             tick_changed: true,
             ..LineEffects::default()
         };
-        crate::commands::settle_line_effects(handle, tick).await;
+        crate::disk::save::settle_line_effects(handle, tick).await;
         listening.finish("settle_line_effects", &mut heard, &mut want);
 
         // Each window answers the quit request the way its page does, so
