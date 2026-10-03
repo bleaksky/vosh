@@ -57,56 +57,26 @@ core-text = "20"
 # The font list reads each family's monospace trait from its CoreText
 # font descriptor (fonts.rs). 0.9 is the version core-text 20 uses.
 core-foundation = "0.9"
-# Tier 3 native terminal renderer (docs/native-renderer.md); the platform
-# list here mirrors the `native_surface` cfg in build.rs. wgpu drives a
-# Metal surface on macOS, a D3D12 surface on Windows, and a Vulkan surface
-# on Linux (X11); pollster blocks on its async init during setup;
-# raw-window-handle bridges the native view.
-[target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
+# Tier 3 native terminal renderer (docs/native-renderer.md), macOS only
+# like the `native_surface` cfg in build.rs. wgpu drives a Metal surface;
+# pollster blocks on its async init during setup; raw-window-handle
+# bridges the native view.
 wgpu = "0.20"
 pollster = "0.3"
 raw-window-handle = "0.6"
 # Terminal grid model (VTE parser + cell grid + scrollback) fed by the
 # post-telnet byte stream; the wgpu renderer draws this grid (M2b/M2c).
 alacritty_terminal = "0.24"
-# font-kit selects the font and supplies metrics + glyph bounds (and, off
-# macOS, rasterizes through the platform library: DirectWrite/FreeType).
+# font-kit selects the font and supplies metrics + glyph bounds.
 # pathfinder_geometry supplies its transform types.
 pathfinder_geometry = "0.5"
 # Cast the per-cell instance + uniform structs to bytes for wgpu buffers.
 bytemuck = { version = "1", features = ["derive"] }
-
 # alacritty_terminal compiles a unix tty (PTY) module we never use; it
 # pulls rustix-openpty, whose rustix builds without the `std` feature and
 # its fd types then fail to bridge to std's OwnedFd. Force `std` on so
 # Cargo unifies the feature across the graph and the tty module compiles.
-[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 rustix = { version = "0.38", features = ["std"] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-# The native surface's child X window rides the GTK toplevel Tauri owns.
-# gtk/gdk (0.18, Tauri 2's GTK3 bindings) reach the toplevel and the
-# clipboard; x11-dl dlopens libX11 for the child window itself, so there
-# is no new link-time dependency and Wayland-only systems still run
-# (install detects the backend and falls back to xterm).
-gtk = "0.18"
-gdk = "0.18"
-x11-dl = "2"
-
-[target.'cfg(target_os = "windows")'.dependencies]
-# Win32 plumbing for the native surface's child HWND (window class,
-# WndProc, clipboard, ShellExecute).
-windows-sys = { version = "0.59", features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-    "Win32_System_DataExchange",
-    "Win32_System_LibraryLoader",
-    "Win32_System_Memory",
-    "Win32_UI_HiDpi",
-    "Win32_UI_Input_KeyboardAndMouse",
-    "Win32_UI_Shell",
-    "Win32_UI_WindowsAndMessaging",
-] }
 
 [dev-dependencies]
 tempfile = "3"
