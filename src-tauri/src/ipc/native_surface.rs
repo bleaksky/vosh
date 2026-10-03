@@ -27,7 +27,7 @@ pub(crate) fn native_surface_set_bounds(
     {
         let lent = lent.unwrap_or(0);
         let _ = app.run_on_main_thread(move || {
-            crate::native_surface::set_bounds(x, y, width, height, dpr, lent);
+            crate::native::surface::set_bounds(x, y, width, height, dpr, lent);
         });
     }
     #[cfg(not(native_surface))]
@@ -47,7 +47,7 @@ pub(crate) fn native_surface_pointer(app: AppHandle, kind: String, x: f64, y: f6
     #[cfg(native_surface)]
     {
         let _ = app.run_on_main_thread(move || {
-            crate::native_surface::forward_pointer(&kind, x, y, open);
+            crate::native::surface::forward_pointer(&kind, x, y, open);
         });
     }
     #[cfg(not(native_surface))]
@@ -63,7 +63,7 @@ pub(crate) fn native_surface_pointer(app: AppHandle, kind: String, x: f64, y: f6
 pub(crate) fn native_surface_ready() -> bool {
     #[cfg(native_surface)]
     {
-        crate::native_surface::is_ready()
+        crate::native::surface::is_ready()
     }
     #[cfg(not(native_surface))]
     {
@@ -78,7 +78,7 @@ pub(crate) fn native_surface_wheel(app: AppHandle, delta_y: f64) {
     #[cfg(native_surface)]
     {
         let _ = app.run_on_main_thread(move || {
-            crate::native_surface::forward_wheel(delta_y);
+            crate::native::surface::forward_wheel(delta_y);
         });
     }
     #[cfg(not(native_surface))]
@@ -92,7 +92,7 @@ pub(crate) fn native_surface_wheel(app: AppHandle, delta_y: f64) {
 #[tauri::command]
 pub(crate) fn native_surface_copy() {
     #[cfg(native_surface)]
-    crate::native_surface::request_copy();
+    crate::native::surface::request_copy();
 }
 
 /// Tier 3 native renderer: select everything in the grid, scrollback
@@ -102,8 +102,8 @@ pub(crate) fn native_surface_copy() {
 pub(crate) fn native_surface_select_all() {
     #[cfg(native_surface)]
     {
-        crate::term_grid::select_all();
-        crate::native_surface::request_redraw();
+        crate::native::grid::select_all();
+        crate::native::surface::request_redraw();
     }
 }
 
@@ -138,12 +138,12 @@ pub(crate) fn native_surface_set_theme(
             parse_hex(&foreground),
             parse_hex(&selection),
         ) {
-            crate::cell_render::set_theme(bg, fg, sel);
+            crate::native::gpu::set_theme(bg, fg, sel);
             let palette: Vec<(u8, u8, u8)> = ansi.iter().filter_map(|s| parse_hex(s)).collect();
             if palette.len() == 16 {
-                crate::cell_render::set_palette(&palette);
+                crate::native::gpu::set_palette(&palette);
             }
-            crate::native_surface::request_redraw();
+            crate::native::surface::request_redraw();
         }
     }
     #[cfg(not(native_surface))]
@@ -160,9 +160,9 @@ pub(crate) fn native_surface_set_divider_color(color: Option<String>) {
     {
         let parsed = color
             .as_deref()
-            .and_then(crate::cell_render::parse_css_color);
-        crate::cell_render::set_divider_color(parsed);
-        crate::native_surface::request_redraw();
+            .and_then(crate::native::gpu::parse_css_color);
+        crate::native::gpu::set_divider_color(parsed);
+        crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
     {
@@ -192,8 +192,8 @@ pub(crate) fn native_surface_set_tokens(
 ) {
     #[cfg(native_surface)]
     {
-        let parse = |v: Option<String>| v.as_deref().and_then(crate::cell_render::parse_css_color);
-        crate::cell_render::set_tokens(crate::cell_render::ChromeTokens {
+        let parse = |v: Option<String>| v.as_deref().and_then(crate::native::gpu::parse_css_color);
+        crate::native::gpu::set_tokens(crate::native::gpu::ChromeTokens {
             divider: parse(divider),
             selection: parse(selection),
             find_match: parse(find_match),
@@ -203,7 +203,7 @@ pub(crate) fn native_surface_set_tokens(
             selrow: parse(selrow),
             light: appearance.as_deref() == Some("light"),
         });
-        crate::native_surface::request_redraw();
+        crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
     {
@@ -226,8 +226,8 @@ pub(crate) fn native_surface_set_tokens(
 pub(crate) fn native_surface_set_prompt_bands(on: bool) {
     #[cfg(native_surface)]
     {
-        crate::cell_render::set_prompt_bands(on);
-        crate::native_surface::request_redraw();
+        crate::native::gpu::set_prompt_bands(on);
+        crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
     {
@@ -243,8 +243,8 @@ pub(crate) fn native_surface_set_prompt_reach(px: f64) {
     #[cfg(native_surface)]
     {
         #[allow(clippy::cast_possible_truncation)]
-        crate::cell_render::set_prompt_reach(px as f32);
-        crate::native_surface::request_redraw();
+        crate::native::gpu::set_prompt_reach(px as f32);
+        crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
     {
@@ -258,8 +258,8 @@ pub(crate) fn native_surface_set_prompt_reach(px: f64) {
 pub(crate) fn native_surface_set_bright_bold(on: bool) {
     #[cfg(native_surface)]
     {
-        crate::cell_render::set_bright_bold(on);
-        crate::native_surface::request_redraw();
+        crate::native::gpu::set_bright_bold(on);
+        crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
     {
@@ -274,8 +274,8 @@ pub(crate) fn native_surface_set_bright_bold(on: bool) {
 pub(crate) fn native_surface_set_blink_text(on: bool) {
     #[cfg(native_surface)]
     {
-        crate::cell_render::set_blink_text(on);
-        crate::native_surface::request_redraw();
+        crate::native::gpu::set_blink_text(on);
+        crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
     {
@@ -291,7 +291,7 @@ pub(crate) fn native_surface_set_blink_text(on: bool) {
 #[tauri::command]
 pub(crate) fn native_surface_set_cell_metrics(width: u32, height: u32, char_height: Option<u32>) {
     #[cfg(native_surface)]
-    crate::native_surface::set_cell_metrics(width, height, char_height.unwrap_or(0));
+    crate::native::surface::set_cell_metrics(width, height, char_height.unwrap_or(0));
     #[cfg(not(native_surface))]
     {
         let _ = (width, height, char_height);
@@ -312,8 +312,9 @@ pub(crate) fn native_surface_find(
 ) -> (usize, usize) {
     #[cfg(native_surface)]
     {
-        let result = crate::term_grid::find_run(&query, regex, case_sensitive, whole_word, forward);
-        crate::native_surface::request_redraw();
+        let result =
+            crate::native::grid::find_run(&query, regex, case_sensitive, whole_word, forward);
+        crate::native::surface::request_redraw();
         result
     }
     #[cfg(not(native_surface))]
@@ -329,8 +330,8 @@ pub(crate) fn native_surface_find(
 pub(crate) fn native_surface_find_clear() {
     #[cfg(native_surface)]
     {
-        crate::term_grid::find_clear();
-        crate::native_surface::request_redraw();
+        crate::native::grid::find_clear();
+        crate::native::surface::request_redraw();
     }
 }
 
@@ -340,7 +341,7 @@ pub(crate) fn native_surface_find_clear() {
 #[tauri::command]
 pub(crate) fn native_surface_set_font(family: String, size: u32) {
     #[cfg(native_surface)]
-    crate::native_surface::request_set_font(family, size);
+    crate::native::surface::request_set_font(family, size);
     #[cfg(not(native_surface))]
     {
         let _ = (family, size);
@@ -357,20 +358,20 @@ pub(crate) fn native_surface_scroll(kind: String) {
     #[cfg(native_surface)]
     {
         match kind.as_str() {
-            "pageup" => crate::term_grid::scroll_page(true),
-            "pagedown" => crate::term_grid::scroll_page(false),
-            "bottom" => crate::term_grid::scroll_to_bottom(),
+            "pageup" => crate::native::grid::scroll_page(true),
+            "pagedown" => crate::native::grid::scroll_page(false),
+            "bottom" => crate::native::grid::scroll_to_bottom(),
             "toggle" => {
-                let (offset, _) = crate::term_grid::scroll_metrics();
+                let (offset, _) = crate::native::grid::scroll_metrics();
                 if offset > 0 {
-                    crate::term_grid::scroll_to_bottom();
+                    crate::native::grid::scroll_to_bottom();
                 } else {
-                    crate::term_grid::scroll_page(true);
+                    crate::native::grid::scroll_page(true);
                 }
             }
             _ => {}
         }
-        crate::native_surface::request_redraw();
+        crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
     {

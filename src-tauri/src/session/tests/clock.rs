@@ -174,7 +174,7 @@ fn a_band_repaint_between_your_echo_and_its_word_keeps_the_next_line_end() {
     let mut session = Session::new(showing(profile(CODES, TICK, true), PromptShow::Pinned));
     let t0 = Instant::now();
     session.p.tick.start_session(t0);
-    let mut grid = crate::term_grid::TermGrid::new(60, 30);
+    let mut grid = crate::native::grid::TermGrid::new(60, 30);
     let read = session.read(&wire_fixture("quiet"));
     assert!(read.prompt);
     grid.session_output(&read.out);

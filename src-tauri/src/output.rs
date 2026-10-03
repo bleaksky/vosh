@@ -220,7 +220,7 @@ pub(crate) fn emit_counted<R: tauri::Runtime>(
     // that xterm receives this same stream through. The grid finds each
     // region in its own rows, as xterm does.
     #[cfg(native_surface)]
-    crate::term_grid::feed_session_output(out, id);
+    crate::native::grid::feed_session_output(out, id);
     if frame {
         request_frame(app);
     }
@@ -237,7 +237,7 @@ pub(crate) const TEST_FRAME_EVENT: &str = "test://frame";
 /// Ask the native renderer for a frame of what the grid holds now.
 pub(crate) fn request_frame<R: tauri::Runtime>(app: &AppHandle<R>) {
     #[cfg(native_surface)]
-    crate::native_surface::request_redraw();
+    crate::native::surface::request_redraw();
     #[cfg(test)]
     let _ = app.emit(TEST_FRAME_EVENT, ());
     #[cfg(not(test))]

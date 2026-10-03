@@ -15,7 +15,7 @@
 
 use std::time::Duration;
 
-use crate::term_grid::TermGrid;
+use crate::native::grid::TermGrid;
 
 /// How far past an edge, in points, the pointer reaches top speed. The
 /// same as xterm's drag scroll, so both renderers move alike.

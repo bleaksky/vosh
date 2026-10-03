@@ -1,6 +1,6 @@
 //! Tier 3 native terminal renderer, M2c (see docs/native-renderer.md).
 //!
-//! The wgpu cell renderer: turns `term_grid`'s cells into pixels. Built
+//! The wgpu cell renderer: turns `grid`'s cells into pixels. Built
 //! incrementally — color mapping first (this file's first commit), then a
 //! glyph atlas, then the instanced pipeline that replaces the M1 test
 //! triangle. The pipeline reads the grid each frame and draws a
@@ -9,7 +9,6 @@
 //! Glyphs rasterize through CoreGraphics with smoothing off, to match the
 //! webview.
 
-#![cfg(native_surface)]
 // Pixel-coordinate float math on small integers (atlas dimensions, glyph
 // coords) that are always far inside f32's exact-integer range.
 #![allow(clippy::cast_precision_loss)]
@@ -21,7 +20,7 @@ use std::sync::Mutex;
 
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
 
-use crate::term_grid::{CellFlags, LiftSpan, Underline};
+use crate::native::grid::{CellFlags, LiftSpan, Underline};
 
 /// Linear-ish rgba in 0..1, ready for a wgpu vertex/instance buffer.
 pub(crate) type Rgba = [f32; 4];
@@ -1061,8 +1060,8 @@ impl GlyphAtlas {
         Self::with_reported(
             fonts,
             px,
-            crate::native_surface::reported_cell(),
-            crate::native_surface::reported_char_height(),
+            crate::native::surface::reported_cell(),
+            crate::native::surface::reported_char_height(),
         )
     }
 
@@ -2335,7 +2334,7 @@ impl CellRenderer {
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         view: &wgpu::TextureView,
-        grid: &crate::term_grid::TermGrid,
+        grid: &crate::native::grid::TermGrid,
         surface_w: u32,
         surface_h: u32,
         split_ratio: f32,
@@ -2356,7 +2355,7 @@ impl CellRenderer {
         let offset = grid.display_offset() as i32;
         // Find matches (and the active one) drive a highlight pass and
         // suppress the split so the match shows in a single full view.
-        let (find_matches, find_active_match) = crate::term_grid::find_snapshot();
+        let (find_matches, find_active_match) = crate::native::grid::find_snapshot();
         // Wash paint. Washed lines carry a distinctive quarter-strength
         // truecolor background (NamedColor::wash_tint in the trigger
         // crate) on the text of the line. That value is a SIGNAL, not
@@ -2509,7 +2508,7 @@ impl CellRenderer {
 
         // URL under the pointer reads as a link: the link color and
         // underlined (it opens on Cmd+click).
-        let hover = crate::native_surface::hover_url();
+        let hover = crate::native::surface::hover_url();
         let link = paint_to_rgba(chrome.link);
 
         let solid_uv = atlas.solid_uv();
@@ -2701,7 +2700,7 @@ impl CellRenderer {
 
         // Overlay scrollbar on the right edge while scrolled: a subtle
         // track and a proportional thumb (the page keeps its xterm copy
-        // hidden). Drag mapping lives in native_surface.
+        // hidden). Drag mapping lives in native/surface.rs.
         let scrollback = grid.scrollback_len();
         if offset > 0 && scrollback > 0 {
             let total = (scrollback + rows) as f32;
@@ -4220,7 +4219,7 @@ mod tests {
         let decor = decor(cell_w, cell_h, atlas.baseline(), scale);
         let format = wgpu::TextureFormat::Rgba8Unorm;
         let mut renderer = CellRenderer::with_atlas(&device, &queue, format, atlas);
-        let mut grid = crate::term_grid::TermGrid::new(cols, rows);
+        let mut grid = crate::native::grid::TermGrid::new(cols, rows);
         grid.feed(bytes);
         if select_all {
             grid.select_all();

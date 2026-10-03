@@ -115,7 +115,7 @@ struct Run {
 
 /// Play `session` through the session loop once, from a blank grid.
 async fn play(session: Arc<Vec<u8>>) -> Run {
-    crate::term_grid::blank_shared_grid_for_test(COLUMNS, ROWS);
+    crate::native::grid::blank_shared_grid_for_test(COLUMNS, ROWS);
     let listener = TcpListener::bind("127.0.0.1:0").expect("a local port");
     let port = listener.local_addr().expect("an address").port();
     let dir = tempfile::tempdir().expect("a temporary folder");
@@ -223,7 +223,7 @@ async fn play(session: Arc<Vec<u8>>) -> Run {
             .map(str::to_string)
             .collect()
     };
-    let grid = crate::term_grid::with_grid(|grid| {
+    let grid = crate::native::grid::with_grid(|grid| {
         let grid = grid.expect("the grid");
         let top = -(grid.scrollback_len() as i32);
         (top..grid.screen_lines() as i32)
@@ -363,7 +363,7 @@ fn per_second(count: usize, took: Duration) -> f64 {
 #[ignore = "P2 benchmark, run with --ignored"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn p2_a_captured_session_reaches_the_grid() {
-    let _grid = crate::term_grid::lock_shared_grid_for_test();
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
     let session = Arc::new(captured_session());
     let mut to_grid = Vec::new();
     for run in 1..=RUNS {

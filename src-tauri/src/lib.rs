@@ -25,10 +25,6 @@ mod tick;
 
 use app::state::{AppState, SharedState};
 use fonts::handle_font_uri;
-// Callers still reach the renderer by the paths of term_grid.rs,
-// cell_render.rs and native_surface/, until they point at native/.
-#[cfg(native_surface)]
-use native::{gpu as cell_render, grid as term_grid, surface as native_surface};
 
 pub fn run() {
     tracing_subscriber::fmt()

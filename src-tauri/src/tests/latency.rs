@@ -279,8 +279,8 @@ fn room(name: &str, lines: usize) -> Vec<u8> {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_log_keeps_every_row_in_stream_order() {
-    let _grid = crate::term_grid::lock_shared_grid_for_test();
-    crate::term_grid::blank_shared_grid_for_test(100, 40);
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
+    crate::native::grid::blank_shared_grid_for_test(100, 40);
     let mut h = Harness::new().await;
 
     let mut greeting = b"Welcome to the test realm.\r\n\r\n[329h 9999m 9999v] ".to_vec();
@@ -385,8 +385,8 @@ async fn the_log_keeps_every_row_in_stream_order() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn your_echo_sits_between_the_prompt_and_the_reply_on_screen() {
-    let _grid = crate::term_grid::lock_shared_grid_for_test();
-    crate::term_grid::blank_shared_grid_for_test(100, 40);
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
+    crate::native::grid::blank_shared_grid_for_test(100, 40);
     let mut h = Harness::new().await;
     let mut greeting = b"Welcome.\r\n\r\n[329h 9999m 9999v] ".to_vec();
     greeting.extend_from_slice(&GA);
@@ -402,7 +402,7 @@ async fn your_echo_sits_between_the_prompt_and_the_reply_on_screen() {
     h.until_shown("Line 1 of the description of Market Street.")
         .await;
 
-    let rows = crate::term_grid::shared_screen_rows_for_test();
+    let rows = crate::native::grid::shared_screen_rows_for_test();
     let echo = rows
         .iter()
         .position(|r| r == "look")
@@ -430,8 +430,8 @@ async fn your_echo_sits_between_the_prompt_and_the_reply_on_screen() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn your_line_reaches_the_game_before_its_log_row() {
-    let _grid = crate::term_grid::lock_shared_grid_for_test();
-    crate::term_grid::blank_shared_grid_for_test(100, 40);
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
+    crate::native::grid::blank_shared_grid_for_test(100, 40);
     let mut h = Harness::new().await;
 
     let log = h.state.logs.clone();
@@ -467,8 +467,8 @@ fn wide_room(name: &str, lines: usize) -> Vec<u8> {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_answer_in_one_read_shows_in_one_frame_and_a_split_one_loses_no_row() {
-    let _grid = crate::term_grid::lock_shared_grid_for_test();
-    crate::term_grid::blank_shared_grid_for_test(100, 40);
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
+    crate::native::grid::blank_shared_grid_for_test(100, 40);
     let mut h = Harness::new().await;
     let mut greeting = b"Welcome.\r\n\r\n[329h 9999m 9999v] ".to_vec();
     greeting.extend_from_slice(&GA);
@@ -515,8 +515,8 @@ async fn an_answer_in_one_read_shows_in_one_frame_and_a_split_one_loses_no_row()
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn your_line_reaches_the_log_while_the_game_never_pauses() {
-    let _grid = crate::term_grid::lock_shared_grid_for_test();
-    crate::term_grid::blank_shared_grid_for_test(100, 40);
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
+    crate::native::grid::blank_shared_grid_for_test(100, 40);
     let h = Harness::new().await;
 
     let mut packet = vec![IAC, 250, 201];

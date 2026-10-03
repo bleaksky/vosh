@@ -16,7 +16,6 @@
 //! Every window touch happens on the main thread (creation inside
 //! `with_webview` / install, updates via `AppHandle::run_on_main_thread`).
 
-#![cfg(native_surface)]
 // Platform window plumbing and the wgpu raw-handle surface are unsafe;
 // the workspace forbids unsafe by default.
 #![allow(unsafe_code)]
@@ -44,7 +43,7 @@ struct GpuState {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    cell_renderer: crate::cell_render::CellRenderer,
+    cell_renderer: crate::native::gpu::CellRenderer,
 }
 
 // The installed surface: the platform's window/view handles plus the GPU
@@ -122,7 +121,7 @@ static LAST_BLINKS: AtomicBool = AtomicBool::new(false);
 /// the epoch. None while Blinking text is off, so a frame then reads no
 /// clock.
 fn blink_now() -> Option<u64> {
-    crate::cell_render::blink_text().then(crate::cell_render::epoch_ms)
+    crate::native::gpu::blink_text().then(crate::native::gpu::epoch_ms)
 }
 
 /// Whether a frame leaves text on screen that blinks: what it drew when
@@ -144,7 +143,7 @@ fn frame_blinks(drew: Option<bool>) -> bool {
 /// (`blinks`) or Blinking text is off (no `now_ms`): then nothing waits.
 fn blink_wait(blinks: bool, now_ms: Option<u64>) -> Option<std::time::Duration> {
     let now_ms = now_ms.filter(|_| blinks)?;
-    Some(crate::cell_render::until_blink_flip(now_ms) + BLINK_SLACK)
+    Some(crate::native::gpu::until_blink_flip(now_ms) + BLINK_SLACK)
 }
 
 /// After a frame that left text that blinks, ask for a frame at the next
@@ -173,7 +172,7 @@ fn redraw_now() {
         if let Some(handle) = slot.as_mut() {
             // A theme change repaints through here, so the backdrop that
             // shows during a resize follows it. Cached, so cheap.
-            platform::set_backdrop(&handle.platform, crate::cell_render::theme_bg_rgb());
+            platform::set_backdrop(&handle.platform, crate::native::gpu::theme_bg_rgb());
             render(&mut handle.gpu);
         }
     }
@@ -296,7 +295,7 @@ fn scroll_report_key(offset: usize, max: usize) -> u64 {
 /// it. Only fires when `scroll_report_key` changes, so the live
 /// tail reports once as `[0, max]` and then stays quiet.
 fn report_scroll_if_changed() {
-    let (offset, max) = crate::term_grid::scroll_metrics();
+    let (offset, max) = crate::native::grid::scroll_metrics();
     let key = scroll_report_key(offset, max);
     if LAST_SCROLL.swap(key, Ordering::AcqRel) == key {
         return;
@@ -429,7 +428,7 @@ fn surface_frame(height_px: f64) -> split_drag::Frame {
 /// region of an open split reads at offset 0, the top (history) region at
 /// the scroll offset. `height_px` is the surface height in physical pixels.
 fn phys_point_to_cell(phys_x: f64, phys_y: f64, height_px: f64) -> Option<(i32, usize)> {
-    let offset = crate::term_grid::current_display_offset();
+    let offset = crate::native::grid::current_display_offset();
     let view = surface_frame(height_px).view(offset)?;
     Some(view.cell_at(phys_x, phys_y))
 }
@@ -459,7 +458,7 @@ static AUTOSCROLL_ARMED: AtomicBool = AtomicBool::new(false);
 /// True when the point falls in the scrollbar hit zone (right edge) while
 /// scrolled. The zone is wider than the drawn bar for forgiving grabs.
 fn in_scrollbar_zone(ev: &PointerEvent) -> bool {
-    let (offset, scrollback) = crate::term_grid::scroll_metrics();
+    let (offset, scrollback) = crate::native::grid::scroll_metrics();
     if offset == 0 || scrollback == 0 {
         return false;
     }
@@ -476,7 +475,7 @@ fn scrollbar_scroll_to(ev: &PointerEvent) {
     if cell_h <= 0.0 || ev.height <= 0.0 {
         return;
     }
-    let (_, scrollback) = crate::term_grid::scroll_metrics();
+    let (_, scrollback) = crate::native::grid::scroll_metrics();
     if scrollback == 0 {
         return;
     }
@@ -484,18 +483,18 @@ fn scrollbar_scroll_to(ev: &PointerEvent) {
     let total = scrollback as f64 + rows;
     let scroll_top = ((ev.y / ev.height) * total - rows / 2.0).clamp(0.0, scrollback as f64);
     let target = scrollback as f64 - scroll_top;
-    crate::term_grid::scroll_to_offset(target.round().max(0.0) as usize);
+    crate::native::grid::scroll_to_offset(target.round().max(0.0) as usize);
     redraw_now();
 }
 
 /// Middle-click toggles the split: scrolled snaps back to the live tail;
 /// at the tail it pages up into scrollback to open the split.
 fn middle_click() {
-    let (offset, _) = crate::term_grid::scroll_metrics();
+    let (offset, _) = crate::native::grid::scroll_metrics();
     if offset > 0 {
-        crate::term_grid::scroll_to_bottom();
+        crate::native::grid::scroll_to_bottom();
     } else {
-        crate::term_grid::scroll_page(true);
+        crate::native::grid::scroll_page(true);
     }
     redraw_now();
     // A middle click never reaches pointer_up, so it sends the event that
@@ -518,7 +517,7 @@ pub(crate) fn forward_wheel(delta_y: f64) {
     *acc -= f64::from(lines);
     drop(acc);
     if lines != 0 {
-        crate::term_grid::scroll(lines);
+        crate::native::grid::scroll(lines);
         redraw_now();
     }
 }
@@ -537,7 +536,7 @@ fn pointer_down(ev: &PointerEvent) {
     let cell = phys_point_to_cell(ev.x, ev.y, ev.height);
     if ev.open_modifier {
         if let Some((line, col)) = cell {
-            if let Some((url, _, _)) = crate::term_grid::url_at(line, col) {
+            if let Some((url, _, _)) = crate::native::grid::url_at(line, col) {
                 platform::open_url(&url);
                 return;
             }
@@ -554,11 +553,11 @@ fn pointer_down(ev: &PointerEvent) {
         DRAGGING.store(true, Ordering::Release);
         return;
     }
-    crate::term_grid::clear_selection();
+    crate::native::grid::clear_selection();
     if let Some((line, col)) = cell {
-        crate::term_grid::start_selection(line, col);
+        crate::native::grid::start_selection(line, col);
         SELECTING.store(true, Ordering::Release);
-        let offset = crate::term_grid::current_display_offset();
+        let offset = crate::native::grid::current_display_offset();
         let from_history = surface_frame(ev.height)
             .view(offset)
             .is_some_and(|view| view.in_history(ev.y));
@@ -588,7 +587,7 @@ fn pointer_dragged(ev: &PointerEvent) {
             return;
         }
         if let Some((line, col)) = phys_point_to_cell(ev.x, ev.y, ev.height) {
-            crate::term_grid::update_selection(line, col);
+            crate::native::grid::update_selection(line, col);
             redraw_now();
         }
     }
@@ -602,8 +601,9 @@ fn history_drag(ev: &PointerEvent) {
         *last = Some((ev.x, ev.y, ev.height));
     }
     let frame = surface_frame(ev.height);
-    let scroll = crate::term_grid::with_grid_mut(|grid| split_drag::drag(grid, &frame, ev.x, ev.y))
-        .unwrap_or(0);
+    let scroll =
+        crate::native::grid::with_grid_mut(|grid| split_drag::drag(grid, &frame, ev.x, ev.y))
+            .unwrap_or(0);
     redraw_now();
     if scroll > 0 {
         arm_autoscroll();
@@ -658,8 +658,9 @@ fn autoscroll_tick() -> bool {
             if SELECTING.load(Ordering::Acquire) && DRAG_FROM_HISTORY.load(Ordering::Acquire) =>
         {
             let frame = surface_frame(height);
-            let more = crate::term_grid::with_grid_mut(|grid| split_drag::tick(grid, &frame, x, y))
-                .unwrap_or(false);
+            let more =
+                crate::native::grid::with_grid_mut(|grid| split_drag::tick(grid, &frame, x, y))
+                    .unwrap_or(false);
             redraw_now();
             more
         }
@@ -712,7 +713,9 @@ pub(crate) fn window_blurred() {
 fn pointer_moved(ev: Option<&PointerEvent>) {
     let next = ev
         .and_then(|e| phys_point_to_cell(e.x, e.y, e.height))
-        .and_then(|(line, col)| crate::term_grid::url_at(line, col).map(|(_, s, e)| (line, s, e)));
+        .and_then(|(line, col)| {
+            crate::native::grid::url_at(line, col).map(|(_, s, e)| (line, s, e))
+        });
     set_hover_url(next);
 }
 
@@ -839,7 +842,7 @@ pub(crate) fn is_ready() -> bool {
 /// the count of characters copied as `vosh://native-copied`, so the page
 /// shows the copy toast.
 fn copy_selection() {
-    let Some(text) = crate::term_grid::selection_text() else {
+    let Some(text) = crate::native::grid::selection_text() else {
         return;
     };
     if text.is_empty() {
@@ -864,10 +867,10 @@ pub(crate) fn request_copy() {
 /// thread. It keeps the surface and device. The fonts arrive loaded from
 /// the blocking pool, so all that is left here is rasterizing the ASCII
 /// glyphs and uploading the atlas.
-fn swap_font(fonts: crate::cell_render::AtlasFonts, font_px: f32) {
+fn swap_font(fonts: crate::native::gpu::AtlasFonts, font_px: f32) {
     if let Ok(mut slot) = surface_slot().lock() {
         if let Some(handle) = slot.as_mut() {
-            handle.gpu.cell_renderer = crate::cell_render::CellRenderer::with_fonts(
+            handle.gpu.cell_renderer = crate::native::gpu::CellRenderer::with_fonts(
                 &handle.gpu.device,
                 &handle.gpu.queue,
                 handle.gpu.config.format,
@@ -943,7 +946,7 @@ fn request_font_rebuild(family: String, font_px: f32) {
     let app = app.clone();
     load_latest(
         &FONT_TICKETS,
-        move || crate::cell_render::AtlasFonts::load(&family),
+        move || crate::native::gpu::AtlasFonts::load(&family),
         move |swap| {
             let _ = app.run_on_main_thread(swap);
         },
@@ -1045,7 +1048,7 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64, lent
     let (px_w, px_h) = clamp_to_device(&handle.gpu.device, px_w, px_h);
     platform::set_scale(&handle.platform, dpr);
     platform::set_hidden(&handle.platform, false);
-    platform::set_backdrop(&handle.platform, crate::cell_render::theme_bg_rgb());
+    platform::set_backdrop(&handle.platform, crate::native::gpu::theme_bg_rgb());
     // The window reports its real radius once it is on screen, and a
     // fullscreen switch also resizes the pane, so re-check here.
     platform::sync_corner_radius(&handle.platform);
@@ -1121,7 +1124,7 @@ unsafe fn init_gpu(
     surface.configure(&device, &config);
 
     let cell_renderer =
-        crate::cell_render::CellRenderer::new(&device, &queue, config.format, font_stack, font_px)?;
+        crate::native::gpu::CellRenderer::new(&device, &queue, config.format, font_stack, font_px)?;
 
     Some(GpuState {
         _instance: instance,
@@ -1157,7 +1160,7 @@ fn render(state: &mut GpuState) {
     let (cols, fit) = state.cell_renderer.grid_size_for(pane_w, pane_h);
     let lent = LENT_ROWS.load(Ordering::Acquire) as usize;
     let (rows, game_rows) = grid_and_game_rows(fit, lent);
-    crate::term_grid::resize_grid(cols, rows);
+    crate::native::grid::resize_grid(cols, rows);
     report_sizes(cols, rows, game_rows);
     // Publish the cell size so the mouse handler can map points to cells.
     let (cw, ch) = state.cell_renderer.cell_size_px();
@@ -1168,15 +1171,15 @@ fn render(state: &mut GpuState) {
     // hold the renderer mutably and the device/queue immutably.
     let device = &state.device;
     let queue = &state.queue;
-    let placement = crate::cell_render::Placement {
+    let placement = crate::native::gpu::Placement {
         x: pane_x,
         y: pane_y,
         scale: load_f32(&DPR, 2.0),
         target: [state.config.width, state.config.height],
-        blink_hidden: now_ms.is_some_and(|now| !crate::cell_render::blink_shown(now)),
+        blink_hidden: now_ms.is_some_and(|now| !crate::native::gpu::blink_shown(now)),
     };
     let cell_renderer = &mut state.cell_renderer;
-    let drawn = crate::term_grid::with_grid(|grid| {
+    let drawn = crate::native::grid::with_grid(|grid| {
         grid.map(|grid| {
             cell_renderer.draw(
                 device,
@@ -1197,7 +1200,7 @@ fn render(state: &mut GpuState) {
         // No grid yet: clear to the terminal background, since this fills
         // the whole window behind the page. The pass records its clear
         // when dropped at the end of this block.
-        let (bg_r, bg_g, bg_b) = crate::cell_render::theme_bg_rgb();
+        let (bg_r, bg_g, bg_b) = crate::native::gpu::theme_bg_rgb();
         let _clear_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("term-surface-clear"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1385,9 +1388,9 @@ mod tests {
     /// divider the renderer draws at 79 px. Call with the shared grid
     /// lock held, and `reset_pointer` after.
     fn split_surface(offset: i32) {
-        crate::term_grid::blank_shared_grid_for_test(20, 12);
+        crate::native::grid::blank_shared_grid_for_test(20, 12);
         let text: Vec<String> = (0..60).map(|n| format!("L{n:02}")).collect();
-        crate::term_grid::with_grid_mut(|grid| {
+        crate::native::grid::with_grid_mut(|grid| {
             grid.feed(text.join("\r\n").as_bytes());
             grid.scroll(offset);
         });
@@ -1406,31 +1409,31 @@ mod tests {
         CELL_H.store(0, Ordering::Release);
         DPR.store(0, Ordering::Release);
         set_divider_frac(None);
-        crate::term_grid::clear_selection();
+        crate::native::grid::clear_selection();
     }
 
     #[test]
     fn a_history_drag_autoscrolls_through_the_divider_into_one_selection() {
-        let _grid = crate::term_grid::lock_shared_grid_for_test();
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
         split_surface(8);
         pointer_down(&at(0.0, 15.0));
         assert!(DRAG_FROM_HISTORY.load(Ordering::Acquire));
         // Past the divider the selection ends on the last history line,
         // L47 at offset 8, and nothing of the live half.
         pointer_dragged(&at(40.0, 100.0));
-        let text = crate::term_grid::selection_text().expect("a selection");
+        let text = crate::native::grid::selection_text().expect("a selection");
         assert_eq!(text.lines().last(), Some("L47"));
-        assert_eq!(crate::term_grid::current_display_offset(), 8);
+        assert_eq!(crate::native::grid::current_display_offset(), 8);
         // Each tick scrolls 7 lines toward the tail, and the second
         // reaches it, which closes the split. The selection runs on to
         // the pointer's cell in the full view.
         assert!(autoscroll_tick());
-        assert_eq!(crate::term_grid::current_display_offset(), 1);
-        let text = crate::term_grid::selection_text().expect("a selection");
+        assert_eq!(crate::native::grid::current_display_offset(), 1);
+        let text = crate::native::grid::selection_text().expect("a selection");
         assert_eq!(text.lines().last(), Some("L54"));
         assert!(!autoscroll_tick());
-        assert_eq!(crate::term_grid::current_display_offset(), 0);
-        let text = crate::term_grid::selection_text().expect("a selection");
+        assert_eq!(crate::native::grid::current_display_offset(), 0);
+        let text = crate::native::grid::selection_text().expect("a selection");
         let lines: Vec<&str> = text.lines().collect();
         let want: Vec<String> = (41..=58).map(|n| format!("L{n:02}")).collect();
         assert_eq!(lines, want);
@@ -1439,7 +1442,7 @@ mod tests {
 
     #[test]
     fn a_window_blur_ends_a_history_drag_and_its_autoscroll() {
-        let _grid = crate::term_grid::lock_shared_grid_for_test();
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
         split_surface(8);
         pointer_down(&at(0.0, 15.0));
         pointer_dragged(&at(40.0, 100.0));
@@ -1452,31 +1455,31 @@ mod tests {
         AUTOSCROLL_ARMED.store(true, Ordering::Release);
         assert!(!autoscroll_tick());
         assert!(!AUTOSCROLL_ARMED.load(Ordering::Acquire));
-        assert_eq!(crate::term_grid::current_display_offset(), 8);
-        let text = crate::term_grid::selection_text().expect("a selection");
+        assert_eq!(crate::native::grid::current_display_offset(), 8);
+        let text = crate::native::grid::selection_text().expect("a selection");
         assert_eq!(text.lines().last(), Some("L47"));
         // A drag event that still comes moves nothing.
         pointer_dragged(&at(40.0, 110.0));
-        assert_eq!(crate::term_grid::current_display_offset(), 8);
-        let after = crate::term_grid::selection_text().expect("a selection");
+        assert_eq!(crate::native::grid::current_display_offset(), 8);
+        let after = crate::native::grid::selection_text().expect("a selection");
         assert_eq!(after, text);
         reset_pointer();
     }
 
     #[test]
     fn a_drag_from_the_live_half_maps_the_pointer_as_before() {
-        let _grid = crate::term_grid::lock_shared_grid_for_test();
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
         split_surface(8);
         // Live row 10 is L58. Up across the divider the pointer reads the
         // history at the offset, row 2 there being L42.
         pointer_down(&at(0.0, 105.0));
         assert!(!DRAG_FROM_HISTORY.load(Ordering::Acquire));
         pointer_dragged(&at(0.0, 25.0));
-        let text = crate::term_grid::selection_text().expect("a selection");
+        let text = crate::native::grid::selection_text().expect("a selection");
         assert_eq!(text.lines().next(), Some("L42"));
         assert_eq!(text.lines().last(), Some("L57"));
         assert!(!autoscroll_tick());
-        assert_eq!(crate::term_grid::current_display_offset(), 8);
+        assert_eq!(crate::native::grid::current_display_offset(), 8);
         reset_pointer();
     }
 
