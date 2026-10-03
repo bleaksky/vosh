@@ -9,6 +9,7 @@ pub(crate) mod switch;
 #[cfg(test)]
 pub(crate) mod tests;
 pub(crate) mod ui;
+pub(crate) mod worlds;
 
 use std::collections::BTreeSet;
 
