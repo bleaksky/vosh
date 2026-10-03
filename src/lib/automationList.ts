@@ -176,7 +176,10 @@ export function foldedGroupOf(
 
 /** The stop that takes Tab. A heading you moved to keeps it until the
  *  selection changes. Otherwise the selected row takes it, or the
- *  heading of the folded group that hides it, or the first stop. */
+ *  heading of the folded group that hides it. With the selection
+ *  outside the list, as while the filter leaves it out, the first row
+ *  takes it, so Tab and Enter from the filter pick the first match and
+ *  never fold it away. A heading takes it only when no row shows. */
 export function tabStopId(
   stops: readonly ListStop[],
   sections: readonly ListSection[],
@@ -192,7 +195,8 @@ export function tabStopId(
     const hiding = foldedGroupOf(sections, folded, selected);
     if (hiding !== null) return stopId({ kind: 'heading', key: hiding });
   }
-  return ids[0] ?? null;
+  const first = stops.find((stop) => stop.kind === 'row') ?? stops[0];
+  return first ? stopId(first) : null;
 }
 
 /** What a key press on the list does. */

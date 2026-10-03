@@ -202,6 +202,19 @@ describe('folding groups', () => {
     expect(tabStopId([], [], folded, null, null)).toBeNull();
   });
 
+  it('gives Tab to the first match, not its heading, when the filter leaves the selection out', () => {
+    const none: ReadonlySet<string> = new Set();
+    const matches = filterSections(sections, 'flee');
+    const stops = listStops(matches, none);
+    expect(ids(stops)).toEqual(['heading:g:combat', 'row:c1']);
+    expect(tabStopId(stops, matches, none, 'i1', null)).toBe('row:c1');
+    expect(tabStopId(stops, matches, none, null, null)).toBe('row:c1');
+    // With every match folded no row shows, so the first heading takes it.
+    const folded = new Set([combat]);
+    const hidden = listStops(matches, folded);
+    expect(tabStopId(hidden, matches, folded, 'i1', null)).toBe('heading:g:combat');
+  });
+
   it('folds and opens one key at a time, and keeps the set when nothing changes', () => {
     const none: ReadonlySet<string> = new Set();
     const one = withFold(none, combat, true);
