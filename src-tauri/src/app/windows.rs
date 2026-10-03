@@ -5,9 +5,9 @@
 //! Settings and Help open hidden and show themselves once their page has
 //! painted the theme. A frame the page has not painted yet shows the
 //! window's own background, so every theme paint in any window reports
-//! the theme's ground here (`window_backdrop_set`), and
-//! [`open_aux_window`] builds the window on it. An open Settings or Help
-//! window takes each new ground as it arrives. The appearance pins the light or dark native
+//! the theme's ground to [`set_backdrop`], and [`open_aux_window`]
+//! builds the window on it. An open Settings or Help window takes each
+//! new ground as it arrives. The appearance pins the light or dark native
 //! appearance while the theme is your pick, and is `None` while the
 //! theme follows the system, so the window follows the system too. A
 //! theme whose ground is not one solid color reports no ground, and the
@@ -22,12 +22,12 @@ use tracing::warn;
 
 /// What a new window opens on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Backdrop {
+struct Backdrop {
     /// The theme's ground, sRGB, or `None` when it is not one solid
     /// color.
-    pub(crate) rgb: Option<(u8, u8, u8)>,
+    rgb: Option<(u8, u8, u8)>,
     /// The native appearance to pin, or `None` to follow the system.
-    pub(crate) appearance: Option<Theme>,
+    appearance: Option<Theme>,
 }
 
 static BACKDROP: Mutex<Option<Backdrop>> = Mutex::new(None);
@@ -43,22 +43,6 @@ static BACKDROP: Mutex<Option<Backdrop>> = Mutex::new(None);
 /// corners outside it. On both, the page's startup paint covers the
 /// first frame, since the window stays hidden until the page shows it.
 const PAINTS_WINDOW: bool = cfg!(target_os = "macos");
-
-/// Read a `#rrggbb` or `#rgb` ground, or none, and an appearance of
-/// `light`, `dark`, or none. Anything else is `None`.
-pub(crate) fn parse(background: Option<&str>, appearance: Option<&str>) -> Option<Backdrop> {
-    let appearance = match appearance {
-        None => None,
-        Some("light") => Some(Theme::Light),
-        Some("dark") => Some(Theme::Dark),
-        Some(_) => return None,
-    };
-    let rgb = match background {
-        None => None,
-        Some(hex) => Some(parse_hex(hex)?),
-    };
-    Some(Backdrop { rgb, appearance })
-}
 
 fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
     let hex = s.trim().strip_prefix('#')?;
@@ -76,21 +60,41 @@ fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
     }
 }
 
-/// The backdrop the last theme paint reported, or `None` before any.
-pub(crate) fn current() -> Option<Backdrop> {
-    BACKDROP.lock().ok().and_then(|slot| *slot)
-}
-
-fn set(backdrop: Backdrop) {
-    if let Ok(mut slot) = BACKDROP.lock() {
-        *slot = Some(backdrop);
-    }
-}
-
 impl Backdrop {
+    /// Read a `#rrggbb` or `#rgb` ground, or none, and an appearance of
+    /// `light`, `dark`, or none. Anything else is `None`.
+    fn parse(background: Option<&str>, appearance: Option<&str>) -> Option<Backdrop> {
+        let appearance = match appearance {
+            None => None,
+            Some("light") => Some(Theme::Light),
+            Some("dark") => Some(Theme::Dark),
+            Some(_) => return None,
+        };
+        let rgb = match background {
+            None => None,
+            Some(hex) => Some(parse_hex(hex)?),
+        };
+        Some(Backdrop { rgb, appearance })
+    }
+
+    /// The backdrop the last theme paint reported, or `None` before any.
+    fn current() -> Option<Backdrop> {
+        BACKDROP.lock().ok().and_then(|slot| *slot)
+    }
+
+    /// Keep a reported backdrop for the next window.
+    fn record(background: Option<&str>, appearance: Option<&str>) -> Result<Backdrop, String> {
+        let backdrop = Self::parse(background, appearance)
+            .ok_or_else(|| format!("not a window backdrop: {background:?} {appearance:?}"))?;
+        if let Ok(mut slot) = BACKDROP.lock() {
+            *slot = Some(backdrop);
+        }
+        Ok(backdrop)
+    }
+
     /// The window's own color, or `None` to keep it clear. See
     /// [`PAINTS_WINDOW`].
-    pub(crate) fn window_color(self) -> Option<Color> {
+    fn window_color(self) -> Option<Color> {
         self.window_color_on(PAINTS_WINDOW)
     }
 
@@ -103,7 +107,7 @@ impl Backdrop {
     }
 
     /// Open a window on this backdrop.
-    pub(crate) fn dress<R: Runtime, M: Manager<R>>(
+    fn dress<R: Runtime, M: Manager<R>>(
         self,
         builder: WebviewWindowBuilder<'_, R, M>,
     ) -> WebviewWindowBuilder<'_, R, M> {
@@ -116,27 +120,34 @@ impl Backdrop {
 
     /// Give an open window this backdrop's ground. Its appearance is the
     /// page's to set, since the page follows the theme itself.
-    pub(crate) fn redress<R: Runtime>(self, window: &Window<R>) {
+    fn redress<R: Runtime>(self, window: &Window<R>) {
         if PAINTS_WINDOW {
             let _ = window.set_background_color(self.window_color());
         }
     }
 }
 
-/// Keep a reported backdrop for the next window.
-pub(crate) fn record(
-    background: Option<&str>,
-    appearance: Option<&str>,
-) -> Result<Backdrop, String> {
-    let backdrop = parse(background, appearance)
-        .ok_or_else(|| format!("not a window backdrop: {background:?} {appearance:?}"))?;
-    set(backdrop);
-    Ok(backdrop)
-}
-
 /// The windows that open on the reported backdrop and take each new
 /// ground while open.
-pub(crate) const DRESSED_WINDOWS: [&str; 2] = ["settings", "help"];
+const DRESSED_WINDOWS: [&str; 2] = ["settings", "help"];
+
+/// A theme paint in a window reported the ground and appearance a new
+/// window should open on. Keep them for the next window, and give the
+/// ground to an open Settings or Help window now, so a theme change
+/// while it is open leaves no old color under it.
+pub(crate) fn set_backdrop(
+    app: &AppHandle,
+    background: Option<&str>,
+    appearance: Option<&str>,
+) -> Result<(), String> {
+    let backdrop = Backdrop::record(background, appearance)?;
+    for label in DRESSED_WINDOWS {
+        if let Some(window) = app.get_webview_window(label) {
+            backdrop.redress(&window.as_ref().window());
+        }
+    }
+    Ok(())
+}
 
 /// A window beside the main one that loads the same bundle with its own
 /// `?view=`, like Settings and Help. Each opens hidden on the theme's
@@ -261,7 +272,7 @@ pub(crate) fn open_aux_window(app: &AppHandle, spec: &AuxWindow) -> Result<(), S
     // page has not painted yet is in your theme. Windows and Linux keep
     // the window clear (PAINTS_WINDOW explains why). Before any paint
     // the window keeps the defaults.
-    let builder = match current() {
+    let builder = match Backdrop::current() {
         Some(backdrop) => backdrop.dress(builder),
         None => builder,
     };
@@ -372,29 +383,28 @@ pub(crate) fn enable_macos_spellcheck(window: &tauri::WebviewWindow) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::{
-        current, parse, record, shows_on_reopen, window_fit, Backdrop, HELP_WINDOW, PAINTS_WINDOW,
-        SETTINGS_WINDOW,
+        shows_on_reopen, window_fit, Backdrop, HELP_WINDOW, PAINTS_WINDOW, SETTINGS_WINDOW,
     };
     use tauri::{window::Color, Theme};
 
     #[test]
     fn reads_the_ground_and_the_appearance() {
         assert_eq!(
-            parse(Some("#f4efe4"), Some("light")),
+            Backdrop::parse(Some("#f4efe4"), Some("light")),
             Some(Backdrop {
                 rgb: Some((0xf4, 0xef, 0xe4)),
                 appearance: Some(Theme::Light),
             })
         );
         assert_eq!(
-            parse(Some(" #1A1B26 "), Some("dark")),
+            Backdrop::parse(Some(" #1A1B26 "), Some("dark")),
             Some(Backdrop {
                 rgb: Some((0x1a, 0x1b, 0x26)),
                 appearance: Some(Theme::Dark),
             })
         );
         assert_eq!(
-            parse(Some("#fff"), None),
+            Backdrop::parse(Some("#fff"), None),
             Some(Backdrop {
                 rgb: Some((255, 255, 255)),
                 appearance: None,
@@ -407,14 +417,14 @@ mod tests {
         // A custom theme's Background can be translucent, or a color
         // only the page can read. The appearance still counts.
         assert_eq!(
-            parse(None, Some("dark")),
+            Backdrop::parse(None, Some("dark")),
             Some(Backdrop {
                 rgb: None,
                 appearance: Some(Theme::Dark),
             })
         );
         assert_eq!(
-            parse(None, None),
+            Backdrop::parse(None, None),
             Some(Backdrop {
                 rgb: None,
                 appearance: None,
@@ -435,11 +445,11 @@ mod tests {
             "rgb(0,0,0)",
             "#ffé",
         ] {
-            assert_eq!(parse(Some(bad), None), None, "{bad}");
+            assert_eq!(Backdrop::parse(Some(bad), None), None, "{bad}");
         }
-        assert_eq!(parse(Some("#f4efe4"), Some("dim")), None);
-        assert_eq!(parse(Some("#f4efe4"), Some("")), None);
-        assert_eq!(parse(None, Some("dim")), None);
+        assert_eq!(Backdrop::parse(Some("#f4efe4"), Some("dim")), None);
+        assert_eq!(Backdrop::parse(Some("#f4efe4"), Some("")), None);
+        assert_eq!(Backdrop::parse(None, Some("dim")), None);
     }
 
     #[test]
@@ -474,18 +484,18 @@ mod tests {
 
     #[test]
     fn keeps_the_last_good_report() {
-        record(Some("#102030"), Some("dark")).unwrap();
-        assert!(record(Some("nope"), None).is_err());
+        Backdrop::record(Some("#102030"), Some("dark")).unwrap();
+        assert!(Backdrop::record(Some("nope"), None).is_err());
         assert_eq!(
-            current(),
+            Backdrop::current(),
             Some(Backdrop {
                 rgb: Some((0x10, 0x20, 0x30)),
                 appearance: Some(Theme::Dark),
             })
         );
-        record(Some("#fdfcf8"), None).unwrap();
+        Backdrop::record(Some("#fdfcf8"), None).unwrap();
         assert_eq!(
-            current(),
+            Backdrop::current(),
             Some(Backdrop {
                 rgb: Some((0xfd, 0xfc, 0xf8)),
                 appearance: None,
@@ -494,9 +504,9 @@ mod tests {
         // A theme without a solid ground drops the old ground and pins
         // its own appearance, so a new window opens on neither the old
         // color nor the old appearance.
-        record(None, Some("light")).unwrap();
+        Backdrop::record(None, Some("light")).unwrap();
         assert_eq!(
-            current(),
+            Backdrop::current(),
             Some(Backdrop {
                 rgb: None,
                 appearance: Some(Theme::Light),
