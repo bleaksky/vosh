@@ -13,7 +13,7 @@ use super::target::{
 };
 use super::tick::slash_tick;
 use super::vars::{slash_unvar, slash_var, slash_vars_list};
-use super::{echo_lines, error_echo, split_first_word, InputResult};
+use super::{split_first_word, InputResult};
 use crate::profile::Profile;
 use crate::script::ApplyResult;
 
@@ -47,7 +47,7 @@ pub(super) fn handle_slash(
         "import-tintin" => slash_import_tintin(profile, args),
         // Typed input runs #logs before the pipeline (see `logs_command`),
         // so only a timer, the tick command, or Lua gets here.
-        "logs" => error_echo("type #logs at the input bar".to_string()),
+        "logs" => InputResult::error("type #logs at the input bar"),
         "record" => slash_record(profile, args),
         "endrec" => slash_endrec(profile),
         "target" => slash_target(profile, args),
@@ -56,9 +56,9 @@ pub(super) fn handle_slash(
         "tarclear" => run_target_clear(profile),
         "qkey" => slash_qkey(profile, args),
         "qkeys" => slash_qkeys_list(profile),
-        "help" => echo_lines(HELP_TEXT.lines()),
-        "" => error_echo("missing slash command. try #help".to_string()),
-        other => error_echo(format!("unknown slash command #{other}. try #help")),
+        "help" => InputResult::echo_lines(HELP_TEXT.lines().map(str::to_string).collect()),
+        "" => InputResult::error("missing slash command. try #help"),
+        other => InputResult::error(format!("unknown slash command #{other}. try #help")),
     }
 }
 
@@ -147,10 +147,7 @@ trigger captures: $0 full match, $1..$9 positional groups, ${name} named group\
 /// memory from `TinTin++` / `Mudlet`.
 fn slash_echo(profile: &mut Profile, args: &str) -> InputResult {
     let text = profile.vars.interpolate(args);
-    InputResult {
-        bytes: Vec::new(),
-        echo: vec![text],
-    }
+    InputResult::echo_line(text)
 }
 
 /// Parse a `{pattern}` block. Supports `\}` to escape a closing brace inside

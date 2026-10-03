@@ -2,7 +2,7 @@
 //! files from the scripts folder, `#lua` runs a line of Lua, and
 //! `#scripts` lists what is loaded.
 
-use super::{echo_one, error_echo, split_first_word, InputResult, APP_DATA_DIR};
+use super::{split_first_word, InputResult, APP_DATA_DIR};
 use crate::profile::Profile;
 use crate::script;
 
@@ -15,8 +15,8 @@ pub(super) fn slash_script(
     match cmd {
         "load" => slash_script_load(profile, rest, lua),
         "reload" => slash_script_reload(profile, lua),
-        "" => error_echo("usage #script load <name> | #script reload".to_string()),
-        other => error_echo(format!("unknown #script subcommand `{other}`")),
+        "" => InputResult::error("usage #script load <name> | #script reload"),
+        other => InputResult::error(format!("unknown #script subcommand `{other}`")),
     }
 }
 
@@ -39,33 +39,33 @@ pub(super) fn slash_script_load_in(
 ) -> InputResult {
     let name = args.trim();
     if name.is_empty() {
-        return error_echo("usage #script load <name>".to_string());
+        return InputResult::error("usage #script load <name>");
     }
     let Some(app_data) = app_data else {
-        return error_echo("could not resolve scripts directory".to_string());
+        return InputResult::error("could not resolve scripts directory");
     };
     let path = script_path_for(app_data, name);
     let code = match std::fs::read_to_string(&path) {
         Ok(c) => c,
-        Err(e) => return error_echo(format!("read failed: {e} ({})", path.display())),
+        Err(e) => return InputResult::error(format!("read failed: {e} ({})", path.display())),
     };
     script::snapshot_vars(&profile.script, &profile.vars);
     let outcome = match profile.script.load_script(name, code) {
         Ok(o) => o,
-        Err(e) => return error_echo(format!("script error: {e}")),
+        Err(e) => return InputResult::error(format!("script error: {e}")),
     };
     lua.append(script::apply_actions(profile, outcome));
-    echo_one(format!("loaded {}", path.display()))
+    InputResult::echo_line(format!("loaded {}", path.display()))
 }
 
 fn slash_script_reload(profile: &mut Profile, lua: &mut script::ApplyResult) -> InputResult {
     script::snapshot_vars(&profile.script, &profile.vars);
     let outcome = match profile.script.reload_scripts() {
         Ok(o) => o,
-        Err(e) => return error_echo(format!("reload error: {e}")),
+        Err(e) => return InputResult::error(format!("reload error: {e}")),
     };
     lua.append(script::apply_actions(profile, outcome));
-    echo_one("scripts reloaded".to_string())
+    InputResult::echo_line("scripts reloaded")
 }
 
 pub(super) fn slash_scripts_list(profile: &Profile) -> InputResult {
@@ -88,10 +88,7 @@ pub(super) fn slash_scripts_list(profile: &Profile) -> InputResult {
             lines.push(format!("    [  0] {} /{}/", t.name, t.pattern));
         }
     }
-    InputResult {
-        bytes: Vec::new(),
-        echo: lines,
-    }
+    InputResult::echo_lines(lines)
 }
 
 pub(super) fn slash_lua(
@@ -101,18 +98,15 @@ pub(super) fn slash_lua(
 ) -> InputResult {
     let code = args.trim_start();
     if code.is_empty() {
-        return error_echo("usage #lua <code>".to_string());
+        return InputResult::error("usage #lua <code>");
     }
     script::snapshot_vars(&profile.script, &profile.vars);
     let outcome = match profile.script.eval(code, "#lua") {
         Ok(o) => o,
-        Err(e) => return error_echo(format!("lua error: {e}")),
+        Err(e) => return InputResult::error(format!("lua error: {e}")),
     };
     lua.append(script::apply_actions(profile, outcome));
-    InputResult {
-        bytes: Vec::new(),
-        echo: Vec::new(),
-    }
+    InputResult::empty()
 }
 
 /// The file `#script load <name>` reads, `<app_data>/scripts/<name>.lua`

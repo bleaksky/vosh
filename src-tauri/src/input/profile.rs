@@ -3,7 +3,7 @@
 
 use vosh_automation::vars::Scope;
 
-use super::{echo_one, error_echo, split_first_word, InputResult, APP_DATA_DIR, PATH_B_ACTIVE};
+use super::{split_first_word, InputResult, APP_DATA_DIR, PATH_B_ACTIVE};
 use crate::profile::Profile;
 use crate::profile_config::ProfileConfig;
 use crate::tintin_import;
@@ -40,21 +40,20 @@ pub(super) fn slash_profile_with(
 ) -> InputResult {
     let (cmd, _rest) = split_first_word(args);
     if migration_pending && matches!(cmd, "save" | "load" | "reset") {
-        return error_echo(PROFILE_MIGRATION_PENDING.to_string());
+        return InputResult::error(PROFILE_MIGRATION_PENDING);
     }
     // Path B keeps authored items in the catalog and persists them
     // automatically. The legacy save/load/reset trio would write, load,
     // or blank the wrong files there, so it bows out with a pointer.
     if PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire) {
         return match cmd {
-            "save" => echo_one("loadout mode saves your changes automatically".to_string()),
-            "load" => echo_one("loadout mode loads the catalog at startup".to_string()),
-            "reset" => error_echo(
-                "profile reset does not apply in loadout mode. delete items from settings instead"
-                    .to_string(),
+            "save" => InputResult::echo_line("loadout mode saves your changes automatically"),
+            "load" => InputResult::echo_line("loadout mode loads the catalog at startup"),
+            "reset" => InputResult::error(
+                "profile reset does not apply in loadout mode. delete items from settings instead",
             ),
-            "" => error_echo("usage #profile save | load | reset".to_string()),
-            other => error_echo(format!("unknown #profile subcommand `{other}`")),
+            "" => InputResult::error("usage #profile save | load | reset"),
+            other => InputResult::error(format!("unknown #profile subcommand `{other}`")),
         };
     }
     match cmd {
@@ -64,35 +63,36 @@ pub(super) fn slash_profile_with(
                 // runs under the profile lock, which the persist takes
                 // after the persist lock, so it only tries.
                 let Ok(_persist_guard) = crate::disk::save::PERSIST_LOCK.try_lock() else {
-                    return error_echo(PROFILE_SAVE_BUSY.to_string());
+                    return InputResult::error(PROFILE_SAVE_BUSY);
                 };
                 if crate::profile_config::is_unread(&path) {
-                    return error_echo(
+                    return InputResult::error(
                         "Vosh could not read this profile file at launch, so it will not save \
-                         over it. Fix the file or switch to another profile."
-                            .to_string(),
+                         over it. Fix the file or switch to another profile.",
                     );
                 }
                 let snapshot = ProfileConfig::from_profile(profile);
                 match snapshot.save(&path) {
-                    Ok(()) => echo_one(format!("profile saved to {}", path.display())),
-                    Err(e) => error_echo(format!("save failed: {e}")),
+                    Ok(()) => {
+                        InputResult::echo_line(format!("profile saved to {}", path.display()))
+                    }
+                    Err(e) => InputResult::error(format!("save failed: {e}")),
                 }
             }
-            None => error_echo("could not resolve profile path".to_string()),
+            None => InputResult::error("could not resolve profile path"),
         },
         "load" => match app_data.and_then(profile_path) {
             Some(path) => load_profile_file(profile, &path, replaced),
-            None => error_echo("could not resolve profile path".to_string()),
+            None => InputResult::error("could not resolve profile path"),
         },
         "reset" => {
             let blank = ProfileConfig::default();
             let _ = blank.apply_to(profile);
             *replaced = true;
-            echo_one("profile reset to defaults".to_string())
+            InputResult::echo_line("profile reset to defaults")
         }
-        "" => error_echo("usage #profile save | load | reset".to_string()),
-        other => error_echo(format!("unknown #profile subcommand `{other}`")),
+        "" => InputResult::error("usage #profile save | load | reset"),
+        other => InputResult::error(format!("unknown #profile subcommand `{other}`")),
     }
 }
 
@@ -106,7 +106,7 @@ pub(super) fn load_profile_file(
 ) -> InputResult {
     let snapshot = match ProfileConfig::load(path) {
         Ok(snapshot) => snapshot,
-        Err(e) => return error_echo(format!("load failed: {e}")),
+        Err(e) => return InputResult::error(format!("load failed: {e}")),
     };
     // The file reads now and the live profile holds what it says, so the
     // saves may write it again.
@@ -117,21 +117,18 @@ pub(super) fn load_profile_file(
     for w in warnings {
         lines.push(format!("  {w}"));
     }
-    InputResult {
-        bytes: Vec::new(),
-        echo: lines,
-    }
+    InputResult::echo_lines(lines)
 }
 
 pub(super) fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputResult {
     let path = args.trim();
     if path.is_empty() {
-        return error_echo("usage #import-tintin <path>".to_string());
+        return InputResult::error("usage #import-tintin <path>");
     }
     let expanded = expand_home(path);
     let report = match tintin_import::import_file(&expanded) {
         Ok(r) => r,
-        Err(e) => return error_echo(format!("read failed: {e}")),
+        Err(e) => return InputResult::error(format!("read failed: {e}")),
     };
     for alias in &report.aliases {
         profile.aliases.set(alias.clone());
@@ -161,10 +158,7 @@ pub(super) fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputRes
     if !report.unparsed.is_empty() {
         lines.push(format!("  unparsed: {} line(s)", report.unparsed.len()));
     }
-    InputResult {
-        bytes: Vec::new(),
-        echo: lines,
-    }
+    InputResult::echo_lines(lines)
 }
 
 /// The active profile's file under the app data folder `app_data`,
