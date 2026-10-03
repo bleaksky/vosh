@@ -14,9 +14,7 @@ export type { MenuPlacement } from './menuPlacement';
 
 // A floating menu in the One Window recipe (SPEC 3 and 7): raised
 // ground, radius 16, the floating shadow, 6 px padding, 30 px rows.
-// It renders into document.body with role="menu", which is also what
-// tells the Windows and Linux native terminal surface to step aside
-// while a menu is open.
+// It renders into document.body with role="menu".
 //
 // The surface owns placement (kept inside the window, flipped when it
 // would run off an edge), roving focus with the arrow keys, and

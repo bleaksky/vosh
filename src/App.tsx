@@ -616,11 +616,9 @@ function App() {
     const PX_PER_LINE = 12;
     let wheelAccum = 0;
     const onWheel = (e: globalThis.WheelEvent) => {
-      // Native surface: wheel over the terminal goes to the native
-      // view, which scrolls the grid itself. The only wheel events
-      // that reach this handler are over the padding gutter around
-      // the surface — opening the (occluded, invisible) DOM split
-      // from those would flip the split layout class for nothing.
+      // Native surface: the sizer forwards the wheel to the native
+      // grid, which scrolls and splits its own display. Opening the
+      // DOM split here would lay xterm's history pane over the grid.
       if (nativeSurfaceEnabled()) return;
       if (e.deltaY === 0) return;
       const scrollingUp = e.deltaY < 0;
@@ -1486,9 +1484,8 @@ function App() {
       onScrollTerminal={(pages) => {
         // Native surface: the grid pages its own display in place
         // (Input invokes native_surface_scroll alongside this), so
-        // the DOM split must stay closed — it would be invisible
-        // under the opaque surface while still toggling the split
-        // layout class.
+        // the DOM split stays closed. Opening it would lay xterm's
+        // history pane over the grid.
         if (nativeSurfaceEnabled()) return;
         // Split-scrollback gesture. The live pane (termRef) stays
         // anchored to the tail. PageUp opens the split if closed;
