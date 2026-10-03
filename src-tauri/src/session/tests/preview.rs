@@ -9,8 +9,10 @@
 //! webview test replays the same payloads into xterm from a stored file.
 
 use super::*;
+#[cfg(native_surface)]
 use crate::output::{base64_encode, OutputPayload};
 use vosh_prompt::values::overrides::{Overrides, Preview, PromptPreview};
+#[cfg(native_surface)]
 use vosh_prompt::PromptShow;
 
 /// The card's Low health preview, which draws `<180>` for [`HP`].
@@ -23,6 +25,7 @@ fn low_health() -> PromptPreview {
 
 /// `bytes` read on a new connection of `session`, cut at `at`, with
 /// `preview` on from the start, as the card would have set it.
+#[cfg(native_surface)]
 fn replay_with(
     session: &mut Session,
     bytes: &[u8],
@@ -39,6 +42,7 @@ fn replay_with(
 
 /// `bytes` read on a new connection of `session`, cut at `at`, live with
 /// the card open: no preview, and in the text the band the card lends.
+#[cfg(native_surface)]
 fn replay_live_with_card(session: &mut Session, bytes: &[u8], at: &[usize]) -> Vec<Read> {
     session.restart();
     session.p.prompt.set_preview(None);
@@ -51,6 +55,7 @@ fn replay_live_with_card(session: &mut Session, bytes: &[u8], at: &[usize]) -> V
 
 /// The native grid's screen, `columns` wide, after `outputs` and then
 /// your echo of `look`, which lands after the open row.
+#[cfg(native_surface)]
 fn screen_after_echo<'a>(
     outputs: impl IntoIterator<Item = &'a Output>,
     columns: usize,
@@ -64,6 +69,7 @@ fn screen_after_echo<'a>(
 }
 
 /// The native grid's screen, `columns` wide, after `outputs`.
+#[cfg(native_surface)]
 fn screen<'a>(outputs: impl IntoIterator<Item = &'a Output>, columns: usize) -> Vec<String> {
     let mut grid = crate::term_grid::TermGrid::new(columns, 60);
     for out in outputs {
@@ -72,10 +78,12 @@ fn screen<'a>(outputs: impl IntoIterator<Item = &'a Output>, columns: usize) -> 
     rows_of(&grid)
 }
 
+#[cfg(native_surface)]
 fn outs(reads: &[Read]) -> impl Iterator<Item = &Output> {
     reads.iter().map(|read| &read.out)
 }
 
+#[cfg(native_surface)]
 #[test]
 fn a_prompt_drawn_with_a_preview_shows_it_until_something_lands_after_it() {
     let mut session = Session::new(profile(CODES, HP, true));
@@ -99,6 +107,7 @@ fn a_prompt_drawn_with_a_preview_shows_it_until_something_lands_after_it() {
     assert_eq!(spans.len(), 3);
 }
 
+#[cfg(native_surface)]
 #[test]
 fn a_preview_left_on_while_game_text_arrives_leaves_only_live_renders_at_every_split() {
     for (name, bytes, prompt) in pinned_streams() {
@@ -139,6 +148,7 @@ fn a_preview_left_on_while_game_text_arrives_leaves_only_live_renders_at_every_s
     }
 }
 
+#[cfg(native_surface)]
 #[test]
 fn a_preview_set_on_the_open_row_gives_way_to_the_next_pulse_at_every_split() {
     let quiet = wire_fixture("quiet");
@@ -308,6 +318,7 @@ fn a_repaint_in_a_payload_carries_the_restore_to_the_webview() {
 /// the live session after your echo, 40 and 12 wide. The webview test
 /// replays them into xterm, then your echo, and holds each screen to the
 /// grid's.
+#[cfg(native_surface)]
 fn preview_splits() -> serde_json::Value {
     let mut streams = Vec::new();
     for (name, bytes, prompt) in pinned_streams() {
@@ -352,6 +363,7 @@ fn preview_splits() -> serde_json::Value {
 
 /// The file the webview test reads: the JSON of [`preview_splits`],
 /// gzipped, as base64 text.
+#[cfg(native_surface)]
 fn preview_splits_path() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../fixtures/prompt/aabahran/preview/splits.b64")
@@ -359,6 +371,7 @@ fn preview_splits_path() -> std::path::PathBuf {
 
 /// Write [`preview_splits`] for the webview test when
 /// `VOSH_WRITE_PREVIEW_SPLITS` is set. Nothing otherwise.
+#[cfg(native_surface)]
 #[test]
 fn write_the_preview_splits_for_the_webview() {
     use std::io::Write as _;
@@ -380,6 +393,7 @@ fn write_the_preview_splits_for_the_webview() {
     std::fs::write(&path, lines.join("\n")).expect("the file");
 }
 
+#[cfg(native_surface)]
 #[test]
 fn the_preview_splits_the_webview_replays_are_what_the_session_sends() {
     use std::io::Read as _;
@@ -399,6 +413,7 @@ fn the_preview_splits_the_webview_replays_are_what_the_session_sends() {
 }
 
 /// The native grid `columns` wide after `outputs`, as its rows.
+#[cfg(native_surface)]
 fn grid_after<'a>(
     grid: &mut crate::term_grid::TermGrid,
     outputs: impl IntoIterator<Item = &'a Output>,
@@ -409,6 +424,7 @@ fn grid_after<'a>(
     rows_of(grid)
 }
 
+#[cfg(native_surface)]
 #[test]
 fn the_open_row_stays_open_across_a_resize_while_the_card_is_open() {
     for show in [PromptShow::Text, PromptShow::Lifted] {
@@ -465,6 +481,7 @@ fn the_open_row_stays_open_across_a_resize_while_the_card_is_open() {
     }
 }
 
+#[cfg(native_surface)]
 #[test]
 fn a_new_height_leaves_the_open_row_open_with_the_card_closed() {
     for show in [PromptShow::Text, PromptShow::Lifted] {
@@ -506,6 +523,7 @@ fn a_new_height_leaves_the_open_row_open_with_the_card_closed() {
     }
 }
 
+#[cfg(native_surface)]
 #[test]
 fn the_live_render_comes_back_when_the_connection_ends_during_a_preview() {
     let now = Instant::now();

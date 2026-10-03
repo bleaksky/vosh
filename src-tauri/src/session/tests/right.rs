@@ -11,12 +11,14 @@ use vosh_prompt::PromptShow;
 const RIGHT: &str = "<%hp>%{right}%mana!";
 
 /// `<1020>` and `800!` with the row's width between them.
+#[cfg(native_surface)]
 fn row(cols: usize) -> String {
     format!("<1020>{}800!", " ".repeat(cols - 10))
 }
 
 /// A session that shows `show` and draws [`RIGHT`] at `cols` wide, as a
 /// connection starts it, with the negotiator holding the same size.
+#[cfg(native_surface)]
 fn at(show: PromptShow, cols: u16) -> (Session, Negotiator) {
     let mut session = Session::new(showing(profile(CODES, RIGHT, true), show));
     let mut negotiator = Negotiator::new();
@@ -26,10 +28,12 @@ fn at(show: PromptShow, cols: u16) -> (Session, Negotiator) {
 }
 
 /// What the band shows, as text.
+#[cfg(native_surface)]
 fn band(out: &Output) -> Option<String> {
     out.pin.as_deref().map(vosh_protocol::ansi::plain_text)
 }
 
+#[cfg(native_surface)]
 #[test]
 fn a_push_reaches_the_last_column_the_session_knows() {
     for show in [PromptShow::Text, PromptShow::Lifted] {
@@ -63,6 +67,7 @@ fn a_push_reaches_the_last_column_the_session_knows() {
     );
 }
 
+#[cfg(native_surface)]
 #[test]
 fn a_new_width_draws_the_push_again_where_your_prompt_shows() {
     for show in [PromptShow::Text, PromptShow::Lifted] {
@@ -150,6 +155,7 @@ fn a_design_with_no_push_still_closes_the_row_at_a_new_width() {
     ));
 }
 
+#[cfg(native_surface)]
 #[test]
 fn a_lifted_band_that_fills_its_row_stays_on_it_and_your_echo_takes_the_next() {
     let (mut session, _) = at(PromptShow::Lifted, 40);
