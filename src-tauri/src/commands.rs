@@ -30,6 +30,9 @@ use crate::profile::{Macro, Profile, Timer};
 use crate::profile_config::{
     hand_out_shared, share_custom_themes, GlobalConfig, HeldCustomThemes, PaneLayoutPersist,
 };
+use crate::prompt::{
+    prompt_look, prompt_show_state, reported_hidden, request_prompt_repaint, PromptShowState,
+};
 use crate::script_state::ApplyResult;
 use crate::session::{self, TargetPayload};
 use crate::tick::{apply_tick_config, tick_config_payload, TickConfigPayload};
@@ -276,13 +279,6 @@ async fn deliver_script_result<R: tauri::Runtime>(
     }
     session::emit_output(app, NOT_CONNECTED.to_vec());
     Ok(())
-}
-
-/// What decides how your prompt looks on screen: the switch, the design
-/// and where it shows. A line that changes any of them repaints it.
-pub(crate) fn prompt_look(p: &crate::profile::Profile) -> (bool, String, vosh_prompt::PromptShow) {
-    let config = p.prompt.config();
-    (config.draw, config.template.clone(), config.show)
 }
 
 /// Send a line typed into the masked password field, the one the input
@@ -2197,15 +2193,6 @@ pub(crate) async fn ui_set_config(
     Ok(true)
 }
 
-/// Ask the session to repaint the open row as the `[prompt]` table now
-/// says. Nothing happens with no connection, or when no drawn prompt is
-/// the last thing on screen.
-pub(crate) async fn request_prompt_repaint(state: &SharedState) {
-    if let Some(handle) = state.session.lock().await.as_ref() {
-        let _ = handle.prompt_repaint();
-    }
-}
-
 /// Write a whole config save onto `ui`, unless it was read at a
 /// generation other than `current`. Returns whether it applied.
 fn apply_ui_config(
@@ -2231,31 +2218,6 @@ pub(crate) async fn hidden_get(
     Ok(reported_hidden(state.inner()).await)
 }
 
-/// The body of [`hidden_get`].
-async fn reported_hidden(state: &SharedState) -> vosh_prompt::values::Hidden {
-    state.profile.lock().await.prompt.vars.reported()
-}
-
-/// Where your prompt shows, with what the Settings row and the main
-/// window need beside it.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub(crate) struct PromptShowState {
-    /// `text`, `lifted` or `pinned`, from `[prompt] show`.
-    pub show: String,
-    /// The profile has a capture that reads a prompt. Without one Vosh
-    /// finds no prompt to lift or pin.
-    pub capture: bool,
-    /// Draw your prompt is on, for the palette's row.
-    pub draw: bool,
-    /// The game sent Char.Prompt this session.
-    pub game_sent: bool,
-    /// The rows the band above the command line keeps while your prompt
-    /// shows pinned, the most any prompt the capture reads can take.
-    pub zone: usize,
-    /// You turned prompts off in the game.
-    pub prompts_off: bool,
-}
-
 /// Where the active profile's prompt shows, and whether it reads one.
 /// Every window reads it again on `vosh://prompt-config-changed`.
 #[tauri::command]
@@ -2263,18 +2225,6 @@ pub(crate) async fn prompt_show_get(
     state: State<'_, SharedState>,
 ) -> Result<PromptShowState, String> {
     Ok(prompt_show_state(&*state.profile.lock().await))
-}
-
-/// The body of [`prompt_show_get`].
-fn prompt_show_state(p: &crate::profile::Profile) -> PromptShowState {
-    PromptShowState {
-        show: p.prompt.show().name().to_string(),
-        capture: p.prompt.stage.has_recognizer(),
-        draw: p.prompt.config().draw,
-        game_sent: p.prompt.vars.gmcp().prompt_seen(),
-        zone: p.prompt.zone(),
-        prompts_off: p.prompt.prompts_off(),
-    }
 }
 
 /// The triggers that hid your prompt this session while the profile
@@ -2940,6 +2890,7 @@ mod tests {
         shows_on_reopen, window_fit, ScrollbackLoad, UiConfigPayload, HELP_WINDOW, SETTINGS_WINDOW,
     };
     use crate::profile_config::{ProfileConfig, UiConfig};
+    use crate::prompt::tests::prompt_profile;
 
     /// Send `ui` the way Settings does: out through `ui_get_config`,
     /// across the JSON bridge, and back through `ui_set_config` onto a
@@ -3065,23 +3016,6 @@ mod tests {
         assert_eq!(live.font_size, 16);
     }
 
-    /// A live profile whose `[prompt]` table holds more than Settings
-    /// shows: a capture and an earlier design.
-    fn prompt_profile() -> crate::profile::Profile {
-        let mut p = crate::profile::Profile::default();
-        p.set_prompt_config(vosh_prompt::PromptConfig {
-            draw: true,
-            template: "%hp".into(),
-            previous_templates: vec!["%mana".into()],
-            capture: vosh_prompt::CaptureConfig::Regex(vosh_prompt::config::RegexCapture {
-                lines: vec![r"\[(?<hp>\d+)hp\]".into()],
-                ..vosh_prompt::config::RegexCapture::default()
-            }),
-            ..vosh_prompt::PromptConfig::default()
-        });
-        p
-    }
-
     #[test]
     fn a_settings_payload_that_leaves_fields_out_still_reads() {
         let mut json = serde_json::to_value(UiConfigPayload::default()).unwrap();
@@ -3139,45 +3073,6 @@ mod tests {
         assert_eq!(file.prompt_config(), table);
         assert!(file.ui.prompt_template_enabled);
         assert_eq!(file.ui.prompt_template, "%hp");
-    }
-
-    #[test]
-    fn the_prompt_show_state_says_where_it_shows_and_whether_a_capture_reads_it() {
-        let mut p = crate::profile::Profile::default();
-        assert_eq!(
-            super::prompt_show_state(&p),
-            super::PromptShowState {
-                show: "text".into(),
-                capture: false,
-                draw: false,
-                game_sent: false,
-                zone: 1,
-                prompts_off: false,
-            }
-        );
-        p = prompt_profile();
-        let mut config = p.prompt.config().clone();
-        config.show = vosh_prompt::PromptShow::Lifted;
-        p.set_prompt_config(config);
-        p.prompt.connect(true);
-        p.prompt.observe(
-            "Char.Prompt",
-            serde_json::json!({"enabled": true, "prompt": "<%hhp> ", "fprompt": ""}),
-            chrono::Local::now().fixed_offset(),
-        );
-        let state = super::prompt_show_state(&p);
-        assert_eq!(state.show, "lifted");
-        assert!(state.capture);
-        assert_eq!(state.draw, p.prompt.config().draw);
-        assert!(state.game_sent);
-        assert_eq!(state.zone, 1);
-        assert!(!state.prompts_off);
-        p.prompt.observe(
-            "Char.Prompt",
-            serde_json::json!({"enabled": false, "prompt": "<%hhp> ", "fprompt": ""}),
-            chrono::Local::now().fixed_offset(),
-        );
-        assert!(super::prompt_show_state(&p).prompts_off);
     }
 
     #[test]
@@ -3835,40 +3730,6 @@ mod tests {
             fixture.strip_suffix('\n'),
             Some(json.as_str()),
             "fixtures/ipc/aliases_export.json no longer matches aliases_export"
-        );
-    }
-
-    #[tokio::test]
-    async fn hidden_get_answers_what_the_session_last_reported() {
-        let state: super::SharedState = std::sync::Arc::new(super::AppState::default());
-        let nothing = serde_json::json!({
-            "vitals": false, "tank": false, "opponent": false, "affects": false, "group": false,
-        });
-        let json = |h| serde_json::to_value(h).unwrap();
-        assert_eq!(json(super::reported_hidden(&state).await), nothing);
-        {
-            let mut p = state.profile.lock().await;
-            p.prompt.connect(true);
-            let at = chrono::Local::now().fixed_offset();
-            // The older build names the song and sends the true values.
-            p.prompt.vars.observe(
-                "Char.Affects",
-                serde_json::json!({"affects":[{"name":"lamented tears","kind":"song","duration":3}]}),
-                at,
-            );
-            p.prompt.vars.observe(
-                "Char.Vitals",
-                serde_json::json!({"hp":850,"maxhp":900,"mana":760,"maxmana":820,"move":250,"maxmove":250}),
-                at,
-            );
-        }
-        // Worked out, but the session has not reported it yet.
-        assert_eq!(json(super::reported_hidden(&state).await), nothing);
-        let reported = state.profile.lock().await.prompt.vars.take_hidden_change();
-        assert!(reported.is_some_and(|h| h.vitals() && h.affects && h.group));
-        assert_eq!(
-            super::reported_hidden(&state).await,
-            reported.expect("a report")
         );
     }
 

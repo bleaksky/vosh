@@ -1450,7 +1450,7 @@ impl Shown {
                 room_idx: p.target.room_idx,
                 quick_keys: p.target.quick_keys.clone(),
             },
-            look: crate::commands::prompt_look(p),
+            look: crate::prompt::prompt_look(p),
         }
     }
 }
@@ -1485,7 +1485,7 @@ impl ShownChanges {
                 .state::<crate::app::state::SharedState>()
                 .inner()
                 .clone();
-            tokio::spawn(async move { crate::commands::request_prompt_repaint(&state).await });
+            tokio::spawn(async move { crate::prompt::request_prompt_repaint(&state).await });
         }
         if let Some(payload) = self.target {
             let _ = app.emit(events::TARGET, payload);
