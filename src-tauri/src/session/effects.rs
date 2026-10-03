@@ -269,11 +269,7 @@ struct Shown {
 impl Shown {
     fn of(p: &Profile) -> Self {
         Self {
-            target: TargetPayload {
-                name: p.target.name.clone(),
-                room_idx: p.target.room_idx,
-                quick_keys: p.target.quick_keys.clone(),
-            },
+            target: TargetPayload::of(p),
             look: crate::prompt::prompt_look(p),
         }
     }

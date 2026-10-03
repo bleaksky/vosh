@@ -481,7 +481,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         p.vars.remove("target");
         line_triggers = p.prompt.stage.line_trigger_notice();
         end_prompt(&mut p);
-        had.then(|| p.target.quick_keys.clone())
+        had.then(|| TargetPayload::of(&p))
     };
     // Line triggers no longer see a prompt the profile reads, so the first
     // session that read yours names the ones that matched it, once, at the
@@ -490,15 +490,8 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         let state = conn.app.state::<crate::app::state::SharedState>();
         crate::prompt_migration::note_line_triggers(state.inner(), names).await;
     }
-    if let Some(quick_keys) = target_after {
-        let _ = conn.app.emit(
-            events::TARGET,
-            TargetPayload {
-                name: None,
-                room_idx: None,
-                quick_keys,
-            },
-        );
+    if let Some(payload) = target_after {
+        let _ = conn.app.emit(events::TARGET, payload);
     }
     let _ = conn.stream.shutdown().await;
     // The affects list goes stale with the session, as the frontend
