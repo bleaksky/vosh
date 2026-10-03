@@ -2,6 +2,7 @@
 //! store; lives across reconnects so user customization survives disconnect
 //! cycles.
 
+pub(crate) mod file;
 pub(crate) mod panes;
 pub(crate) mod shared;
 pub(crate) mod switch;
