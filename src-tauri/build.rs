@@ -4,7 +4,7 @@ fn main() {
     // references the cfg, so adding a platform is a one-line change.
     println!("cargo::rustc-check-cfg=cfg(native_surface)");
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    if target_os == "macos" || target_os == "windows" || target_os == "linux" {
+    if target_os == "macos" {
         println!("cargo::rustc-cfg=native_surface");
     }
     // Tauri puts its Windows manifest, which asks for Common Controls 6,
