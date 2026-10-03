@@ -62,7 +62,7 @@ pub(crate) use mac::{apply_state, build, on_event, system_copy};
 /// The shortcut specs the menu, the palette keycaps, and the page's
 /// keydown handler share, so they cannot drift apart.
 #[cfg(target_os = "macos")]
-const SHORTCUTS_JSON: &str = include_str!("../../src/lib/appShortcuts.json");
+const SHORTCUTS_JSON: &str = include_str!("../../../src/lib/appShortcuts.json");
 
 /// Pane rows in View, in the panel's order.
 #[cfg(target_os = "macos")]
