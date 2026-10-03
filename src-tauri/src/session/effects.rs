@@ -1,9 +1,9 @@
 //! The one Lua effects applier. Every path that runs Lua hands what it
 //! asks for to [`apply_script_result`], which sends its bytes, echoes its
 //! lines, keeps its timers, shows its prompt values and runs its
-//! `mud.input` lines through the input pipeline. A line from a Settings
-//! timer, the tick or `mud.input` runs here the way a typed line runs,
-//! and says what it changed outside the terminal text.
+//! `mud.input` lines through the input pipeline. Every line runs through
+//! the pipeline here, typed or from a Settings timer, the tick or
+//! `mud.input`, and says what it changed outside the terminal text.
 
 use std::sync::Arc;
 
@@ -168,7 +168,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             apply.inputs.iter().map(String::as_str),
         )
         .await;
-        let FiredRun {
+        let LinesRun {
             apply: next,
             shown,
             effects,
@@ -220,14 +220,13 @@ fn framed_echoes<S: AsRef<str>>(lines: &[S]) -> Vec<u8> {
     buf
 }
 
-/// Run `line` through the input pipeline for a path other than typed
-/// input, and note what it asks of the saved profile the way the typed
-/// path does. Call with the profile lock held. A `#profile reset`, or a
-/// `#profile load` that reads its file, swaps the live UI config and
-/// panes, so their generations move in the same step. The profile file it reads
-/// holds none of the shared settings, so `shared` goes back over the
-/// result as it does for typed input.
-pub(super) fn process_fired_line(
+/// Run `line` through the input pipeline and note what it asks of the
+/// saved profile. Call with the profile lock held. A `#profile reset`,
+/// or a `#profile load` that reads its file, swaps the live UI config
+/// and panes, so their generations move in the same step. The profile
+/// file it reads holds none of the shared settings, so `shared` goes
+/// back over the result.
+pub(super) fn run_and_note_line(
     p: &mut Profile,
     line: &str,
     effects: &mut input::LineEffects,
@@ -275,14 +274,13 @@ impl Shown {
     }
 }
 
-/// What lines a timer, the tick command or Lua ran changed outside the
-/// terminal text. Typed input sends the same two things for a typed line.
+/// What lines changed outside the terminal text.
 #[derive(Debug, Default, PartialEq)]
-pub(super) struct ShownChanges {
+pub(crate) struct ShownChanges {
     /// The target display, sent on `session://target`.
-    pub(super) target: Option<TargetPayload>,
+    pub(crate) target: Option<TargetPayload>,
     /// Your prompt looks different, so the open row repaints.
-    pub(super) repaint: bool,
+    pub(crate) repaint: bool,
 }
 
 impl ShownChanges {
@@ -295,9 +293,9 @@ impl ShownChanges {
         }
     }
 
-    /// Ask for the repaint and send the target, as typed input does. The
-    /// repaint request goes through the session handle, as the typed one
-    /// does, from a task of its own, since `session_disconnect` holds the
+    /// Ask for the repaint and send the target, for lines the session
+    /// loop runs. The repaint request goes through the session handle
+    /// from a task of its own, since `session_disconnect` holds the
     /// handle's lock while it waits for this session to end.
     fn send<R: tauri::Runtime>(self, app: &AppHandle<R>) {
         if self.repaint {
@@ -313,14 +311,14 @@ impl ShownChanges {
     }
 }
 
-/// What lines from a timer, the tick or `mud.input` produced under the
-/// profile lock.
-pub(super) struct FiredRun {
+/// What lines run through the input pipeline produced under the profile
+/// lock.
+pub(crate) struct LinesRun {
     /// What the lines ask for, with every list they changed.
-    pub(super) apply: ApplyResult,
+    pub(crate) apply: ApplyResult,
     /// What they changed outside the terminal text.
-    pub(super) shown: ShownChanges,
-    pub(super) effects: input::LineEffects,
+    pub(crate) shown: ShownChanges,
+    pub(crate) effects: input::LineEffects,
 }
 
 /// The part of [`run_fired_command`] that runs under the profile lock:
@@ -330,27 +328,28 @@ pub(super) fn run_fired_locked(
     p: &mut Profile,
     command: &str,
     shared: Option<&SharedLayer>,
-) -> FiredRun {
+) -> LinesRun {
     run_lines_locked(p, [command], shared)
 }
 
-/// Run `lines` through the input pipeline under the profile lock, for a
-/// path other than typed input, each as [`line_script_result`] reads it.
-fn run_lines_locked<'a>(
+/// Run `lines` through the input pipeline under the profile lock, each
+/// as [`line_script_result`] reads it. Every path runs its lines here: a
+/// typed line, a Settings timer, the tick command and `mud.input`.
+pub(crate) fn run_lines_locked<'a>(
     p: &mut Profile,
     lines: impl IntoIterator<Item = &'a str>,
     shared: Option<&SharedLayer>,
-) -> FiredRun {
+) -> LinesRun {
     let lists_before = ListRevisions::of(p);
     let shown_before = Shown::of(p);
     let mut effects = input::LineEffects::default();
     let mut apply = ApplyResult::default();
     for line in lines {
-        let ran = process_fired_line(p, line, &mut effects, shared);
+        let ran = run_and_note_line(p, line, &mut effects, shared);
         apply.append(line_script_result(ran));
     }
     apply.lists = ListChanges::since(lists_before, p);
-    FiredRun {
+    LinesRun {
         apply,
         shown: ShownChanges::since(shown_before, p),
         effects,
@@ -375,7 +374,7 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
     sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
     let shared = crate::profile::switch::shared_layer_for_lines(app, [command]).await;
-    let FiredRun {
+    let LinesRun {
         apply,
         shown,
         effects,

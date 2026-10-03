@@ -16,15 +16,16 @@ mod vars;
 use tauri::{AppHandle, Emitter};
 use vosh_automation::alias::{ExpandError, ExpandStep};
 
-use crate::app::events::{self, ListChanges, ListRevisions, HELP_OPEN};
-use crate::app::state::{note_ui_config_replaced, SharedState};
+use crate::app::events::{self, HELP_OPEN};
+use crate::app::state::SharedState;
 use crate::disk::save::settle_line_effects;
 use crate::output;
 use crate::profile::switch::read_shared_layer;
 use crate::profile::Profile;
-use crate::prompt::{prompt_look, request_prompt_repaint};
+use crate::prompt::request_prompt_repaint;
 use crate::script::{run_alias_body, ApplyResult};
-use crate::session::{self, TargetPayload};
+use crate::session;
+use crate::session::effects::LinesRun;
 
 use slash::handle_slash;
 use target::{run_target_clear, run_target_cycle, run_target_set};
@@ -180,51 +181,33 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     }
     // `#profile reset` and `#profile load` replace the live profile
     // wholesale, panes and tracked affects included. Path B turns them
-    // into echoes, so there they change nothing.
-    let mut effects = LineEffects::default();
-    // The profile file they read holds none of the shared settings, so
-    // global.toml goes back over the result the way a switch lays it.
+    // into echoes, so there they change nothing. The profile file they
+    // read holds none of the shared settings, so global.toml goes back
+    // over the result the way a switch lays it.
     let shared_layer = if may_replace_profile(line) {
         read_shared_layer(state).await
     } else {
         None
     };
-    let (apply, target_after, look_changed) = {
+    // The line runs the way a line from a timer, the tick or Lua runs.
+    let LinesRun {
+        apply,
+        shown,
+        effects,
+    } = {
         let mut profile = state.profile.lock().await;
-        let lists_before = ListRevisions::of(&profile);
-        let look_before = prompt_look(&profile);
-        let before = TargetPayload::of(&profile);
-        let ran = match &shared_layer {
-            Some(layer) => layer.keep_across(&mut profile, |p| run_line(p, line)),
-            None => run_line(&mut profile, line),
-        };
-        // Only a reset, or a load that read its file, replaced the
-        // profile. A load that failed leaves it for the saves to write.
-        effects.note_ran(line, &ran);
-        if ran.replaced {
-            note_ui_config_replaced();
-        }
-        let after = TargetPayload::of(&profile);
-        let payload = (after != before).then_some(after);
-        // The line's own bytes and echo lines, with what the Lua bodies
-        // of its script aliases send among them, then all else the Lua it
-        // ran asks for. #trigger, #alias, and the Lua they run change the
-        // lists an open Settings page shows, so the result carries every
-        // list the line changed.
-        let mut apply = session::effects::line_script_result(ran);
-        apply.lists = ListChanges::since(lists_before, &profile);
-        let look_changed = prompt_look(&profile) != look_before;
-        (apply, payload, look_changed)
+        session::effects::run_lines_locked(&mut profile, [line], shared_layer.as_ref())
     };
     // `#prompt draw` and `#prompt show` change the prompt on screen at
-    // once, and `#prompt default` draws the new design there.
-    if look_changed {
+    // once, and `#prompt default` draws the new design there. A typed
+    // line runs outside the session loop, so it waits for the repaint.
+    if shown.repaint {
         request_prompt_repaint(state).await;
     }
 
     settle_line_effects(app, effects).await;
 
-    if let Some(payload) = target_after {
+    if let Some(payload) = shown.target {
         let _ = app.emit(events::TARGET, payload);
     }
 
