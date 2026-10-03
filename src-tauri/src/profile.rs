@@ -5,6 +5,7 @@
 pub(crate) mod file;
 pub(crate) mod login_match;
 pub(crate) mod panes;
+pub(crate) mod set;
 pub(crate) mod shared;
 pub(crate) mod switch;
 #[cfg(test)]
