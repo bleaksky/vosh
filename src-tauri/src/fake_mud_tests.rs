@@ -1560,7 +1560,7 @@ async fn a_switch_to_a_profile_with_a_moved_capture_switches_it() {
 
     // The latest Char.Prompt switches Healer's pattern as the switch
     // hands it over.
-    crate::commands::apply_profile_switch(h.app.handle(), &h.state, "Healer")
+    crate::profile::switch::apply_profile_switch(h.app.handle(), &h.state, "Healer")
         .await
         .expect("the switch");
     let table = h.prompt_table().await;
@@ -1577,7 +1577,7 @@ async fn a_switch_to_a_profile_with_a_moved_capture_switches_it() {
 
     // Back on Default, which still reads nothing, and Healer's file
     // holds the codes.
-    crate::commands::apply_profile_switch(h.app.handle(), &h.state, DEFAULT_PROFILE_NAME)
+    crate::profile::switch::apply_profile_switch(h.app.handle(), &h.state, DEFAULT_PROFILE_NAME)
         .await
         .expect("the switch back");
     assert!(h.capture().await.is_none());

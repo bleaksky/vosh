@@ -1550,7 +1550,7 @@ async fn run_fired_command<R: tauri::Runtime>(
     command: &str,
     sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
-    let shared = crate::commands::shared_layer_for_lines(app, [command]).await;
+    let shared = crate::profile::switch::shared_layer_for_lines(app, [command]).await;
     let FiredRun {
         apply,
         shown,
@@ -3151,8 +3151,12 @@ async fn handle_gmcp<R: tauri::Runtime>(
                     batch.character = Some(owned.clone());
                 }
                 let state = app.state::<crate::app::state::SharedState>();
-                crate::commands::handle_char_known_for_auto_switch(app, state.inner(), &owned)
-                    .await;
+                crate::profile::switch::handle_char_known_for_auto_switch(
+                    app,
+                    state.inner(),
+                    &owned,
+                )
+                .await;
             }
         }
     }
@@ -3429,9 +3433,11 @@ async fn apply_script_result<R: tauri::Runtime>(
             return Ok(());
         }
         depth += 1;
-        let shared =
-            crate::commands::shared_layer_for_lines(app, apply.inputs.iter().map(String::as_str))
-                .await;
+        let shared = crate::profile::switch::shared_layer_for_lines(
+            app,
+            apply.inputs.iter().map(String::as_str),
+        )
+        .await;
         let FiredRun {
             apply: next,
             shown,
