@@ -18,10 +18,8 @@ mod logs;
 #[cfg(native_surface)]
 mod native_surface;
 mod output;
-mod preset_rollout;
 mod profile;
 mod prompt;
-mod prompt_migration;
 mod script;
 mod session;
 #[cfg(native_surface)]
@@ -61,6 +59,12 @@ mod loadout_store {
 // Callers still reach the wizard planner by the path of migration.rs,
 // until they point at loadouts/wizard/.
 use loadouts::wizard::plan as migration;
+
+// Callers still reach the one time upgrades by the paths of
+// prompt_migration.rs and preset_rollout.rs, until they point at
+// disk/upgrades/.
+use disk::upgrades::presets as preset_rollout;
+use disk::upgrades::prompt_capture as prompt_migration;
 
 pub fn run() {
     tracing_subscriber::fmt()

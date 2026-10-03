@@ -248,7 +248,7 @@ name = "Quiet"
 
     #[test]
     fn every_rollout_names_a_library_preset() {
-        let library = include_str!("../../src/lib/presets.ts");
+        let library = include_str!("../../../../src/lib/presets.ts");
         for (_, preset) in ROLLOUTS {
             assert!(library.contains(&format!("id: '{preset}',")), "{preset}");
         }
