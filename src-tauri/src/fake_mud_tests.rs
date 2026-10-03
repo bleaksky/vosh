@@ -2153,7 +2153,7 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
     .expect("the entry script");
     h.state.profile.lock().await.plugins.enabled = vec!["on_load".into()];
 
-    crate::load_enabled_plugins(h.app.handle(), &h.state, plugins).await;
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, plugins).await;
     assert!(
         h.state
             .profile
