@@ -18,7 +18,7 @@ use tauri::AppHandle;
 use tracing::warn;
 
 use crate::app::events::{broadcast, pane_layout_envelope, PaneLayoutEnvelope, PROFILE_CHANGED};
-use crate::app::state::{SharedState, MIGRATION_RELAUNCH_PENDING};
+use crate::app::state::SharedState;
 use crate::disk::save::PERSIST_LOCK;
 use crate::profile::file::ProfileConfig;
 use crate::profile::login_match::AutoMatch;
@@ -191,7 +191,7 @@ pub(crate) async fn edit_inactive_profile<R>(
     rewrite_inactive(
         &set,
         name,
-        MIGRATION_RELAUNCH_PENDING.load(Ordering::Acquire),
+        state.relaunch_pending.load(Ordering::Acquire),
         edit,
     )
 }

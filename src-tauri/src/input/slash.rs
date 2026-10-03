@@ -14,10 +14,12 @@ use super::target::{
 use super::tick::slash_tick;
 use super::vars::{slash_unvar, slash_var, slash_vars_list};
 use super::{split_first_word, InputResult};
+use crate::app::state::AppState;
 use crate::profile::live::Profile;
 use crate::script::ApplyResult;
 
 pub(super) fn handle_slash(
+    state: &AppState,
     profile: &mut Profile,
     rest: &str,
     replaced: &mut bool,
@@ -43,7 +45,7 @@ pub(super) fn handle_slash(
         "scripts" => slash_scripts_list(profile),
         "lua" => slash_lua(profile, args, lua),
         "echo" | "showme" => slash_echo(profile, args),
-        "profile" => slash_profile(profile, args, replaced),
+        "profile" => slash_profile(state, profile, args, replaced),
         "import-tintin" => slash_import_tintin(profile, args),
         // Typed input runs #logs before the pipeline (see `logs_command`),
         // so only a timer, the tick command, or Lua gets here.

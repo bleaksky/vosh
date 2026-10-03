@@ -13,7 +13,7 @@ use super::plan::{
     analyze_profiles, profile_file_for_catalog, ItemKind, ItemPayload, MigrationPlan,
 };
 use crate::app::events::{broadcast, MIGRATION_APPLIED};
-use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED};
+use crate::app::state::SharedState;
 use crate::disk::paths::{catalog_path, journal_path, legacy_dir, loadouts_path};
 use crate::disk::save::{active_profile_file, persist_state, PERSIST_LOCK};
 use crate::loadouts::presets::first_catalog_presets;
@@ -23,29 +23,18 @@ use crate::profile::set::SavedFile;
 
 /// [`migration_analyze`] over the app data folder `app_data`, so a test
 /// can run it over a folder of its own. `library` holds the id of every
-/// preset in the library the frontend installs from.
+/// preset in the library the frontend installs from. Apply saves the live
+/// profile before it reads the files, unless `#profile reset` or `load`
+/// holds the saves back, see [`apply_migration`]. The preview reads the
+/// active profile as that save would write it, so it shows what apply
+/// builds, the presets of a profile you switched to before anything saved
+/// it among them.
 ///
 /// [`migration_analyze`]: crate::ipc::wizard::migration_analyze
 pub(crate) async fn analyze_migration(
     state: &SharedState,
     app_data: &std::path::Path,
     library: &[&str],
-) -> Result<MigrationPlan, String> {
-    analyze_migration_with(state, app_data, library, &AUTO_PERSIST_SUPPRESSED).await
-}
-
-/// [`analyze_migration`] with `suppressed` in place of
-/// [`AUTO_PERSIST_SUPPRESSED`], so a test can preview after a `#profile
-/// reset` without touching the flag every other test reads. Apply saves
-/// the live profile before it reads the files, unless `suppressed` holds,
-/// see [`apply_migration_with`]. The preview reads the active profile as
-/// that save would write it, so it shows what apply builds, the presets of
-/// a profile you switched to before anything saved it among them.
-pub(crate) async fn analyze_migration_with(
-    state: &SharedState,
-    app_data: &std::path::Path,
-    library: &[&str],
-    suppressed: &std::sync::atomic::AtomicBool,
 ) -> Result<MigrationPlan, String> {
     // No switch or save lands between the read of the live profile and
     // the read of the files, as in apply.
@@ -56,8 +45,10 @@ pub(crate) async fn analyze_migration_with(
     let scope = state.profile_set.lock().await.as_ref().map(|s| *s.scope());
     let (live, live_presets) = {
         let p = state.profile.lock().await;
-        let live = (!suppressed.load(std::sync::atomic::Ordering::Acquire))
-            .then(|| active_profile_file(&p, scope.as_ref()));
+        let held = state
+            .auto_persist_suppressed
+            .load(std::sync::atomic::Ordering::Acquire);
+        let live = (!held).then(|| active_profile_file(&p, scope.as_ref()));
         (live, p.ui.enabled_presets.clone())
     };
     let set = state.loaded_profile_set().await?;
@@ -302,28 +293,6 @@ pub(crate) async fn apply_migration(
     library: &[&str],
     written: impl FnOnce(),
 ) -> Result<(), String> {
-    apply_migration_with(
-        state,
-        app_data,
-        resolutions,
-        library,
-        &AUTO_PERSIST_SUPPRESSED,
-        written,
-    )
-    .await
-}
-
-/// [`apply_migration`] with `suppressed` in place of
-/// [`AUTO_PERSIST_SUPPRESSED`], so a test can run it after a `#profile
-/// reset` without touching the flag every other test reads.
-pub(crate) async fn apply_migration_with(
-    state: &SharedState,
-    app_data: &std::path::Path,
-    resolutions: &[ConflictResolution],
-    library: &[&str],
-    suppressed: &std::sync::atomic::AtomicBool,
-    written: impl FnOnce(),
-) -> Result<(), String> {
     // Every save of a profile file takes this lock, so none lands
     // between the read of a file below and its rewrite without the items.
     let _persist_guard = PERSIST_LOCK.lock().await;
@@ -337,7 +306,10 @@ pub(crate) async fn apply_migration_with(
     // switch does, so the wizard reads it. After `#profile reset` or
     // `load` the live profile is deliberately diverged from its file,
     // and the file stands as it is.
-    if !suppressed.load(std::sync::atomic::Ordering::Acquire) {
+    if !state
+        .auto_persist_suppressed
+        .load(std::sync::atomic::Ordering::Acquire)
+    {
         persist_state(state, Some(app_data)).await;
     }
 

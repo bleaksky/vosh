@@ -1,9 +1,6 @@
 //! The shared catalog wizard and the loadout mode files it writes.
 
-use super::apply::{
-    analyze_migration, analyze_migration_with, apply_migration, apply_migration_with,
-    WIZARD_WRITES_BEFORE_A_CRASH,
-};
+use super::apply::{analyze_migration, apply_migration, WIZARD_WRITES_BEFORE_A_CRASH};
 use crate::app::state::{AppState, SharedState};
 use crate::disk::paths::{catalog_path, loadouts_path};
 use crate::disk::save::tests::{launch_state, persist, read, UNREADABLE};
@@ -747,7 +744,7 @@ async fn the_preview_counts_the_live_presets_of_a_profile_that_never_saved() {
 #[tokio::test]
 async fn the_preview_reads_the_files_after_a_profile_reset() {
     use crate::profile::set::DEFAULT_PROFILE_NAME;
-    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::Ordering;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     write_presets(&set, DEFAULT_PROFILE_NAME, &["healing_basics"]);
@@ -757,12 +754,12 @@ async fn the_preview_reads_the_files_after_a_profile_reset() {
     // save, so apply reads the file as it is, and so does the
     // preview.
     state.profile.lock().await.ui.enabled_presets.clear();
-    let suppressed = AtomicBool::new(true);
-    let plan = analyze_migration_with(&state, dir.path(), LIBRARY, &suppressed)
+    state.auto_persist_suppressed.store(true, Ordering::Release);
+    let plan = analyze_migration(&state, dir.path(), LIBRARY)
         .await
         .unwrap();
     assert_eq!(plan.shared_presets, ["healing_basics"]);
-    apply_migration_with(&state, dir.path(), &[], LIBRARY, &suppressed, || {})
+    apply_migration(&state, dir.path(), &[], LIBRARY, || {})
         .await
         .unwrap();
     let (catalog, _) = load_at_launch(dir.path()).unwrap();
@@ -1626,9 +1623,11 @@ async fn the_wizard_leaves_a_profile_you_reset_to_its_file() {
     // `#profile reset` blanks the live profile and holds the saves
     // back, and the file stays as you saved it.
     ProfileConfig::default().apply_to(&mut *state.profile.lock().await);
-    let suppressed = std::sync::atomic::AtomicBool::new(true);
+    state
+        .auto_persist_suppressed
+        .store(true, std::sync::atomic::Ordering::Release);
 
-    apply_migration_with(&state, dir.path(), &[], LIBRARY, &suppressed, || {})
+    apply_migration(&state, dir.path(), &[], LIBRARY, || {})
         .await
         .unwrap();
 
@@ -1643,15 +1642,14 @@ async fn the_wizard_leaves_a_profile_you_reset_to_its_file() {
 #[tokio::test]
 async fn a_switch_waits_for_the_relaunch_after_the_wizard() {
     use crate::profile::set::DEFAULT_PROFILE_NAME;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::Ordering;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
     write_alias(&set, "Healer", "hh");
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    let pending = AtomicBool::new(false);
     apply_migration(&state, dir.path(), &[], LIBRARY, || {
-        pending.store(true, Ordering::Release);
+        state.relaunch_pending.store(true, Ordering::Release);
     })
     .await
     .unwrap();
@@ -1659,10 +1657,9 @@ async fn a_switch_waits_for_the_relaunch_after_the_wizard() {
     // The Healer file holds no aliases now, and the catalog loads
     // only at launch, so a switch would leave you with none. A
     // login that picks the Healer says why on the terminal.
-    let err =
-        crate::profile::switch::switch_profile_with(&state, Some(dir.path()), "Healer", &pending)
-            .await
-            .unwrap_err();
+    let err = crate::profile::switch::switch_profile(&state, Some(dir.path()), "Healer")
+        .await
+        .unwrap_err();
     assert_eq!(
         crate::profile::switch::auto_switch_failed_line(&err),
         "\r\n\x1b[33mQuit Vosh and open it again to finish the move to loadouts, then \
@@ -1682,14 +1679,10 @@ async fn a_switch_waits_for_the_relaunch_after_the_wizard() {
     assert_eq!(items_on(&*state.profile.lock().await), ["alias hh"]);
 }
 
-/// Try to rename Healer, copy it, and make a profile from it while
-/// `pending` holds, and check that each is refused and that the
-/// profile files and the index stay as they were.
-async fn renames_and_copies_are_refused(
-    state: &SharedState,
-    dir: &std::path::Path,
-    pending: &std::sync::atomic::AtomicBool,
-) {
+/// Try to rename Healer, copy it, and make a profile from it while a
+/// relaunch is pending on `state`, and check that each is refused and
+/// that the profile files and the index stay as they were.
+async fn renames_and_copies_are_refused(state: &SharedState, dir: &std::path::Path) {
     let set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
     let files: Vec<(std::path::PathBuf, Option<String>)> = set
         .list()
@@ -1702,7 +1695,7 @@ async fn renames_and_copies_are_refused(
         .collect();
     let index = read(&dir.join("profiles.toml"));
 
-    let rename = crate::profile::set::rename_profile(state, "Healer", "Cleric", pending)
+    let rename = crate::profile::set::rename_profile(state, "Healer", "Cleric")
         .await
         .unwrap_err();
     assert_eq!(
@@ -1712,21 +1705,14 @@ async fn renames_and_copies_are_refused(
     );
     let copy = "Quit Vosh and open it again to finish the move to loadouts, then copy \
                 the profile.";
-    let duplicate =
-        crate::profile::set::duplicate_profile(state, Some(dir), "Healer", "Cleric", pending)
+    let duplicate = crate::profile::set::duplicate_profile(state, Some(dir), "Healer", "Cleric")
+        .await
+        .unwrap_err();
+    assert_eq!(duplicate, copy);
+    let create =
+        crate::profile::set::create_profile(state, Some(dir), "Cleric", Some("Healer"), None)
             .await
             .unwrap_err();
-    assert_eq!(duplicate, copy);
-    let create = crate::profile::set::create_profile(
-        state,
-        Some(dir),
-        "Cleric",
-        Some("Healer"),
-        None,
-        pending,
-    )
-    .await
-    .unwrap_err();
     assert_eq!(create, copy);
 
     assert_eq!(read(&dir.join("profiles.toml")), index);
@@ -1742,7 +1728,6 @@ async fn renames_and_copies_are_refused(
 #[tokio::test]
 async fn the_live_profile_keeps_the_name_the_prompt_draws() {
     use crate::profile::set::DEFAULT_PROFILE_NAME;
-    use std::sync::atomic::AtomicBool;
     let dir = tempfile::tempdir().unwrap();
     james_like_set(dir.path());
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
@@ -1759,8 +1744,7 @@ async fn the_live_profile_keeps_the_name_the_prompt_draws() {
         Some("Healer")
     );
     // Renaming the live profile renames what the prompt draws.
-    let pending = AtomicBool::new(false);
-    crate::profile::set::rename_profile(&state, "Healer", "Cleric", &pending)
+    crate::profile::set::rename_profile(&state, "Healer", "Cleric")
         .await
         .unwrap();
     assert_eq!(
@@ -1768,7 +1752,7 @@ async fn the_live_profile_keeps_the_name_the_prompt_draws() {
         Some("Cleric")
     );
     // Renaming another profile leaves it alone.
-    crate::profile::set::rename_profile(&state, "Test-Prompt", "Scratch", &pending)
+    crate::profile::set::rename_profile(&state, "Test-Prompt", "Scratch")
         .await
         .unwrap();
     assert_eq!(
@@ -1788,32 +1772,30 @@ async fn the_live_profile_keeps_the_name_the_prompt_draws() {
 #[tokio::test]
 async fn renames_and_copies_wait_for_the_relaunch_after_the_wizard() {
     use crate::profile::set::DEFAULT_PROFILE_NAME;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::Ordering;
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
     write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
     write_alias(&set, "Healer", "hh");
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    let pending = AtomicBool::new(false);
     apply_migration(&state, dir.path(), &[], LIBRARY, || {
-        pending.store(true, Ordering::Release);
+        state.relaunch_pending.store(true, Ordering::Release);
     })
     .await
     .unwrap();
 
-    renames_and_copies_are_refused(&state, dir.path(), &pending).await;
+    renames_and_copies_are_refused(&state, dir.path()).await;
     // A new profile that copies nothing only joins the index.
-    crate::profile::set::create_profile(&state, Some(dir.path()), "Bard", None, None, &pending)
+    crate::profile::set::create_profile(&state, Some(dir.path()), "Bard", None, None)
         .await
         .unwrap();
 
     // Once Vosh opens again, the rename and the copy run.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    let pending = AtomicBool::new(false);
-    crate::profile::set::duplicate_profile(&state, Some(dir.path()), "Healer", "Cleric", &pending)
+    crate::profile::set::duplicate_profile(&state, Some(dir.path()), "Healer", "Cleric")
         .await
         .unwrap();
-    crate::profile::set::rename_profile(&state, "Cleric", "Priest", &pending)
+    crate::profile::set::rename_profile(&state, "Cleric", "Priest")
         .await
         .unwrap();
     let state = relaunch_as(dir.path(), "Priest").await;
@@ -1894,7 +1876,7 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
     use crate::disk::paths::journal_path;
     use crate::loadouts::wizard::journal::WIZARD_UNFINISHED_NOTICE;
     use crate::profile::set::DEFAULT_PROFILE_NAME;
-    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::Ordering;
     let names = [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt"];
     let dir = tempfile::tempdir().unwrap();
     let set = james_like_set(dir.path());
@@ -1946,7 +1928,9 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
 
     // app/launch.rs holds every save and every switch, since the next
     // launch writes the journal again over what this one saved.
-    let pending = AtomicBool::new(launched.wizard_unfinished);
+    state
+        .relaunch_pending
+        .store(launched.wizard_unfinished, Ordering::Release);
     state
         .profile
         .lock()
@@ -1955,21 +1939,18 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
         .set(vosh_automation::vars::Scope::Profile, "target", "dragon");
     {
         let _persist_guard = PERSIST_LOCK.lock().await;
-        crate::disk::save::persist_state_with(&state, Some(dir.path()), &pending).await;
+        crate::disk::save::persist_state(&state, Some(dir.path())).await;
     }
     assert_eq!(read(&set.profile_path("Healer")), healer_file);
     assert_eq!(read(&catalog_path(dir.path())), catalog);
-    assert!(crate::profile::switch::switch_profile_with(
-        &state,
-        Some(dir.path()),
-        DEFAULT_PROFILE_NAME,
-        &pending
-    )
-    .await
-    .is_err());
+    assert!(
+        crate::profile::switch::switch_profile(&state, Some(dir.path()), DEFAULT_PROFILE_NAME)
+            .await
+            .is_err()
+    );
     // A rename would move the Healer file away from the name the
     // journal writes it under, and a copy would take its items.
-    renames_and_copies_are_refused(&state, dir.path(), &pending).await;
+    renames_and_copies_are_refused(&state, dir.path()).await;
     assert!(journal_path(dir.path()).exists());
 
     // Once the file takes writes again, the next launch finishes

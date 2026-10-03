@@ -739,7 +739,8 @@ mod tests {
         let t0 = tokio::time::Instant::now();
         let mut profile = synced_profile(t0);
         let next_fire = profile.tick.next_fire();
-        let ran = crate::input::run_line(&mut profile, "#profile reset");
+        let state = crate::app::state::AppState::default();
+        let ran = crate::input::run_line(&state, &mut profile, "#profile reset");
         assert!(ran.replaced);
         assert_eq!(profile.tick.next_fire(), next_fire);
         assert!(profile.tick.synced);

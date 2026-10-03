@@ -24,7 +24,7 @@ use tauri::{AppHandle, Manager};
 use tracing::warn;
 
 use crate::app::events::{broadcast, line_effect_events};
-use crate::app::state::{SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING};
+use crate::app::state::SharedState;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
 use crate::profile::shared::{strip_global_fields, GlobalConfig};
@@ -45,7 +45,9 @@ pub(crate) static PERSIST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::con
 /// reaches profile.toml/catalog.toml within a couple of seconds; the
 /// exit hook flushes immediately as a backstop.
 pub(crate) fn mark_profile_dirty<R: tauri::Runtime>(app: &AppHandle<R>) {
-    AUTO_PERSIST_SUPPRESSED.store(false, std::sync::atomic::Ordering::Release);
+    app.state::<SharedState>()
+        .auto_persist_suppressed
+        .store(false, std::sync::atomic::Ordering::Release);
     schedule_profile_persist(app);
 }
 
@@ -65,7 +67,7 @@ pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(app: &AppHandle<R>) {
         if shared.profile_dirty_gen.load(Ordering::Acquire) != gen {
             return; // a newer mark restarted the clock
         }
-        if AUTO_PERSIST_SUPPRESSED.load(Ordering::Acquire) {
+        if shared.auto_persist_suppressed.load(Ordering::Acquire) {
             return; // a #profile reset/load intervened
         }
         persist_profile(&app, &shared).await;
@@ -95,11 +97,13 @@ pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
     app: &AppHandle<R>,
     effects: crate::input::LineEffects,
 ) {
+    let shared: SharedState = app.state::<SharedState>().inner().clone();
     if effects.replaced {
-        AUTO_PERSIST_SUPPRESSED.store(true, std::sync::atomic::Ordering::Release);
+        shared
+            .auto_persist_suppressed
+            .store(true, std::sync::atomic::Ordering::Release);
     }
     if effects.replaced || effects.tick_changed {
-        let shared: SharedState = app.state::<SharedState>().inner().clone();
         let events = {
             let p = shared.profile.lock().await;
             line_effect_events(&shared, &effects, &p)
@@ -136,7 +140,9 @@ pub(crate) enum SavePolicy {
     Now,
     /// Save at once, unless `#profile reset` or `#profile load` left the
     /// live profile apart from disk and no durable change has wanted it
-    /// saved since ([`AUTO_PERSIST_SUPPRESSED`]).
+    /// saved since ([`AppState::auto_persist_suppressed`]).
+    ///
+    /// [`AppState::auto_persist_suppressed`]: crate::app::state::AppState::auto_persist_suppressed
     NowUnlessHeld,
     /// Save once the burst settles, through [`schedule_profile_persist`],
     /// which keeps that hold. For edits that land several times a second.
@@ -156,7 +162,10 @@ pub(crate) async fn save_then_broadcast<R: tauri::Runtime, S: serde::Serialize +
     match policy {
         SavePolicy::Now => persist_profile(app, state).await,
         SavePolicy::NowUnlessHeld => {
-            if !AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
+            if !state
+                .auto_persist_suppressed
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
                 persist_profile(app, state).await;
             }
         }
@@ -179,17 +188,6 @@ pub(crate) async fn persist_profile_locked<R: tauri::Runtime>(
 /// held. A file Vosh could not read at launch is never written, see
 /// [`crate::disk::atomic::hold_unread`].
 pub(crate) async fn persist_state(state: &SharedState, app_data: Option<&std::path::Path>) {
-    persist_state_with(state, app_data, &MIGRATION_RELAUNCH_PENDING).await;
-}
-
-/// [`persist_state`] with `relaunch_pending` in place of
-/// [`MIGRATION_RELAUNCH_PENDING`], so a test can save while a relaunch
-/// is pending without touching the flag every other test reads.
-pub(crate) async fn persist_state_with(
-    state: &SharedState,
-    app_data: Option<&std::path::Path>,
-    relaunch_pending: &std::sync::atomic::AtomicBool,
-) {
     // Loadout mode branch. When `state.global_catalog` is `Some`, the user is
     // post-migration: authored items live in catalog.toml and the live
     // Profile is the cache. Write the live aliases / triggers / macros
@@ -211,7 +209,10 @@ pub(crate) async fn persist_state_with(
     // catalog on relaunch. Persist nothing until the restart completes
     // the migration. The same holds after a launch that could not finish
     // a wizard run that stopped partway.
-    if relaunch_pending.load(std::sync::atomic::Ordering::Acquire) {
+    if state
+        .relaunch_pending
+        .load(std::sync::atomic::Ordering::Acquire)
+    {
         tracing::debug!("persist skipped: post-migration window before relaunch");
         return;
     }

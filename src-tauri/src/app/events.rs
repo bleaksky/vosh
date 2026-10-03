@@ -722,7 +722,7 @@ mod tests {
         assert_eq!(before.tick_count, "down");
         assert_eq!(before.tick.warn_at_secs, Some(8));
 
-        let ran = crate::input::run_line(&mut profile, "#profile reset");
+        let ran = crate::input::run_line(&state, &mut profile, "#profile reset");
         assert!(ran.replaced);
         let after = super::profile_ui_events(&state, &profile);
         assert_eq!(after.tick_count, "up");
@@ -741,7 +741,7 @@ mod tests {
             serde_json::json!("icon_value")
         );
 
-        let ran = crate::input::run_line(&mut profile, "#profile reset");
+        let ran = crate::input::run_line(&state, &mut profile, "#profile reset");
         assert!(ran.replaced);
         let after = super::profile_ui_events(&state, &profile);
         assert_eq!(
@@ -806,7 +806,7 @@ mod tests {
             })
         );
 
-        let ran = crate::input::run_line(&mut profile, "#profile reset");
+        let ran = crate::input::run_line(&state, &mut profile, "#profile reset");
         assert!(ran.replaced);
         assert_eq!(
             event_payload(
@@ -860,7 +860,7 @@ mod tests {
         let state = AppState::default();
         let mut effects = crate::input::LineEffects::default();
         for line in lines {
-            let ran = crate::input::run_line(profile, line);
+            let ran = crate::input::run_line(&state, profile, line);
             effects.note_ran(line, &ran);
         }
         super::line_effect_events(&state, &effects, profile)

@@ -237,8 +237,8 @@ pub(super) fn run_and_note_line(
     shared: Option<&SharedLayer>,
 ) -> input::Ran {
     let ran = match shared.filter(|_| input::may_replace_profile(line)) {
-        Some(layer) => layer.keep_across(p, |p| input::run_line(p, line)),
-        None => input::run_line(p, line),
+        Some(layer) => layer.keep_across(p, |p| input::run_line(state, p, line)),
+        None => input::run_line(state, p, line),
     };
     effects.note_ran(line, &ran);
     if ran.replaced {

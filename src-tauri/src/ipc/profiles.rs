@@ -10,7 +10,7 @@
 use tauri::{AppHandle, Manager, State};
 
 use crate::app::events::{broadcast, CUSTOM_THEMES_CHANGED, PROFILES_CHANGED};
-use crate::app::state::{SharedState, MIGRATION_RELAUNCH_PENDING};
+use crate::app::state::SharedState;
 use crate::disk::save::{persist_profile_locked, PERSIST_LOCK};
 use crate::profile::set::{create_profile, duplicate_profile, rename_profile};
 use crate::profile::shared::change_scope_locked;
@@ -53,7 +53,6 @@ pub(crate) async fn profile_create(
         &name,
         copy_from.as_deref(),
         auto_match,
-        &MIGRATION_RELAUNCH_PENDING,
     )
     .await?;
     broadcast(&app, PROFILES_CHANGED, &entry.name);
@@ -82,7 +81,7 @@ pub(crate) async fn profile_rename(
     old: String,
     new: String,
 ) -> Result<(), String> {
-    rename_profile(state.inner(), &old, &new, &MIGRATION_RELAUNCH_PENDING).await?;
+    rename_profile(state.inner(), &old, &new).await?;
     broadcast(&app, PROFILES_CHANGED, &new);
     Ok(())
 }
@@ -98,14 +97,7 @@ pub(crate) async fn profile_duplicate(
     new: String,
 ) -> Result<(), String> {
     let app_data = app.path().app_data_dir().ok();
-    duplicate_profile(
-        state.inner(),
-        app_data.as_deref(),
-        &source,
-        &new,
-        &MIGRATION_RELAUNCH_PENDING,
-    )
-    .await?;
+    duplicate_profile(state.inner(), app_data.as_deref(), &source, &new).await?;
     broadcast(&app, PROFILES_CHANGED, &new);
     Ok(())
 }

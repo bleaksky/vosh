@@ -1993,7 +1993,7 @@ fn the_prompts_off_wire_counts_no_miss_while_the_packages_keep_coming() {
     assert_eq!(wire.p.prompt.status(), vosh_prompt::Status::PromptsOff);
     let report = wire.p.prompt.take_status_change().expect("a report");
     assert_eq!(report.status, vosh_prompt::Status::PromptsOff);
-    let echo = crate::input::run_line(&mut wire.p, "#prompt").result.echo;
+    let echo = crate::input::process(&mut wire.p, "#prompt").echo;
     assert_eq!(
         echo.last().map(String::as_str),
         Some("You turned prompts off in the game. Type prompt in the game to turn them back on.")

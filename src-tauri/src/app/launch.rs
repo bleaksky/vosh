@@ -48,7 +48,8 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
         if launched.wizard_unfinished {
             // The next launch writes the wizard journal again, over
             // anything this session would save.
-            crate::app::state::MIGRATION_RELAUNCH_PENDING
+            state
+                .relaunch_pending
                 .store(true, std::sync::atomic::Ordering::Release);
         }
         match open_log_store(&path) {
@@ -138,7 +139,8 @@ pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
     state.add_launch_notices(run.notices());
     match ProfileSet::load_or_migrate(app_data.to_path_buf()) {
         Ok(mut set) => {
-            let relaunch_pending = crate::app::state::MIGRATION_RELAUNCH_PENDING
+            let relaunch_pending = state
+                .relaunch_pending
                 .load(std::sync::atomic::Ordering::Acquire);
             let wizard_settled = run != WizardRun::Unfinished && !relaunch_pending;
             let notices = crate::disk::upgrades::run(&mut set, app_data, wizard_settled).await;

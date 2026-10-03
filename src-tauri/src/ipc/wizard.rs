@@ -4,7 +4,7 @@
 
 use tauri::{AppHandle, Manager, State};
 
-use crate::app::state::{SharedState, MIGRATION_RELAUNCH_PENDING};
+use crate::app::state::SharedState;
 use crate::loadouts::wizard::apply::{
     analyze_migration, announce_migration_applied, apply_migration, ConflictResolution,
 };
@@ -72,7 +72,9 @@ pub(crate) async fn migration_apply(
         // pre-migration profile. Block every persist until the relaunch
         // loads the catalog, and flip the input layer into loadout mode
         // so the legacy #profile trio stops writing files.
-        MIGRATION_RELAUNCH_PENDING.store(true, std::sync::atomic::Ordering::Release);
+        state
+            .relaunch_pending
+            .store(true, std::sync::atomic::Ordering::Release);
         crate::input::PATH_B_ACTIVE.store(true, std::sync::atomic::Ordering::Release);
     })
     .await?;
