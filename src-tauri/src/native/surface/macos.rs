@@ -452,7 +452,7 @@ pub(super) fn install(window: &tauri::WebviewWindow) -> Result<(), tauri::Error>
             // init_gpu clamps these to the device's texture limit.
             let px_w = (frame.size.width * scale).max(1.0) as u32;
             let px_h = (frame.size.height * scale).max(1.0) as u32;
-            let (font_stack, font_px) = super::font_atlas_params(scale);
+            let (font_stack, font_px) = super::device::font_atlas_params(scale);
             let window_handle = NonNull::new(view.cast::<c_void>())
                 .map(|nn| RawWindowHandle::AppKit(AppKitWindowHandle::new(nn)));
             let Some(window_handle) = window_handle else {
@@ -460,7 +460,7 @@ pub(super) fn install(window: &tauri::WebviewWindow) -> Result<(), tauri::Error>
                 return;
             };
             let display_handle = RawDisplayHandle::AppKit(AppKitDisplayHandle::new());
-            match super::init_gpu(
+            match super::device::init_gpu(
                 window_handle,
                 display_handle,
                 BACKENDS,

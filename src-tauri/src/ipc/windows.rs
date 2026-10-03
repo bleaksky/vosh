@@ -83,7 +83,7 @@ pub(crate) fn menu_copy(app: AppHandle, terminal: bool) {
     #[cfg(target_os = "macos")]
     {
         if terminal && crate::native::grid::selection_text().is_some_and(|t| !t.is_empty()) {
-            crate::native::surface::request_copy();
+            crate::native::surface::pointer::request_copy();
         } else {
             let _ = app.run_on_main_thread(crate::app::menu::system_copy);
         }

@@ -47,7 +47,7 @@ pub(crate) fn native_surface_pointer(app: AppHandle, kind: String, x: f64, y: f6
     #[cfg(native_surface)]
     {
         let _ = app.run_on_main_thread(move || {
-            crate::native::surface::forward_pointer(&kind, x, y, open);
+            crate::native::surface::pointer::forward_pointer(&kind, x, y, open);
         });
     }
     #[cfg(not(native_surface))]
@@ -78,7 +78,7 @@ pub(crate) fn native_surface_wheel(app: AppHandle, delta_y: f64) {
     #[cfg(native_surface)]
     {
         let _ = app.run_on_main_thread(move || {
-            crate::native::surface::forward_wheel(delta_y);
+            crate::native::surface::pointer::forward_wheel(delta_y);
         });
     }
     #[cfg(not(native_surface))]
@@ -92,7 +92,7 @@ pub(crate) fn native_surface_wheel(app: AppHandle, delta_y: f64) {
 #[tauri::command]
 pub(crate) fn native_surface_copy() {
     #[cfg(native_surface)]
-    crate::native::surface::request_copy();
+    crate::native::surface::pointer::request_copy();
 }
 
 /// Tier 3 native renderer: select everything in the grid, scrollback
@@ -289,7 +289,7 @@ pub(crate) fn native_surface_set_blink_text(on: bool) {
 #[tauri::command]
 pub(crate) fn native_surface_set_cell_metrics(width: u32, height: u32, char_height: Option<u32>) {
     #[cfg(native_surface)]
-    crate::native::surface::set_cell_metrics(width, height, char_height.unwrap_or(0));
+    crate::native::surface::device::set_cell_metrics(width, height, char_height.unwrap_or(0));
     #[cfg(not(native_surface))]
     {
         let _ = (width, height, char_height);
@@ -339,7 +339,7 @@ pub(crate) fn native_surface_find_clear() {
 #[tauri::command]
 pub(crate) fn native_surface_set_font(family: String, size: u32) {
     #[cfg(native_surface)]
-    crate::native::surface::request_set_font(family, size);
+    crate::native::surface::device::request_set_font(family, size);
     #[cfg(not(native_surface))]
     {
         let _ = (family, size);
