@@ -1,9 +1,10 @@
-import { act, createElement } from 'react';
+import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { PromptShowState } from '../../lib/promptShow';
 import type { PromptShow } from '../../lib/session';
-import { FakeDocument, FakeElement, FakeNode, findAll } from '../../test/fakeDom';
+import { findAll, type FakeElement } from '../../test/fakeDom';
+import { BUTTON, menuButtonDom, menuHeight, on } from '../../test/menuButtonDom';
 import { SHOW_MENU_WIDTH, ShowButton } from './PromptShow';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -77,194 +78,23 @@ describe('the button that says where your prompt shows', () => {
 });
 
 // ── The menu, mounted ───────────────────────────────────────────────
-// React DOM mounts the button on the stand in DOM (src/test/fakeDom.ts),
-// with the card's own menu. The stand in learns here the few calls the
-// menu makes beyond what React DOM needs: the button's box and the
-// menu's height to place it, contains for a press outside, isConnected
-// for handing focus back, and the selector the menu finds its items
-// with. The DOM sends no events, so a test calls React's handlers, and
-// a press stands in for Enter and Space, which press a button.
+// React DOM mounts the button on the stand in DOM with the card's own
+// menu (src/test/menuButtonDom.ts).
 
-type Handler = (e?: unknown) => void;
-const doc = new FakeDocument();
-const windowListeners = new Map<string, Handler>();
-const documentListeners = new Map<string, Set<Handler>>();
-let createRoot: typeof import('react-dom/client').createRoot;
-
-const ITEMS =
-  '[role="menuitem"]:not(:disabled),[role="menuitemradio"]:not(:disabled),[role="menuitemcheckbox"]:not(:disabled)';
-
-// A 1280 by 800 window with the button low in the card's foot.
-const VW = 1280;
-const VH = 800;
-const BUTTON = { left: 200, top: 700, right: 290, bottom: 728 };
-const MENU_H = 3 * 30 + 12;
-
-function teachTheDom() {
-  const node = FakeNode.prototype as unknown as Record<string, unknown>;
-  node.contains = function (this: FakeNode, other: FakeNode | null): boolean {
-    for (let n = other; n; n = n.parentNode) if (n === this) return true;
-    return false;
-  };
-  Object.defineProperty(FakeNode.prototype, 'isConnected', {
-    configurable: true,
-    get(this: FakeNode) {
-      return (doc as unknown as { contains: (n: FakeNode) => boolean }).contains(this);
-    },
-  });
-  const el = FakeElement.prototype as unknown as Record<string, unknown>;
-  el.getBoundingClientRect = () => BUTTON;
-  el.querySelectorAll = function (this: FakeElement, selector: string): FakeElement[] {
-    if (selector !== ITEMS) throw new Error(`no querySelectorAll for ${selector}`);
-    return findAll(
-      this,
-      (e) =>
-        ['menuitem', 'menuitemradio', 'menuitemcheckbox'].includes(e.getAttribute('role') ?? '') &&
-        !e.hasAttribute('disabled'),
-    );
-  };
-  Object.defineProperty(FakeElement.prototype, 'offsetHeight', {
-    configurable: true,
-    get: () => MENU_H,
-  });
-}
-
-/** The handlers React keeps on an element. */
-function on(el: FakeElement): Record<string, Handler> {
-  const key = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
-  if (!key) throw new Error('the element has no React props');
-  return (el as unknown as Record<string, Record<string, Handler>>)[key];
-}
-
-const keyEvent = (key: string) => ({
-  key,
-  isComposing: false,
-  target: doc.activeElement,
-  metaKey: false,
-  ctrlKey: false,
-  preventDefault() {},
-  stopPropagation() {},
-});
-
-interface Mounted {
-  button: FakeElement;
-  /** The menu, or null while it is shut. */
-  menu: () => FakeElement | null;
-  /** The menu's items, in order. */
-  items: () => FakeElement[];
-  item: (label: string) => FakeElement;
-  press: () => Promise<void>;
-  /** Press a key in the menu. */
-  key: (key: string) => Promise<void>;
-  /** Press Esc, which goes to the surface opened last. */
-  escape: () => Promise<void>;
-  /** Draw the button again with another state. */
-  update: (state: PromptShowState | null) => Promise<void>;
-  onChange: ReturnType<typeof vi.fn>;
-}
-
-const cleanups: (() => Promise<void>)[] = [];
-
-async function mount(
-  value: PromptShow = 'pinned',
-  state: PromptShowState | null = reads,
-): Promise<Mounted> {
-  const container = doc.createElement('div');
-  doc.body.appendChild(container);
-  const root = createRoot(container as unknown as HTMLElement);
-  const onChange = vi.fn();
-  const render = (now: PromptShowState | null) =>
-    act(async () => {
-      root.render(createElement(ShowButton, { value, state: now, onChange }));
-    });
-  await render(state);
-  cleanups.push(async () => {
-    await act(async () => root.unmount());
-    doc.body.removeChild(container);
-  });
-  const [button] = findAll(container, (el) => el.nodeName === 'BUTTON');
-  if (!button) throw new Error('no button');
-  const menu = () => findAll(container, (el) => el.getAttribute('role') === 'menu')[0] ?? null;
-  const items = () => {
-    const shown = menu();
-    if (!shown) throw new Error('the menu is shut');
-    return findAll(shown, (el) => el.getAttribute('role') === 'menuitemradio');
-  };
-  const run = async (fn: () => void) => {
-    await act(async () => fn());
-  };
-  return {
-    button,
-    menu,
-    items,
-    item: (label) => {
-      const found = items().filter((el) => el.textContent === label);
-      if (found.length !== 1) throw new Error(`found ${found.length} of ${label}`);
-      return found[0];
-    },
-    press: () => run(() => on(button).onClick({ currentTarget: button })),
-    key: (k) => {
-      const shown = menu();
-      if (!shown) throw new Error('the menu is shut');
-      return run(() => on(shown).onKeyDown(keyEvent(k)));
-    },
-    escape: () => {
-      const stack = windowListeners.get('keydown');
-      if (!stack) throw new Error('the escape stack is not listening');
-      return run(() => stack(keyEvent('Escape')));
-    },
-    update: (now) => render(now),
-    onChange,
-  };
-}
-
-const label = (el: FakeElement) => el.textContent;
-const checked = (m: Mounted) =>
-  m
-    .items()
-    .filter((el) => el.getAttribute('aria-checked') === 'true')
-    .map(label);
 const checks = (el: FakeElement) =>
   findAll(el, (e) => e.nodeName === 'SVG' && e.getAttribute('class') === 'pane-menu-check').length;
 
 describe('the menu of where your prompt shows', () => {
-  beforeAll(async () => {
-    teachTheDom();
-    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-    Object.assign(doc, {
-      addEventListener: (type: string, fn: Handler) => {
-        const set = documentListeners.get(type) ?? new Set<Handler>();
-        set.add(fn);
-        documentListeners.set(type, set);
-      },
-      removeEventListener: (type: string, fn: Handler) => documentListeners.get(type)?.delete(fn),
-    });
-    vi.stubGlobal('document', doc);
-    vi.stubGlobal('window', {
-      document: doc,
-      innerWidth: VW,
-      innerHeight: VH,
-      location: { protocol: 'about:' },
-      HTMLIFrameElement: class {},
-      addEventListener: (type: string, fn: Handler) => void windowListeners.set(type, fn),
-      removeEventListener() {},
-    });
-    vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
-    vi.stubGlobal('Node', FakeNode);
-    vi.stubGlobal('Element', FakeElement);
-    vi.stubGlobal('HTMLElement', FakeElement);
-    // React DOM checks for a DOM once, when it loads.
-    ({ createRoot } = await import('react-dom/client'));
-  });
+  const { doc, mount: mountElement } = menuButtonDom();
 
-  afterEach(async () => {
-    for (const cleanup of cleanups.splice(0)) await cleanup();
-    doc.activeElement = null;
-  });
-
-  afterAll(() => {
-    vi.unstubAllGlobals();
-  });
+  const mount = async (value: PromptShow = 'pinned', state: PromptShowState | null = reads) => {
+    const onChange = vi.fn();
+    const draw = (now: PromptShowState | null) => (
+      <ShowButton value={value} state={now} onChange={onChange} />
+    );
+    const m = await mountElement(draw(state));
+    return { ...m, onChange, update: (now: PromptShowState | null) => m.update(draw(now)) };
+  };
 
   it('opens on a press with the three places, the current one checked on the right', async () => {
     const m = await mount('lifted');
@@ -279,17 +109,17 @@ describe('the menu of where your prompt shows', () => {
     expect(menu?.getAttribute('aria-label')).toBe('Where your prompt shows');
     expect(menu?.getAttribute('class')).toBe('pc-menu');
     expect(m.button.getAttribute('aria-expanded')).toBe('true');
-    expect(m.items().map(label)).toEqual(['In the text', 'Lifted', 'Pinned']);
+    expect(m.items().map((el) => el.textContent)).toEqual(['In the text', 'Lifted', 'Pinned']);
     for (const item of m.items()) {
       expect(item.getAttribute('class')).toBe('ov-menu-item');
-      expect(checks(item), label(item)).toBe(label(item) === 'Lifted' ? 1 : 0);
+      expect(checks(item), item.textContent ?? '').toBe(item.textContent === 'Lifted' ? 1 : 0);
     }
-    expect(checked(m)).toEqual(['Lifted']);
+    expect(m.checked()).toEqual(['Lifted']);
     // It opens above the button, their left edges together, the narrow
     // pane menus' width, and takes focus.
     expect(menu?.style.width).toBe(`${SHOW_MENU_WIDTH}px`);
     expect(menu?.style.left).toBe(`${BUTTON.left}px`);
-    expect(menu?.style.top).toBe(`${BUTTON.top - 4 - MENU_H}px`);
+    expect(menu?.style.top).toBe(`${BUTTON.top - 4 - menuHeight(3)}px`);
     expect(doc.activeElement).toBe(menu);
 
     // A second press shuts it.
@@ -336,15 +166,8 @@ describe('the menu of where your prompt shows', () => {
   it('closes on a press outside it', async () => {
     const m = await mount('text');
     await m.press();
-    const outside = doc.createElement('div');
-    doc.body.appendChild(outside);
-    const presses = [...(documentListeners.get('pointerdown') ?? [])];
-    expect(presses.length).toBeGreaterThan(0);
-    await act(async () => {
-      for (const fn of presses) fn({ target: outside });
-    });
+    await m.pressOutside();
     expect(m.menu()).toBeNull();
-    doc.body.removeChild(outside);
     expect(m.onChange).not.toHaveBeenCalled();
   });
 
