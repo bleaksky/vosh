@@ -8,6 +8,8 @@
 //!   connection. It sends your lines, takes each socket read, repaints
 //!   your prompt when a deadline passes, polls the tick and the timers,
 //!   and ends the connection.
+//! - `connection` holds what a connection shares with the commands: the
+//!   target you pick, its quick keys and the characters in the room.
 //! - `socket` opens the plain or TLS socket.
 //! - `read` is the socket read path, from each telnet event to what the
 //!   end of a read sends.
@@ -38,6 +40,7 @@
 
 mod batch;
 mod conn;
+pub(crate) mod connection;
 pub(crate) mod echo;
 pub(crate) mod effects;
 mod gmcp;
@@ -97,7 +100,7 @@ pub(crate) struct TargetPayload {
     /// Snapshot of the current quick-key bindings (name + verb).
     /// Frontend renders them next to the target name on the
     /// `TargetBar` so the user always sees which slots are armed.
-    pub quick_keys: Vec<crate::profile::live::QuickKey>,
+    pub quick_keys: Vec<connection::QuickKey>,
 }
 
 impl TargetPayload {
