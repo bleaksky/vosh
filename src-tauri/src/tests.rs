@@ -12,4 +12,5 @@ mod latency;
 #[cfg(native_surface)]
 mod throughput;
 mod upgrade_order;
+pub(crate) mod walk;
 mod wizard_roundtrip;

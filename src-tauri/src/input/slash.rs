@@ -13,6 +13,7 @@ use super::target::{
 };
 use super::tick::slash_tick;
 use super::vars::{slash_unvar, slash_var, slash_vars_list};
+use super::walk::{slash_walk, slash_walk_args};
 use super::{split_first_word, InputResult};
 use crate::app::state::AppState;
 use crate::profile::live::Profile;
@@ -25,6 +26,10 @@ pub(super) fn handle_slash(
     replaced: &mut bool,
     lua: &mut ApplyResult,
 ) -> InputResult {
+    // `#walk` reads its own line, which a `;` may follow straight away.
+    if let Some(args) = slash_walk_args(rest) {
+        return slash_walk(profile, args);
+    }
     let (cmd, args) = split_first_word(rest);
     match cmd {
         "alias" => slash_alias(profile, args),

@@ -1,9 +1,10 @@
 //! The session loop and the [`Conn`] it owns for a connection. The loop
 //! sends your lines to the game, takes each socket read through the read
-//! path, repaints your prompt when a deadline passes, and polls the tick,
-//! the Lua timers and the Settings timers. When the connection ends, it
-//! captures what the game sent last, saves the scrollback and clears what
-//! lasts only as long as the session.
+//! path, hands the walker your `#walk` lines and gives up on a step that
+//! waited too long, repaints your prompt when a deadline passes, and
+//! polls the tick, the Lua timers and the Settings timers. When the
+//! connection ends, it captures what the game sent last, saves the
+//! scrollback and clears what lasts only as long as the session.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -16,14 +17,17 @@ use tracing::{debug, error, info, warn};
 use vosh_protocol::telnet::{option as telnet_option, Negotiator, Parser};
 
 use crate::app::events;
-use crate::output::{emit_output, emit_repaint, output_count};
+use crate::input::walk::WalkCommand;
+use crate::output::{echo_lines, emit_output, emit_repaint, output_count};
 use crate::profile::live::Profile;
 use crate::script::SharedTimers;
 
 use super::batch::Settle;
 use super::connection::Stream;
 use super::echo::ServerEcho;
-use super::effects::{deliver_tick_step, run_fired_command, OutputSink};
+use super::effects::{
+    apply_script_result, deliver_tick_step, framed_echoes, run_fired_command, OutputSink, ScriptIo,
+};
 use super::lines::LineAccumulator;
 use super::log_sink::{capture_held_lines, capture_pending_line, LogSink};
 use super::lua_timers;
@@ -37,6 +41,7 @@ use super::steps::{
     clock_after, clock_step, end_preview_step, hold_step, late_repaint_after, late_repaint_step,
     repaint_step, send_step, window_size_step,
 };
+use super::walk::{self, Walker};
 use super::{
     emit_input_mode, emit_state, now_ms, room_block, OutgoingMsg, StatePayload, TargetPayload,
 };
@@ -70,6 +75,11 @@ pub(super) struct Conn<R: tauri::Runtime> {
     /// The frame and the log rows the reads since the socket was last
     /// quiet owe.
     pub(super) settle: Settle,
+    /// The walker, which sends the steps of a `#walk` one at a time.
+    pub(super) walker: Walker,
+    /// What the walker said during the read under way, which shows at
+    /// its end.
+    pub(super) walk_lines: Vec<String>,
 }
 
 pub(super) async fn io_loop<R: tauri::Runtime>(
@@ -114,6 +124,8 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         perf: PerfCounters::default(),
         seen_output: output_count(),
         settle: Settle::default(),
+        walker: Walker::default(),
+        walk_lines: Vec::new(),
     };
     // When a partial that can still become your prompt stops waiting for
     // the next read and paints raw.
@@ -134,6 +146,8 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     perf_report_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     let disconnect_reason = loop {
+        // When the step on its way gives up waiting for its room.
+        let walk_until = conn.walker.deadline();
         tokio::select! {
             biased;
             outgoing = rx_outgoing.recv() => match outgoing {
@@ -148,6 +162,10 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     if let Err(e) = let_go_held_lines(&mut conn, &mut log_sink).await {
                         warn!(error = %e, "letting go of held lines failed");
                     }
+                    // A command you send stops a walk, and the walk says
+                    // so under the echo of your line.
+                    let stopped = conn.walker.typed(&bytes);
+                    echo_lines(&conn.app, &stopped.lines);
                     // The send records a prompt candidate and closes the
                     // open row. On a server that sends no Char.Vitals it
                     // also starts the next pulse, after which the values
@@ -256,6 +274,12 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     }
                     let mut p = conn.profile.lock().await;
                     p.prompt.stage.local_write(after);
+                }
+                Some(OutgoingMsg::Walk(command)) => {
+                    if let Err(e) = walk_command(&mut conn, command).await {
+                        error!(error = %e, "walk failed");
+                        break Some(format!("write failed: {e}"));
+                    }
                 }
                 Some(OutgoingMsg::PromptRepaint) => {
                     // The card asked for it, so its state follows even when
@@ -368,6 +392,12 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 }
                 emit_prompt_state(&conn.app, state);
             }
+            () = sleep_until_hold(walk_until), if walk_until.is_some() => {
+                let out = conn.walker.expire(Instant::now());
+                if !out.lines.is_empty() {
+                    emit_output(&conn.app, framed_echoes(&out.lines));
+                }
+            }
             () = sleep_until_hold(clock_until), if clock_until.is_some() => {
                 // A clock piece shows another second. Your idle prompt
                 // repaints with it, unless you are selecting text or
@@ -387,8 +417,14 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 emit_prompt_state(&conn.app, state);
             }
             _ = poll.tick() => {
-                if let Err(e) =
-                    handle_tick(&conn.app, &mut conn.stream, &conn.profile, &conn.lua_timers).await
+                if let Err(e) = handle_tick(
+                    &conn.app,
+                    &mut conn.stream,
+                    &mut conn.walker,
+                    &conn.profile,
+                    &conn.lua_timers,
+                )
+                .await
                 {
                     error!(error = %e, "tick handling failed");
                     break Some(format!("tick handling failed: {e}"));
@@ -396,6 +432,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 if let Err(e) = lua_timers::fire_due(
                     &conn.app,
                     &mut conn.stream,
+                    &mut conn.walker,
                     &conn.profile,
                     &conn.lua_timers,
                 )
@@ -406,6 +443,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 if let Err(e) = fire_due_settings_timers(
                     &conn.app,
                     &mut conn.stream,
+                    &mut conn.walker,
                     &conn.profile,
                     &conn.lua_timers,
                     &mut timer_next,
@@ -511,9 +549,45 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     );
 }
 
+/// Hand the walker a `#walk` you typed, or Esc. The step goes out at
+/// once. A line the walker prints follows the echo of your typed line,
+/// and Esc echoes nothing, so its line starts a row of its own. What a
+/// `#walk stop` or a bare `#walk` held runs right after.
+async fn walk_command<R: tauri::Runtime>(
+    conn: &mut Conn<R>,
+    command: WalkCommand,
+) -> std::io::Result<()> {
+    let key = matches!(command, WalkCommand::Stop { key: true, .. });
+    let out = conn.walker.command(command, Instant::now());
+    if !out.send.is_empty() {
+        conn.stream.write_all(&out.send).await?;
+        conn.stream.flush().await?;
+    }
+    if key {
+        if !out.lines.is_empty() {
+            emit_output(&conn.app, framed_echoes(&out.lines));
+        }
+    } else {
+        echo_lines(&conn.app, &out.lines);
+    }
+    if out.release.is_empty() {
+        return Ok(());
+    }
+    let apply = walk::release(&conn.profile, out.release).await;
+    apply_script_result(
+        &conn.app,
+        &mut ScriptIo::Session(&mut conn.stream, &mut OutputSink::Direct, &mut conn.walker),
+        &conn.profile,
+        &conn.lua_timers,
+        apply,
+    )
+    .await
+}
+
 async fn handle_tick<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
+    walker: &mut Walker,
     profile: &Arc<Mutex<Profile>>,
     lua_timers: &SharedTimers,
 ) -> std::io::Result<()> {
@@ -532,6 +606,7 @@ async fn handle_tick<R: tauri::Runtime>(
     deliver_tick_step(
         app,
         stream,
+        walker,
         profile,
         lua_timers,
         step,
@@ -550,6 +625,7 @@ async fn handle_tick<R: tauri::Runtime>(
 async fn fire_due_settings_timers<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
+    walker: &mut Walker,
     profile: &Arc<Mutex<Profile>>,
     lua_timers: &SharedTimers,
     timer_next: &mut HashMap<u32, Instant>,
@@ -592,6 +668,7 @@ async fn fire_due_settings_timers<R: tauri::Runtime>(
         run_fired_command(
             app,
             stream,
+            walker,
             profile,
             lua_timers,
             &command,
