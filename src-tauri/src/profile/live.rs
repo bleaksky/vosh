@@ -1,6 +1,7 @@
-//! Per-profile state. Owns the alias engine, variable store, and trigger
-//! store; lives across reconnects so user customization survives disconnect
-//! cycles.
+//! The profile in memory. It holds what its file saves, plus what runs
+//! with that profile and no file saves: the Lua engine, the aliases
+//! plugins make, the macro recorder, the revision counters that move
+//! when a group turns on or off, and the name Vosh shows for it.
 
 use std::collections::BTreeSet;
 
@@ -20,10 +21,14 @@ pub(crate) struct Profile {
     /// file holds them, so a switch or a save leaves them be, and a
     /// plugin that turns off takes its own.
     pub(crate) plugin_aliases: PluginAliases,
+    /// Your variables. The file saves the profile scoped ones, and a
+    /// switch keeps the session scoped ones, which no file holds.
     pub(crate) vars: VariableStore,
     pub(crate) triggers: TriggerStore,
-    /// The tick settings. The connection keeps the running count.
+    /// The tick settings the file saves, with the reset pattern compiled.
     pub(crate) tick: TickSettings,
+    /// The Lua engine, which runs your scripts and the plugins this
+    /// profile turns on. No file saves its state.
     pub(crate) script: ScriptEngine,
     pub(crate) ui: UiConfig,
     pub(crate) plugins: PluginsPersist,
@@ -65,8 +70,9 @@ pub(crate) struct Profile {
     /// shared catalog, which `#group` follows. See [`GroupFolders`].
     pub(crate) group_folders: GroupFolders,
     /// The custom prompt's `[prompt]` table, which the profile file
-    /// saves. The prompt engine on the connection runs it, and the profile
-    /// keeps the copy the engine holds, see [`crate::prompt::take_config`].
+    /// saves. It stays the table the prompt engine runs, game edits
+    /// included, see [`crate::prompt::take_config`] and
+    /// [`crate::prompt::keep_table`].
     pub(crate) prompt: vosh_prompt::PromptConfig,
     /// The active profile's name as Vosh shows it, `Default` for the
     /// reserved default, which the custom prompt draws for `%profile`.

@@ -1,8 +1,10 @@
 //! Switching the active profile, when you pick one and when a login
 //! names a character another profile claims. A switch saves the profile
 //! you leave, reads the next one's file and global.toml, and lays them
-//! over the live profile. The same read of global.toml keeps your shared
-//! settings across a `#profile reset` or `#profile load`.
+//! over the live profile. The connection carries on as it was, apart
+//! from the tick settings and the prompt table the next profile hands
+//! it. The same read of global.toml keeps your shared settings across a
+//! `#profile reset` or `#profile load`.
 
 use tauri::{AppHandle, Manager};
 use tracing::warn;
@@ -87,9 +89,12 @@ fn open_profile_for_switch(
 /// and global.toml, points the index at it, then lays both over the
 /// live profile, and in loadout mode the catalog and the loadouts too.
 /// Either every step lands or none does, and a save that waits on the
-/// lock finds the live profile whole. The plugins the incoming profile
-/// turns on start and the others stop in the same step, and what they
-/// ask for comes back for the caller to deliver once the lock drops.
+/// lock finds the live profile whole. The connection then takes the
+/// incoming profile's tick settings and `[prompt]` table and keeps the
+/// rest as it was, and its prompt drops the values the last profile's
+/// prompt read. The plugins the incoming profile turns on start and the
+/// others stop in the same step, and what they ask for comes back for
+/// the caller to deliver once the lock drops.
 pub(crate) async fn switch_live_profile(
     state: &SharedState,
     name: &str,
@@ -110,9 +115,11 @@ pub(crate) async fn switch_live_profile(
     let catalog = state.global_catalog.lock().await.clone();
     let loadouts = state.loadout_set.lock().await.clone();
 
-    // Step 3: apply the per-profile file (or defaults) and then overlay
-    // global.toml so theme/font/keep-last/auto-update/dock_layout
-    // survive the switch.
+    // Step 3: lay the per-profile file (or defaults) over the live
+    // profile, then global.toml so theme/font/keep-last/auto-update/
+    // dock_layout survive the switch, then the catalog. The connection
+    // lock comes after these, so a command that reads only the connection
+    // never waits while the files apply.
     {
         let mut p = state.profile.lock().await;
         p.display_name = Some(crate::profile::set::display_name(name));
@@ -128,34 +135,38 @@ pub(crate) async fn switch_live_profile(
                 fresh.apply_to(&mut p);
             }
         }
-        // The running tick carries across with the new settings, so the
-        // status line keeps counting from the last tick.
-        let mut c = state.connection.lock().await;
-        c.tick
-            .adopt(&mut p.tick, &tick_before, tokio::time::Instant::now());
         if let Some(g) = global {
             g.apply_to(&mut p);
         }
         if let Some(catalog) = &catalog {
             lay_catalog_over(&mut p, catalog, loadouts.as_ref());
         }
-        // The custom prompt keeps the connection's GMCP packets and drops
-        // the values the last profile's prompt read, then takes the new
+        // Under the same lock as the swap, so a pane layout write edited
+        // from the old profile's tree, or a whole config save read from
+        // the old profile, is refused from here on.
+        state.note_ui_config_replaced();
+
+        // The connection did not change, so it keeps what it holds and
+        // takes only the next profile's tick settings and [prompt] table.
+        // The tick keeps its count under the new settings, so the status
+        // line counts on from the last tick.
+        let mut c = state.connection.lock().await;
+        c.tick
+            .adopt(&mut p.tick, &tick_before, tokio::time::Instant::now());
+        // The values the last profile's prompt read go, since they came
+        // from its capture and its scripts, and the engine takes the next
         // profile's [prompt] table.
         c.prompt.switch_profile();
         let table = p.prompt.clone();
         crate::prompt::take_config(&mut p, &mut c, table);
         // The latest Char.Prompt of the connection applies to the new
-        // profile's capture by the rule every packet follows.
+        // profile's capture by the rule every packet follows, and the
+        // profile keeps the table as it then stands.
         let before = c.prompt.revision();
         c.prompt.follow_latest(chrono::Local::now().fixed_offset());
         crate::prompt::keep_table(&mut p, &c, before);
-        // Under the same lock as the swap, so a pane layout write edited
-        // from the old profile's tree, or a whole config save read from
-        // the old profile, is refused from here on.
-        state.note_ui_config_replaced();
-        // Under the same lock too, so no plugin of the profile you left
-        // answers a line or a packet for the next one.
+        // Under both locks, so no plugin of the profile you left answers
+        // a line or a packet for the next one.
         let plugins = match state.app_data.get() {
             Some(app_data) => crate::app::plugins::follow_profile_plugins(
                 &mut p,
@@ -450,7 +461,7 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn a_switch_keeps_the_target_the_room_list_the_room_look_and_the_tick_count() {
+    async fn a_switch_leaves_the_connection_as_it_was_but_drops_the_prompt_values() {
         use crate::session::connection::{QuickKey, RoomChar};
         let dir = tempfile::tempdir().unwrap();
         let state = switch_state(dir.path()).await;
@@ -466,7 +477,10 @@ pub(crate) mod tests {
             name: "gg".into(),
             verb: "kill".into(),
         };
-        let (look, count) = {
+        let status = serde_json::json!({"level": 60});
+        let char_state = serde_json::json!({"language": ""});
+        let vitals = serde_json::json!({"hp": 850, "maxhp": 900});
+        let (look, count, who, pulse) = {
             let mut p = state.profile.lock().await;
             let mut c = state.connection.lock().await;
             c.target.name = Some("goblin".into());
@@ -481,9 +495,26 @@ pub(crate) mod tests {
                 c.tick.on_game_tick(&p.tick, t0).is_some(),
                 "the game ticked"
             );
-            (c.room_block.clone(), (c.tick.last_tick, c.tick.last_signal))
+            c.prompt.connect(true);
+            let at = chrono::Local::now().fixed_offset();
+            c.prompt.observe("Char.Status", status.clone(), at);
+            c.prompt.observe("Char.State", char_state.clone(), at);
+            c.prompt.observe("Char.Vitals", vitals.clone(), at);
+            c.prompt.vars.set_script("mood", "grim");
+            assert!(!c.prompt.vars.prompt_vars().is_empty());
+            (
+                c.room_block.clone(),
+                (c.tick.last_tick, c.tick.last_signal),
+                c.prompt.who(),
+                c.prompt.vars.gmcp().pulse(),
+            )
         };
         assert_ne!(look, crate::session::room_block::RoomBlock::default());
+        assert_ne!(
+            who,
+            vosh_prompt::aabahran::Who::default(),
+            "an immortal in a mobile"
+        );
 
         super::switch_live_profile(&state, "Healer").await.unwrap();
 
@@ -498,6 +529,14 @@ pub(crate) mod tests {
         assert!(p.tick.config.enabled, "a running tick stays on");
         assert!(c.tick.synced);
         assert_eq!((c.tick.last_tick, c.tick.last_signal), count);
+        let gmcp = c.prompt.vars.gmcp();
+        assert_eq!(gmcp.get("Char.Status"), Some(&status));
+        assert_eq!(gmcp.get("Char.State"), Some(&char_state));
+        assert_eq!(gmcp.get("Char.Vitals"), Some(&vitals));
+        assert_eq!(gmcp.pulse(), pulse);
+        assert_eq!(c.prompt.who(), who);
+        let left = c.prompt.vars.prompt_vars();
+        assert!(left.is_empty(), "{left:?}");
     }
 
     #[tokio::test]
