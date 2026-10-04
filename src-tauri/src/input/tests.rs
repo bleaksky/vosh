@@ -8,7 +8,6 @@ use crate::prompt::take_config;
 use crate::session::connection::{Connection, RoomChar};
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{NamedColor, TriggerAction};
-use vosh_automation::vars::Scope;
 
 fn regex_capture(c: &Connection) -> vosh_prompt::config::RegexCapture {
     match &c.prompt.config().capture {
@@ -1643,7 +1642,8 @@ fn alias_expansion_runs_through_pipeline() {
 #[test]
 fn a_lua_alias_runs_its_body_in_the_order_you_typed() {
     let mut p = Profile::default();
-    p.vars.set(Scope::Session, "target", "goblin");
+    let mut c = Connection::default();
+    c.vars.set("target", "goblin");
     p.aliases.set(
         Alias::new("kk", "ignored")
             .with_script("mud.send('kick ' .. captures[1])\nmud.echo('kicked')"),
@@ -1651,10 +1651,10 @@ fn a_lua_alias_runs_its_body_in_the_order_you_typed() {
     // The body runs where you typed the alias, with the words after
     // its name, so what it sends goes out between the commands
     // around it.
-    let r = process(&mut p, "look;kk $target;wave");
+    let r = process_on(&mut p, &mut c, "look;kk $target;wave");
     assert_eq!(r.bytes, b"look\r\nkick goblin\r\nwave\r\n");
     assert_eq!(r.echo, ["kicked"]);
-    let r = process(&mut p, "kk dragon;wave");
+    let r = process_on(&mut p, &mut c, "kk dragon;wave");
     assert_eq!(r.bytes, b"kick dragon\r\nwave\r\n");
     assert_eq!(r.echo, ["kicked"]);
 }
@@ -1664,12 +1664,13 @@ fn a_lua_alias_body_reads_the_variables_as_they_are_now() {
     // No script is loaded and no Lua trigger is set, so nothing else
     // gives Lua the variables before the body runs.
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.aliases
         .set(Alias::new("kt", "ignored").with_script("mud.send('kick ' .. mud.var('target'))"));
-    let _ = process(&mut p, "#var target goblin");
-    assert_eq!(process(&mut p, "kt").bytes, b"kick goblin\r\n");
-    let _ = process(&mut p, "#var target orc");
-    assert_eq!(process(&mut p, "kt").bytes, b"kick orc\r\n");
+    let _ = process_on(&mut p, &mut c, "#var target goblin");
+    assert_eq!(process_on(&mut p, &mut c, "kt").bytes, b"kick goblin\r\n");
+    let _ = process_on(&mut p, &mut c, "#var target orc");
+    assert_eq!(process_on(&mut p, &mut c, "kt").bytes, b"kick orc\r\n");
 }
 
 #[test]
@@ -1699,10 +1700,32 @@ fn what_else_a_lua_alias_body_asks_for_comes_back_with_the_line() {
 #[test]
 fn variables_substitute_before_alias_expansion() {
     let mut p = Profile::default();
-    p.vars.set(Scope::Session, "target", "goblin");
+    let mut c = Connection::default();
+    c.vars.set("target", "goblin");
     p.aliases.set(Alias::new("hit", "kick %0"));
-    let r = process(&mut p, "hit $target");
+    let r = process_on(&mut p, &mut c, "hit $target");
     assert_eq!(r.bytes, b"kick goblin\r\n");
+}
+
+#[test]
+fn a_profile_variable_saves_while_a_session_variable_of_its_name_hides_it() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let ran = run_line(
+        &state,
+        &mut p,
+        &mut c,
+        "#lua mud.set_profile_var('home', 'Hollow')",
+    );
+    assert!(ran.lua.durable_changed);
+    let _ = process_on(&mut p, &mut c, "#var home inn");
+    assert_eq!(
+        process_on(&mut p, &mut c, "recall $home").bytes,
+        b"recall inn\r\n"
+    );
+    let saved = ProfileConfig::from_profile(&p).profile_vars;
+    assert_eq!(saved.get("home").map(String::as_str), Some("Hollow"));
 }
 
 #[test]
@@ -1775,11 +1798,7 @@ fn room_chars_need_a_name_and_read_npc_in_each_form() {
 fn tar_by_index_sets_target_and_idx() {
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(
-        &mut c,
-        &mut p.vars,
-        vec![rc("Bob", false), rc("ogre", true)],
-    );
+    set_room_chars(&mut c, vec![rc("Bob", false), rc("ogre", true)]);
     let r = process_on(&mut p, &mut c, "tar 2");
     assert_eq!(c.target.name.as_deref(), Some("ogre"));
     assert_eq!(c.target.room_idx, Some(2));
@@ -1797,7 +1816,6 @@ fn tar_string_keeps_literal_resolves_idx_via_substring() {
     let mut c = Connection::default();
     set_room_chars(
         &mut c,
-        &mut p.vars,
         vec![rc("The Baron Grisvald", true), rc("ogre", true)],
     );
     let _ = process_on(&mut p, &mut c, "tar gris");
@@ -1809,7 +1827,7 @@ fn tar_string_keeps_literal_resolves_idx_via_substring() {
 fn tar_unknown_keeps_literal_with_no_idx() {
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(&mut c, &mut p.vars, vec![rc("Bob", false)]);
+    set_room_chars(&mut c, vec![rc("Bob", false)]);
     let _ = process_on(&mut p, &mut c, "tar Alice");
     assert_eq!(c.target.name.as_deref(), Some("Alice"));
     assert_eq!(c.target.room_idx, None);
@@ -1819,7 +1837,7 @@ fn tar_unknown_keeps_literal_with_no_idx() {
 fn target_syncs_to_var_store_for_interpolation() {
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(&mut c, &mut p.vars, vec![rc("Bob", false)]);
+    set_room_chars(&mut c, vec![rc("Bob", false)]);
     let _ = process_on(&mut p, &mut c, "tar 1");
     // `${target}` should now interpolate to "Bob".
     let r = process_on(&mut p, &mut c, "cast 'bless' ${target}");
@@ -1830,11 +1848,7 @@ fn target_syncs_to_var_store_for_interpolation() {
 fn tarn_cycles_forward_and_wraps() {
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(
-        &mut c,
-        &mut p.vars,
-        vec![rc("A", true), rc("B", true), rc("C", true)],
-    );
+    set_room_chars(&mut c, vec![rc("A", true), rc("B", true), rc("C", true)]);
     let _ = process_on(&mut p, &mut c, "tarn");
     assert_eq!(c.target.name.as_deref(), Some("A"));
     let _ = process_on(&mut p, &mut c, "tarn");
@@ -1848,18 +1862,18 @@ fn tarn_cycles_forward_and_wraps() {
 fn tarclear_drops_target_and_var() {
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(&mut c, &mut p.vars, vec![rc("Bob", false)]);
+    set_room_chars(&mut c, vec![rc("Bob", false)]);
     let _ = process_on(&mut p, &mut c, "tar 1");
     let _ = process_on(&mut p, &mut c, "tarclear");
     assert!(c.target.name.is_none());
-    assert!(p.vars.get("target").is_none());
+    assert!(c.vars.get("target").is_none());
 }
 
 #[test]
 fn quick_key_expands_to_verb_plus_target() {
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(&mut c, &mut p.vars, vec![rc("ogre", true)]);
+    set_room_chars(&mut c, vec![rc("ogre", true)]);
     let _ = process_on(&mut p, &mut c, "tar 1");
     let _ = process_on(&mut p, &mut c, "#qkey gg kick");
     let r = process_on(&mut p, &mut c, "gg");
@@ -1870,7 +1884,7 @@ fn quick_key_expands_to_verb_plus_target() {
 fn a_quick_key_echoes_like_a_typed_command() {
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(&mut c, &mut p.vars, vec![rc("ogre", true)]);
+    set_room_chars(&mut c, vec![rc("ogre", true)]);
     let _ = process_on(&mut p, &mut c, "tar 1");
     let _ = process_on(&mut p, &mut c, "#qkey gg kick");
     // The caret is on by default, before the command in the
@@ -1924,7 +1938,7 @@ fn quick_key_uses_literal_keyword_not_full_name() {
     // descriptor "The Baron Grisvald".
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(&mut c, &mut p.vars, vec![rc("The Baron Grisvald", true)]);
+    set_room_chars(&mut c, vec![rc("The Baron Grisvald", true)]);
     let _ = process_on(&mut p, &mut c, "tar gris");
     let _ = process_on(&mut p, &mut c, "#qkey gg cast 'fireball'");
     let r = process_on(&mut p, &mut c, "gg");
@@ -2066,9 +2080,10 @@ fn slash_unalias_removes() {
 #[test]
 fn slash_var_set_and_show() {
     let mut p = Profile::default();
-    let r = process(&mut p, "#var hp 100");
+    let mut c = Connection::default();
+    let r = process_on(&mut p, &mut c, "#var hp 100");
     assert!(r.echo.iter().any(|l| l == "var hp set"));
-    let r = process(&mut p, "#var hp");
+    let r = process_on(&mut p, &mut c, "#var hp");
     assert!(r.echo.iter().any(|l| l == "hp = 100"));
 }
 

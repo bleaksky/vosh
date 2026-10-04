@@ -500,8 +500,7 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
             macros_changed = true;
         }
         for (k, v) in &report.vars {
-            p.vars
-                .set(vosh_automation::vars::Scope::Profile, k.clone(), v.clone());
+            p.vars.set(k.clone(), v.clone());
         }
         macros_snapshot = p.macros.clone();
         lists = ListChanges::since(lists_before, &p, &c);

@@ -71,7 +71,7 @@ pub(super) fn fire_round(
     c: &mut Connection,
     due: Vec<PendingTimer>,
 ) -> (ApplyResult, Vec<PendingTimer>) {
-    script::snapshot_vars(&c.script, &p.vars);
+    script::snapshot_vars(p, c);
     let ids: Vec<i64> = due.iter().map(|t| t.callback_id).collect();
     let fired = c.script.fire_timers(&ids);
     let held = due

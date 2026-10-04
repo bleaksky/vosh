@@ -259,8 +259,9 @@ pub(crate) async fn connect<R: tauri::Runtime>(
         handle.shutdown().await;
     }
 
-    // Clear session-scoped variables on reconnect; profile-scoped survive.
-    state.profile.lock().await.vars.clear_session();
+    // This session's variables clear on reconnect, and the profile's,
+    // which other sessions read too, survive.
+    session.connection.lock().vars.clear();
 
     // Remember the live connection target so the Char.Status-driven
     // auto-switch path can re-resolve against it once the MUD tells us

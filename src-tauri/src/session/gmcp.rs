@@ -201,7 +201,7 @@ pub(super) fn gmcp_step(
     now: Instant,
 ) -> (Option<TickStep>, ApplyResult) {
     let fought = c.prompt.vars.gmcp().fighting();
-    gmcp_vars::apply(&mut p.vars, msg);
+    gmcp_vars::apply(&mut c.vars, msg);
     // Before Lua, so a value a GMCP handler sets with
     // `mud.set_prompt_var` belongs to the pulse this packet starts.
     observe_prompt_gmcp(p, c, msg);
@@ -219,7 +219,7 @@ pub(super) fn gmcp_step(
             // entry after its things.
             c.room_block.room_chars(arr.len());
             let chars = input::target::read_room_chars(arr);
-            input::target::set_room_chars(c, &mut p.vars, chars);
+            input::target::set_room_chars(c, chars);
         }
     }
     // The look this packet goes with lists a line for each long text its
@@ -230,7 +230,7 @@ pub(super) fn gmcp_step(
         }
     }
     let tick_step = crate::tick::observe_world_time_for_tick(&p.tick, &mut c.tick, msg, now);
-    script::snapshot_vars(&c.script, &p.vars);
+    script::snapshot_vars(p, c);
     let outcome = c.script.dispatch_gmcp(&msg.package, &msg.data);
     let apply = script::apply_actions(p, c, outcome);
     (tick_step, apply)

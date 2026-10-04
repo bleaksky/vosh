@@ -534,10 +534,10 @@ fn process_line(
     // shadowed by aliases or quick-keys.
     let (head, rest) = split_first_word(trimmed);
     match head {
-        "tar" => return run_target_set(c, &mut profile.vars, rest),
-        "tarn" => return run_target_cycle(c, &mut profile.vars, 1),
-        "tarp" => return run_target_cycle(c, &mut profile.vars, -1),
-        "tarclear" => return run_target_clear(c, &mut profile.vars),
+        "tar" => return run_target_set(c, rest),
+        "tarn" => return run_target_cycle(c, 1),
+        "tarp" => return run_target_cycle(c, -1),
+        "tarclear" => return run_target_clear(c),
         _ => {}
     }
 
@@ -581,7 +581,7 @@ fn process_line(
     // Plain input. Interpolate variables, then expand aliases, then encode.
     // An alias that runs Lua runs its body where it stands, so what the
     // body sends goes out in the order you typed the line.
-    let interpolated = profile.vars.interpolate(trimmed);
+    let interpolated = c.var_view(profile).interpolate(trimmed);
     let steps = match profile
         .aliases
         .expand_line_full(&interpolated, &c.plugin_aliases)

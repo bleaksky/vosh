@@ -1,5 +1,4 @@
 use vosh_automation::alias::{Alias, ExpandStep};
-use vosh_automation::vars::Scope;
 
 use super::*;
 use crate::input::process;
@@ -103,7 +102,7 @@ fn bare_walk_asks_how_far_and_stop_stops() {
 fn what_you_type_after_walk_waits_for_it() {
     let mut p = Profile::default();
     p.aliases.set(Alias::new("dep", "deposit %1"));
-    p.vars.set(Scope::Session, "path", "2w");
+    p.vars.set("path", "2w");
     let (steps, rest) = started(&mut p, "#walk $path u;dep all;say done");
     assert_eq!(steps, [West, West, Up]);
     assert_eq!(rest, [command("deposit all"), command("say done")]);

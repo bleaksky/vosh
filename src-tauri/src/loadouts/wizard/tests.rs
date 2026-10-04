@@ -444,8 +444,7 @@ async fn putting_the_catalog_back_keeps_every_item_you_added_since() {
         let mut p = state.profile.lock().await;
         p.aliases
             .set(vosh_automation::alias::Alias::new("zz", "sleep"));
-        p.vars
-            .set(vosh_automation::vars::Scope::Profile, "target", "dragon");
+        p.vars.set("target", "dragon");
     }
     persist(&state).await;
 
@@ -1526,8 +1525,7 @@ async fn the_wizard_keeps_what_you_changed_since_the_last_save() {
     // target, you drag the splitter, and you add an alias.
     {
         let mut p = state.profile.lock().await;
-        p.vars
-            .set(vosh_automation::vars::Scope::Profile, "target", "dragon");
+        p.vars.set("target", "dragon");
         if let Some(panes) = p.ui.panes.as_mut() {
             panes.panel_width = Some(420);
         }
@@ -1844,12 +1842,7 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
 
     // Launch holds every save and every switch, since the next launch
     // writes the journal again over what this one saved.
-    state
-        .profile
-        .lock()
-        .await
-        .vars
-        .set(vosh_automation::vars::Scope::Profile, "target", "dragon");
+    state.profile.lock().await.vars.set("target", "dragon");
     {
         let _persist_guard = PERSIST_LOCK.lock().await;
         crate::disk::save::persist_state(&state).await;

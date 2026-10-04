@@ -59,7 +59,7 @@ fn slash_script_load(
     // owner takes the name the folder gives the file.
     let file = spelled_on_disk(&scripts, &file);
     let path = scripts.join(&file);
-    script::refresh_vars(&c.script, &profile.vars);
+    script::refresh_vars(profile, c);
     let outcome = c
         .script
         .load_script(Owner::Script(file.clone()), &format!("@{file}"), &code);
@@ -84,7 +84,7 @@ fn slash_script_reload(
     let Some(app_data) = state.app_data.get() else {
         return InputResult::error("could not resolve scripts directory");
     };
-    script::refresh_vars(&c.script, &profile.vars);
+    script::refresh_vars(profile, c);
     let mut outcome = ScriptOutcome::default();
     for owner in c.script.reload_order() {
         match read_again(app_data, &owner) {
@@ -165,7 +165,7 @@ pub(super) fn slash_lua(
     if code.is_empty() {
         return InputResult::error("usage #lua <code>");
     }
-    script::refresh_vars(&c.script, &profile.vars);
+    script::refresh_vars(profile, c);
     let outcome = c.script.eval(code, "=#lua");
     lua.append(script::apply_actions(profile, c, outcome));
     InputResult::empty()
