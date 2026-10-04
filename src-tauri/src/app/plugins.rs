@@ -30,6 +30,8 @@ pub(crate) enum PluginError {
     NotFound(String),
     #[error("plugin `{0}` entry script `{1}` is missing")]
     EntryMissing(String, String),
+    #[error("plugin `{0}` entry script `{1}` is outside its folder")]
+    EntryOutside(String, String),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -141,26 +143,82 @@ impl PluginManager {
     pub(crate) fn list(&self) -> &[PluginRecord] {
         &self.plugins
     }
+}
 
-    pub(crate) fn get(&self, name: &str) -> Option<&PluginRecord> {
-        self.plugins.iter().find(|p| p.manifest.name == name)
-    }
+/// A plugin's entry script as it stands on disk.
+#[derive(Debug)]
+pub(crate) struct PluginCode {
+    /// The entry script's path inside the plugin folder, as the manifest
+    /// names it.
+    pub(crate) entry: String,
+    pub(crate) code: String,
+}
 
-    /// Read the entry script body for `name`. Errors when the plugin or
-    /// its entry file are missing.
-    pub(crate) fn read_entry(&self, name: &str) -> Result<String, PluginError> {
-        let record = self
-            .get(name)
-            .ok_or_else(|| PluginError::NotFound(name.to_string()))?;
-        let entry_path = record.dir.join(&record.manifest.entry);
-        if !entry_path.exists() {
-            return Err(PluginError::EntryMissing(
-                name.to_string(),
-                record.manifest.entry.clone(),
-            ));
-        }
-        Ok(std::fs::read_to_string(entry_path)?)
+impl PluginCode {
+    /// The chunk name the plugin `name` runs under, which its errors
+    /// name, like `@vitals_alert/main.lua`.
+    pub(crate) fn chunk(&self, name: &str) -> String {
+        format!("@{name}/{}", self.entry)
     }
+}
+
+/// Read the manifest and the entry script of the plugin `name` in
+/// `plugins_dir` as they stand now. The folder must carry the name the
+/// manifest gives, as discovery asks, and the entry script must sit
+/// inside the folder.
+pub(crate) fn read_plugin(
+    plugins_dir: &std::path::Path,
+    name: &str,
+) -> Result<PluginCode, PluginError> {
+    let not_found = || PluginError::NotFound(name.to_string());
+    // A name from a profile file you edit by hand must not climb out of
+    // the plugins folder.
+    if !is_one_folder(name) {
+        return Err(not_found());
+    }
+    let dir = plugins_dir.join(name);
+    let manifest_path = dir.join("manifest.toml");
+    if !manifest_path.is_file() {
+        return Err(not_found());
+    }
+    let manifest =
+        toml::from_str::<PluginManifestFile>(&std::fs::read_to_string(manifest_path)?)?.plugin;
+    if manifest.name != name {
+        return Err(not_found());
+    }
+    let outside = || PluginError::EntryOutside(name.to_string(), manifest.entry.clone());
+    let inside = std::path::Path::new(&manifest.entry)
+        .components()
+        .all(|part| matches!(part, std::path::Component::Normal(_)));
+    if !inside || manifest.entry.is_empty() {
+        return Err(outside());
+    }
+    let entry_path = dir.join(&manifest.entry);
+    if !entry_path.is_file() {
+        return Err(PluginError::EntryMissing(
+            name.to_string(),
+            manifest.entry.clone(),
+        ));
+    }
+    // A link in the folder could still point elsewhere.
+    let real_dir = dir.canonicalize()?;
+    if !entry_path.canonicalize()?.starts_with(&real_dir) {
+        return Err(outside());
+    }
+    Ok(PluginCode {
+        code: std::fs::read_to_string(entry_path)?,
+        entry: manifest.entry,
+    })
+}
+
+/// True when `name` names one folder, with no separator and no `.` or
+/// `..`.
+fn is_one_folder(name: &str) -> bool {
+    let mut parts = std::path::Path::new(name).components();
+    matches!(
+        (parts.next(), parts.next()),
+        (Some(std::path::Component::Normal(part)), None) if part == name
+    )
 }
 
 /// Drop the example plugins shipped with the app into the user's plugins
@@ -211,7 +269,7 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     plugins_dir: std::path::PathBuf,
 ) {
     let mut mgr = state.plugins.lock().await;
-    mgr.set_plugins_dir(plugins_dir);
+    mgr.set_plugins_dir(plugins_dir.clone());
     if let Err(e) = mgr.discover() {
         error!(error = %e, "plugin discovery failed");
     }
@@ -221,17 +279,14 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     };
     mgr.set_enabled(enabled.clone());
     for name in &enabled {
-        let apply = match mgr.read_entry(name) {
-            Ok(code) => {
-                let entry = mgr
-                    .get(name)
-                    .map_or_else(default_entry, |record| record.manifest.entry.clone());
+        let apply = match read_plugin(&plugins_dir, name) {
+            Ok(plugin) => {
                 let mut p = state.profile.lock().await;
                 crate::script::snapshot_vars(&p.script, &p.vars);
                 let outcome = p.script.load_script(
                     Owner::Plugin(name.clone()),
-                    &format!("@{name}/{entry}"),
-                    code,
+                    &plugin.chunk(name),
+                    &plugin.code,
                 );
                 if outcome.failed {
                     error!(name = %name, "plugin script error");
@@ -340,14 +395,65 @@ mod tests {
     }
 
     #[test]
-    fn read_entry_returns_lua_body() {
+    fn read_plugin_returns_the_entry_script_as_it_stands() {
         let tmp = tempdir();
         write_plugin(tmp.path(), "p", "p", "print('hi')");
-        let mut mgr = PluginManager::default();
-        mgr.set_plugins_dir(tmp.path().to_path_buf());
-        mgr.discover().unwrap();
-        let body = mgr.read_entry("p").unwrap();
-        assert!(body.contains("print('hi')"));
+        let plugin = read_plugin(tmp.path(), "p").unwrap();
+        assert_eq!(plugin.code, "print('hi')");
+        assert_eq!(plugin.chunk("p"), "@p/main.lua");
+        std::fs::write(tmp.path().join("p").join("main.lua"), "print('again')").unwrap();
+        assert_eq!(read_plugin(tmp.path(), "p").unwrap().code, "print('again')");
+    }
+
+    #[test]
+    fn read_plugin_stays_inside_the_plugin_folder() {
+        let tmp = tempdir();
+        let plugins = tmp.path().join("plugins");
+        write_plugin(&plugins, "p", "p", "");
+        std::fs::write(tmp.path().join("outside.lua"), "mud.send('look')").unwrap();
+        // A name that climbs out of the plugins folder finds nothing.
+        for name in ["..", "../plugins/p", "p/.", ""] {
+            assert!(
+                matches!(read_plugin(&plugins, name), Err(PluginError::NotFound(_))),
+                "{name}"
+            );
+        }
+        // Nor does a folder named unlike its manifest.
+        write_plugin(&plugins, "q", "other", "");
+        assert!(matches!(
+            read_plugin(&plugins, "q"),
+            Err(PluginError::NotFound(_))
+        ));
+        // An entry outside the folder is refused.
+        let manifest = plugins.join("p").join("manifest.toml");
+        for entry in ["../../outside.lua", "/etc/hosts", "."] {
+            std::fs::write(
+                &manifest,
+                format!("[plugin]\nname = \"p\"\nentry = \"{entry}\"\n"),
+            )
+            .unwrap();
+            assert!(
+                matches!(
+                    read_plugin(&plugins, "p"),
+                    Err(PluginError::EntryOutside(..))
+                ),
+                "{entry}"
+            );
+        }
+        // So is a link that leads out.
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(
+                tmp.path().join("outside.lua"),
+                plugins.join("p").join("link.lua"),
+            )
+            .unwrap();
+            std::fs::write(&manifest, "[plugin]\nname = \"p\"\nentry = \"link.lua\"\n").unwrap();
+            assert!(matches!(
+                read_plugin(&plugins, "p"),
+                Err(PluginError::EntryOutside(..))
+            ));
+        }
     }
 
     fn tempdir() -> tempfile::TempDir {
