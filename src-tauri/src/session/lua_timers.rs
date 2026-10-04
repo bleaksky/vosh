@@ -13,12 +13,14 @@ use crate::script::{self, PendingTimer, SharedTimers};
 
 use super::connection::Stream;
 use super::effects::{apply_script_result, OutputSink, ScriptIo};
+use super::walk::Walker;
 
 /// Fire the Lua timers whose deadline passed, then apply what their
 /// callbacks ask for.
 pub(super) async fn fire_due<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
+    walker: &mut Walker,
     profile: &Arc<Mutex<Profile>>,
     lua_timers: &SharedTimers,
 ) -> std::io::Result<()> {
@@ -44,6 +46,6 @@ pub(super) async fn fire_due<R: tauri::Runtime>(
         script::apply_actions(&mut p, outcome)
     };
     let mut sink = OutputSink::Direct;
-    let mut io = ScriptIo::Session(stream, &mut sink);
+    let mut io = ScriptIo::Session(stream, &mut sink, walker);
     apply_script_result(app, &mut io, profile, lua_timers, apply).await
 }

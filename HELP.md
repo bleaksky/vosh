@@ -179,6 +179,24 @@ The terminal right click menu collects the terminal's everyday actions in one pl
 
 Items with a shortcut show it on the right, and `Settings` shows an arrow. The arrow keys move through the menu and `Enter` picks an item. `ArrowRight` or `Enter` on `Settings` opens its list on the first row, and `ArrowLeft` steps back out. Pointing at `Settings` opens the list too. `Esc` closes the list first, then the menu. The menu also closes on a click anywhere outside it, or the instant you pick an item. It keeps itself inside the window, so a right click near a corner never opens it half off screen. Near the right edge the Settings list opens on the left of the menu, and near the bottom it rises from its row.
 
+### 2.9 Walk to a place
+
+`#walk` moves you along a string of directions, one step at a time. Vosh waits for the game to show each new room before it sends the next step, so a move that fails stops the walk where you stand.
+
+- Type `#walk 3n2e` to go north three times, then east twice.
+- Use `n` `e` `s` `w` `u` and `d`. The game has no diagonal exits, so `ne` walks north, then east.
+- Put a count from 1 to 99 before a direction to repeat it. Spaces between parts are fine.
+- The walk stops when a move fails, a fight starts, you stop standing, or you send the game a command. Press `Esc` or type `#walk stop` to stop it yourself. Other `#` commands leave it going.
+- An alias or a macro can run `#walk`, so `#alias bank #walk 3n2e` walks you there by name. Commands after `#walk` in the same alias wait until you arrive, and drop if the walk stops early.
+
+| You type     | Vosh sends                                                        |
+| ------------ | ----------------------------------------------------------------- |
+| `#walk 3n2e` | `n n n e e`, each after the room before it shows                  |
+| `#walk 2w u` | `w w u`                                                           |
+| `#walk ne`   | `n e`                                                             |
+| `#walk 3x`   | Nothing. Vosh says it cannot read `x`.                            |
+| `#walk`      | Nothing. Vosh says how many steps are left, and the walk goes on. |
+
 ## Automate
 
 ### 3.1 Create an alias
@@ -722,6 +740,7 @@ This is every slash command Vosh understands today.
 - `#record <name>` starts recording, `#record` shows status, `#record cancel` discards, `#endrec` saves the recording as an alias.
 - `#qkey <name> <verb>` configures a quick key, `#qkey clear <name>` clears, `#qkeys` lists.
 - `#target <args>` mirrors `tar`, with `#target clear|next|prev`, `#tarn`, `#tarp`, `#tarclear` as slash forms.
+- `#walk <steps>` walks a string of directions like `3n2e` one room at a time, `#walk` says how many steps are left, and `#walk stop` stops the walk.
 - `#nativesurface on|off|default` forces the renderer on macOS, applied on restart.
 
 Targeting also works bare with no `#`. Type `tar` to list, `tar <N>` or `tar <substr>` to pick, `tarn` and `tarp` to cycle, `tarclear` to clear.
@@ -748,7 +767,7 @@ In the command line.
 - `Tab` and `Shift+Tab` cycle tab completion through your history words, room characters, and recently seen names.
 - `ArrowUp` and `ArrowDown` recall history, filtered by whatever prefix you already typed.
 - `PageUp` and `PageDown` page the scrollback. On macOS press `Fn+Up` and `Fn+Down`.
-- `Escape` cancels an in flight paste burst, closes the scrollback split, and snaps the terminal to its tail.
+- `Escape` cancels an in flight paste burst, stops a walk, closes the scrollback split, and snaps the terminal to its tail.
 - `Home` and `End` jump the caret, also reachable as `Cmd+Left` and `Cmd+Right` or `Fn+Left` and `Fn+Right` on macOS. Add `Shift` to extend the selection.
 - `Cmd+A` on an empty command line selects the whole terminal, scrollback included.
 - `Cmd+C` with nothing selected in the command line copies the terminal selection.

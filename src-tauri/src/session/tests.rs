@@ -45,6 +45,7 @@ mod right;
 mod room;
 mod show;
 mod steps;
+mod walk;
 
 /// The PROMPT the fake Aabahran prints, the one the wire fixtures carry.
 const CODES: &str = vosh_prompt::testkit::mud::PROMPT;

@@ -359,7 +359,11 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
     if let Some(app_data) = state.app_data.get() {
         note_plugins(state, &crate::disk::paths::plugins_dir(app_data)).await;
     }
-    let (bytes, echoes) = crate::session::effects::collect_script_result(
+    let crate::session::effects::Collected {
+        bytes,
+        echoes,
+        walk,
+    } = crate::session::effects::collect_script_result(
         app,
         &state.profile,
         &state.lua_timers,
@@ -367,23 +371,20 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
     )
     .await;
     crate::output::echo_lines(app, &echoes);
-    if bytes.is_empty() {
+    if bytes.is_empty() && walk.is_none() {
         return;
     }
     // A login switches profiles inside the session task, and a
     // disconnect holds the session lock while it waits for that task to
-    // end. So the bytes go from a task of their own and the switch never
-    // waits on the lock.
+    // end. So the bytes and a #walk go from a task of their own and the
+    // switch never waits on the lock.
     let state = state.clone();
     tokio::spawn(async move {
-        let sent = state
-            .session
-            .lock()
-            .await
-            .as_ref()
-            .is_some_and(|handle| handle.send(bytes));
-        if !sent {
-            info!("plugin sends at a profile switch have no game to go to");
+        let delivered = state.session.lock().await.as_ref().is_some_and(|handle| {
+            (bytes.is_empty() || handle.send(bytes)) && walk.map_or(true, |walk| handle.walk(walk))
+        });
+        if !delivered {
+            info!("plugin output at a profile switch has no game to go to");
         }
     });
 }
@@ -405,24 +406,25 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
         let mut p = state.profile.lock().await;
         follow_profile_plugins(&mut p, &plugins_dir)
     };
-    let (bytes, echoes) = crate::session::effects::collect_script_result(
+    let collected = crate::session::effects::collect_script_result(
         app,
         &state.profile,
         &state.lua_timers,
         apply,
     )
     .await;
-    if !bytes.is_empty() {
+    if !collected.bytes.is_empty() || collected.walk.is_some() {
         info!(
-            bytes = bytes.len(),
-            "plugin sends at launch have no game to go to"
+            bytes = collected.bytes.len(),
+            walk = collected.walk.is_some(),
+            "plugin output at launch has no game to go to"
         );
     }
     state
         .launch_lua_lines
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .extend(echoes);
+        .extend(collected.echoes);
 }
 
 /// Print the lines the plugins printed as they loaded at launch, once,
