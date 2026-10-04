@@ -559,19 +559,20 @@ Keep highlight colors readable covers the exact colors a trigger or a preset pai
 
 Two more colors sit with the rows they belong to. `Sent command color` under Input, then Command line, recolors the local echo of every command you send, and the `›` before it stays grey. `Divider color` under Layout, then Split terminal, recolors the line between the history and the live tail. Press the swatch to pick a color or type a hex color like `#fffc41`. Each applies live, and emptying the field returns it to the theme default.
 
-### 6.4 Set the terminal font
+### 6.4 Set the fonts
 
-The terminal font lives in Settings under Appearance, then Terminal text.
+The terminal font and the panel font live in Settings under Appearance, then Terminal text.
 
 - Open Settings and choose Appearance.
 - Pick a font in `Font`. JetBrains Mono ships inside Vosh, so it works on every machine. The rest of the list holds the monospace fonts installed on your computer. If you own Berkeley Mono, install it and pick it there.
+- Pick a font in `Panel font` for every pane in the panel and the status line under the terminal. `Same as terminal`, the default, draws them in your terminal font. `System font` draws them in the font of the menus and Settings. The rest of the list holds the fonts `Font` offers. The panel font changes only the face, so every row in a pane keeps its height.
 - Pick a size in `Size`, from 11 to 18 pt. The default is 14.
 - Pick `Compact`, `Default`, or `Loose` in `Line height`.
 - To set a whole list of fonts, open `Advanced` and type it in `Font stack`, like `"Fira Code", "JetBrainsMono Bundled", monospace`. Vosh uses the first font in the list that you have.
 - Turn on `Bright text in bold` under Advanced to draw bright colors in the bold weight of your font. It works on macOS.
 - Turn off `Blinking text` under Advanced to keep text that your MUD or your prompt sets to blink still. It starts off when your system reduces motion.
 
-Each change applies at once and saves. Under General, `Font and size` in Keep the same for every character decides whether every character shares one font.
+Each change applies at once and saves. Under General, `Font and size` in Keep the same for every character decides whether every character shares one terminal font and one panel font.
 
 ## Characters and data
 
@@ -676,9 +677,9 @@ The command runs entirely in the frontend and stores your choice locally under t
 
 On Windows and Linux, Settings under General, then Advanced, holds `GPU rendering`, which draws the xterm renderer with your graphics card. Turn it off when the terminal draws wrong, then restart Vosh.
 
-If the text renders in the wrong typeface, open Settings and choose Appearance, then Terminal text. The default font is JetBrains Mono, which ships inside Vosh and works on every machine. Vosh no longer ships Berkeley Mono. A font list that names it uses the copy installed on your computer, and JetBrains Mono when you have none. Install the font you want or pick it in `Font`. The size defaults to 14.
+If the text renders in the wrong typeface, open Settings and choose Appearance, then Terminal text. The default font is JetBrains Mono, which ships inside Vosh and works on every machine. Vosh no longer ships Berkeley Mono. A font list that names it uses the copy installed on your computer, and JetBrains Mono when you have none. Install the font you want or pick it in `Font`. The size defaults to 14. When the panes or the status line show the wrong typeface, check `Panel font` in the same place.
 
-Under General, `Font and size` in Keep the same for every character decides whether every character shares one font. Turn it off to let each character keep its own.
+Under General, `Font and size` in Keep the same for every character decides whether every character shares one terminal font and one panel font. Turn it off to let each character keep its own.
 
 With the xterm renderer the right click menu offers `Clear scrollback`. The native surface hides that item because its grid has no clear command.
 
