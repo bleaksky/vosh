@@ -39,6 +39,7 @@ import {
   saveMacroDraft,
   saveTimerDraft,
   storedPresetIds,
+  timerEntry,
   timerKey,
   timerLabel,
   timerSavePlan,
@@ -50,6 +51,7 @@ import {
   type TimerRecord,
   type TimerStoreApi,
 } from './automationRecords';
+import { buildSections, foldedStorageKey } from './automationList';
 import { defaultEnabledIds, PRESETS } from './presets';
 
 describe('aliases', () => {
@@ -272,6 +274,50 @@ describe('timers', () => {
       enabled: true,
     });
     expect(normalizeTimer({ interval_secs: 0, command: 'x' }).interval_secs).toBe(1);
+  });
+
+  it('keeps a timer group trimmed and leaves a blank one out', () => {
+    expect(normalizeTimer({ id: 3, command: 'drink', group: ' upkeep ' }).group).toBe('upkeep');
+    expect('group' in normalizeTimer({ id: 3, command: 'drink', group: '  ' })).toBe(false);
+    expect('group' in normalizeTimer({ id: 3, command: 'drink', group: null })).toBe(false);
+  });
+
+  it('lists timers under a heading for each group, folded under the timers list id', () => {
+    const rows = [
+      { ...timers[0], group: 'upkeep' },
+      timers[1],
+      normalizeTimer({ id: 3, command: 'rescue', group: 'combat' }),
+    ].map((t, i) => ({ uid: String(i), ...timerEntry(t) }));
+    const sections = buildSections(rows);
+    expect(sections.map((s) => [s.heading, s.entries.map((e) => e.name)])).toEqual([
+      [null, ['save']],
+      ['combat', ['rescue']],
+      ['upkeep', ['Hydrate']],
+    ]);
+    expect(sections[2].key).toBe('g:upkeep');
+    expect(rows[0].meta).toBe('Every 5 min');
+    // The filter finds a timer by its group.
+    expect(rows[0].text).toContain('upkeep');
+    expect(foldedStorageKey('timers')).toBe('vosh.automation.folded.timers');
+  });
+
+  it('sends each timer with its group, and none as null', async () => {
+    const sent: unknown[][] = [];
+    const api: TimerStoreApi = {
+      timersDelete: () => Promise.resolve([]),
+      timersSet: (...args) => {
+        sent.push(args);
+        return Promise.resolve([]);
+      },
+    };
+    let draft = createDraft(timers);
+    draft = updateDraftItem(draft, draft.items[0].uid, (t) => ({ ...t, group: 'upkeep' }));
+    draft = addDraftItem(draft, { ...blankTimer(), command: 'look' });
+    await saveTimerDraft(draft, () => {}, api);
+    expect(sent).toEqual([
+      [1, 'Hydrate', 300, 'drink', true, 'upkeep'],
+      [null, '', 30, 'look', true, null],
+    ]);
   });
 
   it('plans updates, creates, and deletes by id', () => {

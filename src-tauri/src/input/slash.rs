@@ -93,7 +93,7 @@ slash commands:
                                        named group like (?<hp>...) a value
   #unprompt                            stop reading your prompt here
   #group <name> on|off                 enable/disable a group across
-                                       triggers + aliases + macros
+                                       triggers + aliases + macros + timers
   #group <name>                        show current state of a group
   #groups                              list every group and its state
   #tick                                show tick timer state

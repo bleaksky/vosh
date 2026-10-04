@@ -548,10 +548,7 @@ fn a_capture_trigger_with_no_reader_hides_the_prompt_and_is_named_once() {
     p.triggers
         .set(vosh_automation::trigger::Trigger {
             name: "prompt-capture".into(),
-            patterns: vec![vosh_automation::trigger::TriggerPattern {
-                pattern: CAPTURE.into(),
-                enabled: true,
-            }],
+            patterns: vec![vosh_automation::trigger::TriggerPattern::regex(CAPTURE)],
             priority: 100,
             enabled: true,
             actions: vec![
@@ -1322,10 +1319,9 @@ fn a_held_line_a_script_hides_still_shows_and_its_echo_follows() {
     p.triggers
         .set(vosh_automation::trigger::Trigger {
             name: "swap".into(),
-            patterns: vec![vosh_automation::trigger::TriggerPattern {
-                pattern: "^Bob says: ".into(),
-                enabled: true,
-            }],
+            patterns: vec![vosh_automation::trigger::TriggerPattern::regex(
+                "^Bob says: ",
+            )],
             priority: 0,
             enabled: true,
             actions: vec![

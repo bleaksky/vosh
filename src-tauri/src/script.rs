@@ -143,12 +143,7 @@ impl ApplyResult {
         self.inputs.extend(later.inputs);
         self.prompt_vars_changed |= later.prompt_vars_changed;
         self.durable_changed |= later.durable_changed;
-        self.lists = ListChanges {
-            triggers: self.lists.triggers || later.lists.triggers,
-            aliases: self.lists.aliases || later.lists.aliases,
-            prompt: self.lists.prompt || later.lists.prompt,
-            macro_groups: self.lists.macro_groups || later.lists.macro_groups,
-        };
+        self.lists = self.lists.or(later.lists);
         self.new_timers.extend(later.new_timers);
         self.cancel_timers.extend(later.cancel_timers);
         if later.walk.is_some() {
@@ -295,56 +290,145 @@ pub(crate) struct GroupToggleReport {
     pub aliases: bool,
     pub triggers: bool,
     pub macros: bool,
+    pub timers: bool,
 }
 
 impl GroupToggleReport {
     pub(crate) fn touched(&self) -> bool {
-        self.aliases || self.triggers || self.macros
+        self.aliases || self.triggers || self.macros || self.timers
     }
 }
 
-/// Flip a group's enabled state across triggers, aliases, and macros
-/// in one shot. The group lives independently in each store, so this
-/// only touches the stores that actually have a matching entry —
+/// Flip a group's enabled state across triggers, aliases, macros and
+/// timers in one shot. The group lives independently in each store, so
+/// this only touches the stores that actually have a matching entry —
 /// asking to disable a group that exists only in triggers won't
 /// stamp an empty group name into the macro disabled set. In loadout
 /// mode `name` is one of your folders, and each store turns on or off
 /// every catalog group the profile's folder map names for it, see
-/// [`crate::profile::file::GroupFolders`]. A macro group that turned
-/// on or off moves [`Profile::macro_group_toggles`], so the windows
-/// hear it through [`crate::app::events::ListChanges`].
+/// [`crate::profile::file::GroupFolders`]. Timers stay in the profile
+/// file, so a timer group is always its own name. Each group turns
+/// through [`set_list_group`], the call the switch on a group heading in
+/// Settings makes, so the two agree.
 pub(crate) fn toggle_group(profile: &mut Profile, name: &str, enabled: bool) -> GroupToggleReport {
     let mut report = GroupToggleReport::default();
-    let folders = &profile.group_folders;
-    let alias_groups = store_groups(profile.aliases.groups());
-    for group in folder_groups(&folders.aliases, name) {
-        if alias_groups.contains(group) {
-            profile.aliases.set_group_enabled(group, enabled);
-            report.aliases = true;
-        }
-    }
-    let trigger_groups = store_groups(profile.triggers.groups());
-    for group in folder_groups(&folders.triggers, name) {
-        if trigger_groups.contains(group) {
-            profile.triggers.set_group_enabled(group, enabled);
-            report.triggers = true;
-        }
-    }
-    let macro_groups = macro_groups(profile);
-    for group in folder_groups(&folders.macros, name) {
-        if macro_groups.contains(group) {
-            let turned = if enabled {
-                profile.disabled_macro_groups.remove(group)
-            } else {
-                profile.disabled_macro_groups.insert(group.to_string())
-            };
-            if turned {
-                profile.macro_group_toggles = profile.macro_group_toggles.wrapping_add(1);
+    for list in GroupList::ALL {
+        let present: BTreeSet<String> = list_groups(profile, list)
+            .into_iter()
+            .map(|(g, _)| g)
+            .collect();
+        for group in wanted_groups(profile, list, name) {
+            if present.contains(&group) {
+                set_list_group(profile, list, &group, enabled);
+                match list {
+                    GroupList::Triggers => report.triggers = true,
+                    GroupList::Aliases => report.aliases = true,
+                    GroupList::Macros => report.macros = true,
+                    GroupList::Timers => report.timers = true,
+                }
             }
-            report.macros = true;
         }
     }
     report
+}
+
+/// A list whose items sit in groups. The page names it as the
+/// Automation list does, `triggers`, `aliases`, `macros` or `timers`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum GroupList {
+    Triggers,
+    Aliases,
+    Macros,
+    Timers,
+}
+
+impl GroupList {
+    /// Every list, in the order `#group` reports them.
+    pub(crate) const ALL: [GroupList; 4] = [
+        GroupList::Triggers,
+        GroupList::Aliases,
+        GroupList::Macros,
+        GroupList::Timers,
+    ];
+
+    /// Whether loadout mode's catalog holds this list, so the loadouts
+    /// can decide its groups. Timers stay in the profile file.
+    pub(crate) fn in_catalog(self) -> bool {
+        self != GroupList::Timers
+    }
+}
+
+/// Each group the items of `list` name, sorted and once each, paired
+/// with whether it is on.
+pub(crate) fn list_groups(profile: &Profile, list: GroupList) -> Vec<(String, bool)> {
+    let with_state = |groups: BTreeSet<String>, off: &BTreeSet<String>| {
+        groups
+            .into_iter()
+            .map(|g| {
+                let on = !off.contains(&g);
+                (g, on)
+            })
+            .collect()
+    };
+    match list {
+        GroupList::Triggers => profile.triggers.groups(),
+        GroupList::Aliases => profile.aliases.groups(),
+        GroupList::Macros => with_state(macro_groups(profile), &profile.disabled_macro_groups),
+        GroupList::Timers => with_state(timer_groups(profile), &profile.disabled_timer_groups),
+    }
+}
+
+/// Turn the group `group` of `list` on or off by its own name, as the
+/// switch on its heading in Settings does. Returns whether it turned. A
+/// group that turned moves [`Profile::group_toggles`], and a macro group
+/// [`Profile::macro_group_toggles`] as well, so the windows hear it
+/// through [`crate::app::events::ListChanges`].
+pub(crate) fn set_list_group(
+    profile: &mut Profile,
+    list: GroupList,
+    group: &str,
+    enabled: bool,
+) -> bool {
+    if group.is_empty() {
+        return false;
+    }
+    let set_in = |off: &mut BTreeSet<String>| {
+        if enabled {
+            off.remove(group)
+        } else {
+            off.insert(group.to_string())
+        }
+    };
+    let turned = match list {
+        GroupList::Triggers => profile.triggers.set_group_enabled(group, enabled),
+        GroupList::Aliases => profile.aliases.set_group_enabled(group, enabled),
+        GroupList::Macros => set_in(&mut profile.disabled_macro_groups),
+        GroupList::Timers => set_in(&mut profile.disabled_timer_groups),
+    };
+    if turned {
+        profile.group_toggles = profile.group_toggles.wrapping_add(1);
+        if list == GroupList::Macros {
+            profile.macro_group_toggles = profile.macro_group_toggles.wrapping_add(1);
+        }
+    }
+    turned
+}
+
+/// The groups of `list` the folder or group `name` stands for: the
+/// profile's folder map entry for it, or else the group of that name.
+fn wanted_groups(profile: &Profile, list: GroupList, name: &str) -> Vec<String> {
+    let folders = &profile.group_folders;
+    let map = match list {
+        GroupList::Triggers => &folders.triggers,
+        GroupList::Aliases => &folders.aliases,
+        GroupList::Macros => &folders.macros,
+        GroupList::Timers => return vec![name.to_string()],
+    };
+    folder_groups(map, name)
+        .into_iter()
+        .map(str::to_string)
+        .collect()
 }
 
 /// Whether a folder is on in one store.
@@ -358,15 +442,14 @@ pub(crate) enum GroupState {
 }
 
 /// The state of the folder or group `name` in each store, triggers,
-/// aliases, then macros, None where the store holds none of it. Follows
-/// the folder map as [`toggle_group`] does.
-pub(crate) fn group_states(profile: &Profile, name: &str) -> [Option<GroupState>; 3] {
-    let folders = &profile.group_folders;
-    let state = |groups: Vec<(String, bool)>, map: &BTreeMap<String, Vec<String>>| {
-        let wanted = folder_groups(map, name);
-        let found: Vec<bool> = groups
+/// aliases, macros, then timers, None where the store holds none of it.
+/// Follows the folder map as [`toggle_group`] does.
+pub(crate) fn group_states(profile: &Profile, name: &str) -> [Option<GroupState>; 4] {
+    GroupList::ALL.map(|list| {
+        let wanted = wanted_groups(profile, list, name);
+        let found: Vec<bool> = list_groups(profile, list)
             .into_iter()
-            .filter(|(g, _)| wanted.contains(&g.as_str()))
+            .filter(|(g, _)| wanted.contains(g))
             .map(|(_, on)| on)
             .collect();
         match (found.iter().any(|on| *on), found.iter().any(|on| !*on)) {
@@ -375,19 +458,7 @@ pub(crate) fn group_states(profile: &Profile, name: &str) -> [Option<GroupState>
             (false, true) => Some(GroupState::Off),
             (true, true) => Some(GroupState::Mixed),
         }
-    };
-    let macros = macro_groups(profile)
-        .into_iter()
-        .map(|g| {
-            let on = !profile.disabled_macro_groups.contains(&g);
-            (g, on)
-        })
-        .collect();
-    [
-        state(profile.triggers.groups(), &folders.triggers),
-        state(profile.aliases.groups(), &folders.aliases),
-        state(macros, &folders.macros),
-    ]
+    })
 }
 
 /// The catalog groups `name` stands for in one store: the profile's
@@ -399,16 +470,22 @@ fn folder_groups<'a>(folders: &'a BTreeMap<String, Vec<String>>, name: &'a str) 
     }
 }
 
-fn store_groups(groups: Vec<(String, bool)>) -> BTreeSet<String> {
-    groups.into_iter().map(|(g, _)| g).collect()
-}
-
 /// Every group a macro of `profile` is in.
 fn macro_groups(profile: &Profile) -> BTreeSet<String> {
     profile
         .macros
         .iter()
         .filter_map(|m| m.group.clone())
+        .filter(|g| !g.is_empty())
+        .collect()
+}
+
+/// Every group an interval timer of `profile` is in.
+pub(crate) fn timer_groups(profile: &Profile) -> BTreeSet<String> {
+    profile
+        .timers
+        .iter()
+        .filter_map(|t| t.group.clone())
         .filter(|g| !g.is_empty())
         .collect()
 }
@@ -499,7 +576,7 @@ mod tests {
         p.aliases.set_group_enabled("loot", false);
         assert!(!toggle_group(&mut p, "loot", true).touched());
         assert_eq!(aliases_on(&p), ["bash", "flee"]);
-        assert_eq!(group_states(&p, "loot"), [None, None, None]);
+        assert_eq!(group_states(&p, "loot"), [None, None, None, None]);
     }
 
     #[test]

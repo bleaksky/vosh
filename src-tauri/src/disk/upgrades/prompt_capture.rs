@@ -207,12 +207,15 @@ fn candidate(trigger: &Trigger) -> Option<Result<RegexCapture, NotACapture>> {
     if !fits_actions {
         return Some(Err(NotACapture::ScriptDoesMore));
     }
-    let patterns: Vec<&str> = trigger
+    // The regex each row compiles to, so a Text or Starts with row reads
+    // as the trigger store reads it.
+    let sources: Vec<_> = trigger
         .patterns
         .iter()
         .filter(|p| p.enabled)
-        .map(|p| p.pattern.as_str())
+        .map(vosh_automation::trigger::TriggerPattern::regex_source)
         .collect();
+    let patterns: Vec<&str> = sources.iter().map(AsRef::as_ref).collect();
     Some(capture::from_trigger(&patterns, body))
 }
 

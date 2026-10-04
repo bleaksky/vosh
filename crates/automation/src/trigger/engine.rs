@@ -703,10 +703,8 @@ mod tests {
         let mut grouped = highlight("grouped", "hp", NamedColor::Red);
         grouped.group = Some("combat".to_string());
         let mut two = highlight("two", "^nothing", NamedColor::Red);
-        two.patterns.push(crate::trigger::store::TriggerPattern {
-            pattern: r"\d+hp".to_string(),
-            enabled: true,
-        });
+        two.patterns
+            .push(crate::trigger::store::TriggerPattern::regex(r"\d+hp"));
         let mut s = store(vec![
             highlight("low", "hp", NamedColor::Red),
             prompt,
@@ -1001,10 +999,9 @@ mod tests {
     fn a_trigger_that_draws_nothing_keeps_the_line_as_sent() {
         let s = store(vec![Trigger {
             name: "away".into(),
-            patterns: vec![crate::trigger::store::TriggerPattern {
-                pattern: r"^\[AFK\] (\w+) is resting here\.$".into(),
-                enabled: true,
-            }],
+            patterns: vec![crate::trigger::store::TriggerPattern::regex(
+                r"^\[AFK\] (\w+) is resting here\.$",
+            )],
             priority: 0,
             enabled: true,
             actions: vec![
@@ -1123,6 +1120,177 @@ mod tests {
         assert!(drawn > 300, "{drawn}");
     }
 
+    /// The plain text of each line of fixtures/room-colors/looks.json that
+    /// holds a word, in file order.
+    fn look_lines() -> Vec<String> {
+        let json: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/room-colors/looks.json"))
+                .unwrap();
+        let mut out = Vec::new();
+        for case in json["cases"].as_array().unwrap() {
+            for event in case["events"].as_array().unwrap() {
+                if let Some(line) = event["line"].as_str() {
+                    let plain = plain_text(line.as_bytes());
+                    if plain.chars().any(char::is_alphanumeric) {
+                        out.push(plain);
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// A trigger with one row in `mode`, highlighting cyan.
+    fn in_mode(pattern: &str, mode: crate::trigger::MatchMode) -> Trigger {
+        let mut t = highlight("mode", "", NamedColor::Cyan);
+        t.patterns[0] = crate::trigger::TriggerPattern {
+            mode,
+            ..crate::trigger::TriggerPattern::regex(pattern)
+        };
+        t
+    }
+
+    #[test]
+    fn a_line_copied_with_or_without_its_spaces_matches_in_text_and_starts_with() {
+        use crate::trigger::MatchMode;
+        let lines = look_lines();
+        // Things in a look print after five spaces.
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.starts_with("     A black-steel helm")),
+            "{lines:?}"
+        );
+        for line in &lines {
+            // The first dozen letters of the line, as you might copy them.
+            let text = line.trim_start();
+            let start = &text[..text.char_indices().nth(12).map_or(text.len(), |(i, _)| i)];
+            for (copy, mode) in [
+                (line.as_str(), MatchMode::Text),
+                (line.trim_start(), MatchMode::Text),
+                (line.trim(), MatchMode::Text),
+                (line.as_str(), MatchMode::StartsWith),
+                (line.trim_start(), MatchMode::StartsWith),
+                (start, MatchMode::StartsWith),
+            ] {
+                let s = store(vec![in_mode(copy, mode)]);
+                assert_eq!(
+                    matching(&s, line, MatchScope::Line).len(),
+                    1,
+                    "{mode:?} {copy:?} on {line:?}"
+                );
+                // The span covers the whole line, the spaces included.
+                let compiled = s.iter_compiled().next().unwrap();
+                let style = HighlightStyle {
+                    fg: Some(NamedColor::Cyan),
+                    ..Default::default()
+                };
+                let spans = highlight_spans(line, &[(compiled.regexes[0].clone(), style)]);
+                assert_eq!(spans.len(), 1, "{mode:?} {copy:?}");
+                assert_eq!(
+                    (spans[0].0, spans[0].1),
+                    (0, line.len()),
+                    "{mode:?} {copy:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn text_matches_only_the_whole_line_and_starts_with_only_its_start() {
+        use crate::trigger::MatchMode;
+        let s = store(vec![in_mode("walks in.", MatchMode::Text)]);
+        let leftover = &matching(&s, "Maren walks in.", MatchScope::Line);
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let s = store(vec![in_mode("walks in", MatchMode::StartsWith)]);
+        let leftover = &matching(&s, "Maren walks in.", MatchScope::Line);
+        assert!(leftover.is_empty(), "{leftover:?}");
+        // Text skips trailing spaces on the line.
+        let s = store(vec![in_mode("Maren walks in.", MatchMode::Text)]);
+        assert_eq!(matching(&s, "Maren walks in.  ", MatchScope::Line).len(), 1);
+    }
+
+    #[test]
+    fn spaces_at_the_ends_of_the_text_you_typed_never_stop_a_match() {
+        use crate::trigger::MatchMode;
+        // A Text pattern copied with a space after it matches the line
+        // without one.
+        let s = store(vec![in_mode("You feel better. ", MatchMode::Text)]);
+        assert_eq!(matching(&s, "You feel better.", MatchScope::Line).len(), 1);
+        // A pattern copied with the five spaces of a look matches the same
+        // words printed with none.
+        for mode in [MatchMode::Text, MatchMode::StartsWith] {
+            let s = store(vec![in_mode("     Maren walks in.", mode)]);
+            assert_eq!(
+                matching(&s, "Maren walks in.", MatchScope::Line).len(),
+                1,
+                "{mode:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_starts_with_highlight_colors_the_whole_line() {
+        use crate::trigger::MatchMode;
+        let line = "     A black-steel helm is here, gleaming darkly.";
+        let s = store(vec![in_mode("A black-steel helm", MatchMode::StartsWith)]);
+        assert_eq!(
+            process(&s, line.as_bytes()).display.as_deref(),
+            Some(format!("\x1b[36m{line}\x1b[0m").as_str())
+        );
+    }
+
+    #[test]
+    fn text_and_starts_with_have_no_groups() {
+        use crate::trigger::MatchMode;
+        let line = "Maren walks in.";
+        for mode in [MatchMode::Text, MatchMode::StartsWith] {
+            let mut t = in_mode("Maren (walks) in.", mode);
+            t.actions = vec![
+                TriggerAction::Send {
+                    template: "say [$1]".into(),
+                },
+                TriggerAction::Script { body: "x".into() },
+            ];
+            // The parentheses are text, so this pattern needs them in the
+            // line.
+            let s = store(vec![t.clone()]);
+            let leftover = &process(&s, line.as_bytes()).sends;
+            assert!(leftover.is_empty(), "{leftover:?}");
+            t.patterns[0].pattern = "Maren walks".into();
+            if mode == MatchMode::Text {
+                t.patterns[0].pattern = line.into();
+            }
+            let r = process(&store(vec![t]), line.as_bytes());
+            assert_eq!(r.sends, ["say []"], "{mode:?}");
+            assert_eq!(r.scripts[0].captures, [line], "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn a_more_pattern_keeps_its_own_mode() {
+        use crate::trigger::MatchMode;
+        let mut t = in_mode("The day has begun.", MatchMode::Text);
+        t.patterns.push(crate::trigger::TriggerPattern {
+            mode: MatchMode::StartsWith,
+            ..crate::trigger::TriggerPattern::regex("Maren")
+        });
+        t.patterns
+            .push(crate::trigger::TriggerPattern::regex(r"^\[Exits: (\w+)\]$"));
+        let s = store(vec![t]);
+        for line in ["The day has begun.", "Maren walks in.", "[Exits: south]"] {
+            assert_eq!(matching(&s, line, MatchScope::Line).len(), 1, "{line}");
+        }
+        // The More pattern in Starts with reads Maren as text at the start,
+        // so a line that holds Maren after its start stays plain.
+        let leftover = &matching(
+            &s,
+            "Chuckling and grinning to herself, Orla walks in and quickly prepares the gallows for Maren.",
+            MatchScope::Line,
+        );
+        assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
     #[test]
     fn invalid_regex_rejected_at_set() {
         let mut s = TriggerStore::new();
@@ -1135,14 +1303,8 @@ mod tests {
         let s = store(vec![Trigger {
             name: "mobs".into(),
             patterns: vec![
-                crate::trigger::store::TriggerPattern {
-                    pattern: "goblin".into(),
-                    enabled: true,
-                },
-                crate::trigger::store::TriggerPattern {
-                    pattern: "orc".into(),
-                    enabled: true,
-                },
+                crate::trigger::store::TriggerPattern::regex("goblin"),
+                crate::trigger::store::TriggerPattern::regex("orc"),
             ],
             priority: 0,
             enabled: true,
@@ -1167,13 +1329,10 @@ mod tests {
         let s = store(vec![Trigger {
             name: "mobs".into(),
             patterns: vec![
+                crate::trigger::store::TriggerPattern::regex("goblin"),
                 crate::trigger::store::TriggerPattern {
-                    pattern: "goblin".into(),
-                    enabled: true,
-                },
-                crate::trigger::store::TriggerPattern {
-                    pattern: "orc".into(),
                     enabled: false,
+                    ..crate::trigger::store::TriggerPattern::regex("orc")
                 },
             ],
             priority: 0,

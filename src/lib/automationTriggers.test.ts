@@ -205,6 +205,62 @@ describe('normalizeTrigger', () => {
   });
 });
 
+describe('match modes', () => {
+  // The rows Rust writes, the main pattern and More patterns, as the
+  // store sends them. A Regex row has no mode on the wire.
+  const rows = [
+    { pattern: 'You are thirsty.', enabled: true, mode: 'text' },
+    { pattern: 'You are hungry', enabled: false, mode: 'starts_with' },
+    { pattern: '^You are hungry\\.$', enabled: true },
+    { pattern: 'x', enabled: true, mode: 'regex' },
+    { pattern: 'y', enabled: true, mode: 'glob' },
+  ];
+
+  it('keeps Text and Starts with on every row and leaves Regex out', () => {
+    const t = normalizeTrigger({ name: 'needs', patterns: rows, actions: [] });
+    expect(t.patterns).toEqual([
+      { pattern: 'You are thirsty.', enabled: true, mode: 'text' },
+      { pattern: 'You are hungry', enabled: false, mode: 'starts_with' },
+      { pattern: '^You are hungry\\.$', enabled: true },
+      { pattern: 'x', enabled: true },
+      { pattern: 'y', enabled: true },
+    ]);
+  });
+
+  it('survives an edit and a save', async () => {
+    let json = JSON.stringify([{ name: 'needs', patterns: rows, actions: [] }]);
+    const api = {
+      exportTriggers: () => Promise.resolve(json),
+      importTriggers: (next: string) => {
+        json = next;
+        return Promise.resolve();
+      },
+    };
+    let draft = createDraft(await loadTriggers(api));
+    draft = updateDraftItem(draft, draft.items[0].uid, (t) =>
+      withMainPattern(withGroup(t, 'needs'), { enabled: false }),
+    );
+    await saveTriggerDraft(draft, api);
+    const saved = (JSON.parse(json) as TriggerRecord[])[0];
+    expect(saved.patterns.map((p) => p.mode ?? 'regex')).toEqual([
+      'text',
+      'starts_with',
+      'regex',
+      'regex',
+      'regex',
+    ]);
+    expect(saved.patterns[0]).toEqual({
+      pattern: 'You are thirsty.',
+      enabled: false,
+      mode: 'text',
+    });
+  });
+
+  it('starts a new trigger as Regex until the editor offers the modes', () => {
+    expect(blankTrigger().patterns[0].mode).toBeUndefined();
+  });
+});
+
 describe('validateTriggers', () => {
   const t = (name: string, pattern = 'x') => ({
     ...blankTrigger(),

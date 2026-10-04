@@ -422,10 +422,7 @@ fn generate(seed: u64) -> Set {
             };
             config.triggers.push(Trigger {
                 name: name.to_string(),
-                patterns: vec![TriggerPattern {
-                    pattern: format!("^{name} {version}$"),
-                    enabled: true,
-                }],
+                patterns: vec![TriggerPattern::regex(format!("^{name} {version}$"))],
                 priority,
                 enabled: rng.chance(85),
                 actions: vec![TriggerAction::Send {
@@ -520,6 +517,7 @@ fn generate(seed: u64) -> Set {
                 interval_secs: 30 + rng.below(90) as u32,
                 command: "drink".into(),
                 enabled: rng.chance(50),
+                group: None,
             }];
         }
         config.ui.vitals_values = rng.pick(&["current-max", "current", "percent"]).into();

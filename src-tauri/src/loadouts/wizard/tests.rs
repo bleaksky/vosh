@@ -766,6 +766,7 @@ fn character(name: &str, n: u32, presets: &[&str]) -> ProfileConfig {
         interval_secs: 60 + n,
         command: format!("drink {name}"),
         enabled: n % 2 == 0,
+        group: None,
     }];
     config
         .profile_vars
@@ -1233,7 +1234,7 @@ async fn group_turns_a_folder_on_and_off_as_before_after_the_wizard() {
     let r = crate::input::process(&mut p, "#group combat on");
     assert_eq!(
         r.echo,
-        ["[group `combat` not found in triggers, aliases, or macros]"]
+        ["[group `combat` not found in triggers, aliases, macros, or timers]"]
     );
     let leftover = &items_on(&p);
     assert!(leftover.is_empty(), "{leftover:?}");

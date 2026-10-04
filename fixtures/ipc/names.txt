@@ -4,6 +4,8 @@ command aliases_export()
 command aliases_import(json)
 command app_quit()
 command fonts_list()
+command groups_list(list)
+command groups_set_enabled(list, group, enabled)
 command hidden_get()
 command highlight_ground_set(background?)
 command import_apply(format, text)
@@ -100,7 +102,7 @@ command tick_get_config()
 command tick_set_config(config)
 command timers_delete(id)
 command timers_list()
-command timers_set(id?, name, intervalSecs, command, enabled)
+command timers_set(id?, name, intervalSecs, command, enabled, group?)
 command tracked_affects_set(list, profile?)
 command triggers_export()
 command triggers_import(json)
@@ -142,6 +144,7 @@ event vosh://custom-themes-changed app page heard
 event vosh://echo-macros-changed page heard
 event vosh://flush-pending-writes app heard
 event vosh://font-changed page heard
+event vosh://groups-changed app heard
 event vosh://help-find app heard
 event vosh://help-goto page heard
 event vosh://help-open app heard

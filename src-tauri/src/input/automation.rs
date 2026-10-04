@@ -1,7 +1,9 @@
 //! The commands that change your aliases, triggers and groups, and
 //! the macro recorder that saves what you type as an alias.
 
-use vosh_automation::trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
+use vosh_automation::trigger::{
+    HighlightStyle, MatchMode, NamedColor, Trigger, TriggerAction, TriggerPattern,
+};
 
 use super::slash::parse_braced_pattern;
 use super::target::is_target_keyword;
@@ -115,14 +117,27 @@ pub(super) fn slash_triggers_list(profile: &Profile) -> InputResult {
             .map(describe_action)
             .collect::<Vec<_>>()
             .join(" + ");
+        let pattern = t
+            .patterns
+            .first()
+            .map_or_else(|| "//".to_string(), describe_pattern);
         lines.push(format!(
-            "  {mark} [{:>3}] {} /{}/ -> {action}",
-            t.priority,
-            t.name,
-            t.first_pattern(),
+            "  {mark} [{:>3}] {} {pattern} -> {action}",
+            t.priority, t.name,
         ));
     }
     InputResult::echo_lines(lines)
+}
+
+/// A pattern as `#triggers` lists it. A regex sits between slashes, and
+/// Text and Starts with name their mode before the text in quotes, so a
+/// dot in them never reads as a regex dot.
+fn describe_pattern(row: &TriggerPattern) -> String {
+    match row.mode {
+        MatchMode::Regex => format!("/{}/", row.pattern),
+        MatchMode::Text => format!("text \"{}\"", row.pattern),
+        MatchMode::StartsWith => format!("starts with \"{}\"", row.pattern),
+    }
 }
 
 fn parse_action(input: &str) -> Result<TriggerAction, String> {
@@ -226,8 +241,8 @@ fn describe_action(action: &TriggerAction) -> String {
 }
 
 /// `#group <name> [on|off]` — flip a group's enabled state across
-/// triggers, aliases, and macros in one call. With no on/off arg,
-/// echo the current state in each store the group appears in.
+/// triggers, aliases, macros and timers in one call. With no on/off
+/// arg, echo the current state in each store the group appears in.
 pub(super) fn slash_group(profile: &mut Profile, args: &str) -> InputResult {
     let (name, rest) = split_first_word(args);
     if name.is_empty() {
@@ -241,10 +256,10 @@ pub(super) fn slash_group(profile: &mut Profile, args: &str) -> InputResult {
             let report = crate::script::toggle_group(profile, name, enabled);
             if !report.touched() {
                 return InputResult::error(format!(
-                    "group `{name}` not found in triggers, aliases, or macros"
+                    "group `{name}` not found in triggers, aliases, macros, or timers"
                 ));
             }
-            let mut stores: Vec<&str> = Vec::with_capacity(3);
+            let mut stores: Vec<&str> = Vec::with_capacity(4);
             if report.triggers {
                 stores.push("triggers");
             }
@@ -253,6 +268,9 @@ pub(super) fn slash_group(profile: &mut Profile, args: &str) -> InputResult {
             }
             if report.macros {
                 stores.push("macros");
+            }
+            if report.timers {
+                stores.push("timers");
             }
             InputResult::echo_line(format!(
                 "group `{name}` {} for {}",
@@ -268,10 +286,11 @@ pub(super) fn slash_group(profile: &mut Profile, args: &str) -> InputResult {
 
 fn slash_group_show(profile: &Profile, name: &str) -> InputResult {
     use crate::script::GroupState;
-    let [trigger_state, alias_state, macro_state] = crate::script::group_states(profile, name);
-    if trigger_state.is_none() && alias_state.is_none() && macro_state.is_none() {
+    let states = crate::script::group_states(profile, name);
+    let [trigger_state, alias_state, macro_state, timer_state] = states;
+    if states.iter().all(Option::is_none) {
         return InputResult::error(format!(
-            "group `{name}` not found in triggers, aliases, or macros"
+            "group `{name}` not found in triggers, aliases, macros, or timers"
         ));
     }
     let mut lines = vec![format!("group `{name}`:")];
@@ -284,11 +303,12 @@ fn slash_group_show(profile: &Profile, name: &str) -> InputResult {
     lines.push(fmt("triggers", trigger_state));
     lines.push(fmt("aliases ", alias_state));
     lines.push(fmt("macros  ", macro_state));
+    lines.push(fmt("timers  ", timer_state));
     InputResult::echo_lines(lines)
 }
 
-/// `#groups` — every group that any store has at least one entry
-/// tagged with, plus the current on/off state per store.
+/// `#groups` — every group that any store, timers included, has at
+/// least one entry tagged with, plus the current on/off state per store.
 pub(super) fn slash_groups_list(profile: &Profile) -> InputResult {
     use std::collections::BTreeSet;
     let mut names: BTreeSet<String> = BTreeSet::new();
@@ -309,6 +329,8 @@ pub(super) fn slash_groups_list(profile: &Profile) -> InputResult {
             }
         }
     }
+    let timer_groups = crate::script::timer_groups(profile);
+    names.extend(timer_groups.iter().cloned());
     if names.is_empty() {
         return InputResult::echo_line("no groups defined");
     }
@@ -344,6 +366,16 @@ pub(super) fn slash_groups_list(profile: &Profile) -> InputResult {
                 } else {
                     None
                 },
+            ),
+            (
+                "timers",
+                timer_groups.contains(name).then(|| {
+                    if profile.disabled_timer_groups.contains(name) {
+                        "off"
+                    } else {
+                        "on"
+                    }
+                }),
             ),
         ]
         .into_iter()

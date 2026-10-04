@@ -55,6 +55,7 @@ import type { DetailProps, EditorProps, KindSpec } from './types';
 
 const TRIGGERS_SPEC: KindSpec<TriggerRecord> = {
   id: 'triggers',
+  groups: 'triggers',
   noun: { one: 'trigger', many: 'triggers' },
   filterLabel: 'Filter triggers',
   newLabel: 'New trigger',

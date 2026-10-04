@@ -1,6 +1,7 @@
 disabled_alias_groups = ["social"]
 disabled_trigger_groups = ["spam"]
 disabled_macro_groups = ["travel"]
+disabled_timer_groups = ["upkeep"]
 
 [[aliases]]
 name = "kk"
@@ -34,6 +35,11 @@ enabled = true
 [[triggers.patterns]]
 pattern = '^(\w+) whispers to you'
 enabled = false
+
+[[triggers.patterns]]
+pattern = "Tolliver tells you"
+enabled = true
+mode = "starts_with"
 
 [[triggers.actions]]
 kind = "highlight"
@@ -71,6 +77,11 @@ enabled = false
 [[triggers.patterns]]
 pattern = '^You are hungry\.$'
 enabled = true
+
+[[triggers.patterns]]
+pattern = "You are thirsty."
+enabled = true
+mode = "text"
 
 [[triggers.actions]]
 kind = "gag"
@@ -271,6 +282,7 @@ name = "save"
 interval_secs = 300
 command = "save"
 enabled = true
+group = "upkeep"
 
 [group_folders.aliases]
 combat = [

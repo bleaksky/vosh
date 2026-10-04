@@ -183,3 +183,36 @@ fn macro_enabled_round_trips_through_toml() {
     let back: Holder = toml::from_str(&text).unwrap();
     assert_eq!(back.macros, holder.macros);
 }
+
+#[test]
+fn timer_groups_round_trip_through_the_profile_file() {
+    let mut profile = Profile::default();
+    profile.timers.push(super::live::Timer {
+        id: 1,
+        name: "drink".into(),
+        interval_secs: 60,
+        command: "drink water".into(),
+        enabled: true,
+        group: Some("upkeep".into()),
+    });
+    profile.disabled_timer_groups.insert("upkeep".into());
+    let text = ProfileConfig::from_profile(&profile).to_toml().unwrap();
+    assert!(
+        text.contains("disabled_timer_groups = [\"upkeep\"]"),
+        "{text}"
+    );
+    assert!(text.contains("group = \"upkeep\""), "{text}");
+    let mut back = Profile::default();
+    let warnings = ProfileConfig::from_toml(&text).unwrap().apply_to(&mut back);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(back.timers, profile.timers);
+    assert_eq!(back.disabled_timer_groups, profile.disabled_timer_groups);
+    assert!(!back.timer_fires(&back.timers[0]));
+    // A file with neither reads every timer as on and in no group.
+    let bare =
+        "[[timers]]\nid = 1\ninterval_secs = 60\ncommand = \"drink water\"\nenabled = true\n";
+    let mut old = Profile::default();
+    ProfileConfig::from_toml(bare).unwrap().apply_to(&mut old);
+    assert_eq!(old.timers[0].group, None);
+    assert!(old.timer_fires(&old.timers[0]));
+}

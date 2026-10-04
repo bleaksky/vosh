@@ -654,13 +654,10 @@ async fn handle_tick<R: tauri::Runtime>(
     .await
 }
 
-/// Fire the Settings interval timers whose deadline has elapsed.
-/// `timer_next` maps timer id to its next-fire `Instant`; a timer is
-/// seeded on first sight (scheduled one interval out, not fired
-/// immediately) and advanced past any missed slots so a stall never
-/// burst-fires. Disabled or deleted timers drop their deadline. Each
-/// due command runs through the same path as the tick auto-fire:
-/// `input::process`, echo its lines, send its bytes.
+/// Fire the Settings interval timers whose deadline has elapsed, the
+/// ones [`due_settings_timers`] picks. Each due command runs through the
+/// same path as the tick auto-fire: `input::process`, echo its lines,
+/// send its bytes.
 async fn fire_due_settings_timers<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
@@ -669,40 +666,7 @@ async fn fire_due_settings_timers<R: tauri::Runtime>(
     lua_timers: &SharedTimers,
     timer_next: &mut HashMap<u32, Instant>,
 ) -> std::io::Result<()> {
-    let now = Instant::now();
-    let due: Vec<String> = {
-        let p = profile.lock().await;
-        let live: HashSet<u32> = p
-            .timers
-            .iter()
-            .filter(|t| t.enabled)
-            .map(|t| t.id)
-            .collect();
-        timer_next.retain(|id, _| live.contains(id));
-        let mut due = Vec::new();
-        for t in p
-            .timers
-            .iter()
-            .filter(|t| t.enabled && !t.command.is_empty())
-        {
-            let interval = Duration::from_secs(u64::from(t.interval_secs.max(1)));
-            match timer_next.get(&t.id).copied() {
-                None => {
-                    timer_next.insert(t.id, now + interval);
-                }
-                Some(next) if now >= next => {
-                    due.push(t.command.clone());
-                    let mut n = next + interval;
-                    while n <= now {
-                        n += interval;
-                    }
-                    timer_next.insert(t.id, n);
-                }
-                Some(_) => {}
-            }
-        }
-        due
-    };
+    let due = due_settings_timers(&*profile.lock().await, timer_next, Instant::now());
     for command in due {
         run_fired_command(
             app,
@@ -716,6 +680,49 @@ async fn fire_due_settings_timers<R: tauri::Runtime>(
         .await?;
     }
     Ok(())
+}
+
+/// The commands of the Settings interval timers due at `now`, in list
+/// order. `timer_next` maps timer id to its next-fire `Instant`; a timer
+/// is seeded on first sight (scheduled one interval out, not fired
+/// immediately) and advanced past any missed slots so a stall never
+/// burst-fires. A timer that is off, in a group that is off, or deleted
+/// drops its deadline, so it starts a fresh interval when it comes back.
+pub(super) fn due_settings_timers(
+    p: &Profile,
+    timer_next: &mut HashMap<u32, Instant>,
+    now: Instant,
+) -> Vec<String> {
+    let live: HashSet<u32> = p
+        .timers
+        .iter()
+        .filter(|t| p.timer_fires(t))
+        .map(|t| t.id)
+        .collect();
+    timer_next.retain(|id, _| live.contains(id));
+    let mut due = Vec::new();
+    for t in p
+        .timers
+        .iter()
+        .filter(|t| p.timer_fires(t) && !t.command.is_empty())
+    {
+        let interval = Duration::from_secs(u64::from(t.interval_secs.max(1)));
+        match timer_next.get(&t.id).copied() {
+            None => {
+                timer_next.insert(t.id, now + interval);
+            }
+            Some(next) if now >= next => {
+                due.push(t.command.clone());
+                let mut n = next + interval;
+                while n <= now {
+                    n += interval;
+                }
+                timer_next.insert(t.id, n);
+            }
+            Some(_) => {}
+        }
+    }
+    due
 }
 
 /// You are selecting text or reading back in the terminal. The webview

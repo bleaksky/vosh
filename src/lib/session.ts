@@ -218,7 +218,17 @@ export type TriggerAction =
 export interface TriggerPattern {
   pattern: string;
   enabled: boolean;
+  /** How the store reads `pattern`. Left out, and on the wire, while it
+   *  is 'regex'. See `MatchMode` in crates/automation/src/trigger/store.rs. */
+  mode?: MatchMode;
 }
+
+/** 'text' matches a line that is exactly the pattern, with spaces at
+ *  either end of the line and of the pattern skipped. 'starts_with'
+ *  matches a line that starts with it, after any spaces at the start of
+ *  either, and its match runs to the end of the line. Neither has
+ *  groups. 'regex' reads the pattern as typed. */
+export type MatchMode = 'text' | 'starts_with' | 'regex';
 
 export interface TriggerRecord {
   name: string;
@@ -264,11 +274,15 @@ export function normalizePatterns(raw: unknown): TriggerPattern[] {
   const r = raw as Record<string, unknown>;
   if (Array.isArray(r.patterns) && r.patterns.length > 0) {
     return r.patterns.map((row) => {
-      const rr = row as Record<string, unknown>;
-      return {
+      const rr = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>;
+      const out: TriggerPattern = {
         pattern: String(rr.pattern ?? ''),
         enabled: rr.enabled !== false,
       };
+      // A save sends the row back as the page holds it, so the mode has
+      // to ride along or the store reads the text as a regex.
+      if (rr.mode === 'text' || rr.mode === 'starts_with') out.mode = rr.mode;
+      return out;
     });
   }
   if (typeof r.pattern === 'string') {
@@ -1387,32 +1401,82 @@ export async function deleteMacro(key: string): Promise<Macro[]> {
 }
 
 /** One interval timer: fire `command` every `interval_secs` seconds while
- *  connected. `id` is a stable backend-assigned handle. */
+ *  connected. `id` is a stable backend-assigned handle. A timer in a
+ *  group that is off waits as one that is off does. */
 export interface Timer {
   id: number;
   name: string;
   interval_secs: number;
   command: string;
   enabled: boolean;
+  /** Left out while the timer is in no group. */
+  group?: string | null;
 }
 
 export async function timersList(): Promise<Timer[]> {
   return invoke('timers_list');
 }
 
-/** Create (id null) or update (existing id) a timer. Returns the full list. */
+/** Create (id null) or update (existing id) a timer. A null group puts
+ *  it in none. Returns the full list. */
 export async function timersSet(
   id: number | null,
   name: string,
   intervalSecs: number,
   command: string,
   enabled: boolean,
+  group: string | null,
 ): Promise<Timer[]> {
-  return invoke('timers_set', { id: id ?? null, name, intervalSecs, command, enabled });
+  return invoke('timers_set', { id: id ?? null, name, intervalSecs, command, enabled, group });
 }
 
 export async function timersDelete(id: number): Promise<Timer[]> {
   return invoke('timers_delete', { id });
+}
+
+// --- Group switches, one on each group heading in Settings, Automation ---
+
+/** A list whose items sit in groups, named as its Automation list is. */
+export type GroupList = 'triggers' | 'aliases' | 'macros' | 'timers';
+
+/** What the loadouts decide about a group while they decide it. Every
+ *  launch, profile switch and Loadouts save lays it over the group
+ *  again, so the switch waits. */
+export interface LoadoutHold {
+  /** Whether the loadouts turn the group on. */
+  on: boolean;
+  /** The active loadouts that decide. Empty while every loadout is off. */
+  by: string[];
+}
+
+/** One group heading's switch. */
+export interface GroupSwitch {
+  name: string;
+  /** Whether the group is on now. */
+  enabled: boolean;
+  /** Set while the loadouts decide the group. */
+  loadouts?: LoadoutHold;
+}
+
+/** The switch of each group in one list, sorted by name. */
+export async function listGroupSwitches(list: GroupList): Promise<GroupSwitch[]> {
+  return invoke('groups_list', { list });
+}
+
+/** Turn a whole group of one list on or off. Returns every switch of the
+ *  list. Fails for a group the loadouts decide. */
+export async function setGroupEnabled(
+  list: GroupList,
+  group: string,
+  enabled: boolean,
+): Promise<GroupSwitch[]> {
+  return invoke('groups_set_enabled', { list, group, enabled });
+}
+
+/** A group of any list turned on or off: #group, Lua, or a switch in
+ *  Settings. */
+export async function subscribeGroupsChanged(cb: () => void): Promise<UnlistenFn> {
+  return listen<string>('vosh://groups-changed', () => cb());
 }
 
 // --- Macro groups, which the command line follows ---

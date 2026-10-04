@@ -481,10 +481,7 @@ fn line_trigger(
 ) -> vosh_automation::trigger::Trigger {
     vosh_automation::trigger::Trigger {
         name: name.into(),
-        patterns: vec![vosh_automation::trigger::TriggerPattern {
-            pattern: pattern.into(),
-            enabled: true,
-        }],
+        patterns: vec![vosh_automation::trigger::TriggerPattern::regex(pattern)],
         priority: 5,
         enabled: true,
         actions: Vec::new(),
