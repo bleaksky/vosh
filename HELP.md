@@ -303,7 +303,7 @@ Slash commands drive Vosh from the command line without opening Settings. Vosh h
 - Manage variables with `#var <name> [value]`, `#unvar <name>`, and `#vars`.
 - Manage triggers with `#trigger <name> {pattern} <action>`, `#untrigger <name>`, and `#triggers`.
 - Tell Vosh how to read your prompt with `#prompt game {setting}` and `#prompt fight {setting}`, the codes you type in the game, or with `#prompt {regex}`, each named group like `(?<hp>\d+)` a value. `#prompt` alone says how Vosh reads it, and `#unprompt` stops.
-- Turn drawing your design on or off with `#prompt draw on|off`. With drawing off you see the game's own prompt, and your design stays.
+- Turn drawing your design on or off with `#prompt draw on|off`. With drawing off you see the game's own prompt, and your design stays. With no design of your own, Vosh draws your prompt as the game does and follows each change you make to it in the game.
 - Pick where your prompt shows with `#prompt show text|lifted|pinned`.
 - Use Vosh's default prompt design with `#prompt default`. It takes the place of the design in this profile, and Vosh keeps yours as an earlier design.
 - Flip whole folders with `#group <name> on|off` and inspect them with `#groups`.
@@ -763,6 +763,8 @@ Bind your own keys as macros in Settings under Automation, then Macros. Canonica
 ### 9.3 Prompt design codes
 
 Your own prompt is a design of text and codes. Customize prompt writes the codes for you as you click the parts of your prompt and pick values. Choose `Edit as text` there to read them or type your own.
+
+Until you change it, your design follows the game. Vosh writes it from your PROMPT and fight prompt so it draws as the game does, and writes it again each time you change them in the game. Your first change makes the design yours, and `Same as the game` among the starts follows the game again.
 
 | Code                                           | What it does                                                                        |
 | ---------------------------------------------- | ----------------------------------------------------------------------------------- |
