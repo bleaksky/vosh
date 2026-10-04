@@ -15,6 +15,7 @@ use vosh_automation::alias::{ExpandError, ExpandStep};
 
 use super::{split_first_word, InputResult};
 use crate::profile::live::Profile;
+use crate::session::connection::Connection;
 
 /// The most steps one walk takes.
 pub(crate) const MAX_STEPS: usize = 200;
@@ -233,14 +234,11 @@ pub(super) fn slash_walk_args(rest: &str) -> Option<&str> {
 /// `#walk` typed, or from a timer, the tick or Lua. A line typed after
 /// it with `;` waits for the walk, expanded the way any typed line is,
 /// with its variables and aliases.
-pub(super) fn slash_walk(profile: &mut Profile, args: &str) -> InputResult {
+pub(super) fn slash_walk(profile: &mut Profile, c: &Connection, args: &str) -> InputResult {
     let args = profile.vars.interpolate(args);
     let (head, tail) = split_at_separator(&args);
     let rest = match tail {
-        Some(tail) => match profile
-            .aliases
-            .expand_line_full(tail, &profile.plugin_aliases)
-        {
+        Some(tail) => match profile.aliases.expand_line_full(tail, &c.plugin_aliases) {
             Ok(steps) => steps,
             Err(ExpandError::RecursionLimit(depth)) => {
                 return InputResult::error(format!("alias recursion limit hit ({depth})"));

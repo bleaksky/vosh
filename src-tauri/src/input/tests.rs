@@ -1562,7 +1562,7 @@ fn a_plugin_alias_lasts_for_the_session_and_is_never_saved() {
         b"bash Orla\r\n"
     );
     assert_eq!(
-        process(&mut p, "#aliases").echo,
+        run_line(&state, &mut p, &mut c, "#aliases").result.echo,
         [
             "3 alias(es):",
             "    hl -> cast heal",
@@ -1987,12 +1987,14 @@ fn default_quick_keys_are_present_but_empty() {
 
 #[test]
 fn record_captures_then_saves_alias() {
+    let state = AppState::default();
     let mut p = Profile::default();
-    let _ = process(&mut p, "#record buff");
-    let _ = process(&mut p, "cast 'sanctuary' self");
-    let _ = process(&mut p, "cast 'haste' self");
-    let _ = process(&mut p, "cast 'bless' self");
-    let _ = process(&mut p, "#endrec");
+    let mut c = Connection::default();
+    let _ = run_line(&state, &mut p, &mut c, "#record buff");
+    let _ = run_line(&state, &mut p, &mut c, "cast 'sanctuary' self");
+    let _ = run_line(&state, &mut p, &mut c, "cast 'haste' self");
+    let _ = run_line(&state, &mut p, &mut c, "cast 'bless' self");
+    let _ = run_line(&state, &mut p, &mut c, "#endrec");
     let alias = p.aliases.list();
     let buff = alias
         .iter()
@@ -2006,13 +2008,15 @@ fn record_captures_then_saves_alias() {
 
 #[test]
 fn a_recording_replaces_an_alias_in_its_group() {
+    let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     let mut buff = Alias::new("buff", "cast 'armor' self");
     buff.group = Some("buffs".into());
     p.aliases.set(buff);
-    let _ = process(&mut p, "#record buff");
-    let _ = process(&mut p, "cast 'haste' self");
-    let _ = process(&mut p, "#endrec");
+    let _ = run_line(&state, &mut p, &mut c, "#record buff");
+    let _ = run_line(&state, &mut p, &mut c, "cast 'haste' self");
+    let _ = run_line(&state, &mut p, &mut c, "#endrec");
     let buff = p.aliases.get("buff").unwrap();
     assert_eq!(buff.expansion, "cast 'haste' self");
     assert_eq!(buff.group.as_deref(), Some("buffs"));
@@ -2020,13 +2024,15 @@ fn a_recording_replaces_an_alias_in_its_group() {
 
 #[test]
 fn record_skips_slash_lines() {
+    let state = AppState::default();
     let mut p = Profile::default();
-    let _ = process(&mut p, "#record probe");
-    let _ = process(&mut p, "look");
+    let mut c = Connection::default();
+    let _ = run_line(&state, &mut p, &mut c, "#record probe");
+    let _ = run_line(&state, &mut p, &mut c, "look");
     // A slash command shouldn't be captured.
-    let _ = process(&mut p, "#aliases");
-    let _ = process(&mut p, "score");
-    let _ = process(&mut p, "#endrec");
+    let _ = run_line(&state, &mut p, &mut c, "#aliases");
+    let _ = run_line(&state, &mut p, &mut c, "score");
+    let _ = run_line(&state, &mut p, &mut c, "#endrec");
     let buff = p
         .aliases
         .list()
@@ -2038,11 +2044,13 @@ fn record_skips_slash_lines() {
 
 #[test]
 fn record_cancel_discards() {
+    let state = AppState::default();
     let mut p = Profile::default();
-    let _ = process(&mut p, "#record nope");
-    let _ = process(&mut p, "kill rabbit");
-    let _ = process(&mut p, "#record cancel");
-    assert!(p.recording_macro.is_none());
+    let mut c = Connection::default();
+    let _ = run_line(&state, &mut p, &mut c, "#record nope");
+    let _ = run_line(&state, &mut p, &mut c, "kill rabbit");
+    let _ = run_line(&state, &mut p, &mut c, "#record cancel");
+    assert!(c.recording_macro.is_none());
     assert!(p.aliases.list().iter().all(|a| a.name != "nope"));
 }
 

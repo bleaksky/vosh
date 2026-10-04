@@ -2,7 +2,8 @@
 //! its quick keys and the characters in the room, which the commands
 //! share, the room look and the end of a fight, which the loop follows
 //! line by line, the tick's count and the prompt engine, which both read,
-//! and the session's Lua engine. Each [`Session`](crate::sessions::Session) holds its
+//! and the session's Lua engine, with the aliases its plugins make and
+//! the macro recorder. Each [`Session`](crate::sessions::Session) holds its
 //! [`Connection`] behind a lock of its own, [`SharedConnection`], and the
 //! session loop holds a handle to it, so a command reads it straight from
 //! the session and never asks the loop.
@@ -18,6 +19,7 @@
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
+use vosh_automation::alias::PluginAliases;
 use vosh_script::ScriptEngine;
 
 use super::room_block::RoomBlock;
@@ -71,6 +73,16 @@ pub(crate) struct Connection {
     /// the latest GMCP packet of each package for a new handler, and
     /// forgets them as a connection ends. No file saves its state.
     pub(crate) script: ScriptEngine,
+    /// The aliases the session's plugins made, beside the engine that
+    /// runs them, which last while their plugin runs. No profile file
+    /// holds them, so a switch or a save leaves them be, and a plugin that
+    /// turns off takes its own.
+    pub(crate) plugin_aliases: PluginAliases,
+    /// The macro recorder, `Some` between `#record <name>` and `#endrec`.
+    /// It takes each line you type in this session, and `#endrec` saves
+    /// them to the profile as an alias whose expansion is the `;`-joined
+    /// sequence.
+    pub(crate) recording_macro: Option<MacroRecorder>,
 }
 
 impl Connection {
@@ -144,6 +156,12 @@ impl Default for TargetState {
             quick_keys: Self::default_quick_keys(),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct MacroRecorder {
+    pub(crate) name: String,
+    pub(crate) commands: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]

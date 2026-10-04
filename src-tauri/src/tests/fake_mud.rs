@@ -1968,11 +1968,10 @@ async fn lua_a_profile_switch_turns_its_plugins_on_and_the_others_off() {
     let shown = |h: &Harness, text: &str| h.screen().iter().filter(|r| r.contains(text)).count();
     assert_eq!(shown(&h, "everywhere loaded"), 1, "it kept running");
     {
-        let p = h.state.profile.lock().await;
         let session = h.state.selected_session();
         let c = session.connection.lock();
         assert_eq!(c.script.loaded_plugins(), ["everywhere", "healer_only"]);
-        assert_eq!(p.plugin_aliases.list().len(), 1);
+        assert_eq!(c.plugin_aliases.list().len(), 1);
     }
 
     crate::profile::switch::apply_profile_switch(
@@ -1984,11 +1983,10 @@ async fn lua_a_profile_switch_turns_its_plugins_on_and_the_others_off() {
     .await
     .expect("the switch back");
     {
-        let p = h.state.profile.lock().await;
         let session = h.state.selected_session();
         let c = session.connection.lock();
         assert_eq!(c.script.loaded_plugins(), ["everywhere"]);
-        let leftover = &p.plugin_aliases.list();
+        let leftover = &c.plugin_aliases.list();
         assert!(leftover.is_empty(), "{leftover:?}");
     }
     h.finish(grid).await;

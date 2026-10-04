@@ -484,8 +484,8 @@ impl LineEffects {
 /// and what to echo locally. The app runs every line through [`run_line_from`],
 /// which also says whether the line replaced the profile. A test that
 /// needs no app state of its own runs here, on a fresh one, with a fresh
-/// connection that the line's target words and quick keys change and
-/// then drop.
+/// connection, so what the line leaves on it, such as a target, a Lua
+/// global or a recording, drops with it.
 #[cfg(test)]
 pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
     run_line(
@@ -574,7 +574,7 @@ fn process_line(
     // so the recorded macro stays high-level: a recorded `fb dragon`
     // re-expands through the alias engine on replay rather than
     // freezing the alias definition at record time.
-    if let Some(recorder) = profile.recording_macro.as_mut() {
+    if let Some(recorder) = c.recording_macro.as_mut() {
         recorder.commands.push(trimmed.to_string());
     }
 
@@ -584,7 +584,7 @@ fn process_line(
     let interpolated = profile.vars.interpolate(trimmed);
     let steps = match profile
         .aliases
-        .expand_line_full(&interpolated, &profile.plugin_aliases)
+        .expand_line_full(&interpolated, &c.plugin_aliases)
     {
         Ok(steps) => steps,
         Err(ExpandError::RecursionLimit(depth)) => {

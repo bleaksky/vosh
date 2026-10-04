@@ -1,8 +1,9 @@
 //! The profile in memory. It holds what its file saves, plus what runs
-//! with that profile and no file saves: the aliases plugins make, the
-//! macro recorder, the revision counters that move when a group turns on
-//! or off, and the name Vosh shows for it. Each session runs a Lua engine
-//! of its own on its [`Connection`](crate::session::connection::Connection).
+//! with that profile and no file saves: the revision counters that move
+//! when a group turns on or off, and the name Vosh shows for it. Each
+//! session keeps its Lua engine, the aliases its plugins make and its
+//! macro recorder on its
+//! [`Connection`](crate::session::connection::Connection).
 //!
 //! Some of it still belongs to one connection, and R14b decides where it
 //! goes. The session scoped variables clear as a connection starts,
@@ -11,7 +12,7 @@
 
 use std::collections::BTreeSet;
 
-use vosh_automation::alias::{AliasStore, PluginAliases};
+use vosh_automation::alias::AliasStore;
 use vosh_automation::trigger::TriggerStore;
 use vosh_automation::vars::VariableStore;
 
@@ -22,10 +23,6 @@ use crate::tick::TickSettings;
 #[derive(Debug, Default)]
 pub(crate) struct Profile {
     pub(crate) aliases: AliasStore,
-    /// The aliases plugins made, which last for the session. No profile
-    /// file holds them, so a switch or a save leaves them be, and a
-    /// plugin that turns off takes its own.
-    pub(crate) plugin_aliases: PluginAliases,
     /// Your variables. The file saves the profile scoped ones, and a
     /// switch keeps the session scoped ones, which no file holds.
     pub(crate) vars: VariableStore,
@@ -34,11 +31,6 @@ pub(crate) struct Profile {
     pub(crate) tick: TickSettings,
     pub(crate) ui: UiConfig,
     pub(crate) plugins: PluginsPersist,
-    /// Active macro recorder. `Some` between `#record <name>` and
-    /// `#endrec`; commands typed in that window get captured into the
-    /// buffer and on stop saved as an alias whose expansion is the
-    /// `;`-joined sequence.
-    pub(crate) recording_macro: Option<MacroRecorder>,
     /// Keyboard macro bindings. Each entry maps a canonical key
     /// string (e.g. "F1", "Ctrl+N", "Numpad7") to a command line
     /// (which may itself contain `;`-separated subcommands).
@@ -160,10 +152,4 @@ pub(crate) struct Timer {
     /// same shape.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) group: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct MacroRecorder {
-    pub(crate) name: String,
-    pub(crate) commands: Vec<String>,
 }
