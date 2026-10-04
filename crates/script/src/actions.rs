@@ -83,3 +83,18 @@ pub enum Action {
     /// action cap counts them.
     Error(String),
 }
+
+impl Action {
+    /// True for an action that registers something for its owner or
+    /// takes a registration away, which a failed load takes back so the
+    /// owner keeps what it had.
+    pub(crate) fn registers(&self) -> bool {
+        matches!(
+            self,
+            Action::SetLuaTrigger { .. }
+                | Action::RemoveLuaTrigger { .. }
+                | Action::SubscribeGmcp { .. }
+                | Action::Timer { .. }
+        )
+    }
+}
