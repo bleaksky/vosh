@@ -13,10 +13,6 @@ import { ShowButton } from './PromptShow';
 /** The button's name and the menu's. */
 const PREVIEW = 'Preview';
 
-/** The preview menu's width, the width of the menu of where your prompt
- *  shows. */
-export const PREVIEW_MENU_WIDTH = 160;
-
 interface PreviewButtonProps {
   value: PromptPreviewName;
   /** Lament joins the previews under the Forsaken Lands rules. */
@@ -36,7 +32,6 @@ export function PreviewButton({ value, forsaken, onChange }: PreviewButtonProps)
       choices={previewOptions(forsaken)}
       value={value}
       place="above-end"
-      width={PREVIEW_MENU_WIDTH}
       onChange={onChange}
     />
   );

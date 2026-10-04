@@ -5,7 +5,8 @@ import type { PromptShowState } from '../../lib/promptShow';
 import type { PromptPreviewName } from '../../lib/session';
 import { findAll, type FakeElement } from '../../test/fakeDom';
 import { BUTTON, menuButtonDom, menuHeight, on } from '../../test/menuButtonDom';
-import { DesignFoot, PREVIEW_MENU_WIDTH, PreviewButton } from './PromptFoot';
+import { MENU_BUTTON_MENU_WIDTH } from './MenuButton';
+import { DesignFoot, PreviewButton } from './PromptFoot';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -157,9 +158,8 @@ describe('the Preview menu', () => {
     expect(m.checked()).toEqual(['Low health']);
     // It opens above the button, their right edges together, the width
     // of the menu of where your prompt shows, and takes focus.
-    expect(PREVIEW_MENU_WIDTH).toBe(160);
-    expect(menu?.style.width).toBe(`${PREVIEW_MENU_WIDTH}px`);
-    expect(menu?.style.left).toBe(`${BUTTON.right - PREVIEW_MENU_WIDTH}px`);
+    expect(menu?.style.width).toBe(`${MENU_BUTTON_MENU_WIDTH}px`);
+    expect(menu?.style.left).toBe(`${BUTTON.right - MENU_BUTTON_MENU_WIDTH}px`);
     expect(menu?.style.top).toBe(`${BUTTON.top - 4 - menuHeight(3)}px`);
     expect(doc.activeElement).toBe(menu);
 
