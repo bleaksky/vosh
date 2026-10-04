@@ -552,10 +552,12 @@ fn full_profile() -> ProfileConfig {
             interval_secs: 300,
             command: "save".into(),
             enabled: true,
+            group: Some("upkeep".into()),
         }],
         disabled_alias_groups: vec!["social".into()],
         disabled_trigger_groups: vec!["spam".into()],
         disabled_macro_groups: vec!["travel".into()],
+        disabled_timer_groups: vec!["upkeep".into()],
         group_folders: GroupFolders {
             aliases: BTreeMap::from([(
                 "combat".into(),

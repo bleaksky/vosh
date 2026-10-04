@@ -517,6 +517,7 @@ fn generate(seed: u64) -> Set {
                 interval_secs: 30 + rng.below(90) as u32,
                 command: "drink".into(),
                 enabled: rng.chance(50),
+                group: None,
             }];
         }
         config.ui.vitals_values = rng.pick(&["current-max", "current", "percent"]).into();
