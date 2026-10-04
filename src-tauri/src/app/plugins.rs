@@ -262,17 +262,22 @@ pub(crate) fn seed_example_plugins(plugins_dir: &std::path::Path) {
 
 /// Turn the plugin `name` on, or load it again: read it from
 /// `plugins_dir` as it stands and load it. Returns what it asks of the
-/// session, or None when Vosh could not read it, which the log says.
-pub(crate) fn plugin_on(
-    p: &mut Profile,
-    plugins_dir: &std::path::Path,
-    name: &str,
-) -> Option<ApplyResult> {
+/// session. When Vosh cannot read it, a red `[lua]` line says so, and
+/// the plugin waits for `#script reload` as one whose Lua failed does.
+pub(crate) fn plugin_on(p: &mut Profile, plugins_dir: &std::path::Path, name: &str) -> ApplyResult {
     let plugin = match read_plugin(plugins_dir, name) {
         Ok(plugin) => plugin,
         Err(e) => {
             error!(name = %name, error = %e, "plugin entry missing");
-            return None;
+            p.script.list_unread_plugin(name);
+            let outcome = vosh_script::ScriptOutcome {
+                actions: vec![vosh_script::Action::Error(format!(
+                    "Vosh could not read plugin {name} and left it off."
+                ))],
+                failed: true,
+                ..vosh_script::ScriptOutcome::default()
+            };
+            return crate::script::apply_actions(p, outcome);
         }
     };
     // A load runs Lua for certain, even when nothing else is loaded,
@@ -288,7 +293,7 @@ pub(crate) fn plugin_on(
     } else {
         info!(name = %name, "loaded plugin");
     }
-    Some(crate::script::apply_actions(p, outcome))
+    crate::script::apply_actions(p, outcome)
 }
 
 /// Turn the plugin `name` off: take back its Lua triggers, GMCP
@@ -325,9 +330,7 @@ pub(crate) fn follow_profile_plugins(
         if p.script.is_stopped(&Owner::Plugin(name.clone())) {
             continue;
         }
-        if let Some(loaded) = plugin_on(p, plugins_dir, name) {
-            apply.append(loaded);
-        }
+        apply.append(plugin_on(p, plugins_dir, name));
     }
     apply
 }
@@ -408,10 +411,7 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     };
     mgr.set_enabled(enabled.clone());
     for name in &enabled {
-        let loaded = plugin_on(&mut *state.profile.lock().await, &plugins_dir, name);
-        let Some(apply) = loaded else {
-            continue;
-        };
+        let apply = plugin_on(&mut *state.profile.lock().await, &plugins_dir, name);
         let (bytes, echoes) = crate::session::effects::collect_script_result(
             app,
             &state.profile,
@@ -604,7 +604,15 @@ mod tests {
             "missing".into(),
         ];
         let switched = follow_profile_plugins(&mut p, tmp.path());
-        assert_eq!(p.script.loaded_plugins(), ["everywhere", "healer_only"]);
+        // The one it does not have says so, and a reload would try it.
+        assert_eq!(
+            switched.echoes,
+            ["\x1b[90m[lua]\x1b[0m \x1b[31mVosh could not read plugin missing and left it off.\x1b[0m"]
+        );
+        assert_eq!(
+            p.script.loaded_plugins(),
+            ["everywhere", "healer_only", "missing"]
+        );
         let leftover = &p.script.lua_triggers();
         assert!(leftover.is_empty(), "{leftover:?}");
         // Only the plugin that went off lost its timer, and the one both

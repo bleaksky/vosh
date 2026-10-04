@@ -307,6 +307,16 @@ impl ScriptEngine {
         outcome
     }
 
+    /// Put the plugin `name` on the list `#script reload` reads, when Vosh
+    /// could not read its files to load it, so a reload tries it again
+    /// once you fix them, as it does a plugin whose Lua failed.
+    pub fn list_unread_plugin(&mut self, name: &str) {
+        let owner = Owner::Plugin(name.to_string());
+        if !self.loaded_scripts.contains(&owner) {
+            self.loaded_scripts.push(owner);
+        }
+    }
+
     /// The plugins and loose scripts `#script reload` reads again and
     /// loads, in the order they first loaded. A loose script Vosh stopped
     /// is among them, so a reload brings it back, and a plugin Vosh

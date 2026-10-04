@@ -1013,6 +1013,34 @@ fn script_reload_tries_again_a_plugin_whose_first_load_failed() {
 }
 
 #[test]
+fn a_plugin_vosh_could_not_read_says_so_and_a_reload_tries_it_again() {
+    let (dir, state, _scripts) = state_with_scripts();
+    let plugins = dir.path().join("plugins");
+    let mut p = Profile::default();
+    p.plugins.enabled = vec!["meals".into()];
+    let launch = crate::app::plugins::follow_profile_plugins(&mut p, &plugins);
+    assert_eq!(
+        lua_errors(&launch.echoes),
+        ["Vosh could not read plugin meals and left it off."]
+    );
+    // You add its files, and a reload loads it.
+    let plugin = plugins.join("meals");
+    std::fs::create_dir_all(&plugin).unwrap();
+    std::fs::write(plugin.join("manifest.toml"), "[plugin]\nname = \"meals\"\n").unwrap();
+    std::fs::write(
+        plugin.join("main.lua"),
+        "mud.trigger('hunger', 'You are hungry', function() mud.echo('eat') end)",
+    )
+    .unwrap();
+    let ran = run_line(&state, &mut p, "#script reload");
+    let leftover = &ran.lua.echoes;
+    assert!(leftover.is_empty(), "{leftover:?}");
+    let fired = p.script.match_line("You are hungry.");
+    let apply = crate::script::apply_actions(&mut p, fired);
+    assert_eq!(apply.echoes, ["eat"]);
+}
+
+#[test]
 fn lua_you_type_reads_the_variables_with_no_other_lua_loaded() {
     let state = AppState::default();
     let mut p = Profile::default();
