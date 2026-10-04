@@ -1512,6 +1512,12 @@
   background: var(--selection);
 }
 
+/* The tokens under the caret read as selected text. */
+.pc-text-mark,
+.pc-text-mark .pc-tok {
+  color: var(--selection-text);
+}
+
 .pc-text-help {
   margin: 8px 0 0;
   font-size: 11px;
@@ -1549,9 +1555,9 @@
 }
 
 /* The card's marks on your prompt, over the terminal and under the card:
-   the picked part in the selection token with a 1 px accent ring at
-   radius 2, the warn ring at radius 4, the 2 by 17 caret, and a ↵ two
-   cells wide after each row a line break ends. */
+   the picked part in the accent tint with a 1 px accent ring at radius 2,
+   the warn ring at radius 4, the 2 by 17 caret, and a ↵ two cells wide
+   after each row a line break ends. */
 .pc-marks {
   position: fixed;
   top: 0;
@@ -1570,15 +1576,18 @@
   pointer-events: none;
 }
 
-/* A value Vosh reads on the game's own line while the card reads your
-   codes: the selection token alone (P2, P3). */
-.pc-mark-value {
-  background: var(--selection);
+/* The marks over the terminal cannot redraw the glyphs under them, so
+   where a mark in the window takes the opaque selection, these take the
+   accent tint. A value Vosh reads on the game's own line while the card
+   reads your codes takes the tint alone (P2, P3). */
+.pc-mark-value,
+.pc-mark-token,
+.pc-mark-return[aria-pressed='true'] {
+  background: var(--mark-tint);
 }
 
 .pc-mark-token {
   border-radius: 2px;
-  background: var(--selection);
   box-shadow: 0 0 0 1px var(--accent);
 }
 
@@ -1610,7 +1619,6 @@
 }
 
 .pc-mark-return[aria-pressed='true'] {
-  background: var(--selection);
   box-shadow: 0 0 0 1px var(--accent);
 }
 
@@ -1787,7 +1795,7 @@
 
 .st-prompt-mark {
   background: var(--selection);
-  color: var(--text);
+  color: var(--selection-text);
 }
 
 .st-prompt-line-meta {

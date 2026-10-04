@@ -166,14 +166,54 @@ describe('derivation rules', () => {
   });
 
   it('lets an override pin a token and feed the ones built on it', () => {
-    const t = deriveChrome(ember, { panel: '#202020', accent: 'rgba(255, 0, 0, 0.5)' });
+    // Ember's selection set to its ground, so the selection takes the
+    // accent.
+    const t = deriveChrome(
+      { ...ember, selectionBackground: ember.background },
+      { panel: '#202020', accent: 'rgba(255, 0, 0, 0.5)' },
+    );
     expect(t.panel).toBe('#202020');
     // The divider steps 6 in OKLab L off the pinned panel.
     expect(t.divider).toBe('#2f2f2f');
     // A non hex override passes through and the derivation keeps its
     // own accent, Ember's magenta, for anything built on it.
     expect(t.accent).toBe('rgba(255, 0, 0, 0.5)');
-    expect(t.selection).toBe('rgba(180, 142, 201, 0.22)');
+    expect(t.selection).toBe('#362b3a');
+    // A pinned selection keeps the text the rule picks for it.
+    const pinned = deriveChrome(ember, { selection: '#123456' });
+    expect(pinned.selection).toBe('#123456');
+    expect(pinned.selectionText).toBe('#f2efee');
+  });
+
+  it('draws the scheme selection opaque with its own text when the pair reads', () => {
+    const t = deriveChrome(ember);
+    expect(t.selection).toBe('#201d1c');
+    expect(t.selectionText).toBe('#f2efee');
+    // Without a selection text of its own, the foreground reads on it.
+    expect(deriveChrome({ ...ember, selectionForeground: '' }).selectionText).toBe('#c0bdbb');
+    // Near black a step counts by contrast, so #0c0c0c reads as a fill on
+    // #000000 and #0a0a0a, 11.7 off it in OKLab L, does not.
+    const black = { ...ember, background: '#000000' };
+    expect(deriveChrome({ ...black, selectionBackground: '#0c0c0c' }).selection).toBe('#0c0c0c');
+    expect(deriveChrome({ ...black, selectionBackground: '#0a0a0a' }).selection).not.toBe(
+      '#0a0a0a',
+    );
+  });
+
+  it('else draws the accent over the ground with the text tier on it', () => {
+    // A selection under a step of 6 off the ground reads as no fill. The
+    // accent, Ember's magenta, goes over the ground at 0.28.
+    const flat = deriveChrome({ ...ember, selectionBackground: '#0b0a09' });
+    expect(flat.selection).toBe('#362b3a');
+    expect(flat.selectionText).toBe(flat.text);
+    // The same for selection text under 4.5:1 on the scheme's selection.
+    const dim = deriveChrome({ ...ember, selectionForeground: '#5a5856' });
+    expect(dim.selection).toBe('#362b3a');
+    expect(dim.selectionText).toBe('#c0bdbb');
+    // A light theme puts its accent over the paper at 0.20.
+    const light = deriveChrome({ ...paper, selectionBackground: paper.background });
+    expect(light.selection).toBe('#d2d8db');
+    expect(light.selectionText).toBe('#2a2622');
   });
 
   it('writes one var per token', () => {

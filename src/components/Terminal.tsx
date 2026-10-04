@@ -23,7 +23,7 @@ import {
   terminalScreenRows,
   terminalLocalWrite,
 } from '../lib/session';
-import { findTheme } from '../lib/themes';
+import { findTheme, themeTokens } from '../lib/themes';
 import { setHighlightGround } from '../lib/highlightGround';
 import { ansi16Of, xtermThemeFor } from '../lib/terminalTheme';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
@@ -92,17 +92,16 @@ export function nativeSurfaceEnabled(): boolean {
 // (including the themeTerminalColors tint), live-updating on theme or
 // toggle change.
 function reportTheme(themeId: string, themeTerminalColors: boolean): void {
-  setHighlightGround(findTheme(themeId).xterm.background);
+  const theme = findTheme(themeId);
+  setHighlightGround(theme.xterm.background);
   if (!nativeSurfaceEnabled()) return;
-  const resolved = xtermThemeFor(findTheme(themeId), themeTerminalColors);
+  const resolved = xtermThemeFor(theme, themeTerminalColors);
   const ansi = ansi16Of(resolved);
   void invoke('native_surface_set_theme', {
     background: resolved.background ?? '#101218',
     foreground: resolved.foreground ?? '#cccccc',
-    // The raw theme selection hex (resolved.selectionBackground is an
-    // rgba() string after the translucency pass, which the backend hex
-    // parser cannot read).
-    selection: findTheme(themeId).xterm.selectionBackground ?? '#2a3b5e',
+    // The selection token, the opaque fill xterm draws.
+    selection: themeTokens(theme).selection,
     ansi,
   }).catch(() => {});
 }
