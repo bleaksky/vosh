@@ -156,13 +156,9 @@ pub(super) fn observe_prompt_gmcp(
 /// after a send that starts a pulse.
 pub(super) async fn emit_hidden_change<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    profile: &Arc<Mutex<Profile>>,
     connection: &Arc<Mutex<Connection>>,
 ) {
-    let change = {
-        let _p = profile.lock().await;
-        connection.lock().await.prompt.vars.take_hidden_change()
-    };
+    let change = connection.lock().await.prompt.vars.take_hidden_change();
     if let Some(hidden) = change {
         if let Err(e) = app.emit(events::HIDDEN, hidden) {
             warn!(error = %e, "failed to emit the hidden state");
@@ -179,14 +175,10 @@ pub(super) async fn emit_hidden_change<R: tauri::Runtime>(
 /// went stale or was unset drops out.
 pub(super) async fn emit_prompt_vars<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    profile: &Arc<Mutex<Profile>>,
     connection: &Arc<Mutex<Connection>>,
     always: bool,
 ) {
-    let vars = {
-        let _p = profile.lock().await;
-        connection.lock().await.prompt.take_prompt_vars(always)
-    };
+    let vars = connection.lock().await.prompt.take_prompt_vars(always);
     if let Some(vars) = vars {
         send_prompt_vars(app, &vars);
     }
