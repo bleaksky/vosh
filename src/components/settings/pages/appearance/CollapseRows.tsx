@@ -63,8 +63,9 @@ export function CollapseRows({ config, update }: CollapseRowsProps) {
       >
         <Segmented
           options={attacksWait ? WAITING : CHOICES}
-          // While In a fight shows every line, so do attack lines.
-          value={on && attacksWait ? 'every' : choiceOf(config.collapse_attack_lines)}
+          // While In a fight shows every line, so do attack lines, and
+          // the row says so while it waits on Collapse repeated lines too.
+          value={config.collapse_fight_lines ? choiceOf(config.collapse_attack_lines) : 'every'}
           onChange={(choice) =>
             update({ collapse_attack_lines: choice === 'collapse' }, { now: true })
           }

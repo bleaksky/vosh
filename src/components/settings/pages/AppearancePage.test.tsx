@@ -400,6 +400,14 @@ describe('AppearancePage', () => {
         expect(row?.text).toContain('Turn on Collapse repeated lines to choose.');
       }
     }
+    // Waiting, Attack lines still follows In a fight, which shows every
+    // line, whatever Attack lines saved.
+    const whole = await collapseRows(
+      { ...config(), collapse_fight_lines: false, collapse_attack_lines: true },
+      'collapse-attacks',
+    );
+    expect(whole.fights?.pressed).toEqual(['Show every line']);
+    expect(whole.attacks?.pressed).toEqual(['Show every line']);
   });
 
   it('saves the choice you press in each row', async () => {
