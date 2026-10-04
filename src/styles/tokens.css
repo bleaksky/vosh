@@ -71,8 +71,8 @@
 /* Floating recipe (SPEC 3): menus, the palette, popovers, dialogs.
    --ring-float is the edge alone, a fixed black ring outside and on
    dark the theme's --edge inside, and --shadow-float the whole recipe.
-   --edge is also the 1 px edge a small surface draws inside itself to
-   read on its ground, like a color swatch, or a prompt band on paper.
+   --edge is also the 1 px edge a prompt band on paper draws inside
+   itself to read on its ground. A color swatch rings in --key-ring.
    --mark-tint is a mark over terminal text it cannot redraw, the prompt
    card's marks on your prompt, where the opaque selection would hide the
    glyphs. */

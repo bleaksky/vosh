@@ -1671,15 +1671,15 @@
 }
 
 /* The color a chat channel shows, before its name under Channel colors
-   and before each color it can take. The ring keeps black and the
-   ground's own color visible on the menu. */
+   and before each color it can take. The swatch ring keeps black and
+   the ground's own color visible on the menu. */
 .pane-menu-swatch {
   display: inline-block;
   width: 10px;
   height: 10px;
   margin-right: 8px;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1px var(--divider);
+  box-shadow: inset 0 0 0 1px var(--key-ring);
   vertical-align: -1px;
 }
 
