@@ -1043,6 +1043,18 @@ fn rounds(fights: bool, attacks: bool) -> Vec<String> {
 }
 
 #[test]
+fn a_profile_starts_with_the_rules_the_stage_starts_with() {
+    let ui = crate::profile::ui::UiConfig::default();
+    assert_eq!(
+        vosh_prompt::stage::CollapseRules {
+            fights: ui.collapse_fight_lines,
+            attacks: ui.collapse_attack_lines,
+        },
+        vosh_prompt::stage::CollapseRules::default()
+    );
+}
+
+#[test]
 fn in_a_fight_and_attack_lines_decide_which_lines_collapse() {
     let hit = vosh_protocol::ansi::plain_text(DISMEMBERS.as_bytes());
     let hits = times(2, DISMEMBERS);
