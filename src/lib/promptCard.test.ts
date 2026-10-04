@@ -28,6 +28,8 @@ import {
   savedCapture,
   savedForName,
   withCapture,
+  withDesign,
+  withStart,
   startRows,
   takeBackOnto,
   undoEntry,
@@ -245,10 +247,11 @@ describe('where the codes came from', () => {
   it('leaves drawing off when the first capture saves, so only you turn it on', () => {
     const fresh: PromptConfig = {
       draw: false,
-      template: 'DEFAULT',
+      template: '',
       previous_templates: [],
       capture: none,
       show: 'text',
+      mirror: true,
     };
     expect(withCapture(fresh, codes)).toEqual({ ...fresh, capture: codes });
     expect(withCapture({ ...fresh, capture: migrated }, codes).draw).toBe(false);
@@ -444,12 +447,13 @@ describe('the start list', () => {
     preset('detailed', 'Detailed', 'DETAILED '),
     preset('empty', 'Start empty', ''),
   ];
-  const config = (template: string, previous: string[]): PromptConfig => ({
+  const config = (template: string, previous: string[], mirror = false): PromptConfig => ({
     draw: true,
     template,
     previous_templates: previous,
     capture: codes,
     show: 'text',
+    mirror,
   });
 
   it('lists the default, yours, the presets and Start empty, yours checked', () => {
@@ -503,6 +507,68 @@ describe('the start list', () => {
 
   it('checks Start empty while the design is empty', () => {
     expect(startRows(presets, config('', []), []).empty?.checked).toBe(true);
+  });
+
+  it('checks Same as the game while your design follows the game', () => {
+    const list = startRows(presets, config('GAME ', ['MINE'], true), []);
+    expect(list.rows.filter((r) => r.checked).map((r) => r.label)).toEqual(['Same as the game']);
+    // With no codes to follow the design is empty, and no row is
+    // checked, Start empty included.
+    const none = startRows(presets, config('', [], true), []);
+    expect(none.rows.some((r) => r.checked)).toBe(false);
+    expect(none.empty?.checked).toBe(false);
+    // A design of yours that reads as the game does is yours, so Same as
+    // the game stays unchecked.
+    const yours = startRows(presets, config('GAME ', []), []);
+    expect(yours.rows.some((r) => r.checked)).toBe(false);
+  });
+});
+
+describe('what a start and an edit save', () => {
+  const table: PromptConfig = {
+    draw: false,
+    template: '[%hp] ',
+    previous_templates: [],
+    capture: { kind: 'aabahran', prompt: '[%hhp] ', fprompt: '', follow_game: true },
+    show: 'pinned',
+    mirror: true,
+  };
+
+  it('turns drawing on, and only Same as the game follows the game', () => {
+    expect(withStart(table, { id: 'game', template: '[%hp] ' })).toEqual({
+      ...table,
+      draw: true,
+      mirror: true,
+    });
+    for (const [id, template] of [
+      ['default', 'DEFAULT '],
+      ['minimal', 'MIN '],
+      ['yours', 'MINE'],
+      ['profile:Healer', '[%mana]'],
+      ['empty', ''],
+    ]) {
+      expect(withStart(table, { id, template }), id).toEqual({
+        ...table,
+        template,
+        draw: true,
+        mirror: false,
+      });
+    }
+  });
+
+  it('makes the design yours with any edit, starting from the text it edited', () => {
+    expect(withDesign(table, '[%s_bold%hp] ')).toEqual({
+      ...table,
+      template: '[%s_bold%hp] ',
+      mirror: false,
+    });
+  });
+
+  it('takes an edit back to following the game', () => {
+    const edited = withDesign(table, '[%s_bold%hp] ');
+    const entry = undoEntry(table, edited);
+    expect(entry).toEqual({ template: '[%hp] ', mirror: true });
+    expect(takeBackOnto(edited, entry!)).toEqual(table);
   });
 });
 
@@ -679,6 +745,7 @@ describe('Command Z', () => {
     previous_templates: [],
     capture: { kind: 'aabahran', prompt: '<%hhp> ', fprompt: '', follow_game: true },
     show: 'text',
+    mirror: false,
   };
 
   it('takes back only what your change made, onto the table as it stands now', () => {

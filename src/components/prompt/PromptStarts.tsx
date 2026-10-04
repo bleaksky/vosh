@@ -219,7 +219,8 @@ interface StartsProps {
   refresh: number;
   env: BandEnv;
   cellW: number;
-  onPick: (template: string) => void;
+  /** You picked a start, by its id and its design. */
+  onPick: (row: StartRow) => void;
   onInsertValue: () => void;
   /** A line under the hint at rest, such as what the Lament preview
    *  hides (P8c). */
@@ -288,7 +289,7 @@ export function Starts({
           cellW={cellW}
           column={LIST_SAMPLE_PX}
           fightColumn={LIST_ROW_PX - tagRoom}
-          onPick={(row) => onPick(row.template)}
+          onPick={onPick}
         />
         <div className="pc-actions">{insert}</div>
       </div>
@@ -340,7 +341,7 @@ export function Starts({
               inMenu
               onPick={(row) => {
                 setPresetsAt(null);
-                onPick(row.template);
+                onPick(row);
               }}
             />
           </li>

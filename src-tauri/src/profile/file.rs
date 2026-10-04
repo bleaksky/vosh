@@ -72,8 +72,14 @@ pub(crate) struct ProfileConfig {
     /// how Vosh reads the game's prompt. None in a file an older build
     /// wrote, and left out of a file while it says nothing a default one
     /// does not. Set it with [`ProfileConfig::set_prompt`], which keeps
-    /// the `[ui]` copy of the switch and the design in step.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// the `[ui]` copy of the switch and the design in step. Whether the
+    /// design follows the game reads and writes as
+    /// [`vosh_prompt::config::file_table`] says.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "vosh_prompt::config::file_table"
+    )]
     pub prompt: Option<vosh_prompt::PromptConfig>,
 }
 
@@ -209,8 +215,8 @@ impl ProfileConfig {
     }
 
     /// What a profile that never saved a file stands for: the defaults,
-    /// with Vosh's default design ready for when you turn drawing on. A
-    /// switch to such a profile loads it, and its first save keeps it.
+    /// with a design that follows the game for when you turn drawing on.
+    /// A switch to such a profile loads it.
     pub(crate) fn fresh() -> Self {
         let mut config = Self::default();
         config.set_prompt(vosh_prompt::PromptConfig::fresh());
@@ -219,13 +225,22 @@ impl ProfileConfig {
 
     /// The `[prompt]` table this file stands for: its own, or for a file
     /// with none, the switch and the design older builds kept in `[ui]`.
+    /// A design there that counts as none of your own, empty or a default
+    /// Vosh shipped, follows the game, and with no codes to follow it is
+    /// empty.
     pub(crate) fn prompt_config(&self) -> vosh_prompt::PromptConfig {
         match &self.prompt {
             Some(prompt) => prompt.clone(),
-            None => vosh_prompt::PromptConfig::from_legacy(
-                self.ui.prompt_template_enabled,
-                &self.ui.prompt_template,
-            ),
+            None => {
+                let mut prompt = vosh_prompt::PromptConfig::from_legacy(
+                    self.ui.prompt_template_enabled,
+                    &self.ui.prompt_template,
+                );
+                if vosh_prompt::PromptConfig::counts_as_no_design(&prompt.template) {
+                    prompt.follow_game(vosh_prompt::aabahran::Who::default());
+                }
+                prompt
+            }
         }
     }
 
@@ -242,11 +257,10 @@ impl ProfileConfig {
     /// What every load does before anything reads the file. A file with
     /// no `[prompt]` takes the switch and the design from `[ui]`, and a
     /// file with one puts its copy in `[ui]` back in step. A design that
-    /// is a default an earlier build shipped becomes today's default, see
-    /// [`vosh_prompt::PromptConfig::upgrade_retired_default`].
+    /// counts as none of your own, such as a default Vosh shipped, follows
+    /// the game, see [`vosh_prompt::config::file_table`].
     fn merge_legacy_prompt(&mut self) {
-        let mut prompt = self.prompt_config();
-        prompt.upgrade_retired_default();
+        let prompt = self.prompt_config();
         self.set_prompt(prompt);
     }
 
@@ -918,33 +932,22 @@ mod prompt_tests {
     }
 
     #[test]
-    fn a_fresh_profile_file_keeps_the_default_design_with_drawing_off() {
+    fn a_fresh_profile_file_follows_the_game_with_drawing_off() {
         let fresh = ProfileConfig::fresh();
         assert_eq!(fresh.prompt_config(), PromptConfig::fresh());
+        assert!(fresh.prompt_config().mirror);
+        // A file with no [prompt] says the same, so the file is the
+        // defaults, and an older build reads no design.
         let text = fresh.to_toml().unwrap();
+        assert_eq!(text, ProfileConfig::default().to_toml().unwrap());
         let table: toml::Table = text.parse().unwrap();
-        assert_eq!(table["prompt"]["draw"].as_bool(), Some(false));
-        assert_eq!(
-            table["prompt"]["template"].as_str(),
-            Some(vosh_prompt::DEFAULT_DESIGN)
-        );
-        // The [ui] copy older builds read follows it.
-        assert_eq!(
-            table["ui"]["prompt_template"].as_str(),
-            Some(vosh_prompt::DEFAULT_DESIGN)
-        );
+        assert!(!table.contains_key("prompt"));
+        assert_eq!(table["ui"]["prompt_template"].as_str(), Some(""));
 
         let mut live = Profile::default();
         let _ = ProfileConfig::from_toml(&text).unwrap().apply_to(&mut live);
         assert_eq!(*live.prompt.config(), PromptConfig::fresh());
         assert!(!live.prompt.draws(), "it waits for you to turn it on");
-        // Everything else is the defaults.
-        let mut rest = ProfileConfig::fresh();
-        rest.set_prompt(PromptConfig::default());
-        assert_eq!(
-            rest.to_toml().unwrap(),
-            ProfileConfig::default().to_toml().unwrap()
-        );
     }
 
     #[test]
@@ -956,55 +959,94 @@ mod prompt_tests {
         let leftover = &load_at_launch(&set, &mut live);
         assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(*live.prompt.config(), PromptConfig::fresh());
-        assert_eq!(
-            ProfileConfig::from_profile(&live).ui.prompt_template,
-            vosh_prompt::DEFAULT_DESIGN
-        );
+        assert_eq!(ProfileConfig::from_profile(&live).ui.prompt_template, "");
 
-        // A file of its own keeps what it says, a design or none.
-        for design in ["%hp", ""] {
+        // A file of its own keeps what it says, a design or none. No
+        // design follows the game.
+        for (design, follows) in [("%hp", false), ("", true)] {
             let mut file = ProfileConfig::default();
             file.set_prompt(PromptConfig::from_legacy(false, design));
             file.save(&set.active_path()).unwrap();
             let mut live = Profile::default();
             let _ = load_at_launch(&set, &mut live);
             assert_eq!(live.prompt.config().template, design);
+            assert_eq!(live.prompt.config().mirror, follows, "{design:?}");
         }
     }
 
+    /// Same as the game for the test kit's PROMPT, for a mortal.
+    fn same_as_the_game() -> String {
+        vosh_prompt::card::presets::game(
+            vosh_prompt::testkit::mud::PROMPT,
+            "",
+            vosh_prompt::aabahran::Who::default(),
+        )
+        .expect("the codes compile")
+    }
+
+    /// A profile file an earlier build wrote with `design` in its
+    /// `[prompt]` table, your codes, drawing off, pinned, and your design
+    /// before it.
+    fn earlier_file(design: &str) -> String {
+        let text = |s: &str| toml::Value::String(s.to_string());
+        format!(
+            "[ui]\nprompt_template_enabled = false\nprompt_template = {design}\n\n\
+             [prompt]\ndraw = false\ntemplate = {design}\nprevious_templates = [{yours}]\n\
+             show = \"pinned\"\n\n[prompt.capture]\nkind = \"aabahran\"\nprompt = {codes}\n\
+             fprompt = \"\"\nsource = \"gmcp\"\n",
+            design = text(design),
+            yours = text(TEMPLATE),
+            codes = text(vosh_prompt::testkit::mud::PROMPT),
+        )
+    }
+
     #[test]
-    fn a_file_with_an_old_default_design_loads_todays() {
+    fn a_file_with_a_default_vosh_shipped_follows_the_game() {
         let dir = tempfile::tempdir().unwrap();
         let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
-        for old in vosh_prompt::config::RETIRED_DEFAULTS {
-            // As a fresh profile saved it, drawing off.
-            let mut file = ProfileConfig::from_toml(&older_file()).unwrap();
-            file.set_prompt(PromptConfig {
-                show: vosh_prompt::PromptShow::Pinned,
-                previous_templates: vec![TEMPLATE.into()],
-                ..PromptConfig::from_legacy(false, old)
-            });
-            file.save(&set.active_path()).unwrap();
+        let mut olds = vec![vosh_prompt::DEFAULT_DESIGN];
+        olds.extend(vosh_prompt::config::RETIRED_DEFAULTS);
+        for old in olds {
+            std::fs::write(set.active_path(), earlier_file(old)).unwrap();
             let mut live = Profile::default();
             let leftover = &load_at_launch(&set, &mut live);
             assert!(leftover.is_empty(), "{leftover:?}");
             let prompt = live.prompt.config();
-            assert_eq!(prompt.template, vosh_prompt::DEFAULT_DESIGN);
-            assert_eq!(live.ui.prompt_template, vosh_prompt::DEFAULT_DESIGN);
-            // Everything else in the table stays.
+            assert!(prompt.mirror);
+            assert_eq!(prompt.template, same_as_the_game());
+            assert_eq!(live.ui.prompt_template, same_as_the_game());
+            // Everything else in the table stays, and the old text is not
+            // kept, since nobody chose it.
             assert!(!prompt.draw);
             assert_eq!(prompt.show, vosh_prompt::PromptShow::Pinned);
             assert_eq!(prompt.previous_templates, [TEMPLATE]);
 
-            // A file older builds wrote, with the design only in [ui].
+            // The next save says it follows the game and keeps the design
+            // in template, so an older build draws it.
+            let text = ProfileConfig::from_profile(&live).to_toml().unwrap();
+            let table: toml::Table = text.parse().unwrap();
+            assert_eq!(table["prompt"]["mirror"].as_bool(), Some(true));
+            assert_eq!(
+                table["prompt"]["template"].as_str(),
+                Some(same_as_the_game().as_str())
+            );
+            assert_eq!(
+                table["ui"]["prompt_template"].as_str(),
+                Some(same_as_the_game().as_str())
+            );
+
+            // A file older builds wrote, with the design only in [ui] and
+            // no codes, follows the game with no design.
             let older = format!(
                 "[ui]\nprompt_template_enabled = true\nprompt_template = {}\n",
                 toml::Value::String(old.to_string())
             );
             let config = ProfileConfig::from_toml(&older).unwrap();
-            assert_eq!(config.prompt_config().template, vosh_prompt::DEFAULT_DESIGN);
-            assert_eq!(config.ui.prompt_template, vosh_prompt::DEFAULT_DESIGN);
-            assert!(config.prompt_config().draw);
+            let prompt = config.prompt_config();
+            assert!(prompt.mirror);
+            assert_eq!(prompt.template, "");
+            assert_eq!(config.ui.prompt_template, "");
+            assert!(prompt.draw);
         }
 
         // A design of your own loads as you saved it.
@@ -1014,6 +1056,60 @@ mod prompt_tests {
         let mut live = Profile::default();
         let _ = load_at_launch(&set, &mut live);
         assert_eq!(live.prompt.config().template, TEMPLATE);
+        assert!(!live.prompt.config().mirror);
+    }
+
+    #[test]
+    fn vosh_default_you_chose_stays_through_a_save() {
+        let mut live = Profile::default();
+        live.set_prompt_config(PromptConfig {
+            draw: true,
+            capture: CaptureConfig::Aabahran(AabahranCapture {
+                prompt: vosh_prompt::testkit::mud::PROMPT.into(),
+                ..AabahranCapture::default()
+            }),
+            ..PromptConfig::fresh()
+        });
+        assert_eq!(live.prompt.config().template, same_as_the_game());
+        let mut chosen = live.prompt.config().clone();
+        assert!(chosen.use_default_design());
+        live.set_prompt_config(chosen.clone());
+
+        let text = ProfileConfig::from_profile(&live).to_toml().unwrap();
+        let table: toml::Table = text.parse().unwrap();
+        assert_eq!(table["prompt"]["mirror"].as_bool(), Some(false));
+        let mut next = Profile::default();
+        let _ = ProfileConfig::from_toml(&text).unwrap().apply_to(&mut next);
+        assert_eq!(*next.prompt.config(), chosen);
+        assert_eq!(next.prompt.config().template, vosh_prompt::DEFAULT_DESIGN);
+    }
+
+    #[test]
+    fn a_design_that_follows_the_game_round_trips_and_an_older_build_draws_it() {
+        let mut live = Profile::default();
+        live.set_prompt_config(PromptConfig {
+            draw: true,
+            capture: CaptureConfig::Aabahran(AabahranCapture {
+                prompt: vosh_prompt::testkit::mud::PROMPT.into(),
+                ..AabahranCapture::default()
+            }),
+            ..PromptConfig::fresh()
+        });
+        let follows = live.prompt.config().clone();
+        assert!(follows.mirror);
+        let text = ProfileConfig::from_profile(&live).to_toml().unwrap();
+        let back = ProfileConfig::from_toml(&text).unwrap();
+        assert_eq!(back.prompt_config(), follows);
+
+        // An older build reads [ui] alone and writes the file back
+        // without the table. The design it drew becomes yours.
+        let mut table: toml::Table = text.parse().unwrap();
+        assert!(table.remove("prompt").is_some());
+        let older = toml::to_string_pretty(&table).unwrap();
+        let prompt = ProfileConfig::from_toml(&older).unwrap().prompt_config();
+        assert!(prompt.draw);
+        assert_eq!(prompt.template, same_as_the_game());
+        assert!(!prompt.mirror);
     }
 
     #[test]

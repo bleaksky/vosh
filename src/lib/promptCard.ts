@@ -413,8 +413,9 @@ export interface StartRow {
  *  Vosh's default, Yours, Your design before that when it exists, then
  *  the presets in their order, the designs other profiles hold for From
  *  another profile, and Start empty. An earlier design the same as the
- *  default or as the row above it is left out. The first row that holds
- *  your design takes the check. */
+ *  default or as the row above it is left out. While your design follows
+ *  the game, Same as the game takes the check. Otherwise the first other
+ *  row that holds your design takes it. */
 export function startRows(
   presets: readonly PromptPreset[],
   config: PromptConfig,
@@ -446,7 +447,13 @@ export function startRows(
   const emptyPreset = presets.find((p) => p.id === 'empty');
   const empty = emptyPreset ? row('empty', emptyPreset.label, '') : null;
   const all = [...rows, ...others, ...(empty ? [empty] : [])];
-  const first = all.find((r) => r.template === config.template);
+  // A design that follows the game is empty only while there are no
+  // codes to follow, and then no row holds it.
+  const first = config.mirror
+    ? config.template
+      ? all.find((r) => r.id === 'game')
+      : undefined
+    : all.find((r) => r.id !== 'game' && r.template === config.template);
   if (first) first.checked = true;
   return { rows, others, empty };
 }
@@ -656,17 +663,36 @@ export function menuPosition(
   return maxHeight === undefined ? pos : { ...pos, maxHeight };
 }
 
+/** The table once you pick `row` in the start list or the Presets menu.
+ *  Picking a start is how you ask Vosh to draw it, so drawing turns on.
+ *  Same as the game follows the game from then on, and any other start
+ *  makes the design yours. */
+export function withStart(
+  config: PromptConfig,
+  row: Pick<StartRow, 'id' | 'template'>,
+): PromptConfig {
+  return { ...config, template: row.template, draw: true, mirror: row.id === 'game' };
+}
+
+/** The table once you edit the design. An edit makes the design yours,
+ *  starting from the text it edited, even one that followed the game. */
+export function withDesign(config: PromptConfig, template: string): PromptConfig {
+  return { ...config, template, mirror: false };
+}
+
 /** What Command Z puts back: the fields one change of yours made, as
  *  they were before it. */
-export type UndoEntry = Partial<Pick<PromptConfig, 'template' | 'draw' | 'capture'>>;
+export type UndoEntry = Partial<Pick<PromptConfig, 'template' | 'draw' | 'capture' | 'mirror'>>;
 
 /** The entry that takes back the change from `before` to `next`, or null
- *  when it changed none of the design, the switch or the capture. Only
- *  those, so taking it back never puts back what changed elsewhere
- *  since: the codes the game sent, or where your prompt shows. */
+ *  when it changed none of the design, whether it follows the game, the
+ *  switch or the capture. Only those, so taking it back never puts back
+ *  what changed elsewhere since: the codes the game sent, or where your
+ *  prompt shows. */
 export function undoEntry(before: PromptConfig, next: PromptConfig): UndoEntry | null {
   const entry: UndoEntry = {};
   if (before.template !== next.template) entry.template = before.template;
+  if (before.mirror !== next.mirror) entry.mirror = before.mirror;
   if (before.draw !== next.draw) entry.draw = before.draw;
   if (JSON.stringify(before.capture) !== JSON.stringify(next.capture)) {
     entry.capture = before.capture;

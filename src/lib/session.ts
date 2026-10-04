@@ -597,6 +597,11 @@ export interface PromptConfig {
   previous_templates: string[];
   capture: PromptCapture;
   show: PromptShow;
+  /** The design follows the game. The backend writes it from your PROMPT
+   *  and fight prompt codes, as Same as the game, each time they change.
+   *  Any edit makes the design yours, and picking Same as the game in
+   *  the start list follows the game again. */
+  mirror: boolean;
 }
 
 interface RawPromptConfig {
@@ -605,11 +610,12 @@ interface RawPromptConfig {
   previous_templates?: unknown;
   capture?: unknown;
   show?: unknown;
+  mirror?: unknown;
 }
 
 /** A table from what the backend sent. It leaves out an empty list of
- *  earlier designs, no capture and the text, so those come back as the
- *  defaults. */
+ *  earlier designs, no capture, the text, and a design of yours, so
+ *  those come back as the defaults. */
 export function normalizePromptConfig(raw: RawPromptConfig | null): PromptConfig {
   const capture = raw?.capture as PromptCapture | undefined;
   const kinds = ['none', 'aabahran', 'regex'];
@@ -624,6 +630,7 @@ export function normalizePromptConfig(raw: RawPromptConfig | null): PromptConfig
         ? capture
         : { kind: 'none' },
     show: normalizePromptShow(raw?.show),
+    mirror: raw?.mirror === true,
   };
 }
 
@@ -669,8 +676,9 @@ export async function subscribePromptCardOpen(
 /** Save a `[prompt]` table for the active profile. It saves shortly,
  *  repaints the open row and tells every window. A capture that does not
  *  compile changes nothing, and the error is a sentence to show. Turning
- *  drawing on with no design draws Vosh's default, unless `asIs` keeps
- *  the design exactly as sent, as Start empty does. */
+ *  drawing on with no design follows the game, unless `asIs` keeps the
+ *  design exactly as sent, as Start empty does. A table that follows the
+ *  game takes the design written from its codes. */
 export async function promptConfigSet(
   config: PromptConfig,
   options?: { asIs?: boolean },

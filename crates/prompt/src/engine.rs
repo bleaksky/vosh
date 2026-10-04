@@ -113,9 +113,12 @@ impl PromptEngine {
     }
 
     /// Take a table for the profile in use, as a load, an import, a
-    /// Settings save or an edit hands it over. The session's values stay,
-    /// the capture compiles, and the Forsaken Lands rules follow it.
-    pub fn set_config(&mut self, config: PromptConfig) {
+    /// Settings save or an edit hands it over. A design that follows the
+    /// game is written from the table's codes for who you are, so a
+    /// change of codes writes it again. The session's values stay, the
+    /// capture compiles, and the Forsaken Lands rules follow it.
+    pub fn set_config(&mut self, mut config: PromptConfig) {
+        config.mirror_game(self.who);
         if self.config != config {
             self.revision += 1;
         }
@@ -215,8 +218,21 @@ impl PromptEngine {
             .and_then(|s| s.get("language"))
             .and_then(Json::as_str);
         let who = Who::from_packets(level, language);
-        if who != self.who {
-            self.who = who;
+        self.take_who(who);
+    }
+
+    /// The prompt is for `who` now. The capture compiles for it, and a
+    /// design that follows the game is written again for it, since who
+    /// you are decides what some codes print.
+    fn take_who(&mut self, who: Who) {
+        if who == self.who {
+            return;
+        }
+        self.who = who;
+        let mut config = self.config.clone();
+        if config.mirror_game(who) {
+            self.set_config(config);
+        } else {
             self.stage.set_capture_for(&self.config.capture, who);
         }
     }
@@ -358,10 +374,7 @@ impl PromptEngine {
 
     /// A new connection starts as a mortal in your own body.
     fn forget_who(&mut self) {
-        if self.who != Who::default() {
-            self.who = Who::default();
-            self.stage.set_capture_for(&self.config.capture, self.who);
-        }
+        self.take_who(Who::default());
     }
 
     /// The connection closed. Every value, packet and the new build sign
