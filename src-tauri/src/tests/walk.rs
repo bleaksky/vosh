@@ -1004,6 +1004,26 @@ async fn a_new_walk_takes_over_once_the_step_in_flight_lands() {
 
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_walk_that_arrives_as_a_new_one_waits_sends_what_it_held_first() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    let go = Arc::new(Notify::new());
+    h.script([Answer::Wait(go.clone())]);
+    h.type_line("#walk w;get all").await;
+    h.until_heard(&["w"]).await;
+    h.type_line("#walk e;look").await;
+    // The step was the walk's last, so what the walk held acts on the
+    // Common Road before the new walk leaves it.
+    go.notify_one();
+    h.until_heard(&["w", "get all", "e", "look"]).await;
+    assert_eq!(h.here(), FOUNTAIN);
+    assert!(h.walk_lines().is_empty(), "{:?}", h.walk_lines());
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn walk_with_no_connection_says_so() {
     let _grid = grid();
     let h = Harness::new().await;
