@@ -41,7 +41,7 @@
     "\u001b[38;5;244m$1\u001b[0m\u001b[38;5;210m$2\u001b[0m\u001b[38;5;244m$3\u001b[0m",
     "\u001b[38;5;244m$1\u001b[0m\u001b[38;5;152m$2\u001b[0m\u001b[38;5;244m$3\u001b[0m",
     "\u001b[38;5;249mYou get \u001b[38;5;230m$1 \u001b[38;5;249mgold coins from $2.\u001b[0m",
-    "\u001b[38;5;120mYou have become better at \u001b[38;5;230m$1\u001b[38;5;120m!\u001b[0m",
+    "\u001b[38;5;120mYou have become better at \u001b[38;5;230m$1\u001b[38;5;120m!$2\u001b[0m",
     "\u001b[38;5;120mYou raise a level!!\u001b[0m",
     "\u001b[38;5;120mYou gain:  \u001b[38;5;230m$1\u001b[38;5;120m/$2 hit point$3, \u001b[38;5;230m$4\u001b[38;5;120m/$5 mana, \u001b[38;5;230m$6\u001b[38;5;120m/$7 move, and \u001b[38;5;230m$8\u001b[38;5;120m practice$9.\u001b[0m",
     "\u001b[38;5;248mYou receive \u001b[38;5;230m$1 \u001b[38;5;248mexperience points.\u001b[0m",

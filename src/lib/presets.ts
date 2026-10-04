@@ -598,8 +598,10 @@ export const PRESETS: Preset[] = [
       ),
       replace(
         'loot.skill_up',
-        '^You have become better at (.+)!$',
-        '{fg:120}You have become better at {fg:230}$1{fg:120}!{reset}',
+        // check_improve in skills.c adds the percent you reach, as in
+        // [78%]. A song gain (check_improve_song) prints none.
+        '^You have become better at (.+)!( \\[\\d+%\\])?$',
+        '{fg:120}You have become better at {fg:230}$1{fg:120}!$2{reset}',
       ),
       // The game prints the level and what you gain on two lines
       // (update.c gain_exp and advance_level), with hit point and

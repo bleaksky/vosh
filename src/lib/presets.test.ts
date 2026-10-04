@@ -290,16 +290,19 @@ function triggerMatches(trigger: ReturnType<typeof presetTrigger>, line: string)
 describe('the Gold, experience, and levels preset', () => {
   const skillUp = presetTrigger('loot_progression', 'loot.skill_up');
 
-  // Bug 16, open. check_improve in skills.c prints the percent you reach
+  // Bug 16. check_improve in skills.c prints the percent you reach
   // after the skill, You have become better at %s! [%d%%], and the skill
   // trigger wants the line to end at the bang, so it misses every skill
   // and spell you improve. Only a song prints the line without the
   // percent (check_improve_song in song.c). Dodge is a row of skill_table
   // in const.c, and the 78 is the hp_pct of fixtures/gmcp/aabahran
-  // group-info.gmcp. it.fails holds the bug until its fix makes this a
-  // plain it.
-  it.fails('marks a skill you improve, as check_improve prints it (bug 16)', () => {
+  // group-info.gmcp.
+  it('marks a skill you improve, as check_improve prints it (bug 16)', () => {
     expect(triggerMatches(skillUp, 'You have become better at dodge! [78%]')).toBe(true);
+    // The percent stays, in the color of the line.
+    expect(rewritten('loot_progression', 'You have become better at dodge! [78%]')).toBe(
+      'You have become better at dodge! [78%]',
+    );
   });
 
   it('marks the line that says you raised a level', () => {
