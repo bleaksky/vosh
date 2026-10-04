@@ -1394,28 +1394,33 @@ export async function deleteMacro(key: string): Promise<Macro[]> {
 }
 
 /** One interval timer: fire `command` every `interval_secs` seconds while
- *  connected. `id` is a stable backend-assigned handle. */
+ *  connected. `id` is a stable backend-assigned handle. A timer in a
+ *  group that is off waits as one that is off does. */
 export interface Timer {
   id: number;
   name: string;
   interval_secs: number;
   command: string;
   enabled: boolean;
+  /** Left out while the timer is in no group. */
+  group?: string | null;
 }
 
 export async function timersList(): Promise<Timer[]> {
   return invoke('timers_list');
 }
 
-/** Create (id null) or update (existing id) a timer. Returns the full list. */
+/** Create (id null) or update (existing id) a timer. A null group puts
+ *  it in none. Returns the full list. */
 export async function timersSet(
   id: number | null,
   name: string,
   intervalSecs: number,
   command: string,
   enabled: boolean,
+  group: string | null,
 ): Promise<Timer[]> {
-  return invoke('timers_set', { id: id ?? null, name, intervalSecs, command, enabled });
+  return invoke('timers_set', { id: id ?? null, name, intervalSecs, command, enabled, group });
 }
 
 export async function timersDelete(id: number): Promise<Timer[]> {
