@@ -304,10 +304,7 @@ fn commit_cmud_trigger(t: CmudTriggerInProgress, report: &mut ImportReport) {
     }
     report.triggers.push(Trigger {
         name,
-        patterns: vec![vosh_automation::trigger::TriggerPattern {
-            pattern,
-            enabled: true,
-        }],
+        patterns: vec![vosh_automation::trigger::TriggerPattern::regex(pattern)],
         priority: t.priority,
         enabled: t.enabled,
         actions,

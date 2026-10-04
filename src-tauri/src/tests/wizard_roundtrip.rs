@@ -422,10 +422,7 @@ fn generate(seed: u64) -> Set {
             };
             config.triggers.push(Trigger {
                 name: name.to_string(),
-                patterns: vec![TriggerPattern {
-                    pattern: format!("^{name} {version}$"),
-                    enabled: true,
-                }],
+                patterns: vec![TriggerPattern::regex(format!("^{name} {version}$"))],
                 priority,
                 enabled: rng.chance(85),
                 actions: vec![TriggerAction::Send {
