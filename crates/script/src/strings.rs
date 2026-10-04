@@ -734,8 +734,13 @@ mod tests {
 
     #[test]
     fn a_replacement_past_the_memory_limit_stops_the_call() {
+        // Each %0 copies the whole 256 KB match, so the 160 of them build
+        // 40 MB in a few ms. A plain replacement over many matches gets
+        // there too, but takes most of the 100 ms in a debug build and
+        // runs out of time first while other tests load the machine.
         let outcome = typed_in_time(
-            "local big = string.rep('b', 4096) string.gsub(string.rep('a', 100000), '.', big)",
+            "local line = string.rep('a', 256 * 1024) \
+             string.gsub(line, '^.*', string.rep('%0', 160))",
         );
         assert_eq!(outcome.stopped, [Owner::Typed]);
         assert_eq!(

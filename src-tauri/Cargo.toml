@@ -93,6 +93,9 @@ vosh-automation = { path = "../crates/automation", features = ["testkit"] }
 # LogStore::in_memory and the other test only log calls, which the
 # session, prompt lookup, hidden input and password wipe tests use.
 vosh-log = { path = "../crates/log", features = ["testkit"] }
+# An engine whose Lua can nap, which the Lua timer tests use to make a
+# slow handler.
+vosh-script = { path = "../crates/script", features = ["testkit"] }
 # The mock runtime lets a test open windows and count what each event
 # reaches. The feature adds no new crate.
 tauri = { version = "2", features = ["test"] }

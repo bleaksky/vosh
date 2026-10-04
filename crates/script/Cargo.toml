@@ -17,5 +17,10 @@ thiserror = { workspace = true }
 # The variable scope that mud.set_var and mud.set_profile_var name.
 vosh-automation = { path = "../automation" }
 
+[features]
+# The test kit: an engine whose Lua can nap, which the app's tests use to
+# make a slow handler.
+testkit = []
+
 [lints]
 workspace = true
