@@ -89,4 +89,4 @@ Applies to README, CONTRIBUTING, settings labels, error messages, commit message
 
 ## Phase Status
 
-Milestone 2 of the one window redesign is done. The refactor before 1.0 is under way and follows `docs/refactor-plan.md`, which holds the status of every phase and the decisions taken. R13 is done, and stage B stops at its safe stopping point until you check the app. R14 comes next, once you approve it. The last commit of each phase updates this line.
+Milestone 2 of the one window redesign is done. The refactor before 1.0 is under way and follows `docs/refactor-plan.md`, which holds the status of every phase and the decisions taken. R14 is done in code and waits for your app check and your call on P2, which runs about 3 percent slower than before R14. R14b comes next, once you approve it. The last commit of each phase updates this line.

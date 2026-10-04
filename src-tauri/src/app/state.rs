@@ -27,9 +27,9 @@ use crate::session::SessionHandle;
 pub(crate) struct AppState {
     pub(crate) session: Mutex<Option<SessionHandle>>,
     pub(crate) profile: Arc<Mutex<Profile>>,
-    /// Your target and the room list, which belong to the connection. The
-    /// session loop holds a handle to them. See [`Connection`] for where
-    /// its lock sits.
+    /// What one connection holds apart from the profile, your target and
+    /// the room list among it. The session loop holds a handle to it. See
+    /// [`Connection`] for where its lock sits.
     pub(crate) connection: Arc<Mutex<Connection>>,
     pub(crate) lua_timers: SharedTimers,
     pub(crate) logs: SharedLogStore,
