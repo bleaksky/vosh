@@ -56,6 +56,9 @@
 //! the run is written again from the colors it started in (see
 //! [`counted`]). A rewrite leaves out the line end each renderer still
 //! holds back after the run, and carries it as [`Replace::tail`].
+//! [`CollapseRules`] says which lines the session offers it: the lines of
+//! a fight unless you show every one, and attack lines only when you
+//! collapse them too.
 
 mod blocks;
 mod drawing;
@@ -70,7 +73,7 @@ pub use blocks::{Block, BlockLine, End, View};
 pub use marks::{lift_end, lift_start, mark, MARK_OSC};
 pub use output::{close_pin_row, shows_lines, Above, Output, Replace};
 pub use reading::{Offer, Released};
-pub use repeats::{collapsible, counted, Repeat};
+pub use repeats::{collapsible, counted, CollapseRules, Repeat};
 pub use ring::Candidate;
 
 pub(crate) use blocks::OpenRow;
