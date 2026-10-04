@@ -7,7 +7,7 @@
 //! listeners, and a native grid replays the output the way the terminal
 //! shows it. The profile folder and the log live in a temporary folder.
 
-mod harness;
+pub(super) mod harness;
 
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex as StdMutex};

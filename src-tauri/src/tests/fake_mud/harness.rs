@@ -32,21 +32,35 @@ const EVENTS: [&str; 11] = [
     crate::app::events::PROMPT_CONFIG_CHANGED,
 ];
 
+/// A fake game on a local port of its own.
+pub(crate) struct FakeServer {
+    pub(crate) port: u16,
+    /// The game serves these options to the next connection.
+    pub(crate) options: Arc<StdMutex<Options>>,
+    /// Every byte a client sent the game, in order.
+    pub(crate) received: Arc<StdMutex<Vec<u8>>>,
+}
+
 /// Serve the fake game on a local port until the test ends. Each
-/// connection plays the options `options` holds when it connects. `asks`
+/// connection plays the options the server holds when it connects. `asks`
 /// counts each IAC DO EOR a client sends.
-async fn serve_fake(options: Arc<StdMutex<Options>>, asks: Arc<AtomicUsize>) -> u16 {
+async fn serve_fake(options: Options, asks: Arc<AtomicUsize>) -> FakeServer {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("a local port");
-    let port = listener.local_addr().expect("an address").port();
+    let server = FakeServer {
+        port: listener.local_addr().expect("an address").port(),
+        options: Arc::new(StdMutex::new(options)),
+        received: Arc::default(),
+    };
+    let (options, received) = (server.options.clone(), server.received.clone());
     tokio::spawn(async move {
         while let Ok((socket, _)) = listener.accept().await {
             let options = options.lock().expect("the options").clone();
-            tokio::spawn(play(socket, options, asks.clone()));
+            tokio::spawn(play(socket, options, asks.clone(), received.clone()));
         }
     });
-    port
+    server
 }
 
 /// One connection to the fake game, as `examples/fake_mud.rs` plays it.
@@ -54,6 +68,7 @@ async fn play(
     mut socket: TcpStream,
     options: Options,
     asks: Arc<AtomicUsize>,
+    received: Arc<StdMutex<Vec<u8>>>,
 ) -> std::io::Result<()> {
     use vosh_prompt::testkit::mud::telnet::{DO, IAC, TELOPT_EOR};
     socket.set_nodelay(true)?;
@@ -65,6 +80,10 @@ async fn play(
         if n == 0 {
             return Ok(());
         }
+        received
+            .lock()
+            .expect("the bytes")
+            .extend_from_slice(&buf[..n]);
         let asked = buf[..n]
             .windows(3)
             .filter(|w| *w == [IAC, DO, TELOPT_EOR])
@@ -88,8 +107,9 @@ enum Heard {
     /// An event, with the session its payload names, if any, and the
     /// rest of the payload.
     Event(&'static str, Option<SessionId>, String),
-    /// Your typed line, which the webview echoes itself.
-    Echo(String),
+    /// Your typed line, which the webview echoes itself on the terminal
+    /// of the session you typed it in.
+    Echo(SessionId, String),
 }
 
 /// The session `payload` names, taken out of it, and the rest of the
@@ -103,29 +123,39 @@ fn named(payload: &str) -> (Option<SessionId>, String) {
     (session, json.to_string())
 }
 
-/// The app with one profile folder, one log and one connection at a time.
+/// The app with one profile folder and one log, and two fake games. A
+/// session holds one connection at a time.
 pub(crate) struct Harness {
     pub(crate) app: App<MockRuntime>,
     pub(crate) state: SharedState,
     heard: Arc<StdMutex<Vec<Heard>>>,
     pub(crate) dir: tempfile::TempDir,
+    /// Two fake games of the same options, each on a port of its own.
+    pub(crate) servers: [FakeServer; 2],
+    /// The first game's port and options, the ones `servers[0]` holds.
     pub(crate) port: u16,
-    /// The fake game serves these options to the next connection.
     pub(crate) fake: Arc<StdMutex<Options>>,
-    /// How many times a client asked the fake game for EOR.
+    /// How many times a client asked the first game for EOR.
     pub(crate) eor_asks: Arc<AtomicUsize>,
-    /// Whether the fake game counts as The Forsaken Lands when the
-    /// session connects.
+    /// The session the app starts with. `connect`, `type_line`,
+    /// `disconnect` and `screen` act on it and the first game.
+    pub(crate) first: SessionId,
+    /// Whether the fake games count as The Forsaken Lands when a session
+    /// connects.
     forsaken: AtomicBool,
 }
 
 impl Harness {
-    /// A fake game of `build` on a port of its own, and an app whose
-    /// profiles claim Tester (default) and Healer there, with a log.
+    /// Two fake games that play `options`, each on a port of its own,
+    /// and an app whose profiles claim Tester (default) and Healer on the
+    /// first, with a log.
     pub(crate) async fn new(options: Options) -> Self {
-        let fake = Arc::new(StdMutex::new(options));
         let eor_asks = Arc::new(AtomicUsize::new(0));
-        let port = serve_fake(fake.clone(), eor_asks.clone()).await;
+        let servers = [
+            serve_fake(options.clone(), eor_asks.clone()).await,
+            serve_fake(options, Arc::default()).await,
+        ];
+        let port = servers[0].port;
         let dir = tempfile::tempdir().expect("a temporary folder");
         let state: SharedState = Arc::new(AppState::default());
         let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).expect("a set");
@@ -160,14 +190,17 @@ impl Harness {
                     .push(Heard::Event(name, session, payload));
             });
         }
+        let first = state.selected_session().id;
         Self {
             app,
             state,
             heard,
             dir,
             port,
-            fake,
+            fake: servers[0].options.clone(),
+            servers,
             eor_asks,
+            first,
             forsaken: AtomicBool::new(false),
         }
     }
@@ -180,13 +213,25 @@ impl Harness {
         crate::prompt::take_config(&mut p, &mut c, config);
     }
 
-    /// Connect to the fake game the way `session::connect` does, with no
-    /// scrollback file.
+    /// Connect the first session to the first game.
     pub(crate) async fn connect(&self) {
+        self.connect_to(self.first, &self.servers[0]).await;
+    }
+
+    /// Open a session after the others, as the page does.
+    pub(crate) async fn open_session(&self) -> SessionId {
+        crate::ipc::session::session_open(self.app.state())
+            .await
+            .expect("a new session")
+    }
+
+    /// Connect `session` to the fake game `server` the way
+    /// `session::connect` does, with no scrollback file.
+    pub(crate) async fn connect_to(&self, session: SessionId, server: &FakeServer) {
         let state = &self.state;
-        let session = state.selected_session();
+        let session = state.session(Some(session)).expect("the session");
         if let Ok(mut g) = session.current_connection.lock() {
-            *g = Some(("127.0.0.1".into(), self.port));
+            *g = Some(("127.0.0.1".into(), server.port));
         }
         if let Ok(mut g) = session.current_character.lock() {
             *g = None;
@@ -196,7 +241,7 @@ impl Harness {
             state,
             &session,
             "127.0.0.1".into(),
-            self.port,
+            server.port,
             false,
             self.forsaken.load(Ordering::SeqCst),
             None,
@@ -207,9 +252,15 @@ impl Harness {
         *session.slot.lock().await = Some(handle);
     }
 
-    /// Close the connection the way `session::disconnect` does.
+    /// Close the first session's connection.
     pub(crate) async fn disconnect(&self) {
-        let session = self.state.selected_session();
+        self.disconnect_session(self.first).await;
+    }
+
+    /// Close the connection of `session` the way `session::disconnect`
+    /// does.
+    pub(crate) async fn disconnect_session(&self, session: SessionId) {
+        let session = self.state.session(Some(session)).expect("the session");
         let handle = session.slot.lock().await.take();
         if let Some(handle) = handle {
             handle.shutdown().await;
@@ -222,41 +273,51 @@ impl Harness {
         };
     }
 
-    /// Type `line` and press Enter: the webview echoes it, tells the
-    /// session it wrote after the newest output it took, and sends it
-    /// through the input path.
+    /// Type `line` in the first session and press Enter.
     pub(crate) async fn type_line(&self, line: &str) {
-        let after = self.echo(line);
-        if let Some(handle) = self.state.selected_session().slot.lock().await.as_ref() {
+        self.type_in(self.first, line).await;
+    }
+
+    /// Type `line` in `session` and press Enter: the webview echoes it,
+    /// tells the session it wrote after the newest output it took, and
+    /// sends it through the input path.
+    pub(crate) async fn type_in(&self, session: SessionId, line: &str) {
+        let after = self.echo_in(session, line);
+        let typed_in = self.state.session(Some(session)).expect("the session");
+        if let Some(handle) = typed_in.slot.lock().await.as_ref() {
             let _ = handle.local_write(after);
         }
         crate::ipc::session::session_send_input(
             self.app.handle().clone(),
             self.app.state(),
             line.to_string(),
-            None,
+            Some(session),
         )
         .await
         .expect("the line goes out");
     }
 
-    /// The webview echoes `line` on the terminal of the selected
-    /// session. Returns the newest output of the prompt stage that
-    /// terminal took before it, which the echo follows.
+    /// The webview echoes `line` on the terminal of the first session.
     pub(crate) fn echo(&self, line: &str) -> u64 {
-        let shown = Some(self.state.selected_session().id);
+        self.echo_in(self.first, line)
+    }
+
+    /// The webview echoes `line` on the terminal of `session`. Returns
+    /// the newest output of the prompt stage that terminal took before
+    /// it, which the echo follows.
+    fn echo_in(&self, session: SessionId, line: &str) -> u64 {
         let mut heard = self.heard.lock().expect("the events");
         let after = heard
             .iter()
             .filter_map(|h| match h {
-                Heard::Event("session://output", session, payload) if *session == shown => {
+                Heard::Event("session://output", Some(from), payload) if *from == session => {
                     serde_json::from_str::<Json>(payload).ok()?["id"].as_u64()
                 }
                 _ => None,
             })
             .max()
             .unwrap_or(0);
-        heard.push(Heard::Echo(format!("{line}\r\n")));
+        heard.push(Heard::Echo(session, format!("{line}\r\n")));
         after
     }
 
@@ -264,7 +325,8 @@ impl Harness {
         self.heard.lock().expect("the events").clone()
     }
 
-    /// Every payload of the event `name`, oldest first.
+    /// Every payload of the event `name`, oldest first, whichever
+    /// session sent it.
     pub(crate) fn events(&self, name: &str) -> Vec<Json> {
         self.heard()
             .into_iter()
@@ -277,18 +339,35 @@ impl Harness {
             .collect()
     }
 
-    /// What the terminal of the selected session shows, 100 wide, rows
-    /// trimmed.
+    /// Every payload of the event `name` that names `session`, oldest
+    /// first, without its session field.
+    pub(crate) fn events_of(&self, session: SessionId, name: &str) -> Vec<Json> {
+        self.heard()
+            .into_iter()
+            .filter_map(|h| match h {
+                Heard::Event(n, Some(from), payload) if n == name && from == session => {
+                    Some(serde_json::from_str(&payload).expect("a JSON payload"))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// What the terminal of the first session shows.
     pub(crate) fn screen(&self) -> Vec<String> {
-        let shown = Some(self.state.selected_session().id);
+        self.screen_of(self.first)
+    }
+
+    /// What the terminal of `session` shows, 100 wide, rows trimmed.
+    pub(crate) fn screen_of(&self, session: SessionId) -> Vec<String> {
         let mut grid = crate::native::grid::TermGrid::new(100, 200);
         for heard in self.heard() {
             match heard {
-                Heard::Echo(text) => grid.local_write(text.as_bytes()),
-                Heard::Event("session://output", session, payload) if session == shown => {
+                Heard::Echo(from, text) if from == session => grid.local_write(text.as_bytes()),
+                Heard::Event("session://output", Some(from), payload) if from == session => {
                     grid.session_output(&output(&payload));
                 }
-                Heard::Event(..) => {}
+                Heard::Echo(..) | Heard::Event(..) => {}
             }
         }
         let mut rows: Vec<String> = (0..grid.screen_lines())
