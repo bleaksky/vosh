@@ -24,6 +24,7 @@ use super::conn::Conn;
 use super::effects::{apply_script_result, deliver_tick_step, OutputSink, ScriptIo};
 use super::gmcp_vars;
 use super::prompt_view::observe_prompt_gmcp;
+use super::read::walked;
 
 /// GMCP packages we ask the server to enable in Core.Supports.Set. Char,
 /// Room, and Comm cover the player view; World powers the tick timer reset
@@ -95,6 +96,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         deliver_tick_step(
             &conn.app,
             &mut conn.stream,
+            &mut conn.walker,
             &conn.profile,
             &conn.lua_timers,
             step,
@@ -104,12 +106,13 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     }
     apply_script_result(
         &conn.app,
-        &mut ScriptIo::Session(&mut conn.stream, &mut sink),
+        &mut ScriptIo::Session(&mut conn.stream, &mut sink, &mut conn.walker),
         &conn.profile,
         &conn.lua_timers,
         script_apply,
     )
     .await?;
+    walk_gmcp(conn, &msg, batch).await?;
     // Keep the last affects list for a window that opens between ticks.
     conn.app
         .state::<crate::app::state::SharedState>()
@@ -134,6 +137,27 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     // we ran. This `emit` count would otherwise duplicate that, so
     // we leave gmcp_packets as the single source.
     Ok(())
+}
+
+/// What the walker reads of a packet: the tiles, the room, a fight and
+/// your position. What it then asks for goes out at once, and its lines
+/// at the end of the read.
+async fn walk_gmcp<R: tauri::Runtime>(
+    conn: &mut Conn<R>,
+    msg: &vosh_protocol::gmcp::Message,
+    batch: &mut ReadBatch,
+) -> std::io::Result<()> {
+    let out = match msg.package.as_str() {
+        "Map.Tiles" => {
+            conn.walker.tiles(&msg.data);
+            return Ok(());
+        }
+        "Room.Info" => conn.walker.room_info(&msg.data, Instant::now()),
+        "Char.Combat" => conn.walker.combat(&msg.data),
+        "Char.State" => conn.walker.state(&msg.data),
+        _ => return Ok(()),
+    };
+    walked(conn, out, batch).await
 }
 
 /// Char.Status or Char.Name named the character, trimmed and not empty.

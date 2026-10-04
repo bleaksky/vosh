@@ -128,10 +128,15 @@ pub(crate) struct ApplyResult {
     pub lists: ListChanges,
     pub new_timers: Vec<PendingTimer>,
     pub cancel_timers: Vec<u32>,
+    /// A `#walk` a line ran, for the walker in the session, after the
+    /// bytes. Only the input pipeline sets it.
+    pub walk: Option<crate::input::walk::WalkCommand>,
 }
 
 impl ApplyResult {
-    /// Add what `later` asks for after what this result asks for.
+    /// Add what `later` asks for after what this result asks for. A
+    /// `#walk` in `later` takes over one in this result, as a second walk
+    /// takes over the first.
     pub(crate) fn append(&mut self, later: ApplyResult) {
         self.send_bytes.extend(later.send_bytes);
         self.echoes.extend(later.echoes);
@@ -146,6 +151,9 @@ impl ApplyResult {
         };
         self.new_timers.extend(later.new_timers);
         self.cancel_timers.extend(later.cancel_timers);
+        if later.walk.is_some() {
+            self.walk = later.walk;
+        }
     }
 }
 

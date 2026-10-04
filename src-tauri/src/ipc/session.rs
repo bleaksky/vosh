@@ -1,6 +1,7 @@
 //! The commands for your connection to the game. The page connects and
 //! disconnects through them, sends the lines you type, plain or masked,
-//! tells the game the size of the terminal, and reads the target you track.
+//! stops a walk on Esc, tells the game the size of the terminal, and
+//! reads the target you track.
 
 use tauri::{AppHandle, State};
 
@@ -48,6 +49,19 @@ pub(crate) async fn session_send_masked<R: tauri::Runtime>(
     };
     if !handle.send_masked(crate::session::echo::masked_line_bytes(&line)) {
         return Err("session task gone".to_string());
+    }
+    Ok(())
+}
+
+/// Stop the walk under way, as Esc in the command line does. It says
+/// nothing when you are not walking or not connected.
+#[tauri::command]
+pub(crate) async fn session_walk_stop(state: State<'_, SharedState>) -> Result<(), String> {
+    if let Some(handle) = state.session.lock().await.as_ref() {
+        let _ = handle.walk(crate::input::walk::WalkCommand::Stop {
+            key: true,
+            rest: Vec::new(),
+        });
     }
     Ok(())
 }

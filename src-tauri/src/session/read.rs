@@ -21,13 +21,14 @@ use crate::prompt::report_game_prompt_seen;
 use super::batch::{emit_session_output, ReadBatch};
 use super::conn::Conn;
 use super::connection::Stream;
-use super::effects::{apply_script_result, deliver_tick_step, OutputSink, ScriptIo};
+use super::effects::{apply_script_result, deliver_tick_step, framed_echoes, OutputSink, ScriptIo};
 use super::gmcp::{handle_gmcp, hello_subnegotiation, supports_subnegotiation};
 use super::log_sink::LogSink;
 use super::prompt_view::{emit_prompt_state, send_prompt_vars, watching_prompt};
 use super::steps::{
     clock_after, hold_step, let_go_held, line_step, marker_step, partial_step, LineStep,
 };
+use super::walk::{self, WalkOut};
 use super::{emit_input_mode, GagWithoutReaderPayload, RoutedPayload};
 
 pub(super) const READ_BUFFER_BYTES: usize = 8 * 1024;
@@ -51,6 +52,12 @@ impl<R: tauri::Runtime> Conn<R> {
         }
         if let Err(e) = end_read(self, log_sink, &mut batch).await {
             warn!(error = %e, "prompt handling at the end of a read failed");
+        }
+        // What the walker said in this read shows after it, below the
+        // prompt that ends it.
+        if !self.walk_lines.is_empty() {
+            let lines = std::mem::take(&mut self.walk_lines);
+            batch.out.text(&framed_echoes(&lines));
         }
         batch
     }
@@ -85,9 +92,25 @@ async fn handle_event<R: tauri::Runtime>(
             // they have ordering semantics (a `gag` action mutates the
             // line's display before it lands in the batch). Log rows
             // flush in one transaction once the socket is quiet.
+            //
+            // While a step is in flight, the walker reads each line once
+            // it shows, whatever its triggers do to it. The first line
+            // ends the partial the read found, which can be a prompt the
+            // answer to the step runs on from, so the walker reads what
+            // follows it.
+            let mut partial = conn
+                .accumulator
+                .partial()
+                .filter(|_| conn.walker.watching())
+                .map(vosh_protocol::ansi::plain_text);
             for line in conn.accumulator.feed(&bytes) {
                 conn.perf.lines_processed += 1;
                 let plain = vosh_protocol::ansi::plain_text(&line.bytes);
+                let ended = partial.take();
+                let watched = conn
+                    .walker
+                    .watching()
+                    .then(|| walk::answer(&plain, ended.as_deref()).to_string());
                 let trigger_t0 = std::time::Instant::now();
                 // The tick step for a line that matches the Reset on
                 // pattern comes under the same lock as the triggers and
@@ -105,6 +128,10 @@ async fn handle_event<R: tauri::Runtime>(
                 conn.perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
                 for step in steps {
                     deliver_line_step(conn, log_sink, batch, step).await?;
+                }
+                if let Some(plain) = watched {
+                    let out = conn.walker.line(&plain, Instant::now());
+                    walked(conn, out, batch).await?;
                 }
             }
             Ok(())
@@ -232,7 +259,7 @@ async fn deliver_line_step<R: tauri::Runtime>(
     let mut sink = OutputSink::Batch(batch);
     apply_script_result(
         &conn.app,
-        &mut ScriptIo::Session(&mut conn.stream, &mut sink),
+        &mut ScriptIo::Session(&mut conn.stream, &mut sink, &mut conn.walker),
         &conn.profile,
         &conn.lua_timers,
         apply,
@@ -243,12 +270,51 @@ async fn deliver_line_step<R: tauri::Runtime>(
         deliver_tick_step(
             &conn.app,
             &mut conn.stream,
+            &mut conn.walker,
             &conn.profile,
             &conn.lua_timers,
             step,
             &mut sink,
         )
         .await?;
+    }
+    Ok(())
+}
+
+/// Do what the walker asked for in a read: keep its lines for the end of
+/// the read, run what a walk held once you arrive, as its line would have
+/// run it, and send its step at once. What an arrived walk held goes
+/// before the first step of a walk that takes over from it, so it acts in
+/// the room the walk reached.
+pub(super) async fn walked<R: tauri::Runtime>(
+    conn: &mut Conn<R>,
+    out: WalkOut,
+    batch: &mut ReadBatch,
+) -> std::io::Result<()> {
+    let WalkOut {
+        send,
+        lines,
+        release,
+    } = out;
+    conn.walk_lines.extend(lines);
+    if !release.is_empty() {
+        let apply = walk::release(&conn.profile, release).await;
+        apply_script_result(
+            &conn.app,
+            &mut ScriptIo::Session(
+                &mut conn.stream,
+                &mut OutputSink::Batch(batch),
+                &mut conn.walker,
+            ),
+            &conn.profile,
+            &conn.lua_timers,
+            apply,
+        )
+        .await?;
+    }
+    if !send.is_empty() {
+        conn.stream.write_all(&send).await?;
+        conn.stream.flush().await?;
     }
     Ok(())
 }

@@ -198,6 +198,12 @@ export async function sendMaskedInput(line: string): Promise<void> {
   await invoke('session_send_masked', { line });
 }
 
+/// Stop the walk under way, as Esc in the command line does. The session
+/// says nothing when you are not walking.
+export async function stopWalk(): Promise<void> {
+  await invoke('session_walk_stop');
+}
+
 export type TriggerAction =
   | { kind: 'highlight'; style: HighlightStyle }
   | { kind: 'gag' }
