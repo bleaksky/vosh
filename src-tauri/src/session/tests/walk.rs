@@ -192,10 +192,13 @@ fn lines_that_only_look_like_a_failure_leave_the_walk_going() {
     let t = Instant::now();
     let mut w = standing_in(FOUNTAIN, t);
     let _ = w.command(start("2w", &[]), t);
+    // Lines a step can print on its way, and a container's, from
+    // `act_move.c:529`, `437` and `736` and `act_info.c:2726`.
     for line in [
-        "Maren says 'Alas, you cannot go that way.'",
-        "The door is closed now.",
-        "Alas, you cannot go that way",
+        "You attempt to climb in that direction.",
+        "A magical barrier parts about you.",
+        "You feel sluggish.",
+        "It is closed.",
         "[Exits: north south west]",
     ] {
         assert_eq!(w.line(line, t), WalkOut::default(), "{line:?}");
