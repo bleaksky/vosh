@@ -14,6 +14,7 @@ import { BAND_OUTSET_Y, dockGap, type CellSize } from '../../lib/promptBand';
 import {
   cardAnchor,
   type CardRequest,
+  cardShowState,
   codeReaderStep,
   codesSourceLine,
   editedTable,
@@ -1111,7 +1112,7 @@ export function PromptCard({
               </label>
               <ShowButton
                 value={config.show}
-                state={show}
+                state={cardShowState(show, config.capture)}
                 onChange={(place) => save(withShow(config, place))}
               />
               <div className="pc-foot-end">

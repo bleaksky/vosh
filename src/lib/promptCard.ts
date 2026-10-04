@@ -7,6 +7,7 @@
 
 import { profileDisplayName, profilePossessive } from './profileLabel';
 import type { MoveMade } from './promptPieces';
+import type { PromptShowState } from './promptShow';
 import { cellWidth, parseSgrCells, type Cell } from './sgrCells';
 import type {
   PromptCapture,
@@ -688,6 +689,18 @@ export function withDesign(config: PromptConfig, template: string): PromptConfig
  *  your prompt to its new place. */
 export function withShow(config: PromptConfig, show: PromptShow): PromptConfig {
   return { ...config, show };
+}
+
+/** What the button at the card's foot reads of where your prompt
+ *  shows. Right after your first capture the card's table holds it a
+ *  round trip before the state reads it. The button waits quietly then,
+ *  off with nothing to say, so it never asks you to customize the prompt
+ *  you are customizing. */
+export function cardShowState(
+  show: PromptShowState | null,
+  capture: PromptCapture,
+): PromptShowState | null {
+  return show && !show.capture && hasCapture(capture) ? null : show;
 }
 
 /** The table once the opposite Option key takes move `back` back. The
