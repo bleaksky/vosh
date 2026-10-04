@@ -54,8 +54,9 @@ struct LuaTrigger {
 pub struct LuaTriggerInfo {
     pub name: String,
     pub pattern: String,
-    /// Who registered it, as `#scripts` names a loaded script, or
-    /// `#lua` for your own Lua.
+    /// Who registered it, as `Owner::listed_name` gives it. That names a
+    /// plugin, a loose file, `#lua`, or the trigger or alias whose Lua
+    /// made it.
     pub owner: String,
 }
 
