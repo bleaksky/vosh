@@ -734,9 +734,20 @@ mod tests {
 
     #[test]
     fn a_replacement_past_the_memory_limit_stops_the_call() {
-        let outcome = typed_in_time(
-            "local big = string.rep('b', 4096) string.gsub(string.rep('a', 100000), '.', big)",
-        );
+        // The call holds 30 MB before the replacement, so the replacement
+        // passes the 32 MB a call may use within a few MB of output.
+        // Building all 32 MB takes about 90 ms in a debug build, since
+        // each copy of the replacement is searched for `%`, so with every
+        // test running at once the 100 ms limit could stop it first.
+        let hold = "local kb = string.rep('h', 1024) local held = {} \
+                    for i = 1, 30 do held[i] = string.rep(kb, 1024) end";
+        // What it holds stays under the limit on its own.
+        let held = typed_in_time(&format!("{hold} mud.echo('held')"));
+        assert_eq!(held.actions, [crate::Action::Echo("held".into())]);
+        let outcome = typed_in_time(&format!(
+            "{hold} local big = string.rep('b', 4096) \
+             string.gsub(string.rep('a', 100000), '.', big)"
+        ));
         assert_eq!(outcome.stopped, [Owner::Typed]);
         assert_eq!(
             crate::test_support::error_lines(&outcome),
