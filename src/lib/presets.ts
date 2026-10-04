@@ -34,7 +34,6 @@ export interface Preset {
   category: PresetCategory;
   name: string;
   description: string;
-  defaultEnabled: boolean;
   triggers: Omit<TriggerRecord, 'preset'>[];
 }
 
@@ -238,7 +237,6 @@ export const PRESETS: Preset[] = [
     category: 'healing',
     name: 'Cures and heals',
     description: 'Turns cure and heal lines green so you spot them at a glance.',
-    defaultEnabled: true,
     triggers: [
       highlight('cure.feel_lot_better', 'You feel a lot better!$', GREEN),
       highlight('cure.feel_better', 'You feel better\\.$', GREEN),
@@ -261,7 +259,6 @@ export const PRESETS: Preset[] = [
     category: 'defensive',
     name: 'Parries, dodges, and blocks',
     description: 'Dims routine parries, dodges, and blocks to the dark grey your TinTin++ uses.',
-    defaultEnabled: true,
     triggers: [
       // Generic "You dodge X." / "You parry X." — matches the bare
       // form in highlights.tin line 97. Lower priority so the more
@@ -339,7 +336,6 @@ export const PRESETS: Preset[] = [
     // From highlights.tin lines 105 to 134.
     name: 'Disarms and fading buffs',
     description: 'Marks a disarm and a buff that wears off.',
-    defaultEnabled: true,
     triggers: [
       // Visual recolor + auto-rearm send, demonstrating the
       // multi-action support. Mirrors the user's tintin #ACTION at
@@ -417,7 +413,6 @@ export const PRESETS: Preset[] = [
     // From highlights.tin line 124.
     name: 'Terror weapon drop',
     description: 'Turns the line bold red, then picks up your weapon and wields it.',
-    defaultEnabled: true,
     triggers: [
       {
         name: 'terror.drop',
@@ -448,7 +443,6 @@ export const PRESETS: Preset[] = [
     description:
       'Colors the damage verb amber in lines that start with Your, so your hits stand out ' +
       'and the rest of the line keeps its color.',
-    defaultEnabled: true,
     triggers: [
       // Mirrors the TinTin `You%1` form so both "Your kick LACERATES
       // X" and "You LACERATE X" / "You miss X" lines fire — the
@@ -482,7 +476,6 @@ export const PRESETS: Preset[] = [
     description:
       'Dims lines where something hits you to grey, with the damage verb in red and ' +
       'misses in pale cyan.',
-    defaultEnabled: true,
     triggers: [
       replace(
         'combat.incoming',
@@ -508,7 +501,6 @@ export const PRESETS: Preset[] = [
     // From highlights.tin lines 170 to 174.
     name: 'Gold, experience, and levels',
     description: 'Marks the gold, experience, levels, and skills you gain.',
-    defaultEnabled: true,
     triggers: [
       replace(
         'loot.gold',
@@ -547,7 +539,6 @@ export const PRESETS: Preset[] = [
     // against the bubbly potions do_brew makes in skills5.c.
     name: 'Potion labels',
     description: 'Adds the spell a potion casts after its name.',
-    defaultEnabled: true,
     triggers: [
       replace('potion.blue', 'a bubbly blue potion', 'a bubbly blue potion {fg:248}(armor){reset}'),
       replace(
@@ -602,7 +593,6 @@ export const PRESETS: Preset[] = [
     // From highlights.tin lines 192 to 209.
     name: 'Herb labels',
     description: 'Adds the spell an herb casts after its name.',
-    defaultEnabled: true,
     triggers: [
       replace(
         'herb.purple_seaweed',
@@ -666,7 +656,6 @@ export const PRESETS: Preset[] = [
     category: 'chat',
     name: 'Tells you send',
     description: 'Puts each tell you send in the chat pane, beside the ones you get.',
-    defaultEnabled: true,
     triggers: [
       {
         name: 'chat.sent_tells',
@@ -707,7 +696,6 @@ export const PRESETS: Preset[] = [
       'Colors the exits green, what is in the room yellow, your target in the room bright ' +
       'red, the time of day blue, a change in the weather pale blue, and the WiZNET tag ' +
       'magenta.',
-    defaultEnabled: true,
     triggers: [
       highlight('room.exits', EXITS_LINE, { fg: 'green', base: true }, 6),
       {
@@ -743,12 +731,34 @@ export const PRESETS: Preset[] = [
   },
 ];
 
+// The presets an empty enabled_presets list turns on, which are the
+// eleven the library held when new presets began to ship off. The list
+// is frozen. A preset added later starts off, and an empty list, the
+// value every profile holds until you change a preset, keeps the meaning
+// it had when it was saved. PRESETS_ON_BY_DEFAULT in
+// src-tauri/src/loadouts/presets.rs mirrors it, and a test there reads
+// this list.
+export const PRESETS_ON_BY_DEFAULT: readonly string[] = [
+  'healing_basics',
+  'defensive_combat',
+  'disarm_buff_fade',
+  'terror_events',
+  'combat_outgoing',
+  'combat_incoming',
+  'loot_progression',
+  'potion_labels',
+  'herb_labels',
+  'sent_tells',
+  'room_and_time',
+];
+
 export function presetTriggers(preset: Preset): TriggerRecord[] {
   return preset.triggers.map((t) => ({ ...t, preset: preset.id }));
 }
 
+/** The presets on by default, in library order. */
 export function defaultEnabledIds(): string[] {
-  return PRESETS.filter((p) => p.defaultEnabled).map((p) => p.id);
+  return PRESETS.filter((p) => PRESETS_ON_BY_DEFAULT.includes(p.id)).map((p) => p.id);
 }
 
 export function presetById(id: string): Preset | undefined {

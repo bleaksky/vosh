@@ -38,6 +38,7 @@ use vosh_automation::alias::Alias;
 use vosh_automation::trigger::Trigger;
 
 use crate::loadouts::catalog::GlobalCatalog;
+use crate::loadouts::presets::PRESETS_ON_BY_DEFAULT;
 use crate::loadouts::set::Loadout;
 use crate::profile::file::{GroupFolders, ProfileConfig};
 use crate::profile::live::Macro;
@@ -120,7 +121,7 @@ pub(crate) struct MigrationPlan {
     /// Each source profile's own enabled preset list, in the order of
     /// `source_profiles`, so the preview can say which characters gain or
     /// lose a preset. A profile that never saved a file holds the
-    /// defaults, the empty list, which turns every preset on.
+    /// defaults, the empty list, which turns on the presets on by default.
     pub profile_presets: Vec<Vec<String>>,
     /// What each profile file keeps of the catalog groups, by profile.
     /// See [`profile_file_for_catalog`].
@@ -538,10 +539,13 @@ fn content_key<T: CatalogItem>(item: &T) -> String {
 }
 
 /// True when `list`, an `enabled_presets` list, has `preset` on. An
-/// empty list means the defaults, and every preset in the library is on
-/// by default, as `presets_on_in_any` in `loadouts/presets.rs` relies on too.
+/// empty list means the defaults, [`PRESETS_ON_BY_DEFAULT`].
 pub(super) fn preset_on(list: &[String], preset: &str) -> bool {
-    list.is_empty() || list.iter().any(|id| id == preset)
+    if list.is_empty() {
+        PRESETS_ON_BY_DEFAULT.contains(&preset)
+    } else {
+        list.iter().any(|id| id == preset)
+    }
 }
 
 /// Give each copy of each entry its catalog group and on state, then
@@ -1144,5 +1148,16 @@ pub(super) mod tests {
             ("warrior".into(), profile_with(vec![], vec![], vec![])),
         ]);
         assert_eq!(plan.source_profiles, vec!["default", "aabahran", "warrior"]);
+    }
+
+    #[test]
+    fn an_empty_list_has_the_presets_on_by_default_on_and_no_other() {
+        assert!(preset_on(&[], "healing_basics"));
+        assert!(preset_on(&[], "room_and_time"));
+        // A preset added after the defaults froze starts off.
+        assert!(!preset_on(&[], "later_preset"));
+        let named = ["later_preset".to_string()];
+        assert!(preset_on(&named, "later_preset"));
+        assert!(!preset_on(&named, "healing_basics"));
     }
 }

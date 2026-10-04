@@ -36,6 +36,7 @@ use vosh_automation::trigger::{Trigger, TriggerAction, TriggerPattern, TriggerTa
 
 use crate::app::state::{AppState, SharedState};
 use crate::disk::save::PERSIST_LOCK;
+use crate::loadouts::presets::PRESETS_ON_BY_DEFAULT;
 use crate::loadouts::wizard::plan::{ItemKind, ItemPayload};
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::{Macro, Profile, Timer};
@@ -119,12 +120,18 @@ fn preset_trigger(preset: &str, name: &str, older: bool) -> Trigger {
 
 /// The presets that are on for a stored `enabled_presets` list, in
 /// library order, as `enabledPresetIds` in src/lib/automationRecords.ts
-/// reads it. An empty list means the defaults, which hold every preset.
+/// reads it. An empty list means the defaults, `PRESETS_ON_BY_DEFAULT`.
 fn presets_on(stored: &[String]) -> Vec<&'static str> {
     LIBRARY
         .iter()
         .map(|(id, _)| *id)
-        .filter(|id| stored.is_empty() || stored.iter().any(|s| s == id))
+        .filter(|id| {
+            if stored.is_empty() {
+                PRESETS_ON_BY_DEFAULT.contains(id)
+            } else {
+                stored.iter().any(|s| s == id)
+            }
+        })
         .collect()
 }
 

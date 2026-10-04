@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import roomLines from '../../fixtures/room-colors/lines.json';
 import roomPreset from '../../fixtures/room-colors/preset.json';
-import { PRESETS_OFF_MARKER } from './automationRecords';
+import { enabledPresetIds, PRESETS_OFF_MARKER } from './automationRecords';
 import { parseRoutedLine } from './chatStore';
 import {
   defaultEnabledIds,
   PRESET_CATEGORIES,
   PRESETS,
+  PRESETS_ON_BY_DEFAULT,
   presetById,
   presetTriggers,
 } from './presets';
@@ -210,16 +211,32 @@ describe('the Room, time and weather colors preset', () => {
 });
 
 // The library lives only here, and the Rust side leans on what it holds.
-// Launch takes the defaults as every preset there is (presets_on_in_any
-// in loadouts/presets.rs), and Settings stores PRESETS_OFF_MARKER when you
-// turn every preset off. Rust tests read this file as text for the rest,
-// so every read between the two languages goes from Rust to the page.
+// Launch reads an empty list as the presets on by default
+// (PRESETS_ON_BY_DEFAULT in loadouts/presets.rs mirrors the list), and
+// Settings stores PRESETS_OFF_MARKER when you turn every preset off. Rust
+// tests read this file as text for the rest, so every read between the
+// two languages goes from Rust to the page.
 describe('the library the Rust side leans on', () => {
   const ids = PRESETS.map((p) => p.id);
 
-  it('turns every preset on by default', () => {
-    expect(PRESETS.filter((p) => !p.defaultEnabled).map((p) => p.id)).toEqual([]);
-    expect(defaultEnabledIds()).toEqual(ids);
+  it('keeps the eleven presets on by default that an empty list has always meant', () => {
+    const eleven = [
+      'healing_basics',
+      'defensive_combat',
+      'disarm_buff_fade',
+      'terror_events',
+      'combat_outgoing',
+      'combat_incoming',
+      'loot_progression',
+      'potion_labels',
+      'herb_labels',
+      'sent_tells',
+      'room_and_time',
+    ];
+    expect(PRESETS_ON_BY_DEFAULT).toEqual(eleven);
+    // Each is in the library, so an empty list turns on all eleven.
+    expect(defaultEnabledIds()).toEqual(eleven);
+    expect(enabledPresetIds([])).toEqual(eleven);
   });
 
   it('gives each preset an id of its own that is never the off marker', () => {
