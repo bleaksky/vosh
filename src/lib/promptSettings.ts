@@ -216,6 +216,13 @@ export function previewOptions(forsaken: boolean): { value: PromptPreviewName; l
   return options;
 }
 
+/** The preview Settings and the foot of Customize prompt draw for the
+ *  one you picked: Now while Lament is your pick and the Forsaken Lands
+ *  rules are away. Your pick stays, so Lament comes back with them. */
+export function shownPreview(preview: PromptPreviewName, forsaken: boolean): PromptPreviewName {
+  return previewOptions(forsaken).some((o) => o.value === preview) ? preview : 'now';
+}
+
 /** The meta under the preview: where to change your design, or that it
  *  draws sample values while you are offline. */
 export function previewMeta(connected: boolean): string {
