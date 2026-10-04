@@ -6,7 +6,7 @@
 //! in it to the walker there.
 
 mod automation;
-mod profile;
+pub(crate) mod profile;
 mod prompt;
 mod script;
 mod slash;
@@ -86,20 +86,30 @@ impl InputResult {
     }
 }
 
-/// True when `line` is `#profile reset` or `#profile load`, tokenized
+/// The two `#profile` commands that lay a profile over the live one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProfileReplace {
+    /// `#profile reset` lays the defaults over it.
+    Reset,
+    /// `#profile load` lays its file over it.
+    Load,
+}
+
+/// Which of `#profile reset` and `#profile load` `line` is, tokenized
 /// exactly like the slash dispatcher, so the persist-suppression
 /// decision in [`run_typed_line`] cannot drift from what actually
 /// executes ("#profile  reset" and "# profile load" count too).
-pub(crate) fn is_profile_reset_or_load(line: &str) -> bool {
-    let Some(rest) = line.trim_start().strip_prefix('#') else {
-        return false;
-    };
+pub(crate) fn profile_replace(line: &str) -> Option<ProfileReplace> {
+    let rest = line.trim_start().strip_prefix('#')?;
     let (cmd, rest) = split_first_word(rest);
     if cmd != "profile" {
-        return false;
+        return None;
     }
-    let (sub, _) = split_first_word(rest);
-    matches!(sub, "reset" | "load")
+    match split_first_word(rest).0 {
+        "reset" => Some(ProfileReplace::Reset),
+        "load" => Some(ProfileReplace::Load),
+        _ => None,
+    }
 }
 
 /// Who asked for a line the input pipeline runs, which decides the
@@ -225,7 +235,7 @@ pub(crate) fn may_replace_profile(state: &AppState, line: &str) -> bool {
     !state
         .loadout_mode
         .load(std::sync::atomic::Ordering::Acquire)
-        && is_profile_reset_or_load(line)
+        && profile_replace(line).is_some()
 }
 
 /// What the terminal prints when you send a line with no connection.
@@ -275,6 +285,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         apply,
         shown,
         effects,
+        replaced_by,
     } = {
         let mut profile = session.lock_profile().await;
         let mut connection = session.connection.lock();
@@ -293,7 +304,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         request_prompt_repaint(session).await;
     }
 
-    settle_line_effects(app, session, effects).await;
+    settle_line_effects(app, session, effects, replaced_by).await;
 
     if let Some(payload) = shown.target {
         session.emit(app, events::TARGET, &payload);
@@ -482,7 +493,7 @@ impl LineEffects {
         // and loadout mode turns the pair into echoes, so neither counts
         // as a change to save. Saving after a failed load would write a
         // profile an earlier `#profile reset` blanked.
-        if is_profile_reset_or_load(line) {
+        if profile_replace(line).is_some() {
             return;
         }
         // A `#walk` changes nothing a save keeps, and what it holds runs

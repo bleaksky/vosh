@@ -187,6 +187,28 @@ impl Session {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = open;
     }
 
+    /// What a line in another session calls this one: the character
+    /// logged in, or else the world it runs with the port, like `The
+    /// Forsaken Lands 1825`. None while it runs no connection.
+    pub(crate) fn label(&self) -> Option<String> {
+        let character = self
+            .current_character
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        character.or_else(|| {
+            let (host, port) = self
+                .current_connection
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()?;
+            Some(format!(
+                "{} {port}",
+                crate::profile::worlds::world_name(&host)
+            ))
+        })
+    }
+
     /// How many outputs reached the session's terminal so far, see
     /// [`Session::count_output`].
     pub(crate) fn output_count(&self) -> u64 {
@@ -454,6 +476,17 @@ mod tests {
         crate::output::echo_lines(app.handle(), &two, &["You wave.".to_string()]);
         assert_eq!((one.output_count(), two.output_count()), (0, 1));
         assert_eq!(outputs.lock().unwrap()[0]["session"], 2);
+    }
+
+    #[test]
+    fn a_label_names_the_character_or_else_the_world_with_its_port() {
+        let session = on_defaults(SessionId(2));
+        assert_eq!(session.label(), None);
+        *session.current_connection.lock().unwrap() =
+            Some(("play.theforsakenlands.com".into(), 1825));
+        assert_eq!(session.label().as_deref(), Some("The Forsaken Lands 1825"));
+        *session.current_character.lock().unwrap() = Some("Builder".into());
+        assert_eq!(session.label().as_deref(), Some("Builder"));
     }
 
     #[test]

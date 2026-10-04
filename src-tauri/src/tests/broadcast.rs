@@ -178,7 +178,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
             tick_before: Some(crate::tick::TickConfig::default()),
             ..LineEffects::default()
         };
-        crate::disk::save::settle_line_effects(handle, &state.selected_session(), tick).await;
+        crate::disk::save::settle_line_effects(handle, &state.selected_session(), tick, None).await;
         listening.finish("settle_line_effects", &mut heard, &mut want);
 
         // Each window answers the quit request the way its page does, so

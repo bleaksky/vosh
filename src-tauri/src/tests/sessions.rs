@@ -1261,3 +1261,114 @@ async fn a_prompt_edit_in_one_session_reaches_the_other_which_keeps_its_codes() 
     h.disconnect_session(two).await;
     h.finish(grid).await;
 }
+
+/// Whether the profile `session` plays holds the alias `ww` and the
+/// trigger `tt`.
+async fn holds_ww_and_tt(h: &Harness, session: SessionId) -> (bool, bool) {
+    let session = h.state.session(Some(session)).expect("the session");
+    let p = session.lock_profile().await;
+    (
+        p.aliases.get("ww").is_some(),
+        p.triggers.get("tt").is_some(),
+    )
+}
+
+/// Whether the prompt engine of `session` draws your design.
+fn draws(h: &Harness, session: SessionId) -> bool {
+    let session = h.state.session(Some(session)).expect("the session");
+    let draw = session.connection.lock().prompt.config().draw;
+    draw
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_profile_reset_and_load_in_one_session_reach_every_session_on_the_profile() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    // No profile claims Builder, so the first session stays on Default.
+    h.servers[0].options.lock().expect("the options").name = "Builder".into();
+    let (one, two) = (h.first, h.open_session().await);
+    let three = open_session_on(&h, "Healer").await;
+    h.connect_to(one, &h.servers[0]).await;
+    h.connect_to(two, &h.servers[1]).await;
+    h.until("both logins", |h| {
+        shows(h, one, "Welcome to the fake Aabahran, Builder.")
+            && shows(h, two, "Welcome to the fake Aabahran, Tester.")
+    })
+    .await;
+
+    // Default and its file hold an alias, a trigger, the tick turned off
+    // and the switch for drawing the prompt the other way from a reset.
+    let reset_draw = crate::profile::file::ProfileConfig::default()
+        .prompt_config()
+        .draw;
+    let draw_line = if reset_draw {
+        "#prompt draw off"
+    } else {
+        "#prompt draw on"
+    };
+    for line in [
+        "#alias ww spam 3",
+        "#trigger tt {^Line 1 of} send look",
+        "#tick disable",
+        draw_line,
+    ] {
+        h.type_in(one, line).await;
+    }
+    crate::disk::save::tests::persist(&h.state).await;
+    assert_eq!(last_tick(&h, two), None);
+    assert_eq!(draws(&h, two), !reset_draw);
+
+    h.type_in(one, "#profile reset").await;
+    h.until("the line in the second session", |h| {
+        shows(h, two, "Builder reset this profile to its defaults.")
+    })
+    .await;
+    assert!(shows(&h, one, "profile reset to defaults"));
+    assert!(!shows(&h, one, "reset this profile") && !shows(&h, three, "reset this profile"));
+    assert_eq!(holds_ww_and_tt(&h, two).await, (false, false));
+    let second = h.state.session(Some(two)).expect("the second session");
+    assert_eq!(
+        second.lock_profile().await.tick.config,
+        crate::tick::TickConfig::default()
+    );
+    assert!(last_tick(&h, two).is_some(), "the second count follows");
+    assert_eq!(draws(&h, two), reset_draw);
+
+    // The hold is Default's alone. Its debounce and the quit save leave
+    // its file as it was, and Healer still saves an edit.
+    let (default_file, healer_file) = (
+        h.profile_file(DEFAULT_PROFILE_NAME).await,
+        h.profile_file("Healer").await,
+    );
+    let default = second.profile();
+    let healer = h
+        .state
+        .session(Some(three))
+        .expect("the third session")
+        .profile();
+    crate::disk::save::schedule_profile_persist(h.app.handle(), &default);
+    h.type_in(three, "#alias hh spam 2").await;
+    h.until("the Healer save", |_| saved_aliases(&healer_file, "hh") > 0)
+        .await;
+    tokio::time::sleep(std::time::Duration::from_millis(2_500)).await;
+    assert_eq!(saved_aliases(&default_file, "ww"), 1);
+    assert!(default.held() && !healer.held());
+
+    h.type_in(two, "#profile load").await;
+    h.until("the line in the first session", |h| {
+        shows(h, one, "Tester loaded this profile from its file.")
+    })
+    .await;
+    assert!(shows(&h, two, "profile loaded from"));
+    assert!(!shows(&h, two, "loaded this profile") && !shows(&h, three, "loaded this profile"));
+    assert_eq!(holds_ww_and_tt(&h, one).await, (true, true));
+    assert_eq!(draws(&h, one), !reset_draw);
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}

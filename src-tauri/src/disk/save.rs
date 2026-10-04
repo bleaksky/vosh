@@ -99,21 +99,31 @@ pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(
 /// not read suppresses nothing, and spelling variants ("#profile  reset",
 /// "# profile load") cannot slip past into the dirty mark and persist the
 /// just-blanked profile.
+///
+/// `replaced_by` names which of the two last laid a profile over. Every
+/// other session on the profile then takes the new tick settings and
+/// `[prompt]` table, and prints a line that says which session did it.
 pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
     app: &AppHandle<R>,
     session: &Session,
     effects: crate::input::LineEffects,
+    replaced_by: Option<crate::input::ProfileReplace>,
 ) {
     let shared: SharedState = app.state::<SharedState>().inner().clone();
     let open = session.profile();
     if effects.replaced {
         open.hold(true);
     }
-    // Every other session on the profile follows the tick settings and
-    // takes what you chose in the `[prompt]` table. A line that laid a
-    // profile over handed its own connection both as it ran, and the
-    // other sessions keep their counts and tables.
-    if !effects.replaced {
+    // A line that laid a profile over handed its own connection the new
+    // tick settings and `[prompt]` table as it ran, and every other
+    // session on the profile takes them now. Otherwise those sessions
+    // follow a change to the tick settings and take what you chose in the
+    // table.
+    if let Some(how) = replaced_by {
+        let before = effects.tick_before.as_ref();
+        crate::input::profile::hand_to_other_sessions(app, &shared, session, &open, how, before)
+            .await;
+    } else {
         if let Some(before) = effects.tick_before.as_ref() {
             crate::tick::follow_in_other_sessions(&shared, session.id, &open, before).await;
         }
