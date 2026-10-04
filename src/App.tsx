@@ -168,12 +168,12 @@ function applySplitDividerColor(color: string | null): void {
 }
 
 // Hand the native surface the chrome colors the page derives with its
-// theme tokens: the split divider, the selection, find matches in ANSI
-// yellow (28% for every match as Menus.dc.html draws them, stronger for
-// the current one), links in the accent, and the scrollbar in the
-// tertiary tone. A lifted prompt's band takes the selected row fill, with
-// its inset ring on a light theme. Runs on every theme apply, so light
-// themes never get the renderer's dark defaults.
+// theme tokens: the split divider, the selection and its text, find
+// matches in ANSI yellow (28% for every match as Menus.dc.html draws them,
+// stronger for the current one), links in the accent, and the scrollbar
+// in the tertiary tone. A lifted prompt's band takes the selected row
+// fill, with its inset ring on a light theme. Runs on every theme apply,
+// so light themes never get the renderer's dark defaults.
 function pushNativeChromeTokens(): void {
   const theme = findTheme(getCurrentThemeId());
   const tokens = themeTokens(theme);
@@ -181,6 +181,7 @@ function pushNativeChromeTokens(): void {
   void invoke('native_surface_set_tokens', {
     divider: tokens.sep,
     selection: tokens.selection,
+    selectionText: tokens.selectionText,
     findMatch: yellow ? toRgba(yellow, 0.28) : null,
     currentMatch: yellow ? toRgba(yellow, 0.6) : null,
     link: tokens.accent,
