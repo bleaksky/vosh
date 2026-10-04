@@ -286,7 +286,7 @@ async fn designs_list_every_other_profile_with_a_design() {
         .save(&set.profile_path(DEFAULT_PROFILE_NAME))
         .unwrap();
     let state: SharedState = Arc::new(AppState::default());
-    *state.profile_set.lock().await = Some(set);
+    state.set_profiles(set).await;
     let list = designs(&state).await.unwrap();
     let got: Vec<(&str, &str, &str)> = list
         .iter()

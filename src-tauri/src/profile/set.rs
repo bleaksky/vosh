@@ -514,11 +514,7 @@ async fn flush_before_copy(shared: &SharedState, source: &str) {
     // The live profile can run two seconds ahead of its file. After
     // `#profile reset` or `load` it is deliberately diverged, and the
     // copy takes the file as it stands.
-    if copying_live
-        && !shared
-            .auto_persist_suppressed
-            .load(std::sync::atomic::Ordering::Acquire)
-    {
+    if copying_live && !shared.selected_session().profile().held() {
         persist_state(shared).await;
     }
 }
@@ -578,18 +574,18 @@ pub(crate) async fn rename_profile(
     {
         return Err(RENAME_MIGRATION_PENDING.into());
     }
+    let session = state.selected_session();
     let live = {
         let mut set = state.loaded_profile_set().await?;
         let renames_live = set.active_name() == old;
         set.rename(old, new).map_err(|e| e.to_string())?;
-        if renames_live {
-            state.note_active_profile(set.active_name());
-        }
-        renames_live.then(|| display_name(set.active_name()))
+        renames_live.then(|| set.active_name().to_string())
     };
     // The custom prompt draws the live profile's new name.
     if let Some(name) = live {
-        state.profile.lock().await.display_name = Some(name);
+        let mut p = session.lock_profile().await;
+        p.open().set_name(&name);
+        p.display_name = Some(display_name(&name));
     }
     Ok(())
 }

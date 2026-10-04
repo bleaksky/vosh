@@ -46,8 +46,7 @@ pub(crate) async fn prompt_config_get(
     state: State<'_, SharedState>,
     session: Option<SessionId>,
 ) -> Result<PromptConfig, String> {
-    state.session(session)?;
-    Ok(state.profile.lock().await.prompt.clone())
+    Ok(state.session(session)?.lock_profile().await.prompt.clone())
 }
 
 /// Take a `[prompt]` table for the active profile. A new capture that does
@@ -69,7 +68,7 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
     // slot, which Disconnect holds while the loop ends, and the loop's end
     // takes the profile, so holding the profile here would hang both.
     let changed = {
-        let p = &mut *state.profile.lock().await;
+        let p = &mut *session.lock_profile().await;
         let c = &mut *session.connection.lock();
         if as_is.unwrap_or(false) {
             set_config_as_is(p, c, config)?
@@ -97,7 +96,7 @@ pub(crate) async fn prompt_card_open<R: tauri::Runtime>(
 ) -> Result<PromptConfig, String> {
     let session = state.session(session)?;
     let (config, changed) = {
-        let mut p = state.profile.lock().await;
+        let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
         card_open(&mut p, &mut c)
     };
@@ -200,7 +199,7 @@ pub(crate) async fn prompt_line_triggers(
     session: Option<SessionId>,
 ) -> Result<Vec<LineTrigger>, String> {
     let session = state.session(session)?;
-    let p = state.profile.lock().await;
+    let p = session.lock_profile().await;
     let c = session.connection.lock();
     Ok(line_triggers(&p, &c, &capture))
 }
@@ -225,7 +224,7 @@ pub(crate) async fn prompt_render(
         overrides,
         placeholders: placeholders.unwrap_or(false),
     };
-    let p = state.profile.lock().await;
+    let p = session.lock_profile().await;
     let c = session.connection.lock();
     Ok(render_all(&p, &c, std::slice::from_ref(&request)).remove(0))
 }
@@ -238,7 +237,7 @@ pub(crate) async fn prompt_render_many(
     session: Option<SessionId>,
 ) -> Result<Vec<Rendered>, String> {
     let session = state.session(session)?;
-    let p = state.profile.lock().await;
+    let p = session.lock_profile().await;
     let c = session.connection.lock();
     Ok(render_all(&p, &c, &requests))
 }
@@ -254,7 +253,7 @@ pub(crate) async fn prompt_describe(
     session: Option<SessionId>,
 ) -> Result<Described, String> {
     let session = state.session(session)?;
-    let p = state.profile.lock().await;
+    let p = session.lock_profile().await;
     let c = session.connection.lock();
     Ok(describe(&p, &c, &template, preview, overrides))
 }
@@ -270,7 +269,7 @@ pub(crate) async fn prompt_forms(
     session: Option<SessionId>,
 ) -> Result<Vec<FormView>, String> {
     let session = state.session(session)?;
-    let p = state.profile.lock().await;
+    let p = session.lock_profile().await;
     let c = session.connection.lock();
     Ok(forms(&p, &c, &field, preview))
 }
@@ -322,7 +321,7 @@ pub(crate) async fn prompt_edit(
     session: Option<SessionId>,
 ) -> Result<Edited, String> {
     let session = state.session(session)?;
-    let p = state.profile.lock().await;
+    let p = session.lock_profile().await;
     let c = session.connection.lock();
     edit(&p, &c, &template, &op)
 }
@@ -335,7 +334,7 @@ pub(crate) async fn prompt_state_get(
     session: Option<SessionId>,
 ) -> Result<PromptState, String> {
     let session = state.session(session)?;
-    let p = state.profile.lock().await;
+    let p = session.lock_profile().await;
     let c = session.connection.lock();
     Ok(prompt_state(&p, &c))
 }
@@ -427,7 +426,7 @@ mod tests {
         app.manage::<SharedState>(Arc::new(AppState::default()));
         let state: SharedState = app.state::<SharedState>().inner().clone();
         let session = state.selected_session();
-        let mut config = state.profile.lock().await.prompt.clone();
+        let mut config = state.selected_profile().await.prompt.clone();
         config.template = "<%hp>%mana".into();
 
         // Disconnect holds the session slot while the loop ends, and the
@@ -450,7 +449,7 @@ mod tests {
 
         let took = tokio::time::timeout(Duration::from_secs(2), async {
             loop {
-                if state.profile.lock().await.prompt.template == config.template {
+                if state.selected_profile().await.prompt.template == config.template {
                     break;
                 }
                 tokio::task::yield_now().await;

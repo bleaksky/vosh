@@ -345,9 +345,9 @@ pub(crate) fn follow_profile_plugins(
 }
 
 /// Point the plugin list at `plugins_dir`, find the plugins in it, and
-/// mark the ones the live profile turns on.
-async fn note_plugins(state: &SharedState, plugins_dir: &std::path::Path) {
-    let enabled = state.profile.lock().await.plugins.enabled.clone();
+/// mark the ones the profile `session` plays turns on.
+async fn note_plugins(state: &SharedState, session: &Session, plugins_dir: &std::path::Path) {
+    let enabled = session.lock_profile().await.plugins.enabled.clone();
     let mut mgr = state.plugins.lock().await;
     mgr.set_plugins_dir(plugins_dir.to_path_buf());
     if let Err(e) = mgr.discover() {
@@ -367,13 +367,13 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
     apply: ApplyResult,
 ) {
     if let Some(app_data) = state.app_data.get() {
-        note_plugins(state, &crate::disk::paths::plugins_dir(app_data)).await;
+        note_plugins(state, session, &crate::disk::paths::plugins_dir(app_data)).await;
     }
     let crate::session::effects::Collected {
         bytes,
         echoes,
         walk,
-    } = crate::session::effects::collect_script_result(app, &state.profile, session, apply).await;
+    } = crate::session::effects::collect_script_result(app, session, apply).await;
     crate::output::echo_lines(app, session, &echoes);
     if bytes.is_empty() && walk.is_none() {
         return;
@@ -408,14 +408,13 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     session: &Arc<Session>,
     plugins_dir: std::path::PathBuf,
 ) {
-    note_plugins(state, &plugins_dir).await;
+    note_plugins(state, session, &plugins_dir).await;
     let apply = {
-        let mut p = state.profile.lock().await;
+        let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
         follow_profile_plugins(&mut p, &mut c, &plugins_dir)
     };
-    let collected =
-        crate::session::effects::collect_script_result(app, &state.profile, session, apply).await;
+    let collected = crate::session::effects::collect_script_result(app, session, apply).await;
     if !collected.bytes.is_empty() || collected.walk.is_some() {
         info!(
             bytes = collected.bytes.len(),

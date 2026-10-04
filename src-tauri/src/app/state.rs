@@ -10,20 +10,20 @@ use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
 use crate::app::plugins::SharedPluginManager;
 use crate::logs::SharedLogStore;
 use crate::profile::live::Profile;
+use crate::profile::open::OpenProfile;
 use crate::sessions::{Session, SessionId, Sessions, NO_SUCH_SESSION};
 
-/// What every command, window and session shares. The sessions, the live
-/// profile, the profile set, the log store, the plugins, the catalog and
-/// loadouts of loadout mode, the affect fulls and the app data folder.
-/// The generations that turn away a write read before the profile was
-/// replaced live here too, with the counter that settles a burst of
-/// changes into one save, the flags that hold the saves back and the flag
-/// that says loadout mode is live.
+/// What every command, window and session shares. The sessions with the
+/// profiles they play, the profile set, the log store, the plugins, the
+/// catalog and loadouts of loadout mode, the affect fulls and the app
+/// data folder. The generations that turn away a write read before the
+/// profile was replaced live here too, with the flag that holds the
+/// saves back until a relaunch and the flag that says loadout mode is
+/// live.
 pub(crate) struct AppState {
-    /// The sessions and the one selected. See [`crate::sessions`] for
-    /// where its lock sits.
+    /// The sessions, the one selected and the profiles they play. See
+    /// [`crate::sessions`] for where its lock sits.
     sessions: std::sync::Mutex<Sessions>,
-    pub(crate) profile: Arc<Mutex<Profile>>,
     pub(crate) logs: SharedLogStore,
     /// A second connection to the same log database for the read
     /// commands. The session loop appends through `logs`, and a search
@@ -52,10 +52,6 @@ pub(crate) struct AppState {
     /// takes them through `launch_notices_take`, since launch runs before
     /// any window listens.
     pub(crate) launch_notices: std::sync::Mutex<Vec<String>>,
-    /// The active profile's name, kept beside the profile set so an event
-    /// can name it without waiting for that lock. Set at launch, on a
-    /// switch and on a rename. None before any profile loads.
-    pub(crate) active_profile: std::sync::Mutex<Option<String>>,
     /// Counts the times the live profile's panes have been replaced: a
     /// wholesale replace of the UI config, or a pane reset. It moves under
     /// the profile lock in the same step that swaps them, so a pane tree
@@ -72,14 +68,6 @@ pub(crate) struct AppState {
     /// refuses a copy from before a replace rather than write the old
     /// profile's values over the new one.
     ui_config_generation: AtomicU64,
-    /// Debounce generation for `mark_profile_dirty`: each mark bumps it,
-    /// and the delayed persist only fires if no newer mark arrived while
-    /// waiting.
-    pub(crate) profile_dirty_gen: AtomicU64,
-    /// Set by `#profile reset` / `#profile load`: the in-memory profile is
-    /// deliberately diverged from disk, so the passive flushes (debounce,
-    /// exit) must not write it. Cleared by the next durable change.
-    pub(crate) auto_persist_suppressed: AtomicBool,
     /// Set by `migration_apply` once catalog.toml / loadouts.toml are
     /// written: the session is in the post-migration window where the live
     /// Profile is still pre-migration state and must not be persisted.
@@ -128,10 +116,43 @@ impl AppState {
         }
     }
 
-    /// Add a session after the others, see [`Sessions::open`]. Take it
-    /// before any other lock.
-    pub(crate) fn open_session(&self) -> Arc<Session> {
-        self.sessions().open()
+    /// Add a session after the others that plays `profile`, see
+    /// [`Sessions::open`]. Take it before any other lock.
+    pub(crate) fn open_session(&self, profile: Arc<OpenProfile>) -> Arc<Session> {
+        self.sessions().open(profile)
+    }
+
+    /// The open profile named `name`, while a session plays it.
+    pub(crate) fn open_profile(&self, name: &str) -> Option<Arc<OpenProfile>> {
+        self.sessions().profile(name)
+    }
+
+    /// Keep `profile`, named `name`, open for a session to play, see
+    /// [`Sessions::add_profile`].
+    pub(crate) fn add_open_profile(&self, name: &str, profile: Profile) -> Arc<OpenProfile> {
+        self.sessions().add_profile(name, profile)
+    }
+
+    /// Close `open` when no session plays it, see
+    /// [`Sessions::close_unplayed`].
+    pub(crate) fn close_unplayed(&self, open: &Arc<OpenProfile>) -> bool {
+        self.sessions().close_unplayed(open)
+    }
+
+    /// Hold `set` as launch does once it read it, with the selected
+    /// session on its active profile, for a test.
+    #[cfg(test)]
+    pub(crate) async fn set_profiles(&self, set: crate::profile::set::ProfileSet) {
+        self.selected_session()
+            .profile()
+            .set_name(set.active_name());
+        *self.profile_set.lock().await = Some(set);
+    }
+
+    /// The selected session's profile, locked, for a test.
+    #[cfg(test)]
+    pub(crate) async fn selected_profile(&self) -> crate::profile::open::ProfileGuard {
+        self.selected_session().lock_profile().await
     }
 
     /// Select the session `id` names. The commands that name no session
@@ -156,21 +177,10 @@ impl AppState {
             .extend(notices);
     }
 
-    /// Note which profile is active, for the events that name it.
-    pub(crate) fn note_active_profile(&self, name: &str) {
-        *self
-            .active_profile
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(name.to_string());
-    }
-
-    /// The active profile's name, as [`AppState::note_active_profile`]
-    /// last kept it.
+    /// The name of the profile the selected session plays, for the
+    /// events that name it. None before any profile loads.
     pub(crate) fn active_profile(&self) -> Option<String> {
-        self.active_profile
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+        self.selected_session().profile().name()
     }
 
     /// The profile set, locked, once startup has loaded it. Before that,
@@ -221,7 +231,6 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             sessions: std::sync::Mutex::new(Sessions::default()),
-            profile: Arc::new(Mutex::new(Profile::default())),
             logs: SharedLogStore::default(),
             log_reader: SharedLogStore::default(),
             plugins: SharedPluginManager::default(),
@@ -230,11 +239,8 @@ impl Default for AppState {
             global_catalog: Arc::new(Mutex::new(None)),
             loadout_set: Arc::new(Mutex::new(None)),
             launch_notices: std::sync::Mutex::new(Vec::new()),
-            active_profile: std::sync::Mutex::new(None),
             panes_generation: AtomicU64::new(0),
             ui_config_generation: AtomicU64::new(0),
-            profile_dirty_gen: AtomicU64::new(0),
-            auto_persist_suppressed: AtomicBool::new(false),
             relaunch_pending: AtomicBool::new(false),
             loadout_mode: AtomicBool::new(false),
             app_data: OnceLock::new(),

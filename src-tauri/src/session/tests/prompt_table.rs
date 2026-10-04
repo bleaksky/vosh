@@ -63,12 +63,12 @@ async fn the_profile_keeps_the_table_the_engine_holds() {
     let mut file = ProfileConfig::default();
     file.set_prompt(mirroring("<%hhp> "));
     file.save(&set.profile_path("Healer")).unwrap();
-    *state.profile_set.lock().await = Some(set);
+    state.set_profiles(set).await;
     let now = Instant::now();
     let same = |p: &Profile, c: &Connection| assert_eq!(p.prompt, *c.prompt.config());
 
     {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_profile().await;
         let mut c = session.connection.lock();
         start_prompt(&mut p, &mut c, true);
         // A Settings save.
@@ -103,7 +103,7 @@ async fn the_profile_keeps_the_table_the_engine_holds() {
     crate::profile::switch::switch_live_profile(&state, &session, "Healer")
         .await
         .unwrap();
-    let mut p = state.profile.lock().await;
+    let mut p = state.selected_profile().await;
     let mut c = session.connection.lock();
     assert_eq!(codes(&p.prompt), MOVED);
     same(&p, &c);

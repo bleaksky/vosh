@@ -43,7 +43,7 @@ pub(crate) async fn tracked_affects_set(
         }
     }
     {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         p.ui.tracked_affects.clone_from(&list);
     }
     save_then_broadcast(
@@ -95,7 +95,7 @@ pub(crate) async fn ui_set_affects_display(
         almost_gone,
     };
     let changed = {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         apply_affects_display(&mut p.ui, pick)
     };
     let Some(display) = changed else {

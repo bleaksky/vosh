@@ -7,7 +7,6 @@
 use std::sync::Arc;
 
 use tauri::AppHandle;
-use tokio::sync::Mutex;
 use tokio::time::Instant;
 
 use crate::profile::live::Profile;
@@ -25,7 +24,6 @@ pub(super) async fn fire_due<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     walker: &mut Walker,
-    profile: &Arc<Mutex<Profile>>,
     session: &Arc<Session>,
 ) -> std::io::Result<()> {
     let now = Instant::now();
@@ -41,7 +39,7 @@ pub(super) async fn fire_due<R: tauri::Runtime>(
         return Ok(());
     }
     let (apply, held) = {
-        let mut p = profile.lock().await;
+        let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
         fire_round(&mut p, &mut c, due)
     };
@@ -51,7 +49,7 @@ pub(super) async fn fire_due<R: tauri::Runtime>(
     }
     let mut sink = OutputSink::Direct;
     let mut io = ScriptIo::Session(stream, &mut sink, walker);
-    apply_script_result(app, &mut io, profile, session, apply).await
+    apply_script_result(app, &mut io, session, apply).await
 }
 
 /// Put `held`, the timers a round had no time for, back at the front of

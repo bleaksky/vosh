@@ -170,7 +170,7 @@ impl Harness {
         set.create("Healer").expect("Healer");
         set.set_metadata("Healer", None, Some(claim("Healer")))
             .expect("Healer claims Healer");
-        *state.profile_set.lock().await = Some(set);
+        state.set_profiles(set).await;
         let log = dir.path().join("logs.sqlite");
         *state.logs.lock().await = Some(vosh_log::LogStore::open(&log).expect("the log"));
         *state.log_reader.lock().await = Some(vosh_log::LogStore::open(&log).expect("a reader"));
@@ -208,7 +208,7 @@ impl Harness {
     /// Give the live profile the prompt table `config`, as a load does.
     pub(crate) async fn set_prompt(&self, config: vosh_prompt::PromptConfig) {
         let session = self.state.selected_session();
-        let mut p = self.state.profile.lock().await;
+        let mut p = self.state.selected_profile().await;
         let mut c = session.connection.lock();
         crate::prompt::take_config(&mut p, &mut c, config);
     }
@@ -415,12 +415,12 @@ impl Harness {
 
     /// The live profile's capture, as its file saves it.
     pub(crate) async fn capture(&self) -> vosh_prompt::CaptureConfig {
-        self.state.profile.lock().await.prompt.capture.clone()
+        self.state.selected_profile().await.prompt.capture.clone()
     }
 
     /// The live profile's whole `[prompt]` table, as its file saves it.
     pub(crate) async fn prompt_table(&self) -> vosh_prompt::PromptConfig {
-        self.state.profile.lock().await.prompt.clone()
+        self.state.selected_profile().await.prompt.clone()
     }
 
     /// Have the fake game count as The Forsaken Lands, as the real host

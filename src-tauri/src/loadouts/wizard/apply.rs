@@ -43,10 +43,8 @@ pub(crate) async fn analyze_migration(
     }
     let scope = state.profile_set.lock().await.as_ref().map(|s| *s.scope());
     let (live, live_presets) = {
-        let p = state.profile.lock().await;
-        let held = state
-            .auto_persist_suppressed
-            .load(std::sync::atomic::Ordering::Acquire);
+        let p = state.selected_session().lock_profile().await;
+        let held = p.open().held();
         let live = (!held).then(|| active_profile_file(&p, scope.as_ref()));
         (live, p.ui.enabled_presets.clone())
     };
@@ -305,10 +303,7 @@ pub(crate) async fn apply_migration(
     // switch does, so the wizard reads it. After `#profile reset` or
     // `load` the live profile is deliberately diverged from its file,
     // and the file stands as it is.
-    if !state
-        .auto_persist_suppressed
-        .load(std::sync::atomic::Ordering::Acquire)
-    {
+    if !state.selected_session().profile().held() {
         persist_state(state).await;
     }
 
@@ -320,7 +315,13 @@ pub(crate) async fn apply_migration(
         let set = state.loaded_profile_set().await?;
         migration_sources(&set, None)?
     };
-    let live_presets = state.profile.lock().await.ui.enabled_presets.clone();
+    let live_presets = state
+        .selected_session()
+        .lock_profile()
+        .await
+        .ui
+        .enabled_presets
+        .clone();
 
     let plan = plan_migration(&sources, &live_presets, library);
     let mut catalog = plan.auto_resolved.clone();

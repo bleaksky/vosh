@@ -120,7 +120,7 @@ async fn handle_event<R: tauri::Runtime>(
                 // after the locks drop.
                 let steps = {
                     let lock_t0 = std::time::Instant::now();
-                    let mut p = conn.profile.lock().await;
+                    let mut p = conn.session.lock_profile().await;
                     conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
                     conn.perf.mutex_acquires += 1;
                     let mut c = conn.session.connection.lock();
@@ -160,7 +160,7 @@ async fn handle_event<R: tauri::Runtime>(
             // with one too. Either way the candidates ring records one
             // entry.
             let steps = {
-                let mut p = conn.profile.lock().await;
+                let mut p = conn.session.lock_profile().await;
                 let mut c = conn.session.connection.lock();
                 marker_step(
                     &mut p,
@@ -225,7 +225,7 @@ pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
 ) -> std::io::Result<()> {
     let mut batch = ReadBatch::new(conn.others_wrote());
     let steps = {
-        let mut p = conn.profile.lock().await;
+        let mut p = conn.session.lock_profile().await;
         let mut c = conn.session.connection.lock();
         if !c.prompt.stage.holds() {
             return Ok(());
@@ -270,10 +270,10 @@ async fn deliver_line_step<R: tauri::Runtime>(
     send_trigger_outputs(&mut conn.stream, &result.sends).await?;
     let mut sink = OutputSink::Batch(batch);
     let mut io = ScriptIo::Session(&mut conn.stream, &mut sink, &mut conn.walker);
-    apply_script_result(&conn.app, &mut io, &conn.profile, &conn.session, apply).await?;
+    apply_script_result(&conn.app, &mut io, &conn.session, apply).await?;
     if let Some(step) = tick_step {
         conn.perf.ticks += 1;
-        deliver_tick_step(&conn.app, &mut io, &conn.profile, &conn.session, step).await?;
+        deliver_tick_step(&conn.app, &mut io, &conn.session, step).await?;
     }
     Ok(())
 }
@@ -295,7 +295,7 @@ pub(super) async fn walked<R: tauri::Runtime>(
     } = out;
     conn.walk_lines.extend(lines);
     if !release.is_empty() {
-        let apply = walk::release(&conn.profile, &conn.session, release).await;
+        let apply = walk::release(&conn.session, release).await;
         apply_script_result(
             &conn.app,
             &mut ScriptIo::Session(
@@ -303,7 +303,6 @@ pub(super) async fn walked<R: tauri::Runtime>(
                 &mut OutputSink::Batch(batch),
                 &mut conn.walker,
             ),
-            &conn.profile,
             &conn.session,
             apply,
         )
@@ -323,7 +322,7 @@ async fn end_read<R: tauri::Runtime>(
     batch: &mut ReadBatch,
 ) -> std::io::Result<()> {
     let step = {
-        let mut p = conn.profile.lock().await;
+        let mut p = conn.session.lock_profile().await;
         let mut c = conn.session.connection.lock();
         partial_step(
             &mut p,
@@ -367,7 +366,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
     let (app, session) = (&conn.app, &conn.session);
     let watched = prompt && watching_prompt(session);
     let (vars, hidden, prompt_seen, status, prompt_state, clock) = {
-        let p = conn.profile.lock().await;
+        let p = conn.session.lock_profile().await;
         let mut c = session.connection.lock();
         // Echoes the end of the read wrote close the open row.
         c.prompt.stage.finish(&mut out);

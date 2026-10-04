@@ -29,7 +29,7 @@ fn shows(h: &Harness, session: SessionId, text: &str) -> bool {
 /// What `$name` reads in `session`: its own value, or else the profile's.
 async fn var(h: &Harness, session: SessionId, name: &str) -> Option<String> {
     let session = h.state.session(Some(session)).expect("the session");
-    let p = h.state.profile.lock().await;
+    let p = h.state.selected_profile().await;
     let c = session.connection.lock();
     c.var_view(&p).get(name).map(str::to_string)
 }
@@ -64,7 +64,7 @@ async fn two_sessions_with_a_plugin() -> (Harness, SessionId, SessionId) {
     )
     .expect("the manifest");
     std::fs::write(helper.join("main.lua"), HELPER).expect("the entry script");
-    h.state.profile.lock().await.plugins.enabled = vec!["helper".into()];
+    h.state.selected_profile().await.plugins.enabled = vec!["helper".into()];
     let first = h.state.selected_session();
     crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, &first, plugins).await;
     log_in_two_sessions(h).await
@@ -246,7 +246,7 @@ async fn char_vitals_from_each_game_binds_the_hp_of_its_own_session() {
         shows(h, one, "The first has 765 hp.") && shows(h, two, "The second has 1020 hp.")
     })
     .await;
-    assert_eq!(h.state.profile.lock().await.vars.get("hp"), None);
+    assert_eq!(h.state.selected_profile().await.vars.get("hp"), None);
 
     h.disconnect_session(two).await;
     h.finish(grid).await;
@@ -257,7 +257,7 @@ async fn char_vitals_from_each_game_binds_the_hp_of_its_own_session() {
 async fn a_var_stays_in_its_session_and_unvar_takes_the_profile_value_from_both() {
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let (h, one, two) = two_sessions_on_two_games().await;
-    h.state.profile.lock().await.vars.set("home", "Hollow");
+    h.state.selected_profile().await.vars.set("home", "Hollow");
     h.type_in(one, "#var mood grim").await;
     h.type_in(two, "#var mood").await;
     h.type_in(two, "#var home inn").await;
@@ -270,7 +270,7 @@ async fn a_var_stays_in_its_session_and_unvar_takes_the_profile_value_from_both(
     assert_eq!(var(&h, two, "home").await.as_deref(), Some("inn"));
 
     h.type_in(one, "#unvar home").await;
-    assert_eq!(h.state.profile.lock().await.vars.get("home"), None);
+    assert_eq!(h.state.selected_profile().await.vars.get("home"), None);
     assert_eq!(var(&h, one, "home").await, None);
     assert_eq!(var(&h, two, "home").await.as_deref(), Some("inn"));
 
@@ -281,10 +281,9 @@ async fn a_var_stays_in_its_session_and_unvar_takes_the_profile_value_from_both(
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_profile_var_lua_sets_in_one_session_reads_in_the_other_and_saves_once() {
-    use std::sync::atomic::Ordering;
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let (h, one, two) = two_sessions_on_two_games().await;
-    let marks = || h.state.profile_dirty_gen.load(Ordering::Acquire);
+    let marks = || h.state.selected_session().profile().marks();
     let before = marks();
     h.type_in(one, "#lua mud.set_profile_var('home', 'Hollow')")
         .await;
@@ -395,10 +394,9 @@ async fn a_lua_global_stays_in_the_session_that_set_it() {
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_alias_lua_makes_in_one_session_expands_in_the_other_and_saves_once() {
-    use std::sync::atomic::Ordering;
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let (h, one, two) = two_sessions_with_a_plugin().await;
-    let marks = || h.state.profile_dirty_gen.load(Ordering::Acquire);
+    let marks = || h.state.selected_session().profile().marks();
     let before = marks();
     h.type_in(one, "#lua mud.alias('ww', 'spam 3')").await;
     let after = marks();
@@ -453,7 +451,7 @@ async fn an_alias_a_plugin_makes_in_one_session_passes_through_in_the_other() {
     let second = h.state.session(Some(two)).expect("the second session");
     let leftover = second.connection.lock().plugin_aliases.list().len();
     assert_eq!(leftover, 0);
-    assert!(h.state.profile.lock().await.aliases.get("hh").is_none());
+    assert!(h.state.selected_profile().await.aliases.get("hh").is_none());
 
     h.disconnect_session(two).await;
     h.finish(grid).await;
@@ -476,8 +474,7 @@ async fn a_recording_takes_only_its_own_sessions_lines_and_its_alias_expands_in_
     assert!(shows(&h, two, "not recording."));
     let expansion = h
         .state
-        .profile
-        .lock()
+        .selected_profile()
         .await
         .aliases
         .get("walkabout")
@@ -508,8 +505,7 @@ async fn a_trigger_vosh_stops_in_one_session_fires_in_the_other_until_you_save_i
         TriggerAction::Script { body: body.into() },
     );
     h.state
-        .profile
-        .lock()
+        .selected_profile()
         .await
         .triggers
         .set(ender)
@@ -527,7 +523,7 @@ async fn a_trigger_vosh_stops_in_one_session_fires_in_the_other_until_you_save_i
     .await;
     assert!(!shows(&h, two, "Vosh stopped"));
     {
-        let p = h.state.profile.lock().await;
+        let p = h.state.selected_profile().await;
         assert!(p.triggers.is_stopped("ender", one.stop_key()));
         assert!(!p.triggers.is_stopped("ender", two.stop_key()));
     }

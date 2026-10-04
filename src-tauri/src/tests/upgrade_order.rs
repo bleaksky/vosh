@@ -228,7 +228,7 @@ async fn launch_runs_the_upgrades_in_order() {
     // 6. The active profile loaded last, so the live profile holds what
     //    every step wrote, the moved theme too.
     {
-        let p = state.profile.lock().await;
+        let p = state.selected_profile().await;
         assert_eq!(p.ui.enabled_presets, with_rollout);
         assert!(p.prompt.capture.is_migrated());
         let trigger = p.triggers.get("prompt-capture").expect("the moved trigger");

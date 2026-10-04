@@ -150,6 +150,7 @@ pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
 ) -> Result<(), String> {
     let state: SharedState = app.state::<SharedState>().inner().clone();
     let app_data = state.app_data.get().ok_or(NO_APP_DATA)?;
+    let session = state.selected_session();
     let macro_groups_changed = {
         let mut guard = state.loadout_set.lock().await;
         let Some(set) = guard.as_mut() else {
@@ -169,7 +170,7 @@ pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
         // profile switch) must be able to re-impose dormancy.
         set.dormant = set.active.is_empty();
         let snapshot = set.clone();
-        let mut p = state.profile.lock().await;
+        let mut p = session.lock_profile().await;
         let macro_groups_before = p.disabled_macro_groups.clone();
         apply_effective_state(&snapshot, &mut p);
         if let Err(e) = save_loadout_set(app_data, &snapshot) {

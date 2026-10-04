@@ -18,7 +18,7 @@ pub(crate) struct SessionIdentity {
     /// The character from Char.Status or Char.Name, once the MUD sends
     /// it.
     pub character: Option<String>,
-    /// The live profile.
+    /// The profile the session plays.
     pub profile: String,
     /// The profile whose login toggle claims `character` on this world.
     /// None when no profile claims it. See [`ProfileSet::claimed_by`].
@@ -38,6 +38,7 @@ pub(crate) async fn session_identity(
         .ok()
         .and_then(|g| g.clone());
     let (host, port) = connection?;
+    let profile = session.profile().name()?;
     let character = session
         .current_character
         .lock()
@@ -49,10 +50,10 @@ pub(crate) async fn session_identity(
         .as_deref()
         .and_then(|c| set.claimed_by(&host, port, c));
     Some(SessionIdentity {
-        profile: set.active_name().to_string(),
         host,
         port,
         character,
+        profile,
         claimed_by,
     })
 }
@@ -79,7 +80,7 @@ mod tests {
     async fn session_identity_reports_the_login_and_who_claims_it() {
         let dir = tempfile::tempdir().unwrap();
         let state: SharedState = Arc::new(AppState::default());
-        *state.profile_set.lock().await = Some(james_like_set(dir.path()));
+        state.set_profiles(james_like_set(dir.path())).await;
         let session = state.selected_session();
         assert_eq!(session_identity(&state, &session).await, None);
 

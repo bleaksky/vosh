@@ -202,11 +202,13 @@ pub(super) fn font_atlas_params(scale: f64) -> (String, f32) {
         return ("monospace".to_string(), size_for(14.0));
     };
     let state = app.state::<crate::app::state::SharedState>();
-    let guard = state.profile.try_lock();
-    if let Ok(p) = guard {
-        (p.ui.font_family.clone(), size_for(p.ui.font_size as f32))
-    } else {
-        ("monospace".to_string(), size_for(14.0))
+    let open = state.selected_session().profile();
+    let font = open
+        .try_lock()
+        .map(|p| (p.ui.font_family.clone(), p.ui.font_size));
+    match font {
+        Some((family, size)) => (family, size_for(size as f32)),
+        None => ("monospace".to_string(), size_for(14.0)),
     }
 }
 

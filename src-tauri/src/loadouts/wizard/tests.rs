@@ -129,8 +129,7 @@ async fn a_loadout_save_leaves_the_macros_to_the_catalog() {
     let state = relaunch_as(dir.path(), crate::profile::set::DEFAULT_PROFILE_NAME).await;
     assert!(state.global_catalog.lock().await.is_some());
     state
-        .profile
-        .lock()
+        .selected_profile()
         .await
         .macros
         .push(macro_on("f1", "look"));
@@ -142,12 +141,12 @@ async fn a_loadout_save_leaves_the_macros_to_the_catalog() {
 
     // You delete the macro while you play Healer.
     let state = relaunch_as(dir.path(), "Healer").await;
-    state.profile.lock().await.macros.clear();
+    state.selected_profile().await.macros.clear();
     persist(&state).await;
 
     // Back on Default, the macro stays deleted.
     let state = relaunch_as(dir.path(), crate::profile::set::DEFAULT_PROFILE_NAME).await;
-    let leftover = &state.profile.lock().await.macros;
+    let leftover = &state.selected_profile().await.macros;
     assert!(leftover.is_empty(), "{leftover:?}");
 }
 
@@ -267,7 +266,7 @@ async fn the_wizard_never_runs_in_a_session_that_uses_a_catalog() {
     apply_migration(&state, &[], LIBRARY).await.unwrap();
     let state = relaunch_as(dir.path(), "Healer").await;
     assert!(state.global_catalog.lock().await.is_some());
-    assert_eq!(items_on(&*state.profile.lock().await), ["alias hh"]);
+    assert_eq!(items_on(&*state.selected_profile().await), ["alias hh"]);
 }
 
 #[tokio::test]
@@ -380,12 +379,12 @@ async fn a_conflict_you_leave_alone_keeps_the_version_that_was_on() {
     // used. It used to get the version Default had off.
     apply_migration(&state, &[], LIBRARY).await.unwrap();
     let state = relaunch_as(dir.path(), "Healer").await;
-    let p = state.profile.lock().await;
+    let p = state.selected_profile().await;
     assert_eq!(p.aliases.get("kk").unwrap().expansion, "kick 1.");
     assert_eq!(items_on(&p), ["alias kk"]);
     drop(p);
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    let leftover = &items_on(&*state.profile.lock().await);
+    let leftover = &items_on(&*state.selected_profile().await);
     assert!(leftover.is_empty(), "{leftover:?}");
 }
 
@@ -441,7 +440,7 @@ async fn putting_the_catalog_back_keeps_every_item_you_added_since() {
     // the backups in legacy never saw.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
     {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_profile().await;
         p.aliases
             .set(vosh_automation::alias::Alias::new("zz", "sleep"));
         p.vars.set("target", "dragon");
@@ -464,7 +463,7 @@ async fn putting_the_catalog_back_keeps_every_item_you_added_since() {
         std::fs::rename(aside.path().join(path.file_name().unwrap()), &path).unwrap();
     }
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    let p = state.profile.lock().await;
+    let p = state.selected_profile().await;
     assert_eq!(items_on(&p), ["alias kk", "alias zz"]);
     let kept = ProfileConfig::from_profile(&p);
     assert_eq!(kept.profile_vars.get("target").unwrap(), "dragon");
@@ -481,15 +480,14 @@ async fn a_backup_copied_back_beside_the_catalog_spreads_its_old_items() {
     apply_migration(&state, &[], LIBRARY).await.unwrap();
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
     state
-        .profile
-        .lock()
+        .selected_profile()
         .await
         .aliases
         .set(vosh_automation::alias::Alias::new("zz", "sleep"));
     persist(&state).await;
     let state = relaunch_as(dir.path(), "Healer").await;
     assert_eq!(
-        items_on(&*state.profile.lock().await),
+        items_on(&*state.selected_profile().await),
         ["alias hh", "alias zz"]
     );
 
@@ -507,13 +505,13 @@ async fn a_backup_copied_back_beside_the_catalog_spreads_its_old_items() {
     .unwrap();
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
     assert_eq!(
-        items_on(&*state.profile.lock().await),
+        items_on(&*state.selected_profile().await),
         ["alias hh", "alias kk", "alias zz"]
     );
     persist(&state).await;
     let state = relaunch_as(dir.path(), "Healer").await;
     assert_eq!(
-        items_on(&*state.profile.lock().await),
+        items_on(&*state.selected_profile().await),
         ["alias hh", "alias kk", "alias zz"]
     );
 }
@@ -532,7 +530,7 @@ async fn following_the_refusals_builds_the_catalog_again_with_every_item() {
     let mut before = Vec::new();
     for name in names {
         before.push(items_on(
-            &*relaunch_as(dir.path(), name).await.profile.lock().await,
+            &*relaunch_as(dir.path(), name).await.selected_profile().await,
         ));
     }
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
@@ -571,7 +569,11 @@ async fn following_the_refusals_builds_the_catalog_again_with_every_item() {
     for (n, name) in names.iter().enumerate() {
         let state = relaunch_as(dir.path(), name).await;
         assert!(state.global_catalog.lock().await.is_some());
-        assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
+        assert_eq!(
+            items_on(&*state.selected_profile().await),
+            before[n],
+            "{name}"
+        );
     }
 }
 
@@ -630,7 +632,7 @@ async fn the_wizard_keeps_off_a_preset_every_character_had_off() {
     // the potion labels off.
     for name in [crate::profile::set::DEFAULT_PROFILE_NAME, "Healer"] {
         let state = relaunch_as(dir.path(), name).await;
-        assert_eq!(state.profile.lock().await.ui.enabled_presets, on);
+        assert_eq!(state.selected_profile().await.ui.enabled_presets, on);
     }
 }
 
@@ -713,8 +715,8 @@ async fn the_preview_reads_the_files_after_a_profile_reset() {
     // `#profile reset` blanks the live profile and holds every
     // save, so apply reads the file as it is, and so does the
     // preview.
-    state.profile.lock().await.ui.enabled_presets.clear();
-    state.auto_persist_suppressed.store(true, Ordering::Release);
+    state.selected_profile().await.ui.enabled_presets.clear();
+    state.selected_session().profile().hold(true);
     let plan = analyze_migration(&state, LIBRARY).await.unwrap();
     assert_eq!(plan.shared_presets, ["healing_basics"]);
     apply_migration(&state, &[], LIBRARY).await.unwrap();
@@ -927,7 +929,7 @@ async fn the_wizard_keeps_every_setting_of_every_profile() {
     for name in names {
         let state = relaunch_as(dir.path(), name).await;
         assert!(state.global_catalog.lock().await.is_none());
-        let p = state.profile.lock().await;
+        let p = state.selected_profile().await;
         assert_eq!(items_on(&p).len(), 6, "{name}");
         before.push((
             settings(ProfileConfig::from_profile(&p)),
@@ -999,7 +1001,7 @@ async fn the_wizard_keeps_every_setting_of_every_profile() {
         let state = relaunch_as(dir.path(), name).await;
         assert!(state.global_catalog.lock().await.is_some(), "{name}");
         {
-            let p = state.profile.lock().await;
+            let p = state.selected_profile().await;
             assert_eq!(
                 settings(ProfileConfig::from_profile(&p)),
                 before[n].0,
@@ -1075,7 +1077,7 @@ async fn each_loadout_turns_on_the_items_its_character_shared() {
     let mut before = Vec::new();
     for name in names {
         let state = relaunch_as(dir.path(), name).await;
-        before.push(items_on(&*state.profile.lock().await));
+        before.push(items_on(&*state.selected_profile().await));
     }
 
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
@@ -1098,7 +1100,11 @@ async fn each_loadout_turns_on_the_items_its_character_shared() {
         loadouts.active = vec![(*name).to_string()];
         save_loadout_set(dir.path(), &loadouts).unwrap();
         let state = relaunch_as(dir.path(), name).await;
-        assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
+        assert_eq!(
+            items_on(&*state.selected_profile().await),
+            before[n],
+            "{name}"
+        );
     }
 }
 
@@ -1128,7 +1134,7 @@ async fn each_loadout_keeps_off_the_groups_its_character_had_off() {
     let mut before = Vec::new();
     for name in names {
         let state = relaunch_as(dir.path(), name).await;
-        before.push(items_on(&*state.profile.lock().await));
+        before.push(items_on(&*state.selected_profile().await));
     }
     assert_eq!(before[0].len(), 6);
     assert_eq!(before[1].len(), 3);
@@ -1170,10 +1176,18 @@ async fn each_loadout_keeps_off_the_groups_its_character_had_off() {
             }
             save_loadout_set(dir.path(), &loadouts).unwrap();
             let state = relaunch_as(dir.path(), name).await;
-            assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
+            assert_eq!(
+                items_on(&*state.selected_profile().await),
+                before[n],
+                "{name}"
+            );
             persist(&state).await;
             let state = relaunch_as(dir.path(), name).await;
-            assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
+            assert_eq!(
+                items_on(&*state.selected_profile().await),
+                before[n],
+                "{name}"
+            );
         }
     }
 }
@@ -1204,7 +1218,7 @@ async fn group_turns_a_folder_on_and_off_as_before_after_the_wizard() {
     // The Healer folder landed in two catalog groups. `#group
     // combat` used to find no group of that name at all.
     let state = relaunch_as(dir.path(), "Healer").await;
-    let mut p = state.profile.lock().await;
+    let mut p = state.selected_profile().await;
     assert_eq!(items_on(&p), ["trigger bash", "trigger flee"]);
     let r = crate::input::process(&mut p, "#group combat off");
     assert_eq!(r.echo, ["group `combat` disabled for triggers"]);
@@ -1219,7 +1233,7 @@ async fn group_turns_a_folder_on_and_off_as_before_after_the_wizard() {
     // For Default it turns off flee alone, and never turns the
     // Healer's bash on.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    let mut p = state.profile.lock().await;
+    let mut p = state.selected_profile().await;
     crate::input::process(&mut p, "#group combat off");
     let leftover = &items_on(&p);
     assert!(leftover.is_empty(), "{leftover:?}");
@@ -1229,7 +1243,7 @@ async fn group_turns_a_folder_on_and_off_as_before_after_the_wizard() {
 
     // Test-Prompt had no combat folder, and still has none.
     let state = relaunch_as(dir.path(), "Test-Prompt").await;
-    let mut p = state.profile.lock().await;
+    let mut p = state.selected_profile().await;
     let r = crate::input::process(&mut p, "#group combat on");
     assert_eq!(
         r.echo,
@@ -1266,7 +1280,7 @@ async fn each_character_keeps_its_own_version_of_a_trigger() {
         ("Healer", "cast bless Bob"),
     ] {
         let state = relaunch_as(dir.path(), name).await;
-        let p = state.profile.lock().await;
+        let p = state.selected_profile().await;
         let line = vosh_automation::trigger::process(
             &p.triggers,
             b"Bob arrives",
@@ -1303,7 +1317,7 @@ async fn triggers_on_one_line_fire_in_the_order_they_had() {
     let fired = |state: &SharedState| {
         let state = state.clone();
         async move {
-            let p = state.profile.lock().await;
+            let p = state.selected_profile().await;
             vosh_automation::trigger::process(
                 &p.triggers,
                 b"You are knocked down!",
@@ -1357,7 +1371,12 @@ async fn a_trigger_group_you_had_off_stays_off_beside_its_aliases() {
     healer.triggers.push(autoloot);
     healer.disabled_trigger_groups = vec!["loot".into()];
     healer.save(&set.profile_path("Healer")).unwrap();
-    let before = items_on(&*relaunch_as(dir.path(), "Healer").await.profile.lock().await);
+    let before = items_on(
+        &*relaunch_as(dir.path(), "Healer")
+            .await
+            .selected_profile()
+            .await,
+    );
     assert_eq!(before, ["alias loot"]);
 
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
@@ -1366,7 +1385,7 @@ async fn a_trigger_group_you_had_off_stays_off_beside_its_aliases() {
     // The trigger used to come back on with the alias group of the
     // same name, and looted every kill.
     let state = relaunch_as(dir.path(), "Healer").await;
-    assert_eq!(items_on(&*state.profile.lock().await), before);
+    assert_eq!(items_on(&*state.selected_profile().await), before);
 }
 
 #[tokio::test]
@@ -1391,7 +1410,7 @@ async fn a_shared_item_one_character_had_off_stays_off_for_it() {
     let mut before = Vec::new();
     for name in names {
         before.push(items_on(
-            &*relaunch_as(dir.path(), name).await.profile.lock().await,
+            &*relaunch_as(dir.path(), name).await.selected_profile().await,
         ));
     }
     assert_eq!(before[0], ["trigger autoloot"]);
@@ -1404,7 +1423,11 @@ async fn a_shared_item_one_character_had_off_stays_off_for_it() {
     // The trigger used to land in one group on for both.
     for (n, name) in names.iter().enumerate() {
         let state = relaunch_as(dir.path(), name).await;
-        assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
+        assert_eq!(
+            items_on(&*state.selected_profile().await),
+            before[n],
+            "{name}"
+        );
     }
 }
 
@@ -1421,7 +1444,7 @@ fn heal_preset() -> vosh_automation::trigger::Trigger {
 async fn launch_with_presets(dir: &std::path::Path, name: &str) -> SharedState {
     let state = relaunch_as(dir, name).await;
     let installed = {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_profile().await;
         let on = p.ui.enabled_presets.is_empty()
             || p.ui.enabled_presets.iter().any(|id| id == "healing_basics");
         on.then(|| crate::loadouts::presets::install_preset_triggers(&mut p, vec![heal_preset()]))
@@ -1436,7 +1459,7 @@ async fn launch_with_presets(dir: &std::path::Path, name: &str) -> SharedState {
 /// Whether the healing basics trigger is on in `state`, and
 /// whether the Presets tab shows healing basics on.
 async fn heal_preset_on(state: &SharedState) -> (bool, bool) {
-    let p = state.profile.lock().await;
+    let p = state.selected_profile().await;
     let tab = p.ui.enabled_presets.is_empty()
         || p.ui.enabled_presets.iter().any(|id| id == "healing_basics");
     (items_on(&p).contains(&"trigger heal 1".to_string()), tab)
@@ -1533,7 +1556,7 @@ async fn the_wizard_keeps_what_you_changed_since_the_last_save() {
     // Within the two seconds before the save, a script sets your
     // target, you drag the splitter, and you add an alias.
     {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_profile().await;
         p.vars.set("target", "dragon");
         if let Some(panes) = p.ui.panes.as_mut() {
             panes.panel_width = Some(420);
@@ -1547,7 +1570,7 @@ async fn the_wizard_keeps_what_you_changed_since_the_last_save() {
     // Nothing saves between the wizard and the relaunch, so these
     // used to be lost.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    let p = state.profile.lock().await;
+    let p = state.selected_profile().await;
     let kept = ProfileConfig::from_profile(&p);
     assert_eq!(kept.profile_vars.get("target").unwrap(), "dragon");
     assert_eq!(kept.ui.panes.unwrap().panel_width, Some(420));
@@ -1563,13 +1586,13 @@ async fn the_wizard_leaves_a_profile_you_reset_to_its_file() {
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
     // `#profile reset` blanks the live profile and holds the saves
     // back, and the file stays as you saved it.
-    ProfileConfig::default().apply_to(&mut *state.profile.lock().await);
-    state.auto_persist_suppressed.store(true, Ordering::Release);
+    ProfileConfig::default().apply_to(&mut *state.selected_profile().await);
+    state.selected_session().profile().hold(true);
 
     apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    let p = state.profile.lock().await;
+    let p = state.selected_profile().await;
     let kept = ProfileConfig::from_profile(&p);
     assert_eq!(kept.profile_vars.get("target").unwrap(), "orc");
     assert_eq!(kept.ui.panes.unwrap().panel_width, Some(300));
@@ -1601,14 +1624,14 @@ async fn a_switch_waits_for_the_relaunch_after_the_wizard() {
         crate::profile::switch::tests::active(&state).await,
         DEFAULT_PROFILE_NAME
     );
-    assert_eq!(items_on(&*state.profile.lock().await), ["alias kk"]);
+    assert_eq!(items_on(&*state.selected_profile().await), ["alias kk"]);
 
     // Once Vosh opens again, the switch runs.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
     crate::profile::switch::switch_profile(&state, &state.selected_session(), "Healer")
         .await
         .unwrap();
-    assert_eq!(items_on(&*state.profile.lock().await), ["alias hh"]);
+    assert_eq!(items_on(&*state.selected_profile().await), ["alias hh"]);
 }
 
 /// Try to rename Healer, copy it, and make a profile from it while a
@@ -1664,14 +1687,14 @@ async fn the_live_profile_keeps_the_name_the_prompt_draws() {
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
     let shown = |p: &crate::profile::live::Profile| p.display_name.clone();
     assert_eq!(
-        shown(&*state.profile.lock().await).as_deref(),
+        shown(&*state.selected_profile().await).as_deref(),
         Some("Default")
     );
     crate::profile::switch::switch_profile(&state, &state.selected_session(), "Healer")
         .await
         .unwrap();
     assert_eq!(
-        shown(&*state.profile.lock().await).as_deref(),
+        shown(&*state.selected_profile().await).as_deref(),
         Some("Healer")
     );
     // Renaming the live profile renames what the prompt draws.
@@ -1679,7 +1702,7 @@ async fn the_live_profile_keeps_the_name_the_prompt_draws() {
         .await
         .unwrap();
     assert_eq!(
-        shown(&*state.profile.lock().await).as_deref(),
+        shown(&*state.selected_profile().await).as_deref(),
         Some("Cleric")
     );
     // Renaming another profile leaves it alone.
@@ -1687,14 +1710,14 @@ async fn the_live_profile_keeps_the_name_the_prompt_draws() {
         .await
         .unwrap();
     assert_eq!(
-        shown(&*state.profile.lock().await).as_deref(),
+        shown(&*state.selected_profile().await).as_deref(),
         Some("Cleric")
     );
     // The events that name the active profile follow it too.
     assert_eq!(state.active_profile().as_deref(), Some("Cleric"));
     let state = relaunch_as(dir.path(), "Scratch").await;
     assert_eq!(
-        shown(&*state.profile.lock().await).as_deref(),
+        shown(&*state.selected_profile().await).as_deref(),
         Some("Scratch")
     );
     assert_eq!(state.active_profile().as_deref(), Some("Scratch"));
@@ -1725,7 +1748,7 @@ async fn renames_and_copies_wait_for_the_relaunch_after_the_wizard() {
         .await
         .unwrap();
     let state = relaunch_as(dir.path(), "Priest").await;
-    assert_eq!(items_on(&*state.profile.lock().await), ["alias hh"]);
+    assert_eq!(items_on(&*state.selected_profile().await), ["alias hh"]);
 }
 
 #[tokio::test]
@@ -1754,7 +1777,7 @@ async fn a_wizard_run_that_stops_partway_finishes_at_the_next_launch() {
         let mut before = Vec::new();
         for name in names {
             before.push(items_on(
-                &*relaunch_as(dir.path(), name).await.profile.lock().await,
+                &*relaunch_as(dir.path(), name).await.selected_profile().await,
             ));
         }
 
@@ -1785,7 +1808,7 @@ async fn a_wizard_run_that_stops_partway_finishes_at_the_next_launch() {
                 assert!(notices.is_empty(), "stop {stop}");
             }
             assert!(state.global_catalog.lock().await.is_some(), "stop {stop}");
-            let p = state.profile.lock().await;
+            let p = state.selected_profile().await;
             assert_eq!(items_on(&p), before[n], "stop {stop} {name}");
             let leftover = &ProfileConfig::load(&set.profile_path(name))
                 .unwrap()
@@ -1816,7 +1839,7 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
     let mut before = Vec::new();
     for name in names {
         before.push(items_on(
-            &*relaunch_as(dir.path(), name).await.profile.lock().await,
+            &*relaunch_as(dir.path(), name).await.selected_profile().await,
         ));
     }
 
@@ -1847,11 +1870,11 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
     // every other character's items too. The session runs on the
     // Healer file alone.
     assert!(state.global_catalog.lock().await.is_none());
-    assert_eq!(items_on(&*state.profile.lock().await), before[1]);
+    assert_eq!(items_on(&*state.selected_profile().await), before[1]);
 
     // Launch holds every save and every switch, since the next launch
     // writes the journal again over what this one saved.
-    state.profile.lock().await.vars.set("target", "dragon");
+    state.selected_profile().await.vars.set("target", "dragon");
     {
         let _persist_guard = PERSIST_LOCK.lock().await;
         crate::disk::save::persist_state(&state).await;
@@ -1877,7 +1900,11 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
         let state = relaunch_as(dir.path(), name).await;
         assert!(state.loadout_mode.load(Ordering::Acquire), "{name}");
         assert!(!state.relaunch_pending.load(Ordering::Acquire), "{name}");
-        assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
+        assert_eq!(
+            items_on(&*state.selected_profile().await),
+            before[n],
+            "{name}"
+        );
     }
     assert!(!journal_path(dir.path()).exists());
 }
@@ -1930,7 +1957,7 @@ async fn the_wizard_waits_while_an_earlier_run_is_unfinished() {
     let before = character(DEFAULT_PROFILE_NAME, 1, &[]);
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
     assert!(state.global_catalog.lock().await.is_some());
-    let p = state.profile.lock().await;
+    let p = state.selected_profile().await;
     assert_eq!(p.aliases.list().len(), 4);
     assert!(p.aliases.get(&before.aliases[0].name).is_some());
 }
@@ -1956,16 +1983,16 @@ async fn a_script_that_sets_its_own_alias_again_keeps_it_to_its_character() {
     };
     let session = state.selected_session();
     crate::script::apply_actions(
-        &mut *state.profile.lock().await,
+        &mut *state.selected_profile().await,
         &mut session.connection.lock(),
         outcome,
     );
-    assert_eq!(items_on(&*state.profile.lock().await), ["alias hl"]);
+    assert_eq!(items_on(&*state.selected_profile().await), ["alias hl"]);
     persist(&state).await;
 
     // The alias lost its group, so it came on for Default too.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    assert_eq!(items_on(&*state.profile.lock().await), ["alias kk"]);
+    assert_eq!(items_on(&*state.selected_profile().await), ["alias kk"]);
 }
 
 #[tokio::test]
@@ -2033,7 +2060,7 @@ async fn a_wizard_that_cannot_finish_puts_every_file_back() {
     let state = relaunch_as(dir.path(), "Bard").await;
     assert!(state.global_catalog.lock().await.is_none());
     {
-        let p = state.profile.lock().await;
+        let p = state.selected_profile().await;
         assert_eq!(items_on(&p).len(), 6);
         let kept = ProfileConfig::from_profile(&p);
         assert_eq!(kept.profile_vars.get("target").unwrap(), "orc 3");
@@ -2133,7 +2160,7 @@ async fn converted_three(dir: &std::path::Path) -> (SharedState, Vec<Vec<String>
     let mut before = Vec::new();
     for name in names {
         let state = relaunch_as(dir, name).await;
-        before.push(items_on(&*state.profile.lock().await));
+        before.push(items_on(&*state.selected_profile().await));
     }
     let state = relaunch_as(dir, DEFAULT_PROFILE_NAME).await;
     apply_migration(&state, &[], LIBRARY).await.unwrap();
@@ -2142,7 +2169,7 @@ async fn converted_three(dir: &std::path::Path) -> (SharedState, Vec<Vec<String>
 
 /// The catalog items the live stores of `state` hold.
 async fn live_rows(state: &SharedState) -> Vec<String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_profile().await;
     let aliases: Vec<_> = p.aliases.list().into_iter().cloned().collect();
     item_rows(&aliases, &p.triggers.list(), &p.macros)
 }
@@ -2178,28 +2205,28 @@ async fn each_character_keeps_its_own_items_across_switches_after_the_wizard() {
     use crate::profile::set::DEFAULT_PROFILE_NAME;
     let dir = tempfile::tempdir().unwrap();
     let (state, before) = converted_three(dir.path()).await;
-    assert_eq!(items_on(&*state.profile.lock().await), before[0]);
+    assert_eq!(items_on(&*state.selected_profile().await), before[0]);
 
     // Corvanne logs in, and Vosh switches to Healer.
     crate::profile::switch::switch_profile(&state, &state.selected_session(), "Healer")
         .await
         .unwrap();
-    assert_eq!(items_on(&*state.profile.lock().await), before[1]);
+    assert_eq!(items_on(&*state.selected_profile().await), before[1]);
     persist(&state).await;
 
     // The next launch opens as Healer.
     let state = relaunch_as(dir.path(), "Healer").await;
-    assert_eq!(items_on(&*state.profile.lock().await), before[1]);
+    assert_eq!(items_on(&*state.selected_profile().await), before[1]);
 
     // Back to Default, then on to Test-Prompt.
     crate::profile::switch::switch_profile(&state, &state.selected_session(), DEFAULT_PROFILE_NAME)
         .await
         .unwrap();
-    assert_eq!(items_on(&*state.profile.lock().await), before[0]);
+    assert_eq!(items_on(&*state.selected_profile().await), before[0]);
     crate::profile::switch::switch_profile(&state, &state.selected_session(), "Test-Prompt")
         .await
         .unwrap();
-    assert_eq!(items_on(&*state.profile.lock().await), before[2]);
+    assert_eq!(items_on(&*state.selected_profile().await), before[2]);
     persist(&state).await;
 
     // Every save along the way kept each character as it was.
@@ -2208,7 +2235,11 @@ async fn each_character_keeps_its_own_items_across_switches_after_the_wizard() {
         .enumerate()
     {
         let state = relaunch_as(dir.path(), name).await;
-        assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
+        assert_eq!(
+            items_on(&*state.selected_profile().await),
+            before[n],
+            "{name}"
+        );
     }
 }
 

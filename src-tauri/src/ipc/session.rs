@@ -14,18 +14,18 @@ use crate::session::TargetPayload;
 use crate::sessions::SessionId;
 
 /// Open a session after the others, with nothing connected, and return
-/// its id. It plays the live profile, so its connection takes the
-/// profile's tick settings and `[prompt]` table, and its Lua engine loads
-/// the plugins the profile turns on, as the first session's does at
-/// launch.
+/// its id. It plays the profile the selected session plays, so its
+/// connection takes the profile's tick settings and `[prompt]` table, and
+/// its Lua engine loads the plugins the profile turns on, as the first
+/// session's does at launch.
 #[tauri::command]
 pub(crate) async fn session_open<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharedState>,
 ) -> Result<SessionId, String> {
-    let session = state.open_session();
+    let session = state.open_session(state.selected_session().profile());
     {
-        let mut p = state.profile.lock().await;
+        let mut p = session.lock_profile().await;
         let tick_before = p.tick.config.clone();
         let mut c = session.connection.lock();
         crate::profile::switch::hand_to_connection(&mut p, &mut c, &tick_before);
@@ -193,9 +193,9 @@ mod tests {
         // it runs a line.
         let (held_tx, held) = tokio::sync::oneshot::channel();
         let (release, release_rx) = tokio::sync::oneshot::channel::<()>();
-        let profile = state.profile.clone();
+        let session = state.selected_session();
         let holder = tokio::spawn(async move {
-            let _p = profile.lock().await;
+            let _p = session.lock_profile().await;
             let _ = held_tx.send(());
             let _ = release_rx.await;
         });
@@ -220,7 +220,7 @@ mod tests {
         app.manage::<SharedState>(Arc::new(AppState::default()));
         let state: SharedState = app.state::<SharedState>().inner().clone();
         {
-            let mut p = state.profile.lock().await;
+            let mut p = state.selected_profile().await;
             p.prompt.draw = true;
             p.prompt.template = "<%hp>".into();
         }
@@ -229,7 +229,7 @@ mod tests {
             .await
             .unwrap();
         let session = state.session(Some(id)).unwrap();
-        let p = state.profile.lock().await;
+        let p = state.selected_profile().await;
         let c = session.connection.lock();
         assert_eq!(*c.prompt.config(), p.prompt);
         assert_eq!(p.prompt.template, "<%hp>");

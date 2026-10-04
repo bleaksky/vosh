@@ -52,7 +52,10 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.set_prompt(codes(PROMPT)).await;
-    h.state.note_active_profile(DEFAULT_PROFILE_NAME);
+    h.state
+        .selected_session()
+        .profile()
+        .set_name(DEFAULT_PROFILE_NAME);
     crate::ipc::prompt::prompt_watch(h.app.state(), true, None).expect("the card watches");
     h.connect().await;
 
@@ -112,7 +115,7 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
     .expect("an op");
     let edited = {
         let session = h.state.selected_session();
-        let p = h.state.profile.lock().await;
+        let p = h.state.selected_profile().await;
         let c = session.connection.lock();
         crate::prompt::edit(&p, &c, "<%hp>", &op).expect("the edit")
     };
@@ -253,7 +256,10 @@ async fn an_echo_the_session_hears_of_late_leaves_the_prompt_after_it_open() {
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.set_prompt(codes(PROMPT)).await;
-    h.state.note_active_profile(DEFAULT_PROFILE_NAME);
+    h.state
+        .selected_session()
+        .profile()
+        .set_name(DEFAULT_PROFILE_NAME);
     h.connect().await;
     h.until_last_row("<1020>").await;
 
@@ -1676,7 +1682,7 @@ async fn a_lua_alias_you_type_runs_its_body_and_the_game_hears_it() {
     h.set_prompt(codes(PROMPT)).await;
     h.connect().await;
     h.until_last_row("<1020>").await;
-    h.state.profile.lock().await.aliases.set(
+    h.state.selected_profile().await.aliases.set(
         vosh_automation::alias::Alias::new("peer", "ignored")
             .with_script("mud.echo('You peer ' .. captures[1] .. '.')\nmud.send(captures[1])"),
     );
@@ -1715,7 +1721,7 @@ async fn a_lua_alias_that_mud_input_names_runs_its_body() {
     h.connect().await;
     h.until_last_row("<1020>").await;
     {
-        let mut p = h.state.profile.lock().await;
+        let mut p = h.state.selected_profile().await;
         p.aliases.set(
             vosh_automation::alias::Alias::new("peer", "ignored")
                 .with_script("mud.send(captures[1])"),
@@ -1843,7 +1849,7 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
          mud.set_prompt_var('plugin_mark', 'on')\n",
     )
     .expect("the entry script");
-    h.state.profile.lock().await.plugins.enabled = vec!["on_load".into()];
+    h.state.selected_profile().await.plugins.enabled = vec!["on_load".into()];
 
     crate::app::plugins::load_enabled_plugins(
         h.app.handle(),
@@ -1854,8 +1860,7 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
     .await;
     assert!(
         h.state
-            .profile
-            .lock()
+            .selected_profile()
             .await
             .aliases
             .get("plugged")
@@ -1943,7 +1948,7 @@ async fn lua_a_profile_switch_turns_its_plugins_on_and_the_others_off() {
     healer
         .save(&h.profile_file("Healer").await)
         .expect("Healer's file");
-    h.state.profile.lock().await.plugins.enabled = vec!["everywhere".into()];
+    h.state.selected_profile().await.plugins.enabled = vec!["everywhere".into()];
     crate::app::plugins::load_enabled_plugins(
         h.app.handle(),
         &h.state,
@@ -2015,7 +2020,7 @@ async fn lua_a_plugin_load_prints_its_lines_once_you_connect() {
         .expect("the manifest");
         std::fs::write(plugin.join("main.lua"), body).expect("the entry script");
     }
-    h.state.profile.lock().await.plugins.enabled =
+    h.state.selected_profile().await.plugins.enabled =
         vec!["noisy".into(), "spin".into(), "noisy".into()];
     crate::app::plugins::load_enabled_plugins(
         h.app.handle(),
@@ -2061,7 +2066,7 @@ async fn lua_a_settings_timer_runs_starts_timers_and_runs_input() {
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     {
-        let mut p = h.state.profile.lock().await;
+        let mut p = h.state.selected_profile().await;
         for (id, command) in [
             (
                 1,
@@ -2096,8 +2101,7 @@ async fn lua_that_changes_an_alias_saves_your_profile() {
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.state
-        .profile
-        .lock()
+        .selected_profile()
         .await
         .triggers
         .set(vosh_automation::trigger::Trigger::new(
@@ -2165,7 +2169,7 @@ async fn a_timer_line_moves_the_target_display_and_repaints_your_prompt() {
     // Two Settings timers run the lines you would type. The tick command
     // runs its line the same way.
     {
-        let mut p = h.state.profile.lock().await;
+        let mut p = h.state.selected_profile().await;
         for (id, command) in [(1, "tar goblin"), (2, "#prompt default")] {
             p.timers.push(crate::profile::live::Timer {
                 id,
@@ -2192,8 +2196,7 @@ async fn a_line_from_mud_input_moves_the_target_display_and_repaints_your_prompt
     // The game answers Huh? and its prompt. The trigger starts a Lua
     // timer, so its lines run after that prompt drew the band.
     h.state
-        .profile
-        .lock()
+        .selected_profile()
         .await
         .triggers
         .set(vosh_automation::trigger::Trigger::new(

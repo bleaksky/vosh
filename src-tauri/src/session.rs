@@ -376,9 +376,9 @@ pub(crate) async fn disconnect<R: tauri::Runtime>(
 /// the custom prompt follows. The caller says so, which lets a test have
 /// a fake game on a local port count as it.
 ///
-/// The loop shares the live profile and the log store in `state`, and
-/// the connection's target and room list, the Lua timers and the
-/// scrollback ring in `session`, with the rest of the app.
+/// The loop shares the log store in `state`, and the profile `session`
+/// plays, its connection's target and room list, its Lua timers and its
+/// scrollback ring, with the rest of the app.
 pub(crate) async fn spawn<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: &SharedState,
@@ -447,7 +447,6 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         app,
         stream,
         rx_outgoing,
-        state.profile.clone(),
         Arc::clone(session),
         log_sink,
         negotiator,

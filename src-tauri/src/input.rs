@@ -274,7 +274,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         shown,
         effects,
     } = {
-        let mut profile = state.profile.lock().await;
+        let mut profile = session.lock_profile().await;
         let mut connection = session.connection.lock();
         run_lines_locked(
             state,
@@ -297,7 +297,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         session.emit(app, events::TARGET, &payload);
     }
 
-    deliver_script_result(app, state, session, apply).await
+    deliver_script_result(app, session, apply).await
 }
 
 /// Apply a script result outside the session loop, the way every path
@@ -306,7 +306,6 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
 /// With no connection the terminal says so.
 async fn deliver_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    state: &SharedState,
     session: &Arc<Session>,
     apply: ApplyResult,
 ) -> Result<(), String> {
@@ -314,7 +313,7 @@ async fn deliver_script_result<R: tauri::Runtime>(
         bytes,
         echoes,
         walk,
-    } = collect_script_result(app, &state.profile, session, apply).await;
+    } = collect_script_result(app, session, apply).await;
     output::echo_lines(app, session, &echoes);
 
     if bytes.is_empty() && walk.is_none() {

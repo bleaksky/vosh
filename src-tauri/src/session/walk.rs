@@ -20,16 +20,13 @@
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
-use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::Value;
-use tokio::sync::Mutex;
 use tokio::time::Instant;
 use vosh_automation::alias::ExpandStep;
 
 use crate::input::walk::{Dir, WalkCommand, WalkPlan};
-use crate::profile::live::Profile;
 use crate::script::ApplyResult;
 use crate::sessions::Session;
 
@@ -513,14 +510,10 @@ fn here_exits(data: &Value) -> Option<HashMap<Dir, i64>> {
 /// Run what a walk held, the steps after `#walk` in its line, as the
 /// line would have run them, under the profile lock and the connection's.
 /// A `#walk` among them comes back in the result's `walk`.
-pub(super) async fn release(
-    profile: &Arc<Mutex<Profile>>,
-    session: &Session,
-    rest: Vec<ExpandStep>,
-) -> ApplyResult {
+pub(super) async fn release(session: &Session, rest: Vec<ExpandStep>) -> ApplyResult {
     let mut lua = ApplyResult::default();
     let result = {
-        let mut p = profile.lock().await;
+        let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
         crate::input::run_expanded(&mut p, &mut c, rest, &mut lua)
     };
