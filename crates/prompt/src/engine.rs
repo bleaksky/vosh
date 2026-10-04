@@ -223,7 +223,8 @@ impl PromptEngine {
 
     /// The prompt is for `who` now. The capture compiles for it, and a
     /// design that follows the game is written again for it, since who
-    /// you are decides what some codes print.
+    /// you are decides whether Vosh can draw some settings, such as a
+    /// color left open before `%u`.
     fn take_who(&mut self, who: Who) {
         if who == self.who {
             return;
