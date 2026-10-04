@@ -279,8 +279,8 @@ impl ScriptEngine {
     /// `@vitals_alert/main.lua`.
     ///
     /// A load that succeeds takes the place of all `owner` registered
-    /// before, its Lua triggers, GMCP handlers and timers, so a load
-    /// never doubles them. A load that fails registers nothing and leaves
+    /// before, its Lua triggers, GMCP handlers and timers, and a
+    /// plugin's aliases, so a load never doubles them. A load that fails registers nothing and leaves
     /// what `owner` had, and its other actions go ahead. A load Vosh
     /// stops leaves `owner` off with nothing registered. Loading turns an
     /// owner back on after a stop.
@@ -377,24 +377,31 @@ impl ScriptEngine {
         };
         if let Owner::Plugin(name) = owner {
             self.envs.set(name, env);
+            // The aliases the run made follow, in place of the old ones.
+            outcome
+                .actions
+                .push(Action::DropPluginAliases(name.clone()));
         }
         outcome.append(self.finish(owner, &Site::Entry, called));
         outcome
     }
 
     /// Turn the plugin or loose script `owner` off: let go of the Lua
-    /// triggers, GMCP handlers and timers it registered, and take it off
-    /// the list `#script reload` runs. The variables it set and the
-    /// groups it turned on or off stay as they are.
+    /// triggers, GMCP handlers and timers it registered, and a plugin's
+    /// aliases, and take it off the list `#script reload` runs. The
+    /// variables it set and the groups it turned on or off stay as they
+    /// are, and so do the aliases a loose script made, which you keep.
     pub fn unload(&mut self, owner: &Owner) -> ScriptOutcome {
         self.loaded_scripts.retain(|script| script.owner != *owner);
         self.stopped.remove(owner);
+        let owned = self.owned_callbacks(owner);
+        let mut actions = self.release(&owned);
         if let Owner::Plugin(name) = owner {
             self.envs.set(name, None);
+            actions.push(Action::DropPluginAliases(name.clone()));
         }
-        let owned = self.owned_callbacks(owner);
         ScriptOutcome {
-            actions: self.release(&owned),
+            actions,
             ..ScriptOutcome::default()
         }
     }
@@ -614,9 +621,6 @@ impl ScriptEngine {
     /// functions, and the caller turns it off. A function from a `#lua`
     /// line goes alone.
     fn stop_owner(&mut self, owner: &Owner, site: &Site) -> Vec<Action> {
-        if let Owner::Plugin(name) = owner {
-            self.envs.set(name, None);
-        }
         let ids = match owner {
             Owner::Typed => site.callback_id().into_iter().collect(),
             Owner::Plugin(_) | Owner::Script(_) => {
@@ -625,7 +629,12 @@ impl ScriptEngine {
             }
             Owner::Trigger(_) | Owner::Alias(_) => self.owned_callbacks(owner),
         };
-        self.release(&ids)
+        let mut actions = self.release(&ids);
+        if let Owner::Plugin(name) = owner {
+            self.envs.set(name, None);
+            actions.push(Action::DropPluginAliases(name.clone()));
+        }
+        actions
     }
 
     /// Let go of the functions `ids` names, and of the Lua triggers, GMCP
@@ -1422,7 +1431,7 @@ mod tests {
         let typed = e.eval("mud.send('look')", "=#lua").unwrap();
         assert_eq!(typed.actions, vec![Action::Send("look".into())]);
         let other = plugin(&mut e, "polite", "mud.send('look')").unwrap();
-        assert_eq!(other.actions, vec![Action::Send("look".into())]);
+        assert!(other.actions.contains(&Action::Send("look".into())));
         // The libraries read as they are, and refuse a change.
         let read = plugin(
             &mut e,
@@ -1559,6 +1568,57 @@ mod tests {
         e.unload(&watch).unwrap();
         let leftover = &e.lua_triggers();
         assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
+    #[test]
+    fn a_plugin_alias_is_the_plugin_s_and_goes_with_it() {
+        let mut e = ScriptEngine::new().unwrap();
+        let healer = Owner::Plugin("healer".into());
+        let code = "mud.alias('hl', 'cast heal') mud.unalias('kk')";
+        let loaded = e
+            .load_script(healer.clone(), "@healer/main.lua", code.into())
+            .unwrap();
+        // A load drops the aliases the plugin made before its own run.
+        assert_eq!(
+            loaded.actions,
+            vec![
+                Action::DropPluginAliases("healer".into()),
+                Action::SetPluginAlias {
+                    plugin: "healer".into(),
+                    name: "hl".into(),
+                    expansion: "cast heal".into(),
+                },
+                Action::RemovePluginAlias {
+                    plugin: "healer".into(),
+                    name: "kk".into(),
+                },
+            ]
+        );
+        // A failed load keeps the aliases it had and makes none.
+        let failed = e.load_script(
+            healer.clone(),
+            "@healer/main.lua",
+            "mud.alias('hl', 'cast cure') error('typo')".into(),
+        );
+        assert_eq!(error_lines(&failed), ["healer/main.lua:1: typo"]);
+        assert_eq!(failed.actions.len(), 1);
+        assert_eq!(
+            e.unload(&healer).unwrap().actions,
+            vec![Action::DropPluginAliases("healer".into())]
+        );
+        // Your own Lua and a loose script make aliases you keep.
+        let typed = e.eval("mud.alias('hl', 'cast heal')", "=#lua").unwrap();
+        let script = load(&mut e, "heal.lua", "mud.unalias('hl')").unwrap();
+        assert_eq!(
+            [typed.actions, script.actions].concat(),
+            vec![
+                Action::SetAlias {
+                    name: "hl".into(),
+                    expansion: "cast heal".into(),
+                },
+                Action::RemoveAlias("hl".into()),
+            ]
+        );
     }
 
     #[test]

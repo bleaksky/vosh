@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use vosh_automation::alias::AliasStore;
+use vosh_automation::alias::{AliasStore, PluginAliases};
 use vosh_automation::trigger::TriggerStore;
 use vosh_automation::vars::VariableStore;
 use vosh_script::ScriptEngine;
@@ -16,6 +16,10 @@ use crate::tick::TickRuntime;
 #[derive(Debug, Default)]
 pub(crate) struct Profile {
     pub(crate) aliases: AliasStore,
+    /// The aliases plugins made, which last for the session. No profile
+    /// file holds them, so a switch or a save leaves them be, and a
+    /// plugin that turns off takes its own.
+    pub(crate) plugin_aliases: PluginAliases,
     pub(crate) vars: VariableStore,
     pub(crate) triggers: TriggerStore,
     pub(crate) tick: TickRuntime,
