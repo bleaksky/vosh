@@ -580,6 +580,7 @@ pub(crate) async fn rename_profile(
     if let Some(open) = open {
         open.lock().await.set_name(&new);
     }
+    crate::loadouts::set::follow_profile_name(state, old, Some(&new)).await;
     Ok(())
 }
 
@@ -592,8 +593,13 @@ pub(crate) async fn delete_profile(state: &SharedState, name: &str) -> Result<()
     if state.open_profile(name).is_some() {
         return Err(ProfileSetError::CannotDeleteActive(name.to_string()).to_string());
     }
-    let mut set = state.loaded_profile_set().await?;
-    set.delete(name).map_err(|e| e.to_string())
+    state
+        .loaded_profile_set()
+        .await?
+        .delete(name)
+        .map_err(|e| e.to_string())?;
+    crate::loadouts::set::follow_profile_name(state, name, None).await;
+    Ok(())
 }
 
 /// The body of [`profile_duplicate`].

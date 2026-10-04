@@ -230,7 +230,11 @@ pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> b
     }
     // adopt_catalog_presets left the live preset list equal to the
     // catalog's, or the catalog with none, so the overlay leaves it as is.
-    lay_catalog_over(&mut *session.lock_profile().await, &catalog, Some(&set));
+    {
+        let mut p = session.lock_profile().await;
+        let gate = set.for_profile(p.name.as_deref());
+        lay_catalog_over(&mut p, &catalog, Some(&gate));
+    }
     *state.global_catalog.lock().await = Some(catalog);
     *state.loadout_set.lock().await = Some(set);
     info!("loaded catalog.toml and loadouts.toml");

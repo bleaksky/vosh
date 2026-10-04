@@ -326,6 +326,7 @@ fn a_loadout_switch_tells_the_command_line_when_a_macro_group_turned() {
             active: Vec::new(),
             dormant: false,
             loadouts: vec![fight, walk],
+            ..Default::default()
         });
         state.selected_profile().await.macros = vec![
             grouped_macro("F1", "kick", "combat"),

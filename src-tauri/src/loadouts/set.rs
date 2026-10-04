@@ -1,6 +1,8 @@
 //! loadouts.toml, which holds the loadouts you have and which of them
-//! are on, and the switch that turns them on and off.
+//! are on for each profile, and the switch that turns them on and off.
 
+use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -59,8 +61,9 @@ impl Loadout {
 }
 
 /// Persisted top-level loadout collection. Saved at
-/// `<app_data>/loadouts.toml`. The `active` list is the stacked set.
-/// The runtime gates the catalog on the union of every active loadout's
+/// `<app_data>/loadouts.toml`. The `active` list is the stacked set of
+/// every profile that keeps none of its own in `profiles`. The runtime
+/// gates the catalog on the union of every active loadout's
 /// `enabled_groups`, see [`super::gating`].
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub(crate) struct LoadoutSet {
@@ -81,9 +84,60 @@ pub(crate) struct LoadoutSet {
     /// Every loadout the user has authored.
     #[serde(default)]
     pub loadouts: Vec<Loadout>,
+    /// The stacks of the profiles that keep their own, by profile name,
+    /// see [`LoadoutSet::set_stack`]. Left out of the file while empty,
+    /// and an older build, which reads `active` and `dormant` above as
+    /// the one stack, passes over it (D14).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub profiles: BTreeMap<String, Stack>,
+}
+
+/// The stack of active loadouts a profile keeps of its own, with its
+/// dormant switch, in the shape of the top-level `active` and `dormant`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct Stack {
+    #[serde(default)]
+    pub active: Vec<String>,
+    #[serde(default)]
+    pub dormant: bool,
 }
 
 impl LoadoutSet {
+    /// The set as the profile `profile` gates on it, with the stack it
+    /// keeps of its own in place of the top-level one. A profile with
+    /// none, and the defaults before launch names a profile (None), take
+    /// the set as it is.
+    pub(crate) fn for_profile(&self, profile: Option<&str>) -> Cow<'_, LoadoutSet> {
+        match profile.and_then(|name| self.profiles.get(name)) {
+            Some(own) => Cow::Owned(LoadoutSet {
+                active: own.active.clone(),
+                dormant: own.dormant,
+                loadouts: self.loadouts.clone(),
+                profiles: BTreeMap::new(),
+            }),
+            None => Cow::Borrowed(self),
+        }
+    }
+
+    /// Make `stack` the one the profile `profile` gates on. A profile
+    /// that keeps a stack of its own changes that. One with none changes
+    /// the top-level stack while no other profile in `open`, the names of
+    /// the profiles the sessions play, reads it, so one session writes
+    /// loadouts.toml as an older build reads it. Once another open profile
+    /// reads the top-level stack, the profile takes a stack of its own and
+    /// leaves that one as it is.
+    pub(crate) fn set_stack(&mut self, profile: Option<&str>, open: &[String], stack: Stack) {
+        if let Some(name) = profile {
+            let reads_top = |other: &String| other != name && !self.profiles.contains_key(other);
+            if self.profiles.contains_key(name) || open.iter().any(reads_top) {
+                self.profiles.insert(name.to_string(), stack);
+                return;
+            }
+        }
+        self.active = stack.active;
+        self.dormant = stack.dormant;
+    }
+
     /// Look up a loadout by name. Used by the resolver and the
     /// commands surface.
     pub(crate) fn get(&self, name: &str) -> Option<&Loadout> {
@@ -135,10 +189,11 @@ pub(crate) const UNREAD_LOADOUTS_NOTICE: &str =
      Vosh will not save over it or catalog.toml. Fix the file and restart Vosh.";
 
 /// The part of [`loadouts_set_active`] that runs under the loadout and
-/// profile locks: take the new active list, lay the group state it
-/// imposes over the live profile, and save loadouts.toml in the app data
-/// folder. The command queues the profile save, so a test can run this
-/// against a mock app and a scratch folder.
+/// profile locks: take the new active list as the stack of the profile
+/// the selected session plays, see [`LoadoutSet::set_stack`], lay the
+/// group state it imposes over that profile, and save loadouts.toml in
+/// the app data folder. The command queues the profile save, so a test
+/// can run this against a mock app and a scratch folder.
 /// When the switch turned a macro group on or off, every window hears it
 /// once the locks are released, since the command line keeps its own map
 /// of the macro keys that fire.
@@ -151,6 +206,12 @@ pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
     let state: SharedState = app.state::<SharedState>().inner().clone();
     let app_data = state.app_data.get().ok_or(NO_APP_DATA)?;
     let session = state.selected_session();
+    // Read from the session map before the loadouts lock.
+    let open: Vec<String> = state
+        .open_profiles()
+        .iter()
+        .filter_map(|open| open.name())
+        .collect();
     let macro_groups_changed = {
         let mut guard = state.loadout_set.lock().await;
         let Some(set) = guard.as_mut() else {
@@ -159,7 +220,7 @@ pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
         // Filter to known loadout names. A stale name (e.g. from a
         // future-truncated payload) is silently dropped rather than
         // returning an error.
-        set.active = active
+        let active: Vec<String> = active
             .into_iter()
             .filter(|n| set.loadouts.iter().any(|l| &l.name == n))
             .collect();
@@ -168,12 +229,16 @@ pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
         // an empty active list on its own is ambiguous with "loadouts
         // have no opinion", and the other apply points (startup,
         // profile switch) must be able to re-impose dormancy.
-        set.dormant = set.active.is_empty();
-        let snapshot = set.clone();
+        let stack = Stack {
+            dormant: active.is_empty(),
+            active,
+        };
         let mut p = session.lock_profile().await;
+        let name = p.name.clone();
+        set.set_stack(name.as_deref(), &open, stack);
         let macro_groups_before = p.disabled_macro_groups.clone();
-        apply_effective_state(&snapshot, &mut p);
-        if let Err(e) = save_loadout_set(app_data, &snapshot) {
+        apply_effective_state(&set.for_profile(name.as_deref()), &mut p);
+        if let Err(e) = save_loadout_set(app_data, set) {
             warn!(error = %e, "loadouts.toml save failed");
         }
         p.disabled_macro_groups != macro_groups_before
@@ -182,6 +247,28 @@ pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
         broadcast(app, MACRO_GROUPS_CHANGED, &"");
     }
     Ok(())
+}
+
+/// Carry the stack the profile `old` keeps of its own over to `new`, as
+/// a rename moves the profile, or drop it when `new` is None, as a
+/// delete does, and save loadouts.toml when there was one.
+pub(crate) async fn follow_profile_name(state: &SharedState, old: &str, new: Option<&str>) {
+    let Some(app_data) = state.app_data.get() else {
+        return;
+    };
+    let mut guard = state.loadout_set.lock().await;
+    let Some(set) = guard.as_mut() else {
+        return;
+    };
+    let Some(stack) = set.profiles.remove(old) else {
+        return;
+    };
+    if let Some(new) = new {
+        set.profiles.insert(new.to_string(), stack);
+    }
+    if let Err(e) = save_loadout_set(app_data, set) {
+        warn!(error = %e, "loadouts.toml save failed");
+    }
 }
 
 #[cfg(test)]

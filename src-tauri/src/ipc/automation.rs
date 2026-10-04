@@ -287,7 +287,8 @@ pub(crate) async fn groups_list(
 ) -> Result<Vec<GroupSwitchState>, String> {
     let set = state.loadout_set.lock().await;
     let p = state.selected_session().lock_profile().await;
-    Ok(group_switches(&p, set.as_ref(), list))
+    let set = set.as_ref().map(|set| set.for_profile(p.name.as_deref()));
+    Ok(group_switches(&p, set.as_deref(), list))
 }
 
 /// Turn a whole group of one list on or off, from the switch on its
@@ -305,12 +306,13 @@ pub(crate) async fn groups_set_enabled<R: tauri::Runtime>(
     let (open, switches, lists) = {
         let set = state.loadout_set.lock().await;
         let mut p = session.lock_profile().await;
+        let set = set.as_ref().map(|set| set.for_profile(p.name.as_deref()));
         let c = session.connection.lock();
         let before = ListRevisions::of(&p, &c);
-        switch_group(&mut p, set.as_ref(), list, &group, enabled)?;
+        switch_group(&mut p, set.as_deref(), list, &group, enabled)?;
         (
             p.open().clone(),
-            group_switches(&p, set.as_ref(), list),
+            group_switches(&p, set.as_deref(), list),
             ListChanges::since(before, &p, &c),
         )
     };
@@ -694,6 +696,7 @@ mod tests {
             },
             dormant,
             loadouts: vec![healer],
+            ..Default::default()
         }
     }
 
@@ -768,6 +771,7 @@ mod tests {
             active: vec!["Quiet".into()],
             dormant: false,
             loadouts: vec![Loadout::empty("Quiet")],
+            ..Default::default()
         };
         assert_eq!(
             group_switches(&p, Some(&set), GroupList::Aliases),
