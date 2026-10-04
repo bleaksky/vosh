@@ -520,10 +520,14 @@ export const PRESETS: Preset[] = [
         '^You have become better at (.+)!$',
         '{fg:120}You have become better at {fg:230}$1{fg:120}!{reset}',
       ),
+      // The game prints the level and what you gain on two lines
+      // (update.c gain_exp and advance_level), with hit point and
+      // practice singular when one, so each line keeps its own words.
+      replace('loot.level', '^You raise a level!!$', '{fg:120}You raise a level!!{reset}'),
       replace(
-        'loot.level',
-        '^You raise a level!!  You gain:  (\\d+)/\\d+ hit points, (\\d+)/\\d+ mana, (\\d+)/\\d+ move, and (\\d+) practices\\.$',
-        '{fg:120}You raise a level!! You gain {fg:230}$1 hp{fg:120}, {fg:230}$2 mn{fg:120}, {fg:230}$3 mv{fg:120} and {fg:230}$4 practices.{reset}',
+        'loot.level_gain',
+        '^You gain:  (\\d+)/(\\d+) hit point(s?), (\\d+)/(\\d+) mana, (\\d+)/(\\d+) move, and (\\d+) practice(s?)\\.$',
+        '{fg:120}You gain:  {fg:230}$1{fg:120}/$2 hit point$3, {fg:230}$4{fg:120}/$5 mana, {fg:230}$6{fg:120}/$7 move, and {fg:230}$8{fg:120} practice$9.{reset}',
       ),
       replace(
         'loot.xp',
