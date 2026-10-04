@@ -70,7 +70,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     tracing::debug!(package = %msg.package, data = %msg.data, "gmcp payload");
     // Take the tick step for a World.Time hour change under these locks,
     // as the line path does, so the tick needs no lock of its own after.
-    let (tick_step, script_apply) = {
+    let (tick_step, script_apply, daylight) = {
         let lock_t0 = std::time::Instant::now();
         let mut p = conn.session.lock_profile().await;
         conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
@@ -83,8 +83,19 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         apply
             .alerts
             .extend(c.alerts.gmcp(&p, &msg, conn.stream.last_line(), now));
-        (tick_step, apply.ran_under(p.open()))
+        // The game's day or night, beside the tick.
+        let daylight = (msg.package == "World.Time")
+            .then(|| c.tick.observe_daylight(&msg.data))
+            .flatten();
+        (tick_step, apply.ran_under(p.open()), daylight)
     };
+    if let Some(phase) = daylight {
+        conn.session.emit(
+            &conn.app,
+            crate::app::events::DAYLIGHT_CHANGED,
+            &crate::tick::DaylightPayload { phase },
+        );
+    }
 
     // Char.Status / Char.Name carry the logged-in character name on
     // Aabahran (and most ROM derivatives). A name the session has not

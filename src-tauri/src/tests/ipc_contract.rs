@@ -155,6 +155,11 @@ const UNHEARD: &[Unheard] = &[
               hears it, after R18 (Alerts Q18).",
     },
     Unheard {
+        name: "vosh://daylight-changed",
+        why: "The game turned to day or night. Switch themes With the game \
+              reads it in the page half, after R18 (Alerts Q16).",
+    },
+    Unheard {
         name: "vosh://session-selected",
         why: "A click on a banner selected a session. The page opens one \
               session until the page half of R14b after R20.",

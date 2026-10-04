@@ -7,7 +7,8 @@ use tauri::{AppHandle, State};
 use crate::app::events::TICK_CONFIG_CHANGED;
 use crate::app::state::SharedState;
 use crate::disk::save::{save_then_broadcast, SavePolicy};
-use crate::tick::{apply_tick_config, follow_in_other_sessions, TickConfig};
+use crate::sessions::SessionId;
+use crate::tick::{apply_tick_config, follow_in_other_sessions, Daylight, TickConfig};
 
 /// Read the live tick configuration.
 #[tauri::command]
@@ -51,4 +52,18 @@ pub(crate) async fn tick_set_config<R: tauri::Runtime>(
     )
     .await;
     Ok(snapshot)
+}
+
+/// Whether the sun is up in the game of `session`, or the selected one,
+/// as its latest World.Time said, through a drop too: `day`, `night`, or
+/// null before the first. A window that opens reads it, since each turn
+/// goes out once on `vosh://daylight-changed`.
+#[tauri::command]
+pub(crate) async fn daylight_get(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<Option<Daylight>, String> {
+    let session = state.session(session)?;
+    let daylight = session.connection.lock().tick.daylight;
+    Ok(daylight)
 }

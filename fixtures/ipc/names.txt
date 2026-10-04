@@ -8,6 +8,7 @@ command alerts_permission()
 command aliases_export()
 command aliases_import(json)
 command app_quit()
+command daylight_get(session?)
 command fonts_list()
 command groups_list(list)
 command groups_set_enabled(list, group, enabled)
@@ -158,6 +159,7 @@ event vosh://chat-colors-changed app heard
 event vosh://chip-style-changed app page heard
 event vosh://connection-target-changed page heard
 event vosh://custom-themes-changed app page heard
+event vosh://daylight-changed app unheard
 event vosh://echo-macros-changed page heard
 event vosh://flush-pending-writes app heard
 event vosh://font-changed page heard
