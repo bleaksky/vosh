@@ -203,7 +203,8 @@ pub(crate) fn seed_example_plugins(plugins_dir: &std::path::Path) {
 /// on, as launch does. What an entry script asks for applies as on every
 /// other path that runs Lua, so its timers, `mud.input` lines and prompt
 /// values take effect. No terminal shows and no game listens yet, so
-/// what it would print or send goes to the log.
+/// the lines it prints wait for [`show_launch_lines`], and what it would
+/// send goes to the log.
 pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     state: &SharedState,
@@ -251,15 +252,32 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
             apply,
         )
         .await;
-        if !bytes.is_empty() || !echoes.is_empty() {
+        if !bytes.is_empty() {
             info!(
                 name = %name,
                 bytes = bytes.len(),
-                echoes = echoes.len(),
-                "plugin output at launch has nowhere to go"
+                "plugin sends at launch have no game to go to"
             );
         }
+        state
+            .launch_lua_lines
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .extend(echoes);
     }
+}
+
+/// Print the lines the plugins printed as they loaded at launch, once,
+/// now that a terminal listens. The first connect and the first line you
+/// type each call it, and whichever comes first prints them.
+pub(crate) fn show_launch_lines<R: tauri::Runtime>(app: &tauri::AppHandle<R>, state: &SharedState) {
+    let lines = std::mem::take(
+        &mut *state
+            .launch_lua_lines
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+    );
+    crate::output::echo_lines(app, &lines);
 }
 
 #[cfg(test)]
