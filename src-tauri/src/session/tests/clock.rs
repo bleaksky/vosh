@@ -18,7 +18,7 @@ const TICK: &str = "<%hp> %tick";
 fn at_prompt(template: &str, show: PromptShow) -> (Session, Instant) {
     let mut session = Session::new(showing(profile(CODES, template, true), show));
     let t0 = Instant::now();
-    session.p.tick.start_session(t0);
+    session.c.tick.start_session(&mut session.p.tick, t0);
     let read = session.read(&wire_fixture("quiet"));
     assert!(read.prompt, "{show:?}");
     (session, t0)
@@ -84,7 +84,7 @@ fn the_row_waits_while_you_select_or_read_back_and_the_band_does_not() {
 fn a_design_with_no_clock_piece_never_waits_or_draws() {
     for show in [PromptShow::Text, PromptShow::Lifted, PromptShow::Pinned] {
         let (mut session, t0) = at_prompt("<%hp>", show);
-        assert_eq!(clock_after(&session.p, t0), None, "{show:?}");
+        assert_eq!(clock_after(&session.p, &session.c, t0), None, "{show:?}");
         let later = t0 + Duration::from_millis(1_500);
         let (out, drawn) = drawing(|| clock_step(&mut session.p, &session.c, false, false, later));
         assert!(out.is_empty(), "{show:?}");
@@ -94,7 +94,7 @@ fn a_design_with_no_clock_piece_never_waits_or_draws() {
     let mut session = Session::new(profile(CODES, TICK, false));
     let t0 = Instant::now();
     let _ = session.read(&wire_fixture("quiet"));
-    assert_eq!(clock_after(&session.p, t0), None);
+    assert_eq!(clock_after(&session.p, &session.c, t0), None);
 }
 
 #[test]
@@ -103,18 +103,18 @@ fn the_next_repaint_waits_for_the_ticks_next_second() {
     // 29.7 seconds left shows 30 until 29 seconds are left.
     let now = t0 + Duration::from_millis(300);
     assert_eq!(
-        clock_after(&session.p, now),
+        clock_after(&session.p, &session.c, now),
         Some(t0 + Duration::from_secs(1) + CLOCK_SLACK)
     );
     // On the second, the next change is a second away.
     let now = t0 + Duration::from_secs(2);
     assert_eq!(
-        clock_after(&session.p, now),
+        clock_after(&session.p, &session.c, now),
         Some(now + Duration::from_secs(1) + CLOCK_SLACK)
     );
     // The time alone waits at most a second for the clock's next second.
     let (session, t0) = at_prompt("<%hp> %{time:hms}", PromptShow::Text);
-    let next = clock_after(&session.p, t0).expect("a repaint");
+    let next = clock_after(&session.p, &session.c, t0).expect("a repaint");
     assert!(next > t0 && next <= t0 + Duration::from_secs(1) + CLOCK_SLACK);
 }
 
@@ -171,7 +171,7 @@ fn a_band_repaint_between_your_echo_and_its_word_keeps_the_next_line_end() {
     // the renderer has it, so the blank line the game sends next shows.
     let mut session = Session::new(showing(profile(CODES, TICK, true), PromptShow::Pinned));
     let t0 = Instant::now();
-    session.p.tick.start_session(t0);
+    session.c.tick.start_session(&mut session.p.tick, t0);
     let mut grid = crate::native::grid::TermGrid::new(60, 30);
     let read = session.read(&wire_fixture("quiet"));
     assert!(read.prompt);
@@ -209,19 +209,22 @@ fn a_band_repaint_between_your_echo_and_its_word_keeps_the_next_line_end() {
 fn the_seconds_since_the_tick_count_up_past_a_late_tick() {
     for show in [PromptShow::Text, PromptShow::Lifted, PromptShow::Pinned] {
         let (mut session, t0) = at_prompt("<%hp> %{tick:since}", show);
-        let turned = session.p.tick.last_tick.expect("the tick runs");
+        let turned = session.c.tick.last_tick.expect("the tick runs");
         let later = t0 + Duration::from_millis(1_500);
         let out = clock_step(&mut session.p, &session.c, false, false, later);
         assert_eq!(shown(&out, show).as_deref(), Some("<1020> 1s"), "{show:?}");
         // The tick is late, so no second is left of it, and the count
         // goes on as the old TinTin prompt counted.
         let late = turned + Duration::from_millis(31_500);
-        assert_eq!(session.p.tick.remaining(late), Some(Duration::ZERO));
+        assert_eq!(
+            session.c.tick.remaining(&session.p.tick, late),
+            Some(Duration::ZERO)
+        );
         let out = clock_step(&mut session.p, &session.c, false, false, late);
         assert_eq!(shown(&out, show).as_deref(), Some("<1020> 31s"), "{show:?}");
         // The next repaint lands on its next second.
         assert_eq!(
-            clock_after(&session.p, late),
+            clock_after(&session.p, &session.c, late),
             Some(turned + Duration::from_secs(32) + CLOCK_SLACK),
             "{show:?}"
         );

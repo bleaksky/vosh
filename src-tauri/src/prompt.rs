@@ -95,22 +95,25 @@ pub(crate) async fn request_prompt_repaint(state: &SharedState) {
     }
 }
 
-/// What Vosh itself supplies to the custom prompt: the tick timer, your
-/// target from the connection, the profile's name and the affects you
-/// track. The clock reads the local time.
+/// What Vosh itself supplies to the custom prompt: the tick timer and
+/// your target from the connection, the profile's name and the affects
+/// you track. The clock reads the local time.
 pub(crate) fn client_values(
     p: &Profile,
     c: &Connection,
     now: Instant,
 ) -> vosh_prompt::ClientValues {
-    let tick = p.tick.remaining(now).map(|left| vosh_prompt::values::Tick {
-        remaining: i64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(i64::MAX),
-        interval: i64::try_from(p.tick.config.interval_secs).ok(),
-        since: p
-            .tick
-            .elapsed(now)
-            .and_then(|since| i64::try_from(since.as_secs()).ok()),
-    });
+    let tick = c
+        .tick
+        .remaining(&p.tick, now)
+        .map(|left| vosh_prompt::values::Tick {
+            remaining: i64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(i64::MAX),
+            interval: i64::try_from(p.tick.config.interval_secs).ok(),
+            since: c
+                .tick
+                .elapsed(&p.tick, now)
+                .and_then(|since| i64::try_from(since.as_secs()).ok()),
+        });
     vosh_prompt::ClientValues {
         tick,
         target: c.target.name.clone(),

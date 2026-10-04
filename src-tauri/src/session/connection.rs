@@ -1,9 +1,10 @@
 //! What one connection holds apart from the profile: the target you pick,
 //! its quick keys and the characters in the room, which the commands
-//! share, and the room look and the end of a fight, which the loop
-//! follows line by line. The app state holds the [`Connection`] behind
-//! its own lock, and the session loop holds a handle to it, so a command
-//! reads it without waiting on the loop.
+//! share, the room look and the end of a fight, which the loop follows
+//! line by line, and the tick's count, which both read. The app state
+//! holds the [`Connection`] behind its own lock, and the session loop
+//! holds a handle to it, so a command reads it without waiting on the
+//! loop.
 //!
 //! Its lock comes after the profile lock and the profile set, never before
 //! them. A step that holds it takes no other lock and never awaits. The
@@ -11,6 +12,7 @@
 //! the loop ends and clears it.
 
 use super::room_block::RoomBlock;
+use crate::tick::TickRuntime;
 
 /// What one connection holds apart from the profile. It outlives each
 /// connection, so a target you set offline carries into the next one and
@@ -37,6 +39,10 @@ pub(crate) struct Connection {
     /// that named one, and cleared by the prompt, GA or EOR that ends the
     /// pulse, and on a disconnect.
     pub(crate) fight_tail: bool,
+    /// The tick's running count. The profile keeps the tick settings,
+    /// which each of its methods takes. The session starts the count as
+    /// it connects and stops it as it ends.
+    pub(crate) tick: TickRuntime,
 }
 
 impl Connection {

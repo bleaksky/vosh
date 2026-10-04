@@ -11,7 +11,7 @@ use vosh_script::ScriptEngine;
 
 use crate::profile::file::{GroupFolders, PluginsPersist};
 use crate::profile::ui::UiConfig;
-use crate::tick::TickRuntime;
+use crate::tick::TickSettings;
 
 #[derive(Debug, Default)]
 pub(crate) struct Profile {
@@ -22,7 +22,8 @@ pub(crate) struct Profile {
     pub(crate) plugin_aliases: PluginAliases,
     pub(crate) vars: VariableStore,
     pub(crate) triggers: TriggerStore,
-    pub(crate) tick: TickRuntime,
+    /// The tick settings. The connection keeps the running count.
+    pub(crate) tick: TickSettings,
     pub(crate) script: ScriptEngine,
     pub(crate) ui: UiConfig,
     pub(crate) plugins: PluginsPersist,

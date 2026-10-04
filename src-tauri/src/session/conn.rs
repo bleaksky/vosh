@@ -104,7 +104,8 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // The prompt engine starts with no packets and the host's rules.
     {
         let mut p = profile.lock().await;
-        p.tick.start_session(Instant::now());
+        let mut c = connection.lock().await;
+        c.tick.start_session(&mut p.tick, Instant::now());
         start_prompt(&mut p, known_host);
         // A push to the right edge reaches to the width the game is told.
         p.prompt.set_cols(usize::from(negotiator.window_size.0));
@@ -243,7 +244,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                         let now = Instant::now();
                         let out = repaint_step(&mut p, &c, output_count() != conn.seen_output, now);
                         // The design may have gained or lost a clock piece.
-                        clock_until = clock_after(&p, now);
+                        clock_until = clock_after(&p, &c, now);
                         (out, watched_state(&conn.app, &p, &c))
                     };
                     if !out.is_empty() {
@@ -368,7 +369,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     let now = Instant::now();
                     let other = output_count() != conn.seen_output;
                     let out = clock_step(&mut p, &c, other, reading, now);
-                    clock_until = clock_after(&p, now);
+                    clock_until = clock_after(&p, &c, now);
                     let state = if out.is_empty() {
                         None
                     } else {
@@ -387,6 +388,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     &mut conn.stream,
                     &mut conn.walker,
                     &conn.profile,
+                    &conn.connection,
                     &conn.lua_timers,
                 )
                 .await
@@ -469,10 +471,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     capture_held_lines(&conn.profile, &log_sink).await;
     capture_pending_line(&conn.app, &log_sink, &mut conn.accumulator).await;
 
-    {
-        let mut p = conn.profile.lock().await;
-        p.tick.end_session();
-    }
+    conn.connection.lock().await.tick.end_session();
 
     log_sink.close().await;
 
@@ -651,13 +650,15 @@ async fn handle_tick<R: tauri::Runtime>(
     stream: &mut Stream,
     walker: &mut Walker,
     profile: &Arc<Mutex<Profile>>,
+    connection: &Arc<Mutex<Connection>>,
     lua_timers: &SharedTimers,
 ) -> std::io::Result<()> {
-    // Take the firing decision under the lock, then run the Send each
-    // tick command, if the timer fired, after releasing it.
+    // Take the firing decision under the locks, then run the Send each
+    // tick command, if the timer fired, after releasing them.
     let step = {
-        let mut p = profile.lock().await;
-        p.tick.poll(Instant::now())
+        let p = profile.lock().await;
+        let mut c = connection.lock().await;
+        c.tick.poll(&p.tick, Instant::now())
     };
     if !step.payload.enabled && !step.payload.fired {
         return Ok(());

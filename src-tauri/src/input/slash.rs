@@ -1,6 +1,6 @@
 //! The slash command dispatcher. A line that starts with `#` runs the
 //! command its first word names, against the live profile, or against
-//! the connection for your target and quick keys.
+//! the connection for your target, your quick keys and the tick's count.
 
 use super::automation::{
     slash_alias, slash_aliases_list, slash_endrec, slash_group, slash_groups_list, slash_record,
@@ -48,12 +48,12 @@ pub(super) fn handle_slash(
         "unprompt" => slash_unprompt(profile),
         "group" => slash_group(profile, args),
         "groups" => slash_groups_list(profile),
-        "tick" => slash_tick(profile, args),
+        "tick" => slash_tick(profile, c, args),
         "script" => slash_script(state, profile, args, lua),
         "scripts" => slash_scripts_list(profile),
         "lua" => slash_lua(profile, args, lua),
         "echo" | "showme" => slash_echo(profile, args),
-        "profile" => slash_profile(state, profile, args, replaced),
+        "profile" => slash_profile(state, profile, c, args, replaced),
         "import-tintin" => slash_import_tintin(profile, args),
         // Typed input runs #logs before the pipeline (see `logs_command`),
         // so only a timer, the tick command, or Lua gets here.

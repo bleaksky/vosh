@@ -9,6 +9,7 @@ use crate::disk::paths;
 use crate::import::tintin;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
+use crate::session::connection::Connection;
 
 /// What `#profile save`, `load`, and `reset` answer between the shared
 /// catalog wizard and the relaunch that finishes it. Nothing saves in
@@ -22,10 +23,12 @@ const PROFILE_MIGRATION_PENDING: &str =
 pub(super) const PROFILE_SAVE_BUSY: &str = "Vosh is saving this profile. Try again.";
 
 /// `#profile save`, `load` and `reset` on the active profile's file in
-/// the app data folder `state` holds.
+/// the app data folder `state` holds. A load or a reset hands the tick's
+/// count on `c` the new settings.
 pub(super) fn slash_profile(
     state: &AppState,
     profile: &mut Profile,
+    c: &mut Connection,
     args: &str,
     replaced: &mut bool,
 ) -> InputResult {
@@ -80,12 +83,15 @@ pub(super) fn slash_profile(
             None => InputResult::error("could not resolve profile path"),
         },
         "load" => match app_data.and_then(profile_path) {
-            Some(path) => load_profile_file(profile, &path, replaced),
+            Some(path) => load_profile_file(profile, c, &path, replaced),
             None => InputResult::error("could not resolve profile path"),
         },
         "reset" => {
             let blank = ProfileConfig::default();
+            let tick_before = profile.tick.config.clone();
             let _ = blank.apply_to(profile);
+            c.tick
+                .adopt(&mut profile.tick, &tick_before, tokio::time::Instant::now());
             *replaced = true;
             InputResult::echo_line("profile reset to defaults")
         }
@@ -99,6 +105,7 @@ pub(super) fn slash_profile(
 /// the live profile as it was.
 pub(super) fn load_profile_file(
     profile: &mut Profile,
+    c: &mut Connection,
     path: &std::path::Path,
     replaced: &mut bool,
 ) -> InputResult {
@@ -109,7 +116,10 @@ pub(super) fn load_profile_file(
     // The file reads now and the live profile holds what it says, so the
     // saves may write it again.
     crate::disk::atomic::release_unread(path);
+    let tick_before = profile.tick.config.clone();
     let warnings = snapshot.apply_to(profile);
+    c.tick
+        .adopt(&mut profile.tick, &tick_before, tokio::time::Instant::now());
     *replaced = true;
     let mut lines = vec![format!("profile loaded from {}", path.display())];
     for w in warnings {

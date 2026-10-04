@@ -121,6 +121,7 @@ pub(crate) async fn switch_live_profile(
         p.prompt.switch_profile();
         p.display_name = Some(crate::profile::set::display_name(name));
         state.note_active_profile(name);
+        let tick_before = p.tick.config.clone();
         match per_profile {
             Some(snap) => {
                 snap.apply_to(&mut p);
@@ -131,6 +132,13 @@ pub(crate) async fn switch_live_profile(
                 fresh.apply_to(&mut p);
             }
         }
+        // The running tick carries across with the new settings, so the
+        // status line keeps counting from the last tick.
+        state.connection.lock().await.tick.adopt(
+            &mut p.tick,
+            &tick_before,
+            tokio::time::Instant::now(),
+        );
         if let Some(g) = global {
             g.apply_to(&mut p);
         }
@@ -464,9 +472,12 @@ pub(crate) mod tests {
             c.room_block.room_chars(1);
             c.fight_tail = true;
             let t0 = tokio::time::Instant::now();
-            p.tick.start_session(t0);
-            assert!(p.tick.on_game_tick(t0).is_some(), "the game ticked");
-            (c.room_block.clone(), (p.tick.last_tick, p.tick.last_signal))
+            c.tick.start_session(&mut p.tick, t0);
+            assert!(
+                c.tick.on_game_tick(&p.tick, t0).is_some(),
+                "the game ticked"
+            );
+            (c.room_block.clone(), (c.tick.last_tick, c.tick.last_signal))
         };
         assert_ne!(look, crate::session::room_block::RoomBlock::default());
 
@@ -481,8 +492,8 @@ pub(crate) mod tests {
         assert_eq!(c.room_block, look);
         assert!(c.fight_tail);
         assert!(p.tick.config.enabled, "a running tick stays on");
-        assert!(p.tick.synced);
-        assert_eq!((p.tick.last_tick, p.tick.last_signal), count);
+        assert!(c.tick.synced);
+        assert_eq!((c.tick.last_tick, c.tick.last_signal), count);
     }
 
     #[tokio::test]

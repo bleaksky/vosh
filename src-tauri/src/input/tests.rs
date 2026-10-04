@@ -782,7 +782,13 @@ fn profile_save_load_and_reset_wait_for_the_relaunch_after_the_wizard() {
         .set(vosh_automation::alias::Alias::new("kk", "kick %1"));
     for sub in ["save", "load", "reset"] {
         let mut replaced = false;
-        let result = slash_profile(&state, &mut p, sub, &mut replaced);
+        let result = slash_profile(
+            &state,
+            &mut p,
+            &mut Connection::default(),
+            sub,
+            &mut replaced,
+        );
         assert_eq!(
             result.echo,
             ["[Quit Vosh and open it again to finish the move to loadouts.]"],
@@ -803,7 +809,7 @@ fn save_profile_in(state: &AppState, p: &mut Profile) -> InputResult {
     let busy = InputResult::error(PROFILE_SAVE_BUSY).echo;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
-        let result = slash_profile(state, p, "save", &mut false);
+        let result = slash_profile(state, p, &mut Connection::default(), "save", &mut false);
         if result.echo != busy {
             return result;
         }
@@ -847,7 +853,13 @@ fn profile_and_script_commands_use_the_app_data_folder() {
 
     let mut fresh = Profile::default();
     let mut replaced = false;
-    let loaded = slash_profile(&state, &mut fresh, "load", &mut replaced);
+    let loaded = slash_profile(
+        &state,
+        &mut fresh,
+        &mut Connection::default(),
+        "load",
+        &mut replaced,
+    );
     assert_eq!(
         loaded.echo[0],
         format!("profile loaded from {}", healer.display())
@@ -894,7 +906,7 @@ fn a_load_replaces_the_profile_only_when_its_file_reads() {
     let _ = process(&mut p, "#alias greet wave");
 
     let mut replaced = false;
-    let r = load_profile_file(&mut p, &path, &mut replaced);
+    let r = load_profile_file(&mut p, &mut Connection::default(), &path, &mut replaced);
     assert!(!replaced);
     assert!(r.echo[0].contains("load failed"), "{:?}", r.echo);
     assert!(p.aliases.get("greet").is_some());
@@ -908,7 +920,7 @@ fn a_load_replaces_the_profile_only_when_its_file_reads() {
     assert_eq!(effects, REPLACED);
 
     ProfileConfig::default().save(&path).unwrap();
-    let _ = load_profile_file(&mut p, &path, &mut replaced);
+    let _ = load_profile_file(&mut p, &mut Connection::default(), &path, &mut replaced);
     assert!(replaced);
     assert!(p.aliases.get("greet").is_none());
     let mut effects = DIRTY;
