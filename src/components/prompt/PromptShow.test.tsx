@@ -3,8 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { PromptShowState } from '../../lib/promptShow';
 import type { PromptShow } from '../../lib/session';
-import { findAll, type FakeElement } from '../../test/fakeDom';
-import { BUTTON, menuButtonDom, menuHeight, on } from '../../test/menuButtonDom';
+import { BUTTON, checkMarks, menuButtonDom, menuHeight, on } from '../../test/menuButtonDom';
 import { MENU_BUTTON_MENU_WIDTH } from './MenuButton';
 import { ShowButton } from './PromptShow';
 
@@ -82,9 +81,6 @@ describe('the button that says where your prompt shows', () => {
 // React DOM mounts the button on the stand in DOM with the card's own
 // menu (src/test/menuButtonDom.ts).
 
-const checks = (el: FakeElement) =>
-  findAll(el, (e) => e.nodeName === 'SVG' && e.getAttribute('class') === 'pane-menu-check').length;
-
 describe('the menu of where your prompt shows', () => {
   const { doc, mount: mountElement } = menuButtonDom();
 
@@ -113,7 +109,7 @@ describe('the menu of where your prompt shows', () => {
     expect(m.items().map((el) => el.textContent)).toEqual(['In the text', 'Lifted', 'Pinned']);
     for (const item of m.items()) {
       expect(item.getAttribute('class')).toBe('ov-menu-item');
-      expect(checks(item), item.textContent ?? '').toBe(item.textContent === 'Lifted' ? 1 : 0);
+      expect(checkMarks(item), item.textContent ?? '').toBe(item.textContent === 'Lifted' ? 1 : 0);
     }
     expect(m.checked()).toEqual(['Lifted']);
     // It opens above the button, their left edges together, the narrow

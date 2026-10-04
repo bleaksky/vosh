@@ -28,6 +28,13 @@ export const BUTTON = { left: 200, top: 700, right: 290, bottom: 728 };
 /** A menu's height: 30 a row and 6 above and below. */
 export const menuHeight = (rows: number) => rows * 30 + 12;
 
+/** How many check marks an item of the menu draws, 1 for the current
+ *  choice and 0 for the rest. */
+export function checkMarks(item: FakeElement): number {
+  return findAll(item, (e) => e.nodeName === 'SVG' && e.getAttribute('class') === 'pane-menu-check')
+    .length;
+}
+
 /** The handlers React keeps on an element. */
 export function on(el: FakeElement): Record<string, Handler> {
   const key = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
