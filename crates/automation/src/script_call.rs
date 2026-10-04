@@ -7,6 +7,9 @@
 /// Either way Lua reads them as `captures[1]` onward.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScriptCall {
+    /// The name of the trigger or alias that holds the body, so a body
+    /// Vosh stops turns that one off.
+    pub source: String,
     pub body: String,
     pub captures: Vec<String>,
 }
