@@ -324,14 +324,18 @@ An unknown command echoes a pointer to `#help`, and errors come back wrapped in 
 Lua scripts run inside Vosh and register automation through the global `mud` table. Script files live in the `scripts` folder under the app data directory, `~/Library/Application Support/com.aabahran.vosh/scripts/` on macOS.
 
 - Save a `.lua` file in the `scripts` folder.
-- Type `#script load <name>` to load it. Vosh appends `.lua` to a bare name.
-- Type `#scripts` to see loaded scripts and the triggers they registered.
-- After editing a file, type `#script reload` to run every loaded script again.
+- Type `#script load <name>` to load it. Vosh appends `.lua` to a bare name, so `combat` and `combat.lua` load one script.
+- Type `#scripts` to see loaded scripts and the triggers they registered, each with the script that made it.
+- After editing a file, type `#script reload`. Vosh reads every loaded script and plugin from disk again and runs them in the order they first loaded, and an error in one stops none after it.
 - Run one liners with `#lua <code>`.
 
 Scripts talk to Vosh through the global `mud` table. `mud.send(text)` goes straight to the server and `mud.input(text)` feeds back through the input pipeline. `mud.echo(text)` prints locally. `mud.alias(name, expansion)` and `mud.trigger(name, pattern, callback)` register automation, with `captures[1]` holding the full match and `captures[2]` onward the groups. `mud.on_gmcp(package, callback)` hands you server data as a table, and `mud.timer(secs, callback)` schedules work you can cancel with `mud.cancel_timer`.
 
-Loads from `#script load` last for the session. For autoload, make a plugin. Create `plugins/<slug>/` under the app data directory with a `manifest.toml` naming the plugin and its entry script, `main.lua` by default. To turn a plugin on, add its name to `enabled` under `[plugins]` in your profile file while Vosh is closed, like `enabled = ["vitals_alert"]`. Every plugin on that list loads at launch, and removing a name turns that plugin off from the next launch.
+Each script and each plugin owns the triggers, GMCP handlers, and timers it registers, those its callbacks register later included. Loading it again, with `#script reload` or `#script load`, takes all of them back before it runs, so nothing doubles and a trigger you deleted from the file goes. A load with an error keeps what the script had. Variables it set and groups it turned on or off stay. Two scripts may each have a trigger of the same name. A new `mud.on_gmcp` handler runs at once on the last packet of its package, so it sees your `Char.Status` without waiting for your next login.
+
+Loads from `#script load` last for the session. For autoload, make a plugin. Create `plugins/<slug>/` under the app data directory with a `manifest.toml` naming the plugin and its entry script, `main.lua` by default. To turn a plugin on, add its name to `enabled` under `[plugins]` in your profile file while Vosh is closed, like `enabled = ["vitals_alert"]`. Every plugin on that list loads at launch. When you switch profiles, the plugins the next profile lists turn on and the others turn off as you play, and one both profiles list keeps running.
+
+Each plugin runs in its own environment. Its globals and its `mud` table are its own, so two plugins never overwrite each other, and it reads the standard libraries such as `string` and `table` but cannot change them. It starts from fresh globals each time it loads. An alias a plugin makes lasts while the plugin runs, and Vosh never saves it. It takes the place of your own alias of that name until the plugin turns off, and turning a plugin off takes back its aliases with all else it registered. Your `#lua` lines, the Lua in your triggers and aliases, and scripts from `#script load` share one set of globals, and an alias they make is one you keep. They reach the globals of a plugin through `plugins.<name>`, a view you can read but not change, like `plugins.helpers.rescue("Orla")` to call a function the plugin helpers defines.
 
 Every Lua error and every `print` shows in the terminal after a gray `[lua]` tag. An error names its place, like `combat.lua:3:` for line 3 of `combat.lua`, and shows in red. What a plugin prints as it loads at launch shows once you connect or type a line.
 
@@ -710,7 +714,7 @@ This is every slash command Vosh understands today.
 - `#group <name> on|off` toggles a group, `#group <name>` shows state, `#groups` lists.
 - `#tick`, `#tick interval <secs>`, `#tick reset`, `#tick on {pattern}`, `#tick off`, `#tick fire <command>`, `#tick nofire`, `#tick sound on|off`, `#tick disable`, `#tick enable` drive the tick timer.
 - `#tick warn`, `#tick warn at <secs>`, `#tick warn message <text>`, `#tick warn color <name>`, `#tick warn off` shape the tick warning.
-- `#script load <name>` loads a Lua file, `#script reload` reruns loaded scripts, `#scripts` lists them.
+- `#script load <name>` loads a Lua file, `#script reload` reads every loaded script again and runs it, `#scripts` lists them.
 - `#lua <code>` evaluates Lua inline.
 - `#profile save`, `#profile load`, `#profile reset` manage the profile snapshot. In loadout mode all three become notices.
 - `#import-tintin <path>` imports TinTin++ aliases and variables.
