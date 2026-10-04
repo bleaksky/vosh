@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { addDraftItem, createDraft, removeDraftItem, updateDraftItem } from './automationDraft';
+import {
+  addDraftItem,
+  createDraft,
+  draftValues,
+  isDraftDirty,
+  removeDraftItem,
+  replaceDraftValues,
+  updateDraftItem,
+} from './automationDraft';
+import { jsonListText, parseJsonList } from './automationRecords';
 import type { TriggerAction, TriggerRecord } from './session';
 import {
   blankTrigger,
@@ -10,9 +19,11 @@ import {
   extraEffects,
   highlightOf,
   normalizeTrigger,
+  patternSource,
   replaceTemplateOf,
   TRIGGER_STYLE_OPTIONS,
   triggerForSave,
+  triggerKey,
   triggerStyle,
   validateTriggers,
   withEffect,
@@ -20,6 +31,8 @@ import {
   withGroup,
   withHighlight,
   withMainPattern,
+  withMainPatternSource,
+  withPatternSource,
   withReplaceTemplate,
   withTriggerStyle,
   type TriggerStyle,
@@ -207,53 +220,191 @@ describe('normalizeTrigger', () => {
 
 describe('match modes', () => {
   // The rows Rust writes, the main pattern and More patterns, as the
-  // store sends them. A Regex row has no mode on the wire.
+  // store sends them. A Text or Starts with row holds its regex in
+  // pattern and what you typed in text. A Regex row has no mode on the
+  // wire. The last row is a Text row as builds before text saved it.
   const rows = [
-    { pattern: 'You are thirsty.', enabled: true, mode: 'text' },
-    { pattern: 'You are hungry', enabled: false, mode: 'starts_with' },
+    {
+      pattern: '^\\s*You are thirsty\\.\\s*$',
+      enabled: true,
+      mode: 'text',
+      text: 'You are thirsty.',
+    },
+    {
+      pattern: '^\\s*You are hungry.*',
+      enabled: false,
+      mode: 'starts_with',
+      text: 'You are hungry',
+    },
     { pattern: '^You are hungry\\.$', enabled: true },
-    { pattern: 'x', enabled: true, mode: 'regex' },
-    { pattern: 'y', enabled: true, mode: 'glob' },
+    { pattern: 'x', enabled: true, mode: 'regex', text: 'z' },
+    { pattern: 'y', enabled: true, mode: 'glob', text: 'z' },
+    { pattern: '*** Too Dark ***', enabled: true, mode: 'text' },
   ];
 
-  it('keeps Text and Starts with on every row and leaves Regex out', () => {
+  /** triggers_export and triggers_import over one list. */
+  function fakeStore() {
+    const store = {
+      json: JSON.stringify([{ name: 'needs', patterns: rows, actions: [] }]),
+      exportTriggers: () => Promise.resolve(store.json),
+      importTriggers: (next: string) => {
+        store.json = next;
+        return Promise.resolve();
+      },
+      saved: () => (JSON.parse(store.json) as TriggerRecord[])[0],
+    };
+    return store;
+  }
+
+  it('keeps Text and Starts with on every row with its text and leaves Regex out', () => {
     const t = normalizeTrigger({ name: 'needs', patterns: rows, actions: [] });
     expect(t.patterns).toEqual([
-      { pattern: 'You are thirsty.', enabled: true, mode: 'text' },
-      { pattern: 'You are hungry', enabled: false, mode: 'starts_with' },
+      {
+        pattern: '^\\s*You are thirsty\\.\\s*$',
+        enabled: true,
+        mode: 'text',
+        text: 'You are thirsty.',
+      },
+      {
+        pattern: '^\\s*You are hungry.*',
+        enabled: false,
+        mode: 'starts_with',
+        text: 'You are hungry',
+      },
       { pattern: '^You are hungry\\.$', enabled: true },
       { pattern: 'x', enabled: true },
       { pattern: 'y', enabled: true },
+      // The row with no text takes its pattern as the text.
+      { pattern: '*** Too Dark ***', enabled: true, mode: 'text', text: '*** Too Dark ***' },
+    ]);
+    // The Pattern fields show what you typed.
+    expect(t.patterns.map(patternSource)).toEqual([
+      'You are thirsty.',
+      'You are hungry',
+      '^You are hungry\\.$',
+      'x',
+      'y',
+      '*** Too Dark ***',
     ]);
   });
 
   it('survives an edit and a save', async () => {
-    let json = JSON.stringify([{ name: 'needs', patterns: rows, actions: [] }]);
-    const api = {
-      exportTriggers: () => Promise.resolve(json),
-      importTriggers: (next: string) => {
-        json = next;
-        return Promise.resolve();
-      },
-    };
+    const api = fakeStore();
     let draft = createDraft(await loadTriggers(api));
     draft = updateDraftItem(draft, draft.items[0].uid, (t) =>
       withMainPattern(withGroup(t, 'needs'), { enabled: false }),
     );
     await saveTriggerDraft(draft, api);
-    const saved = (JSON.parse(json) as TriggerRecord[])[0];
+    const saved = api.saved();
     expect(saved.patterns.map((p) => p.mode ?? 'regex')).toEqual([
       'text',
       'starts_with',
       'regex',
       'regex',
       'regex',
+      'text',
     ]);
     expect(saved.patterns[0]).toEqual({
-      pattern: 'You are thirsty.',
+      pattern: '^\\s*You are thirsty\\.\\s*$',
       enabled: false,
       mode: 'text',
+      text: 'You are thirsty.',
     });
+    expect(saved.patterns[1].text).toBe('You are hungry');
+    expect(saved.patterns[5]).toEqual({
+      pattern: '*** Too Dark ***',
+      enabled: true,
+      mode: 'text',
+      text: '*** Too Dark ***',
+    });
+  });
+
+  it('edits what you typed in a Text or Starts with row', async () => {
+    const api = fakeStore();
+    let draft = createDraft(await loadTriggers(api));
+    draft = updateDraftItem(draft, draft.items[0].uid, (t) => {
+      const next = withMainPatternSource(t, 'You are hungry.');
+      return {
+        ...next,
+        patterns: next.patterns.map((p, i) =>
+          i === 1 || i === 2 || i === 5 ? withPatternSource(p, `${patternSource(p)} `) : p,
+        ),
+      };
+    });
+    await saveTriggerDraft(draft, api);
+    // An edit changes only the text of a Text or Starts with row, so Save
+    // sends the old regex beside the new text. The store reads text, and
+    // the regex it writes is the one the new text compiles to.
+    expect(api.saved().patterns).toEqual([
+      {
+        pattern: '^\\s*You are thirsty\\.\\s*$',
+        enabled: true,
+        mode: 'text',
+        text: 'You are hungry.',
+      },
+      {
+        pattern: '^\\s*You are hungry.*',
+        enabled: false,
+        mode: 'starts_with',
+        text: 'You are hungry ',
+      },
+      { pattern: '^You are hungry\\.$ ', enabled: true },
+      { pattern: 'x', enabled: true },
+      { pattern: 'y', enabled: true },
+      { pattern: '*** Too Dark ***', enabled: true, mode: 'text', text: '*** Too Dark *** ' },
+    ]);
+    expect(api.saved().patterns.map(patternSource)).toEqual([
+      'You are hungry.',
+      'You are hungry ',
+      '^You are hungry\\.$ ',
+      'x',
+      'y',
+      '*** Too Dark *** ',
+    ]);
+  });
+
+  it('reads as saved again once you type a row back as it was', async () => {
+    const loaded = createDraft(await loadTriggers(fakeStore()));
+    const uid = loaded.items[0].uid;
+    const typed = draftValues(loaded)[0].patterns.map(patternSource);
+    // The main pattern, a Text row as the store sends it.
+    let draft = updateDraftItem(loaded, uid, (t) => withMainPatternSource(t, `${typed[0]}x`));
+    expect(isDraftDirty(draft)).toBe(true);
+    draft = updateDraftItem(draft, uid, (t) => withMainPatternSource(t, typed[0]));
+    expect(isDraftDirty(draft)).toBe(false);
+    // Each row in More patterns, the Text row with no text among them.
+    for (let i = 1; i < typed.length; i++) {
+      const typeIn = (value: string) => (t: TriggerRecord) => ({
+        ...t,
+        patterns: t.patterns.map((p, j) => (j === i ? withPatternSource(p, value) : p)),
+      });
+      draft = updateDraftItem(loaded, uid, typeIn(`${typed[i]}x`));
+      expect(isDraftDirty(draft), `row ${i + 1}`).toBe(true);
+      draft = updateDraftItem(draft, uid, typeIn(typed[i]));
+      expect(isDraftDirty(draft), `row ${i + 1}`).toBe(false);
+    }
+  });
+
+  it('round trips through Edit all as JSON', async () => {
+    const api = fakeStore();
+    let draft = createDraft(await loadTriggers(api));
+    const shown = jsonListText(draftValues(draft));
+    expect(parseJsonList(shown, normalizeTrigger)).toEqual(draftValues(draft));
+    // Change the text of the Starts with row and leave its regex alone,
+    // as you might in the JSON.
+    const edited = shown.replace('"text": "You are hungry"', '"text": "You are hungry."');
+    expect(edited).not.toBe(shown);
+    draft = replaceDraftValues(draft, parseJsonList(edited, normalizeTrigger) ?? [], triggerKey);
+    await saveTriggerDraft(draft, api);
+    const saved = api.saved();
+    expect(saved.patterns[0].text).toBe('You are thirsty.');
+    expect(saved.patterns[1]).toEqual({
+      pattern: '^\\s*You are hungry.*',
+      enabled: false,
+      mode: 'starts_with',
+      text: 'You are hungry.',
+    });
+    expect(patternSource(saved.patterns[1])).toBe('You are hungry.');
   });
 
   it('starts a new trigger as Regex until the editor offers the modes', () => {
@@ -276,6 +427,12 @@ describe('validateTriggers', () => {
     expect(validateTriggers([t('')])).toBe('Give every trigger a name before you save.');
     expect(validateTriggers([t('a'), t('a')])).toContain('Two triggers are named');
     expect(validateTriggers([t('a', ' ')])).toContain('needs a pattern');
+  });
+
+  it('reads what you typed in a Text row, not its regex', () => {
+    const row = { pattern: '^\\s*\\s*$', enabled: true, mode: 'text' as const, text: ' ' };
+    expect(validateTriggers([{ ...t('a'), patterns: [row] }])).toContain('needs a pattern');
+    expect(validateTriggers([{ ...t('a'), patterns: [{ ...row, text: 'x' }] }])).toBeNull();
   });
 });
 
