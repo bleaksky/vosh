@@ -12,6 +12,7 @@ use crate::app::state::SharedState;
 use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::input;
 use crate::output;
+use crate::profile::set::save_sessions;
 use crate::session::TargetPayload;
 use crate::sessions::{SessionId, SessionRow};
 
@@ -21,6 +22,7 @@ use crate::sessions::{SessionId, SessionRow};
 /// the selected session plays. Its connection takes the profile's tick
 /// settings and `[prompt]` table, and its Lua engine loads the plugins
 /// the profile turns on, as the first session's does at launch.
+/// profiles.toml keeps it in the list a launch restores.
 #[tauri::command]
 pub(crate) async fn session_open<R: tauri::Runtime>(
     app: AppHandle<R>,
@@ -35,7 +37,9 @@ pub(crate) async fn session_open<R: tauri::Runtime>(
             Some(name) => crate::profile::switch::open_or_join(state.inner(), &name).await?,
             None => state.selected_session().profile(),
         };
-        state.open_session(open)
+        let session = state.open_session(open);
+        save_sessions(state.inner()).await;
+        session
     };
     {
         let mut p = session.lock_profile().await;
@@ -52,7 +56,8 @@ pub(crate) async fn session_open<R: tauri::Runtime>(
 
 /// Select the session `session` names. The commands that name no session
 /// act on it from then on, and its native grid shows. profiles.toml then
-/// names the profile it plays as the active one.
+/// keeps it as the selected one, and names the profile it plays as the
+/// active one.
 #[tauri::command]
 pub(crate) async fn session_select(
     state: State<'_, SharedState>,
@@ -60,7 +65,8 @@ pub(crate) async fn session_select(
 ) -> Result<(), String> {
     state.select_session(session)?;
     let _persist_guard = PERSIST_LOCK.lock().await;
-    name_selected_profile_active(state.inner()).await
+    save_sessions(state.inner()).await;
+    Ok(())
 }
 
 /// Close the session `session` names. Its connection ends as on
@@ -69,8 +75,9 @@ pub(crate) async fn session_select(
 /// and its recording. Its profile saves, unless `#profile reset` or
 /// `#profile load` holds it, and closes when no other session plays it.
 /// A session that was selected hands the selection on, see
-/// [`crate::sessions::Sessions::close`]. Vosh never closes the only
-/// session, since closing it closes the window.
+/// [`crate::sessions::Sessions::close`], and profiles.toml leaves it out
+/// of the list a launch restores. Vosh never closes the only session,
+/// since closing it closes the window.
 #[tauri::command]
 pub(crate) async fn session_close<R: tauri::Runtime>(
     app: AppHandle<R>,
@@ -100,12 +107,14 @@ pub(crate) async fn session_close<R: tauri::Runtime>(
     }
     #[cfg(any(native_surface, test))]
     crate::native::grid::forget(closed.id);
-    name_selected_profile_active(state.inner()).await
+    save_sessions(state.inner()).await;
+    Ok(())
 }
 
 /// Give the session `session` names the name `name`, which its row and
 /// the lines other sessions print read in place of its character. With
 /// no name, or a blank one, the session reads its character again.
+/// profiles.toml keeps the name for the next launch.
 #[tauri::command]
 pub(crate) async fn session_rename(
     state: State<'_, SharedState>,
@@ -113,6 +122,8 @@ pub(crate) async fn session_rename(
     name: Option<String>,
 ) -> Result<(), String> {
     state.session(Some(session))?.rename(name.as_deref());
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    save_sessions(state.inner()).await;
     Ok(())
 }
 
@@ -120,21 +131,6 @@ pub(crate) async fn session_rename(
 #[tauri::command]
 pub(crate) fn sessions_list(state: State<'_, SharedState>) -> Vec<SessionRow> {
     state.session_rows()
-}
-
-/// Point profiles.toml at the profile the selected session plays, the one
-/// a launch opens. Call with [`PERSIST_LOCK`] held, so no switch moves
-/// the session between the read of its profile and the write of the
-/// index.
-async fn name_selected_profile_active(state: &SharedState) -> Result<(), String> {
-    let Some(name) = state.selected_session().profile().name() else {
-        return Ok(());
-    };
-    let mut guard = state.profile_set.lock().await;
-    match guard.as_mut() {
-        Some(set) if set.active_name() != name => set.switch(&name).map_err(|e| e.to_string()),
-        _ => Ok(()),
-    }
 }
 
 #[tauri::command]

@@ -71,6 +71,7 @@ use vosh_protocol::telnet::{option as telnet_option, Negotiator};
 
 use crate::app::events;
 use crate::app::state::SharedState;
+use crate::disk::save::PERSIST_LOCK;
 use crate::input::walk::WalkCommand;
 use crate::sessions::{Address, Session};
 
@@ -274,12 +275,19 @@ pub(crate) async fn connect<R: tauri::Runtime>(
     if let Ok(mut g) = session.current_character.lock() {
         *g = None;
     }
-    if let Ok(mut g) = session.address.lock() {
-        *g = Some(Address {
-            host: host.clone(),
-            port,
-            tls,
-        });
+    let address = Address {
+        host: host.clone(),
+        port,
+        tls,
+    };
+    let moved = session
+        .address
+        .lock()
+        .is_ok_and(|mut g| g.replace(address.clone()) != Some(address));
+    if moved {
+        // A launch restores the session where it last connected.
+        let _persist_guard = PERSIST_LOCK.lock().await;
+        crate::profile::set::save_sessions(state).await;
     }
     // The old connection cleared the list as it ended. A new connection
     // starts with none until the MUD sends its own.

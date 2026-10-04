@@ -58,6 +58,12 @@ impl SessionId {
     /// The session the app starts with.
     pub(crate) const FIRST: Self = Self(1);
 
+    /// The session numbered `n`, for a test that writes a session list.
+    #[cfg(test)]
+    pub(crate) const fn numbered(n: u32) -> Self {
+        Self(n)
+    }
+
     /// The key the profile's stores hold the session's Lua stops under.
     pub(crate) fn stop_key(self) -> StopKey {
         StopKey(self.0)

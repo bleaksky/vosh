@@ -756,6 +756,84 @@ async fn a_session_on_its_own_profile_saves_only_that_file_and_closing_it_closes
     h.finish(grid).await;
 }
 
+/// The sessions profiles.toml in `h` keeps for the next launch, with the
+/// selected one and the active profile.
+fn kept_sessions(
+    h: &Harness,
+) -> (
+    Vec<crate::profile::set::SessionEntry>,
+    Option<SessionId>,
+    String,
+) {
+    let text = std::fs::read_to_string(h.dir.path().join("profiles.toml")).expect("the index");
+    let index: crate::profile::set::ProfilesIndex = toml::from_str(&text).expect("it reads");
+    (index.sessions, index.selected, index.active)
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn profiles_toml_keeps_the_sessions_while_they_say_more_than_the_active_profile() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    let index = h.dir.path().join("profiles.toml");
+    let alone = std::fs::read_to_string(&index).expect("the index");
+    let rename = |session, name: Option<&str>| {
+        crate::ipc::session::session_rename(h.app.state(), session, name.map(str::to_string))
+    };
+    // One session with no name says nothing the active profile does not.
+    rename(h.first, None).await.expect("the rename");
+    assert_eq!(std::fs::read_to_string(&index).expect("the index"), alone);
+
+    let two = h.open_session().await;
+    let (kept, selected, _) = kept_sessions(&h);
+    let ids: Vec<_> = kept.iter().map(|entry| entry.id).collect();
+    assert_eq!(ids, [h.first, two]);
+    assert!(kept
+        .iter()
+        .all(|entry| entry.profile == DEFAULT_PROFILE_NAME));
+    assert_eq!(selected, Some(h.first));
+
+    // A connect somewhere new, a rename, a switch and a selection each
+    // save the list.
+    let second = h.state.session(Some(two)).expect("the second session");
+    crate::session::connect(
+        h.app.handle(),
+        &h.state,
+        &second,
+        "127.0.0.1".into(),
+        h.servers[1].port,
+        false,
+    )
+    .await
+    .expect("the second game answers");
+    crate::session::disconnect(h.app.handle(), &h.state, &second).await;
+    let entry = kept_sessions(&h).0.remove(1);
+    assert_eq!(
+        (entry.host.as_deref(), entry.port, entry.tls),
+        (Some("127.0.0.1"), Some(h.servers[1].port), false)
+    );
+    rename(two, Some("Alt")).await.expect("the rename");
+    assert_eq!(kept_sessions(&h).0[1].name.as_deref(), Some("Alt"));
+    crate::profile::switch::switch_profile(&h.state, &second, "Healer")
+        .await
+        .expect("the switch");
+    assert_eq!(kept_sessions(&h).0[1].profile, "Healer");
+    crate::ipc::session::session_select(h.app.state(), two)
+        .await
+        .expect("the selection moves");
+    let (_, selected, active) = kept_sessions(&h);
+    assert_eq!((selected, active.as_str()), (Some(two), "Healer"));
+
+    // Back to one session with no name, the file reads as an older build
+    // writes it.
+    crate::ipc::session::session_close(h.app.handle().clone(), h.app.state(), two)
+        .await
+        .expect("the second session closes");
+    assert_eq!(std::fs::read_to_string(&index).expect("the index"), alone);
+
+    h.finish(grid).await;
+}
+
 #[allow(clippy::await_holding_lock)]
 #[tokio::test]
 async fn a_profile_a_session_plays_stays_on_delete_and_renames_for_every_session_on_it() {
