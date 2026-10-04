@@ -379,10 +379,14 @@ impl ScriptEngine {
     /// triggers, GMCP handlers and timers it registered, and a plugin's
     /// aliases, and take it off the list `#script reload` runs. The
     /// variables it set and the groups it turned on or off stay as they
-    /// are, and so do the aliases a loose script made, which you keep.
+    /// are, and so do the aliases a loose script made, which you keep. A
+    /// plugin Vosh stopped stays stopped, so a profile that turns it on
+    /// again leaves it off until you save it or restart Vosh.
     pub fn unload(&mut self, owner: &Owner) -> ScriptOutcome {
         self.loaded_scripts.retain(|loaded| loaded != owner);
-        self.stopped.remove(owner);
+        if !matches!(owner, Owner::Plugin(_)) {
+            self.stopped.remove(owner);
+        }
         let owned = self.owned_callbacks(owner);
         let mut actions = self.release(&owned);
         if let Owner::Plugin(name) = owner {
@@ -2492,6 +2496,22 @@ mod tests {
             e.dispatch_gmcp("Char.Vitals", &full).actions,
             vec![Action::Send("stand".into())]
         );
+    }
+
+    #[test]
+    fn a_stopped_plugin_stays_stopped_once_turned_off() {
+        let mut e = ScriptEngine::new().unwrap();
+        let spin = Owner::Plugin("spin".into());
+        e.load_script(spin.clone(), "@spin/main.lua", "while true do end");
+        assert!(e.is_stopped(&spin));
+        e.unload(&spin).unwrap();
+        assert!(e.is_stopped(&spin));
+        let leftover = &e.loaded_plugins();
+        assert!(leftover.is_empty(), "{leftover:?}");
+        // A load, as a save makes, turns it back on.
+        e.load_script(spin.clone(), "@spin/main.lua", "x = 1")
+            .unwrap();
+        assert!(!e.is_stopped(&spin));
     }
 
     #[test]

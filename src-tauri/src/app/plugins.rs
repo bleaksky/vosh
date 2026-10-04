@@ -301,7 +301,9 @@ pub(crate) fn plugin_off(p: &mut Profile, name: &str) -> ApplyResult {
 /// Turn off each plugin that runs and the live profile does not turn
 /// on, then turn on each one it turns on that does not run yet, in the
 /// order its list gives. A plugin both profiles turn on keeps running as
-/// it is, a stopped one included.
+/// it is, a stopped one included. A plugin Vosh stopped stays off, so a
+/// switch back to a profile that turns it on leaves it off until you
+/// save it or restart Vosh.
 pub(crate) fn follow_profile_plugins(
     p: &mut Profile,
     plugins_dir: &std::path::Path,
@@ -318,6 +320,9 @@ pub(crate) fn follow_profile_plugins(
         apply.append(plugin_off(p, name));
     }
     for name in wanted.iter().filter(|name| !running.contains(name)) {
+        if p.script.is_stopped(&Owner::Plugin(name.clone())) {
+            continue;
+        }
         if let Some(loaded) = plugin_on(p, plugins_dir, name) {
             apply.append(loaded);
         }
@@ -622,6 +627,42 @@ mod tests {
             .map(|(by, _)| by)
             .collect();
         assert_eq!(aliases, ["everywhere"]);
+    }
+
+    #[test]
+    fn a_stopped_plugin_stays_off_across_a_switch_and_back() {
+        let tmp = tempdir();
+        write_plugin(
+            tmp.path(),
+            "runaway",
+            "runaway",
+            "mud.on_gmcp('Char.Vitals', function() while true do end end) \
+             mud.alias('ra', 'look')",
+        );
+        let mut p = Profile::default();
+        p.plugins.enabled = vec!["runaway".into()];
+        follow_profile_plugins(&mut p, tmp.path());
+        let stopped = p
+            .script
+            .dispatch_gmcp("Char.Vitals", &serde_json::json!({}));
+        assert_eq!(stopped.stopped, [Owner::Plugin("runaway".into())]);
+        crate::script::apply_actions(&mut p, stopped);
+        // Away and back again, it stays off with nothing registered.
+        p.plugins.enabled = Vec::new();
+        follow_profile_plugins(&mut p, tmp.path());
+        p.plugins.enabled = vec!["runaway".into()];
+        let back = follow_profile_plugins(&mut p, tmp.path());
+        let leftover = &back.echoes;
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &p.script.loaded_plugins();
+        assert!(leftover.is_empty(), "{leftover:?}");
+        assert!(p.script.is_stopped(&Owner::Plugin("runaway".into())));
+        let leftover = &p.plugin_aliases.list();
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let quiet = p
+            .script
+            .dispatch_gmcp("Char.Vitals", &serde_json::json!({}));
+        assert!(quiet.actions.is_empty(), "{:?}", quiet.actions);
     }
 
     fn tempdir() -> tempfile::TempDir {
