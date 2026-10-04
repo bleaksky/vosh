@@ -347,23 +347,18 @@ async fn note_plugins(state: &SharedState, plugins_dir: &std::path::Path) {
     mgr.set_enabled(enabled);
 }
 
-/// Once a profile switch made the next profile live, turn its plugins on
-/// and the others off, and deliver what they ask for. Their lines print
-/// in the terminal, and what they send goes to the game when one
-/// listens.
+/// Once a profile switch made the next profile live and turned its
+/// plugins on and the others off, deliver what they ask for, `apply`.
+/// Their lines print in the terminal, and what they send goes to the game
+/// when one listens.
 pub(crate) async fn follow_profile<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     state: &SharedState,
+    apply: ApplyResult,
 ) {
-    let Some(app_data) = state.app_data.get() else {
-        return;
-    };
-    let plugins_dir = crate::disk::paths::plugins_dir(app_data);
-    note_plugins(state, &plugins_dir).await;
-    let apply = {
-        let mut p = state.profile.lock().await;
-        follow_profile_plugins(&mut p, &plugins_dir)
-    };
+    if let Some(app_data) = state.app_data.get() {
+        note_plugins(state, &crate::disk::paths::plugins_dir(app_data)).await;
+    }
     let (bytes, echoes) = crate::session::effects::collect_script_result(
         app,
         &state.profile,
