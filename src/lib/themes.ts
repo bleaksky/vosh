@@ -31,10 +31,21 @@ export interface XtermPalette {
   brightWhite: string;
 }
 
+/** The license a theme's colors carry. public/theme-credits.txt keeps
+ *  the notice each one asks to travel with the colors. */
+export type ThemeLicense = 'MIT' | 'GPL-3.0' | 'Public domain' | 'None published';
+
 export interface AppTheme {
   id: string;
   label: string;
   description: string;
+  /// Where the colors come from, named as a sentence names it (Nord, the
+  /// CGA palette), who made them, and the license they carry. Every
+  /// built in theme names all three, and public/theme-credits.txt keeps
+  /// the notices. A custom theme has none.
+  source?: string;
+  author?: string;
+  license?: ThemeLicense;
   xterm: XtermPalette;
   /// Chrome tokens this theme pins instead of deriving.
   chrome?: ChromeOverrides;
@@ -47,6 +58,9 @@ const kansoZen: AppTheme = {
   id: 'kanso-zen',
   label: 'Kanso Zen',
   description: 'Calm Japanese-inspired dark. Cool-blue accent, sage / gold / red semantics.',
+  source: 'kanso.nvim',
+  author: 'Webhooked',
+  license: 'MIT',
   xterm: {
     background: '#090e13',
     foreground: '#c5c9c7',
@@ -85,6 +99,9 @@ const obsidianEmber: AppTheme = {
   id: 'obsidian-ember',
   label: 'Obsidian Ember',
   description: 'Near-black warm neutral ramp, single ember accent, pastel ANSI.',
+  source: 'Vosh',
+  author: 'James Wright',
+  license: 'GPL-3.0',
   xterm: {
     background: '#050403',
     foreground: '#c0bdbb',
@@ -121,6 +138,9 @@ const tokyoNight: AppTheme = {
   id: 'tokyo-night',
   label: 'Tokyo Night',
   description: 'Storm variant. Cool blues, deep navy, frosted accents.',
+  source: 'Tokyo Night',
+  author: 'Enkia',
+  license: 'MIT',
   xterm: {
     background: '#1a1b26',
     foreground: '#c0caf5',
@@ -156,6 +176,9 @@ const nord: AppTheme = {
   id: 'nord',
   label: 'Nord',
   description: 'Arctic palette. Polar nights base, frost accents.',
+  source: 'Nord',
+  author: 'Sven Greb',
+  license: 'MIT',
   xterm: {
     background: '#2e3440',
     foreground: '#d8dee9',
@@ -203,6 +226,9 @@ const gruvbox: AppTheme = {
   id: 'gruvbox',
   label: 'Gruvbox',
   description: 'Warm, retro, earthy. Yellow accent on warm dark.',
+  source: 'gruvbox',
+  author: 'Pavel Pertsev',
+  license: 'MIT',
   xterm: {
     background: '#282828',
     foreground: '#ebdbb2',
@@ -236,6 +262,9 @@ const catppuccin: AppTheme = {
   id: 'catppuccin',
   label: 'Catppuccin',
   description: 'Mocha variant. Soft pastels on a warm dark base.',
+  source: 'Catppuccin',
+  author: 'Catppuccin',
+  license: 'MIT',
   xterm: {
     background: '#1e1e2e',
     foreground: '#cdd6f4',
@@ -272,6 +301,9 @@ const classicVivid: AppTheme = {
   id: 'classic-vivid',
   label: 'Classic Vivid',
   description: 'Saturated CGA/VGA primaries. Bright reds, greens, blues.',
+  source: 'the CGA palette',
+  author: 'IBM',
+  license: 'Public domain',
   xterm: {
     background: '#0a0a0a',
     foreground: '#cccccc',
@@ -304,14 +336,18 @@ const classicVivid: AppTheme = {
 };
 
 // ── Dracula at Night ────────────────────────────────────────────────
-// Night-mode variant of Dracula. Same iconic ANSI palette (purple
-// accent #bd93f9, pinks / greens / cyans), darker chrome surfaces
-// for late-session reading. Reads as a deeper, calmer Dracula
-// without losing its color identity.
+// Dracula's text and its sixteen colors as its terminal ports ship
+// them, with the purple #bd93f9 as the accent, on a ground darker than
+// Dracula's for late sessions. The ground is #1a1c23 where Dracula has
+// #282a36, and black and the selection step down with it, #15161c for
+// #21222c and #363948 for #44475a.
 const dracula: AppTheme = {
   id: 'dracula',
   label: 'Dracula at Night',
-  description: 'Darker chrome variant of Dracula. Same iconic accents on deeper surfaces.',
+  description: "Dracula's colors on a darker ground, #1a1c23 where Dracula has #282a36.",
+  source: 'Dracula',
+  author: 'Zeno Rocha',
+  license: 'MIT',
   xterm: {
     background: '#1a1c23',
     foreground: '#f8f8f2',
@@ -347,6 +383,9 @@ const monokai: AppTheme = {
   id: 'monokai',
   label: 'Monokai',
   description: 'Warm dark with the signature magenta accent.',
+  source: 'Monokai',
+  author: 'Wimer Hazenberg',
+  license: 'None published',
   xterm: {
     background: '#272822',
     foreground: '#f8f8f2',
@@ -382,6 +421,9 @@ const oneDark: AppTheme = {
   id: 'one-dark',
   label: 'One Dark',
   description: 'Atom-style cool slate. Soft pastel semantics, blue accent.',
+  source: 'One Dark for Atom',
+  author: 'GitHub',
+  license: 'MIT',
   xterm: {
     background: '#282c34',
     foreground: '#abb2bf',
@@ -419,6 +461,9 @@ const oneHalfDark: AppTheme = {
   id: 'one-half-dark',
   label: 'One Half Dark',
   description: 'Brighter foreground variant of One Dark. Higher contrast.',
+  source: 'One Half',
+  author: 'Son A. Pham',
+  license: 'MIT',
   xterm: {
     background: '#282c34',
     foreground: '#dcdfe4',
@@ -456,6 +501,9 @@ const tangoDark: AppTheme = {
   id: 'tango-dark',
   label: 'Tango Dark',
   description: 'GNOME Terminal classic. Saturated primaries on a warm dark.',
+  source: 'the Tango Desktop Project',
+  author: 'the Tango Desktop Project',
+  license: 'Public domain',
   xterm: {
     background: '#2e3436',
     foreground: '#d3d7cf',
@@ -493,6 +541,9 @@ const highContrast: AppTheme = {
   id: 'high-contrast',
   label: 'High Contrast',
   description: 'Maximum readability. White text on off-black, yellow accent.',
+  source: 'Vosh',
+  author: 'James Wright',
+  license: 'GPL-3.0',
   xterm: {
     // Slight off-black instead of pure #000000. xterm.js can't be
     // told to override the 256-color cube; ANSI 256 codes like 022
@@ -536,6 +587,9 @@ const vellum: AppTheme = {
   id: 'vellum',
   label: 'Vellum',
   description: 'Warm paper light theme. Ink text, muted ANSI, ink blue accent.',
+  source: 'Vosh',
+  author: 'James Wright',
+  license: 'GPL-3.0',
   xterm: {
     background: '#f7f4ee',
     foreground: '#2a2622',
@@ -571,6 +625,9 @@ const rosePine: AppTheme = {
   id: 'rose-pine',
   label: 'Rosé Pine',
   description: 'Muted rose, gold, and iris on a deep violet base.',
+  source: 'Rosé Pine',
+  author: 'Rosé Pine',
+  license: 'MIT',
   xterm: {
     background: '#191724',
     foreground: '#e0def4',
@@ -599,11 +656,10 @@ const rosePine: AppTheme = {
 };
 
 // ── Everforest ──────────────────────────────────────────────────────
-// sainnhe's Everforest (github.com/sainnhe/everforest, MIT) at its
-// medium background. The palette comes from autoload/everforest.vim
-// and the ANSI mapping from the Terminal section of
-// colors/everforest.vim, which repeats the eight colors for the bright
-// slots and maps black and white as below.
+// Everforest at its medium background. The palette comes from
+// autoload/everforest.vim and the ANSI mapping from the Terminal section
+// of colors/everforest.vim, which repeats the eight colors for the
+// bright slots and maps black and white as below.
 //
 //   dark    bg0 #2d353b  bg3 #475258  fg #d3c6aa  bg_visual #543a48
 //           red #e67e80  green #a7c080  yellow #dbbc7f  blue #7fbbb3
@@ -621,6 +677,9 @@ const everforestDark: AppTheme = {
   id: 'everforest-dark',
   label: 'Everforest Dark',
   description: 'Soft forest greens and warm earth tones on a gray green dark.',
+  source: 'Everforest',
+  author: 'sainnhe',
+  license: 'MIT',
   xterm: {
     background: '#2d353b',
     foreground: '#d3c6aa',
@@ -660,6 +719,9 @@ const everforestLight: AppTheme = {
   id: 'everforest-light',
   label: 'Everforest Light',
   description: 'Soft forest greens and warm ink on cream paper.',
+  source: 'Everforest',
+  author: 'sainnhe',
+  license: 'MIT',
   xterm: {
     background: '#fdf6e3',
     foreground: '#5c6a72',
@@ -708,6 +770,9 @@ const greenScreen: AppTheme = {
   id: 'green-screen',
   label: 'Green Screen',
   description: 'Old school terminal. Phosphor green text and classic CGA colors on black.',
+  source: 'the CGA palette',
+  author: 'IBM',
+  license: 'Public domain',
   xterm: {
     background: '#0a0e0b',
     foreground: '#84d48a',
@@ -739,12 +804,12 @@ const greenScreen: AppTheme = {
 };
 
 // ── Solarized ───────────────────────────────────────────────────────
-// Ethan Schoonover's Solarized (MIT licensed). The ground, the text, the
-// cursor, the normal colors, bright red (orange), and bright magenta
-// (violet) are his published values as his Xresources map them, save
-// white on the light theme (below). The canonical mapping fills bright
-// green, yellow, blue, and cyan with the grey base tones base01, base00,
-// base0, and base1. MUD text leans on those four. Aabahran prints say in
+// The ground, the text, the cursor, the normal colors, bright red
+// (orange), and bright magenta (violet) are Solarized's published values
+// as its Xresources map them, save white on the light theme (below).
+// The canonical mapping fills bright green, yellow, blue, and cyan with
+// the grey base tones base01, base00, base0, and base1. MUD text leans
+// on those four. Aabahran prints say in
 // bright yellow, newbie in bright green, cabal in bright blue, and clan
 // in bright cyan, so on the canonical mapping say turns grey, newbie
 // drops to the comment tone, and cabal matches plain text. Instead,
@@ -778,6 +843,9 @@ const solarizedDark: AppTheme = {
   id: 'solarized-dark',
   label: 'Solarized Dark',
   description: 'Deep teal ground, muted grey text, blue accent. Bright colors keep their hue.',
+  source: 'Solarized',
+  author: 'Ethan Schoonover',
+  license: 'MIT',
   xterm: {
     background: '#002b36',
     foreground: '#839496',
@@ -809,6 +877,9 @@ const solarizedLight: AppTheme = {
   id: 'solarized-light',
   label: 'Solarized Light',
   description: 'Warm cream ground, slate text, blue accent. Bright colors keep their hue.',
+  source: 'Solarized',
+  author: 'Ethan Schoonover',
+  license: 'MIT',
   xterm: {
     background: '#fdf6e3',
     foreground: '#657b83',

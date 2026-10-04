@@ -658,3 +658,35 @@ describe('customThemeLabel', () => {
     expect(customToAppTheme({ ...base, id: 'dusk', label: 'Dusk' }).label).toBe('Dusk');
   });
 });
+
+describe('theme credits', () => {
+  it('names the source, the author and the license of every built in theme', () => {
+    for (const theme of BUILTIN_THEMES) {
+      expect(theme.source?.trim(), theme.id).toBeTruthy();
+      expect(theme.author?.trim(), theme.id).toBeTruthy();
+      expect(theme.license, theme.id).toBeTruthy();
+    }
+  });
+
+  it('records Dracula as the source of Dracula at Night, on a darker ground', () => {
+    const night = findTheme('dracula');
+    expect(night.source).toBe('Dracula');
+    expect(night.license).toBe('MIT');
+    // Dracula's own ground is #282a36.
+    expect(night.xterm.background).toBe('#1a1c23');
+    expect(night.description).toContain('#282a36');
+  });
+
+  it('leaves a custom theme without a credit', () => {
+    const custom = customToAppTheme({
+      id: 'dusk',
+      label: 'Dusk',
+      description: 'Mine.',
+      xterm: {},
+      chrome: {},
+    });
+    expect(custom.source).toBeUndefined();
+    expect(custom.author).toBeUndefined();
+    expect(custom.license).toBeUndefined();
+  });
+});
