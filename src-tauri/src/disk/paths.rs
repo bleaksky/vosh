@@ -4,6 +4,8 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::sessions::SessionId;
+
 /// The profile index, which lists the profiles and names the active one.
 pub(crate) fn profiles_index_path(app_data: &Path) -> PathBuf {
     app_data.join("profiles.toml")
@@ -58,9 +60,15 @@ pub(crate) fn log_db_path(app_data: &Path) -> PathBuf {
     app_data.join("logs.sqlite")
 }
 
-/// The scrollback a session leaves for the next launch to show.
-pub(crate) fn scrollback_path(app_data: &Path) -> PathBuf {
-    app_data.join("scrollback.txt")
+/// The scrollback `session` leaves for the next launch to show. The first
+/// session keeps scrollback.txt, which an older build reads too, and each
+/// other one a file with its number.
+pub(crate) fn scrollback_path(app_data: &Path, session: SessionId) -> PathBuf {
+    if session == SessionId::FIRST {
+        app_data.join("scrollback.txt")
+    } else {
+        app_data.join(format!("scrollback-{session}.txt"))
+    }
 }
 
 /// How full each affect was cast, per character, for the Affects pane.
