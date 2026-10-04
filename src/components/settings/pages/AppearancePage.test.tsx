@@ -1,7 +1,7 @@
 import { act, createElement } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { SystemFontEntry, UiConfig } from '../../../lib/session';
-import { FakeDocument, findAll, type FakeNode } from '../../../test/fakeDom';
+import { FakeDocument, findAll, type FakeElement, type FakeNode } from '../../../test/fakeDom';
 import type { AppearancePage as AppearancePageType } from './AppearancePage';
 
 // The Font select waits on fonts_list, the one slow read on this page.
@@ -211,7 +211,7 @@ describe('AppearancePage', () => {
     expect(off.checked).toBe(false);
   });
 
-  it('draws Collapse repeated lines last under Terminal text, off until you turn it on', async () => {
+  it('draws Collapse repeated lines after Keep highlight colors readable, off until you turn it on', async () => {
     const collapseSwitch = async (cfg: UiConfig) => {
       const container = doc.createElement('div');
       doc.body.appendChild(container);
@@ -253,5 +253,162 @@ describe('AppearancePage', () => {
     expect(off.anchors[at - 1]).toBe('readable-highlights');
     const on = await collapseSwitch({ ...config(), collapse_repeats: true });
     expect(on.checked).toBe(true);
+  });
+
+  /** One row under Collapse repeated lines as the page draws it. */
+  interface CollapseRow {
+    text: string;
+    /** The row waits, in the tertiary tone with its control faded. */
+    waiting: boolean;
+    pressed: string[];
+    /** Whether each segment, Collapse then Show every line, is off. */
+    off: boolean[];
+    segments: FakeElement[];
+  }
+
+  /** Call an element's click handler. The fake DOM sends no events, so
+   *  read the handler from the props React keeps on the element. */
+  function press(el: FakeElement) {
+    const key = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+    const props = key
+      ? (el as unknown as Record<string, { onClick?: (e: unknown) => void }>)[key]
+      : undefined;
+    if (!props?.onClick) throw new Error('the segment has no click handler');
+    props.onClick({ preventDefault() {}, stopPropagation() {} });
+  }
+
+  /** Draw the page with `cfg` on a link to `anchor`, or bare, and read
+   *  the anchors, the two rows under Collapse repeated lines, and the
+   *  config a press of `then` saves. */
+  async function collapseRows(
+    cfg: UiConfig,
+    anchor?: string,
+    then?: (rows: { fights: CollapseRow; attacks: CollapseRow }) => FakeElement,
+  ) {
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    let saved: UiConfig | null = null;
+    await act(async () => {
+      root.render(
+        createElement(AppearancePage, {
+          target: anchor
+            ? { group: 'appearance', section: 'text', anchor }
+            : { group: 'appearance' },
+          navSeq: 0,
+          config: cfg,
+          setConfig: (next) => {
+            saved = next(cfg);
+          },
+          onError: () => undefined,
+          pathB: false,
+          navigate: () => undefined,
+          setLeaveGuard: () => undefined,
+        }),
+      );
+    });
+    const anchors = findAll(container, (el) => el.getAttribute('data-st-anchor') !== null).map(
+      (el) => el.getAttribute('data-st-anchor'),
+    );
+    const read = (at: string): CollapseRow | null => {
+      const [row] = findAll(container, (el) => el.getAttribute('data-st-anchor') === at);
+      if (!row) return null;
+      const segments = findAll(row, (el) => el.nodeName === 'BUTTON');
+      return {
+        text: row.textContent,
+        waiting: (row.getAttribute('class') ?? '').split(' ').includes('is-disabled'),
+        pressed: segments
+          .filter((el) => el.getAttribute('aria-pressed') === 'true')
+          .map((el) => el.textContent),
+        off: segments.map((el) => el.hasAttribute('disabled')),
+        segments,
+      };
+    };
+    const fights = read('collapse-fights');
+    const attacks = read('collapse-attacks');
+    if (then && fights && attacks) {
+      const segment = then({ fights, attacks });
+      await act(async () => {
+        press(segment);
+      });
+    }
+    await act(async () => {
+      root.unmount();
+    });
+    return { anchors, fights, attacks, saved: saved as UiConfig | null };
+  }
+
+  it('shows In a fight and Attack lines under Collapse repeated lines while it is on', async () => {
+    // Off, the rows stay away.
+    const off = await collapseRows(config());
+    expect(off.fights).toBeNull();
+    expect(off.attacks).toBeNull();
+    expect(off.anchors).not.toContain('collapse-fights');
+
+    // On, they follow it. In a fight starts on Collapse, and Attack lines
+    // on Show every line.
+    const on = await collapseRows({ ...config(), collapse_repeats: true });
+    const at = on.anchors.indexOf('collapse-repeats');
+    expect(on.anchors.slice(at, at + 3)).toEqual([
+      'collapse-repeats',
+      'collapse-fights',
+      'collapse-attacks',
+    ]);
+    expect(on.fights?.text).toContain('In a fight');
+    expect(on.fights?.text).toContain('Every line that arrives while you are fighting.');
+    expect(on.fights?.pressed).toEqual(['Collapse']);
+    expect(on.fights?.waiting).toBe(false);
+    expect(on.attacks?.text).toContain('Attack lines');
+    expect(on.attacks?.text).toContain('Each hit and miss the game shows you, in a fight or not.');
+    expect(on.attacks?.pressed).toEqual(['Show every line']);
+    expect(on.attacks?.waiting).toBe(false);
+    expect(on.attacks?.off).toEqual([false, false]);
+
+    const chosen = await collapseRows({
+      ...config(),
+      collapse_repeats: true,
+      collapse_attack_lines: true,
+    });
+    expect(chosen.attacks?.pressed).toEqual(['Collapse']);
+  });
+
+  it('turns Attack lines off and says why while a fight shows every line', async () => {
+    for (const attacks of [false, true]) {
+      const drawn = await collapseRows({
+        ...config(),
+        collapse_repeats: true,
+        collapse_fight_lines: false,
+        collapse_attack_lines: attacks,
+      });
+      expect(drawn.fights?.pressed).toEqual(['Show every line']);
+      expect(drawn.fights?.waiting).toBe(false);
+      // Attack lines show every line then, whatever their own choice.
+      expect(drawn.attacks?.pressed).toEqual(['Show every line']);
+      expect(drawn.attacks?.waiting).toBe(true);
+      expect(drawn.attacks?.off).toEqual([true, true]);
+      expect(drawn.attacks?.text).toContain('Attack lines show every line while In a fight does.');
+    }
+  });
+
+  it('shows both rows waiting on a link to one while Collapse repeated lines is off', async () => {
+    for (const anchor of ['collapse-fights', 'collapse-attacks']) {
+      const drawn = await collapseRows(config(), anchor);
+      expect(drawn.anchors).toContain(anchor);
+      for (const row of [drawn.fights, drawn.attacks]) {
+        expect(row?.waiting).toBe(true);
+        expect(row?.off).toEqual([true, true]);
+        expect(row?.text).toContain('Turn on Collapse repeated lines to choose.');
+      }
+    }
+  });
+
+  it('saves the choice you press in each row', async () => {
+    const on = { ...config(), collapse_repeats: true };
+    const fights = await collapseRows(on, undefined, (rows) => rows.fights.segments[1]);
+    expect(fights.saved?.collapse_fight_lines).toBe(false);
+    expect(fights.saved?.collapse_attack_lines).toBe(false);
+    const attacks = await collapseRows(on, undefined, (rows) => rows.attacks.segments[0]);
+    expect(attacks.saved?.collapse_attack_lines).toBe(true);
+    expect(attacks.saved?.collapse_fight_lines).toBe(true);
   });
 });
