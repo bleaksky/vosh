@@ -361,15 +361,22 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
     if bytes.is_empty() {
         return;
     }
-    let sent = state
-        .session
-        .lock()
-        .await
-        .as_ref()
-        .is_some_and(|handle| handle.send(bytes));
-    if !sent {
-        info!("plugin sends at a profile switch have no game to go to");
-    }
+    // A login switches profiles inside the session task, and a
+    // disconnect holds the session lock while it waits for that task to
+    // end. So the bytes go from a task of their own and the switch never
+    // waits on the lock.
+    let state = state.clone();
+    tokio::spawn(async move {
+        let sent = state
+            .session
+            .lock()
+            .await
+            .as_ref()
+            .is_some_and(|handle| handle.send(bytes));
+        if !sent {
+            info!("plugin sends at a profile switch have no game to go to");
+        }
+    });
 }
 
 /// Find the plugins in `plugins_dir` and load each one the profile turns
