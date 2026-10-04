@@ -92,12 +92,25 @@ async fn handle_event<R: tauri::Runtime>(
             // they have ordering semantics (a `gag` action mutates the
             // line's display before it lands in the batch). Log rows
             // flush in one transaction once the socket is quiet.
+            //
+            // While a step is in flight, the walker reads each line once
+            // it shows, whatever its triggers do to it. The first line
+            // ends the partial the read found, which can be a prompt the
+            // answer to the step runs on from, so the walker reads what
+            // follows it.
+            let mut partial = conn
+                .accumulator
+                .partial()
+                .filter(|_| conn.walker.watching())
+                .map(vosh_protocol::ansi::plain_text);
             for line in conn.accumulator.feed(&bytes) {
                 conn.perf.lines_processed += 1;
                 let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-                // While a step is in flight, the walker reads each line
-                // once it shows, whatever its triggers do to it.
-                let watched = conn.walker.watching().then(|| plain.clone());
+                let ended = partial.take();
+                let watched = conn
+                    .walker
+                    .watching()
+                    .then(|| walk::answer(&plain, ended.as_deref()).to_string());
                 let trigger_t0 = std::time::Instant::now();
                 // The tick step for a line that matches the Reset on
                 // pattern comes under the same lock as the triggers and

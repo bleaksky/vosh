@@ -262,7 +262,8 @@ impl Walker {
 
     /// A line of game text, without its colors. While a step is in
     /// flight, a line that says it failed lands it where you stand, and
-    /// the blind or dark look lands it somewhere Vosh cannot see.
+    /// the blind or dark look lands it somewhere Vosh cannot see. A line
+    /// that ends a prompt Vosh did not read comes as [`answer`] leaves it.
     pub(crate) fn line(&mut self, plain: &str, now: Instant) -> WalkOut {
         let mut out = WalkOut::default();
         if self.flight.is_none() {
@@ -433,6 +434,18 @@ impl Walker {
         }
         false
     }
+}
+
+/// The answer to a step in `line`, the line that ended the partial
+/// `partial`, both without colors. The game starts no new row for its
+/// answer to a command (`comm.c:2111`), so the answer runs on from the
+/// prompt before it when no IAC GA ended that prompt and Vosh did not
+/// read it. The answer is what follows the partial, and a line that does
+/// not start with the partial is all answer.
+pub(crate) fn answer<'a>(line: &'a str, partial: Option<&str>) -> &'a str {
+    partial
+        .and_then(|partial| line.strip_prefix(partial))
+        .unwrap_or(line)
 }
 
 /// `step` or `steps`, as `total` takes.

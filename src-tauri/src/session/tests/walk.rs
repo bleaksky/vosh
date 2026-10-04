@@ -9,7 +9,7 @@ use tokio::time::Instant;
 use vosh_automation::alias::ExpandStep;
 
 use crate::input::walk::{parse_steps, Route, WalkCommand, WalkPlan};
-use crate::session::walk::{WalkOut, Walker, BACKSTOP, NOT_WALKING};
+use crate::session::walk::{answer, WalkOut, Walker, BACKSTOP, NOT_WALKING};
 use crate::tests::walk::{map_tiles, room_info, FOUNTAIN, ROAD};
 
 /// The room west of the Common Road, which the fixtures hold no tiles
@@ -209,6 +209,31 @@ fn lines_that_only_look_like_a_failure_leave_the_walk_going() {
     assert_eq!(
         w.line("Alas, you cannot go that way.", t),
         WalkOut::default()
+    );
+}
+
+#[test]
+fn the_answer_to_a_step_is_what_runs_on_from_an_unread_prompt() {
+    let prompt = "<1020hp 800m 930mv> ";
+    let line = "<1020hp 800m 930mv> Alas, you cannot go that way.";
+    assert_eq!(answer(line, Some(prompt)), "Alas, you cannot go that way.");
+    assert_eq!(
+        answer("It is pitch black ... ", None),
+        "It is pitch black ... "
+    );
+    // A partial the line does not start with leaves the line whole.
+    assert_eq!(
+        answer("Alas, you cannot go that way.", Some("<1020hp")),
+        "Alas, you cannot go that way."
+    );
+
+    let t = Instant::now();
+    let mut w = standing_in(FOUNTAIN, t);
+    let _ = w.command(start("2w", &[]), t);
+    assert_eq!(w.line(line, t), WalkOut::default());
+    assert_eq!(
+        w.line(answer(line, Some(prompt)), t),
+        said(&["[walk] Stopped after 0 of 2 steps."])
     );
 }
 
