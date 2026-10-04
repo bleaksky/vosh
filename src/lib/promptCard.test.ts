@@ -4,6 +4,7 @@ import {
   cardAnchor,
   clockTime,
   codeReaderStep,
+  cardShowState,
   codesSourceLine,
   editedTable,
   entryCopy,
@@ -40,6 +41,7 @@ import {
   type CardStep,
 } from './promptCard';
 import { moveBack, type MoveMade } from './promptPieces';
+import { promptShowLock, type PromptShowState } from './promptShow';
 import type {
   PromptCapture,
   PromptCaptureCheck,
@@ -644,6 +646,31 @@ describe('what a start and an edit save', () => {
     const now = withShow(moved, 'text');
     expect(movedBackTable(moved, now, right)).toEqual({ ...table, show: 'text' });
     expect(movedBackTable(moved, null, right)).toEqual(table);
+  });
+});
+
+describe('the button at the foot that says where your prompt shows', () => {
+  const reads: PromptShowState = {
+    show: 'pinned',
+    capture: true,
+    draw: true,
+    gameSent: true,
+    zone: 1,
+    promptsOff: false,
+  };
+
+  it('waits quietly while the card holds a capture the state has yet to read', () => {
+    // Right after your first capture the card's table holds it, and the
+    // state reads it a round trip later. The button is off meanwhile and
+    // never asks you to customize the prompt you are customizing.
+    const behind = { ...reads, capture: false };
+    expect(cardShowState(behind, codes)).toBeNull();
+    expect(promptShowLock(cardShowState(behind, codes))).toEqual({ locked: true, why: null });
+    // Once the state reads the capture, the button follows it.
+    expect(cardShowState(reads, codes)).toBe(reads);
+    expect(cardShowState(null, codes)).toBeNull();
+    // With no capture in the card either, it keeps the reason.
+    expect(cardShowState(behind, none)).toBe(behind);
   });
 });
 
