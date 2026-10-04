@@ -7,10 +7,13 @@
 //!
 //! Every call into Lua runs under the limits in [`limits`] for an
 //! [`Owner`]. A call that fails leaves an [`Action::Error`] line, and a
-//! call Vosh stops sends nothing it queued and turns its owner off.
+//! call Vosh stops sends nothing it queued and turns its owner off. On
+//! top of that, each plugin and loose script has the time [`budget`]
+//! gives it for one event, across all its handlers.
 
 mod actions;
 mod api;
+mod budget;
 mod env;
 mod hook;
 mod library;
@@ -22,15 +25,19 @@ mod state;
 mod strings;
 #[cfg(test)]
 mod test_support;
+#[cfg(any(test, feature = "testkit"))]
+pub mod testkit;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use mlua::{Function, Lua, Table, Value};
 use regex::Regex;
 use thiserror::Error;
 
 pub use actions::Action;
+use budget::{Budget, Event};
 use env::Envs;
 use limits::{Limits, Stop};
 pub use owner::Owner;
@@ -93,17 +100,46 @@ impl ScriptOutcome {
     }
 }
 
+/// What one round of Lua timers did.
+#[derive(Debug, Default)]
+pub struct FiredTimers {
+    pub outcome: ScriptOutcome,
+    /// The callback ids of the timers whose owner used its time for the
+    /// round. They never ran, and the caller schedules them again for the
+    /// next round.
+    pub held: Vec<i64>,
+}
+
 /// What one call left behind before its actions drain.
 struct Called {
     /// How many actions waited before the call began. The call's own sit
     /// past it.
     start: usize,
+    /// How long the call's Lua ran.
+    took: Duration,
     stop: Option<Stop>,
     error: Option<mlua::Error>,
     /// The call queued more actions than one call may.
     dropped: bool,
     /// The call queued more text than one call may.
     text_dropped: bool,
+}
+
+/// What became of one handler in an event.
+enum Handled {
+    /// It ran, or its function had gone and nothing ran.
+    Ran(ScriptOutcome),
+    /// Its owner had used its time for the event, so it never started.
+    /// The outcome holds the line that says so, the first time only.
+    Skipped(ScriptOutcome),
+}
+
+impl Handled {
+    fn outcome(self) -> ScriptOutcome {
+        match self {
+            Handled::Ran(outcome) | Handled::Skipped(outcome) => outcome,
+        }
+    }
 }
 
 /// One match of a Lua trigger, kept as text until its call makes the
@@ -154,6 +190,9 @@ pub struct ScriptEngine {
     packets: HashMap<String, serde_json::Value>,
     /// True while a new handler runs on the last packet of its package.
     replaying: bool,
+    /// The time each plugin and loose script spent on the event its
+    /// handlers answer now, while they answer one.
+    budget: Option<Budget>,
 }
 
 impl std::fmt::Debug for ScriptEngine {
@@ -203,6 +242,7 @@ impl ScriptEngine {
             envs,
             packets: HashMap::new(),
             replaying: false,
+            budget: None,
         })
     }
 
@@ -458,7 +498,8 @@ impl ScriptEngine {
 
     /// Run every Lua trigger against `line`, in the order they were
     /// registered. For each match the callback fires with a captures
-    /// table, as a call of its own.
+    /// table, as a call of its own. The line is one event, so a plugin or
+    /// loose script that used its time for it skips the rest.
     pub fn match_line(&mut self, line: &str) -> ScriptOutcome {
         let mut hits = Vec::new();
         for trigger in &self.triggers {
@@ -484,37 +525,48 @@ impl ScriptEngine {
                 });
             }
         }
-        let mut acc = ScriptOutcome::default();
-        for hit in hits {
-            let site = Site::LuaTrigger {
-                name: hit.name.clone(),
-                callback_id: hit.callback_id,
-            };
-            acc.append(self.run_callback(hit.callback_id, &site, |lua| {
-                Ok(Value::Table(hit.to_lua(lua)?))
-            }));
+        if hits.is_empty() {
+            return ScriptOutcome::default();
         }
-        acc
+        self.in_event(Event::Line, |engine| {
+            let mut acc = ScriptOutcome::default();
+            for hit in hits {
+                let site = Site::LuaTrigger {
+                    name: hit.name.clone(),
+                    callback_id: hit.callback_id,
+                };
+                let handled = engine.run_callback(hit.callback_id, &site, |lua| {
+                    Ok(Value::Table(hit.to_lua(lua)?))
+                });
+                acc.append(handled.outcome());
+            }
+            acc
+        })
     }
 
     /// Fire every callback subscribed to `package` with the JSON `data`,
-    /// each as a call of its own. Vosh keeps the packet as the last of its
-    /// package, for the handlers made later.
+    /// each as a call of its own. The packet is one event, so a plugin or
+    /// loose script that used its time for it skips the rest. Vosh keeps
+    /// the packet as the last of its package, for the handlers made
+    /// later.
     pub fn dispatch_gmcp(&mut self, package: &str, data: &serde_json::Value) -> ScriptOutcome {
         self.packets.insert(package.to_string(), data.clone());
         let ids = match self.gmcp_subs.get(package) {
             Some(v) => v.clone(),
             None => return ScriptOutcome::default(),
         };
-        let mut acc = ScriptOutcome::default();
-        for id in ids {
-            let site = Site::Gmcp {
-                package: package.to_string(),
-                callback_id: id,
-            };
-            acc.append(self.run_callback(id, &site, |lua| api::json_to_lua(lua, data)));
-        }
-        acc
+        self.in_event(Event::Packet(package.to_string()), |engine| {
+            let mut acc = ScriptOutcome::default();
+            for id in ids {
+                let site = Site::Gmcp {
+                    package: package.to_string(),
+                    callback_id: id,
+                };
+                let handled = engine.run_callback(id, &site, |lua| api::json_to_lua(lua, data));
+                acc.append(handled.outcome());
+            }
+            acc
+        })
     }
 
     /// Forget the last packet of every package, as the connection that
@@ -523,35 +575,82 @@ impl ScriptEngine {
         self.packets.clear();
     }
 
-    /// Fire a one-shot timer callback by its callback id.
+    /// Fire a one-shot timer callback by its callback id, as a round of
+    /// its own.
     pub fn fire_timer(&mut self, callback_id: i64) -> ScriptOutcome {
-        let site = Site::Timer { callback_id };
-        let outcome = self.run_callback(callback_id, &site, |_| Ok(Value::Nil));
-        // Drop the callback after firing; it was a one-shot. Forget its
-        // timer id too, so a late `mud.cancel_timer` has nothing to free.
-        if let Ok(mut s) = self.state.cell.lock() {
-            s.timer_callbacks.retain(|_, id| *id != callback_id);
-        }
-        self.drop_callback(callback_id);
-        outcome
+        self.fire_timers(&[callback_id]).outcome
+    }
+
+    /// Fire the one-shot timers whose callback ids `callback_ids` holds,
+    /// in that order, each as a call of its own. The round is one event,
+    /// so a timer whose plugin or loose script used its time for the
+    /// round never starts, and comes back in [`FiredTimers::held`] for
+    /// the next round.
+    pub fn fire_timers(&mut self, callback_ids: &[i64]) -> FiredTimers {
+        self.in_event(Event::Timers, |engine| {
+            let mut fired = FiredTimers::default();
+            for &callback_id in callback_ids {
+                let site = Site::Timer { callback_id };
+                match engine.run_callback(callback_id, &site, |_| Ok(Value::Nil)) {
+                    Handled::Ran(outcome) => {
+                        fired.outcome.append(outcome);
+                        // Drop the callback after firing, since it was a
+                        // one-shot. Forget its timer id too, so a late
+                        // `mud.cancel_timer` has nothing to free.
+                        if let Ok(mut s) = engine.state.cell.lock() {
+                            s.timer_callbacks.retain(|_, id| *id != callback_id);
+                        }
+                        engine.drop_callback(callback_id);
+                    }
+                    Handled::Skipped(outcome) => {
+                        fired.outcome.append(outcome);
+                        fired.held.push(callback_id);
+                    }
+                }
+            }
+            fired
+        })
+    }
+
+    /// Run `handlers` as the handlers of one `event`, with the whole
+    /// budget for each owner, and give back the budget of the event they
+    /// ran inside, if any, once they end.
+    fn in_event<T>(&mut self, event: Event, handlers: impl FnOnce(&mut Self) -> T) -> T {
+        let outer = self.budget.replace(Budget::new(event));
+        let out = handlers(self);
+        self.budget = outer;
+        out
     }
 
     /// Call the function Vosh holds as `callback_id` with the value `arg`
-    /// makes, as a call of the function's owner. Nothing runs when an
-    /// earlier stop or a cancel let the function go.
+    /// makes, as a call of the function's owner, and charge the time it
+    /// ran to the owner in the event running now. Nothing runs when an
+    /// earlier stop or a cancel let the function go, or when the owner
+    /// used its time for the event.
     fn run_callback(
         &mut self,
         callback_id: i64,
         site: &Site,
         arg: impl FnOnce(&Lua) -> mlua::Result<Value>,
-    ) -> ScriptOutcome {
+    ) -> Handled {
         let owner = match self.state.cell.lock() {
             Ok(s) => s.callbacks.get(&callback_id).map(|cb| cb.owner.clone()),
             Err(_) => None,
         };
         let Some(owner) = owner else {
-            return ScriptOutcome::default();
+            return Handled::Ran(ScriptOutcome::default());
         };
+        if let Some(budget) = self.budget.as_mut() {
+            if !budget.allows(&owner) {
+                let mut outcome = ScriptOutcome::default();
+                if budget.skip(&owner) {
+                    outcome
+                        .actions
+                        .push(Action::Error(report::budget_line(&owner, &budget.event)));
+                }
+                return Handled::Skipped(outcome);
+            }
+        }
         let called = self.call(&owner, |lua| {
             let func: Option<Function> = {
                 let s = self
@@ -569,7 +668,10 @@ impl ScriptEngine {
                 None => Ok(()),
             }
         });
-        self.finish(&owner, site, called)
+        if let Some(budget) = self.budget.as_mut() {
+            budget.charge(&owner, called.took);
+        }
+        Handled::Ran(self.finish(&owner, site, called))
     }
 
     /// Run `body` as one call of `owner`, under the limits. What the call
@@ -585,7 +687,9 @@ impl ScriptEngine {
             Err(_) => 0,
         };
         self.limits.begin(&self.lua);
+        let began = Instant::now();
         let result = body(&self.lua);
+        let took = began.elapsed();
         let memory_error = matches!(&result, Err(err) if limits::is_memory_error(err));
         let stop = self.limits.end(&self.lua, memory_error);
         let (dropped, text_dropped) = match self.state.cell.lock() {
@@ -597,6 +701,7 @@ impl ScriptEngine {
         };
         Called {
             start,
+            took,
             stop,
             error: result.err(),
             dropped,
@@ -647,23 +752,31 @@ impl ScriptEngine {
     /// last packet of its package, as a call of its own, so a handler
     /// made mid session starts from what the game last sent. A handler
     /// that a replayed call makes waits for the next packet, so a handler
-    /// that makes another each time it runs cannot go round for ever.
+    /// that makes another each time it runs cannot go round for ever. The
+    /// replay is an event of its own, so a plugin or loose script that
+    /// used its time for it leaves the rest of its new handlers to wait
+    /// for the next packet.
     fn replay(&mut self, fresh: Vec<(String, i64)>) -> ScriptOutcome {
-        let mut acc = ScriptOutcome::default();
-        if self.replaying {
-            return acc;
+        if self.replaying || fresh.is_empty() {
+            return ScriptOutcome::default();
         }
         self.replaying = true;
-        for (package, callback_id) in fresh {
-            let Some(data) = self.packets.get(&package).cloned() else {
-                continue;
-            };
-            let site = Site::Gmcp {
-                package,
-                callback_id,
-            };
-            acc.append(self.run_callback(callback_id, &site, |lua| api::json_to_lua(lua, &data)));
-        }
+        let acc = self.in_event(Event::Replay, |engine| {
+            let mut acc = ScriptOutcome::default();
+            for (package, callback_id) in fresh {
+                let Some(data) = engine.packets.get(&package).cloned() else {
+                    continue;
+                };
+                let site = Site::Gmcp {
+                    package,
+                    callback_id,
+                };
+                let handled =
+                    engine.run_callback(callback_id, &site, |lua| api::json_to_lua(lua, &data));
+                acc.append(handled.outcome());
+            }
+            acc
+        });
         self.replaying = false;
         acc
     }
