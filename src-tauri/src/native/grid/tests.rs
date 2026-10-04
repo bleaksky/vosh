@@ -1543,3 +1543,162 @@ mod stage_into_grid {
         assert_eq!(screen(&g), ["DRAWN>", "You flee!"]);
     }
 }
+
+/// Your echo with the grey mark Mark your commands draws, as the page
+/// writes it after you type `command`.
+fn send_typed(g: &mut TermGrid, command: &str) {
+    g.local_write(format!("{}{command}\r\n", crate::input::ECHO_CARET).as_bytes());
+}
+
+/// A quick key's echo of `command`, as the session sends it.
+fn send_quick_key(g: &mut TermGrid, command: &str) {
+    let echo = crate::input::command_echo(command, &crate::profile::ui::UiConfig::default());
+    g.session_output(&text(format!("{echo}\r\n").as_bytes()));
+}
+
+/// One way your echo of a command reaches the grid.
+type EchoSend = fn(&mut TermGrid, &str);
+
+/// Each way your echo reaches the grid.
+fn sends() -> [(&'static str, EchoSend); 2] {
+    [("typed", send_typed), ("quick key", send_quick_key)]
+}
+
+/// The game's welcome, from tables.c, which ends on another character
+/// with a `>` inside.
+const MOTD: &str = "Prepare yourself. For you are about to <Enter> the Forsaken Lands!";
+
+#[test]
+fn your_echo_drops_its_mark_after_a_login_prompt() {
+    for (how, send) in sends() {
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&text(b"\n\rAccount name> "));
+        send(&mut g, "Tolliver");
+        g.session_output(&text(b"\n\rYour choice> "));
+        send(&mut g, "1");
+        assert_eq!(
+            screen(&g),
+            ["", "Account name> Tolliver", "", "Your choice> 1"],
+            "{how}"
+        );
+    }
+}
+
+#[test]
+fn your_echo_drops_its_mark_after_your_prompt_in_the_text() {
+    for (how, send) in sends() {
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&text(
+            &[
+                b"You are hungry.\r\n".as_slice(),
+                &marked(1, b"<1020hp 800m 930mv> "),
+            ]
+            .concat(),
+        ));
+        send(&mut g, "look");
+        assert_eq!(
+            screen(&g),
+            ["You are hungry.", "<1020hp 800m 930mv> look"],
+            "{how}"
+        );
+    }
+}
+
+#[test]
+fn your_echo_drops_its_mark_after_a_lifted_prompt() {
+    // The space after the band keeps your echo a cell away, on the
+    // prompt's row.
+    for (how, send) in sends() {
+        let mut g = TermGrid::new(40, 10);
+        let mut prompt = lift(3, &marked(4, b"<1020hp 800m 930mv>"));
+        prompt.push(b' ');
+        g.session_output(&text(&prompt));
+        send(&mut g, "look");
+        assert_eq!(screen(&g), ["<1020hp 800m 930mv> look"], "{how}");
+    }
+}
+
+#[test]
+fn your_echo_keeps_its_mark_on_an_empty_row_and_after_another_character() {
+    for (how, send) in sends() {
+        let mut g = TermGrid::new(80, 10);
+        g.session_output(&text(b"You are hungry.\r\n"));
+        send(&mut g, "look");
+        g.session_output(&text(MOTD.as_bytes()));
+        send(&mut g, "look");
+        assert_eq!(
+            screen(&g),
+            [
+                "You are hungry.".to_string(),
+                "\u{203a} look".to_string(),
+                format!("{MOTD}\u{203a} look"),
+            ],
+            "{how}"
+        );
+        // A prompt that fills its row sends your echo to the next one.
+        let mut g = TermGrid::new(19, 10);
+        g.session_output(&text(b"<1020hp 800m 930mv>"));
+        send(&mut g, "look");
+        assert_eq!(
+            screen(&g),
+            ["<1020hp 800m 930mv>", "\u{203a} look"],
+            "{how}"
+        );
+    }
+}
+
+#[test]
+fn your_echo_keeps_its_mark_on_the_row_held_line_ends_start() {
+    for (how, send) in sends() {
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&held(b"<1020hp 800m 930mv> ", b"\r\n"));
+        send(&mut g, "look");
+        assert_eq!(
+            screen(&g),
+            ["<1020hp 800m 930mv>", "\u{203a} look"],
+            "{how}"
+        );
+    }
+}
+
+#[test]
+fn your_echo_keeps_its_mark_on_the_row_a_pinned_prompt_left() {
+    for (how, send) in sends() {
+        let mut g = TermGrid::new(40, 10);
+        let mut out = held(b"You are hungry.", b"\r\n\r\n");
+        out.pin_row = Some(true);
+        g.session_output(&out);
+        send(&mut g, "look");
+        assert_eq!(
+            screen(&g),
+            ["You are hungry.", "", "\u{203a} look"],
+            "{how}"
+        );
+    }
+}
+
+#[test]
+fn your_echo_reads_its_row_once_the_live_render_is_back() {
+    const DRAWN: &[u8] = b"[1020/1020hp 800/800mn 930/930mv] ";
+    const GAME: &[u8] = b"<1020hp 800m 930mv> ";
+    for (how, send) in sends() {
+        // The card previews your design over the game's own line.
+        let mut g = TermGrid::new(40, 10);
+        let mut preview = text(&marked(1, DRAWN));
+        preview.restore = Some(marked(1, GAME));
+        g.session_output(&preview);
+        send(&mut g, "look");
+        assert_eq!(screen(&g), ["<1020hp 800m 930mv> look"], "{how}");
+        // The card previews the game's line over your design.
+        let mut g = TermGrid::new(40, 10);
+        let mut preview = text(&marked(1, GAME));
+        preview.restore = Some(marked(1, DRAWN));
+        g.session_output(&preview);
+        send(&mut g, "look");
+        assert_eq!(
+            screen(&g),
+            ["[1020/1020hp 800/800mn 930/930mv] \u{203a} look"],
+            "{how}"
+        );
+    }
+}
