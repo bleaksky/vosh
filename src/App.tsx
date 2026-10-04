@@ -82,7 +82,7 @@ import { customToAppTheme, findTheme, setCustomThemes, themeTokens } from './lib
 import { parseHex, toRgba } from './lib/color';
 import { setBaseAnsi } from './lib/baseAnsi';
 import { setReadableHighlights } from './lib/highlightGround';
-import { fitCustomThemes } from './lib/customThemeFits';
+import { fitThemesInPlay } from './lib/customThemeFits';
 import { setFitGameColors } from './lib/fitGameColors';
 import { startStores } from './lib/stores';
 import { pushToast } from './lib/toasts';
@@ -1010,6 +1010,7 @@ function App() {
         applyBrightBold(cfg.bright_bold);
         setBlinkChoice(cfg.blink_text);
         setFitGameColors(cfg.fit_game_colors);
+        fitThemesInPlay(cfg);
         setReadableHighlights(cfg.readable_highlights);
         applySplitDividerColor(cfg.split_divider_color);
 
@@ -1077,6 +1078,7 @@ function App() {
         applyBrightBold(cfg.bright_bold);
         setBlinkChoice(cfg.blink_text);
         setFitGameColors(cfg.fit_game_colors);
+        fitThemesInPlay(cfg);
         setReadableHighlights(cfg.readable_highlights);
         applySplitDividerColor(cfg.split_divider_color);
       },
@@ -1231,10 +1233,6 @@ function App() {
       unlisten?.();
     };
   }, []);
-
-  // A custom theme that keeps no game color fit is fitted here once,
-  // off the main thread, and play draws the fit once it lands.
-  useEffect(() => fitCustomThemes(), []);
 
   useEffect(() => {
     // Settings save broadcasts Keep highlight colors readable. The

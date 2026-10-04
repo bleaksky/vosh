@@ -1501,9 +1501,11 @@ export function onCustomThemesChanged(listener: () => void): () => void {
   };
 }
 
-// Fits the main window made this launch for custom themes that keep
-// none, by the colors they fit (gameFit fitKey). lib/customThemeFits
-// makes them, and no file holds them.
+// Fits the main window made this launch for custom themes in play that
+// keep none, by the colors they fit (gameFit fitKey). lib/customThemeFits
+// makes them, and no file holds them. Each list set later, a broadcast
+// from Settings included, lays a held fit on the theme with its colors
+// that keeps none, so the fit stays until Settings keeps one.
 const HELD_FITS = new Map<string, Partial<XtermPalette>>();
 
 function withHeldFit(theme: AppTheme): AppTheme {
