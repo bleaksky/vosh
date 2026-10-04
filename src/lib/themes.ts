@@ -1099,10 +1099,17 @@ const greenScreen: AppTheme = {
 // Solarized red lifted with its hue held until it clears 3:1 on the
 // panel and the raised surface, the value the chrome derives from red
 // itself. The light theme reads plain red and needs no pin.
+//
+// The dark theme stays out of Fit game colors (Themes review Q20). Its
+// body text reads at Lc 39.5, far under the Lc 75 the game asks, and
+// that is what Solarized is. Fitted, it would stop looking like the
+// scheme you picked.
 const solarizedDark: AppTheme = {
   id: 'solarized-dark',
   label: 'Solarized Dark',
-  description: 'Deep teal ground, muted grey text, blue accent. Bright colors keep their hue.',
+  description:
+    'Deep teal ground, muted grey text, blue accent. Bright colors keep their hue. ' +
+    'Body text is low contrast by design, so Fit game colors leaves this theme as it ships.',
   source: 'Solarized',
   author: 'Ethan Schoonover',
   license: 'MIT',
@@ -1130,6 +1137,7 @@ const solarizedDark: AppTheme = {
     brightCyan: '#4dbcb3',
     brightWhite: '#fdf6e3',
   },
+  fitGameColors: false,
   chrome: { accent: '#268bd2', danger: '#e8403a' },
 };
 

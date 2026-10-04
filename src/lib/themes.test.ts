@@ -570,6 +570,16 @@ describe('Solarized', () => {
     }
   });
 
+  it('keeps the dark theme out of Fit game colors and says why (Q20)', () => {
+    expect(dark.fitGameColors).toBe(false);
+    expect(dark.fitted).toBeUndefined();
+    expect(dark.description).toContain('low contrast by design');
+    expect(light.fitGameColors).toBeUndefined();
+    expect(BUILTIN_THEMES.filter((t) => t.fitGameColors === false).map((t) => t.id)).toEqual([
+      'solarized-dark',
+    ]);
+  });
+
   it('keeps every slot game text reads off its ground', () => {
     const slots = [
       'white',
