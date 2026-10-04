@@ -97,14 +97,42 @@ pub fn attack_line(plain: &str) -> bool {
         .any(|step| stands_in(body, step.vs) || stands_in(body, step.vp))
 }
 
+/// The words that say whose something is. Lines about wounds put one
+/// right before `wounds`, as in `Some of your wounds disappear.`, and no
+/// format of `dam_message` puts one before its verb.
+const POSSESSIVES: [&str; 6] = ["your", "her", "his", "its", "their", "our"];
+
 /// True when `verb` stands in `body` with a space and at least one more
-/// character on each side.
+/// character on each side, and the word right before it says whose
+/// something is in none of the ways [`owns`] reads.
 fn stands_in(body: &str, verb: &str) -> bool {
     let bytes = body.as_bytes();
     body.match_indices(verb).any(|(at, _)| {
         let end = at + verb.len();
-        at >= 2 && bytes[at - 1] == b' ' && bytes.get(end) == Some(&b' ') && end + 1 < bytes.len()
+        at >= 2
+            && bytes[at - 1] == b' '
+            && bytes.get(end) == Some(&b' ')
+            && end + 1 < bytes.len()
+            && !owns(word_before(body, at - 1))
     })
+}
+
+/// The word in `body` that ends at the space at `space`, from the space
+/// or the start before it. Empty when two spaces stand together, as
+/// after the empty attack noun of a skill in `Maren's  hits Orla.`
+fn word_before(body: &str, space: usize) -> &str {
+    let head = &body[..space];
+    head.rfind(' ').map_or(head, |at| &head[at + 1..])
+}
+
+/// True when `word` says whose the next word is: one of the
+/// [`POSSESSIVES`] in any case, or a word that ends in `'s`, as in `Some
+/// of Maren's wounds disappear.` In `dam_message` the word before the
+/// verb is an attack noun or a name, and the empty attack noun leaves
+/// it empty, so neither shape comes there.
+fn owns(word: &str) -> bool {
+    POSSESSIVES.iter().any(|p| word.eq_ignore_ascii_case(p))
+        || word.len() > 2 && word.ends_with("'s")
 }
 
 #[cfg(test)]
@@ -162,13 +190,15 @@ mod tests {
 
     /// Attack nouns from `attack_table` in `tables.c`: two plain ones, one
     /// that is a ladder verb too, one that holds `'s` and one that reads as
-    /// a plural.
+    /// a plural. Then the empty `noun_damage` many skills in `const.c`
+    /// have, which leaves two spaces before the verb.
     const NOUNS: &[&str] = &[
         "slash",
         "pierce",
         "scratch",
         "phantom dragon's claw",
         "thorns",
+        "",
     ];
 
     /// Where a virtual attack comes from, a noun of `attack_table`, as
@@ -265,6 +295,8 @@ mod tests {
             "You do UNSPEAKABLE things to a Blackwatch guard!",
             "A Blackwatch guard does UNSPEAKABLE things to you!",
             "Maren mauls herself.",
+            // A skill whose noun_damage is empty.
+            "Maren's  hits Orla.",
         ] {
             assert!(attack_line(line), "{line}");
         }
@@ -301,6 +333,14 @@ mod tests {
             // No capital at the start.
             "your slash hits a Blackwatch guard.",
             "[Exits: north south]",
+            // Wounds as a noun, after a word that says whose they are
+            // (magic3.c:1508 and 1509, skills5.c:1570, fight.c:2428,
+            // act_obj.c:704).
+            "Some of your wounds disappear.",
+            "You feel your wounds heal rapidly.",
+            "Maren suddenly clutches her wounds and slumps to the ground.",
+            "Some of Maren's wounds disappear.",
+            "A brilliant light flashes around Maren, and their wounds begin to close.",
         ] {
             assert!(!attack_line(line), "{line}");
         }
