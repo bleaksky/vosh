@@ -27,6 +27,11 @@
   --success: #8fdaa8;
   --selection: #201d1c;
   --selection-text: #f2efee;
+  --field: rgba(255, 255, 255, 0.058);
+  --track: rgba(255, 255, 255, 0.158);
+  --menu-hi: rgba(255, 255, 255, 0.081);
+  --key-ring: rgba(255, 255, 255, 0.138);
+  --edge: rgba(255, 255, 255, 0.138);
 
   --font-ui:
     -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI Variable Text', 'Segoe UI', Cantarell,
@@ -64,24 +69,23 @@
 }
 
 /* Floating recipe (SPEC 3): menus, the palette, popovers, dialogs.
-   --ring-float is the edge alone, --shadow-float the whole recipe.
-   --edge-inset is the 1 px edge a small surface draws inside itself to
+   --ring-float is the edge alone, a fixed black ring outside and on
+   dark the theme's --edge inside, and --shadow-float the whole recipe.
+   --edge is also the 1 px edge a small surface draws inside itself to
    read on its ground, like a color swatch, or a prompt band on paper.
    --mark-tint is a mark over terminal text it cannot redraw, the prompt
    card's marks on your prompt, where the opaque selection would hide the
    glyphs. */
 :root,
 :root[data-appearance='dark'] {
-  --ring-float: 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  --ring-float: 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 1px var(--edge);
   --shadow-float: var(--ring-float), 0 17.5px 42px rgba(0, 0, 0, 0.4);
-  --edge-inset: rgba(255, 255, 255, 0.14);
   --mark-tint: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 :root[data-appearance='light'] {
   --ring-float: 0 0 0 1px rgba(0, 0, 0, 0.14);
   --shadow-float: var(--ring-float), 0 17.5px 42px rgba(0, 0, 0, 0.22);
-  --edge-inset: rgba(0, 0, 0, 0.14);
   --mark-tint: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 

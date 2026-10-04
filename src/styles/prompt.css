@@ -30,7 +30,7 @@
 /* A white band on paper needs the light float ring to read, drawn inside
    the band so its size stays the board's. */
 :root[data-appearance='light'] .prompt-band {
-  box-shadow: inset 0 0 0 1px var(--edge-inset);
+  box-shadow: inset 0 0 0 1px var(--edge);
 }
 
 .prompt-band-row {
@@ -80,7 +80,7 @@
 }
 
 :root[data-appearance='light'] .prompt-lift-band {
-  box-shadow: inset 0 0 0 1px var(--edge-inset);
+  box-shadow: inset 0 0 0 1px var(--edge);
 }
 
 /* A band that steps in around your echo on its last row draws as one SVG
@@ -107,7 +107,7 @@
 }
 
 :root[data-appearance='light'] .prompt-lift-ring {
-  stroke: var(--edge-inset);
+  stroke: var(--edge);
   stroke-width: 1;
 }
 
@@ -193,7 +193,7 @@
 }
 
 .pc-head .st-icon-button[aria-expanded='true'] {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .pc-rule {
@@ -269,7 +269,7 @@
 }
 
 .pc-menu-button[aria-expanded='true'] {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .pc-menu-button[aria-disabled='true'] {
@@ -549,7 +549,7 @@
   height: 18px;
   padding: 0 6px;
   border-radius: var(--r-key);
-  background: var(--st-fill);
+  background: var(--field);
   box-sizing: border-box;
   font-family: var(--font-mud);
   font-size: 11.5px;
@@ -560,8 +560,8 @@
   white-space: pre;
 }
 
-/* On paper the fill is white, so the chip takes the hairline ring the
-   Settings fields take there. */
+/* On paper the fill is the raised paper, so the chip takes the hairline
+   ring the Settings fields take there. */
 :root[data-appearance='light'] .pc-code {
   box-shadow: var(--st-fill-ring);
 }
@@ -663,7 +663,7 @@
 
 .pc-name-button:hover,
 .pc-name-button[aria-expanded='true'] {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
   color: var(--text);
 }
 
@@ -728,7 +728,7 @@
 .pc-start:focus-visible,
 .pc-start[aria-checked='true'],
 .pc-start[aria-expanded='true'] {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .pc-start-check {
@@ -803,7 +803,7 @@
 }
 
 .pc-forget .st-button[aria-expanded='true'] {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 /* Menus the card opens: More, Presets, From another profile and the name
@@ -837,7 +837,7 @@
 
 .pc-menu .ov-menu-item:hover,
 .pc-menu .ov-menu-item:focus-visible {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .pc-menu .pc-starts {
@@ -872,7 +872,7 @@
 .pc-name-item:hover,
 .pc-name-item:focus-visible,
 .pc-name-item[aria-checked='true'] {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .pc-name-item .pc-start-check {
@@ -991,7 +991,7 @@
   border: 0;
   border-radius: var(--r-key);
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px var(--edge-inset);
+  box-shadow: inset 0 0 0 1px var(--edge);
 }
 
 .pc-swatch.is-by-value {
@@ -1156,7 +1156,7 @@
 
 .pc-style-item:hover,
 .pc-style-item:focus-visible {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .pc-style-item .pc-start-check {
@@ -1327,7 +1327,7 @@
 
 .pc-picker-row:hover,
 .pc-picker-row.is-current {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .pc-picker-name {
@@ -1423,7 +1423,7 @@
 }
 
 .pc-form.is-on {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 /* A sample sits on the terminal's ground, as it draws in the text. */
@@ -1450,7 +1450,7 @@
   padding: 0 6px;
   border: 0;
   border-radius: var(--r-key);
-  background: var(--st-fill);
+  background: var(--field);
   box-shadow: var(--st-fill-ring);
   color: var(--secondary);
   font-family: var(--font-mud);
@@ -1476,7 +1476,7 @@
   overflow-y: auto;
   border-radius: var(--r-row);
   outline: none;
-  background: var(--st-fill);
+  background: var(--field);
   box-shadow: var(--st-fill-ring);
   font-family: var(--font-mud);
   font-variant-ligatures: none;
