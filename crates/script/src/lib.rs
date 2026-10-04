@@ -1106,15 +1106,19 @@ mod tests {
         for code in [
             "os.execute('ls')",
             "dofile('foo')",
+            "os.getenv('HOME')",
             "require('io')",
             "load('return 1')",
         ] {
             assert!(e.eval(code, "=#lua").failed, "{code}");
         }
         let gone = e
-            .eval("mud.echo(tostring(io) .. tostring(package))", "=#lua")
+            .eval(
+                "mud.echo(tostring(io) .. tostring(package) .. tostring(os.getenv))",
+                "=#lua",
+            )
             .unwrap();
-        assert_eq!(gone.actions, vec![Action::Echo("nilnil".into())]);
+        assert_eq!(gone.actions, vec![Action::Echo("nilnilnil".into())]);
     }
 
     /// Run `code` as the body of the trigger `body`, in a fresh engine.
