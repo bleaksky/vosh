@@ -206,7 +206,7 @@ impl TickRuntime {
     /// profile is connected. That session's count already follows your
     /// switch, so it stays as it stands, and the count starts only while
     /// it is on.
-    pub(crate) fn join_session(&mut self, settings: &TickSettings, now: Instant) {
+    pub(crate) fn join_connected(&mut self, settings: &TickSettings, now: Instant) {
         self.begin_session();
         if settings.config.enabled {
             self.restart(now);
@@ -1047,13 +1047,13 @@ mod tests {
         let mut s = TickSettings::default();
         s.config.enabled = false;
         let mut t = TickRuntime::default();
-        t.join_session(&s, t0);
+        t.join_connected(&s, t0);
         assert!(t.in_session);
         assert_eq!(t.next_fire(&s), None);
 
         s.config.enabled = true;
         let mut t = TickRuntime::default();
-        t.join_session(&s, t0);
+        t.join_connected(&s, t0);
         assert_eq!(t.remaining(&s, t0), Some(secs(30.0)));
     }
 
