@@ -806,3 +806,46 @@ describe('the help on folding groups in Automation', () => {
     expect(paragraph.replace(/`[^`]*`/g, '')).not.toMatch(/[:;–—]| - /);
   });
 });
+
+describe('the help on Lua', () => {
+  it('says what the limits stop and what a stop leaves', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain(
+      'It stops a call that runs past 100 ms, uses 32 MB more than it began with, or takes your scripts past 128 MB in all, and `pcall` cannot catch the stop.',
+    );
+    expect(text).toContain('A stopped call sends nothing it queued');
+    expect(text).toContain(
+      'A plugin then stays off until you restart Vosh, a script from `#script load` until `#script reload`, and a trigger or alias whose Lua ran away until you save it or restart Vosh.',
+    );
+    expect(text).toContain('One call may queue 100 actions');
+  });
+
+  it('says what the sandbox takes away', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain(
+      '`require`, `io`, `os.execute`, and `os.getenv` are gone, and Vosh refuses a `__gc` method',
+    );
+    expect(text).toContain('`#script load` reads only from the `scripts` folder');
+    expect(text).toContain(
+      '`mud.input` cannot run `#script load`, `#import-tintin`, or `#profile`, which run only when you type them.',
+    );
+    expect(text).toContain('Every Lua error and every `print` shows in the terminal');
+  });
+
+  it('matches HELP.md word for word', () => {
+    const found = HELP_TOPICS.find((t) => t.id === 'automate.lua-scripts');
+    if (!found) throw new Error('no Lua topic');
+    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+  });
+
+  it('keeps colons and semicolons out of the new prose', () => {
+    for (const start of ['Every Lua error', 'Lua runs between', 'The sandbox strips']) {
+      const paragraph =
+        body('automate.lua-scripts')
+          .split('\n\n')
+          .find((p) => p.startsWith(start)) ?? '';
+      expect(paragraph).not.toBe('');
+      expect(paragraph.replace(/`[^`]*`/g, '')).not.toMatch(/[:;–—]| - /);
+    }
+  });
+});
