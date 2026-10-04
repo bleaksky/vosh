@@ -253,6 +253,15 @@ impl Snapshot {
         })
     }
 
+    /// True while the latest Char.Combat names a target, so you are in a
+    /// fight. The game sends `{}` once the fight is over.
+    pub fn fighting(&self) -> bool {
+        self.get(CHAR_COMBAT)
+            .and_then(|data| data.get("target"))
+            .and_then(text)
+            .is_some()
+    }
+
     /// Group.Info, parsed. Rows that repeat a member (the same id, or the
     /// same name without an id) fold into one, keeping the last row in
     /// the place of the first, as the Group pane does.
@@ -575,6 +584,47 @@ mod tests {
         assert_eq!(s.combat().and_then(|c| c.hp_pct), None);
         assert!(s.has("CHAR.COMBAT"));
         assert!(!s.has("Char.Vitals"));
+    }
+
+    #[test]
+    fn you_fight_while_char_combat_names_a_target() {
+        let packet = |line: &str| {
+            let (package, data) = line.trim().split_once(' ').expect("a packet");
+            (
+                package.to_string(),
+                serde_json::from_str::<Value>(data).expect("json"),
+            )
+        };
+        let mut s = Snapshot::new();
+        assert!(!s.fighting(), "no Char.Combat yet");
+        for (fixture, fighting) in [
+            (
+                include_str!("../../../../fixtures/gmcp/aabahran/char-combat.gmcp"),
+                true,
+            ),
+            (
+                include_str!("../../../../fixtures/gmcp/aabahran/char-combat-hidden.gmcp"),
+                true,
+            ),
+            (
+                include_str!("../../../../fixtures/gmcp/aabahran/char-combat-withheld.gmcp"),
+                true,
+            ),
+            (
+                include_str!("../../../../fixtures/gmcp/aabahran/char-combat-tank.gmcp"),
+                true,
+            ),
+            (
+                include_str!("../../../../fixtures/gmcp/aabahran/char-combat-end.gmcp"),
+                false,
+            ),
+        ] {
+            let (package, data) = packet(fixture);
+            s.observe(&package, data, at(0));
+            assert_eq!(s.fighting(), fighting, "{fixture}");
+        }
+        s.observe("Char.Combat", json!({"target": "  "}), at(0));
+        assert!(!s.fighting(), "a blank target names no one");
     }
 
     #[test]
