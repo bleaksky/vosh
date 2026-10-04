@@ -272,9 +272,9 @@ impl ProfileConfig {
     }
 
     /// Apply a snapshot onto a live profile, replacing the relevant pieces.
-    /// Triggers with invalid regex are reported and skipped. A caller with
-    /// a live connection then hands its tick count the config this
-    /// replaced, through [`crate::tick::TickRuntime::adopt`].
+    /// Triggers with invalid regex are reported and skipped. The caller
+    /// then hands the tick settings and the `[prompt]` table to the
+    /// connection, through [`crate::profile::switch::hand_to_connection`].
     pub(crate) fn apply_to(&self, profile: &mut Profile) -> Vec<String> {
         let mut warnings = Vec::new();
 
@@ -319,7 +319,7 @@ impl ProfileConfig {
         profile.triggers = triggers;
 
         // Tick: take the persisted settings. The running count stays on
-        // the connection, which follows them (see `TickRuntime::adopt`).
+        // the connection, which follows them (see `hand_to_connection`).
         let reset_regex = crate::tick::compile_reset_pattern(self.tick.reset_pattern.as_deref())
             .unwrap_or_else(|e| {
                 warnings.push(format!("tick reset pattern rejected: {e}"));
@@ -337,9 +337,8 @@ impl ProfileConfig {
         // matching note in `from_profile`).
         profile.ui = self.ui.clone();
         // The custom prompt takes the file's [prompt] table, or the
-        // switch and the design an older file kept in [ui]. A caller with
-        // a connection then hands it to the prompt engine, see
-        // [`crate::prompt::take_config`].
+        // switch and the design an older file kept in [ui], which
+        // `hand_to_connection` hands the prompt engine.
         profile.prompt = self.prompt_config();
 
         // Plugin enabled-set is persisted; the actual load happens in the
@@ -626,9 +625,8 @@ mod tests {
         (profile, c)
     }
 
-    /// Lay `incoming` over the live profile as a switch, `#profile load`
-    /// or `#profile reset` does: the file's settings, then the count on
-    /// the connection follows them and the prompt engine takes the table.
+    /// Lay `incoming` over the live profile and hand it to the
+    /// connection, as `#profile load` does.
     pub(super) fn lay_over(
         incoming: &ProfileConfig,
         profile: &mut Profile,
@@ -636,10 +634,7 @@ mod tests {
     ) -> Vec<String> {
         let before = profile.tick.config.clone();
         let warnings = incoming.apply_to(profile);
-        c.tick
-            .adopt(&mut profile.tick, &before, tokio::time::Instant::now());
-        let table = profile.prompt.clone();
-        crate::prompt::take_config(profile, c, table);
+        crate::profile::switch::hand_to_connection(profile, c, &before);
         warnings
     }
 

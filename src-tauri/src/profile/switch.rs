@@ -15,8 +15,11 @@ use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::loadouts::catalog::lay_catalog_over;
 use crate::output;
 use crate::profile::file::ProfileConfig;
+use crate::profile::live::Profile;
 use crate::profile::shared::{GlobalConfig, SharedLayer};
 use crate::script::ApplyResult;
+use crate::session::connection::Connection;
+use crate::tick::TickConfig;
 
 /// The files a switch to a profile loads: its own file, None for a
 /// profile that never saved one, and global.toml, None before the first
@@ -148,17 +151,11 @@ pub(crate) async fn switch_live_profile(
 
         // The connection did not change, so it keeps what it holds and
         // takes only the next profile's tick settings and [prompt] table.
-        // The tick keeps its count under the new settings, so the status
-        // line counts on from the last tick.
+        // The values the last profile's prompt read go first, since they
+        // came from its capture and its scripts.
         let mut c = state.connection.lock();
-        c.tick
-            .adopt(&mut p.tick, &tick_before, tokio::time::Instant::now());
-        // The values the last profile's prompt read go, since they came
-        // from its capture and its scripts, and the engine takes the next
-        // profile's [prompt] table.
         c.prompt.switch_profile();
-        let table = p.prompt.clone();
-        crate::prompt::take_config(&mut p, &mut c, table);
+        hand_to_connection(&mut p, &mut c, &tick_before);
         // The latest Char.Prompt of the connection applies to the new
         // profile's capture by the rule every packet follows, and the
         // profile keeps the table as it then stands.
@@ -177,6 +174,19 @@ pub(crate) async fn switch_live_profile(
         };
         Ok(plugins)
     }
+}
+
+/// Hand the connection `c` the two things it takes from the profile that
+/// a switch, `#profile load`, `#profile reset` or launch just laid over
+/// `p`: the tick settings and the `[prompt]` table. The tick keeps its
+/// count under the new settings, which replaced `tick_before`, so the
+/// status line counts on from the last tick. The prompt engine takes the
+/// table, and the profile keeps it as the engine then holds it.
+pub(crate) fn hand_to_connection(p: &mut Profile, c: &mut Connection, tick_before: &TickConfig) {
+    c.tick
+        .adopt(&mut p.tick, tick_before, tokio::time::Instant::now());
+    let table = p.prompt.clone();
+    crate::prompt::take_config(p, c, table);
 }
 
 /// Shared body for switching the active profile. The
