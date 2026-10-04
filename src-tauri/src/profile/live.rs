@@ -51,6 +51,11 @@ pub(crate) struct Profile {
     /// `TriggerStore` but lives here directly because there is no
     /// `MacroStore` wrapper.
     pub(crate) disabled_macro_groups: BTreeSet<String>,
+    /// Timer groups turned off, kept the way `disabled_macro_groups` is.
+    /// A timer in one of them waits as a timer that is off does. Timers
+    /// stay in the profile file in loadout mode too, so no loadout turns
+    /// these on or off.
+    pub(crate) disabled_timer_groups: BTreeSet<String>,
     /// Moves each time `#group` or a Lua `mud.set_group_enabled` turns a
     /// macro group on or off, see [`crate::script::toggle_group`].
     /// [`crate::app::events::ListRevisions`] reads it, so every path that
@@ -83,6 +88,15 @@ pub(crate) struct Profile {
 }
 
 impl Profile {
+    /// Whether the interval timer `timer` fires: it is on and its group,
+    /// if it has one, is on.
+    pub(crate) fn timer_fires(&self, timer: &Timer) -> bool {
+        timer.enabled
+            && timer.group.as_deref().map_or(true, |g| {
+                g.is_empty() || !self.disabled_timer_groups.contains(g)
+            })
+    }
+
     /// Take a `[prompt]` table. Nothing reads the live `[ui]` copy of its
     /// switch and design, and a save writes the file's copy from this
     /// table, see [`crate::profile::file::ProfileConfig::from_profile`].
@@ -140,6 +154,12 @@ pub(crate) struct Timer {
     pub(crate) command: String,
     #[serde(default)]
     pub(crate) enabled: bool,
+    /// Optional group tag, as on a macro, which `#group` and the switch
+    /// on its heading in Settings turn on and off with the rest of the
+    /// group. Left out of the file while unset, so older builds read the
+    /// same shape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) group: Option<String>,
 }
 
 #[derive(Debug, Clone)]

@@ -15,7 +15,7 @@ use crate::app::state::SharedState;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
 use crate::import::ImportFormat;
 use crate::loadouts::presets::install_preset_triggers;
-use crate::profile::live::{Macro, Timer};
+use crate::profile::live::{Macro, Profile, Timer};
 
 #[tauri::command]
 pub(crate) async fn triggers_list(state: State<'_, SharedState>) -> Result<Vec<Trigger>, String> {
@@ -210,7 +210,8 @@ pub(crate) async fn timers_list(state: State<'_, SharedState>) -> Result<Vec<Tim
 
 /// Create or update an interval timer. A `None` id creates a new timer
 /// (assigned the next free id); an existing id updates in place. The
-/// interval is clamped to at least one second. Returns the full list.
+/// interval is clamped to at least one second, and a blank group means
+/// none. Returns the full list.
 #[tauri::command]
 pub(crate) async fn timers_set(
     app: AppHandle,
@@ -220,37 +221,57 @@ pub(crate) async fn timers_set(
     interval_secs: u32,
     command: String,
     enabled: bool,
+    group: Option<String>,
 ) -> Result<Vec<Timer>, String> {
+    let updated = {
+        let mut p = state.profile.lock().await;
+        set_timer(&mut p, id, name, interval_secs, command, enabled, group)?;
+        p.timers.clone()
+    };
+    save_then_broadcast(&app, &state, SavePolicy::Now, TIMERS_CHANGED, &updated).await;
+    Ok(updated)
+}
+
+/// The part of [`timers_set`] that runs under the profile lock.
+fn set_timer(
+    p: &mut Profile,
+    id: Option<u32>,
+    name: String,
+    interval_secs: u32,
+    command: String,
+    enabled: bool,
+    group: Option<String>,
+) -> Result<(), String> {
     let name = name.trim().to_string();
     let command = command.trim().to_string();
     if command.is_empty() {
         return Err("command cannot be empty".into());
     }
     let interval_secs = interval_secs.max(1);
-    let updated = {
-        let mut p = state.profile.lock().await;
-        match id.and_then(|wanted| p.timers.iter_mut().find(|t| t.id == wanted)) {
-            Some(existing) => {
-                existing.name = name;
-                existing.interval_secs = interval_secs;
-                existing.command = command;
-                existing.enabled = enabled;
-            }
-            None => {
-                let next_id = p.timers.iter().map(|t| t.id).max().unwrap_or(0) + 1;
-                p.timers.push(Timer {
-                    id: next_id,
-                    name,
-                    interval_secs,
-                    command,
-                    enabled,
-                });
-            }
+    let group = group
+        .map(|g| g.trim().to_string())
+        .filter(|g| !g.is_empty());
+    match id.and_then(|wanted| p.timers.iter_mut().find(|t| t.id == wanted)) {
+        Some(existing) => {
+            existing.name = name;
+            existing.interval_secs = interval_secs;
+            existing.command = command;
+            existing.enabled = enabled;
+            existing.group = group;
         }
-        p.timers.clone()
-    };
-    save_then_broadcast(&app, &state, SavePolicy::Now, TIMERS_CHANGED, &updated).await;
-    Ok(updated)
+        None => {
+            let next_id = p.timers.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+            p.timers.push(Timer {
+                id: next_id,
+                name,
+                interval_secs,
+                command,
+                enabled,
+                group,
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Remove a timer by id. No-op when the id is not present.
@@ -400,6 +421,28 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_timer_keeps_its_group_trimmed_and_a_blank_one_as_none() {
+        let mut p = crate::profile::live::Profile::default();
+        let set = |p: &mut _, id, group: &str| {
+            super::set_timer(
+                p,
+                id,
+                "drink".into(),
+                60,
+                "drink water".into(),
+                true,
+                Some(group.into()),
+            )
+        };
+        set(&mut p, None, "  upkeep ").unwrap();
+        assert_eq!(p.timers[0].group.as_deref(), Some("upkeep"));
+        let id = p.timers[0].id;
+        set(&mut p, Some(id), "  ").unwrap();
+        assert_eq!(p.timers[0].group, None);
+        assert_eq!(p.timers.len(), 1);
+    }
+
     #[test]
     fn aliases_export_sends_the_shared_alias_fixture() {
         // The page tests read this file as the reply to aliases_export,

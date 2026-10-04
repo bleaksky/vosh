@@ -232,24 +232,26 @@ pub(crate) struct GroupToggleReport {
     pub aliases: bool,
     pub triggers: bool,
     pub macros: bool,
+    pub timers: bool,
 }
 
 impl GroupToggleReport {
     pub(crate) fn touched(&self) -> bool {
-        self.aliases || self.triggers || self.macros
+        self.aliases || self.triggers || self.macros || self.timers
     }
 }
 
-/// Flip a group's enabled state across triggers, aliases, and macros
-/// in one shot. The group lives independently in each store, so this
-/// only touches the stores that actually have a matching entry —
+/// Flip a group's enabled state across triggers, aliases, macros and
+/// timers in one shot. The group lives independently in each store, so
+/// this only touches the stores that actually have a matching entry —
 /// asking to disable a group that exists only in triggers won't
 /// stamp an empty group name into the macro disabled set. In loadout
 /// mode `name` is one of your folders, and each store turns on or off
 /// every catalog group the profile's folder map names for it, see
-/// [`crate::profile::file::GroupFolders`]. A macro group that turned
-/// on or off moves [`Profile::macro_group_toggles`], so the windows
-/// hear it through [`crate::app::events::ListChanges`].
+/// [`crate::profile::file::GroupFolders`]. Timers stay in the profile
+/// file, so a timer group is always its own name. A macro group that
+/// turned on or off moves [`Profile::macro_group_toggles`], so the
+/// windows hear it through [`crate::app::events::ListChanges`].
 pub(crate) fn toggle_group(profile: &mut Profile, name: &str, enabled: bool) -> GroupToggleReport {
     let mut report = GroupToggleReport::default();
     let folders = &profile.group_folders;
@@ -281,6 +283,14 @@ pub(crate) fn toggle_group(profile: &mut Profile, name: &str, enabled: bool) -> 
             report.macros = true;
         }
     }
+    if timer_groups(profile).contains(name) {
+        if enabled {
+            profile.disabled_timer_groups.remove(name);
+        } else {
+            profile.disabled_timer_groups.insert(name.to_string());
+        }
+        report.timers = true;
+    }
     report
 }
 
@@ -295,9 +305,9 @@ pub(crate) enum GroupState {
 }
 
 /// The state of the folder or group `name` in each store, triggers,
-/// aliases, then macros, None where the store holds none of it. Follows
-/// the folder map as [`toggle_group`] does.
-pub(crate) fn group_states(profile: &Profile, name: &str) -> [Option<GroupState>; 3] {
+/// aliases, macros, then timers, None where the store holds none of it.
+/// Follows the folder map as [`toggle_group`] does.
+pub(crate) fn group_states(profile: &Profile, name: &str) -> [Option<GroupState>; 4] {
     let folders = &profile.group_folders;
     let state = |groups: Vec<(String, bool)>, map: &BTreeMap<String, Vec<String>>| {
         let wanted = folder_groups(map, name);
@@ -320,10 +330,18 @@ pub(crate) fn group_states(profile: &Profile, name: &str) -> [Option<GroupState>
             (g, on)
         })
         .collect();
+    let timers = timer_groups(profile)
+        .into_iter()
+        .map(|g| {
+            let on = !profile.disabled_timer_groups.contains(&g);
+            (g, on)
+        })
+        .collect();
     [
         state(profile.triggers.groups(), &folders.triggers),
         state(profile.aliases.groups(), &folders.aliases),
         state(macros, &folders.macros),
+        state(timers, &BTreeMap::new()),
     ]
 }
 
@@ -346,6 +364,16 @@ fn macro_groups(profile: &Profile) -> BTreeSet<String> {
         .macros
         .iter()
         .filter_map(|m| m.group.clone())
+        .filter(|g| !g.is_empty())
+        .collect()
+}
+
+/// Every group an interval timer of `profile` is in.
+pub(crate) fn timer_groups(profile: &Profile) -> BTreeSet<String> {
+    profile
+        .timers
+        .iter()
+        .filter_map(|t| t.group.clone())
         .filter(|g| !g.is_empty())
         .collect()
 }
@@ -435,7 +463,7 @@ mod tests {
         p.aliases.set_group_enabled("loot", false);
         assert!(!toggle_group(&mut p, "loot", true).touched());
         assert_eq!(aliases_on(&p), ["bash", "flee"]);
-        assert_eq!(group_states(&p, "loot"), [None, None, None]);
+        assert_eq!(group_states(&p, "loot"), [None, None, None, None]);
     }
 
     #[test]

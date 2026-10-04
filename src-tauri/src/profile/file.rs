@@ -64,6 +64,10 @@ pub(crate) struct ProfileConfig {
     pub disabled_trigger_groups: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub disabled_macro_groups: Vec<String>,
+    /// Timer groups turned off. Timers stay in the profile file in
+    /// loadout mode, so this list does too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_timer_groups: Vec<String>,
     /// The catalog groups each of your folders became in the shared
     /// catalog, which `#group` follows. See [`GroupFolders`].
     #[serde(default, skip_serializing_if = "GroupFolders::is_empty")]
@@ -188,6 +192,8 @@ impl ProfileConfig {
         let disabled_trigger_groups = profile.triggers.disabled_groups();
         let disabled_macro_groups: Vec<String> =
             profile.disabled_macro_groups.iter().cloned().collect();
+        let disabled_timer_groups: Vec<String> =
+            profile.disabled_timer_groups.iter().cloned().collect();
 
         let mut config = Self {
             aliases,
@@ -201,6 +207,7 @@ impl ProfileConfig {
             disabled_alias_groups,
             disabled_trigger_groups,
             disabled_macro_groups,
+            disabled_timer_groups,
             group_folders: profile.group_folders.clone(),
             prompt: None,
         };
@@ -332,6 +339,12 @@ impl ProfileConfig {
         profile.timers.clone_from(&self.timers);
         profile.disabled_macro_groups = self
             .disabled_macro_groups
+            .iter()
+            .filter(|s| !s.is_empty())
+            .cloned()
+            .collect();
+        profile.disabled_timer_groups = self
+            .disabled_timer_groups
             .iter()
             .filter(|s| !s.is_empty())
             .cloned()
