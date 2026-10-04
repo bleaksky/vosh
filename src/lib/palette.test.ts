@@ -388,7 +388,9 @@ describe('theme order', () => {
       }),
     ]);
     const ordered = themesInGalleryOrder();
-    expect(ordered.slice(0, 6).map((t) => t.theme.id)).toEqual([
+    expect(ordered.slice(0, 8).map((t) => t.theme.id)).toEqual([
+      'triad',
+      'rubric',
       'nord',
       'obsidian-ember',
       'vellum',
@@ -396,7 +398,7 @@ describe('theme order', () => {
       'rose-pine',
       'tokyo-night',
     ]);
-    const rest = ordered.slice(6, -1).map((t) => t.theme.label);
+    const rest = ordered.slice(8, -1).map((t) => t.theme.label);
     expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)));
     // The menu bar's Choose theme lists the same order.
     expect(rest).toEqual([

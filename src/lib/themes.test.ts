@@ -344,6 +344,37 @@ describe('control washes', () => {
   });
 });
 
+describe('Triad and Rubric', () => {
+  it('follow Obsidian Ember, which stays first as the fallback', () => {
+    expect(BUILTIN_THEMES.slice(0, 3).map((t) => t.id)).toEqual([
+      'obsidian-ember',
+      'triad',
+      'rubric',
+    ]);
+    expect(findTheme('gone').id).toBe('obsidian-ember');
+    expect(themeTokens(findTheme('triad')).appearance).toBe('dark');
+    expect(themeTokens(findTheme('rubric')).appearance).toBe('light');
+  });
+
+  it('pass all 46 game checks as they stand, so they keep no fit', () => {
+    for (const id of ['triad', 'rubric']) {
+      const theme = findTheme(id);
+      const all = checks(theme.xterm);
+      expect(all, id).toHaveLength(46);
+      expect(
+        all.filter((c) => !c.ok),
+        id,
+      ).toEqual([]);
+      expect(theme.fitted, id).toBeUndefined();
+    }
+  });
+
+  it('take Nercuros cyan and lapis as the accent', () => {
+    expect(themeTokens(findTheme('triad')).accent).toBe('#44d4e2');
+    expect(themeTokens(findTheme('rubric')).accent).toBe('#3656b1');
+  });
+});
+
 describe('Everforest and Green Screen', () => {
   const NEW_THEMES = ['everforest-dark', 'everforest-light', 'green-screen'];
   // Black and bright black stay near the ground on purpose in many

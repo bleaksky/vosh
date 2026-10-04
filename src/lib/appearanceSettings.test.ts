@@ -192,7 +192,8 @@ describe('pairChoices', () => {
 
   it('lists the dark themes in gallery order', () => {
     const dark = pairChoices(themes, 'dark', 'nord').map((c) => c.label);
-    expect(dark.slice(0, 5)).toEqual([
+    expect(dark.slice(0, 6)).toEqual([
+      'Triad',
       'Nord',
       'Obsidian Ember',
       'Gruvbox',
@@ -209,6 +210,7 @@ describe('pairChoices', () => {
 
   it('lists the light themes', () => {
     expect(pairChoices(themes, 'light', 'vellum').map((c) => c.value)).toEqual([
+      'rubric',
       'vellum',
       'everforest-light',
       'solarized-light',
@@ -243,9 +245,9 @@ describe('stepGalleryTheme', () => {
   });
 
   it('wraps at both ends', () => {
-    expect(stepGalleryTheme(themes, last, 1)).toBe('nord');
-    expect(stepGalleryTheme(themes, 'nord', -1)).toBe(last);
-    expect(stepGalleryTheme(themes, last, 1, 'dark')).toBe('nord');
+    expect(stepGalleryTheme(themes, last, 1)).toBe('triad');
+    expect(stepGalleryTheme(themes, 'triad', -1)).toBe(last);
+    expect(stepGalleryTheme(themes, last, 1, 'dark')).toBe('triad');
   });
 
   it('passes over the themes of the other appearance while follow is on', () => {
@@ -261,8 +263,10 @@ describe('stepGalleryTheme', () => {
   it('steps between the light themes while follow is on', () => {
     expect(stepGalleryTheme(themes, 'vellum', 1, 'light')).toBe('everforest-light');
     expect(stepGalleryTheme(themes, 'everforest-light', 1, 'light')).toBe('solarized-light');
-    expect(stepGalleryTheme(themes, 'solarized-light', 1, 'light')).toBe('vellum');
-    expect(stepGalleryTheme(themes, 'vellum', -1, 'light')).toBe('solarized-light');
+    expect(stepGalleryTheme(themes, 'solarized-light', 1, 'light')).toBe('rubric');
+    expect(stepGalleryTheme(themes, 'rubric', 1, 'light')).toBe('vellum');
+    expect(stepGalleryTheme(themes, 'vellum', -1, 'light')).toBe('rubric');
+    expect(stepGalleryTheme(themes, 'rubric', -1, 'light')).toBe('solarized-light');
     expect(stepGalleryTheme(themes, 'everforest-light', -1, 'light')).toBe('vellum');
   });
 

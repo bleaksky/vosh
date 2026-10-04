@@ -458,7 +458,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
 }
 
 /** Every theme in the gallery's order (Appearance and the menu bar's
- *  Choose theme list them the same way): the board's six, the other
+ *  Choose theme list them the same way): the gallery's lead, the other
  *  built in themes by name, then your own themes as you added them. */
 export function themesInGalleryOrder(): { theme: AppTheme; custom: boolean }[] {
   const custom = THEMES.filter((t) => !BUILTIN_THEMES.includes(t));

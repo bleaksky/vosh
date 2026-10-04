@@ -10,12 +10,12 @@ Vosh itself is free software under the GNU General Public License
 version 3. The full text ships with the Vosh source code in LICENSE.
 
 ========================================================================
-Obsidian Ember, High Contrast and Vellum
+Triad, Rubric, Obsidian Ember, High Contrast and Vellum
 
 Source   Vosh by James Wright
 License  GPL-3.0
 
-James Wright made these three themes for Vosh. They are part of Vosh
+James Wright made these five themes for Vosh. They are part of Vosh
 and carry its license, the GNU General Public License version 3.
 
 ========================================================================

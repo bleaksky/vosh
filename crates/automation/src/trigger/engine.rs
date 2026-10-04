@@ -1939,7 +1939,7 @@ mod tests {
             assert_eq!(on_ground(&s, line.as_bytes(), Some(NORD)), drawn(WEATHER));
             assert_eq!(on_ground(&s, line.as_bytes(), Some(VELLUM)), drawn(lifted));
             // On every built in ground it reads, and it changes on the
-            // three light ones alone.
+            // light ones alone.
             let mut changed = Vec::new();
             for (theme, ground) in &grounds {
                 let want = readable::lift_to_contrast(WEATHER, *ground);
@@ -1955,7 +1955,7 @@ mod tests {
             }
             assert_eq!(
                 changed,
-                ["vellum", "solarized-light", "everforest-light"],
+                ["rubric", "vellum", "solarized-light", "everforest-light"],
                 "{plain}"
             );
         }
