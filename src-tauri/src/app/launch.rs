@@ -323,6 +323,23 @@ pub(crate) async fn open_restored<R: tauri::Runtime>(
     Ok(())
 }
 
+/// Select the session `id` names, and show its grid in the place of the
+/// grid that showed. A session launch restored opens its profile and
+/// reads its scrollback the first time, see [`open_restored`], and
+/// profiles.toml then keeps it as the selected one.
+pub(crate) async fn select_session<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    id: crate::sessions::SessionId,
+) -> Result<(), String> {
+    state.select_session(id)?;
+    let selected = state.session(Some(id))?;
+    let opened = open_restored(app, state, &selected).await;
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    crate::profile::set::save_sessions(state).await;
+    opened
+}
+
 /// Read the lines the scrollback file of `session` kept into its ring.
 async fn read_scrollback(session: &Session, app_data: &Path) {
     let path = paths::scrollback_path(app_data, session.id);

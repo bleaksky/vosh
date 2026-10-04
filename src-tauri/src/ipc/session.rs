@@ -56,12 +56,7 @@ pub(crate) async fn session_select<R: tauri::Runtime>(
     state: State<'_, SharedState>,
     session: SessionId,
 ) -> Result<(), String> {
-    state.select_session(session)?;
-    let selected = state.session(Some(session))?;
-    let opened = crate::app::launch::open_restored(&app, state.inner(), &selected).await;
-    let _persist_guard = PERSIST_LOCK.lock().await;
-    save_sessions(state.inner()).await;
-    opened
+    crate::app::launch::select_session(&app, state.inner(), session).await
 }
 
 /// Close the session `session` names. Its connection ends as on
