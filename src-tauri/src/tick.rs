@@ -180,6 +180,65 @@ pub(crate) struct TickRuntime {
     /// A session is connected. A profile switch arms a timer its new
     /// config turns on only while one is.
     pub in_session: bool,
+    /// Whether the sun is up in the game, from the latest World.Time,
+    /// which day and night themes follow (Alerts Q16). A drop keeps it,
+    /// so the window holds what it showed until World.Time comes again
+    /// (Q15). None before the first.
+    pub daylight: Option<Daylight>,
+}
+
+/// The game's day or night, as World.Time says it. Every window hears it
+/// on `vosh://daylight-changed`, since only the main window hears GMCP
+/// and Settings and Help resolve their theme from it too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Daylight {
+    Day,
+    Night,
+}
+
+/// `vosh://daylight-changed`: the game of a session turned to day or
+/// night. Every window hears it, and the page resolves day and night
+/// themes from the selected session's (Sessions Q23).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct DaylightPayload {
+    pub(crate) phase: Daylight,
+}
+
+/// The first game hour of the day where World.Time names no sunlight.
+/// Aabahran always names it, and day begins with the hour 6 line, `The
+/// day has begun.`, so the fallback agrees with it (Alerts Q17).
+const DAY_FIRST_HOUR: i64 = 6;
+/// The first game hour of the night, the hour 19 line, `The night has
+/// begun.`.
+const NIGHT_FIRST_HOUR: i64 = 19;
+
+impl Daylight {
+    /// The day or night a World.Time packet `data` says: its `sunlight`,
+    /// where rise, light and set are day and dark is night, as
+    /// `isDaytime` in src/components/shell/daylight.ts reads it, or else
+    /// its hour. None when it says neither.
+    pub(crate) fn of_world_time(data: &serde_json::Value) -> Option<Self> {
+        let sunlight = data
+            .get("sunlight")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_ascii_lowercase);
+        match sunlight.as_deref() {
+            Some("dark" | "night") => return Some(Self::Night),
+            Some("rise" | "light" | "set" | "day") => return Some(Self::Day),
+            _ => {}
+        }
+        let hour = match data.get("hour")? {
+            serde_json::Value::Number(n) => n.as_i64()?,
+            serde_json::Value::String(s) => s.trim().parse().ok()?,
+            _ => return None,
+        };
+        Some(if (DAY_FIRST_HOUR..NIGHT_FIRST_HOUR).contains(&hour) {
+            Self::Day
+        } else {
+            Self::Night
+        })
+    }
 }
 
 /// What the session does for one tick event: the report to emit on
@@ -344,6 +403,13 @@ impl TickRuntime {
     /// actually changed, which is a real tick. The first observation
     /// primes the state without a tick, so you do not see a spurious tick
     /// the moment you connect.
+    /// Follow the day or night of a World.Time packet `data`. Returns the
+    /// new one when it turned.
+    pub(crate) fn observe_daylight(&mut self, data: &serde_json::Value) -> Option<Daylight> {
+        let now = Daylight::of_world_time(data)?;
+        (self.daylight.replace(now) != Some(now)).then_some(now)
+    }
+
     pub(crate) fn observe_world_hour(&mut self, hour: &str) -> bool {
         match &self.last_world_hour {
             Some(prev) if prev == hour => false,
@@ -805,6 +871,44 @@ mod tests {
     fn check_reset_match_false_when_no_pattern() {
         let s = TickSettings::default();
         assert!(!s.check_reset_match("anything"));
+    }
+
+    #[test]
+    fn the_game_s_day_and_night_follow_world_time_and_turn_once() {
+        use serde_json::json;
+        let of = |data: serde_json::Value| Daylight::of_world_time(&data);
+        // weather_update, update.c:2326: hour 4 dark, 6 rise, 7 light,
+        // 18 set, 19 dark.
+        assert_eq!(
+            of(json!({"hour": 6, "sunlight": "rise"})),
+            Some(Daylight::Day)
+        );
+        assert_eq!(
+            of(json!({"hour": 18, "sunlight": "set"})),
+            Some(Daylight::Day)
+        );
+        assert_eq!(
+            of(json!({"hour": 19, "sunlight": "dark"})),
+            Some(Daylight::Night)
+        );
+        // Eternal darkness keeps it dark at noon, update.c:2305.
+        assert_eq!(
+            of(json!({"hour": 12, "sunlight": "dark"})),
+            Some(Daylight::Night)
+        );
+        // With no sunlight the hour decides.
+        assert_eq!(of(json!({"hour": "5"})), Some(Daylight::Night));
+        assert_eq!(of(json!({"hour": 6})), Some(Daylight::Day));
+        assert_eq!(of(json!({"hour": 19})), Some(Daylight::Night));
+        assert_eq!(of(json!({"day": 3})), None);
+        let mut t = TickRuntime::default();
+        let light = json!({"hour": 14, "sunlight": "light"});
+        assert_eq!(t.observe_daylight(&light), Some(Daylight::Day));
+        assert_eq!(t.observe_daylight(&light), None, "no turn, no news");
+        t.end_session();
+        assert_eq!(t.daylight, Some(Daylight::Day), "a drop keeps it");
+        let dark = json!({"hour": 19, "sunlight": "dark"});
+        assert_eq!(t.observe_daylight(&dark), Some(Daylight::Night));
     }
 
     #[test]

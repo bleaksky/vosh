@@ -94,6 +94,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         loadouts::loadouts_set_active,
         tick::tick_get_config,
         tick::tick_set_config,
+        tick::daylight_get,
         alerts::alert_presets_get,
         alerts::alert_presets_set,
         alerts::alerts_permission,

@@ -5,6 +5,7 @@
 //! posting it, so no test reaches the system's notification center.
 
 use serde_json::Value as Json;
+use tauri::Manager;
 use vosh_automation::trigger::{Trigger, TriggerAction};
 use vosh_prompt::testkit::{gmcp, Build, Options};
 
@@ -287,5 +288,43 @@ async fn a_plugin_alert_carries_its_owner_and_ends_as_the_plugin_turns_off() {
     })
     .await;
     assert_eq!(alerts(&h, h.first).len(), 1);
+    h.finish(grid).await;
+}
+
+/// The phases `session` told every window, oldest first.
+fn phases(h: &Harness, session: SessionId) -> Vec<String> {
+    h.events_of(session, "vosh://daylight-changed")
+        .iter()
+        .map(|e| e["phase"].as_str().unwrap_or_default().to_string())
+        .collect()
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn each_session_keeps_its_game_s_day_or_night_through_a_drop() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(orla()).await;
+    let (one, two) = (h.first, h.open_session().await);
+    h.connect_to(one, &h.servers[0]).await;
+    h.connect_to(two, &h.servers[1]).await;
+    // Each login sends World.Time at hour 14, in full light.
+    h.until("both mornings", |h| {
+        phases(h, one) == ["day"] && phases(h, two) == ["day"]
+    })
+    .await;
+    // weather_update at hour 19, update.c:2326, in the first game alone.
+    h.servers[0].push(&gmcp(
+        "World.Time",
+        r#"{"hour":19,"day":3,"month":5,"year":1203,"sunlight":"dark","sky":"cloudy"}"#,
+    ));
+    h.until("the night", |h| phases(h, one) == ["day", "night"])
+        .await;
+    assert_eq!(phases(&h, two), ["day"]);
+    // The window holds what it showed through a drop.
+    h.disconnect_session(one).await;
+    let phase = |id| crate::ipc::tick::daylight_get(h.app.state(), Some(id));
+    assert_eq!(phase(one).await, Ok(Some(crate::tick::Daylight::Night)));
+    assert_eq!(phase(two).await, Ok(Some(crate::tick::Daylight::Day)));
+    h.disconnect_session(two).await;
     h.finish(grid).await;
 }
