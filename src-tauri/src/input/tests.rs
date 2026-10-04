@@ -1159,6 +1159,7 @@ fn mud_input_keeps_file_and_profile_commands_to_you() {
         ("  #profile load", "#profile"),
         ("#import-tintin combat.tt", "#import-tintin"),
         ("#script  load combat", "#script load"),
+        ("#script reload", "#script reload"),
     ] {
         let ran = run_line_from(&state, &mut p, line, LineFrom::YourLua);
         assert_eq!(
@@ -1175,6 +1176,28 @@ fn mud_input_keeps_file_and_profile_commands_to_you() {
     assert_eq!(ran.result.echo, ["no scripts loaded"]);
     let ran = run_line_from(&state, &mut p, "look", LineFrom::YourLua);
     assert_eq!(ran.result.bytes, b"look\r\n");
+}
+
+#[test]
+fn a_script_that_asks_for_a_reload_cannot_run_one() {
+    let (_dir, state, scripts) = state_with_scripts();
+    std::fs::write(
+        scripts.join("again.lua"),
+        "mud.echo('ran') for i = 1, 50 do mud.input('#script reload') end",
+    )
+    .unwrap();
+    let mut p = Profile::default();
+    let ran = run_line(&state, &mut p, "#script load again");
+    assert_eq!(ran.lua.echoes, ["ran"]);
+    assert_eq!(ran.lua.inputs.len(), 50);
+    let (from, line) = &ran.lua.inputs[0];
+    let ran = run_line_from(&state, &mut p, line, *from);
+    assert_eq!(
+        ran.result.echo,
+        refused("Vosh runs #script reload only when you type it.")
+    );
+    let leftover = &ran.lua.echoes;
+    assert!(leftover.is_empty(), "the script ran again {leftover:?}");
 }
 
 #[test]
