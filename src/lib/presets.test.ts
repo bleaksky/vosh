@@ -3,6 +3,7 @@ import roomLines from '../../fixtures/room-colors/lines.json';
 import roomPreset from '../../fixtures/room-colors/preset.json';
 import { enabledPresetIds, PRESETS_OFF_MARKER } from './automationRecords';
 import { parseRoutedLine } from './chatStore';
+import { KNOWN_WORLDS } from './useConnection';
 import {
   defaultEnabledIds,
   type Preset,
@@ -583,6 +584,39 @@ describe('the sample of every preset', () => {
       for (const line of preset.sample) {
         expect(draw(preset, line).routes, `${preset.id} ${line.text}`).toEqual([]);
       }
+    }
+  });
+});
+
+// Get started suggests presets by the world you connect to. Five suit The
+// Forsaken Lands, whose lines they match, and none suit another game.
+describe('the worlds each preset suits', () => {
+  it('suggests the five that color a room, a fight, a cure and experience on The Forsaken Lands', () => {
+    expect(
+      PRESETS.filter((p) => p.suggest.includes('The Forsaken Lands')).map((p) => p.id),
+    ).toEqual([
+      'healing_basics',
+      'combat_outgoing',
+      'combat_incoming',
+      'loot_progression',
+      'room_and_time',
+    ]);
+  });
+
+  it('names only worlds Vosh knows, each once', () => {
+    const known = KNOWN_WORLDS.map((w) => w.name);
+    for (const preset of PRESETS) {
+      expect(new Set(preset.suggest).size, preset.id).toBe(preset.suggest.length);
+      for (const world of preset.suggest) {
+        expect(known, preset.id).toContain(world);
+      }
+    }
+  });
+
+  it('suggests no preset that sends a command', () => {
+    for (const preset of PRESETS.filter((p) => p.suggest.length > 0)) {
+      const kinds = preset.triggers.flatMap((t) => t.actions.map((a) => a.kind));
+      expect(kinds, preset.id).not.toContain('send');
     }
   });
 });

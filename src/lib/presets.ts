@@ -34,6 +34,10 @@ export interface Preset {
   category: PresetCategory;
   name: string;
   description: string;
+  /** The worlds Get started suggests the preset on, each by the name
+   *  KNOWN_WORLDS in useConnection.ts gives it. Empty when no world
+   *  suggests it. */
+  suggest: readonly string[];
   /** One to three lines the game prints that show what the preset does,
    *  each in the game's own words, with the place in the game's source it
    *  comes from beside it. A character or a number the game fills in comes
@@ -56,6 +60,12 @@ export interface PresetSampleLine {
    *  line leaves it out. */
   target?: Extract<TriggerTarget, 'room' | 'room_target'>;
 }
+
+// The Forsaken Lands, as KNOWN_WORLDS in useConnection.ts names it. Get
+// started suggests five presets there. Each changes only how a line looks,
+// and their samples show what most characters meet early, a room, a
+// fight, a cure and experience.
+const FORSAKEN_LANDS = 'The Forsaken Lands';
 
 // Category names as Settings, Automation shows them over the presets.
 export const PRESET_CATEGORIES: Record<PresetCategory, string> = {
@@ -263,6 +273,7 @@ export const PRESETS: Preset[] = [
       { text: 'You feel a lot better!', shows: 'cure.feel_lot_better' },
       { text: 'You feel less sick.', shows: 'cure.less_sick' },
     ],
+    suggest: [FORSAKEN_LANDS],
     triggers: [
       highlight('cure.feel_lot_better', 'You feel a lot better!$', GREEN),
       highlight('cure.feel_better', 'You feel better\\.$', GREEN),
@@ -293,6 +304,7 @@ export const PRESETS: Preset[] = [
       { text: "You dodge a villager's attack.", shows: 'def.dodge_or_parry' },
       { text: "You block a villager's attack with your shield.", shows: 'def.block_shield' },
     ],
+    suggest: [],
     triggers: [
       // Generic "You dodge X." / "You parry X." — matches the bare
       // form in highlights.tin line 97. Lower priority so the more
@@ -376,6 +388,7 @@ export const PRESETS: Preset[] = [
       { text: 'Maren disarms you and sends your weapon flying!', shows: 'disarm.primary' },
       { text: 'The protective aura around your body fades.', shows: 'buff.protective_aura' },
     ],
+    suggest: [],
     triggers: [
       // Visual recolor + auto-rearm send, demonstrating the
       // multi-action support. Mirrors the user's tintin #ACTION at
@@ -460,6 +473,7 @@ export const PRESETS: Preset[] = [
         shows: 'terror.drop',
       },
     ],
+    suggest: [],
     triggers: [
       {
         name: 'terror.drop',
@@ -493,6 +507,7 @@ export const PRESETS: Preset[] = [
     // The top hit in dam_message in fight.c, on a villager, mob 5287 in
     // area/fortblac.are.
     sample: [{ text: 'You do UNSPEAKABLE things to a villager!', shows: 'combat.outgoing' }],
+    suggest: [FORSAKEN_LANDS],
     triggers: [
       // Mirrors the TinTin `You%1` form so both "Your kick LACERATES
       // X" and "You LACERATE X" / "You miss X" lines fire — the
@@ -532,6 +547,7 @@ export const PRESETS: Preset[] = [
       { text: "A villager's punch grazes you.", shows: 'combat.incoming' },
       { text: "A villager's punch misses you.", shows: 'combat.incoming_miss' },
     ],
+    suggest: [FORSAKEN_LANDS],
     triggers: [
       replace(
         'combat.incoming',
@@ -563,6 +579,7 @@ export const PRESETS: Preset[] = [
       { text: 'You receive 250 experience points.', shows: 'loot.xp' },
       { text: 'You raise a level!!', shows: 'loot.level' },
     ],
+    suggest: [FORSAKEN_LANDS],
     triggers: [
       replace(
         'loot.gold',
@@ -607,6 +624,7 @@ export const PRESETS: Preset[] = [
       { text: 'You brew a bubbly pink potion from a large kettle!', shows: 'potion.pink' },
       { text: 'You quaff a bubbly pink potion.', shows: 'potion.pink' },
     ],
+    suggest: [],
     triggers: [
       replace('potion.blue', 'a bubbly blue potion', 'a bubbly blue potion {fg:248}(armor){reset}'),
       replace(
@@ -664,6 +682,7 @@ export const PRESETS: Preset[] = [
     // do_smoke in act_obj.c with object 1147 in area/hamlet.are, whose
     // smoke casts protection.
     sample: [{ text: 'You light some rosemary and begin to smoke it.', shows: 'herb.rosemary' }],
+    suggest: [],
     triggers: [
       replace(
         'herb.purple_seaweed',
@@ -731,6 +750,7 @@ export const PRESETS: Preset[] = [
     // day line, as the says and tells in fixtures/room-colors do, so the
     // sample holds no words a player wrote.
     sample: [{ text: "You tell Tolliver 'The day has begun.'", shows: 'chat.sent_tells' }],
+    suggest: [],
     triggers: [
       {
         name: 'chat.sent_tells',
@@ -783,6 +803,7 @@ export const PRESETS: Preset[] = [
       },
       { text: 'The day has begun.', shows: 'time.of_day' },
     ],
+    suggest: [FORSAKEN_LANDS],
     triggers: [
       highlight('room.exits', EXITS_LINE, { fg: 'green', base: true }, 6),
       {
