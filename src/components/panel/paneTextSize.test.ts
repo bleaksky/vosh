@@ -237,22 +237,32 @@ describe('the panel in panel.css', () => {
     expect(TOKENS.get('--mud-scale')).toBe('calc(var(--panel-text-px, 12) / 12)');
   });
 
-  it('keeps a count beside the label a digit wide, the label giving way first', () => {
+  it('keeps the first count a digit wide, the label giving way last', () => {
+    // A label followed by a count may shrink, ending in an ellipsis.
     const label = declarations('.pane-label:has(+ .pane-meta)');
-    // The room kept is the zero of the label's face scaled from the
-    // label's size to the count's, after the gap the label leaves.
-    expect(label.get('max-width')?.replace(/\s+/g, ' ')).toBe(
-      'calc( 100% - 8px - 1ch * round(11 * var(--mud-scale), 1) / round(10 * var(--mud-scale), 1) )',
-    );
+    expect(label.get('flex')).toBe('0 1 auto');
+    expect(label.get('min-width')).toBe('0');
     expect(label.get('overflow')).toBe('hidden');
     expect(label.get('text-overflow')).toBe('ellipsis');
+    // Every count shrinks a million times faster than the label, so the
+    // label keeps its width while a count can still give way, and the
+    // counts share what is left as they did.
+    const meta = declarations('.pane-meta');
+    expect(Number(meta.get('flex-shrink'))).toBe(1_000_000);
+    expect(meta.get('min-width')).toBe('0');
+    expect(meta.get('overflow')).toBe('hidden');
+    expect(meta.get('text-overflow')).toBe('ellipsis');
+    // The first count stops at one digit of its own face, the zero
+    // rounded up to a whole px, which holds any of its tabular digits.
+    // A second count has no floor, so it goes before the first count's
+    // digit does.
+    expect(declarations('.pane-label + .pane-meta').get('min-width')).toBe('round(up, 1ch, 1px)');
+    expect(meta.get('font-variant-numeric')).toBe('tabular-nums');
+    expect(declarations('.pane-meta + .pane-meta').get('margin-left')).toBe('10px');
+    expect(RULES.filter((r) => r.selector === '.pane-meta + .pane-meta')).toHaveLength(1);
     expect(declarations('.pane-header > .pane-label + *').get('margin-left')).toBe('8px');
-    // The two sizes it scales between are the label's and the count's.
-    for (const size of [11, 12, 14, 16, 18, 20]) {
-      const scale = size / 12;
-      expect(computed('.pane-label', 'font-size', size)).toBe(`${Math.round(10 * scale)}px`);
-      expect(computed('.pane-meta', 'font-size', size)).toBe(`${Math.round(11 * scale)}px`);
-    }
+    // A label with no count beside it never shrinks, as before.
+    expect(declarations('.pane-label').get('flex')).toBe('none');
   });
 
   it('sets every text in the panes at your panel size, and the menus at their own', () => {
@@ -300,14 +310,9 @@ describe('the panel in panel.css', () => {
       ),
     );
     // The Group meter reads your size and the pane's width, and a Group
-    // row below holds it. The label's room beside a count reads it too,
-    // and its own test above holds it.
+    // row below holds it.
     expect(reading.sort()).toEqual(
-      [
-        ...SCALED.map(([s, p]) => `${s} ${p}`),
-        '.pane-member-meter width',
-        '.pane-label:has(+ .pane-meta) max-width',
-      ].sort(),
+      [...SCALED.map(([s, p]) => `${s} ${p}`), '.pane-member-meter width'].sort(),
     );
   });
 

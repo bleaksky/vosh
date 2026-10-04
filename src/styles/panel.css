@@ -154,22 +154,29 @@
   margin-left: 8px;
 }
 
-/* A count beside the label keeps at least its first digit, which then
-   reads whole, and once the pane is too narrow for both the label gives
-   way, ending in an ellipsis. The room kept is the widest digit of the
-   count, the zero of the label's face scaled from the label's size to
-   the count's, after the 8px gap above. At 12 px the label gives way in
-   no pane, so every header draws as it did, and at 14 px and up an
-   Affects pane at its narrowest still shows how many you miss. */
+/* A narrow header gives way in turn. The counts shrink first, sharing
+   the cut as they always have and ending in an ellipsis, until the
+   first count is down to its first digit and a second count is gone.
+   Only then does the label give way, ending in an ellipsis of its own,
+   so the first count's digit always reads whole. The counts shrink a
+   million times faster than the label, so the label keeps its width to
+   the pixel while a count can still give, and a header that had room
+   for the first count's digit draws exactly as it did. The digit's room
+   is the zero of the count's own face rounded up to a whole px, which
+   holds any of its tabular digits. */
 .pane-label:has(+ .pane-meta) {
-  max-width: calc(
-    100% - 8px - 1ch * round(11 * var(--mud-scale), 1) / round(10 * var(--mud-scale), 1)
-  );
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.pane-label + .pane-meta {
+  min-width: round(up, 1ch, 1px);
+}
+
 .pane-meta {
+  flex-shrink: 1000000;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
