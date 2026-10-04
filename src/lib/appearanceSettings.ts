@@ -193,6 +193,7 @@ export function stepGalleryTheme(
 const LICENSE_TERMS: Record<ThemeLicense, string> = {
   MIT: 'under the MIT license',
   'GPL-3.0': 'under the GPL version 3',
+  'GPL-3.0-or-later': 'under the GPL version 3 or later',
   'Public domain': 'in the public domain',
   'None published': 'with no license published',
 };

@@ -213,6 +213,7 @@ describe('pairChoices', () => {
       'rubric',
       'vellum',
       'everforest-light',
+      'melange-light',
       'solarized-light',
     ]);
   });
@@ -262,7 +263,8 @@ describe('stepGalleryTheme', () => {
 
   it('steps between the light themes while follow is on', () => {
     expect(stepGalleryTheme(themes, 'vellum', 1, 'light')).toBe('everforest-light');
-    expect(stepGalleryTheme(themes, 'everforest-light', 1, 'light')).toBe('solarized-light');
+    expect(stepGalleryTheme(themes, 'everforest-light', 1, 'light')).toBe('melange-light');
+    expect(stepGalleryTheme(themes, 'melange-light', 1, 'light')).toBe('solarized-light');
     expect(stepGalleryTheme(themes, 'solarized-light', 1, 'light')).toBe('rubric');
     expect(stepGalleryTheme(themes, 'rubric', 1, 'light')).toBe('vellum');
     expect(stepGalleryTheme(themes, 'vellum', -1, 'light')).toBe('rubric');
@@ -332,6 +334,12 @@ describe('themeCaption', () => {
   it('says when the author publishes no license', () => {
     expect(themeCaption(findTheme('monokai'))).toMatch(
       / Its colors come from Monokai by Wimer Hazenberg, with no license published\.$/,
+    );
+  });
+
+  it('says when the license takes any later version', () => {
+    expect(themeCaption(findTheme('modus-vivendi'))).toMatch(
+      / Its colors come from the Modus themes by Protesilaos Stavrou, under the GPL version 3 or later\.$/,
     );
   });
 
