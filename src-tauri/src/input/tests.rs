@@ -964,6 +964,44 @@ fn a_loose_script_runs_as_its_file_and_stops_until_a_reload() {
 }
 
 #[test]
+fn script_load_stays_inside_the_scripts_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = AppState::default();
+    state.app_data.set(dir.path().join("vosh")).unwrap();
+    let scripts = dir.path().join("vosh").join("scripts");
+    std::fs::create_dir_all(scripts.join("combat")).unwrap();
+    // A file beside the app data folder, which no load may reach.
+    std::fs::write(dir.path().join("outside.lua"), "mud.send('look')\n").unwrap();
+    std::fs::write(
+        scripts.join("combat").join("bash.lua"),
+        "mud.echo('bash')\n",
+    )
+    .unwrap();
+    let mut p = Profile::default();
+    let outside = dir.path().join("outside.lua");
+    for line in [
+        "#script load ../../outside".to_string(),
+        "#script load combat/../../../outside.lua".to_string(),
+        format!("#script load {}", outside.display()),
+    ] {
+        let ran = run_line(&state, &mut p, &line);
+        assert_eq!(
+            ran.result.echo,
+            ["[Vosh loads scripts from your scripts folder only.]"],
+            "{line}"
+        );
+        let leftover = &ran.lua.send_bytes;
+        assert!(leftover.is_empty(), "{line}");
+    }
+    let leftover = &p.script.loaded_script_names();
+    assert!(leftover.is_empty(), "{leftover:?}");
+    // A folder inside the scripts folder is fine.
+    let ran = run_line(&state, &mut p, "#script load ./combat/bash");
+    assert_eq!(ran.lua.echoes, ["bash"]);
+    assert_eq!(p.script.loaded_script_names(), ["combat/bash.lua"]);
+}
+
+#[test]
 fn scripts_lists_lua_triggers_by_name() {
     let mut p = Profile::default();
     process(
