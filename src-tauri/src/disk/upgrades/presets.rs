@@ -1,14 +1,17 @@
-//! Presets a build adds that come on for every profile, once.
+//! The two presets that came on once for every profile.
 //!
 //! An `enabled_presets` list that names presets holds the presets that
-//! were on when you last saved it. A preset a later build adds is in none
-//! of them, so it would stay off for every profile that ever saved its
-//! presets, and in loadout mode for every character, since the shared
-//! catalog keeps its own list. Each preset in [`ROLLOUTS`] comes on by
-//! default, so launch adds it once to each such list and records the step
-//! in `profiles.toml`. A preset you turn off afterwards stays off.
+//! were on when you last saved it. Tells you send and Room, time and
+//! weather colors came after many such lists were saved, so launch adds
+//! each once to every such list, and in loadout mode to the list the
+//! shared catalog keeps, then records the step in `profiles.toml`. A
+//! preset you turn off afterwards stays off.
 //!
-//! - An empty list means the defaults, which hold the preset already.
+//! [`ROLLOUTS`] takes no new entries. A preset added later ships off and
+//! stays out of [`PRESETS_ON_BY_DEFAULT`], so no list turns it on until
+//! you do. The doc on [`ROLLOUTS`] says why.
+//!
+//! - An empty list means the defaults, which hold both presets already.
 //! - A list that turned every preset off keeps them all off.
 //! - The shared catalog takes it too, in loadout mode, when it holds a
 //!   list.
@@ -18,6 +21,8 @@
 //!
 //! Launch runs it before any profile loads, under the persist lock, so
 //! the live profile reads the files as the step left them.
+//!
+//! [`PRESETS_ON_BY_DEFAULT`]: crate::loadouts::presets::PRESETS_ON_BY_DEFAULT
 
 use std::path::Path;
 
@@ -27,6 +32,17 @@ use crate::profile::set::ProfileSet;
 
 /// Each preset that comes on once, with the id the step is recorded
 /// under in `profiles.toml`.
+///
+/// This list takes no new entries. A preset added later ships off and is
+/// not in [`PRESETS_ON_BY_DEFAULT`], so an empty list leaves it off too,
+/// and players who have Vosh today learn of it through the release notes.
+/// Once you turn one preset on, your list names presets, so a rollout
+/// would turn on a preset you never chose. The two steps here ran before
+/// that rule and stay, so a launch that has not run them yet still does.
+/// Both presets are among the defaults, which is why [`add_preset`]
+/// leaves an empty list alone.
+///
+/// [`PRESETS_ON_BY_DEFAULT`]: crate::loadouts::presets::PRESETS_ON_BY_DEFAULT
 pub(crate) const ROLLOUTS: &[(&str, &str)] = &[
     ("preset-sent-tells-on", "sent_tells"),
     ("preset-room-and-time-on", "room_and_time"),
@@ -101,6 +117,7 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    use crate::loadouts::presets::PRESETS_ON_BY_DEFAULT;
     use crate::profile::file::ProfileConfig;
 
     const INDEX: &str = r#"active = "default"
@@ -251,6 +268,22 @@ name = "Quiet"
         let library = include_str!("../../../../src/lib/presets.ts");
         for (_, preset) in ROLLOUTS {
             assert!(library.contains(&format!("id: '{preset}',")), "{preset}");
+        }
+    }
+
+    #[test]
+    fn rollouts_take_no_new_entries() {
+        // A preset added later ships off with no rollout. See ROLLOUTS.
+        assert_eq!(
+            ROLLOUTS,
+            [
+                ("preset-sent-tells-on", "sent_tells"),
+                ("preset-room-and-time-on", "room_and_time"),
+            ]
+        );
+        // An empty list holds each one already, so add_preset may skip it.
+        for (_, preset) in ROLLOUTS {
+            assert!(PRESETS_ON_BY_DEFAULT.contains(preset), "{preset}");
         }
     }
 }
