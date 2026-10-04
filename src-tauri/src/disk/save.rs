@@ -87,10 +87,11 @@ pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(
     });
 }
 
-/// Act on what a run of input lines in `session` asked of the profile it
-/// plays. Every path that runs lines through the input pipeline calls
-/// this after it releases the profile lock and the connection's, so they
-/// all save alike.
+/// Act on what a run of input lines in `session` asked of `open`, the
+/// profile they ran under, which the caller read while it held the lock,
+/// since a switch may move the session once it lets go. Every path that
+/// runs lines through the input pipeline calls this after it releases the
+/// profile lock and the connection's, so they all save alike.
 ///
 /// Slash commands (#alias, #trigger, #var, #endrec, #import-tintin,
 /// ...) and durable Lua actions change the profile without saving it, so
@@ -114,11 +115,11 @@ pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(
 pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
     app: &AppHandle<R>,
     session: &Session,
+    open: &Arc<OpenProfile>,
     effects: crate::input::LineEffects,
     replaced_by: Option<crate::input::ProfileReplace>,
 ) {
     let shared: SharedState = app.state::<SharedState>().inner().clone();
-    let open = session.profile();
     if effects.replaced {
         open.hold(true);
     }
@@ -129,14 +130,14 @@ pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
     // table.
     if let Some(how) = replaced_by {
         let before = effects.tick_before.as_ref();
-        crate::input::profile::hand_to_other_sessions(app, &shared, session, &open, how, before)
+        crate::input::profile::hand_to_other_sessions(app, &shared, session, open, how, before)
             .await;
     } else {
         if let Some(before) = effects.tick_before.as_ref() {
-            crate::tick::follow_in_other_sessions(&shared, session.id, &open, before).await;
+            crate::tick::follow_in_other_sessions(&shared, session.id, open, before).await;
         }
         if let Some(chosen) = effects.prompt.as_ref() {
-            crate::prompt::choose_in_other_sessions(&shared, session.id, &open, chosen).await;
+            crate::prompt::choose_in_other_sessions(&shared, session.id, open, chosen).await;
         }
     }
     if effects.replaced || effects.tick_before.is_some() {
@@ -151,7 +152,7 @@ pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
     // A durable change after the replace counts as wanting the live
     // state saved, the way a line typed after `#profile reset` does.
     if effects.dirty {
-        mark_profile_dirty(app, &open);
+        mark_profile_dirty(app, open);
     }
 }
 

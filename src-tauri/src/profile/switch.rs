@@ -155,8 +155,9 @@ pub(crate) async fn open_or_join(
 /// and keeps the rest as it was. Its prompt drops the values the last
 /// profile's prompt read. The plugins the next profile turns on start in
 /// the session's engine and the others stop in the same step, and what
-/// they ask for comes back for the caller to deliver once the locks drop.
-/// The profile it left closes when no other session plays it.
+/// they ask for comes back for the caller to deliver once the locks drop,
+/// naming the profile the session plays from here. The profile it left
+/// closes when no other session plays it.
 pub(crate) async fn switch_live_profile(
     state: &SharedState,
     session: &Session,
@@ -173,7 +174,7 @@ pub(crate) async fn switch_live_profile(
     };
     let (to, read) = match state.open_profile(name) {
         // The session plays it already.
-        Some(to) if Arc::ptr_eq(&to, &from) => return Ok(ApplyResult::default()),
+        Some(to) if Arc::ptr_eq(&to, &from) => return Ok(ApplyResult::default().ran_under(&to)),
         Some(to) => {
             point_index().await?;
             (to, false)
@@ -247,14 +248,15 @@ async fn move_session(
     crate::prompt::keep_table(&mut p, &c, before);
     // Under both locks, so no plugin of the profile you left answers a
     // line or a packet for the next one.
-    match state.app_data.get() {
+    let plugins = match state.app_data.get() {
         Some(app_data) => crate::app::plugins::follow_profile_plugins(
             &mut p,
             &mut c,
             &crate::disk::paths::plugins_dir(app_data),
         ),
         None => ApplyResult::default(),
-    }
+    };
+    plugins.ran_under(to)
 }
 
 /// The file of `left`, a profile that just closed, no longer stands
@@ -297,8 +299,11 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
 ) -> Result<(), String> {
     let plugins = switch_profile(state, session, name).await?;
     // The new profile's capture took the game's latest prompt settings.
+    // The plugins ran under that profile, so their result names it.
     let seen = session.connection.lock().prompt.take_seen();
-    crate::prompt::report_game_prompt_seen(app, session, seen);
+    if let Some(open) = plugins.profile.clone() {
+        crate::prompt::report_game_prompt_seen(app, session, &open, seen);
+    }
 
     // Hand every window the new profile's panes, tracked affects, tick
     // settings, and chip style from here, then the replace notice, on

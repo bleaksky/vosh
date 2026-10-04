@@ -219,9 +219,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
         // Durable Lua changes (mud.alias, set_var, group toggles fired
         // by triggers or timers) ride the same debounced save the slash
         // commands use, or they would never reach disk.
-        if apply.durable_changed {
-            crate::disk::save::mark_profile_dirty(app, &session.profile());
-        }
+        mark_durable(app, &apply);
         // A Lua `mud.alias` changes the list an open Settings page shows.
         broadcast_list_changes(app, apply.lists);
 
@@ -239,9 +237,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             let Some(mut released) = io.walk(app, session, command).await? else {
                 continue;
             };
-            if released.durable_changed {
-                crate::disk::save::mark_profile_dirty(app, &session.profile());
-            }
+            mark_durable(app, &released);
             broadcast_list_changes(app, std::mem::take(&mut released.lists));
             if !released.send_bytes.is_empty() {
                 io.send(&std::mem::take(&mut released.send_bytes)).await?;
@@ -290,25 +286,41 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
         )
         .await;
         let state = app.state::<SharedState>();
-        let LinesRun {
-            apply: next,
-            shown,
-            effects,
-            replaced_by,
-        } = {
+        let (
+            open,
+            LinesRun {
+                apply: next,
+                shown,
+                effects,
+                replaced_by,
+            },
+        ) = {
             let mut p = session.lock_profile().await;
             let mut c = session.connection.lock();
-            run_lines_locked(
+            let run = run_lines_locked(
                 &state,
                 &mut p,
                 &mut c,
                 inputs.iter().map(|(from, line)| (*from, line.as_str())),
                 shared.as_ref(),
-            )
+            );
+            (p.open().clone(), run)
         };
-        crate::disk::save::settle_line_effects(app, session, effects, replaced_by).await;
+        crate::disk::save::settle_line_effects(app, session, &open, effects, replaced_by).await;
         shown.send(app, session);
-        apply = next;
+        apply = next.ran_under(&open);
+    }
+}
+
+/// Mark the profile `apply` ran under to save, when its Lua changed what
+/// the profile saves.
+fn mark_durable<R: tauri::Runtime>(app: &AppHandle<R>, apply: &ApplyResult) {
+    debug_assert!(
+        !apply.durable_changed || apply.profile.is_some(),
+        "a durable change names the profile it ran under"
+    );
+    if let Some(open) = apply.profile.as_ref().filter(|_| apply.durable_changed) {
+        crate::disk::save::mark_profile_dirty(app, open);
     }
 }
 
@@ -524,19 +536,23 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
 ) -> std::io::Result<()> {
     let shared = crate::profile::switch::shared_layer_for_lines(app, [command]).await;
     let state = app.state::<SharedState>();
-    let LinesRun {
-        apply,
-        shown,
-        effects,
-        replaced_by,
-    } = {
+    let (
+        open,
+        LinesRun {
+            apply,
+            shown,
+            effects,
+            replaced_by,
+        },
+    ) = {
         let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
-        run_fired_locked(&state, &mut p, &mut c, command, shared.as_ref())
+        let run = run_fired_locked(&state, &mut p, &mut c, command, shared.as_ref());
+        (p.open().clone(), run)
     };
-    crate::disk::save::settle_line_effects(app, session, effects, replaced_by).await;
+    crate::disk::save::settle_line_effects(app, session, &open, effects, replaced_by).await;
     shown.send(app, session);
-    apply_script_result(app, io, session, apply).await
+    apply_script_result(app, io, session, apply.ran_under(&open)).await
 }
 
 /// Report a tick step of `session` on `session://tick`, so the frontend

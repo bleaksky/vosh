@@ -41,7 +41,8 @@ pub(super) async fn fire_due<R: tauri::Runtime>(
     let (apply, held) = {
         let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
-        fire_round(&mut p, &mut c, due)
+        let (apply, held) = fire_round(&mut p, &mut c, due);
+        (apply.ran_under(p.open()), held)
     };
     // Before the apply, so a cancel among its actions finds them.
     if !held.is_empty() {

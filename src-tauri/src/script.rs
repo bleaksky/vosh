@@ -18,6 +18,7 @@ use vosh_script::{Action, Owner, ScriptOutcome};
 use crate::app::events::{ListChanges, ListRevisions};
 use crate::input::LineFrom;
 use crate::profile::live::Profile;
+use crate::profile::open::OpenProfile;
 use crate::session::connection::Connection;
 
 /// One pending one-shot Lua timer.
@@ -128,6 +129,11 @@ pub(crate) struct ApplyResult {
     /// debounced profile persist; ephemeral runtime state (prompt
     /// vars, timers, echoes) does not set it.
     pub durable_changed: bool,
+    /// The profile the Lua ran under, which a durable change marks to
+    /// save. The step that held its lock names it through
+    /// [`ApplyResult::ran_under`], since the session may play another
+    /// profile by the time the result applies.
+    pub profile: Option<Arc<OpenProfile>>,
     /// The trigger and alias lists this apply changed, like an alias a
     /// Lua `mud.alias` set. The caller tells the windows.
     pub lists: ListChanges,
@@ -148,12 +154,19 @@ impl ApplyResult {
         self.inputs.extend(later.inputs);
         self.prompt_vars_changed |= later.prompt_vars_changed;
         self.durable_changed |= later.durable_changed;
+        self.profile = later.profile.or(self.profile.take());
         self.lists = self.lists.or(later.lists);
         self.new_timers.extend(later.new_timers);
         self.cancel_timers.extend(later.cancel_timers);
         if later.walk.is_some() {
             self.walk = later.walk;
         }
+    }
+
+    /// This result, whose Lua ran under `open` while the step held it.
+    pub(crate) fn ran_under(mut self, open: &Arc<OpenProfile>) -> Self {
+        self.profile = Some(Arc::clone(open));
+        self
     }
 }
 

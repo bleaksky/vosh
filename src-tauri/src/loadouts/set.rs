@@ -4,6 +4,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
@@ -16,6 +17,7 @@ use crate::app::state::{SharedState, NO_APP_DATA};
 use crate::disk::atomic::write_with_backup;
 use crate::disk::paths::loadouts_path;
 use crate::profile::login_match::AutoMatch;
+use crate::profile::open::OpenProfile;
 
 /// One named loadout. A loadout has no items of its own — it only
 /// references groups in the global catalog. Each character's vars,
@@ -192,8 +194,8 @@ pub(crate) const UNREAD_LOADOUTS_NOTICE: &str =
 /// profile locks: take the new active list as the stack of the profile
 /// the selected session plays, see [`LoadoutSet::set_stack`], lay the
 /// group state it imposes over that profile, and save loadouts.toml in
-/// the app data folder. The command queues the profile save, so a test
-/// can run this against a mock app and a scratch folder.
+/// the app data folder. Returns that profile, for the command to queue its
+/// save, so a test can run this against a mock app and a scratch folder.
 /// When the switch turned a macro group on or off, every window hears it
 /// once the locks are released, since the command line keeps its own map
 /// of the macro keys that fire.
@@ -202,7 +204,7 @@ pub(crate) const UNREAD_LOADOUTS_NOTICE: &str =
 pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
     app: &AppHandle<R>,
     active: Vec<String>,
-) -> Result<(), String> {
+) -> Result<Arc<OpenProfile>, String> {
     let state: SharedState = app.state::<SharedState>().inner().clone();
     let app_data = state.app_data.get().ok_or(NO_APP_DATA)?;
     let session = state.selected_session();
@@ -212,7 +214,7 @@ pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
         .iter()
         .filter_map(|open| open.name())
         .collect();
-    let macro_groups_changed = {
+    let (open, macro_groups_changed) = {
         let mut guard = state.loadout_set.lock().await;
         let Some(set) = guard.as_mut() else {
             return Err("loadout mode is off".into());
@@ -241,12 +243,15 @@ pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
         if let Err(e) = save_loadout_set(app_data, set) {
             warn!(error = %e, "loadouts.toml save failed");
         }
-        p.disabled_macro_groups != macro_groups_before
+        (
+            p.open().clone(),
+            p.disabled_macro_groups != macro_groups_before,
+        )
     };
     if macro_groups_changed {
         broadcast(app, MACRO_GROUPS_CHANGED, &"");
     }
-    Ok(())
+    Ok(open)
 }
 
 /// Carry the stack the profile `old` keeps of its own over to `new`, as

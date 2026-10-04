@@ -1,7 +1,7 @@
 //! The commands for loadout mode. Settings reads your loadouts and which
 //! of them are on, and the Loadouts editor turns them on and off.
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::app::events::LOADOUTS_CHANGED;
 use crate::app::state::SharedState;
@@ -72,14 +72,13 @@ pub(crate) async fn loadouts_get_state(
 /// such as the Loadouts editor in Settings, see the update.
 #[tauri::command]
 pub(crate) async fn loadouts_set_active(app: AppHandle, active: Vec<String>) -> Result<(), String> {
-    set_active_loadouts(&app, active).await?;
+    let open = set_active_loadouts(&app, active).await?;
     // The recomputed (or dormant) disabled lists live in the profile
     // snapshot on disk; queue a persist so a crash before the exit
     // flush cannot leave loadouts.toml and per-profile state
     // disagreeing. Also clears any stale persist suppression — this is
     // a durable change the user asked for.
-    let state = app.state::<SharedState>();
-    mark_profile_dirty(&app, &state.selected_session().profile());
+    mark_profile_dirty(&app, &open);
     let _ = app.emit(LOADOUTS_CHANGED, &());
     Ok(())
 }

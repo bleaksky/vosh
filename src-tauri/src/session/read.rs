@@ -7,6 +7,8 @@
 //! gathered, once. A partial that waited for the next read, and the lines
 //! held for the rest of a prompt, go out the same way.
 
+use std::sync::Arc;
+
 use tauri::AppHandle;
 use tokio::time::Instant;
 use tracing::warn;
@@ -15,6 +17,7 @@ use vosh_prompt::stage::Output;
 use vosh_protocol::telnet::{codes as telnet_codes, option as telnet_option, Event as TelnetEvent};
 
 use crate::app::events;
+use crate::profile::open::OpenProfile;
 use crate::prompt::report_game_prompt_seen;
 use crate::sessions::Session;
 
@@ -118,13 +121,13 @@ async fn handle_event<R: tauri::Runtime>(
                 // line is the game's tick, so the step fires once per
                 // tick and carries the Send each tick command to run
                 // after the locks drop.
-                let steps = {
+                let (open, steps) = {
                     let lock_t0 = std::time::Instant::now();
                     let mut p = conn.session.lock_profile().await;
                     conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
                     conn.perf.mutex_acquires += 1;
                     let mut c = conn.session.connection.lock();
-                    line_step(
+                    let steps = line_step(
                         &mut p,
                         &mut c,
                         batch,
@@ -132,11 +135,12 @@ async fn handle_event<R: tauri::Runtime>(
                         plain,
                         Instant::now(),
                         log_sink.id(),
-                    )
+                    );
+                    (p.open().clone(), steps)
                 };
                 conn.perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
                 for step in steps {
-                    deliver_line_step(conn, log_sink, batch, step).await?;
+                    deliver_line_step(conn, log_sink, batch, &open, step).await?;
                 }
                 if let Some(plain) = watched {
                     let out = conn.walker.line(&plain, Instant::now());
@@ -159,20 +163,21 @@ async fn handle_event<R: tauri::Runtime>(
             // prompt on its own, since the pager and editor prompts end
             // with one too. Either way the candidates ring records one
             // entry.
-            let steps = {
+            let (open, steps) = {
                 let mut p = conn.session.lock_profile().await;
                 let mut c = conn.session.connection.lock();
-                marker_step(
+                let steps = marker_step(
                     &mut p,
                     &mut c,
                     &mut conn.accumulator,
                     batch,
                     Instant::now(),
                     log_sink.id(),
-                )
+                );
+                (p.open().clone(), steps)
             };
             for step in steps {
-                deliver_line_step(conn, log_sink, batch, step).await?;
+                deliver_line_step(conn, log_sink, batch, &open, step).await?;
             }
             Ok(())
         }
@@ -224,28 +229,31 @@ pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
     log_sink: &mut LogSink,
 ) -> std::io::Result<()> {
     let mut batch = ReadBatch::new(conn.others_wrote());
-    let steps = {
+    let (open, steps) = {
         let mut p = conn.session.lock_profile().await;
         let mut c = conn.session.connection.lock();
         if !c.prompt.stage.holds() {
             return Ok(());
         }
-        let_go_held(&mut p, &mut c, &mut batch, Instant::now(), log_sink.id())
+        let steps = let_go_held(&mut p, &mut c, &mut batch, Instant::now(), log_sink.id());
+        (p.open().clone(), steps)
     };
     for step in steps {
-        deliver_line_step(conn, log_sink, &mut batch, step).await?;
+        deliver_line_step(conn, log_sink, &mut batch, &open, step).await?;
     }
     finish_read(conn, log_sink, batch).await;
     Ok(())
 }
 
-/// Do what a line step left for after the profile lock: emit its routes,
-/// keep it for scrollback, send what its triggers send, apply its Lua
-/// actions' IO into the batch, and run the tick command it fired.
+/// Do what a line step left for after the lock of `open`, the profile it
+/// ran under: emit its routes, keep it for scrollback, send what its
+/// triggers send, apply its Lua actions' IO into the batch, and run the
+/// tick command it fired.
 async fn deliver_line_step<R: tauri::Runtime>(
     conn: &mut Conn<R>,
     log_sink: &LogSink,
     batch: &mut ReadBatch,
+    open: &Arc<OpenProfile>,
     step: LineStep,
 ) -> std::io::Result<()> {
     let LineStep {
@@ -270,7 +278,7 @@ async fn deliver_line_step<R: tauri::Runtime>(
     send_trigger_outputs(&mut conn.stream, &result.sends).await?;
     let mut sink = OutputSink::Batch(batch);
     let mut io = ScriptIo::Session(&mut conn.stream, &mut sink, &mut conn.walker);
-    apply_script_result(&conn.app, &mut io, &conn.session, apply).await?;
+    apply_script_result(&conn.app, &mut io, &conn.session, apply.ran_under(open)).await?;
     if let Some(step) = tick_step {
         conn.perf.ticks += 1;
         deliver_tick_step(&conn.app, &mut io, &conn.session, step).await?;
@@ -321,20 +329,21 @@ async fn end_read<R: tauri::Runtime>(
     log_sink: &LogSink,
     batch: &mut ReadBatch,
 ) -> std::io::Result<()> {
-    let step = {
+    let (open, step) = {
         let mut p = conn.session.lock_profile().await;
         let mut c = conn.session.connection.lock();
-        partial_step(
+        let step = partial_step(
             &mut p,
             &mut c,
             &mut conn.accumulator,
             batch,
             Instant::now(),
             log_sink.id(),
-        )
+        );
+        (p.open().clone(), step)
     };
     if let Some(step) = step {
-        deliver_line_step(conn, log_sink, batch, step).await?;
+        deliver_line_step(conn, log_sink, batch, &open, step).await?;
     }
     Ok(())
 }
@@ -365,12 +374,13 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
     } = batch;
     let (app, session) = (&conn.app, &conn.session);
     let watched = prompt && watching_prompt(session);
-    let (vars, hidden, prompt_seen, status, prompt_state, clock) = {
+    let (open, vars, hidden, prompt_seen, status, prompt_state, clock) = {
         let p = conn.session.lock_profile().await;
         let mut c = session.connection.lock();
         // Echoes the end of the read wrote close the open row.
         c.prompt.stage.finish(&mut out);
         (
+            p.open().clone(),
             c.prompt.take_prompt_vars(prompt_vars),
             c.prompt.vars.take_hidden_change(),
             c.prompt.take_seen(),
@@ -403,7 +413,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
     if let Some(hidden) = hidden {
         session.emit(app, events::HIDDEN, &hidden);
     }
-    report_game_prompt_seen(app, session, prompt_seen);
+    report_game_prompt_seen(app, session, &open, prompt_seen);
     if let Some(status) = status {
         session.emit(app, events::PROMPT_STATUS, &status);
     }

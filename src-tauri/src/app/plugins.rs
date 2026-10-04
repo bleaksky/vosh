@@ -412,7 +412,7 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     let apply = {
         let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
-        follow_profile_plugins(&mut p, &mut c, &plugins_dir)
+        follow_profile_plugins(&mut p, &mut c, &plugins_dir).ran_under(p.open())
     };
     let collected = crate::session::effects::collect_script_result(app, session, apply).await;
     if !collected.bytes.is_empty() || collected.walk.is_some() {
