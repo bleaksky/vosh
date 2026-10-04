@@ -85,6 +85,11 @@ fn shows(h: &Harness, session: SessionId, text: &str) -> bool {
     h.screen_of(session).iter().any(|row| row.contains(text))
 }
 
+/// The character `session` plays, from the game's Char.Status.
+fn character_of(h: &Harness, session: SessionId) -> Option<String> {
+    h.state.session(Some(session)).ok()?.character()
+}
+
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_drop_while_you_play_redials_3_6_12_24_48_and_60_seconds_apart_and_stops_at_the_prompt() {
@@ -270,6 +275,36 @@ async fn disconnect_during_a_wait_ends_the_series() {
 
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn disconnect_after_a_series_reached_the_game_cancels_nothing() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = logged_in(&["alert_connection"]).await;
+    let mut clock = Clock::hold(&h);
+    h.servers[0].cut();
+    let (_, _, done) = clock.next().await;
+    let _ = done.send(());
+    h.until("the try that reached the game", |h| {
+        last_of(h, h.first, "reached").is_some() && rang(h).len() == 2
+    })
+    .await;
+    assert_eq!(rang(&h), ["Connection lost", "Ready to log in"]);
+    // The series ends at that try, so your Disconnect ends none.
+    clock.stays_quiet().await;
+    h.disconnect().await;
+    assert_eq!(kinds(&h, h.first), ["waiting", "dialing", "reached"]);
+    // Your own Connect after it rings nothing. The login comes after the
+    // game's first text, so the read that rings has run by then.
+    h.connect().await;
+    h.until("the login on your link", |h| {
+        character_of(h, h.first).as_deref() == Some("Orla")
+    })
+    .await;
+    assert_eq!(rang(&h), ["Connection lost", "Ready to log in"]);
+    assert_eq!(kinds(&h, h.first), ["waiting", "dialing", "reached"]);
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn each_session_runs_a_series_of_its_own() {
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(playing_as("Orla")).await;
@@ -370,6 +405,45 @@ async fn a_login_as_your_character_during_the_wait_ends_the_series() {
     let _ = done.send(());
     clock.stays_quiet().await;
     assert_eq!(h.servers[0].connects.lock().expect("the connects").len(), 2);
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_login_as_your_character_once_the_series_reached_the_game_says_nothing_of_it() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = logged_in(&[]).await;
+    let mut clock = Clock::hold(&h);
+    let one = h.first;
+    h.servers[0].cut();
+    let (_, _, done) = clock.next().await;
+    let _ = done.send(());
+    h.until("the try that reached the game", |h| {
+        last_of(h, one, "reached").is_some()
+    })
+    .await;
+    // The series ends at that try.
+    clock.stays_quiet().await;
+    // The fake game logs Orla in again on the link the redial opened.
+    h.until("the login on that link", |h| {
+        character_of(h, one).as_deref() == Some("Orla")
+    })
+    .await;
+    let two = h.open_session().await;
+    h.connect_to(two, &h.servers[0]).await;
+    // Char.Status comes before the welcome, so the second login has
+    // reached every other session by the time the welcome shows.
+    h.until("the second login", |h| {
+        shows(h, two, "Welcome to the fake Aabahran, Orla.")
+    })
+    .await;
+    assert!(
+        !shows(&h, one, "[reconnect] Another session"),
+        "{:#?}",
+        h.screen_of(one)
+    );
+    assert_eq!(kinds(&h, one), ["waiting", "dialing", "reached"]);
     h.disconnect_session(two).await;
     h.finish(grid).await;
 }
