@@ -15,6 +15,7 @@ use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::profile::set::{create_profile, duplicate_profile, rename_profile};
 use crate::profile::shared::change_scope_locked;
 use crate::profile::switch::apply_profile_switch;
+use crate::sessions::SessionId;
 
 #[derive(serde::Serialize)]
 pub(crate) struct ProfilesListPayload {
@@ -155,13 +156,15 @@ pub(crate) async fn profile_resolve_match(
     Ok(set.resolve_match(&host, port, character.as_deref()))
 }
 
+/// Switch the session to the profile `name`.
 #[tauri::command]
 pub(crate) async fn profile_switch(
     app: AppHandle,
     state: State<'_, SharedState>,
     name: String,
+    session: Option<SessionId>,
 ) -> Result<(), String> {
     let shared: SharedState = state.inner().clone();
-    let session = shared.selected_session();
+    let session = shared.session(session)?;
     apply_profile_switch(&app, &shared, &session, &name).await
 }

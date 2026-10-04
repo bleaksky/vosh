@@ -545,6 +545,7 @@ impl Harness {
             self.app.handle().clone(),
             self.app.state(),
             line.to_string(),
+            None,
         )
         .await
         .expect("the line goes out");
@@ -552,7 +553,7 @@ impl Harness {
 
     /// Press Esc in the command line.
     async fn escape(&self) {
-        crate::ipc::session::session_walk_stop(self.app.state())
+        crate::ipc::session::session_walk_stop(self.app.state(), None)
             .await
             .expect("Esc reaches the session");
     }

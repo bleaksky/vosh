@@ -65,13 +65,23 @@ fn slash_command_echoes_and_the_logs_reply_reach_the_native_grid() {
         // `#logs` runs before anything that could save, and `look` is not
         // a slash command, so neither marks the profile to save.
         for line in ["#logs", "#logs forget-passwords", "look"] {
-            crate::ipc::session::session_send_input(handle.clone(), app.state(), line.to_string())
-                .await
-                .unwrap();
-        }
-        crate::ipc::session::session_send_masked(handle.clone(), app.state(), "secret".to_string())
+            crate::ipc::session::session_send_input(
+                handle.clone(),
+                app.state(),
+                line.to_string(),
+                None,
+            )
             .await
             .unwrap();
+        }
+        crate::ipc::session::session_send_masked(
+            handle.clone(),
+            app.state(),
+            "secret".to_string(),
+            None,
+        )
+        .await
+        .unwrap();
     });
 
     let reply = forget_passwords::message(&Outcome::NoLog);

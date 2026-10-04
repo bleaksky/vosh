@@ -14,6 +14,7 @@ use crate::profile::inactive::{export_path, profile_detail, profile_toml, Profil
 use crate::profile::login_match::LoginClaim;
 use crate::profile::set::{display_name, ProfileEntry};
 use crate::session::identity::{session_identity, SessionIdentity};
+use crate::sessions::SessionId;
 
 /// Read one profile for the Characters group.
 #[tauri::command]
@@ -107,13 +108,14 @@ pub(crate) async fn profile_export_file(
     })
 }
 
-/// Who is logged in: the connection, the character once known, the
-/// live profile, and which profile claims that character. Null while
-/// no connection is up.
+/// Who is logged in on the session: the connection, the character once
+/// known, the live profile, and which profile claims that character. Null
+/// while the session runs no connection.
 #[tauri::command]
 pub(crate) async fn session_identity_get(
     state: State<'_, SharedState>,
+    session: Option<SessionId>,
 ) -> Result<Option<SessionIdentity>, String> {
-    let session = state.selected_session();
+    let session = state.session(session)?;
     Ok(session_identity(state.inner(), &session).await)
 }

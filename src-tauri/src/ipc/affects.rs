@@ -10,6 +10,7 @@ use crate::affects::full::FullMap;
 use crate::app::events::{AffectsDisplay, AFFECTS_DISPLAY_CHANGED, TRACKED_AFFECTS_CHANGED};
 use crate::app::state::SharedState;
 use crate::disk::save::{save_then_broadcast, SavePolicy};
+use crate::sessions::SessionId;
 
 /// Replace a profile's tracked affects without touching the rest of
 /// its UI config, so an editor outside Settings cannot write a stale
@@ -144,13 +145,14 @@ fn apply_affects_display(
     (after != before).then_some(after)
 }
 
-/// The last `Char.Affects` payload of this connection, raw as the MUD
-/// sent it, or null.
+/// The last `Char.Affects` payload of the session's connection, raw as
+/// the MUD sent it, or null.
 #[tauri::command]
 pub(crate) async fn affects_snapshot_get(
     state: State<'_, SharedState>,
+    session: Option<SessionId>,
 ) -> Result<Option<Value>, String> {
-    Ok(state.selected_session().last_affects.get())
+    Ok(state.session(session)?.last_affects.get())
 }
 
 /// The live map, hours at full by affect key.

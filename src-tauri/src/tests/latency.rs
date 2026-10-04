@@ -145,13 +145,19 @@ impl Harness {
     /// Type `line` and press Enter, as the command line does: the echo
     /// first, then the line through the input path.
     async fn type_line(&self, line: &str) {
-        crate::ipc::terminal::terminal_local_write(self.app.state(), format!("{line}\r\n"), None)
-            .await
-            .expect("the echo");
+        crate::ipc::terminal::terminal_local_write(
+            self.app.state(),
+            format!("{line}\r\n"),
+            None,
+            None,
+        )
+        .await
+        .expect("the echo");
         crate::ipc::session::session_send_input(
             self.app.handle().clone(),
             self.app.state(),
             line.to_string(),
+            None,
         )
         .await
         .expect("the line goes out");
@@ -163,6 +169,7 @@ impl Harness {
             self.app.handle().clone(),
             self.app.state(),
             line.to_string(),
+            None,
         )
         .await
         .expect("the line goes out");

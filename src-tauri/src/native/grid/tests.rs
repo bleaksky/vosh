@@ -357,19 +357,33 @@ fn a_local_write_names_the_newest_output_of_the_stage_the_grid_took() {
     assert_eq!(feed_local(b"x"), next.id());
 }
 
+/// A mock app with the app state, for the terminal commands.
+#[cfg(native_surface)]
+fn app() -> tauri::App<tauri::test::MockRuntime> {
+    use tauri::Manager;
+    let app = tauri::test::mock_builder()
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .expect("a mock app");
+    app.manage::<crate::app::state::SharedState>(std::sync::Arc::default());
+    app
+}
+
 // The command reads the grid only where the surface draws it.
 #[cfg(native_surface)]
 #[test]
 fn terminal_cursor_reports_the_shared_grid() {
+    use tauri::Manager;
     let _shared = lock_shared_grid_for_test();
+    let app = app();
+    let cursor = || crate::ipc::terminal::terminal_cursor(app.state(), None);
     *grid_slot().lock().unwrap() = None;
-    assert_eq!(crate::ipc::terminal::terminal_cursor(), None, "no grid yet");
+    assert_eq!(cursor(), Ok(None), "no grid yet");
     blank_shared_grid_for_test(40, 10);
     let mut out = Output::new(false);
     out.text(b"You are hungry.\r\n");
     out.text(&marked(3, b"<1020hp> "));
     feed_session_output(&out, Some(out.id()));
-    let report = serde_json::to_value(crate::ipc::terminal::terminal_cursor()).expect("json");
+    let report = serde_json::to_value(cursor().expect("the session")).expect("json");
     assert_eq!(
         report,
         serde_json::json!({
@@ -388,18 +402,17 @@ fn terminal_cursor_reports_the_shared_grid() {
 #[cfg(native_surface)]
 #[test]
 fn terminal_screen_rows_reads_the_shared_screen_as_text() {
+    use tauri::Manager;
     let _shared = lock_shared_grid_for_test();
+    let app = app();
+    let rows = || crate::ipc::terminal::terminal_screen_rows(app.state(), None);
     *grid_slot().lock().unwrap() = None;
-    assert_eq!(
-        crate::ipc::terminal::terminal_screen_rows(),
-        None,
-        "no grid yet"
-    );
+    assert_eq!(rows(), Ok(None), "no grid yet");
     blank_shared_grid_for_test(20, 4);
     let mut out = Output::new(false);
     out.text("You rest.\r\n<1020hp> 中文 ".as_bytes());
     feed_session_output(&out, Some(out.id()));
-    let report = serde_json::to_value(crate::ipc::terminal::terminal_screen_rows()).expect("json");
+    let report = serde_json::to_value(rows().expect("the session")).expect("json");
     // A wide character takes two cells and reads once.
     assert_eq!(
         report,

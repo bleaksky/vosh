@@ -235,19 +235,19 @@ impl SessionHandle {
     }
 }
 
-/// Connect the selected session to `host` on `port`, over TLS when `tls`
-/// says so, in place of the connection it runs, if any. The new
-/// connection starts without the session variables, the character and
-/// the affects of the last one, and every window hears who the session is
-/// for once it connects or fails to.
+/// Connect `session` to `host` on `port`, over TLS when `tls` says so,
+/// in place of the connection it runs, if any. The new connection starts
+/// without the session variables, the character and the affects of the
+/// last one, and every window hears who the session is for once it
+/// connects or fails to.
 pub(crate) async fn connect<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
+    session: &Arc<Session>,
     host: String,
     port: u16,
     tls: bool,
 ) -> Result<(), String> {
-    let session = state.selected_session();
     // Take any existing handle out under a brief lock and drop the lock
     // before doing the long-running connect. This lets `disconnect`
     // run concurrently to cancel a hung connect attempt.
@@ -295,7 +295,7 @@ pub(crate) async fn connect<R: tauri::Runtime>(
     let spawned = spawn(
         app.clone(),
         state,
-        &session,
+        session,
         host,
         port,
         tls,
@@ -322,7 +322,7 @@ pub(crate) async fn connect<R: tauri::Runtime>(
                     *g = None;
                 }
             }
-            crate::session::identity::broadcast_session_identity(app, state, &session).await;
+            crate::session::identity::broadcast_session_identity(app, state, session).await;
             return Err(e.to_string());
         }
     };
@@ -335,14 +335,17 @@ pub(crate) async fn connect<R: tauri::Runtime>(
         }
         *current = Some(handle);
     }
-    crate::session::identity::broadcast_session_identity(app, state, &session).await;
+    crate::session::identity::broadcast_session_identity(app, state, session).await;
     Ok(())
 }
 
-/// End the connection the selected session runs, if any, and forget it
-/// and its character. Every window hears that no connection is live.
-pub(crate) async fn disconnect<R: tauri::Runtime>(app: &AppHandle<R>, state: &SharedState) {
-    let session = state.selected_session();
+/// End the connection `session` runs, if any, and forget it and its
+/// character. Every window hears that no connection is live.
+pub(crate) async fn disconnect<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    session: &Arc<Session>,
+) {
     {
         let mut current = session.slot.lock().await;
         if let Some(handle) = current.take() {
@@ -355,7 +358,7 @@ pub(crate) async fn disconnect<R: tauri::Runtime>(app: &AppHandle<R>, state: &Sh
     if let Ok(mut g) = session.current_character.lock() {
         *g = None;
     }
-    crate::session::identity::broadcast_session_identity(app, state, &session).await;
+    crate::session::identity::broadcast_session_identity(app, state, session).await;
 }
 
 /// Open a connection, install a parser plus negotiator, and spin up the IO
