@@ -1,8 +1,8 @@
 //! Two sessions on the one profile, each against a fake game of its own,
 //! through the harness of the fake MUD tests. Each test holds a rule
-//! that keeps one session's connection or Lua engine apart from the
-//! other's, or that lets what one session changes on the profile reach
-//! the other.
+//! that keeps one session's connection, variables or Lua engine apart
+//! from the other's, or that lets what one session changes on the
+//! profile reach the other.
 //!
 //! Every session output also feeds the shared native grid, so each test
 //! holds its guard to keep the others off it. No task of a session takes
@@ -24,6 +24,14 @@ fn sent(server: &FakeServer) -> String {
 /// Whether a row on the terminal of `session` shows `text`.
 fn shows(h: &Harness, session: SessionId, text: &str) -> bool {
     h.screen_of(session).iter().any(|row| row.contains(text))
+}
+
+/// What `$name` reads in `session`: its own value, or else the profile's.
+async fn var(h: &Harness, session: SessionId, name: &str) -> Option<String> {
+    let session = h.state.session(Some(session)).expect("the session");
+    let p = h.state.profile.lock().await;
+    let c = session.connection.lock();
+    c.var_view(&p).get(name).map(str::to_string)
 }
 
 /// The harness with a second session, the first session logged in to the
@@ -138,6 +146,16 @@ async fn a_target_in_one_session_leaves_the_others_empty() {
     assert_eq!(target.name, None);
     assert_eq!(h.events_of(two, "session://target").len(), 0);
     assert!(!shows(&h, two, "goblin"));
+    // So is the variable that mirrors it.
+    assert_eq!(var(&h, one, "target").await.as_deref(), Some("goblin"));
+    assert_eq!(var(&h, two, "target").await, None);
+    h.type_in(one, "kick $target").await;
+    h.type_in(two, "kick $target").await;
+    h.until("both kicks", |h| {
+        sent(&h.servers[0]).contains("kick goblin\r\n")
+            && sent(&h.servers[1]).contains("kick $target\r\n")
+    })
+    .await;
 
     h.disconnect_session(two).await;
     h.finish(grid).await;
@@ -152,16 +170,12 @@ async fn a_disconnect_in_one_session_leaves_the_other_connected_with_its_target(
         // The fake game sends no Room.Chars, so the list goes in place
         // the way the session takes one.
         let session = h.state.session(Some(id)).expect("the session");
-        {
-            let mut p = h.state.profile.lock().await;
-            crate::input::target::set_room_chars(
-                &mut session.connection.lock(),
-                &mut p.vars,
-                crate::input::target::read_room_chars(&[
-                    json!({"name": format!("a {name}"), "npc": true}),
-                ]),
-            );
-        }
+        crate::input::target::set_room_chars(
+            &mut session.connection.lock(),
+            crate::input::target::read_room_chars(&[
+                json!({"name": format!("a {name}"), "npc": true}),
+            ]),
+        );
         h.type_in(id, &format!("tar {name}")).await;
     }
     let names = |h: &Harness, id| {
@@ -198,6 +212,8 @@ async fn a_disconnect_in_one_session_leaves_the_other_connected_with_its_target(
         assert_eq!(c.target.name, None);
         assert_eq!(c.room_chars.len(), 0);
     }
+    assert_eq!(var(&h, one, "target").await.as_deref(), Some("goblin"));
+    assert_eq!(var(&h, two, "target").await, None);
     assert_eq!(names(&h, one), Some(json!("goblin")));
     assert!(h
         .events_of(one, "session://state")
@@ -211,6 +227,88 @@ async fn a_disconnect_in_one_session_leaves_the_other_connected_with_its_target(
     })
     .await;
     assert!(sent(&h.servers[0]).contains("spam 2"));
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn char_vitals_from_each_game_binds_the_hp_of_its_own_session() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_on_two_games().await;
+    h.type_in(one, "fight").await;
+    h.until("the fight in the first game", |h| {
+        shows(h, one, "A Blackwatch guard attacks you!")
+    })
+    .await;
+    h.type_in(one, "#echo The first has $hp hp.").await;
+    h.type_in(two, "#echo The second has $hp hp.").await;
+    h.until("both answers", |h| {
+        shows(h, one, "The first has 765 hp.") && shows(h, two, "The second has 1020 hp.")
+    })
+    .await;
+    assert_eq!(h.state.profile.lock().await.vars.get("hp"), None);
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_var_stays_in_its_session_and_unvar_takes_the_profile_value_from_both() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_on_two_games().await;
+    h.state.profile.lock().await.vars.set("home", "Hollow");
+    h.type_in(one, "#var mood grim").await;
+    h.type_in(two, "#var mood").await;
+    h.type_in(two, "#var home inn").await;
+    h.until("the second session to miss the mood", |h| {
+        shows(h, two, "var mood not set")
+    })
+    .await;
+    assert_eq!(var(&h, one, "mood").await.as_deref(), Some("grim"));
+    assert_eq!(var(&h, one, "home").await.as_deref(), Some("Hollow"));
+    assert_eq!(var(&h, two, "home").await.as_deref(), Some("inn"));
+
+    h.type_in(one, "#unvar home").await;
+    assert_eq!(h.state.profile.lock().await.vars.get("home"), None);
+    assert_eq!(var(&h, one, "home").await, None);
+    assert_eq!(var(&h, two, "home").await.as_deref(), Some("inn"));
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_profile_var_lua_sets_in_one_session_reads_in_the_other_and_saves_once() {
+    use std::sync::atomic::Ordering;
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_on_two_games().await;
+    let marks = || h.state.profile_dirty_gen.load(Ordering::Acquire);
+    let before = marks();
+    h.type_in(one, "#lua mud.set_profile_var('home', 'Hollow')")
+        .await;
+    let after = marks();
+    assert!(after > before, "the line marks the profile to save");
+
+    h.type_in(two, "recall $home").await;
+    h.until("the second game to hear the value", |h| {
+        sent(&h.servers[1]).contains("recall Hollow\r\n")
+    })
+    .await;
+    // The second session marks nothing, so the one save the line started
+    // writes the value to the file of the profile both play.
+    assert_eq!(marks(), after);
+    let file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    let saved = |file: &std::path::Path| {
+        crate::profile::file::ProfileConfig::load(file)
+            .ok()
+            .and_then(|config| config.profile_vars.get("home").cloned())
+    };
+    h.until("the save", |_| saved(&file).is_some()).await;
+    assert_eq!(saved(&file).as_deref(), Some("Hollow"));
+
+    h.disconnect_session(two).await;
     h.finish(grid).await;
 }
 

@@ -5,7 +5,7 @@
 //! name, health and condition under `target_`.
 
 use serde_json::Value;
-use vosh_automation::vars::{Scope, VariableStore};
+use vosh_automation::vars::VariableStore;
 use vosh_protocol::gmcp::Message;
 
 /// Push fields from a known GMCP package into the session variable store.
@@ -33,7 +33,7 @@ pub(crate) fn apply(vars: &mut VariableStore, msg: &Message) {
         }
         let var_name = format!("{prefix}{key}");
         let value_str = stringify(value);
-        vars.set(Scope::Session, var_name, value_str);
+        vars.set(var_name, value_str);
     }
 }
 
@@ -52,29 +52,21 @@ fn apply_char_combat(vars: &mut VariableStore, data: &Value) {
         return;
     };
     if obj.is_empty() {
-        vars.set(Scope::Session, "target_name".to_string(), String::new());
-        vars.set(Scope::Session, "target_hp".to_string(), String::new());
-        vars.set(
-            Scope::Session,
-            "target_condition".to_string(),
-            String::new(),
-        );
+        vars.set("target_name".to_string(), String::new());
+        vars.set("target_hp".to_string(), String::new());
+        vars.set("target_condition".to_string(), String::new());
         return;
     }
     if let Some(name) = obj.get("target").and_then(Value::as_str) {
-        vars.set(Scope::Session, "target_name".to_string(), name.to_string());
+        vars.set("target_name".to_string(), name.to_string());
     }
     let hp = obj.get("hp_pct").map(stringify).unwrap_or_default();
-    vars.set(Scope::Session, "target_hp".to_string(), hp);
+    vars.set("target_hp".to_string(), hp);
     let condition = obj
         .get("condition")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    vars.set(
-        Scope::Session,
-        "target_condition".to_string(),
-        condition.to_string(),
-    );
+    vars.set("target_condition".to_string(), condition.to_string());
 }
 
 /// The flag Aabahran adds to a package whose values the game hides.

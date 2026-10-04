@@ -2404,17 +2404,12 @@ async fn a_disconnect_clears_your_target_the_room_list_and_both_prompt_feeds() {
     target_goblin_and_mark_your_prompt(&h).await;
     // The fake game sends no Room.Chars, so the list goes in place the
     // way the session takes one.
-    {
-        let session = h.state.selected_session();
-        let mut p = h.state.profile.lock().await;
-        crate::input::target::set_room_chars(
-            &mut session.connection.lock(),
-            &mut p.vars,
-            crate::input::target::read_room_chars(&[
-                serde_json::json!({"name": "a goblin", "npc": true}),
-            ]),
-        );
-    }
+    crate::input::target::set_room_chars(
+        &mut h.state.selected_session().connection.lock(),
+        crate::input::target::read_room_chars(&[
+            serde_json::json!({"name": "a goblin", "npc": true}),
+        ]),
+    );
     h.type_line("tar").await;
     h.until_shown("1 char(s) in room:").await;
     let keys = h

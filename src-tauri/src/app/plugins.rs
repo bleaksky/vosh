@@ -290,7 +290,7 @@ pub(crate) fn plugin_on(
     };
     // A load runs Lua for certain, even when nothing else is loaded,
     // as at a switch that turned every other plugin off first.
-    crate::script::refresh_vars(&c.script, &p.vars);
+    crate::script::refresh_vars(p, c);
     let outcome = c.script.load_script(
         Owner::Plugin(name.to_string()),
         &plugin.chunk(name),
@@ -676,7 +676,6 @@ mod tests {
 
     #[test]
     fn a_plugin_reads_the_variables_of_the_profile_that_turns_it_on() {
-        use vosh_automation::vars::Scope;
         let tmp = tempdir();
         for name in ["first_side", "second_side"] {
             write_plugin(
@@ -688,13 +687,13 @@ mod tests {
         }
         let mut p = Profile::default();
         let mut c = Connection::default();
-        p.vars.set(Scope::Profile, "home", "first");
+        p.vars.set("home", "first");
         p.plugins.enabled = vec!["first_side".into()];
         let launch = follow_profile_plugins(&mut p, &mut c, tmp.path());
         assert_eq!(launch.echoes, ["first"]);
         // The switch lays the next profile over this one, and no other
         // Lua stays loaded once its one plugin turns off.
-        p.vars.set(Scope::Profile, "home", "second");
+        p.vars.set("home", "second");
         p.plugins.enabled = vec!["second_side".into()];
         let switched = follow_profile_plugins(&mut p, &mut c, tmp.path());
         assert_eq!(switched.echoes, ["second"]);

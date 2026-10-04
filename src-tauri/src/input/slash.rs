@@ -38,9 +38,9 @@ pub(super) fn handle_slash(
         "alias" => slash_alias(profile, c, args),
         "unalias" => slash_unalias(profile, args),
         "aliases" => slash_aliases_list(profile, c),
-        "var" => slash_var(profile, args),
-        "unvar" => slash_unvar(profile, args),
-        "vars" => slash_vars_list(profile),
+        "var" => slash_var(profile, c, args),
+        "unvar" => slash_unvar(profile, c, args),
+        "vars" => slash_vars_list(profile, c),
         "trigger" => slash_trigger(profile, args),
         "untrigger" => slash_untrigger(profile, args),
         "triggers" => slash_triggers_list(profile),
@@ -52,7 +52,7 @@ pub(super) fn handle_slash(
         "script" => slash_script(state, profile, c, args, lua),
         "scripts" => slash_scripts_list(c),
         "lua" => slash_lua(profile, c, args, lua),
-        "echo" | "showme" => slash_echo(profile, args),
+        "echo" | "showme" => slash_echo(profile, c, args),
         "profile" => slash_profile(state, profile, c, args, replaced),
         "import-tintin" => slash_import_tintin(profile, args),
         // Typed input runs #logs before the pipeline (see `logs_command`),
@@ -60,10 +60,10 @@ pub(super) fn handle_slash(
         "logs" => InputResult::error("type #logs at the input bar"),
         "record" => slash_record(c, args),
         "endrec" => slash_endrec(profile, c),
-        "target" => slash_target(c, &mut profile.vars, args),
-        "tarn" => run_target_cycle(c, &mut profile.vars, 1),
-        "tarp" => run_target_cycle(c, &mut profile.vars, -1),
-        "tarclear" => run_target_clear(c, &mut profile.vars),
+        "target" => slash_target(c, args),
+        "tarn" => run_target_cycle(c, 1),
+        "tarp" => run_target_cycle(c, -1),
+        "tarclear" => run_target_clear(c),
         "qkey" => slash_qkey(c, &profile.aliases, args),
         "qkeys" => slash_qkeys_list(c),
         "help" => InputResult::echo_lines(HELP_TEXT.lines().map(str::to_string).collect()),
@@ -159,8 +159,8 @@ trigger captures: $0 full match, $1..$9 positional groups, ${name} named group\
 /// timer or trigger can echo live state (e.g. `#echo hp is $hp`). Empty
 /// text echoes a blank line. `#showme` is an accepted alias for muscle
 /// memory from `TinTin++` / `Mudlet`.
-fn slash_echo(profile: &mut Profile, args: &str) -> InputResult {
-    let text = profile.vars.interpolate(args);
+fn slash_echo(profile: &Profile, c: &Connection, args: &str) -> InputResult {
+    let text = c.var_view(profile).interpolate(args);
     InputResult::echo_line(text)
 }
 

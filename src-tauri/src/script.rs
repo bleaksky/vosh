@@ -11,8 +11,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
 use vosh_automation::alias::Alias;
-use vosh_automation::vars::{Scope, VariableStore};
-use vosh_script::{Action, Owner, ScriptEngine, ScriptOutcome};
+use vosh_automation::vars::Scope;
+use vosh_script::{Action, Owner, ScriptOutcome};
 
 use crate::app::events::{ListChanges, ListRevisions};
 use crate::input::LineFrom;
@@ -38,21 +38,22 @@ pub(crate) type SharedTimers = Arc<Mutex<Vec<PendingTimer>>>;
 /// is wasted work. This is the common case for users who don't
 /// write Lua, and matches what the engine's match/dispatch paths
 /// would do anyway (no-op when nothing is registered).
-pub(crate) fn snapshot_vars(script: &ScriptEngine, vars: &VariableStore) {
-    if script.has_handlers() {
-        refresh_vars(script, vars);
+pub(crate) fn snapshot_vars(profile: &Profile, c: &Connection) {
+    if c.script.has_handlers() {
+        refresh_vars(profile, c);
     }
 }
 
-/// Give Lua the current variables, so `mud.var(name)` reads them. Call
-/// before Lua that runs for certain, such as the body of a script alias,
-/// a `#lua` line or a load.
-pub(crate) fn refresh_vars(script: &ScriptEngine, vars: &VariableStore) {
-    let snapshot: std::collections::HashMap<String, String> = vars
+/// Give the session's Lua its variables over the profile's, so
+/// `mud.var(name)` reads them. Call before Lua that runs for certain,
+/// such as the body of a script alias, a `#lua` line or a load.
+pub(crate) fn refresh_vars(profile: &Profile, c: &Connection) {
+    let snapshot: std::collections::HashMap<String, String> = c
+        .var_view(profile)
         .iter()
         .map(|(k, v, _)| (k.to_string(), v.to_string()))
         .collect();
-    script.set_var_snapshot(snapshot);
+    c.script.set_var_snapshot(snapshot);
 }
 
 /// Run the Lua body of a script alias with the words typed after its
@@ -69,7 +70,7 @@ pub(crate) fn run_alias_body(
     if profile.aliases.is_stopped(&call.source) {
         return ApplyResult::default();
     }
-    refresh_vars(&c.script, &profile.vars);
+    refresh_vars(profile, c);
     let owner = Owner::Alias(call.source.clone());
     let outcome = c.script.run_body(&owner, &call.body, &call.captures);
     apply_actions(profile, c, outcome)
@@ -203,16 +204,19 @@ pub(crate) fn apply_actions(
                 c.plugin_aliases.remove(&plugin, &name);
             }
             Action::DropPluginAliases(plugin) => c.plugin_aliases.remove_plugin(&plugin),
-            Action::SetVar { scope, name, value } => {
-                // Only profile-scoped vars are persisted; session vars
-                // marking durable would reset the persist debounce on
-                // every combat line for busy Lua triggers.
-                if matches!(scope, Scope::Profile) {
+            // Only profile-scoped vars are persisted; session vars
+            // marking durable would reset the persist debounce on
+            // every combat line for busy Lua triggers.
+            Action::SetVar { scope, name, value } => match scope {
+                Scope::Session => c.vars.set(name, value),
+                Scope::Profile => {
+                    profile.vars.set(name, value);
                     result.durable_changed = true;
                 }
-                profile.vars.set(scope, name, value);
-            }
+            },
+            // Both scopes, so the profile half goes for every session.
             Action::RemoveVar(name) => {
+                c.vars.remove(&name);
                 profile.vars.remove(&name);
                 result.durable_changed = true;
             }

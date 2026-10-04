@@ -472,13 +472,13 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
 
     let line_triggers;
     // Your target, the Room.Chars list, the room look and the fight's
-    // tail end with the connection, and so does the variable that mirrors
-    // the target. Your quick keys outlive it, though not a restart.
+    // tail end with the connection, and so does this session's variable
+    // that mirrors the target. Your quick keys outlive it, though not a
+    // restart.
     let target_after = {
         let mut p = conn.profile.lock().await;
         let mut c = conn.session.connection.lock();
         let had = c.clear_on_disconnect();
-        p.vars.remove("target");
         line_triggers = c.prompt.stage.line_trigger_notice();
         end_prompt(&mut p, &mut c);
         // A new GMCP handler gets the last packet of its package, and

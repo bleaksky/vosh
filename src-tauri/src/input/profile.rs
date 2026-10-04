@@ -1,8 +1,6 @@
 //! `#profile save`, `load` and `reset` on the active profile file, and
 //! `#import-tintin`, which reads aliases and variables from a .tin file.
 
-use vosh_automation::vars::Scope;
-
 use super::{split_first_word, InputResult};
 use crate::app::state::AppState;
 use crate::disk::paths;
@@ -143,9 +141,7 @@ pub(super) fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputRes
         profile.aliases.set(alias.clone());
     }
     for (name, value) in &report.vars {
-        profile
-            .vars
-            .set(Scope::Profile, name.clone(), value.clone());
+        profile.vars.set(name.clone(), value.clone());
     }
     let mut lines = vec![
         format!("imported {}", expanded.display()),

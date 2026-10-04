@@ -235,7 +235,7 @@ pub(super) fn slash_walk_args(rest: &str) -> Option<&str> {
 /// it with `;` waits for the walk, expanded the way any typed line is,
 /// with its variables and aliases.
 pub(super) fn slash_walk(profile: &mut Profile, c: &Connection, args: &str) -> InputResult {
-    let args = profile.vars.interpolate(args);
+    let args = c.var_view(profile).interpolate(args);
     let (head, tail) = split_at_separator(&args);
     let rest = match tail {
         Some(tail) => match profile.aliases.expand_line_full(tail, &c.plugin_aliases) {

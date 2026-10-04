@@ -2,11 +2,12 @@
 //! its quick keys and the characters in the room, which the commands
 //! share, the room look and the end of a fight, which the loop follows
 //! line by line, the tick's count and the prompt engine, which both read,
-//! and the session's Lua engine, with the aliases its plugins make and
-//! the macro recorder. Each [`Session`](crate::sessions::Session) holds its
-//! [`Connection`] behind a lock of its own, [`SharedConnection`], and the
-//! session loop holds a handle to it, so a command reads it straight from
-//! the session and never asks the loop.
+//! the session's variables, and its Lua engine, with the aliases its
+//! plugins make and the macro recorder. Each
+//! [`Session`](crate::sessions::Session) holds its [`Connection`] behind a
+//! lock of its own, [`SharedConnection`], and the session loop holds a
+//! handle to it, so a command reads it straight from the session and
+//! never asks the loop.
 //!
 //! Its lock comes after the session map, the profile lock and the profile
 //! set, never before them. The session slot comes before it, since
@@ -20,9 +21,11 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use vosh_automation::alias::PluginAliases;
+use vosh_automation::vars::{VarView, VariableStore};
 use vosh_script::ScriptEngine;
 
 use super::room_block::RoomBlock;
+use crate::profile::live::Profile;
 use crate::tick::TickRuntime;
 
 /// What one connection holds apart from the profile. Each session holds
@@ -78,6 +81,11 @@ pub(crate) struct Connection {
     /// holds them, so a switch or a save leaves them be, and a plugin that
     /// turns off takes its own.
     pub(crate) plugin_aliases: PluginAliases,
+    /// The session's variables: those `#var`, `mud.set_var` and `tar`
+    /// set and those the GMCP packages bind. They clear as the session
+    /// connects, and no file saves them. A lookup reads them over the
+    /// profile's through [`Connection::var_view`].
+    pub(crate) vars: VariableStore,
     /// The macro recorder, `Some` between `#record <name>` and `#endrec`.
     /// It takes each line you type in this session, and `#endrec` saves
     /// them to the profile as an alias whose expansion is the `;`-joined
@@ -86,17 +94,26 @@ pub(crate) struct Connection {
 }
 
 impl Connection {
-    /// The connection ended, and your target, the room list, the room
-    /// look and the fight's tail end with it. Your quick keys stay.
-    /// Returns whether a target was set.
+    /// The connection ended, and your target with the variable that
+    /// mirrors it, the room list, the room look and the fight's tail end
+    /// with it. Your quick keys stay. Returns whether a target was set.
     pub(crate) fn clear_on_disconnect(&mut self) -> bool {
         let had = self.target.name.is_some();
         self.target.name = None;
         self.target.room_idx = None;
+        self.vars.remove("target");
         self.room_chars.clear();
         self.room_block = RoomBlock::default();
         self.fight_tail = false;
         had
+    }
+
+    /// The session's variables over those of `profile`, the one it plays.
+    pub(crate) fn var_view<'a>(&'a self, profile: &'a Profile) -> VarView<'a> {
+        VarView {
+            session: &self.vars,
+            profile: &profile.vars,
+        }
     }
 }
 
@@ -209,7 +226,9 @@ mod tests {
         c.room_block.room_chars(1);
         assert_ne!(c.room_block, RoomBlock::default());
         c.fight_tail = true;
+        c.vars.set("target", "goblin");
         assert!(c.clear_on_disconnect(), "a target was set");
+        assert_eq!(c.vars.get("target"), None);
         assert_eq!(c.target.name, None);
         assert_eq!(c.target.room_idx, None);
         let leftover = &c.room_chars;

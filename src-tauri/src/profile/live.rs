@@ -1,14 +1,9 @@
 //! The profile in memory. It holds what its file saves, plus what runs
 //! with that profile and no file saves: the revision counters that move
 //! when a group turns on or off, and the name Vosh shows for it. Each
-//! session keeps its Lua engine, the aliases its plugins make and its
-//! macro recorder on its
+//! session keeps its variables, its Lua engine, the aliases its plugins
+//! make and its macro recorder on its
 //! [`Connection`](crate::session::connection::Connection).
-//!
-//! Some of it still belongs to one connection, and R14b decides where it
-//! goes. The session scoped variables clear as a connection starts,
-//! among them the GMCP mirrors and `target`, which mirrors the target on
-//! the connection and clears as a session ends.
 
 use std::collections::BTreeSet;
 
@@ -23,8 +18,8 @@ use crate::tick::TickSettings;
 #[derive(Debug, Default)]
 pub(crate) struct Profile {
     pub(crate) aliases: AliasStore,
-    /// Your variables. The file saves the profile scoped ones, and a
-    /// switch keeps the session scoped ones, which no file holds.
+    /// Your profile scoped variables, which the file saves and every
+    /// session on the profile reads under its own.
     pub(crate) vars: VariableStore,
     pub(crate) triggers: TriggerStore,
     /// The tick settings the file saves, with the reset pattern compiled.

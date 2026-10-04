@@ -58,7 +58,7 @@ fn line_pass(
         highlight_ground::get(),
     );
     let tick_step = tick_reset(p, c, plain, now);
-    script::snapshot_vars(&c.script, &p.vars);
+    script::snapshot_vars(p, c);
     let mut outcome = c.script.match_line(plain);
     script::turn_off_stopped(p, &outcome);
     // The Lua bodies of this line's Script actions join the outcome the
@@ -469,7 +469,7 @@ fn prompt_block(
         highlight_ground::get(),
     );
     if !result.scripts.is_empty() {
-        script::snapshot_vars(&c.script, &p.vars);
+        script::snapshot_vars(p, c);
     }
     let outcome = run_trigger_scripts(p, c, &result);
     let mut apply = script::apply_actions(p, c, outcome);
@@ -603,7 +603,7 @@ fn unread_partial(
         || !result.scripts.is_empty();
     let mut apply = ApplyResult::default();
     if effect {
-        script::snapshot_vars(&c.script, &p.vars);
+        script::snapshot_vars(p, c);
         let outcome = run_trigger_scripts(p, c, &result);
         apply = script::apply_actions(p, c, outcome);
         // The webview hears every prompt a Prompts trigger acted on.
