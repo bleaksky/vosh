@@ -5142,6 +5142,7 @@ dependencies = [
 name = "vosh-script"
 version = "0.8.1"
 dependencies = [
+ "memchr",
  "mlua",
  "regex",
  "serde_json",

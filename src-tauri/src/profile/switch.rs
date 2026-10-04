@@ -14,6 +14,7 @@ use crate::loadouts::catalog::lay_catalog_over;
 use crate::output;
 use crate::profile::file::ProfileConfig;
 use crate::profile::shared::{GlobalConfig, SharedLayer};
+use crate::script::ApplyResult;
 
 /// The files a switch to a profile loads: its own file, None for a
 /// profile that never saved one, and global.toml, None before the first
@@ -86,8 +87,13 @@ fn open_profile_for_switch(
 /// and global.toml, points the index at it, then lays both over the
 /// live profile, and in loadout mode the catalog and the loadouts too.
 /// Either every step lands or none does, and a save that waits on the
-/// lock finds the live profile whole.
-pub(crate) async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), String> {
+/// lock finds the live profile whole. The plugins the incoming profile
+/// turns on start and the others stop in the same step, and what they
+/// ask for comes back for the caller to deliver once the lock drops.
+pub(crate) async fn switch_live_profile(
+    state: &SharedState,
+    name: &str,
+) -> Result<ApplyResult, String> {
     // Step 2: read the incoming files, then flip the active pointer in
     // the index.
     let SwitchFiles {
@@ -138,8 +144,17 @@ pub(crate) async fn switch_live_profile(state: &SharedState, name: &str) -> Resu
         // from the old profile's tree, or a whole config save read from
         // the old profile, is refused from here on.
         state.note_ui_config_replaced();
+        // Under the same lock too, so no plugin of the profile you left
+        // answers a line or a packet for the next one.
+        let plugins = match state.app_data.get() {
+            Some(app_data) => crate::app::plugins::follow_profile_plugins(
+                &mut p,
+                &crate::disk::paths::plugins_dir(app_data),
+            ),
+            None => ApplyResult::default(),
+        };
+        Ok(plugins)
     }
-    Ok(())
 }
 
 /// Shared body for switching the active profile. The
@@ -153,7 +168,7 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
     state: &SharedState,
     name: &str,
 ) -> Result<(), String> {
-    switch_profile(state, name).await?;
+    let plugins = switch_profile(state, name).await?;
     // The new profile's capture took the game's latest prompt settings.
     let seen = state.profile.lock().await.prompt.take_seen();
     crate::prompt::report_game_prompt_seen(app, seen);
@@ -167,6 +182,10 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
     broadcast_profile_ui(app, state).await;
 
     broadcast(app, PROFILE_SWITCHED, &name);
+
+    // What the plugins this profile turned on and the others asked for
+    // as the switch made it live.
+    crate::app::plugins::follow_profile(app, state, plugins).await;
     Ok(())
 }
 
@@ -178,8 +197,9 @@ const SWITCH_MIGRATION_PENDING: &str =
     "Quit Vosh and open it again to finish the move to loadouts, then switch profiles.";
 
 /// Steps 1 to 3 of [`apply_profile_switch`], which need no app handle,
-/// so a test can run them.
-pub(crate) async fn switch_profile(state: &SharedState, name: &str) -> Result<(), String> {
+/// so a test can run them. Returns what the plugins the switch turned on
+/// and off ask for.
+pub(crate) async fn switch_profile(state: &SharedState, name: &str) -> Result<ApplyResult, String> {
     // Hold the persist lock from the flush through loading the next
     // file, so a Settings write to the incoming profile's file lands
     // either before the load reads it or after the switch made the
@@ -346,6 +366,40 @@ pub(crate) mod tests {
         assert_eq!(live_affects(&state).await, ["Haste"]);
         let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         assert_eq!(reloaded.active_name(), "Healer");
+    }
+
+    #[tokio::test]
+    async fn a_switch_turns_the_plugins_over_with_the_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = switch_state(dir.path()).await;
+        let plugins = crate::disk::paths::plugins_dir(dir.path());
+        for name in ["everywhere", "healer_only", "default_only"] {
+            let plugin = plugins.join(name);
+            std::fs::create_dir_all(&plugin).unwrap();
+            std::fs::write(
+                plugin.join("manifest.toml"),
+                format!("[plugin]\nname = \"{name}\"\n"),
+            )
+            .unwrap();
+            std::fs::write(plugin.join("main.lua"), format!("mud.echo('{name} on')")).unwrap();
+        }
+        {
+            let mut p = state.profile.lock().await;
+            p.plugins.enabled = vec!["default_only".into(), "everywhere".into()];
+            crate::app::plugins::follow_profile_plugins(&mut p, &plugins);
+        }
+        let mut config = ProfileConfig::default();
+        config.plugins.enabled = vec!["everywhere".into(), "healer_only".into()];
+        config.save(&healer_file(dir.path())).unwrap();
+
+        let apply = super::switch_live_profile(&state, "Healer").await.unwrap();
+        // Once the swap lets go of the profile, the plugins of the one you
+        // left are off, and what the new one printed waits to show.
+        assert_eq!(
+            state.profile.lock().await.script.loaded_plugins(),
+            ["everywhere", "healer_only"]
+        );
+        assert_eq!(apply.echoes, ["healer_only on"]);
     }
 
     #[tokio::test]

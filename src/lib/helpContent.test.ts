@@ -806,3 +806,92 @@ describe('the help on folding groups in Automation', () => {
     expect(paragraph.replace(/`[^`]*`/g, '')).not.toMatch(/[:;–—]| - /);
   });
 });
+
+describe('the help on Lua', () => {
+  it('says what the limits stop and what a stop leaves', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain(
+      'It stops a call that runs past 100 ms, uses 32 MB more than it began with, or takes your scripts past 128 MB in all, and `pcall` cannot catch the stop.',
+    );
+    expect(text).toContain('A stopped call sends nothing it queued');
+    expect(text).toContain(
+      'A plugin then stays off until you restart Vosh, a script from `#script load` until `#script reload`, and a trigger or alias whose Lua ran away until you save it or restart Vosh.',
+    );
+    expect(text).toContain('One call may queue 100 actions');
+    expect(text).toContain(
+      'The time limit reaches inside string patterns and the `table` functions too',
+    );
+    expect(text).toContain(
+      'Vosh runs 100 `mud.input` lines at most for one game line, packet, timer, or line you type',
+    );
+  });
+
+  it('says what the sandbox takes away', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain(
+      '`require`, `io`, `os.execute`, `os.getenv`, and `os.setlocale` are gone, and Vosh refuses a `__gc` method',
+    );
+    expect(text).toContain('`#script load` reads only from the `scripts` folder');
+    expect(text).toContain(
+      '`mud.input` cannot run `#script load`, `#script reload`, `#import-tintin`, or `#profile`, which run only when you type them, and it cannot set a quick key or the tick command to a `#` command.',
+    );
+    expect(text).toContain('Every Lua error and every `print` shows in the terminal');
+  });
+
+  it('says a reload reads every file again and takes back what each script registered', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain(
+      'Vosh reads every loaded script and plugin from disk again and runs them in the order they first loaded, and an error in one stops none after it.',
+    );
+    expect(text).toContain('`combat` and `combat.lua` load one script');
+    expect(text).toContain(
+      'Loading it again, with `#script reload` or `#script load`, takes all of them back once it runs without an error, so nothing doubles',
+    );
+    expect(text).toContain('Variables it set and groups it turned on or off stay.');
+    expect(text).toContain(
+      'A new `mud.on_gmcp` handler runs at once on the last packet of its package',
+    );
+  });
+
+  it('says what a plugin keeps to itself and how your Lua reaches it', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain('Each plugin runs in its own environment.');
+    expect(text).toContain('a line it hands `mud.input` runs no `#` command but `#echo`');
+    expect(text).toContain(
+      'it reads the standard libraries such as `string` and `table` but cannot change them',
+    );
+    expect(text).toContain(
+      'An alias a plugin makes lasts while the plugin runs, and Vosh never saves it.',
+    );
+    expect(text).toContain(
+      'They reach the globals of a plugin through `plugins.<name>`, a view you can read but not change',
+    );
+    expect(text).toContain(
+      'When you switch profiles, the plugins the next profile lists turn on and the others turn off as you play',
+    );
+  });
+
+  it('matches HELP.md word for word', () => {
+    const found = HELP_TOPICS.find((t) => t.id === 'automate.lua-scripts');
+    if (!found) throw new Error('no Lua topic');
+    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+  });
+
+  it('keeps colons and semicolons out of the new prose', () => {
+    for (const start of [
+      'Each script and each plugin',
+      'Loads from `#script load`',
+      'Each plugin runs',
+      'Every Lua error',
+      'Lua runs between',
+      'The sandbox strips',
+    ]) {
+      const paragraph =
+        body('automate.lua-scripts')
+          .split('\n\n')
+          .find((p) => p.startsWith(start)) ?? '';
+      expect(paragraph).not.toBe('');
+      expect(paragraph.replace(/`[^`]*`/g, '')).not.toMatch(/[:;–—]| - /);
+    }
+  });
+});

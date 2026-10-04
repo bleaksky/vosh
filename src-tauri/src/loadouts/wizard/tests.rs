@@ -1947,6 +1947,7 @@ async fn a_script_that_sets_its_own_alias_again_keeps_it_to_its_character() {
             name: "hl".into(),
             expansion: "cast heal".into(),
         }],
+        ..vosh_script::ScriptOutcome::default()
     };
     crate::script::apply_actions(&mut *state.profile.lock().await, outcome);
     assert_eq!(items_on(&*state.profile.lock().await), ["alias hl"]);

@@ -48,14 +48,23 @@ pub(super) fn slash_unalias(profile: &mut Profile, args: &str) -> InputResult {
 
 pub(super) fn slash_aliases_list(profile: &Profile) -> InputResult {
     let aliases = profile.aliases.list();
-    if aliases.is_empty() {
+    let from_plugins = profile.plugin_aliases.list();
+    if aliases.is_empty() && from_plugins.is_empty() {
         return InputResult::echo_line("no aliases defined");
     }
-    let mut lines = Vec::with_capacity(aliases.len() + 1);
-    lines.push(format!("{} alias(es):", aliases.len()));
+    let count = aliases.len() + from_plugins.len();
+    let mut lines = Vec::with_capacity(count + 1);
+    lines.push(format!("{count} alias(es):"));
     for a in aliases {
         let mark = if a.enabled { ' ' } else { '*' };
         lines.push(format!("  {mark} {} -> {}", a.name, a.expansion));
+    }
+    // A plugin's aliases last while it runs, and Vosh never saves them.
+    for (plugin, a) in from_plugins {
+        lines.push(format!(
+            "    {} -> {} from plugin {plugin}",
+            a.name, a.expansion
+        ));
     }
     InputResult::echo_lines(lines)
 }

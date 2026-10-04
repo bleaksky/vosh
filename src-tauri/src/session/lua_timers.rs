@@ -7,7 +7,6 @@ use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
-use tracing::warn;
 
 use crate::profile::live::Profile;
 use crate::script::{self, PendingTimer, SharedTimers};
@@ -40,10 +39,7 @@ pub(super) async fn fire_due<R: tauri::Runtime>(
         script::snapshot_vars(&p.script, &p.vars);
         let mut outcome = vosh_script::ScriptOutcome::default();
         for t in due {
-            match p.script.fire_timer(t.callback_id) {
-                Ok(o) => outcome.actions.extend(o.actions),
-                Err(err) => warn!(error = %err, "lua timer fire failed"),
-            }
+            outcome.append(p.script.fire_timer(t.callback_id));
         }
         script::apply_actions(&mut p, outcome)
     };
