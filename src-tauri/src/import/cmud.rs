@@ -33,10 +33,13 @@ use crate::profile::live::Macro;
 // Class hierarchy is flattened on import (last-write-wins on alias
 // name collision). Trigger patterns get a best-effort wildcard
 // translation unless `regex="true"` is set, in which case the
-// pattern is taken verbatim. Action bodies are imported as-is — the
-// CMUD command language (`#CW`, `#IF`, `%1`, `@var`, etc.) does not
-// translate to vosh's send-action template, so users will need to
-// adjust anything beyond a plain command string.
+// pattern is taken verbatim. A pattern that reads a CMUD variable,
+// `@var` or the string list `{@list}`, lands as it is, and the report
+// names it under the kind `trigger-pattern`, since Vosh cannot read the
+// variable and the pattern never matches. Action bodies are imported
+// as-is — the CMUD command language (`#CW`, `#IF`, `%1`, `@var`, etc.)
+// does not translate to vosh's send-action template, so users will need
+// to adjust anything beyond a plain command string.
 
 #[derive(Debug, Default)]
 struct CmudAliasInProgress {
@@ -293,6 +296,15 @@ fn commit_cmud_trigger(t: CmudTriggerInProgress, report: &mut ImportReport) {
     let name = t
         .name
         .unwrap_or_else(|| format!("imported_{}", report.triggers.len() + 1));
+    // The trigger still lands, so you can fix its pattern in place, and
+    // the report says it never matches as it stands.
+    let vars = cmud_pattern_vars(&t.pattern);
+    if !vars.is_empty() {
+        report.unsupported.push((
+            "trigger-pattern".into(),
+            format!("{name} (Vosh cannot read {})", name_list(&vars)),
+        ));
+    }
     let pattern = if t.regex {
         t.pattern
     } else {
@@ -328,6 +340,58 @@ fn commit_cmud_macro(m: CmudMacroInProgress, report: &mut ImportReport) {
         None => report
             .unsupported
             .push(("macro-key".into(), format!("{} -> {}", m.key_raw, m.value))),
+    }
+}
+
+/// The CMUD variables a trigger pattern reads, as written and once each,
+/// `@name` for a variable and `{@name}` for a string list. CMUD fills
+/// them in as it matches. Vosh cannot, so the pattern keeps them as text
+/// the game never sends. A `~` or a `\` before the `@` quotes it as text.
+fn cmud_pattern_vars(pattern: &str) -> Vec<String> {
+    let chars: Vec<char> = pattern.chars().collect();
+    let mut out: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        match chars[i] {
+            '~' | '\\' => i += 2,
+            '@' if chars
+                .get(i + 1)
+                .is_some_and(|c| c.is_ascii_alphabetic() || *c == '_') =>
+            {
+                let start = i + 1;
+                let mut end = start;
+                while chars
+                    .get(end)
+                    .is_some_and(|c| c.is_ascii_alphanumeric() || *c == '_')
+                {
+                    end += 1;
+                }
+                let name: String = chars[start..end].iter().collect();
+                let listed = i > 0 && chars[i - 1] == '{' && chars.get(end) == Some(&'}');
+                let written = if listed {
+                    format!("{{@{name}}}")
+                } else {
+                    format!("@{name}")
+                };
+                if !out.contains(&written) {
+                    out.push(written);
+                }
+                i = end;
+            }
+            _ => i += 1,
+        }
+    }
+    out
+}
+
+/// Names in a sentence, with a serial comma before the last of three or
+/// more.
+fn name_list(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => one.clone(),
+        [first, second] => format!("{first} and {second}"),
+        [rest @ .., last] => format!("{}, and {last}", rest.join(", ")),
     }
 }
 
@@ -726,6 +790,57 @@ mod tests {
             eprintln!("  unsupported.{k} = {n}");
         }
         assert!(r.aliases.len() + r.triggers.len() + r.macros.len() > 0);
+    }
+
+    #[test]
+    fn a_pattern_with_a_cmud_variable_lands_and_the_report_says_vosh_cannot_read_it() {
+        let xml = r#"<cmud><window>
+          <trigger name="target_dead">
+            <pattern>@target is DEAD!!</pattern>
+            <value>get all corpse</value>
+          </trigger>
+          <trigger name="enemy_in" regex="true">
+            <pattern>^{@enemies} walks in\.$</pattern>
+          </trigger>
+          <trigger>
+            <pattern>@a and @b and @a with {@c}</pattern>
+          </trigger>
+          <trigger name="quoted">
+            <pattern>~@target is DEAD!!</pattern>
+          </trigger>
+          <trigger name="plain">
+            <pattern>%w is DEAD!!</pattern>
+          </trigger>
+        </window></cmud>"#;
+        let r = parse_cmud(xml);
+        // Every trigger still lands, so you can fix it in place.
+        assert_eq!(r.triggers.len(), 5);
+        assert_eq!(r.triggers[0].first_pattern(), "@target is DEAD!!");
+        assert_eq!(
+            r.unsupported,
+            [
+                (
+                    "trigger-pattern".to_string(),
+                    "target_dead (Vosh cannot read @target)".to_string()
+                ),
+                (
+                    "trigger-pattern".to_string(),
+                    "enemy_in (Vosh cannot read {@enemies})".to_string()
+                ),
+                (
+                    "trigger-pattern".to_string(),
+                    "imported_3 (Vosh cannot read @a, @b, and {@c})".to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn cmud_pattern_vars_skip_quoted_and_bare_at_signs() {
+        assert_eq!(cmud_pattern_vars("@target"), ["@target"]);
+        assert_eq!(cmud_pattern_vars("{@list} @list"), ["{@list}", "@list"]);
+        let leftover = &cmud_pattern_vars("~@target \\@target @ @1 a@");
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
