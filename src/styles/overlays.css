@@ -163,7 +163,7 @@
   flex: none;
   height: 1px;
   margin: 0 1px;
-  background: var(--divider);
+  background: var(--sep);
 }
 
 .ov-pal-list {
@@ -485,7 +485,7 @@
   flex: none;
   width: 1px;
   height: 16px;
-  background: var(--divider);
+  background: var(--sep);
 }
 
 /* The three match toggles draw their glyphs as text (SPEC 6). On is
