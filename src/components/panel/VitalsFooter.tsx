@@ -46,6 +46,10 @@ import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
 // under lamented tears) each one reads `?` in its Values form, in
 // tertiary, over an empty meter, and nothing warns. The opponent's
 // health reads `?` the same way while Char.Combat withholds it.
+//
+// While your pinned prompt hides your vitals, the footer keeps only the
+// opponent row, so a fight still shows its health on the right. Out of
+// a fight it draws nothing.
 
 const ROWS: { key: VitalKey; label: string; max: 'maxhp' | 'maxmana' | 'maxmove' }[] = [
   { key: 'hp', label: 'Health', max: 'maxhp' },
@@ -60,7 +64,9 @@ function shownRows(vitals: Vitals) {
   return ROWS.filter((r) => r.key === 'hp' || vitals[r.max] > 0);
 }
 
-export function VitalsFooter() {
+/** `opponentOnly` keeps only the opponent row, for while your pinned
+ *  prompt hides your vitals. */
+export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean } = {}) {
   const vitals = useVitals();
   const combat = useCombat();
   const density = useVitalsDensity();
@@ -93,6 +99,7 @@ export function VitalsFooter() {
       density={density}
       fit={fit}
       options={options}
+      opponentOnly={opponentOnly}
     />
   );
 }
@@ -105,6 +112,8 @@ export interface VitalsBlockProps {
   fit: VitalsLineFit;
   options: VitalsOptions;
   sectionRef?: Ref<HTMLElement>;
+  /** Only the opponent row, and nothing out of a fight. */
+  opponentOnly?: boolean;
 }
 
 /** The footer drawn from plain values, so every combination of the
@@ -116,8 +125,10 @@ export function VitalsBlock({
   fit,
   options,
   sectionRef,
+  opponentOnly = false,
 }: VitalsBlockProps) {
-  const line = density === 'line' && fit !== 'rows';
+  if (opponentOnly && !combat) return null;
+  const line = !opponentOnly && density === 'line' && fit !== 'rows';
   const geometry = vitalsGeometry(options.meter);
   const meter = geometry.meter > 0;
   const rows =
@@ -152,8 +163,8 @@ export function VitalsBlock({
       className={`panel-vitals${line ? ' is-one-line' : ''}`}
       // The footer holds one row for One line and three for Rows while
       // it waits for your vitals, so logging in moves nothing.
-      style={footerStyle(geometry, density === 'line' ? 1 : 3)}
-      aria-label="Vitals"
+      style={footerStyle(geometry, opponentOnly || density === 'line' ? 1 : 3)}
+      aria-label={opponentOnly ? 'Opponent' : 'Vitals'}
     >
       {combat &&
         (combat.hidden ? (
@@ -173,7 +184,7 @@ export function VitalsBlock({
             meter={meter}
           />
         ))}
-      {vitals === null ? (
+      {opponentOnly ? null : vitals === null ? (
         <div className="panel-vitals-row">
           <p className="panel-vitals-empty">Vitals appear when you log in.</p>
         </div>

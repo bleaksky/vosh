@@ -25,7 +25,9 @@ vi.mock('./panelLayoutStore', () => ({
 }));
 vi.mock('./usePaneMins', () => ({ usePaneMins: () => ({}) }));
 vi.mock('./VitalsFooter', () => ({
-  VitalsFooter: () => <section className="panel-vitals" />,
+  VitalsFooter: ({ opponentOnly }: { opponentOnly?: boolean }) => (
+    <section className={opponentOnly ? 'panel-opponent' : 'panel-vitals'} />
+  ),
 }));
 
 const PINNED: PromptShowState = {
@@ -45,6 +47,13 @@ function drawsVitals(promptShow: PromptShowState | null, hide: boolean): boolean
 describe('PanelHost', () => {
   it('drops the vitals while your prompt is pinned and the switch is on', () => {
     expect(drawsVitals(PINNED, true)).toBe(false);
+  });
+
+  it('keeps the opponent row while your pinned prompt hides the vitals', () => {
+    options = { ...DEFAULT_VITALS_OPTIONS, hide_when_pinned: true };
+    expect(renderToStaticMarkup(<PanelHost promptShow={PINNED} />)).toContain('panel-opponent');
+    options = { ...DEFAULT_VITALS_OPTIONS, hide_when_pinned: false };
+    expect(renderToStaticMarkup(<PanelHost promptShow={PINNED} />)).not.toContain('panel-opponent');
   });
 
   it('brings the vitals back when either one is off', () => {

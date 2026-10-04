@@ -112,6 +112,24 @@ function rule(selector: string): string {
 }
 
 describe('VitalsBlock', () => {
+  it('keeps only the opponent row while your pinned prompt hides your vitals', () => {
+    const only = (combat: CombatOpponent | null) =>
+      renderToStaticMarkup(
+        <VitalsBlock
+          vitals={FIGHT}
+          combat={combat}
+          density="rows"
+          fit="rows"
+          options={DEFAULTS}
+          opponentOnly
+        />,
+      );
+    expect(values(only(GUARD))).toEqual([{ value: '38%', tone: 'combat' }]);
+    expect(only(GUARD)).toContain('--vitals-min-height');
+    // Out of a fight it draws nothing, so the panes keep the room.
+    expect(only(null)).toBe('');
+  });
+
   it('draws the panel you have today with the defaults', () => {
     const html = draw();
     expect(values(html)).toEqual([

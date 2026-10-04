@@ -29,7 +29,7 @@ import { VitalsFooter } from './VitalsFooter';
 // the title band down, then the vitals pinned at the bottom. While your
 // prompt shows pinned above the command line and Hide vitals while your
 // prompt is pinned is on, the vitals go and the panes take their room
-// (see panelShowsVitals). The lines
+// (see panelShowsVitals), all but your opponent's row in a fight. The lines
 // between panes are handles you drag to share the space. The shell
 // owns the panel's column, its left edge drag, and its label.
 //
@@ -140,7 +140,11 @@ export function PanelHost({
           </p>
         )}
       </div>
-      {panelShowsVitals(promptShow, hideWhenPinned) && <VitalsFooter />}
+      {panelShowsVitals(promptShow, hideWhenPinned) ? (
+        <VitalsFooter />
+      ) : (
+        <VitalsFooter opponentOnly />
+      )}
     </div>
   );
 }

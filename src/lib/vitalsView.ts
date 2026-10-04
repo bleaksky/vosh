@@ -131,7 +131,8 @@ function sameName(a: string, b: string): boolean {
 
 /** Whether the panel draws its vitals under the panes. While your
  *  prompt is pinned above the command line and Hide vitals while your
- *  prompt is pinned is on, the footer goes and the panes take its room.
+ *  prompt is pinned is on, the footer goes and the panes take its room,
+ *  all but the opponent row in a fight.
  *  Turning either off brings it back. So does a pinned band with no
  *  prompt to show, with no capture or with prompts off in the game,
  *  since your vitals would then show nowhere. */

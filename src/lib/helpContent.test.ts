@@ -35,10 +35,10 @@ describe('the help on the vitals', () => {
   it('says the vitals leave the panel while your prompt is pinned, and how to keep them', () => {
     const text = body('shape.read-vitals');
     expect(text).toContain(
-      '- Leave `Hide vitals while your prompt is pinned` on and the panel drops its vitals while `Where your prompt shows` is `Pinned`, so the panes take their room. Turn it off to keep them, or pick another place for your prompt, and they come back at once.',
+      '- Leave `Hide vitals while your prompt is pinned` on and the panel drops its vitals while `Where your prompt shows` is `Pinned`, so the panes take their room. In a fight your opponent keeps its row at the foot of the panel. Turn it off to keep them, or pick another place for your prompt, and they come back at once.',
     );
     expect(body('shape.prompt-show')).toContain(
-      'While your prompt is pinned, the panel hides its vitals and gives their room to the panes. Turn off `Hide vitals while your prompt is pinned` under Layout, then Vitals, to keep them.',
+      "While your prompt is pinned, the panel hides its vitals and gives their room to the panes, all but your opponent's row in a fight. Turn off `Hide vitals while your prompt is pinned` under Layout, then Vitals, to keep them.",
     );
   });
 

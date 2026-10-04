@@ -424,7 +424,7 @@ export function VitalsSection({
       </Row>
       <Row
         label="Hide vitals while your prompt is pinned"
-        description="While your prompt is pinned, the panes take their room. Turn it off if your prompt leaves your vitals out."
+        description="While your prompt is pinned, the panes take their room, and your opponent keeps its row in a fight. Turn it off if your prompt leaves your vitals out."
         anchor="hide-pinned"
       >
         <Toggle
