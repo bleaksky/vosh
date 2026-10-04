@@ -238,11 +238,12 @@ export function patternSource(row: TriggerPattern): string {
 }
 
 /** A row with what you typed set to `value`. A Text or Starts with row
- *  takes it in `text`, which the store reads, and in `pattern` too, so
- *  the regex of the old text never stands beside the new one. The store
- *  writes the new regex when it saves. */
+ *  takes it in `text` and keeps `pattern` as the store sent it. The store
+ *  reads `text` and writes the new regex in `pattern` when it saves, and
+ *  a row you type back as it was matches its saved copy, so the page
+ *  reads as saved again. */
 export function withPatternSource(row: TriggerPattern, value: string): TriggerPattern {
-  return isTextRow(row) ? { ...row, pattern: value, text: value } : { ...row, pattern: value };
+  return isTextRow(row) ? { ...row, text: value } : { ...row, pattern: value };
 }
 
 /** Set what you typed in the main pattern. */

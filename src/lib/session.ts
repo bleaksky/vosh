@@ -218,8 +218,9 @@ export type TriggerAction =
 export interface TriggerPattern {
   /** The regex of a Regex row. A Text or Starts with row from the store
    *  holds the regex its text compiles to, which builds up to 0.8.1
-   *  read, and the store reads `text` in its place. Read and edit what
-   *  you typed through `patternSource` and `withPatternSource`. */
+   *  read, and the store reads `text` in its place. An edit changes only
+   *  `text`, and the store writes the new regex here on Save. Read and
+   *  edit what you typed through `patternSource` and `withPatternSource`. */
   pattern: string;
   enabled: boolean;
   /** How the store reads the row. Left out, and on the wire, while it
@@ -227,7 +228,8 @@ export interface TriggerPattern {
   mode?: MatchMode;
   /** What you typed in a Text or Starts with row. A row with one of
    *  those modes and no text, as builds before the field saved it,
-   *  reads `pattern` as the text. A Regex row has none. */
+   *  reads `pattern` as the text, and normalizePatterns copies it here.
+   *  A Regex row has none. */
   text?: string;
 }
 
@@ -289,10 +291,13 @@ export function normalizePatterns(raw: unknown): TriggerPattern[] {
       };
       // A save sends the row back as the page holds it, so the mode has
       // to ride along or the store reads the text as a regex. So does the
-      // text, or the store reads the regex in `pattern` as the text.
+      // text, or the store reads the regex in `pattern` as the text. A
+      // row with no text, as builds before the field saved it, takes
+      // `pattern` as its text, so every such row on the page holds one
+      // and a row you edit and type back matches its saved copy.
       if (rr.mode === 'text' || rr.mode === 'starts_with') {
         out.mode = rr.mode;
-        if (typeof rr.text === 'string') out.text = rr.text;
+        out.text = typeof rr.text === 'string' ? rr.text : out.pattern;
       }
       return out;
     });

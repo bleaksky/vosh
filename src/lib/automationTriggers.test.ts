@@ -3,6 +3,7 @@ import {
   addDraftItem,
   createDraft,
   draftValues,
+  isDraftDirty,
   removeDraftItem,
   replaceDraftValues,
   updateDraftItem,
@@ -273,7 +274,8 @@ describe('match modes', () => {
       { pattern: '^You are hungry\\.$', enabled: true },
       { pattern: 'x', enabled: true },
       { pattern: 'y', enabled: true },
-      { pattern: '*** Too Dark ***', enabled: true, mode: 'text' },
+      // The row with no text takes its pattern as the text.
+      { pattern: '*** Too Dark ***', enabled: true, mode: 'text', text: '*** Too Dark ***' },
     ]);
     // The Pattern fields show what you typed.
     expect(t.patterns.map(patternSource)).toEqual([
@@ -309,7 +311,12 @@ describe('match modes', () => {
       text: 'You are thirsty.',
     });
     expect(saved.patterns[1].text).toBe('You are hungry');
-    expect(saved.patterns[5]).toEqual({ pattern: '*** Too Dark ***', enabled: true, mode: 'text' });
+    expect(saved.patterns[5]).toEqual({
+      pattern: '*** Too Dark ***',
+      enabled: true,
+      mode: 'text',
+      text: '*** Too Dark ***',
+    });
   });
 
   it('edits what you typed in a Text or Starts with row', async () => {
@@ -325,11 +332,18 @@ describe('match modes', () => {
       };
     });
     await saveTriggerDraft(draft, api);
-    // The store reads text, so the old regex never comes back.
+    // An edit changes only the text of a Text or Starts with row, so Save
+    // sends the old regex beside the new text. The store reads text, and
+    // the regex it writes is the one the new text compiles to.
     expect(api.saved().patterns).toEqual([
-      { pattern: 'You are hungry.', enabled: true, mode: 'text', text: 'You are hungry.' },
       {
-        pattern: 'You are hungry ',
+        pattern: '^\\s*You are thirsty\\.\\s*$',
+        enabled: true,
+        mode: 'text',
+        text: 'You are hungry.',
+      },
+      {
+        pattern: '^\\s*You are hungry.*',
         enabled: false,
         mode: 'starts_with',
         text: 'You are hungry ',
@@ -337,8 +351,38 @@ describe('match modes', () => {
       { pattern: '^You are hungry\\.$ ', enabled: true },
       { pattern: 'x', enabled: true },
       { pattern: 'y', enabled: true },
-      { pattern: '*** Too Dark *** ', enabled: true, mode: 'text', text: '*** Too Dark *** ' },
+      { pattern: '*** Too Dark ***', enabled: true, mode: 'text', text: '*** Too Dark *** ' },
     ]);
+    expect(api.saved().patterns.map(patternSource)).toEqual([
+      'You are hungry.',
+      'You are hungry ',
+      '^You are hungry\\.$ ',
+      'x',
+      'y',
+      '*** Too Dark *** ',
+    ]);
+  });
+
+  it('reads as saved again once you type a row back as it was', async () => {
+    const loaded = createDraft(await loadTriggers(fakeStore()));
+    const uid = loaded.items[0].uid;
+    const typed = draftValues(loaded)[0].patterns.map(patternSource);
+    // The main pattern, a Text row as the store sends it.
+    let draft = updateDraftItem(loaded, uid, (t) => withMainPatternSource(t, `${typed[0]}x`));
+    expect(isDraftDirty(draft)).toBe(true);
+    draft = updateDraftItem(draft, uid, (t) => withMainPatternSource(t, typed[0]));
+    expect(isDraftDirty(draft)).toBe(false);
+    // Each row in More patterns, the Text row with no text among them.
+    for (let i = 1; i < typed.length; i++) {
+      const typeIn = (value: string) => (t: TriggerRecord) => ({
+        ...t,
+        patterns: t.patterns.map((p, j) => (j === i ? withPatternSource(p, value) : p)),
+      });
+      draft = updateDraftItem(loaded, uid, typeIn(`${typed[i]}x`));
+      expect(isDraftDirty(draft), `row ${i + 1}`).toBe(true);
+      draft = updateDraftItem(draft, uid, typeIn(typed[i]));
+      expect(isDraftDirty(draft), `row ${i + 1}`).toBe(false);
+    }
   });
 
   it('round trips through Edit all as JSON', async () => {
