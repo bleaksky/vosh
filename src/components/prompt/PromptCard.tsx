@@ -53,7 +53,7 @@ import {
   type MoveMade,
   type Pointing,
 } from '../../lib/promptPieces';
-import { notMatchingLine } from '../../lib/promptSettings';
+import { notMatchingLine, shownPreview } from '../../lib/promptSettings';
 import type { PromptShowState } from '../../lib/promptShow';
 import {
   onPromptState,
@@ -193,8 +193,7 @@ export function PromptCard({
   const [step, setStep] = useState<CardStep | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [preview, setPreview] = useState<PromptPreviewName>('now');
-  const previewRef = useRef(preview);
-  previewRef.current = preview;
+  const previewRef = useRef<PromptPreviewName>('now');
   const [moreAt, setMoreAt] = useState<HTMLElement | null>(null);
   const [confirmForget, setConfirmForget] = useState(false);
   // The code reader for another game, once you choose it in More.
@@ -242,11 +241,12 @@ export function PromptCard({
   const forsaken =
     codesChosen || (state?.forsaken ?? false) || knownHost || config?.capture.kind === 'aabahran';
   const gameSent = (state?.new_build ?? false) || game !== null;
-  // Lament leaves with the Forsaken Lands rules, and the preview goes
-  // back to Now, so the Preview menu always names the preview it draws.
-  useEffect(() => {
-    if (!forsaken && preview === 'lament') setPreview('now');
-  }, [forsaken, preview]);
+  // Lament leaves with the Forsaken Lands rules, and the card draws Now
+  // until they come back, as Settings does. Your pick stays, so a
+  // profile that opens again keeps Lament, and the Preview menu always
+  // names the preview it draws.
+  const drawn = shownPreview(preview, forsaken);
+  previewRef.current = drawn;
 
   const take = (next: PromptConfig) => {
     latest.current = next;
@@ -382,9 +382,9 @@ export function PromptCard({
   useEffect(() => {
     if (step === null) return;
     void promptPreviewSet(
-      reading ? { raw: true } : { placeholders: true, preview: preview === 'now' ? null : preview },
+      reading ? { raw: true } : { placeholders: true, preview: drawn === 'now' ? null : drawn },
     ).catch(() => {});
-  }, [step, reading, preview]);
+  }, [step, reading, drawn]);
 
   // Past the capture steps the card works on your design: as text even
   // with drawing off (P11), and on your prompt while drawing is on.
@@ -432,7 +432,7 @@ export function PromptCard({
   useEffect(() => {
     if (step !== 'start' && step !== 'rest') return;
     let alive = true;
-    void promptDescribe(template, preview === 'now' ? null : preview)
+    void promptDescribe(template, drawn === 'now' ? null : drawn)
       .then((data) => {
         if (alive) setDescribed({ template, data });
       })
@@ -440,7 +440,7 @@ export function PromptCard({
     return () => {
       alive = false;
     };
-  }, [template, step, preview, refresh]);
+  }, [template, step, drawn, refresh]);
 
   // The parts as last described. Right after a change they can trail the
   // design for a moment, and the card keeps showing them meanwhile, so the
@@ -498,7 +498,7 @@ export function PromptCard({
 
   useLayoutEffect(() => {
     void relayout();
-  }, [relayout, step, refresh, view, template, preview]);
+  }, [relayout, step, refresh, view, template, drawn]);
 
   useEffect(() => {
     const onResize = () => void relayout();
@@ -1010,7 +1010,7 @@ export function PromptCard({
           content = (
             <PromptPicker
               state={state}
-              preview={preview}
+              preview={drawn}
               env={env}
               cellW={cellW}
               refresh={refresh}
@@ -1055,7 +1055,7 @@ export function PromptCard({
               refresh={refresh}
               env={env}
               cellW={cellW}
-              note={step === 'rest' && preview === 'lament' ? LAMENT_NOTE : null}
+              note={step === 'rest' && drawn === 'lament' ? LAMENT_NOTE : null}
               promptsOff={state?.status.status === 'prompts_off' || (show?.promptsOff ?? false)}
               notMatching={
                 state?.status.status === 'not_matching'
@@ -1091,7 +1091,7 @@ export function PromptCard({
               show={config.show}
               showState={cardShowState(show, config.capture)}
               onShow={(place) => save(withShow(config, place))}
-              preview={preview}
+              preview={drawn}
               forsaken={forsaken}
               onPreview={setPreview}
               onDone={onClose}
