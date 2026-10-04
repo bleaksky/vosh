@@ -266,3 +266,26 @@ describe('the Gold, experience, and levels preset', () => {
     }
   });
 });
+
+// The bubbly potions do_brew makes from food in skills5.c, each named
+// a bubbly <color> potion, and the spell each casts.
+describe('the Potion labels preset', () => {
+  it('names the spell of every bubbly potion the game brews', () => {
+    const potions: [string, string][] = [
+      ['red', 'cure blind'],
+      ['green', 'haste'],
+      ['crimson', 'frenzy'],
+      ['white', 'sanctuary'],
+      ['orange', 'fireball'],
+      ['clear', 'invisibility'],
+      ['pink', 'cure light'],
+      ['brown', 'cure serious'],
+      ['blue', 'armor'],
+      ['grey', 'bless'],
+    ];
+    for (const [color, spell] of potions) {
+      const name = `a bubbly ${color} potion`;
+      expect(rewritten('potion_labels', name), color).toBe(`${name} (${spell})`);
+    }
+  });
+});
