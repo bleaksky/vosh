@@ -104,26 +104,44 @@ pub(crate) struct AppState {
 }
 
 impl AppState {
-    /// The selected session, which a command that names no session acts
-    /// on. Take it before any other lock.
-    pub(crate) fn selected_session(&self) -> Arc<Session> {
+    /// The session map, held for one step that takes no other lock.
+    fn sessions(&self) -> std::sync::MutexGuard<'_, Sessions> {
         self.sessions
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .selected()
+    }
+
+    /// The selected session, which a command that names no session acts
+    /// on. Take it before any other lock.
+    pub(crate) fn selected_session(&self) -> Arc<Session> {
+        self.sessions().selected()
     }
 
     /// The session a command acts on: the one `id` names, or the selected
     /// session when it names none. A session Vosh does not hold is an
     /// error, in a sentence. Take it before any other lock.
     pub(crate) fn session(&self, id: Option<SessionId>) -> Result<Arc<Session>, String> {
-        let sessions = self
-            .sessions
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let sessions = self.sessions();
         match id {
             None => Ok(sessions.selected()),
             Some(id) => sessions.get(id).ok_or_else(|| NO_SUCH_SESSION.to_string()),
+        }
+    }
+
+    /// Add a session after the others, see [`Sessions::open`]. Take it
+    /// before any other lock.
+    pub(crate) fn open_session(&self) -> Arc<Session> {
+        self.sessions().open()
+    }
+
+    /// Select the session `id` names. The commands that name no session
+    /// act on it from then on. A session Vosh does not hold is an error,
+    /// in a sentence, and the selection stays.
+    pub(crate) fn select_session(&self, id: SessionId) -> Result<(), String> {
+        if self.sessions().select(id) {
+            Ok(())
+        } else {
+            Err(NO_SUCH_SESSION.to_string())
         }
     }
 
