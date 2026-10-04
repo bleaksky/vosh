@@ -1224,6 +1224,47 @@ fn match_modes_round_trip_through_toml_and_0_8_1_reads_every_row() {
     assert_eq!(load_global_catalog(dir.path()).unwrap().triggers, [needs]);
 }
 
+#[test]
+fn a_hand_edited_text_row_with_no_pattern_reads_in_a_profile_file_and_catalog_toml() {
+    // A Text or Starts with row reads `text`, so a hand edit can leave
+    // out `pattern` and the whole file still reads.
+    let text = r#"
+[[triggers]]
+name = "needs"
+
+[[triggers.patterns]]
+mode = "text"
+text = "You are thirsty."
+
+[[triggers.actions]]
+kind = "gag"
+"#;
+    let needs = Trigger {
+        patterns: vec![TriggerPattern {
+            mode: MatchMode::Text,
+            ..TriggerPattern::regex("You are thirsty.")
+        }],
+        ..Trigger::new("needs", "", TriggerAction::Gag)
+    };
+    let loaded = ProfileConfig::from_toml(text).unwrap();
+    assert_eq!(loaded.triggers, std::slice::from_ref(&needs));
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(catalog_path(dir.path()), text).unwrap();
+    assert_eq!(
+        load_global_catalog(dir.path()).unwrap().triggers,
+        std::slice::from_ref(&needs)
+    );
+    // The next save writes the regex an older build reads.
+    let saved = profile_bytes(&loaded);
+    assert!(
+        saved.contains(r"pattern = '^\s*You are thirsty\.\s*$'"),
+        "{saved}"
+    );
+    // A Regex row reads `pattern`, so one with none still fails the file.
+    let regex = text.replace("mode = \"text\"\n", "");
+    assert!(ProfileConfig::from_toml(&regex).is_err(), "{regex}");
+}
+
 /// The plain text of each line of fixtures/room-colors/looks.json that
 /// holds a word, then the two lines `do_scan` in the game's `act_move.c`
 /// prints for a room too dark to scan, the last one `*** Too Dark ***`.

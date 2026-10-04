@@ -25,7 +25,7 @@ use crate::trigger::action::TriggerAction;
 /// regex, so they match the same lines and their next save keeps the
 /// trigger, as a Regex row (D14). `PatternRaw` says how a row reads.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(from = "PatternRaw")]
+#[serde(try_from = "PatternRaw")]
 pub struct TriggerPattern {
     /// What you typed: the regex of a Regex row, the text of a Text or
     /// Starts with row.
@@ -40,12 +40,17 @@ pub struct TriggerPattern {
 /// - A row with no mode is Regex and reads `pattern`. It drops any
 ///   `text`, so a mode this build does not know reads the regex its
 ///   build saved beside the text, which matches the same lines.
-/// - A Text or Starts with row reads what you typed from `text`.
+/// - A Text or Starts with row reads what you typed from `text`, and
+///   needs no `pattern`, so a hand edit can leave it out.
 /// - A Text or Starts with row with no `text`, which builds wrote before
 ///   the field, reads `pattern` as the text.
+///
+/// A row with nothing to read, a Regex row with no `pattern` or a Text
+/// row with neither field, fails as a missing `pattern` always has.
 #[derive(Deserialize)]
 struct PatternRaw {
-    pattern: String,
+    #[serde(default)]
+    pattern: Option<String>,
     #[serde(default = "default_enabled")]
     enabled: bool,
     #[serde(default)]
@@ -54,17 +59,20 @@ struct PatternRaw {
     text: Option<String>,
 }
 
-impl From<PatternRaw> for TriggerPattern {
-    fn from(raw: PatternRaw) -> Self {
-        let pattern = match (raw.mode, raw.text) {
-            (MatchMode::Regex, _) | (_, None) => raw.pattern,
-            (_, Some(text)) => text,
+impl TryFrom<PatternRaw> for TriggerPattern {
+    type Error = &'static str;
+
+    fn try_from(raw: PatternRaw) -> Result<Self, Self::Error> {
+        let pattern = match (raw.mode, raw.text, raw.pattern) {
+            (MatchMode::Text | MatchMode::StartsWith, Some(text), _) => text,
+            (_, _, Some(pattern)) => pattern,
+            (_, _, None) => return Err("missing field `pattern`"),
         };
-        Self {
+        Ok(Self {
             pattern,
             enabled: raw.enabled,
             mode: raw.mode,
-        }
+        })
     }
 }
 
@@ -888,6 +896,75 @@ mod tests {
             json["patterns"][1]["pattern"],
             r"^\s*\*\*\* Too Dark \*\*\*.*"
         );
+    }
+
+    #[test]
+    fn a_text_row_with_only_text_reads_and_saves_its_regex() {
+        // A hand edit that writes only `mode` and `text`, since a Text or
+        // Starts with row reads `text`.
+        let rows = rows_of(
+            r#"{"name":"x","patterns":[
+                {"mode":"text","text":"You are thirsty."},
+                {"enabled":false,"mode":"starts_with","text":"You are hungry"}
+            ],"actions":[]}"#,
+        );
+        assert_eq!(
+            rows,
+            [
+                TriggerPattern {
+                    mode: MatchMode::Text,
+                    ..TriggerPattern::regex("You are thirsty.")
+                },
+                TriggerPattern {
+                    enabled: false,
+                    mode: MatchMode::StartsWith,
+                    ..TriggerPattern::regex("You are hungry")
+                },
+            ]
+        );
+        // The next save writes the regex in `pattern`, which older builds
+        // read.
+        let t = Trigger {
+            patterns: rows,
+            ..Trigger::new("x", "", TriggerAction::Gag)
+        };
+        assert_eq!(
+            serde_json::to_value(&t).unwrap()["patterns"],
+            serde_json::json!([
+                {
+                    "pattern": r"^\s*You are thirsty\.\s*$",
+                    "enabled": true,
+                    "mode": "text",
+                    "text": "You are thirsty.",
+                },
+                {
+                    "pattern": r"^\s*You are hungry.*",
+                    "enabled": false,
+                    "mode": "starts_with",
+                    "text": "You are hungry",
+                },
+            ])
+        );
+    }
+
+    #[test]
+    fn a_row_with_nothing_to_read_still_fails() {
+        // A Regex row reads `pattern`, so one with none fails as it always
+        // has, and so does a Text row with neither field.
+        for row in [
+            r#"{"enabled":true}"#,
+            r#"{"text":"You are thirsty."}"#,
+            r#"{"mode":"glob","text":"You are thirsty."}"#,
+            r#"{"mode":"text"}"#,
+            r#"{"mode":"starts_with","enabled":false}"#,
+        ] {
+            let json = format!(r#"{{"name":"x","patterns":[{row}],"actions":[]}}"#);
+            let err = serde_json::from_str::<Trigger>(&json).unwrap_err();
+            assert!(
+                err.to_string().contains("missing field `pattern`"),
+                "{row}: {err}"
+            );
+        }
     }
 
     #[test]
