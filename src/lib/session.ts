@@ -212,7 +212,16 @@ export type TriggerAction =
 export interface TriggerPattern {
   pattern: string;
   enabled: boolean;
+  /** How the store reads `pattern`. Left out, and on the wire, while it
+   *  is 'regex'. See `MatchMode` in crates/automation/src/trigger/store.rs. */
+  mode?: MatchMode;
 }
+
+/** 'text' matches a line that is exactly the pattern, with spaces at
+ *  either end of the line skipped. 'starts_with' matches a line that
+ *  starts with it, after any spaces, and its match runs to the end of
+ *  the line. Neither has groups. 'regex' reads the pattern as typed. */
+export type MatchMode = 'text' | 'starts_with' | 'regex';
 
 export interface TriggerRecord {
   name: string;
@@ -258,11 +267,15 @@ export function normalizePatterns(raw: unknown): TriggerPattern[] {
   const r = raw as Record<string, unknown>;
   if (Array.isArray(r.patterns) && r.patterns.length > 0) {
     return r.patterns.map((row) => {
-      const rr = row as Record<string, unknown>;
-      return {
+      const rr = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>;
+      const out: TriggerPattern = {
         pattern: String(rr.pattern ?? ''),
         enabled: rr.enabled !== false,
       };
+      // A save sends the row back as the page holds it, so the mode has
+      // to ride along or the store reads the text as a regex.
+      if (rr.mode === 'text' || rr.mode === 'starts_with') out.mode = rr.mode;
+      return out;
     });
   }
   if (typeof r.pattern === 'string') {
