@@ -5,10 +5,11 @@
 use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
 use std::time::Duration;
 
-use mlua::{Function, Lua, Result as LuaResult, Table, Value};
+use mlua::{FromLuaMulti, Function, IntoLuaMulti, Lua, Result as LuaResult, Table, Value};
 use vosh_automation::vars::Scope;
 
 use crate::actions::Action;
+use crate::owner::Owner;
 use crate::state::{Callback, EngineState, StateInner};
 
 /// Counter for synthetic callback ids. The Lua engine stores the actual
@@ -25,8 +26,16 @@ fn alloc_timer_id() -> u32 {
     NEXT_TIMER_ID.fetch_add(1, Ordering::Relaxed)
 }
 
-/// Install the mud API as the `mud` global table scripts call into.
+/// Install the mud API as the `mud` global table your `#lua` lines,
+/// trigger and alias bodies and loose scripts call into.
 pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
+    lua.globals().set("mud", mud_table(lua, None)?)
+}
+
+/// A new `mud` table. What its functions register belongs to `owner`,
+/// a plugin's own table, or with None to the owner of the call that
+/// runs, the shared table.
+pub(crate) fn mud_table(lua: &Lua, owner: Option<Owner>) -> LuaResult<Table> {
     let mud = lua.create_table()?;
 
     mud.set("send", lua.create_function(mud_send)?)?;
@@ -53,16 +62,36 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
         lua.create_function(mud_set_group_enabled)?,
     )?;
 
-    mud.set("trigger", lua.create_function(mud_trigger)?)?;
-    mud.set("untrigger", lua.create_function(mud_untrigger)?)?;
+    mud.set("trigger", owned(lua, owner.as_ref(), mud_trigger)?)?;
+    mud.set("untrigger", owned(lua, owner.as_ref(), mud_untrigger)?)?;
 
-    mud.set("on_gmcp", lua.create_function(mud_on_gmcp)?)?;
+    mud.set("on_gmcp", owned(lua, owner.as_ref(), mud_on_gmcp)?)?;
 
-    mud.set("timer", lua.create_function(mud_timer)?)?;
+    mud.set("timer", owned(lua, owner.as_ref(), mud_timer)?)?;
     mud.set("cancel_timer", lua.create_function(mud_cancel_timer)?)?;
 
-    lua.globals().set("mud", mud)?;
-    Ok(())
+    Ok(mud)
+}
+
+/// A mud function that registers for `owner`, or for the owner of the
+/// call that runs when `owner` is None.
+fn owned<A, R>(
+    lua: &Lua,
+    owner: Option<&Owner>,
+    f: fn(&Lua, Option<&Owner>, A) -> LuaResult<R>,
+) -> LuaResult<Function>
+where
+    A: FromLuaMulti + 'static,
+    R: IntoLuaMulti + 'static,
+{
+    let owner = owner.cloned();
+    lua.create_function(move |lua, args: A| f(lua, owner.as_ref(), args))
+}
+
+/// Who a registration belongs to: the owner of the `mud` table it came
+/// through, or else the owner of the call that runs.
+fn registrant(s: &StateInner, owner: Option<&Owner>) -> Owner {
+    owner.cloned().unwrap_or_else(|| s.owner())
 }
 
 fn with_state<F, R>(lua: &Lua, f: F) -> LuaResult<R>
@@ -82,9 +111,8 @@ where
 }
 
 /// Hold `key`, a function the call running now hands over, under `id`,
-/// with the owner of that call.
-fn hold(s: &mut StateInner, id: i64, key: mlua::RegistryKey) {
-    let owner = s.owner();
+/// for `owner`.
+fn hold(s: &mut StateInner, id: i64, key: mlua::RegistryKey, owner: Owner) {
     s.callbacks.insert(id, Callback { key, owner });
 }
 
@@ -196,13 +224,18 @@ fn mud_set_group_enabled(lua: &Lua, (name, enabled): (String, bool)) -> LuaResul
     })
 }
 
-fn mud_trigger(lua: &Lua, (name, pattern, callback): (String, String, Function)) -> LuaResult<()> {
+fn mud_trigger(
+    lua: &Lua,
+    owner: Option<&Owner>,
+    (name, pattern, callback): (String, String, Function),
+) -> LuaResult<()> {
     let key = lua.create_registry_value(callback)?;
     let id = alloc_callback_id();
     with_state(lua, |s| {
-        hold(s, id, key);
+        let owner = registrant(s, owner);
+        hold(s, id, key, owner.clone());
         s.queue(Action::SetLuaTrigger {
-            owner: s.owner(),
+            owner,
             name,
             pattern,
             callback_id: id,
@@ -211,21 +244,26 @@ fn mud_trigger(lua: &Lua, (name, pattern, callback): (String, String, Function))
     })
 }
 
-fn mud_untrigger(lua: &Lua, name: String) -> LuaResult<()> {
+fn mud_untrigger(lua: &Lua, owner: Option<&Owner>, name: String) -> LuaResult<()> {
     with_state(lua, |s| {
         s.queue(Action::RemoveLuaTrigger {
-            owner: s.owner(),
+            owner: registrant(s, owner),
             name,
         });
         Ok(())
     })
 }
 
-fn mud_on_gmcp(lua: &Lua, (package, callback): (String, Function)) -> LuaResult<()> {
+fn mud_on_gmcp(
+    lua: &Lua,
+    owner: Option<&Owner>,
+    (package, callback): (String, Function),
+) -> LuaResult<()> {
     let key = lua.create_registry_value(callback)?;
     let id = alloc_callback_id();
     with_state(lua, |s| {
-        hold(s, id, key);
+        let owner = registrant(s, owner);
+        hold(s, id, key, owner);
         s.queue(Action::SubscribeGmcp {
             package,
             callback_id: id,
@@ -234,12 +272,17 @@ fn mud_on_gmcp(lua: &Lua, (package, callback): (String, Function)) -> LuaResult<
     })
 }
 
-fn mud_timer(lua: &Lua, (secs, callback): (f64, Function)) -> LuaResult<u32> {
+fn mud_timer(
+    lua: &Lua,
+    owner: Option<&Owner>,
+    (secs, callback): (f64, Function),
+) -> LuaResult<u32> {
     let key = lua.create_registry_value(callback)?;
     let id = alloc_callback_id();
     let timer_id = alloc_timer_id();
     with_state(lua, |s| {
-        hold(s, id, key);
+        let owner = registrant(s, owner);
+        hold(s, id, key, owner);
         s.timer_callbacks.insert(timer_id, id);
         s.queue(Action::Timer {
             delay: Duration::from_secs_f64(secs.max(0.0)),
