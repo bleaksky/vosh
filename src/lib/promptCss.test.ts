@@ -52,14 +52,15 @@ describe('the foot under your design', () => {
   it('keeps Done in the card when the foot runs out of room', () => {
     // Draw your prompt, where it shows, the four previews and Done run
     // past 560 px in the system face, so the right group takes a second
-    // row on the right, and the foot stays 52 tall on one row.
+    // row on the right. 10 above and below the preview's 32 px track
+    // keep one row 52 tall.
     const foot = rule('.pc-foot.is-design');
     expect(foot).toContain('flex-wrap: wrap;');
     expect(foot).toContain('row-gap: 8px;');
     expect(foot).toContain('height: auto;');
     expect(foot).toContain('min-height: 52px;');
-    expect(foot).toContain('padding-top: 12px;');
-    expect(foot).toContain('padding-bottom: 12px;');
+    expect(foot).toContain('padding-top: 10px;');
+    expect(foot).toContain('padding-bottom: 10px;');
     const end = rule('.pc-foot-end');
     expect(end).toContain('margin-left: auto;');
     expect(end).toContain('flex: none;');
