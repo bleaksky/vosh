@@ -753,6 +753,24 @@ function App() {
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
+  // Mark the root while the window is in the background, so frame.css
+  // can dim the window title to the tertiary tone the way the OS dims
+  // an inactive title bar.
+  useEffect(() => {
+    const root = document.documentElement;
+    const mark = () => {
+      root.dataset.windowFocus = document.hasFocus() ? 'focused' : 'unfocused';
+    };
+    mark();
+    window.addEventListener('focus', mark);
+    window.addEventListener('blur', mark);
+    return () => {
+      window.removeEventListener('focus', mark);
+      window.removeEventListener('blur', mark);
+      delete root.dataset.windowFocus;
+    };
+  }, []);
+
   // After a copy the caret should land back on the command line. The
   // terminal copy path dispatches `vosh:focus-input` explicitly; the
   // DOM `copy` listener is the catch-all for a browser-native copy of
