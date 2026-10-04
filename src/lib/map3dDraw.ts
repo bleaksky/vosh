@@ -435,7 +435,7 @@ function drawFloorNumbers(
   ground: Rgb,
 ) {
   ctx.save();
-  ctx.font = `600 10px ${inks.font}`;
+  ctx.font = `600 ${inks.labelPx}px ${inks.font}`;
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
   ctx.lineWidth = 3;

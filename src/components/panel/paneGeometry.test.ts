@@ -30,6 +30,7 @@ import {
   minExtent,
   PANE_FLOOR_H,
   PANE_MIN_H,
+  paneFloorH,
   paneMinH,
   paneWidth,
 } from './paneGeometry';
@@ -488,34 +489,38 @@ describe('dragSizes', () => {
   });
 });
 
-describe('at your terminal size', () => {
-  it('keeps every stock minimum at 12 px', () => {
+describe('at your panel size', () => {
+  it('keeps every stock minimum and the floor at 12 px', () => {
     for (const pane of PANE_TYPES) expect(paneMinH(pane, 12), pane).toBe(PANE_MIN_H[pane]);
     for (const pane of PANE_TYPES) expect(paneMinH(pane), pane).toBe(PANE_MIN_H[pane]);
+    expect(paneFloorH(12)).toBe(PANE_FLOOR_H);
+    expect(paneFloorH()).toBe(PANE_FLOOR_H);
   });
 
-  it('holds six rows of affects and as many messages at 16 px', () => {
-    // 29 px rows, and a chat body four thirds of 92 px.
-    expect(paneMinH('affects', 16)).toBe(28 + 6 * 29);
-    expect(paneMinH('chat', 16)).toBe(28 + 123);
-    // The map, group, and staff queues draw in the UI face.
-    expect(paneMinH('map', 16)).toBe(PANE_MIN_H.map);
-    expect(paneMinH('group', 16)).toBe(PANE_MIN_H.group);
-    expect(paneMinH('imm', 16)).toBe(PANE_MIN_H.imm);
+  it('holds every pane at a 37 px header and its rows at 16 px', () => {
+    // Six 29 px rows of affects, three of group and staff queues, and a
+    // map and chat body four thirds of 152 and 92 px.
+    expect(paneMinH('affects', 16)).toBe(37 + 6 * 29);
+    expect(paneMinH('group', 16)).toBe(37 + 3 * 29);
+    expect(paneMinH('imm', 16)).toBe(37 + 3 * 29);
+    expect(paneMinH('map', 16)).toBe(37 + 203);
+    expect(paneMinH('chat', 16)).toBe(37 + 123);
+    expect(paneFloorH(16)).toBe(37 + 29);
   });
 
   it('counts the same rows at 12 px as before', () => {
     expect(affectsMinH(FIGHT_AFFECTS, 2, 12)).toBe(28 + 7 * 22 + 9);
     expect(countdownMinH(rows(thirty), 1, 12)).toBe(28 + 6 * 23);
     expect(chipsMinH(rows(thirty), 247, FIXED_MEASURE, 12)).toBe(204);
+    expect(groupMinH(12, 12)).toBe(28 + 6 * 22 + 11);
   });
 
   it('counts taller rows at 16 px', () => {
     // Four rows of slots, the 11 px rule, and three rows for the four
     // harmful affects and the count, each 29 px.
-    expect(affectsMinH(FIGHT_AFFECTS, 2, 16)).toBe(28 + 7 * 29 + 11);
+    expect(affectsMinH(FIGHT_AFFECTS, 2, 16)).toBe(37 + 7 * 29 + 11);
     // Down to poison and the count: six rows of 31 px.
-    expect(countdownMinH(rows(thirty), 1, 16)).toBe(28 + 6 * 31);
+    expect(countdownMinH(rows(thirty), 1, 16)).toBe(37 + 6 * 31);
     const body = chipsMinBody(
       chipGroups(rows(thirty)),
       247,
@@ -525,8 +530,28 @@ describe('at your terminal size', () => {
       12 * 29,
       16,
     );
-    expect(chipsMinH(rows(thirty), 247, FIXED_MEASURE, 16)).toBe(28 + body);
-    expect(28 + body).toBeGreaterThan(204);
+    expect(chipsMinH(rows(thirty), 247, FIXED_MEASURE, 16)).toBe(37 + body);
+    expect(37 + body).toBeGreaterThan(204);
+    // Six members of 29 px, and half a row of the seventh.
+    expect(groupMinH(4, 16)).toBe(37 + 4 * 29);
+    expect(groupMinH(12, 16)).toBe(37 + 6 * 29 + 15);
+  });
+
+  it('lays every pane out at its minimum at 16 px, and at its floor on a short panel', () => {
+    const tree = addPane(addPane(defaultLayout().root, 'group'), 'chat');
+    const tall = layoutPanes(tree, 300, 900, {}, 16);
+    for (const { leaf, rect } of tall.leaves) {
+      expect(rect.h, leaf.pane).toBeGreaterThanOrEqual(paneMinH(leaf.pane, 16));
+    }
+    expect(tall.handles[0].mins).toEqual([240, 211, 124, 160]);
+    expect(fitsPanel(tree, 300, 900, 16)).toBe(true);
+    expect(fitsPanel(tree, 300, 700, 16)).toBe(false);
+    const short = layoutPanes(tree, 300, 400, {}, 16);
+    const rects = short.leaves.map((l) => l.rect);
+    for (let i = 1; i < rects.length; i += 1) {
+      expect(rects[i].y).toBe(rects[i - 1].y + rects[i - 1].h + 1);
+    }
+    for (const r of rects) expect(r.h).toBeGreaterThanOrEqual(paneFloorH(16));
   });
 
   it('counts one column below the wider pane two columns need', () => {

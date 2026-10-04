@@ -374,8 +374,11 @@
 /* ── Status line ───────────────────────────────────────────────────── */
 
 /* SPEC 10 G4: 12 px, tertiary, tabular numbers, items 20 apart with no
-   separators. It draws in the panel face, the Panel font row's pick,
-   like the panes. */
+   separators. It draws in the panel face and at the panel size, the
+   picks under Panel text, like the panes. Its text, its line, and its
+   row (--status-line) scale by your size over 12, rounded to whole px
+   as panel.css rounds them. The gaps, the insets and the icons keep
+   their px. */
 .shell-statusline {
   display: flex;
   align-items: center;
@@ -385,8 +388,8 @@
   box-sizing: border-box;
   overflow: hidden;
   font-family: var(--font-panel);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: calc(var(--panel-text-px, 12) * 1px);
+  line-height: round(16px * var(--panel-text-px, 12) / 12, 1px);
   font-weight: 400;
   color: var(--tertiary);
   font-variant-numeric: tabular-nums;

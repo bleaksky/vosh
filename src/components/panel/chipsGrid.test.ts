@@ -327,7 +327,7 @@ describe('chipsMinBody', () => {
   });
 });
 
-describe('chips at your terminal size', () => {
+describe('chips at your panel size', () => {
   const tops = (pages: ChipPage[]) => pages.flatMap((p) => p.lines.map((l) => l.top));
 
   it('packs board C exactly as before at 12 px', () => {
@@ -346,13 +346,14 @@ describe('chips at your terminal size', () => {
     expect(tops(chipPages(groups, 494, hoursOf, MEASURE, 'gutter', all))).toEqual([
       4, 32, 56, 84, 108, 132,
     ]);
-    // 27 px lines, 5 apart in a group and 11 between groups at 16 px.
+    // 27 px lines from 5 down, 5 apart in a group and 11 between groups
+    // at 16 px, beside a 75 px gutter.
     expect(tops(chipPages(groups, 494, hoursOf, MEASURE, 'gutter', all, 16))).toEqual([
-      4, 42, 74, 112, 144, 176,
+      5, 43, 75, 113, 145, 177,
     ]);
     // The last line no longer fits the board's 191 px body.
     const [first] = chipPages(groups, 494, hoursOf, MEASURE, 'gutter', BODY, 16);
-    expect(first.lines.at(-1)?.top).toBe(144);
+    expect(first.lines.at(-1)?.top).toBe(145);
     expect(first.more).toBeGreaterThan(0);
   });
 

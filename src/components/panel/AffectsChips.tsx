@@ -35,7 +35,7 @@ import { usePaneText } from './paneTextSize';
 // then everything else, each a chip with the name exactly as the game
 // sends it and the hours after it. chipsGrid packs the lines and the
 // pages, and the pane draws exactly what it packs. The chips and the
-// lines follow your terminal size.
+// lines follow your panel size.
 //
 // Each chip carries its own state, so C draws no marker. A missing
 // affect is a chip with no ground, ringed in soft red dots (ChipDots).
@@ -296,7 +296,7 @@ function MissingChip({
   // The ring follows the chip's own width once it is measured, since a
   // long name ellipsizes and the chip narrows. Until then, and in a
   // test, it takes the width chipsGrid packed it at. Its height is a
-  // chip's at your terminal size.
+  // chip's at your panel size.
   const width = box?.width ?? chipWidth(row.name, hours, measure);
   return (
     <li ref={ref} className="pane-chip pane-chip-missing">

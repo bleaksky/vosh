@@ -25,8 +25,8 @@ import { usePaneText } from './paneTextSize';
 // under Channel colors in the pane menu, lifted where it would read
 // under 3:1 on the panel (chatColors.ts). The channel filter lives in
 // the pane's props, so it follows the profile and two chat panes can
-// each show a different channel. The messages follow your terminal
-// size, and the lines and the gaps between them scale with it.
+// each show a different channel. The messages follow your panel size,
+// and the lines and the gaps between them scale with it.
 
 export function ChatPane() {
   const leaf = usePaneLeaf();
@@ -39,7 +39,7 @@ export function ChatPane() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickyRef = useRef(true);
   // Distance from the bottom that still counts as reading the newest
-  // message, about a message at your terminal size. Scrolled further
+  // message, about a message at your panel size. Scrolled further
   // up, new lines leave you be.
   const text = usePaneText();
   const sticky = text.chatSticky;

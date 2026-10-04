@@ -45,7 +45,10 @@
   --pane-header: 28px;
   --band: 32px;
   --input-band: 40px;
-  --status-line: 28px;
+  /* 28 px at a 12 px panel. It scales with the panel size the main
+     window writes here as --panel-text-px, as the status line's text
+     does (frame.css). */
+  --status-line: round(28px * var(--panel-text-px, 12) / 12, 1px);
   --panel-w: 300px;
 }
 

@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+} from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -65,6 +73,7 @@ import {
 } from './lib/theme';
 import { loadFontStack, renderFontStack } from './lib/fontLoader';
 import { normalizePanelFont, panelFontFamily, panelFontList } from './lib/panelFont';
+import { DEFAULT_PANEL_SIZE, normalizePanelSize, resolvePanelSize } from './lib/panelSize';
 import { PRESETS, presetTriggers } from './lib/presets';
 import { presetLaunchPlan } from './lib/automationRecords';
 import { listenForQuitFlush } from './lib/pendingWrites';
@@ -227,6 +236,19 @@ function App() {
       return 14;
     }
   });
+  // The panel size as saved, 0 for the terminal size, cached like the
+  // panel font so the panes and the status line paint at it from the
+  // first frame.
+  const [panelSize, setPanelSize] = useState(() => {
+    try {
+      const cached = localStorage.getItem('vosh.cache.panelSize');
+      return cached === null ? DEFAULT_PANEL_SIZE : normalizePanelSize(Number(cached));
+    } catch {
+      return DEFAULT_PANEL_SIZE;
+    }
+  });
+  // The size every pane and the status line draw at.
+  const panelTextPx = resolvePanelSize(panelSize, fontSize);
   // Cached like the font so the first paint uses the saved row spacing
   // instead of reflowing once the config arrives.
   const [terminalLineHeight, setTerminalLineHeight] = useState<TerminalLineHeight>(() => {
@@ -960,6 +982,7 @@ function App() {
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
         setPanelFont(cfg.panel_font);
+        setPanelSize(cfg.panel_font_size);
         setTerminalLineHeight(cfg.terminal_line_height);
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
@@ -1025,6 +1048,7 @@ function App() {
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
         setPanelFont(cfg.panel_font);
+        setPanelSize(cfg.panel_font_size);
         setTerminalLineHeight(cfg.terminal_line_height);
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
@@ -1073,6 +1097,21 @@ function App() {
     }
   }, [panelFont]);
 
+  // The panes and the status line draw at --panel-text-px (panel.css,
+  // frame.css). It lands before the paint that lays the panes out at the
+  // new size, so the rows and their geometry move together.
+  useLayoutEffect(() => {
+    document.documentElement.style.setProperty('--panel-text-px', String(panelTextPx));
+  }, [panelTextPx]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vosh.cache.panelSize', String(panelSize));
+    } catch {
+      // cache only; config remains the source of truth
+    }
+  }, [panelSize]);
+
   useEffect(() => {
     // Cross-window emit from the settings save path. window CustomEvents
     // do not cross webviews, so we listen via the Tauri event bus here.
@@ -1083,6 +1122,7 @@ function App() {
       setFontFamily(detail.family || DEFAULT_FONT_FAMILY);
       setFontSize(detail.size || 14);
       setPanelFont(normalizePanelFont(detail.panel));
+      setPanelSize(normalizePanelSize(detail.panelSize));
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
@@ -1891,7 +1931,7 @@ function App() {
       terminal={terminalAreaElement}
       input={inputElement}
       statusLine={<StatusLine connected={connection.live} showVitals={!panelOpen} />}
-      panel={<PanelHost promptShow={promptShow} fontSize={fontSize} />}
+      panel={<PanelHost promptShow={promptShow} textSize={panelTextPx} />}
     >
       <UpdateNotice />
       <Toasts />
