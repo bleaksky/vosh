@@ -36,8 +36,9 @@ pub(crate) enum Scope {
 /// User-controllable mapping of UI categories to scope. `theme`
 /// covers `theme`, the follow switch, the light and dark pair, and
 /// `custom_themes`, so a custom theme travels with the theme that
-/// names it. `font` covers `font_family`, `font_size`, and
-/// `terminal_line_height` since they move together visually.
+/// names it. `font` covers `font_family`, `font_size`,
+/// `terminal_line_height`, and `panel_font` since they move together
+/// visually.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(crate) struct ScopeConfig {
     #[serde(default = "scope_default_global")]
@@ -119,6 +120,11 @@ pub(crate) struct GlobalConfig {
     pub dark_theme: Option<String>,
     #[serde(default)]
     pub terminal_line_height: Option<String>,
+    /// The panel font, while the font is shared. Written only once you
+    /// pick one, like the profile file's own. With `font_family` here, a
+    /// missing panel font is the terminal font (see `shared_panel_font`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub panel_font: Option<String>,
     #[serde(default)]
     pub dock_layout: Option<Vec<DockEntryPersist>>,
     #[serde(default)]
@@ -146,6 +152,9 @@ impl GlobalConfig {
             font_family: font.then(|| profile.ui.font_family.clone()),
             font_size: font.then_some(profile.ui.font_size),
             terminal_line_height: font.then(|| profile.ui.terminal_line_height.clone()),
+            panel_font: font
+                .then(|| profile.ui.panel_font.clone())
+                .filter(|pick| !pick.is_empty()),
             dock_layout: matches!(scope.dock_layout, Scope::Global)
                 .then(|| profile.ui.dock_layout.clone()),
         }
@@ -185,6 +194,9 @@ impl GlobalConfig {
         if let Some(v) = &self.terminal_line_height {
             profile.ui.terminal_line_height.clone_from(v);
         }
+        if let Some(v) = self.shared_panel_font() {
+            profile.ui.panel_font = v;
+        }
         // The shared list replaces the profile's own. A profile file
         // written before custom themes joined the `theme` scope still
         // holds a list, and `migrate_custom_themes` moves it into
@@ -193,6 +205,15 @@ impl GlobalConfig {
         if let Some(v) = &self.custom_themes {
             profile.ui.custom_themes.clone_from(v);
         }
+    }
+
+    /// The panel font every character shares, or None while the font is
+    /// not shared. The file leaves out the terminal font, the default, so
+    /// a shared font with no panel font of its own is the terminal font.
+    fn shared_panel_font(&self) -> Option<String> {
+        self.font_family
+            .as_ref()
+            .map(|_| self.panel_font.clone().unwrap_or_default())
     }
 
     pub(crate) fn save(&self, path: &Path) -> Result<(), ConfigError> {
@@ -239,6 +260,7 @@ impl GlobalConfig {
             self.font_family = None;
             self.font_size = None;
             self.terminal_line_height = None;
+            self.panel_font = None;
         }
         if !matches!(scope.keep_last_command, Scope::Global) {
             self.keep_last_command = None;
@@ -345,7 +367,8 @@ impl GlobalConfig {
         if let Some(family) = &self.font_family {
             let own_font = !is_default_font_family(&ui.font_family)
                 || ui.font_size != defaults.font_size
-                || ui.terminal_line_height != defaults.terminal_line_height;
+                || ui.terminal_line_height != defaults.terminal_line_height
+                || ui.panel_font != defaults.panel_font;
             if !own_font {
                 changed |= replace_value(&mut ui.font_family, family.clone());
                 if let Some(v) = self.font_size {
@@ -353,6 +376,9 @@ impl GlobalConfig {
                 }
                 if let Some(v) = &self.terminal_line_height {
                     changed |= replace_value(&mut ui.terminal_line_height, v.clone());
+                }
+                if let Some(v) = self.shared_panel_font() {
+                    changed |= replace_value(&mut ui.panel_font, v);
                 }
             }
         }
@@ -489,6 +515,7 @@ pub(crate) fn strip_global_fields(config: &mut ProfileConfig, scope: &ScopeConfi
         config.ui.font_family = defaults.font_family;
         config.ui.font_size = defaults.font_size;
         config.ui.terminal_line_height = defaults.terminal_line_height;
+        config.ui.panel_font = defaults.panel_font;
     }
     if matches!(scope.dock_layout, Scope::Global) {
         config.ui.dock_layout = defaults.dock_layout;
@@ -936,6 +963,77 @@ mod tests {
 
         assert!(refused.is_err());
         assert!(!set.profile_path("Bard").exists());
+    }
+
+    #[test]
+    fn the_font_scope_carries_the_panel_font() {
+        let mut profile = styled_profile();
+        profile.ui.panel_font = "system".into();
+        let scope = ScopeConfig::default();
+        let global_text = toml::to_string_pretty(&GlobalConfig::from_profile(&profile, &scope))
+            .expect("global config serializes");
+        assert!(
+            global_text.contains("panel_font = \"system\""),
+            "{global_text}"
+        );
+        let (per_profile, restored) = split_and_reload(&profile, &scope);
+        assert_eq!(per_profile.ui.panel_font, "");
+        assert_eq!(restored.ui.panel_font, "system");
+
+        // Kept per profile, it stays in the profile file.
+        let scope = ScopeConfig {
+            font: Scope::Profile,
+            ..ScopeConfig::default()
+        };
+        let global_text = toml::to_string_pretty(&GlobalConfig::from_profile(&profile, &scope))
+            .expect("global config serializes");
+        assert!(!global_text.contains("panel_font"), "{global_text}");
+        let (per_profile, restored) = split_and_reload(&profile, &scope);
+        assert_eq!(per_profile.ui.panel_font, "system");
+        assert_eq!(restored.ui.panel_font, "system");
+    }
+
+    #[test]
+    fn a_shared_font_without_a_panel_font_is_the_terminal_font() {
+        // The terminal font, the default, stays out of global.toml.
+        let shared = GlobalConfig::from_profile(&shared_profile(), &ScopeConfig::default());
+        assert_eq!(shared.panel_font, None);
+        let text = toml::to_string_pretty(&shared).unwrap();
+        assert!(!text.contains("panel_font"), "{text}");
+        // So a profile file that kept a panel font of its own from before
+        // the font was shared shows the terminal font every character
+        // shares.
+        let mut live = Profile::default();
+        live.ui.panel_font = "system".into();
+        toml::from_str::<GlobalConfig>(&text)
+            .unwrap()
+            .apply_to(&mut live);
+        assert_eq!(live.ui.panel_font, "");
+        // A global.toml that shares no font leaves it alone.
+        live.ui.panel_font = "system".into();
+        GlobalConfig::default().apply_to(&mut live);
+        assert_eq!(live.ui.panel_font, "system");
+    }
+
+    #[test]
+    fn a_profile_with_its_own_panel_font_keeps_it_when_the_font_stops_being_shared() {
+        let mut profile = shared_profile();
+        profile.ui.panel_font = "system".into();
+        let shared = GlobalConfig::from_profile(&profile, &ScopeConfig::default());
+        // A file with no font of its own takes the shared panel font.
+        let mut ui = UiConfig::default();
+        assert!(shared.hand_out(&mut ui, "alt"));
+        assert_eq!(ui.panel_font, "system");
+        assert_eq!(ui.font_family, "Iosevka");
+        // A panel font of its own is its own font, and it all stays.
+        let own = "\"Iosevka\", Menlo, monospace";
+        let mut ui = UiConfig {
+            panel_font: own.to_string(),
+            ..UiConfig::default()
+        };
+        shared.hand_out(&mut ui, "alt");
+        assert_eq!(ui.panel_font, own);
+        assert_eq!(ui.font_family, UiConfig::default().font_family);
     }
 }
 

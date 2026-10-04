@@ -7,6 +7,7 @@
     "light_theme": "vellum",
     "dark_theme": "",
     "terminal_line_height": "default",
+    "panel_font": "",
     "tracked_affects": [],
     "enabled_presets": [],
     "keep_last_command": false,

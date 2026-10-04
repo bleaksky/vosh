@@ -309,6 +309,7 @@ fn full_ui() -> UiConfig {
         font_family: "JetBrains Mono, monospace".into(),
         font_size: 16,
         terminal_line_height: "loose".into(),
+        panel_font: "\"Iosevka\", Menlo, monospace".into(),
         tracked_affects: vec![
             TrackedAffect {
                 name: "sanctuary".into(),
@@ -606,6 +607,7 @@ fn full_global() -> GlobalConfig {
         light_theme: Some("kanso-pearl".into()),
         dark_theme: Some("tokyo-night".into()),
         terminal_line_height: Some("compact".into()),
+        panel_font: Some("system".into()),
         dock_layout: Some(vec![DockEntryPersist {
             id: "map".into(),
             zone: "left".into(),

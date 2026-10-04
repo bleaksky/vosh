@@ -124,6 +124,14 @@ pub(crate) struct UiConfig {
     /// category. Unknown values coerce back to `default` on save.
     #[serde(default = "default_terminal_line_height")]
     pub terminal_line_height: String,
+    /// The font every pane in the right panel and the status line under
+    /// the terminal draw their text in: empty for the terminal font, the
+    /// default, `system` for the system font, or a CSS font list the way
+    /// `font_family` holds one. Part of the `font` scope category. Written
+    /// only once you pick a font, so a profile that never does saves the
+    /// bytes it saved before. A build without it reads past the key.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub panel_font: String,
     /// Affect names rendered as pills in the status bar. Present affects
     /// show their remaining duration; absent ones render as a struck-out
     /// red-bordered pill so the player notices the gap at a glance.
@@ -845,6 +853,7 @@ impl Default for UiConfig {
             font_family: default_font_family(),
             font_size: default_font_size(),
             terminal_line_height: default_terminal_line_height(),
+            panel_font: String::new(),
             tracked_affects: Vec::new(),
             enabled_presets: Vec::new(),
             dock_layout: Vec::new(),
@@ -1000,6 +1009,21 @@ fn default_font_size() -> u32 {
 /// Hold the terminal font size to 6 to 64 pixels.
 pub(crate) fn coerce_font_size(size: u32) -> u32 {
     size.clamp(6, 64)
+}
+
+/// What the Panel font row saves for the system font. Empty is the
+/// terminal font.
+pub(crate) const PANEL_FONT_SYSTEM: &str = "system";
+
+/// Trim a panel font pick and spell the system font one way. Anything
+/// else is a font list, kept as written.
+pub(crate) fn normalize_panel_font(value: String) -> String {
+    let value = value.trim();
+    if value.eq_ignore_ascii_case(PANEL_FONT_SYSTEM) {
+        PANEL_FONT_SYSTEM.to_string()
+    } else {
+        value.to_string()
+    }
 }
 
 /// The caret shapes the command line draws. Anything else saves as the
@@ -1202,6 +1226,47 @@ name = "haste"
             ui.terminal_line_height = id.into();
             assert_eq!(through_toml(&ui).terminal_line_height, id);
         }
+    }
+
+    #[test]
+    fn the_panel_font_round_trips_and_stays_out_of_the_file_until_you_pick_one() {
+        // Same as terminal, the default, writes nothing, so every file
+        // saved before the row keeps its bytes and reads it back.
+        let written = ProfileConfig::default().to_toml().unwrap();
+        assert!(!written.contains("panel_font"), "{written}");
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n").unwrap();
+        assert_eq!(old.ui.panel_font, "");
+        let mut ui = UiConfig::default();
+        assert_eq!(through_toml(&ui).panel_font, "");
+        for pick in ["system", "\"Iosevka\", Menlo, monospace"] {
+            ui.panel_font = pick.into();
+            assert_eq!(through_toml(&ui).panel_font, pick);
+        }
+        let config = ProfileConfig {
+            ui,
+            ..ProfileConfig::default()
+        };
+        let text = config.to_toml().unwrap();
+        assert!(
+            text.contains(r#"panel_font = "\"Iosevka\", Menlo, monospace""#),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_panel_font_pick_trims_and_spells_the_system_font_one_way() {
+        assert_eq!(normalize_panel_font(String::new()), "");
+        assert_eq!(normalize_panel_font("  ".into()), "");
+        assert_eq!(normalize_panel_font(" System ".into()), "system");
+        assert_eq!(
+            normalize_panel_font(" \"Iosevka\", Menlo, monospace ".into()),
+            "\"Iosevka\", Menlo, monospace"
+        );
+        // A family named system, as the Font list saves one, stays a font.
+        assert_eq!(
+            normalize_panel_font("\"system\", Menlo, monospace".into()),
+            "\"system\", Menlo, monospace"
+        );
     }
 
     #[test]
@@ -1601,5 +1666,6 @@ name = "haste"
         assert_eq!(ui.light_theme, "vellum");
         assert_eq!(ui.dark_theme, "");
         assert_eq!(ui.terminal_line_height, "default");
+        assert_eq!(ui.panel_font, "");
     }
 }
