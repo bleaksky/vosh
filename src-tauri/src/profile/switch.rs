@@ -182,10 +182,11 @@ pub(crate) async fn switch_live_profile(
 
 /// Hand the connection `c` the two things it takes from the profile that
 /// a switch, `#profile load`, `#profile reset` or launch just laid over
-/// `p`: the tick settings and the `[prompt]` table. The tick keeps its
-/// count under the new settings, which replaced `tick_before`, so the
-/// status line counts on from the last tick. The prompt engine takes the
-/// table, and the profile keeps it as the engine then holds it.
+/// `p`, or that a new session plays: the tick settings and the `[prompt]`
+/// table. The tick keeps its count under the new settings, which replaced
+/// `tick_before`, so the status line counts on from the last tick. The
+/// prompt engine takes the table, and the profile keeps it as the engine
+/// then holds it.
 pub(crate) fn hand_to_connection(p: &mut Profile, c: &mut Connection, tick_before: &TickConfig) {
     c.tick
         .adopt(&mut p.tick, tick_before, tokio::time::Instant::now());

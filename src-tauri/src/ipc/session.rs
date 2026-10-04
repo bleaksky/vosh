@@ -1,8 +1,9 @@
-//! The commands for your connection to the game. The page connects and
-//! disconnects through them, sends the lines you type, plain or masked,
-//! stops a walk on Esc, tells the game the size of the terminal, and
-//! reads the target you track. Each acts on the session it names, or on
-//! the selected session when it names none.
+//! The commands for your sessions and their connections to the game.
+//! The page opens and selects a session, connects and disconnects
+//! through them, sends the lines you type, plain or masked, stops a walk
+//! on Esc, tells the game the size of the terminal, and reads the target
+//! you track. Each acts on the session it names, or on the selected
+//! session when it names none.
 
 use tauri::{AppHandle, State};
 
@@ -11,6 +12,30 @@ use crate::input;
 use crate::output;
 use crate::session::TargetPayload;
 use crate::sessions::SessionId;
+
+/// Open a session after the others, with nothing connected, and return
+/// its id. It plays the live profile, so its connection takes the
+/// profile's tick settings and `[prompt]` table, as the first session's
+/// does at launch.
+#[tauri::command]
+pub(crate) async fn session_open(state: State<'_, SharedState>) -> Result<SessionId, String> {
+    let session = state.open_session();
+    let mut p = state.profile.lock().await;
+    let tick_before = p.tick.config.clone();
+    let mut c = session.connection.lock();
+    crate::profile::switch::hand_to_connection(&mut p, &mut c, &tick_before);
+    Ok(session.id)
+}
+
+/// Select the session `session` names. The commands that name no session
+/// act on it from then on.
+#[tauri::command]
+pub(crate) fn session_select(
+    state: State<'_, SharedState>,
+    session: SessionId,
+) -> Result<(), String> {
+    state.select_session(session)
+}
 
 #[tauri::command]
 pub(crate) async fn session_connect(
@@ -173,5 +198,26 @@ mod tests {
 
         release.send(()).unwrap();
         holder.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_new_session_takes_the_prompt_table_of_the_profile_it_plays() {
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        app.manage::<SharedState>(Arc::new(AppState::default()));
+        let state: SharedState = app.state::<SharedState>().inner().clone();
+        {
+            let mut p = state.profile.lock().await;
+            p.prompt.draw = true;
+            p.prompt.template = "<%hp>".into();
+        }
+
+        let id = super::session_open(app.state::<SharedState>())
+            .await
+            .unwrap();
+        let session = state.session(Some(id)).unwrap();
+        let p = state.profile.lock().await;
+        let c = session.connection.lock();
+        assert_eq!(*c.prompt.config(), p.prompt);
+        assert_eq!(p.prompt.template, "<%hp>");
     }
 }

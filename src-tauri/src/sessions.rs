@@ -4,10 +4,10 @@
 //! a command that names no session acts on the selected one.
 //!
 //! The map's lock comes ahead of every other lock. A step takes it only
-//! to find, add or remove a session or read the selection, and no holder
-//! awaits or takes another lock. No step takes it while it holds a
-//! session slot, a profile or a connection, so each step resolves its
-//! session before it takes any other lock.
+//! to find, add or remove a session or to read or change the selection,
+//! and no holder awaits or takes another lock. No step takes it while it
+//! holds a session slot, a profile or a connection, so each step resolves
+//! its session before it takes any other lock.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -159,9 +159,31 @@ pub(crate) struct Sessions {
     list: Vec<Arc<Session>>,
     /// Always names a session in `list`.
     selected: SessionId,
+    /// The number the next session takes. It only grows, so a late event
+    /// from a session that closed never names a newer one.
+    next: u32,
 }
 
 impl Sessions {
+    /// Add a session after the others, with nothing connected, and return
+    /// it. It plays the live profile, the one every session plays.
+    pub(crate) fn open(&mut self) -> Arc<Session> {
+        let session = Arc::new(Session::new(SessionId(self.next)));
+        self.next += 1;
+        self.list.push(session.clone());
+        session
+    }
+
+    /// Select the session `id` names. Returns false, and keeps the
+    /// selection, when the list does not hold it.
+    pub(crate) fn select(&mut self, id: SessionId) -> bool {
+        let held = self.list.iter().any(|session| session.id == id);
+        if held {
+            self.selected = id;
+        }
+        held
+    }
+
     /// The session `id` names, while the list holds it.
     pub(crate) fn get(&self, id: SessionId) -> Option<Arc<Session>> {
         self.list.iter().find(|session| session.id == id).cloned()
@@ -181,6 +203,7 @@ impl Default for Sessions {
         Self {
             list: vec![Arc::new(Session::new(first))],
             selected: first,
+            next: 2,
         }
     }
 }
@@ -277,5 +300,20 @@ mod tests {
             state.session(Some(SessionId(2))).map(|s| s.id),
             Err(NO_SUCH_SESSION.to_string())
         );
+    }
+
+    #[test]
+    fn a_new_session_takes_the_next_number_and_a_selection_needs_one_vosh_holds() {
+        let state = AppState::default();
+        let (two, three) = (state.open_session().id, state.open_session().id);
+        assert_eq!((two, three), (SessionId(2), SessionId(3)));
+        assert_eq!(state.selected_session().id, SessionId(1));
+        assert_eq!(state.select_session(three), Ok(()));
+        assert_eq!(state.session(None).map(|s| s.id), Ok(three));
+        assert_eq!(
+            state.select_session(SessionId(9)),
+            Err(NO_SUCH_SESSION.to_string())
+        );
+        assert_eq!(state.selected_session().id, three);
     }
 }
