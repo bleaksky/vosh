@@ -2076,6 +2076,14 @@ export interface UiConfig {
    *  colors included, once with a count before it. Off unless you turn
    *  it on. */
   collapse_repeats: boolean;
+  /** In a fight, under Collapse repeated lines. While on, lines that
+   *  come while Char.Combat names a target collapse too. On unless you
+   *  turn it off. Off, attack lines show every line as well. */
+  collapse_fight_lines: boolean;
+  /** Attack lines, under Collapse repeated lines. While on, the hits and
+   *  misses the game prints collapse too, in a fight or not, as long as
+   *  collapse_fight_lines is on. Off unless you turn it on. */
+  collapse_attack_lines: boolean;
   /** Custom base terminal palette: 16 CSS colors in ANSI 0-15 order,
    *  used whenever the tint toggle resolves off. Null = canonical
    *  xterm chart. */
@@ -2212,6 +2220,8 @@ export interface RawUiConfig {
   blink_text?: boolean | null;
   readable_highlights?: boolean;
   collapse_repeats?: boolean;
+  collapse_fight_lines?: boolean;
+  collapse_attack_lines?: boolean;
   terminal_base_ansi?: unknown;
   custom_themes?: CustomTheme[];
   split_divider_color?: string | null;
@@ -2296,6 +2306,8 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     blink_text: typeof cfg.blink_text === 'boolean' ? cfg.blink_text : null,
     readable_highlights: cfg.readable_highlights !== false,
     collapse_repeats: cfg.collapse_repeats === true,
+    collapse_fight_lines: cfg.collapse_fight_lines !== false,
+    collapse_attack_lines: cfg.collapse_attack_lines === true,
     terminal_base_ansi:
       Array.isArray(cfg.terminal_base_ansi) &&
       cfg.terminal_base_ansi.length === 16 &&
@@ -2693,6 +2705,8 @@ function uiConfigPayload(config: UiConfig): Record<string, unknown> {
     blink_text: config.blink_text,
     readable_highlights: config.readable_highlights,
     collapse_repeats: config.collapse_repeats,
+    collapse_fight_lines: config.collapse_fight_lines,
+    collapse_attack_lines: config.collapse_attack_lines,
     terminal_base_ansi: config.terminal_base_ansi,
     custom_themes: config.custom_themes,
     split_divider_color: config.split_divider_color,

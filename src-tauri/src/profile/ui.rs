@@ -196,6 +196,20 @@ pub(crate) struct UiConfig {
     /// before.
     #[serde(default, skip_serializing_if = "is_false")]
     pub collapse_repeats: bool,
+    /// In a fight, under Collapse repeated lines: the lines of a fight
+    /// collapse, from the round Char.Combat names a target in to the round
+    /// that ends the fight. On by default, and a file written before this
+    /// choice reads it on. Off, every line of a fight shows, and attack
+    /// lines show every line anywhere. Written only while off.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub collapse_fight_lines: bool,
+    /// Attack lines, under Collapse repeated lines: the hits and misses
+    /// the game prints collapse, in a fight or not. Off by default, so a
+    /// count never hides how many hits landed, and a file written before
+    /// this choice reads it off. In a fight off leaves them whole
+    /// whatever this says. Written only while on.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub collapse_attack_lines: bool,
     /// Custom base terminal palette: 16 CSS colors (ANSI 0-15 order)
     /// used whenever tint-output-with-theme resolves off. None means
     /// the canonical xterm-256 chart. The frontend owns validation.
@@ -841,6 +855,8 @@ impl Default for UiConfig {
             blink_text: None,
             readable_highlights: true,
             collapse_repeats: false,
+            collapse_fight_lines: true,
+            collapse_attack_lines: false,
             terminal_base_ansi: None,
             custom_themes: Vec::new(),
             split_divider_color: None,
@@ -1264,6 +1280,43 @@ name = "haste"
         // A file from before the switch reads it off.
         let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
         assert!(!old.ui.collapse_repeats);
+    }
+
+    #[test]
+    fn collapse_fight_and_attack_lines_round_trip() {
+        let mut ui = UiConfig::default();
+        assert!(through_toml(&ui).collapse_fight_lines);
+        assert!(!through_toml(&ui).collapse_attack_lines);
+        ui.collapse_fight_lines = false;
+        ui.collapse_attack_lines = true;
+        let back = through_toml(&ui);
+        assert!(!back.collapse_fight_lines);
+        assert!(back.collapse_attack_lines);
+    }
+
+    #[test]
+    fn collapse_fight_and_attack_lines_are_written_only_off_their_defaults() {
+        let mut config = ProfileConfig::default();
+        let first = config.to_toml().unwrap();
+        assert!(!first.contains("collapse_fight_lines"), "{first}");
+        assert!(!first.contains("collapse_attack_lines"), "{first}");
+        config.ui.collapse_fight_lines = false;
+        config.ui.collapse_attack_lines = true;
+        let changed = config.to_toml().unwrap();
+        assert!(
+            changed.contains("collapse_fight_lines = false"),
+            "{changed}"
+        );
+        assert!(
+            changed.contains("collapse_attack_lines = true"),
+            "{changed}"
+        );
+        // A file from before the two choices reads their defaults.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\ncollapse_repeats = true\n")
+            .unwrap();
+        assert!(old.ui.collapse_repeats);
+        assert!(old.ui.collapse_fight_lines);
+        assert!(!old.ui.collapse_attack_lines);
     }
 
     #[test]

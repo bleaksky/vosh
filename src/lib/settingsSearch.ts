@@ -143,6 +143,18 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('appearance', 'text', 'collapse-repeats'),
   },
   {
+    label: 'In a fight',
+    description: 'Every line that arrives while you are fighting.',
+    keywords: 'collapse repeated combat battle round target count',
+    target: at('appearance', 'text', 'collapse-fights'),
+  },
+  {
+    label: 'Attack lines',
+    description: 'Each hit and miss the game shows you, in a fight or not.',
+    keywords: 'collapse repeated damage hits misses verbs dismembers combat count',
+    target: at('appearance', 'text', 'collapse-attacks'),
+  },
+  {
     label: 'Custom themes',
     description: 'Start from the theme you see now, then change any color.',
     keywords: 'advanced new edit delete rename theme editor',

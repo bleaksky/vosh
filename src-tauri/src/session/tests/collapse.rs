@@ -1004,3 +1004,159 @@ fn the_collapse_splits_the_webview_replays_are_what_the_session_sends() {
         "the session changed, so write the file again with VOSH_WRITE_COLLAPSE_SPLITS=1"
     );
 }
+
+/// Your slash as `dam_message` in fight.c prints it to you, from the
+/// format `Your %s $c%s $N%c`, with the yellow `process_color` in comm.c
+/// writes for the damage you deal and the reset after the verb.
+const DISMEMBERS: &str = "Your slash \x1b[0;33mDISMEMBERS\x1b[0;0m a Blackwatch guard!";
+
+/// The plain text of each line the scrollback ring keeps after `p` logs
+/// in to the fake Aabahran with a compact prompt pinned and plays a round
+/// in which you hit twice and dodge twice, first out of a fight, then in
+/// one.
+fn rounds_of(p: Profile) -> Vec<String> {
+    let mut session = Session::new(p);
+    let mut mud = Mud::playing(Options {
+        compact: true,
+        ..Options::new(Build::New)
+    });
+    let round = [DISMEMBERS, DISMEMBERS, DODGE, DODGE].join("\n\r");
+    let mut reads = vec![session.read(&mud.login())];
+    reads.push(session.read(&mud.pulse_later(&round)));
+    let fight: Vec<u8> = mud
+        .command("fight")
+        .into_iter()
+        .flat_map(|write| write.bytes)
+        .collect();
+    reads.push(session.read(&fight));
+    reads.push(session.read(&mud.pulse_later(&round)));
+    ring_of(&reads)[LOGIN.len()..].to_vec()
+}
+
+/// [`rounds_of`] with In a fight and Attack lines set to `fights` and
+/// `attacks`.
+fn rounds(fights: bool, attacks: bool) -> Vec<String> {
+    let mut p = collapsing(PromptShow::Pinned);
+    p.ui.collapse_fight_lines = fights;
+    p.ui.collapse_attack_lines = attacks;
+    rounds_of(p)
+}
+
+#[test]
+fn a_profile_starts_with_the_rules_the_stage_starts_with() {
+    let ui = crate::profile::ui::UiConfig::default();
+    assert_eq!(
+        vosh_prompt::stage::CollapseRules {
+            fights: ui.collapse_fight_lines,
+            attacks: ui.collapse_attack_lines,
+        },
+        vosh_prompt::stage::CollapseRules::default()
+    );
+}
+
+#[test]
+fn in_a_fight_and_attack_lines_decide_which_lines_collapse() {
+    let hit = vosh_protocol::ansi::plain_text(DISMEMBERS.as_bytes());
+    let hits = times(2, DISMEMBERS);
+    let dodges = times(2, DODGE);
+    let attacks = "A Blackwatch guard attacks you!";
+    let battle = "A Blackwatch guard has quite a few wounds. ";
+    let tank = "Tester: [===|===|===|---]";
+    let lines = |want: &[&str]| {
+        want.iter()
+            .map(|line| (*line).to_string())
+            .collect::<Vec<_>>()
+    };
+    // At first a fight collapses, and each hit shows on its own, in a
+    // fight or not.
+    let first = lines(&[
+        &hit, &hit, &dodges, attacks, battle, tank, &hit, &hit, &dodges, battle, tank,
+    ]);
+    assert_eq!(rounds_of(collapsing(PromptShow::Pinned)), first);
+    assert_eq!(rounds(true, false), first);
+    // Attack lines on: the hits collapse too.
+    assert_eq!(
+        rounds(true, true),
+        lines(&[&hits, &dodges, attacks, battle, tank, &hits, &dodges, battle, tank,])
+    );
+    // In a fight showing every line: nothing collapses while Char.Combat
+    // names a target, and the hits show on their own out of a fight too,
+    // whatever Attack lines says.
+    let whole = lines(&[
+        &hit, &hit, &dodges, attacks, battle, tank, &hit, &hit, DODGE, DODGE, battle, tank,
+    ]);
+    assert_eq!(rounds(false, false), whole);
+    assert_eq!(rounds(false, true), whole);
+}
+
+/// The guard's death, as `act` prints `$n is DEAD!!` to the room
+/// (fight.c:6295).
+const DEAD: &str = "A Blackwatch guard is DEAD!!";
+
+#[test]
+fn the_round_that_ends_a_fight_is_a_line_of_the_fight() {
+    let attacks = "A Blackwatch guard attacks you!";
+    let battle = "A Blackwatch guard has quite a few wounds. ";
+    let tank = "Tester: [===|===|===|---]";
+    for fights in [true, false] {
+        let mut p = collapsing(PromptShow::Pinned);
+        p.ui.collapse_fight_lines = fights;
+        let mut session = Session::new(p);
+        let mut mud = Mud::playing(Options {
+            compact: true,
+            ..Options::new(Build::New)
+        });
+        let mut reads = vec![session.read(&mud.login())];
+        let fight: Vec<u8> = mud
+            .command("fight")
+            .into_iter()
+            .flat_map(|write| write.bytes)
+            .collect();
+        reads.push(session.read(&fight));
+        // The Char.Combat {} that ends the fight comes before the round's
+        // text, and the round is still the fight's.
+        reads.push(session.read(&mud.fight_ends_later(&[DODGE, DODGE, DEAD].join("\n\r"))));
+        // The prompt ends that round, and out of the fight lines collapse.
+        reads.push(session.read(&mud.pulse_later(&[DODGE, DODGE].join("\n\r"))));
+        let ring = ring_of(&reads)[LOGIN.len()..].to_vec();
+        let dodges = times(2, DODGE);
+        let round: &[&str] = if fights { &[&dodges] } else { &[DODGE, DODGE] };
+        let want = [&[attacks, battle, tank][..], round, &[DEAD, &dodges]].concat();
+        assert_eq!(ring, rows(&want), "In a fight on Collapse: {fights}");
+    }
+}
+
+#[test]
+fn the_battle_line_shows_every_round_while_a_fight_shows_every_line() {
+    let battle = "A Blackwatch guard has quite a few wounds. ";
+    let streams = streams();
+    let (_, login, fight) = streams
+        .iter()
+        .find(|(name, _, _)| *name == "fight")
+        .expect("the fight stream");
+    let sent = String::from_utf8_lossy(fight)
+        .split("\n\r")
+        .filter(|line| *line == battle)
+        .count();
+    assert!(sent > 1, "{sent}");
+    for fights in [true, false] {
+        let mut p = collapsing(PromptShow::Pinned);
+        p.ui.collapse_fight_lines = fights;
+        let mut session = Session::new(p);
+        let reads = replay(&mut session, login, fight, &[]);
+        let ring = ring_of(&reads);
+        let joins = reads
+            .iter()
+            .flat_map(made)
+            .filter(|made| matches!(made, Some(Repeat::Joins(_))))
+            .count();
+        if fights {
+            assert!(joins > 0, "{ring:?}");
+            assert!(ring.contains(&times(3, battle)), "{ring:?}");
+        } else {
+            assert_eq!(joins, 0, "{ring:?}");
+            let shown = ring.iter().filter(|line| line.as_str() == battle).count();
+            assert_eq!(shown, sent, "{ring:?}");
+        }
+    }
+}

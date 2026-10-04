@@ -387,6 +387,33 @@ fn a_fight_prints_the_tank_line_and_reads_back() {
 }
 
 #[test]
+fn the_round_that_ends_a_fight_comes_after_its_empty_char_combat() {
+    let mut mud = playing(Build::New);
+    let _ = run(&mut mud, "fight");
+    // The guard's death, as `act` prints `$n is DEAD!!` to the room
+    // (fight.c:6295).
+    let raw = mud.fight_ends_later("A Blackwatch guard is DEAD!!");
+    // stop_fighting sends Char.Combat in the middle of the round, before
+    // the prompt time packages, which send it again.
+    assert_eq!(names(&raw)[..2], ["Char.Combat", "Char.Vitals"]);
+    let combats: Vec<Json> = packets(&raw)
+        .into_iter()
+        .filter(|(name, _)| name == "Char.Combat")
+        .map(|(_, data)| data)
+        .collect();
+    assert_eq!(combats, [serde_json::json!({}), serde_json::json!({})]);
+    let first_text = parts(&raw)
+        .iter()
+        .position(|p| matches!(p, Part::Text(_)))
+        .expect("some text");
+    assert!(parts(&raw)[first_text..]
+        .iter()
+        .all(|p| matches!(p, Part::Text(_))));
+    assert!(shown(&raw).starts_with("\n\rA Blackwatch guard is DEAD!!\n\r"));
+    assert_eq!(prompt_lines(&raw), ["[1020/1020hp 800/800mn 930/930mv]"]);
+}
+
+#[test]
 fn lament_hides_what_each_build_hides() {
     let expect = [
         (
