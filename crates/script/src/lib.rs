@@ -13,10 +13,13 @@ mod actions;
 mod api;
 mod env;
 mod hook;
+mod library;
 mod limits;
 mod owner;
 mod report;
 mod state;
+#[cfg(test)]
+mod test_support;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -175,6 +178,7 @@ impl ScriptEngine {
         api::apply_sandbox(&lua)?;
         let limits = Limits::new();
         limits::install(&lua, &limits, lua.create_function(api::mud_log)?)?;
+        library::install(&lua)?;
         // The plugins read the standard library as it stands now, so
         // before the shared `mud` table joins the globals.
         let envs = Envs::install(&lua)?;
@@ -775,6 +779,7 @@ mod tests {
     use vosh_automation::vars::Scope;
 
     use super::*;
+    use crate::test_support::returns_in_time;
 
     fn run(code: &str) -> Vec<Action> {
         let mut e = ScriptEngine::new().unwrap();
@@ -2112,18 +2117,6 @@ mod tests {
              coroutine.resume(c) \
              coroutine.close(c)",
         );
-    }
-
-    /// Run `f` on a thread of its own and hand back what it returns,
-    /// failing the test when it has not returned within ten seconds, so
-    /// Lua that never stops fails a test instead of hanging the suite.
-    fn returns_in_time<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = tx.send(f());
-        });
-        rx.recv_timeout(std::time::Duration::from_secs(10))
-            .expect("the Lua never came back")
     }
 
     /// A `<close>` method that spins, as Lua source.
