@@ -32,6 +32,8 @@
 //! - `log_sink` holds the session log's row and the scrollback ring of a
 //!   connection, and the lines the session captures as it ends.
 //! - `perf` counts the work on the hot path.
+//! - `walk` is the walker, which sends the steps of a `#walk` one at a
+//!   time.
 //! - `tests` drives the steps the way the loop does.
 
 mod batch;
@@ -51,6 +53,7 @@ pub(crate) mod prompt_view;
 mod read;
 pub(crate) mod room_block;
 mod steps;
+pub(crate) mod walk;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
@@ -61,6 +64,7 @@ use vosh_protocol::telnet::{option as telnet_option, Negotiator};
 
 use crate::app::events;
 use crate::app::state::SharedState;
+use crate::input::walk::WalkCommand;
 
 use conn::io_loop;
 use connection::ConnectionError;
@@ -144,6 +148,9 @@ pub(crate) enum OutgoingMsg {
     /// renderer that shows took before the text (`Output::id`), since
     /// the session can hear of the text after it wrote more.
     LocalWrite { after: u64 },
+    /// A `#walk` you typed, or Esc, for the walker. It follows the bytes
+    /// of its line.
+    Walk(WalkCommand),
 }
 
 pub(crate) struct SessionHandle {
@@ -197,6 +204,12 @@ impl SessionHandle {
     /// false when the session has already been torn down.
     pub(crate) fn prompt_repaint(&self) -> bool {
         self.tx_outgoing.send(OutgoingMsg::PromptRepaint).is_ok()
+    }
+
+    /// Hand the walker a `#walk` you typed, or Esc. Returns false when
+    /// the session has already been torn down.
+    pub(crate) fn walk(&self, command: WalkCommand) -> bool {
+        self.tx_outgoing.send(OutgoingMsg::Walk(command)).is_ok()
     }
 
     /// True once the session loop has ended, so nothing sent reaches the

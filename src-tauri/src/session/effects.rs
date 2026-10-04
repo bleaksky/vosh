@@ -1,19 +1,22 @@
 //! The one Lua effects applier. Every path that runs Lua hands what it
 //! asks for to [`apply_script_result`], which sends its bytes, echoes its
-//! lines, keeps its timers, shows its prompt values and runs its
-//! `mud.input` lines through the input pipeline. Every line runs through
-//! the pipeline here, typed or from a Settings timer, the tick or
-//! `mud.input`, and says what it changed outside the terminal text.
+//! lines, hands a `#walk` to the walker, keeps its timers, shows its
+//! prompt values and runs its `mud.input` lines through the input
+//! pipeline. Every line runs through the pipeline here, typed or from a
+//! Settings timer, the tick or `mud.input`, and says what it changed
+//! outside the terminal text.
 
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
+use tokio::time::Instant;
 use tracing::warn;
 
 use crate::app::events::{self, broadcast_list_changes, ListChanges, ListRevisions};
 use crate::app::state::{AppState, SharedState};
 use crate::input;
+use crate::input::walk::WalkCommand;
 use crate::output::emit_output;
 use crate::profile::live::Profile;
 use crate::profile::shared::SharedLayer;
@@ -23,6 +26,7 @@ use crate::tick::TickStep;
 use super::batch::ReadBatch;
 use super::connection::Stream;
 use super::prompt_view::emit_prompt_vars;
+use super::walk::{self, Walker};
 use super::TargetPayload;
 
 /// Where a step writes to the terminal: the batch of the read it runs
@@ -55,24 +59,25 @@ impl OutputSink<'_> {
     }
 }
 
-/// Where the bytes and echo lines a script result asks for go.
+/// Where the bytes, echo lines and `#walk` a script result asks for go.
 pub(super) enum ScriptIo<'a, 'b> {
-    /// The session loop: its connection, and the read's batch or the
-    /// terminal.
-    Session(&'a mut Stream, &'a mut OutputSink<'b>),
-    /// Anywhere else, such as a typed line or a plugin load. The bytes
-    /// and echo lines collect for the caller, which sends and prints them
-    /// with its own.
+    /// The session loop: its connection, the read's batch or the
+    /// terminal, and its walker.
+    Session(&'a mut Stream, &'a mut OutputSink<'b>, &'a mut Walker),
+    /// Anywhere else, such as a typed line or a plugin load. The bytes,
+    /// echo lines and walk collect for the caller, which sends and prints
+    /// them with its own and hands the walk to the session.
     Collect {
         bytes: &'a mut Vec<u8>,
         echoes: &'a mut Vec<String>,
+        walk: &'a mut Option<WalkCommand>,
     },
 }
 
 impl ScriptIo<'_, '_> {
     async fn send(&mut self, bytes: &[u8]) -> std::io::Result<()> {
         match self {
-            ScriptIo::Session(stream, _) => {
+            ScriptIo::Session(stream, ..) => {
                 stream.write_all(bytes).await?;
                 stream.flush().await
             }
@@ -85,7 +90,7 @@ impl ScriptIo<'_, '_> {
 
     fn echo<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, lines: Vec<String>) {
         match self {
-            ScriptIo::Session(_, sink) => sink.write(app, framed_echoes(&lines)),
+            ScriptIo::Session(_, sink, _) => sink.write(app, framed_echoes(&lines)),
             ScriptIo::Collect { echoes, .. } => echoes.extend(lines),
         }
     }
@@ -96,8 +101,40 @@ impl ScriptIo<'_, '_> {
         profile: &Arc<Mutex<Profile>>,
     ) {
         match self {
-            ScriptIo::Session(_, sink) => sink.prompt_vars(app, profile).await,
+            ScriptIo::Session(_, sink, _) => sink.prompt_vars(app, profile).await,
             ScriptIo::Collect { .. } => emit_prompt_vars(app, profile, true).await,
+        }
+    }
+
+    /// Hand `command` to the walker: in the session it sends the step and
+    /// prints the walker's lines, and returns what a `#walk stop` or a
+    /// bare `#walk` let go of, run. Anywhere else the walk collects for
+    /// the caller, the later of two taking over.
+    async fn walk<R: tauri::Runtime>(
+        &mut self,
+        app: &AppHandle<R>,
+        profile: &Arc<Mutex<Profile>>,
+        command: WalkCommand,
+    ) -> std::io::Result<Option<ApplyResult>> {
+        match self {
+            ScriptIo::Session(stream, sink, walker) => {
+                let out = walker.command(command, Instant::now());
+                if !out.send.is_empty() {
+                    stream.write_all(&out.send).await?;
+                    stream.flush().await?;
+                }
+                if !out.lines.is_empty() {
+                    sink.write(app, framed_echoes(&out.lines));
+                }
+                if out.release.is_empty() {
+                    return Ok(None);
+                }
+                Ok(Some(walk::release(profile, out.release).await))
+            }
+            ScriptIo::Collect { walk, .. } => {
+                **walk = Some(command);
+                Ok(None)
+            }
         }
     }
 }
@@ -138,7 +175,28 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             io.send(&apply.send_bytes).await?;
         }
         if !apply.echoes.is_empty() {
-            io.echo(app, apply.echoes);
+            io.echo(app, std::mem::take(&mut apply.echoes));
+        }
+        // A `#walk` goes after the bytes of its line. What a `#walk stop`
+        // or a bare `#walk` let go of runs right after it, and its own
+        // timers and `mud.input` lines join this result's.
+        let mut walking = apply.walk.take();
+        while let Some(command) = walking.take() {
+            let Some(mut released) = io.walk(app, profile, command).await? else {
+                continue;
+            };
+            if released.durable_changed {
+                crate::disk::save::mark_profile_dirty(app);
+            }
+            broadcast_list_changes(app, std::mem::take(&mut released.lists));
+            if !released.send_bytes.is_empty() {
+                io.send(&std::mem::take(&mut released.send_bytes)).await?;
+            }
+            if !released.echoes.is_empty() {
+                io.echo(app, std::mem::take(&mut released.echoes));
+            }
+            walking = released.walk.take();
+            apply.append(released);
         }
         if !apply.new_timers.is_empty() || !apply.cancel_timers.is_empty() {
             // New timers go in before the cancels run, so a timer that
@@ -189,31 +247,41 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
     }
 }
 
+/// What a script result outside the session loop leaves for its caller:
+/// the bytes for the game, the echo lines for the terminal, and a `#walk`
+/// for the walker in the session, which goes after the bytes.
+#[derive(Debug, Default)]
+pub(crate) struct Collected {
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) echoes: Vec<String>,
+    pub(crate) walk: Option<WalkCommand>,
+}
+
 /// [`apply_script_result`] outside the session loop, as for a typed line
-/// or a plugin load. Returns the bytes for the game and the echo lines
-/// for the terminal, which the caller sends and prints.
+/// or a plugin load. Returns what the caller sends, prints and hands the
+/// session.
 pub(crate) async fn collect_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
     profile: &Arc<Mutex<Profile>>,
     lua_timers: &SharedTimers,
     apply: ApplyResult,
-) -> (Vec<u8>, Vec<String>) {
-    let mut bytes = Vec::new();
-    let mut echoes = Vec::new();
+) -> Collected {
+    let mut collected = Collected::default();
     let mut io = ScriptIo::Collect {
-        bytes: &mut bytes,
-        echoes: &mut echoes,
+        bytes: &mut collected.bytes,
+        echoes: &mut collected.echoes,
+        walk: &mut collected.walk,
     };
     // Collecting writes to no stream, so it never fails.
     if let Err(e) = apply_script_result(app, &mut io, profile, lua_timers, apply).await {
         warn!(error = %e, "applying a script result failed");
     }
-    (bytes, echoes)
+    collected
 }
 
 /// Echo lines outside a trigger's own line, each on its own row with a
 /// line end before the first.
-fn framed_echoes<S: AsRef<str>>(lines: &[S]) -> Vec<u8> {
+pub(super) fn framed_echoes<S: AsRef<str>>(lines: &[S]) -> Vec<u8> {
     let mut buf = Vec::new();
     for line in lines {
         buf.extend_from_slice(b"\r\n");
@@ -256,6 +324,7 @@ pub(crate) fn line_script_result(ran: input::Ran) -> ApplyResult {
     let mut apply = ApplyResult {
         send_bytes: result.bytes,
         echoes: result.echo,
+        walk: result.walk,
         ..ApplyResult::default()
     };
     apply.append(lua);
@@ -374,6 +443,7 @@ pub(crate) fn run_lines_locked<'a>(
 pub(super) async fn run_fired_command<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
+    walker: &mut Walker,
     profile: &Arc<Mutex<Profile>>,
     lua_timers: &SharedTimers,
     command: &str,
@@ -391,7 +461,7 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
     };
     crate::disk::save::settle_line_effects(app, effects).await;
     shown.send(app);
-    let mut io = ScriptIo::Session(stream, sink);
+    let mut io = ScriptIo::Session(stream, sink, walker);
     apply_script_result(app, &mut io, profile, lua_timers, apply).await
 }
 
@@ -401,6 +471,7 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
 pub(super) async fn deliver_tick_step<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
+    walker: &mut Walker,
     profile: &Arc<Mutex<Profile>>,
     lua_timers: &SharedTimers,
     step: TickStep,
@@ -410,7 +481,7 @@ pub(super) async fn deliver_tick_step<R: tauri::Runtime>(
         warn!(error = %e, "failed to emit tick payload");
     }
     if let Some(command) = step.command {
-        run_fired_command(app, stream, profile, lua_timers, &command, sink).await?;
+        run_fired_command(app, stream, walker, profile, lua_timers, &command, sink).await?;
     }
     Ok(())
 }

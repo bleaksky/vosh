@@ -2,7 +2,8 @@
 //! interpolation and alias expansion, and returns the bytes to send to the
 //! server. Recognizes a small set of slash commands that target the local
 //! profile rather than the connection. [`run_typed_line`] runs a line you
-//! type from end to end and hands its bytes to the session.
+//! type from end to end and hands its bytes to the session, and a `#walk`
+//! in it to the walker there.
 
 mod automation;
 mod profile;
@@ -12,9 +13,11 @@ mod slash;
 pub(crate) mod target;
 mod tick;
 mod vars;
+pub(crate) mod walk;
 
 use tauri::{AppHandle, Emitter};
 use vosh_automation::alias::{ExpandError, ExpandStep};
+use walk::WalkCommand;
 
 use crate::app::events::{self, HELP_OPEN};
 use crate::app::state::{AppState, SharedState};
@@ -37,6 +40,9 @@ pub(crate) struct InputResult {
     /// Local lines to echo back to the terminal pane (without CRLF added).
     /// The session layer wraps each line in CRLF before emitting.
     pub(crate) echo: Vec<String>,
+    /// A `#walk` the line ran, for the walker in the session, after
+    /// `bytes`. What followed it in the line rides inside it.
+    pub(crate) walk: Option<WalkCommand>,
 }
 
 impl InputResult {
@@ -45,6 +51,7 @@ impl InputResult {
         Self {
             bytes: Vec::new(),
             echo: lines,
+            walk: None,
         }
     }
 
@@ -64,6 +71,7 @@ impl InputResult {
         Self {
             bytes,
             echo: Vec::new(),
+            walk: None,
         }
     }
 
@@ -206,25 +214,30 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
 }
 
 /// Apply a script result outside the session loop, the way every path
-/// applies one, then print its echo lines on the terminal and send its
-/// bytes to the game. With no connection the terminal says so.
+/// applies one, then print its echo lines on the terminal, send its bytes
+/// to the game and hand a `#walk` to the walker after them. With no
+/// connection the terminal says so.
 async fn deliver_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
     apply: ApplyResult,
 ) -> Result<(), String> {
-    let (bytes, echoes) =
-        session::effects::collect_script_result(app, &state.profile, &state.lua_timers, apply)
-            .await;
+    let session::effects::Collected {
+        bytes,
+        echoes,
+        walk,
+    } = session::effects::collect_script_result(app, &state.profile, &state.lua_timers, apply)
+        .await;
     output::echo_lines(app, &echoes);
 
-    if bytes.is_empty() {
+    if bytes.is_empty() && walk.is_none() {
         return Ok(());
     }
 
     let mut current = state.session.lock().await;
     if let Some(handle) = current.as_ref() {
-        if handle.send(bytes) {
+        let sent = bytes.is_empty() || handle.send(bytes);
+        if sent && walk.map_or(true, |walk| handle.walk(walk)) {
             return Ok(());
         }
         // The game closed the connection and the session ended, but its
@@ -233,8 +246,25 @@ async fn deliver_script_result<R: tauri::Runtime>(
         // it. Take the handle out, so this line and every one after it
         // finds no connection, as after a disconnect.
         *current = None;
+        output::emit_output(app, NOT_CONNECTED.to_vec());
+        return Ok(());
     }
-    output::emit_output(app, NOT_CONNECTED.to_vec());
+    // With no connection no walk is under way, so `#walk` and `#walk stop`
+    // say so, and anything that would reach the game says it cannot.
+    let reaches_game = match &walk {
+        Some(WalkCommand::Start { .. }) => true,
+        Some(WalkCommand::Stop { rest, .. } | WalkCommand::Status { rest }) => !rest.is_empty(),
+        None => false,
+    };
+    if matches!(
+        walk,
+        Some(WalkCommand::Stop { key: false, .. } | WalkCommand::Status { .. })
+    ) {
+        output::echo_lines(app, &[session::walk::NOT_WALKING.to_string()]);
+    }
+    if !bytes.is_empty() || reaches_game {
+        output::emit_output(app, NOT_CONNECTED.to_vec());
+    }
     Ok(())
 }
 
@@ -327,7 +357,14 @@ impl LineEffects {
         if is_profile_reset_or_load(line) {
             return;
         }
-        if line.trim_start().starts_with('#') {
+        // A `#walk` changes nothing a save keeps, and what it holds runs
+        // as an alias's pieces do, where a `#` command goes out as text.
+        let walk = line
+            .trim_start()
+            .strip_prefix('#')
+            .and_then(walk::slash_walk_args)
+            .is_some();
+        if line.trim_start().starts_with('#') && !walk {
             self.dirty = true;
         }
     }
@@ -426,12 +463,36 @@ fn process_line(
             return InputResult::error(format!("alias recursion limit hit ({depth})"));
         }
     };
+    run_expanded(profile, steps, lua)
+}
 
+/// Run the steps a line expanded to, in order: each command goes out as
+/// text and each script alias body runs where it stands, adding to `lua`
+/// what it asks for besides its sends and echo lines. A command that is a
+/// `#walk` runs it (Q16), and the steps after it ride in the walk, so
+/// they wait for it to end (Q28). Every other `#` command goes out as
+/// text, as it always did. The walker runs what a walk held this way
+/// once you arrive.
+pub(crate) fn run_expanded(
+    profile: &mut Profile,
+    steps: Vec<ExpandStep>,
+    lua: &mut ApplyResult,
+) -> InputResult {
     let mut bytes = Vec::new();
     let mut echo = Vec::new();
-    for step in steps {
+    let mut steps = steps.into_iter();
+    while let Some(step) = steps.next() {
         match step {
             ExpandStep::Command(cmd) => {
+                if let Some(args) = walk::walk_args(&cmd) {
+                    let mut walked = walk::walk_result(args, steps.collect());
+                    echo.append(&mut walked.echo);
+                    return InputResult {
+                        bytes,
+                        echo,
+                        walk: walked.walk,
+                    };
+                }
                 bytes.extend_from_slice(cmd.as_bytes());
                 bytes.extend_from_slice(b"\r\n");
             }
@@ -443,7 +504,11 @@ fn process_line(
             }
         }
     }
-    InputResult { bytes, echo }
+    InputResult {
+        bytes,
+        echo,
+        walk: None,
+    }
 }
 
 fn split_first_word(input: &str) -> (&str, &str) {

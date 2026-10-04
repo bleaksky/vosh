@@ -239,18 +239,19 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
                 continue;
             }
         };
-        let (bytes, echoes) = crate::session::effects::collect_script_result(
+        let collected = crate::session::effects::collect_script_result(
             app,
             &state.profile,
             &state.lua_timers,
             apply,
         )
         .await;
-        if !bytes.is_empty() || !echoes.is_empty() {
+        if !collected.bytes.is_empty() || !collected.echoes.is_empty() || collected.walk.is_some() {
             info!(
                 name = %name,
-                bytes = bytes.len(),
-                echoes = echoes.len(),
+                bytes = collected.bytes.len(),
+                echoes = collected.echoes.len(),
+                walk = collected.walk.is_some(),
                 "plugin output at launch has nowhere to go"
             );
         }
