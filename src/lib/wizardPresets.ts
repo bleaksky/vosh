@@ -16,7 +16,7 @@ export interface PresetChange {
 
 /** Each character whose presets change under the shared list, in profile
  *  order. A profile that never saved a file holds the defaults, which
- *  turn every preset on, as per profile mode reads it. */
+ *  turn on the presets on by default, as per profile mode reads it. */
 export function presetChanges(
   plan: Pick<MigrationPlan, 'source_profiles' | 'shared_presets' | 'profile_presets'>,
 ): PresetChange[] {
