@@ -90,15 +90,18 @@ impl Watch {
                     .data
                     .get("target")
                     .and_then(|v| v.as_str())
-                    .filter(|t| !t.is_empty())
-                    .map(str::to_string);
+                    .filter(|t| !t.is_empty());
                 let started = self.target.is_none() && target.is_some();
                 let tank = msg
                     .data
                     .get("tank")
                     .and_then(|t| t.get("name"))
                     .and_then(|v| v.as_str());
-                self.target.clone_from(&target);
+                // Each round of a fight sends the same target, which this
+                // keeps without a copy.
+                if self.target.as_deref() != target {
+                    self.target = target.map(str::to_string);
+                }
                 let parts = parts(p, ATTACKED)?;
                 if !started {
                     return None;
@@ -114,7 +117,7 @@ impl Watch {
                 let target = target?;
                 Some(preset(
                     ATTACKED,
-                    format!("{} attacked you", capitalized(&target)),
+                    format!("{} attacked you", capitalized(target)),
                     None,
                     parts,
                 ))
@@ -126,10 +129,11 @@ impl Watch {
     /// What a line of the game that is not your prompt rings: your name.
     pub(crate) fn line(&self, p: &Profile, plain: &str) -> Option<Alert> {
         let name = self.name.as_deref()?;
+        // Off, the preset costs a line nothing but this look at the list.
+        let parts = parts(p, NAME)?;
         if plain.starts_with("You ") || !names(plain, name) {
             return None;
         }
-        let parts = parts(p, NAME)?;
         Some(preset(
             NAME,
             "Someone named you".into(),

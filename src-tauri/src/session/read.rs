@@ -383,12 +383,11 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         let hidden = c.prompt.vars.take_hidden_change();
         // Low health follows what the vitals panes read once the read's
         // packets and prompt values landed, while its preset is on.
-        let low = (gmcp || prompt_vars || hidden.is_some())
+        let follow = (gmcp || prompt_vars || hidden.is_some())
+            && crate::alert::presets::parts(&p, crate::alert::presets::LOW_HEALTH).is_some();
+        let low = follow
             .then(|| crate::alert::presets::health(&c.prompt.vars))
             .flatten()
-            .filter(|_| {
-                crate::alert::presets::parts(&p, crate::alert::presets::LOW_HEALTH).is_some()
-            })
             .and_then(|(hp, maxhp, hid)| c.alerts.health(&p, hp, maxhp, hid));
         (
             p.open().clone(),
