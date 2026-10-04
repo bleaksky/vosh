@@ -11,7 +11,7 @@
 pub(crate) mod last_seen;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tokio::time::Instant;
 use tracing::warn;
 use vosh_prompt::capture::Recognizer;
@@ -158,19 +158,18 @@ pub(crate) fn client_values(
     }
 }
 
-/// Tell the webview what the game said of your prompt settings, on
-/// `session://game-prompt-seen`. When the active profile's capture took
-/// a new setting, the profile saves shortly and every window reads the
-/// `[prompt]` table again.
+/// Tell the webview what the game said of your prompt settings in
+/// `session`, on `session://game-prompt-seen`. When the active profile's
+/// capture took a new setting, the profile saves shortly and every window
+/// reads the `[prompt]` table again.
 pub(crate) fn report_game_prompt_seen<R: tauri::Runtime>(
     app: &AppHandle<R>,
+    session: &Session,
     seen: Vec<vosh_prompt::GamePromptSeen>,
 ) {
     let applied = seen.iter().any(|s| s.applied);
     for payload in seen {
-        if let Err(e) = app.emit(events::GAME_PROMPT_SEEN, payload) {
-            warn!(error = %e, "failed to emit the game's prompt settings");
-        }
+        session.emit(app, events::GAME_PROMPT_SEEN, &payload);
     }
     if applied {
         crate::disk::save::mark_profile_dirty(app);

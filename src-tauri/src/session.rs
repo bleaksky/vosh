@@ -63,7 +63,7 @@ pub(crate) mod walk;
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
@@ -309,8 +309,9 @@ pub(crate) async fn connect<R: tauri::Runtime>(
         Err(e) => {
             // Surface the disconnected state so the UI does not stay stuck
             // on "connecting...". The frontend listens for session://state.
-            let _ = app.emit(
-                events::STATE,
+            emit_state(
+                app,
+                session,
                 StatePayload::Disconnected {
                     reason: Some(e.to_string()),
                 },
@@ -390,6 +391,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
 ) -> Result<SessionHandle, ConnectionError> {
     emit_state(
         &app,
+        session,
         StatePayload::Connecting {
             host: host.clone(),
             port,
@@ -420,6 +422,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
 
     emit_state(
         &app,
+        session,
         StatePayload::Connected {
             host: host.clone(),
             port,
@@ -468,16 +471,12 @@ pub(crate) struct GagWithoutReaderPayload {
     pub trigger: String,
 }
 
-fn emit_state<R: tauri::Runtime>(app: &AppHandle<R>, payload: StatePayload) {
-    if let Err(e) = app.emit(events::STATE, payload) {
-        warn!(error = %e, "failed to emit session state");
-    }
+fn emit_state<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, payload: StatePayload) {
+    session.emit(app, events::STATE, &payload);
 }
 
-fn emit_input_mode<R: tauri::Runtime>(app: &AppHandle<R>, password: bool) {
-    if let Err(e) = app.emit(events::INPUT_MODE, InputModePayload { password }) {
-        warn!(error = %e, "failed to emit input mode");
-    }
+fn emit_input_mode<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, password: bool) {
+    session.emit(app, events::INPUT_MODE, &InputModePayload { password });
 }
 
 #[cfg(test)]

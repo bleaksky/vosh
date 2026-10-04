@@ -9,11 +9,13 @@
 //! session slot, a profile or a connection, so each step resolves its
 //! session before it takes any other lock.
 
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
+use tracing::warn;
 
 use crate::affects::snapshot::AffectsSnapshot;
 use crate::logs::SharedScrollback;
@@ -31,9 +33,9 @@ pub(crate) struct SessionId(u32);
 
 /// What one session holds apart from the profile: the task that runs its
 /// connection, what that connection shares with the commands, its Lua
-/// timers and scrollback, and what the app keeps about its connection,
-/// the host and port, the character logged in, the terminal size and the
-/// last affects.
+/// timers and scrollback, the count of what reached its terminal, and
+/// what the app keeps about its connection, the host and port, the
+/// character logged in, the terminal size and the last affects.
 pub(crate) struct Session {
     pub(crate) id: SessionId,
     /// The handle to the task that runs the connection, while one runs.
@@ -83,6 +85,12 @@ pub(crate) struct Session {
     /// window listens, so they wait for the first connect or the first
     /// line you type, see [`crate::app::plugins::show_launch_lines`].
     pub(crate) launch_lua_lines: std::sync::Mutex<Vec<String>>,
+    /// How many outputs reached the session's terminal, repaints aside.
+    /// The session loop notes it after each of its writes, and a count
+    /// that moved since means output from elsewhere, such as a slash
+    /// command's echo, landed after the open row and closed it. Output in
+    /// another session never moves it.
+    output_count: AtomicU64,
 }
 
 impl Session {
@@ -103,8 +111,47 @@ impl Session {
             prompt_watch: AtomicBool::new(false),
             reader_busy: AtomicBool::new(false),
             launch_lua_lines: std::sync::Mutex::new(Vec::new()),
+            output_count: AtomicU64::new(0),
         }
     }
+
+    /// How many outputs reached the session's terminal so far, see
+    /// [`Session::count_output`].
+    pub(crate) fn output_count(&self) -> u64 {
+        self.output_count.load(Ordering::Acquire)
+    }
+
+    /// Count one output that reached the session's terminal. Returns the
+    /// count after it.
+    pub(crate) fn count_output(&self) -> u64 {
+        self.output_count.fetch_add(1, Ordering::AcqRel) + 1
+    }
+
+    /// Send `event` with `payload`, which serializes as an object, and
+    /// the session's id beside its fields, `{session, ..payload}`, so the
+    /// page can tell which session it came from.
+    pub(crate) fn emit<R: tauri::Runtime, T: Serialize>(
+        &self,
+        app: &AppHandle<R>,
+        event: &str,
+        payload: &T,
+    ) {
+        let named = Named {
+            session: self.id,
+            payload,
+        };
+        if let Err(e) = app.emit(event, &named) {
+            warn!(error = %e, event, "failed to emit a session event");
+        }
+    }
+}
+
+/// A session event's payload with the session that sent it.
+#[derive(Serialize)]
+struct Named<'a, T> {
+    session: SessionId,
+    #[serde(flatten)]
+    payload: &'a T,
 }
 
 /// The sessions in the order the window lists them, and the one selected.
@@ -140,8 +187,85 @@ impl Default for Sessions {
 
 #[cfg(test)]
 mod tests {
-    use super::{SessionId, NO_SUCH_SESSION};
+    use std::sync::{Arc, Mutex};
+
+    use serde_json::{json, Value};
+    use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
+    use tauri::{App, Listener};
+
+    use super::{Session, SessionId, NO_SUCH_SESSION};
+    use crate::app::events;
     use crate::app::state::AppState;
+    use crate::session::{StatePayload, TargetPayload};
+
+    fn app() -> App<MockRuntime> {
+        mock_builder()
+            .build(mock_context(noop_assets()))
+            .expect("a mock app")
+    }
+
+    /// Every payload of `event` the app sends from now on.
+    fn hear(app: &App<MockRuntime>, event: &'static str) -> Arc<Mutex<Vec<Value>>> {
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let keep = heard.clone();
+        app.listen_any(event, move |e| {
+            let payload = serde_json::from_str(e.payload()).expect("a JSON payload");
+            keep.lock().expect("the payloads").push(payload);
+        });
+        heard
+    }
+
+    #[test]
+    fn emit_names_the_session_beside_a_structs_fields_and_an_enums_kind() {
+        let app = app();
+        let states = hear(&app, events::STATE);
+        let targets = hear(&app, events::TARGET);
+        let session = Session::new(SessionId(7));
+        session.emit(
+            app.handle(),
+            events::STATE,
+            &StatePayload::Connected {
+                host: "localhost".into(),
+                port: 4000,
+                tls: false,
+            },
+        );
+        session.emit(
+            app.handle(),
+            events::TARGET,
+            &TargetPayload {
+                name: Some("goblin".into()),
+                room_idx: Some(2),
+                quick_keys: Vec::new(),
+            },
+        );
+        assert_eq!(
+            *states.lock().unwrap(),
+            [json!({
+                "session": 7,
+                "kind": "connected",
+                "host": "localhost",
+                "port": 4000,
+                "tls": false,
+            })]
+        );
+        assert_eq!(
+            *targets.lock().unwrap(),
+            [json!({"session": 7, "name": "goblin", "room_idx": 2, "quick_keys": []})]
+        );
+    }
+
+    #[test]
+    fn an_echo_in_one_session_leaves_the_other_sessions_count_alone() {
+        // The echo reaches the shared grid too, which other tests read.
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
+        let app = app();
+        let outputs = hear(&app, events::OUTPUT);
+        let (one, two) = (Session::new(SessionId(1)), Session::new(SessionId(2)));
+        crate::output::echo_lines(app.handle(), &two, &["You wave.".to_string()]);
+        assert_eq!((one.output_count(), two.output_count()), (0, 1));
+        assert_eq!(outputs.lock().unwrap()[0]["session"], 2);
+    }
 
     #[test]
     fn a_command_acts_on_the_session_it_names_or_on_the_selected_one() {

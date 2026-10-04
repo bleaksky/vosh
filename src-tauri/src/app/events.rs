@@ -2,6 +2,13 @@
 //! with the payload it carries and the page function that hears it, and
 //! [`broadcast`] sends an event to every window.
 //!
+//! Each event of the session's stream whose payload is an object names
+//! the session that sent it in a `session` field beside the payload's
+//! own, through [`crate::sessions::Session::emit`], and `session://output`
+//! names it in [`crate::output::OutputPayload`]. `session://prompt-vars`,
+//! a map of values, and the GMCP packages, each the packet as the game
+//! sent it, keep their shape.
+//!
 //! Two names stay where they are built. The session sends each GMCP
 //! package from a `format!` template in session/gmcp.rs,
 //! `session://gmcp/` and the package name, because the contract test

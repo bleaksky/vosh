@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tokio::sync::Mutex;
 use tokio::time::Instant;
 use tracing::warn;
@@ -39,11 +39,11 @@ pub(super) enum OutputSink<'a> {
 }
 
 impl OutputSink<'_> {
-    /// Write `bytes` to the terminal.
-    fn write<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, bytes: Vec<u8>) {
+    /// Write `bytes` to the terminal of `session`.
+    fn write<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, session: &Session, bytes: Vec<u8>) {
         match self {
             OutputSink::Batch(batch) => batch.out.text(&bytes),
-            OutputSink::Direct => emit_output(app, bytes),
+            OutputSink::Direct => emit_output(app, session, bytes),
         }
     }
 
@@ -90,9 +90,14 @@ impl ScriptIo<'_, '_> {
         }
     }
 
-    fn echo<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, lines: Vec<String>) {
+    fn echo<R: tauri::Runtime>(
+        &mut self,
+        app: &AppHandle<R>,
+        session: &Session,
+        lines: Vec<String>,
+    ) {
         match self {
-            ScriptIo::Session(_, sink, _) => sink.write(app, framed_echoes(&lines)),
+            ScriptIo::Session(_, sink, _) => sink.write(app, session, framed_echoes(&lines)),
             ScriptIo::Collect { echoes, .. } => echoes.extend(lines),
         }
     }
@@ -127,7 +132,7 @@ impl ScriptIo<'_, '_> {
                     stream.flush().await?;
                 }
                 if !out.lines.is_empty() {
-                    sink.write(app, framed_echoes(&out.lines));
+                    sink.write(app, session, framed_echoes(&out.lines));
                 }
                 if out.release.is_empty() {
                     return Ok(None);
@@ -227,7 +232,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             io.send(&apply.send_bytes).await?;
         }
         if !apply.echoes.is_empty() {
-            io.echo(app, std::mem::take(&mut apply.echoes));
+            io.echo(app, session, std::mem::take(&mut apply.echoes));
         }
         // A `#walk` goes after the bytes of its line. What a `#walk stop`
         // or a bare `#walk` let go of runs right after it, and its own
@@ -245,7 +250,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
                 io.send(&std::mem::take(&mut released.send_bytes)).await?;
             }
             if !released.echoes.is_empty() {
-                io.echo(app, std::mem::take(&mut released.echoes));
+                io.echo(app, session, std::mem::take(&mut released.echoes));
             }
             walking = released.walk.take();
             apply.append(released);
@@ -269,6 +274,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             warn!(depth, "mud.input went too deep");
             io.echo(
                 app,
+                session,
                 vec![format!("[mud.input recursion limit hit ({depth})]")],
             );
             return Ok(());
@@ -276,7 +282,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
         depth += 1;
         let (inputs, dropped) = budget.take(std::mem::take(&mut apply.inputs));
         if !dropped.is_empty() {
-            io.echo(app, dropped);
+            io.echo(app, session, dropped);
         }
         if inputs.is_empty() {
             return Ok(());
@@ -439,7 +445,7 @@ impl ShownChanges {
             tokio::spawn(async move { crate::prompt::request_prompt_repaint(&session).await });
         }
         if let Some(payload) = self.target {
-            let _ = app.emit(events::TARGET, payload);
+            session.emit(app, events::TARGET, &payload);
         }
     }
 }
@@ -527,9 +533,9 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
     apply_script_result(app, io, profile, session, apply).await
 }
 
-/// Report a tick step on `session://tick`, so the frontend counts and
-/// plays the sound when it fired, then run its Send each tick command
-/// through the full input pipeline like a timer command.
+/// Report a tick step of `session` on `session://tick`, so the frontend
+/// counts and plays the sound when it fired, then run its Send each tick
+/// command through the full input pipeline like a timer command.
 pub(super) async fn deliver_tick_step<R: tauri::Runtime>(
     app: &AppHandle<R>,
     io: &mut ScriptIo<'_, '_>,
@@ -537,9 +543,7 @@ pub(super) async fn deliver_tick_step<R: tauri::Runtime>(
     session: &Arc<Session>,
     step: TickStep,
 ) -> std::io::Result<()> {
-    if let Err(e) = app.emit(events::TICK, &step.payload) {
-        warn!(error = %e, "failed to emit tick payload");
-    }
+    session.emit(app, events::TICK, &step.payload);
     if let Some(command) = step.command {
         run_fired_command(app, io, profile, session, &command).await?;
     }

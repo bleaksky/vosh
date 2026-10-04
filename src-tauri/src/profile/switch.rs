@@ -208,7 +208,7 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
     let plugins = switch_profile(state, session, name).await?;
     // The new profile's capture took the game's latest prompt settings.
     let seen = session.connection.lock().prompt.take_seen();
-    crate::prompt::report_game_prompt_seen(app, seen);
+    crate::prompt::report_game_prompt_seen(app, session, seen);
 
     // Hand every window the new profile's panes, tracked affects, tick
     // settings, and chip style from here, then the replace notice, on
@@ -290,7 +290,7 @@ pub(crate) async fn auto_switch_for_character<R: tauri::Runtime>(
             auto_switch_failed_line(&e)
         }
     };
-    output::emit_output(app, line.into_bytes());
+    output::emit_output(app, session, line.into_bytes());
 }
 
 /// The profile that `character` logging in on the connection `session`

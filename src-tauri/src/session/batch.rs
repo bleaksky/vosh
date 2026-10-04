@@ -7,7 +7,8 @@ use tokio::time::Instant;
 use tracing::warn;
 use vosh_prompt::stage::Output;
 
-use crate::output::{emit_counted, output_count, request_frame};
+use crate::output::{emit_counted, request_frame};
+use crate::sessions::Session;
 
 use super::log_sink::LogSink;
 use super::perf::PerfCounters;
@@ -43,12 +44,11 @@ pub(super) struct ReadBatch {
 }
 
 impl ReadBatch {
-    /// A batch for the next read. `seen` is the output count after the
-    /// session last wrote, so output from elsewhere since then closes the
-    /// open row.
-    pub(super) fn new(seen: u64) -> Self {
+    /// A batch for the next read. `closed` says output from elsewhere
+    /// landed since the session last wrote, which closes the open row.
+    pub(super) fn new(closed: bool) -> Self {
         Self {
-            out: Output::new(output_count() != seen),
+            out: Output::new(closed),
             log: Vec::new(),
             prompt_vars: false,
             prompt: false,
@@ -164,14 +164,15 @@ impl Settle {
     }
 }
 
-/// Send one read's output. Returns the output count after it. It asks
-/// for no frame, since the session asks for one through `settle` when
-/// the burst of reads it came in ends.
+/// Send one read's output in `session`. Returns the session's output
+/// count after it. It asks for no frame, since the session asks for one
+/// through `settle` when the burst of reads it came in ends.
 pub(super) fn emit_session_output<R: tauri::Runtime>(
     app: &AppHandle<R>,
+    session: &Session,
     out: &Output,
     settle: &mut Settle,
 ) -> u64 {
     settle.drew();
-    emit_counted(app, out, true, true, false)
+    emit_counted(app, session, out, true, true, false)
 }

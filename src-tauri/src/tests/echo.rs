@@ -59,7 +59,8 @@ fn slash_command_echoes_and_the_logs_reply_reach_the_native_grid() {
     // session_send_input prints echoes with.
     let help = crate::input::process(&mut Profile::default(), "#help").echo;
     assert_eq!(help.first().map(String::as_str), Some("slash commands:"));
-    crate::output::echo_lines(handle, &help);
+    let session = app.state::<SharedState>().selected_session();
+    crate::output::echo_lines(handle, &session, &help);
 
     tauri::async_runtime::block_on(async {
         // `#logs` runs before anything that could save, and `look` is not
