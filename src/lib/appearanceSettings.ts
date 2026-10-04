@@ -1,12 +1,13 @@
 // The Appearance page's choices and edits, kept pure so they can be
-// tested without a window: what the Font, Panel font, Size, Light theme,
-// and Dark theme selects offer, and how custom themes and the base
-// palette change. The page (src/components/settings/pages/AppearancePage.tsx)
+// tested without a window: what the Font and Size selects of Terminal
+// text and Panel text, and the Light theme and Dark theme selects,
+// offer, and how custom themes and the base palette change. The page (src/components/settings/pages/AppearancePage.tsx)
 // applies and saves the results.
 
 import type { Appearance } from './chrome';
 import { ANSI_SLOTS, CANONICAL_ANSI_16, type AnsiSlot } from './baseAnsi';
 import { normalizePanelFont, PANEL_FONT_SYSTEM, PANEL_FONT_TERMINAL } from './panelFont';
+import { normalizePanelSize, PANEL_SIZE_TERMINAL } from './panelSize';
 import { DEFAULT_LIGHT_THEME_ID, type CustomTheme, type SystemFontEntry } from './session';
 import type { ThemePrefs } from './theme';
 import { themeIdFromLabel, uniqueThemeId } from './themeImport';
@@ -94,7 +95,7 @@ export function fontChoices(current: string, installed: readonly SystemFontEntry
 
 // ── Panel font ───────────────────────────────────────────────────────
 
-/** What the Panel font select offers: the terminal font, the system
+/** What the Panel text Font select offers: the terminal font, the system
  *  font, then the fonts the Font select offers. A font you picked keeps
  *  your exact font list, as Font does. */
 export function panelFontChoices(current: string, installed: readonly SystemFontEntry[]): Choice[] {
@@ -118,6 +119,16 @@ export function sizeChoices(current: number): Choice[] {
   const sizes = new Set<number>(TEXT_SIZES);
   if (Number.isFinite(current) && current > 0) sizes.add(current);
   return [...sizes].sort((a, b) => a - b).map((n) => ({ value: String(n), label: `${n} pt` }));
+}
+
+/** What the Panel text Size select offers: the terminal size, then the
+ *  sizes Size offers, your size among them. */
+export function panelSizeChoices(current: number): Choice[] {
+  const size = normalizePanelSize(current);
+  return [
+    { value: String(PANEL_SIZE_TERMINAL), label: 'Same as terminal' },
+    ...sizeChoices(size === PANEL_SIZE_TERMINAL ? Number.NaN : size),
+  ];
 }
 
 // ── Light and dark themes ────────────────────────────────────────────

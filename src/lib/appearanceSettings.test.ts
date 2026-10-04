@@ -10,6 +10,7 @@ import {
   fontLabel,
   pairChoices,
   panelFontChoices,
+  panelSizeChoices,
   primaryFontFamily,
   removeCustomTheme,
   sizeChoices,
@@ -76,6 +77,31 @@ describe('panelFontChoices', () => {
     ]);
     const gone = '"PT Mono", Menlo, monospace';
     expect(panelFontChoices(gone, installed)[2]).toEqual({ label: 'PT Mono', value: gone });
+  });
+});
+
+describe('panelSizeChoices', () => {
+  it('offers the terminal size, then the sizes Size offers', () => {
+    expect(panelSizeChoices(12)).toEqual([
+      { value: '0', label: 'Same as terminal' },
+      ...sizeChoices(12),
+    ]);
+    expect(panelSizeChoices(0)).toEqual(panelSizeChoices(12));
+    expect(panelSizeChoices(12).map((c) => c.value)).toEqual([
+      '0',
+      '11',
+      '12',
+      '13',
+      '14',
+      '15',
+      '16',
+      '18',
+    ]);
+  });
+
+  it('lists a size of your own among them', () => {
+    expect(panelSizeChoices(20).at(-1)).toEqual({ value: '20', label: '20 pt' });
+    expect(panelSizeChoices(9)[1]).toEqual({ value: '9', label: '9 pt' });
   });
 });
 

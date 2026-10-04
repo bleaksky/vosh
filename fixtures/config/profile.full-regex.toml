@@ -126,6 +126,7 @@ font_family = "JetBrains Mono, monospace"
 font_size = 16
 terminal_line_height = "loose"
 panel_font = "\"Iosevka\", Menlo, monospace"
+panel_font_size = 13
 enabled_presets = [
     "healing_basics",
     "sent_tells",

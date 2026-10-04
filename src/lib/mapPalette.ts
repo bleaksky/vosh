@@ -3,7 +3,8 @@
 // used for area-name watermarks. The mapping and server map views both pull
 // from this table so a tile in either mode reads the same.
 
-import { readPanelFace } from './panelFace';
+import { textPx } from '../components/panel/paneTextSize';
+import { readPanelFace, readPanelTextPx } from './panelFace';
 
 export interface SectorTheme {
   name: string;
@@ -103,6 +104,9 @@ export interface MapInks {
   accentSoft: string;
   /** The panel face, for the floor numbers. */
   font: string;
+  /** The floor numbers' size in px, 10 on a 12 px panel and scaled
+   *  with the panel size. */
+  labelPx: number;
 }
 
 export function mapInks(): MapInks {
@@ -118,6 +122,7 @@ export function mapInks(): MapInks {
     accent: MAP_COLORS.origin,
     accentSoft: MAP_COLORS.originFill,
     font: readPanelFace(),
+    labelPx: textPx(10, readPanelTextPx()),
   };
 }
 

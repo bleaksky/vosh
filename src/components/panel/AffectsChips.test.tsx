@@ -269,7 +269,8 @@ describe('ChipsView', () => {
     expect(rule('.pane-chips-line')).toContain('left: 18px');
     expect(rule('.pane-chips-line')).toContain('right: 12px');
     expect(rule('.pane-chips-line')).toContain('gap: 4px');
-    expect(rule('.pane-chips-label')).toContain('width: 56px');
+    // The gutter is 56 px at a 12 px panel and grows with the size.
+    expect(rule('.pane-chips-label')).toContain('width: var(--mud-chip-gutter)');
     expect(rule('.pane-chip')).toContain('padding: 0 7px');
     // A chip at full is one flat ground, as the board draws it. Only a
     // draining chip lays the gauge over it.
@@ -577,7 +578,7 @@ describe('Draining chips', () => {
   });
 });
 
-describe('ChipsView at your terminal size', () => {
+describe('ChipsView at your panel size', () => {
   const at = (size: number) =>
     renderToStaticMarkup(
       <PaneTextSizeContext.Provider value={size}>
@@ -602,8 +603,9 @@ describe('ChipsView at your terminal size', () => {
   });
 
   it('stacks 27 px lines further apart at 16 px, and rings a missing chip at that height', () => {
-    // The last line no longer fits the body and starts the next page.
-    expect(tops(at(16))).toEqual([4, 42, 74, 112, 144, 4]);
+    // The lines start 5 down, and the last no longer fits the body and
+    // starts the next page.
+    expect(tops(at(16))).toEqual([5, 43, 75, 113, 145, 5]);
     expect(at(16)).toContain('height="25.5"');
   });
 });

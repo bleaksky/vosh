@@ -327,10 +327,25 @@ describe('broadcastUiConfigChanges font event', () => {
       family: base.font_family,
       size: 14,
       panel: 'system',
+      panelSize: 12,
     });
     sent.mockClear();
     await broadcastUiConfigChanges({ ...base, panel_font: 'system' });
     expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://font-changed');
+  });
+
+  it('sends the panel size with the fonts when only the panel size changes', async () => {
+    const sent = vi.mocked(emit);
+    const base = normalizeUiConfig(raw({ font_size: 14 }));
+    await broadcastUiConfigChanges(base);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, panel_font_size: 0 });
+    expect(sent).toHaveBeenCalledWith('vosh://font-changed', {
+      family: base.font_family,
+      size: 14,
+      panel: '',
+      panelSize: 0,
+    });
   });
 });
 

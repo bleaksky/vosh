@@ -1,4 +1,5 @@
 import {
+  useContext,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -14,6 +15,7 @@ import { ServerMapView } from '../ServerMapView';
 import { mapBandLayout, mapBandPeople, mapBandRows } from './mapBand';
 import { PaneHeader, PaneMeta } from './PaneHeader';
 import { exitsLabel } from './paneText';
+import { PaneTextSizeContext } from './paneTextSize';
 
 // The Map pane (SPEC 9): the server map drawing in a box inset 8 px
 // with radius 8, then a band of dense rows for the room you stand in
@@ -126,13 +128,16 @@ export function MapBandRows({
 
 /** How many rows the band holds, the room's rows included. The drawing
  *  and the band split what the pane leaves under its header, and only
- *  a new pane size changes that split, so the count never follows the
- *  rows it lays out. */
+ *  a new pane size or a new panel size changes that split, so the count
+ *  never follows the rows it lays out. */
 function useBandRows(
   boxRef: RefObject<HTMLDivElement | null>,
   rowsRef: RefObject<HTMLUListElement | null>,
 ): number {
   const [rows, setRows] = useState(1);
+  // A new panel size makes every row taller or shorter in a pane that
+  // may keep its size, so it measures again.
+  const textSize = useContext(PaneTextSizeContext);
   useLayoutEffect(() => {
     const box = boxRef.current;
     const pane = box?.parentElement;
@@ -150,6 +155,6 @@ function useBandRows(
     const observer = new ResizeObserver(measure);
     observer.observe(pane);
     return () => observer.disconnect();
-  }, [boxRef, rowsRef]);
+  }, [boxRef, rowsRef, textSize]);
   return rows;
 }

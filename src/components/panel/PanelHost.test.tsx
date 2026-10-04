@@ -17,18 +17,26 @@ vi.mock('../../lib/stores/vitalsOptionsStore', () => ({
 }));
 
 // No panes, so only the footer can draw. The footer stands in as its
-// own section, since its stores need the running app.
+// own section, since its stores need the running app, and says the
+// panel size it hears.
 vi.mock('./panelLayoutStore', () => ({
   usePanelLayout: () => null,
   getPanelLayout: () => null,
   setPaneTree: vi.fn(),
 }));
 vi.mock('./usePaneMins', () => ({ usePaneMins: () => ({}) }));
-vi.mock('./VitalsFooter', () => ({
-  VitalsFooter: ({ opponentOnly }: { opponentOnly?: boolean }) => (
-    <section className={opponentOnly ? 'panel-opponent' : 'panel-vitals'} />
-  ),
-}));
+vi.mock('./VitalsFooter', async () => {
+  const { useContext } = await import('react');
+  const { PaneTextSizeContext } = await import('./paneTextSize');
+  return {
+    VitalsFooter: ({ opponentOnly }: { opponentOnly?: boolean }) => (
+      <section
+        className={opponentOnly ? 'panel-opponent' : 'panel-vitals'}
+        data-size={useContext(PaneTextSizeContext)}
+      />
+    ),
+  };
+});
 
 const PINNED: PromptShowState = {
   show: 'pinned',
@@ -66,16 +74,18 @@ describe('PanelHost', () => {
     expect(drawsVitals({ ...PINNED, promptsOff: true }, true)).toBe(true);
   });
 
-  it('writes your terminal size on the panel for the game text in the panes', () => {
+  it('hands your panel size to every pane and the vitals', () => {
     options = DEFAULT_VITALS_OPTIONS;
-    expect(renderToStaticMarkup(<PanelHost promptShow={null} fontSize={16} />)).toContain(
-      '<div class="panel-host" style="--font-mud-px:16">',
-    );
+    // The main window writes the size on the root for panel.css, so the
+    // panel writes none of its own.
+    const at16 = renderToStaticMarkup(<PanelHost promptShow={null} textSize={16} />);
+    expect(at16).toContain('<div class="panel-host">');
+    expect(at16).toContain('<section class="panel-vitals" data-size="16">');
     // 12 px, the panes as they were drawn, when no size or no real one
     // comes in.
     for (const size of [undefined, 0, Number.NaN]) {
-      expect(renderToStaticMarkup(<PanelHost promptShow={null} fontSize={size} />)).toContain(
-        '<div class="panel-host" style="--font-mud-px:12">',
+      expect(renderToStaticMarkup(<PanelHost promptShow={null} textSize={size} />)).toContain(
+        '<section class="panel-vitals" data-size="12">',
       );
     }
   });

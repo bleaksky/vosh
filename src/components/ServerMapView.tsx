@@ -15,7 +15,7 @@ import {
   sectorForCode,
 } from '../lib/mapPalette';
 import { MAP_STYLE_KEY, loadMapStyle, type MapStyle } from '../lib/mapStyle';
-import { readPanelFace, subscribePanelFace } from '../lib/panelFace';
+import { readPanelFace, readPanelTextPx, subscribePanelFace } from '../lib/panelFace';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom } from '../lib/mapZoom';
 import {
   DOOR_COLORS,
@@ -36,6 +36,7 @@ import {
 import { subscribeThemeChanges } from '../lib/theme';
 import { pushToast } from '../lib/toasts';
 import { MapPaneControls } from './panel/MapPaneControls';
+import { textPx } from './panel/paneTextSize';
 import { useMapGestures } from './useMapGestures';
 
 type Style = MapStyle;
@@ -260,9 +261,11 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
 
     const { rows, cols } = gridDims(tiles);
     if (rows === 0 || cols === 0) {
+      // The notice draws at the panel size, 12 px on a 12 px panel.
+      const px = readPanelTextPx();
       ctx.fillStyle = '#6e7681';
-      ctx.font = `12px ${readPanelFace()}`;
-      ctx.fillText('Map.Tiles payload has no grid yet', 10, 22);
+      ctx.font = `${px}px ${readPanelFace()}`;
+      ctx.fillText('Map.Tiles payload has no grid yet', 10, textPx(22, px));
       return;
     }
 
@@ -356,8 +359,9 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
     };
   }, []);
 
-  // The labels and marks draw in the panel face, so a new face, or a
-  // face that finishes loading after a paint, paints the map again.
+  // The labels and marks draw in the panel face at the panel size, so a
+  // new face or size, or a face that finishes loading after a paint,
+  // paints the map again.
   useEffect(() => subscribePanelFace(() => drawRef.current()), []);
 
   // Every theme write lands on the root element's inline style, from

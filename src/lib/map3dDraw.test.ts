@@ -20,6 +20,7 @@ const INKS: MapInks = {
   accent: '#88c0d0',
   accentSoft: 'rgba(136, 192, 208, 0.13)',
   font: 'sans-serif',
+  labelPx: 10,
 };
 
 type XY = { x: number; y: number };

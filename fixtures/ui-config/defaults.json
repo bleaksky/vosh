@@ -8,6 +8,7 @@
     "dark_theme": "",
     "terminal_line_height": "default",
     "panel_font": "",
+    "panel_font_size": 12,
     "tracked_affects": [],
     "enabled_presets": [],
     "keep_last_command": false,

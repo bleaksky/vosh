@@ -41,7 +41,14 @@ describe('searchSettingsRows', () => {
 
   it('matches descriptions and keywords', () => {
     expect(labels('panel font')[0]).toBe('Panel font');
-    expect(labels('status line font')).toEqual(['Panel font']);
+    expect(labels('status line typeface')).toEqual(['Panel font']);
+    expect(labels('panel size')[0]).toBe('Panel size');
+    expect(labels('status line bigger')).toEqual(['Panel size']);
+    expect(searchSettingsRows('panel size', mac)[0].target).toEqual({
+      group: 'appearance',
+      section: 'panel-text',
+      anchor: 'panel-size',
+    });
     expect(labels('ghostty')).toEqual(['Import a theme']);
     expect(labels('cursor')).toEqual(['Caret shape']);
     expect(labels('missing')).toContain('Tracked affects');
