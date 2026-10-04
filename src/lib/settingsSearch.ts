@@ -114,12 +114,6 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('appearance', 'text', 'font'),
   },
   {
-    label: 'Panel font',
-    description: 'Every pane and the status line under the terminal draw in it.',
-    keywords: 'typeface family panes status line map affects group chat vitals system',
-    target: at('appearance', 'text', 'panel-font'),
-  },
-  {
     label: 'Size',
     keywords: 'font size points terminal text bigger smaller',
     target: at('appearance', 'text', 'size'),
@@ -159,6 +153,21 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     description: 'Each hit and miss the game shows you, in a fight or not.',
     keywords: 'collapse repeated damage hits misses verbs dismembers combat count',
     target: at('appearance', 'text', 'collapse-attacks'),
+  },
+  // Panel text shows Font and Size, named here for the panel so search
+  // tells them from the terminal's.
+  {
+    label: 'Panel font',
+    description: 'Every pane and the status line under the terminal draw in it.',
+    keywords: 'typeface family panel text panes status line map affects group chat vitals system',
+    target: at('appearance', 'panel-text', 'panel-font'),
+  },
+  {
+    label: 'Panel size',
+    description: 'The headers, the rows, and the status line grow with it.',
+    keywords:
+      'font size points panel text panes status line map affects group chat vitals bigger smaller',
+    target: at('appearance', 'panel-text', 'panel-size'),
   },
   {
     label: 'Custom themes',
