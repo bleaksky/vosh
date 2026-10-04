@@ -781,6 +781,17 @@ impl ScriptEngine {
                     fresh.push((package.clone(), callback_id));
                     self.gmcp_subs.entry(package).or_default().push(callback_id);
                 }
+                // The function a cancelled timer would have called goes
+                // now, and the session drops the schedule when it applies
+                // the cancel.
+                Action::CancelTimer(timer_id) => {
+                    if let Ok(mut s) = self.state.cell.lock() {
+                        if let Some(callback_id) = s.timer_callbacks.remove(&timer_id) {
+                            s.callbacks.remove(&callback_id);
+                        }
+                    }
+                    outcome.actions.push(Action::CancelTimer(timer_id));
+                }
                 other => outcome.actions.push(other),
             }
         }
@@ -1185,6 +1196,59 @@ mod tests {
         // A timer that fired leaves nothing behind for a late cancel.
         assert_eq!(held_callbacks(&e), 0);
         assert!(e.state.cell.lock().unwrap().timer_callbacks.is_empty());
+    }
+
+    #[test]
+    fn only_the_owner_of_a_timer_cancels_it() {
+        let mut e = ScriptEngine::new().unwrap();
+        plugin(
+            &mut e,
+            "keeper",
+            "kept = mud.timer(60, function() mud.echo('kept') end) \
+             function stop() mud.cancel_timer(kept) end",
+        )
+        .unwrap();
+        let kept: u32 = e
+            .eval("mud.echo(tostring(plugins.keeper.kept))", "=#lua")
+            .unwrap()
+            .actions
+            .iter()
+            .find_map(|a| match a {
+                Action::Echo(id) => id.parse().ok(),
+                _ => None,
+            })
+            .unwrap();
+        // Neither another plugin nor your own Lua cancels it.
+        let other = plugin(&mut e, "rival", &format!("mud.cancel_timer({kept})")).unwrap();
+        assert!(!other.actions.contains(&Action::CancelTimer(kept)));
+        let typed = e
+            .eval(&format!("mud.cancel_timer({kept})"), "=#lua")
+            .unwrap();
+        assert!(typed.actions.is_empty(), "{:?}", typed.actions);
+        assert_eq!(held_callbacks(&e), 1);
+        // Your own Lua cancels the timers of a trigger body, since they
+        // share names, and a call Vosh stops cancels nothing.
+        let made = e
+            .run_body(
+                &Owner::Trigger("tick".into()),
+                "later = mud.timer(60, function() end)",
+                &[],
+            )
+            .unwrap();
+        let Action::Timer { timer_id, .. } = made.actions[0] else {
+            panic!("expected a timer, got {:?}", made.actions);
+        };
+        let stopped = e.eval("mud.cancel_timer(later) while true do end", "=#lua");
+        assert!(stopped.failed);
+        assert!(!stopped.actions.contains(&Action::CancelTimer(timer_id)));
+        assert_eq!(held_callbacks(&e), 2);
+        let cancelled = e.eval("mud.cancel_timer(later)", "=#lua").unwrap();
+        assert_eq!(cancelled.actions, [Action::CancelTimer(timer_id)]);
+        assert_eq!(held_callbacks(&e), 1);
+        // The plugin cancels its own, whoever calls its function.
+        let own = e.eval("plugins.keeper.stop()", "=#lua").unwrap();
+        assert_eq!(own.actions, [Action::CancelTimer(kept)]);
+        assert_eq!(held_callbacks(&e), 0);
     }
 
     #[test]
