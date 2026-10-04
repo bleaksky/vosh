@@ -753,6 +753,9 @@ describe('the help on Mark your commands', () => {
     expect(body('play.send-commands')).toContain(
       'Each command you send echoes in the text after a grey `›`, so your commands stand apart from the lines the game sends. Turn off `Mark your commands` under Input, then Command line, in Settings, to echo them bare.',
     );
+    expect(body('play.send-commands')).toContain(
+      'Right after a prompt that ends in `>`, such as `Account name>` at login, a command echoes without the `›`, since the prompt marks it already.',
+    );
     expect(body('make-it-yours.control-terminal-colors')).toContain(
       'recolors the local echo of every command you send, and the `›` before it stays grey.',
     );
