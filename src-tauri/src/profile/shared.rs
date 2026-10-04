@@ -122,7 +122,7 @@ pub(crate) struct GlobalConfig {
     pub terminal_line_height: Option<String>,
     /// The panel font, while the font is shared. Written only once you
     /// pick one, like the profile file's own. With `font_family` here, a
-    /// missing panel font is the terminal font (see `shared_panel_font`).
+    /// missing panel font is As designed (see `shared_panel_font`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub panel_font: Option<String>,
     /// The panel size, while the font is shared. Written only once you
@@ -220,8 +220,8 @@ impl GlobalConfig {
     }
 
     /// The panel font every character shares, or None while the font is
-    /// not shared. The file leaves out the terminal font, the default, so
-    /// a shared font with no panel font of its own is the terminal font.
+    /// not shared. The file leaves out As designed, the default, so a
+    /// shared font with no panel font of its own is As designed.
     fn shared_panel_font(&self) -> Option<String> {
         self.font_family
             .as_ref()
@@ -1021,14 +1021,14 @@ mod tests {
     }
 
     #[test]
-    fn a_shared_font_without_a_panel_font_is_the_terminal_font() {
-        // The terminal font, the default, stays out of global.toml.
+    fn a_shared_font_without_a_panel_font_is_as_designed() {
+        // As designed, the default, stays out of global.toml.
         let shared = GlobalConfig::from_profile(&shared_profile(), &ScopeConfig::default());
         assert_eq!(shared.panel_font, None);
         let text = toml::to_string_pretty(&shared).unwrap();
         assert!(!text.contains("panel_font"), "{text}");
         // So a profile file that kept a panel font of its own from before
-        // the font was shared shows the terminal font every character
+        // the font was shared shows As designed, which every character
         // shares.
         let mut live = Profile::default();
         live.ui.panel_font = "system".into();

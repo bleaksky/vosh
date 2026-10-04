@@ -23,7 +23,7 @@ pub(crate) struct UiConfigPayload {
     pub font_family: String,
     pub font_size: u32,
     pub terminal_line_height: String,
-    /// Empty for the terminal font, `system`, or a font list.
+    /// Empty for As designed, `terminal`, `system`, or a font list.
     pub panel_font: String,
     /// The panel size in pixels, or 0 for the terminal size.
     pub panel_font_size: u32,
@@ -684,17 +684,19 @@ mod tests {
     }
 
     #[test]
-    fn the_panel_font_round_trips_and_a_page_without_it_keeps_the_terminal_font() {
+    fn the_panel_font_round_trips_and_a_page_without_it_keeps_as_designed() {
         let mut ui = UiConfig::default();
         assert_eq!(through_payload(&ui).panel_font, "");
-        for pick in ["system", "\"Iosevka\", Menlo, monospace"] {
+        for pick in ["terminal", "system", "\"Iosevka\", Menlo, monospace"] {
             ui.panel_font = pick.into();
             assert_eq!(through_payload(&ui).panel_font, pick);
         }
         ui.panel_font = " SYSTEM ".into();
         assert_eq!(through_payload(&ui).panel_font, "system");
+        ui.panel_font = " Terminal ".into();
+        assert_eq!(through_payload(&ui).panel_font, "terminal");
         // A page from before the row sends no panel font, which reads as
-        // the terminal font.
+        // As designed.
         let payload: UiConfigPayload = serde_json::from_str("{\"font_size\": 16}").unwrap();
         let mut out = UiConfig::default();
         payload.apply_to(&mut out);
