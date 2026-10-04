@@ -1782,6 +1782,14 @@ fn the_summary_names_help_with_words() {
 }
 
 #[test]
+fn the_summary_says_a_reload_reads_the_files_again() {
+    assert!(HELP_TEXT
+        .lines()
+        .any(|l| l.trim_start().starts_with("#script reload ")
+            && l.contains("read every loaded script again and run it")));
+}
+
+#[test]
 fn help_lists_logs_forget_passwords() {
     let lines: Vec<&str> = HELP_TEXT.lines().collect();
     assert!(lines
