@@ -1,7 +1,10 @@
 //! Which profile a login loads. A profile claims characters on a world,
 //! and when one of them logs in there Vosh loads the profile whose claim
-//! fits the login best. A character belongs to one profile per world, so
-//! turning a claim on takes the character from every other profile there.
+//! fits the login best. A character belongs to one profile wherever it
+//! logs in, so turning a claim on takes the character from every other
+//! profile that could load there. A claim on another port of a world
+//! Vosh knows first pins an older claim on the host alone to the world's
+//! own port, so one name can load a profile of its own on each port.
 
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -84,11 +87,23 @@ impl<'de> Deserialize<'de> for AutoMatch {
 }
 
 /// What turning a login toggle on or off did: the profile as it now
-/// reads, and every profile the character was taken from.
+/// reads, every profile the character was taken from, and every claim
+/// pinned to its world's own port so it could keep the character.
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct LoginClaim {
     pub entry: ProfileEntry,
     pub released_from: Vec<String>,
+    pub pinned: Vec<PinnedClaim>,
+}
+
+/// A claim on the host alone that Vosh pinned to its world's own port.
+/// Its whole list moved with it, since a profile holds one claim for all
+/// its characters, so Characters names each one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct PinnedClaim {
+    pub profile: String,
+    pub port: u16,
+    pub characters: Vec<String>,
 }
 
 impl AutoMatch {
@@ -257,13 +272,11 @@ impl ProfileSet {
     /// Turn the login toggle for `name` on or off for `character`.
     ///
     /// On lists the character first if the profile does not list it
-    /// yet, turns the toggle on, and takes the character away from
-    /// every other profile on the same world, because a character
-    /// belongs to one profile per world. A profile left with no
-    /// characters has its toggle turned off so it does not become the
-    /// host wide fallback. Off keeps the world and every name and only
-    /// turns the toggle off. Either way the index is written once and
-    /// nothing switches, since the toggle applies at the next login.
+    /// yet, turns the toggle on, and settles every other profile on the
+    /// same world that lists it, as [`Self::release_character`] says.
+    /// Off keeps the world and every name and only turns the toggle off.
+    /// Either way the index is written once and nothing switches, since
+    /// the toggle applies at the next login.
     pub(crate) fn set_login(
         &mut self,
         name: &str,
@@ -276,6 +289,7 @@ impl ProfileSet {
         };
         let before = self.index.profiles.clone();
         let mut released_from = Vec::new();
+        let mut pinned = Vec::new();
         if on {
             if character.is_empty() {
                 return Err(ProfileSetError::NoCharacter);
@@ -287,7 +301,7 @@ impl ProfileSet {
             let Some((host, port)) = world else {
                 return Err(ProfileSetError::NoWorld(display_name(name)));
             };
-            self.release_character(idx, &host, port, character, &mut released_from);
+            self.release_character(idx, &host, port, character, &mut released_from, &mut pinned);
             let am = self.index.profiles[idx]
                 .auto_match
                 .as_mut()
@@ -303,12 +317,20 @@ impl ProfileSet {
         Ok(LoginClaim {
             entry: self.index.profiles[idx].clone(),
             released_from,
+            pinned,
         })
     }
 
-    /// Take `character` from every profile but the one at `keep` whose
+    /// Settle `character` on every profile but the one at `keep` whose
     /// claim sits on the world at `host` and `port`, because a character
-    /// belongs to one profile per world. A profile left with no
+    /// belongs to one profile wherever it logs in.
+    ///
+    /// When the claim at `keep` pins a port other than the world's own,
+    /// on a world Vosh knows, a claim on the host alone is pinned to the
+    /// world's own port with every character it lists, so the two
+    /// claims never meet. Each one lands in `pinned`.
+    ///
+    /// Every other claim loses the character. A profile left with no
     /// characters has its toggle turned off so it does not become the
     /// host wide fallback. Adds each profile it took the character from
     /// to `released_from` once. Writes nothing, so the caller saves the
@@ -320,13 +342,26 @@ impl ProfileSet {
         port: Option<u16>,
         character: &str,
         released_from: &mut Vec<String>,
+        pinned: &mut Vec<PinnedClaim>,
     ) {
         let wanted = character.trim().to_ascii_lowercase();
+        // Pinning to the port the new claim takes would leave both
+        // claims on it, so the pin needs a port of the world's own.
+        let pin_to = port.and_then(|p| known_world(host).map(|w| w.port).filter(|&own| own != p));
         for (i, other) in self.index.profiles.iter_mut().enumerate() {
             let Some(am) = other.auto_match.as_mut() else {
                 continue;
             };
             if i == keep || !am.on_world(host, port) || !am.names(character) {
+                continue;
+            }
+            if let (None, Some(own)) = (am.port, pin_to) {
+                am.port = Some(own);
+                pinned.push(PinnedClaim {
+                    profile: other.name.clone(),
+                    port: own,
+                    characters: am.characters.clone(),
+                });
                 continue;
             }
             am.characters
@@ -382,9 +417,9 @@ impl ProfileSet {
     ///   turning a toggle back on or taking a character from the
     ///   profile that wins the login.
     /// - A claim with no characters has its toggle turned off.
-    /// - A claim with its toggle on takes each of its characters from
+    /// - A claim with its toggle on settles each of its characters on
     ///   every other profile on the same world, as [`Self::set_login`]
-    ///   does, and names them in `released_from`.
+    ///   does, and names them in `released_from` and `pinned`.
     /// - A claim with no world, port or character goes away.
     ///
     /// Writes the index once and never switches. No command calls it
@@ -403,6 +438,7 @@ impl ProfileSet {
         let before = self.index.profiles.clone();
         let stored = before[idx].auto_match.clone();
         let mut released_from = Vec::new();
+        let mut pinned = Vec::new();
         let claim = match auto_match.map(AutoMatch::cleaned) {
             None => None,
             Some(am) if am.host.is_none() && am.port.is_none() && am.characters.is_empty() => None,
@@ -413,7 +449,14 @@ impl ProfileSet {
                 }
                 if let (true, Some(host)) = (am.enabled, am.host.clone()) {
                     for character in &am.characters {
-                        self.release_character(idx, &host, am.port, character, &mut released_from);
+                        self.release_character(
+                            idx,
+                            &host,
+                            am.port,
+                            character,
+                            &mut released_from,
+                            &mut pinned,
+                        );
                     }
                 }
                 Some(am)
@@ -427,6 +470,7 @@ impl ProfileSet {
         Ok(LoginClaim {
             entry,
             released_from,
+            pinned,
         })
     }
 }
@@ -811,6 +855,91 @@ characters = ["Ilsabet", "Ondrevar"]
         // Another world keeps its own Ilsabet.
         assert_eq!(characters_of(&set, "Elsewhere"), vec!["Ilsabet"]);
         assert_eq!(characters_of(&set, "New"), vec!["Ilsabet"]);
+    }
+
+    #[test]
+    fn a_port_claim_pins_an_older_claim_on_the_host_alone_to_the_worlds_own_port() {
+        let dir = tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let world = "play.theforsakenlands.com";
+        put_claim(
+            &mut set,
+            DEFAULT_PROFILE_NAME,
+            None,
+            claim(world, None, &["Tolliver", "Wrenna"]),
+        );
+        set.create("Build").unwrap();
+        set.set_world("Build", Some(world.into()), Some(1825))
+            .unwrap();
+
+        let result = set.set_login("Build", "Tolliver", true).unwrap();
+        let taken = &result.released_from;
+        assert!(taken.is_empty(), "{taken:?}");
+        let pin = PinnedClaim {
+            profile: DEFAULT_PROFILE_NAME.into(),
+            port: 1848,
+            characters: vec!["Tolliver".into(), "Wrenna".into()],
+        };
+        assert_eq!(result.pinned, vec![pin]);
+        let answer = serde_json::to_value(&result).unwrap();
+        assert_eq!(answer["pinned"][0]["port"], 1848);
+
+        // Default keeps both names and its toggle, now on 1848.
+        let am = set.get(DEFAULT_PROFILE_NAME).unwrap().auto_match.clone();
+        let am = am.unwrap();
+        assert_eq!(am.port, Some(1848));
+        assert_eq!(am.characters, vec!["Tolliver", "Wrenna"]);
+        assert!(am.enabled);
+        assert_eq!(
+            set.resolve_match(world, 1848, Some("Tolliver")),
+            Some(DEFAULT_PROFILE_NAME.into())
+        );
+        assert_eq!(
+            set.resolve_match(world, 1825, Some("Tolliver")),
+            Some("Build".into())
+        );
+        // Wrenna moved to 1848 with the claim.
+        assert_eq!(set.resolve_match(world, 1825, Some("Wrenna")), None);
+        assert!(set.login_on(DEFAULT_PROFILE_NAME));
+        assert!(set.login_on("Build"));
+
+        let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let am = reloaded
+            .get(DEFAULT_PROFILE_NAME)
+            .unwrap()
+            .auto_match
+            .clone();
+        assert_eq!(am.unwrap().port, Some(1848));
+    }
+
+    #[test]
+    fn a_port_claim_on_a_host_vosh_does_not_know_takes_the_character() {
+        let dir = tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let world = "mud.example.org";
+        put_claim(
+            &mut set,
+            DEFAULT_PROFILE_NAME,
+            None,
+            claim(world, None, &["Tolliver", "Wrenna"]),
+        );
+        set.create("Build").unwrap();
+        set.set_world("Build", Some(world.into()), Some(4001))
+            .unwrap();
+
+        let result = set.set_login("Build", "Tolliver", true).unwrap();
+        assert_eq!(result.released_from, vec![DEFAULT_PROFILE_NAME.to_string()]);
+        let pinned = &result.pinned;
+        assert!(pinned.is_empty(), "{pinned:?}");
+        let am = set.get(DEFAULT_PROFILE_NAME).unwrap().auto_match.clone();
+        let am = am.unwrap();
+        assert_eq!(am.port, None);
+        assert_eq!(am.characters, vec!["Wrenna"]);
+        assert_eq!(set.resolve_match(world, 4000, Some("Tolliver")), None);
+        assert_eq!(
+            set.resolve_match(world, 4001, Some("Tolliver")),
+            Some("Build".into())
+        );
     }
 
     #[test]
