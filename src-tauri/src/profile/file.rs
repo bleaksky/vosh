@@ -1021,11 +1021,12 @@ mod prompt_tests {
             assert_eq!(prompt.show, vosh_prompt::PromptShow::Pinned);
             assert_eq!(prompt.previous_templates, [TEMPLATE]);
 
-            // The next save says it follows the game and keeps the design
-            // in template, so an older build draws it.
+            // The next save keeps the design in template, so an older
+            // build draws it. Same as the game for the codes says the
+            // design follows the game, so the file needs no mirror.
             let text = ProfileConfig::from_profile(&live).to_toml().unwrap();
             let table: toml::Table = text.parse().unwrap();
-            assert_eq!(table["prompt"]["mirror"].as_bool(), Some(true));
+            assert!(!table["prompt"].as_table().unwrap().contains_key("mirror"));
             assert_eq!(
                 table["prompt"]["template"].as_str(),
                 Some(same_as_the_game().as_str())
@@ -1034,6 +1035,8 @@ mod prompt_tests {
                 table["ui"]["prompt_template"].as_str(),
                 Some(same_as_the_game().as_str())
             );
+            let again = ProfileConfig::from_toml(&text).unwrap().prompt_config();
+            assert_eq!(again, *live.prompt.config());
 
             // A file older builds wrote, with the design only in [ui] and
             // no codes, follows the game with no design.
@@ -1101,9 +1104,18 @@ mod prompt_tests {
         let back = ProfileConfig::from_toml(&text).unwrap();
         assert_eq!(back.prompt_config(), follows);
 
-        // An older build reads [ui] alone and writes the file back
-        // without the table. The design it drew becomes yours.
+        // An older build that knows the table drops mirror when it saves,
+        // and the design it drew still follows the game.
         let mut table: toml::Table = text.parse().unwrap();
+        let mut kept = table.clone();
+        kept["prompt"].as_table_mut().unwrap().remove("mirror");
+        let older = toml::to_string_pretty(&kept).unwrap();
+        let prompt = ProfileConfig::from_toml(&older).unwrap().prompt_config();
+        assert_eq!(prompt, follows);
+
+        // A build from before the table reads [ui] alone and writes the
+        // file back without the table. With no codes to compare, the
+        // design it drew becomes yours.
         assert!(table.remove("prompt").is_some());
         let older = toml::to_string_pretty(&table).unwrap();
         let prompt = ProfileConfig::from_toml(&older).unwrap().prompt_config();

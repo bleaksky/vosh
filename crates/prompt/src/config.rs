@@ -21,11 +21,12 @@
 //! A profile with no design of its own follows the game. Its design is
 //! Same as the game for your PROMPT and fight prompt codes, written again
 //! each time they change, until you change it (`mirror`). A fresh table
-//! follows the game, and so does one that holds [`DEFAULT_DESIGN`] or one
-//! of the [`RETIRED_DEFAULTS`] from a file that does not say otherwise.
-//! A profile file keeps the design in `template` too, so an older build
-//! draws it, and writes `mirror` only when the design alone does not say
-//! it (see [`file_table`]).
+//! follows the game, and so does one from a file that does not say
+//! otherwise and holds [`DEFAULT_DESIGN`], one of the [`RETIRED_DEFAULTS`],
+//! or Same as the game for its codes, as an older build saves a design
+//! that followed the game. A profile file keeps the design in `template`
+//! too, so an older build draws it, and writes `mirror` only when the
+//! design alone does not say it (see [`file_table`]).
 
 use std::collections::BTreeMap;
 
@@ -454,24 +455,37 @@ where
 /// The `[prompt]` table as a profile file holds it, for a field of type
 /// `Option<PromptConfig>` with `#[serde(with = "...")]`.
 ///
-/// The file writes `mirror` only when the design alone does not say it:
-/// true for a design that follows the game, which is your codes as Same
-/// as the game writes them, and false for a design that counts as none
-/// of your own but that you chose, such as Vosh's default from
-/// `#prompt default` or an empty design from Start empty. A file with no
-/// `mirror` follows the game when its design counts as none of your own
-/// ([`PromptConfig::counts_as_no_design`]), which is how a profile an
-/// earlier build saved with Vosh's default comes to follow the game. A
-/// file read here holds the design written from its codes for a mortal
-/// in your own body, which the live prompt writes again for who you are.
+/// The file writes `mirror` only when the design alone does not say it.
+/// A file with no `mirror` follows the game when its design counts as
+/// none of your own ([`PromptConfig::counts_as_no_design`]), as a profile
+/// an earlier build saved with Vosh's default does, or when the design is
+/// Same as the game for the file's codes for a mortal in your own body.
+/// An older build drops `mirror` when it saves, so a design that followed
+/// the game keeps following it, and so does one an older build started
+/// from Same as the game. The file writes true for a design that follows
+/// the game but reads as neither, such as one written for an immortal,
+/// and false for a design you chose that reads as one, such as Vosh's
+/// default from `#prompt default`, an empty design from Start empty, or
+/// a design of yours equal to Same as the game for your codes. A file
+/// read here holds the design written from its codes for a mortal in
+/// your own body, which the live prompt writes again for who you are.
 ///
 /// Every other key reads and writes as the table always has, so an older
 /// build reads the file and draws the design in `template`.
 pub mod file_table {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-    use super::{CaptureConfig, PromptConfig, PromptShow};
+    use super::{game_design, CaptureConfig, PromptConfig, PromptShow};
     use crate::aabahran::Who;
+
+    /// Whether a file that holds this design and these codes with no
+    /// `mirror` follows the game: the design counts as none of your own,
+    /// or it is Same as the game for the codes, for a mortal in your own
+    /// body.
+    fn follows_unsaid(template: &str, capture: &CaptureConfig) -> bool {
+        PromptConfig::counts_as_no_design(template)
+            || template == game_design(capture, Who::default())
+    }
 
     /// The table as it is written, key by key in the order the derived
     /// form writes them, with `mirror` last.
@@ -499,7 +513,7 @@ pub mod file_table {
                 show,
                 mirror,
             } = config;
-            let said = PromptConfig::counts_as_no_design(template);
+            let said = follows_unsaid(template, capture);
             Self {
                 draw: *draw,
                 template,
@@ -523,7 +537,7 @@ pub mod file_table {
         let said = raw.get("mirror").and_then(serde_json::Value::as_bool);
         let mut config: PromptConfig =
             serde_json::from_value(raw).map_err(serde::de::Error::custom)?;
-        config.mirror = said.unwrap_or_else(|| PromptConfig::counts_as_no_design(&config.template));
+        config.mirror = said.unwrap_or_else(|| follows_unsaid(&config.template, &config.capture));
         config.mirror_game(Who::default());
         Ok(Some(config))
     }
@@ -855,7 +869,7 @@ mod tests {
     fn a_file_writes_mirror_only_when_the_design_does_not_say_it() {
         let prompt = crate::testkit::mud::PROMPT;
         // Following the game, with the design in template for an older
-        // build to draw.
+        // build to draw. Same as the game for the codes says it.
         let mut follows = PromptConfig {
             draw: true,
             capture: codes(prompt, ""),
@@ -863,9 +877,27 @@ mod tests {
         };
         follows.mirror_game(Who::default());
         let (written, back) = through_file(&follows);
-        assert_eq!(written["mirror"], true);
+        assert!(written.get("mirror").is_none(), "{written}");
         assert_eq!(written["template"], same_as_the_game(prompt));
         assert_eq!(back, follows);
+
+        // Following the game as an immortal, whose design a mortal never
+        // has, says it. The file reads back the design for a mortal,
+        // which the live prompt writes again for who you are.
+        let immortal = Who {
+            immortal: true,
+            ..Who::default()
+        };
+        let mut for_an_immortal = PromptConfig {
+            draw: true,
+            capture: codes("<`(12%u %h> ", ""),
+            ..PromptConfig::fresh()
+        };
+        assert!(for_an_immortal.mirror_game(immortal));
+        let (written, back) = through_file(&for_an_immortal);
+        assert_eq!(written["mirror"], true);
+        assert!(back.mirror);
+        assert_eq!(back.template, "");
 
         // Following the game with no codes says it with an empty design.
         let (written, back) = through_file(&PromptConfig {
@@ -880,6 +912,16 @@ mod tests {
         let (written, back) = through_file(&yours);
         assert!(written.get("mirror").is_none(), "{written}");
         assert_eq!(back, yours);
+
+        // A design of yours that matches Same as the game for your codes
+        // says it is yours.
+        let matches = PromptConfig {
+            mirror: false,
+            ..follows.clone()
+        };
+        let (written, back) = through_file(&matches);
+        assert_eq!(written["mirror"], false);
+        assert_eq!(back, matches);
 
         // Vosh's default you chose, and an empty design you chose, say
         // they are yours.
@@ -902,6 +944,36 @@ mod tests {
         let (written, back) = through_file(&full);
         assert_eq!(written, serde_json::to_value(&full).unwrap());
         assert_eq!(back, full);
+    }
+
+    #[test]
+    fn a_file_that_holds_same_as_the_game_for_its_codes_follows_the_game() {
+        let prompt = crate::testkit::mud::PROMPT;
+        let read = |template: &str, codes: &str| {
+            let file = serde_json::json!({"prompt": {
+                "draw": true,
+                "template": template,
+                "capture": {"kind": "aabahran", "prompt": codes, "fprompt": ""},
+            }});
+            serde_json::from_value::<File>(file)
+                .unwrap()
+                .prompt
+                .expect("the table")
+        };
+        // An older build drops mirror when it saves a design that
+        // followed the game, and Same as the game in its start list
+        // wrote the same text.
+        let config = read(&same_as_the_game(prompt), prompt);
+        assert!(config.mirror);
+        assert_eq!(config.template, same_as_the_game(prompt));
+
+        // Your codes moved on while an older build kept the design, so
+        // it is a design of yours now.
+        let all = crate::testkit::mud::PROMPT_ALL;
+        assert_ne!(same_as_the_game(prompt), same_as_the_game(all));
+        let config = read(&same_as_the_game(prompt), all);
+        assert!(!config.mirror);
+        assert_eq!(config.template, same_as_the_game(prompt));
     }
 
     #[test]
