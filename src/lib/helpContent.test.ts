@@ -806,3 +806,59 @@ describe('the help on folding groups in Automation', () => {
     expect(paragraph.replace(/`[^`]*`/g, '')).not.toMatch(/[:;–—]| - /);
   });
 });
+
+describe('the help on #walk', () => {
+  const topic = () => {
+    const found = HELP_TOPICS.find((t) => t.id === 'play.walk');
+    if (!found) throw new Error('no walk topic');
+    return found;
+  };
+
+  it('is Walk to a place, topic 2.9 under Play', () => {
+    const { number, title, section } = topic();
+    expect([number, title, section]).toEqual(['2.9', 'Walk to a place', 'Play']);
+  });
+
+  it('teaches the steps, the stops and walking from an alias', () => {
+    const text = topic().body;
+    expect(text).toContain('- Type `#walk 3n2e` to go north three times, then east twice.');
+    expect(text).toContain(
+      '- Put a count from 1 to 99 before a direction to repeat it. Spaces between parts are fine.',
+    );
+    expect(text).toContain(
+      'Press `Esc` or type `#walk stop` to stop it yourself. Other `#` commands leave it going.',
+    );
+    expect(text).toContain(
+      'Commands after `#walk` in the same alias wait until you arrive, and drop if the walk stops early.',
+    );
+    const table = parseHelpBody(text).find((b) => b.kind === 'table');
+    expect(table?.kind === 'table' ? table.rows.map((r) => r[0]) : []).toEqual([
+      '`#walk 3n2e`',
+      '`#walk 2w u`',
+      '`#walk ne`',
+      '`#walk 3x`',
+      '`#walk`',
+    ]);
+  });
+
+  it('leaves click to walk out until the map offers it', () => {
+    expect(topic().body).not.toContain('Click a room');
+  });
+
+  it('lists #walk with the slash commands, and Esc among the keys', () => {
+    expect(body('reference.slash-commands')).toContain(
+      '- `#walk <steps>` walks a string of directions like `3n2e` one room at a time, `#walk` says how many steps are left, and `#walk stop` stops the walk.',
+    );
+    expect(body('reference.keyboard-shortcuts')).toContain(
+      '- `Escape` cancels an in flight paste burst, stops a walk, closes the scrollback split, and snaps the terminal to its tail.',
+    );
+  });
+
+  it('matches HELP.md word for word', () => {
+    for (const id of ['play.walk', 'reference.slash-commands', 'reference.keyboard-shortcuts']) {
+      const found = HELP_TOPICS.find((t) => t.id === id);
+      if (!found) throw new Error(`no help topic ${id}`);
+      expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+    }
+  });
+});

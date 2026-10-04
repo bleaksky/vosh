@@ -134,6 +134,10 @@ slash commands:
   #qkey <name> <verb>                  configure a quick-key (gg/xx/zz/tt by default)
   #qkey clear <name>                   remove a quick-key
   #qkeys                               list quick-key bindings
+  #walk <steps>                        walk the steps one room at a time,
+                                       like #walk 3n2e
+  #walk                                say how many steps are left
+  #walk stop                           stop walking
   #help                                show this list
   #help <words>                        open Help on those words
 trigger actions:

@@ -92,6 +92,7 @@ describe('the outline of a topic', () => {
       '#record',
       '#qkey',
       '#target',
+      '#walk',
       '#nativesurface',
     ]);
   });
