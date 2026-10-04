@@ -76,7 +76,12 @@ pub(crate) async fn session_close<R: tauri::Runtime>(
     state: State<'_, SharedState>,
     session: SessionId,
 ) -> Result<(), String> {
-    let closed = state.close_session(session)?;
+    // Under the save lock, so a switch that found its session the last
+    // on a profile still finds it so when it closes that profile.
+    let closed = {
+        let _persist_guard = PERSIST_LOCK.lock().await;
+        state.close_session(session)?
+    };
     crate::session::disconnect(&app, state.inner(), &closed).await;
     let _persist_guard = PERSIST_LOCK.lock().await;
     let open = closed.profile();

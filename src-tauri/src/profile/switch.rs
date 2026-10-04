@@ -1,11 +1,12 @@
 //! Switching profiles, when you pick one and when a login names a
-//! character another profile claims. A switch moves one session. It
-//! saves the profile the session leaves, then joins the next profile
-//! when another session plays it, or else reads the next one's file and
-//! global.toml into a profile of its own. The connection carries on as
-//! it was, apart from the tick settings and the prompt table the next
-//! profile hands it. The same read of global.toml keeps your shared
-//! settings across a `#profile reset` or `#profile load`.
+//! character another profile claims. A switch moves one session. When
+//! the session is the last on the profile it leaves, it saves that
+//! profile, which then closes. It joins the next profile when another
+//! session plays it, or else reads the next one's file and global.toml
+//! into a profile of its own. The connection carries on as it was,
+//! apart from the tick settings and the prompt table the next profile
+//! hands it. The same read of global.toml keeps your shared settings
+//! across a `#profile reset` or `#profile load`.
 
 use std::sync::Arc;
 
@@ -137,19 +138,20 @@ pub(crate) async fn open_or_join(
     Ok(state.add_open_profile(name, profile))
 }
 
-/// Steps 2 and 3 of a switch, after the save of the profile `session`
-/// leaves. Call with [`PERSIST_LOCK`] held. The session joins `name`
-/// when another session plays it, and otherwise opens it from its files,
-/// see [`profile_from_files`]. When the session is the selected one, the
-/// index then names `name` as active. Either every step lands or none
-/// does. The session moves while it holds both profiles, so its next step
-/// finds the next profile whole, and its connection takes that profile's
-/// tick settings and `[prompt]` table and keeps the rest as it was. Its
-/// prompt drops the values the last profile's prompt read. The plugins
-/// the next profile turns on start in the session's engine and the others
-/// stop in the same step, and what they ask for comes back for the caller
-/// to deliver once the locks drop. The profile it left closes when no
-/// other session plays it.
+/// Steps 2 and 3 of a switch, after step 1 saved the profile `session`
+/// leaves when no other session plays it. Call with [`PERSIST_LOCK`]
+/// held. The session joins `name` when another session plays it, and
+/// otherwise opens it from its files, see [`profile_from_files`]. When
+/// the session is the selected one, the index then names `name` as
+/// active. Either every step lands or none does. The session moves while
+/// it holds both profiles, the one that opened first first, and then its
+/// connection, so its next step finds the next profile whole, and its
+/// connection takes that profile's tick settings and `[prompt]` table
+/// and keeps the rest as it was. Its prompt drops the values the last
+/// profile's prompt read. The plugins the next profile turns on start in
+/// the session's engine and the others stop in the same step, and what
+/// they ask for comes back for the caller to deliver once the locks drop.
+/// The profile it left closes when no other session plays it.
 pub(crate) async fn switch_live_profile(
     state: &SharedState,
     session: &Session,
@@ -323,13 +325,15 @@ pub(crate) async fn switch_profile(
         return Err(SWITCH_MIGRATION_PENDING.into());
     }
 
-    // Step 1: snapshot + write the profile the session leaves so your
-    // changes since the last persist are not lost on switch. Skipped
-    // after a #profile reset/load: the profile is deliberately diverged
-    // from disk and a passive switch (the GMCP Char.Status auto-switch
-    // reaches here too) must not write it back.
+    // Step 1: the last session on a profile saves it as it leaves, so
+    // your changes since the last save are not lost when it closes, and
+    // a next profile read from its files takes global.toml as you left
+    // it. A profile another session still plays stays open, and its own
+    // saves write it. Skipped after a #profile reset/load: the profile
+    // is deliberately diverged from disk and a passive switch (the GMCP
+    // Char.Status auto-switch reaches here too) must not write it back.
     let leaving = session.profile();
-    if !leaving.held() {
+    if state.players(&leaving) == 1 && !leaving.held() {
         persist_state(state, &leaving).await;
     }
 

@@ -56,18 +56,24 @@ async fn two_sessions_with_a_plugin() -> (Harness, SessionId, SessionId) {
         .set(h.dir.path().to_path_buf())
         .expect("the app data folder");
     let plugins = crate::disk::paths::plugins_dir(h.dir.path());
-    let helper = plugins.join("helper");
-    std::fs::create_dir_all(&helper).expect("the plugin folder");
-    std::fs::write(
-        helper.join("manifest.toml"),
-        "[plugin]\nname = \"helper\"\n",
-    )
-    .expect("the manifest");
-    std::fs::write(helper.join("main.lua"), HELPER).expect("the entry script");
+    write_plugin(&plugins, "helper", HELPER);
     h.state.selected_profile().await.plugins.enabled = vec!["helper".into()];
     let first = h.state.selected_session();
     crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, &first, plugins).await;
     log_in_two_sessions(h).await
+}
+
+/// Write the plugin `name`, whose entry script is `body`, into the
+/// plugins folder `plugins`.
+fn write_plugin(plugins: &std::path::Path, name: &str, body: &str) {
+    let plugin = plugins.join(name);
+    std::fs::create_dir_all(&plugin).expect("the plugin folder");
+    std::fs::write(
+        plugin.join("manifest.toml"),
+        format!("[plugin]\nname = \"{name}\"\n"),
+    )
+    .expect("the manifest");
+    std::fs::write(plugin.join("main.lua"), body).expect("the entry script");
 }
 
 /// Open a second session in `h`, and log the first session in to the
@@ -795,4 +801,182 @@ async fn a_profile_a_session_plays_stays_on_delete_and_renames_for_every_session
     }
     assert_eq!(open_names(&h), [DEFAULT_PROFILE_NAME, "Cleric"]);
     assert_eq!(h.state.active_profile().as_deref(), Some("Cleric"));
+}
+
+/// The name of the profile `session` plays.
+fn plays(h: &Harness, session: SessionId) -> Option<String> {
+    let session = h.state.session(Some(session)).expect("the session");
+    session.profile().name()
+}
+
+/// The plugins the Lua engine of `session` runs.
+fn plugins_of(h: &Harness, session: SessionId) -> Vec<String> {
+    let session = h.state.session(Some(session)).expect("the session");
+    let c = session.connection.lock();
+    c.script.loaded_plugins()
+}
+
+/// The profile variable `name` as the profile file at `file` saves it.
+fn saved_var(file: &std::path::Path, name: &str) -> Option<String> {
+    let config = crate::profile::file::ProfileConfig::load(file).ok()?;
+    config.profile_vars.get(name).cloned()
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_login_moves_its_own_session_and_a_login_in_the_other_joins_that_profile_in_memory() {
+    use vosh_automation::trigger::{Trigger, TriggerAction};
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    // Healer claims Healer on every port of the host, so on both games.
+    let claim = crate::profile::login_match::AutoMatch {
+        host: Some("127.0.0.1".into()),
+        port: None,
+        characters: vec!["Healer".into()],
+        enabled: true,
+    };
+    h.state
+        .profile_set
+        .lock()
+        .await
+        .as_mut()
+        .expect("the set")
+        .set_metadata("Healer", None, Some(claim))
+        .expect("Healer claims Healer");
+    let plugins = crate::disk::paths::plugins_dir(h.dir.path());
+    write_plugin(
+        &plugins,
+        "on_default",
+        "mud.trigger('afk', 'Line 2 of 2 of the spam', function() mud.send('afk') end)",
+    );
+    write_plugin(&plugins, "on_healer", "mud.echo('on_healer loaded')");
+    let healer_file = h.profile_file("Healer").await;
+    let mut healer = crate::profile::file::ProfileConfig::default();
+    healer.plugins.enabled = vec!["on_healer".into()];
+    healer.save(&healer_file).expect("Healer's file");
+    {
+        let mut p = h.state.selected_profile().await;
+        p.plugins.enabled = vec!["on_default".into()];
+        let bow = Trigger::new(
+            "bow",
+            "^Line 1 of 2 of the spam",
+            TriggerAction::Send {
+                template: "bow".into(),
+            },
+        );
+        p.triggers.set(bow).expect("the trigger compiles");
+        // A change no save has written yet.
+        p.vars.set("camp", "Ford");
+    }
+    let first = h.state.selected_session();
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, &first, plugins).await;
+    let (one, two) = (h.first, h.open_session().await);
+    let default_file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+
+    // Healer logs in on the first game, and only the first session moves.
+    h.servers[0].options.lock().expect("the options").name = "Healer".into();
+    h.connect_to(one, &h.servers[0]).await;
+    h.until("the first session to move", |h| {
+        shows(h, one, "Vosh switched to the Healer profile.") && shows(h, one, "on_healer loaded")
+    })
+    .await;
+    assert_eq!(plays(&h, one).as_deref(), Some("Healer"));
+    assert_eq!(plays(&h, two).as_deref(), Some(DEFAULT_PROFILE_NAME));
+    assert_eq!(plugins_of(&h, one), ["on_healer"]);
+    assert_eq!(plugins_of(&h, two), ["on_default"]);
+    // Default stays open for the second session, and the first did not
+    // save it as it left.
+    assert_eq!(open_names(&h), [DEFAULT_PROFILE_NAME, "Healer"]);
+    assert_eq!(saved_var(&default_file, "camp"), None);
+
+    // Default's trigger and plugin answer the second game alone.
+    h.connect_to(two, &h.servers[1]).await;
+    h.until("the Tester login", |h| {
+        shows(h, two, "Welcome to the fake Aabahran, Tester.")
+    })
+    .await;
+    h.type_in(two, "spam 2").await;
+    h.until("the second game to go afk", |h| {
+        shows(h, two, "You are now in AFK mode.")
+    })
+    .await;
+    h.type_in(one, "spam 2").await;
+    h.type_in(one, "spam 1").await;
+    h.until("the first game to answer both", |h| {
+        shows(h, one, "Line 1 of 1 of the spam.")
+    })
+    .await;
+    let second = sent(&h.servers[1]);
+    assert!(second.contains("bow\r\n"), "{second:?}");
+    let sent_first = sent(&h.servers[0]);
+    assert!(
+        !sent_first.contains("bow") && !sent_first.contains("afk"),
+        "{sent_first:?}"
+    );
+
+    // Healer logs in on the second game too, and the second session joins
+    // the Healer the first plays without reading its file: a change on
+    // disk stays out, and a change the first made and nothing saved shows.
+    h.disconnect_session(two).await;
+    let mut on_disk = crate::profile::file::ProfileConfig::default();
+    on_disk
+        .profile_vars
+        .insert("drawn".into(), "from disk".into());
+    on_disk.save(&healer_file).expect("Healer's file");
+    first.lock_profile().await.vars.set("home", "Hollow");
+    h.servers[1].options.lock().expect("the options").name = "Healer".into();
+    h.connect_to(two, &h.servers[1]).await;
+    h.until("the second session to move", |h| {
+        shows(h, two, "Vosh switched to the Healer profile.")
+    })
+    .await;
+    let second = h.state.session(Some(two)).expect("the second session");
+    assert!(std::sync::Arc::ptr_eq(&first.profile(), &second.profile()));
+    {
+        let p = second.lock_profile().await;
+        assert_eq!(p.vars.get("home"), Some("Hollow"));
+        assert_eq!(p.vars.get("drawn"), None);
+    }
+    assert_eq!(
+        saved_var(&healer_file, "drawn").as_deref(),
+        Some("from disk")
+    );
+    assert_eq!(plugins_of(&h, two), ["on_healer"]);
+    // Default, left by its last session, saved and closed.
+    assert_eq!(open_names(&h), ["Healer"]);
+    assert_eq!(saved_var(&default_file, "camp").as_deref(), Some("Ford"));
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn two_switches_the_opposite_way_at_once_both_finish() {
+    let h = Harness::new(Options::new(Build::New)).await;
+    let two = open_session_on(&h, "Healer").await;
+    let switch = |id, name: &'static str| {
+        let (app, state) = (h.app.handle().clone(), h.state.clone());
+        let session = state.session(Some(id)).expect("the session");
+        tokio::spawn(async move {
+            crate::profile::switch::apply_profile_switch(&app, &state, &session, name).await
+        })
+    };
+    let (one_way, other_way) = (switch(h.first, "Healer"), switch(two, DEFAULT_PROFILE_NAME));
+    let both = async { (one_way.await, other_way.await) };
+    let (one_way, other_way) = tokio::time::timeout(std::time::Duration::from_secs(5), both)
+        .await
+        .expect("both switches finish");
+    one_way.expect("the task").expect("the first switch");
+    other_way.expect("the task").expect("the second switch");
+    assert_eq!(plays(&h, h.first).as_deref(), Some("Healer"));
+    assert_eq!(plays(&h, two).as_deref(), Some(DEFAULT_PROFILE_NAME));
+    // Each profile is open once, in whichever order the switches ran.
+    let names = open_names(&h);
+    assert_eq!(names.len(), 2, "{names:?}");
+    assert!(names.iter().any(|name| name == DEFAULT_PROFILE_NAME));
+    assert!(names.iter().any(|name| name == "Healer"));
 }

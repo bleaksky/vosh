@@ -299,12 +299,17 @@ impl Sessions {
         open
     }
 
+    /// How many sessions play `open`.
+    pub(crate) fn players(&self, open: &Arc<OpenProfile>) -> usize {
+        self.list
+            .iter()
+            .filter(|session| Arc::ptr_eq(&session.profile(), open))
+            .count()
+    }
+
     /// Close `open` when no session plays it. Returns whether it closed.
     pub(crate) fn close_unplayed(&mut self, open: &Arc<OpenProfile>) -> bool {
-        let played = self
-            .list
-            .iter()
-            .any(|session| Arc::ptr_eq(&session.profile(), open));
+        let played = self.players(open) > 0;
         if !played {
             self.profiles.retain(|kept| !Arc::ptr_eq(kept, open));
         }
