@@ -874,7 +874,10 @@ fn lua_a_line_runs_hands_on_all_it_asks_for() {
     assert_eq!(ran.lua.echoes, ["hi"]);
     assert_eq!(ran.lua.send_bytes, b"look\r\n");
     assert_eq!(ran.lua.new_timers.len(), 1);
-    assert_eq!(ran.lua.inputs, ["#echo again"]);
+    assert_eq!(
+        ran.lua.inputs,
+        [(LineFrom::YourLua, "#echo again".to_string())]
+    );
     assert!(ran.lua.prompt_vars_changed);
 }
 
@@ -1121,6 +1124,11 @@ fn script_load_stays_inside_the_scripts_folder() {
     assert_eq!(p.script.loaded_script_names(), ["combat/bash.lua"]);
 }
 
+/// The `[lua]` line that says why Vosh did not run a line Lua asked for.
+fn refused(why: &str) -> Vec<String> {
+    vec![format!("\x1b[90m[lua]\x1b[0m \x1b[31m{why}\x1b[0m")]
+}
+
 #[test]
 fn lua_cannot_blank_your_profile_through_mud_input() {
     let state = AppState::default();
@@ -1128,14 +1136,72 @@ fn lua_cannot_blank_your_profile_through_mud_input() {
     p.aliases
         .set(vosh_automation::alias::Alias::new("kk", "kick %1"));
     let ran = run_line(&state, &mut p, "#lua mud.input('#profile reset')");
-    let leftover = &ran.lua.inputs;
-    assert!(leftover.is_empty(), "{leftover:?}");
     assert_eq!(
-        ran.lua.echoes,
-        ["\x1b[90m[lua]\x1b[0m \x1b[31mVosh runs #profile only when you type it.\x1b[0m"]
+        ran.lua.inputs,
+        [(LineFrom::YourLua, "#profile reset".to_string())]
+    );
+    let ran = run_line_from(&state, &mut p, "#profile reset", LineFrom::YourLua);
+    assert_eq!(
+        ran.result.echo,
+        refused("Vosh runs #profile only when you type it.")
     );
     assert!(!ran.replaced);
     assert!(p.aliases.get("kk").is_some());
+}
+
+#[test]
+fn mud_input_keeps_file_and_profile_commands_to_you() {
+    let (_dir, state, scripts) = state_with_scripts();
+    std::fs::write(scripts.join("combat.lua"), "mud.echo('loaded')").unwrap();
+    let mut p = Profile::default();
+    for (line, command) in [
+        ("#profile reset", "#profile"),
+        ("  #profile load", "#profile"),
+        ("#import-tintin combat.tt", "#import-tintin"),
+        ("#script  load combat", "#script load"),
+    ] {
+        let ran = run_line_from(&state, &mut p, line, LineFrom::YourLua);
+        assert_eq!(
+            ran.result.echo,
+            refused(&format!("Vosh runs {command} only when you type it.")),
+            "{line}"
+        );
+        let leftover = &ran.lua.echoes;
+        assert!(leftover.is_empty(), "{line} {leftover:?}");
+    }
+    let leftover = &p.script.loaded_script_names();
+    assert!(leftover.is_empty(), "{leftover:?}");
+    let ran = run_line_from(&state, &mut p, "#scripts", LineFrom::YourLua);
+    assert_eq!(ran.result.echo, ["no scripts loaded"]);
+    let ran = run_line_from(&state, &mut p, "look", LineFrom::YourLua);
+    assert_eq!(ran.result.bytes, b"look\r\n");
+}
+
+#[test]
+fn a_plugin_runs_no_slash_command_but_echo_through_mud_input() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let outcome = p.script.load_script(
+        vosh_script::Owner::Plugin("helpers".into()),
+        "@helpers/main.lua",
+        "mud.input('#lua x = 1') mud.input('#alias a b') mud.input('#echo hello')",
+    );
+    let apply = crate::script::apply_actions(&mut p, outcome);
+    let mut echoes = Vec::new();
+    for (from, line) in &apply.inputs {
+        assert_eq!(*from, LineFrom::Plugin, "{line}");
+        let ran = run_line_from(&state, &mut p, line, *from);
+        echoes.extend(ran.result.echo);
+        echoes.extend(ran.lua.echoes);
+    }
+    let mut expected = refused("Vosh never runs #lua for a plugin.");
+    expected.extend(refused("Vosh never runs #alias for a plugin."));
+    expected.push("hello".to_string());
+    assert_eq!(echoes, expected);
+    // Neither your globals nor your aliases changed.
+    let read = p.script.eval("mud.echo(tostring(x))", "=#lua");
+    assert_eq!(read.actions, [vosh_script::Action::Echo("nil".into())]);
+    assert!(p.aliases.get("a").is_none());
 }
 
 #[test]
@@ -1292,7 +1358,10 @@ fn what_else_a_lua_alias_body_asks_for_comes_back_with_the_line() {
     let leftover = &ran.lua.echoes;
     assert!(leftover.is_empty(), "{leftover:?}");
     assert_eq!(ran.lua.new_timers.len(), 1);
-    assert_eq!(ran.lua.inputs, ["#echo again"]);
+    assert_eq!(
+        ran.lua.inputs,
+        [(LineFrom::YourLua, "#echo again".to_string())]
+    );
     assert!(ran.lua.prompt_vars_changed);
     assert!(!ran.lua.durable_changed);
 }

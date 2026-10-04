@@ -15,6 +15,7 @@ use vosh_automation::vars::{Scope, VariableStore};
 use vosh_script::{Action, Owner, ScriptEngine, ScriptOutcome};
 
 use crate::app::events::{ListChanges, ListRevisions};
+use crate::input::LineFrom;
 use crate::profile::live::Profile;
 
 /// One pending one-shot Lua timer.
@@ -97,7 +98,7 @@ fn lua_lines(text: &str) -> impl Iterator<Item = String> + '_ {
 
 /// The terminal lines for a Lua error or a stop, tagged and in the
 /// theme's red.
-fn lua_error_lines(text: &str) -> impl Iterator<Item = String> + '_ {
+pub(crate) fn lua_error_lines(text: &str) -> impl Iterator<Item = String> + '_ {
     text.split('\n')
         .map(|line| format!("{LUA_TAG} \x1b[31m{}\x1b[0m", line.trim_end_matches('\r')))
 }
@@ -109,8 +110,9 @@ fn lua_error_lines(text: &str) -> impl Iterator<Item = String> + '_ {
 pub(crate) struct ApplyResult {
     pub send_bytes: Vec<u8>,
     pub echoes: Vec<String>,
-    /// Lines of input to feed back through the input pipeline.
-    pub inputs: Vec<String>,
+    /// Lines of input to feed back through the input pipeline, each with
+    /// whose Lua asked for it.
+    pub inputs: Vec<(LineFrom, String)>,
     /// True when any prompt var changed during apply — the session
     /// emits a `session://prompt-vars` snapshot to the frontend
     /// once per apply rather than once per individual set.
@@ -160,13 +162,9 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
                 result.send_bytes.extend_from_slice(line.as_bytes());
                 result.send_bytes.extend_from_slice(b"\r\n");
             }
-            Action::Input(line) => match crate::input::kept_from_lua(&line) {
-                Some(command) => {
-                    let refusal = format!("Vosh runs {command} only when you type it.");
-                    result.echoes.extend(lua_error_lines(&refusal));
-                }
-                None => result.inputs.push(line),
-            },
+            // The input pipeline decides what the line may run, from
+            // whose Lua asked for it.
+            Action::Input { owner, line } => result.inputs.push((LineFrom::lua(&owner), line)),
             Action::Echo(line) => {
                 result.echoes.push(line);
             }
@@ -508,41 +506,6 @@ mod tests {
         apply_actions(&mut p, outcome);
         let leftover = &aliases_on(&p);
         assert!(leftover.is_empty(), "{leftover:?}");
-    }
-
-    #[test]
-    fn mud_input_keeps_file_and_profile_commands_to_you() {
-        let mut p = Profile::default();
-        let lines = [
-            "#profile reset",
-            "  #profile load",
-            "#import-tintin combat.tt",
-            "#script  load combat",
-            "#script reload",
-            "#scripts",
-            "look",
-        ];
-        let outcome = ScriptOutcome {
-            actions: lines
-                .iter()
-                .map(|line| Action::Input((*line).to_string()))
-                .collect(),
-            ..ScriptOutcome::default()
-        };
-        let apply = apply_actions(&mut p, outcome);
-        assert_eq!(apply.inputs, ["#script reload", "#scripts", "look"]);
-        let refusal = |command: &str| {
-            format!("{LUA_TAG} \x1b[31mVosh runs {command} only when you type it.\x1b[0m")
-        };
-        assert_eq!(
-            apply.echoes,
-            [
-                refusal("#profile"),
-                refusal("#profile"),
-                refusal("#import-tintin"),
-                refusal("#script load"),
-            ]
-        );
     }
 
     #[test]

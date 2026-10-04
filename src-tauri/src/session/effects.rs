@@ -13,7 +13,7 @@ use tracing::warn;
 
 use crate::app::events::{self, broadcast_list_changes, ListChanges, ListRevisions};
 use crate::app::state::{AppState, SharedState};
-use crate::input;
+use crate::input::{self, LineFrom};
 use crate::output::emit_output;
 use crate::profile::live::Profile;
 use crate::profile::shared::SharedLayer;
@@ -164,9 +164,10 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             return Ok(());
         }
         depth += 1;
+        let inputs = std::mem::take(&mut apply.inputs);
         let shared = crate::profile::switch::shared_layer_for_lines(
             app,
-            apply.inputs.iter().map(String::as_str),
+            inputs.iter().map(|(_, line)| line.as_str()),
         )
         .await;
         let state = app.state::<SharedState>();
@@ -179,7 +180,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             run_lines_locked(
                 &state,
                 &mut p,
-                apply.inputs.iter().map(String::as_str),
+                inputs.iter().map(|(from, line)| (*from, line.as_str())),
                 shared.as_ref(),
             )
         };
@@ -232,13 +233,14 @@ fn framed_echoes<S: AsRef<str>>(lines: &[S]) -> Vec<u8> {
 pub(super) fn run_and_note_line(
     state: &AppState,
     p: &mut Profile,
+    from: LineFrom,
     line: &str,
     effects: &mut input::LineEffects,
     shared: Option<&SharedLayer>,
 ) -> input::Ran {
     let ran = match shared.filter(|_| input::may_replace_profile(state, line)) {
-        Some(layer) => layer.keep_across(p, |p| input::run_line(state, p, line)),
-        None => input::run_line(state, p, line),
+        Some(layer) => layer.keep_across(p, |p| input::run_line_from(state, p, line, from)),
+        None => input::run_line_from(state, p, line, from),
     };
     effects.note_ran(line, &ran);
     if ran.replaced {
@@ -334,24 +336,25 @@ pub(super) fn run_fired_locked(
     command: &str,
     shared: Option<&SharedLayer>,
 ) -> LinesRun {
-    run_lines_locked(state, p, [command], shared)
+    run_lines_locked(state, p, [(LineFrom::You, command)], shared)
 }
 
 /// Run `lines` through the input pipeline under the profile lock, each
-/// as [`line_script_result`] reads it. Every path runs its lines here: a
-/// typed line, a Settings timer, the tick command and `mud.input`.
+/// for whoever asked for it, as [`line_script_result`] reads it. Every
+/// path runs its lines here: a typed line, a Settings timer, the tick
+/// command and `mud.input`.
 pub(crate) fn run_lines_locked<'a>(
     state: &AppState,
     p: &mut Profile,
-    lines: impl IntoIterator<Item = &'a str>,
+    lines: impl IntoIterator<Item = (LineFrom, &'a str)>,
     shared: Option<&SharedLayer>,
 ) -> LinesRun {
     let lists_before = ListRevisions::of(p);
     let shown_before = Shown::of(p);
     let mut effects = input::LineEffects::default();
     let mut apply = ApplyResult::default();
-    for line in lines {
-        let ran = run_and_note_line(state, p, line, &mut effects, shared);
+    for (from, line) in lines {
+        let ran = run_and_note_line(state, p, from, line, &mut effects, shared);
         apply.append(line_script_result(ran));
     }
     apply.lists = ListChanges::since(lists_before, p);

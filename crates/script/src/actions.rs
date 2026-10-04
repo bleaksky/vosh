@@ -12,8 +12,13 @@ use crate::owner::Owner;
 pub enum Action {
     /// Bytes to send to the server, with CRLF appended by the session.
     Send(String),
-    /// Run text through the input pipeline (vars, aliases, slash commands).
-    Input(String),
+    /// Run text through the input pipeline (vars, aliases, slash
+    /// commands), for the Lua of `owner`, which decides the slash
+    /// commands the line may run.
+    Input {
+        owner: Owner,
+        line: String,
+    },
     /// Echo a line locally to the terminal pane.
     Echo(String),
     /// Insert or replace an alias you keep, which Vosh saves.
@@ -105,7 +110,7 @@ impl Action {
     pub(crate) fn text_len(&self) -> usize {
         match self {
             Action::Send(text)
-            | Action::Input(text)
+            | Action::Input { line: text, .. }
             | Action::Echo(text)
             | Action::RemoveAlias(text)
             | Action::DropPluginAliases(text)

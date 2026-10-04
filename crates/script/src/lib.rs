@@ -1838,6 +1838,43 @@ mod tests {
     }
 
     #[test]
+    fn a_mud_input_line_goes_with_whose_lua_asked_for_it() {
+        let mut e = ScriptEngine::new().unwrap();
+        let inputs = |outcome: ScriptOutcome| -> Vec<Action> {
+            let actions = outcome.unwrap().actions;
+            actions
+                .into_iter()
+                .filter(|action| matches!(action, Action::Input { .. }))
+                .collect()
+        };
+        assert_eq!(
+            inputs(plugin(
+                &mut e,
+                "helpers",
+                "mud.input('#lua x = 1') function go() mud.input('look') end"
+            )),
+            [Action::Input {
+                owner: Owner::Plugin("helpers".into()),
+                line: "#lua x = 1".into(),
+            }]
+        );
+        // A plugin function your Lua calls asks for the plugin.
+        assert_eq!(
+            inputs(e.eval("plugins.helpers.go() mud.input('look')", "=#lua")),
+            [
+                Action::Input {
+                    owner: Owner::Plugin("helpers".into()),
+                    line: "look".into(),
+                },
+                Action::Input {
+                    owner: Owner::Typed,
+                    line: "look".into(),
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn what_a_plugin_function_registers_is_the_plugin_s_whoever_calls_it() {
         let mut e = ScriptEngine::new().unwrap();
         let watch = Owner::Plugin("watch".into());

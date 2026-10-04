@@ -73,7 +73,7 @@ pub(crate) fn mud_table(lua: &Lua, owner: Option<Owner>) -> LuaResult<Table> {
     let mud = lua.create_table()?;
 
     mud.set("send", lua.create_function(mud_send)?)?;
-    mud.set("input", lua.create_function(mud_input)?)?;
+    mud.set("input", owned(lua, owner.as_ref(), mud_input)?)?;
     mud.set("echo", lua.create_function(mud_echo)?)?;
     mud.set("log", lua.create_function(mud_log)?)?;
 
@@ -170,9 +170,17 @@ fn mud_send(lua: &Lua, text: mlua::String) -> LuaResult<()> {
     Ok(())
 }
 
-fn mud_input(lua: &Lua, text: mlua::String) -> LuaResult<()> {
-    queue_capped(lua, [(&text, LINE_BYTES)], |[text]| Action::Input(text))?;
-    Ok(())
+/// `mud.input`. The line goes with whose Lua asked for it, so a plugin's
+/// line runs no slash command.
+fn mud_input(lua: &Lua, owner: Option<&Owner>, text: mlua::String) -> LuaResult<()> {
+    let Some([line]) = all_capped(lua, [(&text, LINE_BYTES)])? else {
+        return Ok(());
+    };
+    with_state(lua, |s| {
+        let owner = registrant(s, owner);
+        s.queue(Action::Input { owner, line });
+        Ok(())
+    })
 }
 
 fn mud_echo(lua: &Lua, text: mlua::String) -> LuaResult<()> {
