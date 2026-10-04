@@ -818,16 +818,22 @@ describe('the help on Lua', () => {
       'A plugin then stays off until you restart Vosh, a script from `#script load` until `#script reload`, and a trigger or alias whose Lua ran away until you save it or restart Vosh.',
     );
     expect(text).toContain('One call may queue 100 actions');
+    expect(text).toContain(
+      'The time limit reaches inside string patterns and the `table` functions too',
+    );
+    expect(text).toContain(
+      'Vosh runs 100 `mud.input` lines at most for one game line, packet, timer, or line you type',
+    );
   });
 
   it('says what the sandbox takes away', () => {
     const text = body('automate.lua-scripts');
     expect(text).toContain(
-      '`require`, `io`, `os.execute`, and `os.getenv` are gone, and Vosh refuses a `__gc` method',
+      '`require`, `io`, `os.execute`, `os.getenv`, and `os.setlocale` are gone, and Vosh refuses a `__gc` method',
     );
     expect(text).toContain('`#script load` reads only from the `scripts` folder');
     expect(text).toContain(
-      '`mud.input` cannot run `#script load`, `#import-tintin`, or `#profile`, which run only when you type them.',
+      '`mud.input` cannot run `#script load`, `#script reload`, `#import-tintin`, or `#profile`, which run only when you type them, and it cannot set a quick key or the tick command to a `#` command.',
     );
     expect(text).toContain('Every Lua error and every `print` shows in the terminal');
   });
@@ -839,7 +845,7 @@ describe('the help on Lua', () => {
     );
     expect(text).toContain('`combat` and `combat.lua` load one script');
     expect(text).toContain(
-      'Loading it again, with `#script reload` or `#script load`, takes all of them back before it runs, so nothing doubles',
+      'Loading it again, with `#script reload` or `#script load`, takes all of them back once it runs without an error, so nothing doubles',
     );
     expect(text).toContain('Variables it set and groups it turned on or off stay.');
     expect(text).toContain(
@@ -850,6 +856,7 @@ describe('the help on Lua', () => {
   it('says what a plugin keeps to itself and how your Lua reaches it', () => {
     const text = body('automate.lua-scripts');
     expect(text).toContain('Each plugin runs in its own environment.');
+    expect(text).toContain('a line it hands `mud.input` runs no `#` command but `#echo`');
     expect(text).toContain(
       'it reads the standard libraries such as `string` and `table` but cannot change them',
     );
