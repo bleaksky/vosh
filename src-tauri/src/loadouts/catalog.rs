@@ -2,6 +2,7 @@
 //! characters share in loadout mode. Vosh runs in loadout mode while the
 //! file is on disk.
 
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -19,7 +20,7 @@ use crate::profile::live::{Macro, Profile};
 /// The global catalog. Every alias, trigger, macro lives here as a
 /// flat list with its `group` tag carrying the loadout association.
 /// Saved at `<app_data>/catalog.toml`.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub(crate) struct GlobalCatalog {
     #[serde(default)]
     pub aliases: Vec<Alias>,
@@ -108,6 +109,71 @@ pub(crate) fn lay_catalog_over(p: &mut Profile, catalog: &GlobalCatalog, set: Op
     if let Some(set) = set {
         apply_effective_state(set, p);
     }
+}
+
+/// Lay over `p`, an open profile, what changed in the catalog from
+/// `before` to `after`, which a save from another open profile just
+/// wrote. An item `after` drops leaves `p` and one it adds or changes
+/// comes in, so `p` keeps the edits it has yet to save and the stops Vosh
+/// put on the items that did not change. The group state of `set`, the
+/// loadouts as `p` gates on them, then applies, since the change may
+/// bring a group.
+pub(crate) fn lay_catalog_change_over(
+    p: &mut Profile,
+    before: &GlobalCatalog,
+    after: &GlobalCatalog,
+    set: Option<&LoadoutSet>,
+) {
+    let (gone, came) = changes(&before.aliases, &after.aliases, |a| a.name.as_str());
+    for name in gone {
+        p.aliases.remove(name);
+    }
+    for alias in came {
+        p.aliases.set(alias.clone());
+    }
+    let (gone, came) = changes(&before.triggers, &after.triggers, |t| t.name.as_str());
+    for name in gone {
+        p.triggers.remove(name);
+    }
+    for trigger in came {
+        if let Err(e) = p.triggers.set(trigger.clone()) {
+            warn!(error = %e, "catalog trigger rejected");
+        }
+    }
+    let (gone, came) = changes(&before.macros, &after.macros, |m| m.key.as_str());
+    p.macros.retain(|m| !gone.contains(&m.key.as_str()));
+    for changed in came {
+        match p.macros.iter_mut().find(|m| m.key == changed.key) {
+            Some(m) => m.clone_from(changed),
+            None => p.macros.push(changed.clone()),
+        }
+    }
+    if after.enabled_presets != before.enabled_presets {
+        if let Some(list) = &after.enabled_presets {
+            p.ui.enabled_presets.clone_from(list);
+        }
+    }
+    if let Some(set) = set {
+        apply_effective_state(set, p);
+    }
+}
+
+/// The keys of the items of `before` that `after` lacks, and the items of
+/// `after` that `before` lacks or holds otherwise, each item known by
+/// `key`.
+fn changes<'a, T: PartialEq>(
+    before: &'a [T],
+    after: &'a [T],
+    key: impl Fn(&'a T) -> &'a str,
+) -> (Vec<&'a str>, Vec<&'a T>) {
+    let was: HashMap<&str, &T> = before.iter().map(|item| (key(item), item)).collect();
+    let now: HashSet<&str> = after.iter().map(&key).collect();
+    let gone = was.keys().copied().filter(|k| !now.contains(k)).collect();
+    let came = after
+        .iter()
+        .filter(|item| was.get(key(item)) != Some(item))
+        .collect();
+    (gone, came)
 }
 
 /// True when `catalog.toml` is in the app data folder, which is what

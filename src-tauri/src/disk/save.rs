@@ -1,7 +1,9 @@
 //! The save engine. It writes each open profile to its own file and
 //! global.toml, and in loadout mode to catalog.toml and loadouts.toml
-//! too. A durable change saves its profile a couple of seconds after its
-//! burst settles, and [`PERSIST_LOCK`] keeps two writes off one file.
+//! too, then lays what it wrote to the files every profile shares over
+//! the other open profiles. A durable change saves its profile a couple
+//! of seconds after its burst settles, and [`PERSIST_LOCK`] keeps two
+//! writes off one file.
 //!
 //! The lock order. A step that holds two of these locks at once takes
 //! them in this order, so no two tasks wait on each other for good.
@@ -27,6 +29,7 @@ use tracing::warn;
 
 use crate::app::events::{broadcast, line_effect_events};
 use crate::app::state::SharedState;
+use crate::loadouts::catalog::{lay_catalog_change_over, GlobalCatalog};
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
 use crate::profile::open::OpenProfile;
@@ -280,8 +283,45 @@ pub(crate) async fn persist_state(state: &SharedState, open: &Arc<OpenProfile>) 
     if let Err(e) = per_profile_snapshot.save(&per_profile_path) {
         warn!(error = %e, path = %per_profile_path.display(), "auto-save per-profile failed");
     }
-    if let Err(e) = global_snapshot.save(&global_path) {
-        warn!(error = %e, path = %global_path.display(), "auto-save global failed");
+    match global_snapshot.save(&global_path) {
+        Ok(()) => lay_save_over_others(state, open, None, Some(&global_snapshot)).await,
+        Err(e) => warn!(error = %e, path = %global_path.display(), "auto-save global failed"),
+    }
+}
+
+/// Lay what the save of `saved` wrote to the files every profile shares
+/// over each other open profile, so a later save from one of them writes
+/// back no older copy. `catalog` is the change the save made to the
+/// catalog, from the copy before it to the one it wrote, which each
+/// profile takes through its own loadout stack, and `shared` is what it
+/// wrote to global.toml. Call with [`PERSIST_LOCK`] held, once the save
+/// let go of `saved`. Each profile is locked in turn, one at a time.
+async fn lay_save_over_others(
+    state: &SharedState,
+    saved: &Arc<OpenProfile>,
+    catalog: Option<(&GlobalCatalog, &GlobalCatalog)>,
+    shared: Option<&GlobalConfig>,
+) {
+    let others: Vec<_> = state
+        .open_profiles()
+        .into_iter()
+        .filter(|open| !Arc::ptr_eq(open, saved))
+        .collect();
+    if others.is_empty() {
+        return;
+    }
+    let loadouts = state.loadout_set.lock().await.clone();
+    for open in others {
+        let mut p = open.lock().await;
+        if let Some((before, after)) = catalog {
+            let gate = loadouts
+                .as_ref()
+                .map(|set| set.for_profile(p.name.as_deref()));
+            lay_catalog_change_over(&mut p, before, after, gate.as_deref());
+        }
+        if let Some(shared) = shared {
+            shared.apply_to(&mut p);
+        }
     }
 }
 
@@ -305,23 +345,21 @@ pub(crate) fn active_profile_file(
 /// `loadouts.toml`, both via the same atomic-write-with-backup
 /// pipeline the per-profile branch uses. Falls through to the legacy
 /// `global.toml` write so theme / font / `dock_layout` edits land on
-/// the same path in both modes.
+/// the same path in both modes. The other open profiles then take the
+/// change to the catalog and what global.toml holds, see
+/// [`lay_save_over_others`].
 async fn persist_loadout_mode(
     state: &SharedState,
     open: &Arc<OpenProfile>,
     name: Option<&str>,
     dir: &std::path::Path,
 ) {
+    let before = state.global_catalog.lock().await.clone();
     // A catalog that has not taken the enabled presets yet waits for a
     // launch that reads a profile file (see
     // `loadouts::presets::adopt_catalog_presets`), so a save leaves the list
     // out rather than write the live profile's list alone.
-    let presets_waiting = state
-        .global_catalog
-        .lock()
-        .await
-        .as_ref()
-        .is_some_and(|c| c.enabled_presets.is_none());
+    let presets_waiting = before.as_ref().is_some_and(|c| c.enabled_presets.is_none());
     // Catalog. Pull aliases / triggers / macros directly from the live
     // Profile. The catalog is the authoritative source in loadout mode
     // so an overwrite here is correct — anything the user typed via
@@ -372,9 +410,13 @@ async fn persist_loadout_mode(
             None => (None, None),
         }
     };
+    let mut shared = None;
     if let Some(g) = global_path {
-        if let Err(e) = global_snapshot.save(&g) {
-            warn!(error = %e, path = %g.display(), "loadout mode global auto-save failed");
+        match global_snapshot.save(&g) {
+            Ok(()) => shared = Some(&global_snapshot),
+            Err(e) => {
+                warn!(error = %e, path = %g.display(), "loadout mode global auto-save failed");
+            }
         }
     }
     // The per-profile file keeps every UI setting outside the shared
@@ -407,8 +449,17 @@ async fn persist_loadout_mode(
             );
         }
     }
-    // Mirror the new catalog into `state.global_catalog` so subsequent
-    // reads see the latest write without going back to disk.
+    // The other open profiles take the change, then the new catalog goes
+    // into `state.global_catalog`, the copy the next save compares with
+    // and a switch lays over the next profile.
+    let changed = before.as_ref().filter(|before| **before != catalog);
+    lay_save_over_others(
+        state,
+        open,
+        changed.map(|before| (before, &catalog)),
+        shared,
+    )
+    .await;
     *state.global_catalog.lock().await = Some(catalog);
 }
 
