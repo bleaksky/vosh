@@ -6,7 +6,9 @@ import {
   type MigrationConflictResolution,
   type MigrationItemKind,
   type MigrationPlan,
+  type TriggerPattern,
 } from '../lib/session';
+import { patternSource } from '../lib/automationTriggers';
 import { PRESETS } from '../lib/presets';
 import { presetChanges } from '../lib/wizardPresets';
 
@@ -403,8 +405,8 @@ function summarizeVariant(
     return expansion.length > 80 ? `${expansion.slice(0, 80)}…` : expansion;
   }
   if (kind === 'trigger') {
-    const patterns = (item.patterns ?? []) as Array<{ pattern: string }>;
-    const first = patterns.length > 0 ? patterns[0].pattern : '';
+    const patterns = (item.patterns ?? []) as TriggerPattern[];
+    const first = patterns.length > 0 ? patternSource(patterns[0]) : '';
     return first.length > 80 ? `${first.slice(0, 80)}…` : first;
   }
   const command = (item.command ?? '') as string;
