@@ -41,7 +41,7 @@ fn capture_profile(template: &str) -> Profile {
 /// Run one complete line through the session's line step, with your
 /// target on `c`, and return the drawn prompt, the bytes after its region
 /// mark, when it drew.
-fn draw_line(p: &mut Profile, c: &super::Connection, line: &str) -> Option<String> {
+fn draw_line(p: &mut Profile, c: &mut super::Connection, line: &str) -> Option<String> {
     let mut batch = super::ReadBatch::new(crate::output::output_count());
     let _ = super::line_step(
         p,
@@ -185,8 +185,8 @@ fn a_line_prompt_draws_in_place_with_no_line_end() {
 #[test]
 fn the_prompt_draws_the_template_byte_for_byte() {
     let mut p = capture_profile(TEMPLATE);
-    let drawn =
-        draw_line(&mut p, &super::Connection::default(), PROMPT_LINE).expect("the prompt draws");
+    let drawn = draw_line(&mut p, &mut super::Connection::default(), PROMPT_LINE)
+        .expect("the prompt draws");
     assert_eq!(plain(&drawn), "[1020(100%)h 800(100%)m 930(100%)v] ");
     // Health at full in the theme's green, where the first renderer
     // drew 256 color 42. Every other byte is as it drew them.
@@ -200,7 +200,7 @@ fn the_prompt_draws_the_template_byte_for_byte() {
 
     // Any other line shows as sent and draws nothing.
     assert_eq!(
-        draw_line(&mut p, &super::Connection::default(), "You are hungry."),
+        draw_line(&mut p, &mut super::Connection::default(), "You are hungry."),
         None
     );
 }
@@ -223,7 +223,7 @@ fn with_drawing_off_the_prompt_shows_as_sent_and_is_logged() {
     let mut batch = super::ReadBatch::new(crate::output::output_count());
     let step = super::line_step(
         &mut wire.p,
-        &wire.c,
+        &mut wire.c,
         &mut batch,
         super::Line {
             bytes: PROMPT_LINE.as_bytes().to_vec(),
@@ -241,7 +241,7 @@ fn with_drawing_off_the_prompt_shows_as_sent_and_is_logged() {
     let mut batch = super::ReadBatch::new(crate::output::output_count());
     let step = super::line_step(
         &mut p,
-        &super::Connection::default(),
+        &mut super::Connection::default(),
         &mut batch,
         super::Line {
             bytes: PROMPT_LINE.as_bytes().to_vec(),
@@ -925,8 +925,12 @@ fn the_three_lament_cases_draw_hidden_vitals_and_report_them() {
             feed(&mut p, file.as_str().expect("a file name"));
         }
         // The game prints zeros for every vital under the song.
-        let drawn = draw_line(&mut p, &super::Connection::default(), "[0/0hp 0/0mn 0/0mv]")
-            .expect("the prompt draws");
+        let drawn = draw_line(
+            &mut p,
+            &mut super::Connection::default(),
+            "[0/0hp 0/0mn 0/0mv]",
+        )
+        .expect("the prompt draws");
         assert_eq!(plain(&drawn), "[?(?%)h ?(?%)m ?(?%)v] ", "{name}");
         // Each mark in bright black, then the look before it.
         assert!(
@@ -969,7 +973,7 @@ fn a_prompt_draws_again_once_the_song_ends() {
     feed(&mut p, "group-info-own-row.gmcp");
     let drawn = draw_line(
         &mut p,
-        &super::Connection::default(),
+        &mut super::Connection::default(),
         "[850/900hp 760/820mn 250/250mv]",
     )
     .expect("the prompt draws");
@@ -992,8 +996,12 @@ fn a_reconnect_in_the_song_hides_the_vitals_from_the_prompt_alone() {
     // true values. Only the prompt the capture reads shows the song.
     let mut p = forsaken_profile(TEMPLATE);
     feed(&mut p, "char-vitals.gmcp");
-    let drawn = draw_line(&mut p, &super::Connection::default(), "[0/0hp 0/0mn 0/0mv]")
-        .expect("the prompt draws");
+    let drawn = draw_line(
+        &mut p,
+        &mut super::Connection::default(),
+        "[0/0hp 0/0mn 0/0mv]",
+    )
+    .expect("the prompt draws");
     assert_eq!(plain(&drawn), "[?(?%)h ?(?%)m ?(?%)v] ");
     let hidden = p
         .prompt
@@ -1026,7 +1034,7 @@ fn other_hosts_hide_nothing() {
     }
     assert_eq!(
         plain(
-            &draw_line(&mut p, &super::Connection::default(), PROMPT_LINE)
+            &draw_line(&mut p, &mut super::Connection::default(), PROMPT_LINE)
                 .expect("the prompt draws")
         ),
         "1020/1020 a Blackwatch guard 41"
@@ -1072,7 +1080,7 @@ fn the_session_draws_the_gate_pieces_from_the_new_build_packets() {
     let mut p = forsaken_profile(GATE);
     new_build_fight(&mut p);
     assert_eq!(
-        plain(&draw_line(&mut p, &super::Connection::default(), PROMPT_LINE).expect("the prompt draws")),
+        plain(&draw_line(&mut p, &mut super::Connection::default(), PROMPT_LINE).expect("the prompt draws")),
         "1250 a Blackwatch guard|FUL waning crescent|sit common rainy 60°F Coastal North|Tester [===|===|===|=--]|S"
     );
     // Nothing is hidden, so nothing is reported.
@@ -1086,12 +1094,16 @@ fn exits_draw_from_room_info_only_on_the_new_build() {
     feed(&mut p, "room-info.gmcp");
     // No Char.Prompt this session, so Room.Info feeds no exits.
     assert_eq!(
-        plain(&draw_line(&mut p, &super::Connection::default(), PROMPT_LINE).expect("it draws")),
+        plain(
+            &draw_line(&mut p, &mut super::Connection::default(), PROMPT_LINE).expect("it draws")
+        ),
         "[]"
     );
     feed(&mut p, "char-prompt.gmcp");
     assert_eq!(
-        plain(&draw_line(&mut p, &super::Connection::default(), PROMPT_LINE).expect("it draws")),
+        plain(
+            &draw_line(&mut p, &mut super::Connection::default(), PROMPT_LINE).expect("it draws")
+        ),
         "[S]"
     );
 }
@@ -1119,7 +1131,7 @@ fn vosh_supplies_the_tick_target_tracked_affects_and_profile() {
         })
     );
     feed(&mut p, "char-affects.gmcp");
-    let drawn = plain(&draw_line(&mut p, &c, PROMPT_LINE).expect("it draws"));
+    let drawn = plain(&draw_line(&mut p, &mut c, PROMPT_LINE).expect("it draws"));
     let parts: Vec<&str> = drawn.split('|').collect();
     assert!(
         parts[0]
@@ -1136,7 +1148,7 @@ fn a_new_connection_starts_the_prompt_over() {
     let mut p = forsaken_profile(GATE);
     new_build_fight(&mut p);
     assert!(p.prompt.vars.new_build());
-    let _ = draw_line(&mut p, &super::Connection::default(), PROMPT_LINE);
+    let _ = draw_line(&mut p, &mut super::Connection::default(), PROMPT_LINE);
     assert!(!p.prompt.vars.prompt_vars().is_empty());
 
     super::end_prompt(&mut p);
@@ -1305,7 +1317,7 @@ fn a_held_line_your_send_lets_go_runs_the_line_pass_and_is_logged() {
     let mut batch = super::ReadBatch::new(crate::output::output_count());
     let steps = super::let_go_held(
         &mut wire.p,
-        &wire.c,
+        &mut wire.c,
         &mut batch,
         tokio::time::Instant::now(),
         Some(3),
@@ -1351,7 +1363,7 @@ fn a_held_line_a_script_hides_still_shows_and_its_echo_follows() {
     let mut batch = super::ReadBatch::new(crate::output::output_count());
     let steps = super::let_go_held(
         &mut wire.p,
-        &wire.c,
+        &mut wire.c,
         &mut batch,
         tokio::time::Instant::now(),
         Some(3),
@@ -1448,12 +1460,13 @@ fn a_released_line_runs_the_line_pass_and_is_logged() {
     let mut batch = super::ReadBatch::new(crate::output::output_count());
     let now = tokio::time::Instant::now();
     let mut acc = super::LineAccumulator::new();
+    let mut c = super::Connection::default();
     let mut steps = Vec::new();
     for line in acc.feed(format!("{TANK_LINE}\n\rYou are hungry.\n\r").as_bytes()) {
         let plain = vosh_protocol::ansi::plain_text(&line.bytes);
         steps.extend(super::line_step(
             &mut p,
-            &super::Connection::default(),
+            &mut c,
             &mut batch,
             line,
             plain,
@@ -1486,7 +1499,15 @@ fn drawing_off_shows_the_whole_block_as_sent_and_logs_it() {
     let mut acc = super::LineAccumulator::new();
     for line in acc.feed(format!("{TANK_LINE}\n\r{FIGHT_LINE}\n\r").as_bytes()) {
         let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-        let _ = super::line_step(&mut wire.p, &wire.c, &mut batch, line, plain, now, Some(3));
+        let _ = super::line_step(
+            &mut wire.p,
+            &mut wire.c,
+            &mut batch,
+            line,
+            plain,
+            now,
+            Some(3),
+        );
     }
     let logged: Vec<&str> = batch.log.iter().map(|e| e.text.as_str()).collect();
     assert_eq!(logged, [TANK_LINE, FIGHT_LINE]);
@@ -1498,18 +1519,11 @@ fn logged_and_kept(p: &mut Profile, text: &str) -> (Vec<String>, Vec<Vec<u8>>, V
     let mut batch = super::ReadBatch::new(crate::output::output_count());
     let now = tokio::time::Instant::now();
     let mut acc = super::LineAccumulator::new();
+    let mut c = super::Connection::default();
     let mut kept = Vec::new();
     for line in acc.feed(text.as_bytes()) {
         let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-        for step in super::line_step(
-            p,
-            &super::Connection::default(),
-            &mut batch,
-            line,
-            plain,
-            now,
-            Some(3),
-        ) {
+        for step in super::line_step(p, &mut c, &mut batch, line, plain, now, Some(3)) {
             kept.extend(step.scrollback);
         }
     }

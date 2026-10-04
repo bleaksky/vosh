@@ -1,14 +1,18 @@
-//! What one connection shares with the commands: the target you pick, its
-//! quick keys and the characters in the room. The app state holds the
-//! [`Connection`] behind its own lock, and the session loop holds a handle
-//! to it, so a command reads it without waiting on the loop.
+//! What one connection holds apart from the profile: the target you pick,
+//! its quick keys and the characters in the room, which the commands
+//! share, and the room look and the end of a fight, which the loop
+//! follows line by line. The app state holds the [`Connection`] behind
+//! its own lock, and the session loop holds a handle to it, so a command
+//! reads it without waiting on the loop.
 //!
 //! Its lock comes after the profile lock and the profile set, never before
 //! them. A step that holds it takes no other lock and never awaits. The
 //! session slot comes before it, since `disconnect` holds the slot while
 //! the loop ends and clears it.
 
-/// What one connection shares with the commands. It outlives each
+use super::room_block::RoomBlock;
+
+/// What one connection holds apart from the profile. It outlives each
 /// connection, so a target you set offline carries into the next one and
 /// your quick keys last until you quit.
 #[derive(Debug, Default)]
@@ -21,16 +25,31 @@ pub(crate) struct Connection {
     /// The latest Room.Chars list, so `tar` can pick a character by its
     /// place or by part of its name without asking the page.
     pub(crate) room_chars: Vec<RoomChar>,
+    /// The room look the session is following, which tells the lines
+    /// that list a room's things and people apart for Room triggers. It
+    /// resets on a disconnect.
+    pub(crate) room_block: RoomBlock,
+    /// The round that ended your fight is still coming. `stop_fighting`
+    /// (fight.c:10278) writes Char.Combat `{}` straight to the socket in
+    /// the middle of the round, and the round's text waits for the end of
+    /// the pulse, so the last attacks, the death and the experience all
+    /// come after it. Set when a Char.Combat with no target follows one
+    /// that named one, and cleared by the prompt, GA or EOR that ends the
+    /// pulse, and on a disconnect.
+    pub(crate) fight_tail: bool,
 }
 
 impl Connection {
-    /// The connection ended, and your target and the room list end with
-    /// it. Your quick keys stay. Returns whether a target was set.
+    /// The connection ended, and your target, the room list, the room
+    /// look and the fight's tail end with it. Your quick keys stay.
+    /// Returns whether a target was set.
     pub(crate) fn clear_on_disconnect(&mut self) -> bool {
         let had = self.target.name.is_some();
         self.target.name = None;
         self.target.room_idx = None;
         self.room_chars.clear();
+        self.room_block = RoomBlock::default();
+        self.fight_tail = false;
         had
     }
 }
@@ -84,7 +103,7 @@ impl TargetState {
 
 #[cfg(test)]
 mod tests {
-    use super::{Connection, QuickKey, RoomChar};
+    use super::{Connection, QuickKey, RoomBlock, RoomChar};
 
     #[test]
     fn a_disconnect_keeps_the_quick_keys_and_clears_the_rest() {
@@ -100,11 +119,16 @@ mod tests {
             name: "a goblin".into(),
             npc: true,
         }];
+        c.room_block.room_chars(1);
+        assert_ne!(c.room_block, RoomBlock::default());
+        c.fight_tail = true;
         assert!(c.clear_on_disconnect(), "a target was set");
         assert_eq!(c.target.name, None);
         assert_eq!(c.target.room_idx, None);
         let leftover = &c.room_chars;
         assert!(leftover.is_empty(), "{leftover:?}");
+        assert_eq!(c.room_block, RoomBlock::default());
+        assert!(!c.fight_tail);
         assert_eq!(c.target.quick_keys, [gg]);
         assert!(!c.clear_on_disconnect(), "no target is left");
     }

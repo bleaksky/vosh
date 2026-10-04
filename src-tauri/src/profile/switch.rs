@@ -461,12 +461,12 @@ pub(crate) mod tests {
             c.target.room_idx = Some(1);
             c.target.quick_keys = vec![gg.clone()];
             c.room_chars = goblin.clone();
-            p.room_block.room_chars(1);
-            p.fight_tail = true;
+            c.room_block.room_chars(1);
+            c.fight_tail = true;
             let t0 = tokio::time::Instant::now();
             p.tick.start_session(t0);
             assert!(p.tick.on_game_tick(t0).is_some(), "the game ticked");
-            (p.room_block.clone(), (p.tick.last_tick, p.tick.last_signal))
+            (c.room_block.clone(), (p.tick.last_tick, p.tick.last_signal))
         };
         assert_ne!(look, crate::session::room_block::RoomBlock::default());
 
@@ -478,8 +478,8 @@ pub(crate) mod tests {
         assert_eq!(c.target.room_idx, Some(1));
         assert_eq!(c.target.quick_keys, [gg]);
         assert_eq!(c.room_chars, goblin);
-        assert_eq!(p.room_block, look);
-        assert!(p.fight_tail);
+        assert_eq!(c.room_block, look);
+        assert!(c.fight_tail);
         assert!(p.tick.config.enabled, "a running tick stays on");
         assert!(p.tick.synced);
         assert_eq!((p.tick.last_tick, p.tick.last_signal), count);
