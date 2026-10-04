@@ -772,7 +772,7 @@ impl ScriptEngine {
                         });
                     }
                     Err(e) => {
-                        outcome.actions.push(Action::Log(format!(
+                        outcome.actions.push(Action::Error(format!(
                             "lua trigger `{name}` rejected: invalid regex {e}"
                         )));
                         self.drop_callback(callback_id);
@@ -2011,12 +2011,17 @@ mod tests {
     }
 
     #[test]
-    fn invalid_trigger_regex_logs_error() {
+    fn invalid_trigger_regex_shows_as_an_error() {
         let mut e = ScriptEngine::new().unwrap();
         let outcome = e
             .eval(r#"mud.trigger("bad", "[unclosed", function() end)"#, "t")
             .unwrap();
-        assert!(matches!(outcome.actions[0], Action::Log(_)));
+        assert!(
+            matches!(&outcome.actions[0], Action::Error(line) if line.starts_with("lua trigger `bad` rejected")),
+            "{:?}",
+            outcome.actions
+        );
+        assert_eq!(held_callbacks(&e), 0);
     }
 
     /// The lines Vosh printed about the Lua, errors and stops alike.
