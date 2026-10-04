@@ -444,6 +444,39 @@ fn prompt_draw_turns_drawing_on_and_off() {
     assert!(p.prompt.config().draw);
     // The help names it.
     assert!(super::slash::HELP_TEXT.contains("#prompt draw on|off"));
+
+    // A pattern of another game gives no codes to follow, so drawing on
+    // with no design still shows the game's own prompt, and says so.
+    let mut p = Profile::default();
+    p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(false, ""));
+    let _ = run_line(&state, &mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
+    let ran = run_line(&state, &mut p, "#prompt draw on");
+    assert_eq!(
+        ran.result.echo,
+        [
+            "Drawing is on. Vosh draws your design in place of your prompt.",
+            "You have no design yet, so you see the game's own prompt. Pick one in Customize prompt.",
+        ]
+    );
+    assert!(p.prompt.config().draw);
+    assert!(p.prompt.config().mirror);
+    assert!(!p.prompt.draws());
+    // So do codes the game sent that Vosh cannot draw, where a color
+    // runs into a code.
+    let mut p = Profile::default();
+    p.set_prompt_config(vosh_prompt::PromptConfig {
+        capture: vosh_prompt::CaptureConfig::Aabahran(vosh_prompt::config::AabahranCapture {
+            prompt: "<`%h> ".into(),
+            ..vosh_prompt::config::AabahranCapture::default()
+        }),
+        ..vosh_prompt::PromptConfig::from_legacy(false, "")
+    });
+    let ran = run_line(&state, &mut p, "#prompt draw on");
+    assert_eq!(
+        ran.result.echo[1],
+        "You have no design yet, so you see the game's own prompt. Pick one in Customize prompt."
+    );
+    assert!(!p.prompt.draws());
 }
 
 #[test]
