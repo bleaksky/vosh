@@ -20,6 +20,7 @@
 //! reach it.
 
 use std::borrow::Cow;
+use std::ops::Range;
 
 use crate::trigger::color::NamedColor;
 
@@ -189,25 +190,27 @@ pub fn lift_to_contrast(fg: Rgb, ground: Rgb) -> Rgb {
     } else {
         [0.0, 1.0]
     };
+    let reads = |rgb: Rgb| contrast(rgb, ground) >= READABLE_CONTRAST;
     // Black or white holds 4.5:1 on any ground, since 4.5 squared is
     // under 21, so the second end always reads when the first does not.
     ends.into_iter()
-        .find_map(|end| lift_toward(start, end, ground))
+        .find_map(|end| lift_toward(start, end, reads))
         .unwrap_or(fg)
 }
 
-/// The lightness between `start` and `end` nearest `start` where the color
-/// reads on `ground`, or `None` when even `end` does not.
-fn lift_toward(start: Oklch, end: f64, ground: Rgb) -> Option<Rgb> {
-    let reads = |l: f64| {
+/// The color at the lightness between `start` and `end` nearest `start`
+/// that `reads`, with `start`'s hue and as much of its chroma as the gamut
+/// holds there, or `None` when even `end` does not read.
+fn lift_toward(start: Oklch, end: f64, reads: impl Fn(Rgb) -> bool) -> Option<Rgb> {
+    let reading_at = |l: f64| {
         let rgb = at_lightness(l, start.c, start.h);
-        (contrast(rgb, ground) >= READABLE_CONTRAST).then_some(rgb)
+        reads(rgb).then_some(rgb)
     };
-    let mut best = reads(end)?;
+    let mut best = reading_at(end)?;
     let (mut short, mut far) = (start.l, end);
     for _ in 0..32 {
         let mid = (short + far) / 2.0;
-        match reads(mid) {
+        match reading_at(mid) {
             Some(rgb) => {
                 best = rgb;
                 far = mid;
@@ -442,34 +445,8 @@ fn settle(
     let want = on(paint.asked);
     let changed = match set_here {
         Some(_) if want == paint.asked => false,
-        Some(At::Semicolons(i)) => {
-            items[i] = want.0.to_string();
-            items[i + 1] = want.1.to_string();
-            items[i + 2] = want.2.to_string();
-            true
-        }
-        Some(At::Colons(i)) => {
-            let mut subs: Vec<String> = items[i].split(':').map(str::to_string).collect();
-            let n = subs.len();
-            subs[n - 3] = want.0.to_string();
-            subs[n - 2] = want.1.to_string();
-            subs[n - 1] = want.2.to_string();
-            items[i] = subs.join(":");
-            true
-        }
-        // The index becomes a true color in the same items: `38;5;n` turns
-        // into `38;2;r;g;b`, the channels in one item that the join spells
-        // out with semicolons.
-        Some(At::IndexedSemicolons(i)) => {
-            let (r, g, b) = want;
-            items[i + 1] = "2".to_string();
-            items[i + 2] = format!("{r};{g};{b}");
-            true
-        }
-        Some(At::IndexedColons(i)) => {
-            let (r, g, b) = want;
-            let code = items[i].split(':').next().unwrap_or("38").to_string();
-            items[i] = format!("{code}:2::{r}:{g}:{b}");
+        Some(at) => {
+            write_at(items, at, want);
             true
         }
         None if want == paint.drawn => false,
@@ -486,6 +463,72 @@ fn settle(
     changed
 }
 
+/// Write `rgb` over the color at `at` in a sequence's items.
+fn write_at(items: &mut [String], at: At, rgb: Rgb) {
+    let (red, green, blue) = rgb;
+    match at {
+        At::Semicolons(i) => {
+            items[i] = red.to_string();
+            items[i + 1] = green.to_string();
+            items[i + 2] = blue.to_string();
+        }
+        At::Colons(i) => {
+            let mut subs: Vec<String> = items[i].split(':').map(str::to_string).collect();
+            let first = subs.len() - 3;
+            subs[first] = red.to_string();
+            subs[first + 1] = green.to_string();
+            subs[first + 2] = blue.to_string();
+            items[i] = subs.join(":");
+        }
+        // The index becomes a true color in the same items: `38;5;n` turns
+        // into `38;2;r;g;b`, the channels in one item that the join spells
+        // out with semicolons.
+        At::IndexedSemicolons(i) => {
+            items[i + 1] = "2".to_string();
+            items[i + 2] = format!("{red};{green};{blue}");
+        }
+        At::IndexedColons(i) => {
+            let code = items[i].split(':').next().unwrap_or("38").to_string();
+            items[i] = format!("{code}:2::{red}:{green}:{blue}");
+        }
+    }
+}
+
+/// Each plain SGR sequence in `bytes`, in order: the bytes it runs over,
+/// from its ESC through its final `m`, and its parameters, which hold
+/// digits, semicolons and colons alone. Every other escape is passed over
+/// whole.
+fn plain_sgrs(bytes: &[u8]) -> impl Iterator<Item = (Range<usize>, &str)> + '_ {
+    let mut from = 0;
+    std::iter::from_fn(move || loop {
+        let start = from + bytes[from..].windows(2).position(|pair| pair == b"\x1b[")?;
+        let mut end = start + 2;
+        while end < bytes.len() && (0x30..=0x3f).contains(&bytes[end]) {
+            end += 1;
+        }
+        let params_end = end;
+        while end < bytes.len() && (0x20..=0x2f).contains(&bytes[end]) {
+            end += 1;
+        }
+        // The final byte. A sequence the line cuts short ends the scan.
+        if end >= bytes.len() {
+            return None;
+        }
+        let params = &bytes[start + 2..params_end];
+        let plain = bytes[end] == b'm'
+            && params_end == end
+            && params
+                .iter()
+                .all(|b| b.is_ascii_digit() || matches!(b, b';' | b':'));
+        from = end + 1;
+        // Digits, semicolons and colons are ASCII, so they always read as
+        // text.
+        if let (true, Ok(params)) = (plain, std::str::from_utf8(params)) {
+            return Some((start..from, params));
+        }
+    })
+}
+
 /// Rewrite the fixed text and underline colors in `text`, a line the
 /// triggers built, so each holds [`READABLE_CONTRAST`] on what it draws
 /// on: `ground`, the terminal background, unless the line set a fixed
@@ -497,51 +540,19 @@ fn settle(
 /// both renderers. Backgrounds never change, and neither does anything but
 /// SGR sequences. Borrows `text` back when nothing needed a change.
 pub fn lift_sgr(text: &str, ground: Rgb) -> Cow<'_, str> {
-    if !text.contains("\x1b[") {
-        return Cow::Borrowed(text);
-    }
-    let bytes = text.as_bytes();
     let mut pen = Pen::default();
     let mut out = String::new();
-    // The end of the text copied into `out` so far.
+    // The end of the text copied into `out` so far. A sequence starts and
+    // ends on ASCII, so each cut falls between characters.
     let mut copied = 0;
-    let mut from = 0;
-    while let Some(found) = text[from..].find("\x1b[") {
-        let start = from + found;
-        let mut end = start + 2;
-        while end < bytes.len() && (0x30..=0x3f).contains(&bytes[end]) {
-            end += 1;
+    for (at, params) in plain_sgrs(text.as_bytes()) {
+        if let Some(rewritten) = pen.sgr(params, ground) {
+            out.push_str(&text[copied..at.start]);
+            out.push_str("\x1b[");
+            out.push_str(&rewritten);
+            out.push('m');
+            copied = at.end;
         }
-        let params_end = end;
-        while end < bytes.len() && (0x20..=0x2f).contains(&bytes[end]) {
-            end += 1;
-        }
-        if end >= bytes.len() {
-            break;
-        }
-        // A final byte past ASCII ends nothing a terminal reads as SGR, and
-        // stepping one byte past it would land inside the character.
-        if !bytes[end].is_ascii() {
-            from = end;
-            continue;
-        }
-        let params = &text[start + 2..params_end];
-        let plain_sgr = bytes[end] == b'm'
-            && params_end == end
-            && params
-                .bytes()
-                .all(|b| b.is_ascii_digit() || b == b';' || b == b':');
-        end += 1;
-        if plain_sgr {
-            if let Some(rewritten) = pen.sgr(params, ground) {
-                out.push_str(&text[copied..start]);
-                out.push_str("\x1b[");
-                out.push_str(&rewritten);
-                out.push('m');
-                copied = end;
-            }
-        }
-        from = end;
     }
     if copied == 0 {
         return Cow::Borrowed(text);
