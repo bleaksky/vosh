@@ -37,8 +37,8 @@ pub enum Action {
     },
     /// Remove a prompt var by name.
     RemovePromptVar(String),
-    /// Toggle a group across the trigger / alias / macro stores. Same
-    /// as the `#group <name> on|off` slash command. Mirrors the
+    /// Toggle a group across the trigger, alias, macro and timer stores.
+    /// Same as the `#group <name> on|off` slash command. Mirrors the
     /// unified scope so a single Lua call flips every store sharing
     /// that group name.
     SetGroupEnabled {
