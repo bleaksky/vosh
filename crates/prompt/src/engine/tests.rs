@@ -383,24 +383,39 @@ fn a_design_of_yours_stays_when_your_codes_change() {
 
 #[test]
 fn a_design_that_follows_the_game_is_written_for_who_you_are() {
+    // A 256 color left open right before %u. For a mortal %u repeats the
+    // text of the code before it, which could finish the color, so Vosh
+    // cannot draw the setting. For an immortal %u prints a word.
+    let prompt = "<`(12%u %h> ";
+    let immortal = Who {
+        immortal: true,
+        ..Who::default()
+    };
+    let mortal = crate::card::presets::game(prompt, "", Who::default()).unwrap_or_default();
+    let drawn = game(prompt, "", immortal);
+    // Who you are changes the design, so only a design written again for
+    // who you are can match it.
+    assert_ne!(mortal, drawn);
+    assert_eq!(mortal, "");
+
     let mut engine = PromptEngine::default();
     engine.connect(true);
-    engine.set_config(mirroring("<%h %u> "));
-    let mortal = game("<%h %u> ", "", Who::default());
+    engine.set_config(mirroring(prompt));
     assert_eq!(engine.config().template, mortal);
+    assert!(!engine.draws());
     engine.observe(
         "Char.Status",
         json!({"name": "Tester", "level": 60, "race": "human", "class": "warrior"}),
         at(),
     );
-    // Who you are decides whether some codes compile, so the design is
-    // written again for an immortal.
     assert!(engine.who().immortal);
-    assert_eq!(engine.config().template, game("<%h %u> ", "", engine.who()));
+    assert_eq!(engine.config().template, drawn);
     assert!(engine.config().mirror);
+    assert!(engine.draws());
     // A new connection starts as a mortal again.
     engine.connect(true);
     assert_eq!(engine.config().template, mortal);
+    assert!(engine.config().mirror);
 }
 
 /// A profile that follows the game's settings with `prompt`.
