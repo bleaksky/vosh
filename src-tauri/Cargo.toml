@@ -80,6 +80,9 @@ rustix = { version = "0.38", features = ["std"] }
 
 [dev-dependencies]
 tempfile = "3"
+# Paused time, so the walk tests run the ten second backstop on a clock
+# they control. The feature adds no new crate.
+tokio = { workspace = true, features = ["test-util"] }
 # The fake Aabahran and its wire cases, which the session tests drive the
 # real session against.
 vosh-prompt = { path = "../crates/prompt", features = ["testkit"] }

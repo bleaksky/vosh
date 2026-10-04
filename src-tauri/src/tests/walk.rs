@@ -1,10 +1,44 @@
-//! The rooms `#walk` is tested in: four rooms of Caranduin from the
-//! Map.Tiles fixtures in `fixtures/gmcp/aabahran/map`, with the Room.Info
-//! the game sends in each, carrying the `num` the walker reads and the
-//! exits the tiles list for that room, and the Map.Tiles of the two rooms
-//! the fixtures were taken in.
+//! `#walk` against a fake game that moves you, over a local port.
+//!
+//! Each test runs the real session loop and the typed input path with the
+//! mock runtime. The fake game plays four rooms of Caranduin from the
+//! Map.Tiles fixtures in `fixtures/gmcp/aabahran/map`. Its Room.Info
+//! carries the `num` the walker reads and the exits the tiles list for
+//! that room, and it sends Map.Tiles for the two rooms the fixtures were
+//! taken in. Every line it prints is the game's own: the exits line of
+//! `do_exits`, the failure lines of `move_char`, the blind and dark
+//! looks of `do_look`, and the prompt `prompt all` sets, as the room
+//! colors fixtures print it.
+//!
+//! The fake answers each step as the test scripts it: it moves you, sends
+//! you elsewhere, fails, goes dark, starts a fight, sits you down, says
+//! nothing, or waits for the test.
+
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex as StdMutex};
+use std::time::Duration;
 
 use serde_json::{json, Value};
+use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
+use tauri::{App, Listener, Manager};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::Notify;
+
+use crate::app::state::{AppState, SharedState};
+
+const IAC: u8 = 255;
+const DONT: u8 = 254;
+const DO: u8 = 253;
+const WILL: u8 = 251;
+const SB: u8 = 250;
+const GA: u8 = 249;
+const SE: u8 = 240;
+const GMCP: u8 = 201;
+
+/// The prompt `prompt all` sets, with the numbers the room colors
+/// fixtures print.
+const PROMPT: &str = "<1020hp 800m 930mv> ";
 
 /// West of the City Fountain in Caranduin, where every test starts.
 pub(crate) const FOUNTAIN: i64 = 4406;
@@ -15,8 +49,8 @@ const ROAD_WEST: i64 = 4404;
 /// The room north of the fountain.
 const NORTH_OF_FOUNTAIN: i64 = 4631;
 
-/// The rooms, each with the rooms its exits lead to in the game's door
-/// order, as the Map.Tiles fixtures list them in `ex`.
+/// The rooms of the fake game, each with the rooms its exits lead to in
+/// the game's door order, as the Map.Tiles fixtures list them in `ex`.
 const ROOMS: &[(i64, &[(&str, i64)])] = &[
     (
         FOUNTAIN,
@@ -85,4 +119,801 @@ pub(crate) fn map_tiles(num: i64) -> Option<Value> {
     let msg = vosh_protocol::gmcp::parse(&raw).expect("the fixture parses");
     assert_eq!(msg.package, "Map.Tiles");
     Some(msg.data)
+}
+
+/// One GMCP packet on the wire.
+fn packet(package: &str, data: &Value) -> Vec<u8> {
+    let mut out = vec![IAC, SB, GMCP];
+    out.extend_from_slice(format!("{package} {data}").as_bytes());
+    out.extend_from_slice(&[IAC, SE]);
+    out
+}
+
+/// What the fake game does with the next step it reads.
+#[derive(Clone)]
+enum Answer {
+    /// Moves you when the room has the exit, as `move_char` does, and
+    /// says you cannot go when it has none.
+    Go,
+    /// Moves you to this room instead, as misdirection does.
+    Elsewhere(i64),
+    /// Prints this line and leaves you where you stand.
+    Fail(&'static str),
+    /// Moves you into a dark room.
+    Dark,
+    /// Moves you while you are blind.
+    Blind,
+    /// Moves you, and someone attacks you as you arrive.
+    Fight,
+    /// Moves you, and you end up sitting.
+    Sit,
+    /// Says nothing at all and leaves you where you stand.
+    Silent,
+    /// Waits until the test lets it go, then moves you.
+    Wait(Arc<Notify>),
+}
+
+/// The fake game's side of the connection.
+#[derive(Default)]
+struct World {
+    here: i64,
+    /// How the next steps go. A step past the end moves you.
+    answers: VecDeque<Answer>,
+    /// Every command the game read, in order.
+    heard: Vec<String>,
+    fighting: bool,
+    sitting: bool,
+}
+
+/// What the game reads.
+enum Input {
+    /// The client agreed to GMCP, which logs you in.
+    Login,
+    Command(String),
+}
+
+impl World {
+    /// What the game writes for `input`, and what to wait for first.
+    fn answer(&mut self, input: Input) -> (Option<Arc<Notify>>, Answer, Option<char>) {
+        match input {
+            Input::Login => (None, Answer::Go, None),
+            Input::Command(text) => {
+                self.heard.push(text.clone());
+                let mut letters = text.chars();
+                let dir = letters
+                    .next()
+                    .filter(|_| letters.next().is_none())
+                    .filter(|c| "neswud".contains(*c));
+                let Some(dir) = dir else {
+                    return (None, Answer::Silent, None);
+                };
+                let answer = self.answers.pop_front().unwrap_or(Answer::Go);
+                match answer {
+                    Answer::Wait(notify) => (Some(notify), Answer::Go, Some(dir)),
+                    answer => (None, answer, Some(dir)),
+                }
+            }
+        }
+    }
+
+    /// The bytes of the answer to a step `dir`, or of the login when
+    /// there is no step, after any wait.
+    fn write(&mut self, answer: Answer, dir: Option<char>) -> Vec<u8> {
+        let Some(dir) = dir else {
+            return match answer {
+                // A command that is no step gets its prompt.
+                Answer::Silent => self.pulse(Vec::new(), ""),
+                _ => self.arrive(self.here),
+            };
+        };
+        if self.fighting {
+            return self.pulse(Vec::new(), "No way!  You are still fighting!\n\r");
+        }
+        if self.sitting {
+            return self.pulse(Vec::new(), "Better stand up first.\n\r");
+        }
+        let to = exits(self.here)
+            .iter()
+            .find(|(word, _)| word.starts_with(dir))
+            .map(|(_, to)| *to);
+        match answer {
+            Answer::Silent => Vec::new(),
+            Answer::Fail(line) => self.pulse(Vec::new(), &format!("{line}\n\r")),
+            _ if to.is_none() && !matches!(answer, Answer::Elsewhere(_)) => {
+                self.pulse(Vec::new(), "Alas, you cannot go that way.\n\r")
+            }
+            Answer::Elsewhere(num) => {
+                self.here = num;
+                self.arrive(num)
+            }
+            Answer::Dark | Answer::Blind => {
+                self.here = to.unwrap_or(self.here);
+                let line = if matches!(answer, Answer::Dark) {
+                    "It is pitch black ... \n\r"
+                } else {
+                    "You can't see a thing!\n\r"
+                };
+                self.pulse(Vec::new(), line)
+            }
+            Answer::Fight | Answer::Sit | Answer::Go | Answer::Wait(_) => {
+                self.fighting = matches!(answer, Answer::Fight);
+                self.sitting = matches!(answer, Answer::Sit);
+                let to = to.unwrap_or(self.here);
+                self.here = to;
+                self.arrive(to)
+            }
+        }
+    }
+
+    /// The look in room `num`: its tiles and Room.Info, then its exits
+    /// line, as `do_look` sends them.
+    fn arrive(&mut self, num: i64) -> Vec<u8> {
+        let mut early = Vec::new();
+        if let Some(tiles) = map_tiles(num) {
+            early.extend(packet("Map.Tiles", &tiles));
+        }
+        early.extend(packet("Room.Info", &room_info(num)));
+        let words: Vec<&str> = exits(num).iter().map(|(word, _)| *word).collect();
+        self.pulse(early, &format!("[Exits: {}]\n\r", words.join(" ")))
+    }
+
+    /// One pulse: the packets a command sent, then Char.Combat and
+    /// Char.State as each prompt sends them, then the text, a blank line
+    /// and the prompt with IAC GA.
+    fn pulse(&self, early: Vec<u8>, text: &str) -> Vec<u8> {
+        let mut out = early;
+        let combat = if self.fighting {
+            json!({"target": "a Blackwatch guard", "condition": "quite a few wounds", "hp_pct": 54})
+        } else {
+            json!({})
+        };
+        out.extend(packet("Char.Combat", &combat));
+        let position = if self.sitting { "sitting" } else { "standing" };
+        out.extend(packet(
+            "Char.State",
+            &json!({"position": position, "language": "common"}),
+        ));
+        out.extend_from_slice(text.as_bytes());
+        out.extend_from_slice(b"\n\r");
+        out.extend_from_slice(PROMPT.as_bytes());
+        out.extend_from_slice(&[IAC, GA]);
+        out
+    }
+}
+
+/// Serve the fake game for one connection on a local port.
+async fn serve(world: Arc<StdMutex<World>>) -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("a local port");
+    let port = listener.local_addr().expect("an address").port();
+    tokio::spawn(async move {
+        if let Ok((socket, _)) = listener.accept().await {
+            let _ = play(socket, world).await;
+        }
+    });
+    port
+}
+
+/// One connection to the fake game. IAC DO GMCP logs you in, and each
+/// line after it is a command.
+async fn play(mut socket: TcpStream, world: Arc<StdMutex<World>>) -> std::io::Result<()> {
+    socket.set_nodelay(true)?;
+    socket.write_all(&[IAC, WILL, GMCP]).await?;
+    let mut input = Vec::new();
+    let mut line = Vec::new();
+    let mut gmcp = false;
+    let mut buf = [0u8; 4096];
+    loop {
+        let n = socket.read(&mut buf).await?;
+        if n == 0 {
+            return Ok(());
+        }
+        input.extend_from_slice(&buf[..n]);
+        let mut read = Vec::new();
+        let mut i = 0;
+        while i < input.len() {
+            let byte = input[i];
+            if byte == IAC {
+                match input.get(i + 1).copied() {
+                    None => break,
+                    Some(SB) => {
+                        let Some(end) = input[i..].windows(2).position(|w| w == [IAC, SE]) else {
+                            break;
+                        };
+                        i += end + 2;
+                    }
+                    Some(verb @ WILL..=DONT) => {
+                        let Some(&option) = input.get(i + 2) else {
+                            break;
+                        };
+                        if verb == DO && option == GMCP && !gmcp {
+                            gmcp = true;
+                            read.push(Input::Login);
+                        }
+                        i += 3;
+                    }
+                    Some(_) => i += 2,
+                }
+                continue;
+            }
+            i += 1;
+            if byte == b'\n' {
+                let text = String::from_utf8_lossy(&line)
+                    .trim_end_matches('\r')
+                    .to_string();
+                line.clear();
+                read.push(Input::Command(text));
+            } else {
+                line.push(byte);
+            }
+        }
+        input.drain(..i);
+        for each in read {
+            let (wait, answer, dir) = world.lock().expect("the world").answer(each);
+            if let Some(notify) = wait {
+                notify.notified().await;
+            }
+            let bytes = world.lock().expect("the world").write(answer, dir);
+            socket.write_all(&bytes).await?;
+        }
+    }
+}
+
+/// The app, one fake game and one connection to it.
+struct Harness {
+    app: App<MockRuntime>,
+    state: SharedState,
+    outputs: Arc<StdMutex<Vec<String>>>,
+    world: Arc<StdMutex<World>>,
+    port: u16,
+}
+
+impl Harness {
+    /// A fake game that starts you at the fountain, and an app not yet
+    /// connected. It loads no profile set, so a save writes nothing.
+    async fn new() -> Self {
+        let world = Arc::new(StdMutex::new(World {
+            here: FOUNTAIN,
+            ..World::default()
+        }));
+        let port = serve(world.clone()).await;
+        let state: SharedState = Arc::new(AppState::default());
+        let app = mock_builder()
+            .build(mock_context(noop_assets()))
+            .expect("a mock app");
+        app.manage::<SharedState>(state.clone());
+        let outputs = Arc::new(StdMutex::new(Vec::new()));
+        let heard = outputs.clone();
+        app.listen_any("session://output", move |event| {
+            heard
+                .lock()
+                .expect("the outputs")
+                .push(event.payload().to_string());
+        });
+        Self {
+            app,
+            state,
+            outputs,
+            world,
+            port,
+        }
+    }
+
+    /// Connect the way `session::connect` does, and wait for the look the
+    /// game sends at login.
+    async fn connect(&self) {
+        let handle = crate::session::spawn(
+            self.app.handle().clone(),
+            &self.state,
+            "127.0.0.1".into(),
+            self.port,
+            false,
+            false,
+            None,
+            (100, 40),
+        )
+        .await
+        .expect("the fake game answers");
+        *self.state.session.lock().await = Some(handle);
+        self.until("the look at login", |h| h.text().contains("[Exits:"))
+            .await;
+    }
+
+    /// The step answers the game gives, in order.
+    fn script(&self, answers: impl IntoIterator<Item = Answer>) {
+        self.world
+            .lock()
+            .expect("the world")
+            .answers
+            .extend(answers);
+    }
+
+    /// Type `line` and press Enter.
+    async fn type_line(&self, line: &str) {
+        crate::ipc::session::session_send_input(
+            self.app.handle().clone(),
+            self.app.state(),
+            line.to_string(),
+        )
+        .await
+        .expect("the line goes out");
+    }
+
+    /// Press Esc in the command line.
+    async fn escape(&self) {
+        crate::ipc::session::session_walk_stop(self.app.state())
+            .await
+            .expect("Esc reaches the session");
+    }
+
+    /// Every command the game read.
+    fn heard(&self) -> Vec<String> {
+        self.world.lock().expect("the world").heard.clone()
+    }
+
+    /// The room the game has you in.
+    fn here(&self) -> i64 {
+        self.world.lock().expect("the world").here
+    }
+
+    /// Everything the terminal got, as plain text, each output's region
+    /// it replaces first, as the renderers write it.
+    fn text(&self) -> String {
+        let outputs = self.outputs.lock().expect("the outputs").clone();
+        let mut bytes = Vec::new();
+        for payload in outputs {
+            let json: Value = serde_json::from_str(&payload).expect("an output payload");
+            for part in [&json["replace"]["b64"], &json["b64"], &json["hold"]] {
+                if let Some(text) = part.as_str() {
+                    bytes.extend(base64_decode(text));
+                }
+            }
+        }
+        vosh_protocol::ansi::plain_text(&bytes)
+    }
+
+    /// Every line Vosh printed about walking, in order.
+    fn walk_lines(&self) -> Vec<String> {
+        self.text()
+            .split(['\r', '\n'])
+            .filter(|line| line.starts_with("[walk]") || line.starts_with("[#walk"))
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// How many looks the terminal showed.
+    fn looks(&self) -> usize {
+        self.text().matches("[Exits:").count()
+    }
+
+    /// Wait for `test` to hold, a sleep of 5 ms at a time, at most a
+    /// thousand times.
+    async fn until(&self, what: &str, test: impl Fn(&Self) -> bool) {
+        for _ in 0..1000 {
+            if test(self) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        panic!(
+            "{what} never came. The game heard {:?}, and the terminal shows\n{}",
+            self.heard(),
+            self.text()
+        );
+    }
+
+    /// Wait until the game heard `commands`.
+    async fn until_heard(&self, commands: &[&str]) {
+        self.until(&format!("the game hearing {commands:?}"), |h| {
+            h.heard() == commands
+        })
+        .await;
+    }
+
+    /// Wait until Vosh printed `lines` about walking.
+    async fn until_said(&self, lines: &[&str]) {
+        self.until(&format!("Vosh saying {lines:?}"), |h| {
+            h.walk_lines() == lines
+        })
+        .await;
+    }
+
+    async fn finish(self) {
+        let handle = self.state.session.lock().await.take();
+        if let Some(handle) = handle {
+            handle.shutdown().await;
+        }
+    }
+}
+
+fn base64_decode(text: &str) -> Vec<u8> {
+    let value = |c: u8| -> u32 {
+        match c {
+            b'A'..=b'Z' => u32::from(c - b'A'),
+            b'a'..=b'z' => u32::from(c - b'a') + 26,
+            b'0'..=b'9' => u32::from(c - b'0') + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => panic!("no base64 digit {c}"),
+        }
+    };
+    let mut out = Vec::new();
+    for chunk in text.as_bytes().chunks(4) {
+        let digits: Vec<u8> = chunk.iter().copied().filter(|&c| c != b'=').collect();
+        let mut n = 0u32;
+        for (i, &c) in digits.iter().enumerate() {
+            n |= value(c) << (18 - 6 * i);
+        }
+        out.extend_from_slice(&n.to_be_bytes()[1..digits.len()]);
+    }
+    out
+}
+
+/// Every session output also feeds the native grid the whole process
+/// shares, where there is one, so a test holds the lock the grid tests
+/// take.
+#[cfg(native_surface)]
+fn grid() -> std::sync::MutexGuard<'static, ()> {
+    crate::native::grid::lock_shared_grid_for_test()
+}
+
+/// Nothing to hold where there is no native grid.
+#[cfg(not(native_surface))]
+struct NoGrid;
+
+#[cfg(not(native_surface))]
+fn grid() -> NoGrid {
+    NoGrid
+}
+
+// The guard keeps the grid tests off the shared native grid. No task of
+// the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_walk_goes_room_by_room_then_sends_what_followed_it() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    h.type_line("#walk 2w2e;get all").await;
+    h.until_heard(&["w", "w", "e", "e", "get all"]).await;
+    assert_eq!(h.here(), FOUNTAIN);
+    assert!(h.walk_lines().is_empty(), "{:?}", h.walk_lines());
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn bare_walk_says_how_many_steps_are_left() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    h.type_line("#walk").await;
+    h.until_said(&["[walk] You are not walking."]).await;
+    let go = Arc::new(Notify::new());
+    h.script([Answer::Wait(go.clone())]);
+    h.type_line("#walk 2w").await;
+    h.until_heard(&["w"]).await;
+    h.type_line("#walk").await;
+    h.until_said(&["[walk] You are not walking.", "[walk] 2 of 2 steps left."])
+        .await;
+    go.notify_one();
+    h.until_heard(&["w", "w"]).await;
+    h.until("the second look", |h| h.looks() == 3).await;
+    h.type_line("#walk").await;
+    h.until_said(&[
+        "[walk] You are not walking.",
+        "[walk] 2 of 2 steps left.",
+        "[walk] You are not walking.",
+    ])
+    .await;
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_failure_line_stops_the_walk_and_drops_the_rest_of_the_line() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    h.script([Answer::Go, Answer::Fail("You need a boat to go there.")]);
+    h.type_line("#walk 2w2e;get all").await;
+    h.until_said(&[
+        "[walk] Stopped after 1 of 4 steps, so Vosh did not send the rest of the line.",
+    ])
+    .await;
+    assert_eq!(h.heard(), ["w", "w"]);
+    assert_eq!(h.here(), ROAD);
+
+    // With no exit that way the game says so, and the walk stops there.
+    h.type_line("#walk 3e2w").await;
+    h.until_said(&[
+        "[walk] Stopped after 1 of 4 steps, so Vosh did not send the rest of the line.",
+        "[walk] Stopped after 1 of 5 steps.",
+    ])
+    .await;
+    assert_eq!(h.heard(), ["w", "w", "e", "e"]);
+    assert_eq!(h.here(), FOUNTAIN);
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_room_the_tiles_did_not_promise_stops_the_walk() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    h.script([Answer::Elsewhere(NORTH_OF_FOUNTAIN)]);
+    h.type_line("#walk 2w").await;
+    h.until_said(&["[walk] Stopped after 0 of 2 steps."]).await;
+    assert_eq!(h.heard(), ["w"]);
+    assert_eq!(h.here(), NORTH_OF_FOUNTAIN);
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_fight_stops_the_walk() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    h.script([Answer::Fight]);
+    h.type_line("#walk 3w").await;
+    h.until_said(&["[walk] Stopped after 1 of 3 steps."]).await;
+    // The second step left with the Room.Info, before the fight showed,
+    // and the game refused it. Nothing went after it.
+    h.until("the refusal", |h| {
+        h.text().contains("No way!  You are still fighting!")
+    })
+    .await;
+    assert_eq!(h.heard(), ["w", "w"]);
+    assert_eq!(h.here(), ROAD);
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_position_but_standing_stops_the_walk() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    h.script([Answer::Sit]);
+    h.type_line("#walk 3w").await;
+    h.until_said(&["[walk] Stopped after 1 of 3 steps."]).await;
+    h.until("the refusal", |h| {
+        h.text().contains("Better stand up first.")
+    })
+    .await;
+    assert_eq!(h.heard(), ["w", "w"]);
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_dark_and_blind_looks_lose_sight_of_the_room() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    h.script([Answer::Dark]);
+    h.type_line("#walk 2w").await;
+    h.until_said(&["[walk] Stopped after 1 of 2 steps. Vosh lost sight of the room."])
+        .await;
+    assert_eq!(h.heard(), ["w"]);
+    // Vosh prints its line after the prompt that ends the dark look.
+    let text = h.text();
+    let dark = text.rfind("It is pitch black ... ").expect("the dark look");
+    let prompt = text.rfind(PROMPT).expect("a prompt");
+    let said = text.rfind("[walk] Stopped").expect("the line");
+    assert!(dark < prompt && prompt < said, "{text}");
+
+    h.script([Answer::Blind]);
+    h.type_line("#walk e;get all").await;
+    h.until_said(&[
+        "[walk] Stopped after 1 of 2 steps. Vosh lost sight of the room.",
+        "[walk] Stopped after 1 of 1 step, so Vosh did not send the rest of the line. Vosh lost sight of the room.",
+    ])
+    .await;
+    assert_eq!(h.heard(), ["w", "e"]);
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn walk_stop_and_esc_stop_the_walk() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    let go = Arc::new(Notify::new());
+    h.script([Answer::Wait(go.clone())]);
+    h.type_line("#walk 2w").await;
+    h.until_heard(&["w"]).await;
+    h.type_line("#walk stop").await;
+    h.until_said(&["[walk] Stopped after 0 of 2 steps."]).await;
+    go.notify_one();
+    h.until("the look after the step", |h| h.looks() == 2).await;
+    assert_eq!(h.heard(), ["w"]);
+    h.type_line("#walk stop").await;
+    h.until_said(&[
+        "[walk] Stopped after 0 of 2 steps.",
+        "[walk] You are not walking.",
+    ])
+    .await;
+
+    let go = Arc::new(Notify::new());
+    h.script([Answer::Wait(go.clone())]);
+    h.type_line("#walk 2e").await;
+    h.until_heard(&["w", "e"]).await;
+    h.escape().await;
+    h.until_said(&[
+        "[walk] Stopped after 0 of 2 steps.",
+        "[walk] You are not walking.",
+        "[walk] Stopped after 0 of 2 steps.",
+    ])
+    .await;
+    go.notify_one();
+    h.until("the look after the step", |h| h.looks() == 3).await;
+    assert_eq!(h.heard(), ["w", "e"]);
+    // Esc says nothing when you are not walking.
+    h.escape().await;
+    h.type_line("#walk").await;
+    h.until("the answer", |h| h.walk_lines().len() == 4).await;
+    assert_eq!(h.walk_lines()[3], "[walk] You are not walking.");
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_command_you_send_stops_the_walk_and_a_hash_command_does_not() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    let go = Arc::new(Notify::new());
+    h.script([Answer::Wait(go.clone())]);
+    h.type_line("#walk 2w").await;
+    h.until_heard(&["w"]).await;
+    // A slash command and a bare Enter leave the walk going. The game
+    // reads the Enter once it answers the step.
+    h.type_line("#echo still walking").await;
+    h.type_line("").await;
+    h.until("the echo", |h| h.text().contains("still walking"))
+        .await;
+    go.notify_one();
+    h.until_heard(&["w", "", "w"]).await;
+    h.until("the end of the walk", |h| h.looks() == 3).await;
+    assert!(h.walk_lines().is_empty(), "{:?}", h.walk_lines());
+
+    let go = Arc::new(Notify::new());
+    h.script([Answer::Wait(go.clone())]);
+    h.type_line("#walk 2e").await;
+    h.until_heard(&["w", "", "w", "e"]).await;
+    h.type_line("look").await;
+    h.until_said(&["[walk] Stopped after 0 of 2 steps."]).await;
+    go.notify_one();
+    h.until_heard(&["w", "", "w", "e", "look"]).await;
+    h.until("the look after the step", |h| h.looks() == 4).await;
+    assert_eq!(h.heard(), ["w", "", "w", "e", "look"]);
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_alias_a_macro_and_a_piece_of_a_line_each_walk() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    {
+        let mut p = h.state.profile.lock().await;
+        p.aliases.set(vosh_automation::alias::Alias::new(
+            "road",
+            "#walk w;get all",
+        ));
+        p.aliases.set(
+            vosh_automation::alias::Alias::new("kk", "ignored").with_script("mud.send('kick')"),
+        );
+        p.macros.push(crate::profile::live::Macro {
+            key: "F1".into(),
+            command: "#walk e;kk".into(),
+            group: None,
+            enabled: true,
+        });
+    }
+    h.connect().await;
+
+    // An alias walks, and what follows it waits.
+    h.type_line("road").await;
+    h.until_heard(&["w", "get all"]).await;
+    assert_eq!(h.here(), ROAD);
+
+    // A macro sends its command the way the command line sends a line,
+    // and a script alias it holds runs once you arrive.
+    let command = h.state.profile.lock().await.macros[0].command.clone();
+    h.type_line(&command).await;
+    h.until_heard(&["w", "get all", "e", "kick"]).await;
+    assert_eq!(h.here(), FOUNTAIN);
+
+    // A piece of a typed line walks after the pieces before it.
+    h.type_line("look;#walk w;get all").await;
+    h.until_heard(&["w", "get all", "e", "kick", "look", "w", "get all"])
+        .await;
+    assert_eq!(h.here(), ROAD);
+    assert!(h.walk_lines().is_empty(), "{:?}", h.walk_lines());
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_new_walk_takes_over_once_the_step_in_flight_lands() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    let go = Arc::new(Notify::new());
+    h.script([Answer::Wait(go.clone())]);
+    h.type_line("#walk 2w;get all").await;
+    h.until_heard(&["w"]).await;
+    h.type_line("#walk e;say back").await;
+    // The new walk waits for the step on its way, and the old one sends
+    // nothing more once it lands.
+    go.notify_one();
+    h.until_heard(&["w", "e", "say back"]).await;
+    assert_eq!(
+        h.walk_lines(),
+        ["[walk] Stopped after 1 of 2 steps, so Vosh did not send the rest of the line."]
+    );
+    assert_eq!(h.here(), FOUNTAIN);
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn walk_with_no_connection_says_so() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.type_line("#walk").await;
+    h.type_line("#walk stop").await;
+    h.type_line("#walk 2w").await;
+    h.until("the answers", |h| h.text().contains("[not connected]"))
+        .await;
+    assert_eq!(
+        h.walk_lines(),
+        ["[walk] You are not walking.", "[walk] You are not walking."]
+    );
+    h.escape().await;
+    assert_eq!(h.walk_lines().len(), 2);
+    h.finish().await;
+}
+
+// The clock is the test's once you are logged in, since the connect's own
+// timeout would run out at once on a paused clock. The step goes out and
+// the game never answers, so only the backstop ends the walk, ten seconds
+// after the step left.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "current_thread")]
+async fn ten_seconds_with_no_room_lose_track_of_the_walk() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    tokio::time::pause();
+    h.script([Answer::Silent]);
+    h.type_line("#walk 2w;get all").await;
+    h.until_heard(&["w"]).await;
+    let left = tokio::time::Instant::now();
+    tokio::time::sleep_until(left + Duration::from_millis(9_900)).await;
+    assert!(h.walk_lines().is_empty(), "{:?}", h.walk_lines());
+    tokio::time::sleep_until(left + Duration::from_millis(10_100)).await;
+    h.until_said(&[
+        "[walk] Stopped, so Vosh did not send the rest of the line. Vosh lost track of the walk.",
+    ])
+    .await;
+    assert_eq!(h.heard(), ["w"]);
+
+    // A walk with nothing after it says the line the board gives.
+    h.script([Answer::Silent]);
+    h.type_line("#walk e").await;
+    h.until_heard(&["w", "e"]).await;
+    tokio::time::sleep(Duration::from_secs(11)).await;
+    h.until_said(&[
+        "[walk] Stopped, so Vosh did not send the rest of the line. Vosh lost track of the walk.",
+        "[walk] Stopped. Vosh lost track of the walk.",
+    ])
+    .await;
+    h.finish().await;
 }
