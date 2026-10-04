@@ -408,6 +408,21 @@ fn terminal_screen_rows_reads_the_shared_screen_as_text() {
 }
 
 #[test]
+fn clear_history_drops_the_scrollback_and_keeps_the_screen() {
+    let mut g = TermGrid::new(10, 2);
+    g.feed(b"one\r\ntwo\r\nthree");
+    g.scroll(1);
+    assert!(g.scrollback_len() > 0);
+    g.select_all();
+    g.clear_history();
+    assert_eq!(g.scrollback_len(), 0);
+    assert_eq!(g.display_offset(), 0);
+    assert!(g.selection_text().is_none());
+    assert_eq!(g.row_string(0).trim_end(), "two");
+    assert_eq!(g.row_string(1).trim_end(), "three");
+}
+
+#[test]
 fn select_all_spans_scrollback_and_the_live_screen() {
     let mut g = TermGrid::new(10, 2);
     g.feed(b"one\r\ntwo\r\nthree");

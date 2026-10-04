@@ -309,6 +309,15 @@ impl TermGrid {
         self.term.selection_to_string()
     }
 
+    /// Drop every line above the screen, for Clear scrollback in the
+    /// terminal menu. The screen keeps what it shows, the view goes back
+    /// to the live tail, and a selection goes with the lines it held.
+    pub(crate) fn clear_history(&mut self) {
+        self.term.scroll_display(Scroll::Bottom);
+        self.term.grid_mut().clear_history();
+        self.term.selection = None;
+    }
+
     /// Scroll the display by `delta` lines (positive scrolls up into
     /// scrollback, clamped to history).
     pub(crate) fn scroll(&mut self, delta: i32) {
@@ -508,6 +517,11 @@ pub(crate) fn start_selection(line: i32, col: usize) {
 /// Extend the active selection to a grid cell.
 pub(crate) fn update_selection(line: i32, col: usize) {
     with_grid_mut(|grid| grid.extend_selection(line, col, false));
+}
+
+/// Drop the shared grid's history, for Clear scrollback.
+pub(crate) fn clear_history() {
+    with_grid_mut(TermGrid::clear_history);
 }
 
 /// Drop the active selection.
