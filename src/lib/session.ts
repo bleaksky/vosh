@@ -2057,8 +2057,9 @@ export interface UiConfig {
   font_size: number;
   /** Terminal row spacing, one of TERMINAL_LINE_HEIGHTS. */
   terminal_line_height: TerminalLineHeight;
-  /** The face of the panes and the status line: empty for the terminal
-   *  font, `system` for the system font, or a font list (panelFont.ts). */
+  /** The face of the panes and the status line: empty for As designed,
+   *  `terminal` for the terminal font, `system` for the system font, or
+   *  a font list (panelFont.ts). */
   panel_font: string;
   /** The size of the panes and the status line in px, or 0 for your
    *  terminal size (panelSize.ts). */

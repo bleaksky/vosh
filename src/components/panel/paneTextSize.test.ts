@@ -394,7 +394,7 @@ describe('liveChipMeasure', () => {
     vi.unstubAllGlobals();
   });
 
-  it('measures every chip text in the panel face at your panel size', () => {
+  it('measures each chip text in the face that draws it at your panel size', () => {
     const fonts: string[] = [];
     const ctx = {
       font: '',
@@ -409,8 +409,14 @@ describe('liveChipMeasure', () => {
       documentElement: {},
       createElement: () => ({ getContext: () => ctx }),
     });
+    // As designed: the names and hours in the terminal face, the group
+    // names and the count in the system face.
+    const faces: Record<string, string> = {
+      '--font-panel': 'system-ui, sans-serif',
+      '--font-panel-game': 'Menlo, monospace',
+    };
     vi.stubGlobal('getComputedStyle', () => ({
-      getPropertyValue: (name: string) => (name === '--font-panel' ? 'Menlo, monospace' : ''),
+      getPropertyValue: (name: string) => faces[name] ?? '',
     }));
     const at16 = liveChipMeasure(16);
     at16.mono('sanctuary');
@@ -424,8 +430,20 @@ describe('liveChipMeasure', () => {
     expect(fonts).toEqual([
       '16px Menlo, monospace',
       '700 16px Menlo, monospace',
-      '600 15px Menlo, monospace',
-      '16px Menlo, monospace',
+      '600 15px system-ui, sans-serif',
+      '16px system-ui, sans-serif',
+      '12px Menlo, monospace',
+      '600 11px system-ui, sans-serif',
+      '12px system-ui, sans-serif',
+    ]);
+    // Any other pick writes one face, which both read.
+    fonts.length = 0;
+    faces['--font-panel'] = 'Menlo, monospace';
+    const one = liveChipMeasure();
+    one.mono('sanctuary');
+    one.label('Recast');
+    one.count('3 more');
+    expect(fonts).toEqual([
       '12px Menlo, monospace',
       '600 11px Menlo, monospace',
       '12px Menlo, monospace',

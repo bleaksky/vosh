@@ -392,11 +392,11 @@ describe('AffectsPaneView', () => {
     expect(cells[0]).toBe('up 5 sanctuary , 5 hours');
   });
 
-  it('sets the names and the hours at your terminal size in the panel face', () => {
-    // The face comes from .panel-host, so the pane draws in your Panel
-    // font (src/lib/panelFont.test.ts).
-    expect(rule('.pane-affect-name')).not.toContain('font-family');
-    expect(rule('.pane-affect-hours')).not.toContain('font-family');
+  it('sets the names and the hours at your panel size in the game face', () => {
+    // The game face is your terminal font under As designed and your
+    // Panel font under any other pick (src/lib/panelFont.test.ts).
+    expect(rule('.pane-affect-name')).toContain('font-family: var(--font-panel-game);');
+    expect(rule('.pane-affect-hours')).toContain('font-family: var(--font-panel-game);');
     expect(rule('.pane-affect-name')).toContain('font-size: var(--mud-text)');
     expect(rule('.pane-affect-hours')).toContain('font-size: var(--mud-text)');
     expect(rule('.pane-affect-hours')).toContain('text-align: right');

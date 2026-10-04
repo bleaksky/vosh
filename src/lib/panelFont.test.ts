@@ -9,6 +9,7 @@ import settingsCss from '../styles/settings.css?raw';
 import tokensCss from '../styles/tokens.css?raw';
 import {
   normalizePanelFont,
+  PANEL_FONT_DESIGNED,
   PANEL_FONT_SYSTEM,
   PANEL_FONT_TERMINAL,
   panelFontFamily,
@@ -16,30 +17,39 @@ import {
 } from './panelFont';
 
 describe('normalizePanelFont', () => {
-  it('reads anything but a string as the terminal font', () => {
+  it('reads anything but a string as As designed', () => {
     for (const value of [undefined, null, 0, true, {}, []]) {
-      expect(normalizePanelFont(value)).toBe(PANEL_FONT_TERMINAL);
+      expect(normalizePanelFont(value)).toBe(PANEL_FONT_DESIGNED);
     }
+    expect(PANEL_FONT_DESIGNED).toBe('');
     expect(normalizePanelFont('')).toBe('');
     expect(normalizePanelFont('   ')).toBe('');
   });
 
-  it('spells the system font one way, as Rust saves it', () => {
+  it('spells the terminal font and the system font one way each, as Rust saves them', () => {
+    expect(normalizePanelFont('terminal')).toBe(PANEL_FONT_TERMINAL);
+    expect(normalizePanelFont(' Terminal ')).toBe(PANEL_FONT_TERMINAL);
     expect(normalizePanelFont('system')).toBe(PANEL_FONT_SYSTEM);
     expect(normalizePanelFont(' System ')).toBe(PANEL_FONT_SYSTEM);
   });
 
-  it('keeps a font list as written, a family named system included', () => {
+  it('keeps a font list as written, a family named system or terminal included', () => {
     expect(normalizePanelFont(' "Iosevka", Menlo, monospace ')).toBe('"Iosevka", Menlo, monospace');
     expect(normalizePanelFont('"system", Menlo, monospace')).toBe('"system", Menlo, monospace');
+    expect(normalizePanelFont('"Terminal", monospace')).toBe('"Terminal", monospace');
   });
 });
 
 describe('the face a window writes', () => {
-  it('follows the terminal face until you pick another', () => {
-    expect(panelFontFamily('')).toBe('var(--font-mud)');
-    expect(panelFontFamily(undefined)).toBe('var(--font-mud)');
+  it('writes nothing under As designed, so each face keeps its own', () => {
+    expect(panelFontFamily('')).toBeNull();
+    expect(panelFontFamily(undefined)).toBeNull();
     expect(panelFontList('')).toBeNull();
+  });
+
+  it('takes the terminal face', () => {
+    expect(panelFontFamily('terminal')).toBe('var(--font-mud)');
+    expect(panelFontList('terminal')).toBeNull();
   });
 
   it('takes the system face the menus use', () => {
@@ -101,7 +111,20 @@ function declared(css: string, selector: string, property: string): string | und
   return m?.[1].trim();
 }
 
-describe('one panel face in the stylesheets', () => {
+/** The panel faces a pane or status line rule may name, each its own
+ *  face under As designed, and all one face under any other pick. */
+const PANEL_FACES = ['var(--font-panel)', 'var(--font-panel-game)', 'var(--font-panel-glyph)'];
+
+/** The rules that name a face, as selector and face, in sheet order. */
+function namedFaces(): string[] {
+  return PANE_RULES.flatMap(({ selector, body }) =>
+    [...body.matchAll(/(?:^|;)\s*font-family\s*:\s*([^;]+);/g)].map(
+      (m) => `${selector}: ${m[1].trim()}`,
+    ),
+  );
+}
+
+describe('the panel faces in the stylesheets', () => {
   it('finds the pane and status line rules in the sheets', () => {
     expect(PANE_RULES.length).toBeGreaterThan(150);
     const sheets = new Set(PANE_RULES.map((r) => r.sheet));
@@ -110,15 +133,37 @@ describe('one panel face in the stylesheets', () => {
     }
   });
 
-  it('defines the face from what the window writes, the terminal face until then', () => {
+  it('defines each face from what the window writes, the face it was designed in without', () => {
     expect(declared(tokensCss, ':root', '--font-panel')).toBe(
+      'var(--panel-font-family, var(--font-ui))',
+    );
+    expect(declared(tokensCss, ':root', '--font-panel-game')).toBe(
       'var(--panel-font-family, var(--font-mud))',
+    );
+    expect(declared(tokensCss, ':root', '--font-panel-glyph')).toBe(
+      'var(--panel-font-family, var(--font-mono))',
+    );
+    expect(declared(tokensCss, ':root', '--font-panel-mark')).toBe(
+      'var(--panel-font-family, monospace)',
     );
   });
 
-  it('sets the panes and the status line in the panel face', () => {
+  it('sets the panes and the status line in the panel face, and the game text in the game face', () => {
     expect(declared(panelCss, '.panel-host', 'font-family')).toBe('var(--font-panel)');
     expect(declared(frameCss, '.shell-statusline', 'font-family')).toBe('var(--font-panel)');
+    // The faces one-window drew each in before the Panel font: the
+    // system face from the panel, the terminal face for the game text,
+    // and the bundled monospace face for the glyph map.
+    expect(namedFaces()).toEqual([
+      '.map-glyph-grid: var(--font-panel-glyph)',
+      '.shell-statusline: var(--font-panel)',
+      '.panel-host: var(--font-panel)',
+      '.pane-affect-hours: var(--font-panel-game)',
+      '.pane-affect-name: var(--font-panel-game)',
+      '.pane-countdown-line: var(--font-panel-game)',
+      '.pane-chip: var(--font-panel-game)',
+      '.pane-chat-log: var(--font-panel-game)',
+    ]);
   });
 
   it('names no other face in any pane or status line rule', () => {
@@ -132,11 +177,11 @@ describe('one panel face in the stylesheets', () => {
     expect(named).toEqual([]);
   });
 
-  it('gives each pane rule the panel face or the face around it, never a family', () => {
+  it('gives each pane rule a panel face or the face around it, never a family', () => {
     const faces = PANE_RULES.flatMap(({ sheet, selector, body }) =>
       [...body.matchAll(/(?:^|;)\s*(font-family|font)\s*:\s*([^;]+);/g)]
         .map((m) => ({ property: m[1], value: m[2].trim() }))
-        .filter(({ value }) => value !== 'var(--font-panel)' && value !== 'inherit')
+        .filter(({ value }) => !PANEL_FACES.includes(value) && value !== 'inherit')
         .map(({ property, value }) => `${sheet} ${selector}: ${property}: ${value}`),
     );
     expect(faces).toEqual([]);

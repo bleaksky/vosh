@@ -6,7 +6,12 @@
 
 import type { Appearance } from './chrome';
 import { ANSI_SLOTS, CANONICAL_ANSI_16, type AnsiSlot } from './baseAnsi';
-import { normalizePanelFont, PANEL_FONT_SYSTEM, PANEL_FONT_TERMINAL } from './panelFont';
+import {
+  normalizePanelFont,
+  PANEL_FONT_DESIGNED,
+  PANEL_FONT_SYSTEM,
+  PANEL_FONT_TERMINAL,
+} from './panelFont';
 import { normalizePanelSize, PANEL_SIZE_TERMINAL } from './panelSize';
 import { DEFAULT_LIGHT_THEME_ID, type CustomTheme, type SystemFontEntry } from './session';
 import type { ThemePrefs } from './theme';
@@ -95,13 +100,14 @@ export function fontChoices(current: string, installed: readonly SystemFontEntry
 
 // ── Panel font ───────────────────────────────────────────────────────
 
-/** What the Panel text Font select offers: the terminal font, the system
- *  font, then the fonts the Font select offers. A font you picked keeps
- *  your exact font list, as Font does. */
+/** What the Panel text Font select offers: As designed, the terminal
+ *  font, the system font, then the fonts the Font select offers. A font
+ *  you picked keeps your exact font list, as Font does. */
 export function panelFontChoices(current: string, installed: readonly SystemFontEntry[]): Choice[] {
   const pick = normalizePanelFont(current);
-  const named = pick !== PANEL_FONT_TERMINAL && pick !== PANEL_FONT_SYSTEM;
+  const named = ![PANEL_FONT_DESIGNED, PANEL_FONT_TERMINAL, PANEL_FONT_SYSTEM].includes(pick);
   return [
+    { value: PANEL_FONT_DESIGNED, label: 'As designed' },
     { value: PANEL_FONT_TERMINAL, label: 'Same as terminal' },
     { value: PANEL_FONT_SYSTEM, label: 'System font' },
     ...fontChoices(named ? pick : '', installed),

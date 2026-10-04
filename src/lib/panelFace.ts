@@ -1,18 +1,18 @@
 import { useSyncExternalStore } from 'react';
 
-// The face and the size the panes and the status line draw at, for the
+// The faces and the size the panes and the status line draw at, for the
 // code that measures their text or draws it on a canvas: the Grouped
 // chips, the vitals on one line, and the map. CSS gives every pane and
-// the status line var(--font-panel) (tokens.css) at --panel-text-px, so
+// the status line the panel faces (tokens.css) at --panel-text-px, so
 // what is read here off the root is what draws. The main window writes
-// both on the root's style when your Panel text or your terminal font
-// changes.
+// your Panel text picks on the root's style, and your terminal font,
+// which the game face draws in under As designed.
 //
 // A canvas measures and draws a face that has not loaded yet in its
 // fallback, and the faces Vosh bundles load with font-display: block
 // after the first paint, as do the installed fonts the font scheme
 // serves. So the version counts up each time a face finishes loading
-// and each time the panel face or size changes, and whatever measured
+// and each time a panel face or the size changes, and whatever measured
 // or drew with it does so again.
 
 let version = 0;
@@ -20,25 +20,41 @@ let started = false;
 let seen = '';
 const listeners = new Set<() => void>();
 
-/** The panel face as a CSS font list, read off the root. */
+function readRoot(name: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name);
+  return value.trim() || fallback;
+}
+
+/** The panel face as a CSS font list, read off the root: the headers,
+ *  labels, counts and rows, the vitals, the status line, and the map's
+ *  floor numbers. */
 export function readPanelFace(): string {
-  if (typeof document === 'undefined') return 'ui-monospace, monospace';
-  const value = getComputedStyle(document.documentElement).getPropertyValue('--font-panel');
-  return value.trim() || 'ui-monospace, monospace';
+  return readRoot('--font-panel', 'system-ui, sans-serif');
+}
+
+/** The game face as a CSS font list, read off the root: the affects,
+ *  the countdown lines, the chips and chat. */
+export function readPanelGameFace(): string {
+  return readRoot('--font-panel-game', 'ui-monospace, monospace');
+}
+
+/** The face the map canvas draws its up and down marks and its notice
+ *  in, read off the root. */
+export function readPanelMarkFace(): string {
+  return readRoot('--font-panel-mark', 'monospace');
 }
 
 /** The panel size in px, read off the root. 12, the size the panes were
  *  drawn at, with nothing there. */
 export function readPanelTextPx(): number {
-  if (typeof document === 'undefined') return 12;
-  const value = getComputedStyle(document.documentElement).getPropertyValue('--panel-text-px');
-  const px = Number(value.trim() || NaN);
+  const px = Number(readRoot('--panel-text-px', '') || NaN);
   return Number.isFinite(px) && px > 0 ? px : 12;
 }
 
-// The face and the size together, so a change to either one counts.
+// The faces and the size together, so a change to any one counts.
 function readPanelText(): string {
-  return `${readPanelFace()}|${readPanelTextPx()}`;
+  return [readPanelFace(), readPanelGameFace(), readPanelMarkFace(), readPanelTextPx()].join('|');
 }
 
 function bump(): void {
@@ -59,7 +75,7 @@ function start(): void {
   }).observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
 }
 
-/** Hear the panel face or size change or a face finish loading. */
+/** Hear a panel face or the size change or a face finish loading. */
 export function subscribePanelFace(cb: () => void): () => void {
   start();
   listeners.add(cb);
@@ -68,7 +84,7 @@ export function subscribePanelFace(cb: () => void): () => void {
   };
 }
 
-/** Counts up each time the panel face or size changes or a face
+/** Counts up each time a panel face or the size changes or a face
  *  loads. */
 export function panelFaceVersion(): number {
   return version;

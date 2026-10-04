@@ -20,8 +20,8 @@ import { PANE_TEXT_BASE, PANE_TEXT_PX, paneText } from './paneTextSize';
 //
 // The lines, the gaps between them, the gutter, and the width for it
 // follow your panel size (paneTextSize.ts), and the measure is in the
-// panel face at that size. The numbers here are at 12 px. The gaps
-// beside a chip and the pane's text edges keep their px.
+// faces that draw each text at that size. The numbers here are at 12
+// px. The gaps beside a chip and the pane's text edges keep their px.
 
 export type ChipGroupId = 'recast' | 'tracked' | 'other';
 
@@ -86,18 +86,17 @@ export function chipLabelMode(
   return width < affectsTwoColumnsW(size) ? 'runin' : 'gutter';
 }
 
-/** Text widths in the face the pane draws, the panel face, at your
- *  panel size. */
+/** Text widths in the faces the pane draws, at your panel size. */
 export interface ChipMeasure {
-  /** A name or hours. */
+  /** A name or hours, in the game face. */
   mono: (s: string) => number;
   /** The hours in the heaviest weight they draw in, so a face whose
    *  bold runs wider never overflows its line. The name's measure when
    *  left out. */
   hours?: (s: string) => number;
-  /** A group name at 600, 11 px at a 12 px panel. */
+  /** A group name in the panel face at 600, 11 px at a 12 px panel. */
   label: (s: string) => number;
-  /** The count, `N more`. */
+  /** The count, `N more`, in the panel face. */
   count: (s: string) => number;
 }
 
