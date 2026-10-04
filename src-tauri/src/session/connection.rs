@@ -2,27 +2,29 @@
 //! its quick keys and the characters in the room, which the commands
 //! share, the room look and the end of a fight, which the loop follows
 //! line by line, and the tick's count and the prompt engine, which both
-//! read. The app state holds the [`Connection`] behind a lock of its own,
-//! [`SharedConnection`], and the session loop holds a handle to it, so a
-//! command reads it straight from the app state and never asks the loop.
+//! read. Each [`Session`](crate::sessions::Session) holds its
+//! [`Connection`] behind a lock of its own, [`SharedConnection`], and the
+//! session loop holds a handle to it, so a command reads it straight from
+//! the session and never asks the loop.
 //!
-//! Its lock comes after the profile lock and the profile set, never before
-//! them. The session slot comes before it, since `disconnect` holds the
-//! slot while the loop ends and clears it. No holder awaits, and the only
-//! locks a holder takes are leaves: the Lua limits mutex in the script
-//! crate for each Lua run, `UNREAD_FILES` in `disk/atomic.rs` for
-//! `#profile save` and `#profile load`, and a try of `PERSIST_LOCK` for
-//! `#profile save`. [`SharedConnection`] says how long a holder keeps it.
+//! Its lock comes after the session map, the profile lock and the profile
+//! set, never before them. The session slot comes before it, since
+//! `disconnect` holds the slot while the loop ends and clears it. No
+//! holder awaits, and the only locks a holder takes are leaves: the Lua
+//! limits mutex in the script crate for each Lua run, `UNREAD_FILES` in
+//! `disk/atomic.rs` for `#profile save` and `#profile load`, and a try of
+//! `PERSIST_LOCK` for `#profile save`. [`SharedConnection`] says how long
+//! a holder keeps it.
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use super::room_block::RoomBlock;
 use crate::tick::TickRuntime;
 
-/// What one connection holds apart from the profile. The app holds one,
-/// which outlives each session, so a target you set offline carries into
-/// the next connection and your quick keys last until you quit. R14b
-/// gives each tab its own.
+/// What one connection holds apart from the profile. Each session holds
+/// one, which outlives each connection the session makes, so a target you
+/// set offline carries into the next connection and your quick keys last
+/// until you quit.
 #[derive(Debug, Default)]
 pub(crate) struct Connection {
     /// Your target plus the quick keys that aim at it. The target clears
@@ -76,12 +78,12 @@ impl Connection {
     }
 }
 
-/// The handle to the [`Connection`] that the app state, the session loop
-/// and the commands share. The loop takes it for every line the game
-/// sends, right after the profile lock, and an async mutex there costs
-/// each line a poll and a share of the task's cooperative budget, about 3
-/// percent of P2. No step holds it across an await, and a task's guard
-/// cannot cross one, so a plain mutex fits.
+/// The handle to the [`Connection`] that the session, its loop and the
+/// commands share. The loop takes it for every line the game sends, right
+/// after the profile lock, and an async mutex there costs each line a
+/// poll and a share of the task's cooperative budget, about 3 percent of
+/// P2. No step holds it across an await, and a task's guard cannot cross
+/// one, so a plain mutex fits.
 ///
 /// The price is that a waiter blocks its runtime thread instead of
 /// yielding, for as long as the holder keeps the guard. A line the game
