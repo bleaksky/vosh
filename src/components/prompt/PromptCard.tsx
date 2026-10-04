@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -98,22 +97,14 @@ import { useCellWidth, useLabelMeasure } from '../../lib/useCellWidth';
 import { knownWorld } from '../../lib/useConnection';
 import { ConfirmDialog } from '../ConfirmDialog';
 import type { TerminalHandle } from '../Terminal';
-import {
-  Button,
-  CloseIcon,
-  IconButton,
-  MoreIcon,
-  Segmented,
-  Toggle,
-  type SegmentedOption,
-} from '../settings/ui';
+import { Button, CloseIcon, IconButton, MoreIcon } from '../settings/ui';
 import { CardMenu, MenuSeparator } from './CardMenu';
 import { CodesEntry, CodesRead, LineTriggers, type CodesRequest } from './PromptCodes';
 import { PromptMarks } from './PromptMarks';
 import { PromptPicker } from './PromptPicker';
 import { PromptPieceBody } from './PromptPiece';
+import { DesignFoot } from './PromptFoot';
 import { PointName, PointPick, type PointedLine } from './PromptPoint';
-import { ShowButton } from './PromptShow';
 import { DrawOff, Starts } from './PromptStarts';
 import { PromptText } from './PromptText';
 
@@ -172,18 +163,6 @@ interface PromptCardProps {
   onClose: () => void;
 }
 
-/** The previews the footer offers. Lament only under the Forsaken Lands
- *  rules, where the game hides your values under lamented tears. */
-function previewOptions(forsaken: boolean): SegmentedOption<PromptPreviewName>[] {
-  const options: SegmentedOption<PromptPreviewName>[] = [
-    { value: 'now', label: 'Now' },
-    { value: 'low_health', label: 'Low health' },
-    { value: 'fight', label: 'Fight' },
-  ];
-  if (forsaken) options.push({ value: 'lament', label: 'Lament' });
-  return options;
-}
-
 /** What the Lament preview hides, under the card at rest (P8c). */
 const LAMENT_NOTE =
   "Lament hides your vitals, your tank's health, your opponent's health, your affects and your group. Vosh draws ? where the game hides a value.";
@@ -203,7 +182,6 @@ export function PromptCard({
   onBand,
   onClose,
 }: PromptCardProps) {
-  const drawId = useId();
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [config, setConfig] = useState<PromptConfig | null>(null);
   const latest = useRef<PromptConfig | null>(null);
@@ -1101,34 +1079,17 @@ export function PromptCard({
           <>
             {content}
             <div className="pc-rule" aria-hidden="true" />
-            <div className="pc-foot is-design">
-              <Toggle
-                id={drawId}
-                checked={config.draw}
-                onChange={(draw) => save({ ...config, draw })}
-              />
-              <label className="pc-switch" htmlFor={drawId}>
-                Draw your prompt
-              </label>
-              <ShowButton
-                value={config.show}
-                state={cardShowState(show, config.capture)}
-                onChange={(place) => save(withShow(config, place))}
-              />
-              <div className="pc-foot-end">
-                {config.draw && (
-                  <Segmented
-                    label="Preview"
-                    options={previewOptions(forsaken)}
-                    value={preview}
-                    onChange={setPreview}
-                  />
-                )}
-                <Button variant="primary" className="pc-done" onClick={onClose}>
-                  Done
-                </Button>
-              </div>
-            </div>
+            <DesignFoot
+              draw={config.draw}
+              onDraw={(draw) => save({ ...config, draw })}
+              show={config.show}
+              showState={cardShowState(show, config.capture)}
+              onShow={(place) => save(withShow(config, place))}
+              preview={preview}
+              forsaken={forsaken}
+              onPreview={setPreview}
+              onDone={onClose}
+            />
           </>
         );
         break;

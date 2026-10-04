@@ -203,8 +203,9 @@ export function previewHeight(rows: number): number {
   return 28 + 17.5 * Math.max(0, rows - 1);
 }
 
-/** The previews the Settings Segmented offers, as the card's footer
- *  does. Lament only under the Forsaken Lands rules. */
+/** The previews Settings and the foot of Customize prompt offer. Lament
+ *  only under the Forsaken Lands rules, where the game hides your values
+ *  under lamented tears. */
 export function previewOptions(forsaken: boolean): { value: PromptPreviewName; label: string }[] {
   const options: { value: PromptPreviewName; label: string }[] = [
     { value: 'now', label: 'Now' },
