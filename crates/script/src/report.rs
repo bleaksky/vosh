@@ -2,17 +2,26 @@
 //! and line where Lua knows them, a stop, and the action cap.
 
 use crate::limits::{
-    Stop, StopReason, ACTIONS_PER_CALL, CALL_MEMORY, MB, STATE_MEMORY, TIME_BUDGET,
+    Stop, StopReason, ACTIONS_PER_CALL, CALL_MEMORY, ECHO_BYTES, MB, STATE_MEMORY, TIME_BUDGET,
 };
 use crate::owner::{Owner, Site};
 
 /// The line for a Lua error: the place Lua names, then what went
-/// wrong, without the stack traceback mlua adds.
+/// wrong, without the stack traceback mlua adds. A message longer than
+/// an echo may be ends where an echo would.
 pub(crate) fn describe(err: &mlua::Error) -> String {
-    match parts(err) {
+    let mut line = match parts(err) {
         (Some(at), message) => format!("{at}: {message}"),
         (None, message) => message,
+    };
+    if line.len() > ECHO_BYTES {
+        let mut end = ECHO_BYTES;
+        while !line.is_char_boundary(end) {
+            end -= 1;
+        }
+        line.truncate(end);
     }
+    line
 }
 
 /// Where an error happened, when Lua's message does not say so itself,
@@ -111,6 +120,17 @@ pub(crate) fn cap_line(owner: &Owner, site: &Site) -> String {
     format!(
         "{subject} queued more than {ACTIONS_PER_CALL} actions in one call. Vosh dropped the rest."
     )
+}
+
+/// The line for a call that queued a piece of text past its size limit,
+/// or more text in all than one call may.
+pub(crate) fn text_cap_line(owner: &Owner, site: &Site) -> String {
+    let subject = subject(owner, site);
+    let subject = match owner {
+        Owner::Plugin(_) | Owner::Script(_) => subject,
+        _ => capitalized(&subject),
+    };
+    format!("{subject} queued more text than one call may. Vosh dropped what went past the limit.")
 }
 
 /// How the lines name the Lua that ran.

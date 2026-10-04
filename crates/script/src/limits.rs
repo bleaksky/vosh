@@ -4,7 +4,10 @@
 //!
 //! A call gets [`TIME_BUDGET`] and [`CALL_MEMORY`] more than the state
 //! held when it began, never past [`STATE_MEMORY`] in all, and may queue
-//! [`ACTIONS_PER_CALL`] actions. Rust decides a stop, never the script.
+//! [`ACTIONS_PER_CALL`] actions with [`CALL_BYTES`] of text among them.
+//! The text Rust copies out of Lua counts toward neither memory limit,
+//! so each piece of it has a size limit of its own. Rust decides a stop,
+//! never the script.
 //! A hook counts instructions and checks the clock every [`HOOK_EVERY`],
 //! and a stop sets a flag that `pcall`, `xpcall` and the coroutine
 //! functions rethrow while it holds, so no protected loop can catch the
@@ -34,6 +37,15 @@ pub(crate) const CALL_MEMORY: usize = 32 * MB;
 pub(crate) const STATE_MEMORY: usize = 128 * MB;
 /// How many actions one call may queue. The rest drop.
 pub(crate) const ACTIONS_PER_CALL: usize = 100;
+/// The most bytes one line Lua sends or puts through `mud.input` may
+/// hold, the size of the game's input buffer.
+pub(crate) const LINE_BYTES: usize = 1024;
+/// The most bytes one echo, print or error line may hold.
+pub(crate) const ECHO_BYTES: usize = 64 * 1024;
+/// The most bytes a name, a pattern, an expansion or a value may hold.
+pub(crate) const NAME_BYTES: usize = 4 * 1024;
+/// The most text one call may queue in all.
+pub(crate) const CALL_BYTES: usize = 256 * 1024;
 
 /// The chunk name of Vosh's own Lua, which a stop never points at.
 pub(crate) const INTERNAL_CHUNK: &str = "=[vosh]";

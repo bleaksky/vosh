@@ -101,6 +101,8 @@ struct Called {
     error: Option<mlua::Error>,
     /// The call queued more actions than one call may.
     dropped: bool,
+    /// The call queued more text than one call may.
+    text_dropped: bool,
 }
 
 /// One match of a Lua trigger, kept as text until its call makes the
@@ -568,15 +570,19 @@ impl ScriptEngine {
         let result = body(&self.lua);
         let memory_error = matches!(&result, Err(err) if limits::is_memory_error(err));
         let stop = self.limits.end(&self.lua, memory_error);
-        let dropped = match self.state.cell.lock() {
-            Ok(mut s) => s.call.take().is_some_and(|call| call.dropped),
-            Err(_) => false,
+        let (dropped, text_dropped) = match self.state.cell.lock() {
+            Ok(mut s) => s
+                .call
+                .take()
+                .map_or((false, false), |call| (call.dropped, call.text_dropped)),
+            Err(_) => (false, false),
         };
         Called {
             start,
             stop,
             error: result.err(),
             dropped,
+            text_dropped,
         }
     }
 
@@ -609,6 +615,11 @@ impl ScriptEngine {
             outcome
                 .actions
                 .push(Action::Error(report::cap_line(owner, site)));
+        }
+        if called.text_dropped {
+            outcome
+                .actions
+                .push(Action::Error(report::text_cap_line(owner, site)));
         }
         outcome.append(self.replay(fresh));
         outcome
@@ -2246,6 +2257,56 @@ mod tests {
         // The next call starts a new count.
         let next = e.eval("mud.send('look')", "=#lua").unwrap();
         assert_eq!(next.actions, vec![Action::Send("look".into())]);
+    }
+
+    /// How many bytes of text the actions of `outcome` hold.
+    fn text_bytes(outcome: &ScriptOutcome) -> usize {
+        outcome.actions.iter().map(Action::text_len).sum()
+    }
+
+    #[test]
+    fn the_text_one_call_hands_over_stays_within_its_limits() {
+        const TOO_MUCH: &str =
+            "Your #lua line queued more text than one call may. Vosh dropped what went past the limit.";
+        let mut e = ScriptEngine::new().unwrap();
+        // Each piece past its own limit drops before Rust copies it.
+        let outcome = e.eval(
+            "local s = string.rep('x', 10 * 1024 * 1024) \
+             for i = 1, 100 do mud.echo(s) end \
+             mud.send(string.rep('y', 1025)) mud.input(string.rep('y', 1025)) \
+             print(string.rep('z', 64 * 1024 + 1)) \
+             mud.set_var('hp', string.rep('9', 4097)) \
+             mud.alias(string.rep('a', 4097), 'look') \
+             mud.trigger('t', string.rep('.', 4097), function() end) \
+             mud.send(string.rep('y', 1024)) mud.echo('kept')",
+            "=#lua",
+        );
+        assert!(!outcome.failed);
+        assert_eq!(error_lines(&outcome), [TOO_MUCH]);
+        let kept: Vec<&Action> = outcome
+            .actions
+            .iter()
+            .filter(|a| !matches!(a, Action::Error(_)))
+            .collect();
+        assert_eq!(
+            kept,
+            [
+                &Action::Send("y".repeat(1024)),
+                &Action::Echo("kept".into())
+            ]
+        );
+        assert_eq!(held_callbacks(&e), 0);
+        // Pieces that fit stop once the call holds 256 KB of them.
+        let outcome = e.eval(
+            "local s = string.rep('x', 60 * 1024) for i = 1, 100 do mud.echo(s) end",
+            "=#lua",
+        );
+        assert_eq!(echoes(&outcome).len(), 4);
+        assert!(text_bytes(&outcome) < 256 * 1024 + 200);
+        assert_eq!(error_lines(&outcome), [TOO_MUCH]);
+        // An error line ends where an echo would.
+        let outcome = e.eval("error(string.rep('e', 1024 * 1024))", "=#lua");
+        assert_eq!(error_line(&outcome).len(), 64 * 1024);
     }
 
     #[test]

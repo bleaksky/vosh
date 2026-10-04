@@ -9,8 +9,42 @@ use mlua::{FromLuaMulti, Function, IntoLuaMulti, Lua, Result as LuaResult, Table
 use vosh_automation::vars::Scope;
 
 use crate::actions::Action;
+use crate::limits::{ECHO_BYTES, LINE_BYTES, NAME_BYTES};
 use crate::owner::Owner;
 use crate::state::{Callback, EngineState, StateInner};
+
+/// A piece of text Lua hands a `mud` function, copied out of Lua only
+/// when it holds at most `cap` bytes, since the copy counts toward no
+/// memory limit. None when it is longer.
+fn capped(text: &mlua::String, cap: usize) -> LuaResult<Option<String>> {
+    if text.as_bytes().len() > cap {
+        return Ok(None);
+    }
+    Ok(Some(text.to_str()?.to_owned()))
+}
+
+/// Each of `texts` copied out of Lua when it fits its cap, or None when
+/// any is longer, which drops what the call would have queued and notes
+/// it, so the call ends with a line that says so.
+fn all_capped<const N: usize>(
+    lua: &Lua,
+    texts: [(&mlua::String, usize); N],
+) -> LuaResult<Option<[String; N]>> {
+    let mut out: [String; N] = std::array::from_fn(|_| String::new());
+    for (slot, (text, cap)) in out.iter_mut().zip(texts) {
+        match capped(text, cap)? {
+            Some(text) => *slot = text,
+            None => {
+                with_state(lua, |s| {
+                    s.drop_long_text();
+                    Ok(())
+                })?;
+                return Ok(None);
+            }
+        }
+    }
+    Ok(Some(out))
+}
 
 /// Counter for synthetic callback ids. The Lua engine stores the actual
 /// callback function in its registry and we hand around the integer id so
@@ -116,33 +150,37 @@ fn hold(s: &mut StateInner, id: i64, key: mlua::RegistryKey, owner: Owner) {
     s.callbacks.insert(id, Callback { key, owner });
 }
 
-fn mud_send(lua: &Lua, text: String) -> LuaResult<()> {
-    with_state(lua, |s| {
-        s.queue(Action::Send(text));
-        Ok(())
-    })
+/// Queue the action `make` builds from `texts`, each within its cap.
+fn queue_capped<const N: usize>(
+    lua: &Lua,
+    texts: [(&mlua::String, usize); N],
+    make: impl FnOnce([String; N]) -> Action,
+) -> LuaResult<bool> {
+    let Some(texts) = all_capped(lua, texts)? else {
+        return Ok(false);
+    };
+    with_state(lua, |s| Ok(s.queue(make(texts))))
 }
 
-fn mud_input(lua: &Lua, text: String) -> LuaResult<()> {
-    with_state(lua, |s| {
-        s.queue(Action::Input(text));
-        Ok(())
-    })
+fn mud_send(lua: &Lua, text: mlua::String) -> LuaResult<()> {
+    queue_capped(lua, [(&text, LINE_BYTES)], |[text]| Action::Send(text))?;
+    Ok(())
 }
 
-fn mud_echo(lua: &Lua, text: String) -> LuaResult<()> {
-    with_state(lua, |s| {
-        s.queue(Action::Echo(text));
-        Ok(())
-    })
+fn mud_input(lua: &Lua, text: mlua::String) -> LuaResult<()> {
+    queue_capped(lua, [(&text, LINE_BYTES)], |[text]| Action::Input(text))?;
+    Ok(())
+}
+
+fn mud_echo(lua: &Lua, text: mlua::String) -> LuaResult<()> {
+    queue_capped(lua, [(&text, ECHO_BYTES)], |[text]| Action::Echo(text))?;
+    Ok(())
 }
 
 /// `mud.log`, and the line `print` makes.
-pub(crate) fn mud_log(lua: &Lua, text: String) -> LuaResult<()> {
-    with_state(lua, |s| {
-        s.queue(Action::Log(text));
-        Ok(())
-    })
+pub(crate) fn mud_log(lua: &Lua, text: mlua::String) -> LuaResult<()> {
+    queue_capped(lua, [(&text, ECHO_BYTES)], |[text]| Action::Log(text))?;
+    Ok(())
 }
 
 /// `mud.alias`. A plugin's alias lasts for the session and belongs to
@@ -150,8 +188,12 @@ pub(crate) fn mud_log(lua: &Lua, text: String) -> LuaResult<()> {
 fn mud_alias(
     lua: &Lua,
     owner: Option<&Owner>,
-    (name, expansion): (String, String),
+    (name, expansion): (mlua::String, mlua::String),
 ) -> LuaResult<()> {
+    let Some([name, expansion]) = all_capped(lua, [(&name, NAME_BYTES), (&expansion, NAME_BYTES)])?
+    else {
+        return Ok(());
+    };
     with_state(lua, |s| {
         s.queue(match registrant(s, owner) {
             Owner::Plugin(plugin) => Action::SetPluginAlias {
@@ -166,7 +208,10 @@ fn mud_alias(
 }
 
 /// `mud.unalias`. A plugin removes only an alias it made.
-fn mud_unalias(lua: &Lua, owner: Option<&Owner>, name: String) -> LuaResult<()> {
+fn mud_unalias(lua: &Lua, owner: Option<&Owner>, name: mlua::String) -> LuaResult<()> {
+    let Some([name]) = all_capped(lua, [(&name, NAME_BYTES)])? else {
+        return Ok(());
+    };
     with_state(lua, |s| {
         s.queue(match registrant(s, owner) {
             Owner::Plugin(plugin) => Action::RemovePluginAlias { plugin, name },
@@ -183,7 +228,10 @@ fn mud_var(lua: &Lua, name: String) -> LuaResult<Option<String>> {
     with_state(lua, |s| Ok(s.var_snapshot.get(&name).cloned()))
 }
 
-fn mud_set_var(lua: &Lua, (name, value): (String, String)) -> LuaResult<()> {
+fn mud_set_var(lua: &Lua, (name, value): (mlua::String, mlua::String)) -> LuaResult<()> {
+    let Some([name, value]) = all_capped(lua, [(&name, NAME_BYTES), (&value, NAME_BYTES)])? else {
+        return Ok(());
+    };
     with_state(lua, |s| {
         let queued = s.queue(Action::SetVar {
             scope: Scope::Session,
@@ -197,7 +245,10 @@ fn mud_set_var(lua: &Lua, (name, value): (String, String)) -> LuaResult<()> {
     })
 }
 
-fn mud_set_profile_var(lua: &Lua, (name, value): (String, String)) -> LuaResult<()> {
+fn mud_set_profile_var(lua: &Lua, (name, value): (mlua::String, mlua::String)) -> LuaResult<()> {
+    let Some([name, value]) = all_capped(lua, [(&name, NAME_BYTES), (&value, NAME_BYTES)])? else {
+        return Ok(());
+    };
     with_state(lua, |s| {
         let queued = s.queue(Action::SetVar {
             scope: Scope::Profile,
@@ -211,7 +262,10 @@ fn mud_set_profile_var(lua: &Lua, (name, value): (String, String)) -> LuaResult<
     })
 }
 
-fn mud_unset_var(lua: &Lua, name: String) -> LuaResult<()> {
+fn mud_unset_var(lua: &Lua, name: mlua::String) -> LuaResult<()> {
+    let Some([name]) = all_capped(lua, [(&name, NAME_BYTES)])? else {
+        return Ok(());
+    };
     with_state(lua, |s| {
         if s.queue(Action::RemoveVar(name.clone())) {
             s.var_snapshot.remove(&name);
@@ -220,32 +274,38 @@ fn mud_unset_var(lua: &Lua, name: String) -> LuaResult<()> {
     })
 }
 
-fn mud_set_prompt_var(lua: &Lua, (name, value): (String, String)) -> LuaResult<()> {
-    with_state(lua, |s| {
-        s.queue(Action::SetPromptVar { name, value });
-        Ok(())
-    })
+fn mud_set_prompt_var(lua: &Lua, (name, value): (mlua::String, mlua::String)) -> LuaResult<()> {
+    queue_capped(
+        lua,
+        [(&name, NAME_BYTES), (&value, NAME_BYTES)],
+        |[name, value]| Action::SetPromptVar { name, value },
+    )?;
+    Ok(())
 }
 
-fn mud_unset_prompt_var(lua: &Lua, name: String) -> LuaResult<()> {
-    with_state(lua, |s| {
-        s.queue(Action::RemovePromptVar(name));
-        Ok(())
-    })
+fn mud_unset_prompt_var(lua: &Lua, name: mlua::String) -> LuaResult<()> {
+    queue_capped(lua, [(&name, NAME_BYTES)], |[name]| {
+        Action::RemovePromptVar(name)
+    })?;
+    Ok(())
 }
 
-fn mud_set_group_enabled(lua: &Lua, (name, enabled): (String, bool)) -> LuaResult<()> {
-    with_state(lua, |s| {
-        s.queue(Action::SetGroupEnabled { name, enabled });
-        Ok(())
-    })
+fn mud_set_group_enabled(lua: &Lua, (name, enabled): (mlua::String, bool)) -> LuaResult<()> {
+    queue_capped(lua, [(&name, NAME_BYTES)], |[name]| {
+        Action::SetGroupEnabled { name, enabled }
+    })?;
+    Ok(())
 }
 
 fn mud_trigger(
     lua: &Lua,
     owner: Option<&Owner>,
-    (name, pattern, callback): (String, String, Function),
+    (name, pattern, callback): (mlua::String, mlua::String, Function),
 ) -> LuaResult<()> {
+    let Some([name, pattern]) = all_capped(lua, [(&name, NAME_BYTES), (&pattern, NAME_BYTES)])?
+    else {
+        return Ok(());
+    };
     let key = lua.create_registry_value(callback)?;
     let id = alloc_callback_id();
     with_state(lua, |s| {
@@ -261,7 +321,10 @@ fn mud_trigger(
     })
 }
 
-fn mud_untrigger(lua: &Lua, owner: Option<&Owner>, name: String) -> LuaResult<()> {
+fn mud_untrigger(lua: &Lua, owner: Option<&Owner>, name: mlua::String) -> LuaResult<()> {
+    let Some([name]) = all_capped(lua, [(&name, NAME_BYTES)])? else {
+        return Ok(());
+    };
     with_state(lua, |s| {
         s.queue(Action::RemoveLuaTrigger {
             owner: registrant(s, owner),
@@ -274,8 +337,11 @@ fn mud_untrigger(lua: &Lua, owner: Option<&Owner>, name: String) -> LuaResult<()
 fn mud_on_gmcp(
     lua: &Lua,
     owner: Option<&Owner>,
-    (package, callback): (String, Function),
+    (package, callback): (mlua::String, Function),
 ) -> LuaResult<()> {
+    let Some([package]) = all_capped(lua, [(&package, NAME_BYTES)])? else {
+        return Ok(());
+    };
     let key = lua.create_registry_value(callback)?;
     let id = alloc_callback_id();
     with_state(lua, |s| {

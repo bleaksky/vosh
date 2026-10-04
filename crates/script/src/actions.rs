@@ -100,6 +100,38 @@ pub enum Action {
 }
 
 impl Action {
+    /// How many bytes of text the action holds, which the text a call
+    /// may queue counts.
+    pub(crate) fn text_len(&self) -> usize {
+        match self {
+            Action::Send(text)
+            | Action::Input(text)
+            | Action::Echo(text)
+            | Action::RemoveAlias(text)
+            | Action::DropPluginAliases(text)
+            | Action::RemoveVar(text)
+            | Action::RemovePromptVar(text)
+            | Action::Log(text)
+            | Action::Error(text) => text.len(),
+            Action::SetAlias { name, expansion } => name.len() + expansion.len(),
+            Action::SetPluginAlias {
+                plugin,
+                name,
+                expansion,
+            } => plugin.len() + name.len() + expansion.len(),
+            Action::RemovePluginAlias { plugin, name } => plugin.len() + name.len(),
+            Action::SetVar { name, value, .. } | Action::SetPromptVar { name, value } => {
+                name.len() + value.len()
+            }
+            Action::SetGroupEnabled { name, .. } | Action::RemoveLuaTrigger { name, .. } => {
+                name.len()
+            }
+            Action::SetLuaTrigger { name, pattern, .. } => name.len() + pattern.len(),
+            Action::SubscribeGmcp { package, .. } => package.len(),
+            Action::Timer { .. } | Action::CancelTimer(_) => 0,
+        }
+    }
+
     /// True for an action that registers something for its owner or
     /// takes a registration away, which a failed load takes back so the
     /// owner keeps what it had.
