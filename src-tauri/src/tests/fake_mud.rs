@@ -2170,6 +2170,32 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
     h.finish(grid).await;
 }
 
+// A Lua GMCP handler you make mid session runs at once on the last
+// packet of its package, here the Char.Status of the login, and the
+// packets end with the connection. The guard keeps other tests off the
+// shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lua_a_new_gmcp_handler_hears_the_last_packet_at_once() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.connect().await;
+    h.until_shown("Welcome to the fake Aabahran, Tester.").await;
+    h.type_line(
+        "#lua mud.on_gmcp('Char.Status', function(d) mud.echo(d.name .. ' is level ' .. d.level) end)",
+    )
+    .await;
+    h.until_shown("Tester is level 50").await;
+    h.disconnect().await;
+    let after = h.state.profile.lock().await.script.eval(
+        "mud.on_gmcp('Char.Status', function() mud.echo('stale') end)",
+        "=#lua",
+    );
+    let leftover = &after.actions;
+    assert!(leftover.is_empty(), "{leftover:?}");
+    h.finish(grid).await;
+}
+
 // What a plugin prints as it loads at launch waits for a terminal, then
 // shows once you connect: its print and its error as [lua] lines, and
 // the stop of a plugin that runs away. The guard keeps other tests off
