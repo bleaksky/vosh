@@ -838,6 +838,32 @@ async fn a_session_on_its_own_profile_saves_only_that_file_and_closing_it_closes
     h.finish(grid).await;
 }
 
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_login_in_a_session_that_closed_leaves_its_profile_to_the_close() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    let two = open_session_on(&h, "Healer").await;
+    let second = h.state.session(Some(two)).expect("the second session");
+    let healer = second.profile();
+    // The close takes the session out of the map, then waits for its
+    // connection to end. A login that names a character Default claims
+    // lands in that wait.
+    h.state.close_session(two).expect("the close");
+    assert_eq!(
+        crate::profile::switch::switch_profile(&h.state, &second, DEFAULT_PROFILE_NAME)
+            .await
+            .err(),
+        Some(crate::sessions::NO_SUCH_SESSION.to_string())
+    );
+    // So the rest of the close still finds the session on Healer, open,
+    // and saves Healer as it closes it.
+    assert!(std::sync::Arc::ptr_eq(&second.profile(), &healer));
+    assert_eq!(open_names(&h), [DEFAULT_PROFILE_NAME, "Healer"]);
+    assert!(h.state.is_open(&healer));
+    h.finish(grid).await;
+}
+
 /// The sessions profiles.toml in `h` keeps for the next launch, with the
 /// selected one and the active profile.
 fn kept_sessions(

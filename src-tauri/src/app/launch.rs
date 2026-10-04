@@ -275,7 +275,8 @@ pub(crate) async fn start_on_profile<R: tauri::Runtime>(
 /// lists gives way to the active one. The session's grid then takes the
 /// lines its scrollback file kept. Does nothing for a session whose
 /// profile is open. A profile that does not open leaves the session
-/// waiting, and the error says why.
+/// waiting, and the error says why, as it does for a session that
+/// closed.
 pub(crate) async fn open_restored<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
@@ -285,6 +286,10 @@ pub(crate) async fn open_restored<R: tauri::Runtime>(
         // No other step opens or closes a profile until the session plays
         // it.
         let _persist_guard = PERSIST_LOCK.lock().await;
+        // A session that closed opens nothing, since no close would close
+        // the profile it opened. The close takes the session out of the
+        // map under this lock.
+        state.session(Some(session.id))?;
         let waiting = session.profile();
         if state.is_open(&waiting) {
             return Ok(());
@@ -504,6 +509,42 @@ mod tests {
             .await
             .expect("a new session");
         assert_eq!(four, SessionId::numbered(4));
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn a_session_that_closes_before_its_first_selection_opens_no_profile() {
+        // A selection shows the session's grid, which other tests read.
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
+        let dir = tempfile::tempdir().expect("a folder");
+        let root = dir.path();
+        let mut set = ProfileSet::load_or_migrate(root.to_path_buf()).expect("a set");
+        set.create("Healer").expect("Healer");
+        let entry = |n, profile: &str| SessionEntry {
+            id: SessionId::numbered(n),
+            name: None,
+            host: None,
+            port: None,
+            tls: false,
+            profile: profile.into(),
+        };
+        let entries = vec![entry(1, DEFAULT_PROFILE_NAME), entry(2, "Healer")];
+        set.keep_sessions(Some(DEFAULT_PROFILE_NAME), entries, None)
+            .expect("the list saves");
+
+        let (state, app) = launch(root).await;
+        let two = state
+            .session(Some(SessionId::numbered(2)))
+            .expect("the second session");
+        // A close takes the session out of the map first and then waits
+        // for its connection to end. A selection that lands in that wait
+        // opens no profile.
+        state.close_session(two.id).expect("the close");
+        assert_eq!(
+            super::open_restored(app.handle(), &state, &two).await,
+            Err(crate::sessions::NO_SUCH_SESSION.to_string())
+        );
+        assert_eq!(open_names(&state), [DEFAULT_PROFILE_NAME]);
     }
 
     #[allow(clippy::await_holding_lock)]

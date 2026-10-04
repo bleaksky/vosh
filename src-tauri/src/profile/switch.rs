@@ -343,6 +343,12 @@ pub(crate) async fn switch_profile(
     {
         return Err(SWITCH_MIGRATION_PENDING.into());
     }
+    // A session that closed plays nothing more, and its close saves and
+    // closes the profile it played. A login in its last moments would
+    // otherwise close the profile it leaves unsaved, since the closed
+    // session no longer counts as its last player. The close takes the
+    // session out of the map under this lock, so the check is exact.
+    state.session(Some(session.id))?;
 
     // Step 1: the last session on a profile saves it as it leaves, so
     // your changes since the last save are not lost when it closes, and
