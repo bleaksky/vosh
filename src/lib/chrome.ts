@@ -84,7 +84,9 @@ export interface ChromeTokens {
   panel: string;
   /// Strong hairline: the panel edge and split handles.
   sep: string;
-  /// Soft hairline between sections inside a pane.
+  /// Soft hairline between sections inside a pane. On dark it steps
+  /// the panel as far as raised does, so the two are one color, and a
+  /// line or ring on a floating surface takes sep or keyRing instead.
   divider: string;
   /// Selected row fill.
   selrow: string;
@@ -125,10 +127,11 @@ export interface ChromeTokens {
   track: string;
   /// The hovered or keyboard row on a floating surface.
   menuHi: string;
-  /// Keycap ring, and the ring inside a color swatch in Settings.
+  /// Keycap ring, and the ring inside a color swatch, in Settings, on
+  /// the prompt card and in the pane menus.
   keyRing: string;
   /// Window edge, the ring inside a floating surface on dark, and the
-  /// edge a small surface draws inside itself to read on its ground.
+  /// edge a band on paper draws inside itself to read on its ground.
   edge: string;
 }
 
