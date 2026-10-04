@@ -53,10 +53,17 @@ static NEXT: AtomicU64 = AtomicU64::new(1);
 /// The prefix of every banner identifier, before the session's number.
 const ID_PREFIX: &str = "vosh-";
 
-/// Whether the app runs from a bundle, which `UNUserNotificationCenter`
-/// needs.
+/// Whether the app runs from an app bundle, which
+/// `UNUserNotificationCenter` needs. A dev build may carry an identifier
+/// in the Info.plist its binary embeds and still run from no bundle, so
+/// the bundle's path must name an app too.
 fn bundled() -> bool {
-    NSBundle::mainBundle().bundleIdentifier().is_some()
+    let bundle = NSBundle::mainBundle();
+    let path = bundle.bundlePath().to_string();
+    let app = std::path::Path::new(&path)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("app"));
+    bundle.bundleIdentifier().is_some() && app
 }
 
 fn center() -> Option<Retained<UNUserNotificationCenter>> {
