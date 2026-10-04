@@ -66,8 +66,9 @@ export interface AppTheme {
 }
 
 // ── Kanso Zen ───────────────────────────────────────────────────────
-// Default. Mirrors the user's Ghostty config exactly so the in-app
-// terminal renders identically to the one outside it.
+// Mirrors the user's Ghostty config exactly, so Settings and exports
+// match the terminal outside Vosh. In play Fit game colors retunes the
+// game colors (Themes review Q15).
 const kansoZen: AppTheme = {
   id: 'kanso-zen',
   label: 'Kanso Zen',

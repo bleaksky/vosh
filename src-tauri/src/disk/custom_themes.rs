@@ -422,11 +422,16 @@ mod tests {
         })
         .unwrap();
         write_profile_themes(&set, "default", vec![theme("mine", "#101010")]);
+        let global_before = std::fs::read_to_string(set.global_path()).unwrap();
 
         assert_eq!(migrate_custom_themes(&set).unwrap(), 0);
         let file = ProfileConfig::load(&set.profile_path("default")).unwrap();
         assert_eq!(theme_ids(&file.ui.custom_themes), ["mine"]);
-        assert!(!set.global_path().exists());
+        // The new install wrote global.toml, and the move leaves it alone.
+        assert_eq!(
+            std::fs::read_to_string(set.global_path()).unwrap(),
+            global_before
+        );
     }
 
     #[test]

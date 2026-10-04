@@ -839,7 +839,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         let mut live = shared_profile();
-        assert!(!set.global_path().exists());
+        // The new install wrote global.toml with its theme.
+        std::fs::remove_file(set.global_path()).unwrap();
         reset(&set, &mut live);
         assert_shared_settings(&live);
     }
