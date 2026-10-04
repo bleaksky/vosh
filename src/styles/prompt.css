@@ -234,6 +234,29 @@
   margin-left: 4px;
 }
 
+/* The foot under your design: Draw your prompt and where your prompt
+   shows on the left, the preview and Done on the right. 12 above and
+   below its 28 px controls keep it 52 tall. A foot too narrow for both
+   groups, as with the four previews of The Forsaken Lands in the system
+   face, puts the right group on a second row, still on the right, so
+   Done never leaves the card. */
+.pc-foot.is-design {
+  flex-wrap: wrap;
+  row-gap: 8px;
+  height: auto;
+  min-height: 52px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.pc-foot-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
 /* Where your prompt shows: a compact menu button in the 12/500 face of
    the preview's segments, its chevron in the secondary tone. */
 .pc-show-button {

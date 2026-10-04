@@ -39,3 +39,36 @@ describe('prompt.css', () => {
     expect(read.filter((name) => !known.has(name))).toEqual([]);
   });
 });
+
+describe('the foot under your design', () => {
+  const prompt = bare(promptCss);
+  /** The declarations of one rule in prompt.css. */
+  const rule = (selector: string) => {
+    const at = prompt.indexOf(`${selector} {`);
+    expect(at, selector).toBeGreaterThanOrEqual(0);
+    return prompt.slice(at, prompt.indexOf('}', at));
+  };
+
+  it('keeps Done in the card when the foot runs out of room', () => {
+    // Draw your prompt, where it shows, the four previews and Done run
+    // past 560 px in the system face, so the right group takes a second
+    // row on the right, and the foot stays 52 tall on one row.
+    const foot = rule('.pc-foot.is-design');
+    expect(foot).toContain('flex-wrap: wrap;');
+    expect(foot).toContain('row-gap: 8px;');
+    expect(foot).toContain('height: auto;');
+    expect(foot).toContain('min-height: 52px;');
+    expect(foot).toContain('padding-top: 12px;');
+    expect(foot).toContain('padding-bottom: 12px;');
+    const end = rule('.pc-foot-end');
+    expect(end).toContain('margin-left: auto;');
+    expect(end).toContain('flex: none;');
+  });
+
+  it('sets where your prompt shows in the face of the preview segments', () => {
+    const button = rule('.pc-show-button');
+    expect(button).toContain('font-size: 12px;');
+    expect(button).toContain('padding: 0 6px 0 10px;');
+    expect(rule(".pc-show-button[aria-disabled='true']")).toContain('opacity: 0.45;');
+  });
+});
