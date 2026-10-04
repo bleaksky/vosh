@@ -668,7 +668,11 @@ pub(crate) fn command_echo(line: &str, ui: &crate::profile::ui::UiConfig) -> Str
 
 /// The grey `›` and space before each command you send, in the theme's
 /// bright black (SGR 90). The same bytes as `ECHO_CARET` in
-/// src/lib/maskedInput.ts.
+/// src/lib/maskedInput.ts. Each renderer leaves it out when the row your
+/// echo lands on already ends in `>`, as a game's prompt such as
+/// `Account name> ` does (`TermGrid::local_write` and
+/// `TermGrid::session_output` in the native grid, and the page's
+/// `RegionWriter`).
 pub(crate) const ECHO_CARET: &str = "\x1b[90m\u{203a} \x1b[0m";
 
 /// The red, green and blue of a Sent command color, the six hex digits

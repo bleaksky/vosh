@@ -179,7 +179,9 @@ impl TermGrid {
             let text = self.land(text);
             if !text.is_empty() {
                 let text = self.wrap(&text);
-                self.feed_marked(text.as_bytes());
+                // A quick key's echo, which the session sends.
+                let text = self.without_mark(text.as_bytes());
+                self.feed_marked(text);
             }
             wrote = true;
         }
@@ -197,7 +199,8 @@ impl TermGrid {
     /// Write text the webview wrote itself, such as your typed echo. It
     /// lands after the open region, so it closes it, and a preview the
     /// region shows goes back to the live render first. Held line ends go
-    /// out before it.
+    /// out before it. Your echo's mark drops where its row already ends
+    /// in `>`.
     pub(crate) fn local_write(&mut self, bytes: &[u8]) {
         if bytes.is_empty() {
             return;
@@ -213,7 +216,38 @@ impl TermGrid {
         } else {
             std::borrow::Cow::Borrowed(bytes)
         };
-        self.feed(&bytes);
+        let bytes = self.without_mark(&bytes);
+        self.feed(bytes);
+    }
+
+    /// Your echo `bytes` without the grey mark Mark your commands draws
+    /// first, when the row it lands on already ends in `>`. Anything else
+    /// comes back as it is. The page's twin is `withoutMark` in
+    /// terminalRegion.ts.
+    fn without_mark<'a>(&self, bytes: &'a [u8]) -> &'a [u8] {
+        match bytes.strip_prefix(crate::input::ECHO_CARET.as_bytes()) {
+            Some(rest) if self.ends_in_prompt() => rest,
+            _ => bytes,
+        }
+    }
+
+    /// The row the cursor sits on already asks for your input, as a
+    /// game's prompt such as `Account name> ` does: what it shows before
+    /// the cursor ends in `>` once trailing blanks go. A cursor held past
+    /// the last column writes on the next row, which holds nothing yet.
+    /// The same rule as `endsInPrompt` in terminalRegion.ts.
+    fn ends_in_prompt(&self) -> bool {
+        let cursor = &self.term.grid().cursor;
+        if cursor.input_needs_wrap {
+            return false;
+        }
+        let row = &self.term.grid()[cursor.point.line];
+        let before: String = (0..cursor.point.column.0)
+            .map(|col| &row[Column(col)])
+            .filter(|cell| !cell.flags.contains(Flags::WIDE_CHAR_SPACER))
+            .map(|cell| if cell.c == '\0' { ' ' } else { cell.c })
+            .collect();
+        before.trim_end().ends_with('>')
     }
 
     /// `text` as it lands at the cursor: without the line end that would
