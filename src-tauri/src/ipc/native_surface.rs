@@ -1,10 +1,9 @@
 //! The commands the page sends the native terminal surface. A build
 //! without the surface keeps every one, so the page calls them the same
 //! way on every platform, and there each one does nothing. A command that
-//! reads or changes what the grid holds names the session it acts on, or
-//! acts on the selected session when it names none. Vosh keeps one grid,
-//! which every session writes to, so the session needs only to be one
-//! Vosh holds.
+//! reads or changes what a grid holds names the session whose grid it
+//! acts on, or acts on the selected session's when it names none. The
+//! pointer and the wheel act on the grid that shows.
 
 use tauri::{AppHandle, State};
 
@@ -101,9 +100,11 @@ pub(crate) fn native_surface_copy(
     state: State<'_, SharedState>,
     session: Option<SessionId>,
 ) -> Result<(), String> {
-    state.session(session)?;
+    let session = state.session(session)?;
     #[cfg(native_surface)]
-    crate::native::surface::pointer::request_copy();
+    crate::native::surface::pointer::request_copy(session.id);
+    #[cfg(not(native_surface))]
+    let _ = session;
     Ok(())
 }
 
@@ -115,12 +116,14 @@ pub(crate) fn native_surface_select_all(
     state: State<'_, SharedState>,
     session: Option<SessionId>,
 ) -> Result<(), String> {
-    state.session(session)?;
+    let session = state.session(session)?;
     #[cfg(native_surface)]
     {
-        crate::native::grid::select_all();
+        crate::native::grid::select_all(session.id);
         crate::native::surface::request_redraw();
     }
+    #[cfg(not(native_surface))]
+    let _ = session;
     Ok(())
 }
 
@@ -235,23 +238,24 @@ pub(crate) fn native_surface_set_tokens(
     }
 }
 
-/// Tier 3 native renderer: draw a band under each lifted prompt while your
-/// prompt shows lifted. The grid tags a lift's cells either way.
+/// Tier 3 native renderer: draw a band under each lifted prompt of the
+/// session while your prompt shows lifted there. The grid tags a lift's
+/// cells either way.
 #[tauri::command]
 pub(crate) fn native_surface_set_prompt_bands(
     state: State<'_, SharedState>,
     on: bool,
     session: Option<SessionId>,
 ) -> Result<(), String> {
-    state.session(session)?;
+    let session = state.session(session)?;
     #[cfg(native_surface)]
     {
-        crate::native::gpu::bands::set_prompt_bands(on);
+        crate::native::grid::set_prompt_bands(session.id, on);
         crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
     {
-        let _ = on;
+        let _ = (on, session);
     }
     Ok(())
 }
@@ -333,17 +337,23 @@ pub(crate) fn native_surface_find(
     forward: bool,
     session: Option<SessionId>,
 ) -> Result<(usize, usize), String> {
-    state.session(session)?;
+    let session = state.session(session)?;
     #[cfg(native_surface)]
     {
-        let result =
-            crate::native::grid::find::find_run(&query, regex, case_sensitive, whole_word, forward);
+        let result = crate::native::grid::find::find_run(
+            session.id,
+            &query,
+            regex,
+            case_sensitive,
+            whole_word,
+            forward,
+        );
         crate::native::surface::request_redraw();
         Ok(result)
     }
     #[cfg(not(native_surface))]
     {
-        let _ = (query, regex, case_sensitive, whole_word, forward);
+        let _ = (session, query, regex, case_sensitive, whole_word, forward);
         Ok((0, 0))
     }
 }
@@ -355,12 +365,14 @@ pub(crate) fn native_surface_find_clear(
     state: State<'_, SharedState>,
     session: Option<SessionId>,
 ) -> Result<(), String> {
-    state.session(session)?;
+    let session = state.session(session)?;
     #[cfg(native_surface)]
     {
-        crate::native::grid::find::find_clear();
+        crate::native::grid::find::find_clear(session.id);
         crate::native::surface::request_redraw();
     }
+    #[cfg(not(native_surface))]
+    let _ = session;
     Ok(())
 }
 
@@ -388,19 +400,20 @@ pub(crate) fn native_surface_scroll(
     kind: String,
     session: Option<SessionId>,
 ) -> Result<(), String> {
-    state.session(session)?;
+    let session = state.session(session)?.id;
     #[cfg(native_surface)]
     {
+        use crate::native::grid::{scroll_metrics, scroll_page, scroll_to_bottom};
         match kind.as_str() {
-            "pageup" => crate::native::grid::scroll_page(true),
-            "pagedown" => crate::native::grid::scroll_page(false),
-            "bottom" => crate::native::grid::scroll_to_bottom(),
+            "pageup" => scroll_page(session, true),
+            "pagedown" => scroll_page(session, false),
+            "bottom" => scroll_to_bottom(session),
             "toggle" => {
-                let (offset, _) = crate::native::grid::scroll_metrics();
+                let (offset, _) = scroll_metrics(session);
                 if offset > 0 {
-                    crate::native::grid::scroll_to_bottom();
+                    scroll_to_bottom(session);
                 } else {
-                    crate::native::grid::scroll_page(true);
+                    scroll_page(session, true);
                 }
             }
             _ => {}
@@ -409,7 +422,7 @@ pub(crate) fn native_surface_scroll(
     }
     #[cfg(not(native_surface))]
     {
-        let _ = kind;
+        let _ = (kind, session);
     }
     Ok(())
 }

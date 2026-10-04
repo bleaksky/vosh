@@ -100,11 +100,11 @@ impl Settle {
         }
     }
 
-    /// Ask for the frame the output so far owes, if any.
-    pub(super) fn frame_now<R: tauri::Runtime>(&mut self, app: &AppHandle<R>) {
+    /// Ask for the frame the output of `session` so far owes, if any.
+    pub(super) fn frame_now<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, session: &Session) {
         if std::mem::take(&mut self.frame) {
             self.since = None;
-            request_frame(app);
+            request_frame(app, session);
         }
     }
 
@@ -129,11 +129,12 @@ impl Settle {
     pub(super) fn overdue_now<R: tauri::Runtime>(
         &mut self,
         app: &AppHandle<R>,
+        session: &Session,
         log_sink: &LogSink,
         perf: &mut PerfCounters,
     ) {
         if self.frame_overdue() {
-            self.frame_now(app);
+            self.frame_now(app, session);
         }
         if self.log_overdue() {
             if let Ok(mut guard) = log_sink.logs.try_lock() {

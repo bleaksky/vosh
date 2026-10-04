@@ -3,11 +3,14 @@
 //! with the one selected. The app starts with one session, selected, and
 //! a command that names no session acts on the selected one.
 //!
-//! The map's lock comes ahead of every other lock. A step takes it only
-//! to find, add or remove a session or to read or change the selection,
-//! and no holder awaits or takes another lock. No step takes it while it
-//! holds a session slot, a profile or a connection, so each step resolves
-//! its session before it takes any other lock.
+//! The map's lock comes ahead of every other lock of the app. A step
+//! takes it only to find, add or remove a session or to read or change
+//! the selection, and no holder awaits. A holder takes no other lock but
+//! one: a change of selection shows the grid of the session it selects,
+//! which takes the native grid map and then the pointer's state, and
+//! neither of those holders ever takes the session map. No step takes it
+//! while it holds a session slot, a profile or a connection, so each step
+//! resolves its session before it takes any other lock.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -30,6 +33,11 @@ pub(crate) const NO_SUCH_SESSION: &str = "Vosh has no such session.";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub(crate) struct SessionId(u32);
+
+impl SessionId {
+    /// The session the app starts with.
+    pub(crate) const FIRST: Self = Self(1);
+}
 
 /// What one session holds apart from the profile: the task that runs its
 /// connection, what that connection shares with the commands, its Lua
@@ -174,12 +182,17 @@ impl Sessions {
         session
     }
 
-    /// Select the session `id` names. Returns false, and keeps the
-    /// selection, when the list does not hold it.
+    /// Select the session `id` names, and show its grid in the place of
+    /// the grid that showed. Returns false, and keeps the selection, when
+    /// the list does not hold it.
     pub(crate) fn select(&mut self, id: SessionId) -> bool {
         let held = self.list.iter().any(|session| session.id == id);
-        if held {
+        if held && id != self.selected {
             self.selected = id;
+            #[cfg(any(native_surface, test))]
+            crate::native::grid::show(id);
+            #[cfg(native_surface)]
+            crate::native::surface::grid_shown();
         }
         held
     }
@@ -199,10 +212,9 @@ impl Sessions {
 impl Default for Sessions {
     /// One session, selected.
     fn default() -> Self {
-        let first = SessionId(1);
         Self {
-            list: vec![Arc::new(Session::new(first))],
-            selected: first,
+            list: vec![Arc::new(Session::new(SessionId::FIRST))],
+            selected: SessionId::FIRST,
             next: 2,
         }
     }
@@ -280,7 +292,7 @@ mod tests {
 
     #[test]
     fn an_echo_in_one_session_leaves_the_other_sessions_count_alone() {
-        // The echo reaches the shared grid too, which other tests read.
+        // The echo reaches the session's grid too, which other tests read.
         let _grid = crate::native::grid::lock_shared_grid_for_test();
         let app = app();
         let outputs = hear(&app, events::OUTPUT);
@@ -303,7 +315,30 @@ mod tests {
     }
 
     #[test]
+    fn an_echo_in_a_session_behind_reaches_its_grid_and_asks_for_no_frame() {
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
+        let app = app();
+        let frames = hear(&app, crate::output::TEST_FRAME_EVENT);
+        let state = AppState::default();
+        let (one, two) = (state.selected_session(), state.open_session());
+        crate::output::echo_lines(app.handle(), &two, &["You wave.".to_string()]);
+        assert_eq!(frames.lock().unwrap().len(), 0);
+        crate::output::echo_lines(app.handle(), &one, &["You nod.".to_string()]);
+        assert_eq!(frames.lock().unwrap().len(), 1);
+        let first_row = |id| crate::native::grid::screen_rows(id).map(|r| r.rows[0].clone());
+        assert_eq!(first_row(one.id).as_deref(), Some("You nod."));
+        assert_eq!(first_row(two.id).as_deref(), Some("You wave."));
+        // Once selected, the second session's grid shows and its echo
+        // asks for a frame.
+        assert_eq!(state.select_session(two.id), Ok(()));
+        crate::output::echo_lines(app.handle(), &two, &["You bow.".to_string()]);
+        assert_eq!(frames.lock().unwrap().len(), 2);
+    }
+
+    #[test]
     fn a_new_session_takes_the_next_number_and_a_selection_needs_one_vosh_holds() {
+        // A selection shows the session's grid, which other tests read.
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
         let state = AppState::default();
         let (two, three) = (state.open_session().id, state.open_session().id);
         assert_eq!((two, three), (SessionId(2), SessionId(3)));

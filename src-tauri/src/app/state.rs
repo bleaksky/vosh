@@ -135,8 +135,8 @@ impl AppState {
     }
 
     /// Select the session `id` names. The commands that name no session
-    /// act on it from then on. A session Vosh does not hold is an error,
-    /// in a sentence, and the selection stays.
+    /// act on it from then on, and its native grid shows. A session Vosh
+    /// does not hold is an error, in a sentence, and the selection stays.
     pub(crate) fn select_session(&self, id: SessionId) -> Result<(), String> {
         if self.sessions().select(id) {
             Ok(())

@@ -3,9 +3,7 @@
 //! screen, loads the saved scrollback as a pane mounts, and reports the
 //! ground your highlight colors must read on. Each that reads or changes
 //! a session's terminal acts on the session it names, or on the selected
-//! session when it names none. Vosh keeps one native grid, which every
-//! session writes to, so a command that reads only the grid needs its
-//! session only to be one Vosh holds.
+//! session when it names none, and on that session's native grid.
 
 use tauri::State;
 use vosh_automation::trigger::readable;
@@ -34,7 +32,7 @@ pub(crate) async fn terminal_local_write(
     let session = state.session(session)?;
     #[cfg(native_surface)]
     let taken = {
-        let taken = crate::native::grid::feed_local(text.as_bytes());
+        let taken = crate::native::grid::feed_local(session.id, text.as_bytes());
         crate::native::surface::request_redraw();
         taken
     };
@@ -80,8 +78,8 @@ pub(crate) fn terminal_cursor(
     state: State<'_, SharedState>,
     session: Option<SessionId>,
 ) -> Result<Option<crate::native::grid::regions::CursorReport>, String> {
-    state.session(session)?;
-    Ok(crate::native::grid::cursor_report())
+    let session = state.session(session)?;
+    Ok(crate::native::grid::cursor_report(session.id))
 }
 
 /// No native grid on this build, so there is nothing to report.
@@ -105,8 +103,8 @@ pub(crate) fn terminal_screen_rows(
     state: State<'_, SharedState>,
     session: Option<SessionId>,
 ) -> Result<Option<crate::native::grid::regions::ScreenRows>, String> {
-    state.session(session)?;
-    Ok(crate::native::grid::screen_rows())
+    let session = state.session(session)?;
+    Ok(crate::native::grid::screen_rows(session.id))
 }
 
 /// No native grid on this build, so there is nothing to read.
@@ -133,14 +131,16 @@ pub(crate) async fn scrollback_load(
     let bytes = sb.dump_live();
     // The native grid is fed only live output, so the persisted scrollback
     // would be missing there. The live pane asks us to seed it, and only
-    // the first ask per process lands. A reloaded page asks again while
-    // the grid still holds everything. The seed is claimed even when the
-    // scrollback is empty, since the grid then gets every line live.
+    // the session's first ask per process lands. A reloaded page asks
+    // again while the grid still holds everything. The seed is claimed
+    // even when the scrollback is empty, since the grid then gets every
+    // line live.
     #[cfg(native_surface)]
-    let seeded_native = feed_native && crate::native::grid::claim_seed() && !bytes.is_empty();
+    let seeded_native =
+        feed_native && crate::native::grid::claim_seed(session.id) && !bytes.is_empty();
     #[cfg(native_surface)]
     if seeded_native {
-        crate::native::grid::feed_local(&bytes);
+        crate::native::grid::feed_local(session.id, &bytes);
         crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
@@ -167,7 +167,7 @@ pub(crate) async fn scrollback_clear(
     session.scrollback.lock().await.clear();
     #[cfg(native_surface)]
     {
-        crate::native::grid::clear_history();
+        crate::native::grid::clear_history(session.id);
         crate::native::surface::request_redraw();
     }
     Ok(())
