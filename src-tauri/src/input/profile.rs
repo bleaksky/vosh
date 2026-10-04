@@ -9,6 +9,7 @@ use crate::disk::paths;
 use crate::import::tintin;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
+use crate::profile::switch::hand_to_connection;
 use crate::session::connection::Connection;
 
 /// What `#profile save`, `load`, and `reset` answer between the shared
@@ -91,10 +92,7 @@ pub(super) fn slash_profile(
             let blank = ProfileConfig::default();
             let tick_before = profile.tick.config.clone();
             let _ = blank.apply_to(profile);
-            c.tick
-                .adopt(&mut profile.tick, &tick_before, tokio::time::Instant::now());
-            let table = profile.prompt.clone();
-            crate::prompt::take_config(profile, c, table);
+            hand_to_connection(profile, c, &tick_before);
             *replaced = true;
             InputResult::echo_line("profile reset to defaults")
         }
@@ -122,10 +120,7 @@ pub(super) fn load_profile_file(
     crate::disk::atomic::release_unread(path);
     let tick_before = profile.tick.config.clone();
     let warnings = snapshot.apply_to(profile);
-    c.tick
-        .adopt(&mut profile.tick, &tick_before, tokio::time::Instant::now());
-    let table = profile.prompt.clone();
-    crate::prompt::take_config(profile, c, table);
+    hand_to_connection(profile, c, &tick_before);
     *replaced = true;
     let mut lines = vec![format!("profile loaded from {}", path.display())];
     for w in warnings {
