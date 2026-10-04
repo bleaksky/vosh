@@ -12,7 +12,7 @@ use tauri::{AppHandle, State};
 use crate::app::events::{broadcast, CUSTOM_THEMES_CHANGED, PROFILES_CHANGED};
 use crate::app::state::SharedState;
 use crate::disk::save::{persist_state, PERSIST_LOCK};
-use crate::profile::set::{create_profile, duplicate_profile, rename_profile};
+use crate::profile::set::{create_profile, delete_profile, duplicate_profile, rename_profile};
 use crate::profile::shared::change_scope_locked;
 use crate::profile::switch::apply_profile_switch;
 use crate::sessions::SessionId;
@@ -58,11 +58,7 @@ pub(crate) async fn profile_delete(
     state: State<'_, SharedState>,
     name: String,
 ) -> Result<(), String> {
-    {
-        let _persist_guard = PERSIST_LOCK.lock().await;
-        let mut set = state.loaded_profile_set().await?;
-        set.delete(&name).map_err(|e| e.to_string())?;
-    }
+    delete_profile(state.inner(), &name).await?;
     broadcast(&app, PROFILES_CHANGED, &name);
     Ok(())
 }

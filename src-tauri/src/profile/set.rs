@@ -568,18 +568,32 @@ pub(crate) async fn rename_profile(
     {
         return Err(RENAME_MIGRATION_PENDING.into());
     }
-    let session = state.selected_session();
-    let live = {
-        let mut set = state.loaded_profile_set().await?;
-        let renames_live = set.active_name() == old;
-        set.rename(old, new).map_err(|e| e.to_string())?;
-        renames_live.then(|| set.active_name().to_string())
-    };
-    // The custom prompt draws the live profile's new name.
-    if let Some(name) = live {
-        session.lock_profile().await.set_name(&name);
+    let new = sanitize_name(new).map_err(|e| e.to_string())?;
+    let open = state.open_profile(old);
+    state
+        .loaded_profile_set()
+        .await?
+        .rename(old, &new)
+        .map_err(|e| e.to_string())?;
+    // Every session on it plays it under the new name, and the custom
+    // prompt draws that name.
+    if let Some(open) = open {
+        open.lock().await.set_name(&new);
     }
     Ok(())
+}
+
+/// The body of [`profile_delete`]. A profile a session plays stays, with
+/// its file.
+///
+/// [`profile_delete`]: crate::ipc::profiles::profile_delete
+pub(crate) async fn delete_profile(state: &SharedState, name: &str) -> Result<(), String> {
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    if state.open_profile(name).is_some() {
+        return Err(ProfileSetError::CannotDeleteActive(name.to_string()).to_string());
+    }
+    let mut set = state.loaded_profile_set().await?;
+    set.delete(name).map_err(|e| e.to_string())
 }
 
 /// The body of [`profile_duplicate`].

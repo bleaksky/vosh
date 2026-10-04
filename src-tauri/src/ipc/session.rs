@@ -8,22 +8,34 @@
 use tauri::{AppHandle, State};
 
 use crate::app::state::SharedState;
+use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::input;
 use crate::output;
 use crate::session::TargetPayload;
 use crate::sessions::SessionId;
 
 /// Open a session after the others, with nothing connected, and return
-/// its id. It plays the profile the selected session plays, so its
-/// connection takes the profile's tick settings and `[prompt]` table, and
-/// its Lua engine loads the plugins the profile turns on, as the first
-/// session's does at launch.
+/// its id. It plays `profile`, which it joins when another session plays
+/// it and otherwise opens from its files, or with no `profile` the one
+/// the selected session plays. Its connection takes the profile's tick
+/// settings and `[prompt]` table, and its Lua engine loads the plugins
+/// the profile turns on, as the first session's does at launch.
 #[tauri::command]
 pub(crate) async fn session_open<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharedState>,
+    profile: Option<String>,
 ) -> Result<SessionId, String> {
-    let session = state.open_session(state.selected_session().profile());
+    let session = {
+        // No other step opens or closes a profile until the session plays
+        // it.
+        let _persist_guard = PERSIST_LOCK.lock().await;
+        let open = match profile {
+            Some(name) => crate::profile::switch::open_or_join(state.inner(), &name).await?,
+            None => state.selected_session().profile(),
+        };
+        state.open_session(open)
+    };
     {
         let mut p = session.lock_profile().await;
         let tick_before = p.tick.config.clone();
@@ -46,9 +58,50 @@ pub(crate) async fn session_select(
     session: SessionId,
 ) -> Result<(), String> {
     state.select_session(session)?;
-    // Under the save lock, so no switch moves the session between the
-    // read of its profile and the write of the index.
-    let _persist_guard = crate::disk::save::PERSIST_LOCK.lock().await;
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    name_selected_profile_active(state.inner()).await
+}
+
+/// Close the session `session` names. Its connection ends as on
+/// Disconnect, and its grid and the Lua stops it made go. With it go its
+/// connection's state, its Lua engine with the aliases its plugins made
+/// and its recording. Its profile saves, unless `#profile reset` or
+/// `#profile load` holds it, and closes when no other session plays it.
+/// A session that was selected hands the selection on, see
+/// [`crate::sessions::Sessions::close`]. Vosh never closes the only
+/// session, since closing it closes the window.
+#[tauri::command]
+pub(crate) async fn session_close<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    session: SessionId,
+) -> Result<(), String> {
+    let closed = state.close_session(session)?;
+    crate::session::disconnect(&app, state.inner(), &closed).await;
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    let open = closed.profile();
+    {
+        let mut p = open.lock().await;
+        let key = closed.id.stop_key();
+        p.triggers.forget_stops(key);
+        p.aliases.forget_stops(key);
+    }
+    if !open.held() {
+        persist_state(state.inner(), &open).await;
+    }
+    if state.close_unplayed(&open) {
+        crate::profile::switch::leave_file(state.inner(), &open).await;
+    }
+    #[cfg(any(native_surface, test))]
+    crate::native::grid::forget(closed.id);
+    name_selected_profile_active(state.inner()).await
+}
+
+/// Point profiles.toml at the profile the selected session plays, the one
+/// a launch opens. Call with [`PERSIST_LOCK`] held, so no switch moves
+/// the session between the read of its profile and the write of the
+/// index.
+async fn name_selected_profile_active(state: &SharedState) -> Result<(), String> {
     let Some(name) = state.selected_session().profile().name() else {
         return Ok(());
     };
@@ -237,7 +290,7 @@ mod tests {
             p.prompt.template = "<%hp>".into();
         }
 
-        let id = super::session_open(app.handle().clone(), app.state::<SharedState>())
+        let id = super::session_open(app.handle().clone(), app.state::<SharedState>(), None)
             .await
             .unwrap();
         let session = state.session(Some(id)).unwrap();

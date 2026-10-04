@@ -220,7 +220,7 @@ impl Harness {
 
     /// Open a session after the others, as the page does.
     pub(crate) async fn open_session(&self) -> SessionId {
-        crate::ipc::session::session_open(self.app.handle().clone(), self.app.state())
+        crate::ipc::session::session_open(self.app.handle().clone(), self.app.state(), None)
             .await
             .expect("a new session")
     }

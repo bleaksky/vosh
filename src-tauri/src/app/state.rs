@@ -122,6 +122,13 @@ impl AppState {
         self.sessions().open(profile)
     }
 
+    /// Take the session `id` out of the map, see [`Sessions::close`].
+    /// A session Vosh does not hold, or the only one, is an error, in a
+    /// sentence.
+    pub(crate) fn close_session(&self, id: SessionId) -> Result<Arc<Session>, String> {
+        self.sessions().close(id).map_err(str::to_string)
+    }
+
     /// The open profile named `name`, while a session plays it.
     pub(crate) fn open_profile(&self, name: &str) -> Option<Arc<OpenProfile>> {
         self.sessions().profile(name)

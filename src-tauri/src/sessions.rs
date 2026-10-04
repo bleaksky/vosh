@@ -36,6 +36,11 @@ use crate::session::SessionHandle;
 /// What a command says when it names a session Vosh does not hold.
 pub(crate) const NO_SUCH_SESSION: &str = "Vosh has no such session.";
 
+/// What closing the only session says. The page closes the window
+/// instead.
+pub(crate) const ONLY_SESSION: &str =
+    "You cannot close your only session. Close the window instead.";
+
 /// A session's number, which no other session of this run shares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -239,6 +244,27 @@ impl Sessions {
         self.next += 1;
         self.list.push(session.clone());
         session
+    }
+
+    /// Take the session `id` out of the list and return it. When it was
+    /// selected, the session after it is selected, or the one before it
+    /// when it was last, and its grid shows. The list never gives up its
+    /// only session.
+    pub(crate) fn close(&mut self, id: SessionId) -> Result<Arc<Session>, &'static str> {
+        let at = self
+            .list
+            .iter()
+            .position(|session| session.id == id)
+            .ok_or(NO_SUCH_SESSION)?;
+        if self.list.len() == 1 {
+            return Err(ONLY_SESSION);
+        }
+        let closed = self.list.remove(at);
+        if self.selected == id {
+            let next = self.list[at.min(self.list.len() - 1)].id;
+            self.select(next);
+        }
+        Ok(closed)
     }
 
     /// The open profile named `name`, while a session plays it.
@@ -461,5 +487,31 @@ mod tests {
             Err(NO_SUCH_SESSION.to_string())
         );
         assert_eq!(state.selected_session().id, three);
+    }
+
+    #[test]
+    fn closing_a_session_hands_the_selection_on_and_never_closes_the_only_one() {
+        // A selection shows the session's grid, which other tests read.
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
+        let state = AppState::default();
+        let one = state.selected_session();
+        let (two, three) = (
+            state.open_session(one.profile()).id,
+            state.open_session(one.profile()).id,
+        );
+        assert_eq!(state.select_session(two), Ok(()));
+        assert_eq!(state.close_session(two).map(|s| s.id), Ok(two));
+        assert_eq!(state.selected_session().id, three);
+        assert_eq!(crate::native::grid::shown(), three);
+        assert_eq!(state.close_session(three).map(|s| s.id), Ok(three));
+        assert_eq!(state.selected_session().id, one.id);
+        assert_eq!(
+            state.close_session(one.id).map(|s| s.id),
+            Err(super::ONLY_SESSION.to_string())
+        );
+        assert_eq!(
+            state.close_session(two).map(|s| s.id),
+            Err(NO_SUCH_SESSION.to_string())
+        );
     }
 }
