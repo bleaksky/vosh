@@ -59,8 +59,11 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
     config: PromptConfig,
     as_is: Option<bool>,
 ) -> Result<(), String> {
-    let p = &mut *state.profile.lock().await;
+    // The locks cover only the change. The repaint waits on the session
+    // slot, which Disconnect holds while the loop ends, and the loop's end
+    // takes the profile, so holding the profile here would hang both.
     let changed = {
+        let p = &mut *state.profile.lock().await;
         let c = &mut *state.connection.lock();
         if as_is.unwrap_or(false) {
             set_config_as_is(p, c, config)?
@@ -351,4 +354,54 @@ pub(crate) async fn prompt_gags_without_reader(
         .gags_without_reader()
         .map(str::to_string)
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use tauri::test::{mock_builder, mock_context, noop_assets};
+    use tauri::Manager;
+
+    use crate::app::state::{AppState, SharedState};
+
+    #[tokio::test]
+    async fn a_table_save_lets_go_of_the_profile_while_disconnect_holds_the_session() {
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        app.manage::<SharedState>(Arc::new(AppState::default()));
+        let state: SharedState = app.state::<SharedState>().inner().clone();
+        let mut config = state.profile.lock().await.prompt.clone();
+        config.template = "<%hp>%mana".into();
+
+        // Disconnect holds the session slot while the loop ends, and the
+        // end of the loop takes the profile.
+        let slot = state.session.lock().await;
+        let save = tokio::spawn({
+            let app = app.handle().clone();
+            let config = config.clone();
+            async move {
+                super::prompt_config_set(app.clone(), app.state::<SharedState>(), config, None)
+                    .await
+            }
+        });
+
+        let took = tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if state.profile.lock().await.prompt.template == config.template {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await;
+        assert!(
+            took.is_ok(),
+            "the profile stays held while the save waits to repaint"
+        );
+        assert!(!save.is_finished(), "the save waits for the session slot");
+
+        drop(slot);
+        save.await.unwrap().expect("the table saves");
+    }
 }
