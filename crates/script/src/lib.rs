@@ -303,6 +303,18 @@ impl ScriptEngine {
             .collect()
     }
 
+    /// The plugins that loaded, a stopped one among them, by name, in the
+    /// order they first loaded.
+    pub fn loaded_plugins(&self) -> Vec<String> {
+        self.loaded_scripts
+            .iter()
+            .filter_map(|owner| match owner {
+                Owner::Plugin(name) => Some(name.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Run a loaded script's code as one call of `owner`. A plugin runs
     /// in a new environment of its own, which takes the place of the one
     /// it had once the run succeeds, and a loose script runs in the
@@ -1349,6 +1361,18 @@ mod tests {
                 Owner::Script("spin.lua".into()),
             ]
         );
+    }
+
+    #[test]
+    fn loaded_plugins_names_each_plugin_once_with_a_stopped_one() {
+        let mut e = ScriptEngine::new().unwrap();
+        plugin(&mut e, "meals", "").unwrap();
+        load(&mut e, "combat.lua", "").unwrap();
+        assert!(plugin(&mut e, "spin", "while true do end").failed);
+        plugin(&mut e, "meals", "").unwrap();
+        assert_eq!(e.loaded_plugins(), ["meals", "spin"]);
+        e.unload(&Owner::Plugin("spin".into())).unwrap();
+        assert_eq!(e.loaded_plugins(), ["meals"]);
     }
 
     #[test]
