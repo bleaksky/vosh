@@ -209,13 +209,17 @@ describe('ChatLog', () => {
 });
 
 describe('the chat line in panel.css', () => {
-  it('sets the log in the panel face at your terminal size, 17 px lines at 12', () => {
+  it('sets the log in the panel face at your panel size, 17 px lines at 12', () => {
     const log = rule('.pane-chat-log');
     // The face comes from .panel-host (src/lib/panelFont.test.ts).
     expect(log).not.toContain('font-family');
     expect(log).toContain('font-size: var(--mud-text);');
     expect(log).toContain('line-height: var(--mud-chat-line);');
-    expect(log).toContain('padding: 8px 12px 12px 18px;');
+    // 8 above and 12 below at 12 px, scaled with the size
+    // (paneTextSize.test.ts), and the side insets as they are.
+    expect(log).toContain(
+      'padding: round(8px * var(--mud-scale), 1px) 12px round(12px * var(--mud-scale), 1px) 18px;',
+    );
   });
 
   it('hangs wrapped lines two cells in and keeps 3 px between messages at 12', () => {

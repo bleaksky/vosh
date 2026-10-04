@@ -3,10 +3,11 @@
    mockups' (Main, PanelTabs, Combat, Session), colors are tokens only.
    Dense rows are 22 px, pane headers 28 px, text starts at x 18, and
    a row with a status marker puts the 8 px marker at x 18 and its
-   text at x 34. Every pane draws in the panel face, which the Panel
-   font row picks and which is your terminal font until you pick
-   another. Game text follows your terminal size, and the rows that
-   hold it scale with it (.panel-host). */
+   text at x 34, all at a 12 px panel. Every pane draws in the panel
+   face and at the panel size, which Settings, Appearance, Panel text
+   picks. The face is your terminal font until you pick another, and
+   the size starts at 12 px. The text, the rows, and the gaps between
+   them scale with the size (.panel-host). */
 
 /* The shell's panel slot supplies the ground, the 1 px left edge, and
    the band's 32 px above the first pane. Every pane's text, the labels
@@ -22,18 +23,21 @@
   overflow: hidden;
   color: var(--text);
   font-family: var(--font-panel);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
   font-weight: 400;
 
-  /* Game text follows your terminal size, which PanelHost writes here
-     as --font-mud-px. Every length that sits with that text was drawn
-     at 12 px and scales by your size over 12, rounded to whole px, so
-     at 12 px each is the number it names. paneTextSize.ts holds the
-     same bases for the pane geometry. */
-  --mud-scale: calc(var(--font-mud-px, 12) / 12);
-  --mud-text: calc(var(--font-mud-px, 12) * 1px);
+  /* The panel draws at your panel size, which the main window writes on
+     the root as --panel-text-px. Every length that sits with the text
+     was drawn at 12 px and scales by your size over 12, rounded to whole
+     px, so at 12 px each is the number it names. The marks, meters,
+     icons and side insets keep their px. paneTextSize.ts holds the same
+     bases for the pane geometry. */
+  --mud-scale: calc(var(--panel-text-px, 12) / 12);
+  --mud-text: calc(var(--panel-text-px, 12) * 1px);
   --mud-line: round(16px * var(--mud-scale), 1px);
+  --mud-header: round(28px * var(--mud-scale), 1px);
+  --mud-row: round(22px * var(--mud-scale), 1px);
   --mud-affects-row: round(22px * var(--mud-scale), 1px);
   --mud-affects-rule-gap: round(4px * var(--mud-scale), 1px);
   --mud-affects-hours: round(22px * var(--mud-scale), 1px);
@@ -41,6 +45,7 @@
   --mud-countdown-meter-top: round(19px * var(--mud-scale), 1px);
   --mud-countdown-meter: round(2px * var(--mud-scale), 1px);
   --mud-chip: round(20px * var(--mud-scale), 1px);
+  --mud-chip-gutter: round(56px * var(--mud-scale), 1px);
   --mud-chat-line: round(17px * var(--mud-scale), 1px);
   --mud-chat-gap: round(3px * var(--mud-scale), 1px);
 }
@@ -124,8 +129,8 @@
   display: flex;
   align-items: baseline;
   min-width: 0;
-  height: var(--pane-header);
-  padding: 6px 40px 0 18px;
+  height: var(--mud-header);
+  padding: round(6px * var(--mud-scale), 1px) 40px 0 18px;
   -webkit-user-select: none;
   user-select: none;
 }
@@ -133,8 +138,8 @@
 .pane-label {
   flex: none;
   margin: 0;
-  font-size: 10px;
-  line-height: 12px;
+  font-size: round(10px * var(--mud-scale), 1px);
+  line-height: round(12px * var(--mud-scale), 1px);
   font-weight: 600;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -151,8 +156,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
-  line-height: 15px;
+  font-size: round(11px * var(--mud-scale), 1px);
+  line-height: round(15px * var(--mud-scale), 1px);
   font-weight: 400;
   font-variant-numeric: tabular-nums;
   color: var(--secondary);
@@ -176,9 +181,15 @@
   margin-left: 10px;
 }
 
+/* The button keeps its 24 by 20 at every size and stays centered on the
+   header's text line: the header's top padding, then half the meta's
+   line, less half the button. 4 px down at 12 px. */
 .pane-more {
   position: absolute;
-  top: 4px;
+  top: round(
+    round(6px * var(--mud-scale), 1px) + round(15px * var(--mud-scale), 1px) / 2 - 10px,
+    1px
+  );
   right: 8px;
   display: flex;
   align-items: center;
@@ -217,15 +228,15 @@
   display: inline-flex;
   align-items: center;
   min-width: 0;
-  height: 15px;
+  height: round(15px * var(--mud-scale), 1px);
   margin: 0;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--secondary);
   font: inherit;
-  font-size: 11px;
-  line-height: 15px;
+  font-size: round(11px * var(--mud-scale), 1px);
+  line-height: round(15px * var(--mud-scale), 1px);
   white-space: nowrap;
   cursor: default;
 }
@@ -259,10 +270,10 @@
   position: relative;
   display: flex;
   align-items: center;
-  height: var(--row);
+  height: var(--mud-row);
   padding: 0 12px 0 18px;
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
 }
 
 .pane-row-marked {
@@ -280,7 +291,7 @@
 
 .pane-row-note {
   margin-left: 6px;
-  font-size: 11px;
+  font-size: round(11px * var(--mud-scale), 1px);
   color: var(--tertiary);
 }
 
@@ -296,7 +307,7 @@
 .pane-marker {
   position: absolute;
   left: 18px;
-  top: 7px;
+  top: round((var(--mud-row) - 8px) / 2, 1px);
   width: 8px;
   height: 8px;
   border-radius: 4px;
@@ -306,10 +317,10 @@
 /* A plain sentence where a pane has nothing to show yet. */
 .pane-empty {
   margin: 0;
-  min-height: var(--row);
-  padding: 3px 12px 3px 18px;
-  font-size: 12px;
-  line-height: 16px;
+  min-height: var(--mud-row);
+  padding: round(3px * var(--mud-scale), 1px) 12px round(3px * var(--mud-scale), 1px) 18px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
   color: var(--tertiary);
 }
 
@@ -550,8 +561,8 @@
   background: transparent;
   color: var(--tertiary);
   font: inherit;
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
   white-space: nowrap;
   cursor: default;
 }
@@ -800,9 +811,9 @@
    that line instead. */
 .pane-chips-label {
   flex: none;
-  width: 56px;
+  width: var(--mud-chip-gutter);
   margin: 0 4px 0 0;
-  font-size: 11px;
+  font-size: round(11px * var(--mud-scale), 1px);
   line-height: var(--mud-chip);
   font-weight: 600;
   white-space: nowrap;
@@ -1016,7 +1027,7 @@
 /* ── Map ─────────────────────────────────────────────────────────── */
 
 .pane-map {
-  padding-bottom: 8px;
+  padding-bottom: round(8px * var(--mud-scale), 1px);
 }
 
 /* The drawing: inset 8, radius 8, no fill or border of its own. The
@@ -1057,9 +1068,9 @@
   left: 0;
   right: 0;
   margin: 0;
-  padding: 3px 4px 3px 10px;
-  font-size: 12px;
-  line-height: 16px;
+  padding: round(3px * var(--mud-scale), 1px) 4px round(3px * var(--mud-scale), 1px) 10px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
   color: var(--tertiary);
   pointer-events: none;
 }
@@ -1138,9 +1149,9 @@
    sets fewer rows. The room row stays. */
 .pane-map-rows {
   flex: 0 1 auto;
-  height: calc(var(--row) * var(--band-rows, 1));
-  min-height: var(--row);
-  margin-top: 4px;
+  height: calc(var(--mud-row) * var(--band-rows, 1));
+  min-height: var(--mud-row);
+  margin-top: round(4px * var(--mud-scale), 1px);
   overflow: hidden;
 }
 
@@ -1176,8 +1187,8 @@
    row never ends on a stray dot. */
 .pane-map-where {
   align-items: flex-start;
-  font-size: 11px;
-  line-height: 14px;
+  font-size: round(11px * var(--mud-scale), 1px);
+  line-height: round(14px * var(--mud-scale), 1px);
   color: var(--tertiary);
 }
 
@@ -1202,7 +1213,7 @@
 
 .pane-member-lead {
   margin-left: 6px;
-  font-size: 11px;
+  font-size: round(11px * var(--mud-scale), 1px);
   color: var(--tertiary);
 }
 
@@ -1225,7 +1236,7 @@
 
 .pane-member-pct {
   flex: none;
-  width: 36px;
+  width: round(36px * var(--mud-scale), 1px);
   margin-left: 8px;
   text-align: right;
   font-weight: 500;
@@ -1290,7 +1301,7 @@
    lines 3 apart at 12 px. */
 .pane-chat-log {
   margin: auto 0 0;
-  padding: 8px 12px 12px 18px;
+  padding: round(8px * var(--mud-scale), 1px) 12px round(12px * var(--mud-scale), 1px) 18px;
   list-style: none;
   font-size: var(--mud-text);
   line-height: var(--mud-chat-line);
@@ -1376,9 +1387,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 16px;
-  font-size: 12px;
-  line-height: 16px;
+  height: var(--mud-line);
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
 }
 
 .panel-vitals-label {
@@ -1451,9 +1462,9 @@
 
 .panel-vitals-empty {
   margin: 0;
-  height: 16px;
-  font-size: 12px;
-  line-height: 16px;
+  height: var(--mud-line);
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
   white-space: nowrap;
   color: var(--tertiary);
 }

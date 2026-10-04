@@ -42,9 +42,9 @@ export { PANE_MIN_H };
 // lightest ones come up short and scroll inside their own box. No two
 // boxes ever overlap.
 //
-// The Affects and Chat panes draw game text at your terminal size
-// (paneTextSize.ts), so their minimums count their rows at that size.
-// The rest draw at their own sizes and keep theirs.
+// Every pane draws at your panel size (paneTextSize.ts), so every
+// minimum, and the floor on a short panel, counts the header and the
+// rows at that size.
 
 export interface Rect {
   x: number;
@@ -85,8 +85,15 @@ export interface PaneGeometry {
 export const HANDLE_PX = 1;
 
 /** The least a pane gets on a panel too short for every minimum: its
- *  header and one dense row, with the rest scrolling inside. */
+ *  header and one dense row, with the rest scrolling inside. At 12 px,
+ *  and paneFloorH at your size. */
 export const PANE_FLOOR_H = PANE_HEADER_PX + PANE_ROW_PX;
+
+/** The floor at panel size `size` px. */
+export function paneFloorH(size: number = PANE_TEXT_PX): number {
+  const { header, row } = paneText(size);
+  return header + row;
+}
 /** Narrowest a side by side pane gets. */
 export const MIN_PANE_W = 120;
 
@@ -94,15 +101,15 @@ export const MIN_PANE_W = 120;
  *  of its PANE_MIN_H entry. */
 export type PaneMins = Partial<Record<PaneType, number>>;
 
-/** A pane type's stock minimum height with the game text at `size`
- *  px: Affects its header and six rows, and Chat its header and a
- *  body that holds as many messages as at 12 px. Every other pane
- *  draws at its own sizes and keeps its PANE_MIN_H entry, as do these
- *  two at 12 px. */
+/** A pane type's stock minimum height at panel size `size` px:
+ *  Affects its header and six rows, Group and Staff queues their header
+ *  and three rows, and the Map and Chat their header and a body as
+ *  much taller as their text. Each is its PANE_MIN_H entry at 12 px. */
 export function paneMinH(pane: PaneType, size: number = PANE_TEXT_PX): number {
-  if (pane === 'affects') return PANE_HEADER_PX + 6 * paneText(size).affectsRow;
-  if (pane === 'chat') return PANE_HEADER_PX + textPx(PANE_MIN_H.chat - PANE_HEADER_PX, size);
-  return PANE_MIN_H[pane];
+  const text = paneText(size);
+  if (pane === 'affects') return text.header + 6 * text.affectsRow;
+  if (pane === 'group' || pane === 'imm') return text.header + 3 * text.row;
+  return text.header + textPx(PANE_MIN_H[pane] - PANE_HEADER_PX, size);
 }
 
 /** Most rows a list pane holds on to as its minimum, so a long list
@@ -110,18 +117,16 @@ export function paneMinH(pane: PaneType, size: number = PANE_TEXT_PX): number {
 const LIST_MIN_ROWS = 12;
 /** Group members a Group pane holds on to as its minimum. */
 const GROUP_MIN_ROWS = 6;
-/** Half a row. A list cut at its minimum shows this much of the next
- *  row, under the bottom fade, so you can tell it goes on. */
-const PEEK_PX = PANE_ROW_PX / 2;
 
 // A minimum that shows `shows` px of a `total` px list, plus a peek at
-// the next row when the list goes on past it.
-function withPeek(shows: number, total: number): number {
-  return total > shows ? Math.min(total, shows + PEEK_PX) : shows;
+// the next row when the list goes on past it: half a `row`, under the
+// bottom fade, so you can tell it goes on.
+function withPeek(shows: number, total: number, row: number): number {
+  return total > shows ? Math.min(total, shows + Math.round(row / 2)) : shows;
 }
 
 /** The Affects pane's minimum for the rows it shows in `columns`
- *  columns, with the game text at `size` px: every tracked slot, then
+ *  columns, at panel size `size` px: every tracked slot, then
  *  under the hairline every harmful affect and the count cell after
  *  them. Never under the stock minimum, and never over a dozen rows.
  *  The pane shows whole rows only and counts the rest, so no peek
@@ -135,13 +140,13 @@ export function affectsMinH(
   const trackedRows = Math.ceil(tracked / columns);
   const restRows = affectsRestMinRows(rows, columns);
   const rule = tracked > 0 && restRows > 0 ? affectsRulePx(size) : 0;
-  const row = paneText(size).affectsRow;
-  const need = PANE_HEADER_PX + Math.min(LIST_MIN_ROWS, trackedRows + restRows) * row;
+  const { header, affectsRow: row } = paneText(size);
+  const need = header + Math.min(LIST_MIN_ROWS, trackedRows + restRows) * row;
   return Math.max(paneMinH('affects', size), need + rule);
 }
 
 /** The Countdown pane's minimum for the rows it shows in `columns`
- *  columns, with the game text at `size` px: every row down to the last
+ *  columns, at panel size `size` px: every row down to the last
  *  one missing, running out, or harmful, and the count after it when
  *  more follow. Never under the stock minimum, and never over a dozen
  *  rows. */
@@ -151,11 +156,11 @@ export function countdownMinH(
   size: number = PANE_TEXT_PX,
 ): number {
   const need = Math.min(LIST_MIN_ROWS, countdownMinRows(rows, columns)) * countdownRowPx(size);
-  return Math.max(paneMinH('affects', size), PANE_HEADER_PX + need);
+  return Math.max(paneMinH('affects', size), paneText(size).header + need);
 }
 
-/** The Grouped chips pane's minimum `width` wide, with the game text
- *  at `size` px: every Recast and Tracked chip and every harmful one on
+/** The Grouped chips pane's minimum `width` wide, at panel size
+ *  `size` px: every Recast and Tracked chip and every harmful one on
  *  the first page, and the count after them when more follow, packed as
  *  the pane packs them with the same `measure`. Never under the stock
  *  minimum, and never over a dozen rows' worth. */
@@ -174,11 +179,11 @@ export function chipsMinH(
     LIST_MIN_ROWS * paneText(size).affectsRow,
     size,
   );
-  return Math.max(paneMinH('affects', size), PANE_HEADER_PX + body);
+  return Math.max(paneMinH('affects', size), paneText(size).header + body);
 }
 
 /** The Affects pane's minimum in `root` laid out `width` wide, for the
- *  style it draws, with the game text at `size` px. The pane draws one
+ *  style it draws, at panel size `size` px. The pane draws one
  *  column or two by its own width, which a Split right halves, so the
  *  minimum counts the columns the pane draws, and the chips pack to
  *  it. A tree without the pane reads the panel's width. */
@@ -195,7 +200,7 @@ export function affectsMinIn(
 }
 
 /** The Affects pane's minimum `paneW` wide for the style it draws,
- *  with the game text at `size` px. */
+ *  at panel size `size` px. */
 export function affectsStyleMinH(
   rows: readonly AffectRow[],
   paneW: number,
@@ -209,43 +214,50 @@ export function affectsStyleMinH(
   return affectsMinH(rows, columns, size);
 }
 
-/** The Group pane's minimum for `members` rows: every member up to
- *  six, so the one in danger is never the row cut off, then a peek at
- *  the seventh. */
-export function groupMinH(members: number): number {
+/** The Group pane's minimum for `members` rows at panel size `size`
+ *  px: every member up to six, so the one in danger is never the row
+ *  cut off, then a peek at the seventh. */
+export function groupMinH(members: number, size: number = PANE_TEXT_PX): number {
+  const { header, row } = paneText(size);
   const count = Math.max(0, Math.floor(members));
-  const shows = Math.max(
-    PANE_MIN_H.group,
-    PANE_HEADER_PX + Math.min(GROUP_MIN_ROWS, count) * PANE_ROW_PX,
-  );
-  return withPeek(shows, PANE_HEADER_PX + count * PANE_ROW_PX);
+  const shows = Math.max(paneMinH('group', size), header + Math.min(GROUP_MIN_ROWS, count) * row);
+  return withPeek(shows, header + count * row, row);
 }
 
 /** The least room `node` needs along `dir`'s axis, height for a
  *  column and width for a row. With `floor`, the least it gets on a
  *  panel too short for every minimum instead. `mins` overrides the
- *  stock minimum height of a pane type. */
+ *  stock minimum height of a pane type at panel size `size` px. */
 export function minExtent(
   node: PaneNode,
   dir: SplitDir,
   floor = false,
   mins: PaneMins = {},
+  size: number = PANE_TEXT_PX,
 ): number {
   if (isLeaf(node)) {
     if (dir === 'row') return MIN_PANE_W;
-    const min = mins[node.pane] ?? PANE_MIN_H[node.pane];
-    return floor ? Math.min(PANE_FLOOR_H, min) : min;
+    const min = mins[node.pane] ?? paneMinH(node.pane, size);
+    return floor ? Math.min(paneFloorH(size), min) : min;
   }
-  const parts = node.children.map((c) => minExtent(c, dir, floor, mins));
+  const parts = node.children.map((c) => minExtent(c, dir, floor, mins, size));
   if (parts.length === 0) return 0;
   if (node.split !== dir) return Math.max(...parts);
   return parts.reduce((acc, p) => acc + p, 0) + HANDLE_PX * (parts.length - 1);
 }
 
 /** True when a `width` by `height` panel holds every pane of the tree
- *  at its minimum. */
-export function fitsPanel(root: PaneSplit, width: number, height: number): boolean {
-  return minExtent(root, 'row') <= width && minExtent(root, 'column') <= height;
+ *  at its minimum at panel size `size` px. */
+export function fitsPanel(
+  root: PaneSplit,
+  width: number,
+  height: number,
+  size: number = PANE_TEXT_PX,
+): boolean {
+  return (
+    minExtent(root, 'row', false, {}, size) <= width &&
+    minExtent(root, 'column', false, {}, size) <= height
+  );
 }
 
 /** Split `total` pixels by `weights`, whole pixels that sum to
@@ -344,15 +356,16 @@ function shareAboveMins(
 
 /** Lay the tree out in a `width` by `height` box, every pane at its
  *  minimum or more while the box holds them all. `mins` overrides the
- *  stock minimum height of a pane type. */
+ *  stock minimum height of a pane type at panel size `size` px. */
 export function layoutPanes(
   root: PaneSplit,
   width: number,
   height: number,
   mins: PaneMins = {},
+  size: number = PANE_TEXT_PX,
 ): PaneGeometry {
   const out: PaneGeometry = { leaves: [], handles: [] };
-  place(root, { x: 0, y: 0, w: Math.max(0, width), h: Math.max(0, height) }, out, mins);
+  place(root, { x: 0, y: 0, w: Math.max(0, width), h: Math.max(0, height) }, out, mins, size);
   return out;
 }
 
@@ -365,7 +378,7 @@ export function paneWidth(root: PaneSplit, width: number, pane: PaneType): numbe
   return box ? box.rect.w : null;
 }
 
-function place(node: PaneNode, rect: Rect, out: PaneGeometry, mins: PaneMins): void {
+function place(node: PaneNode, rect: Rect, out: PaneGeometry, mins: PaneMins, size: number): void {
   if (isLeaf(node)) {
     out.leaves.push({ leaf: node, rect });
     return;
@@ -374,21 +387,21 @@ function place(node: PaneNode, rect: Rect, out: PaneGeometry, mins: PaneMins): v
   if (n === 0) return;
   const vertical = node.split === 'column';
   const axis = vertical ? rect.h : rect.w;
-  const childMins = node.children.map((c) => minExtent(c, node.split, false, mins));
+  const childMins = node.children.map((c) => minExtent(c, node.split, false, mins, size));
   const sizes = allocate(
     Math.max(0, axis - HANDLE_PX * (n - 1)),
     node.children.map((c) => c.weight),
     childMins,
-    node.children.map((c) => minExtent(c, node.split, true, mins)),
+    node.children.map((c) => minExtent(c, node.split, true, mins, size)),
   );
   let at = vertical ? rect.y : rect.x;
   node.children.forEach((child, i) => {
-    const size = sizes[i];
+    const extent = sizes[i];
     const box: Rect = vertical
-      ? { x: rect.x, y: at, w: rect.w, h: size }
-      : { x: at, y: rect.y, w: size, h: rect.h };
-    place(child, box, out, mins);
-    at += size;
+      ? { x: rect.x, y: at, w: rect.w, h: extent }
+      : { x: at, y: rect.y, w: extent, h: rect.h };
+    place(child, box, out, mins, size);
+    at += extent;
     if (i < n - 1) {
       out.handles.push({
         parentId: node.id,
