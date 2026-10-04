@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Terminal } from '@xterm/xterm';
+import { ECHO_CARET } from './maskedInput';
 import {
   closePinRow,
   eraseBack,
@@ -922,5 +923,96 @@ describe('a run of repeated lines the session collapses', () => {
     writer.output(replace(4, `${mark(5)}${count(3, dodge)}\r\n`, true));
     await parsed(writer);
     expect(screen(term)).toEqual([`(3) ${dodge}`]);
+  });
+});
+
+// Mark your commands draws a grey › before your echo, unless the row it
+// lands on already ends in > before the cursor, as a game's own prompt
+// does. The same rules as the native grid's, in
+// src-tauri/src/native/grid/regions.rs. The game lines are Aabahran's own,
+// from tables.c, update.c and the prompt fixtures.
+describe('the mark before your echo', () => {
+  const sends: [string, (writer: RegionWriter, command: string) => void][] = [
+    ['typed', (writer, command) => writer.local(`${ECHO_CARET}${command}\r\n`)],
+    ['quick key', (writer, command) => writer.output({ text: `${ECHO_CARET}${command}\r\n` })],
+  ];
+  const motd = 'Prepare yourself. For you are about to <Enter> the Forsaken Lands!';
+
+  for (const [how, send] of sends) {
+    it(`drops after a login prompt, ${how}`, async () => {
+      const { term, writer } = setup();
+      writer.output({ text: '\n\rAccount name> ' });
+      send(writer, 'Tolliver');
+      writer.output({ text: '\n\rYour choice> ' });
+      send(writer, '1');
+      await parsed(writer);
+      expect(screen(term)).toEqual(['', 'Account name> Tolliver', '', 'Your choice> 1']);
+    });
+
+    it(`drops after your prompt in the text, ${how}`, async () => {
+      const { term, writer } = setup();
+      writer.output({ text: `You are hungry.\r\n${mark(1)}<1020hp 800m 930mv> ` });
+      send(writer, 'look');
+      await parsed(writer);
+      expect(screen(term)).toEqual(['You are hungry.', '<1020hp 800m 930mv> look']);
+    });
+
+    it(`stays on an empty row and after another character, ${how}`, async () => {
+      const { term, writer } = setup(80);
+      writer.output({ text: 'You are hungry.\r\n' });
+      send(writer, 'look');
+      writer.output({ text: motd });
+      send(writer, 'look');
+      await parsed(writer);
+      expect(screen(term)).toEqual(['You are hungry.', '› look', `${motd}› look`]);
+      // A prompt that fills its row sends your echo to the next one.
+      const full = setup(19);
+      full.writer.output({ text: '<1020hp 800m 930mv>' });
+      send(full.writer, 'look');
+      await parsed(full.writer);
+      expect(screen(full.term)).toEqual(['<1020hp 800m 930mv>', '› look']);
+    });
+
+    it(`stays on the row held line ends start, ${how}`, async () => {
+      const { term, writer } = setup();
+      writer.output({ text: '<1020hp 800m 930mv> ', hold: '\r\n' });
+      send(writer, 'look');
+      await parsed(writer);
+      expect(screen(term)).toEqual(['<1020hp 800m 930mv> ', '› look']);
+    });
+
+    it(`stays on the row a pinned prompt left, ${how}`, async () => {
+      const { term, writer } = setup();
+      writer.output({ text: 'You are hungry.', hold: '\r\n\r\n', pinRow: true });
+      send(writer, 'look');
+      await parsed(writer);
+      expect(screen(term)).toEqual(['You are hungry.', '', '› look']);
+    });
+
+    it(`reads the row once the live render is back, ${how}`, async () => {
+      const drawn = '[1020/1020hp 800/800mn 930/930mv] ';
+      const game = '<1020hp 800m 930mv> ';
+      // The card previews your design over the game's own line.
+      const first = setup();
+      first.writer.output({ text: `${mark(1)}${drawn}`, restore: `${mark(1)}${game}` });
+      send(first.writer, 'look');
+      await parsed(first.writer);
+      expect(screen(first.term)).toEqual(['<1020hp 800m 930mv> look']);
+      // The card previews the game's line over your design.
+      const second = setup();
+      second.writer.output({ text: `${mark(1)}${game}`, restore: `${mark(1)}${drawn}` });
+      send(second.writer, 'look');
+      await parsed(second.writer);
+      expect(screen(second.term)).toEqual([`${drawn}› look`]);
+    });
+  }
+
+  it('drops before a bare line end at a login prompt', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: '\n\rYour choice> ' });
+    writer.local(`${ECHO_CARET}\r\n`);
+    writer.output({ text: '\n\rYour choice> ' });
+    await parsed(writer);
+    expect(screen(term)).toEqual(['', 'Your choice> ', '', 'Your choice> ']);
   });
 });

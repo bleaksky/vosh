@@ -46,6 +46,14 @@
 // goes through at once, in the same task, as a drag of a divider and the
 // rows the pinned band lends need. xterm has parsed none of what it
 // holds then, so its flush parses each write once.
+//
+// While Mark your commands is on, your echo, typed or from a quick key,
+// starts with its grey mark. Where the echo lands decides the mark, so it
+// waits for xterm to parse what came before it, held line ends and a
+// restore included. When the row it lands on already ends in `>` before
+// the cursor, as the game's own prompt does, the mark drops.
+
+import { ECHO_CARET } from './maskedInput';
 
 /** The private OSC a region mark uses. */
 export const REGION_OSC = 7717;
@@ -58,10 +66,15 @@ export interface RegionTerminal {
       readonly cursorX: number;
       readonly cursorY: number;
       readonly baseY: number;
-      getLine(
-        y: number,
-      ):
-        | { readonly isWrapped: boolean; translateToString(trimRight?: boolean): string }
+      getLine(y: number):
+        | {
+            readonly isWrapped: boolean;
+            translateToString(
+              trimRight?: boolean,
+              startColumn?: number,
+              endColumn?: number,
+            ): string;
+          }
         | undefined;
     };
   };
@@ -105,6 +118,14 @@ export function showsLines(rows: string[], plain: string): boolean {
 
 function squeeze(text: string): string {
   return text.replace(/\s+/g, '');
+}
+
+/** True when a row that reads `before` up to the cursor already asks for
+ *  your input, as a game's prompt such as `Account name> ` does: it ends
+ *  in `>` once trailing blanks go. Your echo drops its mark there. The
+ *  same rule as ends_in_prompt in src-tauri/src/native/grid/regions.rs. */
+export function endsInPrompt(before: string): boolean {
+  return before.trimEnd().endsWith('>');
 }
 
 /** The most rows the lines above a region are looked for in. */
@@ -494,8 +515,7 @@ export class RegionWriter {
       return;
     }
     if (item.kind === 'local') {
-      this.writeHold();
-      this.write(this.land(item.text));
+      this.landText(item.text);
       return;
     }
     const { replace } = item.out;
@@ -521,7 +541,6 @@ export class RegionWriter {
    *  write, so the marker and cursor can be read. */
   private apply(out: RegionOutput, parsed: boolean): void {
     const { replace } = out;
-    let wrote = false;
     if (replace && parsed) {
       const back = replace.gen === this.openGen ? this.locateAt(replace.gen) : null;
       if (back !== null) {
@@ -540,17 +559,47 @@ export class RegionWriter {
         this.pendingHold = replace.tail ?? '';
       }
     }
-    if (out.text.length > 0) {
-      this.writeHold();
-      this.write(this.land(out.text));
-      wrote = true;
-    }
+    if (out.text.length > 0) this.landText(out.text, () => this.settle(out, true));
+    else this.settle(out, false);
+  }
+
+  /** Keep what `out` says about the line ends to hold, the pinned row and
+   *  the restore, once its text is written. `wrote` says it wrote text. */
+  private settle(out: RegionOutput, wrote: boolean): void {
     const hold = out.hold ?? '';
     if (wrote || hold.length > this.pendingHold.length) this.pendingHold = hold;
     if (out.pinRow !== undefined) this.pinRow = out.pinRow;
     if (out.restore !== undefined && this.openGen !== null) {
       this.restore = { gen: this.openGen, text: out.restore };
     }
+  }
+
+  /** Write `text` at the cursor after the held line ends, then run
+   *  `then`. Your echo waits for xterm to parse what came before it, so
+   *  the row it lands on can decide its mark. */
+  private landText(text: string, then?: () => void): void {
+    this.writeHold();
+    if (!text.startsWith(ECHO_CARET)) {
+      this.write(this.land(text));
+      then?.();
+      return;
+    }
+    this.afterParse(() => {
+      this.write(this.withoutMark(this.land(text)));
+      then?.();
+    });
+  }
+
+  /** Your echo `text` without its mark when the row it lands on already
+   *  ends in `>` before the cursor. A cursor past the last column writes
+   *  on the next row, which holds nothing yet. Call it only once xterm
+   *  has parsed every earlier write. */
+  private withoutMark(text: string): string {
+    const buffer = this.term.buffer.active;
+    const x = buffer.cursorX;
+    if (!text.startsWith(ECHO_CARET) || x >= this.term.cols) return text;
+    const before = buffer.getLine(buffer.baseY + buffer.cursorY)?.translateToString(false, 0, x);
+    return endsInPrompt(before ?? '') ? text.slice(ECHO_CARET.length) : text;
   }
 
   /** `text` as it lands at the cursor: without the line end that would
