@@ -44,7 +44,7 @@ export { PANE_MIN_H };
 //
 // The Affects and Chat panes draw game text at your terminal size
 // (paneTextSize.ts), so their minimums count their rows at that size.
-// The rest draw in the UI face and keep theirs.
+// The rest draw at their own sizes and keep theirs.
 
 export interface Rect {
   x: number;
@@ -97,7 +97,7 @@ export type PaneMins = Partial<Record<PaneType, number>>;
 /** A pane type's stock minimum height with the game text at `size`
  *  px: Affects its header and six rows, and Chat its header and a
  *  body that holds as many messages as at 12 px. Every other pane
- *  draws in the UI face and keeps its PANE_MIN_H entry, as do these
+ *  draws at its own sizes and keeps its PANE_MIN_H entry, as do these
  *  two at 12 px. */
 export function paneMinH(pane: PaneType, size: number = PANE_TEXT_PX): number {
   if (pane === 'affects') return PANE_HEADER_PX + 6 * paneText(size).affectsRow;

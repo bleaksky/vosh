@@ -15,6 +15,7 @@ import {
   sectorForCode,
 } from '../lib/mapPalette';
 import { MAP_STYLE_KEY, loadMapStyle, type MapStyle } from '../lib/mapStyle';
+import { readPanelFace, subscribePanelFace } from '../lib/panelFace';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom } from '../lib/mapZoom';
 import {
   DOOR_COLORS,
@@ -260,7 +261,7 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
     const { rows, cols } = gridDims(tiles);
     if (rows === 0 || cols === 0) {
       ctx.fillStyle = '#6e7681';
-      ctx.font = '12px monospace';
+      ctx.font = `12px ${readPanelFace()}`;
       ctx.fillText('Map.Tiles payload has no grid yet', 10, 22);
       return;
     }
@@ -289,7 +290,19 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
         ground,
       );
     } else if (style === 'squares') {
-      drawSquares(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC, anchor, ground);
+      drawSquares(
+        ctx,
+        cssWidth,
+        cssHeight,
+        tiles,
+        rows,
+        cols,
+        centerR,
+        centerC,
+        anchor,
+        ground,
+        readPanelFace(),
+      );
     }
     // Glyph mode: canvas paints just the background + terrain halo.
     // The actual character grid is rendered via <GlyphsOverlay /> in
@@ -342,6 +355,10 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
       window.removeEventListener('resize', redraw);
     };
   }, []);
+
+  // The labels and marks draw in the panel face, so a new face, or a
+  // face that finishes loading after a paint, paints the map again.
+  useEffect(() => subscribePanelFace(() => drawRef.current()), []);
 
   // Every theme write lands on the root element's inline style, from
   // this window or a broadcast, and so does a change the theme event
@@ -495,6 +512,8 @@ function drawSquares(
   centerC: number,
   anchor: Anchor,
   ground: string,
+  /** The panel face, which the up and down marks draw in. */
+  face: string,
 ) {
   const { pitch, playerX, playerY } = anchor;
   const size = Math.max(8, Math.floor(pitch * 0.55));
@@ -610,7 +629,7 @@ function drawSquares(
       const exits = (cell.e ?? '').toLowerCase();
       if (exits.includes('u') || exits.includes('d')) {
         ctx.fillStyle = MAP_COLORS.text;
-        ctx.font = `${Math.max(7, Math.floor(size * 0.55))}px monospace`;
+        ctx.font = `${Math.max(7, Math.floor(size * 0.55))}px ${face}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         if (exits.includes('u')) {
@@ -844,7 +863,19 @@ function drawTileset(
   if (!image) {
     // Fallback when no tileset is loaded — render with the standard
     // squares style and the line-based off-floor glyphs.
-    drawSquares(ctx, cssWidth, cssHeight, payload, rows, cols, centerR, centerC, anchor, ground);
+    drawSquares(
+      ctx,
+      cssWidth,
+      cssHeight,
+      payload,
+      rows,
+      cols,
+      centerR,
+      centerC,
+      anchor,
+      ground,
+      readPanelFace(),
+    );
     return;
   }
   const tileSize = image.naturalHeight;

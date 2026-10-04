@@ -52,6 +52,8 @@ import {
   promptPreviewSet,
   subscribePromptCardOpen,
   TERMINAL_LINE_HEIGHTS,
+  FONT_CHANGED_EVENT,
+  type FontChange,
   type StatePayload,
   type TerminalLineHeight,
 } from './lib/session';
@@ -62,6 +64,7 @@ import {
   subscribeThemePrefs,
 } from './lib/theme';
 import { loadFontStack, renderFontStack } from './lib/fontLoader';
+import { normalizePanelFont, panelFontFamily, panelFontList } from './lib/panelFont';
 import { PRESETS, presetTriggers } from './lib/presets';
 import { presetLaunchPlan } from './lib/automationRecords';
 import { listenForQuitFlush } from './lib/pendingWrites';
@@ -207,6 +210,15 @@ function App() {
   });
   // The list the terminal draws with, the one the native atlas walks.
   const renderFamily = useMemo(() => renderFontStack(fontFamily), [fontFamily]);
+  // The Panel font, cached like the terminal font so the panes and the
+  // status line paint in it from the first frame.
+  const [panelFont, setPanelFont] = useState(() => {
+    try {
+      return normalizePanelFont(localStorage.getItem('vosh.cache.panelFont'));
+    } catch {
+      return '';
+    }
+  });
   const [fontSize, setFontSize] = useState(() => {
     try {
       const n = Number(localStorage.getItem('vosh.cache.fontSize'));
@@ -947,6 +959,7 @@ function App() {
         applyThemePrefs(cfg, { broadcast: true, broadcastFlips: true });
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
+        setPanelFont(cfg.panel_font);
         setTerminalLineHeight(cfg.terminal_line_height);
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
@@ -1011,6 +1024,7 @@ function App() {
         applyThemePrefs(cfg, { broadcast: true });
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
+        setPanelFont(cfg.panel_font);
         setTerminalLineHeight(cfg.terminal_line_height);
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
@@ -1045,15 +1059,30 @@ function App() {
     }
   }, [fontFamily, renderFamily, fontSize]);
 
+  // The panes and the status line draw in --font-panel, which tokens.css
+  // reads from --panel-font-family: the terminal face, the system face,
+  // or a font you picked, which loads the way the terminal font does.
+  useEffect(() => {
+    const list = panelFontList(panelFont);
+    if (list) loadFontStack(list);
+    document.documentElement.style.setProperty('--panel-font-family', panelFontFamily(panelFont));
+    try {
+      localStorage.setItem('vosh.cache.panelFont', panelFont);
+    } catch {
+      // cache only; config remains the source of truth
+    }
+  }, [panelFont]);
+
   useEffect(() => {
     // Cross-window emit from the settings save path. window CustomEvents
     // do not cross webviews, so we listen via the Tauri event bus here.
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    listen<{ family: string; size: number }>('vosh://font-changed', (event) => {
+    listen<FontChange>(FONT_CHANGED_EVENT, (event) => {
       const detail = event.payload;
       setFontFamily(detail.family || DEFAULT_FONT_FAMILY);
       setFontSize(detail.size || 14);
+      setPanelFont(normalizePanelFont(detail.panel));
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;

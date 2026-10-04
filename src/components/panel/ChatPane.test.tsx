@@ -209,9 +209,10 @@ describe('ChatLog', () => {
 });
 
 describe('the chat line in panel.css', () => {
-  it('sets the log in the terminal face at your terminal size, 17 px lines at 12', () => {
+  it('sets the log in the panel face at your terminal size, 17 px lines at 12', () => {
     const log = rule('.pane-chat-log');
-    expect(log).toContain('font-family: var(--font-mud);');
+    // The face comes from .panel-host (src/lib/panelFont.test.ts).
+    expect(log).not.toContain('font-family');
     expect(log).toContain('font-size: var(--mud-text);');
     expect(log).toContain('line-height: var(--mud-chat-line);');
     expect(log).toContain('padding: 8px 12px 12px 18px;');

@@ -31,6 +31,10 @@
     -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI Variable Text', 'Segoe UI', Cantarell,
     sans-serif;
   --font-mud: var(--app-font-family);
+  /* The panes and the status line, from the Panel font row. The main
+     window writes --panel-font-family (src/lib/panelFont.ts), and until
+     it does they draw in the terminal face, the row's default. */
+  --font-panel: var(--panel-font-family, var(--font-mud));
 
   --r-float: 16px;
   --r-card: 12px;

@@ -193,8 +193,8 @@ describe('paneText', () => {
 });
 
 describe('the game text in panel.css', () => {
-  it('sets every rule in the terminal face at your terminal size', () => {
-    const mono = RULES.filter((r) => /font-family:\s*var\(--font-mud\b/.test(r.body));
+  it('sets every game text rule at your terminal size in the panel face', () => {
+    const mono = RULES.filter((r) => /font-size:\s*var\(--mud-text\)/.test(r.body));
     expect(mono.map((r) => r.selector)).toEqual([
       '.pane-affect-hours',
       '.pane-affect-name',
@@ -204,9 +204,10 @@ describe('the game text in panel.css', () => {
     ]);
     for (const { selector } of mono) {
       const decls = declarations(selector);
-      expect(decls.get('font-size'), selector).toBe('var(--mud-text)');
+      expect(decls.get('font-family'), selector).toBeUndefined();
       expect(decls.get('line-height'), selector).toMatch(/^var\(--mud-(line|chat-line)\)$/);
     }
+    expect(declarations('.panel-host').get('font-family')).toBe('var(--font-panel)');
     expect(TOKENS.get('--mud-text')).toBe('calc(var(--font-mud-px, 12) * 1px)');
     expect(TOKENS.get('--mud-scale')).toBe('calc(var(--font-mud-px, 12) / 12)');
   });
@@ -265,7 +266,7 @@ describe('liveChipMeasure', () => {
     vi.unstubAllGlobals();
   });
 
-  it('measures names and hours in the terminal face at your size', () => {
+  it('measures every chip text in the panel face, names and hours at your size', () => {
     const fonts: string[] = [];
     const ctx = {
       font: '',
@@ -281,7 +282,7 @@ describe('liveChipMeasure', () => {
       createElement: () => ({ getContext: () => ctx }),
     });
     vi.stubGlobal('getComputedStyle', () => ({
-      getPropertyValue: (name: string) => (name === '--font-mud' ? 'Menlo, monospace' : ''),
+      getPropertyValue: (name: string) => (name === '--font-panel' ? 'Menlo, monospace' : ''),
     }));
     const at16 = liveChipMeasure(16);
     at16.mono('sanctuary');
@@ -292,8 +293,8 @@ describe('liveChipMeasure', () => {
     expect(fonts).toEqual([
       '16px Menlo, monospace',
       '700 16px Menlo, monospace',
-      '600 11px system-ui, sans-serif',
-      '12px system-ui, sans-serif',
+      '600 11px Menlo, monospace',
+      '12px Menlo, monospace',
       '12px Menlo, monospace',
     ]);
   });

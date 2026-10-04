@@ -316,6 +316,24 @@ describe('broadcastUiConfigChanges theme events', () => {
   });
 });
 
+describe('broadcastUiConfigChanges font event', () => {
+  it('sends the panel font with the terminal font when only the panel font changes', async () => {
+    const sent = vi.mocked(emit);
+    const base = normalizeUiConfig(raw({ font_size: 14 }));
+    await broadcastUiConfigChanges(base);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, panel_font: 'system' });
+    expect(sent).toHaveBeenCalledWith('vosh://font-changed', {
+      family: base.font_family,
+      size: 14,
+      panel: 'system',
+    });
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, panel_font: 'system' });
+    expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://font-changed');
+  });
+});
+
 describe('own theme echoes', () => {
   it('knows the theme this window just sent', async () => {
     const base = normalizeUiConfig(raw({ theme: 'nord' }));

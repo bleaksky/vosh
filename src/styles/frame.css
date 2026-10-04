@@ -373,8 +373,9 @@
 
 /* ── Status line ───────────────────────────────────────────────────── */
 
-/* SPEC 10 G4: the UI face at 12, tertiary, tabular numbers, items 20
-   apart with no separators. */
+/* SPEC 10 G4: 12 px, tertiary, tabular numbers, items 20 apart with no
+   separators. It draws in the panel face, the Panel font row's pick,
+   like the panes. */
 .shell-statusline {
   display: flex;
   align-items: center;
@@ -383,7 +384,7 @@
   padding: 0 16px;
   box-sizing: border-box;
   overflow: hidden;
-  font-family: var(--font-ui);
+  font-family: var(--font-panel);
   font-size: 12px;
   line-height: 16px;
   font-weight: 400;

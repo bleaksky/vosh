@@ -2364,6 +2364,22 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
 let lastSentConfig: UiConfig | null = null;
 
 const TERMINAL_LINE_HEIGHT_EVENT = 'vosh://terminal-line-height-changed';
+
+/** The terminal font, its size, and the panel font, which Settings sends
+ *  every window together. */
+export const FONT_CHANGED_EVENT = 'vosh://font-changed';
+
+/** What FONT_CHANGED_EVENT carries. */
+export interface FontChange {
+  family: string;
+  size: number;
+  /** The Panel font as saved (panelFont.ts). */
+  panel: string;
+}
+
+function fontChangeOf(config: UiConfig): FontChange {
+  return { family: config.font_family, size: config.font_size, panel: config.panel_font };
+}
 const BLINK_TEXT_EVENT = 'vosh://blink-text-changed';
 const VITALS_DENSITY_EVENT = 'vosh://vitals-density-changed';
 const VITALS_OPTIONS_EVENT = 'vosh://vitals-options-changed';
@@ -2419,11 +2435,11 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   const prevShown = prev ? resolveActiveTheme(prev, systemDark) : undefined;
   if (shown !== prevShown) noteThemeEcho(shown);
   await emitChanged('vosh://theme-changed', shown, prevShown);
-  await emitChanged(
-    'vosh://font-changed',
-    { family: config.font_family, size: config.font_size },
-    prev ? { family: prev.font_family, size: prev.font_size } : undefined,
-    (a, b) => a.family === b.family && a.size === b.size,
+  await emitChanged<FontChange>(
+    FONT_CHANGED_EVENT,
+    fontChangeOf(config),
+    prev ? fontChangeOf(prev) : undefined,
+    (a, b) => a.family === b.family && a.size === b.size && a.panel === b.panel,
   );
   await emitChanged(
     TERMINAL_LINE_HEIGHT_EVENT,

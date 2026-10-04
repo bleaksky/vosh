@@ -1092,16 +1092,15 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 
 /* HTML glyph overlay. Sits absolutely positioned over the canvas
    and is translated so the player cell (`@`) lands at the host's
-   geometric center. Uses the app's monospace font so each cell tiles
-   in real terminal-cell pitch (1ch × 1em), matching tintin's
-   character-grid map. The translate baseline is (50%, 50%) of the
-   host; the inline transform on .map-glyph-grid shifts the grid by
-   (-playerCol * 1ch, -playerRow * 1em) to land the player there. */
+   geometric center. It draws in the Map pane's face, the panel face,
+   and every cell keeps a box in em, so any font tiles, matching
+   tintin's character-grid map. The translate baseline is (50%, 50%) of
+   the host; the inline transform on .map-glyph-grid shifts the grid by
+   (-playerCol * 1em, -playerRow * 1em) to land the player there. */
 .map-glyph-grid {
   position: absolute;
   left: 50%;
   top: 50%;
-  font-family: var(--font-mono);
   font-weight: 700;
   line-height: 1;
   white-space: pre;

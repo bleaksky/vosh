@@ -24,7 +24,7 @@ import { usePaneText } from './paneTextSize';
 // The at a glance checklist, board Affects A, timers first. Two columns
 // of 22 px rows at 12 px, taller at a larger terminal size, each the
 // hours left in a right aligned column and then the name exactly as
-// the game sends it, both in the terminal face. The column is three
+// the game sends it, both at your terminal size. The column is three
 // digits wide, wider while a longer count shows. The game's own marks
 // stand in for the hours, `+` permanent and `-` missing. Your tracked
 // affects keep the slots you set in Characters, each with a dot that

@@ -3,11 +3,15 @@
    mockups' (Main, PanelTabs, Combat, Session), colors are tokens only.
    Dense rows are 22 px, pane headers 28 px, text starts at x 18, and
    a row with a status marker puts the 8 px marker at x 18 and its
-   text at x 34. Game text in the terminal face follows your terminal
-   size, and the rows that hold it scale with it (.panel-host). */
+   text at x 34. Every pane draws in the panel face, which the Panel
+   font row picks and which is your terminal font until you pick
+   another. Game text follows your terminal size, and the rows that
+   hold it scale with it (.panel-host). */
 
 /* The shell's panel slot supplies the ground, the 1 px left edge, and
-   the band's 32 px above the first pane. */
+   the band's 32 px above the first pane. Every pane's text, the labels
+   and counts with the game text, takes the panel face from here, so no
+   rule under it names a face of its own. */
 .panel-host {
   position: relative;
   display: flex;
@@ -17,7 +21,7 @@
   min-height: 0;
   overflow: hidden;
   color: var(--text);
-  font-family: var(--font-ui);
+  font-family: var(--font-panel);
   font-size: 12px;
   line-height: 16px;
   font-weight: 400;
@@ -335,7 +339,7 @@
 /* Board Affects A, timers first. Two columns 16 apart on 22 px rows
    at 12 px, 18 in from the left and 12 from the right. In each cell the mark
    sits at x 0, the hours right aligned in a column of three cells from
-   x 14, and the name 8 after them, both in the terminal face. While a
+   x 14, and the name 8 after them, both at your terminal size. While a
    longer count shows, AffectsPane sets --affect-hours-ch on the body
    and every cell's column widens to fit it. */
 .pane-affects-grid {
@@ -410,7 +414,6 @@
   min-width: calc(var(--affect-hours-ch, 3) * 1ch);
   margin-left: 14px;
   text-align: right;
-  font-family: var(--font-mud, ui-monospace, monospace);
   font-size: var(--mud-text);
   line-height: var(--mud-line);
   font-weight: 500;
@@ -434,7 +437,6 @@
   margin-left: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: var(--font-mud, ui-monospace, monospace);
   font-size: var(--mud-text);
   line-height: var(--mud-line);
   white-space: nowrap;
@@ -536,8 +538,8 @@
   height: var(--mud-affects-row);
 }
 
-/* The count of what does not fit, set in the UI face where the names
-   start, after an empty hours column as wide as every other cell's. */
+/* The count of what does not fit, at 12 px where the names start,
+   after an empty hours column as wide as every other cell's. */
 .pane-affects-more {
   display: flex;
   align-items: center;
@@ -617,7 +619,6 @@
   align-items: center;
   height: calc(var(--mud-line) + 1px);
   padding: 1px 0 0 14px;
-  font-family: var(--font-mud, ui-monospace, monospace);
   font-size: var(--mud-text);
   line-height: var(--mud-line);
 }
@@ -827,7 +828,7 @@
 }
 
 /* A chip: 20 tall at 12 px, 7 px each side, radius 4, the name and 6
-   px after it the hours, in the terminal face. Its ground is the track, and
+   px after it the hours, at your terminal size. Its ground is the track, and
    while its gauge drains, the gauge over it from the left, as wide as
    --gauge of the chip. A 1 px inset ring shows the edge. Every tone
    mixes a theme token. */
@@ -842,7 +843,6 @@
   height: var(--mud-chip);
   padding: 0 7px;
   border-radius: 4px;
-  font-family: var(--font-mud, ui-monospace, monospace);
   font-size: var(--mud-text);
   line-height: var(--mud-line);
   white-space: nowrap;
@@ -1275,13 +1275,12 @@
   );
 }
 
-/* Messages are MUD text, so they sit in the terminal face at your
-   terminal size, on 17 px lines 3 apart at 12 px. */
+/* Messages are MUD text, so they sit at your terminal size, on 17 px
+   lines 3 apart at 12 px. */
 .pane-chat-log {
   margin: auto 0 0;
   padding: 8px 12px 12px 18px;
   list-style: none;
-  font-family: var(--font-mud);
   font-size: var(--mud-text);
   line-height: var(--mud-chat-line);
 }
@@ -1492,6 +1491,8 @@
 
 /* ── Pane menus (SPEC 7 menu recipe) ─────────────────────────────── */
 
+/* Menus keep the system face whatever the Panel font, like every other
+   menu. */
 .pane-menu {
   --menu-hi: rgba(255, 255, 255, 0.08);
   position: fixed;
