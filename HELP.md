@@ -333,7 +333,7 @@ Scripts talk to Vosh through the global `mud` table. `mud.send(text)` goes strai
 
 Loads from `#script load` last for the session. For autoload, make a plugin. Create `plugins/<slug>/` under the app data directory with a `manifest.toml` naming the plugin and its entry script, `main.lua` by default. To turn a plugin on, add its name to `enabled` under `[plugins]` in your profile file while Vosh is closed, like `enabled = ["vitals_alert"]`. Every plugin on that list loads at launch, and removing a name turns that plugin off from the next launch.
 
-Every Lua error and every `print` shows in the terminal after a gray `[lua]` tag. An error names its file and line, like `combat.lua:3:`, and shows in red. What a plugin prints as it loads at launch shows once you connect or type a line.
+Every Lua error and every `print` shows in the terminal after a gray `[lua]` tag. An error names its place, like `combat.lua:3:` for line 3 of `combat.lua`, and shows in red. What a plugin prints as it loads at launch shows once you connect or type a line.
 
 Lua runs between the lines the game sends, so Vosh keeps each call short. It stops a call that runs past 100 ms, uses 32 MB more than it began with, or takes your scripts past 128 MB in all, and `pcall` cannot catch the stop. A stopped call sends nothing it queued, and a red `[lua]` line says what Vosh stopped. A plugin then stays off until you restart Vosh, a script from `#script load` until `#script reload`, and a trigger or alias whose Lua ran away until you save it or restart Vosh. One call may queue 100 actions, such as sends and echoes, and Vosh drops the rest with a line that says so.
 
