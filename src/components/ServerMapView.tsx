@@ -15,7 +15,7 @@ import {
   sectorForCode,
 } from '../lib/mapPalette';
 import { MAP_STYLE_KEY, loadMapStyle, type MapStyle } from '../lib/mapStyle';
-import { readPanelFace, readPanelTextPx, subscribePanelFace } from '../lib/panelFace';
+import { readPanelMarkFace, readPanelTextPx, subscribePanelFace } from '../lib/panelFace';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom } from '../lib/mapZoom';
 import {
   DOOR_COLORS,
@@ -264,7 +264,7 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
       // The notice draws at the panel size, 12 px on a 12 px panel.
       const px = readPanelTextPx();
       ctx.fillStyle = '#6e7681';
-      ctx.font = `${px}px ${readPanelFace()}`;
+      ctx.font = `${px}px ${readPanelMarkFace()}`;
       ctx.fillText('Map.Tiles payload has no grid yet', 10, textPx(22, px));
       return;
     }
@@ -304,7 +304,7 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
         centerC,
         anchor,
         ground,
-        readPanelFace(),
+        readPanelMarkFace(),
       );
     }
     // Glyph mode: canvas paints just the background + terrain halo.
@@ -359,8 +359,8 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
     };
   }, []);
 
-  // The labels and marks draw in the panel face at the panel size, so a
-  // new face or size, or a face that finishes loading after a paint,
+  // The labels and marks draw in the panel faces at the panel size, so
+  // a new face or size, or a face that finishes loading after a paint,
   // paints the map again.
   useEffect(() => subscribePanelFace(() => drawRef.current()), []);
 
@@ -516,7 +516,7 @@ function drawSquares(
   centerC: number,
   anchor: Anchor,
   ground: string,
-  /** The panel face, which the up and down marks draw in. */
+  /** The mark face, which the up and down marks draw in. */
   face: string,
 ) {
   const { pitch, playerX, playerY } = anchor;
@@ -878,7 +878,7 @@ function drawTileset(
       centerC,
       anchor,
       ground,
-      readPanelFace(),
+      readPanelMarkFace(),
     );
     return;
   }

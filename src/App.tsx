@@ -1083,13 +1083,18 @@ function App() {
     }
   }, [fontFamily, renderFamily, fontSize]);
 
-  // The panes and the status line draw in --font-panel, which tokens.css
-  // reads from --panel-font-family: the terminal face, the system face,
-  // or a font you picked, which loads the way the terminal font does.
+  // The panes and the status line draw in the panel faces, which
+  // tokens.css reads from --panel-font-family: nothing under As designed,
+  // where each keeps the face it was designed in, or the terminal face,
+  // the system face, or a font you picked, which loads the way the
+  // terminal font does.
   useEffect(() => {
     const list = panelFontList(panelFont);
     if (list) loadFontStack(list);
-    document.documentElement.style.setProperty('--panel-font-family', panelFontFamily(panelFont));
+    const family = panelFontFamily(panelFont);
+    const root = document.documentElement.style;
+    if (family === null) root.removeProperty('--panel-font-family');
+    else root.setProperty('--panel-font-family', family);
     try {
       localStorage.setItem('vosh.cache.panelFont', panelFont);
     } catch {

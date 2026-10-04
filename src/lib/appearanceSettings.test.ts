@@ -60,13 +60,15 @@ describe('fontLabel', () => {
 });
 
 describe('panelFontChoices', () => {
-  it('offers the terminal font and the system font, then the Font list', () => {
+  it('offers As designed, the terminal font and the system font, then the Font list', () => {
     const choices = panelFontChoices('', installed);
-    expect(choices.slice(0, 2)).toEqual([
-      { value: '', label: 'Same as terminal' },
+    expect(choices.slice(0, 3)).toEqual([
+      { value: '', label: 'As designed' },
+      { value: 'terminal', label: 'Same as terminal' },
       { value: 'system', label: 'System font' },
     ]);
-    expect(choices.slice(2)).toEqual(fontChoices('', installed));
+    expect(choices.slice(3)).toEqual(fontChoices('', installed));
+    expect(panelFontChoices('terminal', installed)).toEqual(choices);
     expect(panelFontChoices('system', installed)).toEqual(choices);
   });
 
@@ -76,7 +78,7 @@ describe('panelFontChoices', () => {
       { label: 'Menlo', value: picked },
     ]);
     const gone = '"PT Mono", Menlo, monospace';
-    expect(panelFontChoices(gone, installed)[2]).toEqual({ label: 'PT Mono', value: gone });
+    expect(panelFontChoices(gone, installed)[3]).toEqual({ label: 'PT Mono', value: gone });
   });
 });
 

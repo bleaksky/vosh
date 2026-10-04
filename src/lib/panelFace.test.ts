@@ -1,15 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// Just what the store reads of a page: the face and the size on the
+// Just what the store reads of a page: the faces and the size on the
 // root, the font loads, and the root's style changes.
-function page(face: string, px = '') {
-  const root = { face, px };
+function page(face: string, px = '', game = '', mark = '') {
+  const root = { face, px, game, mark };
   const fonts = new EventTarget();
   let mutated: (() => void) | null = null;
   vi.stubGlobal('document', { documentElement: root, fonts });
   vi.stubGlobal('getComputedStyle', (el: typeof root) => ({
     getPropertyValue: (name: string) => {
       if (name === '--font-panel') return ` ${el.face}`;
+      if (name === '--font-panel-game') return ` ${el.game}`;
+      if (name === '--font-panel-mark') return ` ${el.mark}`;
       if (name === '--panel-text-px') return el.px;
       return '';
     },
@@ -26,6 +28,10 @@ function page(face: string, px = '') {
   return {
     setFace(next: string) {
       root.face = next;
+      mutated?.();
+    },
+    setGame(next: string) {
+      root.game = next;
       mutated?.();
     },
     setPx(next: string) {
@@ -48,10 +54,12 @@ describe('the panel face', () => {
     vi.unstubAllGlobals();
   });
 
-  it('reads the face the panes draw in off the root', async () => {
-    page('"Iosevka", Menlo, monospace');
-    const { readPanelFace } = await store();
-    expect(readPanelFace()).toBe('"Iosevka", Menlo, monospace');
+  it('reads each face the panes draw in off the root', async () => {
+    page('system-ui, sans-serif', '', '"Iosevka", Menlo, monospace', 'monospace');
+    const { readPanelFace, readPanelGameFace, readPanelMarkFace } = await store();
+    expect(readPanelFace()).toBe('system-ui, sans-serif');
+    expect(readPanelGameFace()).toBe('"Iosevka", Menlo, monospace');
+    expect(readPanelMarkFace()).toBe('monospace');
   });
 
   it('reads the panel size off the root, and 12 with none there', async () => {
@@ -64,10 +72,12 @@ describe('the panel face', () => {
     expect((await store()).readPanelTextPx()).toBe(12);
   });
 
-  it('falls back to a monospace face with nothing on the root', async () => {
+  it('falls back to the faces As designed draws in with nothing on the root', async () => {
     page('');
-    const { readPanelFace } = await store();
-    expect(readPanelFace()).toBe('ui-monospace, monospace');
+    const { readPanelFace, readPanelGameFace, readPanelMarkFace } = await store();
+    expect(readPanelFace()).toBe('system-ui, sans-serif');
+    expect(readPanelGameFace()).toBe('ui-monospace, monospace');
+    expect(readPanelMarkFace()).toBe('monospace');
   });
 
   it('counts up when a face loads and when the face changes, so measures run again', async () => {
@@ -94,8 +104,13 @@ describe('the panel face', () => {
     at.setPx('16');
     expect(panelFaceVersion()).toBe(3);
 
+    // So does a new game face, as a new terminal font gives under As
+    // designed.
+    at.setGame('Menlo, monospace');
+    expect(panelFaceVersion()).toBe(4);
+
     stop();
     at.loaded();
-    expect(heard).toHaveBeenCalledTimes(3);
+    expect(heard).toHaveBeenCalledTimes(4);
   });
 });

@@ -31,10 +31,20 @@
     -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI Variable Text', 'Segoe UI', Cantarell,
     sans-serif;
   --font-mud: var(--app-font-family);
-  /* The panes and the status line, from the Panel font row. The main
-     window writes --panel-font-family (src/lib/panelFont.ts), and until
-     it does they draw in the terminal face, the row's default. */
-  --font-panel: var(--panel-font-family, var(--font-mud));
+  /* The panes and the status line, one name for each face they were
+     designed in. Under Panel text Font As designed, the default, the
+     main window writes no --panel-font-family (src/lib/panelFont.ts)
+     and each keeps its own: --font-panel the system face for the
+     headers, labels, counts, rows, the vitals and the status line,
+     --font-panel-game the terminal face for the game text, the affects,
+     the countdown lines, the chips and chat, --font-panel-glyph the
+     bundled monospace face for the glyph map, and --font-panel-mark the
+     monospace the map canvas draws its up and down marks and its notice
+     in. Any other pick writes one face, and all four draw in it. */
+  --font-panel: var(--panel-font-family, var(--font-ui));
+  --font-panel-game: var(--panel-font-family, var(--font-mud));
+  --font-panel-glyph: var(--panel-font-family, var(--font-mono));
+  --font-panel-mark: var(--panel-font-family, monospace);
 
   --r-float: 16px;
   --r-card: 12px;

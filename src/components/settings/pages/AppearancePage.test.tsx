@@ -499,13 +499,15 @@ describe('AppearancePage', () => {
     expect(same.label).not.toContain('Panel font');
     expect(same.label).toContain('Every pane and the status line under the terminal draw in it.');
     expect(same.value).toBe('');
-    // The terminal font, the system font, then the list Font offers.
-    expect(same.options.slice(0, 2)).toEqual([
-      { label: 'Same as terminal', value: '' },
+    // As designed, the default, the terminal font, the system font, then
+    // the list Font offers.
+    expect(same.options.slice(0, 3)).toEqual([
+      { label: 'As designed', value: '' },
+      { label: 'Same as terminal', value: 'terminal' },
       { label: 'System font', value: 'system' },
     ]);
-    expect(same.options.slice(2).map((o) => o.label)).toEqual(same.font.map((o) => o.label));
-    expect(same.options.slice(2).map((o) => o.label)).toEqual([
+    expect(same.options.slice(3).map((o) => o.label)).toEqual(same.font.map((o) => o.label));
+    expect(same.options.slice(3).map((o) => o.label)).toEqual([
       'JetBrains Mono',
       'Menlo',
       'PT Mono',
@@ -515,6 +517,11 @@ describe('AppearancePage', () => {
 
     const system = await panelRow('panel-font', { ...config(), panel_font: 'system' });
     expect(system.value).toBe('system');
+    const terminal = await panelRow('panel-font', config(), 'terminal');
+    expect(terminal.saved?.panel_font).toBe('terminal');
+    const designed = await panelRow('panel-font', { ...config(), panel_font: 'terminal' }, '');
+    expect(designed.value).toBe('terminal');
+    expect(designed.saved?.panel_font).toBe('');
     const menlo = '"Menlo", Menlo, monospace';
     const picked = await panelRow('panel-font', { ...config(), panel_font: menlo });
     expect(picked.value).toBe(menlo);

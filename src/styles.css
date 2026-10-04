@@ -1092,8 +1092,9 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 
 /* HTML glyph overlay. Sits absolutely positioned over the canvas
    and is translated so the player cell (`@`) lands at the host's
-   geometric center. It draws in the Map pane's face, the panel face,
-   and every cell keeps a box in em, so any font tiles, matching
+   geometric center. It draws in the glyph face, the bundled monospace
+   face under As designed and the panel face under any other Panel
+   font, and every cell keeps a box in em, so any font tiles, matching
    tintin's character-grid map. The translate baseline is (50%, 50%) of
    the host; the inline transform on .map-glyph-grid shifts the grid by
    (-playerCol * 1em, -playerRow * 1em) to land the player there. */
@@ -1101,6 +1102,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   position: absolute;
   left: 50%;
   top: 50%;
+  font-family: var(--font-panel-glyph);
   font-weight: 700;
   line-height: 1;
   white-space: pre;
