@@ -216,7 +216,7 @@ impl SessionHandle {
     /// game. The loop says it disconnected just before it ends, so a test
     /// waits on this to know the session is gone. Such a test also
     /// accepts an empty slot, in case the ended session cleared it.
-    #[cfg(all(test, native_surface))]
+    #[cfg(test)]
     pub(crate) fn has_ended(&self) -> bool {
         self.tx_outgoing.is_closed()
     }

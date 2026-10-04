@@ -8,8 +8,8 @@
 //! each step hands on before that, so one driver for both would change
 //! what they feed.
 //!
-//! A test that builds or reads the native grid, and a helper only such
-//! tests use, builds only where the grid does, behind `native_surface`.
+//! The tests that build or read the native grid run on every platform,
+//! since the grid builds for the tests even where the renderer does not.
 
 use std::time::Duration;
 
@@ -37,7 +37,6 @@ mod collapse;
 mod effects;
 mod gmcp;
 mod log_sink;
-#[cfg(native_surface)]
 mod pointer;
 mod preview;
 mod repaint;
@@ -118,7 +117,6 @@ fn cuts(bytes: &[u8]) -> Vec<usize> {
 /// The streams the pinned screens are checked on: every wire fixture,
 /// and pulses the fake game writes back to back into one read, so two
 /// prompts pin in one read at many of the cuts.
-#[cfg(native_surface)]
 fn pinned_streams() -> Vec<(String, Vec<u8>, &'static str)> {
     use vosh_prompt::testkit::{Build, Mud, Options};
     let mut streams: Vec<(String, Vec<u8>, &'static str)> = vosh_prompt::testkit::wire::CASES
@@ -193,7 +191,6 @@ impl Session {
     /// Output from outside a read, as `emit_output` writes it: a tick
     /// warning, a timer's echo, a slash command's reply. The next read
     /// sees it landed.
-    #[cfg(native_surface)]
     fn emitted(&mut self, bytes: &[u8]) -> Output {
         self.other = true;
         let mut out = Output::new(false);
@@ -306,7 +303,6 @@ struct Wire {
     p: Profile,
     acc: LineAccumulator,
     /// The telnet parser, for reads of raw wire bytes.
-    #[cfg(native_surface)]
     parser: vosh_protocol::telnet::Parser,
     /// The first generation this wire hands out, so tests can name
     /// the marks by number.
@@ -318,7 +314,6 @@ impl Wire {
         let mut wire = Self {
             p,
             acc: LineAccumulator::new(),
-            #[cfg(native_surface)]
             parser: vosh_protocol::telnet::Parser::new(),
             gen0: 0,
         };
@@ -397,7 +392,6 @@ impl Wire {
     /// the Line pass, each GMCP packet through the GMCP step, and a
     /// GA or EOR through the marker step. Then the end of the read,
     /// and the hold's deadline before the next one.
-    #[cfg(native_surface)]
     fn read_wire(&mut self, data: &[u8]) -> vosh_prompt::stage::Output {
         let mut batch = ReadBatch::new(crate::output::output_count());
         batch.out = vosh_prompt::stage::Output::new(false);
@@ -433,7 +427,6 @@ impl Wire {
 
     /// One socket read of `events` in order, as the session handles
     /// them, then the end of the read.
-    #[cfg(native_surface)]
     fn read_events(&mut self, events: &[Ev]) -> vosh_prompt::stage::Output {
         let mut batch = ReadBatch::new(crate::output::output_count());
         let now = tokio::time::Instant::now();
@@ -459,7 +452,6 @@ impl Wire {
 }
 
 /// One event of a socket read.
-#[cfg(native_surface)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Ev {
     Data(Vec<u8>),
@@ -474,7 +466,6 @@ fn payload(out: &Output) -> Option<String> {
 }
 
 /// The rows a grid shows, trimmed, up to the last row that shows anything.
-#[cfg(native_surface)]
 fn rows_of(grid: &crate::native::grid::TermGrid) -> Vec<String> {
     let mut rows: Vec<String> = (0..grid.screen_lines())
         .map(|line| grid.row_string(line).trim_end().to_string())

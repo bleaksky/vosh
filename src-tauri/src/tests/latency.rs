@@ -381,7 +381,8 @@ async fn the_log_keeps_every_row_in_stream_order() {
 
 /// Your typed echo lands on the native grid on the row after the prompt
 /// the GA ended, and the game's reply after it, whichever frame draws
-/// them.
+/// them. The echo reaches the grid only where the surface draws it.
+#[cfg(native_surface)]
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn your_echo_sits_between_the_prompt_and_the_reply_on_screen() {

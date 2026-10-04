@@ -73,7 +73,6 @@ fn plain(ansi: &str) -> String {
 }
 
 /// What the game sends: bytes with a GA wherever `*` stands.
-#[cfg(native_surface)]
 fn stream(text: &str) -> Vec<Ev> {
     let mut events = Vec::new();
     for (i, part) in text.split('*').enumerate() {
@@ -89,7 +88,6 @@ fn stream(text: &str) -> Vec<Ev> {
 
 /// `events` cut into two reads after `at` bytes, a GA counting as
 /// one.
-#[cfg(native_surface)]
 fn split_reads(events: &[Ev], at: usize) -> [Vec<Ev>; 2] {
     let mut reads: [Vec<Ev>; 2] = [Vec::new(), Vec::new()];
     let mut seen = 0;
@@ -115,7 +113,6 @@ fn split_reads(events: &[Ev], at: usize) -> [Vec<Ev>; 2] {
 }
 
 /// How many cuts `events` has, a GA counting as one byte.
-#[cfg(native_surface)]
 fn stream_len(events: &[Ev]) -> usize {
     events
         .iter()
@@ -128,7 +125,6 @@ fn stream_len(events: &[Ev]) -> usize {
 
 /// The screen a native grid `columns` wide shows after `reads`, rows
 /// trimmed, up to the last row that shows anything.
-#[cfg(native_surface)]
 fn screen_of(profile: &dyn Fn() -> Profile, columns: usize, reads: &[Vec<Ev>]) -> Vec<String> {
     let mut wire = Wire::new(profile());
     let mut grid = crate::native::grid::TermGrid::new(columns, 40);
@@ -147,7 +143,6 @@ fn screen_of(profile: &dyn Fn() -> Profile, columns: usize, reads: &[Vec<Ev>]) -
 /// Cut `text` into two reads at every byte, and check each screen is
 /// the one a single read gives, at 40 and 12 wide, for the profile
 /// `profile` makes. Returns the 40 wide screen.
-#[cfg(native_surface)]
 fn same_at_every_split(profile: &dyn Fn() -> Profile, text: &str) -> Vec<String> {
     let events = stream(text);
     let mut wide = Vec::new();
@@ -431,7 +426,6 @@ fn a_ga_on_a_partial_that_grew_after_its_paint_writes_the_whole_of_it() {
     assert!(leftover.is_empty(), "{leftover:?}");
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_game_prompt_nothing_reads_shows_whole_wherever_the_reads_split() {
     let screen = same_at_every_split(
@@ -471,7 +465,6 @@ fn a_prompt_whole_before_its_line_end_keeps_the_line_end() {
     );
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_prompt_that_settles_draws_the_same_wherever_the_reads_split() {
     let draws = || settling_profile(true);
@@ -505,7 +498,6 @@ fn a_prompt_that_settles_draws_the_same_wherever_the_reads_split() {
     );
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_prompt_that_waits_for_its_line_end_draws_the_same_wherever_the_reads_split() {
     // The migrated capture on a prompt ending in %c, which the game
@@ -1215,7 +1207,6 @@ fn a_design_that_reads_the_tank_takes_over_the_whole_block() {
     }
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_tank_block_draws_the_same_wherever_the_reads_split() {
     // The game follows a prompt ending in %c with a space and a GA,
@@ -1388,7 +1379,6 @@ fn drawing_off_on_a_tank_block_brings_back_only_the_line_it_replaced() {
     );
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_ga_after_prompt_all_draws_in_the_same_and_the_next_read() {
     let profile = || codes_profile("%n%P%C<%hhp %mm %vmv> ", HP);
@@ -1411,7 +1401,6 @@ fn a_ga_after_prompt_all_draws_in_the_same_and_the_next_read() {
     );
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_held_line_the_rest_never_follows_shows_as_any_line() {
     let text = format!("{TANK_LINE}\n\rYou are hungry.\n\r{FIGHT_LINE}\n\r");
@@ -1546,7 +1535,6 @@ fn with_drawing_off_every_line_that_shows_is_logged_and_kept() {
     assert_eq!(kept, bytes_of(&[TANK_LINE]));
 }
 
-#[cfg(native_surface)]
 #[test]
 fn prompt_all_settles_with_its_tank_line_in_one_read() {
     let mut wire = Wire::new(codes_profile("%n%P%C<%hhp %mm %vmv> ", HP));
@@ -1722,14 +1710,12 @@ fn an_empty_setting_draws_over_the_fallback() {
 
 /// A profile that reads Aabahran's codes `prompt` on a connection to
 /// the fake game on a local port, and draws `<%hp>` in its place.
-#[cfg(native_surface)]
 fn fake_profile(prompt: &str) -> Profile {
     profile(prompt, HP, true)
 }
 
 /// The screen a native grid `columns` wide shows after `reads` of raw
 /// wire bytes, rows trimmed, up to the last row that shows anything.
-#[cfg(native_surface)]
 fn wire_screen(wire: &mut Wire, columns: usize, reads: &[&[u8]]) -> Vec<String> {
     let mut grid = crate::native::grid::TermGrid::new(columns, 60);
     for read in reads {
@@ -1748,7 +1734,6 @@ fn wire_screen(wire: &mut Wire, columns: usize, reads: &[&[u8]]) -> Vec<String> 
 /// names, at 40 and 12 wide, and check each screen is the one a single
 /// read gives. Returns the 80 wide screen of one read and the wire
 /// that read it.
-#[cfg(native_surface)]
 fn wire_same_at_every_split(profile: &dyn Fn() -> Profile, bytes: &[u8]) -> (Vec<String>, Wire) {
     for columns in [40, 12] {
         let whole = wire_screen(&mut Wire::new(profile()), columns, &[bytes]);
@@ -1767,19 +1752,16 @@ fn wire_same_at_every_split(profile: &dyn Fn() -> Profile, bytes: &[u8]) -> (Vec
 }
 
 /// Every value lamented tears hides, as `session://hidden` reports it.
-#[cfg(native_surface)]
 fn all_hidden() -> serde_json::Value {
     serde_json::json!({"vitals": true, "tank": true, "opponent": true, "affects": true, "group": true})
 }
 
-#[cfg(native_surface)]
 const ROOM: [&str; 3] = [
     "The Bank of Aabahran",
     "  Marble counters line the hall, and a clerk nods at you.",
     "[Exits: south]",
 ];
 
-#[cfg(native_surface)]
 #[test]
 fn the_quiet_wire_draws_its_prompt_at_every_split() {
     let bytes = wire_fixture("quiet");
@@ -1790,7 +1772,6 @@ fn the_quiet_wire_draws_its_prompt_at_every_split() {
     assert_eq!(wire.p.prompt.status(), vosh_prompt::Status::Matching);
 }
 
-#[cfg(native_surface)]
 #[test]
 fn the_fight_wire_reads_the_tank_block_at_every_split() {
     let bytes = wire_fixture("fight-tank");
@@ -1819,7 +1800,6 @@ fn the_fight_wire_reads_the_tank_block_at_every_split() {
     assert_eq!(screen[3..], ["Tester 75% <765>"]);
 }
 
-#[cfg(native_surface)]
 #[test]
 fn each_lament_wire_hides_what_the_song_hides_at_every_split() {
     for (name, battle) in [
@@ -1861,7 +1841,6 @@ fn each_lament_wire_hides_what_the_song_hides_at_every_split() {
     );
 }
 
-#[cfg(native_surface)]
 #[test]
 fn prompt_all_that_the_next_pulse_completes_draws_both_prompts() {
     let bytes = wire_fixture("prompt-all-next");
@@ -1881,7 +1860,6 @@ fn prompt_all_that_the_next_pulse_completes_draws_both_prompts() {
     );
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_ga_after_prompt_all_draws_with_no_flash_at_every_split() {
     let bytes = wire_fixture("ga");
@@ -1893,7 +1871,6 @@ fn a_ga_after_prompt_all_draws_with_no_flash_at_every_split() {
     assert!(!plain(&String::from_utf8_lossy(&out.bytes)).contains("mv>"));
 }
 
-#[cfg(native_surface)]
 #[test]
 fn an_eor_ends_a_prompt_as_a_ga_does() {
     let ga = wire_fixture("ga");
@@ -1927,7 +1904,6 @@ fn an_eor_ends_a_prompt_as_a_ga_does() {
     assert_eq!(bare.last().map(String::as_str), Some("<1020hp 800m 930mv>"));
 }
 
-#[cfg(native_surface)]
 #[test]
 fn the_login_wire_gives_vosh_the_prompt_with_no_typing() {
     let bytes = wire_fixture("login-new");
@@ -1977,7 +1953,6 @@ fn the_login_wire_gives_vosh_the_prompt_with_no_typing() {
     assert!(!wire.p.prompt.take_seen()[0].applied);
 }
 
-#[cfg(native_surface)]
 #[test]
 fn the_prompt_x_wire_reads_the_new_codes_right_after_the_reply() {
     let bytes = wire_fixture("prompt-x-new");
@@ -1992,7 +1967,6 @@ fn the_prompt_x_wire_reads_the_new_codes_right_after_the_reply() {
     assert!(seen[0].applied);
 }
 
-#[cfg(native_surface)]
 #[test]
 fn the_prompts_off_wire_counts_no_miss_while_the_packages_keep_coming() {
     let bytes = wire_fixture("prompts-off-new");

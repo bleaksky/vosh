@@ -680,20 +680,9 @@ fn base64_decode(text: &str) -> Vec<u8> {
 }
 
 /// Every session output also feeds the native grid the whole process
-/// shares, where there is one, so a test holds the lock the grid tests
-/// take.
-#[cfg(native_surface)]
+/// shares, so a test holds the lock the grid tests take.
 fn grid() -> std::sync::MutexGuard<'static, ()> {
     crate::native::grid::lock_shared_grid_for_test()
-}
-
-/// Nothing to hold where there is no native grid.
-#[cfg(not(native_surface))]
-struct NoGrid;
-
-#[cfg(not(native_surface))]
-fn grid() -> NoGrid {
-    NoGrid
 }
 
 // The guard keeps the grid tests off the shared native grid. No task of
