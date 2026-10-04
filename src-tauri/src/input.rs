@@ -437,7 +437,10 @@ fn process_line(
     // An alias that runs Lua runs its body where it stands, so what the
     // body sends goes out in the order you typed the line.
     let interpolated = profile.vars.interpolate(trimmed);
-    let steps = match profile.aliases.expand_line_full(&interpolated) {
+    let steps = match profile
+        .aliases
+        .expand_line_full(&interpolated, &profile.plugin_aliases)
+    {
         Ok(steps) => steps,
         Err(ExpandError::RecursionLimit(depth)) => {
             return InputResult::error(format!("alias recursion limit hit ({depth})"));

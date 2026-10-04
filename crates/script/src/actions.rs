@@ -16,12 +16,27 @@ pub enum Action {
     Input(String),
     /// Echo a line locally to the terminal pane.
     Echo(String),
-    /// Insert or replace an alias.
+    /// Insert or replace an alias you keep, which Vosh saves.
     SetAlias {
         name: String,
         expansion: String,
     },
     RemoveAlias(String),
+    /// Make an alias for the plugin `plugin`, which lasts for the
+    /// session and is never saved.
+    SetPluginAlias {
+        plugin: String,
+        name: String,
+        expansion: String,
+    },
+    /// Remove the alias `name` when the plugin `plugin` made it.
+    RemovePluginAlias {
+        plugin: String,
+        name: String,
+    },
+    /// Remove every alias the plugin of this name made. Vosh adds it
+    /// itself when the plugin turns off, stops or loads again.
+    DropPluginAliases(String),
     /// Insert or replace a variable.
     SetVar {
         scope: Scope,
@@ -95,6 +110,8 @@ impl Action {
                 | Action::RemoveLuaTrigger { .. }
                 | Action::SubscribeGmcp { .. }
                 | Action::Timer { .. }
+                | Action::SetPluginAlias { .. }
+                | Action::RemovePluginAlias { .. }
         )
     }
 }

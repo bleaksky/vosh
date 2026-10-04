@@ -79,6 +79,55 @@ impl Alias {
     }
 }
 
+/// The aliases plugins make. Each lasts for the session and belongs to
+/// the plugin that made it, and Vosh never saves one, so it lives apart
+/// from the [`AliasStore`] the profile file holds. While one lasts it
+/// takes the place of a saved alias of its name.
+#[derive(Debug, Clone, Default)]
+pub struct PluginAliases {
+    /// Each alias by name, with the plugin that made it.
+    aliases: HashMap<String, (String, Alias)>,
+}
+
+impl PluginAliases {
+    /// Make the alias `name` for `plugin`, in place of one of that name
+    /// any plugin made.
+    pub fn set(&mut self, plugin: &str, name: impl Into<String>, expansion: impl Into<String>) {
+        let alias = Alias::new(name, expansion);
+        self.aliases
+            .insert(alias.name.clone(), (plugin.to_string(), alias));
+    }
+
+    /// Remove the alias `name` when `plugin` made it. True when it went.
+    pub fn remove(&mut self, plugin: &str, name: &str) -> bool {
+        let owned = self.aliases.get(name).is_some_and(|(by, _)| by == plugin);
+        if owned {
+            self.aliases.remove(name);
+        }
+        owned
+    }
+
+    /// Remove every alias `plugin` made.
+    pub fn remove_plugin(&mut self, plugin: &str) {
+        self.aliases.retain(|_, (by, _)| by != plugin);
+    }
+
+    /// Every alias by name, with the plugin that made it.
+    pub fn list(&self) -> Vec<(&str, &Alias)> {
+        let mut out: Vec<(&str, &Alias)> = self
+            .aliases
+            .values()
+            .map(|(by, alias)| (by.as_str(), alias))
+            .collect();
+        out.sort_by(|a, b| a.1.name.cmp(&b.1.name));
+        out
+    }
+
+    fn get(&self, name: &str) -> Option<&Alias> {
+        self.aliases.get(name).map(|(_, alias)| alias)
+    }
+}
+
 /// One step of an expanded line. A line expands to its steps in the
 /// order you typed them, so a script alias runs between the commands
 /// around it.
@@ -242,7 +291,7 @@ impl AliasStore {
     #[cfg(test)]
     pub fn expand_line(&self, line: &str) -> Result<Vec<String>, ExpandError> {
         Ok(self
-            .expand_line_full(line)?
+            .expand_line_full(line, &PluginAliases::default())?
             .into_iter()
             .filter_map(|step| match step {
                 ExpandStep::Command(command) => Some(command),
@@ -254,15 +303,20 @@ impl AliasStore {
     /// Full expansion result: the commands to send and the Lua bodies
     /// script aliases queue, in the order you typed them. The input
     /// pipeline runs each body where it stands, so what a body sends goes
-    /// out between the commands around it.
-    pub fn expand_line_full(&self, line: &str) -> Result<Vec<ExpandStep>, ExpandError> {
+    /// out between the commands around it. An alias in `plugins` takes
+    /// the place of a saved one of its name.
+    pub fn expand_line_full(
+        &self,
+        line: &str,
+        plugins: &PluginAliases,
+    ) -> Result<Vec<ExpandStep>, ExpandError> {
         let mut steps = Vec::new();
         for raw in split_commands(line) {
             let trimmed = raw.trim();
             if trimmed.is_empty() {
                 continue;
             }
-            self.expand_into(trimmed, 0, &mut steps)?;
+            self.expand_into(trimmed, 0, plugins, &mut steps)?;
         }
         Ok(steps)
     }
@@ -271,6 +325,7 @@ impl AliasStore {
         &self,
         command: &str,
         depth: usize,
+        plugins: &PluginAliases,
         out: &mut Vec<ExpandStep>,
     ) -> Result<(), ExpandError> {
         if depth >= self.max_depth {
@@ -285,10 +340,16 @@ impl AliasStore {
         //   * Vosh has not stopped its Lua this session.
         // Disabled groups short-circuit to pass-through so the user
         // can flip whole "Combat" / "Crafting" loadouts off without
-        // editing each row.
-        let Some(alias) = self.aliases.get(name).filter(|a| {
-            a.enabled && self.groups.allows(a.group.as_deref()) && !self.stopped.contains(&a.name)
-        }) else {
+        // editing each row. An alias a plugin made has none of these and
+        // comes first.
+        let saved = || {
+            self.aliases.get(name).filter(|a| {
+                a.enabled
+                    && self.groups.allows(a.group.as_deref())
+                    && !self.stopped.contains(&a.name)
+            })
+        };
+        let Some(alias) = plugins.get(name).or_else(saved) else {
             out.push(ExpandStep::Command(command.to_string()));
             return Ok(());
         };
@@ -311,7 +372,7 @@ impl AliasStore {
             if trimmed.is_empty() {
                 continue;
             }
-            self.expand_into(trimmed, depth + 1, out)?;
+            self.expand_into(trimmed, depth + 1, plugins, out)?;
         }
         Ok(())
     }
@@ -405,6 +466,48 @@ mod tests {
             s.set(Alias::new(*n, *e));
         }
         s
+    }
+
+    /// The commands `line` sends with `plugins` over `store`.
+    fn sends(store: &AliasStore, plugins: &PluginAliases, line: &str) -> Vec<String> {
+        store
+            .expand_line_full(line, plugins)
+            .unwrap()
+            .into_iter()
+            .filter_map(|step| match step {
+                ExpandStep::Command(command) => Some(command),
+                ExpandStep::Script(_) => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_plugin_alias_takes_the_place_of_a_saved_one_while_it_lasts() {
+        let saved = store(&[("hl", "cast heal %1"), ("bt", "bash %1")]);
+        let mut plugins = PluginAliases::default();
+        plugins.set("healer", "hl", "cast 'cure light' %1");
+        // It expands through the saved aliases like any other.
+        plugins.set("healer", "go", "bt %1;hl %1");
+        assert_eq!(
+            sends(&saved, &plugins, "go Orla"),
+            ["bash Orla", "cast 'cure light' Orla"]
+        );
+        // It never joins the saved list.
+        let names: Vec<&str> = saved.list().iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, ["bt", "hl"]);
+        // Another plugin cannot remove it, and its own plugin can.
+        assert!(!plugins.remove("other", "hl"));
+        assert!(plugins.remove("healer", "hl"));
+        assert_eq!(sends(&saved, &plugins, "hl Orla"), ["cast heal Orla"]);
+        plugins.set("other", "kk", "kick");
+        plugins.remove_plugin("healer");
+        let left: Vec<(&str, &str)> = plugins
+            .list()
+            .into_iter()
+            .map(|(by, alias)| (by, alias.name.as_str()))
+            .collect();
+        assert_eq!(left, [("other", "kk")]);
+        assert_eq!(sends(&saved, &plugins, "go Orla"), ["go Orla"]);
     }
 
     #[test]
@@ -729,8 +832,11 @@ mod tests {
         // Each body stands where its alias was typed, between the
         // commands around it, at any depth.
         assert_eq!(
-            s.expand_line_full("kk  big   dragon;look;hunt rat;wave")
-                .unwrap(),
+            s.expand_line_full(
+                "kk  big   dragon;look;hunt rat;wave",
+                &PluginAliases::default()
+            )
+            .unwrap(),
             vec![
                 kick(&["big", "dragon"]),
                 ExpandStep::Command("look".into()),

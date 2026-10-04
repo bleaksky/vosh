@@ -1019,6 +1019,60 @@ fn lua_cannot_blank_your_profile_through_mud_input() {
 }
 
 #[test]
+fn a_plugin_alias_lasts_for_the_session_and_is_never_saved() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    p.aliases.set(Alias::new("hl", "cast heal"));
+    let healer = vosh_script::Owner::Plugin("healer".into());
+    let outcome = p.script.load_script(
+        healer.clone(),
+        "@healer/main.lua",
+        "mud.alias('hl', 'cast cure') mud.alias('bt', 'bash %1')".into(),
+    );
+    let apply = crate::script::apply_actions(&mut p, outcome);
+    assert!(!apply.durable_changed);
+    // It takes the place of your own alias of its name.
+    assert_eq!(
+        run_line(&state, &mut p, "hl").result.bytes,
+        b"cast cure\r\n"
+    );
+    // No profile file holds it, and laying one over the profile, as a
+    // switch does, leaves it be.
+    let config = ProfileConfig::from_profile(&p);
+    let saved: Vec<(&str, &str)> = config
+        .aliases
+        .iter()
+        .map(|a| (a.name.as_str(), a.expansion.as_str()))
+        .collect();
+    assert_eq!(saved, [("hl", "cast heal")]);
+    config.apply_to(&mut p);
+    assert_eq!(
+        run_line(&state, &mut p, "bt Orla").result.bytes,
+        b"bash Orla\r\n"
+    );
+    assert_eq!(
+        process(&mut p, "#aliases").echo,
+        [
+            "3 alias(es):",
+            "    hl -> cast heal",
+            "    bt -> bash %1 from plugin healer",
+            "    hl -> cast cure from plugin healer",
+        ]
+    );
+    // Turning the plugin off takes its aliases and gives you yours back.
+    let outcome = p.script.unload(&healer);
+    crate::script::apply_actions(&mut p, outcome);
+    assert_eq!(
+        run_line(&state, &mut p, "hl").result.bytes,
+        b"cast heal\r\n"
+    );
+    assert_eq!(
+        run_line(&state, &mut p, "bt Orla").result.bytes,
+        b"bt Orla\r\n"
+    );
+}
+
+#[test]
 fn scripts_lists_lua_triggers_by_name() {
     let mut p = Profile::default();
     process(

@@ -43,8 +43,8 @@ pub(crate) fn mud_table(lua: &Lua, owner: Option<Owner>) -> LuaResult<Table> {
     mud.set("echo", lua.create_function(mud_echo)?)?;
     mud.set("log", lua.create_function(mud_log)?)?;
 
-    mud.set("alias", lua.create_function(mud_alias)?)?;
-    mud.set("unalias", lua.create_function(mud_unalias)?)?;
+    mud.set("alias", owned(lua, owner.as_ref(), mud_alias)?)?;
+    mud.set("unalias", owned(lua, owner.as_ref(), mud_unalias)?)?;
 
     mud.set("var", lua.create_function(mud_var)?)?;
     mud.set("set_var", lua.create_function(mud_set_var)?)?;
@@ -145,16 +145,33 @@ pub(crate) fn mud_log(lua: &Lua, text: String) -> LuaResult<()> {
     })
 }
 
-fn mud_alias(lua: &Lua, (name, expansion): (String, String)) -> LuaResult<()> {
+/// `mud.alias`. A plugin's alias lasts for the session and belongs to
+/// the plugin, and any other is one you keep.
+fn mud_alias(
+    lua: &Lua,
+    owner: Option<&Owner>,
+    (name, expansion): (String, String),
+) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.queue(Action::SetAlias { name, expansion });
+        s.queue(match registrant(s, owner) {
+            Owner::Plugin(plugin) => Action::SetPluginAlias {
+                plugin,
+                name,
+                expansion,
+            },
+            _ => Action::SetAlias { name, expansion },
+        });
         Ok(())
     })
 }
 
-fn mud_unalias(lua: &Lua, name: String) -> LuaResult<()> {
+/// `mud.unalias`. A plugin removes only an alias it made.
+fn mud_unalias(lua: &Lua, owner: Option<&Owner>, name: String) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.queue(Action::RemoveAlias(name));
+        s.queue(match registrant(s, owner) {
+            Owner::Plugin(plugin) => Action::RemovePluginAlias { plugin, name },
+            _ => Action::RemoveAlias(name),
+        });
         Ok(())
     })
 }
