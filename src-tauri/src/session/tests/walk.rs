@@ -160,10 +160,13 @@ fn esc_stops_a_walk_and_says_nothing_otherwise() {
 #[test]
 fn a_line_that_says_the_step_failed_stops_the_walk_where_you_stand() {
     let t = Instant::now();
+    // A closed door names its whole keyword, one word or more
+    // (`comm.c:7224`).
     for line in [
         "Alas, you cannot go that way.",
         "The door is closed.",
         "The gate is closed.",
+        "The iron door is closed.",
         "You need a boat to go there.",
         "You can't fly.",
         "You are too exhausted.",
@@ -192,7 +195,6 @@ fn lines_that_only_look_like_a_failure_leave_the_walk_going() {
     for line in [
         "Maren says 'Alas, you cannot go that way.'",
         "The door is closed now.",
-        "The iron door is closed.",
         "Alas, you cannot go that way",
         "[Exits: north south west]",
     ] {

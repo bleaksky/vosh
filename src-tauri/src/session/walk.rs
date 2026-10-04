@@ -43,8 +43,8 @@ pub(crate) const NOT_WALKING: &str = "[walk] You are not walking.";
 /// you. `move_char` in `act_move.c` prints the first group, and
 /// `interpret` in `interp.c` the second before the command runs, the
 /// last eight when your position is below standing (`interp.c:1396`). A
-/// closed door reads `The $d is closed.`, which [`is_failure`] knows
-/// apart.
+/// closed door reads `The $d is closed.`, which [`is_failure`] reads
+/// for any door.
 const FAILURES: &[&str] = &[
     "But you haven't got any legs!",
     "Alas, you cannot go that way.",
@@ -91,11 +91,13 @@ fn is_failure(line: &str) -> bool {
     if FAILURES.contains(&line) {
         return true;
     }
-    // `act( "The $d is closed.", ...)`, where `$d` is the first word of
-    // the door's keyword, or `door`.
+    // `act( "The $d is closed.", ...)` in `move_char` (`act_move.c:343`),
+    // where `$d` is the door's whole keyword, or `door` when it has none
+    // (`comm.c:7224`). A container prints the same line (`act_obj.c:846`),
+    // but only for a command you send, which stops the walk first.
     line.strip_prefix("The ")
         .and_then(|rest| rest.strip_suffix(" is closed."))
-        .is_some_and(|door| !door.is_empty() && !door.contains(' '))
+        .is_some_and(|door| !door.is_empty())
 }
 
 /// What the walker asks of the session after an event.
