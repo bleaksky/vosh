@@ -88,9 +88,10 @@ fn a_trigger_body_reads_the_whole_match_then_each_group() {
             },
         ))
         .expect("the trigger compiles");
-    let result = vosh_automation::trigger::process(&p.triggers, b"Bob says hi");
+    let mut c = Connection::default();
+    let result = vosh_automation::trigger::process(&p.triggers, b"Bob says hi", c.stop_key);
     assert_eq!(
-        super::run_trigger_scripts(&mut p, &mut Connection::default(), &result).actions,
+        super::run_trigger_scripts(&mut p, &mut c, &result).actions,
         [vosh_script::Action::Send("Bob says hi|Bob|hi".into())]
     );
 }
@@ -254,9 +255,9 @@ fn a_trigger_body_that_runs_away_turns_its_trigger_off() {
         ))
         .expect("the trigger compiles");
     let mut c = Connection::default();
-    let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.");
+    let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.", c.stop_key);
     let outcome = super::run_trigger_scripts(&mut p, &mut c, &result);
-    assert!(p.triggers.is_stopped("hunger"));
+    assert!(p.triggers.is_stopped("hunger", c.stop_key));
     let apply = crate::script::apply_actions(&mut p, &mut c, outcome);
     // A stopped body sends nothing it queued.
     let leftover = &apply.send_bytes;
@@ -268,7 +269,7 @@ fn a_trigger_body_that_runs_away_turns_its_trigger_off() {
         )]
     );
     // It matches nothing until you save it again.
-    let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.");
+    let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.", c.stop_key);
     let leftover = &result.scripts;
     assert!(leftover.is_empty(), "{leftover:?}");
 }
@@ -286,7 +287,7 @@ fn a_function_a_trigger_body_left_behind_turns_its_trigger_off_too() {
         ))
         .expect("the trigger compiles");
     let mut c = Connection::default();
-    let result = vosh_automation::trigger::process(&p.triggers, b"The day has begun.");
+    let result = vosh_automation::trigger::process(&p.triggers, b"The day has begun.", c.stop_key);
     let outcome = super::run_trigger_scripts(&mut p, &mut c, &result);
     crate::script::apply_actions(&mut p, &mut c, outcome);
     let msg = vosh_protocol::gmcp::Message {
@@ -294,7 +295,7 @@ fn a_function_a_trigger_body_left_behind_turns_its_trigger_off_too() {
         data: serde_json::json!({}),
     };
     let (_, apply) = super::gmcp_step(&mut p, &mut c, &msg, tokio::time::Instant::now());
-    assert!(p.triggers.is_stopped("day"));
+    assert!(p.triggers.is_stopped("day", c.stop_key));
     assert_eq!(
         apply.echoes,
         [lua_error(
@@ -323,7 +324,7 @@ fn an_alias_body_that_runs_away_turns_its_alias_off() {
             "Vosh stopped the Lua in alias heal after 100 ms. heal stays off until you save it or restart Vosh."
         )]
     );
-    assert!(p.aliases.is_stopped("heal"));
+    assert!(p.aliases.is_stopped("heal", c.stop_key));
     // Typed again, it passes through, as an alias you turned off does.
     let ran = crate::input::run_line(&state, &mut p, &mut c, "heal");
     assert_eq!(super::line_script_result(ran).send_bytes, b"heal\r\n");

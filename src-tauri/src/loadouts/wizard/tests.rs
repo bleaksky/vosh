@@ -1267,7 +1267,11 @@ async fn each_character_keeps_its_own_version_of_a_trigger() {
     ] {
         let state = relaunch_as(dir.path(), name).await;
         let p = state.profile.lock().await;
-        let line = vosh_automation::trigger::process(&p.triggers, b"Bob arrives");
+        let line = vosh_automation::trigger::process(
+            &p.triggers,
+            b"Bob arrives",
+            vosh_automation::StopKey::default(),
+        );
         assert_eq!(line.sends, [sent], "{name}");
     }
 }
@@ -1300,7 +1304,12 @@ async fn triggers_on_one_line_fire_in_the_order_they_had() {
         let state = state.clone();
         async move {
             let p = state.profile.lock().await;
-            vosh_automation::trigger::process(&p.triggers, b"You are knocked down!").sends
+            vosh_automation::trigger::process(
+                &p.triggers,
+                b"You are knocked down!",
+                vosh_automation::StopKey::default(),
+            )
+            .sends
         }
     };
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;

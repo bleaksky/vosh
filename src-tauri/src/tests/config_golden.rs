@@ -29,6 +29,7 @@ use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{
     HighlightStyle, MatchMode, NamedColor, Trigger, TriggerAction, TriggerPattern, TriggerTarget,
 };
+use vosh_automation::StopKey;
 use vosh_prompt::config::{AabahranCapture, CaptureSource, RegexCapture};
 use vosh_prompt::{CaptureConfig, PromptConfig, PromptShow};
 
@@ -1337,10 +1338,11 @@ fn a_text_row_saves_a_regex_that_0_8_1_reads_and_matches_the_same_lines() {
         lines
             .iter()
             .map(|line| {
-                let mut names: Vec<String> = matching(store, line, MatchScope::Line)
-                    .iter()
-                    .map(|t| t.name.clone())
-                    .collect();
+                let mut names: Vec<String> =
+                    matching(store, line, MatchScope::Line, StopKey::default())
+                        .iter()
+                        .map(|t| t.name.clone())
+                        .collect();
                 names.sort();
                 names
             })

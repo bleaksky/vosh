@@ -2,8 +2,8 @@
 //! its quick keys and the characters in the room, which the commands
 //! share, the room look and the end of a fight, which the loop follows
 //! line by line, the tick's count and the prompt engine, which both read,
-//! the session's variables, and its Lua engine, with the aliases its
-//! plugins make and the macro recorder. Each
+//! the session's variables, its Lua engine, with the aliases its plugins
+//! make and the macro recorder, and the key its Lua stops go under. Each
 //! [`Session`](crate::sessions::Session) holds its [`Connection`] behind a
 //! lock of its own, [`SharedConnection`], and the session loop holds a
 //! handle to it, so a command reads it straight from the session and
@@ -22,6 +22,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use vosh_automation::alias::PluginAliases;
 use vosh_automation::vars::{VarView, VariableStore};
+use vosh_automation::StopKey;
 use vosh_script::ScriptEngine;
 
 use super::room_block::RoomBlock;
@@ -91,6 +92,10 @@ pub(crate) struct Connection {
     /// them to the profile as an alias whose expansion is the `;`-joined
     /// sequence.
     pub(crate) recording_macro: Option<MacroRecorder>,
+    /// The key the profile's trigger and alias stores hold this session's
+    /// Lua stops under, made from the session's id. A trigger or an alias
+    /// whose Lua Vosh stopped here stays on in every other session.
+    pub(crate) stop_key: StopKey,
 }
 
 impl Connection {
@@ -136,10 +141,14 @@ impl Connection {
 /// `target_get` that comes in the middle waits on its thread through all
 /// of it, so on a machine with few cores a switch with plugins can hold
 /// up the other tasks until it ends.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct SharedConnection(Arc<Mutex<Connection>>);
 
 impl SharedConnection {
+    pub(crate) fn new(connection: Connection) -> Self {
+        Self(Arc::new(Mutex::new(connection)))
+    }
+
     /// Lock the connection. A step that panicked while it held the lock
     /// left the connection as the step had it, and the next holder takes
     /// it as it stands.

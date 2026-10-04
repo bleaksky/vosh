@@ -12,6 +12,7 @@ use tokio::sync::Mutex;
 use tokio::time::Instant;
 use vosh_automation::alias::Alias;
 use vosh_automation::vars::Scope;
+use vosh_automation::StopKey;
 use vosh_script::{Action, Owner, ScriptOutcome};
 
 use crate::app::events::{ListChanges, ListRevisions};
@@ -67,7 +68,7 @@ pub(crate) fn run_alias_body(
     c: &mut Connection,
     call: &vosh_automation::ScriptCall,
 ) -> ApplyResult {
-    if profile.aliases.is_stopped(&call.source) {
+    if profile.aliases.is_stopped(&call.source, c.stop_key) {
         return ApplyResult::default();
     }
     refresh_vars(profile, c);
@@ -77,13 +78,14 @@ pub(crate) fn run_alias_body(
 }
 
 /// Turn off each trigger and alias whose Lua Vosh stopped in `outcome`,
-/// until you save it again or restart Vosh. The engine holds a stopped
-/// plugin or loose script off itself.
-pub(crate) fn turn_off_stopped(profile: &mut Profile, outcome: &ScriptOutcome) {
+/// in the session whose stops `key` names, until you save it again or
+/// restart Vosh. The engine holds a stopped plugin or loose script off
+/// itself.
+pub(crate) fn turn_off_stopped(profile: &mut Profile, key: StopKey, outcome: &ScriptOutcome) {
     for owner in &outcome.stopped {
         match owner {
-            Owner::Trigger(name) => profile.triggers.stop(name),
-            Owner::Alias(name) => profile.aliases.stop(name),
+            Owner::Trigger(name) => profile.triggers.stop(name, key),
+            Owner::Alias(name) => profile.aliases.stop(name, key),
             Owner::Plugin(_) | Owner::Script(_) | Owner::Typed => {}
         }
     }
@@ -167,7 +169,7 @@ pub(crate) fn apply_actions(
 ) -> ApplyResult {
     let mut result = ApplyResult::default();
     let lists_before = ListRevisions::of(profile, c);
-    turn_off_stopped(profile, &outcome);
+    turn_off_stopped(profile, c.stop_key, &outcome);
     for action in outcome.actions {
         match action {
             Action::Send(line) => {
