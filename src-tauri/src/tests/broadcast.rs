@@ -152,7 +152,12 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
 
     tauri::async_runtime::block_on(async {
         let listening = Heard::listen(&app, &[SESSION_IDENTITY_CHANGED]);
-        crate::session::identity::broadcast_session_identity(handle, &state).await;
+        crate::session::identity::broadcast_session_identity(
+            handle,
+            &state,
+            &state.selected_session(),
+        )
+        .await;
         listening.finish("broadcast_session_identity", &mut heard, &mut want);
 
         // A profile switch, an import, and `#profile load` and `reset`
@@ -170,10 +175,12 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
         // A `#tick` command.
         let listening = Heard::listen(&app, &[crate::app::events::TICK_CONFIG_CHANGED]);
         let tick = LineEffects {
-            tick_changed: true,
+            tick_before: Some(crate::tick::TickConfig::default()),
             ..LineEffects::default()
         };
-        crate::disk::save::settle_line_effects(handle, tick).await;
+        let session = state.selected_session();
+        let open = session.profile();
+        crate::disk::save::settle_line_effects(handle, &session, &open, tick, None).await;
         listening.finish("settle_line_effects", &mut heard, &mut want);
 
         // Each window answers the quit request the way its page does, so
@@ -204,7 +211,7 @@ fn the_prompt_table_event_names_the_active_profile() {
     // Before any profile loads it names none.
     crate::app::events::broadcast_list_changes(handle, ListChanges::PROMPT);
     let state: SharedState = app.state::<SharedState>().inner().clone();
-    state.note_active_profile("Second");
+    tauri::async_runtime::block_on(state.selected_profile()).set_name("Second");
     crate::app::events::broadcast_prompt_config_changed(handle);
     app.unlisten(id);
     assert_eq!(
@@ -321,8 +328,9 @@ fn a_loadout_switch_tells_the_command_line_when_a_macro_group_turned() {
             active: Vec::new(),
             dormant: false,
             loadouts: vec![fight, walk],
+            ..Default::default()
         });
-        state.profile.lock().await.macros = vec![
+        state.selected_profile().await.macros = vec![
             grouped_macro("F1", "kick", "combat"),
             grouped_macro("F2", "north", "travel"),
         ];
@@ -331,7 +339,7 @@ fn a_loadout_switch_tells_the_command_line_when_a_macro_group_turned() {
             crate::loadouts::set::set_active_loadouts(handle, active)
         };
         let off = || async {
-            let p = state.profile.lock().await;
+            let p = state.selected_profile().await;
             p.disabled_macro_groups.iter().cloned().collect::<Vec<_>>()
         };
 
@@ -371,7 +379,7 @@ fn a_group_switch_tells_every_window_once() {
     let mut heard = Report::new();
     let mut want = Report::new();
     tauri::async_runtime::block_on(async {
-        state.profile.lock().await.macros = vec![grouped_macro("F1", "kick", "combat")];
+        state.selected_profile().await.macros = vec![grouped_macro("F1", "kick", "combat")];
         let turn = |enabled| {
             crate::ipc::automation::groups_set_enabled(
                 handle.clone(),

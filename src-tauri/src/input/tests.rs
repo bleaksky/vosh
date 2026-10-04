@@ -8,7 +8,6 @@ use crate::prompt::take_config;
 use crate::session::connection::{Connection, RoomChar};
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{NamedColor, TriggerAction};
-use vosh_automation::vars::Scope;
 
 fn regex_capture(c: &Connection) -> vosh_prompt::config::RegexCapture {
     match &c.prompt.config().capture {
@@ -742,18 +741,22 @@ fn effects_of(lines: &[&str]) -> LineEffects {
 const DIRTY: LineEffects = LineEffects {
     replaced: false,
     dirty: true,
-    tick_changed: false,
+    tick_before: None,
+    prompt: None,
 };
 
 const REPLACED: LineEffects = LineEffects {
     replaced: true,
     dirty: false,
-    tick_changed: false,
+    tick_before: None,
+    prompt: None,
 };
 
 /// Whether `line` changed the tick settings of `p`.
 fn changes_tick(p: &mut Profile, c: &mut Connection, line: &str) -> bool {
-    run_line(&AppState::default(), p, c, line).tick_changed
+    run_line(&AppState::default(), p, c, line)
+        .tick_before
+        .is_some()
 }
 
 #[test]
@@ -801,10 +804,10 @@ fn a_line_that_leaves_the_tick_settings_alone_says_nothing() {
 
 #[test]
 fn the_effects_remember_a_tick_change_across_the_run() {
-    let effects = effects_of(&["#tick warn at 10", "look"]);
-    assert!(effects.tick_changed);
+    let effects = effects_of(&["#tick warn at 10", "#tick warn at 5", "look"]);
+    assert_eq!(effects.tick_before, Some(TickConfig::default()));
     assert!(effects.dirty);
-    assert!(!effects_of(&["#tick", "look"]).tick_changed);
+    assert_eq!(effects_of(&["#tick", "look"]).tick_before, None);
 }
 
 #[test]
@@ -878,18 +881,15 @@ fn profile_and_script_commands_use_the_app_data_folder() {
     let mut p = Profile::default();
     p.aliases
         .set(vosh_automation::alias::Alias::new("kk", "kick %1"));
-    // With no index there is no active profile to save.
+    // A profile with no name, before any profile loads, has no file to
+    // save to.
     let saved = save_profile_in(&state, &mut p);
     assert_eq!(saved.echo, ["[could not resolve profile path]"]);
     assert!(!app_data.join("profile.toml").exists());
 
-    // A fresh profile. The index names it, and its first save
-    // writes its file.
-    std::fs::write(
-        app_data.join("profiles.toml"),
-        "active = \"Healer\"\n\n[[profiles]]\nname = \"Healer\"\n",
-    )
-    .unwrap();
+    // A fresh profile. Its name names its file, and its first save
+    // writes it.
+    p.name = Some("Healer".into());
     let healer = app_data.join("profiles").join("Healer.toml");
     let saved = save_profile_in(&state, &mut p);
     assert_eq!(
@@ -899,7 +899,10 @@ fn profile_and_script_commands_use_the_app_data_folder() {
     assert!(healer.exists());
     assert!(!app_data.join("profile.toml").exists());
 
-    let mut fresh = Profile::default();
+    let mut fresh = Profile {
+        name: Some("Healer".into()),
+        ..Profile::default()
+    };
     let mut replaced = false;
     let loaded = slash_profile(
         &state,
@@ -941,7 +944,8 @@ fn a_reset_replaces_the_profile_and_saves_nothing() {
         LineEffects {
             replaced: true,
             dirty: true,
-            tick_changed: false,
+            tick_before: None,
+            prompt: None,
         }
     );
 }
@@ -1105,7 +1109,7 @@ fn script_reload_reads_each_file_again_in_load_order() {
     // The timer the last good run of b started goes, and a new one starts.
     assert_eq!(ran.lua.cancel_timers.len(), 1);
     assert_eq!(ran.lua.new_timers.len(), 1);
-    assert_eq!(p.script.loaded_script_names(), ["a.lua", "b.lua"]);
+    assert_eq!(c.script.loaded_script_names(), ["a.lua", "b.lua"]);
 }
 
 #[test]
@@ -1121,7 +1125,7 @@ fn script_reload_reads_a_plugin_again_too() {
     .unwrap();
     let mut p = Profile::default();
     let mut c = Connection::default();
-    let outcome = p.script.load_script(
+    let outcome = c.script.load_script(
         vosh_script::Owner::Plugin("meals".into()),
         "@meals/main.lua",
         &std::fs::read_to_string(plugin.join("main.lua")).unwrap(),
@@ -1133,7 +1137,7 @@ fn script_reload_reads_a_plugin_again_too() {
     )
     .unwrap();
     run_line(&state, &mut p, &mut c, "#script reload");
-    let fired = p.script.match_line("You are hungry.");
+    let fired = c.script.match_line("You are hungry.");
     let apply = crate::script::apply_actions(&mut p, &mut c, fired);
     assert_eq!(apply.echoes, ["eat now"]);
 }
@@ -1163,7 +1167,7 @@ fn script_reload_tries_again_a_plugin_whose_first_load_failed() {
     .unwrap();
     let ran = run_line(&state, &mut p, &mut c, "#script reload");
     assert_eq!(ran.result.echo, ["scripts reloaded"]);
-    let fired = p.script.match_line("You are hungry.");
+    let fired = c.script.match_line("You are hungry.");
     let apply = crate::script::apply_actions(&mut p, &mut c, fired);
     assert_eq!(apply.echoes, ["eat"]);
 }
@@ -1192,7 +1196,7 @@ fn a_plugin_vosh_could_not_read_says_so_and_a_reload_tries_it_again() {
     let ran = run_line(&state, &mut p, &mut c, "#script reload");
     let leftover = &ran.lua.echoes;
     assert!(leftover.is_empty(), "{leftover:?}");
-    let fired = p.script.match_line("You are hungry.");
+    let fired = c.script.match_line("You are hungry.");
     let apply = crate::script::apply_actions(&mut p, &mut c, fired);
     assert_eq!(apply.echoes, ["eat"]);
 }
@@ -1258,18 +1262,18 @@ fn a_loose_script_runs_as_its_file_and_stops_until_a_reload() {
         [format!("loaded {}", scripts.join("combat.lua").display())]
     );
     run_line(&state, &mut p, &mut c, "#script load combat.lua");
-    assert_eq!(p.script.loaded_script_names(), ["combat.lua"]);
-    let outcome = p.script.match_line("You are hungry.");
+    assert_eq!(c.script.loaded_script_names(), ["combat.lua"]);
+    let outcome = c.script.match_line("You are hungry.");
     let apply = crate::script::apply_actions(&mut p, &mut c, outcome);
     assert_eq!(
         apply.echoes,
         ["\x1b[90m[lua]\x1b[0m \x1b[31mVosh stopped combat.lua after 100 ms. It stays off until #script reload.\x1b[0m"]
     );
-    let leftover = &p.script.lua_triggers();
+    let leftover = &c.script.lua_triggers();
     assert!(leftover.is_empty(), "{leftover:?}");
     // A reload runs it again.
     run_line(&state, &mut p, &mut c, "#script reload");
-    assert_eq!(p.script.lua_triggers().len(), 1);
+    assert_eq!(c.script.lua_triggers().len(), 1);
     // A script with an error says so, and no loaded line shows.
     std::fs::write(
         scripts.join("typo.lua"),
@@ -1308,8 +1312,8 @@ fn a_script_loads_as_one_whatever_case_you_type() {
         ran.result.echo,
         [format!("loaded {}", scripts.join("Combat.lua").display())]
     );
-    assert_eq!(p.script.loaded_script_names(), ["Combat.lua"]);
-    let fired = p.script.match_line("You are hungry.");
+    assert_eq!(c.script.loaded_script_names(), ["Combat.lua"]);
+    let fired = c.script.match_line("You are hungry.");
     let apply = crate::script::apply_actions(&mut p, &mut c, fired);
     assert_eq!(apply.echoes, ["eat"]);
 }
@@ -1345,12 +1349,12 @@ fn script_load_stays_inside_the_scripts_folder() {
         let leftover = &ran.lua.send_bytes;
         assert!(leftover.is_empty(), "{line}");
     }
-    let leftover = &p.script.loaded_script_names();
+    let leftover = &c.script.loaded_script_names();
     assert!(leftover.is_empty(), "{leftover:?}");
     // A folder inside the scripts folder is fine.
     let ran = run_line(&state, &mut p, &mut c, "#script load ./combat/bash");
     assert_eq!(ran.lua.echoes, ["bash"]);
-    assert_eq!(p.script.loaded_script_names(), ["combat/bash.lua"]);
+    assert_eq!(c.script.loaded_script_names(), ["combat/bash.lua"]);
 }
 
 /// The `[lua]` line that says why Vosh did not run a line Lua asked for.
@@ -1401,7 +1405,7 @@ fn mud_input_keeps_file_and_profile_commands_to_you() {
         let leftover = &ran.lua.echoes;
         assert!(leftover.is_empty(), "{line} {leftover:?}");
     }
-    let leftover = &p.script.loaded_script_names();
+    let leftover = &c.script.loaded_script_names();
     assert!(leftover.is_empty(), "{leftover:?}");
     let ran = run_line_from(&state, &mut p, &mut c, "#scripts", LineFrom::YourLua);
     assert_eq!(ran.result.echo, ["no scripts loaded"]);
@@ -1437,7 +1441,7 @@ fn a_plugin_runs_no_slash_command_but_echo_through_mud_input() {
     let state = AppState::default();
     let mut p = Profile::default();
     let mut c = Connection::default();
-    let outcome = p.script.load_script(
+    let outcome = c.script.load_script(
         vosh_script::Owner::Plugin("helpers".into()),
         "@helpers/main.lua",
         "mud.input('#lua x = 1') mud.input('#alias a b') mud.input('#echo hello')",
@@ -1455,7 +1459,7 @@ fn a_plugin_runs_no_slash_command_but_echo_through_mud_input() {
     expected.push("hello".to_string());
     assert_eq!(echoes, expected);
     // Neither your globals nor your aliases changed.
-    let read = p.script.eval("mud.echo(tostring(x))", "=#lua");
+    let read = c.script.eval("mud.echo(tostring(x))", "=#lua");
     assert_eq!(read.actions, [vosh_script::Action::Echo("nil".into())]);
     assert!(p.aliases.get("a").is_none());
 }
@@ -1535,7 +1539,7 @@ fn a_plugin_alias_lasts_for_the_session_and_is_never_saved() {
     let mut c = Connection::default();
     p.aliases.set(Alias::new("hl", "cast heal"));
     let healer = vosh_script::Owner::Plugin("healer".into());
-    let outcome = p.script.load_script(
+    let outcome = c.script.load_script(
         healer.clone(),
         "@healer/main.lua",
         "mud.alias('hl', 'cast cure') mud.alias('bt', 'bash %1')",
@@ -1562,7 +1566,7 @@ fn a_plugin_alias_lasts_for_the_session_and_is_never_saved() {
         b"bash Orla\r\n"
     );
     assert_eq!(
-        process(&mut p, "#aliases").echo,
+        run_line(&state, &mut p, &mut c, "#aliases").result.echo,
         [
             "3 alias(es):",
             "    hl -> cast heal",
@@ -1571,7 +1575,7 @@ fn a_plugin_alias_lasts_for_the_session_and_is_never_saved() {
         ]
     );
     // Turning the plugin off takes its aliases and gives you yours back.
-    let outcome = p.script.unload(&healer);
+    let outcome = c.script.unload(&healer);
     crate::script::apply_actions(&mut p, &mut c, outcome);
     assert_eq!(
         run_line(&state, &mut p, &mut c, "hl").result.bytes,
@@ -1585,13 +1589,17 @@ fn a_plugin_alias_lasts_for_the_session_and_is_never_saved() {
 
 #[test]
 fn scripts_lists_lua_triggers_by_name() {
+    let state = AppState::default();
     let mut p = Profile::default();
-    process(
+    let mut c = Connection::default();
+    run_line(
+        &state,
         &mut p,
+        &mut c,
         "#lua mud.trigger('zeta', 'z', function() end) \
          mud.trigger('alpha', 'a', function() end)",
     );
-    let r = process(&mut p, "#scripts");
+    let r = run_line(&state, &mut p, &mut c, "#scripts").result;
     assert_eq!(
         r.echo,
         [
@@ -1639,7 +1647,8 @@ fn alias_expansion_runs_through_pipeline() {
 #[test]
 fn a_lua_alias_runs_its_body_in_the_order_you_typed() {
     let mut p = Profile::default();
-    p.vars.set(Scope::Session, "target", "goblin");
+    let mut c = Connection::default();
+    c.vars.set("target", "goblin");
     p.aliases.set(
         Alias::new("kk", "ignored")
             .with_script("mud.send('kick ' .. captures[1])\nmud.echo('kicked')"),
@@ -1647,10 +1656,10 @@ fn a_lua_alias_runs_its_body_in_the_order_you_typed() {
     // The body runs where you typed the alias, with the words after
     // its name, so what it sends goes out between the commands
     // around it.
-    let r = process(&mut p, "look;kk $target;wave");
+    let r = process_on(&mut p, &mut c, "look;kk $target;wave");
     assert_eq!(r.bytes, b"look\r\nkick goblin\r\nwave\r\n");
     assert_eq!(r.echo, ["kicked"]);
-    let r = process(&mut p, "kk dragon;wave");
+    let r = process_on(&mut p, &mut c, "kk dragon;wave");
     assert_eq!(r.bytes, b"kick dragon\r\nwave\r\n");
     assert_eq!(r.echo, ["kicked"]);
 }
@@ -1660,12 +1669,13 @@ fn a_lua_alias_body_reads_the_variables_as_they_are_now() {
     // No script is loaded and no Lua trigger is set, so nothing else
     // gives Lua the variables before the body runs.
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.aliases
         .set(Alias::new("kt", "ignored").with_script("mud.send('kick ' .. mud.var('target'))"));
-    let _ = process(&mut p, "#var target goblin");
-    assert_eq!(process(&mut p, "kt").bytes, b"kick goblin\r\n");
-    let _ = process(&mut p, "#var target orc");
-    assert_eq!(process(&mut p, "kt").bytes, b"kick orc\r\n");
+    let _ = process_on(&mut p, &mut c, "#var target goblin");
+    assert_eq!(process_on(&mut p, &mut c, "kt").bytes, b"kick goblin\r\n");
+    let _ = process_on(&mut p, &mut c, "#var target orc");
+    assert_eq!(process_on(&mut p, &mut c, "kt").bytes, b"kick orc\r\n");
 }
 
 #[test]
@@ -1695,10 +1705,32 @@ fn what_else_a_lua_alias_body_asks_for_comes_back_with_the_line() {
 #[test]
 fn variables_substitute_before_alias_expansion() {
     let mut p = Profile::default();
-    p.vars.set(Scope::Session, "target", "goblin");
+    let mut c = Connection::default();
+    c.vars.set("target", "goblin");
     p.aliases.set(Alias::new("hit", "kick %0"));
-    let r = process(&mut p, "hit $target");
+    let r = process_on(&mut p, &mut c, "hit $target");
     assert_eq!(r.bytes, b"kick goblin\r\n");
+}
+
+#[test]
+fn a_profile_variable_saves_while_a_session_variable_of_its_name_hides_it() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let ran = run_line(
+        &state,
+        &mut p,
+        &mut c,
+        "#lua mud.set_profile_var('home', 'Hollow')",
+    );
+    assert!(ran.lua.durable_changed);
+    let _ = process_on(&mut p, &mut c, "#var home inn");
+    assert_eq!(
+        process_on(&mut p, &mut c, "recall $home").bytes,
+        b"recall inn\r\n"
+    );
+    let saved = ProfileConfig::from_profile(&p).profile_vars;
+    assert_eq!(saved.get("home").map(String::as_str), Some("Hollow"));
 }
 
 #[test]
@@ -1771,11 +1803,7 @@ fn room_chars_need_a_name_and_read_npc_in_each_form() {
 fn tar_by_index_sets_target_and_idx() {
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(
-        &mut c,
-        &mut p.vars,
-        vec![rc("Bob", false), rc("ogre", true)],
-    );
+    set_room_chars(&mut c, vec![rc("Bob", false), rc("ogre", true)]);
     let r = process_on(&mut p, &mut c, "tar 2");
     assert_eq!(c.target.name.as_deref(), Some("ogre"));
     assert_eq!(c.target.room_idx, Some(2));
@@ -1793,7 +1821,6 @@ fn tar_string_keeps_literal_resolves_idx_via_substring() {
     let mut c = Connection::default();
     set_room_chars(
         &mut c,
-        &mut p.vars,
         vec![rc("The Baron Grisvald", true), rc("ogre", true)],
     );
     let _ = process_on(&mut p, &mut c, "tar gris");
@@ -1805,7 +1832,7 @@ fn tar_string_keeps_literal_resolves_idx_via_substring() {
 fn tar_unknown_keeps_literal_with_no_idx() {
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(&mut c, &mut p.vars, vec![rc("Bob", false)]);
+    set_room_chars(&mut c, vec![rc("Bob", false)]);
     let _ = process_on(&mut p, &mut c, "tar Alice");
     assert_eq!(c.target.name.as_deref(), Some("Alice"));
     assert_eq!(c.target.room_idx, None);
@@ -1815,7 +1842,7 @@ fn tar_unknown_keeps_literal_with_no_idx() {
 fn target_syncs_to_var_store_for_interpolation() {
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(&mut c, &mut p.vars, vec![rc("Bob", false)]);
+    set_room_chars(&mut c, vec![rc("Bob", false)]);
     let _ = process_on(&mut p, &mut c, "tar 1");
     // `${target}` should now interpolate to "Bob".
     let r = process_on(&mut p, &mut c, "cast 'bless' ${target}");
@@ -1826,11 +1853,7 @@ fn target_syncs_to_var_store_for_interpolation() {
 fn tarn_cycles_forward_and_wraps() {
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(
-        &mut c,
-        &mut p.vars,
-        vec![rc("A", true), rc("B", true), rc("C", true)],
-    );
+    set_room_chars(&mut c, vec![rc("A", true), rc("B", true), rc("C", true)]);
     let _ = process_on(&mut p, &mut c, "tarn");
     assert_eq!(c.target.name.as_deref(), Some("A"));
     let _ = process_on(&mut p, &mut c, "tarn");
@@ -1844,18 +1867,18 @@ fn tarn_cycles_forward_and_wraps() {
 fn tarclear_drops_target_and_var() {
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(&mut c, &mut p.vars, vec![rc("Bob", false)]);
+    set_room_chars(&mut c, vec![rc("Bob", false)]);
     let _ = process_on(&mut p, &mut c, "tar 1");
     let _ = process_on(&mut p, &mut c, "tarclear");
     assert!(c.target.name.is_none());
-    assert!(p.vars.get("target").is_none());
+    assert!(c.vars.get("target").is_none());
 }
 
 #[test]
 fn quick_key_expands_to_verb_plus_target() {
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(&mut c, &mut p.vars, vec![rc("ogre", true)]);
+    set_room_chars(&mut c, vec![rc("ogre", true)]);
     let _ = process_on(&mut p, &mut c, "tar 1");
     let _ = process_on(&mut p, &mut c, "#qkey gg kick");
     let r = process_on(&mut p, &mut c, "gg");
@@ -1866,7 +1889,7 @@ fn quick_key_expands_to_verb_plus_target() {
 fn a_quick_key_echoes_like_a_typed_command() {
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(&mut c, &mut p.vars, vec![rc("ogre", true)]);
+    set_room_chars(&mut c, vec![rc("ogre", true)]);
     let _ = process_on(&mut p, &mut c, "tar 1");
     let _ = process_on(&mut p, &mut c, "#qkey gg kick");
     // The caret is on by default, before the command in the
@@ -1920,7 +1943,7 @@ fn quick_key_uses_literal_keyword_not_full_name() {
     // descriptor "The Baron Grisvald".
     let mut p = Profile::default();
     let mut c = Connection::default();
-    set_room_chars(&mut c, &mut p.vars, vec![rc("The Baron Grisvald", true)]);
+    set_room_chars(&mut c, vec![rc("The Baron Grisvald", true)]);
     let _ = process_on(&mut p, &mut c, "tar gris");
     let _ = process_on(&mut p, &mut c, "#qkey gg cast 'fireball'");
     let r = process_on(&mut p, &mut c, "gg");
@@ -1983,12 +2006,14 @@ fn default_quick_keys_are_present_but_empty() {
 
 #[test]
 fn record_captures_then_saves_alias() {
+    let state = AppState::default();
     let mut p = Profile::default();
-    let _ = process(&mut p, "#record buff");
-    let _ = process(&mut p, "cast 'sanctuary' self");
-    let _ = process(&mut p, "cast 'haste' self");
-    let _ = process(&mut p, "cast 'bless' self");
-    let _ = process(&mut p, "#endrec");
+    let mut c = Connection::default();
+    let _ = run_line(&state, &mut p, &mut c, "#record buff");
+    let _ = run_line(&state, &mut p, &mut c, "cast 'sanctuary' self");
+    let _ = run_line(&state, &mut p, &mut c, "cast 'haste' self");
+    let _ = run_line(&state, &mut p, &mut c, "cast 'bless' self");
+    let _ = run_line(&state, &mut p, &mut c, "#endrec");
     let alias = p.aliases.list();
     let buff = alias
         .iter()
@@ -2002,13 +2027,15 @@ fn record_captures_then_saves_alias() {
 
 #[test]
 fn a_recording_replaces_an_alias_in_its_group() {
+    let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     let mut buff = Alias::new("buff", "cast 'armor' self");
     buff.group = Some("buffs".into());
     p.aliases.set(buff);
-    let _ = process(&mut p, "#record buff");
-    let _ = process(&mut p, "cast 'haste' self");
-    let _ = process(&mut p, "#endrec");
+    let _ = run_line(&state, &mut p, &mut c, "#record buff");
+    let _ = run_line(&state, &mut p, &mut c, "cast 'haste' self");
+    let _ = run_line(&state, &mut p, &mut c, "#endrec");
     let buff = p.aliases.get("buff").unwrap();
     assert_eq!(buff.expansion, "cast 'haste' self");
     assert_eq!(buff.group.as_deref(), Some("buffs"));
@@ -2016,13 +2043,15 @@ fn a_recording_replaces_an_alias_in_its_group() {
 
 #[test]
 fn record_skips_slash_lines() {
+    let state = AppState::default();
     let mut p = Profile::default();
-    let _ = process(&mut p, "#record probe");
-    let _ = process(&mut p, "look");
+    let mut c = Connection::default();
+    let _ = run_line(&state, &mut p, &mut c, "#record probe");
+    let _ = run_line(&state, &mut p, &mut c, "look");
     // A slash command shouldn't be captured.
-    let _ = process(&mut p, "#aliases");
-    let _ = process(&mut p, "score");
-    let _ = process(&mut p, "#endrec");
+    let _ = run_line(&state, &mut p, &mut c, "#aliases");
+    let _ = run_line(&state, &mut p, &mut c, "score");
+    let _ = run_line(&state, &mut p, &mut c, "#endrec");
     let buff = p
         .aliases
         .list()
@@ -2034,11 +2063,13 @@ fn record_skips_slash_lines() {
 
 #[test]
 fn record_cancel_discards() {
+    let state = AppState::default();
     let mut p = Profile::default();
-    let _ = process(&mut p, "#record nope");
-    let _ = process(&mut p, "kill rabbit");
-    let _ = process(&mut p, "#record cancel");
-    assert!(p.recording_macro.is_none());
+    let mut c = Connection::default();
+    let _ = run_line(&state, &mut p, &mut c, "#record nope");
+    let _ = run_line(&state, &mut p, &mut c, "kill rabbit");
+    let _ = run_line(&state, &mut p, &mut c, "#record cancel");
+    assert!(c.recording_macro.is_none());
     assert!(p.aliases.list().iter().all(|a| a.name != "nope"));
 }
 
@@ -2054,9 +2085,10 @@ fn slash_unalias_removes() {
 #[test]
 fn slash_var_set_and_show() {
     let mut p = Profile::default();
-    let r = process(&mut p, "#var hp 100");
+    let mut c = Connection::default();
+    let r = process_on(&mut p, &mut c, "#var hp 100");
     assert!(r.echo.iter().any(|l| l == "var hp set"));
-    let r = process(&mut p, "#var hp");
+    let r = process_on(&mut p, &mut c, "#var hp");
     assert!(r.echo.iter().any(|l| l == "hp = 100"));
 }
 

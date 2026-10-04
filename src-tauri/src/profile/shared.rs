@@ -606,7 +606,7 @@ pub(crate) async fn change_scope_locked(
             return Err(SCOPE_MIGRATION_PENDING.into());
         }
         let values = {
-            let p = state.profile.lock().await;
+            let p = state.selected_session().lock_profile().await;
             GlobalConfig::from_profile(&p, &stopped)
         };
         let set = state.loaded_profile_set().await?;
@@ -626,7 +626,7 @@ pub(crate) async fn change_scope_locked(
     };
     let mut gained = None;
     if let Some(held) = held {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         match share_custom_themes(held, &scope, &global_path, &mut p) {
             Ok(true) => gained = Some(p.ui.custom_themes.clone()),
             Ok(false) => {}
@@ -1200,8 +1200,8 @@ mod scope_change_tests {
         prompt.save(&set.profile_path("Test-Prompt")).unwrap();
 
         let state: SharedState = Arc::new(AppState::default());
-        *state.profile.lock().await = live;
-        *state.profile_set.lock().await = Some(set);
+        *state.selected_profile().await = live;
+        state.set_profiles(set).await;
         state
     }
 
@@ -1210,7 +1210,7 @@ mod scope_change_tests {
     async fn set_scope(state: &SharedState, scope: ScopeConfig) {
         let _persist_guard = PERSIST_LOCK.lock().await;
         change_scope_locked(state, scope).await.unwrap();
-        let live = state.profile.lock().await;
+        let live = state.selected_profile().await;
         let guard = state.profile_set.lock().await;
         persist_live(guard.as_ref().unwrap(), &live);
     }
@@ -1283,7 +1283,7 @@ mod scope_change_tests {
         set_scope(&state, per_profile()).await;
         set_scope(&state, ScopeConfig::default()).await;
 
-        let live = state.profile.lock().await;
+        let live = state.selected_profile().await;
         assert_eq!(
             theme_ids(&live.ui.custom_themes),
             ["night-ink", "night-ink-2"]

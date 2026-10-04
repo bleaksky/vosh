@@ -137,7 +137,7 @@ fn wire(events: &[LookEvent]) -> Vec<u8> {
 fn read(p: &mut Profile, c: &mut Connection, data: &[u8]) -> String {
     let mut parser = Parser::new();
     let mut acc = LineAccumulator::new();
-    let mut batch = ReadBatch::new(crate::output::output_count());
+    let mut batch = ReadBatch::new(false);
     let now = Instant::now();
     for event in parser.feed(data) {
         match event {

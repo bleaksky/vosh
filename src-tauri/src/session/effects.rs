@@ -8,8 +8,7 @@
 
 use std::sync::Arc;
 
-use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::Mutex;
+use tauri::{AppHandle, Manager};
 use tokio::time::Instant;
 use tracing::warn;
 
@@ -20,7 +19,8 @@ use crate::input::{self, LineFrom};
 use crate::output::emit_output;
 use crate::profile::live::Profile;
 use crate::profile::shared::SharedLayer;
-use crate::script::{ApplyResult, SharedTimers};
+use crate::script::ApplyResult;
+use crate::sessions::Session;
 use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
@@ -38,11 +38,11 @@ pub(super) enum OutputSink<'a> {
 }
 
 impl OutputSink<'_> {
-    /// Write `bytes` to the terminal.
-    fn write<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, bytes: Vec<u8>) {
+    /// Write `bytes` to the terminal of `session`.
+    fn write<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, session: &Session, bytes: Vec<u8>) {
         match self {
             OutputSink::Batch(batch) => batch.out.text(&bytes),
-            OutputSink::Direct => emit_output(app, bytes),
+            OutputSink::Direct => emit_output(app, session, bytes),
         }
     }
 
@@ -89,9 +89,14 @@ impl ScriptIo<'_, '_> {
         }
     }
 
-    fn echo<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, lines: Vec<String>) {
+    fn echo<R: tauri::Runtime>(
+        &mut self,
+        app: &AppHandle<R>,
+        session: &Session,
+        lines: Vec<String>,
+    ) {
         match self {
-            ScriptIo::Session(_, sink, _) => sink.write(app, framed_echoes(&lines)),
+            ScriptIo::Session(_, sink, _) => sink.write(app, session, framed_echoes(&lines)),
             ScriptIo::Collect { echoes, .. } => echoes.extend(lines),
         }
     }
@@ -114,8 +119,7 @@ impl ScriptIo<'_, '_> {
     async fn walk<R: tauri::Runtime>(
         &mut self,
         app: &AppHandle<R>,
-        profile: &Arc<Mutex<Profile>>,
-        connection: &SharedConnection,
+        session: &Session,
         command: WalkCommand,
     ) -> std::io::Result<Option<ApplyResult>> {
         match self {
@@ -126,12 +130,12 @@ impl ScriptIo<'_, '_> {
                     stream.flush().await?;
                 }
                 if !out.lines.is_empty() {
-                    sink.write(app, framed_echoes(&out.lines));
+                    sink.write(app, session, framed_echoes(&out.lines));
                 }
                 if out.release.is_empty() {
                     return Ok(None);
                 }
-                Ok(Some(walk::release(profile, connection, out.release).await))
+                Ok(Some(walk::release(session, out.release).await))
             }
             ScriptIo::Collect { walk, .. } => {
                 **walk = Some(command);
@@ -205,9 +209,7 @@ impl InputBudget {
 pub(super) async fn apply_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
     io: &mut ScriptIo<'_, '_>,
-    profile: &Arc<Mutex<Profile>>,
-    connection: &SharedConnection,
-    lua_timers: &SharedTimers,
+    session: &Arc<Session>,
     apply: ApplyResult,
 ) -> std::io::Result<()> {
     let mut apply = apply;
@@ -217,9 +219,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
         // Durable Lua changes (mud.alias, set_var, group toggles fired
         // by triggers or timers) ride the same debounced save the slash
         // commands use, or they would never reach disk.
-        if apply.durable_changed {
-            crate::disk::save::mark_profile_dirty(app);
-        }
+        mark_durable(app, &apply);
         // A Lua `mud.alias` changes the list an open Settings page shows.
         broadcast_list_changes(app, apply.lists);
 
@@ -227,25 +227,23 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             io.send(&apply.send_bytes).await?;
         }
         if !apply.echoes.is_empty() {
-            io.echo(app, std::mem::take(&mut apply.echoes));
+            io.echo(app, session, std::mem::take(&mut apply.echoes));
         }
         // A `#walk` goes after the bytes of its line. What a `#walk stop`
         // or a bare `#walk` let go of runs right after it, and its own
         // timers and `mud.input` lines join this result's.
         let mut walking = apply.walk.take();
         while let Some(command) = walking.take() {
-            let Some(mut released) = io.walk(app, profile, connection, command).await? else {
+            let Some(mut released) = io.walk(app, session, command).await? else {
                 continue;
             };
-            if released.durable_changed {
-                crate::disk::save::mark_profile_dirty(app);
-            }
+            mark_durable(app, &released);
             broadcast_list_changes(app, std::mem::take(&mut released.lists));
             if !released.send_bytes.is_empty() {
                 io.send(&std::mem::take(&mut released.send_bytes)).await?;
             }
             if !released.echoes.is_empty() {
-                io.echo(app, std::mem::take(&mut released.echoes));
+                io.echo(app, session, std::mem::take(&mut released.echoes));
             }
             walking = released.walk.take();
             apply.append(released);
@@ -255,12 +253,12 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             // one result both starts and cancels never fires. Lua never
             // gives two timers the same id, so a cancel only ever takes
             // the timer it names.
-            let mut guard = lua_timers.lock().await;
+            let mut guard = session.lua_timers.lock().await;
             guard.extend(apply.new_timers);
             guard.retain(|t| !apply.cancel_timers.contains(&t.timer_id));
         }
         if apply.prompt_vars_changed {
-            io.prompt_vars(app, connection).await;
+            io.prompt_vars(app, &session.connection).await;
         }
         if apply.inputs.is_empty() {
             return Ok(());
@@ -269,6 +267,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             warn!(depth, "mud.input went too deep");
             io.echo(
                 app,
+                session,
                 vec![format!("[mud.input recursion limit hit ({depth})]")],
             );
             return Ok(());
@@ -276,7 +275,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
         depth += 1;
         let (inputs, dropped) = budget.take(std::mem::take(&mut apply.inputs));
         if !dropped.is_empty() {
-            io.echo(app, dropped);
+            io.echo(app, session, dropped);
         }
         if inputs.is_empty() {
             return Ok(());
@@ -287,24 +286,41 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
         )
         .await;
         let state = app.state::<SharedState>();
-        let LinesRun {
-            apply: next,
-            shown,
-            effects,
-        } = {
-            let mut p = profile.lock().await;
-            let mut c = connection.lock();
-            run_lines_locked(
+        let (
+            open,
+            LinesRun {
+                apply: next,
+                shown,
+                effects,
+                replaced_by,
+            },
+        ) = {
+            let mut p = session.lock_profile().await;
+            let mut c = session.connection.lock();
+            let run = run_lines_locked(
                 &state,
                 &mut p,
                 &mut c,
                 inputs.iter().map(|(from, line)| (*from, line.as_str())),
                 shared.as_ref(),
-            )
+            );
+            (p.open().clone(), run)
         };
-        crate::disk::save::settle_line_effects(app, effects).await;
-        shown.send(app);
-        apply = next;
+        crate::disk::save::settle_line_effects(app, session, &open, effects, replaced_by).await;
+        shown.send(app, session);
+        apply = next.ran_under(&open);
+    }
+}
+
+/// Mark the profile `apply` ran under to save, when its Lua changed what
+/// the profile saves.
+fn mark_durable<R: tauri::Runtime>(app: &AppHandle<R>, apply: &ApplyResult) {
+    debug_assert!(
+        !apply.durable_changed || apply.profile.is_some(),
+        "a durable change names the profile it ran under"
+    );
+    if let Some(open) = apply.profile.as_ref().filter(|_| apply.durable_changed) {
+        crate::disk::save::mark_profile_dirty(app, open);
     }
 }
 
@@ -323,9 +339,7 @@ pub(crate) struct Collected {
 /// session.
 pub(crate) async fn collect_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    profile: &Arc<Mutex<Profile>>,
-    connection: &SharedConnection,
-    lua_timers: &SharedTimers,
+    session: &Arc<Session>,
     apply: ApplyResult,
 ) -> Collected {
     let mut collected = Collected::default();
@@ -335,8 +349,7 @@ pub(crate) async fn collect_script_result<R: tauri::Runtime>(
         walk: &mut collected.walk,
     };
     // Collecting writes to no stream, so it never fails.
-    if let Err(e) = apply_script_result(app, &mut io, profile, connection, lua_timers, apply).await
-    {
+    if let Err(e) = apply_script_result(app, &mut io, session, apply).await {
         warn!(error = %e, "applying a script result failed");
     }
     collected
@@ -431,20 +444,17 @@ impl ShownChanges {
         }
     }
 
-    /// Ask for the repaint and send the target, for lines the session
-    /// loop runs. The repaint request goes through the session handle
-    /// from a task of its own, since `session_disconnect` holds the
+    /// Ask `session` for the repaint and send the target, for lines the
+    /// session loop runs. The repaint request goes through the session
+    /// handle from a task of its own, since `session_disconnect` holds the
     /// handle's lock while it waits for this session to end.
-    fn send<R: tauri::Runtime>(self, app: &AppHandle<R>) {
+    fn send<R: tauri::Runtime>(self, app: &AppHandle<R>, session: &Arc<Session>) {
         if self.repaint {
-            let state = app
-                .state::<crate::app::state::SharedState>()
-                .inner()
-                .clone();
-            tokio::spawn(async move { crate::prompt::request_prompt_repaint(&state).await });
+            let session = Arc::clone(session);
+            tokio::spawn(async move { crate::prompt::request_prompt_repaint(&session).await });
         }
         if let Some(payload) = self.target {
-            let _ = app.emit(events::TARGET, payload);
+            session.emit(app, events::TARGET, &payload);
         }
     }
 }
@@ -457,6 +467,10 @@ pub(crate) struct LinesRun {
     /// What they changed outside the terminal text.
     pub(crate) shown: ShownChanges,
     pub(crate) effects: input::LineEffects,
+    /// Which of `#profile reset` and `#profile load` last laid a profile
+    /// over the live one, read from its line the way the choice to lay
+    /// global.toml back is.
+    pub(crate) replaced_by: Option<input::ProfileReplace>,
 }
 
 /// The part of [`run_fired_command`] that runs under the profile lock
@@ -488,8 +502,12 @@ pub(crate) fn run_lines_locked<'a>(
     let shown_before = Shown::of(c);
     let mut effects = input::LineEffects::default();
     let mut apply = ApplyResult::default();
+    let mut replaced_by = None;
     for (from, line) in lines {
         let ran = run_and_note_line(state, p, c, from, line, &mut effects, shared);
+        if ran.replaced {
+            replaced_by = input::profile_replace(line);
+        }
         apply.append(line_script_result(ran));
     }
     apply.lists = ListChanges::since(lists_before, p, c);
@@ -497,6 +515,7 @@ pub(crate) fn run_lines_locked<'a>(
         apply,
         shown: ShownChanges::since(shown_before, c),
         effects,
+        replaced_by,
     }
 }
 
@@ -512,43 +531,42 @@ pub(crate) fn run_lines_locked<'a>(
 pub(super) async fn run_fired_command<R: tauri::Runtime>(
     app: &AppHandle<R>,
     io: &mut ScriptIo<'_, '_>,
-    profile: &Arc<Mutex<Profile>>,
-    connection: &SharedConnection,
-    lua_timers: &SharedTimers,
+    session: &Arc<Session>,
     command: &str,
 ) -> std::io::Result<()> {
     let shared = crate::profile::switch::shared_layer_for_lines(app, [command]).await;
     let state = app.state::<SharedState>();
-    let LinesRun {
-        apply,
-        shown,
-        effects,
-    } = {
-        let mut p = profile.lock().await;
-        let mut c = connection.lock();
-        run_fired_locked(&state, &mut p, &mut c, command, shared.as_ref())
+    let (
+        open,
+        LinesRun {
+            apply,
+            shown,
+            effects,
+            replaced_by,
+        },
+    ) = {
+        let mut p = session.lock_profile().await;
+        let mut c = session.connection.lock();
+        let run = run_fired_locked(&state, &mut p, &mut c, command, shared.as_ref());
+        (p.open().clone(), run)
     };
-    crate::disk::save::settle_line_effects(app, effects).await;
-    shown.send(app);
-    apply_script_result(app, io, profile, connection, lua_timers, apply).await
+    crate::disk::save::settle_line_effects(app, session, &open, effects, replaced_by).await;
+    shown.send(app, session);
+    apply_script_result(app, io, session, apply.ran_under(&open)).await
 }
 
-/// Report a tick step on `session://tick`, so the frontend counts and
-/// plays the sound when it fired, then run its Send each tick command
-/// through the full input pipeline like a timer command.
+/// Report a tick step of `session` on `session://tick`, so the frontend
+/// counts and plays the sound when it fired, then run its Send each tick
+/// command through the full input pipeline like a timer command.
 pub(super) async fn deliver_tick_step<R: tauri::Runtime>(
     app: &AppHandle<R>,
     io: &mut ScriptIo<'_, '_>,
-    profile: &Arc<Mutex<Profile>>,
-    connection: &SharedConnection,
-    lua_timers: &SharedTimers,
+    session: &Arc<Session>,
     step: TickStep,
 ) -> std::io::Result<()> {
-    if let Err(e) = app.emit(events::TICK, &step.payload) {
-        warn!(error = %e, "failed to emit tick payload");
-    }
+    session.emit(app, events::TICK, &step.payload);
     if let Some(command) = step.command {
-        run_fired_command(app, io, profile, connection, lua_timers, &command).await?;
+        run_fired_command(app, io, session, &command).await?;
     }
     Ok(())
 }

@@ -7,12 +7,14 @@
 //! this grid and draws each cell.
 //!
 //! This file holds the grid, its cells, selection, scroll and resize, and
-//! the shared grid the session feeds and the renderer reads. `regions`
+//! a grid for each session, which the session feeds and the renderer
+//! reads while it shows. `regions`
 //! writes the session's output with the prompt regions it may replace,
 //! `find` searches the grid, `links` finds the web links in it, and
 //! `blink` keeps the blink alacritty drops.
 
-use std::sync::{Mutex, OnceLock};
+use std::collections::BTreeMap;
+use std::sync::Mutex;
 
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::{Dimensions, Scroll};
@@ -23,12 +25,15 @@ use alacritty_terminal::term::{Config, Term};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
 use vosh_prompt::stage::Output;
 
+use crate::sessions::SessionId;
+
 mod blink;
 pub(crate) mod find;
 pub(crate) mod links;
 pub(crate) mod regions;
 
 use blink::{Blinking, BLINK};
+use find::Find;
 use regions::{CursorReport, LiftTrack, Region, ScreenRows};
 
 /// How a cell is underlined: SGR 4 and its `4:x` sub parameter, where
@@ -358,235 +363,324 @@ impl TermGrid {
     }
 }
 
-static GRID: OnceLock<Mutex<Option<TermGrid>>> = OnceLock::new();
-
-fn grid_slot() -> &'static Mutex<Option<TermGrid>> {
-    GRID.get_or_init(|| Mutex::new(None))
+/// One session's grid with what goes with it: whether its saved
+/// scrollback went in, its find, and whether its prompt draws on bands.
+#[derive(Default)]
+pub(crate) struct SessionGrid {
+    /// None until the session's first write, or the first frame that
+    /// shows it.
+    term: Option<TermGrid>,
+    /// The saved scrollback went in, see [`claim_seed`].
+    seeded: bool,
+    find: Find,
+    /// Your prompt shows lifted in this session, so each lift draws on a
+    /// band.
+    prompt_bands: bool,
 }
 
-/// Resize the shared grid to fit the native surface (creating it if it does
-/// not exist yet). Called by the renderer before each frame.
-pub(crate) fn resize_grid(columns: usize, screen_lines: usize) {
-    if let Ok(mut slot) = grid_slot().lock() {
-        match slot.as_mut() {
+impl SessionGrid {
+    /// The grid, None before the session's first write or frame.
+    pub(crate) fn term(&self) -> Option<&TermGrid> {
+        self.term.as_ref()
+    }
+
+    /// The find matches and the one you stepped to.
+    pub(crate) fn find(&self) -> &Find {
+        &self.find
+    }
+
+    /// Whether a band goes under each lifted prompt.
+    pub(crate) fn prompt_bands(&self) -> bool {
+        self.prompt_bands
+    }
+
+    /// Size the grid to `columns` by `screen_lines`, making it if it does
+    /// not exist yet.
+    fn size(&mut self, columns: usize, screen_lines: usize) {
+        match self.term.as_mut() {
             Some(grid) => grid.resize(columns, screen_lines),
-            None => *slot = Some(TermGrid::new(columns, screen_lines)),
+            None => self.term = Some(TermGrid::new(columns, screen_lines)),
+        }
+    }
+
+    /// The grid a write lands in, made at 80 by 24 when no size came yet.
+    fn written(&mut self) -> &mut TermGrid {
+        self.term.get_or_insert_with(|| TermGrid::new(80, 24))
+    }
+}
+
+/// Every session's grid, and the session whose grid shows. One Metal
+/// layer draws one pane, so a frame draws the shown grid alone, and only
+/// that grid takes the pointer and the size the frame gives.
+struct Grids {
+    shown: SessionId,
+    by_session: BTreeMap<SessionId, SessionGrid>,
+}
+
+impl Grids {
+    /// No grid yet, with the first session's showing.
+    const fn new() -> Self {
+        Self {
+            shown: SessionId::FIRST,
+            by_session: BTreeMap::new(),
+        }
+    }
+
+    /// What `session` holds, made empty on first use.
+    fn of(&mut self, session: SessionId) -> &mut SessionGrid {
+        self.by_session.entry(session).or_default()
+    }
+}
+
+static GRIDS: Mutex<Grids> = Mutex::new(Grids::new());
+
+/// Run `f` on what `session` holds, under the map's lock. None only when
+/// a holder of the lock panicked.
+fn with_session<R>(session: SessionId, f: impl FnOnce(&mut SessionGrid) -> R) -> Option<R> {
+    GRIDS.lock().ok().map(|mut grids| f(grids.of(session)))
+}
+
+/// Run `f` on the grid of `session`, under the map's lock. None before
+/// the session's first write or frame.
+pub(crate) fn with_grid_mut<R>(
+    session: SessionId,
+    f: impl FnOnce(&mut TermGrid) -> R,
+) -> Option<R> {
+    let mut grids = GRIDS.lock().ok()?;
+    grids.by_session.get_mut(&session)?.term.as_mut().map(f)
+}
+
+/// Show the grid of `session`. From the next frame on, the frames draw
+/// and size it, and the pointer acts on it.
+pub(crate) fn show(session: SessionId) {
+    if let Ok(mut grids) = GRIDS.lock() {
+        grids.shown = session;
+    }
+}
+
+/// Drop the grid of `session`, which closed, with its find and its bands.
+pub(crate) fn forget(session: SessionId) {
+    if let Ok(mut grids) = GRIDS.lock() {
+        grids.by_session.remove(&session);
+    }
+}
+
+/// The session whose grid shows.
+pub(crate) fn shown() -> SessionId {
+    GRIDS.lock().map_or(SessionId::FIRST, |grids| grids.shown)
+}
+
+/// Resize the shown grid to fit the native surface (creating it if it
+/// does not exist yet). Called by the renderer before each frame.
+pub(crate) fn resize_grid(columns: usize, screen_lines: usize) {
+    if let Ok(mut grids) = GRIDS.lock() {
+        let shown = grids.shown;
+        grids.of(shown).size(columns, screen_lines);
+    }
+}
+
+/// Size the grid of `session` to the window size the page gives it,
+/// while another session's grid shows. The shown grid keeps the size
+/// each frame gives it.
+pub(crate) fn size_hidden(session: SessionId, columns: usize, screen_lines: usize) {
+    if let Ok(mut grids) = GRIDS.lock() {
+        if grids.shown != session {
+            grids.of(session).size(columns, screen_lines);
         }
     }
 }
 
-static SEEDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// Claim the one seeding of the shared grid from the persisted
+/// Claim the one seeding of the grid of `session` from its persisted
 /// scrollback. The grid lives as long as the process, so a webview
 /// reload or a remounted terminal asking again would write the history
 /// a second time over a grid that already holds it (and glue the last
-/// prompt to the first restored line). True on the first call only.
-pub(crate) fn claim_seed() -> bool {
-    !SEEDED.swap(true, std::sync::atomic::Ordering::AcqRel)
+/// prompt to the first restored line). True on each session's first
+/// call only.
+pub(crate) fn claim_seed(session: SessionId) -> bool {
+    with_session(session, |held| !std::mem::replace(&mut held.seeded, true)).unwrap_or(false)
 }
 
-/// Write text the webview wrote itself into the shared grid, creating it
-/// on first use: your typed echo, a notice, the restored scrollback. See
-/// [`TermGrid::local_write`]. Lock guarded, and the renderer reads the
-/// same grid. Returns the newest output of the prompt stage the grid took
-/// before the text, which the text follows.
-pub(crate) fn feed_local(bytes: &[u8]) -> u64 {
-    let Ok(mut slot) = grid_slot().lock() else {
-        return 0;
-    };
-    let grid = slot.get_or_insert_with(|| TermGrid::new(80, 24));
-    grid.local_write(bytes);
-    grid.taken()
+/// Write text the webview wrote itself into the grid of `session`,
+/// creating it on first use: your typed echo, a notice, the restored
+/// scrollback. See [`TermGrid::local_write`]. Lock guarded, and the
+/// renderer reads the same grid while it shows. Returns the newest output
+/// of the prompt stage the grid took before the text, which the text
+/// follows.
+pub(crate) fn feed_local(session: SessionId, bytes: &[u8]) -> u64 {
+    with_session(session, |held| {
+        let grid = held.written();
+        grid.local_write(bytes);
+        grid.taken()
+    })
+    .unwrap_or(0)
 }
 
-/// Write one session output into the shared grid under its lock, word
+/// Write one output of `session` into its grid under the lock, word
 /// wrapped at the grid width, with its replace and restore. See
 /// [`TermGrid::session_output`]. Every `session://output` goes through
 /// here as well, so the grid holds what xterm holds. `id` names the
 /// output when the prompt stage made it.
-pub(crate) fn feed_session_output(out: &Output, id: Option<u64>) {
-    let Ok(mut slot) = grid_slot().lock() else {
-        return;
-    };
-    let grid = slot.get_or_insert_with(|| TermGrid::new(80, 24));
-    grid.session_output(out);
-    if let Some(id) = id {
-        grid.took(id);
-    }
+pub(crate) fn feed_session_output(session: SessionId, out: &Output, id: Option<u64>) {
+    with_session(session, |held| {
+        let grid = held.written();
+        grid.session_output(out);
+        if let Some(id) = id {
+            grid.took(id);
+        }
+    });
 }
 
-/// Where the shared grid's cursor sits and where its open region starts,
-/// under its lock. None before the grid exists. See
+/// Where the cursor of the grid of `session` sits and where its open
+/// region starts, under the lock. None before the grid exists. See
 /// [`TermGrid::cursor_report`].
-pub(crate) fn cursor_report() -> Option<CursorReport> {
-    grid_slot()
-        .lock()
-        .ok()
-        .and_then(|slot| slot.as_ref().map(TermGrid::cursor_report))
+pub(crate) fn cursor_report(session: SessionId) -> Option<CursorReport> {
+    with_grid_mut(session, |grid| grid.cursor_report())
 }
 
-/// The shared grid's live screen as text, under its lock. None before
-/// the grid exists. See [`TermGrid::screen_rows`].
-pub(crate) fn screen_rows() -> Option<ScreenRows> {
-    grid_slot()
-        .lock()
-        .ok()
-        .and_then(|slot| slot.as_ref().map(TermGrid::screen_rows))
+/// The live screen of the grid of `session` as text, under the lock.
+/// None before the grid exists. See [`TermGrid::screen_rows`].
+pub(crate) fn screen_rows(session: SessionId) -> Option<ScreenRows> {
+    with_grid_mut(session, |grid| grid.screen_rows())
 }
 
-/// Current (display offset, scrollback length) of the shared grid, for the
-/// scrollbar thumb geometry and drag mapping.
-pub(crate) fn scroll_metrics() -> (usize, usize) {
-    grid_slot().lock().map_or((0, 0), |slot| {
-        slot.as_ref()
-            .map_or((0, 0), |g| (g.display_offset(), g.scrollback_len()))
+/// Current (display offset, scrollback length) of the grid of `session`,
+/// for the scrollbar thumb geometry and drag mapping.
+pub(crate) fn scroll_metrics(session: SessionId) -> (usize, usize) {
+    with_grid_mut(session, |grid| {
+        (grid.display_offset(), grid.scrollback_len())
     })
+    .unwrap_or((0, 0))
 }
 
-/// Scroll the shared grid to an absolute display offset (0 = live tail),
-/// clamped to history. Drives the scrollbar thumb drag.
-pub(crate) fn scroll_to_offset(target: usize) {
-    if let Ok(mut slot) = grid_slot().lock() {
-        if let Some(grid) = slot.as_mut() {
-            let target = target.min(grid.scrollback_len()) as i32;
-            let current = grid.display_offset() as i32;
-            grid.scroll(target - current);
-        }
-    }
+/// Scroll the grid of `session` to an absolute display offset (0 = live
+/// tail), clamped to history. Drives the scrollbar thumb drag.
+pub(crate) fn scroll_to_offset(session: SessionId, target: usize) {
+    with_grid_mut(session, |grid| {
+        let target = target.min(grid.scrollback_len()) as i32;
+        let current = grid.display_offset() as i32;
+        grid.scroll(target - current);
+    });
 }
 
-/// Scroll the shared grid by `delta` lines (positive = up into scrollback).
-pub(crate) fn scroll(delta: i32) {
-    if let Ok(mut slot) = grid_slot().lock() {
-        if let Some(grid) = slot.as_mut() {
-            grid.scroll(delta);
-        }
-    }
+/// Scroll the grid of `session` by `delta` lines (positive = up into
+/// scrollback).
+pub(crate) fn scroll(session: SessionId, delta: i32) {
+    with_grid_mut(session, |grid| grid.scroll(delta));
 }
 
-/// Page the shared grid up or down (PageUp/PageDown).
-pub(crate) fn scroll_page(up: bool) {
-    if let Ok(mut slot) = grid_slot().lock() {
-        if let Some(grid) = slot.as_mut() {
-            grid.term
-                .scroll_display(if up { Scroll::PageUp } else { Scroll::PageDown });
-        }
-    }
+/// Page the grid of `session` up or down (PageUp/PageDown).
+pub(crate) fn scroll_page(session: SessionId, up: bool) {
+    with_grid_mut(session, |grid| {
+        grid.term
+            .scroll_display(if up { Scroll::PageUp } else { Scroll::PageDown });
+    });
 }
 
-/// Snap the shared grid to the live tail (collapses the split).
-pub(crate) fn scroll_to_bottom() {
-    if let Ok(mut slot) = grid_slot().lock() {
-        if let Some(grid) = slot.as_mut() {
-            grid.term.scroll_display(Scroll::Bottom);
-        }
-    }
+/// Snap the grid of `session` to the live tail (collapses the split).
+pub(crate) fn scroll_to_bottom(session: SessionId) {
+    with_grid_mut(session, |grid| grid.term.scroll_display(Scroll::Bottom));
 }
 
-/// Current scrollback offset of the shared grid (0 = live tail, no split).
-pub(crate) fn current_display_offset() -> usize {
-    grid_slot()
-        .lock()
-        .ok()
-        .and_then(|slot| slot.as_ref().map(TermGrid::display_offset))
-        .unwrap_or(0)
+/// Current scrollback offset of the grid of `session` (0 = live tail, no
+/// split).
+pub(crate) fn current_display_offset(session: SessionId) -> usize {
+    with_grid_mut(session, |grid| grid.display_offset()).unwrap_or(0)
 }
 
-/// You are selecting text in the shared grid or reading back in it, so a
-/// clock repaint of your prompt waits and the row you select or read never
-/// moves. False with no grid.
-pub(crate) fn reader_busy() -> bool {
-    grid_slot().lock().is_ok_and(|slot| {
-        slot.as_ref().is_some_and(|grid| {
-            grid.display_offset() != 0
-                || grid
-                    .term
-                    .selection
-                    .as_ref()
-                    .is_some_and(|selection| !selection.is_empty())
-        })
+/// You are selecting text in the grid of `session` or reading back in
+/// it, so a clock repaint of your prompt waits and the row you select or
+/// read never moves. False with no grid.
+pub(crate) fn reader_busy(session: SessionId) -> bool {
+    with_grid_mut(session, |grid| {
+        grid.display_offset() != 0
+            || grid
+                .term
+                .selection
+                .as_ref()
+                .is_some_and(|selection| !selection.is_empty())
     })
+    .unwrap_or(false)
 }
 
-/// Begin a text selection anchored at a grid cell.
-pub(crate) fn start_selection(line: i32, col: usize) {
-    with_grid_mut(|grid| grid.start_selection(line, col));
+/// Begin a text selection anchored at a cell of the grid of `session`.
+pub(crate) fn start_selection(session: SessionId, line: i32, col: usize) {
+    with_grid_mut(session, |grid| grid.start_selection(line, col));
 }
 
-/// Extend the active selection to a grid cell.
-pub(crate) fn update_selection(line: i32, col: usize) {
-    with_grid_mut(|grid| grid.extend_selection(line, col, false));
+/// Extend the active selection to a cell of the grid of `session`.
+pub(crate) fn update_selection(session: SessionId, line: i32, col: usize) {
+    with_grid_mut(session, |grid| grid.extend_selection(line, col, false));
 }
 
-/// Drop the shared grid's history, for Clear scrollback.
-pub(crate) fn clear_history() {
-    with_grid_mut(TermGrid::clear_history);
+/// Drop the history of the grid of `session`, for Clear scrollback.
+pub(crate) fn clear_history(session: SessionId) {
+    with_grid_mut(session, TermGrid::clear_history);
 }
 
-/// Drop the active selection.
-pub(crate) fn clear_selection() {
-    if let Ok(mut slot) = grid_slot().lock() {
-        if let Some(grid) = slot.as_mut() {
-            grid.term.selection = None;
-        }
-    }
+/// Drop the active selection in the grid of `session`.
+pub(crate) fn clear_selection(session: SessionId) {
+    with_grid_mut(session, |grid| grid.term.selection = None);
 }
 
-/// Select everything in the shared grid, scrollback included. Backs the
-/// terminal menu's Select all and Cmd+A on an empty command line.
-pub(crate) fn select_all() {
-    if let Ok(mut slot) = grid_slot().lock() {
-        if let Some(grid) = slot.as_mut() {
-            grid.select_all();
-        }
-    }
+/// Select everything in the grid of `session`, scrollback included.
+/// Backs the terminal menu's Select all and Cmd+A on an empty command
+/// line.
+pub(crate) fn select_all(session: SessionId) {
+    with_grid_mut(session, TermGrid::select_all);
 }
 
-/// The selected text, or None when there is no selection.
-pub(crate) fn selection_text() -> Option<String> {
-    grid_slot()
-        .lock()
-        .ok()
-        .and_then(|slot| slot.as_ref().and_then(TermGrid::selection_text))
+/// The selected text in the grid of `session`, or None when there is no
+/// selection.
+pub(crate) fn selection_text(session: SessionId) -> Option<String> {
+    with_grid_mut(session, |grid| grid.selection_text()).flatten()
 }
 
-/// Read the shared grid (None until the first feed). The renderer calls
+/// Draw a band under each lifted prompt of `session`, reported by the
+/// page from where your prompt shows.
+pub(crate) fn set_prompt_bands(session: SessionId, on: bool) {
+    with_session(session, |held| held.prompt_bands = on);
+}
+
+/// Read the shown grid with its find and its bands. The renderer calls
 /// this on the main thread to build a frame.
-pub(crate) fn with_grid<R>(f: impl FnOnce(Option<&TermGrid>) -> R) -> R {
-    match grid_slot().lock() {
-        Ok(slot) => f(slot.as_ref()),
+pub(crate) fn with_shown<R>(f: impl FnOnce(Option<&SessionGrid>) -> R) -> R {
+    match GRIDS.lock() {
+        Ok(grids) => f(grids.by_session.get(&grids.shown)),
         Err(_) => f(None),
     }
 }
 
-/// Change the shared grid under its lock. None until the first feed.
-pub(crate) fn with_grid_mut<R>(f: impl FnOnce(&mut TermGrid) -> R) -> Option<R> {
-    grid_slot()
-        .lock()
-        .ok()
-        .and_then(|mut slot| slot.as_mut().map(f))
+/// Read the shown grid (None until the first feed).
+#[cfg(test)]
+pub(crate) fn with_grid<R>(f: impl FnOnce(Option<&TermGrid>) -> R) -> R {
+    with_shown(|shown| f(shown.and_then(SessionGrid::term)))
 }
 
-/// Held by every test that feeds or reads the shared grid. The grid
-/// lives for the whole process, so two such tests on different threads
-/// would otherwise see each other's rows.
+/// Held by every test that feeds or reads the grids. They live for the
+/// whole process, so two such tests on different threads would
+/// otherwise see each other's rows. Each holder starts with no grid and
+/// the first session's showing.
 #[cfg(test)]
 pub(crate) fn lock_shared_grid_for_test() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: Mutex<()> = Mutex::new(());
-    LOCK.lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+    let held = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *GRIDS.lock().unwrap() = Grids::new();
+    held
 }
 
-/// Swap a blank `columns` by `screen_lines` grid in for the shared one,
+/// Swap a blank `columns` by `screen_lines` grid in for the shown one,
 /// with no half character carried over. Call with
 /// [`lock_shared_grid_for_test`] held.
 #[cfg(test)]
 pub(crate) fn blank_shared_grid_for_test(columns: usize, screen_lines: usize) {
-    *grid_slot().lock().unwrap() = Some(TermGrid::new(columns, screen_lines));
+    let mut grids = GRIDS.lock().unwrap();
+    let shown = grids.shown;
+    grids.of(shown).term = Some(TermGrid::new(columns, screen_lines));
 }
 
-/// The rows on the shared grid's screen, trailing blanks trimmed. Empty
+/// The rows on the shown grid's screen, trailing blanks trimmed. Empty
 /// before the first feed.
 #[cfg(test)]
 pub(crate) fn shared_screen_rows_for_test() -> Vec<String> {

@@ -75,15 +75,16 @@ pub(crate) fn menu_set_state(app: AppHandle, state: MenuState) {
 }
 
 /// Edit, then Copy, from the main window. `terminal` is true when the
-/// page holds no text selection of its own, and then a native terminal
-/// selection wins. Anything else copies the way the system would, from
-/// the focused field or the page selection.
+/// page holds no text selection of its own, and then a selection in the
+/// native grid that shows wins. Anything else copies the way the system
+/// would, from the focused field or the page selection.
 #[tauri::command]
 pub(crate) fn menu_copy(app: AppHandle, terminal: bool) {
     #[cfg(target_os = "macos")]
     {
-        if terminal && crate::native::grid::selection_text().is_some_and(|t| !t.is_empty()) {
-            crate::native::surface::pointer::request_copy();
+        let shown = crate::native::grid::shown();
+        if terminal && crate::native::grid::selection_text(shown).is_some_and(|t| !t.is_empty()) {
+            crate::native::surface::pointer::request_copy(shown);
         } else {
             let _ = app.run_on_main_thread(crate::app::menu::system_copy);
         }

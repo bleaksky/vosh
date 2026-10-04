@@ -3,7 +3,7 @@
 //! Its twin is `layoutBands` in src/lib/promptBands.ts, and both run
 //! fixtures/prompt-bands/cases.json.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::frame::CellInstance;
 use super::style::{paint_to_rgba, srgb_to_linear, Rgba};
@@ -264,19 +264,6 @@ pub(super) fn ground_tint(tints: &[Paint]) -> Rgba {
         srgb_to_linear(acc[2] / alpha),
         alpha,
     ]
-}
-
-// When set, your prompt shows lifted and each lift draws on a band.
-static PROMPT_BANDS: AtomicBool = AtomicBool::new(false);
-
-/// Draw a band under each lifted prompt, reported by the page from where
-/// your prompt shows.
-pub(crate) fn set_prompt_bands(on: bool) {
-    PROMPT_BANDS.store(on, Ordering::Release);
-}
-
-pub(super) fn prompt_bands() -> bool {
-    PROMPT_BANDS.load(Ordering::Acquire)
 }
 
 // How far past its last glyph the newest lift's band reaches, in CSS px,

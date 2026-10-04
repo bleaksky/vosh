@@ -1,16 +1,22 @@
-//! `#profile save`, `load` and `reset` on the active profile file, and
+//! `#profile save`, `load` and `reset` on the file of the profile the
+//! session plays, and
 //! `#import-tintin`, which reads aliases and variables from a .tin file.
 
-use vosh_automation::vars::Scope;
+use std::sync::Arc;
 
-use super::{split_first_word, InputResult};
+use tauri::AppHandle;
+
+use super::{split_first_word, InputResult, ProfileReplace};
 use crate::app::state::AppState;
 use crate::disk::paths;
 use crate::import::tintin;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
+use crate::profile::open::OpenProfile;
 use crate::profile::switch::hand_to_connection;
 use crate::session::connection::Connection;
+use crate::sessions::Session;
+use crate::tick::TickConfig;
 
 /// What `#profile save`, `load`, and `reset` answer between the shared
 /// catalog wizard and the relaunch that finishes it. Nothing saves in
@@ -23,8 +29,8 @@ const PROFILE_MIGRATION_PENDING: &str =
 /// [`crate::disk::save::PERSIST_LOCK`].
 pub(super) const PROFILE_SAVE_BUSY: &str = "Vosh is saving this profile. Try again.";
 
-/// `#profile save`, `load` and `reset` on the active profile's file in
-/// the app data folder `state` holds. A load or a reset hands the
+/// `#profile save`, `load` and `reset` on the file of `profile` in the
+/// app data folder `state` holds. A load or a reset hands the
 /// connection `c` the new tick settings and `[prompt]` table, as a
 /// profile switch does, and leaves the rest of it as it was.
 pub(super) fn slash_profile(
@@ -58,9 +64,13 @@ pub(super) fn slash_profile(
             other => InputResult::error(format!("unknown #profile subcommand `{other}`")),
         };
     }
-    let app_data = state.app_data.get().map(std::path::PathBuf::as_path);
+    let path = state
+        .app_data
+        .get()
+        .zip(profile.name.as_deref())
+        .map(|(app_data, name)| paths::profile_path(app_data, name));
     match cmd {
-        "save" => match app_data.and_then(profile_path) {
+        "save" => match path {
             Some(path) => {
                 // Every profile file write holds the persist lock. This
                 // runs under the profile lock, which the persist takes
@@ -84,7 +94,7 @@ pub(super) fn slash_profile(
             }
             None => InputResult::error("could not resolve profile path"),
         },
-        "load" => match app_data.and_then(profile_path) {
+        "load" => match path {
             Some(path) => load_profile_file(profile, c, &path, replaced),
             None => InputResult::error("could not resolve profile path"),
         },
@@ -129,6 +139,54 @@ pub(super) fn load_profile_file(
     InputResult::echo_lines(lines)
 }
 
+/// Hand every session on `open` but `session` the tick settings and
+/// `[prompt]` table that a `#profile reset` or `#profile load` in
+/// `session` just laid over it, through [`hand_to_connection`] as that
+/// line did its own connection, and print in each a line that names
+/// `session` (Q31 of the sessions review). `tick_before` is the tick
+/// settings before the lines changed them, when they did. The sessions
+/// come from the map before the profile lock, each connection is locked
+/// in turn under it, never two at once, and the lines print once it lets
+/// go. Call with no lock held.
+pub(crate) async fn hand_to_other_sessions<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &AppState,
+    session: &Session,
+    open: &Arc<OpenProfile>,
+    how: ProfileReplace,
+    tick_before: Option<&TickConfig>,
+) {
+    let others = state.other_sessions(session.id);
+    if others.is_empty() {
+        return;
+    }
+    let players: Vec<Arc<Session>> = {
+        let mut p = open.lock().await;
+        let players: Vec<_> = p.players(&others).cloned().collect();
+        let before = tick_before.unwrap_or(&p.tick.config).clone();
+        for other in &players {
+            hand_to_connection(&mut p, &mut other.connection.lock(), &before);
+        }
+        players
+    };
+    let line = replaced_line(session.label().as_deref(), how);
+    for other in &players {
+        crate::output::emit_output(app, other, line.clone().into_bytes());
+    }
+}
+
+/// What every other session on the profile prints after `#profile
+/// reset` or `#profile load` in the session `who` names, in the yellow
+/// of the line a login switch prints.
+fn replaced_line(who: Option<&str>, how: ProfileReplace) -> String {
+    let did = match how {
+        ProfileReplace::Reset => "reset this profile to its defaults",
+        ProfileReplace::Load => "loaded this profile from its file",
+    };
+    let who = who.unwrap_or("Another session");
+    format!("\r\n\x1b[33m{who} {did}.\x1b[0m\r\n")
+}
+
 pub(super) fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputResult {
     let path = args.trim();
     if path.is_empty() {
@@ -143,9 +201,7 @@ pub(super) fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputRes
         profile.aliases.set(alias.clone());
     }
     for (name, value) in &report.vars {
-        profile
-            .vars
-            .set(Scope::Profile, name.clone(), value.clone());
+        profile.vars.set(name.clone(), value.clone());
     }
     let mut lines = vec![
         format!("imported {}", expanded.display()),
@@ -168,23 +224,6 @@ pub(super) fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputRes
         lines.push(format!("  unparsed: {} line(s)", report.unparsed.len()));
     }
     InputResult::echo_lines(lines)
-}
-
-/// The active profile's file under the app data folder `app_data`,
-/// `<app_data>/profiles/<active>.toml`, whether or not it exists yet.
-/// Reads the profile index (`profiles.toml`) to learn which profile is
-/// active, and returns `None` when the index does not read or names no
-/// active profile.
-///
-/// It never falls back to the legacy `<app_data>/profile.toml`. Launch
-/// writes the index on every install, so that file would only ever be
-/// a stray, and a later launch without an index would move it over the
-/// default profile.
-fn profile_path(app_data: &std::path::Path) -> Option<std::path::PathBuf> {
-    let body = std::fs::read_to_string(paths::profiles_index_path(app_data)).ok()?;
-    let value = body.parse::<toml::Value>().ok()?;
-    let active = value.get("active")?.as_str()?;
-    Some(paths::profile_path(app_data, active))
 }
 
 fn expand_home(path: &str) -> std::path::PathBuf {

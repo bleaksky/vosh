@@ -88,9 +88,10 @@ fn a_trigger_body_reads_the_whole_match_then_each_group() {
             },
         ))
         .expect("the trigger compiles");
-    let result = vosh_automation::trigger::process(&p.triggers, b"Bob says hi");
+    let mut c = Connection::default();
+    let result = vosh_automation::trigger::process(&p.triggers, b"Bob says hi", c.stop_key);
     assert_eq!(
-        super::run_trigger_scripts(&mut p, &result).actions,
+        super::run_trigger_scripts(&mut p, &mut c, &result).actions,
         [vosh_script::Action::Send("Bob says hi|Bob|hi".into())]
     );
 }
@@ -151,7 +152,8 @@ fn tick_and_lua_lines_note_what_they_ask_of_the_profile() {
         LineEffects {
             replaced: true,
             dirty: false,
-            tick_changed: false,
+            tick_before: None,
+            prompt: None,
         }
     );
     assert!(p.aliases.get("greet").is_none());
@@ -182,10 +184,26 @@ fn a_tick_command_from_a_timer_notes_the_tick_change() {
     let mut p = Profile::default();
     let mut c = Connection::default();
     let run = super::run_fired_locked(&state, &mut p, &mut c, "#tick warn at 10", None);
-    assert!(run.effects.tick_changed);
+    assert!(run.effects.tick_before.is_some());
     assert_eq!(p.tick.config.warn_at_secs, Some(10));
     let run = super::run_fired_locked(&state, &mut p, &mut c, "#tick", None);
-    assert!(!run.effects.tick_changed);
+    assert!(run.effects.tick_before.is_none());
+}
+
+#[test]
+fn a_prompt_command_notes_the_table_it_left_and_a_reset_notes_none() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "#prompt default", None);
+    assert_eq!(run.effects.prompt.as_ref(), Some(c.prompt.config()));
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "#prompt", None);
+    assert_eq!(run.effects.prompt, None);
+    // A reset hands its connection a whole table, which the other
+    // sessions on the profile do not take as a choice.
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "#profile reset", None);
+    assert!(run.effects.replaced);
+    assert_eq!(run.effects.prompt, None);
 }
 
 #[test]
@@ -253,10 +271,11 @@ fn a_trigger_body_that_runs_away_turns_its_trigger_off() {
             },
         ))
         .expect("the trigger compiles");
-    let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.");
-    let outcome = super::run_trigger_scripts(&mut p, &result);
-    assert!(p.triggers.is_stopped("hunger"));
-    let apply = crate::script::apply_actions(&mut p, &mut Connection::default(), outcome);
+    let mut c = Connection::default();
+    let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.", c.stop_key);
+    let outcome = super::run_trigger_scripts(&mut p, &mut c, &result);
+    assert!(p.triggers.is_stopped("hunger", c.stop_key));
+    let apply = crate::script::apply_actions(&mut p, &mut c, outcome);
     // A stopped body sends nothing it queued.
     let leftover = &apply.send_bytes;
     assert!(leftover.is_empty(), "{leftover:?}");
@@ -267,7 +286,7 @@ fn a_trigger_body_that_runs_away_turns_its_trigger_off() {
         )]
     );
     // It matches nothing until you save it again.
-    let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.");
+    let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.", c.stop_key);
     let leftover = &result.scripts;
     assert!(leftover.is_empty(), "{leftover:?}");
 }
@@ -284,16 +303,16 @@ fn a_function_a_trigger_body_left_behind_turns_its_trigger_off_too() {
             },
         ))
         .expect("the trigger compiles");
-    let result = vosh_automation::trigger::process(&p.triggers, b"The day has begun.");
-    let outcome = super::run_trigger_scripts(&mut p, &result);
     let mut c = Connection::default();
+    let result = vosh_automation::trigger::process(&p.triggers, b"The day has begun.", c.stop_key);
+    let outcome = super::run_trigger_scripts(&mut p, &mut c, &result);
     crate::script::apply_actions(&mut p, &mut c, outcome);
     let msg = vosh_protocol::gmcp::Message {
         package: "World.Time".into(),
         data: serde_json::json!({}),
     };
     let (_, apply) = super::gmcp_step(&mut p, &mut c, &msg, tokio::time::Instant::now());
-    assert!(p.triggers.is_stopped("day"));
+    assert!(p.triggers.is_stopped("day", c.stop_key));
     assert_eq!(
         apply.echoes,
         [lua_error(
@@ -322,7 +341,7 @@ fn an_alias_body_that_runs_away_turns_its_alias_off() {
             "Vosh stopped the Lua in alias heal after 100 ms. heal stays off until you save it or restart Vosh."
         )]
     );
-    assert!(p.aliases.is_stopped("heal"));
+    assert!(p.aliases.is_stopped("heal", c.stop_key));
     // Typed again, it passes through, as an alias you turned off does.
     let ran = crate::input::run_line(&state, &mut p, &mut c, "heal");
     assert_eq!(super::line_script_result(ran).send_bytes, b"heal\r\n");

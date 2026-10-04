@@ -8,9 +8,10 @@
 //!   connection. It sends your lines, takes each socket read, repaints
 //!   your prompt when a deadline passes, polls the tick and the timers,
 //!   and ends the connection.
-//! - `connection` holds the [`connection::Connection`], what one
-//!   connection holds apart from the profile: your target, the room
-//!   list and look, the tick's count and the prompt engine.
+//! - `connection` holds the [`connection::Connection`], all the session
+//!   state the line pipeline changes, under one lock: your target, the
+//!   room list and look, the tick's count, the prompt engine, the session
+//!   variables and the Lua engine.
 //! - `socket` opens the plain or TLS socket.
 //! - `read` is the socket read path, from each telnet event to what the
 //!   end of a read sends.
@@ -60,8 +61,10 @@ mod socket;
 mod steps;
 pub(crate) mod walk;
 
+use std::sync::Arc;
+
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
@@ -69,7 +72,9 @@ use vosh_protocol::telnet::{option as telnet_option, Negotiator};
 
 use crate::app::events;
 use crate::app::state::SharedState;
+use crate::disk::save::PERSIST_LOCK;
 use crate::input::walk::WalkCommand;
+use crate::sessions::{Address, Session};
 
 use conn::io_loop;
 use log_sink::LogSink;
@@ -232,14 +237,15 @@ impl SessionHandle {
     }
 }
 
-/// Connect to `host` on `port`, over TLS when `tls` says so, in place of
-/// the session that runs, if any. The new connection starts without the
-/// session variables, the character and the affects of the last one, and
-/// every window hears who the session is for once it connects or fails
-/// to.
+/// Connect `session` to `host` on `port`, over TLS when `tls` says so,
+/// in place of the connection it runs, if any. The new connection starts
+/// without the session variables, the character and the affects of the
+/// last one, and every window hears who the session is for once it
+/// connects or fails to.
 pub(crate) async fn connect<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
+    session: &Arc<Session>,
     host: String,
     port: u16,
     tls: bool,
@@ -248,49 +254,65 @@ pub(crate) async fn connect<R: tauri::Runtime>(
     // before doing the long-running connect. This lets `disconnect`
     // run concurrently to cancel a hung connect attempt.
     let old = {
-        let mut current = state.session.lock().await;
+        let mut current = session.slot.lock().await;
         current.take()
     };
     if let Some(handle) = old {
         handle.shutdown().await;
     }
 
-    // Clear session-scoped variables on reconnect; profile-scoped survive.
-    state.profile.lock().await.vars.clear_session();
+    // This session's variables clear on reconnect, and the profile's,
+    // which other sessions read too, survive.
+    session.connection.lock().vars.clear();
 
     // Remember the live connection target so the Char.Status-driven
     // auto-switch path can re-resolve against it once the MUD tells us
     // who we logged in as. Cleared in `disconnect`. Reset the
     // last-known character at the same time so a reconnect to a
     // different account triggers a fresh resolve.
-    if let Ok(mut g) = state.current_connection.lock() {
+    if let Ok(mut g) = session.current_connection.lock() {
         *g = Some((host.clone(), port));
     }
-    if let Ok(mut g) = state.current_character.lock() {
+    if let Ok(mut g) = session.current_character.lock() {
         *g = None;
     }
-    // The old session cleared the list as it ended. A new connection
+    let address = Address {
+        host: host.clone(),
+        port,
+        tls,
+    };
+    let moved = session
+        .address
+        .lock()
+        .is_ok_and(|mut g| g.replace(address.clone()) != Some(address));
+    if moved {
+        // A launch restores the session where it last connected.
+        let _persist_guard = PERSIST_LOCK.lock().await;
+        crate::profile::set::save_sessions(state).await;
+    }
+    // The old connection cleared the list as it ended. A new connection
     // starts with none until the MUD sends its own.
-    state.last_affects.clear();
-    crate::affects::full::connect(app, state);
+    session.last_affects.clear();
+    crate::affects::full::connect(app, session);
 
     let scrollback_path = state
         .app_data
         .get()
-        .map(|dir| crate::disk::paths::scrollback_path(dir));
+        .map(|dir| crate::disk::paths::scrollback_path(dir, session.id));
 
     // Seed the negotiator with the most recently reported terminal
     // size so the initial `DO NAWS` reply during the handshake
     // carries the correct cols/rows. The default of (80, 24) is
     // applied only when the frontend never called
     // `session_set_window_size` before this connect.
-    let initial_size = state.window_size.lock().map_or((80, 24), |g| *g);
+    let initial_size = session.window_size.lock().map_or((80, 24), |g| *g);
     let target = (host.clone(), port);
     let known_host = crate::profile::worlds::is_forsaken_lands(&host);
 
     let spawned = spawn(
         app.clone(),
         state,
+        session,
         host,
         port,
         tls,
@@ -304,52 +326,65 @@ pub(crate) async fn connect<R: tauri::Runtime>(
         Err(e) => {
             // Surface the disconnected state so the UI does not stay stuck
             // on "connecting...". The frontend listens for session://state.
-            let _ = app.emit(
-                events::STATE,
+            emit_state(
+                app,
+                session,
                 StatePayload::Disconnected {
                     reason: Some(e.to_string()),
                 },
             );
             // Nothing reached the target, so nobody is logged in there.
             // A connect that raced this one keeps its own target.
-            if let Ok(mut g) = state.current_connection.lock() {
+            if let Ok(mut g) = session.current_connection.lock() {
                 if g.as_ref() == Some(&target) {
                     *g = None;
                 }
             }
-            crate::session::identity::broadcast_session_identity(app, state).await;
+            crate::session::identity::broadcast_session_identity(app, state, session).await;
             return Err(e.to_string());
         }
     };
 
     {
-        let mut current = state.session.lock().await;
+        let mut current = session.slot.lock().await;
+        // `session_close` takes the session out of the map before its
+        // disconnect takes the slot. A close that came while this connect
+        // ran found the slot empty, so the connection ends here, or it
+        // would run on with nothing to reach it.
+        if state.session(Some(session.id)).is_err() {
+            handle.shutdown().await;
+            return Err(crate::sessions::NO_SUCH_SESSION.to_string());
+        }
         if let Some(prev) = current.take() {
             // A concurrent connect raced us. Shut down our old handle.
             prev.shutdown().await;
         }
         *current = Some(handle);
     }
-    crate::session::identity::broadcast_session_identity(app, state).await;
+    crate::session::identity::broadcast_session_identity(app, state, session).await;
     Ok(())
 }
 
-/// End the session that runs, if any, and forget the live connection
-/// and its character. Every window hears that no session is live.
-pub(crate) async fn disconnect<R: tauri::Runtime>(app: &AppHandle<R>, state: &SharedState) {
+/// End the connection `session` runs, if any, and forget it and its
+/// character. Every window hears that no connection is live.
+pub(crate) async fn disconnect<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    session: &Arc<Session>,
+) {
     {
-        let mut current = state.session.lock().await;
+        let mut current = session.slot.lock().await;
         if let Some(handle) = current.take() {
             handle.shutdown().await;
         }
     }
-    if let Ok(mut g) = state.current_connection.lock() {
+    if let Ok(mut g) = session.current_connection.lock() {
         *g = None;
     }
-    if let Ok(mut g) = state.current_character.lock() {
+    if let Ok(mut g) = session.current_character.lock() {
         *g = None;
     }
-    crate::session::identity::broadcast_session_identity(app, state).await;
+    crate::session::identity::broadcast_session_identity(app, state, session).await;
 }
 
 /// Open a connection, install a parser plus negotiator, and spin up the IO
@@ -357,7 +392,7 @@ pub(crate) async fn disconnect<R: tauri::Runtime>(app: &AppHandle<R>, state: &Sh
 ///
 /// `initial_window_size` is the (cols, rows) the negotiator should
 /// carry into the first NAWS subnegotiation. The caller (typically
-/// [`connect`]) reads this from `AppState.window_size` so the
+/// [`connect`]) reads this from `Session::window_size` so the
 /// server's first wrap-width decision is based on the actual
 /// terminal geometry instead of the negotiator's 80×24 fallback.
 ///
@@ -365,12 +400,13 @@ pub(crate) async fn disconnect<R: tauri::Runtime>(app: &AppHandle<R>, state: &Sh
 /// the custom prompt follows. The caller says so, which lets a test have
 /// a fake game on a local port count as it.
 ///
-/// The session shares the live profile, the connection's target and room
-/// list, the Lua timers, the log store and the scrollback ring in `state`
-/// with the rest of the app.
+/// The loop shares the log store in `state`, and the profile `session`
+/// plays, its connection's target and room list, its Lua timers and its
+/// scrollback ring, with the rest of the app.
 pub(crate) async fn spawn<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: &SharedState,
+    session: &Arc<Session>,
     host: String,
     port: u16,
     tls: bool,
@@ -380,6 +416,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
 ) -> Result<SessionHandle, ConnectionError> {
     emit_state(
         &app,
+        session,
         StatePayload::Connecting {
             host: host.clone(),
             port,
@@ -410,6 +447,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
 
     emit_state(
         &app,
+        session,
         StatePayload::Connected {
             host: host.clone(),
             port,
@@ -417,11 +455,11 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         },
     );
     // What the plugins printed at launch, if nothing showed it yet.
-    crate::app::plugins::show_launch_lines(&app, state);
+    crate::app::plugins::show_launch_lines(&app, session);
 
     let log_sink = LogSink::open(
         state.logs.clone(),
-        state.scrollback.clone(),
+        session.scrollback.clone(),
         scrollback_path,
         &host,
         port,
@@ -433,9 +471,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         app,
         stream,
         rx_outgoing,
-        state.profile.clone(),
-        state.connection.clone(),
-        state.lua_timers.clone(),
+        Arc::clone(session),
         log_sink,
         negotiator,
         known_host,
@@ -459,16 +495,12 @@ pub(crate) struct GagWithoutReaderPayload {
     pub trigger: String,
 }
 
-fn emit_state<R: tauri::Runtime>(app: &AppHandle<R>, payload: StatePayload) {
-    if let Err(e) = app.emit(events::STATE, payload) {
-        warn!(error = %e, "failed to emit session state");
-    }
+fn emit_state<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, payload: StatePayload) {
+    session.emit(app, events::STATE, &payload);
 }
 
-fn emit_input_mode<R: tauri::Runtime>(app: &AppHandle<R>, password: bool) {
-    if let Err(e) = app.emit(events::INPUT_MODE, InputModePayload { password }) {
-        warn!(error = %e, "failed to emit input mode");
-    }
+fn emit_input_mode<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, password: bool) {
+    session.emit(app, events::INPUT_MODE, &InputModePayload { password });
 }
 
 #[cfg(test)]

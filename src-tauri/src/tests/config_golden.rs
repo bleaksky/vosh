@@ -29,6 +29,7 @@ use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{
     HighlightStyle, MatchMode, NamedColor, Trigger, TriggerAction, TriggerPattern, TriggerTarget,
 };
+use vosh_automation::StopKey;
 use vosh_prompt::config::{AabahranCapture, CaptureSource, RegexCapture};
 use vosh_prompt::{CaptureConfig, PromptConfig, PromptShow};
 
@@ -41,9 +42,10 @@ use crate::profile::file::{GroupFolders, PluginsPersist, ProfileConfig};
 use crate::profile::live::{Macro, Timer};
 use crate::profile::login_match::AutoMatch;
 use crate::profile::panes::{DockEntryPersist, PaneLayoutPersist, PaneNode};
-use crate::profile::set::{ProfileEntry, ProfileSet, ProfilesIndex};
+use crate::profile::set::{ProfileEntry, ProfileSet, ProfilesIndex, SessionEntry};
 use crate::profile::shared::{GlobalConfig, Scope, ScopeConfig};
 use crate::profile::ui::{CustomTheme, TrackedAffect, UiConfig, VitalsConfig};
+use crate::sessions::SessionId;
 use crate::tick::TickConfig;
 
 /// The folder that holds the goldens and the old inputs.
@@ -53,7 +55,7 @@ const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/config");
 const WRITE: &str = "VOSH_WRITE_CONFIG";
 
 /// Every golden, by its path under `fixtures/config`.
-const GOLDENS: [&str; 15] = [
+const GOLDENS: [&str; 16] = [
     "profile.default.toml",
     "profile.fresh.toml",
     "profile.full.toml",
@@ -66,6 +68,7 @@ const GOLDENS: [&str; 15] = [
     "catalog.full.toml",
     "profiles.default.toml",
     "profiles.full.toml",
+    "profiles.sessions.toml",
     "first-save/global.toml",
     "first-save/profiles.toml",
     "first-save/default-profile.toml",
@@ -643,6 +646,7 @@ fn full_loadouts() -> LoadoutSet {
                 enabled_groups: vec!["combat-melee".into(), "wartools".into()],
             },
         ],
+        ..Default::default()
     }
 }
 
@@ -696,6 +700,43 @@ fn full_index() -> ProfilesIndex {
             "prompt-line-triggers".into(),
         ],
         notices: vec!["Vosh moved your prompt capture into the Default profile.".into()],
+        sessions: Vec::new(),
+        selected: None,
+    }
+}
+
+/// [`full_index`] with three sessions open, the second selected (Q16).
+fn sessions_index() -> ProfilesIndex {
+    let world = || Some("play.theforsakenlands.com".to_string());
+    ProfilesIndex {
+        sessions: vec![
+            SessionEntry {
+                id: SessionId::FIRST,
+                name: None,
+                host: world(),
+                port: Some(1848),
+                tls: false,
+                profile: "Healer".into(),
+            },
+            SessionEntry {
+                id: SessionId::numbered(3),
+                name: Some("Build port".into()),
+                host: world(),
+                port: Some(1825),
+                tls: true,
+                profile: "Healer".into(),
+            },
+            SessionEntry {
+                id: SessionId::numbered(4),
+                name: None,
+                host: None,
+                port: None,
+                tls: false,
+                profile: "default".into(),
+            },
+        ],
+        selected: Some(SessionId::numbered(3)),
+        ..full_index()
     }
 }
 
@@ -763,6 +804,35 @@ fn profiles_toml_writes_these_bytes() {
     let full = toml::to_string_pretty(&full_index()).unwrap();
     check("profiles.full.toml", &full);
     assert_eq!(index_round_trip(&full), full);
+
+    let sessions = toml::to_string_pretty(&sessions_index()).unwrap();
+    check("profiles.sessions.toml", &sessions);
+    assert_eq!(index_round_trip(&sessions), sessions);
+}
+
+/// profiles.toml as 0.8.1 reads and saves it, which knows no session
+/// list.
+#[derive(serde::Deserialize, serde::Serialize)]
+struct OldIndex {
+    active: String,
+    #[serde(default, rename = "profile")]
+    profiles: Vec<ProfileEntry>,
+    #[serde(default)]
+    scope: ScopeConfig,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    migrations: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    notices: Vec<String>,
+}
+
+#[test]
+fn an_older_build_reads_the_session_list_and_drops_it_on_its_save() {
+    let sessions = toml::to_string_pretty(&sessions_index()).unwrap();
+    let old: OldIndex = toml::from_str(&sessions).expect("0.8.1 reads it");
+    assert_eq!(
+        toml::to_string_pretty(&old).unwrap(),
+        toml::to_string_pretty(&full_index()).unwrap()
+    );
 }
 
 /// Every file under `root`, by its path from `root`, leaving out the
@@ -793,7 +863,7 @@ async fn a_fresh_install_writes_these_files_on_its_first_save() {
     crate::app::launch::load(&state, root).await;
     {
         let _persist = PERSIST_LOCK.lock().await;
-        crate::disk::save::persist_state(&state).await;
+        crate::disk::save::persist_state(&state, &state.selected_session().profile()).await;
     }
     assert_eq!(
         written_files(root),
@@ -1341,10 +1411,11 @@ fn a_text_row_saves_a_regex_that_0_8_1_reads_and_matches_the_same_lines() {
         lines
             .iter()
             .map(|line| {
-                let mut names: Vec<String> = matching(store, line, MatchScope::Line)
-                    .iter()
-                    .map(|t| t.name.clone())
-                    .collect();
+                let mut names: Vec<String> =
+                    matching(store, line, MatchScope::Line, StopKey::default())
+                        .iter()
+                        .map(|t| t.name.clone())
+                        .collect();
                 names.sort();
                 names
             })

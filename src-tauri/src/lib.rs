@@ -21,6 +21,7 @@ mod profile;
 mod prompt;
 mod script;
 mod session;
+mod sessions;
 #[cfg(test)]
 mod tests;
 mod tick;

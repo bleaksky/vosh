@@ -29,7 +29,7 @@ mod frame;
 pub(crate) mod style;
 
 use atlas::{AtlasFonts, GlyphAtlas};
-use bands::{draw_bands, prompt_bands, prompt_reach, set_stage};
+use bands::{draw_bands, prompt_reach, set_stage};
 use decor::decor;
 use frame::{build_frame, split_regions, CellInstance, FrameInputs};
 use style::{ansi16, chrome_paint, drawn_char, theme_bg, wants_bold_font};
@@ -408,8 +408,9 @@ impl CellRenderer {
 
     /// Lay out a frame of `grid` and draw it into `view`, clearing to
     /// the default background first. `hover` is the link under the
-    /// pointer, and `find` and `find_active` the find matches and the
-    /// one find is on.
+    /// pointer, `find` and `find_active` the find matches and the one
+    /// find is on, and `bands` whether a band goes under each lifted
+    /// prompt.
     pub(crate) fn draw(
         &mut self,
         device: &wgpu::Device,
@@ -420,6 +421,7 @@ impl CellRenderer {
         hover: Option<(i32, usize, usize)>,
         find: Vec<FindMatch>,
         find_active: Option<FindMatch>,
+        bands: bool,
         surface_w: u32,
         surface_h: u32,
         split_ratio: f32,
@@ -499,7 +501,7 @@ impl CellRenderer {
             chrome: chrome_paint(),
             wash_ground: theme_bg(),
             wash_palette: std::array::from_fn(ansi16),
-            bands: prompt_bands(),
+            bands,
             reach: prompt_reach(),
         };
         let atlas = &self.atlas;

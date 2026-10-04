@@ -1,21 +1,74 @@
-//! Find in the terminal. A search over every line the shared grid holds,
-//! with the matches the renderer marks and the one you stepped to.
-
-use std::sync::Mutex;
+//! Find in the terminal. A search over every line a session's grid
+//! holds, with the matches the renderer marks and the one you stepped
+//! to.
 
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Line};
 use regex::RegexBuilder;
 
-use super::{grid_slot, TermGrid};
+use super::{with_session, TermGrid};
+use crate::sessions::SessionId;
 
-// Find/search state. Matches are (grid_line, col_start, col_end) in reading
-// order (top of scrollback to bottom); active is an index into them. The
-// query is remembered so repeated calls with the same query advance the
-// active match instead of resetting it.
-static FIND_MATCHES: Mutex<Vec<(i32, usize, usize)>> = Mutex::new(Vec::new());
-static FIND_ACTIVE: Mutex<usize> = Mutex::new(0);
-static FIND_QUERY: Mutex<String> = Mutex::new(String::new());
+/// A grid's find. The matches run in reading order, top of scrollback to
+/// bottom, and `active` indexes the one you stepped to. The query stays,
+/// so a search for the same query again steps to the next match instead
+/// of starting over.
+#[derive(Default)]
+pub(crate) struct Find {
+    matches: Vec<FindMatch>,
+    active: usize,
+    query: String,
+}
+
+impl Find {
+    /// All matches plus the active match, for the renderer's highlight
+    /// pass.
+    pub(crate) fn snapshot(&self) -> (Vec<FindMatch>, Option<FindMatch>) {
+        (self.matches.clone(), self.matches.get(self.active).copied())
+    }
+
+    /// Search `grid` and step to the next (or previous) match, scrolling
+    /// it into view. Returns (current, total) for the toolbar, 1-based;
+    /// (0, 0) when there is no match.
+    pub(crate) fn run(
+        &mut self,
+        grid: &mut TermGrid,
+        query: &str,
+        is_regex: bool,
+        case_sensitive: bool,
+        whole_word: bool,
+        forward: bool,
+    ) -> (usize, usize) {
+        let matches = collect_matches(grid, query, is_regex, case_sensitive, whole_word);
+        if matches.is_empty() {
+            self.clear();
+            return (0, 0);
+        }
+        let total = matches.len();
+        let active = if self.query == query {
+            let prev = self.active.min(total - 1);
+            if forward {
+                (prev + 1) % total
+            } else {
+                (prev + total - 1) % total
+            }
+        } else if forward {
+            0
+        } else {
+            total - 1
+        };
+        scroll_to_grid_line(grid, matches[active].0);
+        self.query = query.to_string();
+        self.matches = matches;
+        self.active = active;
+        (active + 1, total)
+    }
+
+    /// Clear the matches, the active match and the query.
+    pub(crate) fn clear(&mut self) {
+        *self = Self::default();
+    }
+}
 
 fn build_find_regex(
     query: &str,
@@ -71,96 +124,42 @@ pub(super) fn collect_matches(
     matches
 }
 
-/// All matches plus the active match, for the renderer's highlight pass.
-pub(crate) fn find_snapshot() -> (Vec<FindMatch>, Option<FindMatch>) {
-    let matches = match FIND_MATCHES.lock() {
-        Ok(m) => m.clone(),
-        Err(_) => Vec::new(),
-    };
-    let active = FIND_ACTIVE
-        .lock()
-        .ok()
-        .and_then(|i| matches.get(*i).copied());
-    (matches, active)
-}
-
-/// Run a search and step to the next (or previous) match, scrolling it into
-/// view. Returns (current, total) for the toolbar, 1-based; (0, 0) when
-/// there is no match.
+/// Search the grid of `session` and step to the next (or previous)
+/// match, see [`Find::run`]. (0, 0) before the grid exists.
 pub(crate) fn find_run(
+    session: SessionId,
     query: &str,
     is_regex: bool,
     case_sensitive: bool,
     whole_word: bool,
     forward: bool,
 ) -> (usize, usize) {
-    let matches = match grid_slot().lock() {
-        Ok(slot) => match slot.as_ref() {
-            Some(grid) => collect_matches(grid, query, is_regex, case_sensitive, whole_word),
-            None => Vec::new(),
-        },
-        Err(_) => Vec::new(),
-    };
-    if matches.is_empty() {
-        find_clear();
-        return (0, 0);
-    }
-    let total = matches.len();
-    let query_changed = FIND_QUERY.lock().map_or(true, |q| *q != query);
-    let active = if query_changed {
-        if forward {
-            0
-        } else {
-            total - 1
+    with_session(session, |held| match held.term.as_mut() {
+        Some(grid) => held
+            .find
+            .run(grid, query, is_regex, case_sensitive, whole_word, forward),
+        None => {
+            held.find.clear();
+            (0, 0)
         }
-    } else {
-        let prev = FIND_ACTIVE.lock().map_or(0, |i| *i).min(total - 1);
-        if forward {
-            (prev + 1) % total
-        } else {
-            (prev + total - 1) % total
-        }
-    };
-    let target_line = matches[active].0;
-    if let Ok(mut q) = FIND_QUERY.lock() {
-        *q = query.to_string();
-    }
-    if let Ok(mut m) = FIND_MATCHES.lock() {
-        *m = matches;
-    }
-    if let Ok(mut a) = FIND_ACTIVE.lock() {
-        *a = active;
-    }
-    scroll_to_grid_line(target_line);
-    (active + 1, total)
+    })
+    .unwrap_or((0, 0))
 }
 
 /// Scroll the display so `line` sits near the middle of the screen.
-fn scroll_to_grid_line(line: i32) {
-    if let Ok(mut slot) = grid_slot().lock() {
-        if let Some(grid) = slot.as_mut() {
-            let g = grid.term.grid();
-            let screen = g.screen_lines();
-            let history = g.total_lines().saturating_sub(screen);
-            let target = (screen as i32 / 2 - line).max(0) as usize;
-            let target = target.min(history);
-            let delta = target as i32 - g.display_offset() as i32;
-            if delta != 0 {
-                grid.term.scroll_display(Scroll::Delta(delta));
-            }
-        }
+fn scroll_to_grid_line(grid: &mut TermGrid, line: i32) {
+    let g = grid.term.grid();
+    let screen = g.screen_lines();
+    let history = g.total_lines().saturating_sub(screen);
+    let target = (screen as i32 / 2 - line).max(0) as usize;
+    let target = target.min(history);
+    let delta = target as i32 - g.display_offset() as i32;
+    if delta != 0 {
+        grid.term.scroll_display(Scroll::Delta(delta));
     }
 }
 
-/// Clear the find state (matches, active, query).
-pub(crate) fn find_clear() {
-    if let Ok(mut m) = FIND_MATCHES.lock() {
-        m.clear();
-    }
-    if let Ok(mut a) = FIND_ACTIVE.lock() {
-        *a = 0;
-    }
-    if let Ok(mut q) = FIND_QUERY.lock() {
-        q.clear();
-    }
+/// Clear the find of `session` (matches, active, query).
+pub(crate) fn find_clear(session: SessionId) {
+    with_session(session, |held| held.find.clear());
 }

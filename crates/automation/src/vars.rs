@@ -1,8 +1,10 @@
-//! Variable store with two scopes and `$name` interpolation.
+//! Variables in two scopes, and `$name` interpolation.
 //!
-//! Profile scope persists across sessions and saves in the profile file.
-//! Session scope clears on reconnect. Lookups resolve session before profile,
-//! so a session set hides the profile value until cleared.
+//! Profile scope persists and saves in the profile file, and every session
+//! on the profile reads it. Session scope belongs to one session and
+//! clears as it connects. Each scope keeps a [`VariableStore`] of its
+//! own, and a [`VarView`] reads the two together, session first, so a
+//! session value hides the profile value of the same name until it clears.
 
 use std::collections::HashMap;
 
@@ -12,10 +14,10 @@ pub enum Scope {
     Session,
 }
 
+/// The variables of one scope.
 #[derive(Debug, Default, Clone)]
 pub struct VariableStore {
-    profile: HashMap<String, String>,
-    session: HashMap<String, String>,
+    vars: HashMap<String, String>,
 }
 
 impl VariableStore {
@@ -23,58 +25,57 @@ impl VariableStore {
         Self::default()
     }
 
-    pub fn set(&mut self, scope: Scope, name: impl Into<String>, value: impl Into<String>) {
-        let name = name.into();
-        let value = value.into();
-        match scope {
-            Scope::Profile => {
-                self.profile.insert(name, value);
-            }
-            Scope::Session => {
-                self.session.insert(name, value);
-            }
-        }
+    pub fn set(&mut self, name: impl Into<String>, value: impl Into<String>) {
+        self.vars.insert(name.into(), value.into());
     }
 
-    /// Remove from both scopes. Returns true if anything changed.
+    /// Remove `name`. Returns true if it was set.
     pub fn remove(&mut self, name: &str) -> bool {
-        let s = self.session.remove(name).is_some();
-        let p = self.profile.remove(name).is_some();
-        s || p
+        self.vars.remove(name).is_some()
     }
 
-    /// Resolve a variable. Session wins, then profile.
     pub fn get(&self, name: &str) -> Option<&str> {
-        self.session
-            .get(name)
-            .or_else(|| self.profile.get(name))
-            .map(String::as_str)
+        self.vars.get(name).map(String::as_str)
     }
 
-    /// Drop every session-scoped value. Call on disconnect.
-    pub fn clear_session(&mut self) {
-        self.session.clear();
+    pub fn clear(&mut self) {
+        self.vars.clear();
     }
 
-    /// Iterate session and profile entries together. Session entries shadow
-    /// profile entries with the same name.
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &str, Scope)> + '_ {
-        self.session
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str(), Scope::Session))
-            .chain(self.profile.iter().filter_map(move |(k, v)| {
-                if self.session.contains_key(k) {
-                    None
-                } else {
-                    Some((k.as_str(), v.as_str(), Scope::Profile))
-                }
-            }))
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> + '_ {
+        self.vars.iter().map(|(k, v)| (k.as_str(), v.as_str()))
+    }
+}
+
+/// A session's variables over its profile's, as a lookup reads them.
+#[derive(Debug, Clone, Copy)]
+pub struct VarView<'a> {
+    pub session: &'a VariableStore,
+    pub profile: &'a VariableStore,
+}
+
+impl<'a> VarView<'a> {
+    /// Resolve a variable. Session wins, then profile.
+    pub fn get(self, name: &str) -> Option<&'a str> {
+        self.session.get(name).or_else(|| self.profile.get(name))
+    }
+
+    /// Every variable a lookup finds, the session entries first, then
+    /// each profile entry no session entry of its name hides.
+    pub fn iter(self) -> impl Iterator<Item = (&'a str, &'a str, Scope)> {
+        let session = self.session;
+        session.iter().map(|(k, v)| (k, v, Scope::Session)).chain(
+            self.profile
+                .iter()
+                .filter(move |(k, _)| session.get(k).is_none())
+                .map(|(k, v)| (k, v, Scope::Profile)),
+        )
     }
 
     /// Substitute `$name` and `${name}` references in a string with their
     /// current values. `$$` becomes a literal `$`. Unknown names pass through
     /// verbatim including the leading `$`, matching `TinTin++` behavior.
-    pub fn interpolate(&self, text: &str) -> String {
+    pub fn interpolate(self, text: &str) -> String {
         let mut out = String::with_capacity(text.len());
         let bytes = text.as_bytes();
         let mut i = 0;
@@ -159,100 +160,133 @@ fn next_char_boundary(s: &str, start: usize) -> usize {
 mod tests {
     use super::*;
 
-    fn store(pairs: &[(Scope, &str, &str)]) -> VariableStore {
-        let mut v = VariableStore::new();
+    /// The session's store and the profile's, from `pairs`.
+    fn stores(pairs: &[(Scope, &str, &str)]) -> [VariableStore; 2] {
+        let [mut session, mut profile] = [VariableStore::new(), VariableStore::new()];
         for (scope, k, val) in pairs {
-            v.set(*scope, *k, *val);
+            match scope {
+                Scope::Session => session.set(*k, *val),
+                Scope::Profile => profile.set(*k, *val),
+            }
         }
-        v
+        [session, profile]
+    }
+
+    fn view(stores: &[VariableStore; 2]) -> VarView<'_> {
+        VarView {
+            session: &stores[0],
+            profile: &stores[1],
+        }
     }
 
     #[test]
     fn session_shadows_profile() {
-        let v = store(&[
+        let v = stores(&[
             (Scope::Profile, "name", "Adan"),
             (Scope::Session, "name", "Aleph"),
         ]);
-        assert_eq!(v.get("name"), Some("Aleph"));
+        assert_eq!(view(&v).get("name"), Some("Aleph"));
+        assert_eq!(v[1].get("name"), Some("Adan"));
     }
 
     #[test]
     fn falls_back_to_profile() {
-        let v = store(&[(Scope::Profile, "name", "Adan")]);
-        assert_eq!(v.get("name"), Some("Adan"));
+        let v = stores(&[(Scope::Profile, "name", "Adan")]);
+        assert_eq!(view(&v).get("name"), Some("Adan"));
     }
 
     #[test]
-    fn clear_session_does_not_touch_profile() {
-        let mut v = store(&[
+    fn a_session_value_that_goes_shows_the_profile_value_again() {
+        let mut v = stores(&[
             (Scope::Profile, "name", "Adan"),
+            (Scope::Session, "name", "Aleph"),
             (Scope::Session, "hp", "100"),
         ]);
-        v.clear_session();
-        assert_eq!(v.get("hp"), None);
-        assert_eq!(v.get("name"), Some("Adan"));
+        assert!(v[0].remove("name"));
+        assert!(!v[0].remove("name"));
+        assert_eq!(view(&v).get("name"), Some("Adan"));
+        v[0].clear();
+        assert_eq!(view(&v).get("hp"), None);
+        assert_eq!(view(&v).get("name"), Some("Adan"));
     }
 
     #[test]
     fn interpolate_simple_name() {
-        let v = store(&[(Scope::Session, "target", "goblin")]);
-        assert_eq!(v.interpolate("kick $target"), "kick goblin");
+        let v = stores(&[(Scope::Session, "target", "goblin")]);
+        assert_eq!(view(&v).interpolate("kick $target"), "kick goblin");
     }
 
     #[test]
     fn interpolate_braced_name() {
-        let v = store(&[(Scope::Session, "x", "abc")]);
-        assert_eq!(v.interpolate("a${x}b"), "aabcb");
+        let v = stores(&[(Scope::Session, "x", "abc")]);
+        assert_eq!(view(&v).interpolate("a${x}b"), "aabcb");
+    }
+
+    #[test]
+    fn interpolate_reads_both_scopes_session_first() {
+        let v = stores(&[
+            (Scope::Profile, "target", "orc"),
+            (Scope::Profile, "home", "Hollow"),
+            (Scope::Session, "target", "goblin"),
+        ]);
+        assert_eq!(
+            view(&v).interpolate("kick $target, recall to ${home}"),
+            "kick goblin, recall to Hollow"
+        );
     }
 
     #[test]
     fn double_dollar_escapes() {
-        let v = VariableStore::new();
-        assert_eq!(v.interpolate("price $$50"), "price $50");
+        let v = stores(&[]);
+        assert_eq!(view(&v).interpolate("price $$50"), "price $50");
     }
 
     #[test]
     fn unknown_name_passes_through() {
-        let v = VariableStore::new();
-        assert_eq!(v.interpolate("hello $stranger!"), "hello $stranger!");
+        let v = stores(&[]);
+        assert_eq!(view(&v).interpolate("hello $stranger!"), "hello $stranger!");
     }
 
     #[test]
     fn dollar_followed_by_punctuation_passes_through() {
-        let v = VariableStore::new();
-        assert_eq!(v.interpolate("cost $100"), "cost $100");
+        let v = stores(&[]);
+        assert_eq!(view(&v).interpolate("cost $100"), "cost $100");
     }
 
     #[test]
     fn interpolate_with_utf8() {
-        let v = store(&[(Scope::Session, "drag", "\u{1f409}")]);
-        assert_eq!(v.interpolate("see $drag now"), "see \u{1f409} now");
+        let v = stores(&[(Scope::Session, "drag", "\u{1f409}")]);
+        assert_eq!(view(&v).interpolate("see $drag now"), "see \u{1f409} now");
     }
 
     #[test]
     fn interpolate_underscores_and_digits_in_name() {
-        let v = store(&[(Scope::Session, "weapon_2", "axe")]);
-        assert_eq!(v.interpolate("wield $weapon_2"), "wield axe");
+        let v = stores(&[(Scope::Session, "weapon_2", "axe")]);
+        assert_eq!(view(&v).interpolate("wield $weapon_2"), "wield axe");
     }
 
     #[test]
-    fn iter_combines_scopes_with_session_priority() {
-        let v = store(&[
+    fn iter_lists_the_session_first_and_each_name_once() {
+        let v = stores(&[
             (Scope::Profile, "a", "p"),
             (Scope::Profile, "b", "p"),
+            (Scope::Profile, "c", "p"),
             (Scope::Session, "a", "s"),
+            (Scope::Session, "d", "s"),
         ]);
-        let mut entries: Vec<_> = v
-            .iter()
-            .map(|(k, val, _)| (k.to_string(), val.to_string()))
-            .collect();
-        entries.sort();
+        let entries: Vec<_> = view(&v).iter().collect();
+        let scopes: Vec<Scope> = entries.iter().map(|(_, _, scope)| *scope).collect();
         assert_eq!(
-            entries,
-            vec![
-                ("a".to_string(), "s".to_string()),
-                ("b".to_string(), "p".to_string()),
+            scopes,
+            [
+                Scope::Session,
+                Scope::Session,
+                Scope::Profile,
+                Scope::Profile
             ]
         );
+        let mut found: Vec<_> = entries.iter().map(|(k, val, _)| (*k, *val)).collect();
+        found.sort_unstable();
+        assert_eq!(found, [("a", "s"), ("b", "p"), ("c", "p"), ("d", "s")]);
     }
 }

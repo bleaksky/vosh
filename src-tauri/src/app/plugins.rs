@@ -1,13 +1,14 @@
 //! Lua plugin manager. A plugin is a directory under
 //! `<app_data_dir>/plugins/<slug>/` containing a `manifest.toml` and one or
 //! more Lua files. The manifest declares which file is the entry point;
-//! enabled plugins have their entry script loaded into the shared
-//! `ScriptEngine` on launch.
+//! enabled plugins have their entry script loaded into each session's
+//! Lua engine as the session opens its profile.
 //!
 //! The `[plugins] enabled` list in the profile file says which plugins
-//! are on in that profile. The plugins it names load at launch, and a
-//! profile switch turns the next profile's plugins on and the others off
-//! while you play. You edit the list by hand while Vosh is closed.
+//! are on in that profile. The plugins it names load at launch and in
+//! each session you open, and a profile switch turns the next profile's
+//! plugins on and the others off in the session it switches while you
+//! play. You edit the list by hand while Vosh is closed.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -23,6 +24,7 @@ use crate::app::state::SharedState;
 use crate::profile::live::Profile;
 use crate::script::ApplyResult;
 use crate::session::connection::Connection;
+use crate::sessions::Session;
 
 #[derive(Debug, Error)]
 pub(crate) enum PluginError {
@@ -275,7 +277,7 @@ pub(crate) fn plugin_on(
         Ok(plugin) => plugin,
         Err(e) => {
             error!(name = %name, error = %e, "plugin entry missing");
-            p.script.list_unread_plugin(name);
+            c.script.list_unread_plugin(name);
             let outcome = vosh_script::ScriptOutcome {
                 actions: vec![vosh_script::Action::Error(format!(
                     "Vosh could not read plugin {name} and left it off."
@@ -288,8 +290,8 @@ pub(crate) fn plugin_on(
     };
     // A load runs Lua for certain, even when nothing else is loaded,
     // as at a switch that turned every other plugin off first.
-    crate::script::refresh_vars(&p.script, &p.vars);
-    let outcome = p.script.load_script(
+    crate::script::refresh_vars(p, c);
+    let outcome = c.script.load_script(
         Owner::Plugin(name.to_string()),
         &plugin.chunk(name),
         &plugin.code,
@@ -306,7 +308,7 @@ pub(crate) fn plugin_on(
 /// handlers, timers and aliases. The variables it set and the groups it
 /// turned on or off stay.
 pub(crate) fn plugin_off(p: &mut Profile, c: &mut Connection, name: &str) -> ApplyResult {
-    let outcome = p.script.unload(&Owner::Plugin(name.to_string()));
+    let outcome = c.script.unload(&Owner::Plugin(name.to_string()));
     info!(name = %name, "unloaded plugin");
     crate::script::apply_actions(p, c, outcome)
 }
@@ -328,13 +330,13 @@ pub(crate) fn follow_profile_plugins(
             wanted.push(name.clone());
         }
     }
-    let running = p.script.loaded_plugins();
+    let running = c.script.loaded_plugins();
     let mut apply = ApplyResult::default();
     for name in running.iter().filter(|name| !wanted.contains(name)) {
         apply.append(plugin_off(p, c, name));
     }
     for name in wanted.iter().filter(|name| !running.contains(name)) {
-        if p.script.is_stopped(&Owner::Plugin(name.clone())) {
+        if c.script.is_stopped(&Owner::Plugin(name.clone())) {
             continue;
         }
         apply.append(plugin_on(p, c, plugins_dir, name));
@@ -343,9 +345,9 @@ pub(crate) fn follow_profile_plugins(
 }
 
 /// Point the plugin list at `plugins_dir`, find the plugins in it, and
-/// mark the ones the live profile turns on.
-async fn note_plugins(state: &SharedState, plugins_dir: &std::path::Path) {
-    let enabled = state.profile.lock().await.plugins.enabled.clone();
+/// mark the ones the profile `session` plays turns on.
+async fn note_plugins(state: &SharedState, session: &Session, plugins_dir: &std::path::Path) {
+    let enabled = session.lock_profile().await.plugins.enabled.clone();
     let mut mgr = state.plugins.lock().await;
     mgr.set_plugins_dir(plugins_dir.to_path_buf());
     if let Err(e) = mgr.discover() {
@@ -354,31 +356,25 @@ async fn note_plugins(state: &SharedState, plugins_dir: &std::path::Path) {
     mgr.set_enabled(enabled);
 }
 
-/// Once a profile switch made the next profile live and turned its
-/// plugins on and the others off, deliver what they ask for, `apply`.
-/// Their lines print in the terminal, and what they send goes to the game
-/// when one listens.
+/// Once a profile switch made the next profile live for `session` and
+/// turned its plugins on and the others off, deliver what they ask for,
+/// `apply`. Their lines print in the terminal, and what they send goes to
+/// the game when the session runs a connection.
 pub(crate) async fn follow_profile<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     state: &SharedState,
+    session: &Arc<Session>,
     apply: ApplyResult,
 ) {
     if let Some(app_data) = state.app_data.get() {
-        note_plugins(state, &crate::disk::paths::plugins_dir(app_data)).await;
+        note_plugins(state, session, &crate::disk::paths::plugins_dir(app_data)).await;
     }
     let crate::session::effects::Collected {
         bytes,
         echoes,
         walk,
-    } = crate::session::effects::collect_script_result(
-        app,
-        &state.profile,
-        &state.connection,
-        &state.lua_timers,
-        apply,
-    )
-    .await;
-    crate::output::echo_lines(app, &echoes);
+    } = crate::session::effects::collect_script_result(app, session, apply).await;
+    crate::output::echo_lines(app, session, &echoes);
     if bytes.is_empty() && walk.is_none() {
         return;
     }
@@ -386,9 +382,9 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
     // disconnect holds the session lock while it waits for that task to
     // end. So the bytes and a #walk go from a task of their own and the
     // switch never waits on the lock.
-    let state = state.clone();
+    let session = Arc::clone(session);
     tokio::spawn(async move {
-        let delivered = state.session.lock().await.as_ref().is_some_and(|handle| {
+        let delivered = session.slot.lock().await.as_ref().is_some_and(|handle| {
             (bytes.is_empty() || handle.send(bytes)) && walk.map_or(true, |walk| handle.walk(walk))
         });
         if !delivered {
@@ -398,56 +394,53 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
 }
 
 /// Find the plugins in `plugins_dir` and load each one the profile turns
-/// on, once each in the order its list gives, as a switch does from a
-/// start with none running. What an entry script asks for applies as on
-/// every other path that runs Lua, so its timers, `mud.input` lines and
-/// prompt values take effect. No terminal shows and no game listens yet,
-/// so the lines it prints wait for [`show_launch_lines`], and what it
-/// would send goes to the log.
+/// on into the engine of `session`, once each in the order its list
+/// gives, as a switch does from a start with none running. Launch calls
+/// it for the session the app starts with, and `session_open` for each
+/// session you open. What an entry script asks for applies as on every
+/// other path that runs Lua, so its timers, `mud.input` lines and prompt
+/// values take effect. No terminal shows the session and no game listens
+/// yet, so the lines it prints wait for [`show_launch_lines`], and what
+/// it would send goes to the log.
 pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     state: &SharedState,
+    session: &Arc<Session>,
     plugins_dir: std::path::PathBuf,
 ) {
-    note_plugins(state, &plugins_dir).await;
+    note_plugins(state, session, &plugins_dir).await;
     let apply = {
-        let mut p = state.profile.lock().await;
-        let mut c = state.connection.lock();
-        follow_profile_plugins(&mut p, &mut c, &plugins_dir)
+        let mut p = session.lock_profile().await;
+        let mut c = session.connection.lock();
+        follow_profile_plugins(&mut p, &mut c, &plugins_dir).ran_under(p.open())
     };
-    let collected = crate::session::effects::collect_script_result(
-        app,
-        &state.profile,
-        &state.connection,
-        &state.lua_timers,
-        apply,
-    )
-    .await;
+    let collected = crate::session::effects::collect_script_result(app, session, apply).await;
     if !collected.bytes.is_empty() || collected.walk.is_some() {
         info!(
             bytes = collected.bytes.len(),
             walk = collected.walk.is_some(),
-            "plugin output at launch has no game to go to"
+            "plugin output before a connect has no game to go to"
         );
     }
-    state
+    session
         .launch_lua_lines
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .extend(collected.echoes);
 }
 
-/// Print the lines the plugins printed as they loaded at launch, once,
-/// now that a terminal listens. The first connect and the first line you
-/// type each call it, and whichever comes first prints them.
-pub(crate) fn show_launch_lines<R: tauri::Runtime>(app: &tauri::AppHandle<R>, state: &SharedState) {
+/// Print the lines the plugins printed as they loaded into `session`, at
+/// launch or as it opened, once, now that a terminal listens. The first connect and the
+/// first line you type each call it, and whichever comes first prints
+/// them.
+pub(crate) fn show_launch_lines<R: tauri::Runtime>(app: &tauri::AppHandle<R>, session: &Session) {
     let lines = std::mem::take(
-        &mut *state
+        &mut *session
             .launch_lua_lines
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner),
     );
-    crate::output::echo_lines(app, &lines);
+    crate::output::echo_lines(app, session, &lines);
 }
 
 #[cfg(test)]
@@ -614,17 +607,17 @@ mod tests {
             ["\x1b[90m[lua]\x1b[0m \x1b[31mVosh could not read plugin missing and left it off.\x1b[0m"]
         );
         assert_eq!(
-            p.script.loaded_plugins(),
+            c.script.loaded_plugins(),
             ["everywhere", "healer_only", "missing"]
         );
-        let leftover = &p.script.lua_triggers();
+        let leftover = &c.script.lua_triggers();
         assert!(leftover.is_empty(), "{leftover:?}");
         // Only the plugin that went off lost its timer, and the one both
         // turn on did not load again.
         assert_eq!(switched.cancel_timers, [warrior_timer]);
         let leftover = &switched.new_timers;
         assert!(leftover.is_empty(), "{leftover:?}");
-        let aliases: Vec<(&str, &str)> = p
+        let aliases: Vec<(&str, &str)> = c
             .plugin_aliases
             .list()
             .into_iter()
@@ -634,7 +627,7 @@ mod tests {
         // Back again, the healer's alias goes with it.
         p.plugins.enabled = vec!["everywhere".into()];
         follow_profile_plugins(&mut p, &mut c, tmp.path());
-        let aliases: Vec<&str> = p
+        let aliases: Vec<&str> = c
             .plugin_aliases
             .list()
             .into_iter()
@@ -657,7 +650,7 @@ mod tests {
         let mut c = Connection::default();
         p.plugins.enabled = vec!["runaway".into()];
         follow_profile_plugins(&mut p, &mut c, tmp.path());
-        let stopped = p
+        let stopped = c
             .script
             .dispatch_gmcp("Char.Vitals", &serde_json::json!({}));
         assert_eq!(stopped.stopped, [Owner::Plugin("runaway".into())]);
@@ -669,12 +662,12 @@ mod tests {
         let back = follow_profile_plugins(&mut p, &mut c, tmp.path());
         let leftover = &back.echoes;
         assert!(leftover.is_empty(), "{leftover:?}");
-        let leftover = &p.script.loaded_plugins();
+        let leftover = &c.script.loaded_plugins();
         assert!(leftover.is_empty(), "{leftover:?}");
-        assert!(p.script.is_stopped(&Owner::Plugin("runaway".into())));
-        let leftover = &p.plugin_aliases.list();
+        assert!(c.script.is_stopped(&Owner::Plugin("runaway".into())));
+        let leftover = &c.plugin_aliases.list();
         assert!(leftover.is_empty(), "{leftover:?}");
-        let quiet = p
+        let quiet = c
             .script
             .dispatch_gmcp("Char.Vitals", &serde_json::json!({}));
         assert!(quiet.actions.is_empty(), "{:?}", quiet.actions);
@@ -682,7 +675,6 @@ mod tests {
 
     #[test]
     fn a_plugin_reads_the_variables_of_the_profile_that_turns_it_on() {
-        use vosh_automation::vars::Scope;
         let tmp = tempdir();
         for name in ["first_side", "second_side"] {
             write_plugin(
@@ -694,13 +686,13 @@ mod tests {
         }
         let mut p = Profile::default();
         let mut c = Connection::default();
-        p.vars.set(Scope::Profile, "home", "first");
+        p.vars.set("home", "first");
         p.plugins.enabled = vec!["first_side".into()];
         let launch = follow_profile_plugins(&mut p, &mut c, tmp.path());
         assert_eq!(launch.echoes, ["first"]);
         // The switch lays the next profile over this one, and no other
         // Lua stays loaded once its one plugin turns off.
-        p.vars.set(Scope::Profile, "home", "second");
+        p.vars.set("home", "second");
         p.plugins.enabled = vec!["second_side".into()];
         let switched = follow_profile_plugins(&mut p, &mut c, tmp.path());
         assert_eq!(switched.echoes, ["second"]);

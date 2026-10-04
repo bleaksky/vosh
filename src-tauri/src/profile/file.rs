@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::Trigger;
-use vosh_automation::vars::Scope;
 
 use crate::disk::atomic::{hold_unread, is_unread, write_with_backup};
 use crate::profile::live::{Macro, Profile, Timer};
@@ -173,12 +172,11 @@ impl ProfileConfig {
     pub(crate) fn from_profile(profile: &Profile) -> Self {
         let aliases: Vec<Alias> = profile.aliases.list().into_iter().cloned().collect();
 
-        let mut profile_vars: BTreeMap<String, String> = BTreeMap::new();
-        for (name, value, scope) in profile.vars.iter() {
-            if matches!(scope, Scope::Profile) {
-                profile_vars.insert(name.to_string(), value.to_string());
-            }
-        }
+        let profile_vars: BTreeMap<String, String> = profile
+            .vars
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect();
 
         let triggers = profile.triggers.list();
 
@@ -286,25 +284,10 @@ impl ProfileConfig {
         aliases.set_disabled_groups(self.disabled_alias_groups.iter().cloned());
         profile.aliases = aliases;
 
-        // Profile-scoped vars: clear existing profile-scoped, then set.
-        // Session-scoped values stay alone.
-        let session_only: Vec<(String, String)> = profile
-            .vars
-            .iter()
-            .filter_map(|(k, v, scope)| {
-                if matches!(scope, Scope::Session) {
-                    Some((k.to_string(), v.to_string()))
-                } else {
-                    None
-                }
-            })
-            .collect();
+        // Profile-scoped vars: replace. Each session keeps its own.
         let mut vars = vosh_automation::vars::VariableStore::new();
         for (k, v) in &self.profile_vars {
-            vars.set(Scope::Profile, k.clone(), v.clone());
-        }
-        for (k, v) in session_only {
-            vars.set(Scope::Session, k, v);
+            vars.set(k.clone(), v.clone());
         }
         profile.vars = vars;
 
@@ -490,7 +473,6 @@ pub(crate) const UNREAD_GLOBAL_NOTICE: &str = "Vosh could not read global.toml, 
 /// drawing off.
 pub(crate) fn load_at_launch(set: &ProfileSet, profile: &mut Profile) -> Vec<String> {
     let mut notices = Vec::new();
-    profile.display_name = Some(crate::profile::set::display_name(set.active_name()));
     let active_path = set.active_path();
     if active_path.exists() {
         match ProfileConfig::load(&active_path) {

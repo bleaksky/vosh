@@ -12,9 +12,10 @@ use tauri::{AppHandle, State};
 use crate::app::events::{broadcast, CUSTOM_THEMES_CHANGED, PROFILES_CHANGED};
 use crate::app::state::SharedState;
 use crate::disk::save::{persist_state, PERSIST_LOCK};
-use crate::profile::set::{create_profile, duplicate_profile, rename_profile};
+use crate::profile::set::{create_profile, delete_profile, duplicate_profile, rename_profile};
 use crate::profile::shared::change_scope_locked;
 use crate::profile::switch::apply_profile_switch;
+use crate::sessions::SessionId;
 
 #[derive(serde::Serialize)]
 pub(crate) struct ProfilesListPayload {
@@ -57,11 +58,7 @@ pub(crate) async fn profile_delete(
     state: State<'_, SharedState>,
     name: String,
 ) -> Result<(), String> {
-    {
-        let _persist_guard = PERSIST_LOCK.lock().await;
-        let mut set = state.loaded_profile_set().await?;
-        set.delete(&name).map_err(|e| e.to_string())?;
-    }
+    delete_profile(state.inner(), &name).await?;
     broadcast(&app, PROFILES_CHANGED, &name);
     Ok(())
 }
@@ -128,7 +125,7 @@ pub(crate) async fn profile_set_scope(
     let persist_guard = PERSIST_LOCK.lock().await;
     let shared: SharedState = state.inner().clone();
     let gained = change_scope_locked(&shared, scope).await?;
-    persist_state(&shared).await;
+    persist_state(&shared, &shared.selected_session().profile()).await;
     drop(persist_guard);
     if let Some(list) = gained {
         broadcast(&app, CUSTOM_THEMES_CHANGED, &list);
@@ -155,12 +152,15 @@ pub(crate) async fn profile_resolve_match(
     Ok(set.resolve_match(&host, port, character.as_deref()))
 }
 
+/// Switch the session to the profile `name`.
 #[tauri::command]
 pub(crate) async fn profile_switch(
     app: AppHandle,
     state: State<'_, SharedState>,
     name: String,
+    session: Option<SessionId>,
 ) -> Result<(), String> {
     let shared: SharedState = state.inner().clone();
-    apply_profile_switch(&app, &shared, &name).await
+    let session = shared.session(session)?;
+    apply_profile_switch(&app, &shared, &session, &name).await
 }

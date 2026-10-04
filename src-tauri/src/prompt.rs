@@ -1,6 +1,7 @@
 //! What the prompt editor's commands do, behind the thin wrappers in
 //! [`ipc::prompt`](crate::ipc::prompt). It takes a `[prompt]` table for
-//! the active profile, reads the designs other profiles hold, says what a
+//! the active profile, hands what you chose in it to the other sessions
+//! on that profile, reads the designs other profiles hold, says what a
 //! capture compiles to and which Line triggers it takes over, renders
 //! with live or sample values and preview overrides, applies the edits
 //! the card makes, and builds the state the card watches and where your
@@ -10,8 +11,10 @@
 
 pub(crate) mod last_seen;
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tokio::time::Instant;
 use tracing::warn;
 use vosh_prompt::capture::Recognizer;
@@ -27,11 +30,13 @@ use vosh_prompt::{
 };
 
 use crate::app::events::{self, broadcast_list_changes, ListChanges};
-use crate::app::state::SharedState;
+use crate::app::state::{AppState, SharedState};
 use crate::disk::save::PERSIST_LOCK;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
+use crate::profile::open::OpenProfile;
 use crate::session::connection::Connection;
+use crate::sessions::{Session, SessionId};
 
 /// The body of [`prompt_config_set`]: check and take the table. Returns
 /// whether it changed anything. Only a capture that differs from the one
@@ -101,7 +106,9 @@ pub(crate) fn take_config(p: &mut Profile, c: &mut Connection, config: PromptCon
 /// The profile keeps the table the engine holds, when the engine changed
 /// it since its revision was `before`: it followed the prompt settings
 /// the game showed, or wrote a design that follows the game for who you
-/// are now.
+/// are now. That copy reaches no other engine. Each one follows its own
+/// game, and takes from another session only what you choose, through
+/// [`choose_in_other_sessions`].
 pub(crate) fn keep_table(p: &mut Profile, c: &Connection, before: u64) {
     if c.prompt.revision() != before {
         p.prompt = c.prompt.config().clone();
@@ -115,11 +122,49 @@ pub(crate) fn prompt_look(c: &Connection) -> (bool, String, vosh_prompt::PromptS
     (config.draw, config.template.clone(), config.show)
 }
 
-/// Ask the session to repaint the open row as the `[prompt]` table now
+/// Hand what a `[prompt]` edit in `session` chose to the engine of every
+/// other session on `open`, the profile it plays, and repaint each prompt
+/// that looks different for it. `chosen` is the table the edit left in
+/// the engine of `session`, which the profile keeps. Each engine takes
+/// your choices and keeps what its own game showed it, through
+/// [`vosh_prompt::PromptEngine::take_choice`] (Q29 of the sessions
+/// review). The sessions come from the map before the profile lock, and
+/// each connection is locked in turn under it, never two at once. Each
+/// repaint goes from a task of its own once the locks let go, so a
+/// session loop that runs a `#prompt` line never waits on the slot of
+/// another session. Call with no lock held.
+pub(crate) async fn choose_in_other_sessions(
+    state: &AppState,
+    session: SessionId,
+    open: &Arc<OpenProfile>,
+    chosen: &PromptConfig,
+) {
+    let others = state.other_sessions(session);
+    if others.is_empty() {
+        return;
+    }
+    let mut repaint = Vec::new();
+    {
+        let p = open.lock().await;
+        for other in p.players(&others) {
+            let mut c = other.connection.lock();
+            let before = prompt_look(&c);
+            c.prompt.take_choice(chosen.clone());
+            if prompt_look(&c) != before {
+                repaint.push(Arc::clone(other));
+            }
+        }
+    }
+    for other in repaint {
+        tokio::spawn(async move { request_prompt_repaint(&other).await });
+    }
+}
+
+/// Ask `session` to repaint the open row as the `[prompt]` table now
 /// says. Nothing happens with no connection, or when no drawn prompt is
 /// the last thing on screen.
-pub(crate) async fn request_prompt_repaint(state: &SharedState) {
-    if let Some(handle) = state.session.lock().await.as_ref() {
+pub(crate) async fn request_prompt_repaint(session: &Session) {
+    if let Some(handle) = session.slot.lock().await.as_ref() {
         let _ = handle.prompt_repaint();
     }
 }
@@ -146,7 +191,7 @@ pub(crate) fn client_values(
     vosh_prompt::ClientValues {
         tick,
         target: c.target.name.clone(),
-        profile: p.display_name.clone(),
+        profile: p.name.as_deref().map(crate::profile::set::display_name),
         now: None,
         tracked: p
             .ui
@@ -157,22 +202,23 @@ pub(crate) fn client_values(
     }
 }
 
-/// Tell the webview what the game said of your prompt settings, on
-/// `session://game-prompt-seen`. When the active profile's capture took
-/// a new setting, the profile saves shortly and every window reads the
+/// Tell the webview what the game said of your prompt settings in
+/// `session`, on `session://game-prompt-seen`. When the capture of
+/// `open`, the profile the session played as the engine took them, took a
+/// new setting, that profile saves shortly and every window reads the
 /// `[prompt]` table again.
 pub(crate) fn report_game_prompt_seen<R: tauri::Runtime>(
     app: &AppHandle<R>,
+    session: &Session,
+    open: &Arc<OpenProfile>,
     seen: Vec<vosh_prompt::GamePromptSeen>,
 ) {
     let applied = seen.iter().any(|s| s.applied);
     for payload in seen {
-        if let Err(e) = app.emit(events::GAME_PROMPT_SEEN, payload) {
-            warn!(error = %e, "failed to emit the game's prompt settings");
-        }
+        session.emit(app, events::GAME_PROMPT_SEEN, &payload);
     }
     if applied {
-        crate::disk::save::mark_profile_dirty(app);
+        crate::disk::save::mark_profile_dirty(app, open);
         broadcast_list_changes(app, ListChanges::PROMPT);
     }
 }
@@ -320,6 +366,7 @@ pub(crate) fn line_triggers(
                 &p.triggers,
                 line,
                 vosh_automation::trigger::MatchScope::Line,
+                c.stop_key,
             ) {
                 if out.iter().any(|t| t.name == trigger.name) {
                     continue;
@@ -504,9 +551,10 @@ pub(crate) fn prompt_state(p: &Profile, c: &Connection) -> PromptState {
     c.prompt.state(&client_values(p, c, Instant::now()))
 }
 
-/// The body of [`hidden_get`](crate::ipc::prompt::hidden_get).
-pub(crate) async fn reported_hidden(state: &SharedState) -> vosh_prompt::values::Hidden {
-    state.connection.lock().prompt.vars.reported()
+/// The body of [`hidden_get`](crate::ipc::prompt::hidden_get), for
+/// `session`.
+pub(crate) async fn reported_hidden(session: &Session) -> vosh_prompt::values::Hidden {
+    session.connection.lock().prompt.vars.reported()
 }
 
 /// Where your prompt shows, with what the Settings row and the main

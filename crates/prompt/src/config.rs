@@ -365,6 +365,17 @@ impl CaptureConfig {
     pub fn is_migrated(&self) -> bool {
         matches!(self, Self::Regex(capture) if capture.source == Some(CaptureSource::Migrated))
     }
+
+    /// The game the engine plays decides this capture: Aabahran's codes
+    /// while they follow the game, or the pattern the move from a capture
+    /// trigger wrote, which the first PROMPT the game shows replaces (D10).
+    pub(crate) fn game_decides(&self) -> bool {
+        match self {
+            Self::Aabahran(codes) => codes.follow_game,
+            Self::Regex(_) => self.is_migrated(),
+            Self::None => false,
+        }
+    }
 }
 
 /// The game's PROMPT and fight prompt settings, as the game stores them.

@@ -1,17 +1,18 @@
 //! Settings > Characters. A character is a name in a profile's
 //! `auto_match`, and the Characters group edits any profile in place,
-//! active or not, without switching the live session.
+//! open or not, without switching a session.
 //!
-//! The active profile lives in memory, so reads and writes for it go
-//! through the live `Profile` the way every other command does. An
-//! inactive profile lives only in `profiles/<name>.toml`, so reads load
-//! that file and writes rewrite it under [`PERSIST_LOCK`], and an edit
-//! to one announces itself as `vosh://profile-changed` rather than the
-//! events that carry the active profile's panes and tracked affects to
-//! the main window.
+//! A profile a session plays lives in memory, so reads and writes for it
+//! go through its open copy the way every other command does. Any other
+//! profile lives only in `profiles/<name>.toml`, so reads load that file
+//! and writes rewrite it under [`PERSIST_LOCK`]. An edit to a profile the
+//! selected session does not play announces itself as
+//! `vosh://profile-changed` rather than the events that carry the
+//! selected session's panes and tracked affects to the main window.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use serde::Serialize;
 use tauri::AppHandle;
@@ -21,7 +22,9 @@ use crate::app::events::{broadcast, pane_layout_envelope, PaneLayoutEnvelope, PR
 use crate::app::state::SharedState;
 use crate::disk::save::PERSIST_LOCK;
 use crate::profile::file::ProfileConfig;
+use crate::profile::live::Profile;
 use crate::profile::login_match::AutoMatch;
+use crate::profile::open::OpenProfile;
 use crate::profile::panes::PaneLayoutPersist;
 use crate::profile::set::{display_name, ProfileEntry, ProfileSet, ProfileSetError};
 use crate::profile::shared::{GlobalConfig, Scope};
@@ -34,15 +37,15 @@ pub(crate) struct ProfileDetail {
     pub name: String,
     /// `Default` for the reserved `default` profile, else the name.
     pub display_name: String,
-    /// Whether this is the live profile.
+    /// Whether the selected session plays it.
     pub active: bool,
     pub auto_match: Option<AutoMatch>,
     /// The display name of the profile's world, when it has one.
     pub world_name: Option<String>,
     pub tracked_affects: Vec<TrackedAffect>,
     pub panes: PaneLayoutPersist,
-    /// The live pane generation for the active profile. None for an
-    /// inactive one, whose tree no pane layout write can target.
+    /// The live pane generation for the active profile. None for any
+    /// other, whose tree no pane layout write can target.
     pub generation: Option<u64>,
     /// Whether the login toggle reads on. See [`ProfileSet::login_on`].
     pub login_on: bool,
@@ -143,21 +146,24 @@ pub(crate) fn broadcast_profile_changed<R: tauri::Runtime>(app: &AppHandle<R>, n
 const MIGRATION_PENDING: &str =
     "Restart Vosh to finish the move to loadouts, then change this profile.";
 
-/// Rewrite `name`'s file with `edit` when `name` is inactive, and hand
-/// back what `edit` returned. Ok(None) without writing when `name` is
-/// the live profile, so the caller edits the live profile instead. Call
-/// with [`PERSIST_LOCK`] held.
+/// Where a profile named in a command lives: only in its file, which
+/// gave or took what the command asked, or open in memory, where the
+/// caller reads or edits it instead.
+pub(crate) enum Stored<T> {
+    File(T),
+    Open(Arc<OpenProfile>),
+}
+
+/// Rewrite `name`'s file with `edit`, and hand back what `edit` returned.
+/// Call with [`PERSIST_LOCK`] held, for a profile no session plays.
 fn rewrite_inactive<R>(
     set: &ProfileSet,
     name: &str,
     migration_pending: bool,
     edit: impl FnOnce(&ProfileSet, &mut ProfileConfig) -> R,
-) -> Result<Option<R>, String> {
+) -> Result<R, String> {
     if set.get(name).is_none() {
         return Err(not_found(name));
-    }
-    if set.active_name() == name {
-        return Ok(None);
     }
     // The just archived per profile files must not come back before
     // the relaunch reads the new catalog.
@@ -174,42 +180,31 @@ fn rewrite_inactive<R>(
             display_name(name)
         )
     })?;
-    Ok(Some(out))
+    Ok(out)
 }
 
-/// Edit an inactive profile's file. Holds [`PERSIST_LOCK`] and the
-/// profile set lock across the read, the edit and the write, so it
-/// cannot interleave with a persist, a switch, a rename or a delete.
-/// Ok(None) means `name` is live and nothing was written.
+/// Edit `name`'s file when no session plays it, or hand back its open
+/// copy for the caller to edit. Holds [`PERSIST_LOCK`] and the profile
+/// set lock across the read, the edit and the write, so it cannot
+/// interleave with a persist, a switch, a rename or a delete.
 pub(crate) async fn edit_inactive_profile<R>(
     state: &SharedState,
     name: &str,
     edit: impl FnOnce(&ProfileSet, &mut ProfileConfig) -> R + Send,
-) -> Result<Option<R>, String> {
+) -> Result<Stored<R>, String> {
     let _persist_guard = PERSIST_LOCK.lock().await;
+    if let Some(open) = state.open_profile(name) {
+        return Ok(Stored::Open(open));
+    }
     let set = state.loaded_profile_set().await?;
-    rewrite_inactive(
-        &set,
-        name,
-        state.relaunch_pending.load(Ordering::Acquire),
-        edit,
-    )
-}
-
-/// The active profile's name, for naming a live edit.
-pub(crate) async fn active_name(state: &SharedState) -> Option<String> {
-    state
-        .profile_set
-        .lock()
-        .await
-        .as_ref()
-        .map(|set| set.active_name().to_string())
+    let migration_pending = state.relaunch_pending.load(Ordering::Acquire);
+    rewrite_inactive(&set, name, migration_pending, edit).map(Stored::File)
 }
 
 /// Body of [`profile_detail_get`]. Holds [`PERSIST_LOCK`] so a switch
-/// cannot land between deciding whether `name` is live and reading it.
-/// The profile set lock is let go before the live profile is locked,
-/// the order the persist takes them in.
+/// cannot land between deciding whether a session plays `name` and
+/// reading it. The profile set lock is let go before an open profile is
+/// locked, the order the persist takes them in.
 ///
 /// [`profile_detail_get`]: crate::ipc::characters::profile_detail_get
 pub(crate) async fn profile_detail(
@@ -217,37 +212,32 @@ pub(crate) async fn profile_detail(
     name: &str,
 ) -> Result<ProfileDetail, String> {
     let _persist_guard = PERSIST_LOCK.lock().await;
+    let open = state.open_profile(name);
     let (entry, active, login_on, stored) = {
         let set = state.loaded_profile_set().await?;
         let entry = set.get(name).cloned().ok_or_else(|| not_found(name))?;
-        let active = set.active_name() == name;
-        let stored = if active {
-            None
-        } else {
-            Some(stored_ui(&set, name)?)
+        let stored = match open {
+            Some(open) => Stored::Open(open),
+            None => Stored::File(stored_ui(&set, name)?),
         };
-        (entry, active, set.login_on(name), stored)
+        (entry, set.active_name() == name, set.login_on(name), stored)
     };
     Ok(match stored {
-        Some(ui) => ProfileDetail::new(entry, false, login_on, &ui, None),
-        None => {
-            let p = state.profile.lock().await;
-            ProfileDetail::new(
-                entry,
-                active,
-                login_on,
-                &p.ui,
-                Some(state.panes_generation()),
-            )
+        Stored::File(ui) => ProfileDetail::new(entry, false, login_on, &ui, None),
+        Stored::Open(open) => {
+            let p = open.lock().await;
+            let generation = active.then(|| state.panes_generation());
+            ProfileDetail::new(entry, active, login_on, &p.ui, generation)
         }
     })
 }
 
-/// Reset an inactive profile's saved tree. Ok(None) when `name` is live.
+/// Reset the saved tree of a profile no session plays, or hand back the
+/// open copy of one a session plays.
 pub(crate) async fn reset_inactive_panes(
     state: &SharedState,
     name: &str,
-) -> Result<Option<PaneLayoutPersist>, String> {
+) -> Result<Stored<PaneLayoutPersist>, String> {
     edit_inactive_profile(state, name, |set, config| {
         let mut ui = config.ui.clone();
         apply_global_dock(set, &mut ui);
@@ -258,35 +248,48 @@ pub(crate) async fn reset_inactive_panes(
     .await
 }
 
-/// Reset the live profile's tree and hand back its new envelope.
-pub(crate) async fn reset_live_panes(state: &SharedState) -> PaneLayoutEnvelope {
-    let mut p = state.profile.lock().await;
+/// Reset the tree of `p`, a profile a session plays, and hand back its
+/// new envelope. The tree the selected session's profile shows takes a
+/// new generation, so a splitter drag still in flight is refused. Any
+/// other has no generation, since no pane layout write can target it.
+pub(crate) fn reset_open_panes(
+    state: &SharedState,
+    p: &mut Profile,
+    shown: bool,
+) -> PaneLayoutEnvelope {
     let layout = p.ui.pane_layout().with_default_tree();
-    p.ui.panes = Some(layout);
+    p.ui.panes = Some(layout.clone());
+    if !shown {
+        return PaneLayoutEnvelope {
+            layout,
+            generation: None,
+        };
+    }
     state.bump_panes_generation();
-    pane_layout_envelope(state, &p)
+    pane_layout_envelope(state, p)
 }
 
 /// A profile's settings as TOML, the way `#profile save` writes them:
-/// the live profile for the active name, the saved file (or defaults)
-/// for any other. Holds [`PERSIST_LOCK`] like [`profile_detail`], so a
-/// switch cannot land between deciding which one to read and reading it.
+/// the open copy of a profile a session plays, the saved file (or
+/// defaults) for any other. Holds [`PERSIST_LOCK`] like
+/// [`profile_detail`], so a switch cannot land between deciding which one
+/// to read and reading it.
 pub(crate) async fn profile_toml(state: &SharedState, name: &str) -> Result<String, String> {
     let _persist_guard = PERSIST_LOCK.lock().await;
+    let open = state.open_profile(name);
     let stored = {
         let set = state.loaded_profile_set().await?;
         if set.get(name).is_none() {
             return Err(not_found(name));
         }
-        if set.active_name() == name {
-            None
-        } else {
-            Some(load_profile_file(&set, name)?)
+        match open {
+            Some(open) => Stored::Open(open),
+            None => Stored::File(load_profile_file(&set, name)?),
         }
     };
     let config = match stored {
-        Some(config) => config,
-        None => ProfileConfig::from_profile(&*state.profile.lock().await),
+        Stored::File(config) => config,
+        Stored::Open(open) => ProfileConfig::from_profile(&*open.lock().await),
     };
     config.to_toml().map_err(|e| {
         warn!(error = %e, profile = name, "profile export failed");
@@ -339,8 +342,8 @@ mod tests {
     /// live and tracking Sanctuary.
     async fn james_like_state(dir: &std::path::Path) -> SharedState {
         let state: SharedState = Arc::new(AppState::default());
-        state.profile.lock().await.ui.tracked_affects = vec![affect("Sanctuary")];
-        *state.profile_set.lock().await = Some(james_like_set(dir));
+        state.selected_profile().await.ui.tracked_affects = vec![affect("Sanctuary")];
+        state.set_profiles(james_like_set(dir)).await;
         state
     }
 
@@ -407,7 +410,7 @@ mod tests {
         let written = edit_inactive_profile(&state, "Healer", set_affects(&["Haste", "Fly"]))
             .await
             .unwrap();
-        assert!(written.is_some());
+        assert!(matches!(written, Stored::File(())));
 
         // The file took the list and kept the rest of the profile.
         let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
@@ -420,7 +423,7 @@ mod tests {
         );
 
         // The live profile and the active file never moved.
-        let live = state.profile.lock().await;
+        let live = state.selected_profile().await;
         assert_eq!(names(&live.ui.tracked_affects), ["Sanctuary"]);
         assert!(!set.profile_path(DEFAULT_PROFILE_NAME).exists());
     }
@@ -449,7 +452,7 @@ mod tests {
         let written = edit_inactive_profile(&state, DEFAULT_PROFILE_NAME, set_affects(&["Fly"]))
             .await
             .unwrap();
-        assert!(written.is_none());
+        assert!(matches!(written, Stored::Open(_)));
         let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         assert!(!set.profile_path(DEFAULT_PROFILE_NAME).exists());
         assert!(
@@ -486,16 +489,15 @@ mod tests {
     async fn resetting_an_inactive_profile_rewrites_only_its_file() {
         let dir = tempfile::tempdir().unwrap();
         let state = james_like_state(dir.path()).await;
-        state.profile.lock().await.ui.panes = Some(arranged());
+        state.selected_profile().await.ui.panes = Some(arranged());
         let mut config = ProfileConfig::default();
         config.ui.panes = Some(arranged());
         config.ui.tracked_affects = vec![affect("Haste")];
         write_profile(dir.path(), "Healer", &config);
 
-        let reset = reset_inactive_panes(&state, "Healer")
-            .await
-            .unwrap()
-            .unwrap();
+        let Stored::File(reset) = reset_inactive_panes(&state, "Healer").await.unwrap() else {
+            panic!("Healer's file takes the reset");
+        };
         assert_eq!(reset, arranged().with_default_tree());
         assert!(!reset.panel_open);
         assert_eq!(reset.panel_width, Some(360));
@@ -504,27 +506,29 @@ mod tests {
         assert_eq!(detail.panes, reset);
         assert_eq!(names(&detail.tracked_affects), ["Haste"]);
         // The live profile keeps its own arrangement.
-        assert_eq!(state.profile.lock().await.ui.panes, Some(arranged()));
+        assert_eq!(state.selected_profile().await.ui.panes, Some(arranged()));
     }
 
     #[tokio::test]
     async fn resetting_the_live_profile_moves_the_generation() {
         let dir = tempfile::tempdir().unwrap();
         let state = james_like_state(dir.path()).await;
-        state.profile.lock().await.ui.panes = Some(arranged());
+        state.selected_profile().await.ui.panes = Some(arranged());
         let before = state.panes_generation();
 
-        let envelope = reset_live_panes(&state).await;
+        let envelope = reset_open_panes(&state, &mut *state.selected_profile().await, true);
         assert_eq!(envelope.layout, arranged().with_default_tree());
         assert!(envelope.generation.unwrap() > before);
         assert_eq!(
-            state.profile.lock().await.ui.panes,
+            state.selected_profile().await.ui.panes,
             Some(arranged().with_default_tree())
         );
-        assert!(reset_inactive_panes(&state, DEFAULT_PROFILE_NAME)
-            .await
-            .unwrap()
-            .is_none());
+        assert!(matches!(
+            reset_inactive_panes(&state, DEFAULT_PROFILE_NAME)
+                .await
+                .unwrap(),
+            Stored::Open(_)
+        ));
     }
 
     #[tokio::test]

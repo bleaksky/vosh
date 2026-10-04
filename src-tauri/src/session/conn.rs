@@ -10,20 +10,19 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::{mpsc, Mutex};
+use tauri::{AppHandle, Manager};
+use tokio::sync::mpsc;
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
 use vosh_protocol::telnet::{option as telnet_option, Negotiator, Parser};
 
 use crate::app::events;
 use crate::input::walk::WalkCommand;
-use crate::output::{echo_lines, emit_output, emit_repaint, output_count};
+use crate::output::{echo_lines, emit_output, emit_repaint};
 use crate::profile::live::Profile;
-use crate::script::SharedTimers;
+use crate::sessions::Session;
 
 use super::batch::Settle;
-use super::connection::SharedConnection;
 use super::echo::ServerEcho;
 use super::effects::{
     collect_script_result, deliver_tick_step, framed_echoes, run_fired_command, Collected,
@@ -50,10 +49,11 @@ use super::{emit_input_mode, emit_state, now_ms, OutgoingMsg, StatePayload, Targ
 /// timers.
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
-/// What the loop owns for one connection, and a handle to the
-/// [`Connection`](super::connection::Connection) it shares with the
-/// commands, whose state the app state holds. The read path and the GMCP handler take it whole, with the
-/// connection's [`LogSink`] beside it, in place of a list of its parts.
+/// What the loop owns for one connection, and the [`Session`] it runs
+/// for, whose [`Connection`](super::connection::Connection) it shares
+/// with the commands. The read path and the GMCP handler take it whole,
+/// with the connection's [`LogSink`] beside it, in place of a list of its
+/// parts.
 pub(super) struct Conn<R: tauri::Runtime> {
     pub(super) app: AppHandle<R>,
     pub(super) stream: Stream,
@@ -66,15 +66,14 @@ pub(super) struct Conn<R: tauri::Runtime> {
     /// It lives and dies with the connection, so one that dropped mid
     /// password prompt hands nothing to the next one.
     pub(super) server_echo: ServerEcho,
-    pub(super) profile: Arc<Mutex<Profile>>,
-    /// The handle to your target and the room list. Lock it after the
-    /// profile.
-    pub(super) connection: SharedConnection,
-    pub(super) lua_timers: SharedTimers,
+    /// The session this loop runs for. Lock its connection after the
+    /// profile it plays.
+    pub(super) session: Arc<Session>,
     /// What the loop counts on its hot path, see [`PerfCounters`].
     pub(super) perf: PerfCounters,
-    /// The output count after this session last wrote. Output from
-    /// elsewhere moves it, which closes the open row.
+    /// The session's output count after this loop last wrote. Output
+    /// from elsewhere in the session moves the count, which closes the
+    /// open row.
     pub(super) seen_output: u64,
     /// The frame and the log rows the reads since the socket was last
     /// quiet owe.
@@ -86,26 +85,42 @@ pub(super) struct Conn<R: tauri::Runtime> {
     pub(super) walk_lines: Vec<String>,
 }
 
+impl<R: tauri::Runtime> Conn<R> {
+    /// Output from elsewhere in the session, such as a slash command's
+    /// echo, landed since this loop last wrote, which closes the open row.
+    pub(super) fn others_wrote(&self) -> bool {
+        self.session.output_count() != self.seen_output
+    }
+}
+
 pub(super) async fn io_loop<R: tauri::Runtime>(
     app: AppHandle<R>,
     stream: Stream,
     mut rx_outgoing: mpsc::UnboundedReceiver<OutgoingMsg>,
-    profile: Arc<Mutex<Profile>>,
-    connection: SharedConnection,
-    lua_timers: SharedTimers,
+    session: Arc<Session>,
     mut log_sink: LogSink,
     negotiator: Negotiator,
     known_host: bool,
 ) {
     let mut buf = vec![0u8; READ_BUFFER_BYTES];
 
-    // Activate the tick timer for this session, unsynced until the game's
-    // first tick. The user can disable it later through the slash command.
-    // The prompt engine starts with no packets and the host's rules.
+    // Start the tick timer for this session, unsynced until the game's
+    // first tick. A connect turns your switch on, unless another session
+    // on the profile is connected, whose count already follows the switch
+    // as it stands. The prompt engine starts with no packets and the
+    // host's rules.
+    let others = app
+        .state::<crate::app::state::SharedState>()
+        .other_sessions(session.id);
     {
-        let mut p = profile.lock().await;
-        let mut c = connection.lock();
-        c.tick.start_session(&mut p.tick, Instant::now());
+        let mut p = session.lock_profile().await;
+        let joins = p.players(&others).any(|other| other.connected());
+        let mut c = session.connection.lock();
+        if joins {
+            c.tick.join_connected(&p.tick, Instant::now());
+        } else {
+            c.tick.start_session(&mut p.tick, Instant::now());
+        }
         start_prompt(&mut p, &mut c, known_host);
         // A push to the right edge reaches to the width the game is told.
         c.prompt.set_cols(usize::from(negotiator.window_size.0));
@@ -118,6 +133,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // each connection starts its timers fresh.
     let mut timer_next: HashMap<u32, Instant> = HashMap::new();
 
+    let seen_output = session.output_count();
     let mut conn = Conn {
         app,
         stream,
@@ -125,11 +141,9 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         parser: Parser::new(),
         accumulator: LineAccumulator::new(),
         server_echo: ServerEcho::default(),
-        profile,
-        connection,
-        lua_timers,
+        session,
         perf: PerfCounters::default(),
-        seen_output: output_count(),
+        seen_output,
         settle: Settle::default(),
         walker: Walker::default(),
         walk_lines: Vec::new(),
@@ -169,29 +183,28 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     // edge draws again at the new width. The card hears
                     // the state with it, so its marks move with the push.
                     let (out, state) = {
-                        let p = conn.profile.lock().await;
-                        let mut c = conn.connection.lock();
+                        let p = conn.session.lock_profile().await;
+                        let mut c = conn.session.connection.lock();
                         let redraw = window_size_step(
                             &mut c,
                             &mut conn.negotiator,
                             cols,
                             rows,
-                            watching_prompt(&conn.app),
+                            watching_prompt(&conn.session),
                         );
                         let out = redraw.then(|| {
-                            let other = output_count() != conn.seen_output;
-                            repaint_step(&p, &mut c, other, Instant::now())
+                            repaint_step(&p, &mut c, conn.others_wrote(), Instant::now())
                         });
                         let state = out
                             .as_ref()
                             .filter(|out| !out.is_empty())
-                            .and_then(|_| watched_state(&conn.app, &p, &c));
+                            .and_then(|_| watched_state(&conn.session, &p, &c));
                         (out, state)
                     };
                     if let Some(out) = out.filter(|out| !out.is_empty()) {
-                        emit_repaint(&conn.app, &out);
+                        emit_repaint(&conn.app, &conn.session, &out);
                     }
-                    emit_prompt_state(&conn.app, state);
+                    emit_prompt_state(&conn.app, &conn.session, state);
                     // Once the server sent DO NAWS and Vosh agreed, every
                     // new size goes out, so the game wraps at the new
                     // column count.
@@ -214,7 +227,8 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     // session already sent leaves that output alone: its
                     // open row, its pinned prompt and what it holds all
                     // came after the text.
-                    let landed_last = !conn.connection.lock().prompt.stage.wrote_after(after);
+                    let landed_last =
+                        !conn.session.connection.lock().prompt.stage.wrote_after(after);
                     if landed_last {
                         if hold_until.take().is_some() {
                             flush_hold(&mut conn).await;
@@ -225,7 +239,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                             warn!(error = %e, "letting go of held lines failed");
                         }
                     }
-                    conn.connection.lock().prompt.stage.local_write(after);
+                    conn.session.connection.lock().prompt.stage.local_write(after);
                 }
                 Some(OutgoingMsg::Walk(command)) => {
                     let walked = walk_command(&mut conn, &mut log_sink, &mut hold_until, command);
@@ -238,18 +252,18 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     // the bytes stay the same, since the pieces in them can
                     // be numbered anew.
                     let (out, state) = {
-                        let p = conn.profile.lock().await;
-                        let mut c = conn.connection.lock();
+                        let p = conn.session.lock_profile().await;
+                        let mut c = conn.session.connection.lock();
                         let now = Instant::now();
-                        let out = repaint_step(&p, &mut c, output_count() != conn.seen_output, now);
+                        let out = repaint_step(&p, &mut c, conn.others_wrote(), now);
                         // The design may have gained or lost a clock piece.
                         clock_until = clock_after(&p, &c, now);
-                        (out, watched_state(&conn.app, &p, &c))
+                        (out, watched_state(&conn.session, &p, &c))
                     };
                     if !out.is_empty() {
-                        emit_repaint(&conn.app, &out);
+                        emit_repaint(&conn.app, &conn.session, &out);
                     }
-                    emit_prompt_state(&conn.app, state);
+                    emit_prompt_state(&conn.app, &conn.session, state);
                 }
                 None => {
                     debug!("outgoing channel closed; shutting down session");
@@ -274,13 +288,14 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     let (gmcp, prompt, wrote) = (batch.gmcp, batch.prompt, batch.out.writes_text());
                     clock_until = finish_read(&mut conn, &mut log_sink, batch).await;
                     if gmcp || late_until.is_some() {
-                        let c = conn.connection.lock();
+                        let c = conn.session.connection.lock();
                         late_until =
                             late_repaint_after(&c, late_until, gmcp, prompt, wrote, Instant::now());
                     }
                     // A game that never pauses still gets its frame and
                     // its rows every FRAME_BUDGET.
-                    conn.settle.overdue_now(&conn.app, &log_sink, &mut conn.perf);
+                    conn.settle
+                        .overdue_now(&conn.app, &conn.session, &log_sink, &mut conn.perf);
                 }
                 Err(e) => {
                     error!(error = %e, "read failed");
@@ -302,7 +317,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                                 let mut batch = conn.handle_read(&buf[..n], &log_sink).await;
                                 // The connection is going, so nothing waits.
                                 if batch.hold {
-                                    let mut c = conn.connection.lock();
+                                    let mut c = conn.session.connection.lock();
                                     hold_step(&mut c, &mut conn.accumulator, &mut batch.out);
                                 }
                                 hold_until = None;
@@ -331,64 +346,56 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
             () = sleep_until_hold(late_until), if late_until.is_some() => {
                 late_until = None;
                 let (out, state) = {
-                    let p = conn.profile.lock().await;
-                    let mut c = conn.connection.lock();
-                    let out = late_repaint_step(
-                        &p,
-                        &mut c,
-                        output_count() != conn.seen_output,
-                        Instant::now(),
-                    );
+                    let p = conn.session.lock_profile().await;
+                    let mut c = conn.session.connection.lock();
+                    let out = late_repaint_step(&p, &mut c, conn.others_wrote(), Instant::now());
                     let state = if out.is_empty() {
                         None
                     } else {
-                        watched_state(&conn.app, &p, &c)
+                        watched_state(&conn.session, &p, &c)
                     };
                     (out, state)
                 };
                 if !out.is_empty() {
-                    emit_repaint(&conn.app, &out);
+                    emit_repaint(&conn.app, &conn.session, &out);
                 }
-                emit_prompt_state(&conn.app, state);
+                emit_prompt_state(&conn.app, &conn.session, state);
             }
             () = sleep_until_hold(walk_until), if walk_until.is_some() => {
                 let out = conn.walker.expire(Instant::now());
                 if !out.lines.is_empty() {
-                    emit_output(&conn.app, framed_echoes(&out.lines));
+                    emit_output(&conn.app, &conn.session, framed_echoes(&out.lines));
                 }
             }
             () = sleep_until_hold(clock_until), if clock_until.is_some() => {
                 // A clock piece shows another second. Your idle prompt
                 // repaints with it, unless you are selecting text or
                 // reading back, and then the next second tries again.
-                let reading = reader_busy(&conn.app);
+                let reading = reader_busy(&conn.session);
                 let (out, state) = {
-                    let p = conn.profile.lock().await;
-                    let mut c = conn.connection.lock();
+                    let p = conn.session.lock_profile().await;
+                    let mut c = conn.session.connection.lock();
                     let now = Instant::now();
-                    let other = output_count() != conn.seen_output;
-                    let out = clock_step(&p, &mut c, other, reading, now);
+                    let out = clock_step(&p, &mut c, conn.others_wrote(), reading, now);
                     clock_until = clock_after(&p, &c, now);
                     let state = if out.is_empty() {
                         None
                     } else {
-                        watched_state(&conn.app, &p, &c)
+                        watched_state(&conn.session, &p, &c)
                     };
                     (out, state)
                 };
                 if !out.is_empty() {
-                    emit_repaint(&conn.app, &out);
+                    emit_repaint(&conn.app, &conn.session, &out);
                 }
-                emit_prompt_state(&conn.app, state);
+                emit_prompt_state(&conn.app, &conn.session, state);
             }
             _ = poll.tick() => {
                 if let Err(e) = handle_tick(
                     &conn.app,
                     &mut conn.stream,
                     &mut conn.walker,
-                    &conn.profile,
-                    &conn.connection,
-                    &conn.lua_timers,
+                    &conn.session,
                 )
                 .await
                 {
@@ -399,9 +406,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     &conn.app,
                     &mut conn.stream,
                     &mut conn.walker,
-                    &conn.profile,
-                    &conn.connection,
-                    &conn.lua_timers,
+                    &conn.session,
                 )
                 .await
                 {
@@ -411,9 +416,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     &conn.app,
                     &mut conn.stream,
                     &mut conn.walker,
-                    &conn.profile,
-                    &conn.connection,
-                    &conn.lua_timers,
+                    &conn.session,
                     &mut timer_next,
                 )
                 .await
@@ -428,7 +431,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
             // now and the burst of reads that just ended shows in one
             // frame.
             () = std::future::ready(()), if conn.settle.frame => {
-                conn.settle.frame_now(&conn.app);
+                conn.settle.frame_now(&conn.app, &conn.session);
             }
             // Then the log takes the burst's rows once it is free, so a
             // busy log never holds the loop.
@@ -441,17 +444,12 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // A preview the card shows on your prompt goes with the connection,
     // so the live render goes back on the row first.
     let out = {
-        let p = conn.profile.lock().await;
-        let mut c = conn.connection.lock();
-        end_preview_step(
-            &p,
-            &mut c,
-            output_count() != conn.seen_output,
-            Instant::now(),
-        )
+        let p = conn.session.lock_profile().await;
+        let mut c = conn.session.connection.lock();
+        end_preview_step(&p, &mut c, conn.others_wrote(), Instant::now())
     };
     if !out.is_empty() {
-        emit_repaint(&conn.app, &out);
+        emit_repaint(&conn.app, &conn.session, &out);
     }
 
     // Capture the MUD's final partial line before teardown drops it. A
@@ -466,30 +464,30 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     }
     // The last burst still owes its frame and its rows, which go in the
     // log before the lines the session captures as it ends.
-    conn.settle.frame_now(&conn.app);
+    conn.settle.frame_now(&conn.app, &conn.session);
     conn.settle
         .write_log(log_sink.logs.lock().await.as_mut(), &mut conn.perf);
-    capture_held_lines(&conn.connection, &log_sink).await;
-    capture_pending_line(&conn.app, &log_sink, &mut conn.accumulator).await;
+    capture_held_lines(&conn.session.connection, &log_sink).await;
+    capture_pending_line(&conn.app, &conn.session, &log_sink, &mut conn.accumulator).await;
 
-    conn.connection.lock().tick.end_session();
+    conn.session.connection.lock().tick.end_session();
 
     log_sink.close().await;
 
     let line_triggers;
     // Your target, the Room.Chars list, the room look and the fight's
-    // tail end with the connection, and so does the variable that mirrors
-    // the target. Your quick keys outlive it, though not a restart.
+    // tail end with the connection, and so does this session's variable
+    // that mirrors the target. Your quick keys outlive it, though not a
+    // restart.
     let target_after = {
-        let mut p = conn.profile.lock().await;
-        let mut c = conn.connection.lock();
+        let mut p = conn.session.lock_profile().await;
+        let mut c = conn.session.connection.lock();
         let had = c.clear_on_disconnect();
-        p.vars.remove("target");
         line_triggers = c.prompt.stage.line_trigger_notice();
         end_prompt(&mut p, &mut c);
         // A new GMCP handler gets the last packet of its package, and
         // the packets of this connection end with it.
-        p.script.forget_gmcp_packets();
+        c.script.forget_gmcp_packets();
         had.then(|| TargetPayload::of(&c))
     };
     // Line triggers no longer see a prompt the profile reads, so the first
@@ -500,20 +498,21 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         crate::disk::upgrades::line_triggers::note_line_triggers(state.inner(), names).await;
     }
     if let Some(payload) = target_after {
-        let _ = conn.app.emit(events::TARGET, payload);
+        conn.session.emit(&conn.app, events::TARGET, &payload);
     }
     let _ = conn.stream.shutdown().await;
     // The affects list goes stale with the session, as the frontend
     // store drops its copy on the disconnected state below. The affect
     // fulls are written for the next login, then cleared.
+    conn.session.last_affects.clear();
     let shared = conn.app.state::<crate::app::state::SharedState>();
-    shared.last_affects.clear();
-    crate::affects::full::disconnect(&conn.app, shared.inner());
+    crate::affects::full::disconnect(&conn.app, shared.inner(), &conn.session);
     // Reset password mode on disconnect so the next session starts with
     // a normal-text input even if the server bailed mid-password-prompt.
-    emit_input_mode(&conn.app, false);
+    emit_input_mode(&conn.app, &conn.session, false);
     emit_state(
         &conn.app,
+        &conn.session,
         StatePayload::Disconnected {
             reason: disconnect_reason,
         },
@@ -547,12 +546,12 @@ async fn send_typed<R: tauri::Runtime>(
     // A command you send stops a walk, and the walk says so under the
     // echo of your line.
     let stopped = conn.walker.typed(bytes);
-    echo_lines(&conn.app, &stopped.lines);
+    echo_lines(&conn.app, &conn.session, &stopped.lines);
     // The send records a prompt candidate and closes the open row. On a
     // server that sends no Char.Vitals it also starts the next pulse,
     // after which the values the last prompt set go stale.
     let pulse = send_step(
-        &mut conn.connection.lock(),
+        &mut conn.session.connection.lock(),
         &conn.accumulator,
         bytes,
         now_ms(),
@@ -563,8 +562,8 @@ async fn send_typed<R: tauri::Runtime>(
     // displayed prompt.
     conn.accumulator.forget_partial();
     if pulse {
-        emit_hidden_change(&conn.app, &conn.connection).await;
-        emit_prompt_vars(&conn.app, &conn.connection, false).await;
+        emit_hidden_change(&conn.app, &conn.session).await;
+        emit_prompt_vars(&conn.app, &conn.session.connection, false).await;
     }
     // The input line(s) go in the same log session as server output so
     // transcripts include both directions. While the server holds echo
@@ -592,7 +591,8 @@ async fn send_typed<R: tauri::Runtime>(
     }
     // Lines sent back to back never wait on the log, but their rows still
     // go in once they waited too long.
-    conn.settle.overdue_now(&conn.app, log_sink, &mut conn.perf);
+    conn.settle
+        .overdue_now(&conn.app, &conn.session, log_sink, &mut conn.perf);
     Ok(())
 }
 
@@ -625,28 +625,21 @@ async fn walk_command<R: tauri::Runtime>(
         }
         if key {
             if !out.lines.is_empty() {
-                emit_output(&conn.app, framed_echoes(&out.lines));
+                emit_output(&conn.app, &conn.session, framed_echoes(&out.lines));
             }
         } else {
-            echo_lines(&conn.app, &out.lines);
+            echo_lines(&conn.app, &conn.session, &out.lines);
         }
         if out.release.is_empty() {
             continue;
         }
-        let apply = walk::release(&conn.profile, &conn.connection, out.release).await;
+        let apply = walk::release(&conn.session, out.release).await;
         let Collected {
             bytes,
             echoes,
             walk,
-        } = collect_script_result(
-            &conn.app,
-            &conn.profile,
-            &conn.connection,
-            &conn.lua_timers,
-            apply,
-        )
-        .await;
-        echo_lines(&conn.app, &echoes);
+        } = collect_script_result(&conn.app, &conn.session, apply).await;
+        echo_lines(&conn.app, &conn.session, &echoes);
         if !bytes.is_empty() {
             send_typed(conn, log_sink, hold_until, &bytes, false).await?;
         }
@@ -659,29 +652,25 @@ async fn handle_tick<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     walker: &mut Walker,
-    profile: &Arc<Mutex<Profile>>,
-    connection: &SharedConnection,
-    lua_timers: &SharedTimers,
+    session: &Arc<Session>,
 ) -> std::io::Result<()> {
     // Take the firing decision under the locks, then run the Send each
     // tick command, if the timer fired, after releasing them.
     let step = {
-        let p = profile.lock().await;
-        let mut c = connection.lock();
+        let p = session.lock_profile().await;
+        let mut c = session.connection.lock();
         c.tick.poll(&p.tick, Instant::now())
     };
     if !step.payload.enabled && !step.payload.fired {
         return Ok(());
     }
     if let Some(text) = &step.warn_echo {
-        emit_output(app, text.clone().into_bytes());
+        emit_output(app, session, text.clone().into_bytes());
     }
     deliver_tick_step(
         app,
         &mut ScriptIo::Session(stream, &mut OutputSink::Direct, walker),
-        profile,
-        connection,
-        lua_timers,
+        session,
         step,
     )
     .await
@@ -695,16 +684,14 @@ async fn fire_due_settings_timers<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     walker: &mut Walker,
-    profile: &Arc<Mutex<Profile>>,
-    connection: &SharedConnection,
-    lua_timers: &SharedTimers,
+    session: &Arc<Session>,
     timer_next: &mut HashMap<u32, Instant>,
 ) -> std::io::Result<()> {
-    let due = due_settings_timers(&*profile.lock().await, timer_next, Instant::now());
+    let due = due_settings_timers(&*session.lock_profile().await, timer_next, Instant::now());
     let mut sink = OutputSink::Direct;
     let mut io = ScriptIo::Session(stream, &mut sink, walker);
     for command in due {
-        run_fired_command(app, &mut io, profile, connection, lua_timers, &command).await?;
+        run_fired_command(app, &mut io, session, &command).await?;
     }
     Ok(())
 }
@@ -753,22 +740,22 @@ pub(super) fn due_settings_timers(
 }
 
 /// You are selecting text or reading back in the terminal. The webview
-/// says so for xterm (`terminal_reader_busy`), and the native grid holds
-/// its own selection and scroll.
-fn reader_busy<R: tauri::Runtime>(app: &AppHandle<R>) -> bool {
-    let webview = app
-        .try_state::<crate::app::state::SharedState>()
-        .is_some_and(|state| state.reader_busy.load(std::sync::atomic::Ordering::Acquire));
-    webview || native_reader_busy()
+/// says so for xterm (`terminal_reader_busy`), and the session's native
+/// grid holds its own selection and scroll.
+fn reader_busy(session: &Session) -> bool {
+    let webview = session
+        .reader_busy
+        .load(std::sync::atomic::Ordering::Acquire);
+    webview || native_reader_busy(session)
 }
 
 #[cfg(any(native_surface, test))]
-fn native_reader_busy() -> bool {
-    crate::native::grid::reader_busy()
+fn native_reader_busy(session: &Session) -> bool {
+    crate::native::grid::reader_busy(session.id)
 }
 
 #[cfg(not(any(native_surface, test)))]
-fn native_reader_busy() -> bool {
+fn native_reader_busy(_session: &Session) -> bool {
     false
 }
 

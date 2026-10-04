@@ -1,11 +1,10 @@
 //! Target words and quick keys. `tar` and its kin pick whom your
 //! commands aim at from the characters in the room, and a quick key
 //! like `gg` sends its verb at that target. Both live on the
-//! [`Connection`], and the session variable `target` mirrors the target.
+//! [`Connection`], and its session variable `target` mirrors the target.
 
 use serde_json::Value;
 use vosh_automation::alias::AliasStore;
-use vosh_automation::vars::{Scope, VariableStore};
 
 use super::{split_first_word, InputResult};
 use crate::session::connection::{Connection, QuickKey, RoomChar};
@@ -23,7 +22,7 @@ pub(super) fn is_target_keyword(name: &str) -> bool {
 /// stores "gris" as the name (so commands use the user's keyword)
 /// but resolves `room_idx` to whichever char contains "gris" so the
 /// `>` marker shows on the right chip. First match wins.
-fn refresh_target_idx(c: &mut Connection, vars: &mut VariableStore) {
+fn refresh_target_idx(c: &mut Connection) {
     c.target.room_idx = match &c.target.name {
         None => None,
         Some(name) => {
@@ -34,16 +33,17 @@ fn refresh_target_idx(c: &mut Connection, vars: &mut VariableStore) {
                 .map(|i| i + 1)
         }
     };
-    // Mirror the user target into the variable store so `${target}`
+    // Mirror the user target into the session's variables so `${target}`
     // works in alias expansions and Lua `mud.var("target")` reads it.
     // Clearing the target removes the variable rather than leaving it
-    // empty, so an alias that names it keeps the token as typed.
-    // Char.Combat's `target_name` stays separate (it's the
+    // empty, so an alias that names it keeps the token as typed. A
+    // profile variable of the name stays, for every session on the
+    // profile. Char.Combat's `target_name` stays separate (it's the
     // server-confirmed combat target).
     if let Some(name) = &c.target.name {
-        vars.set(Scope::Session, "target", name.clone());
+        c.vars.set("target", name.clone());
     } else {
-        vars.remove("target");
+        c.vars.remove("target");
     }
 }
 
@@ -72,16 +72,12 @@ pub(crate) fn read_room_chars(entries: &[Value]) -> Vec<RoomChar> {
 }
 
 /// Keep `chars` as the room list and find your target in it again.
-pub(crate) fn set_room_chars(c: &mut Connection, vars: &mut VariableStore, chars: Vec<RoomChar>) {
+pub(crate) fn set_room_chars(c: &mut Connection, chars: Vec<RoomChar>) {
     c.room_chars = chars;
-    refresh_target_idx(c, vars);
+    refresh_target_idx(c);
 }
 
-pub(super) fn run_target_set(
-    c: &mut Connection,
-    vars: &mut VariableStore,
-    args: &str,
-) -> InputResult {
+pub(super) fn run_target_set(c: &mut Connection, args: &str) -> InputResult {
     let arg = args.trim();
     if arg.is_empty() {
         return list_targets(c);
@@ -98,7 +94,7 @@ pub(super) fn run_target_set(
         }
         let name = c.room_chars[n - 1].name.clone();
         c.target.name = Some(name.clone());
-        refresh_target_idx(c, vars);
+        refresh_target_idx(c);
         return InputResult::echo_line(format!("target: {name}"));
     }
     // Non-numeric → use the literal string the user typed. The MUD
@@ -108,7 +104,7 @@ pub(super) fn run_target_set(
     // We still look for a containing room char to drive the `>`
     // marker on the room chip but don't substitute the name.
     c.target.name = Some(arg.to_string());
-    refresh_target_idx(c, vars);
+    refresh_target_idx(c);
     if c.target.room_idx.is_some() {
         InputResult::echo_line(format!("target: {arg}"))
     } else {
@@ -116,11 +112,7 @@ pub(super) fn run_target_set(
     }
 }
 
-pub(super) fn run_target_cycle(
-    c: &mut Connection,
-    vars: &mut VariableStore,
-    step: i32,
-) -> InputResult {
+pub(super) fn run_target_cycle(c: &mut Connection, step: i32) -> InputResult {
     let n = c.room_chars.len();
     if n == 0 {
         return InputResult::error("no chars in room to cycle through");
@@ -146,16 +138,16 @@ pub(super) fn run_target_cycle(
     };
     let name = c.room_chars[(next - 1) as usize].name.clone();
     c.target.name = Some(name.clone());
-    refresh_target_idx(c, vars);
+    refresh_target_idx(c);
     InputResult::echo_line(format!("target: {name} (#{next}/{count})"))
 }
 
-pub(super) fn run_target_clear(c: &mut Connection, vars: &mut VariableStore) -> InputResult {
+pub(super) fn run_target_clear(c: &mut Connection) -> InputResult {
     if c.target.name.is_none() {
         return InputResult::echo_line("no target to clear");
     }
     c.target.name = None;
-    refresh_target_idx(c, vars);
+    refresh_target_idx(c);
     InputResult::echo_line("target cleared")
 }
 
@@ -184,22 +176,18 @@ fn list_targets(c: &Connection) -> InputResult {
 }
 
 /// `#target <args>` mirrors the bare `tar` shortcut.
-pub(super) fn slash_target(
-    c: &mut Connection,
-    vars: &mut VariableStore,
-    args: &str,
-) -> InputResult {
+pub(super) fn slash_target(c: &mut Connection, args: &str) -> InputResult {
     let trimmed = args.trim();
     if trimmed == "clear" {
-        return run_target_clear(c, vars);
+        return run_target_clear(c);
     }
     if trimmed == "next" {
-        return run_target_cycle(c, vars, 1);
+        return run_target_cycle(c, 1);
     }
     if trimmed == "prev" {
-        return run_target_cycle(c, vars, -1);
+        return run_target_cycle(c, -1);
     }
-    run_target_set(c, vars, args)
+    run_target_set(c, args)
 }
 
 /// `#qkey`, which sets a quick key on `c`, or clears one. A name your

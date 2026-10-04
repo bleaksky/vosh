@@ -1,21 +1,14 @@
 //! The profile in memory. It holds what its file saves, plus what runs
-//! with that profile and no file saves: the Lua engine, the aliases
-//! plugins make, the macro recorder, the revision counters that move
-//! when a group turns on or off, and the name Vosh shows for it.
-//!
-//! Some of it still belongs to one connection, and R14b decides where it
-//! goes. The session scoped variables clear as a connection starts,
-//! among them the GMCP mirrors and `target`, which mirrors the target on
-//! the connection and clears as a session ends. The Lua engine keeps the
-//! latest GMCP packet of each package for a new handler, and forgets
-//! them as a session ends.
+//! with that profile and no file saves: the revision counters that move
+//! when a group turns on or off, and its name. Each session keeps its
+//! variables, its Lua engine, the aliases its plugins make and its macro
+//! recorder on its [`Connection`](crate::session::connection::Connection).
 
 use std::collections::BTreeSet;
 
-use vosh_automation::alias::{AliasStore, PluginAliases};
+use vosh_automation::alias::AliasStore;
 use vosh_automation::trigger::TriggerStore;
 use vosh_automation::vars::VariableStore;
-use vosh_script::ScriptEngine;
 
 use crate::profile::file::{GroupFolders, PluginsPersist};
 use crate::profile::ui::UiConfig;
@@ -24,26 +17,14 @@ use crate::tick::TickSettings;
 #[derive(Debug, Default)]
 pub(crate) struct Profile {
     pub(crate) aliases: AliasStore,
-    /// The aliases plugins made, which last for the session. No profile
-    /// file holds them, so a switch or a save leaves them be, and a
-    /// plugin that turns off takes its own.
-    pub(crate) plugin_aliases: PluginAliases,
-    /// Your variables. The file saves the profile scoped ones, and a
-    /// switch keeps the session scoped ones, which no file holds.
+    /// Your profile scoped variables, which the file saves and every
+    /// session on the profile reads under its own.
     pub(crate) vars: VariableStore,
     pub(crate) triggers: TriggerStore,
     /// The tick settings the file saves, with the reset pattern compiled.
     pub(crate) tick: TickSettings,
-    /// The Lua engine, which runs your scripts and the plugins this
-    /// profile turns on. No file saves its state.
-    pub(crate) script: ScriptEngine,
     pub(crate) ui: UiConfig,
     pub(crate) plugins: PluginsPersist,
-    /// Active macro recorder. `Some` between `#record <name>` and
-    /// `#endrec`; commands typed in that window get captured into the
-    /// buffer and on stop saved as an alias whose expansion is the
-    /// `;`-joined sequence.
-    pub(crate) recording_macro: Option<MacroRecorder>,
     /// Keyboard macro bindings. Each entry maps a canonical key
     /// string (e.g. "F1", "Ctrl+N", "Numpad7") to a command line
     /// (which may itself contain `;`-separated subcommands).
@@ -76,21 +57,26 @@ pub(crate) struct Profile {
     /// The catalog groups each of this profile's folders became in the
     /// shared catalog, which `#group` follows. See [`GroupFolders`].
     pub(crate) group_folders: GroupFolders,
-    /// The custom prompt's `[prompt]` table, which the profile file saves
-    /// and `prompt_config_get` answers with. It is a copy of the table
-    /// the prompt engine on the connection runs, and the engine's is the
-    /// one that counts. One rule keeps the two the same. A table from
-    /// outside the engine goes in through [`crate::prompt::take_config`],
-    /// and a step that lets the engine change its table, as when it
-    /// follows the game's prompt settings, copies it back through
-    /// [`crate::prompt::keep_table`]. A step that skips the copy leaves
-    /// the next save writing the old table.
+    /// The custom prompt's `[prompt]` table, which the profile file saves.
+    /// It is a copy of the table the prompt engine on a session's
+    /// connection runs, and the engine's is the one that counts and the
+    /// one `prompt_config_get` answers with. One rule keeps the two the
+    /// same. A table from outside the engine goes in through
+    /// [`crate::prompt::take_config`], and a step that lets the engine
+    /// change its table, as when it follows the game's prompt settings,
+    /// copies it back through [`crate::prompt::keep_table`]. A step that
+    /// skips the copy leaves the next save writing the old table. The
+    /// engines of the other sessions on the profile take only what you
+    /// choose, through [`crate::prompt::choose_in_other_sessions`].
     pub(crate) prompt: vosh_prompt::PromptConfig,
-    /// The active profile's name as Vosh shows it, `Default` for the
-    /// reserved default, which the custom prompt draws for `%profile`.
-    /// Set at launch, on a switch and on a rename, so the session reads
-    /// it without the profile set's lock. None before any profile loads.
-    pub(crate) display_name: Option<String>,
+    /// Its name in the profile set, which `#profile save` and `#profile
+    /// load` find its file by and the custom prompt draws for `%profile`
+    /// as Vosh shows it. Its [`OpenProfile`] keeps the same name for the
+    /// steps that hold no profile lock, and the two change together. None
+    /// before any profile loads.
+    ///
+    /// [`OpenProfile`]: crate::profile::open::OpenProfile
+    pub(crate) name: Option<String>,
     /// Interval timers: each fires its command every `interval_secs`
     /// while connected. Independent of the tick timer (one command on
     /// the game tick) and of Lua `mud.timer` (script callbacks). The
@@ -165,10 +151,4 @@ pub(crate) struct Timer {
     /// same shape.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) group: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct MacroRecorder {
-    pub(crate) name: String,
-    pub(crate) commands: Vec<String>,
 }
