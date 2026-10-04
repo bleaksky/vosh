@@ -5,7 +5,8 @@ import type { PromptShowState } from '../../lib/promptShow';
 import type { PromptShow } from '../../lib/session';
 import { findAll, type FakeElement } from '../../test/fakeDom';
 import { BUTTON, menuButtonDom, menuHeight, on } from '../../test/menuButtonDom';
-import { SHOW_MENU_WIDTH, ShowButton } from './PromptShow';
+import { MENU_BUTTON_MENU_WIDTH } from './MenuButton';
+import { ShowButton } from './PromptShow';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -117,7 +118,8 @@ describe('the menu of where your prompt shows', () => {
     expect(m.checked()).toEqual(['Lifted']);
     // It opens above the button, their left edges together, the narrow
     // pane menus' width, and takes focus.
-    expect(menu?.style.width).toBe(`${SHOW_MENU_WIDTH}px`);
+    expect(MENU_BUTTON_MENU_WIDTH).toBe(160);
+    expect(menu?.style.width).toBe(`${MENU_BUTTON_MENU_WIDTH}px`);
     expect(menu?.style.left).toBe(`${BUTTON.left}px`);
     expect(menu?.style.top).toBe(`${BUTTON.top - 4 - menuHeight(3)}px`);
     expect(doc.activeElement).toBe(menu);

@@ -13,9 +13,6 @@ import { MenuButton, type MenuChoice } from './MenuButton';
 /** The button's name and the menu's. */
 const NAME = 'Where your prompt shows';
 
-/** The menu's width, the narrow pane menus' width. */
-export const SHOW_MENU_WIDTH = 160;
-
 const CHOICES: readonly MenuChoice<PromptShow>[] = PROMPT_SHOWS.map((place) => ({
   value: place,
   label: PROMPT_SHOW_LABELS[place],
@@ -37,7 +34,6 @@ export function ShowButton({ value, state, onChange }: ShowButtonProps) {
       choices={CHOICES}
       value={value}
       place="above-start"
-      width={SHOW_MENU_WIDTH}
       locked={locked}
       why={why}
       onChange={onChange}

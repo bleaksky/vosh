@@ -14,6 +14,10 @@ import { CardMenu } from './CardMenu';
 // A button that is off stays where Tab reaches it, so a screen reader
 // hears why it is off too.
 
+/** The menu's width, the narrow pane menus' width, the same for every
+ *  menu button so the menus at the foot line up. */
+export const MENU_BUTTON_MENU_WIDTH = 160;
+
 export interface MenuChoice<T extends string> {
   value: T;
   label: string;
@@ -28,7 +32,6 @@ interface MenuButtonProps<T extends string> {
   choices: readonly MenuChoice<T>[];
   value: T;
   place: MenuPlace;
-  width: number;
   /** The button is off and opens no menu. */
   locked?: boolean;
   /** Why it is off, as its tooltip and its description. */
@@ -42,7 +45,6 @@ export function MenuButton<T extends string>({
   choices,
   value,
   place,
-  width,
   locked = false,
   why = null,
   onChange,
@@ -95,7 +97,7 @@ export function MenuButton<T extends string>({
         <CardMenu
           anchor={openAt}
           place={place}
-          width={width}
+          width={MENU_BUTTON_MENU_WIDTH}
           label={name}
           onClose={() => setMenuAt(null)}
         >
