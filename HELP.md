@@ -116,6 +116,8 @@ The live tail never scrolls away while the split is open. New output keeps landi
 
 Turn on `Collapse repeated lines` in Settings under Appearance, then Terminal text, and a line the game sends again and again takes one row. A line that reads exactly as the line right above it, colors included, joins it, and the row shows a gray count in front, like `(3) You are hungry.` The count climbs in place as more arrive. Any other line ends the run, a blank one too, and so do the lines you type, a reply from Vosh itself and a prompt that stays in the text. A pinned prompt leaves the text, so a run goes on past it. Type `compact` in Aabahran to drop the blank line before each prompt, and a run goes on from one round to the next. Your session log keeps every line, and your triggers fire on each one. It is off until you turn it on.
 
+Two rows under it set what collapses around a fight. `In a fight` covers every line that arrives while you are fighting, and starts on `Collapse`. Pick `Show every line` and each line of a fight keeps its own row. `Attack lines` covers each hit and miss the game shows you, yours, the ones on you and the ones you watch, in a fight or not. It starts on `Show every line`, so two blows show as two lines and never as `(2) Your slash DISMEMBERS a Blackwatch guard!`, where the count is easy to miss. While `In a fight` shows every line, attack lines show every line too, and the row says so.
+
 With the xterm renderer the divider snaps to whole terminal rows. It also answers the keyboard, arrow keys nudge it 16px and `Shift` with an arrow jumps 64px. The native renderer splits its own grid, and a middle click at the live tail opens the split a page up.
 
 ### 2.5 Find text
