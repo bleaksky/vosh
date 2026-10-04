@@ -109,10 +109,17 @@ pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
     if effects.replaced {
         open.hold(true);
     }
-    // A line that laid a profile over handed its own connection the new
-    // settings as it ran, and the other sessions keep their counts.
-    if let Some(before) = effects.tick_before.as_ref().filter(|_| !effects.replaced) {
-        crate::tick::follow_in_other_sessions(&shared, session.id, &open, before).await;
+    // Every other session on the profile follows the tick settings and
+    // takes what you chose in the `[prompt]` table. A line that laid a
+    // profile over handed its own connection both as it ran, and the
+    // other sessions keep their counts and tables.
+    if !effects.replaced {
+        if let Some(before) = effects.tick_before.as_ref() {
+            crate::tick::follow_in_other_sessions(&shared, session.id, &open, before).await;
+        }
+        if let Some(chosen) = effects.prompt.as_ref() {
+            crate::prompt::choose_in_other_sessions(&shared, session.id, &open, chosen).await;
+        }
     }
     if effects.replaced || effects.tick_before.is_some() {
         let events = {

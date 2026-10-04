@@ -153,6 +153,7 @@ fn tick_and_lua_lines_note_what_they_ask_of_the_profile() {
             replaced: true,
             dirty: false,
             tick_before: None,
+            prompt: None,
         }
     );
     assert!(p.aliases.get("greet").is_none());
@@ -187,6 +188,22 @@ fn a_tick_command_from_a_timer_notes_the_tick_change() {
     assert_eq!(p.tick.config.warn_at_secs, Some(10));
     let run = super::run_fired_locked(&state, &mut p, &mut c, "#tick", None);
     assert!(run.effects.tick_before.is_none());
+}
+
+#[test]
+fn a_prompt_command_notes_the_table_it_left_and_a_reset_notes_none() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "#prompt default", None);
+    assert_eq!(run.effects.prompt.as_ref(), Some(c.prompt.config()));
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "#prompt", None);
+    assert_eq!(run.effects.prompt, None);
+    // A reset hands its connection a whole table, which the other
+    // sessions on the profile do not take as a choice.
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "#profile reset", None);
+    assert!(run.effects.replaced);
+    assert_eq!(run.effects.prompt, None);
 }
 
 #[test]

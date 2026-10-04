@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter};
 use vosh_automation::alias::{ExpandError, ExpandStep};
+use vosh_prompt::PromptConfig;
 use walk::WalkCommand;
 
 use crate::app::events::{self, HELP_OPEN};
@@ -377,6 +378,9 @@ pub(crate) struct Ran {
     /// The tick settings before the line, when it changed them, like
     /// `#tick warn at 10`.
     pub(crate) tick_before: Option<TickConfig>,
+    /// The `[prompt]` table the line left in the engine, when it changed
+    /// it without laying another profile over, like `#prompt draw off`.
+    pub(crate) prompt: Option<PromptConfig>,
 }
 
 /// [`run_line_from`] for a line you type, for a test.
@@ -392,10 +396,11 @@ pub(crate) fn run_line(
 
 /// Run `line`, which `from` asks for, through the input pipeline: what
 /// to send, what to echo, what the Lua it ran asks for, whether it
-/// replaced the live profile, and whether it changed the tick settings,
-/// for [`LineEffects::note_ran`]. The target words and the quick keys
-/// read and set your target on `c`. Who asked decides the slash commands
-/// it may run, those a quick key in it expands to included.
+/// replaced the live profile, and whether it changed the tick settings
+/// or the `[prompt]` table, for [`LineEffects::note_ran`]. The target
+/// words and the quick keys read and set your target on `c`. Who asked
+/// decides the slash commands it may run, those a quick key in it
+/// expands to included.
 pub(crate) fn run_line_from(
     state: &AppState,
     profile: &mut Profile,
@@ -406,13 +411,17 @@ pub(crate) fn run_line_from(
     let mut replaced = false;
     let mut lua = ApplyResult::default();
     let tick_before = profile.tick.config.clone();
+    let prompt_before = c.prompt.revision();
     let result = process_line(state, profile, c, line, from, &mut replaced, &mut lua);
     let tick_before = (profile.tick.config != tick_before).then_some(tick_before);
+    let prompt =
+        (!replaced && c.prompt.revision() != prompt_before).then(|| c.prompt.config().clone());
     Ran {
         result,
         lua,
         replaced,
         tick_before,
+        prompt,
     }
 }
 
@@ -435,17 +444,24 @@ pub(crate) struct LineEffects {
     /// them, so every window hears the new settings once the lines have
     /// run, and every other session on the profile follows them.
     pub(crate) tick_before: Option<TickConfig>,
+    /// The `[prompt]` table the last line that changed it left in its
+    /// engine, like `#prompt draw off`. The engine of every other session
+    /// on the profile takes what you chose in it.
+    pub(crate) prompt: Option<PromptConfig>,
 }
 
 impl LineEffects {
     /// Note one line [`run_line_from`] ran: [`Self::note`] with whether it
-    /// replaced the live profile, whether it changed the tick settings,
-    /// and whether the Lua bodies of its script aliases changed durable
-    /// state.
+    /// replaced the live profile, whether it changed the tick settings or
+    /// the `[prompt]` table, and whether the Lua bodies of its script
+    /// aliases changed durable state.
     pub(crate) fn note_ran(&mut self, line: &str, ran: &Ran) {
         self.note(line, ran.replaced);
         if self.tick_before.is_none() {
             self.tick_before.clone_from(&ran.tick_before);
+        }
+        if ran.prompt.is_some() {
+            self.prompt.clone_from(&ran.prompt);
         }
         if ran.lua.durable_changed {
             self.dirty = true;
