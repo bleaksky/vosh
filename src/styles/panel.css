@@ -1662,5 +1662,5 @@
 .pane-menu > .pane-menu-sep {
   height: 1px;
   margin: 6px 12px;
-  background: var(--divider);
+  background: var(--sep);
 }
