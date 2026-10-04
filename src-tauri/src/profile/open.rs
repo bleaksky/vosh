@@ -88,6 +88,17 @@ impl OpenProfile {
     }
 }
 
+/// Its place and its name, for a result that names the profile it ran
+/// under.
+impl std::fmt::Debug for OpenProfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpenProfile")
+            .field("id", &self.id)
+            .field("name", &self.name())
+            .finish_non_exhaustive()
+    }
+}
+
 /// An open profile, locked. It reads and writes as the [`Profile`] and
 /// keeps the [`OpenProfile`] it came from at hand.
 pub(crate) struct ProfileGuard {

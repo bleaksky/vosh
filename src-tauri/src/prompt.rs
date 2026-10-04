@@ -203,12 +203,14 @@ pub(crate) fn client_values(
 }
 
 /// Tell the webview what the game said of your prompt settings in
-/// `session`, on `session://game-prompt-seen`. When the active profile's
-/// capture took a new setting, the profile saves shortly and every window
-/// reads the `[prompt]` table again.
+/// `session`, on `session://game-prompt-seen`. When the capture of
+/// `open`, the profile the session played as the engine took them, took a
+/// new setting, that profile saves shortly and every window reads the
+/// `[prompt]` table again.
 pub(crate) fn report_game_prompt_seen<R: tauri::Runtime>(
     app: &AppHandle<R>,
     session: &Session,
+    open: &Arc<OpenProfile>,
     seen: Vec<vosh_prompt::GamePromptSeen>,
 ) {
     let applied = seen.iter().any(|s| s.applied);
@@ -216,7 +218,7 @@ pub(crate) fn report_game_prompt_seen<R: tauri::Runtime>(
         session.emit(app, events::GAME_PROMPT_SEEN, &payload);
     }
     if applied {
-        crate::disk::save::mark_profile_dirty(app, &session.profile());
+        crate::disk::save::mark_profile_dirty(app, open);
         broadcast_list_changes(app, ListChanges::PROMPT);
     }
 }

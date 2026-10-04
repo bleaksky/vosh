@@ -512,10 +512,11 @@ fn here_exits(data: &Value) -> Option<HashMap<Dir, i64>> {
 /// A `#walk` among them comes back in the result's `walk`.
 pub(super) async fn release(session: &Session, rest: Vec<ExpandStep>) -> ApplyResult {
     let mut lua = ApplyResult::default();
-    let result = {
+    let (open, result) = {
         let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
-        crate::input::run_expanded(&mut p, &mut c, rest, &mut lua)
+        let result = crate::input::run_expanded(&mut p, &mut c, rest, &mut lua);
+        (p.open().clone(), result)
     };
     let mut apply = ApplyResult {
         send_bytes: result.bytes,
@@ -524,5 +525,5 @@ pub(super) async fn release(session: &Session, rest: Vec<ExpandStep>) -> ApplyRe
         ..ApplyResult::default()
     };
     apply.append(lua);
-    apply
+    apply.ran_under(&open)
 }

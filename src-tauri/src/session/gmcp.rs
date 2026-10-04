@@ -76,7 +76,8 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
         conn.perf.mutex_acquires += 1;
         let mut c = conn.session.connection.lock();
-        gmcp_step(&mut p, &mut c, &msg, Instant::now())
+        let (tick_step, apply) = gmcp_step(&mut p, &mut c, &msg, Instant::now());
+        (tick_step, apply.ran_under(p.open()))
     };
 
     // Char.Status / Char.Name carry the logged-in character name on

@@ -1011,6 +1011,47 @@ fn saved_var(file: &std::path::Path, name: &str) -> Option<String> {
 
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn what_lua_sets_on_a_login_packet_saves_the_profile_the_login_leaves() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    let plugins = crate::disk::paths::plugins_dir(h.dir.path());
+    write_plugin(
+        &plugins,
+        "greeter",
+        "mud.on_gmcp('Char.Status', function() mud.set_profile_var('greeted', 'yes') end)",
+    );
+    h.state.selected_profile().await.plugins.enabled = vec!["greeter".into()];
+    let first = h.state.selected_session();
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, &first, plugins).await;
+    // The second session keeps Default open, so the switch does not save
+    // it as it leaves.
+    let (one, two) = (h.first, h.open_session().await);
+    let default_file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+
+    // Healer logs in. The Char.Status that names Healer runs Default's
+    // Lua, then moves the first session to Healer before its result
+    // applies.
+    h.servers[0].options.lock().expect("the options").name = "Healer".into();
+    h.connect_to(one, &h.servers[0]).await;
+    h.until("the first session to move", |h| {
+        shows(h, one, "Vosh switched to the Healer profile.")
+    })
+    .await;
+    assert_eq!(plays(&h, two).as_deref(), Some(DEFAULT_PROFILE_NAME));
+    // The value the Lua set marks Default, the profile it ran under.
+    h.until("Default's save", |_| {
+        saved_var(&default_file, "greeted").is_some()
+    })
+    .await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_login_moves_its_own_session_and_a_login_in_the_other_joins_that_profile_in_memory() {
     use vosh_automation::trigger::{Trigger, TriggerAction};
     let grid = crate::native::grid::lock_shared_grid_for_test();

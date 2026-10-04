@@ -281,21 +281,25 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         None
     };
     // The line runs the way a line from a timer, the tick or Lua runs.
-    let LinesRun {
-        apply,
-        shown,
-        effects,
-        replaced_by,
-    } = {
+    let (
+        open,
+        LinesRun {
+            apply,
+            shown,
+            effects,
+            replaced_by,
+        },
+    ) = {
         let mut profile = session.lock_profile().await;
         let mut connection = session.connection.lock();
-        run_lines_locked(
+        let run = run_lines_locked(
             state,
             &mut profile,
             &mut connection,
             [(LineFrom::You, line)],
             shared_layer.as_ref(),
-        )
+        );
+        (profile.open().clone(), run)
     };
     // `#prompt draw` and `#prompt show` change the prompt on screen at
     // once, and `#prompt default` draws the new design there. A typed
@@ -304,13 +308,13 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         request_prompt_repaint(session).await;
     }
 
-    settle_line_effects(app, session, effects, replaced_by).await;
+    settle_line_effects(app, session, &open, effects, replaced_by).await;
 
     if let Some(payload) = shown.target {
         session.emit(app, events::TARGET, &payload);
     }
 
-    deliver_script_result(app, session, apply).await
+    deliver_script_result(app, session, apply.ran_under(&open)).await
 }
 
 /// Apply a script result outside the session loop, the way every path
