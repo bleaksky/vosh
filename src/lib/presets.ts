@@ -575,7 +575,10 @@ export const PRESETS: Preset[] = [
     description: 'Marks the gold, experience, levels, and skills you gain.',
     // group_gain in fight.c, with the experience to the next level of
     // fixtures/gmcp/aabahran group-info.gmcp, 1250, then gain_exp in
-    // update.c.
+    // update.c. Q5 of the first run review has the sample show experience
+    // and a skill, but the skill trigger misses every line check_improve
+    // prints (bug 16). The level line bug 14 fixed stands in for the
+    // skill, a gap against Q5 that still needs your sign off.
     sample: [
       { text: 'You receive 1250 experience points.', shows: 'loot.xp' },
       { text: 'You raise a level!!', shows: 'loot.level' },
