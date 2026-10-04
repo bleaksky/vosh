@@ -7,10 +7,11 @@
 use std::time::Duration;
 
 use tokio::time::Instant;
-use tracing::{debug, warn};
+use tracing::debug;
 use vosh_automation::trigger::{LineResult, MatchScope};
 use vosh_prompt::stage::{Block, BlockLine, End, Offer, Output};
 use vosh_protocol::telnet::Negotiator;
+use vosh_script::{Owner, ScriptOutcome};
 
 use crate::profile::live::Profile;
 use crate::script::{self, ApplyResult};
@@ -52,18 +53,11 @@ fn line_pass(
     );
     let tick_step = tick_reset(p, plain, now);
     script::snapshot_vars(&p.script, &p.vars);
-    let mut outcome = match p.script.match_line(plain) {
-        Ok(o) => o,
-        Err(err) => {
-            warn!(error = %err, "lua match_line failed");
-            vosh_script::ScriptOutcome::default()
-        }
-    };
+    let mut outcome = p.script.match_line(plain);
+    script::turn_off_stopped(p, &outcome);
     // The Lua bodies of this line's Script actions join the outcome the
     // Lua registered triggers wrote, so one apply takes both.
-    outcome
-        .actions
-        .extend(run_trigger_scripts(p, &result, "trigger-script"));
+    outcome.append(run_trigger_scripts(p, &result));
     let apply = script::apply_actions(p, outcome);
     LinePass {
         result,
@@ -82,22 +76,21 @@ fn tick_reset(p: &mut Profile, plain: &str, now: Instant) -> Option<TickStep> {
 }
 
 /// Run the Lua bodies of the Script actions in `result`, with their
-/// captures, and return the actions they produced.
-pub(super) fn run_trigger_scripts(
-    p: &mut Profile,
-    result: &LineResult,
-    chunk: &str,
-) -> Vec<vosh_script::Action> {
-    let mut actions = Vec::new();
+/// captures, and return what they produced. A body Vosh stops turns its
+/// trigger off at once, so a later match of the same trigger on this
+/// line runs nothing.
+pub(super) fn run_trigger_scripts(p: &mut Profile, result: &LineResult) -> ScriptOutcome {
+    let mut acc = ScriptOutcome::default();
     for call in &result.scripts {
-        match p.script.run_body(&call.body, &call.captures, chunk) {
-            Ok(o) => actions.extend(o.actions),
-            Err(err) => {
-                warn!(error = %err, chunk, "trigger script eval failed");
-            }
+        if p.triggers.is_stopped(&call.source) {
+            continue;
         }
+        let owner = Owner::Trigger(call.source.clone());
+        let outcome = p.script.run_body(&owner, &call.body, &call.captures);
+        script::turn_off_stopped(p, &outcome);
+        acc.append(outcome);
     }
-    actions
+    acc
 }
 
 /// What one line, prompt or partial left for the session to do once the
@@ -435,9 +428,7 @@ fn prompt_block(
     if !result.scripts.is_empty() {
         script::snapshot_vars(&p.script, &p.vars);
     }
-    let outcome = vosh_script::ScriptOutcome {
-        actions: run_trigger_scripts(p, &result, "prompt-trigger-script"),
-    };
+    let outcome = run_trigger_scripts(p, &result);
     let mut apply = script::apply_actions(p, outcome);
     batch.prompt_vars = true;
     batch.prompt = true;
@@ -569,9 +560,7 @@ fn unread_partial(
     let mut apply = ApplyResult::default();
     if effect {
         script::snapshot_vars(&p.script, &p.vars);
-        let outcome = vosh_script::ScriptOutcome {
-            actions: run_trigger_scripts(p, &result, "prompt-trigger-script"),
-        };
+        let outcome = run_trigger_scripts(p, &result);
         apply = script::apply_actions(p, outcome);
         // The webview hears every prompt a Prompts trigger acted on.
         batch.prompt_vars = true;

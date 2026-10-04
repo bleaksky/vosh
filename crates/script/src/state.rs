@@ -8,6 +8,33 @@ use std::sync::{Arc, Mutex};
 use mlua::RegistryKey;
 
 use crate::actions::Action;
+use crate::limits::ACTIONS_PER_CALL;
+use crate::owner::Owner;
+
+/// One Lua function Vosh holds for later, and the owner of the call
+/// that handed it over.
+pub(crate) struct Callback {
+    pub(crate) key: RegistryKey,
+    pub(crate) owner: Owner,
+}
+
+/// The call running now: whose Lua it runs, how many actions it queued,
+/// and whether it queued more than one call may.
+pub(crate) struct CallInfo {
+    pub(crate) owner: Owner,
+    queued: usize,
+    pub(crate) dropped: bool,
+}
+
+impl CallInfo {
+    pub(crate) fn new(owner: Owner) -> Self {
+        Self {
+            owner,
+            queued: 0,
+            dropped: false,
+        }
+    }
+}
 
 /// Per-engine bookkeeping. Lua references it via `app_data_ref` and we
 /// access it from the Rust side via the `Arc<Mutex<>>` clone we hand out.
@@ -16,15 +43,63 @@ pub(crate) struct StateInner {
     /// Side effects queued by Lua API calls. Drained by the engine after
     /// each Lua callback returns.
     pub(crate) pending: Vec<Action>,
-    /// Registry keys keyed by callback id. The id is what travels in
-    /// `Action::SetLuaTrigger`, `SubscribeGmcp`, and `Timer`.
-    pub(crate) callbacks: HashMap<i64, RegistryKey>,
+    /// The functions Vosh holds, keyed by callback id. The id is what
+    /// travels in `Action::SetLuaTrigger`, `SubscribeGmcp`, and `Timer`.
+    pub(crate) callbacks: HashMap<i64, Callback>,
     /// Callback id of each timer that has not fired yet, by timer id, so
     /// `mud.cancel_timer` can free the callback it will never run.
     pub(crate) timer_callbacks: HashMap<u32, i64>,
     /// Snapshot of session and profile variables, refreshed by the
     /// caller before each Lua entry. `mud.var(name)` reads from here.
     pub(crate) var_snapshot: HashMap<String, String>,
+    /// The call running now, while one runs.
+    pub(crate) call: Option<CallInfo>,
+}
+
+impl StateInner {
+    /// The owner of the call running now. A function it hands over keeps
+    /// this owner.
+    pub(crate) fn owner(&self) -> Owner {
+        self.call
+            .as_ref()
+            .map_or(Owner::Typed, |call| call.owner.clone())
+    }
+
+    /// Queue `action` for the call running now. A call may queue
+    /// [`ACTIONS_PER_CALL`] actions, and past that each one drops, with
+    /// the function it would have registered. True when it queued.
+    pub(crate) fn queue(&mut self, action: Action) -> bool {
+        if let Some(call) = self.call.as_mut() {
+            if call.queued >= ACTIONS_PER_CALL {
+                call.dropped = true;
+                self.forget_registration(&action);
+                return false;
+            }
+            call.queued += 1;
+        }
+        self.pending.push(action);
+        true
+    }
+
+    /// Free the function an action that never applies would have
+    /// registered.
+    pub(crate) fn forget_registration(&mut self, action: &Action) {
+        match action {
+            Action::SetLuaTrigger { callback_id, .. }
+            | Action::SubscribeGmcp { callback_id, .. } => {
+                self.callbacks.remove(callback_id);
+            }
+            Action::Timer {
+                callback_id,
+                timer_id,
+                ..
+            } => {
+                self.callbacks.remove(callback_id);
+                self.timer_callbacks.remove(timer_id);
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Wrapper around the shared inner state. Stored as Lua app data so the

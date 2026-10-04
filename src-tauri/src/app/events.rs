@@ -670,6 +670,7 @@ mod tests {
                 name: "k".into(),
                 expansion: "kick".into(),
             }],
+            ..vosh_script::ScriptOutcome::default()
         };
         let apply = crate::script::apply_actions(&mut p, outcome);
         assert_eq!(apply.lists, ListChanges::ALIASES);
@@ -689,6 +690,7 @@ mod tests {
                 name: "combat".into(),
                 enabled,
             }],
+            ..vosh_script::ScriptOutcome::default()
         };
         let apply = crate::script::apply_actions(&mut p, toggle(false));
         assert_eq!(apply.lists.events(), [MACRO_GROUPS_CHANGED]);

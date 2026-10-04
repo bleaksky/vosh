@@ -878,12 +878,89 @@ fn lua_a_line_runs_hands_on_all_it_asks_for() {
     assert!(ran.lua.prompt_vars_changed);
 
     // A reload runs each loaded script again, timers and all.
-    p.script
-        .load_script("t", "mud.timer(1, function() end)".into())
-        .unwrap();
+    let outcome = p.script.load_script(
+        vosh_script::Owner::Script("t.lua".into()),
+        "@t.lua",
+        "mud.timer(1, function() end)".into(),
+    );
+    assert!(!outcome.failed);
     let ran = run_line(&state, &mut p, "#script reload");
     assert_eq!(ran.result.echo, ["scripts reloaded"]);
     assert_eq!(ran.lua.new_timers.len(), 1);
+}
+
+#[test]
+fn lua_errors_and_print_reach_the_terminal_as_lua_lines() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let ran = run_line(&state, &mut p, "#lua print('hp', 80)");
+    assert_eq!(ran.lua.echoes, ["\x1b[90m[lua]\x1b[0m hp\t80"]);
+    let ran = run_line(&state, &mut p, "#lua mud.echo('one') error('boom')");
+    assert_eq!(
+        ran.lua.echoes,
+        ["one", "\x1b[90m[lua]\x1b[0m \x1b[31m#lua:1: boom\x1b[0m",]
+    );
+    // A line of text from print with a break in it shows as two lines.
+    let ran = run_line(&state, &mut p, "#lua print('a\\nb')");
+    assert_eq!(
+        ran.lua.echoes,
+        ["\x1b[90m[lua]\x1b[0m a", "\x1b[90m[lua]\x1b[0m b"]
+    );
+    let ran = run_line(&state, &mut p, "#lua while true do end");
+    assert_eq!(
+        ran.lua.echoes,
+        ["\x1b[90m[lua]\x1b[0m \x1b[31mVosh stopped your #lua line after 100 ms.\x1b[0m"]
+    );
+}
+
+#[test]
+fn a_loose_script_runs_as_its_file_and_stops_until_a_reload() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = AppState::default();
+    state.app_data.set(dir.path().to_path_buf()).unwrap();
+    let scripts = dir.path().join("scripts");
+    std::fs::create_dir_all(&scripts).unwrap();
+    std::fs::write(
+        scripts.join("combat.lua"),
+        "mud.trigger('hunger', 'You are hungry', function() while true do end end)\n",
+    )
+    .unwrap();
+    let mut p = Profile::default();
+    // A bare name and the name with .lua load as one script.
+    let ran = run_line(&state, &mut p, "#script load combat");
+    assert_eq!(
+        ran.result.echo,
+        [format!("loaded {}", scripts.join("combat.lua").display())]
+    );
+    run_line(&state, &mut p, "#script load combat.lua");
+    assert_eq!(p.script.loaded_script_names(), ["combat.lua"]);
+    let outcome = p.script.match_line("You are hungry.");
+    let apply = crate::script::apply_actions(&mut p, outcome);
+    assert_eq!(
+        apply.echoes,
+        ["\x1b[90m[lua]\x1b[0m \x1b[31mVosh stopped combat.lua after 100 ms. It stays off until #script reload.\x1b[0m"]
+    );
+    let leftover = &p.script.lua_triggers();
+    assert!(leftover.is_empty(), "{leftover:?}");
+    // A reload runs it again.
+    run_line(&state, &mut p, "#script reload");
+    assert_eq!(p.script.lua_triggers().len(), 1);
+    // A script with an error says so, and no loaded line shows.
+    std::fs::write(
+        scripts.join("typo.lua"),
+        "mud.echo('one')\nmud.ech('two')\n",
+    )
+    .unwrap();
+    let ran = run_line(&state, &mut p, "#script load typo");
+    let leftover = &ran.result.echo;
+    assert!(leftover.is_empty(), "{leftover:?}");
+    assert_eq!(
+        ran.lua.echoes,
+        [
+            "one",
+            "\x1b[90m[lua]\x1b[0m \x1b[31mtypo.lua:2: attempt to call a nil value (field 'ech')\x1b[0m",
+        ]
+    );
 }
 
 #[test]

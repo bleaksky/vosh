@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 use tokio::time::Instant;
 use vosh_automation::alias::Alias;
 use vosh_automation::vars::{Scope, VariableStore};
-use vosh_script::{Action, ScriptEngine, ScriptOutcome};
+use vosh_script::{Action, Owner, ScriptEngine, ScriptOutcome};
 
 use crate::app::events::{ListChanges, ListRevisions};
 use crate::profile::live::Profile;
@@ -54,22 +54,52 @@ fn refresh_vars(script: &ScriptEngine, vars: &VariableStore) {
 
 /// Run the Lua body of a script alias with the words typed after its
 /// name, and apply what it asks of the profile. Lua reads the current
-/// variables. A body that fails is logged and asks for nothing.
+/// variables. A body that fails asks for what it queued before the
+/// error, and its error line prints. A body Vosh stopped asks for
+/// nothing and turns its alias off, so a later step of the same line
+/// that names the alias runs nothing.
 pub(crate) fn run_alias_body(
     profile: &mut Profile,
     call: &vosh_automation::ScriptCall,
 ) -> ApplyResult {
+    if profile.aliases.is_stopped(&call.source) {
+        return ApplyResult::default();
+    }
     refresh_vars(&profile.script, &profile.vars);
-    match profile
-        .script
-        .run_body(&call.body, &call.captures, "alias-script")
-    {
-        Ok(outcome) => apply_actions(profile, outcome),
-        Err(err) => {
-            tracing::warn!(error = %err, "alias script eval failed");
-            ApplyResult::default()
+    let owner = Owner::Alias(call.source.clone());
+    let outcome = profile.script.run_body(&owner, &call.body, &call.captures);
+    apply_actions(profile, outcome)
+}
+
+/// Turn off each trigger and alias whose Lua Vosh stopped in `outcome`,
+/// until you save it again or restart Vosh. The engine holds a stopped
+/// plugin or loose script off itself.
+pub(crate) fn turn_off_stopped(profile: &mut Profile, outcome: &ScriptOutcome) {
+    for owner in &outcome.stopped {
+        match owner {
+            Owner::Trigger(name) => profile.triggers.stop(name),
+            Owner::Alias(name) => profile.aliases.stop(name),
+            Owner::Plugin(_) | Owner::Script(_) | Owner::Typed => {}
         }
     }
+}
+
+/// The `[lua]` tag before each line Vosh prints about Lua, in the
+/// theme's bright black, so the line reads as Vosh and not the game.
+const LUA_TAG: &str = "\x1b[90m[lua]\x1b[0m";
+
+/// The terminal lines for `text` from `print` or `mud.log`, one tagged
+/// line for each line of the text, in the default color.
+fn lua_lines(text: &str) -> impl Iterator<Item = String> + '_ {
+    text.split('\n')
+        .map(|line| format!("{LUA_TAG} {}", line.trim_end_matches('\r')))
+}
+
+/// The terminal lines for a Lua error or a stop, tagged and in the
+/// theme's red.
+fn lua_error_lines(text: &str) -> impl Iterator<Item = String> + '_ {
+    text.split('\n')
+        .map(|line| format!("{LUA_TAG} \x1b[31m{}\x1b[0m", line.trim_end_matches('\r')))
 }
 
 /// Result of applying a [`ScriptOutcome`]: bytes to send, lines to echo,
@@ -123,6 +153,7 @@ impl ApplyResult {
 pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> ApplyResult {
     let mut result = ApplyResult::default();
     let lists_before = ListRevisions::of(profile);
+    turn_off_stopped(profile, &outcome);
     for action in outcome.actions {
         match action {
             Action::Send(line) => {
@@ -135,8 +166,11 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
             Action::Echo(line) => {
                 result.echoes.push(line);
             }
-            Action::Log(line) => {
-                result.echoes.push(format!("[lua] {line}"));
+            Action::Log(text) => {
+                result.echoes.extend(lua_lines(&text));
+            }
+            Action::Error(text) => {
+                result.echoes.extend(lua_error_lines(&text));
             }
             Action::SetAlias { name, expansion } => {
                 define_alias(profile, name, expansion);
@@ -360,6 +394,7 @@ mod tests {
                 name: name.into(),
                 expansion: expansion.into(),
             }],
+            ..ScriptOutcome::default()
         }
     }
 
@@ -446,6 +481,7 @@ mod tests {
                 name: "combat".into(),
                 enabled: false,
             }],
+            ..ScriptOutcome::default()
         };
         apply_actions(&mut p, outcome);
         let leftover = &aliases_on(&p);

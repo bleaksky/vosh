@@ -65,6 +65,12 @@ pub enum Action {
     },
     /// Cancel a previously scheduled timer.
     CancelTimer(u32),
-    /// Log a debug line (currently echoes to the terminal in a faint color).
+    /// A line from `print` or `mud.log`, for the terminal under the
+    /// `[lua]` tag.
     Log(String),
+    /// A Lua error, with its file and line where Lua knows them, or a
+    /// line about a stop or the action cap. The terminal shows it under
+    /// the `[lua]` tag in red. Vosh adds these itself, so no call's
+    /// action cap counts them.
+    Error(String),
 }

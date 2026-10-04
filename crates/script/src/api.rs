@@ -9,7 +9,7 @@ use mlua::{Function, Lua, Result as LuaResult, Table, Value};
 use vosh_automation::vars::Scope;
 
 use crate::actions::Action;
-use crate::state::{EngineState, StateInner};
+use crate::state::{Callback, EngineState, StateInner};
 
 /// Counter for synthetic callback ids. The Lua engine stores the actual
 /// callback function in its registry and we hand around the integer id so
@@ -81,44 +81,52 @@ where
     f(&mut guard)
 }
 
+/// Hold `key`, a function the call running now hands over, under `id`,
+/// with the owner of that call.
+fn hold(s: &mut StateInner, id: i64, key: mlua::RegistryKey) {
+    let owner = s.owner();
+    s.callbacks.insert(id, Callback { key, owner });
+}
+
 fn mud_send(lua: &Lua, text: String) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.pending.push(Action::Send(text));
+        s.queue(Action::Send(text));
         Ok(())
     })
 }
 
 fn mud_input(lua: &Lua, text: String) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.pending.push(Action::Input(text));
+        s.queue(Action::Input(text));
         Ok(())
     })
 }
 
 fn mud_echo(lua: &Lua, text: String) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.pending.push(Action::Echo(text));
+        s.queue(Action::Echo(text));
         Ok(())
     })
 }
 
-fn mud_log(lua: &Lua, text: String) -> LuaResult<()> {
+/// `mud.log`, and the line `print` makes.
+pub(crate) fn mud_log(lua: &Lua, text: String) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.pending.push(Action::Log(text));
+        s.queue(Action::Log(text));
         Ok(())
     })
 }
 
 fn mud_alias(lua: &Lua, (name, expansion): (String, String)) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.pending.push(Action::SetAlias { name, expansion });
+        s.queue(Action::SetAlias { name, expansion });
         Ok(())
     })
 }
 
 fn mud_unalias(lua: &Lua, name: String) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.pending.push(Action::RemoveAlias(name));
+        s.queue(Action::RemoveAlias(name));
         Ok(())
     })
 }
@@ -132,53 +140,58 @@ fn mud_var(lua: &Lua, name: String) -> LuaResult<Option<String>> {
 
 fn mud_set_var(lua: &Lua, (name, value): (String, String)) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.pending.push(Action::SetVar {
+        let queued = s.queue(Action::SetVar {
             scope: Scope::Session,
             name: name.clone(),
             value: value.clone(),
         });
-        s.var_snapshot.insert(name, value);
+        if queued {
+            s.var_snapshot.insert(name, value);
+        }
         Ok(())
     })
 }
 
 fn mud_set_profile_var(lua: &Lua, (name, value): (String, String)) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.pending.push(Action::SetVar {
+        let queued = s.queue(Action::SetVar {
             scope: Scope::Profile,
             name: name.clone(),
             value: value.clone(),
         });
-        s.var_snapshot.insert(name, value);
+        if queued {
+            s.var_snapshot.insert(name, value);
+        }
         Ok(())
     })
 }
 
 fn mud_unset_var(lua: &Lua, name: String) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.var_snapshot.remove(&name);
-        s.pending.push(Action::RemoveVar(name));
+        if s.queue(Action::RemoveVar(name.clone())) {
+            s.var_snapshot.remove(&name);
+        }
         Ok(())
     })
 }
 
 fn mud_set_prompt_var(lua: &Lua, (name, value): (String, String)) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.pending.push(Action::SetPromptVar { name, value });
+        s.queue(Action::SetPromptVar { name, value });
         Ok(())
     })
 }
 
 fn mud_unset_prompt_var(lua: &Lua, name: String) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.pending.push(Action::RemovePromptVar(name));
+        s.queue(Action::RemovePromptVar(name));
         Ok(())
     })
 }
 
 fn mud_set_group_enabled(lua: &Lua, (name, enabled): (String, bool)) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.pending.push(Action::SetGroupEnabled { name, enabled });
+        s.queue(Action::SetGroupEnabled { name, enabled });
         Ok(())
     })
 }
@@ -187,8 +200,8 @@ fn mud_trigger(lua: &Lua, (name, pattern, callback): (String, String, Function))
     let key = lua.create_registry_value(callback)?;
     let id = alloc_callback_id();
     with_state(lua, |s| {
-        s.callbacks.insert(id, key);
-        s.pending.push(Action::SetLuaTrigger {
+        hold(s, id, key);
+        s.queue(Action::SetLuaTrigger {
             name,
             pattern,
             callback_id: id,
@@ -199,7 +212,7 @@ fn mud_trigger(lua: &Lua, (name, pattern, callback): (String, String, Function))
 
 fn mud_untrigger(lua: &Lua, name: String) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.pending.push(Action::RemoveLuaTrigger(name));
+        s.queue(Action::RemoveLuaTrigger(name));
         Ok(())
     })
 }
@@ -208,8 +221,8 @@ fn mud_on_gmcp(lua: &Lua, (package, callback): (String, Function)) -> LuaResult<
     let key = lua.create_registry_value(callback)?;
     let id = alloc_callback_id();
     with_state(lua, |s| {
-        s.callbacks.insert(id, key);
-        s.pending.push(Action::SubscribeGmcp {
+        hold(s, id, key);
+        s.queue(Action::SubscribeGmcp {
             package,
             callback_id: id,
         });
@@ -222,9 +235,9 @@ fn mud_timer(lua: &Lua, (secs, callback): (f64, Function)) -> LuaResult<u32> {
     let id = alloc_callback_id();
     let timer_id = alloc_timer_id();
     with_state(lua, |s| {
-        s.callbacks.insert(id, key);
+        hold(s, id, key);
         s.timer_callbacks.insert(timer_id, id);
-        s.pending.push(Action::Timer {
+        s.queue(Action::Timer {
             delay: Duration::from_secs_f64(secs.max(0.0)),
             callback_id: id,
             timer_id,
@@ -242,7 +255,7 @@ fn mud_cancel_timer(lua: &Lua, timer_id: u32) -> LuaResult<()> {
         if let Some(callback_id) = s.timer_callbacks.remove(&timer_id) {
             s.callbacks.remove(&callback_id);
         }
-        s.pending.push(Action::CancelTimer(timer_id));
+        s.queue(Action::CancelTimer(timer_id));
         Ok(())
     })
 }
@@ -278,30 +291,6 @@ pub(crate) fn json_to_lua(lua: &Lua, value: &serde_json::Value) -> LuaResult<Val
             Value::Table(t)
         }
     })
-}
-
-/// Build a Lua array of capture strings for a regex match. Index 1 is the
-/// full match (mirrors Lua 1-based indexing); subsequent indices are
-/// numbered captures. Named captures show up under their string keys too.
-pub(crate) fn captures_to_lua(
-    lua: &Lua,
-    captures: &regex::Captures<'_>,
-    capture_names: &[Option<String>],
-) -> LuaResult<Table> {
-    let t = lua.create_table()?;
-    for (i, mat) in captures.iter().enumerate() {
-        if let Some(m) = mat {
-            t.set(i + 1, m.as_str())?;
-        }
-    }
-    for (i, name) in capture_names.iter().enumerate() {
-        if let Some(n) = name {
-            if let Some(m) = captures.get(i + 1) {
-                t.set(n.as_str(), m.as_str())?;
-            }
-        }
-    }
-    Ok(t)
 }
 
 /// Apply the sandbox: remove globals that shell out, touch the filesystem,
