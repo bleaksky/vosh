@@ -19,8 +19,10 @@ describe('themeThumb', () => {
   it('matches the board for Obsidian Ember', () => {
     expect(themeThumb(findTheme('obsidian-ember'))).toEqual({
       bg: '#050403',
-      panel: '#0c0a08',
-      sep: '#1d1b19',
+      // The panel sits on the ground under the one ground rule, and the
+      // line steps 11 in OKLab L off it.
+      panel: '#050403',
+      sep: '#1b1a19',
       accent: '#ef8f2f',
       text: '#c0bdbb',
       appearance: 'dark',
@@ -31,8 +33,10 @@ describe('themeThumb', () => {
   it('matches the board for Vellum', () => {
     expect(themeThumb(findTheme('vellum'))).toEqual({
       bg: '#f7f4ee',
-      panel: '#f0ede7',
-      sep: '#dad8d2',
+      // The panel sits on the paper under the one ground rule, and the
+      // line steps 11 in OKLab L off it.
+      panel: '#f7f4ee',
+      sep: '#d2d0cb',
       accent: '#3f6690',
       text: '#2a2622',
       appearance: 'light',
@@ -50,7 +54,10 @@ describe('themeThumb', () => {
     });
     const thumb = themeThumb(custom);
     expect(thumb).toMatchObject({ bg: '#ffffff', accent: '#d7005f', appearance: 'light' });
-    expect(thumb.panel).not.toBe(thumb.bg);
+    // The panel sits on the ground under the one ground rule, so the
+    // strip shows by its line.
+    expect(thumb.panel).toBe(thumb.bg);
+    expect(thumb.sep).not.toBe(thumb.bg);
   });
 });
 

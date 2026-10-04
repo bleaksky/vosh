@@ -159,16 +159,15 @@ describe('chatInks', () => {
   });
 
   it('lifts the published colors that fade on a panel, and leaves the theme alone', () => {
+    // Vellum's bright yellow, Solarized Dark's red, Everforest Light's
+    // red and Green Screen's magenta left the list when the one ground
+    // rule put the panel on the terminal ground, where each reads at 3:1.
     const cases = [
-      ['vellum', 'brightYellow'],
       ['solarized-light', 'cyan'],
-      ['solarized-dark', 'red'],
       ['tango-dark', 'blue'],
       ['classic-vivid', 'blue'],
       ['everforest-light', 'yellow'],
-      ['everforest-light', 'red'],
       ['green-screen', 'blue'],
-      ['green-screen', 'magenta'],
     ] as const;
     for (const [id, slot] of cases) {
       const theme = findTheme(id);
@@ -184,7 +183,7 @@ describe('chatInks', () => {
       color: kanso.brightYellow,
       fadeTag: true,
     });
-    // Vellum's green tell reads at 4.3:1 on its panel, but near 2.6:1 a
+    // Vellum's green tell reads at 4.6:1 on its panel, but near 2.7:1 a
     // step back, so its tag draws solid.
     expect(chatInks(vellum, themeTokens(findTheme('vellum'))).green).toEqual({
       color: vellum.green,

@@ -7,17 +7,17 @@
 
 :root {
   --bg: #050403;
-  --panel: #0c0a08;
-  --sep: #1d1b19;
-  --divider: #181614;
-  --selrow: #1d1b19;
-  --hover: #171513;
-  --inputband: #0f0e0d;
+  --panel: #050403;
+  --sep: #1b1a19;
+  --divider: #100f0e;
+  --selrow: #121110;
+  --hover: #0b0b0a;
+  --inputband: #080807;
   --text: #c0bdbb;
-  --secondary: #918e8c;
-  --tertiary: #646260;
-  --title: #8f8e8e;
-  --raised: #100f0d;
+  --secondary: #8e8b89;
+  --tertiary: #63615f;
+  --title: #8e8b89;
+  --raised: #100f0e;
   --accent: #ef8f2f;
   --on-accent: #140b02;
   --danger: #ea8f80;

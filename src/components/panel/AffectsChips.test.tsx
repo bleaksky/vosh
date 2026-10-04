@@ -412,56 +412,57 @@ describe('Draining chips', () => {
   // built in theme and tone then reads at 3 to 1 or better over the fill
   // and over the bare panel. An imported light palette whose red sits at
   // or near 4.5 to 1 draws its hours close to the fill color over itself.
-  // The common ones hold 3 to 1 at 24 percent where 28 dropped them under
-  // it, as the next test pins. On a light theme Grouped chips draws its
+  // The common ones hold 3 to 1 at 24 percent, where 28 drops Catppuccin
+  // Latte under it, as the next test pins. On a light theme Grouped chips draws its
   // yellow hours in warn text too, so no theme reads under 3 to 1 there.
   const GROUPED_UNDER_THREE: string[] = [];
   // How far the fill stands off the bare panel on a light theme, so the
   // drain stays clear. The Grouped chips track stands off it 1.15 to 1.25.
   const LIGHT_FILL_FLOOR = 1.3;
   // The hours' contrast on each theme, on the Grouped chips track and
-  // then on the Draining chips fill.
+  // then on the Draining chips fill, over the panel the one ground rule
+  // puts on the terminal ground.
   const HOURS_READ: Record<string, string> = {
-    'obsidian-ember warn': '9.59 to 6.10',
-    'obsidian-ember danger': '6.53 to 4.79',
-    'vellum warn': '3.86 to 3.13',
-    'vellum danger': '4.02 to 3.59',
-    'kanso-zen warn': '7.98 to 5.15',
-    'kanso-zen danger': '4.57 to 3.61',
-    'tokyo-night warn': '5.83 to 4.01',
-    'tokyo-night danger': '4.50 to 3.45',
+    'obsidian-ember warn': '10.23 to 6.51',
+    'obsidian-ember danger': '6.94 to 5.10',
+    'vellum warn': '3.84 to 3.09',
+    'vellum danger': '4.26 to 3.78',
+    'kanso-zen warn': '8.90 to 5.74',
+    'kanso-zen danger': '5.04 to 3.94',
+    'tokyo-night warn': '6.48 to 4.47',
+    'tokyo-night danger': '5.01 to 3.84',
     'nord warn': '5.77 to 3.93',
     'nord danger': '4.11 to 3.49',
-    'rose-pine warn': '7.03 to 4.66',
-    'rose-pine danger': '4.31 to 3.37',
-    'gruvbox warn': '5.58 to 3.82',
-    'gruvbox danger': '4.12 to 3.46',
-    'catppuccin warn': '7.76 to 4.85',
-    'catppuccin danger': '4.67 to 3.52',
-    'dracula warn': '9.44 to 5.63',
-    'dracula danger': '4.39 to 3.42',
-    'monokai warn': '5.61 to 3.87',
-    'monokai danger': '4.32 to 3.73',
-    'one-dark warn': '5.19 to 3.64',
-    'one-dark danger': '4.04 to 3.36',
-    'one-half-dark warn': '5.19 to 3.64',
-    'one-half-dark danger': '4.04 to 3.36',
-    'solarized-dark warn': '4.57 to 3.40',
-    'solarized-dark danger': '4.47 to 3.97',
-    'solarized-light warn': '3.94 to 3.36',
-    'solarized-light danger': '3.67 to 3.27',
-    'tango-dark warn': '6.09 to 4.05',
-    'tango-dark danger': '4.29 to 3.68',
-    'classic-vivid warn': '11.89 to 6.74',
-    'classic-vivid danger': '4.21 to 3.53',
-    'high-contrast warn': '11.46 to 6.54',
-    'high-contrast danger': '6.01 to 4.39',
-    'everforest-dark warn': '4.41 to 3.21',
-    'everforest-dark danger': '3.99 to 3.26',
-    'everforest-light warn': '4.03 to 3.41',
-    'everforest-light danger': '3.81 to 3.46',
-    'green-screen warn': '11.51 to 6.50',
-    'green-screen danger': '4.74 to 3.72',
+    'rose-pine warn': '7.92 to 5.14',
+    'rose-pine danger': '4.80 to 3.72',
+    'gruvbox warn': '6.34 to 4.26',
+    'gruvbox danger': '4.81 to 3.95',
+    'catppuccin warn': '8.90 to 5.40',
+    'catppuccin danger': '5.32 to 3.92',
+    'dracula warn': '10.70 to 6.17',
+    'dracula danger': '4.91 to 3.75',
+    'monokai warn': '6.43 to 4.31',
+    'monokai danger': '4.91 to 4.17',
+    'one-dark warn': '5.91 to 4.05',
+    'one-dark danger': '4.62 to 3.73',
+    'one-half-dark warn': '5.91 to 4.05',
+    'one-half-dark danger': '4.62 to 3.73',
+    'solarized-dark warn': '5.16 to 3.81',
+    'solarized-dark danger': '5.15 to 4.47',
+    'solarized-light warn': '3.95 to 3.34',
+    'solarized-light danger': '3.63 to 3.21',
+    'tango-dark warn': '6.98 to 4.49',
+    'tango-dark danger': '4.89 to 4.06',
+    'classic-vivid warn': '13.29 to 7.38',
+    'classic-vivid danger': '4.60 to 3.81',
+    'high-contrast warn': '12.88 to 7.18',
+    'high-contrast danger': '6.59 to 4.81',
+    'everforest-dark warn': '5.08 to 3.57',
+    'everforest-dark danger': '4.53 to 3.63',
+    'everforest-light warn': '3.96 to 3.36',
+    'everforest-light danger': '3.80 to 3.47',
+    'green-screen warn': '12.78 to 7.21',
+    'green-screen danger': '5.21 to 4.08',
   };
 
   it('reads the hours at 3 to 1 or better over the fill and the bare panel, pinned per theme', () => {
@@ -546,9 +547,9 @@ describe('Draining chips', () => {
     'selenized-light': ['#fbf3db', '#53676d', '#d2212d', '#ad8900'],
   };
   const IMPORTED_READ: Record<string, string> = {
-    'catppuccin-latte': 'red 3.02, 2.83 at 28, yellow 3.31',
-    'gruvbox-light': 'red 3.12, 2.95 at 28, yellow 3.35',
-    'selenized-light': 'red 3.14, 2.94 at 28, yellow 3.39',
+    'catppuccin-latte': 'red 3.20, 2.98 at 28, yellow 3.30',
+    'gruvbox-light': 'red 3.32, 3.11 at 28, yellow 3.35',
+    'selenized-light': 'red 3.25, 3.04 at 28, yellow 3.38',
   };
 
   it('reads the hours at 3 to 1 or better over the fill on imported light palettes', () => {

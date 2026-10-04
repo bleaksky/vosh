@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ACCENT_APART,
   CHROME_COLOR_KEYS,
   ON_ACCENT_CONTRAST,
   SECONDARY_CONTRAST,
@@ -9,7 +10,17 @@ import {
   type Appearance,
   type ChromeColorKey,
 } from './chrome';
-import { composite, contrast, deltaE2000, parseHex, rgbToOklch, type Rgb } from './color';
+import {
+  composite,
+  contrast,
+  deltaE2000,
+  deltaEOk,
+  parseHex,
+  rgbToOklab,
+  rgbToOklch,
+  WHITE,
+  type Rgb,
+} from './color';
 import {
   BUILTIN_THEMES,
   customThemeLabel,
@@ -34,33 +45,56 @@ const paint = (color: string, ground: string): Rgb => {
   return composite({ r: +m[1], g: +m[2], b: +m[3] }, hex(ground), +m[4]);
 };
 
-interface CanvasSheet {
+// A lightness step in OKLab L times 100. Below Obsidian Ember's ground
+// OKLab L runs too steep to measure by, so there a step counts as the
+// one that gives the same contrast on Ember's ground.
+const EMBER_GROUND = hex('#050403');
+const lightness = (c: Rgb) => rgbToOklab(c).L * 100;
+function stepDL(a: Rgb, b: Rgb): number {
+  const base = lightness(EMBER_GROUND);
+  if (Math.min(lightness(a), lightness(b)) >= base) return Math.abs(lightness(a) - lightness(b));
+  const ratio = contrast(a, b);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 30; i += 1) {
+    const alpha = (lo + hi) / 2;
+    if (contrast(composite(WHITE, EMBER_GROUND, alpha), EMBER_GROUND) < ratio) lo = alpha;
+    else hi = alpha;
+  }
+  return lightness(composite(WHITE, EMBER_GROUND, hi)) - base;
+}
+
+interface TokenSheet {
   id: string;
   appearance: Appearance;
   tokens: Record<ChromeColorKey, string>;
 }
 
-// The approved One Window canvas tokens (SPEC section 4, the Palette
-// and Main artboards for onAccent). The canvas token sheet differs
-// only in Ember's title, #8e8e8e, which the second Ember entry covers.
-const NORD: CanvasSheet = {
+// The token sheets under the one ground rule (Themes review Q7, board
+// 11). The One Window canvas sheets predate it, so the panel now sits
+// on the ground, the lines step in lightness, the title takes the
+// secondary tone, and Vellum floats on its paper instead of white.
+// Ember's is the sheet the board draws, and Nord's and Vellum's are the
+// rule's with their pins. The selection keeps the canvas values, since
+// the selection token has not changed yet.
+const NORD: TokenSheet = {
   id: 'nord',
   appearance: 'dark',
   tokens: {
     bg: '#2e3440',
     panel: '#2e3440',
     sep: '#434c5e',
-    divider: '#383e4a',
+    divider: '#3e444f',
     selrow: '#3b4252',
-    hover: '#373d49',
-    inputband: '#363c48',
+    hover: '#393f4a',
+    inputband: '#353b46',
     text: '#e5e9f0',
     secondary: '#c0c7d3',
     tertiary: '#7b8294',
-    title: '#a1a4a9',
+    title: '#c0c7d3',
     raised: '#2e3440',
     accent: '#88c0d0',
-    onAccent: '#1b1f27',
+    onAccent: '#1a1f2a',
     danger: '#bf616a',
     dangerText: '#dc8a92',
     warn: '#ebcb8b',
@@ -70,22 +104,22 @@ const NORD: CanvasSheet = {
   },
 };
 
-const EMBER: CanvasSheet = {
+const EMBER: TokenSheet = {
   id: 'obsidian-ember',
   appearance: 'dark',
   tokens: {
     bg: '#050403',
-    panel: '#0c0a08',
-    sep: '#1d1b19',
-    divider: '#181614',
-    selrow: '#1d1b19',
-    hover: '#171513',
-    inputband: '#0f0e0d',
+    panel: '#050403',
+    sep: '#1b1a19',
+    divider: '#100f0e',
+    selrow: '#121110',
+    hover: '#0b0b0a',
+    inputband: '#080807',
     text: '#c0bdbb',
-    secondary: '#918e8c',
-    tertiary: '#62605e',
-    title: '#8e8c8b',
-    raised: '#100f0d',
+    secondary: '#8e8b89',
+    tertiary: '#63615f',
+    title: '#8e8b89',
+    raised: '#100f0e',
     accent: '#ef8f2f',
     onAccent: '#140b02',
     danger: '#ea8f80',
@@ -97,41 +131,38 @@ const EMBER: CanvasSheet = {
   },
 };
 
-const VELLUM: CanvasSheet = {
+const VELLUM: TokenSheet = {
   id: 'vellum',
   appearance: 'light',
   tokens: {
     bg: '#f7f4ee',
-    panel: '#f0ede7',
-    sep: '#dad8d2',
-    divider: '#dfdcd7',
-    selrow: '#ffffff',
-    hover: '#e6e4de',
+    panel: '#f7f4ee',
+    sep: '#d2d0cb',
+    divider: '#e3e0db',
+    selrow: '#fffdfa',
+    hover: '#e9e6e1',
     inputband: '#eeebe6',
     text: '#2a2622',
-    secondary: '#5c5853',
-    tertiary: '#898681',
-    title: '#7c7a77',
-    raised: '#ffffff',
+    secondary: '#5f5c57',
+    tertiary: '#8c8984',
+    title: '#5f5c57',
+    raised: '#fffdfa',
     accent: '#3f6690',
     onAccent: '#ffffff',
     danger: '#a8453a',
     dangerText: '#a8453a',
     warn: '#94661a',
-    warnText: '#8f6213',
+    warnText: '#94661a',
     success: '#4f7a3a',
     selection: 'rgba(63, 102, 144, 0.18)',
   },
 };
 
-const SHEETS: CanvasSheet[] = [
-  NORD,
-  EMBER,
-  VELLUM,
-  { ...EMBER, tokens: { ...EMBER.tokens, title: '#8e8e8e' } },
-];
+// The canvas drew Ember's title in #8e8e8e on a second sheet. The title
+// is the secondary tone now, so that sheet is gone.
+const SHEETS: TokenSheet[] = [NORD, EMBER, VELLUM];
 
-describe('built-in themes reproduce the approved canvas', () => {
+describe('built-in themes reproduce the one ground boards', () => {
   SHEETS.forEach((sheet, n) => {
     it(`${sheet.id} (sheet ${n + 1}) within delta E 2`, () => {
       const theme = findTheme(sheet.id);
@@ -179,6 +210,22 @@ describe('contrast floors', () => {
       expect(on('title', bg), 'title').toBeGreaterThanOrEqual(3);
       expect(on('accent', bg), 'accent').toBeGreaterThanOrEqual(3);
       expect(on('onAccent', hex(t.accent)), 'onAccent').toBeGreaterThanOrEqual(ON_ACCENT_CONTRAST);
+      // The window floors of the one ground rule. The 1 px line stands
+      // dL 8 to 12 off the ground, and 4 or more off a menu, where the
+      // menu separators draw in it.
+      const sep = stepDL(hex(t.sep), bg);
+      expect(sep, 'sep off the ground').toBeGreaterThanOrEqual(8);
+      expect(sep, 'sep off the ground').toBeLessThanOrEqual(12);
+      expect(stepDL(hex(t.sep), raised), 'sep off raised').toBeGreaterThanOrEqual(4);
+      // An accent the rule picks stands apart from every status color.
+      // A pinned one stays as the theme drew it.
+      if (theme.chrome?.accent === undefined) {
+        for (const key of ['danger', 'warn', 'success'] as const) {
+          expect(deltaEOk(hex(t.accent), hex(t[key])), `accent from ${key}`).toBeGreaterThanOrEqual(
+            ACCENT_APART,
+          );
+        }
+      }
     });
   }
 
@@ -330,10 +377,11 @@ describe('Everforest and Green Screen', () => {
 
   it('take Everforest green as the accent', () => {
     expect(themeTokens(findTheme('everforest-dark')).accent).toBe('#a7c080');
-    // The published green lifted to 3:1, the color the chrome also
-    // derives as success.
+    // The published green lifted to 3:1. The pin keeps the shade the
+    // chrome derived for success while menus floated on white, a step
+    // darker than the one ground rule's success on the paper.
     const light = themeTokens(findTheme('everforest-light'));
-    expect(light.accent).toBe(light.success);
+    expect(light.accent).toBe('#809300');
     expect(Math.abs(hue(light.accent) - hue('#8da101'))).toBeLessThan(2);
     expect(contrast(hex(light.accent), hex(light.bg))).toBeGreaterThanOrEqual(3);
   });
@@ -520,7 +568,8 @@ describe('custom theme chrome', () => {
     });
     const t = themeTokens(custom);
     expect(t.accent).toBe('#ff3399');
-    expect(t.panel).toBe('#0c0a08');
+    // The panel sits on the terminal ground under the one ground rule.
+    expect(t.panel).toBe('#050403');
     expect(t.text).toBe('#c0bdbb');
     expect(t.warn).toBe('#ecc985');
   });
