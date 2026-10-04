@@ -63,11 +63,15 @@ end
 /// Lua that puts `plugins` in the global environment. It takes the
 /// table of environments by plugin name. `plugins.<name>` is a view of
 /// that plugin's globals that reads the environment it has now, or
-/// nothing while it is off, and refuses a change.
+/// nothing while it is off, and refuses a change. It leaves out `_G`,
+/// which is the environment itself, and the plugin's `mud` table, so
+/// the view hands out nothing that writes into the plugin or registers
+/// for it.
 const PLUGINS: &str = r#"
 local by_name = ...
 local error, next, setmetatable = error, next, setmetatable
 local views = {}
+local hidden = { _G = true, mud = true }
 
 local function view_of(name)
   local view = views[name]
@@ -79,7 +83,7 @@ local function view_of(name)
   setmetatable(view, {
     __index = function(_, key)
       local env = by_name[name]
-      if env ~= nil then
+      if env ~= nil and not hidden[key] then
         return env[key]
       end
     end,
@@ -88,7 +92,14 @@ local function view_of(name)
     end,
     __pairs = function()
       local env = by_name[name] or {}
-      return function(_, key) return next(env, key) end, view, nil
+      local function step(_, key)
+        local after, value = next(env, key)
+        while after ~= nil and hidden[after] do
+          after, value = next(env, after)
+        end
+        return after, value
+      end
+      return step, view, nil
     end,
     __metatable = false,
   })
