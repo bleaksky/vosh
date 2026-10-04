@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { CRITICAL_TICKS, EXPIRING_TICKS } from './affectsView';
 import { sanitizeLayout, type PaneLayout } from './paneLayout';
+import { normalizePanelFont } from './panelFont';
 import {
   resolveActiveTheme,
   systemPrefersDark,
@@ -2055,6 +2056,9 @@ export interface UiConfig {
   font_size: number;
   /** Terminal row spacing, one of TERMINAL_LINE_HEIGHTS. */
   terminal_line_height: TerminalLineHeight;
+  /** The face of the panes and the status line: empty for the terminal
+   *  font, `system` for the system font, or a font list (panelFont.ts). */
+  panel_font: string;
   tracked_affects: TrackedAffect[];
   enabled_presets: string[];
   keep_last_command: boolean;
@@ -2212,6 +2216,7 @@ export interface RawUiConfig {
   font_family: string;
   font_size: number;
   terminal_line_height?: string;
+  panel_font?: string;
   tracked_affects: unknown[];
   enabled_presets: string[];
   keep_last_command?: boolean;
@@ -2295,6 +2300,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     font_family: cfg.font_family,
     font_size: cfg.font_size,
     terminal_line_height: normalizeTerminalLineHeight(cfg.terminal_line_height),
+    panel_font: normalizePanelFont(cfg.panel_font),
     tracked_affects: Array.isArray(cfg.tracked_affects)
       ? normalizeTrackedAffects(cfg.tracked_affects)
       : [],
@@ -2692,6 +2698,7 @@ function uiConfigPayload(config: UiConfig): Record<string, unknown> {
     font_family: config.font_family,
     font_size: config.font_size,
     terminal_line_height: config.terminal_line_height,
+    panel_font: config.panel_font,
     // Wire format intentionally drops `label: null` to the omitted
     // form so the backend's `Option<String>` deserializes cleanly.
     tracked_affects: config.tracked_affects.map((t) => ({
