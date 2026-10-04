@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Terminal } from '@xterm/xterm';
 import { ECHO_CARET } from './maskedInput';
+import { LiftTracker } from './promptBands';
 import {
   closePinRow,
   eraseBack,
@@ -15,6 +16,8 @@ import {
 // xterm has parsed any of them.
 
 const mark = (gen: number) => `\x1b]7717;o;${gen}\x07`;
+const liftStart = (id: number) => `\x1b]7717;l;${id}\x07`;
+const liftEnd = (id: number) => `\x1b]7717;e;${id}\x07`;
 
 function setup(cols = 40, rows = 10) {
   const term = new Terminal({ cols, rows, scrollback: 100, allowProposedApi: true });
@@ -987,6 +990,19 @@ describe('the mark before your echo', () => {
       send(writer, 'look');
       await parsed(writer);
       expect(screen(term)).toEqual(['You are hungry.', '', '› look']);
+    });
+
+    it(`drops after a lifted prompt, ${how}`, async () => {
+      // The space after the band keeps your echo a cell away, on the
+      // prompt's row. The lift marks go to a tracker, as in the app.
+      const { term, writer } = setup();
+      const lifts = new LiftTracker(term);
+      writer.output({ text: `${liftStart(3)}${mark(4)}<1020hp 800m 930mv>${liftEnd(3)} ` });
+      send(writer, 'look');
+      await parsed(writer);
+      expect(screen(term)).toEqual(['<1020hp 800m 930mv> look']);
+      expect(lifts.size).toBe(1);
+      lifts.dispose();
     });
 
     it(`reads the row once the live render is back, ${how}`, async () => {
