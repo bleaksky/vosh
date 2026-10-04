@@ -555,13 +555,19 @@ pub(crate) fn observe<R: tauri::Runtime>(app: &AppHandle<R>, package: &str, data
     }
 }
 
-/// The game named the character on the live connection.
+/// The game named the character on the connection `session` runs.
 pub(crate) fn character_known<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
+    session: &crate::sessions::Session,
     character: &str,
 ) {
-    let Some((host, port)) = state.current_connection.lock().ok().and_then(|g| g.clone()) else {
+    let Some((host, port)) = session
+        .current_connection
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())
+    else {
         return;
     };
     let key = character_key(&host, port, character);

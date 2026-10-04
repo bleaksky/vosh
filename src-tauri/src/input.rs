@@ -15,6 +15,8 @@ mod tick;
 mod vars;
 pub(crate) mod walk;
 
+use std::sync::Arc;
+
 use tauri::{AppHandle, Emitter};
 use vosh_automation::alias::{ExpandError, ExpandStep};
 use walk::WalkCommand;
@@ -27,9 +29,9 @@ use crate::profile::live::Profile;
 use crate::profile::switch::read_shared_layer;
 use crate::prompt::request_prompt_repaint;
 use crate::script::{run_alias_body, ApplyResult};
-use crate::session;
 use crate::session::connection::Connection;
-use crate::session::effects::LinesRun;
+use crate::session::effects::{collect_script_result, run_lines_locked, Collected, LinesRun};
+use crate::sessions::Session;
 
 use slash::handle_slash;
 use target::{run_target_clear, run_target_cycle, run_target_set};
@@ -227,19 +229,20 @@ pub(crate) fn may_replace_profile(state: &AppState, line: &str) -> bool {
 /// What the terminal prints when you send a line with no connection.
 pub(crate) const NOT_CONNECTED: &[u8] = b"\r\n[not connected]\r\n";
 
-/// Run a line you typed, the body of `session_send_input`. `#help` and
-/// `#logs` take their short cuts. Any other line runs through the
-/// pipeline under the profile lock and the connection's. Then the prompt
-/// repaints when the line changed how it looks, the line's saves and
-/// events go out with your target when it changed, and what it sends and
-/// echoes is delivered.
+/// Run a line you typed in the selected session, the body of
+/// `session_send_input`. `#help` and `#logs` take their short cuts. Any
+/// other line runs through the pipeline under the profile lock and the
+/// connection's. Then the prompt repaints when the line changed how it
+/// looks, the line's saves and events go out with your target when it
+/// changed, and what it sends and echoes is delivered.
 pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
     line: &str,
 ) -> Result<(), String> {
+    let session = state.selected_session();
     // What the plugins printed at launch, if nothing showed it yet.
-    crate::app::plugins::show_launch_lines(app, state);
+    crate::app::plugins::show_launch_lines(app, &session);
     // `#help <words>` opens Help on those words. The topics live in the
     // page, so the main window searches them, opens Help on the best
     // match, or says in the terminal that none matched.
@@ -272,8 +275,8 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         effects,
     } = {
         let mut profile = state.profile.lock().await;
-        let mut connection = state.connection.lock();
-        session::effects::run_lines_locked(
+        let mut connection = session.connection.lock();
+        run_lines_locked(
             state,
             &mut profile,
             &mut connection,
@@ -285,7 +288,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     // once, and `#prompt default` draws the new design there. A typed
     // line runs outside the session loop, so it waits for the repaint.
     if shown.repaint {
-        request_prompt_repaint(state).await;
+        request_prompt_repaint(&session).await;
     }
 
     settle_line_effects(app, effects).await;
@@ -294,37 +297,31 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         let _ = app.emit(events::TARGET, payload);
     }
 
-    deliver_script_result(app, state, apply).await
+    deliver_script_result(app, state, &session, apply).await
 }
 
 /// Apply a script result outside the session loop, the way every path
 /// applies one, then print its echo lines on the terminal, send its bytes
-/// to the game and hand a `#walk` to the walker after them. With no
-/// connection the terminal says so.
+/// to the game `session` runs and hand a `#walk` to its walker after them.
+/// With no connection the terminal says so.
 async fn deliver_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
+    session: &Arc<Session>,
     apply: ApplyResult,
 ) -> Result<(), String> {
-    let session::effects::Collected {
+    let Collected {
         bytes,
         echoes,
         walk,
-    } = session::effects::collect_script_result(
-        app,
-        &state.profile,
-        &state.connection,
-        &state.lua_timers,
-        apply,
-    )
-    .await;
+    } = collect_script_result(app, &state.profile, session, apply).await;
     output::echo_lines(app, &echoes);
 
     if bytes.is_empty() && walk.is_none() {
         return Ok(());
     }
 
-    let mut current = state.session.lock().await;
+    let mut current = session.slot.lock().await;
     if let Some(handle) = current.as_ref() {
         let sent = bytes.is_empty() || handle.send(bytes);
         if sent && walk.map_or(true, |walk| handle.walk(walk)) {
@@ -350,7 +347,7 @@ async fn deliver_script_result<R: tauri::Runtime>(
         walk,
         Some(WalkCommand::Stop { key: false, .. } | WalkCommand::Status { .. })
     ) {
-        output::echo_lines(app, &[session::walk::NOT_WALKING.to_string()]);
+        output::echo_lines(app, &[crate::session::walk::NOT_WALKING.to_string()]);
     }
     if !bytes.is_empty() || reaches_game {
         output::emit_output(app, NOT_CONNECTED.to_vec());

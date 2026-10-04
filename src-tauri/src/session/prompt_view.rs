@@ -5,13 +5,14 @@
 
 use std::collections::BTreeMap;
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tokio::time::Instant;
 use tracing::warn;
 
 use crate::app::events;
 use crate::profile::live::Profile;
 use crate::prompt::{client_values, keep_table};
+use crate::sessions::Session;
 
 use super::connection::{Connection, SharedConnection};
 
@@ -191,14 +192,14 @@ pub(super) fn send_prompt_vars<R: tauri::Runtime>(
     }
 }
 
-/// The prompt state while the card watches your prompt, for
+/// The prompt state while the card watches the prompt of `session`, for
 /// `session://prompt-state` after a repaint. None while it does not.
-pub(super) fn watched_state<R: tauri::Runtime>(
-    app: &AppHandle<R>,
+pub(super) fn watched_state(
+    session: &Session,
     p: &Profile,
     c: &Connection,
 ) -> Option<vosh_prompt::card::state::PromptState> {
-    watching_prompt(app).then(|| crate::prompt::prompt_state(p, c))
+    watching_prompt(session).then(|| crate::prompt::prompt_state(p, c))
 }
 
 /// Send `state` on `session://prompt-state`, when there is one.
@@ -213,13 +214,10 @@ pub(super) fn emit_prompt_state<R: tauri::Runtime>(
     }
 }
 
-/// The prompt card watches your prompt (`prompt_watch`), so the prompt
-/// state follows each prompt Vosh reads.
-pub(super) fn watching_prompt<R: tauri::Runtime>(app: &AppHandle<R>) -> bool {
-    app.try_state::<crate::app::state::SharedState>()
-        .is_some_and(|state| {
-            state
-                .prompt_watch
-                .load(std::sync::atomic::Ordering::Acquire)
-        })
+/// The prompt card watches the prompt of `session` (`prompt_watch`), so
+/// the prompt state follows each prompt it reads.
+pub(super) fn watching_prompt(session: &Session) -> bool {
+    session
+        .prompt_watch
+        .load(std::sync::atomic::Ordering::Acquire)
 }

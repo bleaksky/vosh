@@ -422,9 +422,10 @@ impl Harness {
     /// a temporary folder.
     async fn new() -> Self {
         let h = Self::unread().await;
+        let session = h.state.selected_session();
         crate::prompt::take_config(
             &mut *h.state.profile.lock().await,
-            &mut h.state.connection.lock(),
+            &mut session.connection.lock(),
             vosh_prompt::PromptConfig {
                 capture: vosh_prompt::CaptureConfig::Aabahran(
                     vosh_prompt::config::AabahranCapture::default(),
@@ -476,6 +477,7 @@ impl Harness {
         let handle = crate::session::spawn(
             self.app.handle().clone(),
             &self.state,
+            &self.state.selected_session(),
             "127.0.0.1".into(),
             self.port,
             false,
@@ -485,7 +487,7 @@ impl Harness {
         )
         .await
         .expect("the fake game answers");
-        *self.state.session.lock().await = Some(handle);
+        *self.state.selected_session().slot.lock().await = Some(handle);
         self.until("the look at login", |h| h.text().contains("[Exits:"))
             .await;
         let reads = !self.state.profile.lock().await.prompt.capture.is_none();
@@ -493,7 +495,14 @@ impl Harness {
             return;
         }
         for _ in 0..1000 {
-            let read = self.state.connection.lock().prompt.vars.prompt_vars();
+            let read = self
+                .state
+                .selected_session()
+                .connection
+                .lock()
+                .prompt
+                .vars
+                .prompt_vars();
             if read.values().any(|value| value == "1020") {
                 return;
             }
@@ -529,7 +538,7 @@ impl Harness {
             shown.push(Shown::Echo(format!("{line}\r\n")));
             after
         };
-        if let Some(handle) = self.state.session.lock().await.as_ref() {
+        if let Some(handle) = self.state.selected_session().slot.lock().await.as_ref() {
             let _ = handle.local_write(after);
         }
         crate::ipc::session::session_send_input(
@@ -630,7 +639,7 @@ impl Harness {
 
     /// End the session, and return every row its log holds.
     async fn end(&self) -> Vec<String> {
-        let handle = self.state.session.lock().await.take();
+        let handle = self.state.selected_session().slot.lock().await.take();
         if let Some(handle) = handle {
             handle.shutdown().await;
         }
@@ -646,7 +655,7 @@ impl Harness {
     }
 
     async fn finish(self) {
-        let handle = self.state.session.lock().await.take();
+        let handle = self.state.selected_session().slot.lock().await.take();
         if let Some(handle) = handle {
             handle.shutdown().await;
         }

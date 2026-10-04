@@ -162,5 +162,6 @@ pub(crate) async fn profile_switch(
     name: String,
 ) -> Result<(), String> {
     let shared: SharedState = state.inner().clone();
-    apply_profile_switch(&app, &shared, &name).await
+    let session = shared.selected_session();
+    apply_profile_switch(&app, &shared, &session, &name).await
 }

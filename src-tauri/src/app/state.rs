@@ -8,68 +8,33 @@ use std::sync::{Arc, OnceLock};
 use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
 
 use crate::app::plugins::SharedPluginManager;
-use crate::logs::{SharedLogStore, SharedScrollback};
+use crate::logs::SharedLogStore;
 use crate::profile::live::Profile;
-use crate::script::SharedTimers;
-use crate::session::connection::SharedConnection;
-use crate::session::SessionHandle;
+use crate::sessions::{Session, Sessions};
 
-/// What every command, window and session shares. The one session slot,
-/// the live profile, what the connection shares with the commands, the
-/// profile set, the log store and scrollback, the plugins and Lua timers,
-/// the catalog and loadouts of loadout mode, the app data folder, and what
-/// the app keeps about the live connection: its host and port, the
-/// character logged in, the terminal size and the last affects. The
-/// generations that turn away a write read before the profile was replaced
-/// live here too, with the counter that settles a burst of changes into
-/// one save, the flags that hold the saves back and the flag that says
-/// loadout mode is live.
+/// What every command, window and session shares. The sessions, the live
+/// profile, the profile set, the log store, the plugins, the catalog and
+/// loadouts of loadout mode, the affect fulls and the app data folder.
+/// The generations that turn away a write read before the profile was
+/// replaced live here too, with the counter that settles a burst of
+/// changes into one save, the flags that hold the saves back and the flag
+/// that says loadout mode is live.
 pub(crate) struct AppState {
-    pub(crate) session: Mutex<Option<SessionHandle>>,
+    /// The sessions and the one selected. See [`crate::sessions`] for
+    /// where its lock sits.
+    sessions: std::sync::Mutex<Sessions>,
     pub(crate) profile: Arc<Mutex<Profile>>,
-    /// What one connection holds apart from the profile, your target and
-    /// the room list among it. The app holds one, which outlives each
-    /// session, until R14b gives each tab its own. The session loop holds
-    /// a handle to it. See [`crate::session::connection`] for where its
-    /// lock sits.
-    pub(crate) connection: SharedConnection,
-    pub(crate) lua_timers: SharedTimers,
     pub(crate) logs: SharedLogStore,
     /// A second connection to the same log database for the read
     /// commands. The session loop appends through `logs`, and a search
     /// can read the whole log, so reads take their own lock and never
     /// hold up the live session. WAL lets both run at once.
     pub(crate) log_reader: SharedLogStore,
-    pub(crate) scrollback: SharedScrollback,
     pub(crate) plugins: SharedPluginManager,
     /// Catalog of named profiles. Loaded (or migrated from the legacy
     /// single-file layout) once at startup; commands mutate it under
     /// this mutex.
     pub(crate) profile_set: Arc<Mutex<Option<crate::profile::set::ProfileSet>>>,
-    /// Last terminal size reported by the frontend, kept across the
-    /// no-session window so a fresh `session_connect` can seed the
-    /// telnet `Negotiator` with the real (cols, rows) instead of the
-    /// 80×24 default. Without this cache the server's first NAWS
-    /// reply carried 80 cols and wrapped early output (login banner,
-    /// `who`, motd) until the user nudged the window. Stored under a
-    /// std Mutex because the critical section is two integer copies
-    /// — async overhead is not worth it.
-    pub(crate) window_size: std::sync::Mutex<(u16, u16)>,
-    /// Live connection target (host, port). Set when
-    /// `session_connect` succeeds, cleared on disconnect. Read by the
-    /// Char.Status-driven auto-switch path so the resolver knows
-    /// which connection's profile to pick. Stored under a std mutex
-    /// because the work inside the lock is just a clone.
-    pub(crate) current_connection: std::sync::Mutex<Option<(String, u16)>>,
-    /// Last character name observed via Char.Status or Char.Name on
-    /// the current session. Cleared on disconnect. Used to suppress
-    /// duplicate resolver calls when the MUD re-sends Char.Status on
-    /// every vitals update.
-    pub(crate) current_character: std::sync::Mutex<Option<String>>,
-    /// The last Char.Affects list of this connection, for a window that
-    /// opens between ticks. Cleared on connect and when the session
-    /// ends.
-    pub(crate) last_affects: crate::affects::snapshot::AffectsSnapshot,
     /// How full each affect was cast, per character, for the Affects
     /// pane's gauges. See [`crate::affects::full`].
     pub(crate) affect_full: crate::affects::full::AffectFull,
@@ -87,22 +52,10 @@ pub(crate) struct AppState {
     /// takes them through `launch_notices_take`, since launch runs before
     /// any window listens.
     pub(crate) launch_notices: std::sync::Mutex<Vec<String>>,
-    /// The terminal lines the plugins printed as they loaded at launch,
-    /// their `[lua]` errors and stops among them. Launch runs before any
-    /// window listens, so they wait for the first connect or the first
-    /// line you type, see [`crate::app::plugins::show_launch_lines`].
-    pub(crate) launch_lua_lines: std::sync::Mutex<Vec<String>>,
     /// The active profile's name, kept beside the profile set so an event
     /// can name it without waiting for that lock. Set at launch, on a
     /// switch and on a rename. None before any profile loads.
     pub(crate) active_profile: std::sync::Mutex<Option<String>>,
-    /// The prompt card watches your prompt, so `session://prompt-state`
-    /// follows each prompt Vosh reads.
-    pub(crate) prompt_watch: std::sync::atomic::AtomicBool,
-    /// You are selecting text in xterm or reading back in its split, as
-    /// the webview last said. A clock repaint of your prompt waits while
-    /// it holds, so the row you select or read never moves.
-    pub(crate) reader_busy: std::sync::atomic::AtomicBool,
     /// Counts the times the live profile's panes have been replaced: a
     /// wholesale replace of the UI config, or a pane reset. It moves under
     /// the profile lock in the same step that swaps them, so a pane tree
@@ -151,6 +104,15 @@ pub(crate) struct AppState {
 }
 
 impl AppState {
+    /// The selected session, which a command that names no session acts
+    /// on. Take it before any other lock.
+    pub(crate) fn selected_session(&self) -> Arc<Session> {
+        self.sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .selected()
+    }
+
     /// Keep `notices` for the main window to show.
     pub(crate) fn add_launch_notices(&self, notices: Vec<String>) {
         if notices.is_empty() {
@@ -226,31 +188,17 @@ impl AppState {
 impl Default for AppState {
     fn default() -> Self {
         Self {
-            session: Mutex::new(None),
+            sessions: std::sync::Mutex::new(Sessions::default()),
             profile: Arc::new(Mutex::new(Profile::default())),
-            connection: SharedConnection::default(),
-            lua_timers: SharedTimers::default(),
             logs: SharedLogStore::default(),
             log_reader: SharedLogStore::default(),
-            scrollback: SharedScrollback::default(),
             plugins: SharedPluginManager::default(),
             profile_set: Arc::new(Mutex::new(None)),
-            // Default matches `Negotiator::default()` so any code path
-            // that bypasses `session_set_window_size` (e.g. an early
-            // automated connect from a script) still gets a sensible
-            // baseline.
-            window_size: std::sync::Mutex::new((80, 24)),
-            current_connection: std::sync::Mutex::new(None),
-            current_character: std::sync::Mutex::new(None),
-            last_affects: crate::affects::snapshot::AffectsSnapshot::default(),
             affect_full: crate::affects::full::AffectFull::default(),
             global_catalog: Arc::new(Mutex::new(None)),
             loadout_set: Arc::new(Mutex::new(None)),
             launch_notices: std::sync::Mutex::new(Vec::new()),
-            launch_lua_lines: std::sync::Mutex::new(Vec::new()),
             active_profile: std::sync::Mutex::new(None),
-            prompt_watch: std::sync::atomic::AtomicBool::new(false),
-            reader_busy: std::sync::atomic::AtomicBool::new(false),
             panes_generation: AtomicU64::new(0),
             ui_config_generation: AtomicU64::new(0),
             profile_dirty_gen: AtomicU64::new(0),

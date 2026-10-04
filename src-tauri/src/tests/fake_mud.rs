@@ -174,8 +174,9 @@ impl Harness {
 
     /// Give the live profile the prompt table `config`, as a load does.
     async fn set_prompt(&self, config: vosh_prompt::PromptConfig) {
+        let session = self.state.selected_session();
         let mut p = self.state.profile.lock().await;
-        let mut c = self.state.connection.lock();
+        let mut c = session.connection.lock();
         crate::prompt::take_config(&mut p, &mut c, config);
     }
 
@@ -183,15 +184,17 @@ impl Harness {
     /// scrollback file.
     async fn connect(&self) {
         let state = &self.state;
-        if let Ok(mut g) = state.current_connection.lock() {
+        let session = state.selected_session();
+        if let Ok(mut g) = session.current_connection.lock() {
             *g = Some(("127.0.0.1".into(), self.port));
         }
-        if let Ok(mut g) = state.current_character.lock() {
+        if let Ok(mut g) = session.current_character.lock() {
             *g = None;
         }
         let handle = crate::session::spawn(
             self.app.handle().clone(),
             state,
+            &session,
             "127.0.0.1".into(),
             self.port,
             false,
@@ -201,21 +204,22 @@ impl Harness {
         )
         .await
         .expect("the fake game answers");
-        *state.session.lock().await = Some(handle);
+        *session.slot.lock().await = Some(handle);
     }
 
     /// Close the connection the way `session::disconnect` does.
     async fn disconnect(&self) {
-        let handle = self.state.session.lock().await.take();
+        let session = self.state.selected_session();
+        let handle = session.slot.lock().await.take();
         if let Some(handle) = handle {
             handle.shutdown().await;
         }
-        if let Ok(mut g) = self.state.current_connection.lock() {
+        if let Ok(mut g) = session.current_connection.lock() {
             *g = None;
         }
-        if let Ok(mut g) = self.state.current_character.lock() {
+        if let Ok(mut g) = session.current_character.lock() {
             *g = None;
-        }
+        };
     }
 
     /// Type `line` and press Enter: the webview echoes it, tells the
@@ -223,7 +227,7 @@ impl Harness {
     /// through the input path.
     async fn type_line(&self, line: &str) {
         let after = self.echo(line);
-        if let Some(handle) = self.state.session.lock().await.as_ref() {
+        if let Some(handle) = self.state.selected_session().slot.lock().await.as_ref() {
             let _ = handle.local_write(after);
         }
         crate::ipc::session::session_send_input(
@@ -529,8 +533,9 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
     }))
     .expect("an op");
     let edited = {
+        let session = h.state.selected_session();
         let p = h.state.profile.lock().await;
-        let c = h.state.connection.lock();
+        let c = session.connection.lock();
         crate::prompt::edit(&p, &c, "<%hp>", &op).expect("the edit")
     };
     assert_eq!(edited.template, "<%hp>%mana");
@@ -622,7 +627,7 @@ async fn a_new_width_tells_the_card_where_the_push_draws_now() {
     );
 
     // Narrower, the same row draws again and the card hears it at once.
-    if let Some(handle) = h.state.session.lock().await.as_ref() {
+    if let Some(handle) = h.state.selected_session().slot.lock().await.as_ref() {
         assert!(handle.set_window_size(80, 40));
     }
     h.until("the state at 80 columns", |h| state_at(h, 80).is_some())
@@ -678,7 +683,7 @@ async fn an_echo_the_session_hears_of_late_leaves_the_prompt_after_it_open() {
     h.until_last_row("<1020>").await;
 
     // Only now does the session hear of the echo.
-    if let Some(handle) = h.state.session.lock().await.as_ref() {
+    if let Some(handle) = h.state.selected_session().slot.lock().await.as_ref() {
         let _ = handle.local_write(after);
     }
 
@@ -737,7 +742,14 @@ async fn the_new_build_gives_vosh_the_prompt_at_login_and_follows_the_game() {
     assert_eq!(seen.prompt.as_deref(), Some(PROMPT));
     assert_eq!(seen.enabled, Some(true));
     assert_eq!(seen.character.as_deref(), Some("Tester"));
-    assert!(h.state.connection.lock().prompt.vars.new_build());
+    assert!(h
+        .state
+        .selected_session()
+        .connection
+        .lock()
+        .prompt
+        .vars
+        .new_build());
 
     // prompt x in the game: Char.Prompt comes before its reply, and the
     // prompt right after the reply reads with the new codes.
@@ -967,6 +979,7 @@ async fn the_tick_counts_down_in_your_idle_prompt_and_waits_while_you_read() {
 
     // While you select text or read back, the row stays as it is.
     h.state
+        .selected_session()
         .reader_busy
         .store(true, std::sync::atomic::Ordering::Release);
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -975,6 +988,7 @@ async fn the_tick_counts_down_in_your_idle_prompt_and_waits_while_you_read() {
     assert_eq!(repaints(&h).len(), held);
     // Once you let go it catches up within the second.
     h.state
+        .selected_session()
         .reader_busy
         .store(false, std::sync::atomic::Ordering::Release);
     h.until("the tick again", |h| repaints(h).len() > held)
@@ -1107,6 +1121,7 @@ async fn the_log_lookup_finds_only_the_prompt_of_the_profiles_own_character() {
     h.until_shown("Welcome to the fake Aabahran, Healer.").await;
     h.until("the session to name Healer", |h| {
         h.state
+            .selected_session()
             .current_character
             .lock()
             .ok()
@@ -1200,7 +1215,14 @@ async fn a_reconnect_reads_the_prompt_until_char_prompt_comes_again() {
     // and the prompt reads from the saved codes all the same.
     h.until_shown("Reconnecting.").await;
     h.until_last_row("<1020>").await;
-    assert!(!h.state.connection.lock().prompt.vars.new_build());
+    assert!(!h
+        .state
+        .selected_session()
+        .connection
+        .lock()
+        .prompt
+        .vars
+        .new_build());
     let leftover = &h.events("session://game-prompt-seen");
     assert!(leftover.is_empty(), "{leftover:?}");
     // prompt in the game sends Char.Prompt again.
@@ -1210,7 +1232,14 @@ async fn a_reconnect_reads_the_prompt_until_char_prompt_comes_again() {
         !h.events("session://game-prompt-seen").is_empty()
     })
     .await;
-    assert!(h.state.connection.lock().prompt.vars.new_build());
+    assert!(h
+        .state
+        .selected_session()
+        .connection
+        .lock()
+        .prompt
+        .vars
+        .new_build());
     assert_eq!(
         h.events("session://game-prompt-seen"),
         [serde_json::json!({"kind": "gmcp", "text": PROMPT, "applied": false})]
@@ -1553,9 +1582,14 @@ async fn a_switch_to_a_profile_with_a_moved_capture_switches_it() {
 
     // The latest Char.Prompt switches Healer's pattern as the switch
     // hands it over.
-    crate::profile::switch::apply_profile_switch(h.app.handle(), &h.state, "Healer")
-        .await
-        .expect("the switch");
+    crate::profile::switch::apply_profile_switch(
+        h.app.handle(),
+        &h.state,
+        &h.state.selected_session(),
+        "Healer",
+    )
+    .await
+    .expect("the switch");
     let table = h.prompt_table().await;
     let codes = aabahran(&table.capture);
     assert_eq!(codes.prompt, PROMPT);
@@ -1570,9 +1604,14 @@ async fn a_switch_to_a_profile_with_a_moved_capture_switches_it() {
 
     // Back on Default, which still reads nothing, and Healer's file
     // holds the codes.
-    crate::profile::switch::apply_profile_switch(h.app.handle(), &h.state, DEFAULT_PROFILE_NAME)
-        .await
-        .expect("the switch back");
+    crate::profile::switch::apply_profile_switch(
+        h.app.handle(),
+        &h.state,
+        &h.state.selected_session(),
+        DEFAULT_PROFILE_NAME,
+    )
+    .await
+    .expect("the switch back");
     assert!(h.capture().await.is_none());
     assert_eq!(toasts(&h).len(), 1);
     let saved = saved_capture(&healer).expect("Healer's file reads");
@@ -1977,7 +2016,7 @@ async fn with_no_design_of_your_own_vosh_draws_your_prompt_as_the_game_does() {
     h.until_shown("Drawing is on.").await;
     h.type_line("look").await;
     h.until_last_row("[1020/1020hp 800/800mn 930/930mv]").await;
-    assert!(h.state.connection.lock().prompt.draws());
+    assert!(h.state.selected_session().connection.lock().prompt.draws());
 
     // Change it in the game, and the drawn prompt follows.
     h.type_line(&format!("prompt {TYPED_X}")).await;
@@ -2205,7 +2244,13 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
     .expect("the entry script");
     h.state.profile.lock().await.plugins.enabled = vec!["on_load".into()];
 
-    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, plugins).await;
+    crate::app::plugins::load_enabled_plugins(
+        h.app.handle(),
+        &h.state,
+        &h.state.selected_session(),
+        plugins,
+    )
+    .await;
     assert!(
         h.state
             .profile
@@ -2298,13 +2343,24 @@ async fn lua_a_profile_switch_turns_its_plugins_on_and_the_others_off() {
         .save(&h.profile_file("Healer").await)
         .expect("Healer's file");
     h.state.profile.lock().await.plugins.enabled = vec!["everywhere".into()];
-    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, plugins).await;
+    crate::app::plugins::load_enabled_plugins(
+        h.app.handle(),
+        &h.state,
+        &h.state.selected_session(),
+        plugins,
+    )
+    .await;
     h.connect().await;
     h.until_shown("Welcome to the fake Aabahran, Tester.").await;
 
-    crate::profile::switch::apply_profile_switch(h.app.handle(), &h.state, "Healer")
-        .await
-        .expect("the switch");
+    crate::profile::switch::apply_profile_switch(
+        h.app.handle(),
+        &h.state,
+        &h.state.selected_session(),
+        "Healer",
+    )
+    .await
+    .expect("the switch");
     h.until_shown("healer_only sees Tester").await;
     // What it sends as it loads reaches the game.
     h.until_shown("You are now in AFK mode.").await;
@@ -2316,9 +2372,14 @@ async fn lua_a_profile_switch_turns_its_plugins_on_and_the_others_off() {
         assert_eq!(p.plugin_aliases.list().len(), 1);
     }
 
-    crate::profile::switch::apply_profile_switch(h.app.handle(), &h.state, DEFAULT_PROFILE_NAME)
-        .await
-        .expect("the switch back");
+    crate::profile::switch::apply_profile_switch(
+        h.app.handle(),
+        &h.state,
+        &h.state.selected_session(),
+        DEFAULT_PROFILE_NAME,
+    )
+    .await
+    .expect("the switch back");
     {
         let p = h.state.profile.lock().await;
         assert_eq!(p.script.loaded_plugins(), ["everywhere"]);
@@ -2353,7 +2414,13 @@ async fn lua_a_plugin_load_prints_its_lines_once_you_connect() {
     }
     h.state.profile.lock().await.plugins.enabled =
         vec!["noisy".into(), "spin".into(), "noisy".into()];
-    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, plugins).await;
+    crate::app::plugins::load_enabled_plugins(
+        h.app.handle(),
+        &h.state,
+        &h.state.selected_session(),
+        plugins,
+    )
+    .await;
     assert!(h
         .state
         .profile
@@ -2567,7 +2634,7 @@ async fn a_line_typed_after_the_game_closes_the_link_says_not_connected() {
     // An empty slot counts too, so a session that clears its own slot
     // as it ends still passes this wait.
     h.until("the session ends", |h| {
-        h.state.session.try_lock().is_ok_and(|s| {
+        h.state.selected_session().slot.try_lock().is_ok_and(|s| {
             s.as_ref()
                 .is_none_or(crate::session::SessionHandle::has_ended)
         })
@@ -2584,7 +2651,7 @@ async fn a_line_typed_after_the_game_closes_the_link_says_not_connected() {
     assert_eq!(sent, Ok(()), "look finds no session to send to");
     h.until_shown("[not connected]").await;
     assert!(
-        h.state.session.lock().await.is_none(),
+        h.state.selected_session().slot.lock().await.is_none(),
         "the ended session leaves the app state"
     );
     h.finish(grid).await;
@@ -2662,9 +2729,14 @@ async fn a_profile_switch_while_connected_keeps_your_target_prompt_and_tick() {
     let targets = h.events("session://target").len();
     let vars = h.events("session://prompt-vars").len();
     let ticks = h.events(crate::app::events::TICK).len();
-    crate::profile::switch::apply_profile_switch(h.app.handle(), &h.state, "Healer")
-        .await
-        .expect("the switch");
+    crate::profile::switch::apply_profile_switch(
+        h.app.handle(),
+        &h.state,
+        &h.state.selected_session(),
+        "Healer",
+    )
+    .await
+    .expect("the switch");
 
     // Your target and quick keys stay, and the target display hears
     // nothing that clears them.
@@ -2729,9 +2801,10 @@ async fn a_disconnect_clears_your_target_the_room_list_and_both_prompt_feeds() {
     // The fake game sends no Room.Chars, so the list goes in place the
     // way the session takes one.
     {
+        let session = h.state.selected_session();
         let mut p = h.state.profile.lock().await;
         crate::input::target::set_room_chars(
-            &mut h.state.connection.lock(),
+            &mut session.connection.lock(),
             &mut p.vars,
             crate::input::target::read_room_chars(&[
                 serde_json::json!({"name": "a goblin", "npc": true}),

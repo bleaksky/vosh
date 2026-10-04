@@ -114,5 +114,6 @@ pub(crate) async fn profile_export_file(
 pub(crate) async fn session_identity_get(
     state: State<'_, SharedState>,
 ) -> Result<Option<SessionIdentity>, String> {
-    Ok(session_identity(state.inner()).await)
+    let session = state.selected_session();
+    Ok(session_identity(state.inner(), &session).await)
 }

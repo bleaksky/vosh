@@ -42,7 +42,8 @@ pub(crate) async fn session_send_masked<R: tauri::Runtime>(
     state: State<'_, SharedState>,
     line: String,
 ) -> Result<(), String> {
-    let current = state.session.lock().await;
+    let session = state.selected_session();
+    let current = session.slot.lock().await;
     let Some(handle) = current.as_ref() else {
         output::emit_output(&app, input::NOT_CONNECTED.to_vec());
         return Ok(());
@@ -57,7 +58,8 @@ pub(crate) async fn session_send_masked<R: tauri::Runtime>(
 /// nothing when you are not walking or not connected.
 #[tauri::command]
 pub(crate) async fn session_walk_stop(state: State<'_, SharedState>) -> Result<(), String> {
-    if let Some(handle) = state.session.lock().await.as_ref() {
+    let session = state.selected_session();
+    if let Some(handle) = session.slot.lock().await.as_ref() {
         let _ = handle.walk(crate::input::walk::WalkCommand::Stop {
             key: true,
             rest: Vec::new(),
@@ -85,16 +87,17 @@ pub(crate) async fn session_set_window_size(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
+    let session = state.selected_session();
     // Always cache the size — even when no session exists, so the
     // next `session_connect` can seed the negotiator with the real
     // dimensions instead of the 80×24 default. Without this the
     // server's first NAWS reply (during the early handshake) would
     // carry the wrong size and wrap early output until the next
     // user-driven resize triggered a fresh subneg.
-    if let Ok(mut guard) = state.window_size.lock() {
+    if let Ok(mut guard) = session.window_size.lock() {
         *guard = (cols, rows);
     }
-    let current = state.session.lock().await;
+    let current = session.slot.lock().await;
     if let Some(handle) = current.as_ref() {
         if !handle.set_window_size(cols, rows) {
             return Err("session task gone".into());
@@ -108,7 +111,9 @@ pub(crate) async fn session_set_window_size(
 /// `session://target` events fire.
 #[tauri::command]
 pub(crate) async fn target_get(state: State<'_, SharedState>) -> Result<TargetPayload, String> {
-    Ok(TargetPayload::of(&state.connection.lock()))
+    let session = state.selected_session();
+    let c = session.connection.lock();
+    Ok(TargetPayload::of(&c))
 }
 
 #[cfg(test)]
@@ -126,7 +131,8 @@ mod tests {
         let app = mock_builder().build(mock_context(noop_assets())).unwrap();
         app.manage::<SharedState>(Arc::new(AppState::default()));
         let state: SharedState = app.state::<SharedState>().inner().clone();
-        state.connection.lock().target.name = Some("goblin".into());
+        let session = state.selected_session();
+        session.connection.lock().target.name = Some("goblin".into());
 
         // Another task holds the profile, as the session loop does while
         // it runs a line.

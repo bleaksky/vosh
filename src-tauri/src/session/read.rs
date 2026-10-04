@@ -123,7 +123,7 @@ async fn handle_event<R: tauri::Runtime>(
                     let mut p = conn.profile.lock().await;
                     conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
                     conn.perf.mutex_acquires += 1;
-                    let mut c = conn.connection.lock();
+                    let mut c = conn.session.connection.lock();
                     line_step(
                         &mut p,
                         &mut c,
@@ -161,7 +161,7 @@ async fn handle_event<R: tauri::Runtime>(
             // entry.
             let steps = {
                 let mut p = conn.profile.lock().await;
-                let mut c = conn.connection.lock();
+                let mut c = conn.session.connection.lock();
                 marker_step(
                     &mut p,
                     &mut c,
@@ -205,7 +205,7 @@ async fn handle_event<R: tauri::Runtime>(
 /// the output count after it.
 pub(super) async fn flush_hold<R: tauri::Runtime>(conn: &mut Conn<R>) {
     let out = {
-        let mut c = conn.connection.lock();
+        let mut c = conn.session.connection.lock();
         let mut out = Output::new(output_count() != conn.seen_output);
         hold_step(&mut c, &mut conn.accumulator, &mut out);
         out
@@ -226,7 +226,7 @@ pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
     let mut batch = ReadBatch::new(conn.seen_output);
     let steps = {
         let mut p = conn.profile.lock().await;
-        let mut c = conn.connection.lock();
+        let mut c = conn.session.connection.lock();
         if !c.prompt.stage.holds() {
             return Ok(());
         }
@@ -270,26 +270,10 @@ async fn deliver_line_step<R: tauri::Runtime>(
     send_trigger_outputs(&mut conn.stream, &result.sends).await?;
     let mut sink = OutputSink::Batch(batch);
     let mut io = ScriptIo::Session(&mut conn.stream, &mut sink, &mut conn.walker);
-    apply_script_result(
-        &conn.app,
-        &mut io,
-        &conn.profile,
-        &conn.connection,
-        &conn.lua_timers,
-        apply,
-    )
-    .await?;
+    apply_script_result(&conn.app, &mut io, &conn.profile, &conn.session, apply).await?;
     if let Some(step) = tick_step {
         conn.perf.ticks += 1;
-        deliver_tick_step(
-            &conn.app,
-            &mut io,
-            &conn.profile,
-            &conn.connection,
-            &conn.lua_timers,
-            step,
-        )
-        .await?;
+        deliver_tick_step(&conn.app, &mut io, &conn.profile, &conn.session, step).await?;
     }
     Ok(())
 }
@@ -311,7 +295,7 @@ pub(super) async fn walked<R: tauri::Runtime>(
     } = out;
     conn.walk_lines.extend(lines);
     if !release.is_empty() {
-        let apply = walk::release(&conn.profile, &conn.connection, release).await;
+        let apply = walk::release(&conn.profile, &conn.session, release).await;
         apply_script_result(
             &conn.app,
             &mut ScriptIo::Session(
@@ -320,8 +304,7 @@ pub(super) async fn walked<R: tauri::Runtime>(
                 &mut conn.walker,
             ),
             &conn.profile,
-            &conn.connection,
-            &conn.lua_timers,
+            &conn.session,
             apply,
         )
         .await?;
@@ -341,7 +324,7 @@ async fn end_read<R: tauri::Runtime>(
 ) -> std::io::Result<()> {
     let step = {
         let mut p = conn.profile.lock().await;
-        let mut c = conn.connection.lock();
+        let mut c = conn.session.connection.lock();
         partial_step(
             &mut p,
             &mut c,
@@ -382,10 +365,10 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         gmcp: _,
     } = batch;
     let app = &conn.app;
-    let watched = prompt && watching_prompt(app);
+    let watched = prompt && watching_prompt(&conn.session);
     let (vars, hidden, prompt_seen, status, prompt_state, clock) = {
         let p = conn.profile.lock().await;
-        let mut c = conn.connection.lock();
+        let mut c = conn.session.connection.lock();
         // Echoes the end of the read wrote close the open row.
         c.prompt.stage.finish(&mut out);
         (

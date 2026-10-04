@@ -6,6 +6,8 @@
 //! or Char.Name is a login, which loads its affect fulls, may switch the
 //! profile and sends the session identity.
 
+use std::sync::Arc;
+
 use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::time::Instant;
@@ -17,6 +19,7 @@ use crate::input;
 use crate::profile::live::Profile;
 use crate::profile::switch::auto_switch_for_character;
 use crate::script::{self, ApplyResult};
+use crate::sessions::Session;
 use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
@@ -72,7 +75,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         let mut p = conn.profile.lock().await;
         conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
         conn.perf.mutex_acquires += 1;
-        let mut c = conn.connection.lock();
+        let mut c = conn.session.connection.lock();
         gmcp_step(&mut p, &mut c, &msg, Instant::now())
     };
 
@@ -87,8 +90,8 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
                 if msg.package == "Char.Status" {
                     batch.character = Some(owned.clone());
                 }
-                let state = conn.app.state::<crate::app::state::SharedState>();
-                character_named(&conn.app, state.inner(), &owned).await;
+                let state = conn.app.state::<SharedState>();
+                character_named(&conn.app, state.inner(), &conn.session, &owned).await;
             }
         }
     }
@@ -96,31 +99,19 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     let mut io = ScriptIo::Session(&mut conn.stream, &mut sink, &mut conn.walker);
     if let Some(step) = tick_step {
         conn.perf.ticks += 1;
-        deliver_tick_step(
-            &conn.app,
-            &mut io,
-            &conn.profile,
-            &conn.connection,
-            &conn.lua_timers,
-            step,
-        )
-        .await?;
+        deliver_tick_step(&conn.app, &mut io, &conn.profile, &conn.session, step).await?;
     }
     apply_script_result(
         &conn.app,
         &mut io,
         &conn.profile,
-        &conn.connection,
-        &conn.lua_timers,
+        &conn.session,
         script_apply,
     )
     .await?;
     walk_gmcp(conn, &msg, batch).await?;
     // Keep the last affects list for a window that opens between ticks.
-    conn.app
-        .state::<crate::app::state::SharedState>()
-        .last_affects
-        .observe(&msg.package, &msg.data);
+    conn.session.last_affects.observe(&msg.package, &msg.data);
     // A list that changes the affect fulls sends them first, so the
     // windows never draw the list against the old ones (a recast at
     // fewer hours than the old full).
@@ -171,12 +162,13 @@ async fn walk_gmcp<R: tauri::Runtime>(
 async fn character_named<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
+    session: &Arc<Session>,
     character: &str,
 ) {
     // Char.Status is sent on every vitals update, so without this gate
     // the login would run every pulse.
     let is_new = {
-        let Ok(mut guard) = state.current_character.lock() else {
+        let Ok(mut guard) = session.current_character.lock() else {
             return;
         };
         if guard.as_deref() == Some(character) {
@@ -190,9 +182,9 @@ async fn character_named<R: tauri::Runtime>(
         return;
     }
     // The affect gauges read this character's saved fulls.
-    crate::affects::full::character_known(app, state, character);
-    auto_switch_for_character(app, state, character).await;
-    crate::session::identity::broadcast_session_identity(app, state).await;
+    crate::affects::full::character_known(app, state, session, character);
+    auto_switch_for_character(app, state, session, character).await;
+    crate::session::identity::broadcast_session_identity(app, state, session).await;
 }
 
 /// What a GMCP packet does to the profile and the connection, under the
