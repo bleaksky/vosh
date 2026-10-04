@@ -217,9 +217,7 @@ async fn move_session(
     // A connected session on the next profile already counts by its
     // switch, so this one follows the switch as it stands, as a connect
     // beside it does, rather than keep its running tick on over it.
-    let beside_a_count = p
-        .players(&others)
-        .any(|other| other.connection.lock().tick.in_session);
+    let beside_a_count = p.players(&others).any(|other| other.connected());
     session.play(to.clone());
     // Under the same locks as the move, so a pane layout write edited
     // from the old profile's tree, or a whole config save read from the

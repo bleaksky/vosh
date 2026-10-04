@@ -114,12 +114,10 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         .other_sessions(session.id);
     {
         let mut p = session.lock_profile().await;
-        let joins = p
-            .players(&others)
-            .any(|other| other.connection.lock().tick.in_session);
+        let joins = p.players(&others).any(|other| other.connected());
         let mut c = session.connection.lock();
         if joins {
-            c.tick.join_session(&p.tick, Instant::now());
+            c.tick.join_connected(&p.tick, Instant::now());
         } else {
             c.tick.start_session(&mut p.tick, Instant::now());
         }

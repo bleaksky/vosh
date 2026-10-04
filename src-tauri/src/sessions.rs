@@ -260,7 +260,7 @@ impl Session {
     /// count in session as it starts and out as it ends, see
     /// [`crate::tick::TickRuntime::in_session`]. Takes the connection
     /// lock.
-    fn connected(&self) -> bool {
+    pub(crate) fn connected(&self) -> bool {
         self.connection.lock().tick.in_session
     }
 
