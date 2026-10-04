@@ -40,13 +40,17 @@ use crate::session::connection::Connection;
 /// capture back with every other change it saves.
 ///
 /// [`prompt_config_set`]: crate::ipc::prompt::prompt_config_set
-pub(crate) fn set_config(p: &mut Profile, mut config: PromptConfig) -> Result<bool, String> {
+pub(crate) fn set_config(
+    p: &mut Profile,
+    c: &mut Connection,
+    mut config: PromptConfig,
+) -> Result<bool, String> {
     // Turning drawing on with no design follows the game, as Settings,
     // the card's switch and #prompt draw do.
-    if config.draw && !p.prompt.config().draw && config.template.is_empty() {
+    if config.draw && !c.prompt.config().draw && config.template.is_empty() {
         config.mirror = true;
     }
-    set_config_as_is(p, config)
+    set_config_as_is(p, c, config)
 }
 
 /// [`set_config`] with the design exactly as sent, an empty one too, for
@@ -54,35 +58,60 @@ pub(crate) fn set_config(p: &mut Profile, mut config: PromptConfig) -> Result<bo
 /// the design written from its codes in place of the one sent, so a
 /// table read before the codes last changed never brings back the old
 /// design.
-pub(crate) fn set_config_as_is(p: &mut Profile, mut config: PromptConfig) -> Result<bool, String> {
-    if config.capture != p.prompt.config().capture {
-        vosh_prompt::card::report::check_capture(&config.capture, p.prompt.who())?;
+pub(crate) fn set_config_as_is(
+    p: &mut Profile,
+    c: &mut Connection,
+    mut config: PromptConfig,
+) -> Result<bool, String> {
+    if config.capture != c.prompt.config().capture {
+        vosh_prompt::card::report::check_capture(&config.capture, c.prompt.who())?;
     }
     config.previous_templates.truncate(PREVIOUS_TEMPLATES);
-    let before = p.prompt.revision();
-    p.set_prompt_config(config);
-    Ok(p.prompt.revision() != before)
+    let before = c.prompt.revision();
+    take_config(p, c, config);
+    Ok(c.prompt.revision() != before)
 }
 
 /// The body of [`prompt_card_open`]: the table as it now stands, and
 /// whether opening changed it.
 ///
 /// [`prompt_card_open`]: crate::ipc::prompt::prompt_card_open
-pub(crate) fn card_open(p: &mut Profile) -> (PromptConfig, bool) {
-    let mut config = p.prompt.config().clone();
+pub(crate) fn card_open(p: &mut Profile, c: &mut Connection) -> (PromptConfig, bool) {
+    let mut config = c.prompt.config().clone();
     if !config.note_opened() {
         return (config, false);
     }
-    p.set_prompt_config(config.clone());
+    take_config(p, c, config.clone());
     (config, true)
+}
+
+/// Take a `[prompt]` table for the active profile, as a load, a switch, a
+/// Settings save or an edit hands it over. Every table from outside the
+/// engine comes through here. The engine on the connection takes it and
+/// writes a design that follows the game for who you are, and the profile
+/// keeps the table as the engine holds it, which its file saves. Nothing
+/// reads the live `[ui]` copy of the switch and the design, and a save
+/// writes the file's copy from this table, see
+/// [`crate::profile::file::ProfileConfig::from_profile`].
+pub(crate) fn take_config(p: &mut Profile, c: &mut Connection, config: PromptConfig) {
+    c.prompt.set_config(config);
+    p.prompt = c.prompt.config().clone();
+}
+
+/// The profile keeps the table the engine holds, when the engine changed
+/// it since its revision was `before`: it followed the prompt settings
+/// the game showed, or wrote a design that follows the game for who you
+/// are now.
+pub(crate) fn keep_table(p: &mut Profile, c: &Connection, before: u64) {
+    if c.prompt.revision() != before {
+        p.prompt = c.prompt.config().clone();
+    }
 }
 
 /// What decides how your prompt looks on screen: the switch, the design
 /// and where it shows. A line that changes any of them repaints it.
-pub(crate) fn prompt_look(
-    p: &crate::profile::live::Profile,
-) -> (bool, String, vosh_prompt::PromptShow) {
-    let config = p.prompt.config();
+pub(crate) fn prompt_look(c: &Connection) -> (bool, String, vosh_prompt::PromptShow) {
+    let config = c.prompt.config();
     (config.draw, config.template.clone(), config.show)
 }
 
@@ -198,15 +227,15 @@ pub(crate) async fn designs(state: &SharedState) -> Result<Vec<PromptDesign>, St
 /// values whose packages came this session.
 ///
 /// [`prompt_compile`]: crate::ipc::prompt::prompt_compile
-pub(crate) fn compile(p: &Profile, request: &CompileRequest) -> CompileReport {
-    vosh_prompt::card::report::report(request, p.prompt.who(), &|name| supplied(p, name))
+pub(crate) fn compile(c: &Connection, request: &CompileRequest) -> CompileReport {
+    vosh_prompt::card::report::report(request, c.prompt.who(), &|name| supplied(c, name))
 }
 
 /// True when GMCP supplied `name` this session: its package came.
-fn supplied(p: &Profile, name: &str) -> bool {
+fn supplied(c: &Connection, name: &str) -> bool {
     vosh_prompt::values::entry(name)
         .and_then(|e| e.package)
-        .is_some_and(|package| p.prompt.vars.gmcp().has(package))
+        .is_some_and(|package| c.prompt.vars.gmcp().has(package))
 }
 
 /// The body of [`prompt_capture_from_line`]. A ring entry that holds a
@@ -215,26 +244,26 @@ fn supplied(p: &Profile, name: &str) -> bool {
 ///
 /// [`prompt_capture_from_line`]: crate::ipc::prompt::prompt_capture_from_line
 pub(crate) fn capture_from_line(
-    p: &Profile,
+    c: &Connection,
     id: u64,
     names: &[String],
 ) -> Result<CompileReport, String> {
-    let candidate = p
+    let candidate = c
         .prompt
         .stage
         .candidate(id)
         .ok_or_else(|| "Vosh no longer keeps that line. Pick another one.".to_string())?;
     let line = candidate.plain.lines().last().unwrap_or_default();
-    let mut report = vosh_prompt::card::report::line_report(line, names, &|name| supplied(p, name));
-    report.gmcp_names = unknown_vitals(p);
+    let mut report = vosh_prompt::card::report::line_report(line, names, &|name| supplied(c, name));
+    report.gmcp_names = unknown_vitals(c);
     Ok(report)
 }
 
 /// The values in the latest Char.Vitals that Vosh has no name for, such
 /// as `mp` on a game that calls mana that, for the card's name menu.
-fn unknown_vitals(p: &Profile) -> Vec<vosh_prompt::card::report::GmcpName> {
+fn unknown_vitals(c: &Connection) -> Vec<vosh_prompt::card::report::GmcpName> {
     const PACKAGE: &str = "Char.Vitals";
-    let Some(data) = p
+    let Some(data) = c
         .prompt
         .vars
         .gmcp()
@@ -268,12 +297,16 @@ pub(crate) struct LineTrigger {
 /// The body of [`prompt_line_triggers`].
 ///
 /// [`prompt_line_triggers`]: crate::ipc::prompt::prompt_line_triggers
-pub(crate) fn line_triggers(p: &Profile, capture: &CaptureConfig) -> Vec<LineTrigger> {
-    let Some(recognizer) = Recognizer::compile_for(capture, p.prompt.who()) else {
+pub(crate) fn line_triggers(
+    p: &Profile,
+    c: &Connection,
+    capture: &CaptureConfig,
+) -> Vec<LineTrigger> {
+    let Some(recognizer) = Recognizer::compile_for(capture, c.prompt.who()) else {
         return Vec::new();
     };
     let mut out: Vec<LineTrigger> = Vec::new();
-    for candidate in p.prompt.stage.ring() {
+    for candidate in c.prompt.stage.ring() {
         let lines: Vec<&str> = candidate.plain.split('\n').collect();
         if recognizer
             .read(&lines)
@@ -337,7 +370,7 @@ pub(crate) struct RenderRequest {
 /// [`prompt_render_many`]: crate::ipc::prompt::prompt_render_many
 pub(crate) fn render_all(p: &Profile, c: &Connection, requests: &[RenderRequest]) -> Vec<Rendered> {
     let client = client_values(p, c, Instant::now());
-    let live = p.prompt.vars.resolver(&client);
+    let live = c.prompt.vars.resolver(&client);
     let now = chrono::Local::now().naive_local();
     let samples = Samples { now };
     requests
@@ -377,7 +410,7 @@ fn with_values<T>(
     then: impl FnOnce(&dyn Values, bool) -> T,
 ) -> T {
     let client = client_values(p, c, Instant::now());
-    let live = p.prompt.vars.resolver(&client);
+    let live = c.prompt.vars.resolver(&client);
     let now = chrono::Local::now().naive_local();
     let over = PromptPreview {
         preview,
@@ -447,7 +480,7 @@ pub(crate) fn edit(
     op: &EditOp,
 ) -> Result<Edited, String> {
     let client = client_values(p, c, Instant::now());
-    let live = p.prompt.vars.resolver(&client);
+    let live = c.prompt.vars.resolver(&client);
     let known = |field: &FieldRef| !matches!(live.resolve(field), Resolved::Unknown);
     let (template, piece) =
         vosh_prompt::card::edit::apply_at(template, op, &known).map_err(|e| e.0)?;
@@ -468,12 +501,12 @@ pub(crate) fn edit(
 ///
 /// [`prompt_state_get`]: crate::ipc::prompt::prompt_state_get
 pub(crate) fn prompt_state(p: &Profile, c: &Connection) -> PromptState {
-    p.prompt.state(&client_values(p, c, Instant::now()))
+    c.prompt.state(&client_values(p, c, Instant::now()))
 }
 
 /// The body of [`hidden_get`](crate::ipc::prompt::hidden_get).
 pub(crate) async fn reported_hidden(state: &SharedState) -> vosh_prompt::values::Hidden {
-    state.profile.lock().await.prompt.vars.reported()
+    state.connection.lock().await.prompt.vars.reported()
 }
 
 /// Where your prompt shows, with what the Settings row and the main
@@ -497,14 +530,14 @@ pub(crate) struct PromptShowState {
 }
 
 /// The body of [`prompt_show_get`](crate::ipc::prompt::prompt_show_get).
-pub(crate) fn prompt_show_state(p: &crate::profile::live::Profile) -> PromptShowState {
+pub(crate) fn prompt_show_state(c: &Connection) -> PromptShowState {
     PromptShowState {
-        show: p.prompt.show().name().to_string(),
-        capture: p.prompt.stage.has_recognizer(),
-        draw: p.prompt.config().draw,
-        game_sent: p.prompt.vars.gmcp().prompt_seen(),
-        zone: p.prompt.zone(),
-        prompts_off: p.prompt.prompts_off(),
+        show: c.prompt.show().name().to_string(),
+        capture: c.prompt.stage.has_recognizer(),
+        draw: c.prompt.config().draw,
+        game_sent: c.prompt.vars.gmcp().prompt_seen(),
+        zone: c.prompt.zone(),
+        prompts_off: c.prompt.prompts_off(),
     }
 }
 

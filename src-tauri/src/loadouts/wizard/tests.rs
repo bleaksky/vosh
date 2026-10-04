@@ -1950,7 +1950,11 @@ async fn a_script_that_sets_its_own_alias_again_keeps_it_to_its_character() {
         }],
         ..vosh_script::ScriptOutcome::default()
     };
-    crate::script::apply_actions(&mut *state.profile.lock().await, outcome);
+    crate::script::apply_actions(
+        &mut *state.profile.lock().await,
+        &mut *state.connection.lock().await,
+        outcome,
+    );
     assert_eq!(items_on(&*state.profile.lock().await), ["alias hl"]);
     persist(&state).await;
 

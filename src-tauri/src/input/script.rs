@@ -10,17 +10,19 @@ use crate::app::state::AppState;
 use crate::disk::paths;
 use crate::profile::live::Profile;
 use crate::script;
+use crate::session::connection::Connection;
 
 pub(super) fn slash_script(
     state: &AppState,
     profile: &mut Profile,
+    c: &mut Connection,
     args: &str,
     lua: &mut script::ApplyResult,
 ) -> InputResult {
     let (cmd, rest) = split_first_word(args);
     match cmd {
-        "load" => slash_script_load(state, profile, rest, lua),
-        "reload" => slash_script_reload(state, profile, lua),
+        "load" => slash_script_load(state, profile, c, rest, lua),
+        "reload" => slash_script_reload(state, profile, c, lua),
         "" => InputResult::error("usage #script load <name> | #script reload"),
         other => InputResult::error(format!("unknown #script subcommand `{other}`")),
     }
@@ -31,6 +33,7 @@ pub(super) fn slash_script(
 fn slash_script_load(
     state: &AppState,
     profile: &mut Profile,
+    c: &mut Connection,
     args: &str,
     lua: &mut script::ApplyResult,
 ) -> InputResult {
@@ -49,7 +52,7 @@ fn slash_script_load(
     let scripts = paths::scripts_dir(app_data);
     let path = scripts.join(&file);
     let code = match std::fs::read_to_string(&path) {
-        Ok(c) => c,
+        Ok(code) => code,
         Err(e) => return InputResult::error(format!("read failed: {e} ({})", path.display())),
     };
     // A disk that ignores case opens `Combat.lua` for `combat`, so the
@@ -62,7 +65,7 @@ fn slash_script_load(
             .script
             .load_script(Owner::Script(file.clone()), &format!("@{file}"), &code);
     let failed = outcome.failed;
-    lua.append(script::apply_actions(profile, outcome));
+    lua.append(script::apply_actions(profile, c, outcome));
     // A script that failed says why in its own lines.
     if failed {
         return InputResult::empty();
@@ -76,6 +79,7 @@ fn slash_script_load(
 fn slash_script_reload(
     state: &AppState,
     profile: &mut Profile,
+    c: &mut Connection,
     lua: &mut script::ApplyResult,
 ) -> InputResult {
     let Some(app_data) = state.app_data.get() else {
@@ -92,7 +96,7 @@ fn slash_script_reload(
             None => {}
         }
     }
-    lua.append(script::apply_actions(profile, outcome));
+    lua.append(script::apply_actions(profile, c, outcome));
     InputResult::echo_line("scripts reloaded")
 }
 
@@ -154,6 +158,7 @@ pub(super) fn slash_scripts_list(profile: &Profile) -> InputResult {
 
 pub(super) fn slash_lua(
     profile: &mut Profile,
+    c: &mut Connection,
     args: &str,
     lua: &mut script::ApplyResult,
 ) -> InputResult {
@@ -163,7 +168,7 @@ pub(super) fn slash_lua(
     }
     script::refresh_vars(&profile.script, &profile.vars);
     let outcome = profile.script.eval(code, "=#lua");
-    lua.append(script::apply_actions(profile, outcome));
+    lua.append(script::apply_actions(profile, c, outcome));
     InputResult::empty()
 }
 

@@ -140,8 +140,8 @@ fn stamp(at: DateTime<FixedOffset>) -> String {
 pub(crate) async fn last_seen(state: &SharedState) -> Option<LastSeen> {
     let character = state.current_character.lock().ok().and_then(|g| g.clone());
     {
-        let p = state.profile.lock().await;
-        if let Some(packet) = p.prompt.vars.gmcp().char_prompt() {
+        let c = state.connection.lock().await;
+        if let Some(packet) = c.prompt.vars.gmcp().char_prompt() {
             return Some(LastSeen {
                 prompt: Some(packet.prompt.clone()),
                 fprompt: Some(packet.fprompt.clone()),
@@ -152,7 +152,7 @@ pub(crate) async fn last_seen(state: &SharedState) -> Option<LastSeen> {
                 character,
             });
         }
-        if let Some(seen) = p.prompt.session_setting().filter(|s| s.prompt.is_some()) {
+        if let Some(seen) = c.prompt.session_setting().filter(|s| s.prompt.is_some()) {
             return Some(LastSeen {
                 prompt: seen.prompt.clone(),
                 fprompt: seen.fprompt.clone(),
@@ -364,20 +364,20 @@ mod tests {
         let state: SharedState = std::sync::Arc::new(crate::app::state::AppState::default());
         assert_eq!(last_seen(&state).await, None, "nothing anywhere");
         {
-            let mut p = state.profile.lock().await;
-            p.prompt.connect(true);
-            p.prompt
+            let mut c = state.connection.lock().await;
+            c.prompt.connect(true);
+            c.prompt
                 .note_send("prompt %h\r\n", chrono::Local::now().timestamp_millis());
             let now = chrono::Local::now().fixed_offset();
-            p.prompt
+            c.prompt
                 .observe_line(b"Prompt set to %h ", "Prompt set to %h ", now);
         }
         let seen = last_seen(&state).await.expect("the session saw it");
         assert_eq!(seen.source, "session");
         assert_eq!(seen.prompt.as_deref(), Some("%h "));
         {
-            let mut p = state.profile.lock().await;
-            p.prompt.observe(
+            let mut c = state.connection.lock().await;
+            c.prompt.observe(
                 "Char.Prompt",
                 serde_json::json!({"enabled": false, "prompt": "%m ", "fprompt": ""}),
                 chrono::Local::now().fixed_offset(),

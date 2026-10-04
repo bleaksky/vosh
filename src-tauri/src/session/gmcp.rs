@@ -196,8 +196,9 @@ async fn character_named<R: tauri::Runtime>(
 
 /// What a GMCP packet does to the profile and the connection, under the
 /// locks the caller holds: the variables and the custom prompt take it,
-/// the connection keeps Room.Chars for the target commands and follows
-/// the room look and the end of a fight, a World.Time hour change is the
+/// and the profile keeps the prompt table the engine holds after it, the
+/// connection keeps Room.Chars for the target commands and follows the
+/// room look and the end of a fight, a World.Time hour change is the
 /// tick, and Lua GMCP handlers run. Returns the tick step and what the
 /// handlers asked for, which the caller delivers once the locks drop.
 pub(super) fn gmcp_step(
@@ -206,14 +207,14 @@ pub(super) fn gmcp_step(
     msg: &vosh_protocol::gmcp::Message,
     now: Instant,
 ) -> (Option<TickStep>, ApplyResult) {
-    let fought = p.prompt.vars.gmcp().fighting();
+    let fought = c.prompt.vars.gmcp().fighting();
     gmcp_vars::apply(&mut p.vars, msg);
     // Before Lua, so a value a GMCP handler sets with
     // `mud.set_prompt_var` belongs to the pulse this packet starts.
-    observe_prompt_gmcp(p, msg);
+    observe_prompt_gmcp(p, c, msg);
     // The fight is over, and the text of the round that ended it is
     // still to come.
-    if fought && !p.prompt.vars.gmcp().fighting() {
+    if fought && !c.prompt.vars.gmcp().fighting() {
         c.fight_tail = true;
     }
     // The connection keeps the latest Room.Chars list, so a bare
@@ -238,7 +239,7 @@ pub(super) fn gmcp_step(
     let tick_step = crate::tick::observe_world_time_for_tick(&p.tick, &mut c.tick, msg, now);
     script::snapshot_vars(&p.script, &p.vars);
     let outcome = p.script.dispatch_gmcp(&msg.package, &msg.data);
-    let apply = script::apply_actions(p, outcome);
+    let apply = script::apply_actions(p, c, outcome);
     (tick_step, apply)
 }
 

@@ -115,10 +115,6 @@ pub(crate) async fn switch_live_profile(
     // survive the switch.
     {
         let mut p = state.profile.lock().await;
-        // The custom prompt keeps the connection's GMCP packets and drops
-        // the values the last profile's prompt read. The file below hands
-        // it the new profile's [prompt] table.
-        p.prompt.switch_profile();
         p.display_name = Some(crate::profile::set::display_name(name));
         state.note_active_profile(name);
         let tick_before = p.tick.config.clone();
@@ -134,20 +130,26 @@ pub(crate) async fn switch_live_profile(
         }
         // The running tick carries across with the new settings, so the
         // status line keeps counting from the last tick.
-        state.connection.lock().await.tick.adopt(
-            &mut p.tick,
-            &tick_before,
-            tokio::time::Instant::now(),
-        );
+        let mut c = state.connection.lock().await;
+        c.tick
+            .adopt(&mut p.tick, &tick_before, tokio::time::Instant::now());
         if let Some(g) = global {
             g.apply_to(&mut p);
         }
         if let Some(catalog) = &catalog {
             lay_catalog_over(&mut p, catalog, loadouts.as_ref());
         }
+        // The custom prompt keeps the connection's GMCP packets and drops
+        // the values the last profile's prompt read, then takes the new
+        // profile's [prompt] table.
+        c.prompt.switch_profile();
+        let table = p.prompt.clone();
+        crate::prompt::take_config(&mut p, &mut c, table);
         // The latest Char.Prompt of the connection applies to the new
         // profile's capture by the rule every packet follows.
-        p.prompt.follow_latest(chrono::Local::now().fixed_offset());
+        let before = c.prompt.revision();
+        c.prompt.follow_latest(chrono::Local::now().fixed_offset());
+        crate::prompt::keep_table(&mut p, &c, before);
         // Under the same lock as the swap, so a pane layout write edited
         // from the old profile's tree, or a whole config save read from
         // the old profile, is refused from here on.
@@ -157,6 +159,7 @@ pub(crate) async fn switch_live_profile(
         let plugins = match state.app_data.get() {
             Some(app_data) => crate::app::plugins::follow_profile_plugins(
                 &mut p,
+                &mut c,
                 &crate::disk::paths::plugins_dir(app_data),
             ),
             None => ApplyResult::default(),
@@ -178,7 +181,7 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
 ) -> Result<(), String> {
     let plugins = switch_profile(state, name).await?;
     // The new profile's capture took the game's latest prompt settings.
-    let seen = state.profile.lock().await.prompt.take_seen();
+    let seen = state.connection.lock().await.prompt.take_seen();
     crate::prompt::report_game_prompt_seen(app, seen);
 
     // Hand every window the new profile's panes, tracked affects, tick
@@ -393,8 +396,9 @@ pub(crate) mod tests {
         }
         {
             let mut p = state.profile.lock().await;
+            let mut c = state.connection.lock().await;
             p.plugins.enabled = vec!["default_only".into(), "everywhere".into()];
-            crate::app::plugins::follow_profile_plugins(&mut p, &plugins);
+            crate::app::plugins::follow_profile_plugins(&mut p, &mut c, &plugins);
         }
         let mut config = ProfileConfig::default();
         config.plugins.enabled = vec!["everywhere".into(), "healer_only".into()];
@@ -417,32 +421,32 @@ pub(crate) mod tests {
         *state.current_connection.lock().unwrap() =
             Some(("play.theforsakenlands.com".into(), 1848));
         {
-            let mut p = state.profile.lock().await;
-            p.prompt.connect(true);
+            let mut c = state.connection.lock().await;
+            c.prompt.connect(true);
             let at = chrono::Local::now().fixed_offset();
-            p.prompt.vars.observe(
+            c.prompt.vars.observe(
                 "Char.Prompt",
                 serde_json::json!({"enabled":true,"prompt":"%n%P%C<%hhp %mm %vmv> ","fprompt":""}),
                 at,
             );
-            p.prompt
+            c.prompt
                 .vars
                 .observe("Char.Vitals", serde_json::json!({"hp":850,"maxhp":900}), at);
-            p.prompt.vars.set_script("hp", "840");
-            p.prompt.vars.set_script("mood", "grim");
-            assert_eq!(p.prompt.vars.prompt_vars().len(), 2);
+            c.prompt.vars.set_script("hp", "840");
+            c.prompt.vars.set_script("mood", "grim");
+            assert_eq!(c.prompt.vars.prompt_vars().len(), 2);
         }
 
         super::switch_live_profile(&state, "Healer").await.unwrap();
 
-        let p = state.profile.lock().await;
-        assert!(p.prompt.forsaken());
+        let c = state.connection.lock().await;
+        assert!(c.prompt.forsaken());
         assert!(
-            p.prompt.vars.new_build(),
+            c.prompt.vars.new_build(),
             "the Char.Prompt of this connection stays"
         );
-        assert!(p.prompt.vars.gmcp().get("Char.Vitals").is_some());
-        assert!(p.prompt.vars.prompt_vars().is_empty());
+        assert!(c.prompt.vars.gmcp().get("Char.Vitals").is_some());
+        assert!(c.prompt.vars.prompt_vars().is_empty());
     }
 
     #[tokio::test]
@@ -502,16 +506,21 @@ pub(crate) mod tests {
         let state = switch_state(dir.path()).await;
         {
             let mut p = state.profile.lock().await;
+            let mut c = state.connection.lock().await;
             // A world Vosh does not know, where no Forsaken Lands rule
             // holds until a capture reads Aabahran's codes.
-            p.prompt.connect(false);
-            p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
+            c.prompt.connect(false);
+            crate::prompt::take_config(
+                &mut p,
+                &mut c,
+                vosh_prompt::PromptConfig::from_legacy(true, "%hp"),
+            );
             let at = chrono::Local::now().fixed_offset();
-            p.prompt
+            c.prompt
                 .vars
                 .observe("Char.Vitals", serde_json::json!({"hp":850,"maxhp":900}), at);
-            p.prompt.vars.set_script("mood", "grim");
-            assert!(!p.prompt.forsaken());
+            c.prompt.vars.set_script("mood", "grim");
+            assert!(!c.prompt.forsaken());
         }
         let healer = vosh_prompt::PromptConfig {
             draw: false,
@@ -532,12 +541,13 @@ pub(crate) mod tests {
         super::switch_live_profile(&state, "Healer").await.unwrap();
         {
             let p = state.profile.lock().await;
-            assert_eq!(*p.prompt.config(), healer);
+            let c = state.connection.lock().await;
+            assert_eq!(*c.prompt.config(), healer);
             assert!(!p.ui.prompt_template_enabled);
             assert_eq!(p.ui.prompt_template, "%mana");
-            assert!(p.prompt.forsaken(), "the capture reads Aabahran's codes");
-            assert!(p.prompt.vars.gmcp().get("Char.Vitals").is_some());
-            assert!(p.prompt.vars.prompt_vars().is_empty());
+            assert!(c.prompt.forsaken(), "the capture reads Aabahran's codes");
+            assert!(c.prompt.vars.gmcp().get("Char.Vitals").is_some());
+            assert!(c.prompt.vars.prompt_vars().is_empty());
         }
 
         // On to a profile that never saved a file, a fresh one, which
@@ -545,11 +555,11 @@ pub(crate) mod tests {
         super::switch_live_profile(&state, "Test-Prompt")
             .await
             .unwrap();
-        let p = state.profile.lock().await;
-        assert_eq!(*p.prompt.config(), vosh_prompt::PromptConfig::fresh());
-        assert!(!p.prompt.draws());
-        assert!(!p.prompt.forsaken());
-        assert!(p.prompt.vars.gmcp().get("Char.Vitals").is_some());
+        let c = state.connection.lock().await;
+        assert_eq!(*c.prompt.config(), vosh_prompt::PromptConfig::fresh());
+        assert!(!c.prompt.draws());
+        assert!(!c.prompt.forsaken());
+        assert!(c.prompt.vars.gmcp().get("Char.Vitals").is_some());
     }
 
     #[tokio::test]
@@ -570,7 +580,8 @@ pub(crate) mod tests {
         super::switch_live_profile(&state, "Fresh").await.unwrap();
         {
             let p = state.profile.lock().await;
-            assert_eq!(*p.prompt.config(), vosh_prompt::PromptConfig::fresh());
+            let c = state.connection.lock().await;
+            assert_eq!(*c.prompt.config(), vosh_prompt::PromptConfig::fresh());
             assert_eq!(p.ui.prompt_template, "");
         }
         // The first save keeps it following the game.
@@ -589,7 +600,7 @@ pub(crate) mod tests {
 
         super::switch_live_profile(&state, "Mortal").await.unwrap();
         let p = state.profile.lock().await;
-        assert!(p.prompt.config().is_default());
+        assert!(state.connection.lock().await.prompt.config().is_default());
         assert_eq!(live_names(&p.ui.tracked_affects), ["Haste"]);
     }
 
@@ -603,14 +614,14 @@ pub(crate) mod tests {
         let state = switch_state(dir.path()).await;
         let game = "%n%P%C<%hhp %mm %vmv> ";
         {
-            let mut p = state.profile.lock().await;
-            p.prompt.connect(true);
-            p.prompt.observe(
+            let mut c = state.connection.lock().await;
+            c.prompt.connect(true);
+            c.prompt.observe(
                 "Char.Prompt",
                 serde_json::json!({"enabled": true, "prompt": game, "fprompt": ""}),
                 chrono::Local::now().fixed_offset(),
             );
-            assert!(!p.prompt.take_seen()[0].applied, "default reads nothing");
+            assert!(!c.prompt.take_seen()[0].applied, "default reads nothing");
         }
         let codes = |follow_game| vosh_prompt::PromptConfig {
             draw: true,
@@ -628,13 +639,13 @@ pub(crate) mod tests {
 
         super::switch_live_profile(&state, "Healer").await.unwrap();
         {
-            let mut p = state.profile.lock().await;
-            let vosh_prompt::CaptureConfig::Aabahran(taken) = &p.prompt.config().capture else {
+            let mut c = state.connection.lock().await;
+            let vosh_prompt::CaptureConfig::Aabahran(taken) = &c.prompt.config().capture else {
                 panic!("an aabahran capture");
             };
             assert_eq!(taken.prompt, game);
             assert_eq!(taken.source, Some(vosh_prompt::config::CaptureSource::Gmcp));
-            let seen = p.prompt.take_seen();
+            let seen = c.prompt.take_seen();
             assert_eq!(seen.len(), 1);
             assert!(seen[0].applied, "the toast follows");
         }
@@ -647,9 +658,9 @@ pub(crate) mod tests {
             .await
             .unwrap();
         super::switch_live_profile(&state, "Healer").await.unwrap();
-        let mut p = state.profile.lock().await;
-        assert_eq!(*p.prompt.config(), codes(false));
-        let leftover = &p.prompt.take_seen();
+        let mut c = state.connection.lock().await;
+        assert_eq!(*c.prompt.config(), codes(false));
+        let leftover = &c.prompt.take_seen();
         assert!(leftover.is_empty(), "{leftover:?}");
     }
 

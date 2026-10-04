@@ -55,7 +55,10 @@ impl OutputSink<'_> {
     ) {
         match self {
             OutputSink::Batch(batch) => batch.prompt_vars = true,
-            OutputSink::Direct => emit_prompt_vars(app, profile, true).await,
+            OutputSink::Direct => {
+                let state = app.state::<SharedState>();
+                emit_prompt_vars(app, profile, &state.connection, true).await;
+            }
         }
     }
 }
@@ -103,7 +106,10 @@ impl ScriptIo<'_, '_> {
     ) {
         match self {
             ScriptIo::Session(_, sink, _) => sink.prompt_vars(app, profile).await,
-            ScriptIo::Collect { .. } => emit_prompt_vars(app, profile, true).await,
+            ScriptIo::Collect { .. } => {
+                let state = app.state::<SharedState>();
+                emit_prompt_vars(app, profile, &state.connection, true).await;
+            }
         }
     }
 
@@ -130,7 +136,10 @@ impl ScriptIo<'_, '_> {
                 if out.release.is_empty() {
                     return Ok(None);
                 }
-                Ok(Some(walk::release(profile, out.release).await))
+                let state = app.state::<SharedState>();
+                Ok(Some(
+                    walk::release(profile, &state.connection, out.release).await,
+                ))
             }
             ScriptIo::Collect { walk, .. } => {
                 **walk = Some(command);
@@ -400,10 +409,10 @@ struct Shown {
 }
 
 impl Shown {
-    fn of(p: &Profile, c: &Connection) -> Self {
+    fn of(c: &Connection) -> Self {
         Self {
             target: TargetPayload::of(c),
-            look: crate::prompt::prompt_look(p),
+            look: crate::prompt::prompt_look(c),
         }
     }
 }
@@ -418,9 +427,9 @@ pub(crate) struct ShownChanges {
 }
 
 impl ShownChanges {
-    /// What `p` and `c` changed since `before` was taken.
-    fn since(before: Shown, p: &Profile, c: &Connection) -> Self {
-        let after = Shown::of(p, c);
+    /// What `c` changed since `before` was taken.
+    fn since(before: Shown, c: &Connection) -> Self {
+        let after = Shown::of(c);
         Self {
             repaint: after.look != before.look,
             target: (after.target != before.target).then_some(after.target),
@@ -480,18 +489,18 @@ pub(crate) fn run_lines_locked<'a>(
     lines: impl IntoIterator<Item = (LineFrom, &'a str)>,
     shared: Option<&SharedLayer>,
 ) -> LinesRun {
-    let lists_before = ListRevisions::of(p);
-    let shown_before = Shown::of(p, c);
+    let lists_before = ListRevisions::of(p, c);
+    let shown_before = Shown::of(c);
     let mut effects = input::LineEffects::default();
     let mut apply = ApplyResult::default();
     for (from, line) in lines {
         let ran = run_and_note_line(state, p, c, from, line, &mut effects, shared);
         apply.append(line_script_result(ran));
     }
-    apply.lists = ListChanges::since(lists_before, p);
+    apply.lists = ListChanges::since(lists_before, p, c);
     LinesRun {
         apply,
-        shown: ShownChanges::since(shown_before, p, c),
+        shown: ShownChanges::since(shown_before, c),
         effects,
     }
 }

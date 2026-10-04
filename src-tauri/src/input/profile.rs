@@ -92,6 +92,8 @@ pub(super) fn slash_profile(
             let _ = blank.apply_to(profile);
             c.tick
                 .adopt(&mut profile.tick, &tick_before, tokio::time::Instant::now());
+            let table = profile.prompt.clone();
+            crate::prompt::take_config(profile, c, table);
             *replaced = true;
             InputResult::echo_line("profile reset to defaults")
         }
@@ -120,6 +122,8 @@ pub(super) fn load_profile_file(
     let warnings = snapshot.apply_to(profile);
     c.tick
         .adopt(&mut profile.tick, &tick_before, tokio::time::Instant::now());
+    let table = profile.prompt.clone();
+    crate::prompt::take_config(profile, c, table);
     *replaced = true;
     let mut lines = vec![format!("profile loaded from {}", path.display())];
     for w in warnings {

@@ -22,6 +22,7 @@ use crate::app::events::{
 use crate::app::state::{AppState, SharedState};
 use crate::input::LineEffects;
 use crate::profile::live::{Macro, Profile};
+use crate::session::connection::Connection;
 
 /// The main window, and Settings and Help open beside it.
 const WINDOWS: [&str; 3] = ["main", "settings", "help"];
@@ -226,9 +227,10 @@ fn grouped_macro(key: &str, command: &str, group: &str) -> Macro {
 /// Run `line` the way typed input, timer and tick commands and
 /// `mud.input` lines run, and tell the windows what it changed.
 fn run_and_tell(handle: &tauri::AppHandle<MockRuntime>, p: &mut Profile, line: &str) {
-    let before = ListRevisions::of(p);
-    let _ = crate::input::process(p, line);
-    broadcast_list_changes(handle, ListChanges::since(before, p));
+    let mut c = Connection::default();
+    let before = ListRevisions::of(p, &c);
+    let _ = crate::input::run_line(&AppState::default(), p, &mut c, line);
+    broadcast_list_changes(handle, ListChanges::since(before, p, &c));
 }
 
 /// Apply a Lua `mud.set_group_enabled` the way a trigger, a timer, a
@@ -247,7 +249,7 @@ fn toggle_from_lua(
         }],
         ..vosh_script::ScriptOutcome::default()
     };
-    let apply = crate::script::apply_actions(p, outcome);
+    let apply = crate::script::apply_actions(p, &mut Connection::default(), outcome);
     broadcast_list_changes(handle, apply.lists);
 }
 

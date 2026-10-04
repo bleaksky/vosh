@@ -30,7 +30,7 @@ fn replay_with(
     preview: Option<&PromptPreview>,
 ) -> Vec<Read> {
     session.restart();
-    session.p.prompt.set_preview(preview.cloned());
+    session.c.prompt.set_preview(preview.cloned());
     vosh_prompt::testkit::reads(bytes, at)
         .into_iter()
         .map(|read| session.read(read))
@@ -41,8 +41,8 @@ fn replay_with(
 /// the card open: no preview, and in the text the band the card lends.
 fn replay_live_with_card(session: &mut Session, bytes: &[u8], at: &[usize]) -> Vec<Read> {
     session.restart();
-    session.p.prompt.set_preview(None);
-    session.p.prompt.stage.set_card(true);
+    session.c.prompt.set_preview(None);
+    session.c.prompt.stage.set_card(true);
     vosh_prompt::testkit::reads(bytes, at)
         .into_iter()
         .map(|read| session.read(read))
@@ -79,7 +79,7 @@ fn outs(reads: &[Read]) -> impl Iterator<Item = &Output> {
 #[test]
 fn a_prompt_drawn_with_a_preview_shows_it_until_something_lands_after_it() {
     let mut session = Session::new(profile(CODES, HP, true));
-    session.p.prompt.set_preview(Some(low_health()));
+    session.c.prompt.set_preview(Some(low_health()));
     let read = session.read(&wire_fixture("quiet"));
     // The open row shows the preview, with the live render as its
     // restore.
@@ -92,10 +92,10 @@ fn a_prompt_drawn_with_a_preview_shows_it_until_something_lands_after_it() {
     let rows = screen_after_echo([&read.out], 80);
     assert_eq!(rows.last().map(String::as_str), Some("<1020> look"));
     // The panes keep the live values.
-    let vars = session.p.prompt.take_prompt_vars(true).expect("the vars");
+    let vars = session.c.prompt.take_prompt_vars(true).expect("the vars");
     assert_eq!(vars.get("hp").map(String::as_str), Some("1020"));
     // The open row keeps the spans of what it shows.
-    let spans = &session.p.prompt.stage.open_row().expect("the row").spans;
+    let spans = &session.c.prompt.stage.open_row().expect("the row").spans;
     assert_eq!(spans.len(), 3);
 }
 
@@ -153,7 +153,7 @@ fn a_preview_set_on_the_open_row_gives_way_to_the_next_pulse_at_every_split() {
             let mut want = replay_with(&mut live, &quiet, &[], None);
             // The card opens on the live row, lending it the band in the
             // text.
-            live.p.prompt.stage.set_card(true);
+            live.c.prompt.stage.set_card(true);
             want.push(Read {
                 out: live.repaint(),
                 ..Read::default()
@@ -165,7 +165,7 @@ fn a_preview_set_on_the_open_row_gives_way_to_the_next_pulse_at_every_split() {
             );
             let mut got = replay_with(&mut previewing, &quiet, &[], None);
             // The card sets Low health on the open row.
-            previewing.p.prompt.set_preview(Some(low_health()));
+            previewing.c.prompt.set_preview(Some(low_health()));
             let repaint = previewing.repaint();
             match show {
                 PromptShow::Pinned => {
@@ -219,7 +219,7 @@ fn the_card_closing_repaints_the_live_render_with_nothing_to_restore() {
     let read = session.read(&wire_fixture("quiet"));
     assert_eq!(read.out.restore, None);
     // The card opens: values with nothing to show draw their labels.
-    session.p.prompt.set_preview(Some(PromptPreview {
+    session.c.prompt.set_preview(Some(PromptPreview {
         placeholders: true,
         ..PromptPreview::default()
     }));
@@ -232,7 +232,7 @@ fn the_card_closing_repaints_the_live_render_with_nothing_to_restore() {
         "<1020> "
     );
     // It reads your codes: the row shows the line the game sent.
-    session.p.prompt.set_preview(Some(PromptPreview {
+    session.c.prompt.set_preview(Some(PromptPreview {
         raw: true,
         ..PromptPreview::default()
     }));
@@ -247,7 +247,7 @@ fn the_card_closing_repaints_the_live_render_with_nothing_to_restore() {
         "<1020> "
     );
     // A preview with values on top of Fight.
-    session.p.prompt.set_preview(Some(PromptPreview {
+    session.c.prompt.set_preview(Some(PromptPreview {
         preview: Some(Preview::Fight),
         overrides: Some(Overrides {
             values: [("opponent".to_string(), serde_json::json!("a rat"))].into(),
@@ -261,7 +261,7 @@ fn the_card_closing_repaints_the_live_render_with_nothing_to_restore() {
         "<1020>a rat "
     );
     // The card closes.
-    session.p.prompt.set_preview(None);
+    session.c.prompt.set_preview(None);
     let closed = session.repaint();
     assert_eq!(
         drawn_text(&closed.replace.as_ref().expect("the repaint").bytes),
@@ -287,7 +287,7 @@ fn drawn_text(bytes: &[u8]) -> String {
 fn a_repaint_in_a_payload_carries_the_restore_to_the_webview() {
     let mut session = Session::new(profile(CODES, HP, true));
     let _ = session.read(&wire_fixture("quiet"));
-    session.p.prompt.set_preview(Some(low_health()));
+    session.c.prompt.set_preview(Some(low_health()));
     let json = payload(&session.repaint()).expect("a payload");
     let value: serde_json::Value = serde_json::from_str(&json).expect("json");
     let restore = value["restore"].as_str().expect("the restore");
@@ -422,19 +422,19 @@ fn the_open_row_stays_open_across_a_resize_while_the_card_is_open() {
 
         // The card shows Low health, then the panel opens and the
         // terminal narrows.
-        session.p.prompt.set_preview(Some(low_health()));
+        session.c.prompt.set_preview(Some(low_health()));
         let low = session.repaint();
         assert_eq!(
             grid_after(&mut grid, [&low]).last().map(String::as_str),
             Some("<180>"),
             "{label}"
         );
-        window_size_step(&mut session.p, &mut negotiator, 60, 40, false);
+        window_size_step(&mut session.c, &mut negotiator, 60, 40, false);
         grid.resize(60, 40);
-        assert!(session.p.prompt.stage.open_row().is_some(), "{label}");
+        assert!(session.c.prompt.stage.open_row().is_some(), "{label}");
 
         // Clearing the preview puts the live render back.
-        session.p.prompt.set_preview(None);
+        session.c.prompt.set_preview(None);
         let live = session.repaint();
         assert!(live.restore.is_none(), "{label}");
         assert_eq!(
@@ -445,12 +445,12 @@ fn the_open_row_stays_open_across_a_resize_while_the_card_is_open() {
 
         // With no preview, the open card keeps the row open too, so an
         // edit repaints it.
-        window_size_step(&mut session.p, &mut negotiator, 70, 40, true);
+        window_size_step(&mut session.c, &mut negotiator, 70, 40, true);
         grid.resize(70, 40);
-        assert!(session.p.prompt.stage.open_row().is_some(), "{label}");
-        let mut config = session.p.prompt.config().clone();
+        assert!(session.c.prompt.stage.open_row().is_some(), "{label}");
+        let mut config = session.c.prompt.config().clone();
         config.template = "[%hp]".into();
-        session.p.set_prompt_config(config);
+        take_config(&mut session.p, &mut session.c, config);
         let edited = session.repaint();
         assert_eq!(
             grid_after(&mut grid, [&edited]).last().map(String::as_str),
@@ -459,8 +459,8 @@ fn the_open_row_stays_open_across_a_resize_while_the_card_is_open() {
         );
 
         // With the card closed, a new size closes the row.
-        window_size_step(&mut session.p, &mut negotiator, 80, 40, false);
-        assert!(session.p.prompt.stage.open_row().is_none(), "{label}");
+        window_size_step(&mut session.c, &mut negotiator, 80, 40, false);
+        assert!(session.c.prompt.stage.open_row().is_none(), "{label}");
         assert!(session.repaint().is_empty(), "{label}");
     }
 }
@@ -481,15 +481,15 @@ fn a_new_height_leaves_the_open_row_open_with_the_card_closed() {
         // width stays, so nothing wraps again and a design change still
         // repaints the row in place on the native grid.
         for (rows, template, drawn) in [(44, "[%hp]", "[1020]"), (30, "{%hp}", "{1020}")] {
-            window_size_step(&mut session.p, &mut negotiator, 80, rows, false);
+            window_size_step(&mut session.c, &mut negotiator, 80, rows, false);
             grid.resize(80, usize::from(rows));
             assert!(
-                session.p.prompt.stage.open_row().is_some(),
+                session.c.prompt.stage.open_row().is_some(),
                 "{label} {rows}"
             );
-            let mut config = session.p.prompt.config().clone();
+            let mut config = session.c.prompt.config().clone();
             config.template = template.into();
-            session.p.set_prompt_config(config);
+            take_config(&mut session.p, &mut session.c, config);
             let edited = session.repaint();
             let screen = grid_after(&mut grid, [&edited]);
             assert_eq!(
@@ -514,12 +514,12 @@ fn the_live_render_comes_back_when_the_connection_ends_during_a_preview() {
         let mut session = Session::new(showing(profile(CODES, HP, true), show));
         let mut grid = crate::native::grid::TermGrid::new(80, 40);
         let quiet = session.read(&wire_fixture("quiet"));
-        session.p.prompt.set_preview(Some(low_health()));
+        session.c.prompt.set_preview(Some(low_health()));
         let low = session.repaint();
         let _ = grid_after(&mut grid, [&quiet.out, &low]);
         // You disconnect with the card open, and nothing else lands.
-        let out = end_preview_step(&mut session.p, &session.c, false, now);
-        assert!(session.p.prompt.preview().is_none(), "{label}");
+        let out = end_preview_step(&session.p, &mut session.c, false, now);
+        assert!(session.c.prompt.preview().is_none(), "{label}");
         assert!(out.restore.is_none(), "{label}");
         if show == PromptShow::Pinned {
             assert_eq!(
@@ -542,5 +542,5 @@ fn the_live_render_comes_back_when_the_connection_ends_during_a_preview() {
     // With no preview, the connection ends with nothing to write.
     let mut session = Session::new(profile(CODES, HP, true));
     let _ = session.read(&wire_fixture("quiet"));
-    assert!(end_preview_step(&mut session.p, &session.c, false, now).is_empty());
+    assert!(end_preview_step(&session.p, &mut session.c, false, now).is_empty());
 }

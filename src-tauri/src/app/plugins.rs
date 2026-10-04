@@ -22,6 +22,7 @@ use vosh_script::Owner;
 use crate::app::state::SharedState;
 use crate::profile::live::Profile;
 use crate::script::ApplyResult;
+use crate::session::connection::Connection;
 
 #[derive(Debug, Error)]
 pub(crate) enum PluginError {
@@ -264,7 +265,12 @@ pub(crate) fn seed_example_plugins(plugins_dir: &std::path::Path) {
 /// `plugins_dir` as it stands and load it. Returns what it asks of the
 /// session. When Vosh cannot read it, a red `[lua]` line says so, and
 /// the plugin waits for `#script reload` as one whose Lua failed does.
-pub(crate) fn plugin_on(p: &mut Profile, plugins_dir: &std::path::Path, name: &str) -> ApplyResult {
+pub(crate) fn plugin_on(
+    p: &mut Profile,
+    c: &mut Connection,
+    plugins_dir: &std::path::Path,
+    name: &str,
+) -> ApplyResult {
     let plugin = match read_plugin(plugins_dir, name) {
         Ok(plugin) => plugin,
         Err(e) => {
@@ -277,7 +283,7 @@ pub(crate) fn plugin_on(p: &mut Profile, plugins_dir: &std::path::Path, name: &s
                 failed: true,
                 ..vosh_script::ScriptOutcome::default()
             };
-            return crate::script::apply_actions(p, outcome);
+            return crate::script::apply_actions(p, c, outcome);
         }
     };
     // A load runs Lua for certain, even when nothing else is loaded,
@@ -293,16 +299,16 @@ pub(crate) fn plugin_on(p: &mut Profile, plugins_dir: &std::path::Path, name: &s
     } else {
         info!(name = %name, "loaded plugin");
     }
-    crate::script::apply_actions(p, outcome)
+    crate::script::apply_actions(p, c, outcome)
 }
 
 /// Turn the plugin `name` off: take back its Lua triggers, GMCP
 /// handlers, timers and aliases. The variables it set and the groups it
 /// turned on or off stay.
-pub(crate) fn plugin_off(p: &mut Profile, name: &str) -> ApplyResult {
+pub(crate) fn plugin_off(p: &mut Profile, c: &mut Connection, name: &str) -> ApplyResult {
     let outcome = p.script.unload(&Owner::Plugin(name.to_string()));
     info!(name = %name, "unloaded plugin");
-    crate::script::apply_actions(p, outcome)
+    crate::script::apply_actions(p, c, outcome)
 }
 
 /// Turn off each plugin that runs and the live profile does not turn
@@ -313,6 +319,7 @@ pub(crate) fn plugin_off(p: &mut Profile, name: &str) -> ApplyResult {
 /// save it or restart Vosh.
 pub(crate) fn follow_profile_plugins(
     p: &mut Profile,
+    c: &mut Connection,
     plugins_dir: &std::path::Path,
 ) -> ApplyResult {
     let mut wanted: Vec<String> = Vec::new();
@@ -324,13 +331,13 @@ pub(crate) fn follow_profile_plugins(
     let running = p.script.loaded_plugins();
     let mut apply = ApplyResult::default();
     for name in running.iter().filter(|name| !wanted.contains(name)) {
-        apply.append(plugin_off(p, name));
+        apply.append(plugin_off(p, c, name));
     }
     for name in wanted.iter().filter(|name| !running.contains(name)) {
         if p.script.is_stopped(&Owner::Plugin(name.clone())) {
             continue;
         }
-        apply.append(plugin_on(p, plugins_dir, name));
+        apply.append(plugin_on(p, c, plugins_dir, name));
     }
     apply
 }
@@ -404,7 +411,8 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     note_plugins(state, &plugins_dir).await;
     let apply = {
         let mut p = state.profile.lock().await;
-        follow_profile_plugins(&mut p, &plugins_dir)
+        let mut c = state.connection.lock().await;
+        follow_profile_plugins(&mut p, &mut c, &plugins_dir)
     };
     let collected = crate::session::effects::collect_script_result(
         app,
@@ -584,8 +592,9 @@ mod tests {
              mud.timer(600, function() end)",
         );
         let mut p = Profile::default();
+        let mut c = Connection::default();
         p.plugins.enabled = vec!["everywhere".into(), "warrior_only".into()];
-        let launch = follow_profile_plugins(&mut p, tmp.path());
+        let launch = follow_profile_plugins(&mut p, &mut c, tmp.path());
         assert_eq!(launch.new_timers.len(), 2);
         let warrior_timer = launch.new_timers[1].timer_id;
         // The next profile lists one plugin twice and one it does not
@@ -596,7 +605,7 @@ mod tests {
             "healer_only".into(),
             "missing".into(),
         ];
-        let switched = follow_profile_plugins(&mut p, tmp.path());
+        let switched = follow_profile_plugins(&mut p, &mut c, tmp.path());
         // The one it does not have says so, and a reload would try it.
         assert_eq!(
             switched.echoes,
@@ -622,7 +631,7 @@ mod tests {
         assert_eq!(aliases, [("everywhere", "ev"), ("healer_only", "hl")]);
         // Back again, the healer's alias goes with it.
         p.plugins.enabled = vec!["everywhere".into()];
-        follow_profile_plugins(&mut p, tmp.path());
+        follow_profile_plugins(&mut p, &mut c, tmp.path());
         let aliases: Vec<&str> = p
             .plugin_aliases
             .list()
@@ -643,18 +652,19 @@ mod tests {
              mud.alias('ra', 'look')",
         );
         let mut p = Profile::default();
+        let mut c = Connection::default();
         p.plugins.enabled = vec!["runaway".into()];
-        follow_profile_plugins(&mut p, tmp.path());
+        follow_profile_plugins(&mut p, &mut c, tmp.path());
         let stopped = p
             .script
             .dispatch_gmcp("Char.Vitals", &serde_json::json!({}));
         assert_eq!(stopped.stopped, [Owner::Plugin("runaway".into())]);
-        crate::script::apply_actions(&mut p, stopped);
+        crate::script::apply_actions(&mut p, &mut c, stopped);
         // Away and back again, it stays off with nothing registered.
         p.plugins.enabled = Vec::new();
-        follow_profile_plugins(&mut p, tmp.path());
+        follow_profile_plugins(&mut p, &mut c, tmp.path());
         p.plugins.enabled = vec!["runaway".into()];
-        let back = follow_profile_plugins(&mut p, tmp.path());
+        let back = follow_profile_plugins(&mut p, &mut c, tmp.path());
         let leftover = &back.echoes;
         assert!(leftover.is_empty(), "{leftover:?}");
         let leftover = &p.script.loaded_plugins();
@@ -681,15 +691,16 @@ mod tests {
             );
         }
         let mut p = Profile::default();
+        let mut c = Connection::default();
         p.vars.set(Scope::Profile, "home", "first");
         p.plugins.enabled = vec!["first_side".into()];
-        let launch = follow_profile_plugins(&mut p, tmp.path());
+        let launch = follow_profile_plugins(&mut p, &mut c, tmp.path());
         assert_eq!(launch.echoes, ["first"]);
         // The switch lays the next profile over this one, and no other
         // Lua stays loaded once its one plugin turns off.
         p.vars.set(Scope::Profile, "home", "second");
         p.plugins.enabled = vec!["second_side".into()];
-        let switched = follow_profile_plugins(&mut p, tmp.path());
+        let switched = follow_profile_plugins(&mut p, &mut c, tmp.path());
         assert_eq!(switched.echoes, ["second"]);
     }
 

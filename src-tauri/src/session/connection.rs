@@ -1,10 +1,10 @@
 //! What one connection holds apart from the profile: the target you pick,
 //! its quick keys and the characters in the room, which the commands
 //! share, the room look and the end of a fight, which the loop follows
-//! line by line, and the tick's count, which both read. The app state
-//! holds the [`Connection`] behind its own lock, and the session loop
-//! holds a handle to it, so a command reads it without waiting on the
-//! loop.
+//! line by line, and the tick's count and the prompt engine, which both
+//! read. The app state holds the [`Connection`] behind its own lock, and
+//! the session loop holds a handle to it, so a command reads it without
+//! waiting on the loop.
 //!
 //! Its lock comes after the profile lock and the profile set, never before
 //! them. A step that holds it takes no other lock and never awaits. The
@@ -43,6 +43,13 @@ pub(crate) struct Connection {
     /// which each of its methods takes. The session starts the count as
     /// it connects and stops it as it ends.
     pub(crate) tick: TickRuntime,
+    /// The custom prompt: the profile's `[prompt]` table compiled for the
+    /// stage, and what the session feeds it, the values triggers write
+    /// with `mud.set_prompt_var(name, value)`, the latest packet of each
+    /// GMCP package, and the hidden state worked out from them. A profile
+    /// switch keeps the packets and drops the values, and a disconnect
+    /// clears both.
+    pub(crate) prompt: vosh_prompt::PromptEngine,
 }
 
 impl Connection {

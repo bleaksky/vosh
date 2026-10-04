@@ -422,16 +422,16 @@ impl Harness {
     /// a temporary folder.
     async fn new() -> Self {
         let h = Self::unread().await;
-        h.state
-            .profile
-            .lock()
-            .await
-            .set_prompt_config(vosh_prompt::PromptConfig {
+        crate::prompt::take_config(
+            &mut *h.state.profile.lock().await,
+            &mut *h.state.connection.lock().await,
+            vosh_prompt::PromptConfig {
                 capture: vosh_prompt::CaptureConfig::Aabahran(
                     vosh_prompt::config::AabahranCapture::default(),
                 ),
                 ..vosh_prompt::PromptConfig::default()
-            });
+            },
+        );
         h
     }
 
@@ -488,15 +488,12 @@ impl Harness {
         *self.state.session.lock().await = Some(handle);
         self.until("the look at login", |h| h.text().contains("[Exits:"))
             .await;
-        let reads = {
-            let p = self.state.profile.lock().await;
-            !p.prompt.config().capture.is_none()
-        };
+        let reads = !self.state.profile.lock().await.prompt.capture.is_none();
         if !reads {
             return;
         }
         for _ in 0..1000 {
-            let read = self.state.profile.lock().await.prompt.vars.prompt_vars();
+            let read = self.state.connection.lock().await.prompt.vars.prompt_vars();
             if read.values().any(|value| value == "1020") {
                 return;
             }

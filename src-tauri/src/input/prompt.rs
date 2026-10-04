@@ -7,6 +7,8 @@ use vosh_prompt::card::sentences::and_list;
 use super::slash::parse_braced_pattern;
 use super::{split_first_word, InputResult};
 use crate::profile::live::Profile;
+use crate::prompt::take_config;
+use crate::session::connection::Connection;
 
 /// `#prompt {regex}`: read your prompt with a pattern. It becomes the
 /// active profile's capture, `[prompt.capture] kind = "regex"`, with
@@ -16,14 +18,14 @@ use crate::profile::live::Profile;
 /// pattern with none still tells Vosh where your prompt is. The switch
 /// and the design stay as they are. Older builds wrote a trigger named
 /// `prompt-capture` instead, which hid the prompt in every profile.
-pub(super) fn slash_prompt(profile: &mut Profile, args: &str) -> InputResult {
+pub(super) fn slash_prompt(profile: &mut Profile, c: &mut Connection, args: &str) -> InputResult {
     match split_first_word(args) {
-        ("", _) => return prompt_status(profile, chrono::Local::now().fixed_offset()),
-        ("game", rest) => return slash_prompt_codes(profile, rest, false),
-        ("fight", rest) => return slash_prompt_codes(profile, rest, true),
-        ("draw", rest) => return slash_prompt_draw(profile, rest),
-        ("show", rest) => return slash_prompt_show(profile, rest),
-        ("default", rest) => return slash_prompt_default(profile, rest),
+        ("", _) => return prompt_status(c, chrono::Local::now().fixed_offset()),
+        ("game", rest) => return slash_prompt_codes(profile, c, rest, false),
+        ("fight", rest) => return slash_prompt_codes(profile, c, rest, true),
+        ("draw", rest) => return slash_prompt_draw(profile, c, rest),
+        ("show", rest) => return slash_prompt_show(profile, c, rest),
+        ("default", rest) => return slash_prompt_default(profile, c, rest),
         _ => {}
     }
     let Some((pattern, _rest)) = parse_braced_pattern(args) else {
@@ -49,9 +51,9 @@ pub(super) fn slash_prompt(profile: &mut Profile, args: &str) -> InputResult {
         ),
         source: Some(vosh_prompt::config::CaptureSource::Typed),
     };
-    let mut config = profile.prompt.config().clone();
+    let mut config = c.prompt.config().clone();
     config.capture = vosh_prompt::CaptureConfig::Regex(capture);
-    profile.set_prompt_config(config);
+    take_config(profile, c, config);
     InputResult::echo_line(if names.is_empty() {
         "Vosh reads your prompt with this pattern.".to_string()
     } else {
@@ -69,7 +71,12 @@ pub(super) fn slash_prompt(profile: &mut Profile, args: &str) -> InputResult {
 /// active profile's `kind = "aabahran"` with source typed. On the new
 /// build the next Char.Prompt replaces it while the capture follows the
 /// game.
-fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputResult {
+fn slash_prompt_codes(
+    profile: &mut Profile,
+    c: &mut Connection,
+    args: &str,
+    fight: bool,
+) -> InputResult {
     use vosh_prompt::aabahran::{self, lex, Origin, Which};
     use vosh_prompt::card::sentences;
     use vosh_prompt::config::{AabahranCapture, CaptureSource};
@@ -83,7 +90,7 @@ fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputRe
     let Some((typed, _rest)) = parse_braced_pattern(args) else {
         return InputResult::error(usage);
     };
-    let held = match &profile.prompt.config().capture {
+    let held = match &c.prompt.config().capture {
         CaptureConfig::Aabahran(codes) => Some(codes.clone()),
         _ => None,
     };
@@ -96,19 +103,18 @@ fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputRe
         );
     }
     let which = if fight { Which::Fight } else { Which::Prompt };
-    let normalized = lex::normalize(&typed, which, profile.prompt.who());
+    let normalized = lex::normalize(&typed, which, c.prompt.who());
     let codes = held.unwrap_or_default();
     let (prompt, fprompt) = if fight {
         (codes.prompt.clone(), normalized.text)
     } else {
         (normalized.text, codes.fprompt.clone())
     };
-    let compiled = match aabahran::compile(&prompt, &fprompt, Origin::Stored, profile.prompt.who())
-    {
+    let compiled = match aabahran::compile(&prompt, &fprompt, Origin::Stored, c.prompt.who()) {
         Ok(compiled) => compiled,
         Err(e) => return InputResult::error(e.text),
     };
-    let mut config = profile.prompt.config().clone();
+    let mut config = c.prompt.config().clone();
     config.capture = CaptureConfig::Aabahran(AabahranCapture {
         prompt: compiled.prompt.clone(),
         fprompt: compiled.fprompt.clone(),
@@ -120,7 +126,7 @@ fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputRe
         ),
         source: Some(CaptureSource::Typed),
     });
-    profile.set_prompt_config(config);
+    take_config(profile, c, config);
     let mut echo = vec![sentences::reads_sentence(&compiled.reads(which), fight)];
     echo.extend(
         normalized
@@ -140,19 +146,19 @@ fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputRe
 /// draws only a prompt it reads. With a capture and still no design to
 /// draw, as with a pattern of another game or codes Vosh cannot draw,
 /// the echo says you see the game's own prompt.
-fn slash_prompt_draw(profile: &mut Profile, args: &str) -> InputResult {
+fn slash_prompt_draw(profile: &mut Profile, c: &mut Connection, args: &str) -> InputResult {
     let draw = match args.trim().to_ascii_lowercase().as_str() {
         "on" => true,
         "off" => false,
         _ => return InputResult::error("usage #prompt draw on | off"),
     };
-    let mut config = profile.prompt.config().clone();
+    let mut config = c.prompt.config().clone();
     if config.draw != draw {
         config.draw = draw;
         if draw && config.template.is_empty() {
             config.mirror = true;
         }
-        profile.set_prompt_config(config);
+        take_config(profile, c, config);
     }
     let mut echo = vec![if draw {
         "Drawing is on. Vosh draws your design in place of your prompt."
@@ -160,9 +166,9 @@ fn slash_prompt_draw(profile: &mut Profile, args: &str) -> InputResult {
         "Drawing is off. You see the game's own prompt again."
     }
     .to_string()];
-    if draw && profile.prompt.config().capture.is_none() {
+    if draw && c.prompt.config().capture.is_none() {
         echo.push(PROMPT_NONE.to_string());
-    } else if draw && !profile.prompt.draws() {
+    } else if draw && !c.prompt.draws() {
         echo.push(DRAW_NO_DESIGN.to_string());
     }
     InputResult::echo_lines(echo)
@@ -172,17 +178,17 @@ fn slash_prompt_draw(profile: &mut Profile, args: &str) -> InputResult {
 /// text as the game sends it, lifted on a band in the text, or pinned on
 /// a band above the command line with earlier prompts out of the text.
 /// It needs a capture, since Vosh finds your prompt only through one.
-fn slash_prompt_show(profile: &mut Profile, args: &str) -> InputResult {
+fn slash_prompt_show(profile: &mut Profile, c: &mut Connection, args: &str) -> InputResult {
     use vosh_prompt::PromptShow;
     let Some(show) = PromptShow::parse(args) else {
         return InputResult::error("usage #prompt show text | lifted | pinned");
     };
-    if profile.prompt.config().capture.is_none() {
+    if c.prompt.config().capture.is_none() {
         return InputResult::echo_line(PROMPT_NONE);
     }
-    let mut config = profile.prompt.config().clone();
+    let mut config = c.prompt.config().clone();
     config.show = show;
-    profile.set_prompt_config(config);
+    take_config(profile, c, config);
     InputResult::echo_line(show_sentence(show))
 }
 
@@ -192,11 +198,11 @@ fn slash_prompt_show(profile: &mut Profile, args: &str) -> InputResult {
 /// back, unless it followed the game. The switch, the place and the
 /// capture stay. The echo says what else it takes to see the design,
 /// also when the design is the default already.
-fn slash_prompt_default(profile: &mut Profile, args: &str) -> InputResult {
+fn slash_prompt_default(profile: &mut Profile, c: &mut Connection, args: &str) -> InputResult {
     if !args.trim().is_empty() {
         return InputResult::error("usage #prompt default");
     }
-    let mut config = profile.prompt.config().clone();
+    let mut config = c.prompt.config().clone();
     let had = !config.template.is_empty() && !config.mirror;
     let changed = config.use_default_design();
     let mut echo = vec![match (changed, had) {
@@ -217,7 +223,7 @@ fn slash_prompt_default(profile: &mut Profile, args: &str) -> InputResult {
         );
     }
     if changed {
-        profile.set_prompt_config(config);
+        take_config(profile, c, config);
     }
     InputResult::echo_lines(echo)
 }
@@ -246,11 +252,11 @@ const PROMPTS_OFF: &str =
 /// last matched, whether Vosh draws, and whether you turned prompts off
 /// in the game. `now` sets the clock the times read in.
 pub(super) fn prompt_status(
-    profile: &Profile,
+    c: &Connection,
     now: chrono::DateTime<chrono::FixedOffset>,
 ) -> InputResult {
     use vosh_prompt::{CaptureConfig, Status};
-    let engine = &profile.prompt;
+    let engine = &c.prompt;
     let clock = |at: chrono::DateTime<chrono::FixedOffset>| {
         at.with_timezone(now.offset()).format("%-I:%M").to_string()
     };
@@ -306,12 +312,12 @@ pub(super) fn prompt_status(
 
 /// `#unprompt`: stop reading your prompt in the active profile. The
 /// game's prompt shows again, and the design stays saved.
-pub(super) fn slash_unprompt(profile: &mut Profile) -> InputResult {
-    if profile.prompt.config().capture.is_none() {
+pub(super) fn slash_unprompt(profile: &mut Profile, c: &mut Connection) -> InputResult {
+    if c.prompt.config().capture.is_none() {
         return InputResult::echo_line("Vosh does not read your prompt in this profile.");
     }
-    let mut config = profile.prompt.config().clone();
+    let mut config = c.prompt.config().clone();
     config.capture = vosh_prompt::CaptureConfig::None;
-    profile.set_prompt_config(config);
+    take_config(profile, c, config);
     InputResult::echo_line("Vosh stopped reading your prompt. Your design stays saved.")
 }

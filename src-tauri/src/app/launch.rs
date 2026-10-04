@@ -158,7 +158,11 @@ pub(crate) async fn load_profiles(state: &SharedState, mut set: ProfileSet) {
     // the main window shows.
     let notices = {
         let mut p = state.profile.lock().await;
-        load_at_launch(&set, &mut p)
+        let notices = load_at_launch(&set, &mut p);
+        let mut c = state.connection.lock().await;
+        let table = p.prompt.clone();
+        crate::prompt::take_config(&mut p, &mut c, table);
+        notices
     };
     state.add_launch_notices(notices);
     state.note_active_profile(set.active_name());

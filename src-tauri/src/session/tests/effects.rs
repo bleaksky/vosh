@@ -256,7 +256,7 @@ fn a_trigger_body_that_runs_away_turns_its_trigger_off() {
     let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.");
     let outcome = super::run_trigger_scripts(&mut p, &result);
     assert!(p.triggers.is_stopped("hunger"));
-    let apply = crate::script::apply_actions(&mut p, outcome);
+    let apply = crate::script::apply_actions(&mut p, &mut Connection::default(), outcome);
     // A stopped body sends nothing it queued.
     let leftover = &apply.send_bytes;
     assert!(leftover.is_empty(), "{leftover:?}");
@@ -286,17 +286,13 @@ fn a_function_a_trigger_body_left_behind_turns_its_trigger_off_too() {
         .expect("the trigger compiles");
     let result = vosh_automation::trigger::process(&p.triggers, b"The day has begun.");
     let outcome = super::run_trigger_scripts(&mut p, &result);
-    crate::script::apply_actions(&mut p, outcome);
+    let mut c = Connection::default();
+    crate::script::apply_actions(&mut p, &mut c, outcome);
     let msg = vosh_protocol::gmcp::Message {
         package: "World.Time".into(),
         data: serde_json::json!({}),
     };
-    let (_, apply) = super::gmcp_step(
-        &mut p,
-        &mut Connection::default(),
-        &msg,
-        tokio::time::Instant::now(),
-    );
+    let (_, apply) = super::gmcp_step(&mut p, &mut c, &msg, tokio::time::Instant::now());
     assert!(p.triggers.is_stopped("day"));
     assert_eq!(
         apply.echoes,

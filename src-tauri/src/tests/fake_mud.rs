@@ -174,7 +174,9 @@ impl Harness {
 
     /// Give the live profile the prompt table `config`, as a load does.
     async fn set_prompt(&self, config: vosh_prompt::PromptConfig) {
-        self.state.profile.lock().await.set_prompt_config(config);
+        let mut p = self.state.profile.lock().await;
+        let mut c = self.state.connection.lock().await;
+        crate::prompt::take_config(&mut p, &mut c, config);
     }
 
     /// Connect to the fake game the way `session::connect` does, with no
@@ -324,21 +326,14 @@ impl Harness {
         .await;
     }
 
-    /// The live profile's capture.
+    /// The live profile's capture, as its file saves it.
     async fn capture(&self) -> vosh_prompt::CaptureConfig {
-        self.state
-            .profile
-            .lock()
-            .await
-            .prompt
-            .config()
-            .capture
-            .clone()
+        self.state.profile.lock().await.prompt.capture.clone()
     }
 
-    /// The live profile's whole `[prompt]` table.
+    /// The live profile's whole `[prompt]` table, as its file saves it.
     async fn prompt_table(&self) -> vosh_prompt::PromptConfig {
-        self.state.profile.lock().await.prompt.config().clone()
+        self.state.profile.lock().await.prompt.clone()
     }
 
     /// Have the fake game count as The Forsaken Lands, as the real host
@@ -742,7 +737,7 @@ async fn the_new_build_gives_vosh_the_prompt_at_login_and_follows_the_game() {
     assert_eq!(seen.prompt.as_deref(), Some(PROMPT));
     assert_eq!(seen.enabled, Some(true));
     assert_eq!(seen.character.as_deref(), Some("Tester"));
-    assert!(h.state.profile.lock().await.prompt.vars.new_build());
+    assert!(h.state.connection.lock().await.prompt.vars.new_build());
 
     // prompt x in the game: Char.Prompt comes before its reply, and the
     // prompt right after the reply reads with the new codes.
@@ -1205,7 +1200,7 @@ async fn a_reconnect_reads_the_prompt_until_char_prompt_comes_again() {
     // and the prompt reads from the saved codes all the same.
     h.until_shown("Reconnecting.").await;
     h.until_last_row("<1020>").await;
-    assert!(!h.state.profile.lock().await.prompt.vars.new_build());
+    assert!(!h.state.connection.lock().await.prompt.vars.new_build());
     let leftover = &h.events("session://game-prompt-seen");
     assert!(leftover.is_empty(), "{leftover:?}");
     // prompt in the game sends Char.Prompt again.
@@ -1215,7 +1210,7 @@ async fn a_reconnect_reads_the_prompt_until_char_prompt_comes_again() {
         !h.events("session://game-prompt-seen").is_empty()
     })
     .await;
-    assert!(h.state.profile.lock().await.prompt.vars.new_build());
+    assert!(h.state.connection.lock().await.prompt.vars.new_build());
     assert_eq!(
         h.events("session://game-prompt-seen"),
         [serde_json::json!({"kind": "gmcp", "text": PROMPT, "applied": false})]
@@ -1982,7 +1977,7 @@ async fn with_no_design_of_your_own_vosh_draws_your_prompt_as_the_game_does() {
     h.until_shown("Drawing is on.").await;
     h.type_line("look").await;
     h.until_last_row("[1020/1020hp 800/800mn 930/930mv]").await;
-    assert!(h.state.profile.lock().await.prompt.draws());
+    assert!(h.state.connection.lock().await.prompt.draws());
 
     // Change it in the game, and the drawn prompt follows.
     h.type_line(&format!("prompt {TYPED_X}")).await;

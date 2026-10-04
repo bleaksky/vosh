@@ -217,7 +217,7 @@ impl ProfileConfig {
             group_folders: profile.group_folders.clone(),
             prompt: None,
         };
-        config.set_prompt(profile.prompt.config().clone());
+        config.set_prompt(profile.prompt.clone());
         config
     }
 
@@ -337,8 +337,10 @@ impl ProfileConfig {
         // matching note in `from_profile`).
         profile.ui = self.ui.clone();
         // The custom prompt takes the file's [prompt] table, or the
-        // switch and the design an older file kept in [ui].
-        profile.set_prompt_config(self.prompt_config());
+        // switch and the design an older file kept in [ui]. A caller with
+        // a connection then hands it to the prompt engine, see
+        // [`crate::prompt::take_config`].
+        profile.prompt = self.prompt_config();
 
         // Plugin enabled-set is persisted; the actual load happens in the
         // PluginManager wired into AppState.
@@ -516,7 +518,7 @@ pub(crate) fn load_at_launch(set: &ProfileSet, profile: &mut Profile) -> Vec<Str
     } else {
         // A profile that never saved a file is fresh, see
         // [`ProfileConfig::fresh`].
-        profile.set_prompt_config(vosh_prompt::PromptConfig::fresh());
+        profile.prompt = vosh_prompt::PromptConfig::fresh();
     }
     let global_path = set.global_path();
     match GlobalConfig::load_shared(&global_path, set.scope()) {
@@ -626,8 +628,8 @@ mod tests {
 
     /// Lay `incoming` over the live profile as a switch, `#profile load`
     /// or `#profile reset` does: the file's settings, then the count on
-    /// the connection follows them.
-    fn lay_over(
+    /// the connection follows them and the prompt engine takes the table.
+    pub(super) fn lay_over(
         incoming: &ProfileConfig,
         profile: &mut Profile,
         c: &mut Connection,
@@ -636,6 +638,8 @@ mod tests {
         let warnings = incoming.apply_to(profile);
         c.tick
             .adopt(&mut profile.tick, &before, tokio::time::Instant::now());
+        let table = profile.prompt.clone();
+        crate::prompt::take_config(profile, c, table);
         warnings
     }
 
@@ -824,8 +828,10 @@ mod tests {
 /// copy, and the copy kept before the first table.
 #[cfg(test)]
 mod prompt_tests {
+    use super::tests::lay_over;
     use super::*;
     use crate::disk::atomic::{release_unread, BACKUP_RETENTION};
+    use crate::session::connection::Connection;
     use vosh_prompt::config::{AabahranCapture, CaptureSource, RegexCapture};
     use vosh_prompt::{CaptureConfig, PromptConfig};
 
@@ -903,7 +909,7 @@ mod prompt_tests {
     #[test]
     fn every_save_writes_the_ui_copy_beside_the_table() {
         let mut live = Profile::default();
-        live.set_prompt_config(migrated());
+        crate::prompt::take_config(&mut live, &mut Connection::default(), migrated());
         let text = ProfileConfig::from_profile(&live).to_toml().unwrap();
         let table: toml::Table = text.parse().unwrap();
         assert_eq!(table["ui"]["prompt_template_enabled"].as_bool(), Some(true));
@@ -920,14 +926,14 @@ mod prompt_tests {
     #[test]
     fn the_table_and_the_ui_copy_round_trip() {
         let mut live = Profile::default();
-        live.set_prompt_config(migrated());
+        crate::prompt::take_config(&mut live, &mut Connection::default(), migrated());
         let text = ProfileConfig::from_profile(&live).to_toml().unwrap();
         let back = ProfileConfig::from_toml(&text).unwrap();
         assert_eq!(back.prompt_config(), migrated());
 
         let mut next = Profile::default();
         let _ = back.apply_to(&mut next);
-        assert_eq!(*next.prompt.config(), migrated());
+        assert_eq!(next.prompt, migrated());
         assert!(next.ui.prompt_template_enabled);
         assert_eq!(next.ui.prompt_template, TEMPLATE);
     }
@@ -935,7 +941,7 @@ mod prompt_tests {
     #[test]
     fn an_older_build_that_drops_the_table_still_draws_the_design() {
         let mut live = Profile::default();
-        live.set_prompt_config(migrated());
+        crate::prompt::take_config(&mut live, &mut Connection::default(), migrated());
         let text = ProfileConfig::from_profile(&live).to_toml().unwrap();
         // An older build reads [ui] alone and writes the file back without
         // the [prompt] table it does not know.
@@ -978,9 +984,10 @@ mod prompt_tests {
         assert_eq!(table["ui"]["prompt_template"].as_str(), Some(""));
 
         let mut live = Profile::default();
-        let _ = ProfileConfig::from_toml(&text).unwrap().apply_to(&mut live);
-        assert_eq!(*live.prompt.config(), PromptConfig::fresh());
-        assert!(!live.prompt.draws(), "it waits for you to turn it on");
+        let mut c = Connection::default();
+        let _ = lay_over(&ProfileConfig::from_toml(&text).unwrap(), &mut live, &mut c);
+        assert_eq!(live.prompt, PromptConfig::fresh());
+        assert!(!c.prompt.draws(), "it waits for you to turn it on");
     }
 
     #[test]
@@ -991,7 +998,7 @@ mod prompt_tests {
         let mut live = Profile::default();
         let leftover = &load_at_launch(&set, &mut live);
         assert!(leftover.is_empty(), "{leftover:?}");
-        assert_eq!(*live.prompt.config(), PromptConfig::fresh());
+        assert_eq!(live.prompt, PromptConfig::fresh());
         assert_eq!(ProfileConfig::from_profile(&live).ui.prompt_template, "");
 
         // A file of its own keeps what it says, a design or none. No
@@ -1002,8 +1009,8 @@ mod prompt_tests {
             file.save(&set.active_path()).unwrap();
             let mut live = Profile::default();
             let _ = load_at_launch(&set, &mut live);
-            assert_eq!(live.prompt.config().template, design);
-            assert_eq!(live.prompt.config().mirror, follows, "{design:?}");
+            assert_eq!(live.prompt.template, design);
+            assert_eq!(live.prompt.mirror, follows, "{design:?}");
         }
     }
 
@@ -1044,7 +1051,7 @@ mod prompt_tests {
             let mut live = Profile::default();
             let leftover = &load_at_launch(&set, &mut live);
             assert!(leftover.is_empty(), "{leftover:?}");
-            let prompt = live.prompt.config();
+            let prompt = &live.prompt;
             assert!(prompt.mirror);
             assert_eq!(prompt.template, same_as_the_game());
             assert_eq!(live.ui.prompt_template, same_as_the_game());
@@ -1069,7 +1076,7 @@ mod prompt_tests {
                 Some(same_as_the_game().as_str())
             );
             let again = ProfileConfig::from_toml(&text).unwrap().prompt_config();
-            assert_eq!(again, *live.prompt.config());
+            assert_eq!(again, live.prompt);
 
             // A file older builds wrote, with the design only in [ui] and
             // no codes, follows the game with no design.
@@ -1091,47 +1098,56 @@ mod prompt_tests {
         file.save(&set.active_path()).unwrap();
         let mut live = Profile::default();
         let _ = load_at_launch(&set, &mut live);
-        assert_eq!(live.prompt.config().template, TEMPLATE);
-        assert!(!live.prompt.config().mirror);
+        assert_eq!(live.prompt.template, TEMPLATE);
+        assert!(!live.prompt.mirror);
     }
 
     #[test]
     fn vosh_default_you_chose_stays_through_a_save() {
         let mut live = Profile::default();
-        live.set_prompt_config(PromptConfig {
-            draw: true,
-            capture: CaptureConfig::Aabahran(AabahranCapture {
-                prompt: vosh_prompt::testkit::mud::PROMPT.into(),
-                ..AabahranCapture::default()
-            }),
-            ..PromptConfig::fresh()
-        });
-        assert_eq!(live.prompt.config().template, same_as_the_game());
-        let mut chosen = live.prompt.config().clone();
+        let mut c = Connection::default();
+        crate::prompt::take_config(
+            &mut live,
+            &mut c,
+            PromptConfig {
+                draw: true,
+                capture: CaptureConfig::Aabahran(AabahranCapture {
+                    prompt: vosh_prompt::testkit::mud::PROMPT.into(),
+                    ..AabahranCapture::default()
+                }),
+                ..PromptConfig::fresh()
+            },
+        );
+        assert_eq!(live.prompt.template, same_as_the_game());
+        let mut chosen = live.prompt.clone();
         assert!(chosen.use_default_design());
-        live.set_prompt_config(chosen.clone());
+        crate::prompt::take_config(&mut live, &mut c, chosen.clone());
 
         let text = ProfileConfig::from_profile(&live).to_toml().unwrap();
         let table: toml::Table = text.parse().unwrap();
         assert_eq!(table["prompt"]["mirror"].as_bool(), Some(false));
         let mut next = Profile::default();
         let _ = ProfileConfig::from_toml(&text).unwrap().apply_to(&mut next);
-        assert_eq!(*next.prompt.config(), chosen);
-        assert_eq!(next.prompt.config().template, vosh_prompt::DEFAULT_DESIGN);
+        assert_eq!(next.prompt, chosen);
+        assert_eq!(next.prompt.template, vosh_prompt::DEFAULT_DESIGN);
     }
 
     #[test]
     fn a_design_that_follows_the_game_round_trips_and_an_older_build_draws_it() {
         let mut live = Profile::default();
-        live.set_prompt_config(PromptConfig {
-            draw: true,
-            capture: CaptureConfig::Aabahran(AabahranCapture {
-                prompt: vosh_prompt::testkit::mud::PROMPT.into(),
-                ..AabahranCapture::default()
-            }),
-            ..PromptConfig::fresh()
-        });
-        let follows = live.prompt.config().clone();
+        crate::prompt::take_config(
+            &mut live,
+            &mut Connection::default(),
+            PromptConfig {
+                draw: true,
+                capture: CaptureConfig::Aabahran(AabahranCapture {
+                    prompt: vosh_prompt::testkit::mud::PROMPT.into(),
+                    ..AabahranCapture::default()
+                }),
+                ..PromptConfig::fresh()
+            },
+        );
+        let follows = live.prompt.clone();
         assert!(follows.mirror);
         let text = ProfileConfig::from_profile(&live).to_toml().unwrap();
         let back = ProfileConfig::from_toml(&text).unwrap();
@@ -1169,17 +1185,18 @@ mod prompt_tests {
         let text = config.to_toml().unwrap();
 
         let mut live = Profile::default();
-        let _ = ProfileConfig::from_toml(&text).unwrap().apply_to(&mut live);
-        assert_eq!(*live.prompt.config(), aabahran);
+        let mut c = Connection::default();
+        let _ = lay_over(&ProfileConfig::from_toml(&text).unwrap(), &mut live, &mut c);
+        assert_eq!(*c.prompt.config(), aabahran);
         assert!(
-            live.prompt.forsaken(),
+            c.prompt.forsaken(),
             "an Aabahran capture holds the rules on any host"
         );
 
         // A reset hands back the default table.
-        let _ = ProfileConfig::default().apply_to(&mut live);
-        assert!(live.prompt.config().is_default());
-        assert!(!live.prompt.forsaken());
+        let _ = lay_over(&ProfileConfig::default(), &mut live, &mut c);
+        assert!(c.prompt.config().is_default());
+        assert!(!c.prompt.forsaken());
         assert!(!live.ui.prompt_template_enabled);
     }
 

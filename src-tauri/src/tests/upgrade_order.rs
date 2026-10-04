@@ -230,7 +230,7 @@ async fn launch_runs_the_upgrades_in_order() {
     {
         let p = state.profile.lock().await;
         assert_eq!(p.ui.enabled_presets, with_rollout);
-        assert!(p.prompt.config().capture.is_migrated());
+        assert!(p.prompt.capture.is_migrated());
         let trigger = p.triggers.get("prompt-capture").expect("the moved trigger");
         assert!(!trigger.enabled);
         assert_eq!(theme_ids(&p.ui.custom_themes), ["custom-dusk"]);

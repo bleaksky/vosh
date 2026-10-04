@@ -578,7 +578,7 @@ mod tests {
 
     #[test]
     fn the_settings_payload_carries_nothing_of_your_prompt() {
-        let p = prompt_profile();
+        let (p, _) = prompt_profile();
         let json = serde_json::to_value(super::ui_config_of(&p, 5)).unwrap();
         let keys = json.as_object().unwrap();
         for key in ["prompt_template_enabled", "prompt_template", "prompt_show"] {
@@ -589,16 +589,16 @@ mod tests {
 
     #[test]
     fn a_settings_save_leaves_the_prompt_table_and_its_copy_alone() {
-        let mut p = prompt_profile();
-        let mut config = p.prompt.config().clone();
+        let (mut p, mut c) = prompt_profile();
+        let mut config = c.prompt.config().clone();
         config.show = vosh_prompt::PromptShow::Pinned;
-        p.set_prompt_config(config);
-        let table = p.prompt.config().clone();
+        crate::prompt::take_config(&mut p, &mut c, config);
+        let table = p.prompt.clone();
         let mut save = super::ui_config_of(&p, 4);
         save.font_size = 16;
         assert!(super::apply_ui_config(&mut p.ui, save, 4));
         assert_eq!(p.ui.font_size, 16);
-        assert_eq!(*p.prompt.config(), table);
+        assert_eq!(p.prompt, table);
 
         // A window from before the prompt section still sends the three
         // fields. They are read past and change nothing.
@@ -609,7 +609,7 @@ mod tests {
         fields.insert("prompt_show".into(), "text".into());
         let old: UiConfigPayload = serde_json::from_value(json).unwrap();
         assert!(super::apply_ui_config(&mut p.ui, old, 4));
-        assert_eq!(*p.prompt.config(), table);
+        assert_eq!(p.prompt, table);
 
         // The file keeps the table, and [ui] its copy of the switch and
         // the design for an older build.

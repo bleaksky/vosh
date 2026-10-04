@@ -63,7 +63,7 @@ fn case(template: &str, show: PromptShow) -> serde_json::Value {
         "show": show.name(),
         "payloads": payloads,
         "open_row": state.open_row,
-        "zone": session.p.prompt.zone(),
+        "zone": session.c.prompt.zone(),
         "native": native,
     })
 }
