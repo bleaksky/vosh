@@ -16,8 +16,10 @@ mod hook;
 mod library;
 mod limits;
 mod owner;
+mod pattern;
 mod report;
 mod state;
+mod strings;
 #[cfg(test)]
 mod test_support;
 
@@ -179,6 +181,7 @@ impl ScriptEngine {
         let limits = Limits::new();
         limits::install(&lua, &limits, lua.create_function(api::mud_log)?)?;
         library::install(&lua)?;
+        strings::install(&lua, &limits)?;
         // The plugins read the standard library as it stands now, so
         // before the shared `mud` table joins the globals.
         let envs = Envs::install(&lua)?;

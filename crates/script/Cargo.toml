@@ -8,6 +8,8 @@ description = "Embedded Lua scripting engine with sandboxed mud.* API."
 rust-version.workspace = true
 
 [dependencies]
+# Plain string.find searches with it, in time linear in the subject.
+memchr = "2"
 mlua = { version = "0.10", features = ["lua54", "vendored", "send"] }
 regex = "1"
 serde_json = { workspace = true }
