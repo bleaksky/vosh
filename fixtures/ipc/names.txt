@@ -1,4 +1,4 @@
-command affect_full_get()
+command affect_full_get(session?)
 command affects_snapshot_get(session?)
 command aliases_export()
 command aliases_import(json)

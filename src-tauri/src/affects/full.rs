@@ -34,13 +34,18 @@
 //! nothing and does not count as the previous list, so a recast under
 //! the song still reads as a rise once the list comes back.
 //!
-//! Each character's map is kept across logins in
-//! `<app_data_dir>/affect_full.toml`, keyed by `{host}:{port} {name}`.
-//! The file is written only when the map would change what it holds, a
-//! moment after a burst of changes settles, never on a tick and never
-//! for a login that finds the fulls it saved. It is a cache, so it keeps
-//! no backups, and a file Vosh cannot read is left alone while the store
-//! runs in memory for the session.
+//! Each session keeps a store of its own, [`AffectFull`], for the
+//! character on its connection, so a list, a login or a disconnect in one
+//! session never touches another's fulls. Every character's map is kept
+//! across logins in the one `<app_data_dir>/affect_full.toml`,
+//! [`FullFile`], keyed by `{host}:{port} {name}`. A store writes its map
+//! only when it would change what the file holds, a moment after a burst
+//! of changes settles, never on a tick and never for a login that finds
+//! the fulls it saved. Each write reads the file, changes one character
+//! and writes it back while it holds the file, so two sessions that write
+//! at once never drop each other's character. It is a cache, so it keeps
+//! no backups, and a file Vosh cannot read is left alone while the stores
+//! run in memory until you quit.
 //!
 //! This module is the one place that decides full. A server field for
 //! the cast length would be read here first, with the peak rule as the
@@ -48,8 +53,8 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use serde_json::Value;
@@ -59,6 +64,7 @@ use tracing::warn;
 use crate::affects::snapshot::AFFECTS_PACKAGE;
 use crate::app::events::{broadcast, AFFECT_FULL_CHANGED};
 use crate::app::state::SharedState;
+use crate::sessions::Session;
 
 /// The shape this build writes.
 const FILE_VERSION: i64 = 1;
@@ -158,23 +164,72 @@ struct Left {
     hours: i64,
 }
 
-/// The store. One per app, in [`crate::app::state::AppState`].
+/// The file every session's store keeps its character's map in. One per
+/// app, in [`crate::app::state::AppState`].
+#[derive(Debug, Default)]
+pub(crate) struct FullFile {
+    /// Where the file is, set at launch. None reads and writes nothing,
+    /// as in tests that set none. A read of the file holds it, and so
+    /// does a write through its read, change and write, so one session's
+    /// write never lands between another's read and write. Under it a
+    /// write takes its store's lock, and no step takes it under a store's
+    /// lock.
+    path: Mutex<Option<PathBuf>>,
+    /// The file did not read this run, so nothing is written over it.
+    unreadable: AtomicBool,
+    /// Files written, for the tests.
+    writes: AtomicUsize,
+}
+
+impl FullFile {
+    fn path(&self) -> MutexGuard<'_, Option<PathBuf>> {
+        self.path.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Keep maps in `path` from now on.
+    pub(crate) fn set_path(&self, path: PathBuf) {
+        *self.path() = Some(path);
+    }
+
+    /// How many files the stores wrote here.
+    #[cfg(test)]
+    pub(crate) fn writes(&self) -> usize {
+        self.writes.load(Ordering::Acquire)
+    }
+
+    /// The map the file keeps for `key`, empty when it keeps none or the
+    /// file does not read. A file that does not read is left alone until
+    /// you quit.
+    fn read(&self, key: &str) -> FullMap {
+        let path = self.path();
+        let Some(path) = path.as_ref() else {
+            return FullMap::new();
+        };
+        match read_file(path) {
+            Ok(Some(table)) => characters_of(&table)
+                .and_then(|characters| characters.get(key))
+                .map(map_of)
+                .unwrap_or_default(),
+            Ok(None) => FullMap::new(),
+            Err(()) => {
+                warn!(path = %path.display(), "affect_full: the file does not read, so Vosh keeps the fulls in memory");
+                self.unreadable.store(true, Ordering::Release);
+                FullMap::new()
+            }
+        }
+    }
+}
+
+/// The store of one session. Each [`Session`] holds one.
 #[derive(Debug, Default)]
 pub(crate) struct AffectFull {
     inner: Mutex<Inner>,
     /// Bumped by every change, so only the last write of a burst runs.
     write_gen: AtomicU64,
-    /// Files written, for the tests.
-    writes: AtomicUsize,
 }
 
 #[derive(Debug, Default)]
 struct Inner {
-    /// The file, set at launch. None writes nothing, as in tests that
-    /// do not set one.
-    path: Option<PathBuf>,
-    /// The file did not read this session, so nothing is written over it.
-    unreadable: bool,
     /// The logged in character's key, None until the game names it.
     character: Option<String>,
     /// The fulls of the affects on you, which the panes draw.
@@ -210,7 +265,6 @@ impl Inner {
 /// One write of a character's map.
 #[derive(Debug)]
 struct WriteJob {
-    path: PathBuf,
     character: String,
     full: FullMap,
 }
@@ -220,20 +274,9 @@ impl AffectFull {
         self.inner.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Keep maps in `path` from now on.
-    pub(crate) fn set_path(&self, path: PathBuf) {
-        self.lock().path = Some(path);
-    }
-
     /// The live map.
     pub(crate) fn map(&self) -> FullMap {
         self.lock().full.clone()
-    }
-
-    /// How many files this store wrote.
-    #[cfg(test)]
-    pub(crate) fn writes(&self) -> usize {
-        self.writes.load(Ordering::Acquire)
     }
 
     /// Take in a GMCP packet. Returns the new map when a Char.Affects
@@ -327,8 +370,8 @@ impl AffectFull {
         (inner.full != before).then(|| inner.full.clone())
     }
 
-    /// [`Self::character_known_with`] with the map the file holds.
-    pub(crate) fn character_known(&self, key: String) -> Option<FullMap> {
+    /// [`Self::character_known_with`] with the map `file` holds.
+    pub(crate) fn character_known(&self, file: &FullFile, key: String) -> Option<FullMap> {
         {
             let inner = self.lock();
             if inner.character.as_deref() == Some(key.as_str()) {
@@ -337,9 +380,9 @@ impl AffectFull {
         }
         // A character that changes on one connection writes first.
         if self.lock().character.is_some() {
-            self.flush();
+            self.flush(file);
         }
-        let saved = self.read_saved(&key);
+        let saved = file.read(&key);
         self.character_known_with(key, saved)
     }
 
@@ -348,20 +391,15 @@ impl AffectFull {
     pub(crate) fn connect(&self) -> bool {
         let mut inner = self.lock();
         let had = !inner.full.is_empty();
-        let path = inner.path.take();
-        let unreadable = inner.unreadable;
-        *inner = Inner {
-            path,
-            unreadable,
-            ..Inner::default()
-        };
+        *inner = Inner::default();
         had
     }
 
-    /// The connection ended: write the character's map, then forget the
-    /// connection's state. Returns true when a map was showing.
-    pub(crate) fn disconnect(&self) -> bool {
-        self.flush();
+    /// The connection ended: write the character's map to `file`, then
+    /// forget the connection's state. Returns true when a map was
+    /// showing.
+    pub(crate) fn disconnect(&self, file: &FullFile) -> bool {
+        self.flush(file);
         self.connect()
     }
 
@@ -376,25 +414,32 @@ impl AffectFull {
         self.write_gen.load(Ordering::Acquire) == ticket
     }
 
-    /// Write the character's map now when it differs from what the file
-    /// holds. Nothing is written before the game names the character.
-    /// Returns whether a file was written.
-    pub(crate) fn flush(&self) -> bool {
+    /// Write the character's map to `file` now when it differs from what
+    /// the file holds. Nothing is written before the game names the
+    /// character. Returns whether the file was written.
+    pub(crate) fn flush(&self, file: &FullFile) -> bool {
+        let path = file.path();
+        let Some(path) = path.as_ref() else {
+            return false;
+        };
+        if file.unreadable.load(Ordering::Acquire) {
+            return false;
+        }
         let Some(job) = self.take_write() else {
             return false;
         };
-        match write_character(&job) {
+        match write_character(path, &job) {
             Ok(()) => {
-                self.writes.fetch_add(1, Ordering::AcqRel);
+                file.writes.fetch_add(1, Ordering::AcqRel);
                 true
             }
             Err(WriteError::Unreadable) => {
-                warn!(path = %job.path.display(), "affect_full: the file does not read, so Vosh keeps the fulls in memory");
-                self.lock().unreadable = true;
+                warn!(path = %path.display(), "affect_full: the file does not read, so Vosh keeps the fulls in memory");
+                file.unreadable.store(true, Ordering::Release);
                 false
             }
             Err(WriteError::Io(e)) => {
-                warn!(error = %e, path = %job.path.display(), "affect_full: write failed");
+                warn!(error = %e, path = %path.display(), "affect_full: write failed");
                 // What the file holds is not known now, so the next flush
                 // tries again.
                 let mut inner = self.lock();
@@ -408,42 +453,13 @@ impl AffectFull {
 
     fn take_write(&self) -> Option<WriteJob> {
         let mut inner = self.lock();
-        if inner.unreadable {
-            return None;
-        }
-        let path = inner.path.clone()?;
         let character = inner.character.clone()?;
         let full = inner.kept();
         if inner.stored.as_ref() == Some(&full) {
             return None;
         }
         inner.stored = Some(full.clone());
-        Some(WriteJob {
-            path,
-            character,
-            full,
-        })
-    }
-
-    /// The map the file keeps for `key`, empty when it keeps none or the
-    /// file does not read. A file that does not read is left alone for
-    /// the rest of the session.
-    fn read_saved(&self, key: &str) -> FullMap {
-        let Some(path) = self.lock().path.clone() else {
-            return FullMap::new();
-        };
-        match read_file(&path) {
-            Ok(Some(table)) => characters_of(&table)
-                .and_then(|characters| characters.get(key))
-                .map(map_of)
-                .unwrap_or_default(),
-            Ok(None) => FullMap::new(),
-            Err(()) => {
-                warn!(path = %path.display(), "affect_full: the file does not read, so Vosh keeps the fulls in memory");
-                self.lock().unreadable = true;
-                FullMap::new()
-            }
-        }
+        Some(WriteJob { character, full })
     }
 }
 
@@ -481,12 +497,12 @@ enum WriteError {
     Io(std::io::Error),
 }
 
-/// Read the file, change the one character, and write the whole file
-/// through a temporary file and a rename, so the file always holds the
-/// old maps or the new ones. Unknown fields and other characters stay as
-/// they are. An empty map drops the character.
-fn write_character(job: &WriteJob) -> Result<(), WriteError> {
-    let mut table = match read_file(&job.path) {
+/// Read the file at `path`, change the one character, and write the whole
+/// file through a temporary file and a rename, so the file always holds
+/// the old maps or the new ones. Unknown fields and other characters stay
+/// as they are. An empty map drops the character.
+fn write_character(path: &Path, job: &WriteJob) -> Result<(), WriteError> {
+    let mut table = match read_file(path) {
         Ok(Some(table)) => table,
         Ok(None) => toml::Table::new(),
         Err(()) => return Err(WriteError::Unreadable),
@@ -511,13 +527,13 @@ fn write_character(job: &WriteJob) -> Result<(), WriteError> {
         characters.insert(job.character.clone(), toml::Value::Table(map));
     }
     let text = toml::to_string(&table).map_err(|e| WriteError::Io(std::io::Error::other(e)))?;
-    if let Some(parent) = job.path.parent() {
+    if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(WriteError::Io)?;
     }
-    let mut tmp = job.path.clone().into_os_string();
+    let mut tmp = path.to_path_buf().into_os_string();
     tmp.push(".tmp");
     let tmp = PathBuf::from(tmp);
-    let written = std::fs::write(&tmp, text).and_then(|()| std::fs::rename(&tmp, &job.path));
+    let written = std::fs::write(&tmp, text).and_then(|()| std::fs::rename(&tmp, path));
     if let Err(e) = written {
         let _ = std::fs::remove_file(&tmp);
         return Err(WriteError::Io(e));
@@ -525,33 +541,43 @@ fn write_character(job: &WriteJob) -> Result<(), WriteError> {
     Ok(())
 }
 
-/// Tell every window the map changed, and write it once the burst
-/// settles.
-pub(crate) fn changed<R: tauri::Runtime>(app: &AppHandle<R>, map: &FullMap) {
+/// Tell every window the map of `session` changed, and write it once the
+/// burst settles.
+fn changed<R: tauri::Runtime>(app: &AppHandle<R>, session: &Arc<Session>, map: &FullMap) {
     broadcast(app, AFFECT_FULL_CHANGED, map);
-    schedule_write(app);
+    schedule_write(app, session);
 }
 
-/// Write the map once no change has come for [`WRITE_DEBOUNCE`].
-pub(crate) fn schedule_write<R: tauri::Runtime>(app: &AppHandle<R>) {
+/// Write the map of `session` once no change to it has come for
+/// [`WRITE_DEBOUNCE`].
+fn schedule_write<R: tauri::Runtime>(app: &AppHandle<R>, session: &Arc<Session>) {
     let state: SharedState = app.state::<SharedState>().inner().clone();
-    let ticket = state.affect_full.schedule();
+    let session = Arc::clone(session);
+    let ticket = session.affect_full.schedule();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(WRITE_DEBOUNCE).await;
-        if !state.affect_full.write_due(ticket) {
+        if !session.affect_full.write_due(ticket) {
             return;
         }
-        let _ = tauri::async_runtime::spawn_blocking(move || state.affect_full.flush()).await;
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            session.affect_full.flush(&state.affect_file)
+        })
+        .await;
     });
 }
 
-/// Take in a GMCP packet on the session loop: a Char.Affects list that
-/// changes the map goes out to every window. The caller sends the list
-/// itself after this, so the windows never draw it against the old map.
-pub(crate) fn observe<R: tauri::Runtime>(app: &AppHandle<R>, package: &str, data: &Value) {
-    let state = app.state::<SharedState>();
-    if let Some(map) = state.affect_full.observe(package, data) {
-        changed(app, &map);
+/// Take in a GMCP packet on the loop of `session`: a Char.Affects list
+/// that changes its map goes out to every window. The caller sends the
+/// list itself after this, so the windows never draw it against the old
+/// map.
+pub(crate) fn observe<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    session: &Arc<Session>,
+    package: &str,
+    data: &Value,
+) {
+    if let Some(map) = session.affect_full.observe(package, data) {
+        changed(app, session, &map);
     }
 }
 
@@ -559,7 +585,7 @@ pub(crate) fn observe<R: tauri::Runtime>(app: &AppHandle<R>, package: &str, data
 pub(crate) fn character_known<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
-    session: &crate::sessions::Session,
+    session: &Arc<Session>,
     character: &str,
 ) {
     let Some((host, port)) = session
@@ -571,24 +597,28 @@ pub(crate) fn character_known<R: tauri::Runtime>(
         return;
     };
     let key = character_key(&host, port, character);
-    if let Some(map) = state.affect_full.character_known(key) {
-        changed(app, &map);
+    if let Some(map) = session.affect_full.character_known(&state.affect_file, key) {
+        changed(app, session, &map);
     } else {
         // A map built before the name came belongs to it now.
-        schedule_write(app);
+        schedule_write(app, session);
     }
 }
 
-/// A new connection: nothing shows until its first list.
-pub(crate) fn connect<R: tauri::Runtime>(app: &AppHandle<R>, state: &SharedState) {
-    if state.affect_full.connect() {
+/// A new connection of `session`: nothing shows until its first list.
+pub(crate) fn connect<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session) {
+    if session.affect_full.connect() {
         broadcast(app, AFFECT_FULL_CHANGED, &FullMap::new());
     }
 }
 
-/// The connection ended: write the map, then clear it everywhere.
-pub(crate) fn disconnect<R: tauri::Runtime>(app: &AppHandle<R>, state: &SharedState) {
-    if state.affect_full.disconnect() {
+/// The connection of `session` ended: write its map, then clear it.
+pub(crate) fn disconnect<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    session: &Session,
+) {
+    if session.affect_full.disconnect(&state.affect_file) {
         broadcast(app, AFFECT_FULL_CHANGED, &FullMap::new());
     }
 }
@@ -620,11 +650,12 @@ mod tests {
             .collect()
     }
 
-    /// A store over its own temporary folder, never app data.
-    fn store_in(dir: &tempfile::TempDir) -> AffectFull {
-        let store = AffectFull::default();
-        store.set_path(affect_full_path(dir.path()));
-        store
+    /// A store, and the file in its own temporary folder, never app data,
+    /// that it writes.
+    fn store_in(dir: &tempfile::TempDir) -> (AffectFull, FullFile) {
+        let file = FullFile::default();
+        file.set_path(affect_full_path(dir.path()));
+        (AffectFull::default(), file)
     }
 
     const ILSABET: &str = "aabahran.com:4000 ilsabet";
@@ -763,14 +794,14 @@ mod tests {
     #[test]
     fn nothing_is_written_before_the_character_is_known() {
         let dir = tempfile::tempdir().unwrap();
-        let store = store_in(&dir);
+        let (store, file) = store_in(&dir);
         seen(&store, &[("armor", 48)]);
-        assert!(!store.flush());
+        assert!(!store.flush(&file));
         assert!(!affect_full_path(dir.path()).exists());
         // Once the game names the character, the map built so far is its.
-        store.character_known(ILSABET.into());
-        assert!(store.flush());
-        assert_eq!(store.writes(), 1);
+        store.character_known(&file, ILSABET.into());
+        assert!(store.flush(&file));
+        assert_eq!(file.writes(), 1);
         let text = std::fs::read_to_string(affect_full_path(dir.path())).unwrap();
         assert!(text.contains("version = 1"), "{text}");
         assert!(text.contains("armor = 48"), "{text}");
@@ -779,15 +810,15 @@ mod tests {
     #[test]
     fn a_tick_with_no_change_writes_nothing() {
         let dir = tempfile::tempdir().unwrap();
-        let store = store_in(&dir);
-        store.character_known(ILSABET.into());
+        let (store, file) = store_in(&dir);
+        store.character_known(&file, ILSABET.into());
         seen(&store, &[("armor", 48)]);
-        assert!(store.flush());
+        assert!(store.flush(&file));
         for hours in (40..48).rev() {
             seen(&store, &[("armor", hours)]);
-            assert!(!store.flush(), "a tick at {hours} writes nothing");
+            assert!(!store.flush(&file), "a tick at {hours} writes nothing");
         }
-        assert_eq!(store.writes(), 1);
+        assert_eq!(file.writes(), 1);
     }
 
     #[test]
@@ -798,18 +829,18 @@ mod tests {
         // The name first, then the list, and the list first, then the name.
         for name_first in [true, false] {
             std::fs::write(&path, text).unwrap();
-            let store = store_in(&dir);
+            let (store, file) = store_in(&dir);
             if name_first {
-                store.character_known(ILSABET.into());
+                store.character_known(&file, ILSABET.into());
                 seen(&store, &[("armor", 31)]);
             } else {
                 seen(&store, &[("armor", 31)]);
-                store.character_known(ILSABET.into());
+                store.character_known(&file, ILSABET.into());
             }
             assert_eq!(store.map(), map(&[("armor", 48)]));
-            assert!(!store.flush(), "the file holds these fulls already");
-            assert!(store.disconnect(), "a map was showing");
-            assert_eq!(store.writes(), 0, "nor does logging out write");
+            assert!(!store.flush(&file), "the file holds these fulls already");
+            assert!(store.disconnect(&file), "a map was showing");
+            assert_eq!(file.writes(), 0, "nor does logging out write");
             assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
         }
     }
@@ -823,17 +854,17 @@ mod tests {
             "version = 1\n\n[characters.\"aabahran.com:4000 ilsabet\"]\narmor = 48\nfly = 53\n",
         )
         .unwrap();
-        let store = store_in(&dir);
-        store.character_known(ILSABET.into());
+        let (store, file) = store_in(&dir);
+        store.character_known(&file, ILSABET.into());
         seen(&store, &[("armor", 31)]);
-        assert!(store.flush());
+        assert!(store.flush(&file));
         let table: toml::Table = std::fs::read_to_string(&path).unwrap().parse().unwrap();
         assert_eq!(map_of(&table["characters"][ILSABET]), map(&[("armor", 48)]));
         // A login with nothing on you drops the character.
-        let next = store_in(&dir);
-        next.character_known(ILSABET.into());
+        let (next, file) = store_in(&dir);
+        next.character_known(&file, ILSABET.into());
         assert_eq!(seen(&next, &[]), None, "the pane had nothing to show");
-        assert!(next.flush());
+        assert!(next.flush(&file));
         let table: toml::Table = std::fs::read_to_string(&path).unwrap().parse().unwrap();
         assert!(!table["characters"]
             .as_table()
@@ -852,16 +883,16 @@ mod tests {
     #[test]
     fn quitting_takes_affects_off_one_at_a_time_and_the_file_keeps_their_fulls() {
         let dir = tempfile::tempdir().unwrap();
-        let store = store_in(&dir);
-        store.character_known(ILSABET.into());
+        let (store, file) = store_in(&dir);
+        store.character_known(&file, ILSABET.into());
         seen(&store, &[("armor", 48), ("sanctuary", 10)]);
         seen(&store, &[("armor", 31), ("sanctuary", 5)]);
-        assert!(store.flush());
+        assert!(store.flush(&file));
         quit(&store, &[("armor", 31), ("sanctuary", 5)]);
         assert!(store.map().is_empty(), "the pane shows what the game sends");
-        assert!(!store.flush(), "the file keeps the fulls");
-        store.disconnect();
-        assert_eq!(store.writes(), 1);
+        assert!(!store.flush(&file), "the file keeps the fulls");
+        store.disconnect(&file);
+        assert_eq!(file.writes(), 1);
         let text = std::fs::read_to_string(affect_full_path(dir.path())).unwrap();
         let table: toml::Table = text.parse().unwrap();
         assert_eq!(
@@ -869,8 +900,8 @@ mod tests {
             map(&[("armor", 48), ("sanctuary", 10)])
         );
         // The next login picks up where you quit.
-        let next = store_in(&dir);
-        next.character_known(ILSABET.into());
+        let (next, file) = store_in(&dir);
+        next.character_known(&file, ILSABET.into());
         assert_eq!(
             seen(&next, &[("armor", 31), ("sanctuary", 5)]),
             Some(map(&[("armor", 48), ("sanctuary", 10)]))
@@ -911,14 +942,14 @@ mod tests {
     #[test]
     fn quitting_to_play_another_character_writes_the_first_ones_fulls() {
         let dir = tempfile::tempdir().unwrap();
-        let store = store_in(&dir);
-        store.character_known(ILSABET.into());
+        let (store, file) = store_in(&dir);
+        store.character_known(&file, ILSABET.into());
         seen(&store, &[("armor", 48)]);
         seen(&store, &[("armor", 31)]);
         quit(&store, &[("armor", 31)]);
-        store.character_known("aabahran.com:4000 ondrevar".into());
+        store.character_known(&file, "aabahran.com:4000 ondrevar".into());
         assert_eq!(seen(&store, &[("armor", 20)]), Some(map(&[("armor", 20)])));
-        store.disconnect();
+        store.disconnect(&file);
         let text = std::fs::read_to_string(affect_full_path(dir.path())).unwrap();
         let table: toml::Table = text.parse().unwrap();
         let characters = table["characters"].as_table().unwrap();
@@ -932,8 +963,8 @@ mod tests {
     #[test]
     fn a_round_of_buffs_inside_the_wait_writes_once() {
         let dir = tempfile::tempdir().unwrap();
-        let store = store_in(&dir);
-        store.character_known(ILSABET.into());
+        let (store, file) = store_in(&dir);
+        store.character_known(&file, ILSABET.into());
         let mut tickets = Vec::new();
         for (i, name) in ["armor", "shield", "bless", "sanctuary"].iter().enumerate() {
             let mut affects: Vec<(&str, i64)> = ["armor", "shield", "bless", "sanctuary"][..=i]
@@ -948,28 +979,28 @@ mod tests {
         assert_eq!(due, [false, false, false, true]);
         for &t in &tickets {
             if store.write_due(t) {
-                store.flush();
+                store.flush(&file);
             }
         }
-        assert_eq!(store.writes(), 1);
+        assert_eq!(file.writes(), 1);
     }
 
     #[test]
     fn disconnect_writes_then_empties() {
         let dir = tempfile::tempdir().unwrap();
-        let store = store_in(&dir);
-        store.character_known(ILSABET.into());
+        let (store, file) = store_in(&dir);
+        store.character_known(&file, ILSABET.into());
         seen(&store, &[("armor", 48)]);
-        assert!(store.disconnect(), "a map was showing");
+        assert!(store.disconnect(&file), "a map was showing");
         assert!(store.map().is_empty());
-        assert_eq!(store.writes(), 1);
+        assert_eq!(file.writes(), 1);
         // The next login reads it back.
-        let next = store_in(&dir);
-        next.character_known(ILSABET.into());
+        let (next, file) = store_in(&dir);
+        next.character_known(&file, ILSABET.into());
         assert_eq!(seen(&next, &[("armor", 31)]), Some(map(&[("armor", 48)])));
         // Another character on the same world keeps its own.
-        let other = store_in(&dir);
-        other.character_known("aabahran.com:4000 ondrevar".into());
+        let (other, file) = store_in(&dir);
+        other.character_known(&file, "aabahran.com:4000 ondrevar".into());
         assert_eq!(seen(&other, &[("armor", 31)]), Some(map(&[("armor", 31)])));
     }
 
@@ -982,14 +1013,14 @@ mod tests {
             "version = 1\nnote = \"kept\"\n\n[characters.\"aabahran.com:4000 ondrevar\"]\nhaste = 26\n\n[characters.\"aabahran.com:4000 ilsabet\"]\narmor = 12\n\"stone skin\" = \"fifty\"\n",
         )
         .unwrap();
-        let store = store_in(&dir);
-        store.character_known(ILSABET.into());
+        let (store, file) = store_in(&dir);
+        store.character_known(&file, ILSABET.into());
         // The saved armor is 12, less than the 31 on you: a newer cast.
         assert_eq!(
             seen(&store, &[("armor", 31), ("stone skin", 50)]),
             Some(map(&[("armor", 31), ("stone skin", 50)]))
         );
-        assert!(store.flush());
+        assert!(store.flush(&file));
         let table: toml::Table = std::fs::read_to_string(&path).unwrap().parse().unwrap();
         assert_eq!(table["note"].as_str(), Some("kept"));
         let characters = table["characters"].as_table().unwrap();
@@ -1003,7 +1034,7 @@ mod tests {
         );
         // An empty list is what quitting ends with, so it keeps them.
         seen(&store, &[]);
-        assert!(!store.flush());
+        assert!(!store.flush(&file));
         let table: toml::Table = std::fs::read_to_string(&path).unwrap().parse().unwrap();
         assert_eq!(
             map_of(&table["characters"][ILSABET]),
@@ -1012,14 +1043,38 @@ mod tests {
     }
 
     #[test]
+    fn two_sessions_keep_their_own_maps_and_both_characters_in_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let (one, file) = store_in(&dir);
+        let two = AffectFull::default();
+        let ondrevar = "aabahran.com:4001 ondrevar";
+        one.character_known(&file, ILSABET.into());
+        two.character_known(&file, ondrevar.into());
+        seen(&one, &[("armor", 48)]);
+        seen(&two, &[("sanctuary", 9)]);
+        assert!(one.flush(&file));
+        // A list and a disconnect in the second session leave the first
+        // session's map alone.
+        seen(&two, &[("sanctuary", 8)]);
+        assert!(two.disconnect(&file));
+        assert_eq!(one.map(), map(&[("armor", 48)]));
+        assert!(two.map().is_empty());
+        let text = std::fs::read_to_string(affect_full_path(dir.path())).unwrap();
+        let table: toml::Table = text.parse().unwrap();
+        let characters = table["characters"].as_table().unwrap();
+        assert_eq!(map_of(&characters[ILSABET]), map(&[("armor", 48)]));
+        assert_eq!(map_of(&characters[ondrevar]), map(&[("sanctuary", 9)]));
+    }
+
+    #[test]
     fn a_file_that_does_not_read_is_left_alone() {
         let dir = tempfile::tempdir().unwrap();
         let path = affect_full_path(dir.path());
         std::fs::write(&path, "this is [not toml").unwrap();
-        let store = store_in(&dir);
-        store.character_known(ILSABET.into());
+        let (store, file) = store_in(&dir);
+        store.character_known(&file, ILSABET.into());
         assert_eq!(seen(&store, &[("armor", 31)]), Some(map(&[("armor", 31)])));
-        assert!(!store.flush());
+        assert!(!store.flush(&file));
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "this is [not toml");
         // The store still works in memory.
         assert_eq!(store.map(), map(&[("armor", 31)]));
@@ -1028,11 +1083,11 @@ mod tests {
     #[test]
     fn another_character_on_the_same_connection_writes_the_first_and_starts_over() {
         let dir = tempfile::tempdir().unwrap();
-        let store = store_in(&dir);
-        store.character_known(ILSABET.into());
+        let (store, file) = store_in(&dir);
+        store.character_known(&file, ILSABET.into());
         seen(&store, &[("armor", 48)]);
-        store.character_known("aabahran.com:4000 ondrevar".into());
-        assert_eq!(store.writes(), 1, "Ilsabet's fulls are written first");
+        store.character_known(&file, "aabahran.com:4000 ondrevar".into());
+        assert_eq!(file.writes(), 1, "Ilsabet's fulls are written first");
         assert!(store.map().is_empty());
         assert_eq!(seen(&store, &[("armor", 20)]), Some(map(&[("armor", 20)])));
         let text = std::fs::read_to_string(affect_full_path(dir.path())).unwrap();

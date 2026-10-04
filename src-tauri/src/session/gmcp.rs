@@ -108,7 +108,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     // A list that changes the affect fulls sends them first, so the
     // windows never draw the list against the old ones (a recast at
     // fewer hours than the old full).
-    crate::affects::full::observe(&conn.app, &msg.package, &msg.data);
+    crate::affects::full::observe(&conn.app, &conn.session, &msg.package, &msg.data);
     // Each package goes out on an event of its own, so a page listener
     // hears only the packages it reads, instead of every listener running
     // on every packet and filtering by `payload.package`. Tauri event

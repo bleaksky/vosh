@@ -237,6 +237,88 @@ async fn a_disconnect_in_one_session_leaves_the_other_connected_with_its_target(
     h.finish(grid).await;
 }
 
+/// The affect fulls `pairs`, as a store keeps them.
+fn fulls(pairs: &[(&str, i64)]) -> crate::affects::full::FullMap {
+    pairs.iter().map(|(k, v)| ((*k).to_string(), *v)).collect()
+}
+
+/// The fulls the file keeps for `character` on the fake game `server`.
+fn saved_fulls(h: &Harness, server: &FakeServer, character: &str) -> crate::affects::full::FullMap {
+    let file = crate::disk::paths::affect_full_path(h.dir.path());
+    let Ok(text) = std::fs::read_to_string(file) else {
+        return fulls(&[]);
+    };
+    let table: toml::Table = text.parse().expect("the file reads");
+    let key = crate::affects::full::character_key("127.0.0.1", server.port, character);
+    table
+        .get("characters")
+        .and_then(|characters| characters.get(key.as_str()))
+        .and_then(toml::Value::as_table)
+        .map(|t| {
+            t.iter()
+                .filter_map(|(k, v)| Some((k.clone(), v.as_integer()?)))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn affect_fulls_stay_in_their_session_and_a_disconnect_writes_only_its_own() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.state
+        .affect_file
+        .set_path(crate::disk::paths::affect_full_path(h.dir.path()));
+    {
+        let mut second = h.servers[1].options.lock().expect("the options");
+        second.name = "Builder".into();
+        second.affects = vec![
+            vosh_prompt::testkit::Affect::spell("sanctuary", 9),
+            vosh_prompt::testkit::Affect::spell("fly", 20),
+        ];
+    }
+    let (one, two) = (h.first, h.open_session().await);
+    h.connect_to(one, &h.servers[0]).await;
+    h.connect_to(two, &h.servers[1]).await;
+    let builder = fulls(&[("fly", 20), ("sanctuary", 9)]);
+    h.until("each session's login fulls", |h| {
+        h.fulls_of(one) == fulls(&[("armor", 44), ("bless", 6)]) && h.fulls_of(two) == builder
+    })
+    .await;
+    let tester = fulls(&[("armor", 48), ("bless", 6)]);
+    h.type_in(one, "cast 48 armor").await;
+    h.until("the recast in the first session", |h| {
+        h.fulls_of(one) == tester
+    })
+    .await;
+    assert_eq!(h.fulls_of(two), builder);
+
+    // The second session's disconnect writes Builder's fulls and clears
+    // its own map alone.
+    h.disconnect_session(two).await;
+    h.until("Builder's fulls in the file", |h| {
+        h.fulls_of(two).is_empty() && saved_fulls(h, &h.servers[1], "Builder") == builder
+    })
+    .await;
+    assert_eq!(h.fulls_of(one), tester);
+    let shown = crate::ipc::affects::affect_full_get(h.app.state(), Some(one))
+        .await
+        .expect("the first session's fulls");
+    assert_eq!(shown, tester);
+    let written = saved_fulls(&h, &h.servers[0], "Tester");
+    assert!(written.is_empty() || written == tester, "{written:?}");
+
+    // The first session's disconnect writes Tester's, and Builder's stay.
+    h.disconnect_session(one).await;
+    h.until("Tester's fulls in the file", |h| {
+        saved_fulls(h, &h.servers[0], "Tester") == tester
+    })
+    .await;
+    assert_eq!(saved_fulls(&h, &h.servers[1], "Builder"), builder);
+    h.finish(grid).await;
+}
+
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn char_vitals_from_each_game_binds_the_hp_of_its_own_session() {
