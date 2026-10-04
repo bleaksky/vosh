@@ -176,6 +176,21 @@ describe('StatusVitals', () => {
     expect(frameCss.slice(at, frameCss.indexOf('}', at))).toContain('color: var(--tertiary)');
   });
 
+  it('lets your target give way with an ellipsis and keeps every other item whole', () => {
+    expect(draw()).toContain('<span class="shell-status-target">Target<span');
+    const rule = (selector: string) => {
+      const at = frameCss.indexOf(`\n${selector} {`);
+      expect(at, selector).toBeGreaterThanOrEqual(0);
+      return frameCss.slice(at, frameCss.indexOf('}', at));
+    };
+    expect(rule('.shell-statusline > *')).toContain('flex: none;');
+    const target = rule('.shell-statusline > .shell-status-target');
+    expect(target).toContain('flex: 0 1 auto;');
+    expect(target).toContain('min-width: 0;');
+    expect(target).toContain('overflow: hidden;');
+    expect(target).toContain('text-overflow: ellipsis;');
+  });
+
   it('sets the warn tone in frame.css', () => {
     const at = frameCss.indexOf('.shell-statusline .is-warn {');
     expect(at).toBeGreaterThanOrEqual(0);
