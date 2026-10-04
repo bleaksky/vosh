@@ -36,7 +36,9 @@ export interface Preset {
   description: string;
   /** The worlds Get started suggests the preset on, each by the name
    *  KNOWN_WORLDS in useConnection.ts gives it. Empty when no world
-   *  suggests it. */
+   *  suggests it. Get started and the Presets page read this one field.
+   *  The presets step lists the suggestions outside Chat, and the Chat
+   *  step lists the ones in it. */
   suggest: readonly string[];
   /** One to three lines the game prints that show what the preset does,
    *  each in the game's own words, with the place in the game's source it
@@ -62,9 +64,11 @@ export interface PresetSampleLine {
 }
 
 // The Forsaken Lands, as KNOWN_WORLDS in useConnection.ts names it. Get
-// started suggests five presets there. Each changes only how a line looks,
-// and their samples show what most characters meet early, a room, a
-// fight, a cure and experience.
+// started suggests six presets there. The presets step lists five, each
+// changing only how a line looks, and their samples show what most
+// characters meet early, a room, a fight, a cure and experience. The Chat
+// step lists Tells you send, which puts the tells you send in the chat
+// pane.
 const FORSAKEN_LANDS = 'The Forsaken Lands';
 
 // Category names as Settings, Automation shows them over the presets.
@@ -754,7 +758,7 @@ export const PRESETS: Preset[] = [
     // day line, as the says and tells in fixtures/room-colors do, so the
     // sample holds no words a player wrote.
     sample: [{ text: "You tell Tolliver 'The day has begun.'", shows: 'chat.sent_tells' }],
-    suggest: [],
+    suggest: [FORSAKEN_LANDS],
     triggers: [
       {
         name: 'chat.sent_tells',

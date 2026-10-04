@@ -633,19 +633,34 @@ describe('the sample of every preset', () => {
   });
 });
 
-// Get started suggests presets by the world you connect to. Five suit The
+// Get started suggests presets by the world you connect to. Six suit The
 // Forsaken Lands, whose lines they match, and none suit another game.
+// The presets step lists the five outside Chat (Q5 of the first run
+// review), and the Chat step lists Tells you send, which the Presets page
+// rings as suggested too.
 describe('the worlds each preset suits', () => {
-  it('suggests the five that color a room, a fight, a cure and experience on The Forsaken Lands', () => {
-    expect(
-      PRESETS.filter((p) => p.suggest.includes('The Forsaken Lands')).map((p) => p.id),
-    ).toEqual([
+  const suggested = PRESETS.filter((p) => p.suggest.includes('The Forsaken Lands'));
+
+  it('suggests six on The Forsaken Lands, Tells you send among them', () => {
+    expect(suggested.map((p) => p.id)).toEqual([
+      'healing_basics',
+      'combat_outgoing',
+      'combat_incoming',
+      'loot_progression',
+      'sent_tells',
+      'room_and_time',
+    ]);
+  });
+
+  it('lists the five that color a room, a fight, a cure and experience on the presets step', () => {
+    expect(suggested.filter((p) => p.category !== 'chat').map((p) => p.id)).toEqual([
       'healing_basics',
       'combat_outgoing',
       'combat_incoming',
       'loot_progression',
       'room_and_time',
     ]);
+    expect(suggested.filter((p) => p.category === 'chat').map((p) => p.id)).toEqual(['sent_tells']);
   });
 
   it('names only worlds Vosh knows, each once', () => {
