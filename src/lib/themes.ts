@@ -1217,6 +1217,16 @@ export function themeTokens(theme: AppTheme): ChromeTokens {
   return deriveChrome(theme.xterm, theme.chrome);
 }
 
+/** The palette the game draws in while you play. With Fit game colors on
+ *  (`fit`) it is the published palette with the theme's fitted slots laid
+ *  over it, unless the theme keeps out. Off, or for a theme with nothing
+ *  fitted, it is the published palette. The window tokens, Settings and
+ *  log exports read the published palette, theme.xterm. */
+export function playPalette(theme: AppTheme, fit: boolean): XtermPalette {
+  if (!fit || theme.fitGameColors === false || !theme.fitted) return theme.xterm;
+  return { ...theme.xterm, ...theme.fitted };
+}
+
 // User-authored themes, set by the Settings UI on load. Merged into
 // THEMES via a Proxy so callers that iterate THEMES (the picker
 // dropdown, findTheme) see custom entries without changes.

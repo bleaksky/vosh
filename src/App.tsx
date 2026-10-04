@@ -47,6 +47,7 @@ import {
   subscribeBrightBoldChanged,
   subscribeBlinkTextChanged,
   subscribeReadableHighlightsChanged,
+  subscribeFitGameColorsChanged,
   subscribeBaseAnsiChanged,
   subscribeCustomThemesChanged,
   subscribeMigrationApplied,
@@ -81,6 +82,7 @@ import { customToAppTheme, findTheme, setCustomThemes, themeTokens } from './lib
 import { parseHex, toRgba } from './lib/color';
 import { setBaseAnsi } from './lib/baseAnsi';
 import { setReadableHighlights } from './lib/highlightGround';
+import { setFitGameColors } from './lib/fitGameColors';
 import { startStores } from './lib/stores';
 import { pushToast } from './lib/toasts';
 import { showLaunchNotices, showMigrationApplied } from './lib/launchNotices';
@@ -1006,6 +1008,7 @@ function App() {
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
         setBlinkChoice(cfg.blink_text);
+        setFitGameColors(cfg.fit_game_colors);
         setReadableHighlights(cfg.readable_highlights);
         applySplitDividerColor(cfg.split_divider_color);
 
@@ -1072,6 +1075,7 @@ function App() {
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
         setBlinkChoice(cfg.blink_text);
+        setFitGameColors(cfg.fit_game_colors);
         setReadableHighlights(cfg.readable_highlights);
         applySplitDividerColor(cfg.split_divider_color);
       },
@@ -1203,6 +1207,21 @@ function App() {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
     subscribeBlinkTextChanged((value) => setBlinkChoice(value)).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Settings save broadcasts Fit game colors. The terminal, the prompt
+    // band and the panes draw from it at once.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    subscribeFitGameColorsChanged(setFitGameColors).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
     });

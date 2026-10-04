@@ -8,6 +8,7 @@ import {
   type ChatInk,
 } from '../../lib/chatColors';
 import { getChatLines, subscribeChatLines, type ChatLine } from '../../lib/chatStore';
+import { usePlayPalette } from '../../lib/fitGameColors';
 import { useChatColors } from '../../lib/stores/chatColorsStore';
 import { themeTokens, type XtermPalette } from '../../lib/themes';
 import { useActiveTheme } from '../../lib/useActiveTheme';
@@ -33,7 +34,7 @@ export function ChatPane() {
   const channel = leaf?.props.channel ?? '';
   const [lines, setLines] = useState<ChatLine[]>(() => getChatLines());
   const theme = useActiveTheme();
-  const palette = theme.xterm;
+  const palette = usePlayPalette();
   const ground = useMemo(() => themeTokens(theme), [theme]);
   const colors = useChatColors();
   const scrollRef = useRef<HTMLDivElement | null>(null);

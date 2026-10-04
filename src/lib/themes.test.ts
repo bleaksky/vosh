@@ -29,8 +29,8 @@ import {
   customToAppTheme,
   findTheme,
   migrateCustomChrome,
+  playPalette,
   themeTokens,
-  type AppTheme,
   type XtermPalette,
 } from './themes';
 import credits from '../../public/theme-credits.txt?raw';
@@ -602,10 +602,25 @@ describe('Solarized', () => {
 // The fits are the Themes review's own (fit-survey.json), computed
 // ahead by lib/gameFit. These pin what the decisions say of them.
 describe('fitted game colors', () => {
-  const inPlay = (theme: AppTheme) => ({ ...theme.xterm, ...theme.fitted });
-  const misses = (id: string) => checks(inPlay(findTheme(id))).filter((c) => !c.ok);
+  const inPlay = (id: string) => playPalette(findTheme(id), true);
+  const misses = (id: string) => checks(inPlay(id)).filter((c) => !c.ok);
   const value = (id: string, check: string) =>
-    checks(inPlay(findTheme(id))).find((c) => c.id === check)?.value;
+    checks(inPlay(id)).find((c) => c.id === check)?.value;
+
+  it('draws play in the fitted slots while Fit game colors is on (Q2)', () => {
+    const kanso = findTheme('kanso-zen');
+    expect(inPlay('kanso-zen')).toEqual({ ...kanso.xterm, ...kanso.fitted });
+    expect(inPlay('kanso-zen').foreground).toBe('#c9cdcb');
+    expect(inPlay('kanso-zen').brightBlack).toBe('#92979d');
+    expect(inPlay('kanso-zen').brightWhite).toBe('#f0f5f2');
+    expect(inPlay('kanso-zen').background).toBe(kanso.xterm.background);
+    // Off, play draws the theme as published.
+    for (const theme of BUILTIN_THEMES)
+      expect(playPalette(theme, false), theme.id).toBe(theme.xterm);
+    // Solarized Dark keeps out, so play draws it as published (Q20).
+    const dark = findTheme('solarized-dark');
+    expect(playPalette(dark, true)).toBe(dark.xterm);
+  });
 
   it('stores only the slots the fit moved, from body text and the 16 colors', () => {
     for (const theme of BUILTIN_THEMES) {
