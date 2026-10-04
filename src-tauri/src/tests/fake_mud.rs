@@ -2281,8 +2281,8 @@ async fn lua_a_profile_switch_turns_its_plugins_on_and_the_others_off() {
 
 // What a plugin prints as it loads at launch waits for a terminal, then
 // shows once you connect: its print and its error as [lua] lines, and
-// the stop of a plugin that runs away. The guard keeps other tests off
-// the shared native grid.
+// the stop of a plugin that runs away. A plugin the profile lists twice
+// loads once. The guard keeps other tests off the shared native grid.
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn lua_a_plugin_load_prints_its_lines_once_you_connect() {
@@ -2302,7 +2302,8 @@ async fn lua_a_plugin_load_prints_its_lines_once_you_connect() {
         .expect("the manifest");
         std::fs::write(plugin.join("main.lua"), body).expect("the entry script");
     }
-    h.state.profile.lock().await.plugins.enabled = vec!["noisy".into(), "spin".into()];
+    h.state.profile.lock().await.plugins.enabled =
+        vec!["noisy".into(), "spin".into(), "noisy".into()];
     crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, plugins).await;
     assert!(h
         .state
@@ -2322,6 +2323,12 @@ async fn lua_a_plugin_load_prints_its_lines_once_you_connect() {
         "[lua] spin stays off until you save it under Scripts in Settings or restart Vosh.",
     )
     .await;
+    let noisy = h
+        .screen()
+        .iter()
+        .filter(|row| row.contains("noisy is here"))
+        .count();
+    assert_eq!(noisy, 1, "{:#?}", h.screen());
     h.finish(grid).await;
 }
 

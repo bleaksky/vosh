@@ -335,6 +335,18 @@ pub(crate) fn follow_profile_plugins(
     apply
 }
 
+/// Point the plugin list at `plugins_dir`, find the plugins in it, and
+/// mark the ones the live profile turns on.
+async fn note_plugins(state: &SharedState, plugins_dir: &std::path::Path) {
+    let enabled = state.profile.lock().await.plugins.enabled.clone();
+    let mut mgr = state.plugins.lock().await;
+    mgr.set_plugins_dir(plugins_dir.to_path_buf());
+    if let Err(e) = mgr.discover() {
+        error!(error = %e, "plugin discovery failed");
+    }
+    mgr.set_enabled(enabled);
+}
+
 /// Once a profile switch made the next profile live, turn its plugins on
 /// and the others off, and deliver what they ask for. Their lines print
 /// in the terminal, and what they send goes to the game when one
@@ -347,15 +359,7 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
         return;
     };
     let plugins_dir = crate::disk::paths::plugins_dir(app_data);
-    let enabled = state.profile.lock().await.plugins.enabled.clone();
-    {
-        let mut mgr = state.plugins.lock().await;
-        mgr.set_plugins_dir(plugins_dir.clone());
-        if let Err(e) = mgr.discover() {
-            error!(error = %e, "plugin discovery failed");
-        }
-        mgr.set_enabled(enabled);
-    }
+    note_plugins(state, &plugins_dir).await;
     let apply = {
         let mut p = state.profile.lock().await;
         follow_profile_plugins(&mut p, &plugins_dir)
@@ -390,48 +394,40 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
 }
 
 /// Find the plugins in `plugins_dir` and load each one the profile turns
-/// on, as launch does. What an entry script asks for applies as on every
-/// other path that runs Lua, so its timers, `mud.input` lines and prompt
-/// values take effect. No terminal shows and no game listens yet, so
-/// the lines it prints wait for [`show_launch_lines`], and what it would
-/// send goes to the log.
+/// on, once each in the order its list gives, as a switch does from a
+/// start with none running. What an entry script asks for applies as on
+/// every other path that runs Lua, so its timers, `mud.input` lines and
+/// prompt values take effect. No terminal shows and no game listens yet,
+/// so the lines it prints wait for [`show_launch_lines`], and what it
+/// would send goes to the log.
 pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     state: &SharedState,
     plugins_dir: std::path::PathBuf,
 ) {
-    let mut mgr = state.plugins.lock().await;
-    mgr.set_plugins_dir(plugins_dir.clone());
-    if let Err(e) = mgr.discover() {
-        error!(error = %e, "plugin discovery failed");
-    }
-    let enabled = {
-        let p = state.profile.lock().await;
-        p.plugins.enabled.clone()
+    note_plugins(state, &plugins_dir).await;
+    let apply = {
+        let mut p = state.profile.lock().await;
+        follow_profile_plugins(&mut p, &plugins_dir)
     };
-    mgr.set_enabled(enabled.clone());
-    for name in &enabled {
-        let apply = plugin_on(&mut *state.profile.lock().await, &plugins_dir, name);
-        let (bytes, echoes) = crate::session::effects::collect_script_result(
-            app,
-            &state.profile,
-            &state.lua_timers,
-            apply,
-        )
-        .await;
-        if !bytes.is_empty() {
-            info!(
-                name = %name,
-                bytes = bytes.len(),
-                "plugin sends at launch have no game to go to"
-            );
-        }
-        state
-            .launch_lua_lines
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .extend(echoes);
+    let (bytes, echoes) = crate::session::effects::collect_script_result(
+        app,
+        &state.profile,
+        &state.lua_timers,
+        apply,
+    )
+    .await;
+    if !bytes.is_empty() {
+        info!(
+            bytes = bytes.len(),
+            "plugin sends at launch have no game to go to"
+        );
     }
+    state
+        .launch_lua_lines
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .extend(echoes);
 }
 
 /// Print the lines the plugins printed as they loaded at launch, once,
