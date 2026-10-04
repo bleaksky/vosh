@@ -14,7 +14,6 @@ use tracing::warn;
 
 use crate::logs::{SharedLogStore, SharedScrollback};
 use crate::output::emit_output;
-use crate::profile::live::Profile;
 
 use super::connection::Connection;
 use super::lines::{LineAccumulator, Partial};
@@ -128,15 +127,8 @@ impl LogSession {
 
 /// Log the lines the stage still holds as the session ends, and keep them
 /// for scrollback, through [`end_held`].
-pub(super) async fn capture_held_lines(
-    profile: &Arc<Mutex<Profile>>,
-    connection: &Arc<Mutex<Connection>>,
-    log_sink: &LogSink,
-) {
-    let (log, kept) = {
-        let _p = profile.lock().await;
-        end_held(&mut *connection.lock().await, log_sink.id())
-    };
+pub(super) async fn capture_held_lines(connection: &Arc<Mutex<Connection>>, log_sink: &LogSink) {
+    let (log, kept) = end_held(&mut *connection.lock().await, log_sink.id());
     if !kept.is_empty() {
         let mut ring = log_sink.scrollback.lock().await;
         for text in kept {

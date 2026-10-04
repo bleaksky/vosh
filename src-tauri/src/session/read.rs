@@ -205,7 +205,6 @@ async fn handle_event<R: tauri::Runtime>(
 /// the output count after it.
 pub(super) async fn flush_hold<R: tauri::Runtime>(conn: &mut Conn<R>) {
     let out = {
-        let _p = conn.profile.lock().await;
         let mut c = conn.connection.lock().await;
         let mut out = Output::new(output_count() != conn.seen_output);
         hold_step(&mut c, &mut conn.accumulator, &mut out);

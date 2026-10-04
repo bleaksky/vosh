@@ -48,16 +48,12 @@ impl OutputSink<'_> {
 
     /// A prompt var changed. A read sends the prompt vars once after its
     /// output, and anything else sends them now.
-    async fn prompt_vars<R: tauri::Runtime>(
-        &mut self,
-        app: &AppHandle<R>,
-        profile: &Arc<Mutex<Profile>>,
-    ) {
+    async fn prompt_vars<R: tauri::Runtime>(&mut self, app: &AppHandle<R>) {
         match self {
             OutputSink::Batch(batch) => batch.prompt_vars = true,
             OutputSink::Direct => {
                 let state = app.state::<SharedState>();
-                emit_prompt_vars(app, profile, &state.connection, true).await;
+                emit_prompt_vars(app, &state.connection, true).await;
             }
         }
     }
@@ -99,16 +95,12 @@ impl ScriptIo<'_, '_> {
         }
     }
 
-    async fn prompt_vars<R: tauri::Runtime>(
-        &mut self,
-        app: &AppHandle<R>,
-        profile: &Arc<Mutex<Profile>>,
-    ) {
+    async fn prompt_vars<R: tauri::Runtime>(&mut self, app: &AppHandle<R>) {
         match self {
-            ScriptIo::Session(_, sink, _) => sink.prompt_vars(app, profile).await,
+            ScriptIo::Session(_, sink, _) => sink.prompt_vars(app).await,
             ScriptIo::Collect { .. } => {
                 let state = app.state::<SharedState>();
-                emit_prompt_vars(app, profile, &state.connection, true).await;
+                emit_prompt_vars(app, &state.connection, true).await;
             }
         }
     }
@@ -267,7 +259,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             guard.retain(|t| !apply.cancel_timers.contains(&t.timer_id));
         }
         if apply.prompt_vars_changed {
-            io.prompt_vars(app, profile).await;
+            io.prompt_vars(app).await;
         }
         if apply.inputs.is_empty() {
             return Ok(());

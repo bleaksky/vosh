@@ -214,10 +214,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     // session already sent leaves that output alone: its
                     // open row, its pinned prompt and what it holds all
                     // came after the text.
-                    let landed_last = {
-                        let _p = conn.profile.lock().await;
-                        !conn.connection.lock().await.prompt.stage.wrote_after(after)
-                    };
+                    let landed_last = !conn.connection.lock().await.prompt.stage.wrote_after(after);
                     if landed_last {
                         if hold_until.take().is_some() {
                             flush_hold(&mut conn).await;
@@ -228,7 +225,6 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                             warn!(error = %e, "letting go of held lines failed");
                         }
                     }
-                    let _p = conn.profile.lock().await;
                     conn.connection.lock().await.prompt.stage.local_write(after);
                 }
                 Some(OutgoingMsg::Walk(command)) => {
@@ -278,7 +274,6 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     let (gmcp, prompt, wrote) = (batch.gmcp, batch.prompt, batch.out.writes_text());
                     clock_until = finish_read(&mut conn, &mut log_sink, batch).await;
                     if gmcp || late_until.is_some() {
-                        let _p = conn.profile.lock().await;
                         let c = conn.connection.lock().await;
                         late_until =
                             late_repaint_after(&c, late_until, gmcp, prompt, wrote, Instant::now());
@@ -307,7 +302,6 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                                 let mut batch = conn.handle_read(&buf[..n], &log_sink).await;
                                 // The connection is going, so nothing waits.
                                 if batch.hold {
-                                    let _p = conn.profile.lock().await;
                                     let mut c = conn.connection.lock().await;
                                     hold_step(&mut c, &mut conn.accumulator, &mut batch.out);
                                 }
@@ -474,7 +468,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     conn.settle.frame_now(&conn.app);
     conn.settle
         .write_log(log_sink.logs.lock().await.as_mut(), &mut conn.perf);
-    capture_held_lines(&conn.profile, &conn.connection, &log_sink).await;
+    capture_held_lines(&conn.connection, &log_sink).await;
     capture_pending_line(&conn.app, &log_sink, &mut conn.accumulator).await;
 
     conn.connection.lock().await.tick.end_session();
@@ -556,19 +550,20 @@ async fn send_typed<R: tauri::Runtime>(
     // The send records a prompt candidate and closes the open row. On a
     // server that sends no Char.Vitals it also starts the next pulse,
     // after which the values the last prompt set go stale.
-    let pulse = {
-        let _p = conn.profile.lock().await;
-        let mut c = conn.connection.lock().await;
-        send_step(&mut c, &conn.accumulator, bytes, now_ms())
-    };
+    let pulse = send_step(
+        &mut *conn.connection.lock().await,
+        &conn.accumulator,
+        bytes,
+        now_ms(),
+    );
     // The frontend already echoed the typed line inline with the
     // on-screen prompt. Drop the buffered partial so the next chunk from
     // the server starts fresh on a new row instead of merging with the
     // displayed prompt.
     conn.accumulator.forget_partial();
     if pulse {
-        emit_hidden_change(&conn.app, &conn.profile, &conn.connection).await;
-        emit_prompt_vars(&conn.app, &conn.profile, &conn.connection, false).await;
+        emit_hidden_change(&conn.app, &conn.connection).await;
+        emit_prompt_vars(&conn.app, &conn.connection, false).await;
     }
     // The input line(s) go in the same log session as server output so
     // transcripts include both directions. While the server holds echo
