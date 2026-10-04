@@ -140,6 +140,56 @@ describe('AppearancePage', () => {
     });
   });
 
+  it('describes and credits the theme on screen under the gallery', async () => {
+    const caption = async (ui: UiConfig) => {
+      const container = doc.createElement('div');
+      doc.body.appendChild(container);
+      const root = createRoot(container as unknown as HTMLElement);
+      await act(async () => {
+        root.render(
+          createElement(AppearancePage, {
+            target: { group: 'appearance' },
+            navSeq: 0,
+            config: ui,
+            setConfig: () => undefined,
+            onError: () => undefined,
+            pathB: false,
+            navigate: () => undefined,
+            setLeaveGuard: () => undefined,
+          }),
+        );
+      });
+      const found = findAll(container, (el) =>
+        (el.getAttribute('class') ?? '').split(' ').includes('st-theme-caption'),
+      );
+      const shown = found.map((el) => ({
+        text: el.textContent,
+        className: el.getAttribute('class'),
+        after: el.parentNode?.childNodes[el.parentNode.childNodes.indexOf(el) - 1]?.nodeName,
+      }));
+      await act(async () => {
+        root.unmount();
+      });
+      return shown;
+    };
+
+    expect(await caption(config())).toEqual([
+      {
+        text:
+          'Arctic palette. Polar nights base, frost accents. ' +
+          'Its colors come from Nord by Sven Greb, under the MIT license.',
+        className: 'st-meta st-theme-caption',
+        after: 'FIELDSET',
+      },
+    ]);
+
+    const dusk = { id: 'dusk', label: 'Dusk', description: 'Low light.', xterm: {}, chrome: {} };
+    const custom = await caption({ ...config(), theme: 'dusk', custom_themes: [dusk] });
+    expect(custom.map((c) => c.text)).toEqual(['Low light.']);
+    const blank = { ...dusk, description: '' };
+    expect(await caption({ ...config(), theme: 'dusk', custom_themes: [blank] })).toEqual([]);
+  });
+
   it('starts Blinking text off while your system reduces motion and keeps your choice', async () => {
     // The window above answers every media query, reduce motion among
     // them, as a match.

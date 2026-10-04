@@ -57,7 +57,7 @@ export interface AppTheme {
 const kansoZen: AppTheme = {
   id: 'kanso-zen',
   label: 'Kanso Zen',
-  description: 'Calm Japanese-inspired dark. Cool-blue accent, sage / gold / red semantics.',
+  description: 'Calm Japanese dark. Cool blue accent, with sage, gold and red for status.',
   source: 'kanso.nvim',
   author: 'Webhooked',
   license: 'MIT',
@@ -98,7 +98,7 @@ const kansoZen: AppTheme = {
 const obsidianEmber: AppTheme = {
   id: 'obsidian-ember',
   label: 'Obsidian Ember',
-  description: 'Near-black warm neutral ramp, single ember accent, pastel ANSI.',
+  description: 'Warm near black ground, pastel colors and a single ember accent.',
   source: 'Vosh',
   author: 'James Wright',
   license: 'GPL-3.0',
@@ -131,13 +131,13 @@ const obsidianEmber: AppTheme = {
   chrome: { accent: '#ef8f2f', onAccent: '#140b02' },
 };
 
-// ── Tokyo Night Storm ───────────────────────────────────────────────
+// ── Tokyo Night ─────────────────────────────────────────────────────
 // Saturated blues, muted purples, signature deep navy. Accent on the
 // frost blue (`#7aa2f7`).
 const tokyoNight: AppTheme = {
   id: 'tokyo-night',
   label: 'Tokyo Night',
-  description: 'Storm variant. Cool blues, deep navy, frosted accents.',
+  description: 'Night variant. Cool blues, deep navy, frosted accents.',
   source: 'Tokyo Night',
   author: 'Enkia',
   license: 'MIT',
@@ -344,7 +344,7 @@ const classicVivid: AppTheme = {
 const dracula: AppTheme = {
   id: 'dracula',
   label: 'Dracula at Night',
-  description: "Dracula's colors on a darker ground, #1a1c23 where Dracula has #282a36.",
+  description: 'Dracula on a darker ground, #1a1c23 where Dracula has #282a36.',
   source: 'Dracula',
   author: 'Zeno Rocha',
   license: 'MIT',
@@ -420,7 +420,7 @@ const monokai: AppTheme = {
 const oneDark: AppTheme = {
   id: 'one-dark',
   label: 'One Dark',
-  description: 'Atom-style cool slate. Soft pastel semantics, blue accent.',
+  description: 'Cool slate in the style of Atom. Soft pastels, blue accent.',
   source: 'One Dark for Atom',
   author: 'GitHub',
   license: 'MIT',
@@ -540,7 +540,7 @@ const tangoDark: AppTheme = {
 const highContrast: AppTheme = {
   id: 'high-contrast',
   label: 'High Contrast',
-  description: 'Maximum readability. White text on off-black, yellow accent.',
+  description: 'Maximum readability. White text on near black, yellow accent.',
   source: 'Vosh',
   author: 'James Wright',
   license: 'GPL-3.0',

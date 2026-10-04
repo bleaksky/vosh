@@ -6,6 +6,7 @@ import {
   panelFontChoices,
   panelSizeChoices,
   sizeChoices,
+  themeCaption,
 } from '../../../lib/appearanceSettings';
 import { normalizePanelFont } from '../../../lib/panelFont';
 import { normalizePanelSize } from '../../../lib/panelSize';
@@ -28,7 +29,7 @@ import {
 } from '../../../lib/theme';
 import { parseThemeFile, ThemeFileError } from '../../../lib/themeImport';
 import { galleryThemes } from '../../../lib/themeThumb';
-import { BUILTIN_THEMES, customToAppTheme, setCustomThemes } from '../../../lib/themes';
+import { BUILTIN_THEMES, customToAppTheme, findTheme, setCustomThemes } from '../../../lib/themes';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
 import { Button, Card, Row, Section, Segmented, Select, Toggle } from '../ui';
@@ -37,7 +38,8 @@ import { CollapseRows } from './appearance/CollapseRows';
 import { ThemeGallery } from './appearance/ThemeGallery';
 
 // Appearance, from the approved board (SettingsAppearance.dc.html).
-// Theme holds Import… and the gallery of every theme, then follow
+// Theme holds Import… and the gallery of every theme, a caption that
+// describes the theme on screen and credits its colors, then follow
 // system appearance and the light and dark pair it switches between.
 // Terminal text holds the font, the size, the line height, whether MUD
 // text takes the theme's colors, whether Vosh keeps the colors your
@@ -130,6 +132,8 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
 
   const themes = galleryThemes(BUILTIN_THEMES, config.custom_themes.map(customToAppTheme));
   const shown = activeThemeFor(config);
+  // An id no theme has draws the fallback theme, so the caption names it.
+  const caption = themeCaption(themes.find((t) => t.id === shown) ?? findTheme(shown));
   // While follow is on the arrow keys stay among the themes the OS
   // shows now, so stepping through the gallery never fills the other
   // slot and each step lands on the radio it checks.
@@ -230,6 +234,7 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
             onPick={pick}
             appearance={arrowAppearance}
           />
+          {caption !== '' && <p className="st-meta st-theme-caption">{caption}</p>}
           <Row
             anchor="follow-system"
             label="Follow system appearance"

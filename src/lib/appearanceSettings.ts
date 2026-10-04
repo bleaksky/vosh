@@ -16,7 +16,7 @@ import { normalizePanelSize, PANEL_SIZE_TERMINAL } from './panelSize';
 import { DEFAULT_LIGHT_THEME_ID, type CustomTheme, type SystemFontEntry } from './session';
 import type { ThemePrefs } from './theme';
 import { themeIdFromLabel, uniqueThemeId } from './themeImport';
-import { DEFAULT_THEME_ID, themeTokens, type AppTheme } from './themes';
+import { DEFAULT_THEME_ID, themeTokens, type AppTheme, type ThemeLicense } from './themes';
 
 /** One option of a settings select. */
 export interface Choice {
@@ -178,6 +178,35 @@ export function stepGalleryTheme(
     if (appearance === undefined || themeTokens(theme).appearance === appearance) return theme.id;
   }
   return from;
+}
+
+// ── Theme caption ────────────────────────────────────────────────────
+
+const LICENSE_TERMS: Record<ThemeLicense, string> = {
+  MIT: 'under the MIT license',
+  'GPL-3.0': 'under the GPL version 3',
+  'Public domain': 'in the public domain',
+  'None published': 'with no license published',
+};
+
+/** The caption under the theme gallery for the theme on screen: its
+ *  description, then for a built in theme one sentence that names
+ *  where its colors come from, who made them, and their license. A
+ *  custom theme shows its description alone, and nothing when that is
+ *  blank. */
+export function themeCaption(theme: AppTheme): string {
+  const { source, author, license } = theme;
+  const parts = [theme.description.trim()];
+  if (source !== undefined && author !== undefined && license !== undefined) {
+    const terms = LICENSE_TERMS[license];
+    const from = author === source ? source : `${source} by ${author}`;
+    parts.push(
+      source === 'Vosh'
+        ? `${author} made it for Vosh, ${terms}.`
+        : `Its colors come from ${from}, ${terms}.`,
+    );
+  }
+  return parts.filter((part) => part !== '').join(' ');
 }
 
 // ── Custom themes ────────────────────────────────────────────────────

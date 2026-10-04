@@ -16,6 +16,7 @@ import {
   sizeChoices,
   stepGalleryTheme,
   THEME_SLOT_GROUPS,
+  themeCaption,
   withBaseColor,
 } from './appearanceSettings';
 import { ANSI_SLOTS, CANONICAL_ANSI_16 } from './baseAnsi';
@@ -293,6 +294,55 @@ const custom = (id: string, label = id): CustomTheme => ({
   description: '',
   xterm: {},
   chrome: {},
+});
+
+describe('themeCaption', () => {
+  it('follows the description with the source, the author and the license', () => {
+    expect(themeCaption(findTheme('kanso-zen'))).toBe(
+      'Calm Japanese dark. Cool blue accent, with sage, gold and red for status. ' +
+        'Its colors come from kanso.nvim by Webhooked, under the MIT license.',
+    );
+    expect(themeCaption(findTheme('solarized-light'))).toBe(
+      'Warm cream ground, slate text, blue accent. Bright colors keep their hue. ' +
+        'Its colors come from Solarized by Ethan Schoonover, under the MIT license.',
+    );
+  });
+
+  it('says James Wright made a theme of its own for Vosh', () => {
+    expect(themeCaption(findTheme('obsidian-ember'))).toBe(
+      'Warm near black ground, pastel colors and a single ember accent. ' +
+        'James Wright made it for Vosh, under the GPL version 3.',
+    );
+  });
+
+  it('names a source once when its author has the same name', () => {
+    expect(themeCaption(findTheme('catppuccin'))).toMatch(
+      / Its colors come from Catppuccin, under the MIT license\.$/,
+    );
+    expect(themeCaption(findTheme('tango-dark'))).toMatch(
+      / Its colors come from the Tango Desktop Project, in the public domain\.$/,
+    );
+  });
+
+  it('says when the author publishes no license', () => {
+    expect(themeCaption(findTheme('monokai'))).toMatch(
+      / Its colors come from Monokai by Wimer Hazenberg, with no license published\.$/,
+    );
+  });
+
+  it('shows a custom theme by its description alone, and nothing for a blank one', () => {
+    const mine = customToAppTheme({ ...custom('dusk', 'Dusk'), description: ' Low light. ' });
+    expect(themeCaption(mine)).toBe('Low light.');
+    expect(themeCaption(customToAppTheme(custom('blank')))).toBe('');
+  });
+
+  it('keeps every built in caption free of colons, semicolons and dashes', () => {
+    for (const theme of BUILTIN_THEMES) {
+      const caption = themeCaption(theme);
+      expect(caption, theme.id).not.toMatch(/[:;\u2010-\u2015-]/);
+      expect(caption, theme.id).toMatch(/\.$/);
+    }
+  });
 });
 
 describe('copyTheme', () => {
