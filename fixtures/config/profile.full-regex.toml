@@ -2,6 +2,7 @@ disabled_alias_groups = ["social"]
 disabled_trigger_groups = ["spam"]
 disabled_macro_groups = ["travel"]
 disabled_timer_groups = ["upkeep"]
+reconnect = false
 
 [[aliases]]
 name = "kk"
@@ -327,3 +328,16 @@ source = "migrated"
 [prompt.capture.names]
 2 = "mana"
 3 = "move"
+
+[alerts.alert_low_health]
+banner = false
+sound = "low"
+background = false
+words = false
+
+[alerts.alert_tells]
+banner = true
+sound = "bell"
+attention = "once"
+background = true
+words = false
