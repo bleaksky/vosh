@@ -20,6 +20,12 @@ pub enum Owner {
 }
 
 impl Owner {
+    /// The tag the alerts of this owner carry, the name `#scripts` lists
+    /// it under, such as `plugin:vitals_alert`.
+    pub fn tag(&self) -> String {
+        self.listed_name()
+    }
+
     /// The name `#scripts` lists a loaded script under.
     pub(crate) fn listed_name(&self) -> String {
         match self {

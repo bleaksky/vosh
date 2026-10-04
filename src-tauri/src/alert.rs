@@ -5,7 +5,9 @@
 //!
 //! - The line pipeline and the GMCP handler work out which alerts a line
 //!   or a packet raises, under the profile and connection locks, and hand
-//!   them on in the step's [`crate::script::ApplyResult`].
+//!   them on in the step's [`crate::script::ApplyResult`], as the Lua does
+//!   for `mud.alert`. A plugin that turns off, stops or loads again ends
+//!   its alerts through [`end_owner`].
 //! - [`ring`] takes them once those locks let go. It asks [`focus`]
 //!   whether you look at the session, which takes the session map, holds
 //!   each to the 10 second cap the session keeps, posts the banner,
@@ -93,6 +95,12 @@ impl Caps {
         self.0.insert(key.to_string(), now);
         true
     }
+
+    /// Forget every key of the Lua `owner`, whose alerts ended.
+    pub(crate) fn forget_owner(&mut self, owner: &str) {
+        let prefix = format!("lua:{owner}:");
+        self.0.retain(|key, _| !key.starts_with(&prefix));
+    }
 }
 
 /// `session://alert`: an alert rang. The page plays `sound`, shows its
@@ -115,6 +123,32 @@ pub(crate) struct AlertPayload {
     pub(crate) notice: bool,
     pub(crate) source: String,
     pub(crate) owner: Option<String>,
+}
+
+/// `session://alerts-ended`: the Lua `owner` turned off, stopped or
+/// loaded again, so its notices go and its banners are taken back.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct AlertsEnded {
+    pub(crate) owner: String,
+}
+
+/// The alert `mud.alert` raised for the Lua of `owner`, whose tag, such
+/// as `plugin:vitals_alert`, it carries.
+pub(crate) fn of_lua(
+    owner: &vosh_script::Owner,
+    title: String,
+    text: Option<String>,
+    parts: AlertParts,
+) -> Alert {
+    let tag = owner.tag();
+    Alert {
+        cap: format!("lua:{tag}:{title}"),
+        source: format!("lua:{tag}"),
+        title,
+        words: text,
+        parts,
+        owner: Some(tag),
+    }
 }
 
 /// Ring each of `alerts` that `session` raised, with no lock held. Each
@@ -166,9 +200,36 @@ pub(crate) fn ring<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, ale
     }
 }
 
+/// End the alerts of the Lua `owner` in `session`: its caps go, its
+/// banners still showing are taken back, and the page drops its notices.
+pub(crate) fn end_owner<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, owner: &str) {
+    session.forget_alert_owner(owner);
+    if let Some(state) = app.try_state::<SharedState>() {
+        state.banners.withdraw(session.id, owner);
+    }
+    session.emit(
+        app,
+        events::ALERTS_ENDED,
+        &AlertsEnded {
+            owner: owner.to_string(),
+        },
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_lua_owner_whose_alerts_end_rings_again_at_once() {
+        let mut caps = Caps::default();
+        let now = Instant::now();
+        assert!(caps.allow("lua:plugin:vitals_alert:Health low", now));
+        assert!(caps.allow("lua:plugin:other:Health low", now));
+        caps.forget_owner("plugin:vitals_alert");
+        assert!(caps.allow("lua:plugin:vitals_alert:Health low", now));
+        assert!(!caps.allow("lua:plugin:other:Health low", now));
+    }
 
     #[test]
     fn a_key_rings_once_in_ten_seconds_and_each_key_counts_alone() {

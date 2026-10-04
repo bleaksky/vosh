@@ -386,6 +386,14 @@ impl Session {
         }
     }
 
+    /// Forget the caps of the Lua `owner`, whose alerts ended.
+    pub(crate) fn forget_alert_owner(&self, owner: &str) {
+        self.alert_caps
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .forget_owner(owner);
+    }
+
     /// Whether the alert counted under `cap` may ring at `now`, under the
     /// 10 second cap, and if so, mark that it rang.
     pub(crate) fn allow_alert(&self, cap: &str, now: tokio::time::Instant) -> bool {
