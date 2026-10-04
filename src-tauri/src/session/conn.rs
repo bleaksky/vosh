@@ -461,6 +461,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         p.target.room_idx = None;
         p.room_chars.clear();
         p.room_block = room_block::RoomBlock::default();
+        p.fight_tail = false;
         p.vars.remove("target");
         line_triggers = p.prompt.stage.line_trigger_notice();
         end_prompt(&mut p);

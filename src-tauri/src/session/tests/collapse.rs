@@ -1089,6 +1089,43 @@ fn in_a_fight_and_attack_lines_decide_which_lines_collapse() {
     assert_eq!(rounds(false, true), whole);
 }
 
+/// The guard's death, as `act` prints `$n is DEAD!!` to the room
+/// (fight.c:6295).
+const DEAD: &str = "A Blackwatch guard is DEAD!!";
+
+#[test]
+fn the_round_that_ends_a_fight_is_a_line_of_the_fight() {
+    let attacks = "A Blackwatch guard attacks you!";
+    let battle = "A Blackwatch guard has quite a few wounds. ";
+    let tank = "Tester: [===|===|===|---]";
+    for fights in [true, false] {
+        let mut p = collapsing(PromptShow::Pinned);
+        p.ui.collapse_fight_lines = fights;
+        let mut session = Session::new(p);
+        let mut mud = Mud::playing(Options {
+            compact: true,
+            ..Options::new(Build::New)
+        });
+        let mut reads = vec![session.read(&mud.login())];
+        let fight: Vec<u8> = mud
+            .command("fight")
+            .into_iter()
+            .flat_map(|write| write.bytes)
+            .collect();
+        reads.push(session.read(&fight));
+        // The Char.Combat {} that ends the fight comes before the round's
+        // text, and the round is still the fight's.
+        reads.push(session.read(&mud.fight_ends_later(&[DODGE, DODGE, DEAD].join("\n\r"))));
+        // The prompt ends that round, and out of the fight lines collapse.
+        reads.push(session.read(&mud.pulse_later(&[DODGE, DODGE].join("\n\r"))));
+        let ring = ring_of(&reads)[LOGIN.len()..].to_vec();
+        let dodges = times(2, DODGE);
+        let round: &[&str] = if fights { &[&dodges] } else { &[DODGE, DODGE] };
+        let want = [&[attacks, battle, tank][..], round, &[DEAD, &dodges]].concat();
+        assert_eq!(ring, rows(&want), "In a fight on Collapse: {fights}");
+    }
+}
+
 #[test]
 fn the_battle_line_shows_every_round_while_a_fight_shows_every_line() {
     let battle = "A Blackwatch guard has quite a few wounds. ";
