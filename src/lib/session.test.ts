@@ -424,6 +424,35 @@ describe('Collapse repeated lines', () => {
     expect(command).toBe('ui_set_config');
     expect(args.config).toMatchObject({ collapse_repeats: true });
   });
+
+  it('reads In a fight on and Attack lines off for a config saved before them', () => {
+    const before = normalizeUiConfig(raw({ collapse_repeats: true }));
+    expect(before.collapse_fight_lines).toBe(true);
+    expect(before.collapse_attack_lines).toBe(false);
+    const chosen = normalizeUiConfig(
+      raw({ collapse_fight_lines: false, collapse_attack_lines: true }),
+    );
+    expect(chosen.collapse_fight_lines).toBe(false);
+    expect(chosen.collapse_attack_lines).toBe(true);
+  });
+
+  it('saves In a fight and Attack lines with the rest of the config', async () => {
+    const invoked = vi.mocked(invoke);
+    invoked.mockClear();
+    const chosen = {
+      ...normalizeUiConfig(raw()),
+      collapse_repeats: true,
+      collapse_fight_lines: false,
+      collapse_attack_lines: true,
+    };
+    await setUiConfig(chosen);
+    const [command, args] = invoked.mock.calls[0] as [string, { config: Record<string, unknown> }];
+    expect(command).toBe('ui_set_config');
+    expect(args.config).toMatchObject({
+      collapse_fight_lines: false,
+      collapse_attack_lines: true,
+    });
+  });
 });
 
 describe('vitals options', () => {

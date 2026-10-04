@@ -343,6 +343,10 @@ fn full_ui() -> UiConfig {
         // Written only while on, so off keeps the golden's bytes. The
         // collapse_repeats tests in ipc/ui_config.rs cover on.
         collapse_repeats: false,
+        // Written only off their defaults, so the defaults keep the
+        // golden's bytes. The tests in profile/ui.rs cover the others.
+        collapse_fight_lines: true,
+        collapse_attack_lines: false,
         terminal_base_ansi: Some(
             [
                 "#000000", "#cd3131", "#0dbc79", "#e5e510", "#2472c8", "#bc3fbc", "#11a8cd",
