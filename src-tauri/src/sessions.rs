@@ -163,9 +163,15 @@ impl Session {
     /// that lock finds the session gone from it and takes the next one.
     pub(crate) async fn lock_profile(&self) -> ProfileGuard {
         loop {
-            let open = self.profile();
-            let guard = open.lock().await;
-            if Arc::ptr_eq(&open, &self.profile()) {
+            let guard = ProfileGuard::lock(self.profile()).await;
+            let plays = Arc::ptr_eq(
+                guard.open(),
+                &self
+                    .profile
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner),
+            );
+            if plays {
                 return guard;
             }
         }
