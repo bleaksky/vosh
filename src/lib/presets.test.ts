@@ -270,10 +270,38 @@ function rewritten(id: string, line: string): string | null {
   return null;
 }
 
+// The trigger `name` of preset `id`. It throws when the preset has no such
+// trigger, which fails the file as it loads, so a test of an open bug can
+// never pass on a trigger that left.
+function presetTrigger(id: string, name: string) {
+  const found = presetById(id)?.triggers.find((t) => t.name === name);
+  if (!found) throw new Error(`${id} has no trigger ${name}`);
+  return found;
+}
+
+// Whether a pattern of `trigger` that is on matches `line`.
+function triggerMatches(trigger: ReturnType<typeof presetTrigger>, line: string): boolean {
+  return trigger.patterns.some((p) => p.enabled && new RegExp(p.pattern).test(line));
+}
+
 // The level up, as gain_exp and advance_level print it in update.c: the
 // level on one line, then what you gain on the next, with hit point and
 // practice singular when one.
 describe('the Gold, experience, and levels preset', () => {
+  const skillUp = presetTrigger('loot_progression', 'loot.skill_up');
+
+  // Bug 16, open. check_improve in skills.c prints the percent you reach
+  // after the skill, You have become better at %s! [%d%%], and the skill
+  // trigger wants the line to end at the bang, so it misses every skill
+  // and spell you improve. Only a song prints the line without the
+  // percent (check_improve_song in song.c). Dodge is a row of skill_table
+  // in const.c, and the 78 is the hp_pct of fixtures/gmcp/aabahran
+  // group-info.gmcp. it.fails holds the bug until its fix makes this a
+  // plain it.
+  it.fails('marks a skill you improve, as check_improve prints it (bug 16)', () => {
+    expect(triggerMatches(skillUp, 'You have become better at dodge! [78%]')).toBe(true);
+  });
+
   it('marks the line that says you raised a level', () => {
     expect(rewritten('loot_progression', 'You raise a level!!')).toBe('You raise a level!!');
   });
