@@ -4,7 +4,9 @@ import {
   cardAnchor,
   clockTime,
   codeReaderStep,
+  cardShowState,
   codesSourceLine,
+  editedTable,
   entryCopy,
   headerButtons,
   lastSeenLine,
@@ -13,6 +15,7 @@ import {
   matchSentences,
   matchTone,
   migratedNote,
+  movedBackTable,
   nextCardRequest,
   sampleCut,
   moreItems,
@@ -30,6 +33,7 @@ import {
   withCapture,
   withDesign,
   withMoveTakenBack,
+  withShow,
   withStart,
   startRows,
   takeBackOnto,
@@ -37,6 +41,7 @@ import {
   type CardStep,
 } from './promptCard';
 import { moveBack, type MoveMade } from './promptPieces';
+import { promptShowLock, type PromptShowState } from './promptShow';
 import type {
   PromptCapture,
   PromptCaptureCheck,
@@ -573,6 +578,20 @@ describe('what a start and an edit save', () => {
     expect(takeBackOnto(edited, entry!)).toEqual(table);
   });
 
+  it('changes only where your prompt shows, and Command Z keeps the place', () => {
+    for (const show of ['text', 'lifted'] as const) {
+      const placed = withShow(table, show);
+      expect(placed, show).toEqual({ ...table, show });
+      // The card moves with your prompt, so taking a change back never
+      // moves it again.
+      expect(undoEntry(table, placed), show).toBeNull();
+    }
+    // A design change after it takes back the design alone.
+    const lifted = withShow(table, 'lifted');
+    const edited = withDesign(lifted, '[%s_bold%hp] ');
+    expect(takeBackOnto(edited, undoEntry(lifted, edited)!)).toEqual(lifted);
+  });
+
   it('takes a move back with the other Option key to following the game', () => {
     // Option with Right moves a part of a design that follows the game,
     // which makes the design yours. The move keeps what the design was.
@@ -596,6 +615,62 @@ describe('what a start and an edit save', () => {
     // A move of a design of yours comes back yours.
     const yours = { ...table, mirror: false };
     expect(withMoveTakenBack(withDesign(yours, after), { ...right, mirror: false })).toEqual(yours);
+  });
+
+  it('lands an edit on the table as it stands, so a place picked meanwhile stays', () => {
+    // The edit began on the table, and while it waited on its round
+    // trips you picked Lifted at the foot and turned drawing on.
+    const now = { ...withShow(table, 'lifted'), draw: true };
+    const edited = editedTable(table, now, '[%s_bold%hp] ');
+    expect(edited).toEqual({ ...now, template: '[%s_bold%hp] ', mirror: false });
+    // Command Z takes back the design alone.
+    expect(takeBackOnto(edited!, undoEntry(now, edited!)!)).toEqual(now);
+    // An edit that left the design as it was saves nothing.
+    expect(editedTable(table, now, table.template)).toBeNull();
+    // With no table to land on, it lands on the one it began on.
+    expect(editedTable(table, null, '[%s_bold%hp] ')).toEqual(withDesign(table, '[%s_bold%hp] '));
+  });
+
+  it('lands a move taken back on the table as it stands too', () => {
+    const after = '[ %hp]';
+    const moved = withDesign(table, after);
+    const right: MoveMade = {
+      before: table.template,
+      after,
+      from: 1,
+      landed: 2,
+      dir: 1,
+      mirror: table.mirror,
+    };
+    // You picked In the text while the move went back.
+    const now = withShow(moved, 'text');
+    expect(movedBackTable(moved, now, right)).toEqual({ ...table, show: 'text' });
+    expect(movedBackTable(moved, null, right)).toEqual(table);
+  });
+});
+
+describe('the button at the foot that says where your prompt shows', () => {
+  const reads: PromptShowState = {
+    show: 'pinned',
+    capture: true,
+    draw: true,
+    gameSent: true,
+    zone: 1,
+    promptsOff: false,
+  };
+
+  it('waits quietly while the card holds a capture the state has yet to read', () => {
+    // Right after your first capture the card's table holds it, and the
+    // state reads it a round trip later. The button is off meanwhile and
+    // never asks you to customize the prompt you are customizing.
+    const behind = { ...reads, capture: false };
+    expect(cardShowState(behind, codes)).toBeNull();
+    expect(promptShowLock(cardShowState(behind, codes))).toEqual({ locked: true, why: null });
+    // Once the state reads the capture, the button follows it.
+    expect(cardShowState(reads, codes)).toBe(reads);
+    expect(cardShowState(null, codes)).toBeNull();
+    // With no capture in the card either, it keeps the reason.
+    expect(cardShowState(behind, none)).toBe(behind);
   });
 });
 

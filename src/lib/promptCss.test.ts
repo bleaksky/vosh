@@ -39,3 +39,44 @@ describe('prompt.css', () => {
     expect(read.filter((name) => !known.has(name))).toEqual([]);
   });
 });
+
+describe('the foot under your design', () => {
+  const prompt = bare(promptCss);
+  /** The declarations of one rule in prompt.css. */
+  const rule = (selector: string) => {
+    const at = prompt.indexOf(`${selector} {`);
+    expect(at, selector).toBeGreaterThanOrEqual(0);
+    return prompt.slice(at, prompt.indexOf('}', at));
+  };
+
+  it('keeps the foot under your design one row 52 tall, with drawing on or off', () => {
+    // The Preview menu took the place of the four segments, so the foot
+    // fits one row and never wraps. 28 px controls sit centered in it.
+    const foot = rule('.pc-foot');
+    expect(foot).toContain('display: flex;');
+    expect(foot).toContain('align-items: center;');
+    expect(foot).toContain('height: 52px;');
+    expect(foot).not.toContain('flex-wrap');
+    expect(foot).not.toContain('min-height');
+    // No rule lets any foot wrap or grow past the row.
+    expect(prompt).not.toContain('.pc-foot.is-design');
+    for (const at of prompt.matchAll(/\.pc-foot[\w.-]*[^{]*\{([^}]*)\}/g)) {
+      expect(at[1]).not.toContain('flex-wrap');
+      expect(at[1]).not.toMatch(/(?:^|[^-])height: auto/);
+    }
+    // The preview and Done hold the right end.
+    const end = rule('.pc-foot-end');
+    expect(end).toContain('margin-left: auto;');
+    expect(end).toContain('flex: none;');
+  });
+
+  it('sets the menu buttons at the foot in the 12/500 face of a segmented control', () => {
+    const button = rule('.pc-menu-button');
+    expect(button).toContain('font-size: 12px;');
+    expect(button).toContain('padding: 0 6px 0 10px;');
+    expect(rule(".pc-menu-button[aria-disabled='true']")).toContain('opacity: 0.45;');
+    // Preview: reads in the secondary tone, the preview in the text color.
+    expect(rule('.pc-menu-button-lead')).toContain('color: var(--secondary);');
+    expect(rule('.pc-menu-button svg')).toContain('color: var(--secondary);');
+  });
+});

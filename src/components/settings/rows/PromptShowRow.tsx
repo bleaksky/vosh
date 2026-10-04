@@ -1,9 +1,10 @@
 import {
   PROMPT_SHOW_HELP,
-  promptShowDisabledHelp,
+  PROMPT_SHOW_LABELS,
+  promptShowLock,
   type PromptShowState,
 } from '../../../lib/promptShow';
-import type { PromptShow } from '../../../lib/session';
+import { PROMPT_SHOWS, type PromptShow } from '../../../lib/session';
 import { Row, Segmented, type SegmentedOption } from '../ui';
 
 // Where your prompt shows, from the profile's [prompt] show. It sits
@@ -11,13 +12,13 @@ import { Row, Segmented, type SegmentedOption } from '../ui';
 // bridge, which repaints the prompt on screen and tells every window.
 // Nothing can be lifted or pinned while the profile reads no prompt, so
 // the row turns off then, with the sentence the Draw row uses in that
-// state.
+// state. The button beside Draw your prompt in Customize prompt offers
+// the same places under the same rule.
 
-const OPTIONS: readonly SegmentedOption<PromptShow>[] = [
-  { value: 'text', label: 'In the text' },
-  { value: 'lifted', label: 'Lifted' },
-  { value: 'pinned', label: 'Pinned' },
-];
+const OPTIONS: readonly SegmentedOption<PromptShow>[] = PROMPT_SHOWS.map((value) => ({
+  value,
+  label: PROMPT_SHOW_LABELS[value],
+}));
 
 interface PromptShowFieldProps {
   value: PromptShow;
@@ -27,14 +28,14 @@ interface PromptShowFieldProps {
 }
 
 export function PromptShowField({ value, state, onChange }: PromptShowFieldProps) {
-  const off = state !== null && !state.capture;
-  const options = off || state === null ? OPTIONS.map((o) => ({ ...o, disabled: true })) : OPTIONS;
+  const { locked, why } = promptShowLock(state);
+  const options = locked ? OPTIONS.map((o) => ({ ...o, disabled: true })) : OPTIONS;
   return (
     <Row
       label="Where your prompt shows"
-      description={off ? promptShowDisabledHelp(state.gameSent) : PROMPT_SHOW_HELP[value]}
+      description={why ?? PROMPT_SHOW_HELP[value]}
       anchor="prompt-show"
-      {...(off ? { className: 'is-disabled' } : {})}
+      {...(why !== null ? { className: 'is-disabled' } : {})}
     >
       <Segmented options={options} value={value} onChange={onChange} />
     </Row>
