@@ -148,6 +148,11 @@ pub struct ScriptEngine {
     stopped: HashSet<Owner>,
     /// The environment of each plugin that runs.
     envs: Envs,
+    /// The last packet of each GMCP package this connection sent, which
+    /// a new handler of the package gets at once.
+    packets: HashMap<String, serde_json::Value>,
+    /// True while a new handler runs on the last packet of its package.
+    replaying: bool,
 }
 
 impl std::fmt::Debug for ScriptEngine {
@@ -190,6 +195,8 @@ impl ScriptEngine {
             loaded_scripts: Vec::new(),
             stopped: HashSet::new(),
             envs,
+            packets: HashMap::new(),
+            replaying: false,
         })
     }
 
@@ -286,10 +293,10 @@ impl ScriptEngine {
     /// owner back on after a stop.
     pub fn load_script(&mut self, owner: Owner, chunk: &str, code: String) -> ScriptOutcome {
         self.stopped.remove(&owner);
-        let outcome = self.run_script(&owner, chunk, &code);
+        let (outcome, ran) = self.run_script(&owner, chunk, &code);
         // A stopped script stays on the list, so `#script reload` can
         // bring it back. A script that failed keeps what it had.
-        if !outcome.failed || self.stopped.contains(&owner) {
+        if ran || self.stopped.contains(&owner) {
             let script = LoadedScript {
                 owner,
                 chunk: chunk.to_string(),
@@ -330,7 +337,7 @@ impl ScriptEngine {
         let mut acc = ScriptOutcome::default();
         for (owner, chunk, code) in scripts {
             self.stopped.remove(&owner);
-            acc.append(self.run_script(&owner, &chunk, &code));
+            acc.append(self.run_script(&owner, &chunk, &code).0);
         }
         acc
     }
@@ -340,17 +347,19 @@ impl ScriptEngine {
     /// it had once the run succeeds, and a loose script runs in the
     /// global one. A run that succeeds lets go of all `owner` registered
     /// before it began, and one that fails takes back what it registered
-    /// itself.
-    fn run_script(&mut self, owner: &Owner, chunk: &str, code: &str) -> ScriptOutcome {
+    /// itself. Returns what the run asks for, and whether the code ran to
+    /// its end, whatever a handler it made did with a packet after.
+    fn run_script(&mut self, owner: &Owner, chunk: &str, code: &str) -> (ScriptOutcome, bool) {
         let env = match owner {
             Owner::Plugin(name) => match self.envs.create(&self.lua, name) {
                 Ok(env) => Some(env),
                 Err(err) => {
-                    return ScriptOutcome {
+                    let outcome = ScriptOutcome {
                         actions: vec![Action::Error(report::describe(&err))],
                         failed: true,
                         stopped: Vec::new(),
-                    }
+                    };
+                    return (outcome, false);
                 }
             },
             _ => None,
@@ -365,11 +374,11 @@ impl ScriptEngine {
             .exec()
         });
         if called.stop.is_some() {
-            return self.finish(owner, &Site::Entry, called);
+            return (self.finish(owner, &Site::Entry, called), false);
         }
         if called.error.is_some() {
             self.discard_registrations_since(called.start);
-            return self.finish(owner, &Site::Entry, called);
+            return (self.finish(owner, &Site::Entry, called), false);
         }
         let mut outcome = ScriptOutcome {
             actions: self.release(&before),
@@ -383,7 +392,7 @@ impl ScriptEngine {
                 .push(Action::DropPluginAliases(name.clone()));
         }
         outcome.append(self.finish(owner, &Site::Entry, called));
-        outcome
+        (outcome, true)
     }
 
     /// Turn the plugin or loose script `owner` off: let go of the Lua
@@ -491,8 +500,10 @@ impl ScriptEngine {
     }
 
     /// Fire every callback subscribed to `package` with the JSON `data`,
-    /// each as a call of its own.
+    /// each as a call of its own. Vosh keeps the packet as the last of its
+    /// package, for the handlers made later.
     pub fn dispatch_gmcp(&mut self, package: &str, data: &serde_json::Value) -> ScriptOutcome {
+        self.packets.insert(package.to_string(), data.clone());
         let ids = match self.gmcp_subs.get(package) {
             Some(v) => v.clone(),
             None => return ScriptOutcome::default(),
@@ -506,6 +517,12 @@ impl ScriptEngine {
             acc.append(self.run_callback(id, &site, |lua| api::json_to_lua(lua, data)));
         }
         acc
+    }
+
+    /// Forget the last packet of every package, as the connection that
+    /// sent them ends.
+    pub fn forget_gmcp_packets(&mut self) {
+        self.packets.clear();
     }
 
     /// Fire a one-shot timer callback by its callback id.
@@ -590,7 +607,9 @@ impl ScriptEngine {
         if let Some(stop) = called.stop {
             self.discard_since(called.start);
             let released = self.stop_owner(owner, site);
-            let mut outcome = self.drain();
+            // The stop took back what the call registered, so nothing
+            // new waits for a packet.
+            let (mut outcome, _) = self.drain();
             outcome.actions.extend(released);
             outcome.actions.extend(
                 report::stop_lines(owner, site, &stop)
@@ -601,7 +620,7 @@ impl ScriptEngine {
             outcome.stopped.push(owner.clone());
             return outcome;
         }
-        let mut outcome = self.drain();
+        let (mut outcome, fresh) = self.drain();
         if let Some(err) = called.error {
             outcome.actions.push(Action::Error(report::describe(&err)));
             outcome.failed = true;
@@ -611,7 +630,33 @@ impl ScriptEngine {
                 .actions
                 .push(Action::Error(report::cap_line(owner, site)));
         }
+        outcome.append(self.replay(fresh));
         outcome
+    }
+
+    /// Hand each new handler in `fresh`, a package and a callback id, the
+    /// last packet of its package, as a call of its own, so a handler
+    /// made mid session starts from what the game last sent. A handler
+    /// that a replayed call makes waits for the next packet, so a handler
+    /// that makes another each time it runs cannot go round for ever.
+    fn replay(&mut self, fresh: Vec<(String, i64)>) -> ScriptOutcome {
+        let mut acc = ScriptOutcome::default();
+        if self.replaying {
+            return acc;
+        }
+        self.replaying = true;
+        for (package, callback_id) in fresh {
+            let Some(data) = self.packets.get(&package).cloned() else {
+                continue;
+            };
+            let site = Site::Gmcp {
+                package,
+                callback_id,
+            };
+            acc.append(self.run_callback(callback_id, &site, |lua| api::json_to_lua(lua, &data)));
+        }
+        self.replaying = false;
+        acc
     }
 
     /// Turn off what a stop of `owner` in `site` leaves off, and return
@@ -695,9 +740,11 @@ impl ScriptEngine {
 
     /// Drain queued actions, also installing any [`Action::SetLuaTrigger`]
     /// or [`Action::SubscribeGmcp`] into the engine's own bookkeeping
-    /// before returning the rest to the caller.
-    fn drain(&mut self) -> ScriptOutcome {
+    /// before returning the rest to the caller, with each new GMCP
+    /// handler as its package and callback id.
+    fn drain(&mut self) -> (ScriptOutcome, Vec<(String, i64)>) {
         let mut outcome = ScriptOutcome::default();
+        let mut fresh = Vec::new();
         let actions: Vec<Action> = match self.state.cell.lock() {
             Ok(mut s) => std::mem::take(&mut s.pending),
             Err(_) => Vec::new(),
@@ -740,12 +787,13 @@ impl ScriptEngine {
                     package,
                     callback_id,
                 } => {
+                    fresh.push((package.clone(), callback_id));
                     self.gmcp_subs.entry(package).or_default().push(callback_id);
                 }
                 other => outcome.actions.push(other),
             }
         }
-        outcome
+        (outcome, fresh)
     }
 }
 
@@ -957,6 +1005,72 @@ mod tests {
             .dispatch_gmcp("Char.Vitals", &serde_json::json!({"hp": 80, "maxhp": 100}))
             .unwrap();
         assert_eq!(outcome.actions, vec![Action::Echo("80/100".into())]);
+    }
+
+    #[test]
+    fn a_new_handler_gets_the_last_packet_of_its_package_at_once() {
+        let mut e = ScriptEngine::new().unwrap();
+        // No packet yet, so a handler waits for the first.
+        let waiting = e
+            .eval(
+                "mud.on_gmcp('Char.Status', function(d) mud.echo('status ' .. d.level) end)",
+                "=#lua",
+            )
+            .unwrap();
+        let leftover = &waiting.actions;
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let status = serde_json::json!({"name": "Orla", "level": 50});
+        let fired = e.dispatch_gmcp("Char.Status", &status).unwrap();
+        assert_eq!(echoes(&fired), ["status 50"]);
+        // A plugin that turns on later hears the same packet as it loads,
+        // after what its load asked for.
+        let loaded = plugin(
+            &mut e,
+            "levels",
+            "mud.echo('loaded') \
+             mud.on_gmcp('Char.Status', function(d) mud.echo('level ' .. d.level) end) \
+             mud.on_gmcp('Room.Info', function() mud.echo('room') end)",
+        )
+        .unwrap();
+        assert_eq!(echoes(&loaded), ["loaded", "level 50"]);
+        // The packet stays the last until the next of its package.
+        let later = e
+            .eval(
+                "mud.on_gmcp('Char.Status', function(d) mud.echo('again ' .. d.level) end)",
+                "=#lua",
+            )
+            .unwrap();
+        assert_eq!(echoes(&later), ["again 50"]);
+        // A disconnect forgets the packets.
+        e.forget_gmcp_packets();
+        let leftover = &e
+            .eval(
+                "mud.on_gmcp('Char.Status', function() mud.echo('stale') end)",
+                "=#lua",
+            )
+            .unwrap()
+            .actions;
+        assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
+    #[test]
+    fn a_handler_that_makes_another_each_time_cannot_go_round() {
+        let mut e = ScriptEngine::new().unwrap();
+        e.dispatch_gmcp("Char.Vitals", &serde_json::json!({"hp": 80}))
+            .unwrap();
+        let outcome = e
+            .eval(
+                "local function again(d) \
+                   mud.echo('hp ' .. d.hp) \
+                   mud.on_gmcp('Char.Vitals', again) \
+                 end \
+                 mud.on_gmcp('Char.Vitals', again)",
+                "=#lua",
+            )
+            .unwrap();
+        // The new handler runs once, and the one it makes waits.
+        assert_eq!(echoes(&outcome), ["hp 80"]);
+        assert_eq!(held_callbacks(&e), 2);
     }
 
     #[test]
@@ -2054,11 +2168,16 @@ mod tests {
         let leftover = &e.dispatch_gmcp("Char.Vitals", &vitals).actions;
         assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(held_callbacks(&e), 0);
-        // Loading it again turns it back on.
-        e.load_script(wait_full.clone(), "@wait_full/main.lua", code.into())
+        // Loading it again turns it back on, and its new handler runs at
+        // once on the last packet, which says you are full now.
+        let full = serde_json::json!({"hp": 1020, "maxhp": 1020});
+        let leftover = &e.dispatch_gmcp("Char.Vitals", &full).actions;
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let loaded = e
+            .load_script(wait_full.clone(), "@wait_full/main.lua", code.into())
             .unwrap();
         assert!(!e.is_stopped(&wait_full));
-        let full = serde_json::json!({"hp": 1020, "maxhp": 1020});
+        assert!(loaded.actions.contains(&Action::Send("stand".into())));
         assert_eq!(
             e.dispatch_gmcp("Char.Vitals", &full).actions,
             vec![Action::Send("stand".into())]
