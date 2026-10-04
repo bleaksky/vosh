@@ -5,16 +5,17 @@
 //! selected, and launch puts the sessions profiles.toml lists in its
 //! place. A command that names no session acts on the selected one.
 //!
-//! The map's lock comes after the save lock and ahead of every other
-//! lock of the app. A step takes it only to find, add or remove a session
-//! or an open profile or to read or change the selection, and no holder
-//! awaits. A holder takes no other lock but leaf locks, a session's
-//! profile pointer and an open profile's name, and one more: a change of
-//! selection shows the grid of the session it selects, which takes the
-//! native grid map and then the pointer's state, and neither of those
-//! holders ever takes the session map. No step takes it while it holds a
-//! session slot, a profile or a connection, so each step resolves its
-//! session before it takes any other lock.
+//! The map's lock comes after a session's slot and the save lock, and
+//! ahead of every other lock of the app. A step takes it only to find,
+//! add or remove a session or an open profile or to read or change the
+//! selection, and no holder awaits. A holder takes no other lock but leaf
+//! locks, a session's profile pointer and an open profile's name, and one
+//! more: a change of selection shows the grid of the session it selects,
+//! which takes the native grid map and then the pointer's state, and
+//! neither of those holders ever takes the session map. No step takes it
+//! while it holds the loadouts, a profile, the profile set or a
+//! connection, so each step resolves its session before it takes any of
+//! them.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;

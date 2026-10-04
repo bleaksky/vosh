@@ -8,17 +8,22 @@
 //! The lock order. A step that holds two of these locks at once takes
 //! them in this order, so no two tasks wait on each other for good.
 //!
-//! 1. [`PERSIST_LOCK`]. Nothing waits for it while holding another lock,
-//!    so `#profile save`, which runs under the profile lock, only tries
-//!    it.
-//! 2. The loadouts and the plugin manager in [`AppState`].
-//! 3. The profiles the sessions play, the one that opened first first.
-//! 4. The profile set. The save in loadout mode reads the sharing scope
+//! 1. A session's slot, which `disconnect` holds while the task it ends
+//!    takes the locks below.
+//! 2. [`PERSIST_LOCK`]. Nothing else waits for it while holding another
+//!    lock, so `#profile save`, which runs under the profile lock, only
+//!    tries it.
+//! 3. The session map in [`AppState`]. Its holders take no other lock
+//!    of this list.
+//! 4. The loadouts in [`AppState`].
+//! 5. The profiles the sessions play, the one that opened first first.
+//! 6. The profile set. The save in loadout mode reads the sharing scope
 //!    from it while it holds the profile, so a step that holds the set
 //!    never waits for the profile.
+//! 7. A session's connection, one at a time.
 //!
-//! The session slot comes before every lock the session task takes, and
-//! the log before the log reader. docs/architecture.md says why.
+//! The catalog and the plugin manager are only ever held alone, and the
+//! log comes before the log reader. docs/architecture.md says why.
 //!
 //! [`AppState`]: crate::app::state::AppState
 
