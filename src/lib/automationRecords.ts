@@ -7,6 +7,7 @@
 // and remove triggers, and loadouts set the active list.
 
 import { draftChanges, saveDraftOnto, type Draft, type SavedWrite } from './automationDraft';
+import { groupKeyOf, searchText, type ListEntry } from './automationList';
 import { defaultEnabledIds, PRESETS } from './presets';
 import {
   deleteMacro,
@@ -217,18 +218,22 @@ export interface TimerRecord {
   interval_secs: number;
   command: string;
   enabled: boolean;
+  group?: string;
 }
 
 export function normalizeTimer(raw: unknown): TimerRecord {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const interval = typeof r.interval_secs === 'number' ? Math.floor(r.interval_secs) : 30;
-  return {
+  const out: TimerRecord = {
     id: typeof r.id === 'number' ? r.id : null,
     name: typeof r.name === 'string' ? r.name : '',
     interval_secs: Math.max(1, Number.isFinite(interval) ? interval : 30),
     command: typeof r.command === 'string' ? r.command : '',
     enabled: r.enabled !== false,
   };
+  const group = typeof r.group === 'string' ? r.group.trim() : '';
+  if (group) out.group = group;
+  return out;
 }
 
 export function blankTimer(): TimerRecord {
@@ -291,6 +296,7 @@ export interface TimerStoreApi {
     intervalSecs: number,
     command: string,
     enabled: boolean,
+    group: string | null,
   ) => Promise<unknown[]>;
 }
 
@@ -320,6 +326,7 @@ export async function saveTimerDraft(
       sent.interval_secs,
       sent.command,
       sent.enabled,
+      sent.group ?? null,
     );
     // The store creates a timer for a null id, and also for an id it no
     // longer holds, so look the id up either way.
@@ -346,6 +353,17 @@ export function timerLabel(timer: TimerRecord): string {
   const name = timer.name.trim();
   if (name) return name;
   return timer.command.split('\n')[0].trim();
+}
+
+/** A timer's row in the Timers list, under the heading of its group. */
+export function timerEntry(timer: TimerRecord): Omit<ListEntry, 'uid'> {
+  return {
+    name: timerLabel(timer),
+    meta: `Every ${formatInterval(timer.interval_secs)}`,
+    group: groupKeyOf(timer.group),
+    enabled: timer.enabled,
+    text: searchText(timer.name, timer.group, timer.command),
+  };
 }
 
 // ── Tick ────────────────────────────────────────────────────────────

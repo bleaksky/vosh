@@ -27,7 +27,7 @@ use std::sync::Arc;
 
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{
-    HighlightStyle, NamedColor, Trigger, TriggerAction, TriggerPattern, TriggerTarget,
+    HighlightStyle, MatchMode, NamedColor, Trigger, TriggerAction, TriggerPattern, TriggerTarget,
 };
 use vosh_prompt::config::{AabahranCapture, CaptureSource, RegexCapture};
 use vosh_prompt::{CaptureConfig, PromptConfig, PromptShow};
@@ -422,13 +422,14 @@ fn full_triggers() -> Vec<Trigger> {
         Trigger {
             name: "tells".into(),
             patterns: vec![
+                TriggerPattern::regex(r"^(\w+) tells you '(.*)'$"),
                 TriggerPattern {
-                    pattern: r"^(\w+) tells you '(.*)'$".into(),
-                    enabled: true,
+                    enabled: false,
+                    ..TriggerPattern::regex(r"^(\w+) whispers to you")
                 },
                 TriggerPattern {
-                    pattern: r"^(\w+) whispers to you".into(),
-                    enabled: false,
+                    mode: MatchMode::StartsWith,
+                    ..TriggerPattern::regex("Tolliver tells you")
                 },
             ],
             priority: 5,
@@ -464,10 +465,13 @@ fn full_triggers() -> Vec<Trigger> {
         },
         Trigger {
             name: "spam".into(),
-            patterns: vec![TriggerPattern {
-                pattern: "^You are hungry\\.$".into(),
-                enabled: true,
-            }],
+            patterns: vec![
+                TriggerPattern::regex("^You are hungry\\.$"),
+                TriggerPattern {
+                    mode: MatchMode::Text,
+                    ..TriggerPattern::regex("You are thirsty.")
+                },
+            ],
             priority: 0,
             enabled: false,
             actions: vec![TriggerAction::Gag],
@@ -478,10 +482,7 @@ fn full_triggers() -> Vec<Trigger> {
         // A Room trigger, which goes under `room_triggers` (D14).
         Trigger {
             name: "room-items".into(),
-            patterns: vec![TriggerPattern {
-                pattern: "^.+$".into(),
-                enabled: true,
-            }],
+            patterns: vec![TriggerPattern::regex("^.+$")],
             priority: 4,
             enabled: true,
             actions: vec![TriggerAction::Highlight {
@@ -551,10 +552,12 @@ fn full_profile() -> ProfileConfig {
             interval_secs: 300,
             command: "save".into(),
             enabled: true,
+            group: Some("upkeep".into()),
         }],
         disabled_alias_groups: vec!["social".into()],
         disabled_trigger_groups: vec!["spam".into()],
         disabled_macro_groups: vec!["travel".into()],
+        disabled_timer_groups: vec!["upkeep".into()],
         group_folders: GroupFolders {
             aliases: BTreeMap::from([(
                 "combat".into(),
@@ -1142,4 +1145,89 @@ fn a_your_target_trigger_saves_where_0_8_0_still_reads_the_file() {
             .len(),
         1
     );
+}
+
+#[test]
+fn match_modes_round_trip_through_toml_and_0_8_0_reads_every_row() {
+    /// A pattern row as 0.8.0 and 0.7.2 read it, which skips `mode`.
+    #[derive(serde::Deserialize)]
+    struct OldRow {
+        pattern: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OldRows {
+        patterns: Vec<OldRow>,
+    }
+    #[derive(serde::Deserialize)]
+    struct OldFile {
+        triggers: Vec<OldRows>,
+    }
+    let row = |pattern: &str, mode| TriggerPattern {
+        mode,
+        ..TriggerPattern::regex(pattern)
+    };
+    let needs = Trigger {
+        patterns: vec![
+            row("You are thirsty.", MatchMode::Text),
+            row("You are hungry", MatchMode::StartsWith),
+            row(r"^You are hungry\.$", MatchMode::Regex),
+        ],
+        ..Trigger::new("needs", "", TriggerAction::Gag)
+    };
+    let mut profile = crate::profile::live::Profile::default();
+    profile.triggers.set(needs.clone()).unwrap();
+    let texts = [
+        profile_bytes(&ProfileConfig::from_profile(&profile)),
+        catalog_bytes(&GlobalCatalog::from_profile(&profile)),
+    ];
+    for text in &texts {
+        assert!(text.contains("mode = \"text\""), "{text}");
+        assert!(text.contains("mode = \"starts_with\""), "{text}");
+        assert_eq!(text.matches("\nmode = ").count(), 2, "{text}");
+        // An older build reads each row's text, and reads it as a regex.
+        let old: OldFile = toml::from_str(text).unwrap();
+        let rows: Vec<&str> = old.triggers[0]
+            .patterns
+            .iter()
+            .map(|r| r.pattern.as_str())
+            .collect();
+        assert_eq!(
+            rows,
+            ["You are thirsty.", "You are hungry", r"^You are hungry\.$"]
+        );
+    }
+    let loaded = ProfileConfig::from_toml(&texts[0]).unwrap();
+    assert_eq!(loaded.triggers, std::slice::from_ref(&needs));
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(catalog_path(dir.path()), &texts[1]).unwrap();
+    assert_eq!(load_global_catalog(dir.path()).unwrap().triggers, [needs]);
+}
+
+#[test]
+fn a_mode_that_is_not_a_name_reads_as_regex_in_a_profile_and_the_catalog() {
+    for value in ["1", "true", "[]"] {
+        let text = format!(
+            "[[triggers]]\nname = \"needs\"\n\n\
+             [[triggers.patterns]]\npattern = '^You are hungry\\.$'\nmode = {value}\n\n\
+             [[triggers.patterns]]\npattern = \"You are thirsty.\"\nmode = \"text\"\n\n\
+             [[triggers.actions]]\nkind = \"gag\"\n"
+        );
+        let modes = |triggers: &[Trigger]| -> Vec<MatchMode> {
+            triggers[0].patterns.iter().map(|p| p.mode).collect()
+        };
+        let loaded = ProfileConfig::from_toml(&text).unwrap();
+        assert_eq!(
+            modes(&loaded.triggers),
+            [MatchMode::Regex, MatchMode::Text],
+            "{value}"
+        );
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(catalog_path(dir.path()), &text).unwrap();
+        let catalog = load_global_catalog(dir.path()).unwrap();
+        assert_eq!(
+            modes(&catalog.triggers),
+            [MatchMode::Regex, MatchMode::Text],
+            "{value}"
+        );
+    }
 }

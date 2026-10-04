@@ -58,6 +58,12 @@ export function sectionKeyOf(entry: Pick<ListEntry, 'group' | 'preset'>): string
   return entry.preset ? PRESET_KEY : UNGROUPED_KEY;
 }
 
+/** The group a section stands for, by its key, or null for the
+ *  ungrouped items and the presets, which no switch turns. */
+export function groupOfSectionKey(key: string): string | null {
+  return key.startsWith('g:') ? key.slice(2) : null;
+}
+
 /** Sort entries into sections: ungrouped first, named groups in
  *  alphabetical order, ungrouped presets last. */
 export function buildSections(entries: readonly ListEntry[]): ListSection[] {

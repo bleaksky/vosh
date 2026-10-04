@@ -38,6 +38,7 @@ import { ItemList, type PinnedEntry } from './ItemList';
 import { JsonPanel } from './JsonPanel';
 import { SaveBar, type SaveStatus } from './SaveBar';
 import type { DirtyReport, KindSpec } from './types';
+import { useGroupSwitches } from './useGroupSwitches';
 import { useListFolds } from './useListFolds';
 
 /** A block pinned above the list with its own detail and its own
@@ -119,6 +120,7 @@ export function DraftEditor<T>({
   const [deleteSeq, setDeleteSeq] = useState(0);
   const afterDeleteRef = useRef<string | null>(null);
   const folds = useListFolds(spec.id, filter);
+  const groupSwitches = useGroupSwitches(spec.groups ?? null, draft?.saved, onError);
   /** The selection when the filter took its first letter. */
   const filterFromRef = useRef<string | null>(null);
 
@@ -546,6 +548,7 @@ export function DraftEditor<T>({
               warnNote={warnNote}
               folded={folds.folded}
               onFold={folds.setFold}
+              groupSwitches={groupSwitches}
               footer={
                 spec.json ? (
                   <Button

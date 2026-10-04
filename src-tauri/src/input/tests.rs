@@ -1921,6 +1921,37 @@ fn slash_trigger_invalid_regex_rejected() {
 }
 
 #[test]
+fn slash_triggers_lists_each_first_pattern_in_its_mode() {
+    use vosh_automation::trigger::{MatchMode, Trigger, TriggerPattern};
+    let mut p = Profile::default();
+    let _ = process(&mut p, r"#trigger hungry {^You are hungry\.$} gag");
+    for (name, pattern, mode) in [
+        ("thirsty", "You are thirsty.", MatchMode::Text),
+        ("tells", "Tolliver tells you", MatchMode::StartsWith),
+    ] {
+        p.triggers
+            .set(Trigger {
+                patterns: vec![TriggerPattern {
+                    mode,
+                    ..TriggerPattern::regex(pattern)
+                }],
+                ..Trigger::new(name, "", TriggerAction::Gag)
+            })
+            .unwrap();
+    }
+    let r = process(&mut p, "#triggers");
+    assert_eq!(
+        r.echo,
+        [
+            "3 trigger(s) by priority:",
+            r"    [  0] hungry /^You are hungry\.$/ -> gag",
+            "    [  0] thirsty text \"You are thirsty.\" -> gag",
+            "    [  0] tells starts with \"Tolliver tells you\" -> gag",
+        ]
+    );
+}
+
+#[test]
 fn slash_untrigger_removes() {
     let mut p = Profile::default();
     let _ = process(&mut p, "#trigger spam {tingle} gag");
@@ -2048,4 +2079,73 @@ fn logs_from_a_timer_or_script_says_where_it_runs() {
         assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(r.echo, vec!["[type #logs at the input bar]".to_string()]);
     }
+}
+
+/// A timer every 30 seconds that sends `command`, in `group`.
+fn timer_in(id: u32, command: &str, group: Option<&str>) -> crate::profile::live::Timer {
+    crate::profile::live::Timer {
+        id,
+        name: String::new(),
+        interval_secs: 30,
+        command: command.into(),
+        enabled: true,
+        group: group.map(Into::into),
+    }
+}
+
+#[test]
+fn slash_group_turns_a_timer_group_off_and_on() {
+    let mut p = Profile::default();
+    p.timers.push(timer_in(1, "drink water", Some("upkeep")));
+    p.timers.push(timer_in(2, "save", None));
+    let r = process(&mut p, "#group upkeep off");
+    assert_eq!(r.echo, ["group `upkeep` disabled for timers"]);
+    assert!(!p.timer_fires(&p.timers[0]));
+    // A timer with no group never turns off with one.
+    assert!(p.timer_fires(&p.timers[1]));
+    let r = process(&mut p, "#group upkeep");
+    assert_eq!(
+        r.echo,
+        [
+            "group `upkeep`:",
+            "  triggers: (none tagged)",
+            "  aliases : (none tagged)",
+            "  macros  : (none tagged)",
+            "  timers  : off",
+        ]
+    );
+    let r = process(&mut p, "#groups");
+    assert_eq!(r.echo, ["1 group(s):", "  upkeep: timers=off"]);
+    let r = process(&mut p, "#group upkeep on");
+    assert_eq!(r.echo, ["group `upkeep` enabled for timers"]);
+    assert!(p.timer_fires(&p.timers[0]));
+    assert!(p.disabled_timer_groups.is_empty());
+}
+
+#[test]
+fn slash_group_turns_every_store_that_holds_the_group() {
+    let mut p = Profile::default();
+    let mut kick = Alias::new("kk", "kick");
+    kick.group = Some("combat".into());
+    p.aliases.set(kick);
+    p.timers.push(timer_in(1, "bash", Some("combat")));
+    let r = process(&mut p, "#group combat off");
+    assert_eq!(r.echo, ["group `combat` disabled for aliases + timers"]);
+    assert!(!p.aliases.is_group_enabled("combat"));
+    assert!(!p.timer_fires(&p.timers[0]));
+    let r = process(&mut p, "#group nothing off");
+    assert_eq!(
+        r.echo,
+        ["[group `nothing` not found in triggers, aliases, macros, or timers]"]
+    );
+    let leftover = &p.disabled_timer_groups;
+    assert!(!leftover.contains("nothing"), "{leftover:?}");
+}
+
+#[test]
+fn a_timer_group_turned_off_by_lua_stops_its_timers() {
+    let mut p = Profile::default();
+    p.timers.push(timer_in(1, "drink water", Some("upkeep")));
+    let _ = process(&mut p, "#lua mud.set_group_enabled('upkeep', false)");
+    assert!(!p.timer_fires(&p.timers[0]));
 }

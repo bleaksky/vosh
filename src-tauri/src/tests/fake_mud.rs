@@ -2356,6 +2356,7 @@ async fn lua_a_settings_timer_runs_starts_timers_and_runs_input() {
                 interval_secs: 1,
                 command: command.into(),
                 enabled: true,
+                group: None,
             });
         }
     }
@@ -2453,6 +2454,7 @@ async fn a_timer_line_moves_the_target_display_and_repaints_your_prompt() {
                 interval_secs: 1,
                 command: command.into(),
                 enabled: true,
+                group: None,
             });
         }
     }

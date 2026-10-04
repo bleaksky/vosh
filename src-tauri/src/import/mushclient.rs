@@ -126,10 +126,7 @@ fn mushclient_trigger_from(e: &BytesStart, report: &mut ImportReport) -> Option<
     }
     Some(Trigger {
         name,
-        patterns: vec![vosh_automation::trigger::TriggerPattern {
-            pattern,
-            enabled: true,
-        }],
+        patterns: vec![vosh_automation::trigger::TriggerPattern::regex(pattern)],
         priority: sequence,
         enabled,
         group: None,

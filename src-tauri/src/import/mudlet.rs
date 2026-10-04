@@ -202,10 +202,9 @@ fn commit_mudlet_trigger(item: MudletItem, report: &mut ImportReport) {
     }
     report.triggers.push(Trigger {
         name,
-        patterns: vec![vosh_automation::trigger::TriggerPattern {
-            pattern: item.pattern,
-            enabled: true,
-        }],
+        patterns: vec![vosh_automation::trigger::TriggerPattern::regex(
+            item.pattern,
+        )],
         priority: 100,
         enabled: item.is_active,
         actions,

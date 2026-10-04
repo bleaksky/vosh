@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Draft, KindNoun, SavedWrite } from '../../../../lib/automationDraft';
 import type { ListEntry } from '../../../../lib/automationList';
+import type { GroupList } from '../../../../lib/session';
 
 /** The kinds on the Automation switcher. Loadouts shows in loadout
  *  mode only. */
@@ -89,6 +90,9 @@ export interface KindSpec<T> {
   /** Reload when the store changes elsewhere while the draft is clean. */
   subscribe?: (onChange: () => void) => Promise<() => void>;
   renderDetail: (props: DetailProps<T>) => ReactNode;
+  /** The list whose groups the switch on each heading turns. Leave out
+   *  for kinds whose headings have no switch, like Presets. */
+  groups?: GroupList;
   /** Mono list rows for MUD text, like alias names and macro keys. */
   monoName?: boolean;
   monoMeta?: boolean;

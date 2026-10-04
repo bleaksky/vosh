@@ -66,6 +66,10 @@ Features approved on October 3. You approved two design reviews in full, Vosh Sc
 
 The Scripts review reverses part of D5, since plugins get a page in Settings, and brings the speedwalk D3 put after 1.0 forward as `#walk` and click to walk on the tiles the game sends. Auto reconnect joins 1.0, as prompt.md already promised. R23 records all three in docs/requirements.md.
 
+The match modes landed after R13 with Regex still the mode a new trigger starts in, since the Triggers editor has no control for them yet. The control lands with the screens after R18. In the same work `blankTrigger` and `Add pattern` start a new row in Text as Q11 approved, the test `starts a new trigger as Regex until the editor offers the modes` in src/lib/automationTriggers.test.ts flips, and HELP 3.2 describes the three modes where it now says patterns are regexes.
+
+One question about the modes waits for you before that control lands. 0.7.2 and 0.8.0 read a Text or Starts with row as a regex, which the review accepted. A text that is not a valid regex, such as a line that starts with `**` or holds an unmatched `(`, makes those builds drop the trigger with a warning, and their next save writes the profile file or catalog.toml without it. So a downgrade can lose that trigger, which D14 promises it will not. You can accept this as a limit of D14 and record it here. Or Vosh can write the regex a Text or Starts with row compiles to in `pattern` and the text you typed in a new `text` field, so an older build reads a regex that matches the same lines. The second changes the file shape the review approved. Today you reach a mode only through Edit all as JSON or a hand edit.
+
 The trigger engine reads `pieces` in `crates/ansi`, and the readable.rs tests read the SGR model there, so the ansi row in 3.7 and R7 item 3 no longer hold as written. R7 keeps `plain_text` and `pieces` and puts the SGR model behind a vosh-ansi `testkit` feature that the vosh-trigger tests turn on.
 
 ## Decisions taken

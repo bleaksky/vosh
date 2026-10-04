@@ -779,7 +779,7 @@ describe('the help on folding groups in Automation', () => {
   it('says how a heading folds its group and what the list remembers', () => {
     const text = body('automate.first-alias');
     expect(text).toContain(
-      'Triggers, Aliases, and Macros each list your items under a heading for every group, and Presets under a heading for each category.',
+      'Triggers, Aliases, Macros, and Timers each list your items under a heading for every group, and Presets under a heading for each category.',
     );
     expect(text).toContain(
       'Click a heading to fold its group away, and click it again to open it.',
@@ -802,7 +802,8 @@ describe('the help on folding groups in Automation', () => {
     const paragraph =
       body('automate.first-alias')
         .split('\n\n')
-        .find((p) => p.startsWith('Triggers, Aliases, and Macros')) ?? '';
+        .find((p) => p.startsWith('Triggers, Aliases, Macros, and Timers')) ?? '';
+    expect(paragraph).not.toBe('');
     expect(paragraph.replace(/`[^`]*`/g, '')).not.toMatch(/[:;–—]| - /);
   });
 });
@@ -945,6 +946,79 @@ describe('the help on #walk', () => {
 
   it('matches HELP.md word for word', () => {
     for (const id of ['play.walk', 'reference.slash-commands', 'reference.keyboard-shortcuts']) {
+      const found = HELP_TOPICS.find((t) => t.id === id);
+      if (!found) throw new Error(`no help topic ${id}`);
+      expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+    }
+  });
+});
+
+describe('the help on group switches and timer groups', () => {
+  const switches =
+    'The switch after a group heading turns the whole group on and off at once, the same as `#group`, and each item keeps its own `Enabled`.';
+
+  it('says what the switch on a heading does, and when it waits', () => {
+    const text = body('automate.first-alias');
+    expect(text).toContain(switches);
+    expect(text).toContain('It acts as you flip it, with no `Save`');
+    expect(text).toContain('a group you just named gets its switch once you save it');
+    expect(text).toContain('`Tab` from a heading reaches its switch, and `Space` flips it.');
+    expect(text).toContain(
+      'In loadout mode, while an active loadout lists groups or while you keep the catalog dormant, the loadouts decide each group of triggers, aliases, and macros.',
+    );
+    expect(text).toContain(
+      'Its switch waits, and a note under the heading names the loadouts that decide it, or says every loadout is off.',
+    );
+    expect(text).toContain(
+      '`#group` still turns such a group, and the note then says when the loadouts turn it back.',
+    );
+    expect(text).toContain(
+      'with the switch on the heading of their group or with `#group <name> on|off`',
+    );
+    const paragraph = text.split('\n\n').find((p) => p.startsWith('The switch after')) ?? '';
+    expect(paragraph.replace(/`[^`]*`/g, '')).not.toMatch(/[:;–—]| - /);
+  });
+
+  it('says timers take groups, and that no loadout turns them', () => {
+    expect(body('automate.first-alias')).toContain(
+      'A timer takes a `Group` too, and a timer in a group that is off waits, then starts a whole interval once the group comes back on.',
+    );
+    expect(body('automate.macros')).toContain(
+      'along with matching alias, trigger, and timer groups.',
+    );
+    expect(body('characters-and-data.loadouts')).toContain(
+      'Timers stay with each profile, so no loadout turns a timer group on or off.',
+    );
+    expect(body('reference.slash-commands')).toContain(
+      '`#group <name> on|off` turns a group of triggers, aliases, macros, and timers on or off',
+    );
+    expect(body('reference.keyboard-shortcuts')).toContain(
+      '`Tab` from a heading reaches its group switch, and `Space` flips it.',
+    );
+  });
+
+  it('says a dormant catalog holds every switch too', () => {
+    const loadouts = body('characters-and-data.loadouts');
+    expect(loadouts).toContain(
+      'When no active loadout declares any enabled groups, the loadouts impose nothing and each group stays on or off as you left it, unless you keep the catalog dormant.',
+    );
+    expect(loadouts).toContain(
+      'While they impose, and while the catalog is dormant, the switch on each catalog group in Automation waits, with a note that names the loadouts that decide it or says every loadout is off.',
+    );
+    const paragraph =
+      loadouts.split('\n\n').find((p) => p.startsWith('When no active loadout')) ?? '';
+    expect(paragraph).not.toBe('');
+    expect(paragraph.replace(/`[^`]*`/g, '')).not.toMatch(/[:;–—]| - /);
+  });
+
+  it('reads the same in HELP.md', () => {
+    for (const id of [
+      'automate.first-alias',
+      'automate.macros',
+      'characters-and-data.loadouts',
+      'reference.slash-commands',
+      'reference.keyboard-shortcuts',
+    ]) {
       const found = HELP_TOPICS.find((t) => t.id === id);
       if (!found) throw new Error(`no help topic ${id}`);
       expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);

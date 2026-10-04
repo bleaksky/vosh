@@ -4,7 +4,7 @@ Hand written and synthetic. Nothing here was captured from a live session. Every
 
 ## looks.json
 
-Room looks, each as a list of events in wire order. A `gmcp` event is a packet, a `line` event is one line of text with the ANSI codes the server sends, and a `prompt` event is a prompt the server ends with a GA. `room` marks the lines a Room trigger matches, the armies, the things and the people a look lists after its exits line. `target` on a case is what you gave `tar` before the look, and on a line it marks the line of that person, which a Your target trigger matches. `src-tauri/src/session/tests/room.rs` plays each look through the session's own steps, and `crates/automation/src/trigger/engine.rs` highlights each word of each line in place.
+Room looks, each as a list of events in wire order. A `gmcp` event is a packet, a `line` event is one line of text with the ANSI codes the server sends, and a `prompt` event is a prompt the server ends with a GA. `room` marks the lines a Room trigger matches, the armies, the things and the people a look lists after its exits line. `target` on a case is what you gave `tar` before the look, and on a line it marks the line of that person, which a Your target trigger matches. `src-tauri/src/session/tests/room.rs` plays each look through the session's own steps, and `crates/automation/src/trigger/engine.rs` highlights each word of each line in place and matches each line in the Text and Starts with modes, copied with and without its leading spaces.
 
 Where the lines come from.
 

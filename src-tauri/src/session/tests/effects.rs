@@ -329,3 +329,47 @@ fn one_result_runs_100_mud_input_lines_in_all_its_rounds() {
     assert!(run.is_empty(), "{run:?}");
     assert!(said.is_empty(), "{said:?}");
 }
+
+#[test]
+fn a_timer_in_a_group_that_is_off_waits_and_starts_fresh_when_it_comes_back() {
+    use std::collections::HashMap;
+    use std::time::Duration;
+
+    use tokio::time::Instant;
+
+    use crate::session::conn::due_settings_timers;
+
+    let mut p = Profile::default();
+    for (id, group) in [(1, Some("upkeep")), (2, None)] {
+        p.timers.push(crate::profile::live::Timer {
+            id,
+            name: String::new(),
+            interval_secs: 10,
+            command: format!("timer {id}"),
+            enabled: true,
+            group: group.map(Into::into),
+        });
+    }
+    let mut next = HashMap::new();
+    let t0 = Instant::now();
+    // The first look seeds each deadline one interval out.
+    let leftover = &due_settings_timers(&p, &mut next, t0);
+    assert!(leftover.is_empty(), "{leftover:?}");
+    let secs = |n| t0 + Duration::from_secs(n);
+    assert_eq!(
+        due_settings_timers(&p, &mut next, secs(10)),
+        ["timer 1", "timer 2"]
+    );
+    p.disabled_timer_groups.insert("upkeep".into());
+    assert_eq!(due_settings_timers(&p, &mut next, secs(20)), ["timer 2"]);
+    assert!(!next.contains_key(&1));
+    // Back on, it waits a whole interval from now rather than firing
+    // for the slots it missed.
+    p.disabled_timer_groups.clear();
+    assert_eq!(
+        due_settings_timers(&p, &mut next, secs(25)),
+        Vec::<String>::new()
+    );
+    assert_eq!(due_settings_timers(&p, &mut next, secs(30)), ["timer 2"]);
+    assert_eq!(due_settings_timers(&p, &mut next, secs(35)), ["timer 1"]);
+}

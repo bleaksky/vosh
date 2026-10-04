@@ -19,6 +19,7 @@ import type { DetailProps, EditorProps, KindSpec } from './types';
 
 const MACROS_SPEC: KindSpec<MacroRecord> = {
   id: 'macros',
+  groups: 'macros',
   noun: { one: 'macro', many: 'macros' },
   filterLabel: 'Filter macros',
   newLabel: 'New macro',
