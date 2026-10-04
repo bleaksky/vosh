@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apca, checks, fit, GAME_FIXED_COLORS, xterm256 } from './gameFit';
+import { apca, checks, fit, GAME_FIXED_COLORS, needsFit, xterm256 } from './gameFit';
 import { findTheme, type XtermPalette } from './themes';
 
 // Triad as the Themes review drew it, the one palette that passes every
@@ -96,6 +96,13 @@ describe('checks', () => {
 describe('fit', () => {
   it('leaves a palette that passes every check as it is', () => {
     expect(fit(TRIAD)).toEqual({});
+  });
+
+  it('asks for a fit only where one can move a color', () => {
+    expect(needsFit(TRIAD)).toBe(false);
+    expect(needsFit(findTheme('tango-dark').xterm)).toBe(true);
+    // A color the fit cannot read.
+    expect(needsFit({ ...findTheme('tango-dark').xterm, red: 'crimson' })).toBe(false);
   });
 
   // The lifts the Themes review's survey (fit-survey.json) gives Tango

@@ -28,7 +28,7 @@ import { ConfirmDialog } from '../../../ConfirmDialog';
 import type { UpdateConfig } from '../../legacy/useSettingsAutoSave';
 import { Button, Field, PlusIcon, Row, Select } from '../../ui';
 import { ColorBlock, ColorGroup } from './ColorGrid';
-import { useKeepFit } from './useKeepFit';
+import { fitAndKeep } from './fitAndKeep';
 
 /** How long the colors rest after an edit before Vosh fits the game
  *  colors to them, so a drag through the picker fits once. */
@@ -45,9 +45,19 @@ interface CustomThemeRowsProps {
 export function CustomThemeRows({ config, update }: CustomThemeRowsProps) {
   const [editId, setEditId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const keepFitOf = useKeepFit(config, update);
-  const refit = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(refit.current), []);
+  // The fit of colors still settling after an edit. Leaving the rows
+  // runs it at once, so the fit is kept.
+  const refit = useRef<{ timer: ReturnType<typeof setTimeout>; run: () => void } | undefined>(
+    undefined,
+  );
+  useEffect(
+    () => () => {
+      if (!refit.current) return;
+      clearTimeout(refit.current.timer);
+      refit.current.run();
+    },
+    [],
+  );
   const customs = config.custom_themes;
   const shown = activeThemeFor(config);
   // The theme the editor holds: the one you chose, else the custom
@@ -69,7 +79,7 @@ export function CustomThemeRows({ config, update }: CustomThemeRowsProps) {
     setEditId(theme.id);
     // A copy keeps the fit of the theme it copies, and one with none
     // to keep is fitted now.
-    if (!theme.fitted) keepFitOf(theme);
+    if (!theme.fitted) fitAndKeep(theme, update);
   };
 
   const edit = (id: string, patch: Partial<CustomTheme>) => {
@@ -91,8 +101,12 @@ export function CustomThemeRows({ config, update }: CustomThemeRowsProps) {
     const before = customs.find((t) => t.id === id);
     const after = list.find((t) => t.id === id);
     if (before && after && customFitKey(before) !== customFitKey(after)) {
-      clearTimeout(refit.current);
-      refit.current = setTimeout(() => keepFitOf(after), FIT_SETTLE_MS);
+      if (refit.current) clearTimeout(refit.current.timer);
+      const run = () => {
+        refit.current = undefined;
+        fitAndKeep(after, update);
+      };
+      refit.current = { timer: setTimeout(run, FIT_SETTLE_MS), run };
     }
   };
 

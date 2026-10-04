@@ -78,29 +78,43 @@ function pick(root: FakeNode, label: string, hex: string) {
   props.onChange({ target: { value: hex } });
 }
 
+let shown: UiConfig;
+
+function startConfig(): UiConfig {
+  return normalizeUiConfig({
+    theme: 'nord',
+    auto_update: false,
+    font_family: 'Menlo',
+    font_size: 14,
+    tracked_affects: [],
+    enabled_presets: [],
+    custom_themes: [dusk],
+  });
+}
+
+/** The rows on `shown`, with the config the Settings window keeps above
+ *  them. Without `rows` the window shows another page. */
+function Host({ rows = true }: { rows?: boolean }) {
+  const [cfg, setCfg] = useState(shown);
+  shown = cfg;
+  if (!rows) return null;
+  return createElement(CustomThemeRows, {
+    config: cfg,
+    update: (patch) =>
+      setCfg((c) => {
+        const change = typeof patch === 'function' ? patch(c) : patch;
+        return change ? { ...c, ...change } : c;
+      }),
+  });
+}
+
 describe('CustomThemeRows', () => {
   it('drops the fit on an edit to a color it reads and fits the new colors once', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const container = doc.createElement('div');
     doc.body.appendChild(container);
     const root = createRoot(container as unknown as HTMLElement);
-    let shown: UiConfig = normalizeUiConfig({
-      theme: 'nord',
-      auto_update: false,
-      font_family: 'Menlo',
-      font_size: 14,
-      tracked_affects: [],
-      enabled_presets: [],
-      custom_themes: [dusk],
-    });
-    function Host() {
-      const [cfg, setCfg] = useState(shown);
-      shown = cfg;
-      return createElement(CustomThemeRows, {
-        config: cfg,
-        update: (patch) => setCfg((c) => ({ ...c, ...patch })),
-      });
-    }
+    shown = startConfig();
     await act(async () => {
       root.render(createElement(Host));
     });
@@ -134,6 +148,38 @@ describe('CustomThemeRows', () => {
     });
     expect(shown.custom_themes[0].fitted).toEqual({ red: '#e0473f' });
     expect(fitting.asked).toHaveLength(1);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('fits colors still settling at once when you leave, and keeps the fit', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    fitting.asked.length = 0;
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    shown = startConfig();
+    await act(async () => {
+      root.render(createElement(Host));
+    });
+    await act(async () => {
+      pick(container, 'red', '#cc3333');
+    });
+    expect(fitting.asked).toHaveLength(0);
+
+    // You move to another page before the colors rest. The fit starts
+    // then, and its answer lands on the config the window keeps.
+    await act(async () => {
+      root.render(createElement(Host, { rows: false }));
+    });
+    expect(fitting.asked).toHaveLength(1);
+    expect(fitting.asked[0].red).toBe('#cc3333');
+    await act(async () => {
+      fitting.answer({ red: '#d94a44' });
+    });
+    expect(shown.custom_themes[0].fitted).toEqual({ red: '#d94a44' });
 
     await act(async () => {
       root.unmount();

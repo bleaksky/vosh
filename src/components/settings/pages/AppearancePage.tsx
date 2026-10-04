@@ -43,7 +43,7 @@ import { Button, Card, Row, Section, Segmented, Select, Toggle } from '../ui';
 import { AdvancedAppearance } from './appearance/AdvancedAppearance';
 import { CollapseRows } from './appearance/CollapseRows';
 import { ThemeGallery } from './appearance/ThemeGallery';
-import { useKeepFit } from './appearance/useKeepFit';
+import { fitAndKeep } from './appearance/fitAndKeep';
 
 // Appearance, from the approved board (SettingsAppearance.dc.html).
 // Theme holds Import… and the gallery of every theme, a caption that
@@ -108,7 +108,6 @@ function systemName(): string {
 
 export function AppearancePage({ target, navSeq, config, setConfig, onError }: SettingsPageProps) {
   const { update } = useSettingsAutoSave(setConfig, onError);
-  const keepFitOf = useKeepFit(config, update);
   const [advancedOpen, setAdvancedOpen] = useState(() => opensAdvanced(target));
   const [importError, setImportError] = useState<string | null>(null);
   const [installedFonts, setInstalledFonts] = useState<SystemFontEntry[]>([]);
@@ -137,6 +136,19 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
       cancelled = true;
     };
   }, []);
+
+  // A custom theme that keeps no fit is fitted once the page opens on
+  // your config, and keeps the fit: one imported before Vosh kept fits,
+  // one Vosh 0.8.1 saved, which drops the fit, and one whose fit Settings
+  // closed before it could keep.
+  const loaded = config !== null;
+  useEffect(() => {
+    for (const theme of configRef.current?.custom_themes ?? []) {
+      if (!theme.fitted) fitAndKeep(theme, update);
+    }
+    // The page asks once, when your config is there.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   if (!config) return null;
 
@@ -211,7 +223,7 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
     // The theme shows at once, and its game colors are fitted once,
     // off the main thread, and kept with it.
     addTheme(theme);
-    keepFitOf(theme);
+    fitAndKeep(theme, update);
   };
 
   const fontValue = config.font_family || BUNDLED_FONTS[0].value;
