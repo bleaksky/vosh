@@ -178,6 +178,13 @@ pub(crate) struct Session {
     /// When each alert of the session last rang, for the 10 second cap. A
     /// leaf lock, taken alone once the profile and connection let go.
     alert_caps: std::sync::Mutex<crate::alert::Caps>,
+    /// The series of redials the session runs after a drop, if any. A
+    /// leaf lock, held to start, take or wake one. See
+    /// [`crate::session::reconnect`].
+    redial: std::sync::Mutex<Option<crate::session::reconnect::Redial>>,
+    /// A redial opened the connection that runs and its first text has
+    /// yet to come, which rings the Connection alert.
+    pub(crate) redialed: AtomicBool,
 }
 
 impl Session {
@@ -207,6 +214,8 @@ impl Session {
             launch_lua_lines: std::sync::Mutex::new(Vec::new()),
             output_count: AtomicU64::new(0),
             alert_caps: std::sync::Mutex::new(crate::alert::Caps::default()),
+            redial: std::sync::Mutex::new(None),
+            redialed: AtomicBool::new(false),
         }
     }
 
@@ -268,8 +277,9 @@ impl Session {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = name.map(str::to_string);
     }
 
-    /// The character logged in on the live connection, if any.
-    fn character(&self) -> Option<String> {
+    /// The character logged in on the live connection, if any. A drop
+    /// keeps it until the next connect.
+    pub(crate) fn character(&self) -> Option<String> {
         self.current_character
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -333,6 +343,47 @@ impl Session {
     /// count after it.
     pub(crate) fn count_output(&self) -> u64 {
         self.output_count.fetch_add(1, Ordering::AcqRel) + 1
+    }
+
+    /// The host and port of the live connection, which a drop keeps until
+    /// the next connect.
+    pub(crate) fn live_address(&self) -> Option<(String, u16)> {
+        self.current_connection
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Keep `redial`, the series of redials the session now runs.
+    pub(crate) fn start_redial(&self, redial: crate::session::reconnect::Redial) {
+        *self
+            .redial
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(redial);
+    }
+
+    /// Take the series of redials the session runs, to end it.
+    pub(crate) fn take_redial(&self) -> Option<crate::session::reconnect::Redial> {
+        self.redial
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+    }
+
+    /// Dial at once in the series the session runs. Returns false when it
+    /// runs none.
+    pub(crate) fn redial_now(&self) -> bool {
+        let redial = self
+            .redial
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match redial.as_ref() {
+            Some(redial) if !redial.ended() => {
+                redial.now();
+                true
+            }
+            _ => false,
+        }
     }
 
     /// Whether the alert counted under `cap` may ring at `now`, under the

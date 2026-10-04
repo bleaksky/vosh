@@ -59,6 +59,17 @@ pub(crate) struct Watch {
     target: Option<String>,
 }
 
+/// What the connection alert says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Link {
+    /// The link dropped while you played.
+    Lost,
+    /// A redial reached the game's prompt, so you can log in.
+    Ready,
+    /// Vosh stopped trying.
+    Stopped,
+}
+
 impl Watch {
     /// A connection opened or ended, so nothing it followed carries on.
     pub(crate) fn reset(&mut self) {
@@ -187,6 +198,22 @@ pub(crate) fn health(vars: &vosh_prompt::values::Vars) -> Option<(i64, i64, bool
         return None;
     }
     Some((hp.unwrap_or(0), maxhp.unwrap_or(0), hidden))
+}
+
+/// What the connection preset rings for `link`, while it is on. Each
+/// turn of the link counts under a cap of its own, so a redial that
+/// reaches the prompt 3 seconds after the drop still rings.
+pub(crate) fn connection(p: &Profile, link: Link) -> Option<Alert> {
+    let parts = parts(p, CONNECTION)?;
+    let (key, title) = match link {
+        Link::Lost => ("lost", "Connection lost"),
+        Link::Ready => ("ready", "Ready to log in"),
+        Link::Stopped => ("stopped", "Vosh stopped trying"),
+    };
+    Some(Alert {
+        cap: format!("preset:{CONNECTION}:{key}"),
+        ..preset(CONNECTION, title.into(), None, parts)
+    })
 }
 
 /// A tell you got, from Comm.Channel.

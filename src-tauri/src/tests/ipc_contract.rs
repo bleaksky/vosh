@@ -145,6 +145,11 @@ const UNHEARD: &[Unheard] = &[
               its notice and marks the row, after R18 (Alerts Q18).",
     },
     Unheard {
+        name: "session://reconnect",
+        why: "Where a redial stands. The reconnect notice of the page half \
+              hears it, after R18 (Alerts Q18).",
+    },
+    Unheard {
         name: "vosh://session-selected",
         why: "A click on a banner selected a session. The page opens one \
               session until the page half of R14b after R20.",

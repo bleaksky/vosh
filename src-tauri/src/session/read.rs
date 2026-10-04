@@ -7,6 +7,7 @@
 //! gathered, once. A partial that waited for the next read, and the lines
 //! held for the rest of a prompt, go out the same way.
 
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use tauri::AppHandle;
@@ -374,7 +375,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
     } = batch;
     let (app, session) = (&conn.app, &conn.session);
     let watched = prompt && watching_prompt(session);
-    let (open, vars, hidden, prompt_seen, status, prompt_state, clock, low) = {
+    let (open, vars, hidden, prompt_seen, status, prompt_state, clock, rings) = {
         let p = conn.session.lock_profile().await;
         let mut c = session.connection.lock();
         // Echoes the end of the read wrote close the open row.
@@ -385,10 +386,20 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         // packets and prompt values landed, while its preset is on.
         let follow = (gmcp || prompt_vars || hidden.is_some())
             && crate::alert::presets::parts(&p, crate::alert::presets::LOW_HEALTH).is_some();
-        let low = follow
+        let mut rings: Vec<crate::alert::Alert> = follow
             .then(|| crate::alert::presets::health(&c.prompt.vars))
             .flatten()
-            .and_then(|(hp, maxhp, hid)| c.alerts.health(&p, hp, maxhp, hid));
+            .and_then(|(hp, maxhp, hid)| c.alerts.health(&p, hp, maxhp, hid))
+            .into_iter()
+            .collect();
+        // The first text of a link a redial opened is the game's prompt,
+        // which waits for your login.
+        if out.writes_text() && session.redialed.swap(false, Ordering::AcqRel) {
+            rings.extend(crate::alert::presets::connection(
+                &p,
+                crate::alert::presets::Link::Ready,
+            ));
+        }
         (
             p.open().clone(),
             vars,
@@ -397,7 +408,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
             c.prompt.take_status_change(),
             watched.then(|| crate::prompt::prompt_state(&p, &c)),
             clock_after(&p, &c, Instant::now()),
-            low,
+            rings,
         )
     };
     if !out.is_empty() {
@@ -429,7 +440,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         session.emit(app, events::PROMPT_STATUS, &status);
     }
     emit_prompt_state(app, session, prompt_state);
-    crate::alert::ring(app, session, low.into_iter().collect());
+    crate::alert::ring(app, session, rings);
     clock
 }
 
