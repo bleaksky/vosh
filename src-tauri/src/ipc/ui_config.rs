@@ -25,6 +25,8 @@ pub(crate) struct UiConfigPayload {
     pub terminal_line_height: String,
     /// Empty for the terminal font, `system`, or a font list.
     pub panel_font: String,
+    /// The panel size in pixels, or 0 for the terminal size.
+    pub panel_font_size: u32,
     pub tracked_affects: Vec<crate::profile::ui::TrackedAffect>,
     pub enabled_presets: Vec<String>,
     pub keep_last_command: bool,
@@ -89,6 +91,7 @@ impl UiConfigPayload {
             font_size: ui.font_size,
             terminal_line_height: ui.terminal_line_height.clone(),
             panel_font: ui.panel_font.clone(),
+            panel_font_size: ui.panel_font_size,
             tracked_affects: ui.tracked_affects.clone(),
             enabled_presets: ui.enabled_presets.clone(),
             keep_last_command: ui.keep_last_command,
@@ -143,6 +146,7 @@ impl UiConfigPayload {
             font_size,
             terminal_line_height,
             panel_font,
+            panel_font_size,
             tracked_affects,
             enabled_presets,
             keep_last_command,
@@ -187,6 +191,7 @@ impl UiConfigPayload {
         ui.terminal_line_height =
             crate::profile::ui::coerce_terminal_line_height(terminal_line_height);
         ui.panel_font = crate::profile::ui::normalize_panel_font(panel_font);
+        ui.panel_font_size = crate::profile::ui::coerce_panel_font_size(panel_font_size);
         ui.tracked_affects = crate::profile::ui::normalize_tracked_affects(tracked_affects);
         ui.enabled_presets = crate::profile::ui::normalize_enabled_presets(enabled_presets);
         ui.keep_last_command = keep_last_command;
@@ -694,6 +699,25 @@ mod tests {
         let mut out = UiConfig::default();
         payload.apply_to(&mut out);
         assert_eq!(out.panel_font, "");
+        assert_eq!(out.font_size, 16);
+    }
+
+    #[test]
+    fn the_panel_size_round_trips_and_a_page_without_it_keeps_12() {
+        let mut ui = UiConfig::default();
+        assert_eq!(through_payload(&ui).panel_font_size, 12);
+        for pick in [0, 11, 16] {
+            ui.panel_font_size = pick;
+            assert_eq!(through_payload(&ui).panel_font_size, pick);
+        }
+        ui.panel_font_size = 200;
+        assert_eq!(through_payload(&ui).panel_font_size, 64);
+        // A page from before the row sends no panel size, which reads as
+        // 12, the size the panes drew at, and never as the terminal size.
+        let payload: UiConfigPayload = serde_json::from_str("{\"font_size\": 16}").unwrap();
+        let mut out = UiConfig::default();
+        payload.apply_to(&mut out);
+        assert_eq!(out.panel_font_size, 12);
         assert_eq!(out.font_size, 16);
     }
 

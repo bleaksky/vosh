@@ -132,6 +132,18 @@ pub(crate) struct UiConfig {
     /// bytes it saved before. A build without it reads past the key.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub panel_font: String,
+    /// The size in pixels every pane and the status line under the
+    /// terminal draw at, 12 by default, the size they were drawn at
+    /// before you could pick one. 0 follows the terminal size
+    /// (`PANEL_FONT_SIZE_TERMINAL`). Part of the `font` scope category.
+    /// Written only once you pick another size, so a profile that never
+    /// does saves the bytes it saved before. A build without it reads
+    /// past the key.
+    #[serde(
+        default = "default_panel_font_size",
+        skip_serializing_if = "is_default_panel_font_size"
+    )]
+    pub panel_font_size: u32,
     /// Affect names rendered as pills in the status bar. Present affects
     /// show their remaining duration; absent ones render as a struck-out
     /// red-bordered pill so the player notices the gap at a glance.
@@ -854,6 +866,7 @@ impl Default for UiConfig {
             font_size: default_font_size(),
             terminal_line_height: default_terminal_line_height(),
             panel_font: String::new(),
+            panel_font_size: default_panel_font_size(),
             tracked_affects: Vec::new(),
             enabled_presets: Vec::new(),
             dock_layout: Vec::new(),
@@ -1023,6 +1036,30 @@ pub(crate) fn normalize_panel_font(value: String) -> String {
         PANEL_FONT_SYSTEM.to_string()
     } else {
         value.to_string()
+    }
+}
+
+/// What the panel Size row saves to follow the terminal size.
+pub(crate) const PANEL_FONT_SIZE_TERMINAL: u32 = 0;
+
+/// The panel size a profile starts at, the size the panes were drawn at.
+pub(crate) const DEFAULT_PANEL_FONT_SIZE: u32 = 12;
+
+fn default_panel_font_size() -> u32 {
+    DEFAULT_PANEL_FONT_SIZE
+}
+
+fn is_default_panel_font_size(size: &u32) -> bool {
+    *size == DEFAULT_PANEL_FONT_SIZE
+}
+
+/// Hold a panel size to the terminal size's 6 to 64 pixels, keeping 0,
+/// which follows the terminal size.
+pub(crate) fn coerce_panel_font_size(size: u32) -> u32 {
+    if size == PANEL_FONT_SIZE_TERMINAL {
+        size
+    } else {
+        coerce_font_size(size)
     }
 }
 
@@ -1267,6 +1304,36 @@ name = "haste"
             normalize_panel_font("\"system\", Menlo, monospace".into()),
             "\"system\", Menlo, monospace"
         );
+    }
+
+    #[test]
+    fn the_panel_size_round_trips_and_stays_out_of_the_file_until_you_pick_one() {
+        // 12, the default, writes nothing, so every file saved before the
+        // row keeps its bytes and reads it back at the size it drew.
+        let written = ProfileConfig::default().to_toml().unwrap();
+        assert!(!written.contains("panel_font_size"), "{written}");
+        let old = ProfileConfig::from_toml("[ui]\nfont_size = 16\n").unwrap();
+        assert_eq!(old.ui.panel_font_size, 12);
+        let mut ui = UiConfig::default();
+        assert_eq!(through_toml(&ui).panel_font_size, 12);
+        for pick in [PANEL_FONT_SIZE_TERMINAL, 11, 14, 18] {
+            ui.panel_font_size = pick;
+            assert_eq!(through_toml(&ui).panel_font_size, pick);
+        }
+        let config = ProfileConfig {
+            ui,
+            ..ProfileConfig::default()
+        };
+        let text = config.to_toml().unwrap();
+        assert!(text.contains("panel_font_size = 18"), "{text}");
+    }
+
+    #[test]
+    fn a_panel_size_holds_to_the_terminal_sizes_and_keeps_same_as_terminal() {
+        assert_eq!(coerce_panel_font_size(PANEL_FONT_SIZE_TERMINAL), 0);
+        assert_eq!(coerce_panel_font_size(3), 6);
+        assert_eq!(coerce_panel_font_size(14), 14);
+        assert_eq!(coerce_panel_font_size(90), 64);
     }
 
     #[test]
@@ -1667,5 +1734,6 @@ name = "haste"
         assert_eq!(ui.dark_theme, "");
         assert_eq!(ui.terminal_line_height, "default");
         assert_eq!(ui.panel_font, "");
+        assert_eq!(ui.panel_font_size, 12);
     }
 }
