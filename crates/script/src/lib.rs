@@ -11,6 +11,7 @@
 
 mod actions;
 mod api;
+mod env;
 mod limits;
 mod owner;
 mod report;
@@ -24,6 +25,7 @@ use regex::Regex;
 use thiserror::Error;
 
 pub use actions::Action;
+use env::Envs;
 use limits::{Limits, Stop};
 pub use owner::Owner;
 use owner::Site;
@@ -144,6 +146,8 @@ pub struct ScriptEngine {
     /// The plugins and loose scripts Vosh stopped. A plugin stays off
     /// until it loads again, and a loose script until `#script reload`.
     stopped: HashSet<Owner>,
+    /// The environment of each plugin that runs.
+    envs: Envs,
 }
 
 impl std::fmt::Debug for ScriptEngine {
@@ -170,10 +174,13 @@ impl ScriptEngine {
         let lua = Lua::new();
         let state = EngineState::new();
         lua.set_app_data(state.clone());
-        api::install(&lua)?;
         api::apply_sandbox(&lua)?;
         let limits = Limits::new();
         limits::install(&lua, &limits, lua.create_function(api::mud_log)?)?;
+        // The plugins read the standard library as it stands now, so
+        // before the shared `mud` table joins the globals.
+        let envs = Envs::install(&lua)?;
+        api::install(&lua)?;
         Ok(Self {
             lua,
             state,
@@ -182,6 +189,7 @@ impl ScriptEngine {
             gmcp_subs: HashMap::new(),
             loaded_scripts: Vec::new(),
             stopped: HashSet::new(),
+            envs,
         })
     }
 
@@ -327,12 +335,35 @@ impl ScriptEngine {
         acc
     }
 
-    /// Run a loaded script's code as one call of `owner`. A run that
-    /// succeeds lets go of all `owner` registered before it began, and
-    /// one that fails takes back what it registered itself.
+    /// Run a loaded script's code as one call of `owner`. A plugin runs
+    /// in a new environment of its own, which takes the place of the one
+    /// it had once the run succeeds, and a loose script runs in the
+    /// global one. A run that succeeds lets go of all `owner` registered
+    /// before it began, and one that fails takes back what it registered
+    /// itself.
     fn run_script(&mut self, owner: &Owner, chunk: &str, code: &str) -> ScriptOutcome {
+        let env = match owner {
+            Owner::Plugin(name) => match self.envs.create(&self.lua, name) {
+                Ok(env) => Some(env),
+                Err(err) => {
+                    return ScriptOutcome {
+                        actions: vec![Action::Error(report::describe(&err))],
+                        failed: true,
+                        stopped: Vec::new(),
+                    }
+                }
+            },
+            _ => None,
+        };
         let before = self.owned_callbacks(owner);
-        let called = self.call(owner, |lua| lua.load(code).set_name(chunk).exec());
+        let called = self.call(owner, |lua| {
+            let chunk = lua.load(code).set_name(chunk);
+            match env.clone() {
+                Some(env) => chunk.set_environment(env),
+                None => chunk,
+            }
+            .exec()
+        });
         if called.stop.is_some() {
             return self.finish(owner, &Site::Entry, called);
         }
@@ -344,6 +375,9 @@ impl ScriptEngine {
             actions: self.release(&before),
             ..ScriptOutcome::default()
         };
+        if let Owner::Plugin(name) = owner {
+            self.envs.set(name, env);
+        }
         outcome.append(self.finish(owner, &Site::Entry, called));
         outcome
     }
@@ -355,6 +389,9 @@ impl ScriptEngine {
     pub fn unload(&mut self, owner: &Owner) -> ScriptOutcome {
         self.loaded_scripts.retain(|script| script.owner != *owner);
         self.stopped.remove(owner);
+        if let Owner::Plugin(name) = owner {
+            self.envs.set(name, None);
+        }
         let owned = self.owned_callbacks(owner);
         ScriptOutcome {
             actions: self.release(&owned),
@@ -572,10 +609,14 @@ impl ScriptEngine {
 
     /// Turn off what a stop of `owner` in `site` leaves off, and return
     /// the actions that tell the session. A plugin and a loose script
-    /// lose every function they handed over and stay stopped. A trigger
-    /// or an alias loses its functions, and the caller turns it off. A
-    /// function from a `#lua` line goes alone.
+    /// lose every function they handed over and stay stopped, and a
+    /// plugin its environment. A trigger or an alias loses its
+    /// functions, and the caller turns it off. A function from a `#lua`
+    /// line goes alone.
     fn stop_owner(&mut self, owner: &Owner, site: &Site) -> Vec<Action> {
+        if let Owner::Plugin(name) = owner {
+            self.envs.set(name, None);
+        }
         let ids = match owner {
             Owner::Typed => site.callback_id().into_iter().collect(),
             Owner::Plugin(_) | Owner::Script(_) => {
@@ -1315,6 +1356,118 @@ mod tests {
         assert!(leftover.is_empty(), "{leftover:?}");
         let leftover = &e.loaded_script_names();
         assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
+    /// Load `code` as the plugin `name`.
+    fn plugin(e: &mut ScriptEngine, name: &str, code: &str) -> ScriptOutcome {
+        e.load_script(
+            Owner::Plugin(name.into()),
+            &format!("@{name}/main.lua"),
+            code.into(),
+        )
+    }
+
+    /// The echoes of an outcome.
+    fn echoes(outcome: &ScriptOutcome) -> Vec<String> {
+        outcome
+            .actions
+            .iter()
+            .filter_map(|action| match action {
+                Action::Echo(text) => Some(text.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn each_plugin_keeps_its_own_globals() {
+        let mut e = ScriptEngine::new().unwrap();
+        for name in ["first", "second"] {
+            plugin(
+                &mut e,
+                name,
+                &format!(
+                    "function draw() return '{name}' end\n\
+                     mud.on_gmcp('Char.Vitals', function() mud.echo(draw()) end)"
+                ),
+            )
+            .unwrap();
+        }
+        let drawn = e
+            .dispatch_gmcp("Char.Vitals", &serde_json::json!({}))
+            .unwrap();
+        assert_eq!(echoes(&drawn), ["first", "second"]);
+        // Neither reaches the globals your own Lua shares, nor they its.
+        e.eval("secret = 'typed'", "=#lua").unwrap();
+        let shared = e.eval("mud.echo(tostring(draw))", "=#lua").unwrap();
+        assert_eq!(echoes(&shared), ["nil"]);
+        let inside = plugin(&mut e, "third", "mud.echo(tostring(secret))").unwrap();
+        assert_eq!(echoes(&inside), ["nil"]);
+        // _G names the plugin's own globals.
+        let own = plugin(&mut e, "fourth", "hp = 80 mud.echo(tostring(_G.hp))").unwrap();
+        assert_eq!(echoes(&own), ["80"]);
+    }
+
+    #[test]
+    fn a_plugin_cannot_change_mud_or_the_libraries_for_the_rest() {
+        let mut e = ScriptEngine::new().unwrap();
+        plugin(
+            &mut e,
+            "rude",
+            "mud.send = function() end\n\
+             mud.send('quiet')",
+        )
+        .unwrap();
+        // Its own mud table changed, and nothing else did.
+        let typed = e.eval("mud.send('look')", "=#lua").unwrap();
+        assert_eq!(typed.actions, vec![Action::Send("look".into())]);
+        let other = plugin(&mut e, "polite", "mud.send('look')").unwrap();
+        assert_eq!(other.actions, vec![Action::Send("look".into())]);
+        // The libraries read as they are, and refuse a change.
+        let read = plugin(
+            &mut e,
+            "reader",
+            "local n = 0 for _ in pairs(string) do n = n + 1 end\n\
+             mud.echo(string.upper('hp') .. ('mv'):upper() .. tostring(n > 5))\n\
+             mud.echo(tostring(getmetatable('')) .. tostring(getmetatable(string)))",
+        )
+        .unwrap();
+        assert_eq!(echoes(&read), ["HPMVtrue", "falsefalse"]);
+        // The sandbox holds inside a plugin too.
+        let sandboxed = plugin(
+            &mut e,
+            "sandboxed",
+            "mud.echo(tostring(io) .. tostring(os.getenv) .. tostring(load))",
+        )
+        .unwrap();
+        assert_eq!(echoes(&sandboxed), ["nilnilnil"]);
+        let refused = plugin(&mut e, "writer", "string.upper = nil");
+        assert_eq!(
+            error_lines(&refused),
+            ["writer/main.lua:1: string is read only in a plugin"]
+        );
+        // A plugin may still put its own table in place of one.
+        let shadowed = plugin(
+            &mut e,
+            "shadow",
+            "string = { upper = function() return 'mine' end } mud.echo(string.upper('x'))",
+        )
+        .unwrap();
+        assert_eq!(echoes(&shadowed), ["mine"]);
+        let typed = e.eval("mud.echo(string.upper('hp'))", "=#lua").unwrap();
+        assert_eq!(echoes(&typed), ["HP"]);
+    }
+
+    #[test]
+    fn a_plugin_starts_from_fresh_globals_on_each_load() {
+        let mut e = ScriptEngine::new().unwrap();
+        let code = "loads = (loads or 0) + 1 mud.echo(tostring(loads))";
+        for _ in 0..3 {
+            assert_eq!(echoes(&plugin(&mut e, "counter", code).unwrap()), ["1"]);
+        }
+        // A loose script shares the globals, which a reload keeps.
+        load(&mut e, "counter.lua", code).unwrap();
+        assert_eq!(echoes(&load(&mut e, "counter.lua", code).unwrap()), ["2"]);
     }
 
     #[test]
