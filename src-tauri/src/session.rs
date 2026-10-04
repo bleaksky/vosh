@@ -346,6 +346,14 @@ pub(crate) async fn connect<R: tauri::Runtime>(
 
     {
         let mut current = session.slot.lock().await;
+        // `session_close` takes the session out of the map before its
+        // disconnect takes the slot. A close that came while this connect
+        // ran found the slot empty, so the connection ends here, or it
+        // would run on with nothing to reach it.
+        if state.session(Some(session.id)).is_err() {
+            handle.shutdown().await;
+            return Err(crate::sessions::NO_SUCH_SESSION.to_string());
+        }
         if let Some(prev) = current.take() {
             // A concurrent connect raced us. Shut down our old handle.
             prev.shutdown().await;
