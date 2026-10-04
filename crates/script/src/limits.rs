@@ -84,8 +84,8 @@ pub(crate) struct Limits {
 
 struct Inner {
     /// When the call running now runs out of time. Between calls it
-    /// lies in the past, so Lua that runs outside a call, such as a
-    /// `__gc` method, stops at the first look at the clock.
+    /// lies in the past, so any Lua that runs outside a call stops at
+    /// the first look at the clock.
     deadline: Instant,
     /// The memory limit the call running now has.
     memory_limit: usize,
