@@ -11,7 +11,10 @@ mod input;
 mod ipc;
 mod loadouts;
 mod logs;
-#[cfg(native_surface)]
+// Off macOS the native grid builds only for the tests, which read it, so
+// what only the renderer calls goes unused there.
+#[cfg(any(native_surface, test))]
+#[cfg_attr(not(native_surface), allow(dead_code))]
 mod native;
 mod output;
 mod profile;

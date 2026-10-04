@@ -219,7 +219,7 @@ pub(crate) fn emit_counted<R: tauri::Runtime>(
     // Word wrapped at the grid width, matching the frontend WordWrapper
     // that xterm receives this same stream through. The grid finds each
     // region in its own rows, as xterm does.
-    #[cfg(native_surface)]
+    #[cfg(any(native_surface, test))]
     crate::native::grid::feed_session_output(out, id);
     if frame {
         request_frame(app);

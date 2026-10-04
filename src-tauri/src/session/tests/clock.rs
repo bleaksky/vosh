@@ -6,7 +6,6 @@
 //! read back holds.
 
 use super::*;
-#[cfg(native_surface)]
 use crate::output::OutputPayload;
 use vosh_prompt::values::overrides::{Preview, PromptPreview};
 use vosh_prompt::PromptShow;
@@ -164,7 +163,6 @@ fn text_after_your_prompt_ends_the_repaints_of_its_row() {
     );
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_band_repaint_between_your_echo_and_its_word_keeps_the_next_line_end() {
     // You type look while pinned. The webview writes your echo, which

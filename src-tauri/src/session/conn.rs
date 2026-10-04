@@ -736,12 +736,12 @@ fn reader_busy<R: tauri::Runtime>(app: &AppHandle<R>) -> bool {
     webview || native_reader_busy()
 }
 
-#[cfg(native_surface)]
+#[cfg(any(native_surface, test))]
 fn native_reader_busy() -> bool {
     crate::native::grid::reader_busy()
 }
 
-#[cfg(not(native_surface))]
+#[cfg(not(any(native_surface, test)))]
 fn native_reader_busy() -> bool {
     false
 }

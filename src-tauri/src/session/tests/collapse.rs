@@ -12,7 +12,6 @@
 //! `update.c` in the server source, with an invented name.
 
 use super::*;
-#[cfg(native_surface)]
 use crate::output::{base64_encode, OutputPayload};
 use vosh_prompt::stage::Repeat;
 use vosh_prompt::testkit::{Build, Mud, Options};
@@ -130,7 +129,6 @@ fn replay(session: &mut Session, login: &[u8], bytes: &[u8], at: &[usize]) -> Ve
 }
 
 /// The rows a native grid `columns` wide shows after `reads`, trimmed.
-#[cfg(native_surface)]
 fn grid_rows(reads: &[Read], columns: usize) -> Vec<String> {
     let mut grid = crate::native::grid::TermGrid::new(columns, 60);
     for read in reads {
@@ -180,7 +178,6 @@ fn rows(lines: &[&str]) -> Vec<String> {
     lines.iter().map(|line| (*line).to_string()).collect()
 }
 
-#[cfg(native_surface)]
 #[test]
 fn repeated_lines_show_once_with_their_count() {
     let streams = streams();
@@ -239,7 +236,6 @@ fn repeated_lines_show_once_with_their_count() {
     );
 }
 
-#[cfg(native_surface)]
 #[test]
 fn repeated_lines_show_the_same_at_every_split_on_the_native_grid() {
     for (name, login, bytes) in streams() {
@@ -417,7 +413,6 @@ fn the_scrollback_ring_keeps_each_run_once_in_the_order_it_came() {
     }
 }
 
-#[cfg(native_surface)]
 #[test]
 fn your_echo_output_from_elsewhere_and_a_new_connection_start_a_new_run() {
     let mut mud = Mud::playing(Options {
@@ -479,7 +474,6 @@ fn your_echo_output_from_elsewhere_and_a_new_connection_start_a_new_run() {
     assert_eq!(made(&read), [None, Some(Repeat::Starts)]);
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_hidden_line_leaves_the_run_and_another_color_starts_a_new_one() {
     let mut p = collapsing(PromptShow::Pinned);
@@ -521,7 +515,6 @@ fn with_collapse_off_every_line_shows_as_before() {
 }
 
 /// The rows a grid shows at its display offset, trimmed.
-#[cfg(native_surface)]
 fn in_view(grid: &crate::native::grid::TermGrid) -> Vec<String> {
     (0..grid.screen_lines())
         .map(|line| {
@@ -533,7 +526,6 @@ fn in_view(grid: &crate::native::grid::TermGrid) -> Vec<String> {
         .collect()
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_run_goes_on_at_the_live_tail_while_you_read_back() {
     let mut session = Session::new(collapsing(PromptShow::Pinned));
@@ -557,7 +549,6 @@ fn a_run_goes_on_at_the_live_tail_while_you_read_back() {
     assert_eq!(live[live.len() - 2], THIRSTY);
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_run_longer_than_the_width_rewrites_every_row_it_takes() {
     let mut session = Session::new(collapsing(PromptShow::Pinned));
@@ -575,7 +566,6 @@ fn a_run_longer_than_the_width_rewrites_every_row_it_takes() {
 }
 
 /// A trigger named `name` that highlights `pattern` in `style`.
-#[cfg(native_surface)]
 fn highlight(
     name: &str,
     pattern: &str,
@@ -589,7 +579,6 @@ fn highlight(
 }
 
 /// The screen row that shows `text`, trimmed.
-#[cfg(native_surface)]
 fn row_of(grid: &crate::native::grid::TermGrid, text: &str) -> usize {
     rows_of(grid)
         .iter()
@@ -600,7 +589,6 @@ fn row_of(grid: &crate::native::grid::TermGrid, text: &str) -> usize {
 /// What the session writes, your prompt pinned, while a Line trigger
 /// highlights `pattern` in `style`: the login of the fake Aabahran with a
 /// compact prompt, then a pulse for each of `lines`.
-#[cfg(native_surface)]
 fn highlighted(
     pattern: &str,
     style: vosh_automation::trigger::HighlightStyle,
@@ -623,7 +611,6 @@ fn highlighted(
 }
 
 /// A run whose line ends on a blue background, across pinned pulses.
-#[cfg(native_surface)]
 fn blue_run() -> Vec<Output> {
     let style = vosh_automation::trigger::HighlightStyle {
         bg: Some(vosh_automation::trigger::NamedColor::Blue),
@@ -633,7 +620,6 @@ fn blue_run() -> Vec<Output> {
 }
 
 /// A run of a line a red wash covers, across pinned pulses.
-#[cfg(native_surface)]
 fn washed_run() -> Vec<Output> {
     let style = vosh_automation::trigger::HighlightStyle {
         fg: Some(vosh_automation::trigger::NamedColor::Red),
@@ -644,7 +630,6 @@ fn washed_run() -> Vec<Output> {
 }
 
 /// A grid `columns` wide and 20 rows tall after `outputs`.
-#[cfg(native_surface)]
 fn grid_after(outputs: &[Output], columns: usize) -> crate::native::grid::TermGrid {
     let mut grid = crate::native::grid::TermGrid::new(columns, 20);
     for out in outputs {
@@ -653,7 +638,6 @@ fn grid_after(outputs: &[Output], columns: usize) -> crate::native::grid::TermGr
     grid
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_run_with_a_background_crossing_a_pinned_pulse_leaves_every_other_cell_plain() {
     use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
@@ -713,7 +697,6 @@ fn a_run_with_a_background_crossing_a_pinned_pulse_leaves_every_other_cell_plain
     }
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_line_that_relies_on_the_color_before_it_keeps_it_with_its_count() {
     use alacritty_terminal::vte::ansi::{Color, NamedColor};
@@ -753,7 +736,6 @@ fn a_line_that_relies_on_the_color_before_it_keeps_it_with_its_count() {
 /// session builds the next pulse before it hears of it, so that pulse goes
 /// on with the run. Returns the payloads in order, how many come before
 /// your echo, and the echo.
-#[cfg(native_surface)]
 fn echo_before_the_run() -> (Vec<Output>, usize, &'static [u8]) {
     let red = format!("\x1b[1;31m{DODGE}\x1b[0m");
     let mut mud = Mud::playing(Options {
@@ -777,7 +759,6 @@ fn echo_before_the_run() -> (Vec<Output>, usize, &'static [u8]) {
     )
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_run_your_echo_landed_before_goes_on_a_new_row_that_still_ends() {
     use alacritty_terminal::vte::ansi::{Color, NamedColor};
@@ -806,7 +787,6 @@ fn a_run_your_echo_landed_before_goes_on_a_new_row_that_still_ends() {
 /// of the split, and loads the scrollback the session kept so far, then
 /// two more dodges and a parry. Returns what the session wrote before the
 /// pane opened, what the pane loads, and what the session wrote after.
-#[cfg(native_surface)]
 fn pane_during_a_run() -> (Vec<Output>, Vec<u8>, Vec<Output>) {
     let mut mud = Mud::playing(Options {
         compact: true,
@@ -829,7 +809,6 @@ fn pane_during_a_run() -> (Vec<Output>, Vec<u8>, Vec<Output>) {
     )
 }
 
-#[cfg(native_surface)]
 #[test]
 fn a_pane_that_loads_the_scrollback_during_a_run_goes_on_with_it_in_place() {
     let (before, load, after) = pane_during_a_run();
@@ -861,7 +840,6 @@ fn a_pane_that_loads_the_scrollback_during_a_run_goes_on_with_it_in_place() {
 /// on a blue background and one a wash covers, across pinned pulses, your
 /// echo landing before the session heard of it, and a pane that loads
 /// the scrollback during a run.
-#[cfg(native_surface)]
 fn collapse_splits() -> serde_json::Value {
     let payloads = |reads: &[Read]| -> Vec<serde_json::Value> {
         reads
@@ -958,14 +936,12 @@ fn collapse_splits() -> serde_json::Value {
 
 /// The file the webview test reads: the JSON of [`collapse_splits`],
 /// gzipped, as base64 text, since the webview test can import text only.
-#[cfg(native_surface)]
 fn collapse_splits_path() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../fixtures/collapse/splits.b64")
 }
 
 /// Write [`collapse_splits`] for the webview test when
 /// `VOSH_WRITE_COLLAPSE_SPLITS` is set. Nothing otherwise.
-#[cfg(native_surface)]
 #[test]
 fn write_the_collapse_splits_for_the_webview() {
     use std::io::Write as _;
@@ -987,7 +963,6 @@ fn write_the_collapse_splits_for_the_webview() {
     std::fs::write(&path, lines.join("\n")).expect("the file");
 }
 
-#[cfg(native_surface)]
 #[test]
 fn the_collapse_splits_the_webview_replays_are_what_the_session_sends() {
     use std::io::Read as _;

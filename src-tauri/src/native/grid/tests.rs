@@ -357,6 +357,8 @@ fn a_local_write_names_the_newest_output_of_the_stage_the_grid_took() {
     assert_eq!(feed_local(b"x"), next.id());
 }
 
+// The command reads the grid only where the surface draws it.
+#[cfg(native_surface)]
 #[test]
 fn terminal_cursor_reports_the_shared_grid() {
     let _shared = lock_shared_grid_for_test();
@@ -382,6 +384,8 @@ fn terminal_cursor_reports_the_shared_grid() {
     assert_eq!(cursor_report().and_then(|r| r.region), None);
 }
 
+// The command reads the grid only where the surface draws it.
+#[cfg(native_surface)]
 #[test]
 fn terminal_screen_rows_reads_the_shared_screen_as_text() {
     let _shared = lock_shared_grid_for_test();

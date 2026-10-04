@@ -66,6 +66,7 @@ pollster = "0.3"
 raw-window-handle = "0.6"
 # Terminal grid model (VTE parser + cell grid + scrollback) fed by the
 # post-telnet byte stream; the wgpu renderer draws this grid (M2b/M2c).
+# Off macOS the grid builds for the tests too, through the dev table below.
 alacritty_terminal = "0.24"
 # font-kit selects the font and supplies metrics + glyph bounds.
 # pathfinder_geometry supplies its transform types.
@@ -108,6 +109,19 @@ flate2 = "1"
 # depends on muda, so this adds no new crate.
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 muda = { version = "0.19", default-features = false }
+
+# The session, pointer and fake MUD tests read the native grid, so off
+# macOS the grid builds for the tests as well. As a dev dependency it
+# never reaches a release build there.
+[target.'cfg(not(target_os = "macos"))'.dev-dependencies]
+alacritty_terminal = "0.24"
+
+# alacritty_terminal compiles a unix tty (PTY) module we never use; it
+# pulls rustix-openpty, whose rustix builds without the `std` feature and
+# its fd types then fail to bridge to std's OwnedFd. Force `std` on so
+# Cargo unifies the feature across the graph and the tty module compiles.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+rustix = { version = "0.38", features = ["std"] }
 
 [features]
 default = ["custom-protocol"]
