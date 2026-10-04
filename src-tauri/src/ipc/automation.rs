@@ -685,6 +685,42 @@ mod tests {
     }
 
     #[test]
+    fn a_group_turned_by_group_shows_as_it_is_until_the_loadouts_turn_it_back() {
+        use crate::loadouts::gating::apply_effective_state;
+        let held_on = Some(LoadoutHold {
+            on: true,
+            by: vec!["Healer".into()],
+        });
+        let held_off = Some(LoadoutHold {
+            on: false,
+            by: Vec::new(),
+        });
+        // #group combat off while Healer holds combat on. The switch reads
+        // the group as off, and the hold still says the loadouts turn it on.
+        let mut p = grouped();
+        let set = healer_on(false);
+        apply_effective_state(&set, &mut p);
+        crate::input::process(&mut p, "#group combat off");
+        let switches = group_switches(&p, Some(&set), GroupList::Triggers);
+        assert!(!switches[0].enabled);
+        assert_eq!(switches[0].loadouts, held_on);
+        // The next apply lays the loadouts over the group again.
+        apply_effective_state(&set, &mut p);
+        let switches = group_switches(&p, Some(&set), GroupList::Triggers);
+        assert!(switches[0].enabled);
+        assert_eq!(switches[0].loadouts, held_on);
+        // #group combat on while the catalog is dormant, the other way.
+        let dormant = healer_on(true);
+        apply_effective_state(&dormant, &mut p);
+        crate::input::process(&mut p, "#group combat on");
+        let switches = group_switches(&p, Some(&dormant), GroupList::Aliases);
+        assert!(switches[0].enabled);
+        assert_eq!(switches[0].loadouts, held_off);
+        apply_effective_state(&dormant, &mut p);
+        assert!(!group_switches(&p, Some(&dormant), GroupList::Aliases)[0].enabled);
+    }
+
+    #[test]
     fn with_no_opinion_from_the_loadouts_the_switch_is_yours() {
         let mut p = grouped();
         let set = LoadoutSet {

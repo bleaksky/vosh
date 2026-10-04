@@ -369,9 +369,9 @@ export function ItemList({
                     />
                   )}
                 </div>
-                {hold && (
+                {hold && groupSwitch && (
                   <p id={noteId} className="st-auto-groupnote">
-                    {loadoutHoldNote(hold)}
+                    {loadoutHoldNote(hold, groupSwitch.enabled)}
                   </p>
                 )}
                 {open && (

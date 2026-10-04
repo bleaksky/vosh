@@ -229,6 +229,24 @@ describe('the switch on a group heading', () => {
     expect(switchOf(html, 'combat')).not.toMatch(/disabled|aria-describedby/);
   });
 
+  it('says when the loadouts turn back a group that #group turned', () => {
+    // #group idle on while Healer leaves idle off. The switch shows the
+    // group as it is, and the note says the loadouts turn it back.
+    const turned = {
+      ...switches,
+      byName: new Map([
+        ['idle', { name: 'idle', enabled: true, loadouts: { on: false, by: ['Healer'] } }],
+      ]),
+    };
+    const html = renderList({ sections, groupSwitches: turned });
+    const idle = switchOf(html, 'idle') ?? '';
+    expect(idle).toMatch(/checked=""/);
+    expect(idle).toMatch(/disabled=""/);
+    expect(html).toContain(
+      'class="st-auto-groupnote">The Healer loadout turns this group off again when you next launch Vosh, switch profiles, or save Loadouts.</p>',
+    );
+  });
+
   it('takes Tab only from its heading, so the list keeps one stop from outside', () => {
     const tabbable = (html: string) =>
       [...html.matchAll(/<(?:button|input)[^>]*tabindex="0"[^>]*>/g)].map(
