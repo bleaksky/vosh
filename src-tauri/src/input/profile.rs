@@ -2,14 +2,21 @@
 //! session plays, and
 //! `#import-tintin`, which reads aliases and variables from a .tin file.
 
-use super::{split_first_word, InputResult};
+use std::sync::Arc;
+
+use tauri::AppHandle;
+
+use super::{split_first_word, InputResult, ProfileReplace};
 use crate::app::state::AppState;
 use crate::disk::paths;
 use crate::import::tintin;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
+use crate::profile::open::OpenProfile;
 use crate::profile::switch::hand_to_connection;
 use crate::session::connection::Connection;
+use crate::sessions::Session;
+use crate::tick::TickConfig;
 
 /// What `#profile save`, `load`, and `reset` answer between the shared
 /// catalog wizard and the relaunch that finishes it. Nothing saves in
@@ -130,6 +137,54 @@ pub(super) fn load_profile_file(
         lines.push(format!("  {w}"));
     }
     InputResult::echo_lines(lines)
+}
+
+/// Hand every session on `open` but `session` the tick settings and
+/// `[prompt]` table that a `#profile reset` or `#profile load` in
+/// `session` just laid over it, through [`hand_to_connection`] as that
+/// line did its own connection, and print in each a line that names
+/// `session` (Q31 of the sessions review). `tick_before` is the tick
+/// settings before the lines changed them, when they did. The sessions
+/// come from the map before the profile lock, each connection is locked
+/// in turn under it, never two at once, and the lines print once it lets
+/// go. Call with no lock held.
+pub(crate) async fn hand_to_other_sessions<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &AppState,
+    session: &Session,
+    open: &Arc<OpenProfile>,
+    how: ProfileReplace,
+    tick_before: Option<&TickConfig>,
+) {
+    let others = state.other_sessions(session.id);
+    if others.is_empty() {
+        return;
+    }
+    let players: Vec<Arc<Session>> = {
+        let mut p = open.lock().await;
+        let players: Vec<_> = p.players(&others).cloned().collect();
+        let before = tick_before.unwrap_or(&p.tick.config).clone();
+        for other in &players {
+            hand_to_connection(&mut p, &mut other.connection.lock(), &before);
+        }
+        players
+    };
+    let line = replaced_line(session.label().as_deref(), how);
+    for other in &players {
+        crate::output::emit_output(app, other, line.clone().into_bytes());
+    }
+}
+
+/// What every other session on the profile prints after `#profile
+/// reset` or `#profile load` in the session `who` names, in the yellow
+/// of the line a login switch prints.
+fn replaced_line(who: Option<&str>, how: ProfileReplace) -> String {
+    let did = match how {
+        ProfileReplace::Reset => "reset this profile to its defaults",
+        ProfileReplace::Load => "loaded this profile from its file",
+    };
+    let who = who.unwrap_or("Another session");
+    format!("\r\n\x1b[33m{who} {did}.\x1b[0m\r\n")
 }
 
 pub(super) fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputResult {

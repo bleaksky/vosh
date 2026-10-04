@@ -294,6 +294,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             apply: next,
             shown,
             effects,
+            replaced_by,
         } = {
             let mut p = session.lock_profile().await;
             let mut c = session.connection.lock();
@@ -305,7 +306,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
                 shared.as_ref(),
             )
         };
-        crate::disk::save::settle_line_effects(app, session, effects).await;
+        crate::disk::save::settle_line_effects(app, session, effects, replaced_by).await;
         shown.send(app, session);
         apply = next;
     }
@@ -454,6 +455,10 @@ pub(crate) struct LinesRun {
     /// What they changed outside the terminal text.
     pub(crate) shown: ShownChanges,
     pub(crate) effects: input::LineEffects,
+    /// Which of `#profile reset` and `#profile load` last laid a profile
+    /// over the live one, read from its line the way the choice to lay
+    /// global.toml back is.
+    pub(crate) replaced_by: Option<input::ProfileReplace>,
 }
 
 /// The part of [`run_fired_command`] that runs under the profile lock
@@ -485,8 +490,12 @@ pub(crate) fn run_lines_locked<'a>(
     let shown_before = Shown::of(c);
     let mut effects = input::LineEffects::default();
     let mut apply = ApplyResult::default();
+    let mut replaced_by = None;
     for (from, line) in lines {
         let ran = run_and_note_line(state, p, c, from, line, &mut effects, shared);
+        if ran.replaced {
+            replaced_by = input::profile_replace(line);
+        }
         apply.append(line_script_result(ran));
     }
     apply.lists = ListChanges::since(lists_before, p, c);
@@ -494,6 +503,7 @@ pub(crate) fn run_lines_locked<'a>(
         apply,
         shown: ShownChanges::since(shown_before, c),
         effects,
+        replaced_by,
     }
 }
 
@@ -518,12 +528,13 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
         apply,
         shown,
         effects,
+        replaced_by,
     } = {
         let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
         run_fired_locked(&state, &mut p, &mut c, command, shared.as_ref())
     };
-    crate::disk::save::settle_line_effects(app, session, effects).await;
+    crate::disk::save::settle_line_effects(app, session, effects, replaced_by).await;
     shown.send(app, session);
     apply_script_result(app, io, session, apply).await
 }
