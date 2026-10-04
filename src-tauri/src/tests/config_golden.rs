@@ -640,6 +640,7 @@ fn full_loadouts() -> LoadoutSet {
                 enabled_groups: vec!["combat-melee".into(), "wartools".into()],
             },
         ],
+        ..Default::default()
     }
 }
 

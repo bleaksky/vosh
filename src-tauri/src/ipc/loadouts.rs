@@ -33,12 +33,14 @@ pub(crate) struct LoadoutsState {
 
 /// Snapshot the current loadout state for the Settings UI. In per
 /// profile mode returns `loadout_mode: false` plus empty lists so the
-/// frontend can hide the Loadouts tab. In loadout mode the active list
-/// and every loadout's summary come from the `state.loadout_set` mutex.
+/// frontend can hide the Loadouts tab. In loadout mode every loadout's
+/// summary comes from the `state.loadout_set` mutex, with the active list
+/// of the profile the selected session plays.
 #[tauri::command]
 pub(crate) async fn loadouts_get_state(
     state: State<'_, SharedState>,
 ) -> Result<LoadoutsState, String> {
+    let profile = state.selected_session().profile().name();
     let guard = state.loadout_set.lock().await;
     let Some(set) = guard.as_ref() else {
         return Ok(LoadoutsState {
@@ -58,16 +60,16 @@ pub(crate) async fn loadouts_get_state(
         .collect();
     Ok(LoadoutsState {
         loadout_mode: true,
-        active: set.active.clone(),
+        active: set.for_profile(profile.as_deref()).active.clone(),
         loadouts: summaries,
     })
 }
 
-/// Replace the active-loadouts list and reapply group state: the
-/// union rule while loadouts are active, full dormancy when the user
-/// deactivates everything. Persists the loadout set to disk and emits
-/// a state-changed event so other windows, such as the Loadouts editor
-/// in Settings, see the update.
+/// Replace the active-loadouts list of the selected session's profile
+/// and reapply group state: the union rule while loadouts are active,
+/// full dormancy when the user deactivates everything. Persists the
+/// loadout set to disk and emits a state-changed event so other windows,
+/// such as the Loadouts editor in Settings, see the update.
 #[tauri::command]
 pub(crate) async fn loadouts_set_active(app: AppHandle, active: Vec<String>) -> Result<(), String> {
     set_active_loadouts(&app, active).await?;

@@ -363,6 +363,7 @@ pub(crate) async fn apply_migration(
         loadouts: plan.loadouts.clone(),
         active: Vec::new(),
         dormant: false,
+        ..Default::default()
     };
 
     // Each profile file stays where it is and keeps every setting of its

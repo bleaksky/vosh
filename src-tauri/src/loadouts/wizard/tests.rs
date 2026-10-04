@@ -80,6 +80,7 @@ fn loadout_mode(set: &ProfileSet, dir: &std::path::Path) {
         loadouts: vec![Loadout::empty("default")],
         active: vec!["default".into()],
         dormant: false,
+        ..Default::default()
     };
     save_loadout_set(dir, &loadouts).unwrap();
 }

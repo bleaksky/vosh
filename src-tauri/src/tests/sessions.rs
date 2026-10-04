@@ -1372,3 +1372,95 @@ async fn a_profile_reset_and_load_in_one_session_reach_every_session_on_the_prof
     h.disconnect_session(two).await;
     h.finish(grid).await;
 }
+
+/// The harness in loadout mode. The catalog holds `kk` in the combat
+/// group and `hh` in heals, Melee turns combat on and Heals turns heals
+/// on, and the first session plays Default.
+async fn loadout_mode() -> Harness {
+    use crate::loadouts::catalog::{save_global_catalog, GlobalCatalog};
+    use crate::loadouts::set::{save_loadout_set, Loadout, LoadoutSet};
+    use vosh_automation::alias::Alias;
+    let h = Harness::new(Options::new(Build::New)).await;
+    let dir = h.dir.path();
+    h.state
+        .app_data
+        .set(dir.to_path_buf())
+        .expect("the app data folder");
+    let grouped = |name: &str, group: &str| Alias {
+        group: Some(group.into()),
+        ..Alias::new(name, "spam 1")
+    };
+    let catalog = GlobalCatalog {
+        aliases: vec![grouped("kk", "combat"), grouped("hh", "heals")],
+        enabled_presets: Some(Vec::new()),
+        ..GlobalCatalog::default()
+    };
+    save_global_catalog(dir, &catalog).expect("catalog.toml");
+    let turns_on = |name: &str, group: &str| Loadout {
+        enabled_groups: vec![group.into()],
+        ..Loadout::empty(name)
+    };
+    let loadouts = LoadoutSet {
+        loadouts: vec![turns_on("Melee", "combat"), turns_on("Heals", "heals")],
+        ..LoadoutSet::default()
+    };
+    save_loadout_set(dir, &loadouts).expect("loadouts.toml");
+    assert!(crate::app::launch::load_loadout_mode(&h.state, dir).await);
+    h
+}
+
+/// Whether the profile `session` plays has its combat group on, and its
+/// heals group.
+async fn combat_and_heals(h: &Harness, session: SessionId) -> (bool, bool) {
+    let session = h.state.session(Some(session)).expect("the session");
+    let p = session.lock_profile().await;
+    (
+        p.aliases.is_group_enabled("combat"),
+        p.aliases.is_group_enabled("heals"),
+    )
+}
+
+/// What the Loadouts editor shows as on for the selected session.
+async fn shown_active(h: &Harness) -> Vec<String> {
+    crate::ipc::loadouts::loadouts_get_state(h.app.state())
+        .await
+        .expect("the loadout state")
+        .active
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test]
+async fn a_loadout_turned_on_in_the_second_session_gates_its_own_profile_only() {
+    use crate::loadouts::set::{load_loadout_set, set_active_loadouts};
+    // A selection shows the session's grid, which other tests read.
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = loadout_mode().await;
+    let one = h.first;
+    // With one profile open, the change writes the top level as before.
+    set_active_loadouts(h.app.handle(), vec!["Melee".into()])
+        .await
+        .expect("Melee turns on");
+    let saved = load_loadout_set(h.dir.path()).expect("loadouts.toml");
+    assert_eq!(saved.active, ["Melee"]);
+    assert!(saved.profiles.is_empty());
+
+    // Healer opens through the top-level stack.
+    let two = open_session_on(&h, "Healer").await;
+    assert_eq!(combat_and_heals(&h, two).await, (true, false));
+    crate::ipc::session::session_select(h.app.state(), two)
+        .await
+        .expect("the selection moves");
+    set_active_loadouts(h.app.handle(), vec!["Heals".into()])
+        .await
+        .expect("Heals turns on");
+    assert_eq!(combat_and_heals(&h, two).await, (false, true));
+    assert_eq!(combat_and_heals(&h, one).await, (true, false));
+    let saved = load_loadout_set(h.dir.path()).expect("loadouts.toml");
+    assert_eq!(saved.active, ["Melee"]);
+    assert_eq!(saved.profiles["Healer"].active, ["Heals"]);
+    assert_eq!(shown_active(&h).await, ["Heals"]);
+    crate::ipc::session::session_select(h.app.state(), one)
+        .await
+        .expect("the selection moves back");
+    assert_eq!(shown_active(&h).await, ["Melee"]);
+}

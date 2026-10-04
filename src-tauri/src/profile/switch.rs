@@ -100,13 +100,18 @@ impl ProfileFiles {
     }
 }
 
-/// A profile as a switch opens it from `files`: its file or a fresh one,
-/// global.toml over it, then in loadout mode the catalog with the
-/// loadouts, so no save finds it without its aliases, triggers and
-/// macros.
-async fn profile_from_files(state: &SharedState, files: ProfileFiles) -> Profile {
+/// The profile `name` as a switch opens it from `files`: its file or a
+/// fresh one, global.toml over it, then in loadout mode the catalog with
+/// the loadouts as `name` gates on them, so no save finds it without its
+/// aliases, triggers and macros.
+async fn profile_from_files(state: &SharedState, name: &str, files: ProfileFiles) -> Profile {
     let catalog = state.global_catalog.lock().await.clone();
-    let loadouts = state.loadout_set.lock().await.clone();
+    let loadouts = state
+        .loadout_set
+        .lock()
+        .await
+        .as_ref()
+        .map(|set| set.for_profile(Some(name)).into_owned());
     let mut p = Profile::default();
     // A profile that never saved a file is fresh.
     let file = files.per_profile.unwrap_or_else(ProfileConfig::fresh);
@@ -134,7 +139,7 @@ pub(crate) async fn open_or_join(
     }
     let files = ProfileFiles::read(&*state.loaded_profile_set().await?, name, None)?;
     files.release();
-    let profile = profile_from_files(state, files).await;
+    let profile = profile_from_files(state, name, files).await;
     Ok(state.add_open_profile(name, profile))
 }
 
@@ -179,7 +184,7 @@ pub(crate) async fn switch_live_profile(
                 ProfileFiles::read(&*state.loaded_profile_set().await?, name, Some(&using))?;
             point_index().await?;
             files.release();
-            let profile = profile_from_files(state, files).await;
+            let profile = profile_from_files(state, name, files).await;
             (state.add_open_profile(name, profile), true)
         }
     };
