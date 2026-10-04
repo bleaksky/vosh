@@ -178,7 +178,8 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
             tick_changed: true,
             ..LineEffects::default()
         };
-        crate::disk::save::settle_line_effects(handle, tick).await;
+        let open = state.selected_session().profile();
+        crate::disk::save::settle_line_effects(handle, &open, tick).await;
         listening.finish("settle_line_effects", &mut heard, &mut want);
 
         // Each window answers the quit request the way its page does, so
@@ -209,7 +210,7 @@ fn the_prompt_table_event_names_the_active_profile() {
     // Before any profile loads it names none.
     crate::app::events::broadcast_list_changes(handle, ListChanges::PROMPT);
     let state: SharedState = app.state::<SharedState>().inner().clone();
-    state.selected_session().profile().set_name("Second");
+    tauri::async_runtime::block_on(state.selected_profile()).set_name("Second");
     crate::app::events::broadcast_prompt_config_changed(handle);
     app.unlisten(id);
     assert_eq!(

@@ -282,25 +282,35 @@ pub(crate) fn on_run_event(app_handle: &AppHandle, event: tauri::RunEvent) {
     }
 }
 
-/// Write the live profile once on the way out. [`ExitFlow`] decides
+/// Write every open profile once on the way out. [`ExitFlow`] decides
 /// when, so this runs exactly once.
 fn flush_profile_on_exit(app_handle: &AppHandle) {
     let state: SharedState = app_handle.state::<SharedState>().inner().clone();
     // The affect fulls are a cache of their own, written whatever
-    // becomes of the profile.
+    // becomes of the profiles.
     state.affect_full.flush();
-    // Honor a #profile reset/load: the in-memory profile is
-    // deliberately diverged from disk; do not write it back.
-    if state.selected_session().profile().held() {
-        info!("exit flush: skipped, persist suppressed by profile reset or load");
-        return;
+    // Honor a #profile reset/load: a profile it left deliberately
+    // diverged from disk is not written back.
+    let (held, saved): (Vec<_>, Vec<_>) = state
+        .open_profiles()
+        .into_iter()
+        .partition(|open| open.held());
+    if !held.is_empty() {
+        info!(
+            held = held.len(),
+            "exit flush: skipped the profiles a profile reset or load holds"
+        );
     }
-    info!("exit flush: persisting profile");
-    // Bounded: a wedged Lua trigger holding the profile lock
-    // must not turn quit into a hang. The timeout cuts the
-    // lock waits; the file writes themselves are sync and
-    // small.
-    let flush = crate::disk::save::persist_profile(&state);
+    info!(profiles = saved.len(), "exit flush: persisting profiles");
+    // Bounded: a wedged Lua trigger holding a profile lock must
+    // not turn quit into a hang. The timeout cuts the lock waits
+    // for every profile together; the file writes themselves are
+    // sync and small.
+    let flush = async {
+        for open in &saved {
+            crate::disk::save::persist_profile(&state, open).await;
+        }
+    };
     let outcome = tauri::async_runtime::block_on(async {
         tokio::time::timeout(std::time::Duration::from_secs(3), flush).await
     });

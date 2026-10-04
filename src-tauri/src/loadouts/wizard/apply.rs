@@ -297,14 +297,16 @@ pub(crate) async fn apply_migration(
         return Err(reason.into());
     }
 
-    // The live profile can run two seconds ahead of its file, with a
+    // Each open profile can run two seconds ahead of its file, with a
     // variable a script set or a splitter you dragged, and once this run
-    // is done nothing saves it until the relaunch. Write it first, as a
+    // is done nothing saves it until the relaunch. Write each first, as a
     // switch does, so the wizard reads it. After `#profile reset` or
-    // `load` the live profile is deliberately diverged from its file,
-    // and the file stands as it is.
-    if !state.selected_session().profile().held() {
-        persist_state(state).await;
+    // `load` a profile is deliberately diverged from its file, and the
+    // file stands as it is.
+    for open in state.open_profiles() {
+        if !open.held() {
+            persist_state(state, &open).await;
+        }
     }
 
     // Re-load sources from disk — the analyze call has to walk the

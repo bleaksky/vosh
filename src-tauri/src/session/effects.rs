@@ -220,7 +220,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
         // by triggers or timers) ride the same debounced save the slash
         // commands use, or they would never reach disk.
         if apply.durable_changed {
-            crate::disk::save::mark_profile_dirty(app);
+            crate::disk::save::mark_profile_dirty(app, &session.profile());
         }
         // A Lua `mud.alias` changes the list an open Settings page shows.
         broadcast_list_changes(app, apply.lists);
@@ -240,7 +240,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
                 continue;
             };
             if released.durable_changed {
-                crate::disk::save::mark_profile_dirty(app);
+                crate::disk::save::mark_profile_dirty(app, &session.profile());
             }
             broadcast_list_changes(app, std::mem::take(&mut released.lists));
             if !released.send_bytes.is_empty() {
@@ -305,7 +305,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
                 shared.as_ref(),
             )
         };
-        crate::disk::save::settle_line_effects(app, effects).await;
+        crate::disk::save::settle_line_effects(app, &session.profile(), effects).await;
         shown.send(app, session);
         apply = next;
     }
@@ -523,7 +523,7 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
         let mut c = session.connection.lock();
         run_fired_locked(&state, &mut p, &mut c, command, shared.as_ref())
     };
-    crate::disk::save::settle_line_effects(app, effects).await;
+    crate::disk::save::settle_line_effects(app, &session.profile(), effects).await;
     shown.send(app, session);
     apply_script_result(app, io, session, apply).await
 }

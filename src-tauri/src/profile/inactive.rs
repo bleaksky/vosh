@@ -12,6 +12,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use serde::Serialize;
 use tauri::AppHandle;
@@ -22,6 +23,7 @@ use crate::app::state::SharedState;
 use crate::disk::save::PERSIST_LOCK;
 use crate::profile::file::ProfileConfig;
 use crate::profile::login_match::AutoMatch;
+use crate::profile::open::OpenProfile;
 use crate::profile::panes::PaneLayoutPersist;
 use crate::profile::set::{display_name, ProfileEntry, ProfileSet, ProfileSetError};
 use crate::profile::shared::{GlobalConfig, Scope};
@@ -258,13 +260,16 @@ pub(crate) async fn reset_inactive_panes(
     .await
 }
 
-/// Reset the live profile's tree and hand back its new envelope.
-pub(crate) async fn reset_live_panes(state: &SharedState) -> PaneLayoutEnvelope {
+/// Reset the live profile's tree and hand back the profile with its new
+/// envelope.
+pub(crate) async fn reset_live_panes(
+    state: &SharedState,
+) -> (Arc<OpenProfile>, PaneLayoutEnvelope) {
     let mut p = state.selected_session().lock_profile().await;
     let layout = p.ui.pane_layout().with_default_tree();
     p.ui.panes = Some(layout);
     state.bump_panes_generation();
-    pane_layout_envelope(state, &p)
+    (p.open().clone(), pane_layout_envelope(state, &p))
 }
 
 /// A profile's settings as TOML, the way `#profile save` writes them:
@@ -514,7 +519,7 @@ mod tests {
         state.selected_profile().await.ui.panes = Some(arranged());
         let before = state.panes_generation();
 
-        let envelope = reset_live_panes(&state).await;
+        let (_, envelope) = reset_live_panes(&state).await;
         assert_eq!(envelope.layout, arranged().with_default_tree());
         assert!(envelope.generation.unwrap() > before);
         assert_eq!(

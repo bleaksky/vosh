@@ -67,17 +67,18 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
     // The locks cover only the change. The repaint waits on the session
     // slot, which Disconnect holds while the loop ends, and the loop's end
     // takes the profile, so holding the profile here would hang both.
-    let changed = {
-        let p = &mut *session.lock_profile().await;
+    let (open, changed) = {
+        let mut p = session.lock_profile().await;
         let c = &mut *session.connection.lock();
-        if as_is.unwrap_or(false) {
-            set_config_as_is(p, c, config)?
+        let changed = if as_is.unwrap_or(false) {
+            set_config_as_is(&mut p, c, config)?
         } else {
-            set_config(p, c, config)?
-        }
+            set_config(&mut p, c, config)?
+        };
+        (p.open().clone(), changed)
     };
     if changed {
-        mark_profile_dirty(&app);
+        mark_profile_dirty(&app, &open);
         request_prompt_repaint(&session).await;
         broadcast_prompt_config_changed(&app);
     }
@@ -95,13 +96,13 @@ pub(crate) async fn prompt_card_open<R: tauri::Runtime>(
     session: Option<SessionId>,
 ) -> Result<PromptConfig, String> {
     let session = state.session(session)?;
-    let (config, changed) = {
+    let (open, (config, changed)) = {
         let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
-        card_open(&mut p, &mut c)
+        (p.open().clone(), card_open(&mut p, &mut c))
     };
     if changed {
-        mark_profile_dirty(&app);
+        mark_profile_dirty(&app, &open);
         broadcast_prompt_config_changed(&app);
     }
     Ok(config)

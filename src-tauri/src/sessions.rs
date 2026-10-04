@@ -249,6 +249,11 @@ impl Sessions {
             .cloned()
     }
 
+    /// The profiles the sessions play, in the order they opened.
+    pub(crate) fn profiles(&self) -> Vec<Arc<OpenProfile>> {
+        self.profiles.clone()
+    }
+
     /// Keep `profile`, which `name` names in the profile set, open, for a
     /// session to play.
     pub(crate) fn add_profile(&mut self, name: &str, profile: Profile) -> Arc<OpenProfile> {

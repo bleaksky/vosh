@@ -33,7 +33,9 @@ pub(crate) struct OpenProfile {
 }
 
 impl OpenProfile {
-    pub(crate) fn new(id: u64, name: Option<String>, profile: Profile) -> Self {
+    /// Open `profile` as `name`, the name it keeps too.
+    pub(crate) fn new(id: u64, name: Option<String>, mut profile: Profile) -> Self {
+        profile.name.clone_from(&name);
         Self {
             id,
             name: std::sync::Mutex::new(name),
@@ -49,14 +51,6 @@ impl OpenProfile {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
-    }
-
-    /// Give it the name `name` in the profile set.
-    pub(crate) fn set_name(&self, name: &str) {
-        *self
-            .name
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(name.to_string());
     }
 
     /// Lock the profile.
@@ -107,6 +101,17 @@ impl ProfileGuard {
     /// The open profile this guard holds.
     pub(crate) fn open(&self) -> &Arc<OpenProfile> {
         &self.open
+    }
+
+    /// Give the profile the name `name` in the profile set, in memory and
+    /// on its [`OpenProfile`] alike.
+    pub(crate) fn set_name(&mut self, name: &str) {
+        self.guard.name = Some(name.to_string());
+        *self
+            .open
+            .name
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(name.to_string());
     }
 }
 

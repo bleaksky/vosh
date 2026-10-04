@@ -27,19 +27,21 @@ pub(crate) async fn tick_set_config(
     config: TickConfig,
 ) -> Result<TickConfig, String> {
     let session = state.selected_session();
-    let snapshot = {
+    let (open, snapshot) = {
         let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
-        apply_tick_config(
+        let snapshot = apply_tick_config(
             &mut p.tick,
             &mut c.tick,
             &config,
             tokio::time::Instant::now(),
-        )?
+        )?;
+        (p.open().clone(), snapshot)
     };
     save_then_broadcast(
         &app,
         &state,
+        &open,
         SavePolicy::Now,
         TICK_CONFIG_CHANGED,
         &snapshot,

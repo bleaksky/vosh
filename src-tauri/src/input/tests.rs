@@ -877,18 +877,15 @@ fn profile_and_script_commands_use_the_app_data_folder() {
     let mut p = Profile::default();
     p.aliases
         .set(vosh_automation::alias::Alias::new("kk", "kick %1"));
-    // With no index there is no active profile to save.
+    // A profile with no name, before any profile loads, has no file to
+    // save to.
     let saved = save_profile_in(&state, &mut p);
     assert_eq!(saved.echo, ["[could not resolve profile path]"]);
     assert!(!app_data.join("profile.toml").exists());
 
-    // A fresh profile. The index names it, and its first save
-    // writes its file.
-    std::fs::write(
-        app_data.join("profiles.toml"),
-        "active = \"Healer\"\n\n[[profiles]]\nname = \"Healer\"\n",
-    )
-    .unwrap();
+    // A fresh profile. Its name names its file, and its first save
+    // writes it.
+    p.name = Some("Healer".into());
     let healer = app_data.join("profiles").join("Healer.toml");
     let saved = save_profile_in(&state, &mut p);
     assert_eq!(
@@ -898,7 +895,10 @@ fn profile_and_script_commands_use_the_app_data_folder() {
     assert!(healer.exists());
     assert!(!app_data.join("profile.toml").exists());
 
-    let mut fresh = Profile::default();
+    let mut fresh = Profile {
+        name: Some("Healer".into()),
+        ..Profile::default()
+    };
     let mut replaced = false;
     let loaded = slash_profile(
         &state,

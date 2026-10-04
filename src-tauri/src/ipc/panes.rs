@@ -44,20 +44,21 @@ pub(crate) async fn pane_layout_set(
 ) -> Result<bool, String> {
     let mut layout = layout;
     layout.sanitize();
-    let current = {
+    let (open, current) = {
         let mut p = state.selected_session().lock_profile().await;
         let current = state.panes_generation();
         if generation.is_some_and(|g| g != current) {
             return Ok(false);
         }
         p.ui.panes = Some(layout.clone());
-        current
+        (p.open().clone(), current)
     };
     // A layout tweak after `#profile reset` must not save the blanked
     // profile, so this schedules without clearing the suppression.
     save_then_broadcast(
         &app,
         &state,
+        &open,
         SavePolicy::SoonUnlessHeld,
         PANE_LAYOUT_CHANGED,
         &PaneLayoutEnvelope {
@@ -95,10 +96,11 @@ pub(crate) async fn pane_layout_reset(
             });
         }
     }
-    let envelope = reset_live_panes(&shared).await;
+    let (open, envelope) = reset_live_panes(&shared).await;
     save_then_broadcast(
         &app,
         &shared,
+        &open,
         SavePolicy::NowUnlessHeld,
         PANE_LAYOUT_CHANGED,
         &envelope,

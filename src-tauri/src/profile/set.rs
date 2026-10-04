@@ -500,22 +500,16 @@ pub(crate) fn sanitize_name(name: &str) -> Result<String, ProfileSetError> {
     Ok(trimmed.to_string())
 }
 
-/// Write the live profile to its file before a copy of `source` reads
-/// that file, when `source` is the live profile. Call with
-/// [`PERSIST_LOCK`] held across this and the copy, so the copy reads
-/// what the flush wrote and no persist rewrites the source mid copy.
+/// Write `source` to its file before a copy reads that file, when a
+/// session plays it. Call with [`PERSIST_LOCK`] held across this and the
+/// copy, so the copy reads what the flush wrote and no persist rewrites
+/// the source mid copy.
 async fn flush_before_copy(shared: &SharedState, source: &str) {
-    let copying_live = shared
-        .profile_set
-        .lock()
-        .await
-        .as_ref()
-        .is_some_and(|set| set.active_name() == source);
-    // The live profile can run two seconds ahead of its file. After
+    // An open profile can run two seconds ahead of its file. After
     // `#profile reset` or `load` it is deliberately diverged, and the
     // copy takes the file as it stands.
-    if copying_live && !shared.selected_session().profile().held() {
-        persist_state(shared).await;
+    if let Some(open) = shared.open_profile(source).filter(|open| !open.held()) {
+        persist_state(shared, &open).await;
     }
 }
 
@@ -583,9 +577,7 @@ pub(crate) async fn rename_profile(
     };
     // The custom prompt draws the live profile's new name.
     if let Some(name) = live {
-        let mut p = session.lock_profile().await;
-        p.open().set_name(&name);
-        p.display_name = Some(display_name(&name));
+        session.lock_profile().await.set_name(&name);
     }
     Ok(())
 }
