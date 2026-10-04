@@ -597,6 +597,107 @@ fn a_switch_applies_the_latest_char_prompt_to_the_new_profile() {
     assert_eq!(codes(&engine).prompt, "<%hhp> ");
 }
 
+/// An engine whose game sent `prompt` in Char.Prompt, under a profile
+/// with no design of its own.
+fn sent_by_its_game(prompt: &str) -> PromptEngine {
+    let mut engine = PromptEngine::default();
+    engine.connect(true);
+    engine.set_config(mirroring("<%hhp> "));
+    engine.observe("Char.Prompt", char_prompt(true, prompt, ""), at());
+    let _ = engine.take_seen();
+    engine
+}
+
+#[test]
+fn a_choice_made_in_another_session_keeps_the_codes_this_game_sent() {
+    let mut engine = sent_by_its_game(PROMPT);
+    let own = codes(&engine);
+    assert_eq!(own.source, Some(CaptureSource::Gmcp));
+
+    // The other session turned drawing off, pinned the prompt and kept
+    // an earlier design, under codes its own game sent.
+    let revision = engine.revision();
+    engine.take_choice(PromptConfig {
+        draw: false,
+        show: crate::PromptShow::Pinned,
+        previous_templates: vec!["%hp".into()],
+        ..mirroring("<%h/%Hhp> ")
+    });
+    assert!(engine.revision() > revision);
+    let config = engine.config();
+    assert!(!config.draw);
+    assert_eq!(config.show, crate::PromptShow::Pinned);
+    assert_eq!(config.previous_templates, ["%hp"]);
+    assert_eq!(codes(&engine), own);
+    assert!(engine.config().mirror);
+    assert_eq!(engine.config().template, game(PROMPT, "", Who::default()));
+
+    // A design you wrote comes over, and the codes still stay.
+    engine.take_choice(following("<%h/%Hhp> "));
+    assert_eq!(engine.config().template, "%hp");
+    assert!(!engine.config().mirror);
+    assert_eq!(codes(&engine), own);
+
+    // Codes that follow the game stay, whatever the other session held.
+    let mut held = sent_by_its_game(PROMPT);
+    held.set_config(PromptConfig {
+        capture: CaptureConfig::Aabahran(AabahranCapture {
+            follow_game: false,
+            ..own.clone()
+        }),
+        ..held.config().clone()
+    });
+    held.take_choice(mirroring("<%h/%Hhp> "));
+    assert_eq!(codes(&held), own, "following the game again keeps them");
+}
+
+#[test]
+fn a_capture_you_set_comes_over_and_one_each_game_decides_stays() {
+    let mut engine = sent_by_its_game(PROMPT);
+    let own = engine.config().capture.clone();
+
+    // Codes that no longer follow the game are yours.
+    let fixed = CaptureConfig::Aabahran(AabahranCapture {
+        prompt: "<%h/%Hhp> ".into(),
+        follow_game: false,
+        source: Some(CaptureSource::Typed),
+        ..AabahranCapture::default()
+    });
+    let chosen = |capture: &CaptureConfig| PromptConfig {
+        capture: capture.clone(),
+        ..mirroring("")
+    };
+    engine.take_choice(chosen(&fixed));
+    assert_eq!(engine.config().capture, fixed);
+    // So is a pattern you set, and reading none.
+    let pattern = CaptureConfig::Regex(RegexCapture {
+        lines: vec![r"<(?<hp>\d+)hp>".into()],
+        source: Some(CaptureSource::Typed),
+        ..RegexCapture::default()
+    });
+    engine.take_choice(chosen(&pattern));
+    assert_eq!(engine.config().capture, pattern);
+    engine.take_choice(chosen(&CaptureConfig::None));
+    assert!(engine.config().capture.is_none());
+    // Codes from the other game reach an engine that reads none.
+    engine.take_choice(chosen(&own));
+    assert_eq!(engine.config().capture, own);
+
+    // The pattern a capture trigger left and the codes the game switched
+    // it to are each the game's, so each engine keeps its own (D10).
+    let migrated = CaptureConfig::Regex(RegexCapture {
+        lines: vec![r"<(?<hp>\d+)hp>".into()],
+        source: Some(CaptureSource::Migrated),
+        ..RegexCapture::default()
+    });
+    engine.take_choice(chosen(&migrated));
+    assert_eq!(engine.config().capture, own);
+    let mut moved = PromptEngine::default();
+    moved.set_config(chosen(&migrated));
+    moved.take_choice(chosen(&own));
+    assert_eq!(moved.config().capture, migrated);
+}
+
 #[test]
 fn every_char_prompt_fixture_is_taken_as_sent() {
     for file in [

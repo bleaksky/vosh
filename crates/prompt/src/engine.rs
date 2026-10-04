@@ -22,7 +22,7 @@ use chrono::{DateTime, FixedOffset, SecondsFormat};
 use serde_json::Value as Json;
 
 use crate::aabahran::Who;
-use crate::config::PromptConfig;
+use crate::config::{AabahranCapture, CaptureConfig, PromptConfig};
 use crate::design::Template;
 use crate::stage::Stage;
 use crate::values::gmcp::{Observed, CHAR_STATE, CHAR_STATUS};
@@ -135,6 +135,31 @@ impl PromptEngine {
         if recaptured {
             self.read_newest();
         }
+    }
+
+    /// Take what you chose in `chosen`, the table another engine on the
+    /// same profile holds after you changed it there (Q29 of the sessions
+    /// review). The switch, where your prompt shows, whether the design
+    /// follows the game, a design you wrote, the earlier designs and a
+    /// capture you set come from `chosen`. What this engine's own game
+    /// supplied stays: its Aabahran codes, with when and how Vosh learned
+    /// them, while the chosen codes follow the game too, a capture its
+    /// game decides while the chosen one is the game's as well, and the
+    /// design written from its codes while the design follows the game.
+    pub fn take_choice(&mut self, mut chosen: PromptConfig) {
+        chosen.capture = match (chosen.capture, &self.config.capture) {
+            (CaptureConfig::Aabahran(theirs), CaptureConfig::Aabahran(mine))
+                if theirs.follow_game =>
+            {
+                CaptureConfig::Aabahran(AabahranCapture {
+                    follow_game: true,
+                    ..mine.clone()
+                })
+            }
+            (theirs, mine) if theirs.game_decides() && mine.game_decides() => mine.clone(),
+            (theirs, _) => theirs,
+        };
+        self.set_config(chosen);
     }
 
     /// Read the newest prompt in the candidates ring with the capture just
