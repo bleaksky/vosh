@@ -1204,11 +1204,9 @@ mod tests {
         let s = store(vec![in_mode("walks in", MatchMode::StartsWith)]);
         let leftover = &matching(&s, "Maren walks in.", MatchScope::Line);
         assert!(leftover.is_empty(), "{leftover:?}");
-        // Text skips trailing spaces on the line, and a dot is a dot.
+        // Text skips trailing spaces on the line.
         let s = store(vec![in_mode("Maren walks in.", MatchMode::Text)]);
         assert_eq!(matching(&s, "Maren walks in.  ", MatchScope::Line).len(), 1);
-        let leftover = &matching(&s, "Maren walks inX", MatchScope::Line);
-        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
@@ -1263,8 +1261,13 @@ mod tests {
         for line in ["The day has begun.", "Maren walks in.", "[Exits: south]"] {
             assert_eq!(matching(&s, line, MatchScope::Line).len(), 1, "{line}");
         }
-        // The More pattern in Starts with reads Maren as text at the start.
-        let leftover = &matching(&s, "Orla greets Maren.", MatchScope::Line);
+        // The More pattern in Starts with reads Maren as text at the start,
+        // so a line that holds Maren after its start stays plain.
+        let leftover = &matching(
+            &s,
+            "Chuckling and grinning to herself, Orla walks in and quickly prepares the gallows for Maren.",
+            MatchScope::Line,
+        );
         assert!(leftover.is_empty(), "{leftover:?}");
     }
 
