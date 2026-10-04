@@ -18,6 +18,7 @@ import type {
   PromptLastSeen,
   PromptLineNumber,
   PromptPreset,
+  PromptShow,
   SessionIdentity,
 } from './session';
 import type { GamePromptSeen } from './stores/gamePromptStore';
@@ -679,6 +680,14 @@ export function withStart(
  *  starting from the text it edited, even one that followed the game. */
 export function withDesign(config: PromptConfig, template: string): PromptConfig {
   return { ...config, template, mirror: false };
+}
+
+/** The table once you pick where your prompt shows at the card's foot.
+ *  Only the place changes. Command Z never takes it back, as it never
+ *  takes back a place you picked in Settings, since the card moves with
+ *  your prompt to its new place. */
+export function withShow(config: PromptConfig, show: PromptShow): PromptConfig {
+  return { ...config, show };
 }
 
 /** The table once the opposite Option key takes move `back` back. The

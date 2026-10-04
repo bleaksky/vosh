@@ -30,6 +30,7 @@ import {
   withCapture,
   withDesign,
   withMoveTakenBack,
+  withShow,
   withStart,
   startRows,
   takeBackOnto,
@@ -571,6 +572,20 @@ describe('what a start and an edit save', () => {
     const entry = undoEntry(table, edited);
     expect(entry).toEqual({ template: '[%hp] ', mirror: true });
     expect(takeBackOnto(edited, entry!)).toEqual(table);
+  });
+
+  it('changes only where your prompt shows, and Command Z keeps the place', () => {
+    for (const show of ['text', 'lifted'] as const) {
+      const placed = withShow(table, show);
+      expect(placed, show).toEqual({ ...table, show });
+      // The card moves with your prompt, so taking a change back never
+      // moves it again.
+      expect(undoEntry(table, placed), show).toBeNull();
+    }
+    // A design change after it takes back the design alone.
+    const lifted = withShow(table, 'lifted');
+    const edited = withDesign(lifted, '[%s_bold%hp] ');
+    expect(takeBackOnto(edited, undoEntry(lifted, edited)!)).toEqual(lifted);
   });
 
   it('takes a move back with the other Option key to following the game', () => {

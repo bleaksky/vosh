@@ -234,6 +234,32 @@
   margin-left: 4px;
 }
 
+/* Where your prompt shows: a compact menu button in the 12/500 face of
+   the preview's segments, its chevron in the secondary tone. */
+.pc-show-button {
+  gap: 2px;
+  padding: 0 6px 0 10px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.pc-show-button svg {
+  display: block;
+  color: var(--secondary);
+}
+
+.pc-show-button[aria-expanded='true'] {
+  background: var(--ov-hl);
+}
+
+.pc-show-button[aria-disabled='true'] {
+  opacity: 0.45;
+}
+
+.pc-show-button[aria-disabled='true']:hover {
+  background: transparent;
+}
+
 .pc-switch {
   display: flex;
   align-items: center;
