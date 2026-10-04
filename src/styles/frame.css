@@ -395,6 +395,20 @@
   -webkit-user-select: none;
 }
 
+/* Every item keeps its width but your target, which gives way first
+   when the line runs short, its name ending in an ellipsis. So the
+   tick, the time and the moons stay whole in a wide panel face. */
+.shell-statusline > * {
+  flex: none;
+}
+
+.shell-statusline > .shell-status-target {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .shell-status-value {
   margin-left: 6px;
   color: var(--text);

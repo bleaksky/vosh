@@ -118,7 +118,7 @@ export function StatusVitals({ showVitals, vitals, target, combat, options }: St
           </span>
         ))}
       {target && (
-        <span>
+        <span className="shell-status-target">
           Target<span className="shell-status-value">{target}</span>
           {targetPct !== null && (
             <span className="shell-status-value is-warn">{`${targetPct}%`}</span>
