@@ -52,7 +52,9 @@ export interface Preset {
 /** A line of a preset's sample. */
 export interface PresetSampleLine {
   /** The line, word for word as the game prints it, without the colors
-   *  the game sends. */
+   *  the game sends. Where the line quotes what a character says, a page
+   *  that shows the sample draws the quoted words as a bar, as the
+   *  mockups draw speech, and never as text. */
   text: string;
   /** The name of the trigger of the preset the line shows. */
   shows: string;
@@ -756,7 +758,9 @@ export const PRESETS: Preset[] = [
     description: 'Puts each tell you send in the chat pane, beside the ones you get.',
     // compose_tell in languages.c, to Tolliver. The tell quotes a time of
     // day line, as the says and tells in fixtures/room-colors do, so the
-    // sample holds no words a player wrote.
+    // sample holds no words a player wrote. Get started and the Looks like
+    // row still draw the quoted words as a bar, the span parseRoutedLine
+    // in chatStore.ts gives as its text.
     sample: [{ text: "You tell Tolliver 'The day has begun.'", shows: 'chat.sent_tells' }],
     suggest: [FORSAKEN_LANDS],
     triggers: [
