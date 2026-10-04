@@ -23,7 +23,6 @@ use crate::profile::live::Profile;
 use crate::script::SharedTimers;
 
 use super::batch::Settle;
-use super::connection::Stream;
 use super::echo::ServerEcho;
 use super::effects::{
     collect_script_result, deliver_tick_step, framed_echoes, run_fired_command, Collected,
@@ -38,6 +37,7 @@ use super::prompt_view::{
     watched_state, watching_prompt,
 };
 use super::read::{finish_read, flush_hold, let_go_held_lines, READ_BUFFER_BYTES};
+use super::socket::Stream;
 use super::steps::{
     clock_after, clock_step, end_preview_step, hold_step, late_repaint_after, late_repaint_step,
     repaint_step, send_step, window_size_step,

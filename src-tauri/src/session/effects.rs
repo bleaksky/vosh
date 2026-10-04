@@ -24,8 +24,8 @@ use crate::script::{ApplyResult, SharedTimers};
 use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
-use super::connection::Stream;
 use super::prompt_view::emit_prompt_vars;
+use super::socket::Stream;
 use super::walk::{self, Walker};
 use super::TargetPayload;
 

@@ -8,7 +8,7 @@
 //!   connection. It sends your lines, takes each socket read, repaints
 //!   your prompt when a deadline passes, polls the tick and the timers,
 //!   and ends the connection.
-//! - `connection` opens the plain or TLS socket.
+//! - `socket` opens the plain or TLS socket.
 //! - `read` is the socket read path, from each telnet event to what the
 //!   end of a read sends.
 //! - `lines` cuts what the game sends into lines and the partial after
@@ -38,7 +38,6 @@
 
 mod batch;
 mod conn;
-mod connection;
 pub(crate) mod echo;
 pub(crate) mod effects;
 mod gmcp;
@@ -52,6 +51,7 @@ mod perf;
 pub(crate) mod prompt_view;
 mod read;
 pub(crate) mod room_block;
+mod socket;
 mod steps;
 pub(crate) mod walk;
 
@@ -67,8 +67,8 @@ use crate::app::state::SharedState;
 use crate::input::walk::WalkCommand;
 
 use conn::io_loop;
-use connection::ConnectionError;
 use log_sink::LogSink;
+use socket::ConnectionError;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -381,7 +381,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         },
     );
 
-    let mut stream = connection::connect(&host, port, tls).await?;
+    let mut stream = socket::connect(&host, port, tls).await?;
     info!(%host, port, tls, "session connected");
 
     // Seed the negotiator with the size we already know about so the

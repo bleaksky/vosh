@@ -13,8 +13,8 @@ use tokio::time::Instant;
 use crate::profile::live::Profile;
 use crate::script::{self, ApplyResult, PendingTimer, SharedTimers};
 
-use super::connection::Stream;
 use super::effects::{apply_script_result, OutputSink, ScriptIo};
+use super::socket::Stream;
 use super::walk::Walker;
 
 /// Fire the Lua timers whose deadline passed, then apply what their
