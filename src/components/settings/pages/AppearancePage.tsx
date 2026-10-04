@@ -4,9 +4,11 @@ import {
   fontChoices,
   pairChoices,
   panelFontChoices,
+  panelSizeChoices,
   sizeChoices,
 } from '../../../lib/appearanceSettings';
 import { normalizePanelFont } from '../../../lib/panelFont';
+import { normalizePanelSize } from '../../../lib/panelSize';
 import {
   listSystemFonts,
   resolveThemeTerminalColors,
@@ -37,15 +39,16 @@ import { ThemeGallery } from './appearance/ThemeGallery';
 // Appearance, from the approved board (SettingsAppearance.dc.html).
 // Theme holds Import… and the gallery of every theme, then follow
 // system appearance and the light and dark pair it switches between.
-// Terminal text holds the font, the panel font that every pane and the
-// status line draw in, the size, the line height, whether MUD text
-// takes the theme's colors, whether Vosh keeps the colors your triggers
-// set readable on the theme, and whether a line the same as the one
-// before it shows once with a count. While that is on, two rows under it
-// choose whether the lines of a fight collapse, and whether attack lines
-// do. A link to either row shows them even while it is off, so search
-// lands on them. A quiet Advanced row at the end holds what the board
-// leaves out. Every change saves on its own.
+// Terminal text holds the font, the size, the line height, whether MUD
+// text takes the theme's colors, whether Vosh keeps the colors your
+// triggers set readable on the theme, and whether a line the same as
+// the one before it shows once with a count. While that is on, two rows
+// under it choose whether the lines of a fight collapse, and whether
+// attack lines do. A link to either row shows them even while it is
+// off, so search lands on them. Panel text holds the font and the size
+// that every pane and the status line draw in, so each section sets one
+// thing. A quiet Advanced row at the end holds what the board leaves
+// out. Every change saves on its own.
 
 const LINE_HEIGHTS = [
   { value: 'compact', label: 'Compact' },
@@ -262,17 +265,6 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
             onChange={(family) => update({ font_family: family }, { now: true })}
           />
         </Row>
-        <Row
-          anchor="panel-font"
-          label="Panel font"
-          description="Every pane and the status line under the terminal draw in it."
-        >
-          <Select
-            value={normalizePanelFont(config.panel_font)}
-            options={panelFontChoices(config.panel_font, installedFonts)}
-            onChange={(pick) => update({ panel_font: pick }, { now: true })}
-          />
-        </Row>
         <Row anchor="size" label="Size">
           <Select
             value={String(config.font_size)}
@@ -318,6 +310,31 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           />
         </Row>
         {showsCollapseRows(config, target) && <CollapseRows config={config} update={update} />}
+      </Section>
+
+      <Section id="panel-text" title="Panel text">
+        <Row
+          anchor="panel-font"
+          label="Font"
+          description="Every pane and the status line under the terminal draw in it."
+        >
+          <Select
+            value={normalizePanelFont(config.panel_font)}
+            options={panelFontChoices(config.panel_font, installedFonts)}
+            onChange={(pick) => update({ panel_font: pick }, { now: true })}
+          />
+        </Row>
+        <Row
+          anchor="panel-size"
+          label="Size"
+          description="The headers, the rows, and the status line grow with it."
+        >
+          <Select
+            value={String(normalizePanelSize(config.panel_font_size))}
+            options={panelSizeChoices(config.panel_font_size)}
+            onChange={(size) => update({ panel_font_size: Number(size) }, { now: true })}
+          />
+        </Row>
       </Section>
 
       <AdvancedAppearance

@@ -18,7 +18,7 @@ use crate::profile::file::{ConfigError, ProfileConfig};
 use crate::profile::live::Profile;
 use crate::profile::panes::DockEntryPersist;
 use crate::profile::set::ProfileSet;
-use crate::profile::ui::{is_default_font_family, CustomTheme, UiConfig};
+use crate::profile::ui::{is_default_font_family, CustomTheme, UiConfig, DEFAULT_PANEL_FONT_SIZE};
 
 /// Per-category scope choice. Per-profile fields move with the
 /// active profile; global fields are shared across every profile.
@@ -37,8 +37,8 @@ pub(crate) enum Scope {
 /// covers `theme`, the follow switch, the light and dark pair, and
 /// `custom_themes`, so a custom theme travels with the theme that
 /// names it. `font` covers `font_family`, `font_size`,
-/// `terminal_line_height`, and `panel_font` since they move together
-/// visually.
+/// `terminal_line_height`, `panel_font`, and `panel_font_size` since
+/// they move together visually.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(crate) struct ScopeConfig {
     #[serde(default = "scope_default_global")]
@@ -125,6 +125,12 @@ pub(crate) struct GlobalConfig {
     /// missing panel font is the terminal font (see `shared_panel_font`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub panel_font: Option<String>,
+    /// The panel size, while the font is shared. Written only once you
+    /// pick another than 12, like the profile file's own. With
+    /// `font_family` here, a missing panel size is 12 (see
+    /// `shared_panel_font_size`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub panel_font_size: Option<u32>,
     #[serde(default)]
     pub dock_layout: Option<Vec<DockEntryPersist>>,
     #[serde(default)]
@@ -155,6 +161,9 @@ impl GlobalConfig {
             panel_font: font
                 .then(|| profile.ui.panel_font.clone())
                 .filter(|pick| !pick.is_empty()),
+            panel_font_size: font
+                .then_some(profile.ui.panel_font_size)
+                .filter(|size| *size != DEFAULT_PANEL_FONT_SIZE),
             dock_layout: matches!(scope.dock_layout, Scope::Global)
                 .then(|| profile.ui.dock_layout.clone()),
         }
@@ -197,6 +206,9 @@ impl GlobalConfig {
         if let Some(v) = self.shared_panel_font() {
             profile.ui.panel_font = v;
         }
+        if let Some(v) = self.shared_panel_font_size() {
+            profile.ui.panel_font_size = v;
+        }
         // The shared list replaces the profile's own. A profile file
         // written before custom themes joined the `theme` scope still
         // holds a list, and `migrate_custom_themes` moves it into
@@ -214,6 +226,15 @@ impl GlobalConfig {
         self.font_family
             .as_ref()
             .map(|_| self.panel_font.clone().unwrap_or_default())
+    }
+
+    /// The panel size every character shares, or None while the font is
+    /// not shared. The file leaves out 12, the default, so a shared font
+    /// with no panel size of its own is 12.
+    fn shared_panel_font_size(&self) -> Option<u32> {
+        self.font_family
+            .as_ref()
+            .map(|_| self.panel_font_size.unwrap_or(DEFAULT_PANEL_FONT_SIZE))
     }
 
     pub(crate) fn save(&self, path: &Path) -> Result<(), ConfigError> {
@@ -261,6 +282,7 @@ impl GlobalConfig {
             self.font_size = None;
             self.terminal_line_height = None;
             self.panel_font = None;
+            self.panel_font_size = None;
         }
         if !matches!(scope.keep_last_command, Scope::Global) {
             self.keep_last_command = None;
@@ -368,7 +390,8 @@ impl GlobalConfig {
             let own_font = !is_default_font_family(&ui.font_family)
                 || ui.font_size != defaults.font_size
                 || ui.terminal_line_height != defaults.terminal_line_height
-                || ui.panel_font != defaults.panel_font;
+                || ui.panel_font != defaults.panel_font
+                || ui.panel_font_size != defaults.panel_font_size;
             if !own_font {
                 changed |= replace_value(&mut ui.font_family, family.clone());
                 if let Some(v) = self.font_size {
@@ -379,6 +402,9 @@ impl GlobalConfig {
                 }
                 if let Some(v) = self.shared_panel_font() {
                     changed |= replace_value(&mut ui.panel_font, v);
+                }
+                if let Some(v) = self.shared_panel_font_size() {
+                    changed |= replace_value(&mut ui.panel_font_size, v);
                 }
             }
         }
@@ -516,6 +542,7 @@ pub(crate) fn strip_global_fields(config: &mut ProfileConfig, scope: &ScopeConfi
         config.ui.font_size = defaults.font_size;
         config.ui.terminal_line_height = defaults.terminal_line_height;
         config.ui.panel_font = defaults.panel_font;
+        config.ui.panel_font_size = defaults.panel_font_size;
     }
     if matches!(scope.dock_layout, Scope::Global) {
         config.ui.dock_layout = defaults.dock_layout;
@@ -1033,6 +1060,76 @@ mod tests {
         };
         shared.hand_out(&mut ui, "alt");
         assert_eq!(ui.panel_font, own);
+        assert_eq!(ui.font_family, UiConfig::default().font_family);
+    }
+
+    #[test]
+    fn the_font_scope_carries_the_panel_size() {
+        let mut profile = styled_profile();
+        profile.ui.panel_font_size = 16;
+        let scope = ScopeConfig::default();
+        let global_text = toml::to_string_pretty(&GlobalConfig::from_profile(&profile, &scope))
+            .expect("global config serializes");
+        assert!(
+            global_text.contains("panel_font_size = 16"),
+            "{global_text}"
+        );
+        let (per_profile, restored) = split_and_reload(&profile, &scope);
+        assert_eq!(per_profile.ui.panel_font_size, 12);
+        assert_eq!(restored.ui.panel_font_size, 16);
+
+        // Kept per profile, it stays in the profile file.
+        let scope = ScopeConfig {
+            font: Scope::Profile,
+            ..ScopeConfig::default()
+        };
+        let global_text = toml::to_string_pretty(&GlobalConfig::from_profile(&profile, &scope))
+            .expect("global config serializes");
+        assert!(!global_text.contains("panel_font_size"), "{global_text}");
+        let (per_profile, restored) = split_and_reload(&profile, &scope);
+        assert_eq!(per_profile.ui.panel_font_size, 16);
+        assert_eq!(restored.ui.panel_font_size, 16);
+    }
+
+    #[test]
+    fn a_shared_font_without_a_panel_size_draws_the_panel_at_12() {
+        // 12, the default, stays out of global.toml.
+        let shared = GlobalConfig::from_profile(&shared_profile(), &ScopeConfig::default());
+        assert_eq!(shared.panel_font_size, None);
+        let text = toml::to_string_pretty(&shared).unwrap();
+        assert!(!text.contains("panel_font_size"), "{text}");
+        // So a profile file that kept a panel size of its own from before
+        // the font was shared draws at the 12 every character shares.
+        let mut live = Profile::default();
+        live.ui.panel_font_size = 0;
+        toml::from_str::<GlobalConfig>(&text)
+            .unwrap()
+            .apply_to(&mut live);
+        assert_eq!(live.ui.panel_font_size, 12);
+        // A global.toml that shares no font leaves it alone.
+        live.ui.panel_font_size = 0;
+        GlobalConfig::default().apply_to(&mut live);
+        assert_eq!(live.ui.panel_font_size, 0);
+    }
+
+    #[test]
+    fn a_profile_with_its_own_panel_size_keeps_it_when_the_font_stops_being_shared() {
+        let mut profile = shared_profile();
+        profile.ui.panel_font_size = 0;
+        let shared = GlobalConfig::from_profile(&profile, &ScopeConfig::default());
+        assert_eq!(shared.panel_font_size, Some(0));
+        // A file with no font of its own takes the shared panel size.
+        let mut ui = UiConfig::default();
+        assert!(shared.hand_out(&mut ui, "alt"));
+        assert_eq!(ui.panel_font_size, 0);
+        assert_eq!(ui.font_family, "Iosevka");
+        // A panel size of its own is its own font, and it all stays.
+        let mut ui = UiConfig {
+            panel_font_size: 15,
+            ..UiConfig::default()
+        };
+        shared.hand_out(&mut ui, "alt");
+        assert_eq!(ui.panel_font_size, 15);
         assert_eq!(ui.font_family, UiConfig::default().font_family);
     }
 }

@@ -18,7 +18,7 @@ import { usePaneText } from './paneTextSize';
 
 // Board Affects B, Countdown. One run by the hours left, missing first
 // and permanent last, down the left column and on down the right, on
-// 23 px rows at 12 px, taller at a larger terminal size. Each cell
+// 23 px rows at 12 px, taller at a larger panel size. Each cell
 // carries Timers first's mark, the name exactly as the game sends it,
 // the hours at the right edge with the game's own `+` and `-`, and a
 // 2 px meter under the text. The meter drains from full toward empty

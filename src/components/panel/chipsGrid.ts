@@ -18,9 +18,10 @@ import { PANE_TEXT_BASE, PANE_TEXT_PX, paneText } from './paneTextSize';
 // its last line, and a click on the count scrolls one page on. Pure,
 // with the text measure handed in, so the fit is unit tested.
 //
-// The lines, the gaps between them, and the width for the gutter
-// follow your terminal size (paneTextSize.ts), and the measure is in
-// the panel face at that size. The numbers here are at 12 px.
+// The lines, the gaps between them, the gutter, and the width for it
+// follow your panel size (paneTextSize.ts), and the measure is in the
+// panel face at that size. The numbers here are at 12 px. The gaps
+// beside a chip and the pane's text edges keep their px.
 
 export type ChipGroupId = 'recast' | 'tracked' | 'other';
 
@@ -62,9 +63,9 @@ export const CHIP_H = PANE_TEXT_BASE.chip;
  *  apart, and groups chipGroupGap, both in paneTextSize.ts. */
 export const CHIP_GAP = 4;
 /** Above the first line of a page. */
-export const CHIPS_TOP = 4;
+export const CHIPS_TOP = PANE_TEXT_BASE.chipsTop;
 /** The label gutter, and the space after a label. */
-export const GUTTER_W = 56;
+export const GUTTER_W = PANE_TEXT_BASE.chipGutter;
 export const GUTTER_GAP = 8;
 /** The pane's text edges: chips run from x 18 to 12 from the right. */
 export const CHIPS_LEFT = 18;
@@ -85,17 +86,18 @@ export function chipLabelMode(
   return width < affectsTwoColumnsW(size) ? 'runin' : 'gutter';
 }
 
-/** Text widths in the face the pane draws, the panel face. */
+/** Text widths in the face the pane draws, the panel face, at your
+ *  panel size. */
 export interface ChipMeasure {
-  /** A name or hours at your terminal size. */
+  /** A name or hours. */
   mono: (s: string) => number;
-  /** The hours at your terminal size and the heaviest weight they draw
-   *  in, so a face whose bold runs wider never overflows its line. The
-   *  name's measure when left out. */
+  /** The hours in the heaviest weight they draw in, so a face whose
+   *  bold runs wider never overflows its line. The name's measure when
+   *  left out. */
   hours?: (s: string) => number;
-  /** A group name at 600 11 px. */
+  /** A group name at 600, 11 px at a 12 px panel. */
   label: (s: string) => number;
-  /** The count, `N more`, at 12 px. */
+  /** The count, `N more`. */
   count: (s: string) => number;
 }
 
@@ -170,7 +172,7 @@ export interface ChipPage {
 }
 
 /** Pack `groups` into pages of whole lines, each page `bodyH` tall, in
- *  a pane `width` wide, with the game text at `size` px. `hoursOf` is
+ *  a pane `width` wide, at panel size `size` px. `hoursOf` is
  *  the text a chip shows for its hours. A page that cannot hold
  *  everything left ends with the count on its last line: while that
  *  line has no room for 8 px and the count, its last chip moves to the
@@ -189,9 +191,15 @@ export function chipPages(
   bodyH: number,
   size: number = PANE_TEXT_PX,
 ): ChipPage[] {
-  const { chip: lineH, chipLineGap: lineGap, chipGroupGap: groupGap } = paneText(size);
+  const {
+    chip: lineH,
+    chipLineGap: lineGap,
+    chipGroupGap: groupGap,
+    chipsTop,
+    chipGutter,
+  } = paneText(size);
   const inner =
-    width - CHIPS_LEFT - CHIPS_RIGHT - (labels === 'gutter' ? GUTTER_W + GUTTER_GAP : 0);
+    width - CHIPS_LEFT - CHIPS_RIGHT - (labels === 'gutter' ? chipGutter + GUTTER_GAP : 0);
   const labelOf = (id: ChipGroupId) => groups.find((g) => g.id === id)?.label ?? '';
   const lead = (line: { group: ChipGroupId; labelled: boolean }) =>
     labels === 'runin' && line.labelled
@@ -226,7 +234,7 @@ export function chipPages(
         continue;
       }
       // A new line: the next group, or this one wrapping.
-      const top: number = line ? line.top + lineH + (newGroup ? groupGap : lineGap) : CHIPS_TOP;
+      const top: number = line ? line.top + lineH + (newGroup ? groupGap : lineGap) : chipsTop;
       if (top + lineH > bodyH && lines.length > 0) {
         full = true;
         break;
@@ -282,7 +290,7 @@ export function chipPages(
 
 /** The least body height whose first page holds every Recast and
  *  Tracked chip and every harmful one, the rows Timers first holds, and
- *  the count after them when more follow, with the game text at `size`
+ *  the count after them when more follow, at panel size `size`
  *  px. 0 when nothing needs holding, and never more than `cap`. */
 export function chipsMinBody(
   groups: readonly ChipGroup[],
@@ -297,7 +305,8 @@ export function chipsMinBody(
     g.rows.filter((r) => g.id !== 'other' || r.state === 'harmful'),
   );
   if (must.length === 0) return 0;
-  for (let h = CHIPS_TOP + paneText(size).chip; h <= cap; h += 1) {
+  const { chipsTop, chip } = paneText(size);
+  for (let h = chipsTop + chip; h <= cap; h += 1) {
     const [first] = chipPages(groups, width, hoursOf, measure, labels, h, size);
     const shown = new Set(first?.lines.flatMap((l) => l.rows.map((r) => r.key)) ?? []);
     if (must.every((r) => shown.has(r.key))) return h;

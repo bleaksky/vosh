@@ -561,18 +561,19 @@ Two more colors sit with the rows they belong to. `Sent command color` under Inp
 
 ### 6.4 Set the fonts
 
-The terminal font and the panel font live in Settings under Appearance, then Terminal text.
+The terminal font lives in Settings under Appearance, then Terminal text. The panel font and its size live right after it, under Panel text.
 
 - Open Settings and choose Appearance.
-- Pick a font in `Font`. JetBrains Mono ships inside Vosh, so it works on every machine. The rest of the list holds the monospace fonts installed on your computer. If you own Berkeley Mono, install it and pick it there.
-- Pick a font in `Panel font` for every pane in the panel and the status line under the terminal. `Same as terminal`, the default, draws them in your terminal font. `System font` draws them in the font of the menus and Settings. The rest of the list holds the fonts `Font` offers. The panel font changes only the face, so every row in a pane keeps its height.
+- Under Terminal text, pick a font in `Font`. JetBrains Mono ships inside Vosh, so it works on every machine. The rest of the list holds the monospace fonts installed on your computer. If you own Berkeley Mono, install it and pick it there.
 - Pick a size in `Size`, from 11 to 18 pt. The default is 14.
 - Pick `Compact`, `Default`, or `Loose` in `Line height`.
+- Under Panel text, pick a font in `Font` for every pane in the panel and the status line under the terminal. `Same as terminal`, the default, draws them in your terminal font. `System font` draws them in the font of the menus and Settings. The rest of the list holds the fonts the terminal `Font` offers.
+- Pick a size in `Size` under Panel text. The headers, the labels, the rows, chat, the map labels, and the status line all grow with it, so the panel reads as one size. It starts at 12 pt, the size the panes were drawn at, and `Same as terminal` follows your terminal size. The menus, the title band, Settings, and Help keep their sizes.
 - To set a whole list of fonts, open `Advanced` and type it in `Font stack`, like `"Fira Code", "JetBrainsMono Bundled", monospace`. Vosh uses the first font in the list that you have.
 - Turn on `Bright text in bold` under Advanced to draw bright colors in the bold weight of your font. It works on macOS.
 - Turn off `Blinking text` under Advanced to keep text that your MUD or your prompt sets to blink still. It starts off when your system reduces motion.
 
-Each change applies at once and saves. Under General, `Font and size` in Keep the same for every character decides whether every character shares one terminal font and one panel font.
+Each change applies at once and saves. Under General, `Font and size` in Keep the same for every character decides whether every character shares one terminal font and size and one panel font and size.
 
 ## Characters and data
 
@@ -677,9 +678,9 @@ The command runs entirely in the frontend and stores your choice locally under t
 
 On Windows and Linux, Settings under General, then Advanced, holds `GPU rendering`, which draws the xterm renderer with your graphics card. Turn it off when the terminal draws wrong, then restart Vosh.
 
-If the text renders in the wrong typeface, open Settings and choose Appearance, then Terminal text. The default font is JetBrains Mono, which ships inside Vosh and works on every machine. Vosh no longer ships Berkeley Mono. A font list that names it uses the copy installed on your computer, and JetBrains Mono when you have none. Install the font you want or pick it in `Font`. The size defaults to 14. When the panes or the status line show the wrong typeface, check `Panel font` in the same place.
+If the text renders in the wrong typeface, open Settings and choose Appearance, then Terminal text. The default font is JetBrains Mono, which ships inside Vosh and works on every machine. Vosh no longer ships Berkeley Mono. A font list that names it uses the copy installed on your computer, and JetBrains Mono when you have none. Install the font you want or pick it in `Font`. The size defaults to 14. When the panes or the status line show the wrong typeface or size, check `Font` and `Size` under Panel text, right after Terminal text.
 
-Under General, `Font and size` in Keep the same for every character decides whether every character shares one terminal font and one panel font. Turn it off to let each character keep its own.
+Under General, `Font and size` in Keep the same for every character decides whether every character shares one terminal font and size and one panel font and size. Turn it off to let each character keep its own.
 
 With the xterm renderer the right click menu offers `Clear scrollback`. The native surface hides that item because its grid has no clear command.
 

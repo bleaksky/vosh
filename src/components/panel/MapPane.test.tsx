@@ -176,7 +176,8 @@ describe('the band under the map', () => {
 
   it('sets the terrain row in the quiet tier, and lets the region give way first', () => {
     expect(rule('.pane-map-where')).toContain('color: var(--tertiary);');
-    expect(rule('.pane-map-where')).toContain('font-size: 11px;');
+    // 11 px at a 12 px panel, scaled with the size (paneTextSize.test.ts).
+    expect(rule('.pane-map-where')).toContain('font-size: round(11px * var(--mud-scale), 1px);');
     expect(rule('.pane-map-terrain')).toContain('flex: none;');
     const region = rule('.pane-map-region');
     expect(region).toContain('min-width: 0;');

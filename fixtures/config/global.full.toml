@@ -8,6 +8,7 @@ light_theme = "kanso-pearl"
 dark_theme = "tokyo-night"
 terminal_line_height = "compact"
 panel_font = "system"
+panel_font_size = 0
 
 [[dock_layout]]
 id = "map"

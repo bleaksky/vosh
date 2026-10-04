@@ -2,11 +2,12 @@ import { Fragment, isValidElement, type ReactElement, type ReactNode } from 'rea
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CHAT_CHANNELS, chatChannelColor, type ChatColors } from '../../lib/chatColors';
-import type { PaneLeaf, PaneType } from '../../lib/paneLayout';
+import type { PaneLayout, PaneLeaf, PaneType } from '../../lib/paneLayout';
 import { resetChatColors, setChatColor } from '../../lib/session';
 import { findTheme } from '../../lib/themes';
 import { MenuItem, MenuSeparator } from './MenuSurface';
 import { ChannelColorItems, ChannelColorRows, PaneMenu } from './PaneMenu';
+import { PaneTextSizeContext } from './paneTextSize';
 
 // The stores behind the menu reach the Tauri bridge when they start.
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -38,6 +39,12 @@ vi.mock('../../lib/stores/affectsDisplayStore', async () => {
   };
 });
 vi.mock('../../lib/stores/chatColorsStore', () => ({ useChatColors: () => new Map() }));
+// The layout the menu splits, none unless a test lays one out.
+const laid = vi.hoisted(() => ({ layout: null as PaneLayout | null }));
+vi.mock('./panelLayoutStore', async (actual) => ({
+  ...(await actual<typeof import('./panelLayoutStore')>()),
+  getPanelLayout: () => laid.layout,
+}));
 vi.mock('../../lib/useActiveTheme', async () => {
   const { findTheme: find } = await import('../../lib/themes');
   return { useActiveTheme: () => find('kanso-zen') };
@@ -114,6 +121,7 @@ beforeEach(() => {
   vi.mocked(resetChatColors).mockClear();
   vi.mocked(setChatColor).mockClear();
   shown.style = null;
+  laid.layout = null;
 });
 
 describe('PaneMenu', () => {
@@ -164,6 +172,44 @@ describe('PaneMenu', () => {
     for (const pane of ['map', 'affects', 'group'] as const) {
       expect(menu(pane), pane).not.toContain('Channel colors');
     }
+  });
+
+  it('offers a split only when every pane keeps its minimum at your panel size', () => {
+    // Map, Affects and Chat in a 300 by 650 panel, so a split adds Group.
+    laid.layout = {
+      version: 1,
+      panel_open: true,
+      panel_width: 300,
+      root: {
+        id: 'root',
+        split: 'column',
+        weight: 1,
+        children: [
+          { id: 'map', pane: 'map', weight: 0.4, props: {} },
+          { id: 'affects', pane: 'affects', weight: 0.35, props: {} },
+          { id: 'leaf-chat', pane: 'chat', weight: 0.25, props: {} },
+        ],
+      },
+    };
+    const area = { clientWidth: 300, clientHeight: 650 };
+    const inPanel = {
+      getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0 }),
+      closest: (selector: string) => (selector === '.panel-panes' ? area : null),
+    } as unknown as HTMLButtonElement;
+    const leaf: PaneLeaf = { id: 'leaf-chat', pane: 'chat', weight: 1, props: {} };
+    const splits = (size: number) =>
+      menuRows(
+        renderToStaticMarkup(
+          <PaneTextSizeContext.Provider value={size}>
+            <PaneMenu leaf={leaf} anchor={inPanel} onClose={() => {}} />
+          </PaneTextSizeContext.Provider>,
+        ),
+      ).filter((row) => row.startsWith('Split'));
+    // Splitting Chat down needs 557 px at 12 px and 738 px at 16 px.
+    // Side by side, the panes keep the heights they have now, 462 px
+    // and 613 px.
+    expect(splits(12)).toEqual(['Split right', 'Split down']);
+    expect(splits(16)).toEqual(['Split right', 'Split down (off)']);
   });
 });
 

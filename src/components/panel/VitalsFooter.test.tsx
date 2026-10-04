@@ -4,6 +4,7 @@ import type { VitalsDensity, VitalsOptions } from '../../lib/session';
 import type { CombatOpponent } from '../../lib/stores/combatStore';
 import type { Vitals } from '../../lib/stores/vitalsStore';
 import panelCss from '../../styles/panel.css?raw';
+import { PaneTextSizeContext } from './paneTextSize';
 import type { VitalsLineFit } from './vitalsLine';
 import { VitalsBlock } from './VitalsFooter';
 
@@ -296,6 +297,35 @@ describe('VitalsBlock', () => {
     expect(panelCss.indexOf('.panel-vitals-row-hidden .panel-vitals-value {')).toBeGreaterThan(
       panelCss.indexOf('.panel-vitals-row-combat .panel-vitals-value {'),
     );
+  });
+
+  it('scales the rows and the space round them with your panel size, the meter as it is', () => {
+    const at = (size: number, meter: VitalsOptions['meter']) =>
+      renderToStaticMarkup(
+        <PaneTextSizeContext.Provider value={size}>
+          <VitalsBlock
+            vitals={FIGHT}
+            combat={null}
+            density="rows"
+            fit="rows"
+            options={{ ...DEFAULTS, meter }}
+          />
+        </PaneTextSizeContext.Provider>,
+      );
+    expect(at(12, 'line')).toBe(draw({}, { combat: null }));
+    const line = at(16, 'line');
+    expect(line).toContain('--vitals-row:37px');
+    expect(line).toContain('--vitals-row-top:5px');
+    expect(line).toContain('--vitals-meter:2px');
+    expect(line).toContain('--vitals-meter-gap:1px');
+    // 1 + 11 + 3 x 37 + 15.
+    expect(line).toContain('--vitals-min-height:138px');
+    const bar = at(16, 'bar');
+    expect(bar).toContain('--vitals-meter:4px');
+    expect(bar).toContain('--vitals-meter-gap:3px');
+    const none = at(16, 'none');
+    expect(none).toContain('--vitals-row:29px');
+    expect(none).toContain('--vitals-row-top:4px');
   });
 
   it('reads the geometry and the warn tone in panel.css', () => {

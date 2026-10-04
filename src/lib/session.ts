@@ -3,6 +3,7 @@ import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { CRITICAL_TICKS, EXPIRING_TICKS } from './affectsView';
 import { sanitizeLayout, type PaneLayout } from './paneLayout';
 import { normalizePanelFont } from './panelFont';
+import { normalizePanelSize } from './panelSize';
 import {
   resolveActiveTheme,
   systemPrefersDark,
@@ -2059,6 +2060,9 @@ export interface UiConfig {
   /** The face of the panes and the status line: empty for the terminal
    *  font, `system` for the system font, or a font list (panelFont.ts). */
   panel_font: string;
+  /** The size of the panes and the status line in px, or 0 for your
+   *  terminal size (panelSize.ts). */
+  panel_font_size: number;
   tracked_affects: TrackedAffect[];
   enabled_presets: string[];
   keep_last_command: boolean;
@@ -2217,6 +2221,7 @@ export interface RawUiConfig {
   font_size: number;
   terminal_line_height?: string;
   panel_font?: string;
+  panel_font_size?: number;
   tracked_affects: unknown[];
   enabled_presets: string[];
   keep_last_command?: boolean;
@@ -2301,6 +2306,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     font_size: cfg.font_size,
     terminal_line_height: normalizeTerminalLineHeight(cfg.terminal_line_height),
     panel_font: normalizePanelFont(cfg.panel_font),
+    panel_font_size: normalizePanelSize(cfg.panel_font_size),
     tracked_affects: Array.isArray(cfg.tracked_affects)
       ? normalizeTrackedAffects(cfg.tracked_affects)
       : [],
@@ -2365,8 +2371,8 @@ let lastSentConfig: UiConfig | null = null;
 
 const TERMINAL_LINE_HEIGHT_EVENT = 'vosh://terminal-line-height-changed';
 
-/** The terminal font, its size, and the panel font, which Settings sends
- *  every window together. */
+/** The terminal font, its size, and the panel font and size, which
+ *  Settings sends every window together. */
 export const FONT_CHANGED_EVENT = 'vosh://font-changed';
 
 /** What FONT_CHANGED_EVENT carries. */
@@ -2375,10 +2381,17 @@ export interface FontChange {
   size: number;
   /** The Panel font as saved (panelFont.ts). */
   panel: string;
+  /** The panel size as saved, 0 for the terminal size (panelSize.ts). */
+  panelSize: number;
 }
 
 function fontChangeOf(config: UiConfig): FontChange {
-  return { family: config.font_family, size: config.font_size, panel: config.panel_font };
+  return {
+    family: config.font_family,
+    size: config.font_size,
+    panel: config.panel_font,
+    panelSize: config.panel_font_size,
+  };
 }
 const BLINK_TEXT_EVENT = 'vosh://blink-text-changed';
 const VITALS_DENSITY_EVENT = 'vosh://vitals-density-changed';
@@ -2439,7 +2452,11 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     FONT_CHANGED_EVENT,
     fontChangeOf(config),
     prev ? fontChangeOf(prev) : undefined,
-    (a, b) => a.family === b.family && a.size === b.size && a.panel === b.panel,
+    (a, b) =>
+      a.family === b.family &&
+      a.size === b.size &&
+      a.panel === b.panel &&
+      a.panelSize === b.panelSize,
   );
   await emitChanged(
     TERMINAL_LINE_HEIGHT_EVENT,
@@ -2715,6 +2732,7 @@ function uiConfigPayload(config: UiConfig): Record<string, unknown> {
     font_size: config.font_size,
     terminal_line_height: config.terminal_line_height,
     panel_font: config.panel_font,
+    panel_font_size: config.panel_font_size,
     // Wire format intentionally drops `label: null` to the omitted
     // form so the backend's `Option<String>` deserializes cleanly.
     tracked_affects: config.tracked_affects.map((t) => ({

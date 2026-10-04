@@ -25,6 +25,7 @@ import {
   type VitalTone,
 } from '../../lib/vitalsView';
 import { panelWidthOf, usePanelLayout } from './panelLayoutStore';
+import { textPx, usePaneText } from './paneTextSize';
 import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
 
 // Vitals pinned under the panes (SPEC 5, G3). Each vital is a label,
@@ -40,7 +41,9 @@ import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
 // digit health, and a panel too narrow for even the values stacks them
 // in rows (vitalsLine.ts). Values writes each number as current and
 // max, the current alone, or percent. Meter draws the 2 px line, the
-// 4 px bar, or none at the panes' 22 px pitch. Warn before you run low
+// 4 px bar, or none at the panes' 22 px pitch. The rows, the text and
+// the space round them scale with your panel size, as the panes do,
+// and the meter keeps its px. Warn before you run low
 // turns a vital warn under two thirds and danger under one third. The
 // rules live in vitalsView.ts.
 //
@@ -75,8 +78,9 @@ export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean 
   const options = useVitalsOptions();
   const sectionRef = useRef<HTMLElement | null>(null);
   const width = useFooterWidth(sectionRef, density === 'line');
-  // The vitals draw in the panel face, so they measure in it, again
-  // each time it changes or a face loads.
+  const { size } = usePaneText();
+  // The vitals draw in the panel face at your panel size, so they
+  // measure in it, again each time it changes or a face loads.
   const faceVersion = usePanelFaceVersion();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const face = useMemo(() => readPanelFace(), [faceVersion]);
@@ -89,10 +93,10 @@ export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean 
       ? vitalsLineFit(
           width,
           shownRows(vitals).map((r) => ({
-            label: textWidth(r.label, `400 12px ${face}`, faceVersion),
+            label: textWidth(r.label, `400 ${size}px ${face}`, faceVersion),
             value: textWidth(
               widestVital(options.values, vitals[r.max], vitals.hidden),
-              `500 12px ${face}`,
+              `500 ${size}px ${face}`,
               faceVersion,
             ),
           })),
@@ -135,9 +139,10 @@ export function VitalsBlock({
   sectionRef,
   opponentOnly = false,
 }: VitalsBlockProps) {
+  const { size } = usePaneText();
   if (opponentOnly && !combat) return null;
   const line = !opponentOnly && density === 'line' && fit !== 'rows';
-  const geometry = vitalsGeometry(options.meter);
+  const geometry = geometryAt(vitalsGeometry(options.meter), size);
   const meter = geometry.meter > 0;
   const rows =
     vitals === null
@@ -224,6 +229,20 @@ export function VitalsBlock({
       )}
     </section>
   );
+}
+
+/** `geometry` at panel size `size` px: the rows, the space above the
+ *  text, the gap to the meter and the footer's padding scale as the
+ *  text does, and the meter keeps its px. */
+function geometryAt(geometry: VitalsGeometry, size: number): VitalsGeometry {
+  return {
+    ...geometry,
+    row: textPx(geometry.row, size),
+    rowTop: textPx(geometry.rowTop, size),
+    meterGap: textPx(geometry.meterGap, size),
+    padTop: textPx(geometry.padTop, size),
+    padBottom: textPx(geometry.padBottom, size),
+  };
 }
 
 /** The geometry as custom properties panel.css reads. */

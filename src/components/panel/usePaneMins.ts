@@ -8,15 +8,16 @@ import { useTrackedAffects } from '../../lib/stores/trackedAffectsStore';
 import type { PaneSplit } from '../../lib/paneLayout';
 import { affectsTwoColumnsW } from './affectsGrid';
 import { useChipMeasure } from './chipMeasure';
-import { affectsMinIn, affectsStyleMinH, groupMinH, paneMinH, type PaneMins } from './paneGeometry';
+import { affectsMinIn, affectsStyleMinH, groupMinH, type PaneMins } from './paneGeometry';
 
 // The minimum heights that follow what the Affects and Group panes
 // show right now, for PanelHost to lay `root` out `width` wide with.
 // The panes order their own rows the same way, so the minimum covers
 // the rows they draw in the style you picked. The Affects pane draws
 // one column or two by its own width, which affectsMinIn reads from the
-// tree. The Affects and Chat panes draw game text at your terminal
-// `size`, so theirs count rows at that size.
+// tree. Every pane draws at your panel `size`, so each counts its rows
+// at that size, and layoutPanes gives the rest their stock minimum at
+// it.
 
 function subscribeMembers(cb: () => void): () => void {
   return subscribeGroupState(() => cb());
@@ -52,7 +53,6 @@ export function usePaneMins(root: PaneSplit | null, width: number, size: number)
         : affectsStyleMinH(rows, affectsTwoColumnsW(size), style, measure, size),
     [root, width, rows, style, measure, size],
   );
-  const group = groupMinH(members);
-  const chat = paneMinH('chat', size);
-  return useMemo(() => ({ affects, group, chat }), [affects, group, chat]);
+  const group = groupMinH(members, size);
+  return useMemo(() => ({ affects, group }), [affects, group]);
 }

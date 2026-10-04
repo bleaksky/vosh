@@ -8,7 +8,7 @@ import { PANE_TEXT_BASE, PANE_TEXT_PX, paneText } from './paneTextSize';
 // permanent after every timed one and unknown last. It fills down the
 // left column, then down the right, on 23 px rows, two columns from
 // 360 px, one below, at 12 px. The rows and the width follow your
-// terminal size (paneTextSize.ts). What does not fit is the end of the
+// panel size (paneTextSize.ts). What does not fit is the end of the
 // countdown, counted in the last cell of the page, and a click on the
 // count scrolls one page on. Pure so the fit is unit tested.
 
@@ -54,7 +54,7 @@ export interface CountdownGrid {
 }
 
 /** Place `rows`, in the order affectsView gives them, in a pane body of
- *  `box`, with the game text at `size` px. A short list balances
+ *  `box`, at panel size `size` px. A short list balances
  *  across both columns (fifteen make eight over seven), a long one
  *  fills what fits, and a page holds at least two cells while two or
  *  more affects wait. Before the body is measured (`null`) every affect

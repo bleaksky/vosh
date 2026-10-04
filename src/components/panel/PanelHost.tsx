@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type PointerEvent,
   type RefObject,
 } from 'react';
@@ -39,9 +38,10 @@ import { VitalsFooter } from './VitalsFooter';
 // and each pane's scroll position survive every tree edit, and a pane
 // moved with Show here instead keeps its state too.
 //
-// The game text in the panes follows your terminal size. The panel
-// writes it as --font-mud-px for panel.css and hands it to every pane,
-// which sizes its rows from it (paneTextSize.ts).
+// Every pane draws at your panel size. The main window writes it on the
+// root as --panel-text-px for panel.css, and the panel hands it to
+// every pane, which sizes its rows from it (paneTextSize.ts), and to
+// the geometry, which sizes every minimum from it.
 //
 // No pane drops below the height it reads at while the panel has room
 // (paneMinH, raised for Affects and Group to hold your tracked
@@ -64,20 +64,20 @@ const PANES: Record<PaneType, () => React.ReactNode> = {
 
 /** `promptShow` is where your prompt shows, from usePromptShow, which
  *  decides with Hide vitals while your prompt is pinned whether the
- *  vitals draw. `fontSize` is your terminal size in px, which the game
- *  text in the panes follows. */
+ *  vitals draw. `textSize` is your panel size in px, which every pane
+ *  draws at, the terminal size when the panel follows it. */
 export function PanelHost({
   promptShow,
-  fontSize,
+  textSize: size,
 }: {
   promptShow: PromptShowState | null;
-  fontSize?: number | undefined;
+  textSize?: number | undefined;
 }) {
-  const textSize = paneTextSize(fontSize);
+  const textSize = paneTextSize(size);
   const layout = usePanelLayout();
   const { hide_when_pinned: hideWhenPinned } = useVitalsOptions();
   const areaRef = useRef<HTMLDivElement | null>(null);
-  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [box, setBox] = useState({ w: 0, h: 0 });
 
   useLayoutEffect(() => {
     const el = areaRef.current;
@@ -85,7 +85,7 @@ export function PanelHost({
     const measure = () => {
       const w = el.clientWidth;
       const h = el.clientHeight;
-      setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+      setBox((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -96,10 +96,10 @@ export function PanelHost({
   useMoreBelow(areaRef);
 
   const root = layout?.root ?? null;
-  const mins = usePaneMins(root, size.w, textSize);
+  const mins = usePaneMins(root, box.w, textSize);
   const geometry = useMemo(
-    () => (root ? layoutPanes(root, size.w, size.h, mins) : null),
-    [root, size.w, size.h, mins],
+    () => (root ? layoutPanes(root, box.w, box.h, mins, textSize) : null),
+    [root, box.w, box.h, mins, textSize],
   );
   // Type order, not tree order, so no edit ever reorders the DOM.
   const leaves = geometry
@@ -108,12 +108,10 @@ export function PanelHost({
       )
     : [];
 
-  const hostStyle = { ['--font-mud-px' as string]: textSize } as CSSProperties;
-
   return (
-    <div className="panel-host" style={hostStyle}>
-      <div ref={areaRef} className="panel-panes">
-        <PaneTextSizeContext.Provider value={textSize}>
+    <PaneTextSizeContext.Provider value={textSize}>
+      <div className="panel-host">
+        <div ref={areaRef} className="panel-panes">
           {leaves.map(({ leaf, rect }) => (
             <section
               key={leaf.pane}
@@ -130,22 +128,22 @@ export function PanelHost({
               <PaneLeafContext.Provider value={leaf}>{PANES[leaf.pane]()}</PaneLeafContext.Provider>
             </section>
           ))}
-        </PaneTextSizeContext.Provider>
-        {geometry?.handles.map((h) => (
-          <PaneHandle key={`${h.parentId}:${h.index}`} handle={h} />
-        ))}
-        {root && root.children.length === 0 && (
-          <p className="pane-empty panel-empty">
-            Add a pane to show the map, your affects, your group, or chat.
-          </p>
+          {geometry?.handles.map((h) => (
+            <PaneHandle key={`${h.parentId}:${h.index}`} handle={h} />
+          ))}
+          {root && root.children.length === 0 && (
+            <p className="pane-empty panel-empty">
+              Add a pane to show the map, your affects, your group, or chat.
+            </p>
+          )}
+        </div>
+        {panelShowsVitals(promptShow, hideWhenPinned) ? (
+          <VitalsFooter />
+        ) : (
+          <VitalsFooter opponentOnly />
         )}
       </div>
-      {panelShowsVitals(promptShow, hideWhenPinned) ? (
-        <VitalsFooter />
-      ) : (
-        <VitalsFooter opponentOnly />
-      )}
-    </div>
+    </PaneTextSizeContext.Provider>
   );
 }
 

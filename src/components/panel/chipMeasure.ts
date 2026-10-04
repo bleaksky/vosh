@@ -1,13 +1,12 @@
 import { useMemo } from 'react';
 import { readPanelFace, usePanelFaceVersion } from '../../lib/panelFace';
 import { FIXED_MEASURE, type ChipMeasure } from './chipsGrid';
-import { PANE_TEXT_PX, paneTextSize } from './paneTextSize';
+import { PANE_TEXT_PX, paneTextSize, textPx } from './paneTextSize';
 
 // Text widths for the Grouped chips packer, in the face the pane draws:
 // the panel face (--font-panel, which follows your Panel font) at your
-// terminal size for names and hours, and at the pane's own sizes for
-// the group names and the count. The pane and its minimum share this
-// one measure.
+// panel size, the group names a step smaller, as panel.css draws them.
+// The pane and its minimum share this one measure.
 //
 // A canvas measures a face that has not loaded in its fallback, so the
 // widths are dropped and measured again whenever a face finishes
@@ -15,8 +14,8 @@ import { PANE_TEXT_PX, paneTextSize } from './paneTextSize';
 
 let canvas: HTMLCanvasElement | null = null;
 
-/** A measure over the panel face as it is now, game text at `size` px,
- *  with its own cache. */
+/** A measure over the panel face as it is now, at panel size `size`
+ *  px, with its own cache. */
 export function liveChipMeasure(size: number = PANE_TEXT_PX): ChipMeasure {
   if (typeof document === 'undefined') return FIXED_MEASURE;
   const px = paneTextSize(size);
@@ -37,14 +36,14 @@ export function liveChipMeasure(size: number = PANE_TEXT_PX): ChipMeasure {
   return {
     mono: (s) => width(`${px}px ${face}`, s),
     hours: (s) => width(`700 ${px}px ${face}`, s),
-    label: (s) => width(`600 11px ${face}`, s),
-    count: (s) => width(`12px ${face}`, s),
+    label: (s) => width(`600 ${textPx(11, px)}px ${face}`, s),
+    count: (s) => width(`${px}px ${face}`, s),
   };
 }
 
-/** The live measure at your terminal `size`, new each time a face
- *  loads or changes, or the size does, so the pane and its minimum
- *  pack again. */
+/** The live measure at your panel `size`, new each time a face loads
+ *  or changes, or the size does, so the pane and its minimum pack
+ *  again. */
 export function useChipMeasure(size: number = PANE_TEXT_PX): ChipMeasure {
   const v = usePanelFaceVersion();
   // eslint-disable-next-line react-hooks/exhaustive-deps

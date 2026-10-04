@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   affectsMarkerChoices,
   affectsStyleChoices,
@@ -33,6 +33,7 @@ import {
 } from './paneActions';
 import { submenuAt } from './menuPlacement';
 import { fitsPanel } from './paneGeometry';
+import { PaneTextSizeContext } from './paneTextSize';
 import { CheckIcon, ChevronRightIcon } from './paneIcons';
 import { getPanelLayout } from './panelLayoutStore';
 import { PANE_LABELS, offeredPaneTypes } from './paneTypes';
@@ -50,7 +51,8 @@ import { PANE_LABELS, offeredPaneTypes } from './paneTypes';
 // colors with a check on the current pick, then Reset all. A pick saves
 // alone for the profile and the pane follows at once. Closing a pane
 // loses nothing, so it carries no destructive color. A split the panel
-// has no room for, with every pane at its minimum, stays unavailable.
+// has no room for, with every pane at its minimum at your panel size,
+// stays unavailable.
 
 interface Props {
   leaf: PaneLeaf;
@@ -72,6 +74,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
   const display = useAffectsDisplay();
   const chatColors = useChatColors();
   const palette = useActiveTheme().xterm;
+  const textSize = useContext(PaneTextSizeContext);
   const menuId = `pane-menu-${leaf.id}`;
   const subId = (which: PaneSubmenu) => `${menuId}-${which}`;
   const chanId = (channel: string) => `${menuId}-colors-${channel}`;
@@ -119,7 +122,12 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
     const root = getPanelLayout()?.root;
     if (!root || splitIn === null) return false;
     if (!area) return true;
-    return fitsPanel(splitPane(root, leaf.id, dir, splitIn), area.clientWidth, area.clientHeight);
+    return fitsPanel(
+      splitPane(root, leaf.id, dir, splitIn),
+      area.clientWidth,
+      area.clientHeight,
+      textSize,
+    );
   };
 
   // Each choice list checks the current pick. A pick saves it alone,

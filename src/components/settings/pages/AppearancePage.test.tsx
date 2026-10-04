@@ -410,7 +410,7 @@ describe('AppearancePage', () => {
     expect(whole.attacks?.pressed).toEqual(['Show every line']);
   });
 
-  it('draws Panel font under Font, the terminal font until you pick one, and saves your pick', async () => {
+  it('gives Panel text a section of its own after Terminal text, with Font and Size', async () => {
     // The installed fonts are in, as the first test leaves them.
     await act(async () => {
       fonts.resolve([
@@ -420,7 +420,7 @@ describe('AppearancePage', () => {
       ]);
       await fonts.pending;
     });
-    const panelFont = async (cfg: UiConfig, pick?: string) => {
+    const panelRow = async (anchor: string, cfg: UiConfig, pick?: string) => {
       const container = doc.createElement('div');
       doc.body.appendChild(container);
       const root = createRoot(container as unknown as HTMLElement);
@@ -444,7 +444,12 @@ describe('AppearancePage', () => {
       const anchors = findAll(container, (el) => el.getAttribute('data-st-anchor') !== null).map(
         (el) => el.getAttribute('data-st-anchor'),
       );
-      const [row] = findAll(container, (el) => el.getAttribute('data-st-anchor') === 'panel-font');
+      const [section] = findAll(
+        container,
+        (el) => el.getAttribute('data-st-anchor') === 'panel-text',
+      );
+      const [title] = findAll(section, (el) => el.nodeName === 'H2');
+      const [row] = findAll(section, (el) => el.getAttribute('data-st-anchor') === anchor);
       const [select] = findAll(row, (el) => el.nodeName === 'SELECT');
       const options = select.options.map((o) => ({ label: o.textContent, value: o.value }));
       // React marks the shown option selected.
@@ -467,6 +472,7 @@ describe('AppearancePage', () => {
       });
       return {
         anchors,
+        title: title.textContent,
         label: row.textContent,
         options,
         font,
@@ -475,10 +481,22 @@ describe('AppearancePage', () => {
       };
     };
 
-    const same = await panelFont(config(), 'system');
-    expect(same.anchors.indexOf('panel-font')).toBe(same.anchors.indexOf('font') + 1);
-    expect(same.anchors.indexOf('size')).toBe(same.anchors.indexOf('panel-font') + 1);
-    expect(same.label).toContain('Panel font');
+    const same = await panelRow('panel-font', config(), 'system');
+    // Terminal text keeps Font, Size, and the rest. Panel text follows it,
+    // with its Font, then its Size, before Advanced.
+    expect(same.anchors.indexOf('size')).toBe(same.anchors.indexOf('font') + 1);
+    expect(same.anchors.slice(same.anchors.indexOf('panel-text'))).toEqual([
+      'panel-text',
+      'panel-font',
+      'panel-size',
+      'advanced',
+    ]);
+    expect(same.anchors.indexOf('panel-text')).toBeGreaterThan(
+      same.anchors.indexOf('collapse-repeats'),
+    );
+    expect(same.title).toBe('Panel text');
+    expect(same.label).toContain('Font');
+    expect(same.label).not.toContain('Panel font');
     expect(same.label).toContain('Every pane and the status line under the terminal draw in it.');
     expect(same.value).toBe('');
     // The terminal font, the system font, then the list Font offers.
@@ -495,14 +513,40 @@ describe('AppearancePage', () => {
     expect(same.saved?.panel_font).toBe('system');
     expect(same.saved?.font_family).toBe(CURRENT);
 
-    const system = await panelFont({ ...config(), panel_font: 'system' });
+    const system = await panelRow('panel-font', { ...config(), panel_font: 'system' });
     expect(system.value).toBe('system');
     const menlo = '"Menlo", Menlo, monospace';
-    const picked = await panelFont({ ...config(), panel_font: menlo });
+    const picked = await panelRow('panel-font', { ...config(), panel_font: menlo });
     expect(picked.value).toBe(menlo);
     expect(picked.options.filter((o) => o.value === menlo)).toEqual([
       { label: 'Menlo', value: menlo },
     ]);
+
+    // Size starts at 12, offers Same as terminal and the sizes the
+    // terminal Size offers, and saves your pick.
+    const size = await panelRow('panel-size', config(), '0');
+    expect(size.label).toContain('Size');
+    expect(size.label).toContain('The headers, the rows, and the status line grow with it.');
+    expect(size.value).toBe('12');
+    expect(size.options.map((o) => o.label)).toEqual([
+      'Same as terminal',
+      '11 pt',
+      '12 pt',
+      '13 pt',
+      '14 pt',
+      '15 pt',
+      '16 pt',
+      '18 pt',
+    ]);
+    expect(size.options[0].value).toBe('0');
+    expect(size.saved?.panel_font_size).toBe(0);
+    expect(size.saved?.font_size).toBe(14);
+    const following = await panelRow('panel-size', { ...config(), panel_font_size: 0 }, '16');
+    expect(following.value).toBe('0');
+    expect(following.saved?.panel_font_size).toBe(16);
+    const own = await panelRow('panel-size', { ...config(), panel_font_size: 20 });
+    expect(own.value).toBe('20');
+    expect(own.options.at(-1)).toEqual({ label: '20 pt', value: '20' });
   });
 
   it('saves the choice you press in each row', async () => {

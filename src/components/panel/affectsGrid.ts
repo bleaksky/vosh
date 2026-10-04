@@ -14,7 +14,7 @@ import { PANE_TEXT_BASE, PANE_TEXT_PX, paneText } from './paneTextSize';
 // stops on whole rows. Pure so the fit is unit tested.
 //
 // The rows, the gaps round the hairline, and the width for two columns
-// follow your terminal size (paneTextSize.ts). The numbers here are at
+// follow your panel size (paneTextSize.ts). The numbers here are at
 // 12 px.
 
 /** The hairline between your tracked slots and the rest, with 4 px
@@ -69,7 +69,7 @@ export interface AffectsGrid {
 }
 
 /** Place `rows`, in the order affectsView gives them, in a pane body
- *  of `box`, with the game text at `size` px. Before the body is
+ *  of `box`, at panel size `size` px. Before the body is
  *  measured (`null`) every affect goes on one page. */
 export function affectsGrid(
   rows: readonly AffectRow[],

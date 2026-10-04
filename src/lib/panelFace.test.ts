@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// Just what the store reads of a page: the face on the root, the font
-// loads, and the root's style changes.
-function page(face: string) {
-  const root = { face };
+// Just what the store reads of a page: the face and the size on the
+// root, the font loads, and the root's style changes.
+function page(face: string, px = '') {
+  const root = { face, px };
   const fonts = new EventTarget();
   let mutated: (() => void) | null = null;
   vi.stubGlobal('document', { documentElement: root, fonts });
   vi.stubGlobal('getComputedStyle', (el: typeof root) => ({
-    getPropertyValue: (name: string) => (name === '--font-panel' ? ` ${el.face}` : ''),
+    getPropertyValue: (name: string) => {
+      if (name === '--font-panel') return ` ${el.face}`;
+      if (name === '--panel-text-px') return el.px;
+      return '';
+    },
   }));
   vi.stubGlobal(
     'MutationObserver',
@@ -22,6 +26,10 @@ function page(face: string) {
   return {
     setFace(next: string) {
       root.face = next;
+      mutated?.();
+    },
+    setPx(next: string) {
+      root.px = next;
       mutated?.();
     },
     loaded() {
@@ -44,6 +52,16 @@ describe('the panel face', () => {
     page('"Iosevka", Menlo, monospace');
     const { readPanelFace } = await store();
     expect(readPanelFace()).toBe('"Iosevka", Menlo, monospace');
+  });
+
+  it('reads the panel size off the root, and 12 with none there', async () => {
+    page('Menlo, monospace', ' 16');
+    const { readPanelTextPx } = await store();
+    expect(readPanelTextPx()).toBe(16);
+    page('Menlo, monospace', '');
+    expect((await store()).readPanelTextPx()).toBe(12);
+    page('Menlo, monospace', 'big');
+    expect((await store()).readPanelTextPx()).toBe(12);
   });
 
   it('falls back to a monospace face with nothing on the root', async () => {
@@ -70,8 +88,14 @@ describe('the panel face', () => {
     expect(panelFaceVersion()).toBe(2);
     expect(heard).toHaveBeenCalledTimes(2);
 
+    // A new panel size measures and draws again too.
+    at.setPx('16');
+    expect(panelFaceVersion()).toBe(3);
+    at.setPx('16');
+    expect(panelFaceVersion()).toBe(3);
+
     stop();
     at.loaded();
-    expect(heard).toHaveBeenCalledTimes(2);
+    expect(heard).toHaveBeenCalledTimes(3);
   });
 });
