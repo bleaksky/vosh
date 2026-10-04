@@ -82,49 +82,57 @@ impl Alias {
 /// The aliases plugins make. Each lasts for the session and belongs to
 /// the plugin that made it, and Vosh never saves one, so it lives apart
 /// from the [`AliasStore`] the profile file holds. While one lasts it
-/// takes the place of a saved alias of its name.
+/// takes the place of a saved alias of its name. Two plugins may each
+/// make an alias of one name, and the one made last expands, so when it
+/// goes the other expands again.
 #[derive(Debug, Clone, Default)]
 pub struct PluginAliases {
-    /// Each alias by name, with the plugin that made it.
-    aliases: HashMap<String, (String, Alias)>,
+    /// Each alias with the plugin that made it, in the order they were
+    /// made.
+    aliases: Vec<(String, Alias)>,
 }
 
 impl PluginAliases {
     /// Make the alias `name` for `plugin`, in place of one of that name
-    /// any plugin made.
+    /// the same plugin made.
     pub fn set(&mut self, plugin: &str, name: impl Into<String>, expansion: impl Into<String>) {
         let alias = Alias::new(name, expansion);
         self.aliases
-            .insert(alias.name.clone(), (plugin.to_string(), alias));
+            .retain(|(by, old)| !(by == plugin && old.name == alias.name));
+        self.aliases.push((plugin.to_string(), alias));
     }
 
     /// Remove the alias `name` when `plugin` made it. True when it went.
     pub fn remove(&mut self, plugin: &str, name: &str) -> bool {
-        let owned = self.aliases.get(name).is_some_and(|(by, _)| by == plugin);
-        if owned {
-            self.aliases.remove(name);
-        }
-        owned
+        let before = self.aliases.len();
+        self.aliases
+            .retain(|(by, alias)| !(by == plugin && alias.name == name));
+        self.aliases.len() != before
     }
 
     /// Remove every alias `plugin` made.
     pub fn remove_plugin(&mut self, plugin: &str) {
-        self.aliases.retain(|_, (by, _)| by != plugin);
+        self.aliases.retain(|(by, _)| by != plugin);
     }
 
     /// Every alias by name, with the plugin that made it.
     pub fn list(&self) -> Vec<(&str, &Alias)> {
         let mut out: Vec<(&str, &Alias)> = self
             .aliases
-            .values()
+            .iter()
             .map(|(by, alias)| (by.as_str(), alias))
             .collect();
-        out.sort_by(|a, b| a.1.name.cmp(&b.1.name));
+        out.sort_by(|a, b| a.1.name.cmp(&b.1.name).then_with(|| a.0.cmp(b.0)));
         out
     }
 
+    /// The alias of `name` that expands: the one a plugin made last.
     fn get(&self, name: &str) -> Option<&Alias> {
-        self.aliases.get(name).map(|(_, alias)| alias)
+        self.aliases
+            .iter()
+            .rev()
+            .find(|(_, alias)| alias.name == name)
+            .map(|(_, alias)| alias)
     }
 }
 
@@ -508,6 +516,32 @@ mod tests {
             .collect();
         assert_eq!(left, [("other", "kk")]);
         assert_eq!(sends(&saved, &plugins, "go Orla"), ["go Orla"]);
+    }
+
+    #[test]
+    fn two_plugins_may_each_make_an_alias_of_one_name() {
+        let saved = store(&[("hl", "cast heal %1")]);
+        let mut plugins = PluginAliases::default();
+        plugins.set("healer", "hl", "cast 'cure light' %1");
+        plugins.set("cleric", "hl", "cast 'cure serious' %1");
+        // The one made last expands, and both list.
+        assert_eq!(
+            sends(&saved, &plugins, "hl Orla"),
+            ["cast 'cure serious' Orla"]
+        );
+        let listed: Vec<&str> = plugins.list().into_iter().map(|(by, _)| by).collect();
+        assert_eq!(listed, ["cleric", "healer"]);
+        // Once the cleric's goes, the healer's expands again.
+        plugins.remove_plugin("cleric");
+        assert_eq!(
+            sends(&saved, &plugins, "hl Orla"),
+            ["cast 'cure light' Orla"]
+        );
+        // Making it again keeps one alias of the name per plugin.
+        plugins.set("healer", "hl", "cast heal %1");
+        assert_eq!(plugins.list().len(), 1);
+        assert!(plugins.remove("healer", "hl"));
+        assert_eq!(sends(&saved, &plugins, "hl Orla"), ["cast heal Orla"]);
     }
 
     #[test]
