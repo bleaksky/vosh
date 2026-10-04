@@ -1,3 +1,5 @@
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { act, createElement } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { foldedStorageKey, groupKeyOf, searchText } from '../../../../lib/automationList';
@@ -110,14 +112,14 @@ afterEach(async () => {
   detail = null;
 });
 
-async function mount() {
+async function mount(spec: KindSpec<Thing> = SPEC) {
   const container = doc.createElement('div');
   doc.body.appendChild(container);
   const root = createRoot(container as unknown as HTMLElement);
   await act(async () => {
     root.render(
       createElement(DraftEditor<Thing>, {
-        spec: SPEC,
+        spec,
         json: false,
         onJson: () => {},
         onDirty: () => {},
@@ -145,9 +147,25 @@ async function mount() {
     null;
   const filter = findAll(container, (el) => el.nodeName === 'INPUT')[0];
   const scroll = findAll(container, (el) => el.getAttribute('class') === 'st-auto-scroll')[0];
+  const groupSwitch = (group: string) =>
+    findAll(container, (el) => el.getAttribute('data-group-switch') === group)[0] ?? null;
   return {
     heading,
     row,
+    groupSwitch,
+    /** The note under a heading whose group the loadouts decide. */
+    notes: () =>
+      findAll(container, (el) => el.getAttribute('class') === 'st-auto-groupnote').map(
+        (el) => el.textContent,
+      ),
+    /** Flip a group switch, as a click does. */
+    flip: (group: string) =>
+      run(() => {
+        const el = groupSwitch(group);
+        if (!el) throw new Error(`no switch for ${group}`);
+        const props = on(el) as unknown as { checked: boolean; onChange: Handler };
+        props.onChange({ target: { checked: !props.checked } });
+      }),
     /** Whether a group heading shows its group open. */
     open: (key: string) => heading(key)?.getAttribute('aria-expanded') === 'true',
     /** The names of the rows that show. */
@@ -170,8 +188,10 @@ async function mount() {
         const dataset: Record<string, string> = {};
         const uid = at.getAttribute('data-uid');
         const fold = at.getAttribute('data-fold');
+        const groupSwitch = at.getAttribute('data-group-switch');
         if (uid !== null) dataset.uid = uid;
         if (fold !== null) dataset.fold = fold;
+        if (groupSwitch !== null) dataset.groupSwitch = groupSwitch;
         on(scroll).onKeyDown({ key, target: { dataset }, preventDefault() {} });
       }),
   };
@@ -303,5 +323,83 @@ describe('folding a group in the Automation list', () => {
     expect(list.row('Echo my deaths')).not.toBeNull();
     expect(list.heading('u:')).toBeNull();
     expect(list.heading('g:combat')).not.toBeNull();
+  });
+});
+
+describe('the switch on a group heading', () => {
+  const GROUPED: KindSpec<Thing> = { ...SPEC, groups: 'triggers' };
+  /** The switches the fake store holds, as groups_list answers. */
+  let switches: { name: string; enabled: boolean; loadouts?: { on: boolean; by: string[] } }[];
+  const sets: unknown[] = [];
+
+  function fakeStore() {
+    switches = [
+      { name: 'combat', enabled: true },
+      { name: 'idle', enabled: true },
+    ];
+    sets.length = 0;
+    vi.mocked(invoke).mockImplementation((cmd: string, args?: unknown) => {
+      if (cmd === 'groups_list') return Promise.resolve(switches);
+      if (cmd === 'groups_set_enabled') {
+        sets.push(args);
+        const { group, enabled } = args as { group: string; enabled: boolean };
+        switches = switches.map((s) => (s.name === group ? { ...s, enabled } : s));
+        return Promise.resolve(switches);
+      }
+      return Promise.resolve();
+    });
+  }
+
+  afterEach(() => {
+    vi.mocked(invoke).mockImplementation(() => Promise.resolve());
+  });
+
+  const isOn = (el: FakeElement | null) =>
+    el ? (on(el) as unknown as { checked: boolean }).checked : null;
+
+  it('turns a whole group at once and leaves the draft as it was', async () => {
+    fakeStore();
+    const list = await mount(GROUPED);
+    expect(isOn(list.groupSwitch('combat'))).toBe(true);
+    await list.flip('combat');
+    expect(sets).toEqual([{ list: 'triggers', group: 'combat', enabled: false }]);
+    expect(isOn(list.groupSwitch('combat'))).toBe(false);
+    // The rows stay, and folding works as before.
+    expect(list.rows()).toEqual([
+      'Echo my deaths',
+      'Flee below 20 percent',
+      'Loot every kill',
+      'Sleep when mana is low',
+    ]);
+    await list.click(list.heading('g:combat'));
+    expect(list.open('g:combat')).toBe(false);
+    expect(list.groupSwitch('combat')).not.toBeNull();
+  });
+
+  it('follows #group and the loadouts from anywhere', async () => {
+    fakeStore();
+    const list = await mount(GROUPED);
+    switches = [
+      { name: 'combat', enabled: false, loadouts: { on: false, by: ['Healer'] } },
+      { name: 'idle', enabled: true },
+    ];
+    const heard = vi
+      .mocked(listen)
+      .mock.calls.filter(([event]) => event === 'vosh://groups-changed')
+      .map(([, cb]) => cb as (e: unknown) => void);
+    expect(heard.length).toBeGreaterThan(0);
+    await act(async () => heard[heard.length - 1]({ payload: '' }));
+    expect(isOn(list.groupSwitch('combat'))).toBe(false);
+    expect(on(list.groupSwitch('combat') as FakeElement).disabled).toBe(true);
+    expect(list.notes()).toEqual(['The Healer loadout leaves this group off.']);
+  });
+
+  it('moves with the arrow keys as its heading does', async () => {
+    fakeStore();
+    const list = await mount(GROUPED);
+    await list.key('ArrowDown', list.groupSwitch('combat'));
+    expect(list.selected()).toMatch(/^Flee below 20 percent/);
+    await list.key('ArrowLeft', list.groupSwitch('idle'));
+    expect(list.open('g:idle')).toBe(true);
   });
 });

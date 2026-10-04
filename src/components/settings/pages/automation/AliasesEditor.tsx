@@ -20,6 +20,7 @@ import type { DetailProps, EditorProps, KindSpec } from './types';
 
 const ALIASES_SPEC: KindSpec<AliasRecord> = {
   id: 'aliases',
+  groups: 'aliases',
   noun: { one: 'alias', many: 'aliases' },
   filterLabel: 'Filter aliases',
   newLabel: 'New alias',

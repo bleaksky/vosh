@@ -13,15 +13,19 @@ import {
 import type { KindNoun } from '../../../../lib/automationDraft';
 import {
   foldKeyOf,
+  groupOfSectionKey,
   listKeyAction,
   listStops,
+  sectionKeyOf,
   stopId,
   tabStopId,
   type ListSection,
   type ListStop,
 } from '../../../../lib/automationList';
+import { loadoutHoldNote } from '../../../../lib/groupSwitches';
 import { scrollWithin } from '../../../../lib/scrollWithin';
-import { ChevronRightIcon, cx, Field, SearchIcon, VisuallyHidden } from '../../ui';
+import { ChevronRightIcon, cx, Field, SearchIcon, Toggle, VisuallyHidden } from '../../ui';
+import type { GroupSwitches } from './useGroupSwitches';
 
 /** A row pinned above the groups, like the Tick in Timers. */
 export interface PinnedEntry {
@@ -136,6 +140,9 @@ export interface ItemListProps {
   folded: ReadonlySet<string>;
   /** Fold or open a group from its heading. */
   onFold: (key: string, fold: boolean) => void;
+  /** The on and off switch after each group heading. Null or left out
+   *  for lists whose groups have none. */
+  groupSwitches?: GroupSwitches | null | undefined;
 }
 
 /** A heading you moved to, and the selection it was made under. */
@@ -149,7 +156,10 @@ interface HeadingCursor {
  *  folds its group away and opens it again. Up and Down move through
  *  the headings and rows as one list, a row taking the selection as
  *  you reach it, and Left and Right fold and open a heading. One stop
- *  takes Tab, the selected row unless you moved to a heading. */
+ *  takes Tab, the selected row unless you moved to a heading. A group
+ *  heading can carry the switch that turns its whole group on and off.
+ *  Tab reaches it from its heading while that heading holds the stop,
+ *  so the list still takes one Tab from outside. */
 export function ItemList({
   noun,
   filterLabel,
@@ -169,6 +179,7 @@ export function ItemList({
   warnNote,
   folded,
   onFold,
+  groupSwitches,
 }: ItemListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const baseId = useId();
@@ -202,13 +213,16 @@ export function ItemList({
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     // The stop with focus, else the one that takes Tab, as when focus
     // sits on Edit all as JSON… under the list.
-    const { uid, fold } = (e.target as HTMLElement).dataset ?? {};
+    // A group switch moves as its heading does.
+    const { uid, fold, groupSwitch } = (e.target as HTMLElement).dataset ?? {};
     const at =
       uid !== undefined
         ? stopId({ kind: 'row', uid })
         : fold !== undefined
           ? stopId({ kind: 'heading', key: fold })
-          : tabId;
+          : groupSwitch !== undefined
+            ? stopId({ kind: 'heading', key: sectionKeyOf({ group: groupSwitch }) })
+            : tabId;
     const action = listKeyAction(stops, at, e.key);
     // Left and Right fold only the heading that has focus.
     if (!action || (action.type === 'fold' && fold === undefined)) return;
@@ -309,6 +323,10 @@ export function ItemList({
             const id = stopId({ kind: 'heading', key });
             const groupId = `${baseId}-group-${index}`;
             const count = section.entries.length;
+            const group = groupOfSectionKey(section.key);
+            const groupSwitch = group !== null ? groupSwitches?.byName.get(group) : undefined;
+            const hold = groupSwitch?.loadouts;
+            const noteId = hold ? `${groupId}-note` : undefined;
             return (
               <Fragment key={section.key}>
                 {divider}
@@ -319,6 +337,7 @@ export function ItemList({
                       className="st-auto-fold"
                       aria-expanded={open}
                       aria-controls={open ? groupId : undefined}
+                      aria-describedby={noteId}
                       tabIndex={tabId === id ? 0 : -1}
                       data-fold={key}
                       onClick={(e) => onHeadingClick(e, key, open)}
@@ -334,9 +353,27 @@ export function ItemList({
                       )}
                     </button>
                   </h2>
-                  {/* The slot for the group's on and off switch, after the
-                      heading, since a switch cannot sit inside a button. */}
+                  {/* The group's on and off switch sits after the heading,
+                      since a switch cannot sit inside a button. */}
+                  {group !== null && groupSwitch && groupSwitches && (
+                    <Toggle
+                      className="st-auto-groupswitch"
+                      aria-label={`${group} group`}
+                      aria-describedby={noteId}
+                      checked={groupSwitch.enabled}
+                      disabled={hold !== undefined}
+                      tabIndex={tabId === id ? 0 : -1}
+                      data-group-switch={group}
+                      onFocus={() => setCursor({ id, selected })}
+                      onChange={(on) => groupSwitches.turn(group, on)}
+                    />
+                  )}
                 </div>
+                {hold && (
+                  <p id={noteId} className="st-auto-groupnote">
+                    {loadoutHoldNote(hold)}
+                  </p>
+                )}
                 {open && (
                   <div id={groupId} className="st-auto-group">
                     {rows}
