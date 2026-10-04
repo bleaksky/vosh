@@ -23,6 +23,7 @@ use crate::app::state::SharedState;
 use crate::profile::live::Profile;
 use crate::script::ApplyResult;
 use crate::session::connection::Connection;
+use crate::sessions::Session;
 
 #[derive(Debug, Error)]
 pub(crate) enum PluginError {
@@ -354,13 +355,14 @@ async fn note_plugins(state: &SharedState, plugins_dir: &std::path::Path) {
     mgr.set_enabled(enabled);
 }
 
-/// Once a profile switch made the next profile live and turned its
-/// plugins on and the others off, deliver what they ask for, `apply`.
-/// Their lines print in the terminal, and what they send goes to the game
-/// when one listens.
+/// Once a profile switch made the next profile live for `session` and
+/// turned its plugins on and the others off, deliver what they ask for,
+/// `apply`. Their lines print in the terminal, and what they send goes to
+/// the game when the session runs a connection.
 pub(crate) async fn follow_profile<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     state: &SharedState,
+    session: &Arc<Session>,
     apply: ApplyResult,
 ) {
     if let Some(app_data) = state.app_data.get() {
@@ -370,14 +372,7 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
         bytes,
         echoes,
         walk,
-    } = crate::session::effects::collect_script_result(
-        app,
-        &state.profile,
-        &state.connection,
-        &state.lua_timers,
-        apply,
-    )
-    .await;
+    } = crate::session::effects::collect_script_result(app, &state.profile, session, apply).await;
     crate::output::echo_lines(app, &echoes);
     if bytes.is_empty() && walk.is_none() {
         return;
@@ -386,9 +381,9 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
     // disconnect holds the session lock while it waits for that task to
     // end. So the bytes and a #walk go from a task of their own and the
     // switch never waits on the lock.
-    let state = state.clone();
+    let session = Arc::clone(session);
     tokio::spawn(async move {
-        let delivered = state.session.lock().await.as_ref().is_some_and(|handle| {
+        let delivered = session.slot.lock().await.as_ref().is_some_and(|handle| {
             (bytes.is_empty() || handle.send(bytes)) && walk.map_or(true, |walk| handle.walk(walk))
         });
         if !delivered {
@@ -398,31 +393,26 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
 }
 
 /// Find the plugins in `plugins_dir` and load each one the profile turns
-/// on, once each in the order its list gives, as a switch does from a
-/// start with none running. What an entry script asks for applies as on
-/// every other path that runs Lua, so its timers, `mud.input` lines and
-/// prompt values take effect. No terminal shows and no game listens yet,
-/// so the lines it prints wait for [`show_launch_lines`], and what it
-/// would send goes to the log.
+/// on for `session`, once each in the order its list gives, as a switch
+/// does from a start with none running. What an entry script asks for
+/// applies as on every other path that runs Lua, so its timers,
+/// `mud.input` lines and prompt values take effect. No terminal shows and
+/// no game listens yet, so the lines it prints wait for
+/// [`show_launch_lines`], and what it would send goes to the log.
 pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     state: &SharedState,
+    session: &Arc<Session>,
     plugins_dir: std::path::PathBuf,
 ) {
     note_plugins(state, &plugins_dir).await;
     let apply = {
         let mut p = state.profile.lock().await;
-        let mut c = state.connection.lock();
+        let mut c = session.connection.lock();
         follow_profile_plugins(&mut p, &mut c, &plugins_dir)
     };
-    let collected = crate::session::effects::collect_script_result(
-        app,
-        &state.profile,
-        &state.connection,
-        &state.lua_timers,
-        apply,
-    )
-    .await;
+    let collected =
+        crate::session::effects::collect_script_result(app, &state.profile, session, apply).await;
     if !collected.bytes.is_empty() || collected.walk.is_some() {
         info!(
             bytes = collected.bytes.len(),
@@ -430,19 +420,20 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
             "plugin output at launch has no game to go to"
         );
     }
-    state
+    session
         .launch_lua_lines
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .extend(collected.echoes);
 }
 
-/// Print the lines the plugins printed as they loaded at launch, once,
-/// now that a terminal listens. The first connect and the first line you
-/// type each call it, and whichever comes first prints them.
-pub(crate) fn show_launch_lines<R: tauri::Runtime>(app: &tauri::AppHandle<R>, state: &SharedState) {
+/// Print the lines the plugins printed as they loaded into `session` at
+/// launch, once, now that a terminal listens. The first connect and the
+/// first line you type each call it, and whichever comes first prints
+/// them.
+pub(crate) fn show_launch_lines<R: tauri::Runtime>(app: &tauri::AppHandle<R>, session: &Session) {
     let lines = std::mem::take(
-        &mut *state
+        &mut *session
             .launch_lua_lines
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner),

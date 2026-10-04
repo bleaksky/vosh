@@ -32,6 +32,7 @@ use crate::disk::save::PERSIST_LOCK;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
 use crate::session::connection::Connection;
+use crate::sessions::Session;
 
 /// The body of [`prompt_config_set`]: check and take the table. Returns
 /// whether it changed anything. Only a capture that differs from the one
@@ -115,11 +116,11 @@ pub(crate) fn prompt_look(c: &Connection) -> (bool, String, vosh_prompt::PromptS
     (config.draw, config.template.clone(), config.show)
 }
 
-/// Ask the session to repaint the open row as the `[prompt]` table now
+/// Ask `session` to repaint the open row as the `[prompt]` table now
 /// says. Nothing happens with no connection, or when no drawn prompt is
 /// the last thing on screen.
-pub(crate) async fn request_prompt_repaint(state: &SharedState) {
-    if let Some(handle) = state.session.lock().await.as_ref() {
+pub(crate) async fn request_prompt_repaint(session: &Session) {
+    if let Some(handle) = session.slot.lock().await.as_ref() {
         let _ = handle.prompt_repaint();
     }
 }
@@ -504,9 +505,10 @@ pub(crate) fn prompt_state(p: &Profile, c: &Connection) -> PromptState {
     c.prompt.state(&client_values(p, c, Instant::now()))
 }
 
-/// The body of [`hidden_get`](crate::ipc::prompt::hidden_get).
-pub(crate) async fn reported_hidden(state: &SharedState) -> vosh_prompt::values::Hidden {
-    state.connection.lock().prompt.vars.reported()
+/// The body of [`hidden_get`](crate::ipc::prompt::hidden_get), for
+/// `session`.
+pub(crate) async fn reported_hidden(session: &Session) -> vosh_prompt::values::Hidden {
+    session.connection.lock().prompt.vars.reported()
 }
 
 /// Where your prompt shows, with what the Settings row and the main

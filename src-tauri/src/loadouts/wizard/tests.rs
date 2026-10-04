@@ -679,7 +679,7 @@ async fn the_preview_counts_the_live_presets_of_a_profile_that_never_saved() {
     // You create Test-Prompt, switch to it, and open the wizard
     // before anything saves it. Its live list is the defaults.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    crate::profile::switch::switch_profile(&state, "Test-Prompt")
+    crate::profile::switch::switch_profile(&state, &state.selected_session(), "Test-Prompt")
         .await
         .unwrap();
     assert!(!set.profile_path("Test-Prompt").exists());
@@ -1582,7 +1582,7 @@ async fn a_switch_waits_for_the_relaunch_after_the_wizard() {
     // The Healer file holds no aliases now, and the catalog loads
     // only at launch, so a switch would leave you with none. A
     // login that picks the Healer says why on the terminal.
-    let err = crate::profile::switch::switch_profile(&state, "Healer")
+    let err = crate::profile::switch::switch_profile(&state, &state.selected_session(), "Healer")
         .await
         .unwrap_err();
     assert_eq!(
@@ -1598,7 +1598,7 @@ async fn a_switch_waits_for_the_relaunch_after_the_wizard() {
 
     // Once Vosh opens again, the switch runs.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    crate::profile::switch::switch_profile(&state, "Healer")
+    crate::profile::switch::switch_profile(&state, &state.selected_session(), "Healer")
         .await
         .unwrap();
     assert_eq!(items_on(&*state.profile.lock().await), ["alias hh"]);
@@ -1660,7 +1660,7 @@ async fn the_live_profile_keeps_the_name_the_prompt_draws() {
         shown(&*state.profile.lock().await).as_deref(),
         Some("Default")
     );
-    crate::profile::switch::switch_profile(&state, "Healer")
+    crate::profile::switch::switch_profile(&state, &state.selected_session(), "Healer")
         .await
         .unwrap();
     assert_eq!(
@@ -1856,11 +1856,13 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
     }
     assert_eq!(read(&set.profile_path("Healer")), healer_file);
     assert_eq!(read(&catalog_path(dir.path())), catalog);
-    assert!(
-        crate::profile::switch::switch_profile(&state, DEFAULT_PROFILE_NAME)
-            .await
-            .is_err()
-    );
+    assert!(crate::profile::switch::switch_profile(
+        &state,
+        &state.selected_session(),
+        DEFAULT_PROFILE_NAME
+    )
+    .await
+    .is_err());
     // A rename would move the Healer file away from the name the
     // journal writes it under, and a copy would take its items.
     renames_and_copies_are_refused(&state, dir.path()).await;
@@ -1950,9 +1952,10 @@ async fn a_script_that_sets_its_own_alias_again_keeps_it_to_its_character() {
         }],
         ..vosh_script::ScriptOutcome::default()
     };
+    let session = state.selected_session();
     crate::script::apply_actions(
         &mut *state.profile.lock().await,
-        &mut state.connection.lock(),
+        &mut session.connection.lock(),
         outcome,
     );
     assert_eq!(items_on(&*state.profile.lock().await), ["alias hl"]);
@@ -2154,7 +2157,7 @@ async fn a_save_right_after_a_switch_keeps_the_catalog() {
     // let go of the lock.
     {
         let _persist_guard = PERSIST_LOCK.lock().await;
-        crate::profile::switch::switch_live_profile(&state, "Healer")
+        crate::profile::switch::switch_live_profile(&state, &state.selected_session(), "Healer")
             .await
             .unwrap();
     }
@@ -2176,7 +2179,7 @@ async fn each_character_keeps_its_own_items_across_switches_after_the_wizard() {
     assert_eq!(items_on(&*state.profile.lock().await), before[0]);
 
     // Corvanne logs in, and Vosh switches to Healer.
-    crate::profile::switch::switch_profile(&state, "Healer")
+    crate::profile::switch::switch_profile(&state, &state.selected_session(), "Healer")
         .await
         .unwrap();
     assert_eq!(items_on(&*state.profile.lock().await), before[1]);
@@ -2187,11 +2190,11 @@ async fn each_character_keeps_its_own_items_across_switches_after_the_wizard() {
     assert_eq!(items_on(&*state.profile.lock().await), before[1]);
 
     // Back to Default, then on to Test-Prompt.
-    crate::profile::switch::switch_profile(&state, DEFAULT_PROFILE_NAME)
+    crate::profile::switch::switch_profile(&state, &state.selected_session(), DEFAULT_PROFILE_NAME)
         .await
         .unwrap();
     assert_eq!(items_on(&*state.profile.lock().await), before[0]);
-    crate::profile::switch::switch_profile(&state, "Test-Prompt")
+    crate::profile::switch::switch_profile(&state, &state.selected_session(), "Test-Prompt")
         .await
         .unwrap();
     assert_eq!(items_on(&*state.profile.lock().await), before[2]);
@@ -2246,7 +2249,7 @@ async fn a_switch_keeps_the_items_a_profile_file_holds_as_launch_does() {
 
     // A switch to Healer does the same.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    crate::profile::switch::switch_profile(&state, "Healer")
+    crate::profile::switch::switch_profile(&state, &state.selected_session(), "Healer")
         .await
         .unwrap();
     assert_eq!(live_rows(&state).await, rows);

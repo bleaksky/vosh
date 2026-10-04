@@ -122,9 +122,10 @@ async fn play(session: Arc<Vec<u8>>) -> Run {
     let state: SharedState = Arc::new(AppState::default());
     let log = dir.path().join("logs.sqlite");
     *state.logs.lock().await = Some(vosh_log::LogStore::open(&log).expect("the log"));
+    let selected = state.selected_session();
     crate::prompt::take_config(
         &mut *state.profile.lock().await,
-        &mut state.connection.lock(),
+        &mut selected.connection.lock(),
         vosh_prompt::PromptConfig {
             capture: vosh_prompt::CaptureConfig::Aabahran(vosh_prompt::config::AabahranCapture {
                 prompt: PROMPT.into(),
@@ -193,6 +194,7 @@ async fn play(session: Arc<Vec<u8>>) -> Run {
     let handle = crate::session::spawn(
         app.handle().clone(),
         &state,
+        &selected,
         "127.0.0.1".into(),
         port,
         false,
@@ -202,7 +204,7 @@ async fn play(session: Arc<Vec<u8>>) -> Run {
     )
     .await
     .expect("the game answers");
-    *state.session.lock().await = Some(handle);
+    *selected.slot.lock().await = Some(handle);
 
     let begin = Instant::now();
     let base = begin.duration_since(start);
@@ -238,7 +240,7 @@ async fn play(session: Arc<Vec<u8>>) -> Run {
             })
             .collect()
     });
-    state.session.lock().await.take();
+    selected.slot.lock().await.take();
     Run {
         to_grid: last.saturating_sub(base),
         to_closed: closed.duration_since(begin),

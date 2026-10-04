@@ -756,13 +756,14 @@ fn the_prompt_show_state_says_where_it_shows_and_whether_a_capture_reads_it() {
 #[tokio::test]
 async fn hidden_get_answers_what_the_session_last_reported() {
     let state: super::SharedState = std::sync::Arc::new(AppState::default());
+    let session = state.selected_session();
     let nothing = serde_json::json!({
         "vitals": false, "tank": false, "opponent": false, "affects": false, "group": false,
     });
     let json = |h| serde_json::to_value(h).unwrap();
-    assert_eq!(json(super::reported_hidden(&state).await), nothing);
+    assert_eq!(json(super::reported_hidden(&session).await), nothing);
     {
-        let mut c = state.connection.lock();
+        let mut c = session.connection.lock();
         c.prompt.connect(true);
         let at = chrono::Local::now().fixed_offset();
         // The older build names the song and sends the true values.
@@ -778,11 +779,11 @@ async fn hidden_get_answers_what_the_session_last_reported() {
         );
     }
     // Worked out, but the session has not reported it yet.
-    assert_eq!(json(super::reported_hidden(&state).await), nothing);
-    let reported = state.connection.lock().prompt.vars.take_hidden_change();
+    assert_eq!(json(super::reported_hidden(&session).await), nothing);
+    let reported = session.connection.lock().prompt.vars.take_hidden_change();
     assert!(reported.is_some_and(|h| h.vitals() && h.affects && h.group));
     assert_eq!(
-        super::reported_hidden(&state).await,
+        super::reported_hidden(&session).await,
         reported.expect("a report")
     );
 }

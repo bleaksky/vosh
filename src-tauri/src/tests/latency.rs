@@ -81,6 +81,7 @@ impl Harness {
         let handle = crate::session::spawn(
             app.handle().clone(),
             &state,
+            &state.selected_session(),
             "127.0.0.1".into(),
             port,
             false,
@@ -90,7 +91,7 @@ impl Harness {
         )
         .await
         .expect("the game answers");
-        *state.session.lock().await = Some(handle);
+        *state.selected_session().slot.lock().await = Some(handle);
         let socket = accept.await.expect("the accept task");
         socket.set_nodelay(true).expect("no delay");
         let (mut reader, to_client) = socket.into_split();
@@ -232,7 +233,7 @@ impl Harness {
     }
 
     async fn disconnect(&self) {
-        let handle = self.state.session.lock().await.take();
+        let handle = self.state.selected_session().slot.lock().await.take();
         if let Some(handle) = handle {
             handle.shutdown().await;
         }

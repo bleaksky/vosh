@@ -283,10 +283,11 @@ pub(crate) async fn groups_set_enabled<R: tauri::Runtime>(
     group: String,
     enabled: bool,
 ) -> Result<Vec<GroupSwitchState>, String> {
+    let session = state.selected_session();
     let (switches, lists) = {
         let set = state.loadout_set.lock().await;
         let mut p = state.profile.lock().await;
-        let c = state.connection.lock();
+        let c = session.connection.lock();
         let before = ListRevisions::of(&p, &c);
         switch_group(&mut p, set.as_ref(), list, &group, enabled)?;
         (
@@ -477,9 +478,10 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
     let mut macros_changed = false;
     let macros_snapshot: Vec<Macro>;
     let lists;
+    let session = state.selected_session();
     {
         let mut p = state.profile.lock().await;
-        let c = state.connection.lock();
+        let c = session.connection.lock();
         let lists_before = ListRevisions::of(&p, &c);
         for alias in &report.aliases {
             p.aliases.set(alias.clone());

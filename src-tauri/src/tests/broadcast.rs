@@ -152,7 +152,12 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
 
     tauri::async_runtime::block_on(async {
         let listening = Heard::listen(&app, &[SESSION_IDENTITY_CHANGED]);
-        crate::session::identity::broadcast_session_identity(handle, &state).await;
+        crate::session::identity::broadcast_session_identity(
+            handle,
+            &state,
+            &state.selected_session(),
+        )
+        .await;
         listening.finish("broadcast_session_identity", &mut heard, &mut want);
 
         // A profile switch, an import, and `#profile load` and `reset`

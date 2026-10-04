@@ -64,9 +64,12 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
                 error!(error = %e, "log store failed to open; logging disabled");
             }
         }
+        // The session the app starts with takes the scrollback and the
+        // plugins.
+        let session = state.selected_session();
         let scrollback_path = paths::scrollback_path(&path);
         if let Ok(bytes) = std::fs::read(&scrollback_path) {
-            let scrollback = state.scrollback.clone();
+            let scrollback = session.scrollback.clone();
             tauri::async_runtime::block_on(async move {
                 let mut sb = scrollback.lock().await;
                 sb.load_from_bytes(&bytes);
@@ -80,6 +83,7 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
         tauri::async_runtime::block_on(crate::app::plugins::load_enabled_plugins(
             app.handle(),
             state,
+            &session,
             plugins_dir,
         ));
     }
@@ -149,8 +153,10 @@ pub(crate) async fn load(state: &SharedState, app_data: &Path) {
 /// Load whichever profile `set`, the profile set launch read, marks as
 /// active into the live profile, and overlay the shared global.toml
 /// (theme, font, dock layout, keep last, auto update) so those UI prefs
-/// stay the same across every profile.
+/// stay the same across every profile. The selected session takes the
+/// profile's tick settings and `[prompt]` table.
 pub(crate) async fn load_profiles(state: &SharedState, mut set: ProfileSet) {
+    let session = state.selected_session();
     // What an earlier session left to tell you, once.
     state.add_launch_notices(set.take_notices());
     // A file that does not read keeps the defaults in its place for this
@@ -160,7 +166,7 @@ pub(crate) async fn load_profiles(state: &SharedState, mut set: ProfileSet) {
         let mut p = state.profile.lock().await;
         let tick_before = p.tick.config.clone();
         let notices = load_at_launch(&set, &mut p);
-        let mut c = state.connection.lock();
+        let mut c = session.connection.lock();
         crate::profile::switch::hand_to_connection(&mut p, &mut c, &tick_before);
         notices
     };

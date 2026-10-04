@@ -150,7 +150,7 @@ fn apply_affects_display(
 pub(crate) async fn affects_snapshot_get(
     state: State<'_, SharedState>,
 ) -> Result<Option<Value>, String> {
-    Ok(state.last_affects.get())
+    Ok(state.selected_session().last_affects.get())
 }
 
 /// The live map, hours at full by affect key.

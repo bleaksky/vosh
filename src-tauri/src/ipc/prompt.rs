@@ -59,12 +59,13 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
     config: PromptConfig,
     as_is: Option<bool>,
 ) -> Result<(), String> {
+    let session = state.selected_session();
     // The locks cover only the change. The repaint waits on the session
     // slot, which Disconnect holds while the loop ends, and the loop's end
     // takes the profile, so holding the profile here would hang both.
     let changed = {
         let p = &mut *state.profile.lock().await;
-        let c = &mut *state.connection.lock();
+        let c = &mut *session.connection.lock();
         if as_is.unwrap_or(false) {
             set_config_as_is(p, c, config)?
         } else {
@@ -73,7 +74,7 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
     };
     if changed {
         mark_profile_dirty(&app);
-        request_prompt_repaint(state.inner()).await;
+        request_prompt_repaint(&session).await;
         broadcast_prompt_config_changed(&app);
     }
     Ok(())
@@ -88,9 +89,10 @@ pub(crate) async fn prompt_card_open<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharedState>,
 ) -> Result<PromptConfig, String> {
+    let session = state.selected_session();
     let (config, changed) = {
         let mut p = state.profile.lock().await;
-        let mut c = state.connection.lock();
+        let mut c = session.connection.lock();
         card_open(&mut p, &mut c)
     };
     if changed {
@@ -120,7 +122,9 @@ pub(crate) async fn prompt_compile(
     state: State<'_, SharedState>,
     capture: CompileRequest,
 ) -> Result<CompileReport, String> {
-    Ok(compile(&state.connection.lock(), &capture))
+    let session = state.selected_session();
+    let c = session.connection.lock();
+    Ok(compile(&c, &capture))
 }
 
 /// What a capture built from one entry of the candidates ring reads: the
@@ -133,7 +137,9 @@ pub(crate) async fn prompt_capture_from_line(
     id: u64,
     names: Option<Vec<String>>,
 ) -> Result<CompileReport, String> {
-    capture_from_line(&state.connection.lock(), id, &names.unwrap_or_default())
+    let session = state.selected_session();
+    let c = session.connection.lock();
+    capture_from_line(&c, id, &names.unwrap_or_default())
 }
 
 /// The candidates ring grouped by shape, with counts.
@@ -141,7 +147,8 @@ pub(crate) async fn prompt_capture_from_line(
 pub(crate) async fn prompt_candidates(
     state: State<'_, SharedState>,
 ) -> Result<Vec<CandidateGroup>, String> {
-    let c = state.connection.lock();
+    let session = state.selected_session();
+    let c = session.connection.lock();
     Ok(vosh_prompt::card::candidates::groups(c.prompt.stage.ring()))
 }
 
@@ -152,14 +159,15 @@ pub(crate) async fn prompt_capture_check(
     state: State<'_, SharedState>,
     capture: CaptureConfig,
 ) -> Result<CaptureCheck, String> {
+    let session = state.selected_session();
     let (recognizer, ring) = {
-        let c = state.connection.lock();
+        let c = session.connection.lock();
         let recognizer = Recognizer::compile_for(&capture, c.prompt.who());
         let ring: Vec<vosh_prompt::stage::Candidate> = c.prompt.stage.ring().cloned().collect();
         (recognizer, ring)
     };
     let lines: Vec<String> = {
-        let scrollback = state.scrollback.lock().await;
+        let scrollback = session.scrollback.lock().await;
         scrollback
             .lines()
             .map(vosh_protocol::ansi::plain_text)
@@ -180,8 +188,9 @@ pub(crate) async fn prompt_line_triggers(
     state: State<'_, SharedState>,
     capture: CaptureConfig,
 ) -> Result<Vec<LineTrigger>, String> {
+    let session = state.selected_session();
     let p = state.profile.lock().await;
-    let c = state.connection.lock();
+    let c = session.connection.lock();
     Ok(line_triggers(&p, &c, &capture))
 }
 
@@ -196,6 +205,7 @@ pub(crate) async fn prompt_render(
     overrides: Option<Overrides>,
     placeholders: Option<bool>,
 ) -> Result<Rendered, String> {
+    let session = state.selected_session();
     let request = RenderRequest {
         template,
         values: values.unwrap_or_default(),
@@ -204,7 +214,7 @@ pub(crate) async fn prompt_render(
         placeholders: placeholders.unwrap_or(false),
     };
     let p = state.profile.lock().await;
-    let c = state.connection.lock();
+    let c = session.connection.lock();
     Ok(render_all(&p, &c, std::slice::from_ref(&request)).remove(0))
 }
 
@@ -214,8 +224,9 @@ pub(crate) async fn prompt_render_many(
     state: State<'_, SharedState>,
     requests: Vec<RenderRequest>,
 ) -> Result<Vec<Rendered>, String> {
+    let session = state.selected_session();
     let p = state.profile.lock().await;
-    let c = state.connection.lock();
+    let c = session.connection.lock();
     Ok(render_all(&p, &c, &requests))
 }
 
@@ -228,8 +239,9 @@ pub(crate) async fn prompt_describe(
     preview: Option<Preview>,
     overrides: Option<Overrides>,
 ) -> Result<Described, String> {
+    let session = state.selected_session();
     let p = state.profile.lock().await;
-    let c = state.connection.lock();
+    let c = session.connection.lock();
     Ok(describe(&p, &c, &template, preview, overrides))
 }
 
@@ -242,8 +254,9 @@ pub(crate) async fn prompt_forms(
     field: String,
     preview: Option<Preview>,
 ) -> Result<Vec<FormView>, String> {
+    let session = state.selected_session();
     let p = state.profile.lock().await;
-    let c = state.connection.lock();
+    let c = session.connection.lock();
     Ok(forms(&p, &c, &field, preview))
 }
 
@@ -260,8 +273,9 @@ pub(crate) async fn prompt_preview_set(
     state: State<'_, SharedState>,
     preview: Option<PromptPreview>,
 ) -> Result<(), String> {
-    state.connection.lock().prompt.set_preview(preview);
-    request_prompt_repaint(state.inner()).await;
+    let session = state.selected_session();
+    session.connection.lock().prompt.set_preview(preview);
+    request_prompt_repaint(&session).await;
     Ok(())
 }
 
@@ -276,7 +290,8 @@ pub(crate) async fn prompt_code_reader_set(
     state: State<'_, SharedState>,
     on: bool,
 ) -> Result<(), String> {
-    state.connection.lock().prompt.set_reader(on);
+    let session = state.selected_session();
+    session.connection.lock().prompt.set_reader(on);
     Ok(())
 }
 
@@ -288,8 +303,9 @@ pub(crate) async fn prompt_edit(
     template: String,
     op: EditOp,
 ) -> Result<Edited, String> {
+    let session = state.selected_session();
     let p = state.profile.lock().await;
-    let c = state.connection.lock();
+    let c = session.connection.lock();
     edit(&p, &c, &template, &op)
 }
 
@@ -297,8 +313,9 @@ pub(crate) async fn prompt_edit(
 /// new build sign and the open row with its spans.
 #[tauri::command]
 pub(crate) async fn prompt_state_get(state: State<'_, SharedState>) -> Result<PromptState, String> {
+    let session = state.selected_session();
     let p = state.profile.lock().await;
-    let c = state.connection.lock();
+    let c = session.connection.lock();
     Ok(prompt_state(&p, &c))
 }
 
@@ -306,7 +323,10 @@ pub(crate) async fn prompt_state_get(state: State<'_, SharedState>) -> Result<Pr
 /// prompt Vosh reads.
 #[tauri::command]
 pub(crate) fn prompt_watch(state: State<'_, SharedState>, on: bool) {
-    state.prompt_watch.store(on, Ordering::Release);
+    state
+        .selected_session()
+        .prompt_watch
+        .store(on, Ordering::Release);
 }
 
 /// Your prompt settings and where Vosh last saw them: the latest
@@ -327,7 +347,8 @@ pub(crate) async fn prompt_last_seen(
 pub(crate) async fn hidden_get(
     state: State<'_, SharedState>,
 ) -> Result<vosh_prompt::values::Hidden, String> {
-    Ok(reported_hidden(state.inner()).await)
+    let session = state.selected_session();
+    Ok(reported_hidden(&session).await)
 }
 
 /// Where the active profile's prompt shows, and whether it reads one.
@@ -336,7 +357,9 @@ pub(crate) async fn hidden_get(
 pub(crate) async fn prompt_show_get(
     state: State<'_, SharedState>,
 ) -> Result<PromptShowState, String> {
-    Ok(prompt_show_state(&state.connection.lock()))
+    let session = state.selected_session();
+    let c = session.connection.lock();
+    Ok(prompt_show_state(&c))
 }
 
 /// The triggers that hid your prompt this session while the profile
@@ -348,7 +371,8 @@ pub(crate) async fn prompt_show_get(
 pub(crate) async fn prompt_gags_without_reader(
     state: State<'_, SharedState>,
 ) -> Result<Vec<String>, String> {
-    let c = state.connection.lock();
+    let session = state.selected_session();
+    let c = session.connection.lock();
     Ok(c.prompt
         .stage
         .gags_without_reader()
@@ -371,12 +395,13 @@ mod tests {
         let app = mock_builder().build(mock_context(noop_assets())).unwrap();
         app.manage::<SharedState>(Arc::new(AppState::default()));
         let state: SharedState = app.state::<SharedState>().inner().clone();
+        let session = state.selected_session();
         let mut config = state.profile.lock().await.prompt.clone();
         config.template = "<%hp>%mana".into();
 
         // Disconnect holds the session slot while the loop ends, and the
         // end of the loop takes the profile.
-        let slot = state.session.lock().await;
+        let slot = session.slot.lock().await;
         let save = tokio::spawn({
             let app = app.handle().clone();
             let config = config.clone();

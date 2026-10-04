@@ -38,7 +38,8 @@ pub(crate) async fn terminal_local_write(
         let _ = &text;
         u64::MAX
     };
-    if let Some(handle) = state.session.lock().await.as_ref() {
+    let session = state.selected_session();
+    if let Some(handle) = session.slot.lock().await.as_ref() {
         let _ = handle.local_write(after.unwrap_or(taken));
     }
     Ok(())
@@ -52,6 +53,7 @@ pub(crate) async fn terminal_local_write(
 #[tauri::command]
 pub(crate) fn terminal_reader_busy(state: State<'_, SharedState>, busy: bool) {
     state
+        .selected_session()
         .reader_busy
         .store(busy, std::sync::atomic::Ordering::Release);
 }
@@ -96,7 +98,8 @@ pub(crate) async fn scrollback_load(
     state: State<'_, SharedState>,
     feed_native: bool,
 ) -> Result<ScrollbackLoad, String> {
-    let sb = state.scrollback.lock().await;
+    let session = state.selected_session();
+    let sb = session.scrollback.lock().await;
     // With the run of repeated lines the screen ends on marked, so a pane
     // that loads it during the run rewrites the count in place.
     let bytes = sb.dump_live();
@@ -129,7 +132,8 @@ pub(crate) async fn scrollback_load(
 /// keeps every line.
 #[tauri::command]
 pub(crate) async fn scrollback_clear(state: State<'_, SharedState>) -> Result<(), String> {
-    state.scrollback.lock().await.clear();
+    let session = state.selected_session();
+    session.scrollback.lock().await.clear();
     #[cfg(native_surface)]
     {
         crate::native::grid::clear_history();

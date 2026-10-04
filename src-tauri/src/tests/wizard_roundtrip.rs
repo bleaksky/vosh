@@ -770,7 +770,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         .filter(|_| rng.chance(50))
         .map(|n| names[n].as_str());
     if let Some(name) = unsaved {
-        crate::profile::switch::switch_profile(&wizard, name)
+        crate::profile::switch::switch_profile(&wizard, &wizard.selected_session(), name)
             .await
             .map_err(|e| format!("switch: {e}"))?;
     }
@@ -971,7 +971,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
     let state = launch_as(dir, &names[start]).await;
     for step in 0..4 {
         let n = rng.below(names.len());
-        crate::profile::switch::switch_profile(&state, &names[n])
+        crate::profile::switch::switch_profile(&state, &state.selected_session(), &names[n])
             .await
             .map_err(|e| format!("switch: {e}"))?;
         check(
@@ -996,7 +996,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         check(&state, name, "at the last launch", &before[n], &want[n]).await?;
         check_group_steps(&state, name, &steps, &want_toggled[n]).await?;
         let state = launch_as(dir, &names[(n + 1) % names.len()]).await;
-        crate::profile::switch::switch_profile(&state, name)
+        crate::profile::switch::switch_profile(&state, &state.selected_session(), name)
             .await
             .map_err(|e| format!("switch: {e}"))?;
         check_group_steps(&state, name, &steps, &want_toggled[n]).await?;
