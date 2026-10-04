@@ -223,6 +223,54 @@ describe('AppearancePage', () => {
     });
   });
 
+  it('draws Fit game colors after the theme colors switch, on unless you turn it off', async () => {
+    const fitSwitch = async (cfg: UiConfig) => {
+      const container = doc.createElement('div');
+      doc.body.appendChild(container);
+      const root = createRoot(container as unknown as HTMLElement);
+      await act(async () => {
+        root.render(
+          createElement(AppearancePage, {
+            target: { group: 'appearance' },
+            navSeq: 0,
+            config: cfg,
+            setConfig: () => undefined,
+            onError: () => undefined,
+            pathB: false,
+            navigate: () => undefined,
+            setLeaveGuard: () => undefined,
+          }),
+        );
+      });
+      const anchors = findAll(container, (el) => el.getAttribute('data-st-anchor') !== null).map(
+        (el) => el.getAttribute('data-st-anchor'),
+      );
+      const [row] = findAll(
+        container,
+        (el) => el.getAttribute('data-st-anchor') === 'fit-game-colors',
+      );
+      const [input] = findAll(row, (el) => el.getAttribute('role') === 'switch');
+      const checked = (input as unknown as { checked: boolean }).checked;
+      await act(async () => {
+        root.unmount();
+      });
+      return { label: row.textContent, checked, anchors };
+    };
+
+    const on = await fitSwitch(config());
+    expect(on.label).toContain('Fit game colors');
+    expect(on.label).toContain('Settings keeps the theme as published');
+    expect(on.checked).toBe(true);
+    const at = on.anchors.indexOf('fit-game-colors');
+    expect(on.anchors.slice(at - 1, at + 2)).toEqual([
+      'theme-colors',
+      'fit-game-colors',
+      'readable-highlights',
+    ]);
+    const off = await fitSwitch({ ...config(), fit_game_colors: false });
+    expect(off.checked).toBe(false);
+  });
+
   it('draws Keep highlight colors readable under Terminal text, on unless you turn it off', async () => {
     const readableSwitch = async (cfg: UiConfig) => {
       const container = doc.createElement('div');

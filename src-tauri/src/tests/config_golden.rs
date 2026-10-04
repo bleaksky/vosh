@@ -340,6 +340,10 @@ fn full_ui() -> UiConfig {
         bright_bold: true,
         blink_text: Some(false),
         // Written only while off, so on keeps the golden's bytes. The
+        // fit_game_colors tests in profile/ui.rs and ipc/ui_config.rs
+        // cover off.
+        fit_game_colors: true,
+        // Written only while off, so on keeps the golden's bytes. The
         // readable_highlights tests in ipc/ui_config.rs cover off.
         readable_highlights: true,
         // Written only while on, so off keeps the golden's bytes. The

@@ -201,6 +201,14 @@ pub(crate) struct UiConfig {
     /// unless the system asks to reduce motion. Your choice always wins.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blink_text: Option<bool>,
+    /// Fit game colors. While on, play draws the game's colors in the
+    /// slots the theme fits for them, so the colors that fade on its
+    /// ground read, and Settings keeps the theme as published. On by
+    /// default, and a file written before this switch reads it on.
+    /// Written only while off, so a profile that never turns it off
+    /// saves the bytes it saved before.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub fit_game_colors: bool,
     /// Keep highlight colors readable. While on, a fixed color a trigger
     /// paints text in, a true color or a 256 color past the 16, that fades
     /// on the theme's terminal background draws at a lightness that reads
@@ -877,6 +885,7 @@ impl Default for UiConfig {
             theme_terminal_colors: None,
             bright_bold: false,
             blink_text: None,
+            fit_game_colors: true,
             readable_highlights: true,
             collapse_repeats: false,
             collapse_fight_lines: true,
@@ -1382,6 +1391,27 @@ name = "haste"
             ..UiConfig::default()
         };
         assert!(through_toml(&ui).vitals_warn_thirds);
+    }
+
+    #[test]
+    fn fit_game_colors_round_trips() {
+        let mut ui = UiConfig::default();
+        assert!(through_toml(&ui).fit_game_colors);
+        ui.fit_game_colors = false;
+        assert!(!through_toml(&ui).fit_game_colors);
+    }
+
+    #[test]
+    fn fit_game_colors_is_written_only_while_off() {
+        let mut config = ProfileConfig::default();
+        let on = config.to_toml().unwrap();
+        assert!(!on.contains("fit_game_colors"), "{on}");
+        config.ui.fit_game_colors = false;
+        let off = config.to_toml().unwrap();
+        assert!(off.contains("fit_game_colors = false"), "{off}");
+        // A file from before the switch reads it on.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert!(old.ui.fit_game_colors);
     }
 
     #[test]

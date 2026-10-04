@@ -414,6 +414,32 @@ describe('vitals density', () => {
   });
 });
 
+describe('Fit game colors', () => {
+  it('reads on for a config saved before it existed, and keeps it off once off', () => {
+    expect(normalizeUiConfig(raw()).fit_game_colors).toBe(true);
+    expect(normalizeUiConfig(raw({ fit_game_colors: false })).fit_game_colors).toBe(false);
+  });
+
+  it('saves with the rest of the config and tells every window when it changes', async () => {
+    const invoked = vi.mocked(invoke);
+    invoked.mockClear();
+    const off = { ...normalizeUiConfig(raw()), fit_game_colors: false };
+    await setUiConfig(off);
+    const [command, args] = invoked.mock.calls[0] as [string, { config: Record<string, unknown> }];
+    expect(command).toBe('ui_set_config');
+    expect(args.config).toMatchObject({ fit_game_colors: false });
+
+    const sent = vi.mocked(emit);
+    await broadcastUiConfigChanges(off);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...off, fit_game_colors: true });
+    expect(sent).toHaveBeenCalledWith('vosh://fit-game-colors-changed', true);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...off, fit_game_colors: true });
+    expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://fit-game-colors-changed');
+  });
+});
+
 describe('Keep highlight colors readable', () => {
   it('reads on for a config saved before it existed, and keeps it off once off', () => {
     expect(normalizeUiConfig(raw()).readable_highlights).toBe(true);

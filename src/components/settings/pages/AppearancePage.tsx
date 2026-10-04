@@ -42,8 +42,9 @@ import { ThemeGallery } from './appearance/ThemeGallery';
 // describes the theme on screen and credits its colors, then follow
 // system appearance and the light and dark pair it switches between.
 // Terminal text holds the font, the size, the line height, whether MUD
-// text takes the theme's colors, whether Vosh keeps the colors your
-// triggers set readable on the theme, and whether a line the same as
+// text takes the theme's colors, whether play fits the game's colors to
+// the theme, whether Vosh keeps the colors your triggers set readable
+// on the theme, and whether a line the same as
 // the one before it shows once with a count. While that is on, two rows
 // under it choose whether the lines of a fight collapse, and whether
 // attack lines do. A link to either row shows them even while it is
@@ -292,6 +293,16 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           <Toggle
             checked={resolveThemeTerminalColors(config.theme, config.theme_terminal_colors)}
             onChange={(on) => update({ theme_terminal_colors: on }, { now: true })}
+          />
+        </Row>
+        <Row
+          anchor="fit-game-colors"
+          label="Fit game colors"
+          description="While you play, Vosh lifts the game colors that fade on the theme, and Settings keeps the theme as published."
+        >
+          <Toggle
+            checked={config.fit_game_colors}
+            onChange={(on) => update({ fit_game_colors: on }, { now: true })}
           />
         </Row>
         <Row
