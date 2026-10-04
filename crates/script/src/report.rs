@@ -1,6 +1,8 @@
 //! The lines Vosh prints about the Lua it runs: an error with its file
-//! and line where Lua knows them, a stop, and the action cap.
+//! and line where Lua knows them, a stop, the action cap, and the
+//! handlers an event skipped.
 
+use crate::budget::{Event, EVENT_BUDGET};
 use crate::limits::{
     Stop, StopReason, ACTIONS_PER_CALL, CALL_MEMORY, ECHO_BYTES, MB, STATE_MEMORY, TIME_BUDGET,
 };
@@ -133,6 +135,25 @@ pub(crate) fn text_cap_line(owner: &Owner, site: &Site) -> String {
     format!("{subject} queued more text than one call may. Vosh dropped what went past the limit.")
 }
 
+/// The line for the first handler of `owner` that `event` skipped, once
+/// `owner` used its time for the event.
+pub(crate) fn budget_line(owner: &Owner, event: &Event) -> String {
+    let subject = subject(owner, &Site::Entry);
+    let used = format!("{subject} used its {} ms", EVENT_BUDGET.as_millis());
+    match event {
+        Event::Line => format!("{used} for this line, so Vosh skipped the rest of its handlers."),
+        Event::Packet(package) => {
+            format!("{used} for this {package} packet, so Vosh skipped the rest of its handlers.")
+        }
+        Event::Timers => format!(
+            "{used} for this round of timers, so the rest of its timers wait for the next round."
+        ),
+        Event::Replay => format!(
+            "{used} on the last packets, so the rest of its new handlers wait for the next packet."
+        ),
+    }
+}
+
 /// How the lines name the Lua that ran.
 fn subject(owner: &Owner, site: &Site) -> String {
     match owner {
@@ -247,6 +268,27 @@ mod tests {
         assert_eq!(
             cap_line(&Owner::Typed, &Site::Entry),
             "Your #lua line queued more than 100 actions in one call. Vosh dropped the rest."
+        );
+    }
+
+    #[test]
+    fn a_budget_line_names_the_owner_and_the_event() {
+        let owner = Owner::Plugin("vitals_alert".into());
+        assert_eq!(
+            budget_line(&owner, &Event::Line),
+            "vitals_alert used its 100 ms for this line, so Vosh skipped the rest of its handlers."
+        );
+        assert_eq!(
+            budget_line(&owner, &Event::Packet("Char.Vitals".into())),
+            "vitals_alert used its 100 ms for this Char.Vitals packet, so Vosh skipped the rest of its handlers."
+        );
+        assert_eq!(
+            budget_line(&Owner::Script("combat.lua".into()), &Event::Timers),
+            "combat.lua used its 100 ms for this round of timers, so the rest of its timers wait for the next round."
+        );
+        assert_eq!(
+            budget_line(&owner, &Event::Replay),
+            "vitals_alert used its 100 ms on the last packets, so the rest of its new handlers wait for the next packet."
         );
     }
 

@@ -827,6 +827,16 @@ describe('the help on Lua', () => {
     );
   });
 
+  it('says what the budget for one line, packet, replay or round of timers does', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain(
+      'Each plugin and each script from `#script load` also gets 100 ms in all for one game line, one packet, the last packets its new handlers get, or one round of timers that fall due together.',
+    );
+    expect(text).toContain(
+      'Once it has used them, Vosh skips the rest of its triggers and handlers for that line or packet, holds the rest of its timers a quarter second, and says so in a red `[lua]` line.',
+    );
+  });
+
   it('says what the sandbox takes away', () => {
     const text = body('automate.lua-scripts');
     expect(text).toContain(
@@ -851,6 +861,9 @@ describe('the help on Lua', () => {
     expect(text).toContain('Variables it set and groups it turned on or off stay.');
     expect(text).toContain(
       'A new `mud.on_gmcp` handler runs at once on the last packet of its package',
+    );
+    expect(text).toContain(
+      'A new `Comm.Channel` handler waits for the next message instead, since each chat packet is one message and not a state.',
     );
   });
 
