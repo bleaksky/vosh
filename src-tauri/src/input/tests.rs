@@ -4,7 +4,7 @@ use super::slash::{parse_braced_pattern, HELP_TEXT};
 use super::target::{read_room_chars, set_room_chars};
 use super::*;
 use crate::profile::file::ProfileConfig;
-use crate::profile::live::RoomChar;
+use crate::session::connection::RoomChar;
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{NamedColor, TriggerAction};
 use vosh_automation::vars::Scope;

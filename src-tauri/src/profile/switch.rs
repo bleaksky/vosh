@@ -439,7 +439,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn a_switch_keeps_the_target_the_room_list_the_room_look_and_the_tick_count() {
-        use crate::profile::live::{QuickKey, RoomChar};
+        use crate::session::connection::{QuickKey, RoomChar};
         let dir = tempfile::tempdir().unwrap();
         let state = switch_state(dir.path()).await;
         // Healer saved the tick off.
