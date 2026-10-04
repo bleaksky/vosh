@@ -206,7 +206,14 @@ async fn move_session(
     from: &Arc<OpenProfile>,
     to: &Arc<OpenProfile>,
 ) -> ApplyResult {
+    let others = state.other_sessions(session.id);
     let (left, mut p) = lock_both(from, to).await;
+    // A connected session on the next profile already counts by its
+    // switch, so this one follows the switch as it stands, as a connect
+    // beside it does, rather than keep its running tick on over it.
+    let beside_a_count = p
+        .players(&others)
+        .any(|other| other.connection.lock().tick.in_session);
     session.play(to.clone());
     // Under the same locks as the move, so a pane layout write edited
     // from the old profile's tree, or a whole config save read from the
@@ -219,7 +226,14 @@ async fn move_session(
     // from its capture and its scripts.
     let mut c = session.connection.lock();
     c.prompt.switch_profile();
-    hand_to_connection(&mut p, &mut c, &left.tick.config);
+    if beside_a_count {
+        c.tick
+            .follow(&p.tick, &left.tick.config, tokio::time::Instant::now());
+        let table = p.prompt.clone();
+        crate::prompt::take_config(&mut p, &mut c, table);
+    } else {
+        hand_to_connection(&mut p, &mut c, &left.tick.config);
+    }
     // The latest Char.Prompt of the connection applies to the next
     // profile's capture by the rule every packet follows, and the profile
     // keeps the table as it then stands.

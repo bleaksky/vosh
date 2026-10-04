@@ -116,6 +116,14 @@ impl AppState {
         }
     }
 
+    /// Every session but `id`. A step that works on the sessions of one
+    /// profile takes them here before any other lock, then picks the ones
+    /// that play it once it holds the profile, through
+    /// [`ProfileGuard::players`](crate::profile::open::ProfileGuard::players).
+    pub(crate) fn other_sessions(&self, id: SessionId) -> Vec<Arc<Session>> {
+        self.sessions().others(id)
+    }
+
     /// Add a session after the others that plays `profile`, see
     /// [`Sessions::open`]. Take it before any other lock.
     pub(crate) fn open_session(&self, profile: Arc<OpenProfile>) -> Arc<Session> {

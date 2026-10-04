@@ -175,11 +175,10 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
         // A `#tick` command.
         let listening = Heard::listen(&app, &[crate::app::events::TICK_CONFIG_CHANGED]);
         let tick = LineEffects {
-            tick_changed: true,
+            tick_before: Some(crate::tick::TickConfig::default()),
             ..LineEffects::default()
         };
-        let open = state.selected_session().profile();
-        crate::disk::save::settle_line_effects(handle, &open, tick).await;
+        crate::disk::save::settle_line_effects(handle, &state.selected_session(), tick).await;
         listening.finish("settle_line_effects", &mut heard, &mut want);
 
         // Each window answers the quit request the way its page does, so

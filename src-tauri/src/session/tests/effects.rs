@@ -152,7 +152,7 @@ fn tick_and_lua_lines_note_what_they_ask_of_the_profile() {
         LineEffects {
             replaced: true,
             dirty: false,
-            tick_changed: false,
+            tick_before: None,
         }
     );
     assert!(p.aliases.get("greet").is_none());
@@ -183,10 +183,10 @@ fn a_tick_command_from_a_timer_notes_the_tick_change() {
     let mut p = Profile::default();
     let mut c = Connection::default();
     let run = super::run_fired_locked(&state, &mut p, &mut c, "#tick warn at 10", None);
-    assert!(run.effects.tick_changed);
+    assert!(run.effects.tick_before.is_some());
     assert_eq!(p.tick.config.warn_at_secs, Some(10));
     let run = super::run_fired_locked(&state, &mut p, &mut c, "#tick", None);
-    assert!(!run.effects.tick_changed);
+    assert!(run.effects.tick_before.is_none());
 }
 
 #[test]

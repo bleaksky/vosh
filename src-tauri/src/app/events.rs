@@ -573,7 +573,7 @@ pub(crate) fn line_effect_events(
     if effects.replaced {
         return profile_ui_events(state, p).events();
     }
-    if effects.tick_changed {
+    if effects.tick_before.is_some() {
         return event_json(TICK_CONFIG_CHANGED, &p.tick.config)
             .into_iter()
             .collect();

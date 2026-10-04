@@ -104,13 +104,25 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
 ) {
     let mut buf = vec![0u8; READ_BUFFER_BYTES];
 
-    // Activate the tick timer for this session, unsynced until the game's
-    // first tick. The user can disable it later through the slash command.
-    // The prompt engine starts with no packets and the host's rules.
+    // Start the tick timer for this session, unsynced until the game's
+    // first tick. A connect turns your switch on, unless another session
+    // on the profile is connected, whose count already follows the switch
+    // as it stands. The prompt engine starts with no packets and the
+    // host's rules.
+    let others = app
+        .state::<crate::app::state::SharedState>()
+        .other_sessions(session.id);
     {
         let mut p = session.lock_profile().await;
+        let joins = p
+            .players(&others)
+            .any(|other| other.connection.lock().tick.in_session);
         let mut c = session.connection.lock();
-        c.tick.start_session(&mut p.tick, Instant::now());
+        if joins {
+            c.tick.join_session(&p.tick, Instant::now());
+        } else {
+            c.tick.start_session(&mut p.tick, Instant::now());
+        }
         start_prompt(&mut p, &mut c, known_host);
         // A push to the right edge reaches to the width the game is told.
         c.prompt.set_cols(usize::from(negotiator.window_size.0));

@@ -7,7 +7,7 @@ use tauri::{AppHandle, State};
 use crate::app::events::TICK_CONFIG_CHANGED;
 use crate::app::state::SharedState;
 use crate::disk::save::{save_then_broadcast, SavePolicy};
-use crate::tick::{apply_tick_config, TickConfig};
+use crate::tick::{apply_tick_config, follow_in_other_sessions, TickConfig};
 
 /// Read the live tick configuration.
 #[tauri::command]
@@ -17,18 +17,20 @@ pub(crate) async fn tick_get_config(state: State<'_, SharedState>) -> Result<Tic
 }
 
 /// Apply a new tick configuration through [`apply_tick_config`], which
-/// changes every field or none. Persists the active profile and
-/// broadcasts `vosh://tick-config-changed` only after the whole
+/// changes every field or none, to the profile the selected session
+/// plays, and every other session on it follows. Persists the profile
+/// and broadcasts `vosh://tick-config-changed` only after the whole
 /// configuration applied.
 #[tauri::command]
-pub(crate) async fn tick_set_config(
-    app: AppHandle,
+pub(crate) async fn tick_set_config<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, SharedState>,
     config: TickConfig,
 ) -> Result<TickConfig, String> {
     let session = state.selected_session();
-    let (open, snapshot) = {
+    let (open, before, snapshot) = {
         let mut p = session.lock_profile().await;
+        let before = p.tick.config.clone();
         let mut c = session.connection.lock();
         let snapshot = apply_tick_config(
             &mut p.tick,
@@ -36,8 +38,9 @@ pub(crate) async fn tick_set_config(
             &config,
             tokio::time::Instant::now(),
         )?;
-        (p.open().clone(), snapshot)
+        (p.open().clone(), before, snapshot)
     };
+    follow_in_other_sessions(&state, session.id, &open, &before).await;
     save_then_broadcast(
         &app,
         &state,

@@ -980,3 +980,168 @@ async fn two_switches_the_opposite_way_at_once_both_finish() {
     assert!(names.iter().any(|name| name == DEFAULT_PROFILE_NAME));
     assert!(names.iter().any(|name| name == "Healer"));
 }
+
+/// When the tick count of `session` last restarted, while it runs.
+fn last_tick(h: &Harness, session: SessionId) -> Option<tokio::time::Instant> {
+    let session = h.state.session(Some(session)).expect("the session");
+    let last = session.connection.lock().tick.last_tick;
+    last
+}
+
+/// The tick settings the profile file at `file` holds.
+fn saved_tick(file: &std::path::Path) -> Option<crate::tick::TickConfig> {
+    crate::profile::file::ProfileConfig::load(file)
+        .ok()
+        .map(|config| config.tick)
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_tick_disable_in_one_session_stops_the_others_count_and_saves_off_once() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_on_two_games().await;
+    crate::disk::save::tests::persist(&h.state).await;
+    let file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    let before = backups(&file);
+    assert!(last_tick(&h, two).is_some(), "the second count runs");
+
+    h.type_in(one, "#tick disable").await;
+    assert_eq!(last_tick(&h, one), None);
+    assert_eq!(last_tick(&h, two), None);
+    h.until("the save", |_| {
+        saved_tick(&file).is_some_and(|tick| !tick.enabled)
+    })
+    .await;
+    // Past the debounce no second write follows.
+    tokio::time::sleep(std::time::Duration::from_millis(2_500)).await;
+    assert_eq!(backups(&file), before + 1);
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_new_interval_from_settings_reaches_both_counts() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_on_two_games().await;
+    // The second game's spam is a real tick, so the second count syncs.
+    h.type_in(one, "#tick on {Line 1 of 1 of the spam}").await;
+    h.type_in(two, "spam 1").await;
+    let second = h.state.session(Some(two)).expect("the second session");
+    h.until("the second count to sync", |_| {
+        second.connection.lock().tick.synced
+    })
+    .await;
+
+    let config = h.state.selected_profile().await.tick.config.clone();
+    let saved = crate::ipc::tick::tick_set_config(
+        h.app.handle().clone(),
+        h.app.state(),
+        crate::tick::TickConfig {
+            interval_secs: 45,
+            ..config
+        },
+    )
+    .await
+    .expect("the settings apply");
+    assert_eq!(saved.interval_secs, 45);
+    let p = h.state.selected_profile().await;
+    let now = tokio::time::Instant::now();
+    let first = h.state.session(Some(one)).expect("the first session");
+    // The first count, unsynced, starts again at the new interval.
+    let left = first.connection.lock().tick.remaining(&p.tick, now);
+    assert!(left.is_some_and(|left| left.as_secs() >= 44), "{left:?}");
+    // The second keeps its count and waits for the game at the new one.
+    let c = second.connection.lock();
+    assert!(c.tick.synced);
+    assert!(c.tick.interval_changed_at.is_some());
+    assert_eq!(
+        c.tick.next_fire(&p.tick),
+        c.tick
+            .last_tick
+            .map(|last| last + std::time::Duration::from_secs(45))
+    );
+    drop((c, p));
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_tick_reset_in_one_session_leaves_the_others_count_alone() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_on_two_games().await;
+    let (first, second) = (last_tick(&h, one), last_tick(&h, two));
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    h.type_in(one, "#tick reset").await;
+    assert!(last_tick(&h, one) > first);
+    assert_eq!(last_tick(&h, two), second);
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_connect_beside_a_connected_session_keeps_the_tick_you_turned_off_off() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    let (one, two) = (h.first, h.open_session().await);
+    let welcome = "Welcome to the fake Aabahran, Tester.";
+    h.connect_to(one, &h.servers[0]).await;
+    h.until("the first login", |h| shows(h, one, welcome)).await;
+    h.type_in(one, "#tick disable").await;
+
+    h.connect_to(two, &h.servers[1]).await;
+    h.until("the second login", |h| shows(h, two, welcome))
+        .await;
+    assert!(!h.state.selected_profile().await.tick.config.enabled);
+    let second = h.state.session(Some(two)).expect("the second session");
+    let c = second.connection.lock();
+    assert!(c.tick.in_session);
+    assert_eq!(c.tick.last_tick, None);
+    drop(c);
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_switch_beside_a_connected_session_keeps_the_tick_you_turned_off_off() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    let (one, two) = (h.first, open_session_on(&h, "Healer").await);
+    let welcome = "Welcome to the fake Aabahran, Tester.";
+    h.connect_to(one, &h.servers[0]).await;
+    h.connect_to(two, &h.servers[1]).await;
+    h.until("both logins", |h| {
+        shows(h, one, welcome) && shows(h, two, welcome)
+    })
+    .await;
+    h.type_in(one, "#tick disable").await;
+    assert!(last_tick(&h, two).is_some(), "the count on Healer runs");
+
+    let second = h.state.session(Some(two)).expect("the second session");
+    crate::profile::switch::apply_profile_switch(
+        h.app.handle(),
+        &h.state,
+        &second,
+        DEFAULT_PROFILE_NAME,
+    )
+    .await
+    .expect("the second session joins the first");
+    assert!(!h.state.selected_profile().await.tick.config.enabled);
+    assert_eq!(last_tick(&h, two), None);
+    assert!(second.connection.lock().tick.in_session);
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}

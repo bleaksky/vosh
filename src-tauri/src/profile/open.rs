@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
 use crate::profile::live::Profile;
+use crate::sessions::Session;
 
 /// One profile the sessions play, with what holds its saves back.
 pub(crate) struct OpenProfile {
@@ -106,6 +107,18 @@ impl ProfileGuard {
     /// The open profile this guard holds.
     pub(crate) fn open(&self) -> &Arc<OpenProfile> {
         &self.open
+    }
+
+    /// The sessions among `sessions` that play this profile. A switch
+    /// moves a session only while it holds the profile it leaves and the
+    /// next, so the ones picked stay on this one while the guard is held.
+    pub(crate) fn players<'a>(
+        &'a self,
+        sessions: &'a [Arc<Session>],
+    ) -> impl Iterator<Item = &'a Arc<Session>> + 'a {
+        sessions
+            .iter()
+            .filter(|session| Arc::ptr_eq(&session.profile(), &self.open))
     }
 
     /// Give the profile the name `name` in the profile set, in memory and
