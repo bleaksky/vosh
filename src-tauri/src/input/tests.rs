@@ -1013,6 +1013,15 @@ fn script_reload_tries_again_a_plugin_whose_first_load_failed() {
 }
 
 #[test]
+fn lua_you_type_reads_the_variables_with_no_other_lua_loaded() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    run_line(&state, &mut p, "#var mark on");
+    let ran = run_line(&state, &mut p, "#lua mud.echo(tostring(mud.var('mark')))");
+    assert_eq!(ran.lua.echoes, ["on"]);
+}
+
+#[test]
 fn lua_errors_and_print_reach_the_terminal_as_lua_lines() {
     let state = AppState::default();
     let mut p = Profile::default();

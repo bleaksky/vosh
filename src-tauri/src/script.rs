@@ -44,8 +44,9 @@ pub(crate) fn snapshot_vars(script: &ScriptEngine, vars: &VariableStore) {
 }
 
 /// Give Lua the current variables, so `mud.var(name)` reads them. Call
-/// before Lua that runs for certain, such as the body of a script alias.
-fn refresh_vars(script: &ScriptEngine, vars: &VariableStore) {
+/// before Lua that runs for certain, such as the body of a script alias,
+/// a `#lua` line or a load.
+pub(crate) fn refresh_vars(script: &ScriptEngine, vars: &VariableStore) {
     let snapshot: std::collections::HashMap<String, String> = vars
         .iter()
         .map(|(k, v, _)| (k.to_string(), v.to_string()))
