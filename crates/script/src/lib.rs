@@ -1826,16 +1826,18 @@ mod tests {
             "os.getenv('HOME')",
             "require('io')",
             "load('return 1')",
+            "os.setlocale('fr_FR.UTF-8')",
         ] {
             assert!(e.eval(code, "=#lua").failed, "{code}");
         }
         let gone = e
             .eval(
-                "mud.echo(tostring(io) .. tostring(package) .. tostring(os.getenv))",
+                "mud.echo(tostring(io) .. tostring(package) .. tostring(os.getenv) \
+                 .. tostring(os.setlocale) .. tostring(1.5))",
                 "=#lua",
             )
             .unwrap();
-        assert_eq!(gone.actions, vec![Action::Echo("nilnilnil".into())]);
+        assert_eq!(gone.actions, vec![Action::Echo("nilnilnilnil1.5".into())]);
     }
 
     /// Run `code` as the body of the trigger `body`, in a fresh engine.

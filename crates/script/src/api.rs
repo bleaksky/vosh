@@ -442,7 +442,9 @@ pub(crate) fn json_to_lua(lua: &Lua, value: &serde_json::Value) -> LuaResult<Val
 }
 
 /// Apply the sandbox: remove globals that shell out, touch the filesystem,
-/// read the environment, or load arbitrary code.
+/// read the environment, load arbitrary code, or change the C locale,
+/// which `tostring` and the patterns of every script read and which the
+/// whole process shares.
 pub(crate) fn apply_sandbox(lua: &Lua) -> LuaResult<()> {
     let globals = lua.globals();
     for name in ["dofile", "loadfile", "load", "loadstring", "require"] {
@@ -455,7 +457,14 @@ pub(crate) fn apply_sandbox(lua: &Lua) -> LuaResult<()> {
     let os: Option<Table> = globals.get("os").ok();
     if let Some(os) = os {
         for name in [
-            "execute", "exit", "getenv", "remove", "rename", "tmpname", "setenv",
+            "execute",
+            "exit",
+            "getenv",
+            "remove",
+            "rename",
+            "tmpname",
+            "setenv",
+            "setlocale",
         ] {
             os.set(name, Value::Nil)?;
         }
