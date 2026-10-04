@@ -1,14 +1,17 @@
-//! Presets a build adds that come on for every profile, once.
+//! The two presets that came on once for every profile.
 //!
 //! An `enabled_presets` list that names presets holds the presets that
-//! were on when you last saved it. A preset a later build adds is in none
-//! of them, so it would stay off for every profile that ever saved its
-//! presets, and in loadout mode for every character, since the shared
-//! catalog keeps its own list. Each preset in [`ROLLOUTS`] comes on by
-//! default, so launch adds it once to each such list and records the step
-//! in `profiles.toml`. A preset you turn off afterwards stays off.
+//! were on when you last saved it. Tells you send and Room, time and
+//! weather colors came after many such lists were saved, so launch adds
+//! each once to every such list, and in loadout mode to the list the
+//! shared catalog keeps, then records the step in `profiles.toml`. A
+//! preset you turn off afterwards stays off.
 //!
-//! - An empty list means the defaults, which hold the preset already.
+//! [`ROLLOUTS`] takes no new entries. A preset added later ships off and
+//! stays out of [`PRESETS_ON_BY_DEFAULT`], so no list turns it on until
+//! you do. The doc on [`ROLLOUTS`] says why.
+//!
+//! - An empty list means the defaults, which hold both presets already.
 //! - A list that turned every preset off keeps them all off.
 //! - The shared catalog takes it too, in loadout mode, when it holds a
 //!   list.
@@ -18,6 +21,8 @@
 //!
 //! Launch runs it before any profile loads, under the persist lock, so
 //! the live profile reads the files as the step left them.
+//!
+//! [`PRESETS_ON_BY_DEFAULT`]: crate::loadouts::presets::PRESETS_ON_BY_DEFAULT
 
 use std::path::Path;
 
