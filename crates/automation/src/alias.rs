@@ -13,7 +13,7 @@
 //! Multiple commands separated by `;` in an expansion are split and each is
 //! re-fed through the engine, bounded by a maximum recursion depth.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -108,6 +108,10 @@ pub struct AliasStore {
     groups: GroupSwitch,
     /// See [`AliasStore::revision`].
     revision: u64,
+    /// The aliases whose Lua Vosh stopped this session. A stopped alias
+    /// passes through, as an off one does, until you save it again. Vosh
+    /// never saves this, so a restart turns them all back on.
+    stopped: HashSet<String>,
 }
 
 impl Default for AliasStore {
@@ -123,6 +127,7 @@ impl AliasStore {
             max_depth: DEFAULT_MAX_DEPTH,
             groups: GroupSwitch::default(),
             revision: 0,
+            stopped: HashSet::new(),
         }
     }
 
@@ -179,12 +184,16 @@ impl AliasStore {
         self
     }
 
+    /// Insert or replace an alias. Saving an alias Vosh stopped turns
+    /// it back on.
     pub fn set(&mut self, alias: Alias) {
+        self.stopped.remove(&alias.name);
         self.aliases.insert(alias.name.clone(), alias);
         self.revision = next_revision();
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
+        self.stopped.remove(name);
         let removed = self.aliases.remove(name).is_some();
         if removed {
             self.revision = next_revision();
@@ -194,6 +203,30 @@ impl AliasStore {
 
     pub fn get(&self, name: &str) -> Option<&Alias> {
         self.aliases.get(name)
+    }
+
+    /// Turn the alias `name` off for the rest of the session, after Vosh
+    /// stopped its Lua. It stays off until you save it again.
+    pub fn stop(&mut self, name: &str) {
+        if self.aliases.contains_key(name) {
+            self.stopped.insert(name.to_string());
+        }
+    }
+
+    /// True while Vosh holds the alias `name` off after a stop.
+    pub fn is_stopped(&self, name: &str) -> bool {
+        self.stopped.contains(name)
+    }
+
+    /// Keep the stops of `old` for each alias this store holds as `old`
+    /// held it. The Settings editor saves the whole list at once, so
+    /// only the alias you changed comes back on.
+    pub fn keep_stops_from(&mut self, old: &AliasStore) {
+        for name in &old.stopped {
+            if self.aliases.get(name) == old.aliases.get(name) {
+                self.stopped.insert(name.clone());
+            }
+        }
     }
 
     pub fn list(&self) -> Vec<&Alias> {
@@ -248,15 +281,14 @@ impl AliasStore {
         // The alias fires only when:
         //   * the named entry exists, AND
         //   * its own `enabled` flag is true, AND
-        //   * its group is enabled (or it is ungrouped).
+        //   * its group is enabled (or it is ungrouped), AND
+        //   * Vosh has not stopped its Lua this session.
         // Disabled groups short-circuit to pass-through so the user
         // can flip whole "Combat" / "Crafting" loadouts off without
         // editing each row.
-        let Some(alias) = self
-            .aliases
-            .get(name)
-            .filter(|a| a.enabled && self.groups.allows(a.group.as_deref()))
-        else {
+        let Some(alias) = self.aliases.get(name).filter(|a| {
+            a.enabled && self.groups.allows(a.group.as_deref()) && !self.stopped.contains(&a.name)
+        }) else {
             out.push(ExpandStep::Command(command.to_string()));
             return Ok(());
         };
@@ -266,6 +298,7 @@ impl AliasStore {
         // `captures[2]`, ..., the words `%1`, `%2`, ... would take.
         if let Some(body) = &alias.script {
             out.push(ExpandStep::Script(ScriptCall {
+                source: alias.name.clone(),
                 body: body.clone(),
                 captures: rest.split_whitespace().map(str::to_string).collect(),
             }));
@@ -651,6 +684,30 @@ mod tests {
     }
 
     #[test]
+    fn a_stopped_alias_passes_through_until_you_save_it() {
+        let mut s = store(&[("hl", "cast heal")]);
+        s.stop("hl");
+        assert!(s.is_stopped("hl"));
+        assert_eq!(s.expand_line("hl").unwrap(), vec!["hl".to_string()]);
+        s.set(Alias::new("hl", "cast heal"));
+        assert!(!s.is_stopped("hl"));
+        assert_eq!(s.expand_line("hl").unwrap(), vec!["cast heal".to_string()]);
+    }
+
+    #[test]
+    fn a_whole_list_save_keeps_only_the_unchanged_alias_stops() {
+        let mut old = store(&[("hl", "cast heal"), ("kk", "kick")]);
+        old.stop("hl");
+        old.stop("kk");
+        let mut saved = store(&[("hl", "cast heal"), ("kk", "kick %1")]);
+        saved.keep_stops_from(&old);
+        assert!(saved.is_stopped("hl"));
+        assert!(!saved.is_stopped("kk"));
+        assert!(saved.remove("hl"));
+        assert!(!saved.is_stopped("hl"));
+    }
+
+    #[test]
     fn list_returns_sorted_aliases() {
         let s = store(&[("zeta", "z"), ("alpha", "a"), ("mu", "m")]);
         let names: Vec<_> = s.list().iter().map(|a| a.name.as_str()).collect();
@@ -664,6 +721,7 @@ mod tests {
         s.set(Alias::new("kk", "ignored").with_script(body));
         let kick = |captures: &[&str]| {
             ExpandStep::Script(ScriptCall {
+                source: "kk".into(),
                 body: body.into(),
                 captures: captures.iter().map(|c| (*c).to_string()).collect(),
             })
