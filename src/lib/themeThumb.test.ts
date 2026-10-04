@@ -30,15 +30,17 @@ describe('themeThumb', () => {
     });
   });
 
-  it('matches the board for Vellum', () => {
-    expect(themeThumb(findTheme('vellum'))).toEqual({
-      bg: '#f7f4ee',
+  it('matches the shortlist for Rubric', () => {
+    // Rubric took Vellum's place on the board (Themes review Q14), and
+    // these are its shortlist tokens.
+    expect(themeThumb(findTheme('rubric'))).toEqual({
+      bg: '#f0e5cf',
       // The panel sits on the paper under the one ground rule, and the
       // line steps 11 in OKLab L off it.
-      panel: '#f7f4ee',
-      sep: '#d2d0cb',
-      accent: '#3f6690',
-      text: '#2a2622',
+      panel: '#f0e5cf',
+      sep: '#cbc1af',
+      accent: '#3656b1',
+      text: '#151d2a',
       appearance: 'light',
       ring: 'rgba(0,0,0,0.14)',
     });
@@ -71,12 +73,11 @@ describe('galleryThemes', () => {
       chrome: {},
     });
     const ids = galleryThemes(BUILTIN_THEMES, [custom]).map((t) => t.id);
-    expect(ids.slice(0, 8)).toEqual([
+    expect(ids.slice(0, 7)).toEqual([
       'triad',
       'rubric',
       'nord',
       'obsidian-ember',
-      'vellum',
       'gruvbox',
       'rose-pine',
       'tokyo-night',
@@ -84,15 +85,11 @@ describe('galleryThemes', () => {
     expect(ids).toHaveLength(BUILTIN_THEMES.length + 1);
     expect(ids[ids.length - 1]).toBe('aardvark');
     const rest = galleryThemes(BUILTIN_THEMES, [])
-      .slice(8)
+      .slice(7)
       .map((t) => t.label);
     expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)));
     expect(rest[0]).toBe('Catppuccin');
     const everforest = rest.indexOf('Everforest Dark');
-    expect(rest.slice(everforest, everforest + 3)).toEqual([
-      'Everforest Dark',
-      'Everforest Light',
-      'Green Screen',
-    ]);
+    expect(rest.slice(everforest, everforest + 2)).toEqual(['Everforest Dark', 'Green Screen']);
   });
 });

@@ -295,31 +295,30 @@ describe('roomNameColor', () => {
   });
 
   it('darkens the slots that fade on a light theme and keeps their hue', () => {
-    const theme = findTheme('vellum');
+    const theme = findTheme('rubric');
     const tokens = themeTokens(theme);
     expect(tokens.appearance).toBe('light');
     const panel = hex(tokens.panel);
-    // A city prints in white, a stream you can swim in bold cyan, and a
-    // desert in bold yellow. Each fades on the paper.
-    for (const sector of [1, 6, 10]) {
+    // An inside room prints in bright black, a forest in green, and deep
+    // water in blue. Each fades on the paper.
+    for (const sector of [0, 3, 7]) {
       const was = hex(theme.xterm[SECTOR_NAME_SLOTS[sector]]);
       expect(contrast(was, panel), String(sector)).toBeLessThan(ROOM_NAME_CONTRAST);
       const now = hex(roomNameColor(sector, theme.xterm, tokens)!);
       expect(rgbToOklch(now).L, String(sector)).toBeLessThan(rgbToOklch(was).L);
     }
-    // The desert's yellow stays yellow rather than turning olive or
-    // orange.
-    const yellow = rgbToOklch(hex(theme.xterm.brightYellow));
-    const desert = rgbToOklch(hex(roomNameColor(10, theme.xterm, tokens)!));
-    expect(yellow.C).toBeGreaterThan(0.05);
-    expect(Math.abs(desert.h - yellow.h)).toBeLessThan(1);
+    // The forest's green stays green rather than turning gray or blue.
+    const green = rgbToOklch(hex(theme.xterm.green));
+    const forest = rgbToOklch(hex(roomNameColor(3, theme.xterm, tokens)!));
+    expect(green.C).toBeGreaterThan(0.05);
+    expect(Math.abs(forest.h - green.h)).toBeLessThan(1);
   });
 
   it('follows the theme, the way the terminal does', () => {
     const kanso = findTheme('kanso-zen');
-    const vellum = findTheme('vellum');
+    const rubric = findTheme('rubric');
     expect(roomNameColor(7, kanso.xterm, themeTokens(kanso))).not.toBe(
-      roomNameColor(7, vellum.xterm, themeTokens(vellum)),
+      roomNameColor(7, rubric.xterm, themeTokens(rubric)),
     );
     // A slot that reads on the panel draws as the theme gives it.
     const tokens = themeTokens(kanso);
@@ -340,7 +339,7 @@ describe('roomNameColor', () => {
   });
 
   it('takes the slot as it is on a panel that does not parse', () => {
-    const theme = findTheme('vellum');
+    const theme = findTheme('rubric');
     expect(roomNameColor(1, theme.xterm, { panel: 'transparent', appearance: 'light' })).toBe(
       theme.xterm.white,
     );

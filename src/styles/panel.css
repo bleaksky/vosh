@@ -759,7 +759,7 @@
    hours or red at one or none. The wash sits behind the row, 6 px past
    it each side at radius 4, 20 tall in Timers first like a chip, and
    22 tall over the text and the meter in Countdown. The missing wash is
-   8 percent, so a red name keeps 4.5 to 1 on Vellum. */
+   8 percent, so a red name keeps 4 to 1 or better on the light themes. */
 [data-affects-tint] .pane-affect,
 [data-affects-tint] .pane-countdown-cell {
   isolation: isolate;
@@ -920,8 +920,8 @@
 }
 
 /* On a light theme the yellow hours read under 3 to 1 on the tinted
-   chip (Solarized Light and Everforest Light), so a light theme draws
-   them in the deeper warn text tone, in both chip styles. */
+   chip (Solarized Light), so a light theme draws them in the deeper
+   warn text tone, in both chip styles. */
 :root[data-appearance='light'] .pane-chip-tracked.is-warn .pane-chip-hours {
   color: var(--warn-text);
 }

@@ -1955,13 +1955,7 @@ mod tests {
             }
             assert_eq!(
                 changed,
-                [
-                    "rubric",
-                    "vellum",
-                    "solarized-light",
-                    "everforest-light",
-                    "melange-light"
-                ],
+                ["rubric", "solarized-light", "melange-light"],
                 "{plain}"
             );
         }

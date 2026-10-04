@@ -112,7 +112,7 @@ describe('seedDarkTheme', () => {
   });
 
   it('falls back to Obsidian Ember for a light or unknown theme', () => {
-    expect(seedDarkTheme('vellum', [])).toBe('obsidian-ember');
+    expect(seedDarkTheme('rubric', [])).toBe('obsidian-ember');
     expect(seedDarkTheme('system', [])).toBe('obsidian-ember');
     expect(seedDarkTheme('gone', [])).toBe('obsidian-ember');
   });
@@ -121,6 +121,41 @@ describe('seedDarkTheme', () => {
     const themes = [custom('night-ink', '#000000'), custom('paper', '#ffffff')];
     expect(seedDarkTheme('night-ink', themes)).toBe('night-ink');
     expect(seedDarkTheme('paper', themes)).toBe('obsidian-ember');
+  });
+
+  it('reads a retired id by the theme that took its place', () => {
+    // A saved One Dark shows One Half Dark, so it seeds a dark theme of
+    // One Half Dark under the id you saved.
+    expect(seedDarkTheme('one-dark', [])).toBe('one-dark');
+    expect(findTheme(seedDarkTheme('one-dark', [])).id).toBe('one-half-dark');
+    expect(seedDarkTheme('vellum', [])).toBe('obsidian-ember');
+    expect(seedDarkTheme('everforest-light', [])).toBe('obsidian-ember');
+    // A custom theme with a retired id wins over the successor.
+    expect(seedDarkTheme('one-dark', [custom('one-dark', '#ffffff')])).toBe('obsidian-ember');
+  });
+});
+
+describe('a retired theme id', () => {
+  it('stays as you saved it, and so does the light default that names Vellum', async () => {
+    const saved = normalizeUiConfig(
+      raw({ theme: 'one-dark', light_theme: 'vellum', dark_theme: 'everforest-light' }),
+    );
+    expect(saved).toMatchObject({
+      theme: 'one-dark',
+      light_theme: 'vellum',
+      dark_theme: 'everforest-light',
+    });
+    expect(normalizeUiConfig(raw()).light_theme).toBe('vellum');
+    const invoked = vi.mocked(invoke);
+    invoked.mockClear();
+    await setUiConfig(saved);
+    const [command, args] = invoked.mock.calls[0] as [string, { config: Record<string, unknown> }];
+    expect(command).toBe('ui_set_config');
+    expect(args.config).toMatchObject({
+      theme: 'one-dark',
+      light_theme: 'vellum',
+      dark_theme: 'everforest-light',
+    });
   });
 });
 
@@ -160,11 +195,10 @@ describe('a custom theme on a built-in id', () => {
 
   it('frees the Everforest and Green Screen ids too', () => {
     // An Everforest file you imported, or a theme you named Green Screen.
-    const ids = ['everforest-dark', 'everforest-light', 'green-screen'];
+    const ids = ['everforest-dark', 'green-screen'];
     const out = freeBuiltinThemeIds(
       raw({
         theme: 'green-screen',
-        light_theme: 'everforest-light',
         dark_theme: 'everforest-dark',
         custom_themes: ids.map((id) => custom(id, '#000000')),
       }),
@@ -172,9 +206,13 @@ describe('a custom theme on a built-in id', () => {
     expect(out.custom_themes?.map((t) => t.id)).toEqual(ids.map((id) => `${id}-2`));
     expect(out).toMatchObject({
       theme: 'green-screen-2',
-      light_theme: 'everforest-light-2',
       dark_theme: 'everforest-dark-2',
     });
+  });
+
+  it('leaves a custom theme on a retired id where it is, since it wins over the successor', () => {
+    const cfg = raw({ theme: 'vellum', custom_themes: [custom('vellum', '#ffffff')] });
+    expect(freeBuiltinThemeIds(cfg)).toBe(cfg);
   });
 
   it('frees the ids of the schemes Vosh added after Green Screen', () => {

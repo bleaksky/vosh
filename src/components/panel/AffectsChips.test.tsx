@@ -434,8 +434,6 @@ describe('Draining chips', () => {
     'triad danger': '7.04 to 4.99',
     'rubric warn': '6.13 to 4.64',
     'rubric danger': '3.86 to 3.50',
-    'vellum warn': '3.84 to 3.09',
-    'vellum danger': '4.26 to 3.78',
     'kanso-zen warn': '8.90 to 5.74',
     'kanso-zen danger': '5.04 to 3.94',
     'tokyo-night warn': '6.48 to 4.47',
@@ -452,8 +450,6 @@ describe('Draining chips', () => {
     'dracula danger': '4.91 to 3.75',
     'monokai warn': '6.43 to 4.31',
     'monokai danger': '4.91 to 4.17',
-    'one-dark warn': '5.91 to 4.05',
-    'one-dark danger': '4.62 to 3.73',
     'one-half-dark warn': '5.91 to 4.05',
     'one-half-dark danger': '4.62 to 3.73',
     'solarized-dark warn': '5.16 to 3.81',
@@ -468,8 +464,6 @@ describe('Draining chips', () => {
     'high-contrast danger': '6.59 to 4.81',
     'everforest-dark warn': '5.08 to 3.57',
     'everforest-dark danger': '4.53 to 3.63',
-    'everforest-light warn': '3.96 to 3.36',
-    'everforest-light danger': '3.80 to 3.47',
     'green-screen warn': '12.78 to 7.21',
     'green-screen danger': '5.21 to 4.08',
     'srcery warn': '9.52 to 5.93',
@@ -575,7 +569,7 @@ describe('Draining chips', () => {
   };
 
   it('reads the hours at 3 to 1 or better over the fill on imported light palettes', () => {
-    const base = BUILTIN_THEMES.find((theme) => theme.id === 'vellum')!.xterm;
+    const base = BUILTIN_THEMES.find((theme) => theme.id === 'rubric')!.xterm;
     const read: Record<string, string> = {};
     for (const [name, [background, foreground, red, yellow]] of Object.entries(IMPORTED_LIGHT)) {
       const t = deriveChrome({ ...base, background, foreground, cursor: foreground, red, yellow });

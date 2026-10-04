@@ -388,17 +388,16 @@ describe('theme order', () => {
       }),
     ]);
     const ordered = themesInGalleryOrder();
-    expect(ordered.slice(0, 8).map((t) => t.theme.id)).toEqual([
+    expect(ordered.slice(0, 7).map((t) => t.theme.id)).toEqual([
       'triad',
       'rubric',
       'nord',
       'obsidian-ember',
-      'vellum',
       'gruvbox',
       'rose-pine',
       'tokyo-night',
     ]);
-    const rest = ordered.slice(8, -1).map((t) => t.theme.label);
+    const rest = ordered.slice(7, -1).map((t) => t.theme.label);
     expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)));
     // The menu bar's Choose theme lists the same order.
     expect(rest).toEqual([
@@ -406,7 +405,6 @@ describe('theme order', () => {
       'Classic Vivid',
       'Dracula at Night',
       'Everforest Dark',
-      'Everforest Light',
       'Green Screen',
       'High Contrast',
       'Kanso Zen',
@@ -415,7 +413,6 @@ describe('theme order', () => {
       'Modus Vivendi',
       'Monokai',
       'Nightfly',
-      'One Dark',
       'One Half Dark',
       'Solarized Dark',
       'Solarized Light',
@@ -449,7 +446,7 @@ describe('chooseTheme', () => {
     applyThemePrefs({
       theme: 'obsidian-ember',
       follow_system_appearance: false,
-      light_theme: 'vellum',
+      light_theme: 'rubric',
       dark_theme: 'obsidian-ember',
     });
     vi.unstubAllGlobals();
@@ -460,7 +457,7 @@ describe('chooseTheme', () => {
     applyThemePrefs({
       theme: 'nord',
       follow_system_appearance: false,
-      light_theme: 'vellum',
+      light_theme: 'rubric',
       dark_theme: 'nord',
     });
     await chooseTheme('gruvbox');
@@ -468,7 +465,7 @@ describe('chooseTheme', () => {
     expect(getThemePrefs()?.theme).toBe('gruvbox');
     expect(invoke).toHaveBeenCalledWith('ui_set_theme', {
       theme: 'gruvbox',
-      lightTheme: 'vellum',
+      lightTheme: 'rubric',
       darkTheme: 'nord',
     });
   });
@@ -478,7 +475,7 @@ describe('chooseTheme', () => {
     applyThemePrefs({
       theme: 'nord',
       follow_system_appearance: true,
-      light_theme: 'vellum',
+      light_theme: 'rubric',
       dark_theme: 'tokyo-night',
     });
     await chooseTheme('rose-pine');
@@ -505,5 +502,32 @@ describe('chooseTheme', () => {
       lightTheme: 'paper',
       darkTheme: 'rose-pine',
     });
+  });
+});
+
+describe('the theme on screen', () => {
+  // A paint an older build left names Vellum, which this build shows
+  // as Rubric.
+  const oldPaint = JSON.stringify({
+    v: 1,
+    follow: false,
+    manual: { id: 'vellum', appearance: 'light', vars: { '--bg': '#f7f4ee' } },
+  });
+
+  // Last in the file, since the fresh modules it loads leave the ones
+  // the tests above import behind.
+  it('checks the theme a retired id shows, from the startup paint on', async () => {
+    vi.resetModules();
+    const { prepaintTheme } = await import('./themePaint');
+    prepaintTheme({
+      storage: () => ({ getItem: () => oldPaint, setItem: () => {} }),
+      systemDark: () => false,
+      root: () => ({ setAttribute: () => {}, style: { setProperty: () => {} } }),
+    });
+    const { getCurrentThemeId } = await import('./theme');
+    expect(getCurrentThemeId()).toBe('vellum');
+    const palette = await import('./palette');
+    const checked = palette.themeEntries().filter((e) => e.checked);
+    expect(checked.map((e) => e.id)).toEqual(['theme-rubric']);
   });
 });

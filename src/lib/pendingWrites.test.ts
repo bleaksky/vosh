@@ -195,7 +195,7 @@ describe('a debounced write', () => {
     write.patch((v) => `${v} dark`);
     await write.flush();
     expect(sent).toEqual(['nord dark']);
-    write.schedule('vellum', 250);
+    write.schedule('rubric', 250);
     write.drop();
     await vi.advanceTimersByTimeAsync(500);
     await write.flush();

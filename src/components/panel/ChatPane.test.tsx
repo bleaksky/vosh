@@ -17,9 +17,9 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 const kanso = findTheme('kanso-zen').xterm;
-const vellum = findTheme('vellum').xterm;
+const rubric = findTheme('rubric').xterm;
 const kansoGround = themeTokens(findTheme('kanso-zen'));
-const vellumGround = themeTokens(findTheme('vellum'));
+const rubricGround = themeTokens(findTheme('rubric'));
 const TS = new Date(2026, 8, 30, 20, 41).getTime();
 
 const comm = (data: Record<string, unknown>): ChatLine => {
@@ -153,22 +153,23 @@ describe('ChatLog', () => {
       '#e46876',
       '#87a987',
     ]);
-    // Vellum's bright yellow reads at 3.06:1 on its panel, which sits on
-    // the paper under the one ground rule, so say keeps #b88226 as the
-    // terminal draws it.
-    expect(drawn(BOARD.slice(4, 7), vellum, vellumGround).map((m) => m.color)).toEqual([
-      '#4f7a3a',
-      '#4f7a3a',
-      '#b88226',
+    // Rubric's verdigris tell reads at 4.3:1 on its panel, which sits on
+    // the paper under the one ground rule, and its umber say at 11.9:1,
+    // so both keep the colors the terminal draws.
+    expect(drawn(BOARD.slice(4, 7), rubric, rubricGround).map((m) => m.color)).toEqual([
+      '#007873',
+      '#007873',
+      '#3b2200',
     ]);
   });
 
   it('steps the tag back only where it still reads at 3:1 on the panel', () => {
     expect(drawn(BOARD).map((m) => m.solidTag)).toEqual(BOARD.map(() => false));
-    expect(drawn(BOARD.slice(4, 7), vellum, vellumGround).map((m) => m.solidTag)).toEqual([
+    // The tell's tag reads near 2.7:1 a step back, and the say's at 5:1.
+    expect(drawn(BOARD.slice(4, 7), rubric, rubricGround).map((m) => m.solidTag)).toEqual([
       true,
       true,
-      true,
+      false,
     ]);
   });
 

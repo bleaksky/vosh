@@ -273,7 +273,8 @@ export function keepFit(
 
 /** The fields after you delete a custom theme. Any pick that named it
  *  falls back to the stock theme for its place: Obsidian Ember for the
- *  manual pick and the dark theme, Vellum for the light theme. */
+ *  manual pick and the dark theme, DEFAULT_LIGHT_THEME_ID for the light
+ *  theme, which shows Rubric. */
 export function removeCustomTheme<T extends ThemeFields>(ui: T, id: string): T {
   return {
     ...ui,
