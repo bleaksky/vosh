@@ -26,7 +26,8 @@
 //! macro keys that fire, so a `#group` line or a Lua
 //! `mud.set_group_enabled` that turned a macro group on or off tells it
 //! to read the groups again, or the keys of a group that is off go on
-//! firing.
+//! firing. A group of any list that turned on or off tells Settings too,
+//! which shows a switch on each group heading.
 //!
 //! A replace (a profile switch, an import, `#profile load` or `reset`)
 //! hands every window the profile's UI settings at once, so none keeps
@@ -123,6 +124,12 @@ pub(crate) const PROMPT_CONFIG_CHANGED: &str = "vosh://prompt-config-changed";
 /// is an empty string. `subscribeMacroGroupsChanged` hears it, and the
 /// command line reads the groups again.
 pub(crate) const MACRO_GROUPS_CHANGED: &str = "vosh://macro-groups-changed";
+/// Sent to every window when a group of any list turned on or off: a
+/// `#group` line, a Lua `mud.set_group_enabled`, or the switch on a group
+/// heading in Settings. The payload is an empty string.
+/// `subscribeGroupsChanged` hears it, and Settings reads the switches
+/// again.
+pub(crate) const GROUPS_CHANGED: &str = "vosh://groups-changed";
 /// Sent to every window when a macro was set or removed, or an import
 /// brought macros. The payload is the whole list of
 /// [`crate::profile::live::Macro`]. `subscribeMacrosChanged` hears it.
@@ -279,13 +286,15 @@ pub(crate) fn broadcast_prompt_config_changed<R: tauri::Runtime>(app: &AppHandle
 }
 
 /// The trigger and alias list revisions, the prompt table's, and the
-/// count of macro group toggles, at one moment.
+/// counts of macro group toggles and of group toggles in any list, at
+/// one moment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ListRevisions {
     triggers: u64,
     aliases: u64,
     prompt: u64,
     macro_groups: u64,
+    groups: u64,
 }
 
 impl ListRevisions {
@@ -295,18 +304,21 @@ impl ListRevisions {
             aliases: profile.aliases.revision(),
             prompt: profile.prompt.revision(),
             macro_groups: profile.macro_group_toggles,
+            groups: profile.group_toggles,
         }
     }
 }
 
-/// Which lists a step changed, whether it changed the prompt table, and
-/// whether it turned a macro group on or off.
+/// Which lists a step changed, whether it changed the prompt table,
+/// whether it turned a macro group on or off, and whether it turned a
+/// group of any list.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct ListChanges {
     pub(crate) triggers: bool,
     pub(crate) aliases: bool,
     pub(crate) prompt: bool,
     pub(crate) macro_groups: bool,
+    pub(crate) groups: bool,
 }
 
 impl ListChanges {
@@ -316,6 +328,18 @@ impl ListChanges {
             aliases: before.aliases != after.aliases,
             prompt: before.prompt != after.prompt,
             macro_groups: before.macro_groups != after.macro_groups,
+            groups: before.groups != after.groups,
+        }
+    }
+
+    /// What either `self` or `later` changed.
+    pub(crate) fn or(self, later: Self) -> Self {
+        Self {
+            triggers: self.triggers || later.triggers,
+            aliases: self.aliases || later.aliases,
+            prompt: self.prompt || later.prompt,
+            macro_groups: self.macro_groups || later.macro_groups,
+            groups: self.groups || later.groups,
         }
     }
 
@@ -331,6 +355,7 @@ impl ListChanges {
         aliases: false,
         prompt: true,
         macro_groups: false,
+        groups: false,
     };
 
     /// The trigger list alone, for a step that only writes triggers.
@@ -339,6 +364,7 @@ impl ListChanges {
         aliases: false,
         prompt: false,
         macro_groups: false,
+        groups: false,
     };
 
     /// The alias list alone.
@@ -347,6 +373,7 @@ impl ListChanges {
         aliases: true,
         prompt: false,
         macro_groups: false,
+        groups: false,
     };
 
     /// The events these changes send, triggers first.
@@ -363,6 +390,9 @@ impl ListChanges {
         }
         if self.macro_groups {
             out.push(MACRO_GROUPS_CHANGED);
+        }
+        if self.groups {
+            out.push(GROUPS_CHANGED);
         }
         out
     }
@@ -611,17 +641,38 @@ mod tests {
         });
         assert_eq!(
             changes(&mut p, "#group combat off").events(),
-            [MACRO_GROUPS_CHANGED]
+            [MACRO_GROUPS_CHANGED, GROUPS_CHANGED]
         );
         // Off already, so nothing turned.
         let leftover = &changes(&mut p, "#group combat off").events();
         assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(
             changes(&mut p, "#lua mud.set_group_enabled('combat', true)").events(),
-            [MACRO_GROUPS_CHANGED]
+            [MACRO_GROUPS_CHANGED, GROUPS_CHANGED]
         );
         // A group nothing is in leaves the command line alone.
         let leftover = &changes(&mut p, "#group nothing off").events();
+        assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
+    #[test]
+    fn a_group_of_any_list_that_turned_tells_settings() {
+        let mut p = Profile::default();
+        let mut kick = vosh_automation::alias::Alias::new("kk", "kick");
+        kick.group = Some("combat".into());
+        p.aliases.set(kick);
+        p.timers.push(crate::profile::live::Timer {
+            id: 1,
+            name: String::new(),
+            interval_secs: 60,
+            command: "drink water".into(),
+            enabled: true,
+            group: Some("upkeep".into()),
+        });
+        for line in ["#group combat off", "#group upkeep off", "#group upkeep on"] {
+            assert_eq!(changes(&mut p, line).events(), [GROUPS_CHANGED], "{line}");
+        }
+        let leftover = &changes(&mut p, "#group upkeep on").events();
         assert!(leftover.is_empty(), "{leftover:?}");
     }
 
@@ -648,6 +699,7 @@ mod tests {
             aliases: true,
             prompt: true,
             macro_groups: true,
+            groups: true,
         };
         assert_eq!(
             all.events(),
@@ -655,8 +707,13 @@ mod tests {
                 TRIGGERS_CHANGED,
                 ALIASES_CHANGED,
                 PROMPT_CONFIG_CHANGED,
-                MACRO_GROUPS_CHANGED
+                MACRO_GROUPS_CHANGED,
+                GROUPS_CHANGED
             ]
+        );
+        assert_eq!(
+            ListChanges::TRIGGERS.or(ListChanges::ALIASES).events(),
+            [TRIGGERS_CHANGED, ALIASES_CHANGED]
         );
         let leftover = &ListChanges::default().events();
         assert!(leftover.is_empty(), "{leftover:?}");
@@ -691,12 +748,12 @@ mod tests {
             }],
         };
         let apply = crate::script::apply_actions(&mut p, toggle(false));
-        assert_eq!(apply.lists.events(), [MACRO_GROUPS_CHANGED]);
+        assert_eq!(apply.lists.events(), [MACRO_GROUPS_CHANGED, GROUPS_CHANGED]);
         let apply = crate::script::apply_actions(&mut p, toggle(false));
         let leftover = &apply.lists.events();
         assert!(leftover.is_empty(), "{leftover:?}");
         let apply = crate::script::apply_actions(&mut p, toggle(true));
-        assert_eq!(apply.lists.events(), [MACRO_GROUPS_CHANGED]);
+        assert_eq!(apply.lists.events(), [MACRO_GROUPS_CHANGED, GROUPS_CHANGED]);
     }
 
     /// The payload `events` carries for `name`.

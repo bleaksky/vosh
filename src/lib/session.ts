@@ -1422,6 +1422,51 @@ export async function timersDelete(id: number): Promise<Timer[]> {
   return invoke('timers_delete', { id });
 }
 
+// --- Group switches, one on each group heading in Settings, Automation ---
+
+/** A list whose items sit in groups, named as its Automation list is. */
+export type GroupList = 'triggers' | 'aliases' | 'macros' | 'timers';
+
+/** What the loadouts decide about a group while they decide it. Every
+ *  loadout switch and launch lays it over the group again, so the
+ *  switch waits. */
+export interface LoadoutHold {
+  /** Whether the loadouts turn the group on. */
+  on: boolean;
+  /** The active loadouts that decide. Empty while every loadout is off. */
+  by: string[];
+}
+
+/** One group heading's switch. */
+export interface GroupSwitch {
+  name: string;
+  /** Whether the group is on now. */
+  enabled: boolean;
+  /** Set while the loadouts decide the group. */
+  loadouts?: LoadoutHold;
+}
+
+/** The switch of each group in one list, sorted by name. */
+export async function listGroupSwitches(list: GroupList): Promise<GroupSwitch[]> {
+  return invoke('groups_list', { list });
+}
+
+/** Turn a whole group of one list on or off. Returns every switch of the
+ *  list. Fails for a group the loadouts decide. */
+export async function setGroupEnabled(
+  list: GroupList,
+  group: string,
+  enabled: boolean,
+): Promise<GroupSwitch[]> {
+  return invoke('groups_set_enabled', { list, group, enabled });
+}
+
+/** A group of any list turned on or off: #group, Lua, or a switch in
+ *  Settings. */
+export async function subscribeGroupsChanged(cb: () => void): Promise<UnlistenFn> {
+  return listen<string>('vosh://groups-changed', () => cb());
+}
+
 // --- Macro groups, which the command line follows ---
 
 export async function listMacroGroups(): Promise<GroupState[]> {

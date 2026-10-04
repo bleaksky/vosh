@@ -22,14 +22,16 @@ impl GroupSwitch {
         group.map_or(true, |g| self.is_enabled(g))
     }
 
-    pub(crate) fn set_enabled(&mut self, group: &str, enabled: bool) {
+    /// Turn `group` on or off. Returns whether it turned, false for a
+    /// group already in that state and for no group.
+    pub(crate) fn set_enabled(&mut self, group: &str, enabled: bool) -> bool {
         if group.is_empty() {
-            return;
+            return false;
         }
         if enabled {
-            self.off.remove(group);
+            self.off.remove(group)
         } else {
-            self.off.insert(group.to_string());
+            self.off.insert(group.to_string())
         }
     }
 
@@ -59,5 +61,25 @@ impl GroupSwitch {
             .map(Into::into)
             .filter(|s| !s.is_empty())
             .collect();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GroupSwitch;
+
+    #[test]
+    fn a_switch_says_whether_the_group_turned() {
+        let mut groups = GroupSwitch::default();
+        assert!(groups.set_enabled("combat", false));
+        assert!(!groups.set_enabled("combat", false));
+        assert!(!groups.is_enabled("combat"));
+        assert!(groups.set_enabled("combat", true));
+        assert!(!groups.set_enabled("combat", true));
+        // No group is always on and never turns.
+        assert!(!groups.set_enabled("", false));
+        assert!(groups.allows(None));
+        let leftover = &groups.disabled();
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 }

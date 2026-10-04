@@ -16,8 +16,8 @@ use tauri::{App, EventId, Listener, Manager, WebviewUrl, WebviewWindow, WebviewW
 
 use crate::app::events::{
     broadcast_list_changes, ListChanges, ListRevisions, ALIASES_CHANGED, FLUSH_PENDING_WRITES,
-    MACRO_GROUPS_CHANGED, PROFILE_CHANGED, PROMPT_CONFIG_CHANGED, SESSION_IDENTITY_CHANGED,
-    TRIGGERS_CHANGED,
+    GROUPS_CHANGED, MACRO_GROUPS_CHANGED, PROFILE_CHANGED, PROMPT_CONFIG_CHANGED,
+    SESSION_IDENTITY_CHANGED, TRIGGERS_CHANGED,
 };
 use crate::app::state::{AppState, SharedState};
 use crate::input::LineEffects;
@@ -126,6 +126,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
             ALIASES_CHANGED,
             PROMPT_CONFIG_CHANGED,
             MACRO_GROUPS_CHANGED,
+            GROUPS_CHANGED,
         ],
     );
     broadcast_list_changes(
@@ -135,6 +136,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
             aliases: true,
             prompt: true,
             macro_groups: true,
+            groups: true,
         },
     );
     listening.finish("broadcast_list_changes", &mut heard, &mut want);
@@ -355,4 +357,35 @@ fn a_loadout_switch_tells_the_command_line_when_a_macro_group_turned() {
     assert_eq!(heard, want);
     // The switch saved loadouts.toml in the scratch folder.
     assert!(crate::disk::paths::loadouts_path(dir.path()).exists());
+}
+
+#[test]
+fn a_group_switch_tells_every_window_once() {
+    use crate::script::GroupList;
+    let app = app_with_settings_open();
+    let handle = app.handle();
+    let state: SharedState = app.state::<SharedState>().inner().clone();
+    let mut heard = Report::new();
+    let mut want = Report::new();
+    tauri::async_runtime::block_on(async {
+        state.profile.lock().await.macros = vec![grouped_macro("F1", "kick", "combat")];
+        let turn = |enabled| {
+            crate::ipc::automation::groups_set_enabled(
+                handle.clone(),
+                app.state::<SharedState>(),
+                GroupList::Macros,
+                "combat".into(),
+                enabled,
+            )
+        };
+        // Settings follows the switch, and the command line its keys.
+        let listening = Heard::listen(&app, &[GROUPS_CHANGED, MACRO_GROUPS_CHANGED]);
+        turn(false).await.unwrap();
+        listening.finish("groups_set_enabled", &mut heard, &mut want);
+        // Off already, so nothing turned.
+        let listening = Heard::listen(&app, &[GROUPS_CHANGED, MACRO_GROUPS_CHANGED]);
+        turn(false).await.unwrap();
+        listening.finish_unheard("groups_set_enabled again", &mut heard, &mut want);
+    });
+    assert_eq!(heard, want);
 }

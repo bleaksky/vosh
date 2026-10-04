@@ -142,9 +142,10 @@ impl AliasStore {
     }
 
     /// Toggle a whole group. Calling with `enabled = true` removes
-    /// the group from the disabled set; with `false` adds it.
-    pub fn set_group_enabled(&mut self, group: &str, enabled: bool) {
-        self.groups.set_enabled(group, enabled);
+    /// the group from the disabled set; with `false` adds it. Returns
+    /// whether the group turned.
+    pub fn set_group_enabled(&mut self, group: &str, enabled: bool) -> bool {
+        self.groups.set_enabled(group, enabled)
     }
 
     /// Sorted list of every group name referenced by at least one

@@ -14,8 +14,11 @@ use crate::app::events::{
 use crate::app::state::SharedState;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
 use crate::import::ImportFormat;
+use crate::loadouts::gating::{loadout_hold, LoadoutHold};
 use crate::loadouts::presets::install_preset_triggers;
+use crate::loadouts::set::LoadoutSet;
 use crate::profile::live::{Macro, Profile, Timer};
+use crate::script::{list_groups, set_list_group, GroupList};
 
 #[tauri::command]
 pub(crate) async fn triggers_list(state: State<'_, SharedState>) -> Result<Vec<Trigger>, String> {
@@ -199,6 +202,103 @@ pub(crate) async fn macros_groups_list(
             GroupState { name: n, enabled }
         })
         .collect())
+}
+
+/// One group heading's switch, as Settings draws it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct GroupSwitchState {
+    pub name: String,
+    /// Whether the group is on now.
+    pub enabled: bool,
+    /// Set while the loadouts decide the group, so the switch waits and
+    /// its note names the loadouts that decide.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loadouts: Option<LoadoutHold>,
+}
+
+/// The switch of each group of `list`, sorted by name. `set` is loadout
+/// mode's loadout set, None in per profile mode.
+fn group_switches(p: &Profile, set: Option<&LoadoutSet>, list: GroupList) -> Vec<GroupSwitchState> {
+    list_groups(p, list)
+        .into_iter()
+        .map(|(name, enabled)| {
+            let loadouts = set
+                .filter(|_| list.in_catalog())
+                .and_then(|set| loadout_hold(set, &name));
+            GroupSwitchState {
+                name,
+                enabled,
+                loadouts,
+            }
+        })
+        .collect()
+}
+
+/// Turn the group `group` of `list` on or off by its own name, as `#group`
+/// turns each group it finds. The per list off lists are where the switch
+/// lasts in both modes. A group the loadouts decide stays as they set it,
+/// since the next switch or launch would put it back.
+fn switch_group(
+    p: &mut Profile,
+    set: Option<&LoadoutSet>,
+    list: GroupList,
+    group: &str,
+    enabled: bool,
+) -> Result<(), String> {
+    let group = group.trim();
+    if !list_groups(p, list).iter().any(|(g, _)| g == group) {
+        return Err(format!("Vosh has no group named “{group}” there now."));
+    }
+    let held = set
+        .filter(|_| list.in_catalog())
+        .is_some_and(|set| loadout_hold(set, group).is_some());
+    if held {
+        return Err(format!(
+            "Your loadouts decide the group “{group}”. Change it under Loadouts."
+        ));
+    }
+    set_list_group(p, list, group, enabled);
+    Ok(())
+}
+
+/// The switch on each group heading of one Automation list.
+#[tauri::command]
+pub(crate) async fn groups_list(
+    state: State<'_, SharedState>,
+    list: GroupList,
+) -> Result<Vec<GroupSwitchState>, String> {
+    let set = state.loadout_set.lock().await;
+    let p = state.profile.lock().await;
+    Ok(group_switches(&p, set.as_ref(), list))
+}
+
+/// Turn a whole group of one list on or off, from the switch on its
+/// heading in Settings, and answer every switch of that list. Saves the
+/// profile, and every window hears that the group turned.
+#[tauri::command]
+pub(crate) async fn groups_set_enabled<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    list: GroupList,
+    group: String,
+    enabled: bool,
+) -> Result<Vec<GroupSwitchState>, String> {
+    let (switches, lists) = {
+        let set = state.loadout_set.lock().await;
+        let mut p = state.profile.lock().await;
+        let before = ListRevisions::of(&p);
+        switch_group(&mut p, set.as_ref(), list, &group, enabled)?;
+        (
+            group_switches(&p, set.as_ref(), list),
+            ListChanges::since(before, &p),
+        )
+    };
+    if lists.groups {
+        let shared: SharedState = state.inner().clone();
+        persist_profile(&shared).await;
+    }
+    broadcast_list_changes(&app, lists);
+    Ok(switches)
 }
 
 /// List every interval timer, in stored order.
@@ -421,6 +521,240 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
 
 #[cfg(test)]
 mod tests {
+    use super::{group_switches, switch_group, GroupSwitchState};
+    use crate::loadouts::gating::LoadoutHold;
+    use crate::loadouts::set::{Loadout, LoadoutSet};
+    use crate::profile::live::{Macro, Profile, Timer};
+    use crate::script::GroupList;
+
+    /// A profile with a combat group in every list and a loot group of
+    /// triggers.
+    fn grouped() -> Profile {
+        use vosh_automation::alias::Alias;
+        use vosh_automation::trigger::{Trigger, TriggerAction};
+        let mut p = Profile::default();
+        for (name, group) in [("flee", "combat"), ("loot", "loot")] {
+            p.triggers
+                .set(Trigger {
+                    group: Some(group.into()),
+                    ..Trigger::new(name, "^x$", TriggerAction::Gag)
+                })
+                .unwrap();
+        }
+        let mut kick = Alias::new("kk", "kick");
+        kick.group = Some("combat".into());
+        p.aliases.set(kick);
+        p.macros.push(Macro {
+            key: "F1".into(),
+            command: "bash".into(),
+            group: Some("combat".into()),
+            enabled: true,
+        });
+        p.timers.push(Timer {
+            id: 1,
+            name: String::new(),
+            interval_secs: 30,
+            command: "rescue".into(),
+            enabled: true,
+            group: Some("combat".into()),
+        });
+        p
+    }
+
+    fn switch(name: &str, enabled: bool) -> GroupSwitchState {
+        GroupSwitchState {
+            name: name.into(),
+            enabled,
+            loadouts: None,
+        }
+    }
+
+    #[test]
+    fn each_list_answers_a_switch_for_each_of_its_groups() {
+        let p = grouped();
+        assert_eq!(
+            group_switches(&p, None, GroupList::Triggers),
+            [switch("combat", true), switch("loot", true)]
+        );
+        for list in [GroupList::Aliases, GroupList::Macros, GroupList::Timers] {
+            assert_eq!(group_switches(&p, None, list), [switch("combat", true)]);
+        }
+    }
+
+    #[test]
+    fn a_switch_turns_one_list_and_agrees_with_group() {
+        let mut p = grouped();
+        for list in GroupList::ALL {
+            switch_group(&mut p, None, list, "combat", false).unwrap();
+            assert_eq!(
+                group_switches(&p, None, list)[0],
+                switch("combat", false),
+                "{list:?}"
+            );
+        }
+        // Each list turned alone, and #group reads what the switches set.
+        let r = crate::input::process(&mut p, "#group combat");
+        assert_eq!(
+            r.echo[1..],
+            [
+                "  triggers: off",
+                "  aliases : off",
+                "  macros  : off",
+                "  timers  : off"
+            ]
+        );
+        assert!(!p.timer_fires(&p.timers[0]));
+        // And a switch reads what #group set.
+        crate::input::process(&mut p, "#group combat on");
+        for list in GroupList::ALL {
+            assert_eq!(group_switches(&p, None, list)[0], switch("combat", true));
+        }
+        // The trigger list's loot group never moved.
+        assert!(p.triggers.is_group_enabled("loot"));
+    }
+
+    #[test]
+    fn a_switch_keeps_off_through_a_save_of_the_list() {
+        let mut p = grouped();
+        switch_group(&mut p, None, GroupList::Triggers, "loot", false).unwrap();
+        let json = p.triggers.export_json().unwrap();
+        p.triggers.import_json(&json).unwrap();
+        assert_eq!(
+            group_switches(&p, None, GroupList::Triggers)[1],
+            switch("loot", false)
+        );
+        let text = crate::profile::file::ProfileConfig::from_profile(&p)
+            .to_toml()
+            .unwrap();
+        assert!(
+            text.contains("disabled_trigger_groups = [\"loot\"]"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_switch_refuses_a_group_no_item_is_in() {
+        let mut p = grouped();
+        let err = switch_group(&mut p, None, GroupList::Aliases, "loot", false).unwrap_err();
+        assert_eq!(err, "Vosh has no group named “loot” there now.");
+        let leftover = &p.aliases.disabled_groups();
+        assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
+    /// Loadout mode with Healer on, which lists the combat group.
+    fn healer_on(dormant: bool) -> LoadoutSet {
+        let mut healer = Loadout::empty("Healer");
+        healer.enabled_groups = vec!["combat".into()];
+        LoadoutSet {
+            active: if dormant {
+                Vec::new()
+            } else {
+                vec!["Healer".into()]
+            },
+            dormant,
+            loadouts: vec![healer],
+        }
+    }
+
+    #[test]
+    fn a_group_the_loadouts_decide_shows_who_and_waits() {
+        let mut p = grouped();
+        let set = healer_on(false);
+        let held = |on, by: &[&str]| {
+            Some(LoadoutHold {
+                on,
+                by: by.iter().map(|n| (*n).to_string()).collect(),
+            })
+        };
+        let switches = group_switches(&p, Some(&set), GroupList::Triggers);
+        assert_eq!(switches[0].loadouts, held(true, &["Healer"]));
+        assert_eq!(switches[1].loadouts, held(false, &["Healer"]));
+        let err = switch_group(&mut p, Some(&set), GroupList::Triggers, "loot", true).unwrap_err();
+        assert_eq!(
+            err,
+            "Your loadouts decide the group “loot”. Change it under Loadouts."
+        );
+        // Timers stay in the profile file, so no loadout decides them.
+        let timers = group_switches(&p, Some(&set), GroupList::Timers);
+        assert_eq!(timers, [switch("combat", true)]);
+        switch_group(&mut p, Some(&set), GroupList::Timers, "combat", false).unwrap();
+        // Dormant holds every catalog group off, with no loadout to name.
+        let dormant = healer_on(true);
+        let macros = group_switches(&p, Some(&dormant), GroupList::Macros);
+        assert_eq!(macros[0].loadouts, held(false, &[]));
+    }
+
+    #[test]
+    fn with_no_opinion_from_the_loadouts_the_switch_is_yours() {
+        let mut p = grouped();
+        let set = LoadoutSet {
+            active: vec!["Quiet".into()],
+            dormant: false,
+            loadouts: vec![Loadout::empty("Quiet")],
+        };
+        assert_eq!(
+            group_switches(&p, Some(&set), GroupList::Aliases),
+            [switch("combat", true)]
+        );
+        switch_group(&mut p, Some(&set), GroupList::Aliases, "combat", false).unwrap();
+        assert!(!p.aliases.is_group_enabled("combat"));
+    }
+
+    #[test]
+    fn the_page_reads_a_switch_and_its_hold_by_these_names() {
+        let mut p = grouped();
+        let set = healer_on(false);
+        let sent = serde_json::to_value(group_switches(&p, Some(&set), GroupList::Macros)).unwrap();
+        assert_eq!(
+            sent,
+            serde_json::json!([
+                { "name": "combat", "enabled": true, "loadouts": { "on": true, "by": ["Healer"] } }
+            ])
+        );
+        switch_group(&mut p, None, GroupList::Timers, "combat", false).unwrap();
+        let sent = serde_json::to_value(group_switches(&p, None, GroupList::Timers)).unwrap();
+        assert_eq!(
+            sent,
+            serde_json::json!([{ "name": "combat", "enabled": false }])
+        );
+        let list: GroupList = serde_json::from_value(serde_json::json!("timers")).unwrap();
+        assert_eq!(list, GroupList::Timers);
+    }
+
+    #[test]
+    fn a_switch_answers_every_switch_of_its_list() {
+        use std::sync::Arc;
+
+        use tauri::test::{mock_builder, mock_context, noop_assets};
+        use tauri::Manager;
+
+        use crate::app::state::{AppState, SharedState};
+
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        app.manage::<SharedState>(Arc::new(AppState::default()));
+        let state: SharedState = app.state::<SharedState>().inner().clone();
+        tauri::async_runtime::block_on(async {
+            *state.profile.lock().await = grouped();
+            let answer = super::groups_set_enabled(
+                app.handle().clone(),
+                app.state::<SharedState>(),
+                GroupList::Macros,
+                " combat ".into(),
+                false,
+            )
+            .await
+            .unwrap();
+            assert_eq!(answer, [switch("combat", false)]);
+            let p = state.profile.lock().await;
+            assert!(p.disabled_macro_groups.contains("combat"));
+            drop(p);
+            let listed = super::groups_list(app.state::<SharedState>(), GroupList::Macros)
+                .await
+                .unwrap();
+            assert_eq!(listed, answer);
+        });
+    }
+
     #[test]
     fn a_timer_keeps_its_group_trimmed_and_a_blank_one_as_none() {
         let mut p = crate::profile::live::Profile::default();

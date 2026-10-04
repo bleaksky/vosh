@@ -64,6 +64,11 @@ pub(crate) struct Profile {
     /// switch tell it themselves. A profile switch or replace leaves this
     /// alone.
     pub(crate) macro_group_toggles: u64,
+    /// Moves each time a group of any list turns on or off, through
+    /// [`crate::script::set_list_group`]: `#group`, Lua, or the switch on a
+    /// group heading in Settings. [`crate::app::events::ListRevisions`]
+    /// reads it, so an open Settings page shows each switch as it stands.
+    pub(crate) group_toggles: u64,
     /// The catalog groups each of this profile's folders became in the
     /// shared catalog, which `#group` follows. See [`GroupFolders`].
     pub(crate) group_folders: GroupFolders,
