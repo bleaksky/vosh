@@ -23,7 +23,7 @@ use crate::profile::live::Profile;
 use crate::script::SharedTimers;
 
 use super::batch::Settle;
-use super::connection::Connection;
+use super::connection::SharedConnection;
 use super::echo::ServerEcho;
 use super::effects::{
     collect_script_result, deliver_tick_step, framed_echoes, run_fired_command, Collected,
@@ -69,7 +69,7 @@ pub(super) struct Conn<R: tauri::Runtime> {
     pub(super) profile: Arc<Mutex<Profile>>,
     /// The handle to your target and the room list. Lock it after the
     /// profile.
-    pub(super) connection: Arc<Mutex<Connection>>,
+    pub(super) connection: SharedConnection,
     pub(super) lua_timers: SharedTimers,
     /// What the loop counts on its hot path, see [`PerfCounters`].
     pub(super) perf: PerfCounters,
@@ -91,7 +91,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     stream: Stream,
     mut rx_outgoing: mpsc::UnboundedReceiver<OutgoingMsg>,
     profile: Arc<Mutex<Profile>>,
-    connection: Arc<Mutex<Connection>>,
+    connection: SharedConnection,
     lua_timers: SharedTimers,
     mut log_sink: LogSink,
     negotiator: Negotiator,
@@ -104,7 +104,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // The prompt engine starts with no packets and the host's rules.
     {
         let mut p = profile.lock().await;
-        let mut c = connection.lock().await;
+        let mut c = connection.lock();
         c.tick.start_session(&mut p.tick, Instant::now());
         start_prompt(&mut p, &mut c, known_host);
         // A push to the right edge reaches to the width the game is told.
@@ -170,7 +170,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     // the state with it, so its marks move with the push.
                     let (out, state) = {
                         let p = conn.profile.lock().await;
-                        let mut c = conn.connection.lock().await;
+                        let mut c = conn.connection.lock();
                         let redraw = window_size_step(
                             &mut c,
                             &mut conn.negotiator,
@@ -214,7 +214,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     // session already sent leaves that output alone: its
                     // open row, its pinned prompt and what it holds all
                     // came after the text.
-                    let landed_last = !conn.connection.lock().await.prompt.stage.wrote_after(after);
+                    let landed_last = !conn.connection.lock().prompt.stage.wrote_after(after);
                     if landed_last {
                         if hold_until.take().is_some() {
                             flush_hold(&mut conn).await;
@@ -225,7 +225,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                             warn!(error = %e, "letting go of held lines failed");
                         }
                     }
-                    conn.connection.lock().await.prompt.stage.local_write(after);
+                    conn.connection.lock().prompt.stage.local_write(after);
                 }
                 Some(OutgoingMsg::Walk(command)) => {
                     let walked = walk_command(&mut conn, &mut log_sink, &mut hold_until, command);
@@ -239,7 +239,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     // be numbered anew.
                     let (out, state) = {
                         let p = conn.profile.lock().await;
-                        let mut c = conn.connection.lock().await;
+                        let mut c = conn.connection.lock();
                         let now = Instant::now();
                         let out = repaint_step(&p, &mut c, output_count() != conn.seen_output, now);
                         // The design may have gained or lost a clock piece.
@@ -274,7 +274,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     let (gmcp, prompt, wrote) = (batch.gmcp, batch.prompt, batch.out.writes_text());
                     clock_until = finish_read(&mut conn, &mut log_sink, batch).await;
                     if gmcp || late_until.is_some() {
-                        let c = conn.connection.lock().await;
+                        let c = conn.connection.lock();
                         late_until =
                             late_repaint_after(&c, late_until, gmcp, prompt, wrote, Instant::now());
                     }
@@ -302,7 +302,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                                 let mut batch = conn.handle_read(&buf[..n], &log_sink).await;
                                 // The connection is going, so nothing waits.
                                 if batch.hold {
-                                    let mut c = conn.connection.lock().await;
+                                    let mut c = conn.connection.lock();
                                     hold_step(&mut c, &mut conn.accumulator, &mut batch.out);
                                 }
                                 hold_until = None;
@@ -332,7 +332,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 late_until = None;
                 let (out, state) = {
                     let p = conn.profile.lock().await;
-                    let mut c = conn.connection.lock().await;
+                    let mut c = conn.connection.lock();
                     let out = late_repaint_step(
                         &p,
                         &mut c,
@@ -364,7 +364,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 let reading = reader_busy(&conn.app);
                 let (out, state) = {
                     let p = conn.profile.lock().await;
-                    let mut c = conn.connection.lock().await;
+                    let mut c = conn.connection.lock();
                     let now = Instant::now();
                     let other = output_count() != conn.seen_output;
                     let out = clock_step(&p, &mut c, other, reading, now);
@@ -441,7 +441,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // so the live render goes back on the row first.
     let out = {
         let p = conn.profile.lock().await;
-        let mut c = conn.connection.lock().await;
+        let mut c = conn.connection.lock();
         end_preview_step(
             &p,
             &mut c,
@@ -471,7 +471,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     capture_held_lines(&conn.connection, &log_sink).await;
     capture_pending_line(&conn.app, &log_sink, &mut conn.accumulator).await;
 
-    conn.connection.lock().await.tick.end_session();
+    conn.connection.lock().tick.end_session();
 
     log_sink.close().await;
 
@@ -481,7 +481,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // the target. Your quick keys outlive it, though not a restart.
     let target_after = {
         let mut p = conn.profile.lock().await;
-        let mut c = conn.connection.lock().await;
+        let mut c = conn.connection.lock();
         let had = c.clear_on_disconnect();
         p.vars.remove("target");
         line_triggers = c.prompt.stage.line_trigger_notice();
@@ -551,7 +551,7 @@ async fn send_typed<R: tauri::Runtime>(
     // server that sends no Char.Vitals it also starts the next pulse,
     // after which the values the last prompt set go stale.
     let pulse = send_step(
-        &mut *conn.connection.lock().await,
+        &mut conn.connection.lock(),
         &conn.accumulator,
         bytes,
         now_ms(),
@@ -652,14 +652,14 @@ async fn handle_tick<R: tauri::Runtime>(
     stream: &mut Stream,
     walker: &mut Walker,
     profile: &Arc<Mutex<Profile>>,
-    connection: &Arc<Mutex<Connection>>,
+    connection: &SharedConnection,
     lua_timers: &SharedTimers,
 ) -> std::io::Result<()> {
     // Take the firing decision under the locks, then run the Send each
     // tick command, if the timer fired, after releasing them.
     let step = {
         let p = profile.lock().await;
-        let mut c = connection.lock().await;
+        let mut c = connection.lock();
         c.tick.poll(&p.tick, Instant::now())
     };
     if !step.payload.enabled && !step.payload.fired {

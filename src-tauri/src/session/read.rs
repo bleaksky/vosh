@@ -123,7 +123,7 @@ async fn handle_event<R: tauri::Runtime>(
                     let mut p = conn.profile.lock().await;
                     conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
                     conn.perf.mutex_acquires += 1;
-                    let mut c = conn.connection.lock().await;
+                    let mut c = conn.connection.lock();
                     line_step(
                         &mut p,
                         &mut c,
@@ -161,7 +161,7 @@ async fn handle_event<R: tauri::Runtime>(
             // entry.
             let steps = {
                 let mut p = conn.profile.lock().await;
-                let mut c = conn.connection.lock().await;
+                let mut c = conn.connection.lock();
                 marker_step(
                     &mut p,
                     &mut c,
@@ -205,7 +205,7 @@ async fn handle_event<R: tauri::Runtime>(
 /// the output count after it.
 pub(super) async fn flush_hold<R: tauri::Runtime>(conn: &mut Conn<R>) {
     let out = {
-        let mut c = conn.connection.lock().await;
+        let mut c = conn.connection.lock();
         let mut out = Output::new(output_count() != conn.seen_output);
         hold_step(&mut c, &mut conn.accumulator, &mut out);
         out
@@ -226,7 +226,7 @@ pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
     let mut batch = ReadBatch::new(conn.seen_output);
     let steps = {
         let mut p = conn.profile.lock().await;
-        let mut c = conn.connection.lock().await;
+        let mut c = conn.connection.lock();
         if !c.prompt.stage.holds() {
             return Ok(());
         }
@@ -339,7 +339,7 @@ async fn end_read<R: tauri::Runtime>(
 ) -> std::io::Result<()> {
     let step = {
         let mut p = conn.profile.lock().await;
-        let mut c = conn.connection.lock().await;
+        let mut c = conn.connection.lock();
         partial_step(
             &mut p,
             &mut c,
@@ -383,7 +383,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
     let watched = prompt && watching_prompt(app);
     let (vars, hidden, prompt_seen, status, prompt_state, clock) = {
         let p = conn.profile.lock().await;
-        let mut c = conn.connection.lock().await;
+        let mut c = conn.connection.lock();
         // Echoes the end of the read wrote close the open row.
         c.prompt.stage.finish(&mut out);
         (

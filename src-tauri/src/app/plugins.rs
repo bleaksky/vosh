@@ -411,7 +411,7 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     note_plugins(state, &plugins_dir).await;
     let apply = {
         let mut p = state.profile.lock().await;
-        let mut c = state.connection.lock().await;
+        let mut c = state.connection.lock();
         follow_profile_plugins(&mut p, &mut c, &plugins_dir)
     };
     let collected = crate::session::effects::collect_script_result(

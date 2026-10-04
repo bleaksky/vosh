@@ -1952,7 +1952,7 @@ async fn a_script_that_sets_its_own_alias_again_keeps_it_to_its_character() {
     };
     crate::script::apply_actions(
         &mut *state.profile.lock().await,
-        &mut *state.connection.lock().await,
+        &mut state.connection.lock(),
         outcome,
     );
     assert_eq!(items_on(&*state.profile.lock().await), ["alias hl"]);

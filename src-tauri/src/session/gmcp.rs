@@ -72,7 +72,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         let mut p = conn.profile.lock().await;
         conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
         conn.perf.mutex_acquires += 1;
-        let mut c = conn.connection.lock().await;
+        let mut c = conn.connection.lock();
         gmcp_step(&mut p, &mut c, &msg, Instant::now())
     };
 

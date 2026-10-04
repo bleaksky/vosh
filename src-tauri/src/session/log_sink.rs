@@ -6,16 +6,14 @@
 //! ring first.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use tauri::AppHandle;
-use tokio::sync::Mutex;
 use tracing::warn;
 
 use crate::logs::{SharedLogStore, SharedScrollback};
 use crate::output::emit_output;
 
-use super::connection::Connection;
+use super::connection::SharedConnection;
 use super::lines::{LineAccumulator, Partial};
 use super::now_ms;
 use super::steps::end_held;
@@ -127,8 +125,8 @@ impl LogSession {
 
 /// Log the lines the stage still holds as the session ends, and keep them
 /// for scrollback, through [`end_held`].
-pub(super) async fn capture_held_lines(connection: &Arc<Mutex<Connection>>, log_sink: &LogSink) {
-    let (log, kept) = end_held(&mut *connection.lock().await, log_sink.id());
+pub(super) async fn capture_held_lines(connection: &SharedConnection, log_sink: &LogSink) {
+    let (log, kept) = end_held(&mut connection.lock(), log_sink.id());
     if !kept.is_empty() {
         let mut ring = log_sink.scrollback.lock().await;
         for text in kept {

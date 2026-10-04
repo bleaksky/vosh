@@ -292,7 +292,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             effects,
         } = {
             let mut p = profile.lock().await;
-            let mut c = state.connection.lock().await;
+            let mut c = state.connection.lock();
             run_lines_locked(
                 &state,
                 &mut p,
@@ -523,7 +523,7 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
         effects,
     } = {
         let mut p = profile.lock().await;
-        let mut c = state.connection.lock().await;
+        let mut c = state.connection.lock();
         run_fired_locked(&state, &mut p, &mut c, command, shared.as_ref())
     };
     crate::disk::save::settle_line_effects(app, effects).await;

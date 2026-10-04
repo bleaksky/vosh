@@ -61,7 +61,7 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
 ) -> Result<(), String> {
     let p = &mut *state.profile.lock().await;
     let changed = {
-        let c = &mut *state.connection.lock().await;
+        let c = &mut *state.connection.lock();
         if as_is.unwrap_or(false) {
             set_config_as_is(p, c, config)?
         } else {
@@ -87,7 +87,7 @@ pub(crate) async fn prompt_card_open<R: tauri::Runtime>(
 ) -> Result<PromptConfig, String> {
     let (config, changed) = {
         let mut p = state.profile.lock().await;
-        let mut c = state.connection.lock().await;
+        let mut c = state.connection.lock();
         card_open(&mut p, &mut c)
     };
     if changed {
@@ -117,7 +117,7 @@ pub(crate) async fn prompt_compile(
     state: State<'_, SharedState>,
     capture: CompileRequest,
 ) -> Result<CompileReport, String> {
-    Ok(compile(&*state.connection.lock().await, &capture))
+    Ok(compile(&state.connection.lock(), &capture))
 }
 
 /// What a capture built from one entry of the candidates ring reads: the
@@ -130,11 +130,7 @@ pub(crate) async fn prompt_capture_from_line(
     id: u64,
     names: Option<Vec<String>>,
 ) -> Result<CompileReport, String> {
-    capture_from_line(
-        &*state.connection.lock().await,
-        id,
-        &names.unwrap_or_default(),
-    )
+    capture_from_line(&state.connection.lock(), id, &names.unwrap_or_default())
 }
 
 /// The candidates ring grouped by shape, with counts.
@@ -142,7 +138,7 @@ pub(crate) async fn prompt_capture_from_line(
 pub(crate) async fn prompt_candidates(
     state: State<'_, SharedState>,
 ) -> Result<Vec<CandidateGroup>, String> {
-    let c = state.connection.lock().await;
+    let c = state.connection.lock();
     Ok(vosh_prompt::card::candidates::groups(c.prompt.stage.ring()))
 }
 
@@ -154,7 +150,7 @@ pub(crate) async fn prompt_capture_check(
     capture: CaptureConfig,
 ) -> Result<CaptureCheck, String> {
     let (recognizer, ring) = {
-        let c = state.connection.lock().await;
+        let c = state.connection.lock();
         let recognizer = Recognizer::compile_for(&capture, c.prompt.who());
         let ring: Vec<vosh_prompt::stage::Candidate> = c.prompt.stage.ring().cloned().collect();
         (recognizer, ring)
@@ -182,7 +178,7 @@ pub(crate) async fn prompt_line_triggers(
     capture: CaptureConfig,
 ) -> Result<Vec<LineTrigger>, String> {
     let p = state.profile.lock().await;
-    let c = state.connection.lock().await;
+    let c = state.connection.lock();
     Ok(line_triggers(&p, &c, &capture))
 }
 
@@ -205,7 +201,7 @@ pub(crate) async fn prompt_render(
         placeholders: placeholders.unwrap_or(false),
     };
     let p = state.profile.lock().await;
-    let c = state.connection.lock().await;
+    let c = state.connection.lock();
     Ok(render_all(&p, &c, std::slice::from_ref(&request)).remove(0))
 }
 
@@ -216,7 +212,7 @@ pub(crate) async fn prompt_render_many(
     requests: Vec<RenderRequest>,
 ) -> Result<Vec<Rendered>, String> {
     let p = state.profile.lock().await;
-    let c = state.connection.lock().await;
+    let c = state.connection.lock();
     Ok(render_all(&p, &c, &requests))
 }
 
@@ -230,7 +226,7 @@ pub(crate) async fn prompt_describe(
     overrides: Option<Overrides>,
 ) -> Result<Described, String> {
     let p = state.profile.lock().await;
-    let c = state.connection.lock().await;
+    let c = state.connection.lock();
     Ok(describe(&p, &c, &template, preview, overrides))
 }
 
@@ -244,7 +240,7 @@ pub(crate) async fn prompt_forms(
     preview: Option<Preview>,
 ) -> Result<Vec<FormView>, String> {
     let p = state.profile.lock().await;
-    let c = state.connection.lock().await;
+    let c = state.connection.lock();
     Ok(forms(&p, &c, &field, preview))
 }
 
@@ -261,7 +257,7 @@ pub(crate) async fn prompt_preview_set(
     state: State<'_, SharedState>,
     preview: Option<PromptPreview>,
 ) -> Result<(), String> {
-    state.connection.lock().await.prompt.set_preview(preview);
+    state.connection.lock().prompt.set_preview(preview);
     request_prompt_repaint(state.inner()).await;
     Ok(())
 }
@@ -277,7 +273,7 @@ pub(crate) async fn prompt_code_reader_set(
     state: State<'_, SharedState>,
     on: bool,
 ) -> Result<(), String> {
-    state.connection.lock().await.prompt.set_reader(on);
+    state.connection.lock().prompt.set_reader(on);
     Ok(())
 }
 
@@ -290,7 +286,7 @@ pub(crate) async fn prompt_edit(
     op: EditOp,
 ) -> Result<Edited, String> {
     let p = state.profile.lock().await;
-    let c = state.connection.lock().await;
+    let c = state.connection.lock();
     edit(&p, &c, &template, &op)
 }
 
@@ -299,7 +295,7 @@ pub(crate) async fn prompt_edit(
 #[tauri::command]
 pub(crate) async fn prompt_state_get(state: State<'_, SharedState>) -> Result<PromptState, String> {
     let p = state.profile.lock().await;
-    let c = state.connection.lock().await;
+    let c = state.connection.lock();
     Ok(prompt_state(&p, &c))
 }
 
@@ -337,7 +333,7 @@ pub(crate) async fn hidden_get(
 pub(crate) async fn prompt_show_get(
     state: State<'_, SharedState>,
 ) -> Result<PromptShowState, String> {
-    Ok(prompt_show_state(&*state.connection.lock().await))
+    Ok(prompt_show_state(&state.connection.lock()))
 }
 
 /// The triggers that hid your prompt this session while the profile
@@ -349,7 +345,7 @@ pub(crate) async fn prompt_show_get(
 pub(crate) async fn prompt_gags_without_reader(
     state: State<'_, SharedState>,
 ) -> Result<Vec<String>, String> {
-    let c = state.connection.lock().await;
+    let c = state.connection.lock();
     Ok(c.prompt
         .stage
         .gags_without_reader()
