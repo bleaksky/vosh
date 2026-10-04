@@ -441,9 +441,9 @@ impl TriggerStore {
 
     /// Toggle a whole group. Calling with `true` removes the group
     /// from the disabled set; `false` adds it. No-op for an empty
-    /// group name.
-    pub fn set_group_enabled(&mut self, group: &str, enabled: bool) {
-        self.groups.set_enabled(group, enabled);
+    /// group name. Returns whether the group turned.
+    pub fn set_group_enabled(&mut self, group: &str, enabled: bool) -> bool {
+        self.groups.set_enabled(group, enabled)
     }
 
     /// Sorted list of every group referenced by at least one trigger,

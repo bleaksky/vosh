@@ -25,6 +25,54 @@ use std::collections::{BTreeSet, HashSet};
 use super::set::LoadoutSet;
 use crate::profile::live::Profile;
 
+/// What the loadouts decide about one group of the catalog, while they
+/// decide it: on or off, and the active loadouts that decide. Every
+/// apply point lays this state over the group again, so a change made
+/// to it by hand lasts only until the next switch or launch, and the
+/// switch on the group heading in Settings waits while it holds.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct LoadoutHold {
+    /// Whether the loadouts turn the group on.
+    pub(crate) on: bool,
+    /// The active loadouts that decide, in the order they are on: the
+    /// ones that list the group when they turn it on, and every one that
+    /// lists any group when they leave it off. Empty while every loadout
+    /// is off and the catalog is dormant.
+    pub(crate) by: Vec<String>,
+}
+
+/// What `set` decides about the catalog group `group`, the way
+/// [`apply_effective_state`] lays it over the stores, or None while the
+/// loadouts have no opinion and the group stays as you left it.
+pub(crate) fn loadout_hold(set: &LoadoutSet, group: &str) -> Option<LoadoutHold> {
+    if set.dormant {
+        return Some(LoadoutHold {
+            on: false,
+            by: Vec::new(),
+        });
+    }
+    let enabled = set.effective_enabled_groups();
+    if enabled.is_empty() {
+        return None;
+    }
+    let on = enabled.iter().any(|g| g == group);
+    let mut by: Vec<String> = Vec::new();
+    for name in &set.active {
+        let Some(loadout) = set.get(name) else {
+            continue;
+        };
+        let decides = if on {
+            loadout.enabled_groups.iter().any(|g| g == group)
+        } else {
+            !loadout.enabled_groups.is_empty()
+        };
+        if decides && !by.contains(name) {
+            by.push(name.clone());
+        }
+    }
+    Some(LoadoutHold { on, by })
+}
+
 /// Apply whatever group state the loadout set actually calls for:
 /// explicit dormancy wins, otherwise the union rules run (including
 /// the no-opinion guard). Every apply point (startup, profile switch,
@@ -173,6 +221,98 @@ mod tests {
             p.triggers.set(t).unwrap();
         }
         p
+    }
+
+    fn set_of(active: &[&str], dormant: bool) -> LoadoutSet {
+        let mut healer = Loadout::empty("Healer");
+        healer.enabled_groups = vec!["heals".into(), "combat".into()];
+        let mut warrior = Loadout::empty("Warrior");
+        warrior.enabled_groups = vec!["combat".into()];
+        LoadoutSet {
+            active: active.iter().map(|n| (*n).to_string()).collect(),
+            dormant,
+            loadouts: vec![healer, warrior, Loadout::empty("Quiet")],
+        }
+    }
+
+    #[test]
+    fn a_hold_names_the_loadouts_that_decide_a_group() {
+        let hold = |set: &LoadoutSet, group| loadout_hold(set, group);
+        let both = set_of(&["Healer", "Warrior", "Quiet"], false);
+        assert_eq!(
+            hold(&both, "combat"),
+            Some(LoadoutHold {
+                on: true,
+                by: vec!["Healer".into(), "Warrior".into()],
+            })
+        );
+        assert_eq!(
+            hold(&both, "heals"),
+            Some(LoadoutHold {
+                on: true,
+                by: vec!["Healer".into()],
+            })
+        );
+        // A group no active loadout lists stays off, and every loadout
+        // that lists a group decides that. Quiet lists none.
+        assert_eq!(
+            hold(&both, "loot"),
+            Some(LoadoutHold {
+                on: false,
+                by: vec!["Healer".into(), "Warrior".into()],
+            })
+        );
+    }
+
+    #[test]
+    fn no_hold_while_the_loadouts_have_no_opinion() {
+        assert_eq!(loadout_hold(&LoadoutSet::default(), "combat"), None);
+        assert_eq!(loadout_hold(&set_of(&["Quiet"], false), "combat"), None);
+        assert_eq!(loadout_hold(&set_of(&[], false), "combat"), None);
+    }
+
+    #[test]
+    fn dormant_holds_every_group_off_with_no_loadout_to_name() {
+        let off = Some(LoadoutHold {
+            on: false,
+            by: Vec::new(),
+        });
+        assert_eq!(loadout_hold(&set_of(&[], true), "combat"), off);
+        assert_eq!(loadout_hold(&set_of(&["Healer"], true), "heals"), off);
+    }
+
+    #[test]
+    fn a_hold_says_what_an_apply_lays_over_the_group() {
+        // Every hold agrees with what apply_effective_state does to the
+        // group, whatever the switch said before.
+        let groups = ["combat", "heals", "loot"];
+        for (active, dormant) in [
+            (&["Healer"][..], false),
+            (&["Warrior", "Quiet"][..], false),
+            (&[][..], true),
+        ] {
+            let set = set_of(active, dormant);
+            let mut profile = profile_with_items(
+                groups
+                    .iter()
+                    .map(|g| alias_with_group(g, "x", Some(g)))
+                    .collect(),
+                Vec::new(),
+                Vec::new(),
+            );
+            for g in groups {
+                profile.aliases.set_group_enabled(g, g == "loot");
+            }
+            apply_effective_state(&set, &mut profile);
+            for g in groups {
+                let hold = loadout_hold(&set, g).expect("the loadouts decide");
+                assert_eq!(
+                    profile.aliases.is_group_enabled(g),
+                    hold.on,
+                    "{active:?} {g}"
+                );
+            }
+        }
     }
 
     #[test]
