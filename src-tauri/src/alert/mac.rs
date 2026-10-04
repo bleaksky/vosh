@@ -3,7 +3,8 @@
 //! `NSUserNotificationCenter` there, which drops banners, so Vosh keeps a
 //! small module of its own. It posts, answers a click by selecting the
 //! session, lets a banner show while Vosh is in front when its alert asks
-//! for that, and reads whether you allow banners and asks. It also plays
+//! for that, reads whether you allow banners and asks, and takes back the
+//! banners of a plugin that turned off. It also plays
 //! a system sound through `NSSound`, which Alerts Q4 names for a window
 //! too hidden to play its own tone.
 //!
@@ -24,7 +25,7 @@ use block2::RcBlock;
 use objc2_06::rc::Retained;
 use objc2_06::runtime::{AnyClass, AnyObject, Bool, ProtocolObject};
 use objc2_06::{define_class, msg_send, AnyThread};
-use objc2_foundation::{NSBundle, NSError, NSObject, NSObjectProtocol, NSString};
+use objc2_foundation::{NSArray, NSBundle, NSError, NSObject, NSObjectProtocol, NSString};
 use objc2_user_notifications::{
     UNAuthorizationOptions, UNAuthorizationStatus, UNMutableNotificationContent, UNNotification,
     UNNotificationPresentationOptions, UNNotificationRequest, UNNotificationResponse,
@@ -39,6 +40,13 @@ use crate::sessions::SessionId;
 type OnClick = Box<dyn Fn(SessionId) + Send + Sync>;
 
 static ON_CLICK: OnceLock<OnClick> = OnceLock::new();
+
+/// The banners still showing, by identifier, with the session and the
+/// Lua owner of each, so a plugin that turns off takes its own back.
+static SHOWING: Mutex<Vec<(String, SessionId, Option<String>)>> = Mutex::new(Vec::new());
+
+/// The most banners [`SHOWING`] keeps track of.
+const SHOWING_KEPT: usize = 100;
 
 static NEXT: AtomicU64 = AtomicU64::new(1);
 
@@ -165,6 +173,36 @@ pub(super) fn post(banner: &Banner, sound: bool) {
         None,
     );
     center.addNotificationRequest_withCompletionHandler(&request, None);
+    let mut showing = SHOWING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    showing.push((id, banner.session, banner.owner.clone()));
+    if showing.len() > SHOWING_KEPT {
+        let extra = showing.len() - SHOWING_KEPT;
+        showing.drain(..extra);
+    }
+}
+
+/// Take back the banners of `session` that the Lua `owner` posted.
+pub(super) fn withdraw(session: SessionId, owner: &str) {
+    let ids: Vec<String> = {
+        let mut showing = SHOWING
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (gone, kept): (Vec<_>, Vec<_>) = showing
+            .drain(..)
+            .partition(|(_, s, o)| *s == session && o.as_deref() == Some(owner));
+        *showing = kept;
+        gone.into_iter().map(|(id, ..)| id).collect()
+    };
+    if ids.is_empty() {
+        return;
+    }
+    let Some(center) = center() else {
+        return;
+    };
+    let ids: Vec<Retained<NSString>> = ids.iter().map(|id| NSString::from_str(id)).collect();
+    center.removeDeliveredNotificationsWithIdentifiers(&NSArray::from_retained_slice(&ids));
 }
 
 /// Whether you allow Vosh's banners, as System Settings says. Waits up

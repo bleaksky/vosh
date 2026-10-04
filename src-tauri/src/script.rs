@@ -145,6 +145,9 @@ pub(crate) struct ApplyResult {
     /// The alerts the step raised, a trigger's, a preset's or Lua's,
     /// which ring once the locks let go, see [`crate::alert::ring`].
     pub alerts: Vec<crate::alert::Alert>,
+    /// The Lua owners whose alerts end, each a plugin that turned off,
+    /// stopped or loaded again, see [`crate::alert::end_owner`].
+    pub ended: Vec<String>,
 }
 
 impl ApplyResult {
@@ -165,6 +168,7 @@ impl ApplyResult {
             self.walk = later.walk;
         }
         self.alerts.extend(later.alerts);
+        self.ended.extend(later.ended);
     }
 
     /// This result, whose Lua ran under `open` while the step held it.
@@ -222,7 +226,12 @@ pub(crate) fn apply_actions(
             Action::RemovePluginAlias { plugin, name } => {
                 c.plugin_aliases.remove(&plugin, &name);
             }
-            Action::DropPluginAliases(plugin) => c.plugin_aliases.remove_plugin(&plugin),
+            // The plugin turned off, stopped or loaded again, and its
+            // alerts end with its aliases.
+            Action::DropPluginAliases(plugin) => {
+                c.plugin_aliases.remove_plugin(&plugin);
+                result.ended.push(vosh_script::Owner::Plugin(plugin).tag());
+            }
             // Only profile-scoped vars are persisted; session vars
             // marking durable would reset the persist debounce on
             // every combat line for busy Lua triggers.
@@ -287,6 +296,14 @@ pub(crate) fn apply_actions(
             Action::CancelTimer(id) => {
                 result.cancel_timers.push(id);
             }
+            Action::Alert {
+                owner,
+                title,
+                text,
+                parts,
+            } => result
+                .alerts
+                .push(crate::alert::of_lua(&owner, title, text, parts)),
         }
     }
     result.lists = ListChanges::since(lists_before, profile, c);

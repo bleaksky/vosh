@@ -145,6 +145,11 @@ const UNHEARD: &[Unheard] = &[
               its notice and marks the row, after R18 (Alerts Q18).",
     },
     Unheard {
+        name: "session://alerts-ended",
+        why: "A plugin's alerts ended. The page half drops its notices, after \
+              R18 (Alerts Q19).",
+    },
+    Unheard {
         name: "session://reconnect",
         why: "Where a redial stands. The reconnect notice of the page half \
               hears it, after R18 (Alerts Q18).",

@@ -119,6 +119,10 @@ pub(crate) const PROMPT_GAG_WITHOUT_READER: &str = "session://prompt-gag-without
 /// alerts plays its tone, shows its notice and marks the session's row.
 /// No page listener hears it yet.
 pub(crate) const ALERT: &str = "session://alert";
+/// The alerts of a Lua owner ended, as its plugin turned off, stopped or
+/// loaded again. The payload is a [`crate::alert::AlertsEnded`]. No page
+/// listener hears it yet.
+pub(crate) const ALERTS_ENDED: &str = "session://alerts-ended";
 /// Where the redial of the session stands after a drop: a wait, a try, a
 /// failed try, the try that reached the game, the end of the tries, a
 /// cancel, or why a drop does not redial. The payload is a

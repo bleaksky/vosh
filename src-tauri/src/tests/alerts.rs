@@ -203,3 +203,89 @@ async fn a_session_counts_as_in_front_only_while_vosh_is_and_its_row_is_selected
     h.disconnect_session(two).await;
     h.finish(grid).await;
 }
+
+/// Turn the plugin `name` on or off in the first session, and deliver
+/// what it asks for.
+async fn plugin(h: &Harness, name: &str, on: bool) {
+    let session = h.state.selected_session();
+    let plugins = crate::disk::paths::plugins_dir(h.dir.path());
+    let apply = {
+        let mut p = session.lock_profile().await;
+        let mut c = session.connection.lock();
+        let apply = if on {
+            crate::app::plugins::plugin_on(&mut p, &mut c, &plugins, name)
+        } else {
+            crate::app::plugins::plugin_off(&mut p, &mut c, name)
+        };
+        apply.ran_under(p.open())
+    };
+    crate::app::plugins::follow_profile(h.app.handle(), &h.state, &session, apply).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_plugin_alert_carries_its_owner_and_ends_as_the_plugin_turns_off() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(orla()).await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    let folder = crate::disk::paths::plugins_dir(h.dir.path()).join("watch");
+    std::fs::create_dir_all(&folder).expect("the plugin folder");
+    std::fs::write(folder.join("manifest.toml"), "[plugin]\nname = \"watch\"\n")
+        .expect("the manifest");
+    std::fs::write(
+        folder.join("main.lua"),
+        "mud.trigger('visitor', 'walks in', function() \
+             mud.alert('Someone walked in', {sound = 'knock', attention = 'once'}) end)",
+    )
+    .expect("the entry script");
+    h.connect().await;
+    h.until_shown("Welcome to the fake Aabahran, Orla.").await;
+    plugin(&h, "watch", true).await;
+
+    // A second match inside 10 seconds rings nothing more.
+    h.servers[0].push(&line("Maren walks in."));
+    h.servers[0].push(&line("Maren walks in."));
+    h.until("both lines", |h| {
+        h.screen()
+            .iter()
+            .filter(|r| r.contains("Maren walks in."))
+            .count()
+            == 2
+    })
+    .await;
+    h.until("the alert", |h| !alerts(h, h.first).is_empty())
+        .await;
+    let rung = alerts(&h, h.first);
+    assert_eq!(rung.len(), 1, "{rung:?}");
+    assert_eq!(rung[0]["owner"], "plugin:watch");
+    assert_eq!(rung[0]["source"], "lua:plugin:watch");
+    assert_eq!(rung[0]["sound"], "knock");
+    let posted = h.state.banners.recorded();
+    assert_eq!(posted.len(), 1);
+    assert_eq!(posted[0].banner.owner.as_deref(), Some("plugin:watch"));
+
+    // Turning the plugin off ends its alerts. Its banners go, the page
+    // hears so, and its trigger is gone.
+    plugin(&h, "watch", false).await;
+    h.until("the end of its alerts", |h| {
+        h.events_of(h.first, "session://alerts-ended")
+            .iter()
+            .any(|e| e["owner"] == "plugin:watch")
+    })
+    .await;
+    assert_eq!(h.state.banners.recorded(), Vec::new());
+    h.servers[0].push(&line("Maren walks in."));
+    h.until("the third line", |h| {
+        h.screen()
+            .iter()
+            .filter(|r| r.contains("Maren walks in."))
+            .count()
+            == 3
+    })
+    .await;
+    assert_eq!(alerts(&h, h.first).len(), 1);
+    h.finish(grid).await;
+}

@@ -134,6 +134,22 @@ impl Banners {
         }
     }
 
+    /// Take back the banners of `session` that the Lua `owner` posted.
+    pub(crate) fn withdraw(&self, session: SessionId, owner: &str) {
+        match self {
+            Banners::System(_) => {
+                #[cfg(target_os = "macos")]
+                super::mac::withdraw(session, owner);
+                #[cfg(not(target_os = "macos"))]
+                let _ = (session, owner);
+            }
+            #[cfg(test)]
+            Banners::Recorded(list) => list.lock().expect("the banners").retain(|p| {
+                !(p.banner.session == session && p.banner.owner.as_deref() == Some(owner))
+            }),
+        }
+    }
+
     /// The session of the newest banner the system showed, which a click
     /// that starts Vosh again on Windows selects.
     #[cfg_attr(not(windows), allow(dead_code))]

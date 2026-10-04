@@ -20,7 +20,7 @@ use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
 use crate::sessions::SessionId;
 
 /// The events the tests read, as the webview would hear them.
-const EVENTS: [&str; 13] = [
+const EVENTS: [&str; 14] = [
     "session://output",
     "session://game-prompt-seen",
     "session://prompt-status",
@@ -33,6 +33,7 @@ const EVENTS: [&str; 13] = [
     crate::app::events::AFFECT_FULL_CHANGED,
     crate::app::events::PROMPT_CONFIG_CHANGED,
     crate::app::events::ALERT,
+    crate::app::events::ALERTS_ENDED,
     crate::app::events::RECONNECT,
 ];
 
