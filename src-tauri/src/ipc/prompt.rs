@@ -46,8 +46,9 @@ pub(crate) async fn prompt_config_get(
 /// Take a `[prompt]` table for the active profile. A new capture that does
 /// not compile changes nothing, and the error says why in a sentence. A table
 /// that changes anything saves shortly, repaints the open row and tells
-/// every window. With `as_is`, the design is taken exactly as sent, so
-/// Start empty keeps it empty as drawing turns on.
+/// every window. Turning drawing on with an empty design follows the
+/// game. With `as_is`, the design is taken exactly as sent, so Start
+/// empty keeps it empty as drawing turns on.
 #[tauri::command]
 pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
     app: AppHandle<R>,
@@ -88,10 +89,10 @@ pub(crate) async fn prompt_card_open<R: tauri::Runtime>(
 
 /// The designs every other profile holds, read from their files, each
 /// with a template that is not empty. These are designs you made, so a
-/// template equal to Vosh's default design, [`vosh_prompt::DEFAULT_DESIGN`],
-/// is left out, as a profile that never saved a file holds it and the
-/// start list already offers it. A file holding a default an earlier
-/// build shipped loads with today's, so it is left out too. A file Vosh
+/// design that follows the game is left out, and so is one equal to
+/// Vosh's default design, [`vosh_prompt::DEFAULT_DESIGN`], which the
+/// start list already offers. A file holding a default an earlier build
+/// shipped loads following the game, so it is left out too. A file Vosh
 /// cannot read is left out.
 #[tauri::command]
 pub(crate) async fn prompt_designs_list(

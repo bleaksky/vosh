@@ -1943,6 +1943,56 @@ async fn prompt_default_draws_the_default_design_on_the_pinned_band_at_once() {
     h.finish(grid).await;
 }
 
+/// Same as the game for `prompt`, for a mortal in your own body.
+fn same_as_the_game(prompt: &str) -> String {
+    vosh_prompt::card::presets::game(prompt, "", vosh_prompt::aabahran::Who::default())
+        .expect("the codes compile")
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn with_no_design_of_your_own_vosh_draws_your_prompt_as_the_game_does() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    // A fresh profile whose capture follows the game, on another setting
+    // than the one the game holds, with drawing off.
+    h.set_prompt(vosh_prompt::PromptConfig {
+        capture: codes("<%hhp> ").capture,
+        ..vosh_prompt::PromptConfig::fresh()
+    })
+    .await;
+    h.connect().await;
+
+    // Login gives Vosh your PROMPT, and the design follows it. Drawing
+    // stays off until you turn it on.
+    h.until_last_row("[1020/1020hp 800/800mn 930/930mv]").await;
+    let table = h.prompt_table().await;
+    assert!(table.mirror);
+    assert!(!table.draw);
+    assert_eq!(table.template, same_as_the_game(PROMPT));
+
+    // Turned on, Vosh draws your prompt exactly as the game does.
+    h.type_line("#prompt draw on").await;
+    h.until_shown("Drawing is on.").await;
+    h.type_line("look").await;
+    h.until_last_row("[1020/1020hp 800/800mn 930/930mv]").await;
+    assert!(h.state.profile.lock().await.prompt.draws());
+
+    // Change it in the game, and the drawn prompt follows.
+    h.type_line(&format!("prompt {TYPED_X}")).await;
+    h.until_shown(&format!("Prompt set to {TYPED_X}")).await;
+    h.until_last_row("<1020/1020hp 800/800mn>").await;
+    let table = h.prompt_table().await;
+    assert!(table.mirror);
+    assert!(table.draw);
+    assert_eq!(table.template, same_as_the_game(PROMPT_X));
+    let leftover = &table.previous_templates;
+    assert!(leftover.is_empty(), "{leftover:?}");
+    h.finish(grid).await;
+}
+
 /// The session sends each GMCP package on the event
 /// `fixtures/ipc/gmcp-events.json` names for it. `onGmcpPackage` on the
 /// page builds its listen from the same file in session.test.ts, so a

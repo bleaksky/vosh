@@ -54,6 +54,7 @@ describe('the [prompt] table', () => {
       previous_templates: [],
       capture: { kind: 'none' },
       show: 'text',
+      mirror: false,
     });
     expect(normalizePromptConfig(null)).toEqual({
       draw: false,
@@ -61,7 +62,15 @@ describe('the [prompt] table', () => {
       previous_templates: [],
       capture: { kind: 'none' },
       show: 'text',
+      mirror: false,
     });
+  });
+
+  it('reads a design that follows the game, and a design of yours when left out', () => {
+    const follows = normalizePromptConfig({ draw: true, template: '[%hp] ', mirror: true });
+    expect(follows.mirror).toBe(true);
+    expect(normalizePromptConfig({ template: '[%hp] ' }).mirror).toBe(false);
+    expect(normalizePromptConfig({ template: '[%hp] ', mirror: 'yes' }).mirror).toBe(false);
   });
 
   it('keeps a capture, the earlier designs and where your prompt shows', () => {

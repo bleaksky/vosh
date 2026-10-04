@@ -529,6 +529,8 @@ fn full_prompt() -> PromptConfig {
             source: Some(CaptureSource::Gmcp),
         }),
         show: PromptShow::Pinned,
+        // A design of yours, which the file says with no mirror key.
+        mirror: false,
     }
 }
 

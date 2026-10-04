@@ -133,8 +133,9 @@ fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputRe
 }
 
 /// `#prompt draw on|off`: draw your design in place of your prompt, or
-/// show the game's own prompt. Turning drawing on with no design draws
-/// Vosh's default, as Settings does. The design, the place and the
+/// show the game's own prompt. Turning drawing on with no design follows
+/// the game, as Settings does, so Vosh draws your prompt as your codes
+/// say until you change the design. The design, the place and the
 /// capture stay. With no capture the echo says how to start, since Vosh
 /// draws only a prompt it reads.
 fn slash_prompt_draw(profile: &mut Profile, args: &str) -> InputResult {
@@ -147,7 +148,7 @@ fn slash_prompt_draw(profile: &mut Profile, args: &str) -> InputResult {
     if config.draw != draw {
         config.draw = draw;
         if draw && config.template.is_empty() {
-            config.template = vosh_prompt::DEFAULT_DESIGN.to_string();
+            config.mirror = true;
         }
         profile.set_prompt_config(config);
     }
@@ -182,16 +183,17 @@ fn slash_prompt_show(profile: &mut Profile, args: &str) -> InputResult {
 }
 
 /// `#prompt default`: put Vosh's default design in place of the one in
-/// this profile. The one you had goes first among the earlier designs,
-/// so the card can offer it back, and the switch, the place and the
+/// this profile, as your choice, so it stops following the game. The one
+/// you had goes first among the earlier designs, so the card can offer it
+/// back, unless it followed the game. The switch, the place and the
 /// capture stay. The echo says what else it takes to see the design,
-/// also when the design is the default already, as in a fresh profile.
+/// also when the design is the default already.
 fn slash_prompt_default(profile: &mut Profile, args: &str) -> InputResult {
     if !args.trim().is_empty() {
         return InputResult::error("usage #prompt default");
     }
     let mut config = profile.prompt.config().clone();
-    let had = !config.template.is_empty();
+    let had = !config.template.is_empty() && !config.mirror;
     let changed = config.use_default_design();
     let mut echo = vec![match (changed, had) {
         (false, _) => "Your design is already Vosh's default.",

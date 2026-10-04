@@ -18,12 +18,20 @@
 //! template in `[ui] prompt_template_enabled` and `prompt_template`, which
 //! [`PromptConfig::from_legacy`] reads when a file has no `[prompt]`.
 //!
-//! A fresh table takes [`DEFAULT_DESIGN`], and a table that holds one of
-//! the [`RETIRED_DEFAULTS`] takes it in their place.
+//! A profile with no design of its own follows the game. Its design is
+//! Same as the game for your PROMPT and fight prompt codes, written again
+//! each time they change, until you change it (`mirror`). A fresh table
+//! follows the game, and so does one that holds [`DEFAULT_DESIGN`] or one
+//! of the [`RETIRED_DEFAULTS`] from a file that does not say otherwise.
+//! A profile file keeps the design in `template` too, so an older build
+//! draws it, and writes `mirror` only when the design alone does not say
+//! it (see [`file_table`]).
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
+
+use crate::aabahran::Who;
 
 /// Vosh's default, the design Vosh draws for a profile that has none of
 /// its own. It mirrors the pinned band of the gallery mockup, with the
@@ -120,8 +128,8 @@ const AT_A_GLANCE_FIRST: &str = concat!(
 /// The designs earlier builds shipped as Vosh's default, byte for byte.
 /// You only ever got one from Vosh, at a fresh profile, by turning
 /// drawing on with no design, or with `#prompt default`, so a profile
-/// that holds one takes [`DEFAULT_DESIGN`] when it loads
-/// ([`crate::PromptConfig::upgrade_retired_default`]).
+/// that holds one counts as having no design of its own and follows the
+/// game when it loads ([`PromptConfig::counts_as_no_design`]).
 pub const RETIRED_DEFAULTS: [&str; 2] = [AT_A_GLANCE, AT_A_GLANCE_FIRST];
 
 /// How many earlier designs `previous_templates` keeps.
@@ -159,6 +167,18 @@ pub struct PromptConfig {
         deserialize_with = "lenient_show"
     )]
     pub show: PromptShow,
+    /// The design follows the game. Vosh writes it from your PROMPT and
+    /// fight prompt codes, as Same as the game, each time they change,
+    /// and keeps it empty while the profile reads no codes, so you see
+    /// the game's own prompt. Any edit makes the design yours. The page
+    /// hears it as `mirror`, left out while false. A profile file writes
+    /// it only when the design does not say it (see [`file_table`]).
+    #[serde(
+        default,
+        skip_serializing_if = "is_false",
+        deserialize_with = "lenient_bool"
+    )]
+    pub mirror: bool,
 }
 
 /// `[prompt] show`, where your prompt shows.
@@ -213,28 +233,68 @@ impl PromptConfig {
         }
     }
 
-    /// The table a fresh profile starts with: Vosh's default design,
-    /// [`DEFAULT_DESIGN`], with drawing off and your prompt in the text,
-    /// so turning drawing on draws it.
+    /// The table a fresh profile starts with: drawing off, your prompt
+    /// in the text, and a design that follows the game, so turning
+    /// drawing on draws your prompt as the game does.
     pub fn fresh() -> Self {
         Self {
-            template: DEFAULT_DESIGN.to_string(),
+            mirror: true,
             ..Self::default()
         }
     }
 
-    /// True when the table says nothing a default one does not, so a
-    /// profile file leaves it out.
+    /// True when the table says nothing a file with no `[prompt]` does
+    /// not, so a profile file leaves it out. Such a file follows the game
+    /// with an empty design, and with no codes, no design and drawing off
+    /// following the game or not draws the same, so `mirror` does not
+    /// count.
     pub fn is_default(&self) -> bool {
-        *self == Self::default()
+        Self {
+            mirror: false,
+            ..self.clone()
+        } == Self::default()
+    }
+
+    /// A design that counts as none of your own: empty, Vosh's default,
+    /// or a default an earlier build shipped. A profile file that holds
+    /// one and does not say otherwise follows the game.
+    pub fn counts_as_no_design(template: &str) -> bool {
+        template.is_empty() || template == DEFAULT_DESIGN || RETIRED_DEFAULTS.contains(&template)
+    }
+
+    /// Write the design again from the codes while it follows the game,
+    /// for `who`. Returns whether the design changed. A design of yours
+    /// stays as it is.
+    pub fn mirror_game(&mut self, who: Who) -> bool {
+        if !self.mirror {
+            return false;
+        }
+        let design = game_design(&self.capture, who);
+        if design == self.template {
+            return false;
+        }
+        self.template = design;
+        true
+    }
+
+    /// Follow the game from now on, as turning drawing on with no design
+    /// and picking Same as the game do. The design is written from the
+    /// codes for `who`.
+    pub fn follow_game(&mut self, who: Who) {
+        self.mirror = true;
+        self.mirror_game(who);
     }
 
     /// The card opened on the saved design. When it differs from the
     /// newest earlier design, it goes first and the oldest beyond
-    /// [`PREVIOUS_TEMPLATES`] drops. An empty design is never kept.
-    /// Returns whether the list changed.
+    /// [`PREVIOUS_TEMPLATES`] drops. An empty design is never kept, and
+    /// neither is one that follows the game, since Same as the game
+    /// brings it back. Returns whether the list changed.
     pub fn note_opened(&mut self) -> bool {
-        if self.template.is_empty() || self.previous_templates.first() == Some(&self.template) {
+        if self.mirror
+            || self.template.is_empty()
+            || self.previous_templates.first() == Some(&self.template)
+        {
             return false;
         }
         self.previous_templates.insert(0, self.template.clone());
@@ -243,32 +303,30 @@ impl PromptConfig {
     }
 
     /// Put Vosh's default design, [`DEFAULT_DESIGN`], in place of the one
-    /// you have. Yours goes first among the earlier designs, as when the
-    /// card opens, so the card can offer it back. The switch, the place
-    /// and the capture stay. Returns false when the design already is the
-    /// default.
+    /// you have, as your choice, so it stops following the game. Yours
+    /// goes first among the earlier designs, as when the card opens, so
+    /// the card can offer it back. The switch, the place and the capture
+    /// stay. Returns false when the design already is the default you
+    /// chose.
     pub fn use_default_design(&mut self) -> bool {
-        if self.template == DEFAULT_DESIGN {
+        if self.template == DEFAULT_DESIGN && !self.mirror {
             return false;
         }
         self.note_opened();
         self.template = DEFAULT_DESIGN.to_string();
+        self.mirror = false;
         true
     }
+}
 
-    /// Put Vosh's default design, [`DEFAULT_DESIGN`], in place of one an
-    /// earlier build shipped as its default, [`RETIRED_DEFAULTS`], byte
-    /// for byte. You never typed that text, so it goes and is not kept
-    /// among the earlier designs. Any other design stays, and so do the
-    /// switch, the place, the capture and the earlier designs. Returns
-    /// whether the design changed.
-    pub fn upgrade_retired_default(&mut self) -> bool {
-        if !RETIRED_DEFAULTS.contains(&self.template.as_str()) {
-            return false;
-        }
-        self.template = DEFAULT_DESIGN.to_string();
-        true
-    }
+/// The design that follows the game for `capture`: Same as the game for
+/// Aabahran's codes when they compile, as the card's start list offers
+/// it, or empty, which draws nothing in place of the game's own prompt.
+fn game_design(capture: &CaptureConfig, who: Who) -> String {
+    let CaptureConfig::Aabahran(codes) = capture else {
+        return String::new();
+    };
+    crate::card::presets::game(&codes.prompt, &codes.fprompt, who).unwrap_or_default()
 }
 
 /// `[prompt.capture]`, how Vosh reads the game's prompt. The `kind` key
@@ -377,6 +435,99 @@ fn default_true() -> bool {
     true
 }
 
+// serde's skip_serializing_if hands the field by reference.
+fn is_false(on: &bool) -> bool {
+    !*on
+}
+
+/// Read a switch, or off for a value that is not one, so a hand edit
+/// never keeps the profile file from loading.
+fn lenient_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = serde_json::Value::deserialize(deserializer)?;
+    Ok(raw.as_bool().unwrap_or(false))
+}
+
+/// The `[prompt]` table as a profile file holds it, for a field of type
+/// `Option<PromptConfig>` with `#[serde(with = "...")]`.
+///
+/// The file writes `mirror` only when the design alone does not say it:
+/// true for a design that follows the game, which is your codes as Same
+/// as the game writes them, and false for a design that counts as none
+/// of your own but that you chose, such as Vosh's default from
+/// `#prompt default` or an empty design from Start empty. A file with no
+/// `mirror` follows the game when its design counts as none of your own
+/// ([`PromptConfig::counts_as_no_design`]), which is how a profile an
+/// earlier build saved with Vosh's default comes to follow the game. A
+/// file read here holds the design written from its codes for a mortal
+/// in your own body, which the live prompt writes again for who you are.
+///
+/// Every other key reads and writes as the table always has, so an older
+/// build reads the file and draws the design in `template`.
+pub mod file_table {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use super::{CaptureConfig, PromptConfig, PromptShow};
+    use crate::aabahran::Who;
+
+    /// The table as it is written, key by key in the order the derived
+    /// form writes them, with `mirror` last.
+    #[derive(Serialize)]
+    struct Written<'a> {
+        draw: bool,
+        template: &'a str,
+        #[serde(skip_serializing_if = "<[String]>::is_empty")]
+        previous_templates: &'a [String],
+        #[serde(skip_serializing_if = "CaptureConfig::is_none")]
+        capture: &'a CaptureConfig,
+        #[serde(skip_serializing_if = "PromptShow::is_text")]
+        show: PromptShow,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        mirror: Option<bool>,
+    }
+
+    impl<'a> Written<'a> {
+        fn of(config: &'a PromptConfig) -> Self {
+            let PromptConfig {
+                draw,
+                template,
+                previous_templates,
+                capture,
+                show,
+                mirror,
+            } = config;
+            let said = PromptConfig::counts_as_no_design(template);
+            Self {
+                draw: *draw,
+                template,
+                previous_templates,
+                capture,
+                show: *show,
+                mirror: (*mirror != said).then_some(*mirror),
+            }
+        }
+    }
+
+    pub fn serialize<S: Serializer>(table: &Option<PromptConfig>, s: S) -> Result<S::Ok, S::Error> {
+        match table {
+            Some(config) => Written::of(config).serialize(s),
+            None => s.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<PromptConfig>, D::Error> {
+        let raw = serde_json::Value::deserialize(d)?;
+        let said = raw.get("mirror").and_then(serde_json::Value::as_bool);
+        let mut config: PromptConfig =
+            serde_json::from_value(raw).map_err(serde::de::Error::custom)?;
+        config.mirror = said.unwrap_or_else(|| PromptConfig::counts_as_no_design(&config.template));
+        config.mirror_game(Who::default());
+        Ok(Some(config))
+    }
+}
+
 /// Read `[prompt.capture]`, or none when it does not read, so a capture
 /// table a newer build or a hand edit wrote never keeps the rest of the
 /// profile file from loading.
@@ -438,6 +589,7 @@ mod tests {
                 source: Some(CaptureSource::Migrated),
             }),
             show: PromptShow::Text,
+            mirror: false,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["capture"]["kind"], "regex");
@@ -542,24 +694,268 @@ mod tests {
         assert!(leftover.is_empty(), "{leftover:?}");
     }
 
+    /// Your PROMPT setting from the test kit, read from the codes the
+    /// game sent.
+    fn codes(prompt: &str, fprompt: &str) -> CaptureConfig {
+        CaptureConfig::Aabahran(AabahranCapture {
+            prompt: prompt.into(),
+            fprompt: fprompt.into(),
+            source: Some(CaptureSource::Gmcp),
+            ..AabahranCapture::default()
+        })
+    }
+
+    /// Same as the game for `prompt` with no fight prompt, for a mortal.
+    fn same_as_the_game(prompt: &str) -> String {
+        crate::card::presets::game(prompt, "", Who::default()).expect("the codes compile")
+    }
+
     #[test]
-    fn a_fresh_profile_holds_the_default_design_and_draws_nothing_yet() {
+    fn a_fresh_profile_follows_the_game_and_draws_nothing_yet() {
         let fresh = PromptConfig::fresh();
         assert!(!fresh.draw);
-        assert_eq!(fresh.template, DEFAULT_DESIGN);
+        assert!(fresh.mirror);
+        // No codes yet, so no design and the game's own prompt.
+        assert_eq!(fresh.template, "");
         let leftover = &fresh.previous_templates;
         assert!(leftover.is_empty(), "{leftover:?}");
         assert!(fresh.capture.is_none());
         assert_eq!(fresh.show, PromptShow::Text);
-        // The file keeps it from the first save.
-        assert!(!fresh.is_default());
+        // A file with no [prompt] says the same, so the file leaves it out.
+        assert!(fresh.is_default());
         let json = serde_json::to_value(&fresh).unwrap();
         assert_eq!(
             json,
-            serde_json::json!({"draw": false, "template": DEFAULT_DESIGN})
+            serde_json::json!({"draw": false, "template": "", "mirror": true})
         );
         let back: PromptConfig = serde_json::from_value(json).unwrap();
         assert_eq!(back, fresh);
+    }
+
+    #[test]
+    fn a_design_that_follows_the_game_is_same_as_the_game_for_your_codes() {
+        let prompt = crate::testkit::mud::PROMPT;
+        let mut config = PromptConfig {
+            capture: codes(prompt, ""),
+            ..PromptConfig::fresh()
+        };
+        assert!(config.mirror_game(Who::default()));
+        assert_eq!(config.template, same_as_the_game(prompt));
+        assert_eq!(
+            Some(config.template.as_str()),
+            crate::card::presets::same_as_the_game(prompt, "", Who::default()).as_deref()
+        );
+        // Again changes nothing.
+        assert!(!config.mirror_game(Who::default()));
+
+        // New codes write it again, a fight prompt included.
+        let all = crate::testkit::mud::PROMPT_ALL;
+        config.capture = codes(all, "`1%h``hp [%p] > ");
+        assert!(config.mirror_game(Who::default()));
+        let both = crate::card::presets::game(all, "`1%h``hp [%p] > ", Who::default());
+        assert_eq!(Some(config.template.clone()), both);
+        assert!(
+            config.template.contains("%{if:fight}"),
+            "{}",
+            config.template
+        );
+
+        // With no codes, or a pattern of another game, it is empty, so
+        // you see the game's own prompt.
+        config.capture = CaptureConfig::None;
+        assert!(config.mirror_game(Who::default()));
+        assert_eq!(config.template, "");
+        config.capture = CaptureConfig::Regex(RegexCapture {
+            lines: vec![r"\[(?<hp>\d+)hp\]".into()],
+            ..RegexCapture::default()
+        });
+        assert!(!config.mirror_game(Who::default()));
+        assert_eq!(config.template, "");
+        // Codes that do not compile leave the game's own prompt too.
+        config.capture = codes("<`%h> ", "");
+        assert!(crate::card::presets::game("<`%h> ", "", Who::default()).is_none());
+        assert!(!config.mirror_game(Who::default()));
+        assert_eq!(config.template, "");
+    }
+
+    #[test]
+    fn a_design_of_yours_never_follows_the_game() {
+        let mut config = PromptConfig {
+            capture: codes(crate::testkit::mud::PROMPT, ""),
+            ..PromptConfig::from_legacy(true, JAMES)
+        };
+        assert!(!config.mirror);
+        assert!(!config.mirror_game(Who::default()));
+        assert_eq!(config.template, JAMES);
+
+        // Following the game from now on writes the design at once.
+        config.follow_game(Who::default());
+        assert!(config.mirror);
+        assert_eq!(
+            config.template,
+            same_as_the_game(crate::testkit::mud::PROMPT)
+        );
+        assert!(config.draw);
+    }
+
+    #[test]
+    fn opening_the_card_never_keeps_a_design_that_follows_the_game() {
+        let mut config = PromptConfig {
+            capture: codes(crate::testkit::mud::PROMPT, ""),
+            previous_templates: vec![JAMES.into()],
+            ..PromptConfig::fresh()
+        };
+        config.mirror_game(Who::default());
+        assert_eq!(
+            config.template,
+            same_as_the_game(crate::testkit::mud::PROMPT)
+        );
+        // Same as the game brings it back, so Yours stays yours.
+        assert!(!config.note_opened());
+        assert_eq!(config.previous_templates, [JAMES]);
+    }
+
+    #[test]
+    fn a_design_counts_as_none_of_your_own_when_vosh_wrote_it() {
+        // At a glance as it last shipped, then as it first shipped.
+        assert_eq!(RETIRED_DEFAULTS.map(str::len), [884, 728]);
+        for none in ["", DEFAULT_DESIGN, RETIRED_DEFAULTS[0], RETIRED_DEFAULTS[1]] {
+            assert!(PromptConfig::counts_as_no_design(none), "{none}");
+        }
+        // Any other design is yours, even one a byte away from a default.
+        for design in [
+            JAMES.to_string(),
+            RETIRED_DEFAULTS[0].trim_end().to_string(),
+            format!("{} ", RETIRED_DEFAULTS[1]),
+            format!("{DEFAULT_DESIGN} "),
+            same_as_the_game(crate::testkit::mud::PROMPT),
+        ] {
+            assert!(!PromptConfig::counts_as_no_design(&design), "{design}");
+        }
+    }
+
+    /// A file that holds a `[prompt]` table the way a profile file does.
+    #[derive(Debug, Default, Serialize, Deserialize)]
+    struct File {
+        #[serde(default, skip_serializing_if = "Option::is_none", with = "file_table")]
+        prompt: Option<PromptConfig>,
+    }
+
+    fn through_file(config: &PromptConfig) -> (serde_json::Value, PromptConfig) {
+        let written = serde_json::to_value(File {
+            prompt: Some(config.clone()),
+        })
+        .unwrap();
+        let back: File = serde_json::from_value(written.clone()).unwrap();
+        (written["prompt"].clone(), back.prompt.expect("the table"))
+    }
+
+    #[test]
+    fn a_file_writes_mirror_only_when_the_design_does_not_say_it() {
+        let prompt = crate::testkit::mud::PROMPT;
+        // Following the game, with the design in template for an older
+        // build to draw.
+        let mut follows = PromptConfig {
+            draw: true,
+            capture: codes(prompt, ""),
+            ..PromptConfig::fresh()
+        };
+        follows.mirror_game(Who::default());
+        let (written, back) = through_file(&follows);
+        assert_eq!(written["mirror"], true);
+        assert_eq!(written["template"], same_as_the_game(prompt));
+        assert_eq!(back, follows);
+
+        // Following the game with no codes says it with an empty design.
+        let (written, back) = through_file(&PromptConfig {
+            draw: true,
+            ..PromptConfig::fresh()
+        });
+        assert!(written.get("mirror").is_none(), "{written}");
+        assert!(back.mirror);
+
+        // Your own design says it is yours.
+        let yours = PromptConfig::from_legacy(true, JAMES);
+        let (written, back) = through_file(&yours);
+        assert!(written.get("mirror").is_none(), "{written}");
+        assert_eq!(back, yours);
+
+        // Vosh's default you chose, and an empty design you chose, say
+        // they are yours.
+        for design in [DEFAULT_DESIGN, ""] {
+            let chosen = PromptConfig::from_legacy(true, design);
+            let (written, back) = through_file(&chosen);
+            assert_eq!(written["mirror"], false, "{design}");
+            assert_eq!(back, chosen, "{design}");
+        }
+
+        // Every other key reads as it always has.
+        let full = PromptConfig {
+            draw: true,
+            template: JAMES.into(),
+            previous_templates: vec!["%hp".into()],
+            capture: codes(prompt, "%h> "),
+            show: PromptShow::Pinned,
+            mirror: false,
+        };
+        let (written, back) = through_file(&full);
+        assert_eq!(written, serde_json::to_value(&full).unwrap());
+        assert_eq!(back, full);
+    }
+
+    #[test]
+    fn a_file_with_a_default_vosh_shipped_follows_the_game() {
+        let prompt = crate::testkit::mud::PROMPT;
+        for old in [DEFAULT_DESIGN, RETIRED_DEFAULTS[0], RETIRED_DEFAULTS[1]] {
+            // As an earlier build wrote it, drawing on and pinned.
+            let file = serde_json::json!({"prompt": {
+                "draw": true,
+                "template": old,
+                "previous_templates": [JAMES],
+                "capture": {"kind": "aabahran", "prompt": prompt, "fprompt": ""},
+                "show": "pinned",
+            }});
+            let read: File = serde_json::from_value(file).unwrap();
+            let config = read.prompt.expect("the table");
+            assert!(config.mirror);
+            assert_eq!(config.template, same_as_the_game(prompt));
+            // Nobody chose the old text, so it is not kept as an earlier
+            // design. The switch, the place and yours stay.
+            assert_eq!(config.previous_templates, [JAMES]);
+            assert!(config.draw);
+            assert_eq!(config.show, PromptShow::Pinned);
+        }
+
+        // With no codes it follows the game with no design, so drawing
+        // shows the game's own prompt.
+        let file = serde_json::json!({"prompt": {"draw": true, "template": DEFAULT_DESIGN}});
+        let config = serde_json::from_value::<File>(file)
+            .unwrap()
+            .prompt
+            .unwrap();
+        assert!(config.mirror);
+        assert_eq!(config.template, "");
+
+        // A file that says the default is yours keeps it.
+        let file = serde_json::json!({"prompt": {
+            "draw": true, "template": DEFAULT_DESIGN, "mirror": false,
+            "capture": {"kind": "aabahran", "prompt": prompt, "fprompt": ""},
+        }});
+        let config = serde_json::from_value::<File>(file)
+            .unwrap()
+            .prompt
+            .unwrap();
+        assert!(!config.mirror);
+        assert_eq!(config.template, DEFAULT_DESIGN);
+
+        // A mirror this build cannot read reads as the design says.
+        let file = serde_json::json!({"prompt": {"template": JAMES, "mirror": "yes"}});
+        let config = serde_json::from_value::<File>(file)
+            .unwrap()
+            .prompt
+            .unwrap();
+        assert!(!config.mirror);
+        assert_eq!(config.template, JAMES);
     }
 
     #[test]
@@ -603,43 +999,22 @@ mod tests {
         assert_eq!(config.template, DEFAULT_DESIGN);
         let leftover = &config.previous_templates;
         assert!(leftover.is_empty(), "{leftover:?}");
-    }
 
-    #[test]
-    fn a_default_an_earlier_build_shipped_takes_todays_default() {
-        // At a glance as it last shipped, then as it first shipped.
-        assert_eq!(RETIRED_DEFAULTS.map(str::len), [884, 728]);
-        for old in RETIRED_DEFAULTS {
-            assert_ne!(old, DEFAULT_DESIGN);
-            let mut config = PromptConfig {
-                previous_templates: vec![JAMES.into()],
-                show: PromptShow::Pinned,
-                ..PromptConfig::from_legacy(true, old)
-            };
-            assert!(config.upgrade_retired_default());
-            assert_eq!(config.template, DEFAULT_DESIGN);
-            // Nobody chose the old text, so it is not kept as an earlier
-            // design. The switch, the place and yours stay.
-            assert_eq!(config.previous_templates, [JAMES]);
-            assert!(config.draw);
-            assert_eq!(config.show, PromptShow::Pinned);
-            // Again changes nothing.
-            assert!(!config.upgrade_retired_default());
-        }
-
-        // Any other design stays, even one a byte away from an old
-        // default, or today's.
-        for design in [
-            JAMES.to_string(),
-            RETIRED_DEFAULTS[0].trim_end().to_string(),
-            format!("{} ", RETIRED_DEFAULTS[1]),
-            DEFAULT_DESIGN.to_string(),
-            String::new(),
-        ] {
-            let mut config = PromptConfig::from_legacy(true, &design);
-            assert!(!config.upgrade_retired_default(), "{design}");
-            assert_eq!(config.template, design);
-        }
+        // A design that follows the game is not kept, and the default
+        // you chose stops following it.
+        let mut config = PromptConfig {
+            capture: codes(crate::testkit::mud::PROMPT, ""),
+            ..PromptConfig::fresh()
+        };
+        config.mirror_game(Who::default());
+        assert!(config.use_default_design());
+        assert_eq!(config.template, DEFAULT_DESIGN);
+        assert!(!config.mirror);
+        let leftover = &config.previous_templates;
+        assert!(leftover.is_empty(), "{leftover:?}");
+        assert!(!config.mirror_game(Who::default()));
+        assert_eq!(config.template, DEFAULT_DESIGN);
+        assert!(!config.use_default_design());
     }
 
     #[test]

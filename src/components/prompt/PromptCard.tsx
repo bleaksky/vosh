@@ -26,6 +26,8 @@ import {
   takeBackOnto,
   undoEntry,
   withCapture,
+  withDesign,
+  withStart,
   type CardStep,
   type MoreItemId,
   type UndoEntry,
@@ -610,7 +612,7 @@ export function PromptCard({
         // Another profile became active meanwhile, so the edit was for a
         // table the card no longer shows.
         if (at !== opens.current) return;
-        if (text !== base.template) save({ ...base, template: text });
+        if (text !== base.template) save(withDesign(base, text));
         if (data) setDescribed({ template: text, data });
         made?.({ before: base.template, after: text, landed });
         const first = ops[0];
@@ -640,7 +642,7 @@ export function PromptCard({
         () => null,
       );
       if (at !== opens.current) return;
-      save({ ...base, template: back.before });
+      save(withDesign(base, back.before));
       if (data) setDescribed({ template: back.before, data });
       setPointing({ picked: back.from, caret: null });
     });
@@ -1022,7 +1024,7 @@ export function PromptCard({
               template={config.template}
               tokens={described?.data.tokens ?? []}
               describedFor={described?.template ?? ''}
-              onChange={(next) => save({ ...config, template: next })}
+              onChange={(next) => save(withDesign(config, next))}
               onCaretPiece={(piece) => setPointing({ picked: piece, caret: null })}
               onInsertValue={() => openPicker('text')}
               insertRef={insertRef}
@@ -1059,11 +1061,12 @@ export function PromptCard({
                   ? notMatchingLine(state.status.last_match_at)
                   : null
               }
-              onPick={(template) => {
+              onPick={(row) => {
                 setPointing(NOWHERE);
                 // Picking a start is how you ask Vosh to draw it, so
-                // drawing turns on. Start empty keeps its empty design.
-                save({ ...config, template, draw: true }, true, template === '');
+                // drawing turns on. Same as the game follows the game,
+                // and Start empty keeps its empty design.
+                save(withStart(config, row), true, row.template === '');
               }}
               onInsertValue={() => openPicker('design')}
             >

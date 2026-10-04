@@ -314,6 +314,95 @@ fn an_immortal_reads_pacify_once_char_status_says_so() {
     assert!(!pacify(&engine));
 }
 
+/// A profile with no design of its own, drawing on, that reads
+/// `prompt`.
+fn mirroring(prompt: &str) -> PromptConfig {
+    PromptConfig {
+        draw: true,
+        capture: CaptureConfig::Aabahran(AabahranCapture {
+            prompt: prompt.into(),
+            ..AabahranCapture::default()
+        }),
+        ..PromptConfig::fresh()
+    }
+}
+
+/// Same as the game for these settings and `who`.
+fn game(prompt: &str, fprompt: &str, who: Who) -> String {
+    crate::card::presets::game(prompt, fprompt, who).expect("the codes compile")
+}
+
+#[test]
+fn a_design_that_follows_the_game_follows_each_char_prompt() {
+    let mut engine = PromptEngine::default();
+    engine.connect(true);
+    engine.set_config(mirroring("<%hhp> "));
+    assert_eq!(
+        engine.config().template,
+        game("<%hhp> ", "", Who::default())
+    );
+    assert!(engine.draws());
+    let revision = engine.revision();
+
+    // You change your prompt and fight prompt in the game.
+    let fight = "`1%h``hp [%p] > ";
+    engine.observe("Char.Prompt", char_prompt(true, PROMPT, fight), at());
+    assert!(engine.config().mirror);
+    assert_eq!(
+        engine.config().template,
+        game(PROMPT, fight, Who::default())
+    );
+    assert!(engine.revision() > revision);
+    let seen = engine.take_seen();
+    assert!(seen[0].applied);
+    // The design reads what the new codes feed, so nothing is lost.
+    let leftover = &seen[0].lost;
+    assert!(leftover.is_empty(), "{leftover:?}");
+
+    // A profile switch hands over a table read before the codes moved,
+    // and the latest Char.Prompt writes the design again.
+    engine.switch_profile();
+    engine.set_config(mirroring("<%hhp> "));
+    engine.follow_latest(at());
+    assert_eq!(
+        engine.config().template,
+        game(PROMPT, fight, Who::default())
+    );
+}
+
+#[test]
+fn a_design_of_yours_stays_when_your_codes_change() {
+    let mut engine = PromptEngine::default();
+    engine.connect(true);
+    engine.set_config(following("<%hhp> "));
+    engine.observe("Char.Prompt", char_prompt(true, PROMPT, ""), at());
+    assert_eq!(codes(&engine).prompt, PROMPT);
+    assert_eq!(engine.config().template, "%hp");
+    assert!(!engine.config().mirror);
+}
+
+#[test]
+fn a_design_that_follows_the_game_is_written_for_who_you_are() {
+    let mut engine = PromptEngine::default();
+    engine.connect(true);
+    engine.set_config(mirroring("<%h %u> "));
+    let mortal = game("<%h %u> ", "", Who::default());
+    assert_eq!(engine.config().template, mortal);
+    engine.observe(
+        "Char.Status",
+        json!({"name": "Tester", "level": 60, "race": "human", "class": "warrior"}),
+        at(),
+    );
+    // Who you are decides whether some codes compile, so the design is
+    // written again for an immortal.
+    assert!(engine.who().immortal);
+    assert_eq!(engine.config().template, game("<%h %u> ", "", engine.who()));
+    assert!(engine.config().mirror);
+    // A new connection starts as a mortal again.
+    engine.connect(true);
+    assert_eq!(engine.config().template, mortal);
+}
+
 /// A profile that follows the game's settings with `prompt`.
 fn following(prompt: &str) -> PromptConfig {
     PromptConfig {
