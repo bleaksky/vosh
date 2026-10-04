@@ -1205,6 +1205,59 @@ fn a_plugin_runs_no_slash_command_but_echo_through_mud_input() {
 }
 
 #[test]
+fn a_quick_key_cannot_carry_lua_to_a_slash_command() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    p.aliases.set(Alias::new("kk", "kick %1"));
+    // Lua cannot make the quick key.
+    let ran = run_line_from(&state, &mut p, "#qkey zq #profile", LineFrom::YourLua);
+    assert_eq!(
+        ran.result.echo,
+        refused("Vosh sets a quick key to a # command only when you type it.")
+    );
+    assert!(p.target.quick_keys.iter().all(|q| q.name != "zq"));
+    // Nor can it run one you made, here or from a plugin.
+    run_line(&state, &mut p, "#qkey zq #profile");
+    run_line_from(&state, &mut p, "tar reset", LineFrom::YourLua);
+    let ran = run_line_from(&state, &mut p, "zq", LineFrom::YourLua);
+    assert_eq!(
+        ran.result.echo[1..],
+        refused("Vosh runs #profile only when you type it.")
+    );
+    assert!(!ran.replaced);
+    let ran = run_line_from(&state, &mut p, "zq", LineFrom::Plugin);
+    assert_eq!(
+        ran.result.echo[1..],
+        refused("Vosh never runs #profile for a plugin.")
+    );
+    assert!(!ran.replaced);
+    assert!(p.aliases.get("kk").is_some());
+    // A quick key that sends to the game is fine.
+    let ran = run_line_from(&state, &mut p, "#qkey zk kick", LineFrom::YourLua);
+    assert_eq!(ran.result.echo, ["quick-key `zk` -> kick"]);
+}
+
+#[test]
+fn lua_cannot_set_the_tick_command_to_a_slash_command() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let ran = run_line_from(
+        &state,
+        &mut p,
+        "#tick fire  #profile reset",
+        LineFrom::YourLua,
+    );
+    assert_eq!(
+        ran.result.echo,
+        refused("Vosh sets the tick command to a # command only when you type it.")
+    );
+    assert_eq!(p.tick.config.auto_fire, None);
+    let ran = run_line_from(&state, &mut p, "#tick fire stand", LineFrom::YourLua);
+    assert_eq!(ran.result.echo, ["tick auto-fire set to: stand"]);
+    assert_eq!(p.tick.config.auto_fire.as_deref(), Some("stand"));
+}
+
+#[test]
 fn a_plugin_alias_lasts_for_the_session_and_is_never_saved() {
     let state = AppState::default();
     let mut p = Profile::default();

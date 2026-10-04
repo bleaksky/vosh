@@ -129,17 +129,31 @@ pub(crate) fn kept_from_lua(line: &str) -> Option<&'static str> {
 
 /// Why Vosh does not run the slash command `line` that `from` asks for,
 /// read the way the slash dispatcher reads it, or None when it runs. A
-/// plugin runs no slash command but `#echo`, and your own Lua runs any
-/// but those [`kept_from_lua`] names.
+/// plugin runs no slash command but `#echo`. Your own Lua runs any but
+/// those [`kept_from_lua`] names, and it cannot set a quick key or the
+/// tick command to a slash command, which would later run as yours.
 fn slash_refusal(from: LineFrom, line: &str) -> Option<String> {
     let rest = line.trim_start().strip_prefix('#')?;
-    let (cmd, _) = split_first_word(rest);
+    let (cmd, args) = split_first_word(rest);
+    let runs_slash = |text: &str| text.trim_start().starts_with('#');
     match from {
         LineFrom::You => None,
         LineFrom::Plugin => (!matches!(cmd, "echo" | "showme"))
             .then(|| format!("Vosh never runs #{cmd} for a plugin.")),
         LineFrom::YourLua => {
-            kept_from_lua(line).map(|command| format!("Vosh runs {command} only when you type it."))
+            if let Some(command) = kept_from_lua(line) {
+                return Some(format!("Vosh runs {command} only when you type it."));
+            }
+            let (word, text) = split_first_word(args);
+            match cmd {
+                "qkey" if word != "clear" && runs_slash(text) => {
+                    Some("Vosh sets a quick key to a # command only when you type it.".to_string())
+                }
+                "tick" if word == "fire" && runs_slash(text) => Some(
+                    "Vosh sets the tick command to a # command only when you type it.".to_string(),
+                ),
+                _ => None,
+            }
         }
     }
 }
