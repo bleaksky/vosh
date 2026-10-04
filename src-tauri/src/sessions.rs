@@ -331,6 +331,15 @@ impl Sessions {
         held
     }
 
+    /// Every session but `id`, in order.
+    pub(crate) fn others(&self, id: SessionId) -> Vec<Arc<Session>> {
+        self.list
+            .iter()
+            .filter(|session| session.id != id)
+            .cloned()
+            .collect()
+    }
+
     /// The session `id` names, while the list holds it.
     pub(crate) fn get(&self, id: SessionId) -> Option<Arc<Session>> {
         self.list.iter().find(|session| session.id == id).cloned()

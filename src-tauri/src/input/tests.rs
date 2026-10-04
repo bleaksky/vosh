@@ -741,18 +741,20 @@ fn effects_of(lines: &[&str]) -> LineEffects {
 const DIRTY: LineEffects = LineEffects {
     replaced: false,
     dirty: true,
-    tick_changed: false,
+    tick_before: None,
 };
 
 const REPLACED: LineEffects = LineEffects {
     replaced: true,
     dirty: false,
-    tick_changed: false,
+    tick_before: None,
 };
 
 /// Whether `line` changed the tick settings of `p`.
 fn changes_tick(p: &mut Profile, c: &mut Connection, line: &str) -> bool {
-    run_line(&AppState::default(), p, c, line).tick_changed
+    run_line(&AppState::default(), p, c, line)
+        .tick_before
+        .is_some()
 }
 
 #[test]
@@ -800,10 +802,10 @@ fn a_line_that_leaves_the_tick_settings_alone_says_nothing() {
 
 #[test]
 fn the_effects_remember_a_tick_change_across_the_run() {
-    let effects = effects_of(&["#tick warn at 10", "look"]);
-    assert!(effects.tick_changed);
+    let effects = effects_of(&["#tick warn at 10", "#tick warn at 5", "look"]);
+    assert_eq!(effects.tick_before, Some(TickConfig::default()));
     assert!(effects.dirty);
-    assert!(!effects_of(&["#tick", "look"]).tick_changed);
+    assert_eq!(effects_of(&["#tick", "look"]).tick_before, None);
 }
 
 #[test]
@@ -940,7 +942,7 @@ fn a_reset_replaces_the_profile_and_saves_nothing() {
         LineEffects {
             replaced: true,
             dirty: true,
-            tick_changed: false,
+            tick_before: None,
         }
     );
 }

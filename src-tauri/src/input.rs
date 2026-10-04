@@ -32,6 +32,7 @@ use crate::script::{run_alias_body, ApplyResult};
 use crate::session::connection::Connection;
 use crate::session::effects::{collect_script_result, run_lines_locked, Collected, LinesRun};
 use crate::sessions::Session;
+use crate::tick::TickConfig;
 
 use slash::handle_slash;
 use target::{run_target_clear, run_target_cycle, run_target_set};
@@ -291,7 +292,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         request_prompt_repaint(session).await;
     }
 
-    settle_line_effects(app, &session.profile(), effects).await;
+    settle_line_effects(app, session, effects).await;
 
     if let Some(payload) = shown.target {
         session.emit(app, events::TARGET, &payload);
@@ -373,8 +374,9 @@ pub(crate) struct Ran {
     /// A `#profile reset`, or a `#profile load` that read its file,
     /// replaced the live profile.
     pub(crate) replaced: bool,
-    /// The line changed the tick settings, like `#tick warn at 10`.
-    pub(crate) tick_changed: bool,
+    /// The tick settings before the line, when it changed them, like
+    /// `#tick warn at 10`.
+    pub(crate) tick_before: Option<TickConfig>,
 }
 
 /// [`run_line_from`] for a line you type, for a test.
@@ -405,12 +407,12 @@ pub(crate) fn run_line_from(
     let mut lua = ApplyResult::default();
     let tick_before = profile.tick.config.clone();
     let result = process_line(state, profile, c, line, from, &mut replaced, &mut lua);
-    let tick_changed = profile.tick.config != tick_before;
+    let tick_before = (profile.tick.config != tick_before).then_some(tick_before);
     Ran {
         result,
         lua,
         replaced,
-        tick_changed,
+        tick_before,
     }
 }
 
@@ -421,17 +423,18 @@ pub(crate) fn run_line_from(
 /// disk the way the same line typed at the prompt does. Lua that changed
 /// durable state marks the profile dirty where its result is applied,
 /// after these.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct LineEffects {
     /// A `#profile reset` or `#profile load` replaced the live profile,
     /// which leaves it diverged from disk on purpose.
     pub(crate) replaced: bool,
     /// A slash command came after the last replace, or with none.
     pub(crate) dirty: bool,
-    /// A `#tick` command changed the tick settings. The status line and
-    /// the Settings Tick card show them, so every window hears the new
-    /// settings once the lines have run.
-    pub(crate) tick_changed: bool,
+    /// The tick settings before the first line that changed them, like a
+    /// `#tick` command. The status line and the Settings Tick card show
+    /// them, so every window hears the new settings once the lines have
+    /// run, and every other session on the profile follows them.
+    pub(crate) tick_before: Option<TickConfig>,
 }
 
 impl LineEffects {
@@ -441,8 +444,8 @@ impl LineEffects {
     /// state.
     pub(crate) fn note_ran(&mut self, line: &str, ran: &Ran) {
         self.note(line, ran.replaced);
-        if ran.tick_changed {
-            self.tick_changed = true;
+        if self.tick_before.is_none() {
+            self.tick_before.clone_from(&ran.tick_before);
         }
         if ran.lua.durable_changed {
             self.dirty = true;

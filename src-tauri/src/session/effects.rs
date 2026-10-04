@@ -305,7 +305,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
                 shared.as_ref(),
             )
         };
-        crate::disk::save::settle_line_effects(app, &session.profile(), effects).await;
+        crate::disk::save::settle_line_effects(app, session, effects).await;
         shown.send(app, session);
         apply = next;
     }
@@ -523,7 +523,7 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
         let mut c = session.connection.lock();
         run_fired_locked(&state, &mut p, &mut c, command, shared.as_ref())
     };
-    crate::disk::save::settle_line_effects(app, &session.profile(), effects).await;
+    crate::disk::save::settle_line_effects(app, session, effects).await;
     shown.send(app, session);
     apply_script_result(app, io, session, apply).await
 }

@@ -31,6 +31,7 @@ use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
 use crate::profile::open::OpenProfile;
 use crate::profile::shared::{strip_global_fields, GlobalConfig};
+use crate::sessions::Session;
 
 /// Serializes every write of a profile file: an open profile's
 /// persist, Settings edits to an inactive profile's file, a profile
@@ -78,9 +79,10 @@ pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(
     });
 }
 
-/// Act on what a run of input lines asked of `open`, the profile they ran
-/// on. Every path that runs lines through the input pipeline calls this
-/// after it releases the profile lock, so they all save alike.
+/// Act on what a run of input lines in `session` asked of the profile it
+/// plays. Every path that runs lines through the input pipeline calls
+/// this after it releases the profile lock and the connection's, so they
+/// all save alike.
 ///
 /// Slash commands (#alias, #trigger, #var, #endrec, #import-tintin,
 /// ...) and durable Lua actions change the profile without saving it, so
@@ -99,14 +101,20 @@ pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(
 /// just-blanked profile.
 pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    open: &Arc<OpenProfile>,
+    session: &Session,
     effects: crate::input::LineEffects,
 ) {
     let shared: SharedState = app.state::<SharedState>().inner().clone();
+    let open = session.profile();
     if effects.replaced {
         open.hold(true);
     }
-    if effects.replaced || effects.tick_changed {
+    // A line that laid a profile over handed its own connection the new
+    // settings as it ran, and the other sessions keep their counts.
+    if let Some(before) = effects.tick_before.as_ref().filter(|_| !effects.replaced) {
+        crate::tick::follow_in_other_sessions(&shared, session.id, &open, before).await;
+    }
+    if effects.replaced || effects.tick_before.is_some() {
         let events = {
             let p = open.lock().await;
             line_effect_events(&shared, &effects, &p)
@@ -118,7 +126,7 @@ pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
     // A durable change after the replace counts as wanting the live
     // state saved, the way a line typed after `#profile reset` does.
     if effects.dirty {
-        mark_profile_dirty(app, open);
+        mark_profile_dirty(app, &open);
     }
 }
 
