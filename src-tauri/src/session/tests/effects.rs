@@ -2,7 +2,7 @@
 //! asks of the session and your profile.
 
 use crate::app::state::AppState;
-use crate::input::LineEffects;
+use crate::input::{LineEffects, LineFrom};
 use crate::profile::live::Profile;
 
 #[test]
@@ -41,7 +41,7 @@ fn a_script_alias_body_hands_on_all_it_asks_for() {
     assert_eq!(apply.send_bytes, b"stand\r\norc\r\n");
     assert_eq!(apply.echoes, ["ready"]);
     assert_eq!(apply.new_timers.len(), 1);
-    assert_eq!(apply.inputs, ["look"]);
+    assert_eq!(apply.inputs, [(LineFrom::YourLua, "look".to_string())]);
     assert!(apply.prompt_vars_changed);
 }
 
@@ -111,13 +111,27 @@ fn tick_and_lua_lines_note_what_they_ask_of_the_profile() {
     let state = AppState::default();
     let mut p = Profile::default();
     let mut effects = LineEffects::default();
-    let _ = super::run_and_note_line(&state, &mut p, "#alias greet wave", &mut effects, None);
+    let _ = super::run_and_note_line(
+        &state,
+        &mut p,
+        LineFrom::You,
+        "#alias greet wave",
+        &mut effects,
+        None,
+    );
     assert!(effects.dirty);
     assert!(p.aliases.get("greet").is_some());
 
     // A reset from a timer or a script keeps the blanked profile off
     // the disk, as it does when you type it.
-    let _ = super::run_and_note_line(&state, &mut p, "#profile reset", &mut effects, None);
+    let _ = super::run_and_note_line(
+        &state,
+        &mut p,
+        LineFrom::You,
+        "#profile reset",
+        &mut effects,
+        None,
+    );
     assert_eq!(
         effects,
         LineEffects {
@@ -135,7 +149,14 @@ fn a_reset_from_a_timer_turns_away_a_config_save_read_before_it() {
     let mut p = Profile::default();
     let mut effects = LineEffects::default();
     let before = state.ui_config_generation();
-    let _ = super::run_and_note_line(&state, &mut p, "#profile reset", &mut effects, None);
+    let _ = super::run_and_note_line(
+        &state,
+        &mut p,
+        LineFrom::You,
+        "#profile reset",
+        &mut effects,
+        None,
+    );
     assert!(state.ui_config_generation() > before);
 }
 

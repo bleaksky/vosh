@@ -2123,7 +2123,8 @@ async fn lua_you_type_starts_timers_runs_input_and_sets_prompt_values() {
 // A plugin you turned on does all its entry script asks as it loads at
 // launch, the way the Lua you type does. Here it runs a line through
 // mud.input, gives your prompt a value and starts a timer, which fires
-// once the game connects. The guard keeps other tests off the shared
+// once the game connects. Of the slash commands it runs only #echo, so
+// it makes no alias you keep. The guard keeps other tests off the shared
 // native grid.
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -2141,6 +2142,7 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
     std::fs::write(
         plugin.join("main.lua"),
         "mud.timer(0, function() mud.echo('the plugin timer fired') end)\n\
+         mud.input('#echo the plugin ran ' .. 'mud.input')\n\
          mud.input('#alias plugged kick')\n\
          mud.set_prompt_var('plugin_mark', 'on')\n",
     )
@@ -2155,8 +2157,8 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
             .await
             .aliases
             .get("plugged")
-            .is_some(),
-        "the mud.input line ran"
+            .is_none(),
+        "a plugin made an alias you keep"
     );
     h.until("the value the plugin gave your prompt", |h| {
         h.events("session://prompt-vars")
@@ -2167,6 +2169,9 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
 
     h.connect().await;
     h.until_shown("the plugin timer fired").await;
+    h.until_shown("the plugin ran mud.input").await;
+    h.until_shown("[lua] Vosh never runs #alias for a plugin.")
+        .await;
     h.finish(grid).await;
 }
 
