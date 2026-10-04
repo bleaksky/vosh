@@ -238,11 +238,19 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
                 callback_id,
                 timer_id,
             } => {
-                result.new_timers.push(PendingTimer {
-                    deadline: Instant::now() + delay,
-                    callback_id,
-                    timer_id,
-                });
+                // Lua caps a delay at a day, and a deadline past what the
+                // clock can hold never comes, so such a timer waits a day.
+                let now = Instant::now();
+                let deadline = now
+                    .checked_add(delay)
+                    .or_else(|| now.checked_add(std::time::Duration::from_secs(24 * 60 * 60)));
+                if let Some(deadline) = deadline {
+                    result.new_timers.push(PendingTimer {
+                        deadline,
+                        callback_id,
+                        timer_id,
+                    });
+                }
             }
             Action::CancelTimer(id) => {
                 result.cancel_timers.push(id);
@@ -535,6 +543,21 @@ mod tests {
                 refusal("#script load"),
             ]
         );
+    }
+
+    #[test]
+    fn a_timer_no_clock_can_hold_still_applies() {
+        let mut p = Profile::default();
+        let outcome = ScriptOutcome {
+            actions: vec![Action::Timer {
+                delay: std::time::Duration::MAX,
+                callback_id: 1,
+                timer_id: 1,
+            }],
+            ..ScriptOutcome::default()
+        };
+        let apply = apply_actions(&mut p, outcome);
+        assert_eq!(apply.new_timers.len(), 1);
     }
 
     #[test]

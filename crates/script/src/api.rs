@@ -355,11 +355,29 @@ fn mud_on_gmcp(
     })
 }
 
+/// The longest a Lua timer waits. A longer delay waits this long.
+pub(crate) const TIMER_MAX: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// How long a timer of `secs` seconds waits: none for a negative number,
+/// and at most [`TIMER_MAX`]. A number that is not finite is an error,
+/// since no wait could be that long.
+fn timer_delay(secs: f64) -> LuaResult<Duration> {
+    if !secs.is_finite() {
+        return Err(mlua::Error::RuntimeError(
+            "mud.timer needs a finite number of seconds".into(),
+        ));
+    }
+    Ok(Duration::try_from_secs_f64(secs.max(0.0))
+        .unwrap_or(TIMER_MAX)
+        .min(TIMER_MAX))
+}
+
 fn mud_timer(
     lua: &Lua,
     owner: Option<&Owner>,
     (secs, callback): (f64, Function),
 ) -> LuaResult<u32> {
+    let delay = timer_delay(secs)?;
     let key = lua.create_registry_value(callback)?;
     let id = alloc_callback_id();
     let timer_id = alloc_timer_id();
@@ -368,7 +386,7 @@ fn mud_timer(
         hold(s, id, key, owner);
         s.timer_callbacks.insert(timer_id, id);
         s.queue(Action::Timer {
-            delay: Duration::from_secs_f64(secs.max(0.0)),
+            delay,
             callback_id: id,
             timer_id,
         });

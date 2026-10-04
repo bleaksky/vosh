@@ -1096,6 +1096,34 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_timer_waits_at_most_a_day_and_never_forever() {
+        let mut e = ScriptEngine::new().unwrap();
+        for secs in ["math.huge", "-math.huge", "0/0"] {
+            let outcome = e.eval(&format!("mud.timer({secs}, function() end)"), "=#lua");
+            assert_eq!(
+                error_lines(&outcome),
+                ["#lua:1: mud.timer needs a finite number of seconds"],
+                "{secs}"
+            );
+        }
+        assert_eq!(held_callbacks(&e), 0);
+        let delays: Vec<std::time::Duration> = e
+            .eval(
+                "mud.timer(1e300, function() end) mud.timer(-5, function() end)",
+                "=#lua",
+            )
+            .unwrap()
+            .actions
+            .into_iter()
+            .filter_map(|action| match action {
+                Action::Timer { delay, .. } => Some(delay),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(delays, [api::TIMER_MAX, std::time::Duration::ZERO]);
+    }
+
     /// How many Lua callbacks the engine still holds a registry slot for.
     fn held_callbacks(e: &ScriptEngine) -> usize {
         e.state.cell.lock().unwrap().callbacks.len()
