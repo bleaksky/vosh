@@ -90,18 +90,28 @@ impl MatchMode {
 }
 
 /// A mode this build does not know, from a hand edit or a later build,
-/// reads as Regex like a missing one, so one row never fails the whole
-/// file. The next save leaves it out.
+/// reads as Regex like a missing one, and so does a value that is not a
+/// name at all, such as `mode = 1`. One row never fails the whole file,
+/// and the next save leaves the field out.
 impl<'de> Deserialize<'de> for MatchMode {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let name = String::deserialize(deserializer)?;
-        Ok(match name.as_str() {
-            "text" => MatchMode::Text,
-            "starts_with" => MatchMode::StartsWith,
-            _ => MatchMode::Regex,
+        /// What a file holds in `mode`, a name or anything else.
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Name(String),
+            Other(serde::de::IgnoredAny),
+        }
+        Ok(match Raw::deserialize(deserializer)? {
+            Raw::Name(name) => match name.as_str() {
+                "text" => MatchMode::Text,
+                "starts_with" => MatchMode::StartsWith,
+                _ => MatchMode::Regex,
+            },
+            Raw::Other(_) => MatchMode::Regex,
         })
     }
 }
@@ -661,6 +671,16 @@ mod tests {
         let later = r#"{"name":"x","patterns":[{"pattern":"^a","mode":"glob"}],"actions":[]}"#;
         let t: Trigger = serde_json::from_str(later).unwrap();
         assert_eq!(t.patterns[0].mode, MatchMode::Regex);
+        // A value that is not a name reads as Regex too, and the rows
+        // around it keep their modes.
+        for value in ["1", "true", "null", "[]", "{}", "1.5"] {
+            let json = format!(
+                r#"{{"name":"x","patterns":[{{"pattern":"^a","mode":{value}}},{{"pattern":"a","mode":"text"}}],"actions":[]}}"#
+            );
+            let t: Trigger = serde_json::from_str(&json).unwrap();
+            assert_eq!(t.patterns[0].mode, MatchMode::Regex, "{value}");
+            assert_eq!(t.patterns[1].mode, MatchMode::Text, "{value}");
+        }
     }
 
     #[test]

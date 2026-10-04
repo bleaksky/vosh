@@ -1202,3 +1202,32 @@ fn match_modes_round_trip_through_toml_and_0_8_0_reads_every_row() {
     std::fs::write(catalog_path(dir.path()), &texts[1]).unwrap();
     assert_eq!(load_global_catalog(dir.path()).unwrap().triggers, [needs]);
 }
+
+#[test]
+fn a_mode_that_is_not_a_name_reads_as_regex_in_a_profile_and_the_catalog() {
+    for value in ["1", "true", "[]"] {
+        let text = format!(
+            "[[triggers]]\nname = \"needs\"\n\n\
+             [[triggers.patterns]]\npattern = '^You are hungry\\.$'\nmode = {value}\n\n\
+             [[triggers.patterns]]\npattern = \"You are thirsty.\"\nmode = \"text\"\n\n\
+             [[triggers.actions]]\nkind = \"gag\"\n"
+        );
+        let modes = |triggers: &[Trigger]| -> Vec<MatchMode> {
+            triggers[0].patterns.iter().map(|p| p.mode).collect()
+        };
+        let loaded = ProfileConfig::from_toml(&text).unwrap();
+        assert_eq!(
+            modes(&loaded.triggers),
+            [MatchMode::Regex, MatchMode::Text],
+            "{value}"
+        );
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(catalog_path(dir.path()), &text).unwrap();
+        let catalog = load_global_catalog(dir.path()).unwrap();
+        assert_eq!(
+            modes(&catalog.triggers),
+            [MatchMode::Regex, MatchMode::Text],
+            "{value}"
+        );
+    }
+}
