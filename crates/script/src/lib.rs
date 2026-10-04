@@ -73,6 +73,11 @@ pub enum ScriptError {
     Lua(#[from] mlua::Error),
 }
 
+/// The GMCP packages whose last packet Vosh never keeps for a new
+/// handler. Each chat packet is one message and not a state, so a new
+/// handler waits for the next one.
+const UNKEPT_PACKAGES: &[&str] = &["Comm.Channel"];
+
 /// What [`ScriptEngine::run_body`] puts before a body. It takes the
 /// captures table the chunk is called with and ends without a line break,
 /// so the body's lines keep their numbers.
@@ -186,7 +191,7 @@ pub struct ScriptEngine {
     /// The environment of each plugin that runs.
     envs: Envs,
     /// The last packet of each GMCP package this connection sent, which
-    /// a new handler of the package gets at once.
+    /// a new handler of the package gets at once. Chat packets stay out.
     packets: HashMap<String, serde_json::Value>,
     /// True while a new handler runs on the last packet of its package.
     replaying: bool,
@@ -548,9 +553,11 @@ impl ScriptEngine {
     /// each as a call of its own. The packet is one event, so a plugin or
     /// loose script that used its time for it skips the rest. Vosh keeps
     /// the packet as the last of its package, for the handlers made
-    /// later.
+    /// later, unless it is a chat packet.
     pub fn dispatch_gmcp(&mut self, package: &str, data: &serde_json::Value) -> ScriptOutcome {
-        self.packets.insert(package.to_string(), data.clone());
+        if !UNKEPT_PACKAGES.contains(&package) {
+            self.packets.insert(package.to_string(), data.clone());
+        }
         let ids = match self.gmcp_subs.get(package) {
             Some(v) => v.clone(),
             None => return ScriptOutcome::default(),
@@ -1205,6 +1212,30 @@ mod tests {
             .unwrap()
             .actions;
         assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
+    #[test]
+    fn a_new_handler_never_gets_the_last_chat_packet() {
+        // The tell fixture as the game sent it. Each chat packet is one
+        // message and not a state, so Vosh keeps none for later.
+        let fixture = include_str!("../../../fixtures/gmcp/aabahran/chat/tell.gmcp");
+        let (package, body) = fixture.trim_end().split_once(' ').unwrap();
+        assert_eq!(package, "Comm.Channel");
+        let tell: serde_json::Value = serde_json::from_str(body).unwrap();
+        let mut e = ScriptEngine::new().unwrap();
+        e.dispatch_gmcp(package, &tell).unwrap();
+        let handler = "mud.on_gmcp('Comm.Channel', function(d) \
+                         mud.echo(d.channel .. ' from ' .. d.speaker) \
+                       end)";
+        let loaded = plugin(&mut e, "chat", handler).unwrap();
+        let leftover = &echoes(&loaded);
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let typed = e.eval(handler, "=#lua").unwrap();
+        let leftover = &echoes(&typed);
+        assert!(leftover.is_empty(), "{leftover:?}");
+        // The next message reaches both.
+        let fired = e.dispatch_gmcp(package, &tell).unwrap();
+        assert_eq!(echoes(&fired), ["tell from Tolliver", "tell from Tolliver"]);
     }
 
     #[test]
