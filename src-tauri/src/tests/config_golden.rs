@@ -1224,6 +1224,141 @@ fn match_modes_round_trip_through_toml_and_0_8_1_reads_every_row() {
     assert_eq!(load_global_catalog(dir.path()).unwrap().triggers, [needs]);
 }
 
+/// The plain text of each line of fixtures/room-colors/looks.json that
+/// holds a word, then the two lines `do_scan` in the game's `act_move.c`
+/// prints for a room too dark to scan, the last one `*** Too Dark ***`.
+fn lines_to_match() -> Vec<String> {
+    let json: serde_json::Value =
+        serde_json::from_str(include_str!("../../../fixtures/room-colors/looks.json")).unwrap();
+    let mut out: Vec<String> = Vec::new();
+    for case in json["cases"].as_array().unwrap() {
+        for event in case["events"].as_array().unwrap() {
+            if let Some(line) = event["line"].as_str() {
+                let plain = vosh_protocol::ansi::plain_text(line.as_bytes());
+                if plain.chars().any(char::is_alphanumeric) && !out.contains(&plain) {
+                    out.push(plain);
+                }
+            }
+        }
+    }
+    out.push("You vision cannot penetrate the blanket of darkness surrounding this room.".into());
+    out.push("*** Too Dark ***".into());
+    out
+}
+
+#[test]
+fn a_text_row_saves_a_regex_that_0_8_1_reads_and_matches_the_same_lines() {
+    use vosh_automation::trigger::{matching, MatchScope, TriggerStore};
+
+    let lines = lines_to_match();
+    assert!(lines.len() > 40, "{}", lines.len());
+    // Read as a regex, the text of some of these lines fails, and the text
+    // of others misses the very line it came from. That is what 0.8.1 made
+    // of a Text row before Vosh saved the regex too.
+    let too_dark = lines.last().unwrap();
+    assert!(regex::Regex::new(too_dark).is_err(), "{too_dark}");
+    for line in [
+        "( 2) A pair of black-steel gauntlets rests on the ground.",
+        "[AFK] Tolliver is resting here.",
+    ] {
+        assert!(lines.iter().any(|l| l.trim_start() == line), "{line}");
+        assert!(!regex::Regex::new(line).unwrap().is_match(line), "{line}");
+    }
+
+    // Each line in Text as you copy it, and its first dozen letters in
+    // Starts with, one trigger each.
+    let mut profile = crate::profile::live::Profile::default();
+    for (i, line) in lines.iter().enumerate() {
+        let text = line.trim_start();
+        let start = &text[..text.char_indices().nth(12).map_or(text.len(), |(at, _)| at)];
+        for (name, copy, mode) in [
+            (format!("text {i}"), line.as_str(), MatchMode::Text),
+            (format!("starts {i}"), start, MatchMode::StartsWith),
+        ] {
+            profile
+                .triggers
+                .set(Trigger {
+                    patterns: vec![TriggerPattern {
+                        mode,
+                        ..TriggerPattern::regex(copy)
+                    }],
+                    ..Trigger::new(name, "", TriggerAction::Gag)
+                })
+                .unwrap();
+        }
+    }
+    // The names of the triggers in `store` that match each line.
+    let matches = |store: &TriggerStore| -> Vec<Vec<String>> {
+        lines
+            .iter()
+            .map(|line| {
+                let mut names: Vec<String> = matching(store, line, MatchScope::Line)
+                    .iter()
+                    .map(|t| t.name.clone())
+                    .collect();
+                names.sort();
+                names
+            })
+            .collect()
+    };
+    let wanted = matches(&profile.triggers);
+    for (line, names) in lines.iter().zip(&wanted) {
+        assert!(names.len() >= 2, "{line:?} {names:?}");
+    }
+
+    for (file, text) in [
+        (
+            "profile",
+            profile_bytes(&ProfileConfig::from_profile(&profile)),
+        ),
+        (
+            "catalog",
+            catalog_bytes(&GlobalCatalog::from_profile(&profile)),
+        ),
+    ] {
+        // 0.8.1 reads each row with no mode and no text. Every regex
+        // compiles, so it keeps every trigger, and each matches the lines
+        // it matches in this build.
+        let old: OldRowsFile = toml::from_str(&text).unwrap();
+        assert_eq!(old.triggers.len(), lines.len() * 2, "{file}");
+        let mut old_matches = vec![Vec::new(); lines.len()];
+        for t in &old.triggers {
+            let regex = regex::Regex::new(&t.patterns[0].pattern)
+                .unwrap_or_else(|e| panic!("0.8.1 drops {:?} from the {file}: {e}", t.name));
+            for (names, line) in old_matches.iter_mut().zip(&lines) {
+                if regex.is_match(line) {
+                    names.push(t.name.clone());
+                }
+            }
+        }
+        for names in &mut old_matches {
+            names.sort();
+        }
+        assert_eq!(old_matches, wanted, "{file}");
+
+        // Its next save writes each row as a regex alone. This build reads
+        // it back as a Regex row that matches the same lines.
+        let saved = toml::to_string(&old).unwrap();
+        assert!(!saved.contains("\nmode = "), "{saved}");
+        assert!(!saved.contains("\ntext = "), "{saved}");
+        let back = match file {
+            "profile" => ProfileConfig::from_toml(&saved).unwrap().triggers,
+            _ => {
+                let dir = tempfile::tempdir().unwrap();
+                std::fs::write(catalog_path(dir.path()), &saved).unwrap();
+                load_global_catalog(dir.path()).unwrap().triggers
+            }
+        };
+        assert_eq!(back.len(), lines.len() * 2, "{file}");
+        let mut store = TriggerStore::new();
+        for t in back {
+            assert_eq!(t.patterns[0].mode, MatchMode::Regex, "{file}");
+            store.set(t).unwrap();
+        }
+        assert_eq!(matches(&store), wanted, "{file}");
+    }
+}
+
 #[test]
 fn a_mode_that_is_not_a_name_reads_as_regex_in_a_profile_and_the_catalog() {
     for value in ["1", "true", "[]"] {
