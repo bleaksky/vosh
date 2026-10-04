@@ -23,12 +23,19 @@ use crate::owner::Owner;
 /// Each environment gets its own read only stand in for each library
 /// table, so a `rawset` on one reaches that plugin alone. The string
 /// methods read the string library through the metatable every string
-/// shares, so that metatable hides itself from `getmetatable`.
+/// shares, so a plugin's own `getmetatable` hides that metatable, and
+/// your own Lua still reads it as it always has.
 const ENV: &str = r#"
 local std = ...
 local error, next, setmetatable, type = error, next, setmetatable, type
+local raw_getmetatable = getmetatable
 
-getmetatable("").__metatable = false
+local function plugin_getmetatable(value)
+  if type(value) == "string" then
+    return false
+  end
+  return raw_getmetatable(value)
+end
 
 local function read_only(lib, label)
   local proxy = {}
@@ -54,6 +61,7 @@ return function(mud)
       view[key] = value
     end
   end
+  view.getmetatable = plugin_getmetatable
   local env = { mud = mud }
   env._G = env
   return setmetatable(env, { __index = view, __metatable = false })
