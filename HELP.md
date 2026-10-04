@@ -193,9 +193,11 @@ Aliases expand a short name into one or more commands. They live in Settings und
 
 Captures pull words from the line you typed. `%1` through `%9` pull the first through ninth word after the alias name. `%0` pulls the whole tail, `%1-` pulls word one through the end with spacing intact, and a missing word expands to nothing. `%%` gives a literal percent.
 
-Give related aliases a shared name in `Group` to turn them on and off together with `#group <name> on|off`. Under `Advanced`, `Run Lua instead` runs a Lua script in place of the expansion, with the words you typed in its captures table.
+Give related aliases a shared name in `Group` to turn them on and off together, with the switch on the heading of their group or with `#group <name> on|off`. Under `Advanced`, `Run Lua instead` runs a Lua script in place of the expansion, with the words you typed in its captures table.
 
-Triggers, Aliases, and Macros each list your items under a heading for every group, and Presets under a heading for each category. The items with no group sit at the top under no heading. Click a heading to fold its group away, and click it again to open it. The chevron turns down while the group is open, and a folded heading counts the items it holds. With a heading in focus, `ArrowLeft` folds it and `ArrowRight` opens it, and `ArrowUp` and `ArrowDown` move through the headings and items as one list. Each list remembers the groups you fold. Type in the filter and every folded group with a match opens until you clear it. Pick an item from the matches and its group stays open.
+Triggers, Aliases, Macros, and Timers each list your items under a heading for every group, and Presets under a heading for each category. The items with no group sit at the top under no heading. Click a heading to fold its group away, and click it again to open it. The chevron turns down while the group is open, and a folded heading counts the items it holds. With a heading in focus, `ArrowLeft` folds it and `ArrowRight` opens it, and `ArrowUp` and `ArrowDown` move through the headings and items as one list. Each list remembers the groups you fold. Type in the filter and every folded group with a match opens until you clear it. Pick an item from the matches and its group stays open.
+
+The switch after a group heading turns the whole group on and off at once, the same as `#group`, and each item keeps its own `Enabled`. It acts as you flip it, with no `Save`, and a group you just named gets its switch once you save it. `Tab` from a heading reaches its switch, and `Space` flips it. A timer takes a `Group` too, and a timer in a group that is off waits, then starts a whole interval once the group comes back on. In loadout mode, while an active loadout lists groups, the loadouts decide each group of triggers, aliases, and macros. Its switch waits, and a note under the heading names the loadouts that decide it.
 
 Example. An alias named `kk` with the expansion `kick %1; backstab %1` turns `kk dragon` into `kick dragon` followed by `backstab dragon`.
 
@@ -288,7 +290,7 @@ Macros bind a key to a command that fires while the command line has focus. They
 
 A macro fires only while the command line has focus. On macOS the `Cmd` shortcuts belong to Vosh and `Ctrl` belongs to your macros.
 
-Turn on `Show the commands your macros send` under Input, then Command line, to make each press show what it sent. `#group <name> on|off` turns a whole group of macros on and off from the command line, along with matching alias and trigger groups.
+Turn on `Show the commands your macros send` under Input, then Command line, to make each press show what it sent. `#group <name> on|off` turns a whole group of macros on and off from the command line, along with matching alias, trigger, and timer groups.
 
 Example. Bind `F1` to `stand; flee` and pressing `F1` in the command line sends both commands.
 
@@ -575,7 +577,7 @@ A trigger two characters had in different versions keeps each version, and the s
 
 Click `Turn all off`, then `Save`, to park the catalog dormant. Dormant disables every grouped alias, trigger, and macro, and it survives restarts and profile switches. Items without a group always stay live.
 
-When no active loadout declares any enabled groups, the loadouts impose nothing and each group stays on or off as you left it.
+When no active loadout declares any enabled groups, the loadouts impose nothing and each group stays on or off as you left it. While they impose, the switch on each catalog group in Automation waits, with a note that names the loadouts that decide it. Timers stay with each profile, so no loadout turns a timer group on or off.
 
 Activation is the only edit Loadouts makes. Author or reshape loadouts by editing `loadouts.toml` in the app data folder while Vosh is closed. The migration wizard runs once. It will not build a new catalog while `catalog.toml` or `loadouts.toml` sits in the app data folder, while `profiles/legacy/` holds the copies from an earlier run, or while an earlier run waits to finish at the next launch.
 
@@ -703,7 +705,7 @@ This is every slash command Vosh understands today.
 - `#prompt draw on|off` draws your design in place of your prompt in this profile, or shows the game's own prompt.
 - `#prompt show text|lifted|pinned` shows your prompt in this profile in the text, lifted on a band in the text, or pinned above the command line.
 - `#prompt default` puts Vosh's default design in place of the design in this profile and keeps yours as an earlier design.
-- `#group <name> on|off` toggles a group, `#group <name>` shows state, `#groups` lists.
+- `#group <name> on|off` turns a group of triggers, aliases, macros, and timers on or off, `#group <name>` shows state, `#groups` lists.
 - `#tick`, `#tick interval <secs>`, `#tick reset`, `#tick on {pattern}`, `#tick off`, `#tick fire <command>`, `#tick nofire`, `#tick sound on|off`, `#tick disable`, `#tick enable` drive the tick timer.
 - `#tick warn`, `#tick warn at <secs>`, `#tick warn message <text>`, `#tick warn color <name>`, `#tick warn off` shape the tick warning.
 - `#script load <name>` loads a Lua file, `#script reload` reruns loaded scripts, `#scripts` lists them.
@@ -753,7 +755,7 @@ In the terminal menu. `ArrowUp` and `ArrowDown` move through the items, `Enter` 
 
 In Settings and Help. `Cmd+F` puts the caret in the search, `ArrowUp` and `ArrowDown` move through the results, and `Escape` clears the search. In Help, `Enter` steps to the next match in the topic you read and `Shift+Enter` to the previous one.
 
-In an Automation list in Settings. `ArrowUp` and `ArrowDown` move through the group headings and items, and `Home` and `End` jump to the first and the last. On a heading, `ArrowLeft` folds its group and `ArrowRight` opens it.
+In an Automation list in Settings. `ArrowUp` and `ArrowDown` move through the group headings and items, and `Home` and `End` jump to the first and the last. On a heading, `ArrowLeft` folds its group and `ArrowRight` opens it. `Tab` from a heading reaches its group switch, and `Space` flips it.
 
 Mouse on the terminal. Wheel up opens the scrollback split. Middle click closes the split and snaps to the live tail. Right click opens the terminal menu.
 
