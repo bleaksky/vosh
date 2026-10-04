@@ -39,8 +39,11 @@ export function themeThumb(theme: AppTheme): ThemeThumb {
   };
 }
 
-/** The six themes the approved board shows first, in its order. */
+/** The themes the gallery shows first: Vosh's signature pair, then the
+ *  six the approved board shows first, in its order. */
 export const GALLERY_LEAD_IDS = [
+  'triad',
+  'rubric',
   'nord',
   'obsidian-ember',
   'vellum',
@@ -49,8 +52,9 @@ export const GALLERY_LEAD_IDS = [
   'tokyo-night',
 ] as const;
 
-/** Every theme in gallery order: the board's six first, then the other
- *  built ins by label, then your custom themes as you added them. */
+/** Every theme in gallery order: the lead (GALLERY_LEAD_IDS) first, then
+ *  the other built ins by label, then your custom themes as you added
+ *  them. */
 export function galleryThemes(builtins: AppTheme[], custom: AppTheme[]): AppTheme[] {
   const lead = GALLERY_LEAD_IDS.map((id) => builtins.find((t) => t.id === id)).filter(
     (t): t is AppTheme => t !== undefined,

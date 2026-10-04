@@ -425,6 +425,10 @@ describe('Draining chips', () => {
   const HOURS_READ: Record<string, string> = {
     'obsidian-ember warn': '10.23 to 6.51',
     'obsidian-ember danger': '6.94 to 5.10',
+    'triad warn': '11.53 to 6.71',
+    'triad danger': '7.04 to 4.99',
+    'rubric warn': '6.13 to 4.64',
+    'rubric danger': '3.86 to 3.50',
     'vellum warn': '3.84 to 3.09',
     'vellum danger': '4.26 to 3.78',
     'kanso-zen warn': '8.90 to 5.74',

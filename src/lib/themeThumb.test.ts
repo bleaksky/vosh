@@ -62,7 +62,7 @@ describe('themeThumb', () => {
 });
 
 describe('galleryThemes', () => {
-  it('leads with the board order, then the rest by label, then custom themes', () => {
+  it('leads with the signature pair and the board order, then the rest by label, then custom themes', () => {
     const custom = customToAppTheme({
       id: 'aardvark',
       label: 'Aardvark',
@@ -71,7 +71,9 @@ describe('galleryThemes', () => {
       chrome: {},
     });
     const ids = galleryThemes(BUILTIN_THEMES, [custom]).map((t) => t.id);
-    expect(ids.slice(0, 6)).toEqual([
+    expect(ids.slice(0, 8)).toEqual([
+      'triad',
+      'rubric',
       'nord',
       'obsidian-ember',
       'vellum',
@@ -82,7 +84,7 @@ describe('galleryThemes', () => {
     expect(ids).toHaveLength(BUILTIN_THEMES.length + 1);
     expect(ids[ids.length - 1]).toBe('aardvark');
     const rest = galleryThemes(BUILTIN_THEMES, [])
-      .slice(6)
+      .slice(8)
       .map((t) => t.label);
     expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)));
     expect(rest[0]).toBe('Catppuccin');

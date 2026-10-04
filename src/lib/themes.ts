@@ -176,6 +176,94 @@ const obsidianEmber: AppTheme = {
   chrome: { accent: '#ef8f2f', onAccent: '#140b02' },
 };
 
+// ── Triad ───────────────────────────────────────────────────────────
+// Vosh's signature dark, under the sky it is named for. Each moon sits
+// on the slot moon.c paints it in: Lysenties silver in bright white,
+// Nercuros cyan in bright cyan, Dyphrities blood red in red, a scarlet
+// that stays apart from green for deuteranopes. The ground is a violet
+// night and body text a neutral stone, so both moons stand clear of it.
+// The cursor is Nercuros cyan, which the theme pins as its accent. It
+// passes all 46 game checks as it stands, so it keeps no fit.
+const triad: AppTheme = {
+  id: 'triad',
+  label: 'Triad',
+  description:
+    'The three moons of Aabahran over a violet night. Each moon keeps the color the game ' +
+    'paints it in, and Nercuros cyan is the accent.',
+  source: 'Vosh',
+  author: 'James Wright',
+  license: 'GPL-3.0',
+  xterm: {
+    background: '#150c22',
+    foreground: '#dbdbda',
+    cursor: '#44d4e2',
+    cursorAccent: '#150c22',
+    selectionBackground: '#224458',
+    selectionForeground: '#dbdbda',
+    black: '#41464d',
+    red: '#fe6457',
+    green: '#45c6a8',
+    yellow: '#eeca71',
+    blue: '#78a0d5',
+    magenta: '#bb8eba',
+    cyan: '#a7c2c4',
+    white: '#b5babe',
+    brightBlack: '#98a0ab',
+    brightRed: '#ff9b8e',
+    brightGreen: '#aafddd',
+    brightYellow: '#ffeead',
+    brightBlue: '#94c2fb',
+    brightMagenta: '#dbade1',
+    brightCyan: '#84e6ff',
+    brightWhite: '#f4f8fb',
+  },
+  chrome: { accent: '#44d4e2' },
+};
+
+// ── Rubric ──────────────────────────────────────────────────────────
+// Vosh's signature light, a manuscript page. Body text is iron gall
+// ink, blue black, and room names the same ink faded to sepia. Hurt is
+// vermilion, alarms kermes, tells verdigris, the cabal lapis and says
+// umber. The bright slots are darker than the normal ones, so bold text
+// grows heavier on the paper instead of fading. The accent is the lapis
+// of the initials, so red in the window always means trouble. It passes
+// all 46 game checks as it stands, so it keeps no fit.
+const rubric: AppTheme = {
+  id: 'rubric',
+  label: 'Rubric',
+  description:
+    'Ink on parchment. Blue black text, red kept for trouble, and the lapis of the ' +
+    'initials as the accent.',
+  source: 'Vosh',
+  author: 'James Wright',
+  license: 'GPL-3.0',
+  xterm: {
+    background: '#f0e5cf',
+    foreground: '#151d2a',
+    cursor: '#3656b1',
+    cursorAccent: '#f0e5cf',
+    selectionBackground: '#cbc8c9',
+    selectionForeground: '#151d2a',
+    black: '#2b2f38',
+    red: '#e15400',
+    green: '#007873',
+    yellow: '#5d4000',
+    blue: '#4e73c2',
+    magenta: '#b05684',
+    cyan: '#2c587b',
+    white: '#5e6770',
+    brightBlack: '#948170',
+    brightRed: '#970004',
+    brightGreen: '#004e47',
+    brightYellow: '#3b2200',
+    brightBlue: '#334eb1',
+    brightMagenta: '#8f3075',
+    brightCyan: '#003f56',
+    brightWhite: '#050911',
+  },
+  chrome: { accent: '#3656b1' },
+};
+
 // ── Tokyo Night ─────────────────────────────────────────────────────
 // Saturated blues, muted purples, signature deep navy. Accent on the
 // frost blue (`#7aa2f7`).
@@ -1193,6 +1281,8 @@ const solarizedLight: AppTheme = {
 
 export const BUILTIN_THEMES: AppTheme[] = [
   obsidianEmber,
+  triad,
+  rubric,
   vellum,
   kansoZen,
   tokyoNight,
