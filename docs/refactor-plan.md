@@ -57,6 +57,15 @@ Features that landed before stage B. These landed on `one-window` after R6, in t
 
 R16 places four page files Part 2 does not name. `src/lib/blink.ts` and `src/lib/xtermBlink.ts` came with blinking text and `src/lib/readableGrounds.test.ts` with readable highlight colors. `src/lib/fontLoader.ts` is older, but it now holds the page side of the font stacks twin.
 
+Features approved on October 3. You approved two design reviews in full, Vosh Scripts and Panels with 29 decisions (https://claude.ai/artifact/VYB6nnGC7Px4fAEbLbzQQ4) and Vosh Alerts and Scenes with 19 decisions (https://claude.ai/artifact/MomjSZpxcEQUuEELi2gk4T), and a few smaller asks. They land between phases, in this order.
+
+1. Right after R13, the Rust half. Lua limits, an environment and owner tags for each plugin, and the sandbox fixes. Text, Starts with and Regex match modes for triggers. The `#walk` walker in the session task. A warning when a CMUD pattern imports a variable it cannot read. Your drawn prompt mirrors the game's PROMPT until you change the design. On and off switches for whole groups, and groups for timers. A Game time row for a 12 hour clock in the status line. The docs that promise more than the code does.
+2. After R14, the Rust half of alerts and auto reconnect.
+3. After R18, every screen from both reviews. The Scripts page, profile import, the Numpad movement preset, click to walk on the map, Lua panes, the Alert row and its presets, more than one Chat pane, the reconnect notice and the Switch themes row. Then the sessions phase and the Settings shortcuts.
+4. After R22, saving a scene.
+
+The Scripts review reverses part of D5, since plugins get a page in Settings, and brings the speedwalk D3 put after 1.0 forward as `#walk` and click to walk on the tiles the game sends. Auto reconnect joins 1.0, as prompt.md already promised. R23 records all three in docs/requirements.md.
+
 The trigger engine reads `pieces` in `crates/ansi`, and the readable.rs tests read the SGR model there, so the ansi row in 3.7 and R7 item 3 no longer hold as written. R7 keeps `plain_text` and `pieces` and puts the SGR model behind a vosh-ansi `testkit` feature that the vosh-trigger tests turn on.
 
 ## Decisions taken
