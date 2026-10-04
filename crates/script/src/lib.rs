@@ -1705,7 +1705,7 @@ mod tests {
                 "=#lua",
             )
             .unwrap();
-        assert_eq!(echoes(&listed), ["_G mud rescue"]);
+        assert_eq!(echoes(&listed), ["rescue"]);
         // A plugin sees neither the others nor this view.
         let inside = plugin(&mut e, "nosy", "mud.echo(tostring(plugins))").unwrap();
         assert_eq!(echoes(&inside), ["nil"]);
@@ -1733,6 +1733,20 @@ mod tests {
             )
             .unwrap();
         assert_eq!(echoes(&read), ["3nil"]);
+        // Neither its environment nor its mud table comes out of the
+        // view, so nothing reached through it writes into the plugin.
+        let reached = e.eval(
+            "mud.echo(tostring(plugins.helpers._G) .. tostring(plugins.helpers.mud)) \
+             plugins.helpers._G.level = 99",
+            "=#lua",
+        );
+        assert_eq!(echoes(&reached), ["nilnil"]);
+        assert_eq!(
+            error_lines(&reached),
+            ["#lua:1: attempt to index a nil value (field '_G')"]
+        );
+        let read = e.eval("mud.echo(tostring(held.level))", "=#lua").unwrap();
+        assert_eq!(echoes(&read), ["3"]);
         e.unload(&Owner::Plugin("helpers".into())).unwrap();
         let read = e
             .eval(
