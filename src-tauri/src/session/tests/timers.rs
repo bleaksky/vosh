@@ -4,7 +4,7 @@ use vosh_script::Owner;
 
 use crate::profile::live::Profile;
 use crate::script::{self, PendingTimer};
-use crate::session::lua_timers::fire_round;
+use crate::session::lua_timers::{fire_round, hold};
 
 #[test]
 fn timers_a_plugin_had_no_time_for_go_back_on_the_list() {
@@ -46,4 +46,51 @@ fn timers_a_plugin_had_no_time_for_go_back_on_the_list() {
     // The next round runs the first of them.
     let (next, _) = fire_round(&mut p, held);
     assert_eq!(next.echoes.first(), Some(&format!("slow {}", ran + 1)));
+}
+
+#[test]
+fn held_timers_fire_before_a_later_timer_of_the_same_plugin() {
+    let mut p = Profile {
+        script: vosh_script::testkit::engine_with_nap(),
+        ..Profile::default()
+    };
+    let loaded = p.script.load_script(
+        Owner::Plugin("slow".into()),
+        "@slow/main.lua",
+        "for i = 1, 6 do \
+           mud.timer(0, function() os.nap(30) mud.echo('slow ' .. i) end) \
+         end \
+         mud.timer(1, function() mud.echo('later') end)",
+    );
+    assert!(!loaded.failed, "{:?}", loaded.actions);
+    let mut timers = script::apply_actions(&mut p, loaded).new_timers;
+    assert_eq!(timers.len(), 7);
+    // The first poll finds the six due, and the later timer stays on the
+    // list.
+    let mut list = timers.split_off(6);
+    let (apply, held) = fire_round(&mut p, timers);
+    let ran = apply
+        .echoes
+        .iter()
+        .filter(|line| line.starts_with("slow "))
+        .count();
+    assert!((1..=4).contains(&ran), "{:?}", apply.echoes);
+    let key = |t: &PendingTimer| (t.timer_id, t.callback_id, t.deadline);
+    // The held timers were due before anything still on the list, so
+    // they go back ahead of the later timer.
+    let mut want = held.iter().map(key).collect::<Vec<_>>();
+    want.extend(list.iter().map(key));
+    hold(&mut list, held);
+    assert_eq!(list.iter().map(key).collect::<Vec<_>>(), want);
+    // The later timer comes due before the next poll, which still runs
+    // the held timers first.
+    let (next, _) = fire_round(&mut p, list);
+    assert_eq!(next.echoes.first(), Some(&format!("slow {}", ran + 1)));
+    let last_slow = next
+        .echoes
+        .iter()
+        .rposition(|line| line.starts_with("slow "));
+    if let Some(at) = next.echoes.iter().position(|line| line == "later") {
+        assert!(last_slow < Some(at), "{:?}", next.echoes);
+    }
 }

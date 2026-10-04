@@ -2,7 +2,7 @@
 //! list, and each poll of the session loop fires the ones whose deadline
 //! passed as one round, then applies what their callbacks ask for. A
 //! timer whose plugin or loose script used its time for the round goes
-//! back on the list for the next poll.
+//! back at the front of the list, so the next poll fires it first.
 
 use std::sync::Arc;
 
@@ -44,11 +44,19 @@ pub(super) async fn fire_due<R: tauri::Runtime>(
     };
     // Before the apply, so a cancel among its actions finds them.
     if !held.is_empty() {
-        lua_timers.lock().await.extend(held);
+        hold(&mut *lua_timers.lock().await, held);
     }
     let mut sink = OutputSink::Direct;
     let mut io = ScriptIo::Session(stream, &mut sink, walker);
     apply_script_result(app, &mut io, profile, lua_timers, apply).await
+}
+
+/// Put `held`, the timers a round had no time for, back at the front of
+/// `list`, in their order. They were due before anything still on the
+/// list, so the next poll fires them first, ahead of a later timer that
+/// came due since.
+pub(super) fn hold(list: &mut Vec<PendingTimer>, held: Vec<PendingTimer>) {
+    list.splice(0..0, held);
 }
 
 /// Fire `due` as one round under the profile lock the caller holds.
