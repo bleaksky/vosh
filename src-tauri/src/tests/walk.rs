@@ -10,6 +10,14 @@
 //! looks of `do_look`, and the prompt `prompt all` sets, as the room
 //! colors fixtures print it.
 //!
+//! It writes as the game does for a new character. No IAC GA ends a
+//! prompt, since the game sends one only for `COMM_TELNET_GA`
+//! (`comm.c:1626`), which a new character lacks (`save.c:1961`) and only
+//! an immortal can set (`act_wiz.c:9626`). The answer to a command starts
+//! no new row (`comm.c:2111`), so it runs on from the prompt before it. Char.Prompt comes at login (`comm.c:2578`), so a
+//! profile whose capture follows the game reads each prompt as it ends a
+//! read, and the line after it starts clean.
+//!
 //! The fake answers each step as the test scripts it: it moves you, sends
 //! you elsewhere, fails, goes dark, starts a fight, sits you down, says
 //! nothing, or waits for the test.
@@ -32,7 +40,6 @@ const DONT: u8 = 254;
 const DO: u8 = 253;
 const WILL: u8 = 251;
 const SB: u8 = 250;
-const GA: u8 = 249;
 const SE: u8 = 240;
 const GMCP: u8 = 201;
 
@@ -121,6 +128,19 @@ pub(crate) fn map_tiles(num: i64) -> Option<Value> {
     Some(msg.data)
 }
 
+/// The Char.Prompt the game sends at login for `prompt all`, from the
+/// fixture.
+fn char_prompt() -> Vec<u8> {
+    let path = format!(
+        "{}/../fixtures/gmcp/aabahran/char-prompt.gmcp",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
+    let msg = vosh_protocol::gmcp::parse(&raw).expect("the fixture parses");
+    assert_eq!(msg.package, "Char.Prompt");
+    packet(&msg.package, &msg.data)
+}
+
 /// One GMCP packet on the wire.
 fn packet(package: &str, data: &Value) -> Vec<u8> {
     let mut out = vec![IAC, SB, GMCP];
@@ -202,15 +222,20 @@ impl World {
         let Some(dir) = dir else {
             return match answer {
                 // A command that is no step gets its prompt.
-                Answer::Silent => self.pulse(Vec::new(), ""),
-                _ => self.arrive(self.here),
+                Answer::Silent => self.pulse(Vec::new()),
+                // The login look, then Char.Prompt.
+                _ => {
+                    let mut out = self.look(self.here);
+                    out.extend(char_prompt());
+                    self.pulse(out)
+                }
             };
         };
         if self.fighting {
-            return self.pulse(Vec::new(), "No way!  You are still fighting!\n\r");
+            return self.say("No way!  You are still fighting!");
         }
         if self.sitting {
-            return self.pulse(Vec::new(), "Better stand up first.\n\r");
+            return self.say("Better stand up first.");
         }
         let to = exits(self.here)
             .iter()
@@ -218,9 +243,9 @@ impl World {
             .map(|(_, to)| *to);
         match answer {
             Answer::Silent => Vec::new(),
-            Answer::Fail(line) => self.pulse(Vec::new(), &format!("{line}\n\r")),
+            Answer::Fail(line) => self.say(line),
             _ if to.is_none() && !matches!(answer, Answer::Elsewhere(_)) => {
-                self.pulse(Vec::new(), "Alas, you cannot go that way.\n\r")
+                self.say("Alas, you cannot go that way.")
             }
             Answer::Elsewhere(num) => {
                 self.here = num;
@@ -229,11 +254,11 @@ impl World {
             Answer::Dark | Answer::Blind => {
                 self.here = to.unwrap_or(self.here);
                 let line = if matches!(answer, Answer::Dark) {
-                    "It is pitch black ... \n\r"
+                    "It is pitch black ... "
                 } else {
-                    "You can't see a thing!\n\r"
+                    "You can't see a thing!"
                 };
-                self.pulse(Vec::new(), line)
+                self.say(line)
             }
             Answer::Fight | Answer::Sit | Answer::Go | Answer::Wait(_) => {
                 self.fighting = matches!(answer, Answer::Fight);
@@ -245,23 +270,37 @@ impl World {
         }
     }
 
-    /// The look in room `num`: its tiles and Room.Info, then its exits
-    /// line, as `do_look` sends them.
+    /// The pulse after a step that reaches room `num`: its look.
     fn arrive(&mut self, num: i64) -> Vec<u8> {
-        let mut early = Vec::new();
-        if let Some(tiles) = map_tiles(num) {
-            early.extend(packet("Map.Tiles", &tiles));
-        }
-        early.extend(packet("Room.Info", &room_info(num)));
-        let words: Vec<&str> = exits(num).iter().map(|(word, _)| *word).collect();
-        self.pulse(early, &format!("[Exits: {}]\n\r", words.join(" ")))
+        let look = self.look(num);
+        self.pulse(look)
     }
 
-    /// One pulse: the packets a command sent, then Char.Combat and
-    /// Char.State as each prompt sends them, then the text, a blank line
-    /// and the prompt with IAC GA.
-    fn pulse(&self, early: Vec<u8>, text: &str) -> Vec<u8> {
-        let mut out = early;
+    /// The look in room `num`: its tiles and Room.Info, then its exits
+    /// line, as `do_look` sends them.
+    fn look(&self, num: i64) -> Vec<u8> {
+        let mut out = Vec::new();
+        if let Some(tiles) = map_tiles(num) {
+            out.extend(packet("Map.Tiles", &tiles));
+        }
+        out.extend(packet("Room.Info", &room_info(num)));
+        let words: Vec<&str> = exits(num).iter().map(|(word, _)| *word).collect();
+        out.extend_from_slice(format!("[Exits: {}]\n\r", words.join(" ")).as_bytes());
+        out
+    }
+
+    /// The pulse after a command that prints `line` and nothing else.
+    fn say(&self, line: &str) -> Vec<u8> {
+        self.pulse(format!("{line}\n\r").into_bytes())
+    }
+
+    /// One pulse: what the command wrote, then a blank line, the prompt,
+    /// and Char.Combat and Char.State, which each prompt sends after it,
+    /// as `process_output` writes them (`comm.c:1621` to `1627`).
+    fn pulse(&self, wrote: Vec<u8>) -> Vec<u8> {
+        let mut out = wrote;
+        out.extend_from_slice(b"\n\r");
+        out.extend_from_slice(PROMPT.as_bytes());
         let combat = if self.fighting {
             json!({"target": "a Blackwatch guard", "condition": "quite a few wounds", "hp_pct": 54})
         } else {
@@ -273,10 +312,6 @@ impl World {
             "Char.State",
             &json!({"position": position, "language": "common"}),
         ));
-        out.extend_from_slice(text.as_bytes());
-        out.extend_from_slice(b"\n\r");
-        out.extend_from_slice(PROMPT.as_bytes());
-        out.extend_from_slice(&[IAC, GA]);
         out
     }
 }
@@ -360,19 +395,46 @@ async fn play(mut socket: TcpStream, world: Arc<StdMutex<World>>) -> std::io::Re
     }
 }
 
+/// What the terminal showed, in order.
+#[derive(Clone)]
+enum Shown {
+    /// A `session://output` payload.
+    Output(String),
+    /// Your typed line, which the webview echoes itself.
+    Echo(String),
+}
+
 /// The app, one fake game and one connection to it.
 struct Harness {
     app: App<MockRuntime>,
     state: SharedState,
-    outputs: Arc<StdMutex<Vec<String>>>,
+    shown: Arc<StdMutex<Vec<Shown>>>,
     world: Arc<StdMutex<World>>,
     port: u16,
 }
 
 impl Harness {
     /// A fake game that starts you at the fountain, and an app not yet
-    /// connected. It loads no profile set, so a save writes nothing.
+    /// connected, whose capture follows the game's prompt settings. It
+    /// loads no profile set, so a save writes nothing.
     async fn new() -> Self {
+        let h = Self::unread().await;
+        h.state
+            .profile
+            .lock()
+            .await
+            .set_prompt_config(vosh_prompt::PromptConfig {
+                capture: vosh_prompt::CaptureConfig::Aabahran(
+                    vosh_prompt::config::AabahranCapture::default(),
+                ),
+                ..vosh_prompt::PromptConfig::default()
+            });
+        h
+    }
+
+    /// [`Harness::new`] with a profile that reads no prompt, so each
+    /// prompt waits in the session for the line that ends it.
+    async fn unread() -> Self {
         let world = Arc::new(StdMutex::new(World {
             here: FOUNTAIN,
             ..World::default()
@@ -383,25 +445,26 @@ impl Harness {
             .build(mock_context(noop_assets()))
             .expect("a mock app");
         app.manage::<SharedState>(state.clone());
-        let outputs = Arc::new(StdMutex::new(Vec::new()));
-        let heard = outputs.clone();
+        let shown = Arc::new(StdMutex::new(Vec::new()));
+        let heard = shown.clone();
         app.listen_any("session://output", move |event| {
             heard
                 .lock()
                 .expect("the outputs")
-                .push(event.payload().to_string());
+                .push(Shown::Output(event.payload().to_string()));
         });
         Self {
             app,
             state,
-            outputs,
+            shown,
             world,
             port,
         }
     }
 
     /// Connect the way `session::connect` does, and wait for the look the
-    /// game sends at login.
+    /// game sends at login, and for a profile that reads the prompt, the
+    /// prompt after it.
     async fn connect(&self) {
         let handle = crate::session::spawn(
             self.app.handle().clone(),
@@ -418,6 +481,21 @@ impl Harness {
         *self.state.session.lock().await = Some(handle);
         self.until("the look at login", |h| h.text().contains("[Exits:"))
             .await;
+        let reads = {
+            let p = self.state.profile.lock().await;
+            !p.prompt.config().capture.is_none()
+        };
+        if !reads {
+            return;
+        }
+        for _ in 0..1000 {
+            let read = self.state.profile.lock().await.prompt.vars.prompt_vars();
+            if read.values().any(|value| value == "1020") {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        panic!("the prompt at login was never read");
     }
 
     /// The step answers the game gives, in order.
@@ -429,8 +507,27 @@ impl Harness {
             .extend(answers);
     }
 
-    /// Type `line` and press Enter.
+    /// Type `line` and press Enter. The webview echoes it after the
+    /// newest output it took, and tells the session so.
     async fn type_line(&self, line: &str) {
+        let after = {
+            let mut shown = self.shown.lock().expect("the outputs");
+            let after = shown
+                .iter()
+                .filter_map(|s| match s {
+                    Shown::Output(payload) => {
+                        serde_json::from_str::<Value>(payload).ok()?["id"].as_u64()
+                    }
+                    Shown::Echo(_) => None,
+                })
+                .max()
+                .unwrap_or(0);
+            shown.push(Shown::Echo(format!("{line}\r\n")));
+            after
+        };
+        if let Some(handle) = self.state.session.lock().await.as_ref() {
+            let _ = handle.local_write(after);
+        }
         crate::ipc::session::session_send_input(
             self.app.handle().clone(),
             self.app.state(),
@@ -458,11 +555,19 @@ impl Harness {
     }
 
     /// Everything the terminal got, as plain text, each output's region
-    /// it replaces first, as the renderers write it.
+    /// it replaces first, as the renderers write it, and your typed
+    /// echoes.
     fn text(&self) -> String {
-        let outputs = self.outputs.lock().expect("the outputs").clone();
+        let shown = self.shown.lock().expect("the outputs").clone();
         let mut bytes = Vec::new();
-        for payload in outputs {
+        for each in shown {
+            let payload = match each {
+                Shown::Output(payload) => payload,
+                Shown::Echo(line) => {
+                    bytes.extend_from_slice(line.as_bytes());
+                    continue;
+                }
+            };
             let json: Value = serde_json::from_str(&payload).expect("an output payload");
             for part in [&json["replace"]["b64"], &json["b64"], &json["hold"]] {
                 if let Some(text) = part.as_str() {
