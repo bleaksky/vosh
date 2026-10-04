@@ -227,3 +227,42 @@ describe('the library the Rust side leans on', () => {
     expect(ids).not.toContain(PRESETS_OFF_MARKER);
   });
 });
+
+// What a preset's replace makes of a line, as the trigger engine does
+// it: the first pattern that matches rewrites the line through its
+// template, $1 to $9 filled from the groups. Colors stripped, so the test
+// reads the words. Null when no pattern matches.
+function rewritten(id: string, line: string): string | null {
+  const preset = presetById(id);
+  for (const trigger of preset ? presetTriggers(preset) : []) {
+    for (const p of trigger.patterns) {
+      const m = new RegExp(p.pattern).exec(line);
+      if (!m) continue;
+      for (const action of trigger.actions) {
+        if (action.kind !== 'replace') continue;
+        const out = action.template.replace(/\$(\d)/g, (_, n: string) => m[Number(n)] ?? '');
+        // eslint-disable-next-line no-control-regex
+        return out.replace(/\x1b\[[0-9;]*m/g, '');
+      }
+    }
+  }
+  return null;
+}
+
+// The level up, as gain_exp and advance_level print it in update.c: the
+// level on one line, then what you gain on the next, with hit point and
+// practice singular when one.
+describe('the Gold, experience, and levels preset', () => {
+  it('marks the line that says you raised a level', () => {
+    expect(rewritten('loot_progression', 'You raise a level!!')).toBe('You raise a level!!');
+  });
+
+  it('marks what you gain and keeps the game words', () => {
+    for (const line of [
+      'You gain:  12/1032 hit points, 9/809 mana, 5/935 move, and 4 practices.',
+      'You gain:  7/1027 hit points, 3/803 mana, 1/931 move, and 1 practice.',
+    ]) {
+      expect(rewritten('loot_progression', line), line).toBe(line);
+    }
+  });
+});
