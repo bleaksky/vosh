@@ -8,9 +8,10 @@
 //!   connection. It sends your lines, takes each socket read, repaints
 //!   your prompt when a deadline passes, polls the tick and the timers,
 //!   and ends the connection.
-//! - `connection` holds the [`connection::Connection`], what one
-//!   connection holds apart from the profile: your target, the room
-//!   list and look, the tick's count and the prompt engine.
+//! - `connection` holds the [`connection::Connection`], all the session
+//!   state the line pipeline changes, under one lock: your target, the
+//!   room list and look, the tick's count, the prompt engine, the session
+//!   variables and the Lua engine.
 //! - `socket` opens the plain or TLS socket.
 //! - `read` is the socket read path, from each telnet event to what the
 //!   end of a read sends.

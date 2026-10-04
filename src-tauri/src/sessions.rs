@@ -1,5 +1,5 @@
-//! The sessions the app holds. Each [`Session`] keeps what one connection
-//! holds apart from the profile and points at the profile it plays, and
+//! The sessions the app holds. Each [`Session`] keeps who one session is,
+//! with its [`Connection`], and points at the profile it plays, and
 //! [`Sessions`] lists them in order with the one selected, beside the
 //! profiles they play, each open once. The app starts with one session,
 //! selected, and launch puts the sessions profiles.toml lists in its
@@ -81,13 +81,16 @@ impl SessionId {
     }
 }
 
-/// What one session holds apart from the profile: the name you gave it,
-/// the task that runs its connection, what that connection shares with
-/// the commands, its Lua timers and scrollback, the count of what reached
-/// its terminal, and what the app keeps about its connection, where it
-/// last connected, the host and port, the character logged in, the
-/// terminal size, the last affects and their fulls. It points at the
-/// profile it plays.
+/// Who one session is, and the facts about it that leaf locks guard. The
+/// split with [`Connection`] is by lock, not by meaning. All the session
+/// state the line pipeline changes sits in its [`Connection`], under one
+/// std lock that lives as long as the session. Here sit the name you gave
+/// it, where it last connected, which the row keeps once the connection
+/// ends, the host, port and character of the live connection, which a
+/// disconnect clears, the terminal size, the last affects and their
+/// fulls, beside the task that runs its connection, its Lua timers, its
+/// scrollback and the count of what reached its terminal. It points at
+/// the profile it plays.
 pub(crate) struct Session {
     pub(crate) id: SessionId,
     /// The name you gave the session, which its row and a line in another
@@ -107,12 +110,14 @@ pub(crate) struct Session {
     /// holds it while the task ends, and the task locks the profile, the
     /// connection, the log and the scrollback as it ends.
     pub(crate) slot: Mutex<Option<SessionHandle>>,
-    /// What one connection holds apart from the profile, your target and
-    /// the room list among it. It outlives each connection of the
-    /// session, and the session loop holds a handle to it. See
+    /// All the session state the line pipeline changes, your target, the
+    /// room list and the Lua engine among it. It outlives each connection
+    /// of the session, and the session loop holds a handle to it. See
     /// [`crate::session::connection`] for where its lock sits.
     pub(crate) connection: SharedConnection,
-    /// The `mud.timer` timers the session loop fires.
+    /// The `mud.timer` timers the session loop fires. They sit apart from
+    /// the engine, under a lock of their own, so the loop's poll finds
+    /// none due without the profile lock that the engine's needs.
     pub(crate) lua_timers: SharedTimers,
     /// The ring of recent lines, which launch, or a restored session's
     /// first selection, reads from the session's scrollback file, and the
@@ -126,9 +131,10 @@ pub(crate) struct Session {
     /// the lock is two integer copies, so a std mutex fits.
     pub(crate) window_size: std::sync::Mutex<(u16, u16)>,
     /// The host and port of the live connection. Set when a connect
-    /// starts, cleared on disconnect. The Char.Status login path reads
-    /// it so the resolver knows which world's profile to pick. The work
-    /// inside the lock is a clone, so a std mutex fits.
+    /// starts, cleared on disconnect, where `address` keeps the last one.
+    /// The Char.Status login path reads it so the resolver knows which
+    /// world's profile to pick. The work inside the lock is a clone, so a
+    /// std mutex fits.
     pub(crate) current_connection: std::sync::Mutex<Option<(String, u16)>>,
     /// The last character name Char.Status or Char.Name gave on the live
     /// connection. Cleared on connect and disconnect. The game resends

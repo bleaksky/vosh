@@ -1,13 +1,18 @@
-//! What one connection holds apart from the profile: the target you pick,
-//! its quick keys and the characters in the room, which the commands
-//! share, the room look and the end of a fight, which the loop follows
-//! line by line, the tick's count and the prompt engine, which both read,
-//! the session's variables, its Lua engine, with the aliases its plugins
-//! make and the macro recorder, and the key its Lua stops go under. Each
-//! [`Session`](crate::sessions::Session) holds its [`Connection`] behind a
-//! lock of its own, [`SharedConnection`], and the session loop holds a
-//! handle to it, so a command reads it straight from the session and
-//! never asks the loop.
+//! All the session state the line pipeline changes, under one std lock
+//! that lives as long as the session. That is the target you pick, its
+//! quick keys and the characters in the room, which the commands share,
+//! the room look and the end of a fight, which the loop follows line by
+//! line, the tick's count and the prompt engine, which both read, and the
+//! session's variables, its Lua engine, with the aliases its plugins make
+//! and the macro recorder, and the key its Lua stops go under. The split
+//! with [`Session`](crate::sessions::Session) is by lock, not by meaning.
+//! The engine, the variables, the recorder and the plugin aliases belong
+//! to the session and outlive each connection, and they sit here because
+//! a line changes them together with the rest, beside the profile. The
+//! session keeps who it is and the facts leaf locks guard. Each session
+//! holds its [`Connection`] behind [`SharedConnection`], and the session
+//! loop holds a handle to it, so a command reads it straight from the
+//! session and never asks the loop.
 //!
 //! Its lock comes after the session map, the profile lock and the profile
 //! set, never before them. The session slot comes before it, since
@@ -29,17 +34,17 @@ use super::room_block::RoomBlock;
 use crate::profile::live::Profile;
 use crate::tick::TickRuntime;
 
-/// What one connection holds apart from the profile. Each session holds
-/// one, which outlives each connection the session makes, so a target you
-/// set offline carries into the next connection, your quick keys last
-/// until you quit, and the Lua engine runs `#lua` and plugin aliases
-/// while no game listens.
+/// All the session state the line pipeline changes. Each session holds
+/// one, which lives as long as the session and outlives each connection
+/// it makes, so a target you set offline carries into the next
+/// connection, your quick keys last until the session closes, and the Lua
+/// engine runs `#lua` and plugin aliases while no game listens.
 #[derive(Debug, Default)]
 pub(crate) struct Connection {
     /// Your target plus the quick keys that aim at it. The target clears
     /// on disconnect. The quick keys live in memory only. No profile file
-    /// holds them, so a restart brings back the stock gg, xx, zz and tt
-    /// slots, as HELP.md says.
+    /// holds them, so a restart, like a new session, brings back the
+    /// stock gg, xx, zz and tt slots, as HELP.md says.
     pub(crate) target: TargetState,
     /// The latest Room.Chars list, so `tar` can pick a character by its
     /// place or by part of its name without asking the page.
@@ -167,10 +172,10 @@ pub(crate) struct TargetState {
     pub(crate) room_idx: Option<usize>,
     /// Configurable quick-key slots. Defaults to `gg`/`xx`/`zz`/`tt`
     /// with empty verbs; users edit via `#qkey <name> <verb>`. They
-    /// belong to no one connection and last until you quit. They sit
-    /// here because every target payload carries them, and `target_get`
-    /// and the end of a session build one under this lock alone. R14b,
-    /// with a connection per tab, decides where they live.
+    /// belong to the session. Each new session starts with the stock
+    /// slots, and they last until it closes. They sit here because every
+    /// target payload carries them, and `target_get` and the end of a
+    /// connection build one under this lock alone.
     pub(crate) quick_keys: Vec<QuickKey>,
 }
 
