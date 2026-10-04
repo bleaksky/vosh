@@ -55,10 +55,7 @@ impl OpenProfile {
 
     /// Lock the profile.
     pub(crate) async fn lock(self: &Arc<Self>) -> ProfileGuard {
-        ProfileGuard {
-            guard: self.profile.clone().lock_owned().await,
-            open: self.clone(),
-        }
+        ProfileGuard::lock(self.clone()).await
     }
 
     /// The profile, locked, unless another step holds it. A frame of the
@@ -98,6 +95,14 @@ pub(crate) struct ProfileGuard {
 }
 
 impl ProfileGuard {
+    /// Lock `open`, keeping the handle.
+    pub(crate) async fn lock(open: Arc<OpenProfile>) -> Self {
+        Self {
+            guard: open.profile.clone().lock_owned().await,
+            open,
+        }
+    }
+
     /// The open profile this guard holds.
     pub(crate) fn open(&self) -> &Arc<OpenProfile> {
         &self.open
