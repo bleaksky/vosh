@@ -177,6 +177,26 @@ describe('a custom theme on a built-in id', () => {
     });
   });
 
+  it('frees the ids of the schemes Vosh added after Green Screen', () => {
+    // A Srcery or Modus Vivendi file you imported reads under the id the
+    // built in theme now has.
+    const ids = ['srcery', 'nightfly', 'melange-dark', 'melange-light', 'modus-vivendi'];
+    const out = freeBuiltinThemeIds(
+      raw({
+        theme: 'modus-vivendi',
+        light_theme: 'melange-light',
+        dark_theme: 'srcery',
+        custom_themes: ids.map((id) => custom(id, '#000000')),
+      }),
+    );
+    expect(out.custom_themes?.map((t) => t.id)).toEqual(ids.map((id) => `${id}-2`));
+    expect(out).toMatchObject({
+      theme: 'modus-vivendi-2',
+      light_theme: 'melange-light-2',
+      dark_theme: 'srcery-2',
+    });
+  });
+
   it('frees the id of every built-in theme', () => {
     const ids = BUILTIN_THEMES.map((t) => t.id);
     const out = freeBuiltinThemeIds(raw({ custom_themes: ids.map((id) => custom(id, '#000000')) }));

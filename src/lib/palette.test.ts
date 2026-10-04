@@ -410,11 +410,16 @@ describe('theme order', () => {
       'Green Screen',
       'High Contrast',
       'Kanso Zen',
+      'Melange Dark',
+      'Melange Light',
+      'Modus Vivendi',
       'Monokai',
+      'Nightfly',
       'One Dark',
       'One Half Dark',
       'Solarized Dark',
       'Solarized Light',
+      'Srcery',
       'Tango Dark',
     ]);
     expect(ordered.at(-1)).toMatchObject({ theme: { id: 'mine' }, custom: true });

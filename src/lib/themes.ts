@@ -34,7 +34,12 @@ export interface XtermPalette {
 
 /** The license a theme's colors carry. public/theme-credits.txt keeps
  *  the notice each one asks to travel with the colors. */
-export type ThemeLicense = 'MIT' | 'GPL-3.0' | 'Public domain' | 'None published';
+export type ThemeLicense =
+  | 'MIT'
+  | 'GPL-3.0'
+  | 'GPL-3.0-or-later'
+  | 'Public domain'
+  | 'None published';
 
 export interface AppTheme {
   id: string;
@@ -1279,6 +1284,289 @@ const solarizedLight: AppTheme = {
   chrome: { accent: '#268bd2' },
 };
 
+// ── Srcery ──────────────────────────────────────────────────────────
+// The Ghostty theme of srcery-terminal, as published. Its yellow cursor
+// is its warn color, so the theme pins its bright cyan as the accent.
+// The selection is the scheme's own cream under black text.
+const srcery: AppTheme = {
+  id: 'srcery',
+  label: 'Srcery',
+  description:
+    'Cream text on a warm black, with bright colors made for the terminal first. Bright cyan accent.',
+  source: 'Srcery',
+  author: 'Daniel Berg',
+  license: 'MIT',
+  xterm: {
+    background: '#121110',
+    foreground: '#fce8c3',
+    cursor: '#fed06e',
+    cursorAccent: '#121110',
+    selectionBackground: '#fce8c3',
+    selectionForeground: '#121110',
+    black: '#121110',
+    red: '#ef2f27',
+    green: '#519f50',
+    yellow: '#fbb829',
+    blue: '#2c78bf',
+    magenta: '#e02c6d',
+    cyan: '#0aaeb3',
+    white: '#c5b088',
+    brightBlack: '#917e6b',
+    brightRed: '#f75341',
+    brightGreen: '#98bc37',
+    brightYellow: '#fed06e',
+    brightBlue: '#68a8e4',
+    brightMagenta: '#ff5c8f',
+    brightCyan: '#2be4d0',
+    brightWhite: '#fce8c3',
+  },
+  // In play the fit moves 15 slots and passes 45 of 46. Red stays short
+  // at Lc 40.3 (Q1).
+  fitted: {
+    foreground: '#e8d5b0',
+    black: '#282625',
+    red: '#fe4135',
+    green: '#92e28f',
+    yellow: '#ecaa04',
+    blue: '#4f9ae3',
+    magenta: '#ff5589',
+    cyan: '#36c3c7',
+    brightBlack: '#a6937f',
+    brightRed: '#ff9483',
+    brightGreen: '#d1f878',
+    brightBlue: '#79baf7',
+    brightMagenta: '#ff90ac',
+    brightCyan: '#32e8d3',
+    brightWhite: '#fff0d3',
+  },
+  chrome: { accent: '#2be4d0' },
+};
+
+// ── Nightfly ────────────────────────────────────────────────────────
+// The Ghostty theme of vim-nightfly-colors, as published, Night Owl's
+// navy with its terminal colors reworked. Its cursor is gray, so the
+// theme pins its bright magenta, a violet, as the accent.
+const nightfly: AppTheme = {
+  id: 'nightfly',
+  label: 'Nightfly',
+  description:
+    'Deep navy night after Night Owl, with soft text, distinct bright colors and a violet accent.',
+  source: 'nightfly',
+  author: 'bluz71',
+  license: 'MIT',
+  xterm: {
+    background: '#011627',
+    foreground: '#bdc1c6',
+    cursor: '#9ca1aa',
+    cursorAccent: '#011627',
+    selectionBackground: '#b2ceee',
+    selectionForeground: '#080808',
+    black: '#1d3b53',
+    red: '#fc514e',
+    green: '#a1cd5e',
+    yellow: '#e3d18a',
+    blue: '#82aaff',
+    magenta: '#c792ea',
+    cyan: '#7fdbca',
+    white: '#a1aab8',
+    brightBlack: '#7c8f8f',
+    brightRed: '#ff5874',
+    brightGreen: '#21c7a8',
+    brightYellow: '#ecc48d',
+    brightBlue: '#82aaff',
+    brightMagenta: '#ae81ff',
+    brightCyan: '#7fdbca',
+    brightWhite: '#d6deeb',
+  },
+  // In play the fit moves 16 slots by small steps and passes 44 of 46.
+  // Red stays short at Lc 38.1 and the yellow pair at dE 7.9 (Q1).
+  fitted: {
+    foreground: '#c9cdd2',
+    red: '#f24746',
+    green: '#96c152',
+    yellow: '#e9d68f',
+    blue: '#7aa1f6',
+    magenta: '#be89e1',
+    cyan: '#77d3c2',
+    white: '#aab4c2',
+    brightBlack: '#879b9b',
+    brightRed: '#ff939d',
+    brightGreen: '#62f5d4',
+    brightYellow: '#ffe7c6',
+    brightBlue: '#a2c1ff',
+    brightMagenta: '#c9b1ff',
+    brightCyan: '#98f5e3',
+    brightWhite: '#dfe8f5',
+  },
+  chrome: { accent: '#ae81ff' },
+};
+
+// ── Melange ─────────────────────────────────────────────────────────
+// The Ghostty themes of melange-nvim, as published. Neither cursor
+// carries a hue, cream on the dark one and brown on the light one, so
+// each pins its bright magenta as the accent, mauve on the dark ground
+// and plum on the light one.
+const melangeDark: AppTheme = {
+  id: 'melange-dark',
+  label: 'Melange Dark',
+  description:
+    'Warm coffee and clay. Muted earth colors on a dark brown ground, with a mauve accent.',
+  source: 'Melange',
+  author: 'Sergio Alejandro Vargas',
+  license: 'MIT',
+  xterm: {
+    background: '#292522',
+    foreground: '#ece1d7',
+    cursor: '#ece1d7',
+    cursorAccent: '#292522',
+    selectionBackground: '#403a36',
+    selectionForeground: '#ece1d7',
+    black: '#34302c',
+    red: '#bd8183',
+    green: '#78997a',
+    yellow: '#e49b5d',
+    blue: '#7f91b2',
+    magenta: '#b380b0',
+    cyan: '#7b9695',
+    white: '#c1a78e',
+    brightBlack: '#867462',
+    brightRed: '#d47766',
+    brightGreen: '#85b695',
+    brightYellow: '#ebc06d',
+    brightBlue: '#a3a9ce',
+    brightMagenta: '#cf9bc2',
+    brightCyan: '#89b3b6',
+    brightWhite: '#ece1d7',
+  },
+  // In play the fit moves 16 slots and passes 44 of 46. Yellow stays
+  // short at Lc 58.5 and red at Lc 41.5 (Q1).
+  fitted: {
+    black: '#393531',
+    red: '#c08485',
+    green: '#b7dab8',
+    yellow: '#eda365',
+    blue: '#899cbd',
+    magenta: '#bd8aba',
+    cyan: '#a0bcba',
+    white: '#ccb299',
+    brightBlack: '#aa9885',
+    brightRed: '#fe9d8a',
+    brightGreen: '#cbffdb',
+    brightYellow: '#f7cc79',
+    brightBlue: '#b1b8dd',
+    brightMagenta: '#deaad1',
+    brightCyan: '#b3dfe2',
+    brightWhite: '#fffefc',
+  },
+  chrome: { accent: '#cf9bc2' },
+};
+
+const melangeLight: AppTheme = {
+  id: 'melange-light',
+  label: 'Melange Light',
+  description:
+    'The light twin of Melange Dark. Warm brown ink on soft gray paper, with a plum accent.',
+  source: 'Melange',
+  author: 'Sergio Alejandro Vargas',
+  license: 'MIT',
+  xterm: {
+    background: '#f1f1f1',
+    foreground: '#54433a',
+    cursor: '#54433a',
+    cursorAccent: '#f1f1f1',
+    selectionBackground: '#d9d3ce',
+    selectionForeground: '#54433a',
+    black: '#e9e1db',
+    red: '#c77b8b',
+    green: '#6e9b72',
+    yellow: '#bc5c00',
+    blue: '#7892bd',
+    magenta: '#be79bb',
+    cyan: '#739797',
+    white: '#7d6658',
+    brightBlack: '#a98a78',
+    brightRed: '#bf0021',
+    brightGreen: '#3a684a',
+    brightYellow: '#a06d00',
+    brightBlue: '#465aa4',
+    brightMagenta: '#904180',
+    brightCyan: '#3d6568',
+    brightWhite: '#54433a',
+  },
+  // It passes 35 of 46 as published. In play the fit moves 9 slots,
+  // most of the change in the greens, and passes all 46.
+  fitted: {
+    black: '#dfd7d2',
+    red: '#c97c8c',
+    green: '#2c5631',
+    yellow: '#b85a00',
+    cyan: '#608383',
+    brightRed: '#c00222',
+    brightGreen: '#003218',
+    brightYellow: '#835900',
+    brightWhite: '#3e2e26',
+  },
+  chrome: { accent: '#904180' },
+};
+
+// ── Modus Vivendi ───────────────────────────────────────────────────
+// The dark theme of the Modus themes, as modus-themes.el resolves its
+// palette, built to WCAG AAA contrast and licensed GPL like Vosh. Its
+// cursor is white, so the theme pins its blue as the accent.
+const modusVivendi: AppTheme = {
+  id: 'modus-vivendi',
+  label: 'Modus Vivendi',
+  description: 'White text on pure black, built for the highest contrast. Clear blue accent.',
+  source: 'the Modus themes',
+  author: 'Protesilaos Stavrou',
+  license: 'GPL-3.0-or-later',
+  xterm: {
+    background: '#000000',
+    foreground: '#ffffff',
+    cursor: '#ffffff',
+    cursorAccent: '#000000',
+    selectionBackground: '#5a5a5a',
+    selectionForeground: '#ffffff',
+    black: '#000000',
+    red: '#ff5f59',
+    green: '#44bc44',
+    yellow: '#d0bc00',
+    blue: '#2fafff',
+    magenta: '#feacd0',
+    cyan: '#00d3d0',
+    white: '#a6a6a6',
+    brightBlack: '#595959',
+    brightRed: '#ff6b55',
+    brightGreen: '#00c06f',
+    brightYellow: '#fec43f',
+    brightBlue: '#79a8ff',
+    brightMagenta: '#b6a0ff',
+    brightCyan: '#6ae4b9',
+    brightWhite: '#ffffff',
+  },
+  // In play the fit lowers body text to #e4e4e4, so bold white reads
+  // above it, and lifts black to the dimmed ground Modus uses itself. It
+  // moves 15 slots and passes 45 of 46, with red short at Lc 43.5 (Q1).
+  fitted: {
+    foreground: '#e4e4e4',
+    black: '#1e1e1e',
+    red: '#f85954',
+    green: '#81f67e',
+    blue: '#25a8f8',
+    magenta: '#e797bb',
+    cyan: '#00cecb',
+    white: '#b1b1b1',
+    brightBlack: '#959595',
+    brightRed: '#ff9380',
+    brightGreen: '#aaffc8',
+    brightYellow: '#ffcd62',
+    brightBlue: '#90b7ff',
+    brightMagenta: '#c3b3ff',
+    brightCyan: '#6fe9bd',
+  },
+  chrome: { accent: '#2fafff' },
+};
+
 export const BUILTIN_THEMES: AppTheme[] = [
   obsidianEmber,
   triad,
@@ -1302,6 +1590,11 @@ export const BUILTIN_THEMES: AppTheme[] = [
   everforestDark,
   everforestLight,
   greenScreen,
+  srcery,
+  nightfly,
+  melangeDark,
+  melangeLight,
+  modusVivendi,
 ];
 
 /** The chrome tokens a theme paints the window with. */

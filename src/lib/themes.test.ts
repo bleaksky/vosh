@@ -310,7 +310,11 @@ describe('control washes', () => {
         const step = steps[key];
         // A light field is the raised paper, below.
         if (step === undefined) continue;
-        const ground = t[SURFACE[key]];
+        // Below Obsidian Ember's ground a wash keeps the alpha it takes
+        // on Ember's, so on Modus Vivendi's pure black it steps as it
+        // does there.
+        const surface = t[SURFACE[key]];
+        const ground = lightness(hex(surface)) < lightness(EMBER_GROUND) ? '#050403' : surface;
         // A three place alpha and whole channels round a step by up to
         // about 0.4.
         expect(Math.abs(stepDL(paint(t[key], ground), hex(ground)) - step), key).toBeLessThan(0.5);
@@ -713,6 +717,17 @@ describe('fitted game colors', () => {
     expect(findTheme('monokai').fitted?.foreground).toBe('#e4e4df');
     expect(findTheme('high-contrast').fitted?.foreground).toBe('#e4e4e4');
   });
+
+  it('leaves the new schemes short where the review said (Q1)', () => {
+    const missed = (id: string) => misses(id).map((c) => `${c.id} ${c.value}`);
+    expect(missed('srcery')).toEqual(['T3 red Lc 40.3']);
+    expect(missed('nightfly')).toEqual(['T3 red Lc 38.1', 'T6 yellow pair dE 7.9']);
+    expect(missed('melange-dark')).toEqual(['T2 yellow Lc 58.5', 'T3 red Lc 41.5']);
+    expect(missed('melange-light')).toEqual([]);
+    expect(missed('modus-vivendi')).toEqual(['T3 red Lc 43.5']);
+    // Melange Light passes 35 as published.
+    expect(checks(findTheme('melange-light').xterm).filter((c) => !c.ok)).toHaveLength(11);
+  });
 });
 
 describe('custom theme chrome', () => {
@@ -854,5 +869,12 @@ describe('public/theme-credits.txt', () => {
       expect(body, theme.id).toMatch(/^Copyright \(c\) \d{4}\S* \S/m);
       expect(flat(body), theme.id).toContain(PERMISSION);
     }
+  });
+
+  it('keeps the copyright line of Modus Vivendi', () => {
+    expect(findTheme('modus-vivendi').license).toBe('GPL-3.0-or-later');
+    expect(sectionFor('Modus Vivendi')?.body).toContain(
+      'Copyright (C) 2019-2026 Free Software Foundation, Inc.',
+    );
   });
 });

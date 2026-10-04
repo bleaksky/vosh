@@ -22,7 +22,12 @@
     { "theme": "high-contrast", "background": "#0d0d0d" },
     { "theme": "everforest-dark", "background": "#2d353b" },
     { "theme": "everforest-light", "background": "#fdf6e3" },
-    { "theme": "green-screen", "background": "#0a0e0b" }
+    { "theme": "green-screen", "background": "#0a0e0b" },
+    { "theme": "srcery", "background": "#121110" },
+    { "theme": "nightfly", "background": "#011627" },
+    { "theme": "melange-dark", "background": "#292522" },
+    { "theme": "melange-light", "background": "#f1f1f1" },
+    { "theme": "modus-vivendi", "background": "#000000" }
   ],
   "colors": {
     "true_color": ["#8fa7d9"],
