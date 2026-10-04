@@ -2,7 +2,8 @@
 //! many sessions play it, so an edit from any of them reaches every
 //! session on it. The session map keeps them, see [`crate::sessions`],
 //! and each [`Session`](crate::sessions::Session) points at the one it
-//! plays.
+//! plays. A session launch restored points at one that waits, see
+//! [`OpenProfile::waiting`], until its first selection.
 
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -13,7 +14,8 @@ use tokio::sync::{Mutex, OwnedMutexGuard};
 use crate::profile::live::Profile;
 use crate::sessions::Session;
 
-/// One profile the sessions play, with what holds its saves back.
+/// One profile the sessions play, with what holds its saves back, or the
+/// defaults a restored session waits on, see [`OpenProfile::waiting`].
 pub(crate) struct OpenProfile {
     /// Its place in the order the profiles opened. A step that holds two
     /// profiles at once takes the lower first.
@@ -44,6 +46,15 @@ impl OpenProfile {
             dirty_gen: AtomicU64::new(0),
             persist_held: AtomicBool::new(false),
         }
+    }
+
+    /// The defaults a session launch restored plays under `name`, the
+    /// profile it last played, until its first selection opens that
+    /// profile or joins it, see [`crate::app::launch::open_restored`]. The
+    /// session map keeps it out of the open profiles, so no save writes
+    /// it.
+    pub(crate) fn waiting(id: u64, name: &str) -> Self {
+        Self::new(id, Some(name.to_string()), Profile::default())
     }
 
     /// Its name in the profile set, see [`OpenProfile::name`].

@@ -193,7 +193,10 @@ impl Session {
         }
     }
 
-    /// The profile the session plays.
+    /// The profile the session plays. A session launch restored plays
+    /// defaults that wait under its last profile's name and never save,
+    /// until its first selection opens or joins that profile, see
+    /// [`OpenProfile::waiting`].
     pub(crate) fn profile(&self) -> Arc<OpenProfile> {
         self.profile
             .lock()
@@ -471,11 +474,9 @@ impl Sessions {
     /// place of the one the app starts with, and select the one `selected`
     /// names, or else the first. The selected session plays the profile
     /// the app starts on, which launch then loads. Each other one waits
-    /// under the name of the profile it last played, on defaults kept out
-    /// of the open profiles so no save writes them, until its first
-    /// selection opens that profile, see
-    /// [`crate::app::launch::open_restored`]. An entry whose id an earlier
-    /// one took is left out.
+    /// under the name of the profile it last played, see
+    /// [`OpenProfile::waiting`]. An entry whose id an earlier one took is
+    /// left out.
     pub(crate) fn restore(&mut self, entries: &[SessionEntry], selected: Option<SessionId>) {
         let Some(first) = entries.first() else {
             return;
@@ -494,8 +495,7 @@ impl Sessions {
             } else {
                 let id = self.next_profile;
                 self.next_profile += 1;
-                let name = Some(entry.profile.clone());
-                Arc::new(OpenProfile::new(id, name, Profile::default()))
+                Arc::new(OpenProfile::waiting(id, &entry.profile))
             };
             let session = Session::new(entry.id, profile);
             session.rename(entry.name.as_deref());
