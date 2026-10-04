@@ -137,7 +137,9 @@ fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputRe
 /// the game, as Settings does, so Vosh draws your prompt as your codes
 /// say until you change the design. The design, the place and the
 /// capture stay. With no capture the echo says how to start, since Vosh
-/// draws only a prompt it reads.
+/// draws only a prompt it reads. With a capture and still no design to
+/// draw, as with a pattern of another game or codes Vosh cannot draw,
+/// the echo says you see the game's own prompt.
 fn slash_prompt_draw(profile: &mut Profile, args: &str) -> InputResult {
     let draw = match args.trim().to_ascii_lowercase().as_str() {
         "on" => true,
@@ -160,6 +162,8 @@ fn slash_prompt_draw(profile: &mut Profile, args: &str) -> InputResult {
     .to_string()];
     if draw && profile.prompt.config().capture.is_none() {
         echo.push(PROMPT_NONE.to_string());
+    } else if draw && !profile.prompt.draws() {
+        echo.push(DRAW_NO_DESIGN.to_string());
     }
     InputResult::echo_lines(echo)
 }
@@ -230,6 +234,10 @@ fn show_sentence(show: vosh_prompt::PromptShow) -> &'static str {
 
 /// What `#prompt` says when nothing reads your prompt in this profile.
 const PROMPT_NONE: &str = "Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start.";
+/// What `#prompt draw on` says while drawing is on and the profile reads
+/// your prompt but has no design to draw in its place.
+const DRAW_NO_DESIGN: &str =
+    "You have no design yet, so you see the game's own prompt. Pick one in Customize prompt.";
 /// What `#prompt` says while you have prompts off in the game.
 const PROMPTS_OFF: &str =
     "You turned prompts off in the game. Type prompt in the game to turn them back on.";
