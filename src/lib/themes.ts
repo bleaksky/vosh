@@ -5,6 +5,7 @@
 // is known for (Nord's frost accent, for example).
 
 import { CHROME_COLOR_KEYS, deriveChrome, type ChromeOverrides, type ChromeTokens } from './chrome';
+import { fitKey } from './gameFit';
 
 export interface XtermPalette {
   background: string;
@@ -1244,11 +1245,23 @@ export function onCustomThemesChanged(listener: () => void): () => void {
   };
 }
 
+// Fits the main window made this launch for custom themes that keep
+// none, by the colors they fit (gameFit fitKey). lib/customThemeFits
+// makes them, and no file holds them.
+const HELD_FITS = new Map<string, Partial<XtermPalette>>();
+
+function withHeldFit(theme: AppTheme): AppTheme {
+  if (theme.fitted) return theme;
+  const fitted = HELD_FITS.get(fitKey(theme.xterm));
+  return fitted ? { ...theme, fitted } : theme;
+}
+
 /** Replace the registered custom themes. The settings save path
  *  calls this whenever the user-authored list changes; subsequent
- *  iterations of THEMES include the new entries. */
+ *  iterations of THEMES include the new entries. A theme that keeps no
+ *  fit takes the one this window holds for its colors (holdFit). */
 export function setCustomThemes(themes: AppTheme[]): void {
-  CUSTOM_THEMES = themes.slice();
+  CUSTOM_THEMES = themes.map(withHeldFit);
   for (const listener of customThemeListeners) {
     try {
       listener();
@@ -1256,6 +1269,18 @@ export function setCustomThemes(themes: AppTheme[]): void {
       // The new list is in place whatever a listener does with it.
     }
   }
+}
+
+/** The custom themes registered now. */
+export function customThemes(): readonly AppTheme[] {
+  return CUSTOM_THEMES;
+}
+
+/** Hold `fitted` in memory for the custom themes with the colors of
+ *  `palette` that keep no fit, and lay it on the ones registered now. */
+export function holdFit(palette: XtermPalette, fitted: Partial<XtermPalette>): void {
+  HELD_FITS.set(fitKey(palette), fitted);
+  setCustomThemes(CUSTOM_THEMES);
 }
 
 // Slots of the hand-authored chrome palette custom themes carried
