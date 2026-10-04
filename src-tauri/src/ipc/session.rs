@@ -1,5 +1,6 @@
 //! The commands for your sessions and their connections to the game.
-//! The page opens and selects a session, connects and disconnects
+//! The page lists, opens, selects, renames and closes sessions, connects
+//! and disconnects
 //! through them, sends the lines you type, plain or masked, stops a walk
 //! on Esc, tells the game the size of the terminal, and reads the target
 //! you track. Each acts on the session it names, or on the selected
@@ -12,7 +13,7 @@ use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::input;
 use crate::output;
 use crate::session::TargetPayload;
-use crate::sessions::SessionId;
+use crate::sessions::{SessionId, SessionRow};
 
 /// Open a session after the others, with nothing connected, and return
 /// its id. It plays `profile`, which it joins when another session plays
@@ -100,6 +101,25 @@ pub(crate) async fn session_close<R: tauri::Runtime>(
     #[cfg(any(native_surface, test))]
     crate::native::grid::forget(closed.id);
     name_selected_profile_active(state.inner()).await
+}
+
+/// Give the session `session` names the name `name`, which its row and
+/// the lines other sessions print read in place of its character. With
+/// no name, or a blank one, the session reads its character again.
+#[tauri::command]
+pub(crate) async fn session_rename(
+    state: State<'_, SharedState>,
+    session: SessionId,
+    name: Option<String>,
+) -> Result<(), String> {
+    state.session(Some(session))?.rename(name.as_deref());
+    Ok(())
+}
+
+/// Every session in the order the window lists them.
+#[tauri::command]
+pub(crate) fn sessions_list(state: State<'_, SharedState>) -> Vec<SessionRow> {
+    state.session_rows()
 }
 
 /// Point profiles.toml at the profile the selected session plays, the one

@@ -11,7 +11,7 @@ use crate::app::plugins::SharedPluginManager;
 use crate::logs::SharedLogStore;
 use crate::profile::live::Profile;
 use crate::profile::open::OpenProfile;
-use crate::sessions::{Session, SessionId, Sessions, NO_SUCH_SESSION};
+use crate::sessions::{Session, SessionId, SessionRow, Sessions, NO_SUCH_SESSION};
 
 /// What every command, window and session shares. The sessions with the
 /// profiles they play, the profile set, the log store, the plugins, the
@@ -122,6 +122,15 @@ impl AppState {
     /// [`ProfileGuard::players`](crate::profile::open::ProfileGuard::players).
     pub(crate) fn other_sessions(&self, id: SessionId) -> Vec<Arc<Session>> {
         self.sessions().others(id)
+    }
+
+    /// Every session's row, in order. Each row is read once the map lets
+    /// go, so take it with no profile held.
+    pub(crate) fn session_rows(&self) -> Vec<SessionRow> {
+        let (list, selected) = self.sessions().in_order();
+        list.iter()
+            .map(|session| session.row(session.id == selected))
+            .collect()
     }
 
     /// Add a session after the others that plays `profile`, see
