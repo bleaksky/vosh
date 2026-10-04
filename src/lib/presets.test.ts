@@ -316,6 +316,23 @@ describe('the Gold, experience, and levels preset', () => {
   });
 });
 
+// The buffs that wear off in Disarms and fading buffs, as update.c sends
+// the wear off lines of skill_table in const.c.
+describe('the Disarms and fading buffs preset', () => {
+  const sanctuary = presetTrigger('disarm_buff_fade', 'buff.sanctuary');
+
+  // Bug 17, open. The sanctuary trigger wants The white aura around a
+  // character fades, a line the game never prints. When sanctuary leaves
+  // someone else, the room reads the line the sanctuary row of skill_table
+  // holds for others, The protective aura around $n fades., here with
+  // Maren. The nearest line in words, The angry white aura around $n
+  // fades., is holy vengeance wearing off (effect.c), not sanctuary.
+  // it.fails holds the bug until its fix makes this a plain it.
+  it.fails('marks sanctuary fading from another character (bug 17)', () => {
+    expect(triggerMatches(sanctuary, 'The protective aura around Maren fades.')).toBe(true);
+  });
+});
+
 // The bubbly potions do_brew makes from food in skills5.c, each named
 // a bubbly <color> potion, and the spell each casts.
 describe('the Potion labels preset', () => {
