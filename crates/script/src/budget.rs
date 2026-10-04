@@ -320,6 +320,48 @@ mod tests {
     }
 
     #[test]
+    fn a_replay_inside_a_line_has_its_own_budget_and_the_line_keeps_its_own() {
+        let mut e = engine();
+        e.dispatch_gmcp("Char.Vitals", &serde_json::json!({}));
+        // The first trigger makes six slow handlers, and each new handler
+        // gets the last packet as soon as that trigger ends.
+        plugin(
+            &mut e,
+            "slow",
+            &format!(
+                "for i = 1, 10 do \
+                   mud.trigger('day' .. i, 'The day has begun', function() \
+                     if i == 1 then \
+                       for j = 1, 6 do \
+                         mud.on_gmcp('Char.Vitals', function() \
+                           os.nap({SLOW_MS}) mud.echo('new ' .. j) \
+                         end) \
+                       end \
+                     end \
+                     os.nap({SLOW_MS}) mud.echo('slow ' .. i) \
+                   end) \
+                 end"
+            ),
+        );
+        let outcome = e.match_line(DAY);
+        assert!(!outcome.failed, "{:?}", outcome.actions);
+        // The replay has a budget of its own, which its slow handlers use.
+        ran_the_first_few(&echoes_of(&outcome, "new "), "new ");
+        // The line gets back what the plugin had left of its budget, so the
+        // rest of the triggers run until the plugin uses it.
+        ran_the_first_few(&echoes_of(&outcome, "slow "), "slow ");
+        // One line for each event, the replay first, as it ran inside the
+        // first trigger.
+        assert_eq!(
+            error_lines(&outcome),
+            [
+                "slow used its 100 ms on the last packets, so the rest of its new handlers wait for the next packet.",
+                "slow used its 100 ms for this line, so Vosh skipped the rest of its handlers.",
+            ]
+        );
+    }
+
+    #[test]
     fn a_replay_of_the_last_packets_is_an_event_of_its_own() {
         let mut e = engine();
         e.dispatch_gmcp("Char.Vitals", &serde_json::json!({}));
