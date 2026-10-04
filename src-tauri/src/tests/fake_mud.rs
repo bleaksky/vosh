@@ -2117,6 +2117,12 @@ async fn lua_you_type_starts_timers_runs_input_and_sets_prompt_values() {
     h.type_line("#lua function again() mud.input('#lua again()') end again()")
         .await;
     h.until_shown("[mud.input recursion limit hit (16)]").await;
+
+    // Lua whose lines each ask for 100 more runs 100 lines in all.
+    h.type_line("#lua function fan() for i = 1, 100 do mud.input('#lua fan()') end end fan()")
+        .await;
+    h.until_shown("[lua] Vosh ran 100 lines from mud.input and dropped the rest.")
+        .await;
     h.finish(grid).await;
 }
 
@@ -2124,8 +2130,8 @@ async fn lua_you_type_starts_timers_runs_input_and_sets_prompt_values() {
 // launch, the way the Lua you type does. Here it runs a line through
 // mud.input, gives your prompt a value and starts a timer, which fires
 // once the game connects. Of the slash commands it runs only #echo, so
-// it makes no alias you keep. The guard keeps other tests off the shared
-// native grid.
+// it neither makes an alias nor loads itself again for good. The guard
+// keeps other tests off the shared native grid.
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
@@ -2144,6 +2150,7 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
         "mud.timer(0, function() mud.echo('the plugin timer fired') end)\n\
          mud.input('#echo the plugin ran ' .. 'mud.input')\n\
          mud.input('#alias plugged kick')\n\
+         for i = 1, 50 do mud.input('#script reload') end\n\
          mud.set_prompt_var('plugin_mark', 'on')\n",
     )
     .expect("the entry script");
@@ -2171,6 +2178,8 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
     h.until_shown("the plugin timer fired").await;
     h.until_shown("the plugin ran mud.input").await;
     h.until_shown("[lua] Vosh never runs #alias for a plugin.")
+        .await;
+    h.until_shown("[lua] Vosh never runs #script for a plugin.")
         .await;
     h.finish(grid).await;
 }

@@ -306,3 +306,26 @@ fn an_alias_body_that_runs_away_turns_its_alias_off() {
     let ran = crate::input::run_line(&state, &mut p, "heal");
     assert_eq!(super::line_script_result(ran).send_bytes, b"heal\r\n");
 }
+
+#[test]
+fn one_result_runs_100_mud_input_lines_in_all_its_rounds() {
+    let lines = |n: usize| -> Vec<(LineFrom, String)> {
+        (0..n)
+            .map(|_| (LineFrom::YourLua, "#lua fan()".to_string()))
+            .collect()
+    };
+    let mut budget = super::InputBudget::new();
+    let (run, said) = budget.take(lines(60));
+    assert_eq!(run.len(), 60);
+    assert!(said.is_empty(), "{said:?}");
+    let (run, said) = budget.take(lines(100));
+    assert_eq!(run.len(), 40);
+    assert_eq!(
+        said,
+        ["\x1b[90m[lua]\x1b[0m \x1b[31mVosh ran 100 lines from mud.input and dropped the rest.\x1b[0m"]
+    );
+    // Lines that each asked for 100 more run none, and Vosh says so once.
+    let (run, said) = budget.take(lines(40 * 100));
+    assert!(run.is_empty(), "{run:?}");
+    assert!(said.is_empty(), "{said:?}");
+}

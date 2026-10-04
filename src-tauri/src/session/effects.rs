@@ -107,6 +107,54 @@ impl ScriptIo<'_, '_> {
 /// asking stops here, at the depth an alias may go.
 const MUD_INPUT_DEPTH: usize = vosh_automation::alias::DEFAULT_MAX_DEPTH;
 
+/// How many `mud.input` lines one script result runs in all its rounds.
+/// Each call may queue 100 lines, so Lua whose lines each ask for as
+/// many again would otherwise run 100 times more Lua each round.
+const MUD_INPUT_LINES: usize = 100;
+
+/// The `mud.input` lines one script result may still run.
+#[derive(Debug)]
+pub(super) struct InputBudget {
+    left: usize,
+    /// Vosh said it dropped lines.
+    told: bool,
+}
+
+impl InputBudget {
+    pub(super) fn new() -> Self {
+        Self {
+            left: MUD_INPUT_LINES,
+            told: false,
+        }
+    }
+
+    /// The lines of the next round that fit what is left, and the first
+    /// time lines do not fit, the terminal lines that say Vosh dropped
+    /// them.
+    pub(super) fn take(
+        &mut self,
+        mut lines: Vec<(LineFrom, String)>,
+    ) -> (Vec<(LineFrom, String)>, Vec<String>) {
+        let mut said = Vec::new();
+        if lines.len() > self.left {
+            lines.truncate(self.left);
+            if !self.told {
+                self.told = true;
+                warn!(
+                    lines = MUD_INPUT_LINES,
+                    "mud.input asked for too many lines"
+                );
+                said = crate::script::lua_error_lines(&format!(
+                    "Vosh ran {MUD_INPUT_LINES} lines from mud.input and dropped the rest."
+                ))
+                .collect();
+            }
+        }
+        self.left -= lines.len();
+        (lines, said)
+    }
+}
+
 /// Perform the IO and timer bookkeeping a script result asks for. Every
 /// path that runs Lua applies its result here: the game's lines and
 /// GMCP, Lua timers, the lines you type, a Settings timer, the tick
@@ -124,6 +172,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
 ) -> std::io::Result<()> {
     let mut apply = apply;
     let mut depth = 0;
+    let mut budget = InputBudget::new();
     loop {
         // Durable Lua changes (mud.alias, set_var, group toggles fired
         // by triggers or timers) ride the same debounced save the slash
@@ -164,7 +213,13 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             return Ok(());
         }
         depth += 1;
-        let inputs = std::mem::take(&mut apply.inputs);
+        let (inputs, dropped) = budget.take(std::mem::take(&mut apply.inputs));
+        if !dropped.is_empty() {
+            io.echo(app, dropped);
+        }
+        if inputs.is_empty() {
+            return Ok(());
+        }
         let shared = crate::profile::switch::shared_layer_for_lines(
             app,
             inputs.iter().map(|(_, line)| line.as_str()),

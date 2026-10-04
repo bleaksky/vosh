@@ -114,7 +114,8 @@ impl LineFrom {
 
 /// The command in `line` that Lua may not run through `mud.input`, read
 /// the way the slash dispatcher reads it: `#script load`, which runs a
-/// file, `#import-tintin`, which reads one, and `#profile`, which saves,
+/// file, `#script reload`, which runs every loaded file again,
+/// `#import-tintin`, which reads a file, and `#profile`, which saves,
 /// loads or blanks your profile. None for any other line.
 pub(crate) fn kept_from_lua(line: &str) -> Option<&'static str> {
     let rest = line.trim_start().strip_prefix('#')?;
@@ -122,7 +123,11 @@ pub(crate) fn kept_from_lua(line: &str) -> Option<&'static str> {
     match cmd {
         "profile" => Some("#profile"),
         "import-tintin" => Some("#import-tintin"),
-        "script" if split_first_word(rest).0 == "load" => Some("#script load"),
+        "script" => match split_first_word(rest).0 {
+            "load" => Some("#script load"),
+            "reload" => Some("#script reload"),
+            _ => None,
+        },
         _ => None,
     }
 }
