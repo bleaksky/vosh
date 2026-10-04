@@ -8,16 +8,17 @@
 //!   connection. It sends your lines, takes each socket read, repaints
 //!   your prompt when a deadline passes, polls the tick and the timers,
 //!   and ends the connection.
-//! - `connection` holds the [`connection::Connection`] a connection
-//!   shares with the commands: the target you pick, its quick keys and
-//!   the characters in the room.
+//! - `connection` holds the [`connection::Connection`], what one
+//!   connection holds apart from the profile: your target, the room
+//!   list and look, the tick's count and the prompt engine.
 //! - `socket` opens the plain or TLS socket.
 //! - `read` is the socket read path, from each telnet event to what the
 //!   end of a read sends.
 //! - `lines` cuts what the game sends into lines and the partial after
 //!   them.
-//! - `steps` holds what the loop does under the profile lock for each
-//!   line, prompt, partial and repaint.
+//! - `steps` holds what the loop does under the connection lock, and
+//!   the profile lock before it where a step needs both, for each line,
+//!   prompt, partial and repaint.
 //! - `batch` holds what one read writes, and the frame and log rows a
 //!   burst of reads owes.
 //! - `prompt_view` holds what your prompt shows and what the webview
