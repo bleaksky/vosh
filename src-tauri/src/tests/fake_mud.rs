@@ -24,7 +24,7 @@ use crate::profile::login_match::AutoMatch;
 use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
 
 /// The events the tests read, as the webview would hear them.
-const EVENTS: [&str; 10] = [
+const EVENTS: [&str; 11] = [
     "session://output",
     "session://game-prompt-seen",
     "session://prompt-status",
@@ -33,6 +33,7 @@ const EVENTS: [&str; 10] = [
     "session://hidden",
     "session://state",
     "session://target",
+    crate::app::events::TICK,
     crate::app::events::AFFECT_FULL_CHANGED,
     crate::app::events::PROMPT_CONFIG_CHANGED,
 ];
@@ -2588,5 +2589,214 @@ async fn a_line_typed_after_the_game_closes_the_link_says_not_connected() {
         h.state.session.lock().await.is_none(),
         "the ended session leaves the app state"
     );
+    h.finish(grid).await;
+}
+
+/// Your design with the sky, a value only the World.Time packet of the
+/// login carries.
+fn codes_and_sky() -> vosh_prompt::PromptConfig {
+    vosh_prompt::PromptConfig {
+        template: "<%hp> %sky".into(),
+        ..codes(PROMPT)
+    }
+}
+
+/// How long the count of a `session://tick` report has run.
+fn tick_elapsed(tick: &Json) -> Duration {
+    Duration::from_millis(
+        tick["elapsed_ms"]
+            .as_u64()
+            .expect("the time since the tick"),
+    )
+}
+
+/// Wait until the tick has counted a second, so a count that started
+/// again would show, and return the newest report.
+async fn a_second_of_the_tick(h: &Harness) -> Json {
+    h.until("a second of the tick", |h| {
+        h.events(crate::app::events::TICK)
+            .last()
+            .is_some_and(|tick| tick_elapsed(tick) >= Duration::from_secs(1))
+    })
+    .await;
+    h.events(crate::app::events::TICK)
+        .pop()
+        .expect("a tick report")
+}
+
+/// Target goblin, send kill with gg, and give your prompt the value
+/// `lua_mark` through Lua, which the windows hear.
+async fn target_goblin_and_mark_your_prompt(h: &Harness) {
+    h.type_line("tar goblin").await;
+    h.type_line("#qkey gg kill").await;
+    h.type_line("#lua mud.set_prompt_var('lua_mark','on')")
+        .await;
+    h.until("the value Lua gave your prompt", |h| {
+        h.events("session://prompt-vars")
+            .iter()
+            .any(|vars| vars["lua_mark"] == "on")
+    })
+    .await;
+}
+
+// A profile switch while you play keeps what belongs to the connection.
+// Your target and quick keys stay, the packets of the login stay, so the
+// sky still draws, and the tick counts on and stays on, although the next
+// profile saved it off. Only the values Lua gave your prompt drop. The
+// guard keeps other tests off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_profile_switch_while_connected_keeps_your_target_prompt_and_tick() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.set_prompt(codes_and_sky()).await;
+    let mut healer = crate::profile::file::ProfileConfig::default();
+    healer.set_prompt(codes_and_sky());
+    healer.tick.enabled = false;
+    healer
+        .save(&h.profile_file("Healer").await)
+        .expect("Healer's file");
+    h.connect().await;
+    h.until_last_row("<1020> cloudy").await;
+    target_goblin_and_mark_your_prompt(&h).await;
+    let tick = a_second_of_the_tick(&h).await;
+
+    let targets = h.events("session://target").len();
+    let vars = h.events("session://prompt-vars").len();
+    let ticks = h.events(crate::app::events::TICK).len();
+    crate::profile::switch::apply_profile_switch(h.app.handle(), &h.state, "Healer")
+        .await
+        .expect("the switch");
+
+    // Your target and quick keys stay, and the target display hears
+    // nothing that clears them.
+    h.type_line("tar").await;
+    h.until_shown("current target: goblin").await;
+    h.type_line("#qkeys").await;
+    h.until_shown("gg  ->  kill").await;
+    let heard = &h.events("session://target")[targets..];
+    assert!(heard.iter().all(|t| t["name"] == "goblin"), "{heard:?}");
+
+    // The next pulse draws your prompt, and the sky comes from the
+    // packet of the login, since the game sends no World.Time after it.
+    let rooms = |h: &Harness| {
+        h.screen()
+            .iter()
+            .filter(|r| r.as_str() == "[Exits: south]")
+            .count()
+    };
+    let before = rooms(&h);
+    h.type_line("look").await;
+    h.until("the room", |h| rooms(h) > before).await;
+    h.until_last_row("<1020> cloudy").await;
+
+    // The value Lua gave your prompt dropped with the switch.
+    h.until("the prompt values after the switch", |h| {
+        h.events("session://prompt-vars").len() > vars
+    })
+    .await;
+    let values = &h.events("session://prompt-vars")[vars];
+    assert!(values.get("lua_mark").is_none(), "{values}");
+
+    // The tick counts on from where it was, on and synced as before.
+    h.until("two tick reports after the switch", |h| {
+        h.events(crate::app::events::TICK).len() >= ticks + 2
+    })
+    .await;
+    for after in &h.events(crate::app::events::TICK)[ticks..] {
+        assert_eq!(after["enabled"], true, "{after}");
+        assert_eq!(after["synced"], tick["synced"], "{after}");
+        assert!(
+            tick_elapsed(after) >= tick_elapsed(&tick),
+            "{after} after {tick}"
+        );
+    }
+    h.finish(grid).await;
+}
+
+// A disconnect ends what belongs to the connection. Your target, the room
+// list and the values Lua gave your prompt clear, and your quick keys
+// stay. A target you set while offline carries into the next connection,
+// and the tick counts from the connect, unsynced. The guard keeps other
+// tests off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_disconnect_clears_your_target_the_room_list_and_both_prompt_feeds() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.set_prompt(codes(PROMPT)).await;
+    h.connect().await;
+    h.until_last_row("<1020>").await;
+    target_goblin_and_mark_your_prompt(&h).await;
+    // The fake game sends no Room.Chars, so the list goes in place the
+    // way the session takes one.
+    crate::input::target::set_room_chars(
+        &mut *h.state.profile.lock().await,
+        crate::input::target::read_room_chars(&[
+            serde_json::json!({"name": "a goblin", "npc": true}),
+        ]),
+    );
+    h.type_line("tar").await;
+    h.until_shown("1 char(s) in room:").await;
+    let keys = h
+        .events("session://target")
+        .pop()
+        .expect("the target display")["quick_keys"]
+        .clone();
+    assert!(
+        keys.as_array()
+            .expect("the quick keys")
+            .contains(&serde_json::json!({"name": "gg", "verb": "kill"})),
+        "{keys}"
+    );
+    a_second_of_the_tick(&h).await;
+
+    h.disconnect().await;
+    h.until("the target display to clear", |h| {
+        h.events("session://target")
+            .last()
+            .is_some_and(|t| t["name"].is_null())
+    })
+    .await;
+    let cleared = h.events("session://target").pop().expect("the clear");
+    assert!(cleared["room_idx"].is_null(), "{cleared}");
+    assert_eq!(cleared["quick_keys"], keys);
+
+    // Offline, a target still takes.
+    h.type_line("tar orc").await;
+    h.until_shown("target: orc (not in room)").await;
+    let vars = h.events("session://prompt-vars").len();
+    let ticks = h.events(crate::app::events::TICK).len();
+    let connected = std::time::Instant::now();
+    h.connect().await;
+
+    // The tick starts again with the connection, unsynced.
+    h.until("the tick of the new connection", |h| {
+        h.events(crate::app::events::TICK).len() > ticks
+    })
+    .await;
+    let since = connected.elapsed();
+    let first = &h.events(crate::app::events::TICK)[ticks];
+    assert_eq!(first["enabled"], true, "{first}");
+    assert_eq!(first["synced"], false, "{first}");
+    assert!(tick_elapsed(first) <= since, "{first} within {since:?}");
+
+    // Your prompt reads without the value Lua gave it before.
+    h.until_last_row("<1020>").await;
+    h.until("the prompt values of the new connection", |h| {
+        h.events("session://prompt-vars").len() > vars
+    })
+    .await;
+    let values = &h.events("session://prompt-vars")[vars];
+    assert!(values.get("lua_mark").is_none(), "{values}");
+
+    // The target you set offline stays, and the room list is gone.
+    h.type_line("tar").await;
+    h.until("tar to list no one in the room", |h| {
+        h.screen()
+            .windows(2)
+            .any(|w| w[0] == "current target: orc" && w[1] == "(no Room.Chars data yet)")
+    })
+    .await;
     h.finish(grid).await;
 }

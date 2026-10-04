@@ -438,6 +438,52 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn a_switch_keeps_the_target_the_room_list_the_room_look_and_the_tick_count() {
+        use crate::profile::live::{QuickKey, RoomChar};
+        let dir = tempfile::tempdir().unwrap();
+        let state = switch_state(dir.path()).await;
+        // Healer saved the tick off.
+        let mut config = ProfileConfig::default();
+        config.tick.enabled = false;
+        config.save(&healer_file(dir.path())).unwrap();
+        let goblin = vec![RoomChar {
+            name: "a goblin".into(),
+            npc: true,
+        }];
+        let gg = QuickKey {
+            name: "gg".into(),
+            verb: "kill".into(),
+        };
+        let (look, count) = {
+            let mut p = state.profile.lock().await;
+            p.target.name = Some("goblin".into());
+            p.target.room_idx = Some(1);
+            p.target.quick_keys = vec![gg.clone()];
+            p.room_chars = goblin.clone();
+            p.room_block.room_chars(1);
+            p.fight_tail = true;
+            let t0 = tokio::time::Instant::now();
+            p.tick.start_session(t0);
+            assert!(p.tick.on_game_tick(t0).is_some(), "the game ticked");
+            (p.room_block.clone(), (p.tick.last_tick, p.tick.last_signal))
+        };
+        assert_ne!(look, crate::session::room_block::RoomBlock::default());
+
+        super::switch_live_profile(&state, "Healer").await.unwrap();
+
+        let p = state.profile.lock().await;
+        assert_eq!(p.target.name.as_deref(), Some("goblin"));
+        assert_eq!(p.target.room_idx, Some(1));
+        assert_eq!(p.target.quick_keys, [gg]);
+        assert_eq!(p.room_chars, goblin);
+        assert_eq!(p.room_block, look);
+        assert!(p.fight_tail);
+        assert!(p.tick.config.enabled, "a running tick stays on");
+        assert!(p.tick.synced);
+        assert_eq!((p.tick.last_tick, p.tick.last_signal), count);
+    }
+
+    #[tokio::test]
     async fn a_switch_hands_the_prompt_the_next_profile_table_and_its_rules() {
         let dir = tempfile::tempdir().unwrap();
         let state = switch_state(dir.path()).await;
