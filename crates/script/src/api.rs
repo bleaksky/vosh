@@ -202,6 +202,7 @@ fn mud_trigger(lua: &Lua, (name, pattern, callback): (String, String, Function))
     with_state(lua, |s| {
         hold(s, id, key);
         s.queue(Action::SetLuaTrigger {
+            owner: s.owner(),
             name,
             pattern,
             callback_id: id,
@@ -212,7 +213,10 @@ fn mud_trigger(lua: &Lua, (name, pattern, callback): (String, String, Function))
 
 fn mud_untrigger(lua: &Lua, name: String) -> LuaResult<()> {
     with_state(lua, |s| {
-        s.queue(Action::RemoveLuaTrigger(name));
+        s.queue(Action::RemoveLuaTrigger {
+            owner: s.owner(),
+            name,
+        });
         Ok(())
     })
 }

@@ -1032,8 +1032,8 @@ fn scripts_lists_lua_triggers_by_name() {
         [
             "no scripts loaded",
             "2 lua trigger(s):",
-            "    [  0] alpha /a/",
-            "    [  0] zeta /z/",
+            "    [  0] alpha /a/ from #lua",
+            "    [  0] zeta /z/ from #lua",
         ]
     );
 }

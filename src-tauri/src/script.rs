@@ -218,7 +218,7 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
                 result.durable_changed = true;
             }
             Action::SetLuaTrigger { .. }
-            | Action::RemoveLuaTrigger(_)
+            | Action::RemoveLuaTrigger { .. }
             | Action::SubscribeGmcp { .. } => {
                 // The script engine consumes these in its own drain loop;
                 // they should not reach here. Ignore defensively.

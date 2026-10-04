@@ -6,6 +6,8 @@ use std::time::Duration;
 
 use vosh_automation::vars::Scope;
 
+use crate::owner::Owner;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     /// Bytes to send to the server, with CRLF appended by the session.
@@ -46,12 +48,19 @@ pub enum Action {
         enabled: bool,
     },
     /// Insert or replace a regex trigger that fires a Lua callback by id.
+    /// It replaces the trigger of its name that `owner` shares names
+    /// with, so two plugins can each have a trigger of the same name.
     SetLuaTrigger {
+        owner: Owner,
         name: String,
         pattern: String,
         callback_id: i64,
     },
-    RemoveLuaTrigger(String),
+    /// Remove the Lua trigger `name` that `owner` shares names with.
+    RemoveLuaTrigger {
+        owner: Owner,
+        name: String,
+    },
     /// Subscribe a Lua callback to a GMCP package.
     SubscribeGmcp {
         package: String,
