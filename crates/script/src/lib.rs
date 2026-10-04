@@ -86,14 +86,6 @@ impl ScriptOutcome {
     }
 }
 
-/// A script `#script reload` runs again: its owner, its chunk name and
-/// its code.
-struct LoadedScript {
-    owner: Owner,
-    chunk: String,
-    code: String,
-}
-
 /// What one call left behind before its actions drain.
 struct Called {
     /// How many actions waited before the call began. The call's own sit
@@ -140,9 +132,9 @@ pub struct ScriptEngine {
     limits: Arc<Limits>,
     triggers: Vec<LuaTrigger>,
     gmcp_subs: HashMap<String, Vec<i64>>,
-    /// The scripts `#script reload` runs again, in the order they first
-    /// loaded.
-    loaded_scripts: Vec<LoadedScript>,
+    /// The plugins and loose scripts that loaded, in the order they first
+    /// loaded, which `#script reload` follows.
+    loaded_scripts: Vec<Owner>,
     /// The plugins and loose scripts Vosh stopped. A plugin stays off
     /// until it loads again, and a loose script until `#script reload`.
     stopped: HashSet<Owner>,
@@ -220,11 +212,7 @@ impl ScriptEngine {
     }
 
     pub fn loaded_script_names(&self) -> Vec<String> {
-        let mut names: Vec<String> = self
-            .loaded_scripts
-            .iter()
-            .map(|script| script.owner.listed_name())
-            .collect();
+        let mut names: Vec<String> = self.loaded_scripts.iter().map(Owner::listed_name).collect();
         names.sort();
         names
     }
@@ -280,66 +268,39 @@ impl ScriptEngine {
         self.finish(owner, &Site::Entry, called)
     }
 
-    /// Load a plugin or a loose script, or load it again, as a named
-    /// chunk a later `reload` can run again. `owner` names the plugin or
-    /// the loose file, and `chunk` is the chunk name its errors name, like
-    /// `@vitals_alert/main.lua`.
+    /// Load a plugin or a loose script, or load it again. `owner` names
+    /// the plugin or the loose file, and `chunk` is the chunk name its
+    /// errors name, like `@vitals_alert/main.lua`.
     ///
     /// A load that succeeds takes the place of all `owner` registered
-    /// before, its Lua triggers, GMCP handlers and timers, and a
-    /// plugin's aliases, so a load never doubles them. A load that fails registers nothing and leaves
-    /// what `owner` had, and its other actions go ahead. A load Vosh
-    /// stops leaves `owner` off with nothing registered. Loading turns an
-    /// owner back on after a stop.
-    pub fn load_script(&mut self, owner: Owner, chunk: &str, code: String) -> ScriptOutcome {
+    /// before, its Lua triggers, GMCP handlers and timers, and a plugin's
+    /// aliases, so a load never doubles them. A load that fails registers
+    /// nothing and leaves what `owner` had, and its other actions go
+    /// ahead. A load Vosh stops leaves `owner` off with nothing
+    /// registered. Loading turns an owner back on after a stop.
+    pub fn load_script(&mut self, owner: Owner, chunk: &str, code: &str) -> ScriptOutcome {
         self.stopped.remove(&owner);
-        let (outcome, ran) = self.run_script(&owner, chunk, &code);
+        let (outcome, ran) = self.run_script(&owner, chunk, code);
         // A stopped script stays on the list, so `#script reload` can
-        // bring it back. A script that failed keeps what it had.
-        if ran || self.stopped.contains(&owner) {
-            let script = LoadedScript {
-                owner,
-                chunk: chunk.to_string(),
-                code,
-            };
-            match self
-                .loaded_scripts
-                .iter_mut()
-                .find(|loaded| loaded.owner == script.owner)
-            {
-                Some(loaded) => *loaded = script,
-                None => self.loaded_scripts.push(script),
-            }
+        // bring it back. A script that failed keeps its place, or never
+        // takes one.
+        if (ran || self.stopped.contains(&owner)) && !self.loaded_scripts.contains(&owner) {
+            self.loaded_scripts.push(owner);
         }
         outcome
     }
 
-    /// Re-execute every loaded script in the order they loaded, and go on
-    /// past one that fails. Each run that succeeds takes the place of all
-    /// its script registered before, as [`Self::load_script`] says. A
-    /// loose script Vosh stopped runs again, and a plugin Vosh stopped
-    /// stays off. Lua globals and the variables a script set stay.
-    pub fn reload_scripts(&mut self) -> ScriptOutcome {
-        let scripts: Vec<(Owner, String, String)> = self
-            .loaded_scripts
+    /// The plugins and loose scripts `#script reload` reads again and
+    /// loads, in the order they first loaded. A loose script Vosh stopped
+    /// is among them, so a reload brings it back, and a plugin Vosh
+    /// stopped is not, since it stays off until you save it or restart
+    /// Vosh.
+    pub fn reload_order(&self) -> Vec<Owner> {
+        self.loaded_scripts
             .iter()
-            .filter(|script| {
-                !(matches!(script.owner, Owner::Plugin(_)) && self.stopped.contains(&script.owner))
-            })
-            .map(|script| {
-                (
-                    script.owner.clone(),
-                    script.chunk.clone(),
-                    script.code.clone(),
-                )
-            })
-            .collect();
-        let mut acc = ScriptOutcome::default();
-        for (owner, chunk, code) in scripts {
-            self.stopped.remove(&owner);
-            acc.append(self.run_script(&owner, &chunk, &code).0);
-        }
-        acc
+            .filter(|owner| !(matches!(owner, Owner::Plugin(_)) && self.stopped.contains(owner)))
+            .cloned()
+            .collect()
     }
 
     /// Run a loaded script's code as one call of `owner`. A plugin runs
@@ -401,7 +362,7 @@ impl ScriptEngine {
     /// variables it set and the groups it turned on or off stay as they
     /// are, and so do the aliases a loose script made, which you keep.
     pub fn unload(&mut self, owner: &Owner) -> ScriptOutcome {
-        self.loaded_scripts.retain(|script| script.owner != *owner);
+        self.loaded_scripts.retain(|loaded| loaded != owner);
         self.stopped.remove(owner);
         let owned = self.owned_callbacks(owner);
         let mut actions = self.release(&owned);
@@ -837,7 +798,27 @@ mod tests {
 
     /// Load `code` as the loose script `name`.
     fn load(e: &mut ScriptEngine, name: &str, code: &str) -> ScriptOutcome {
-        e.load_script(Owner::Script(name.into()), &format!("@{name}"), code.into())
+        e.load_script(Owner::Script(name.into()), &format!("@{name}"), code)
+    }
+
+    /// Load each script `#script reload` runs again, in its order, with
+    /// the code `files` holds for its name, the way the app reads each
+    /// file again.
+    fn reload(e: &mut ScriptEngine, files: &[(&str, &str)]) -> ScriptOutcome {
+        let mut acc = ScriptOutcome::default();
+        for owner in e.reload_order() {
+            let (name, chunk) = match &owner {
+                Owner::Script(name) => (name.clone(), format!("@{name}")),
+                Owner::Plugin(name) => (name.clone(), format!("@{name}/main.lua")),
+                other => panic!("{other:?} never reloads"),
+            };
+            let (_, code) = files
+                .iter()
+                .find(|(file, _)| *file == name)
+                .unwrap_or_else(|| panic!("no file for {name}"));
+            acc.append(e.load_script(owner, &chunk, code));
+        }
+        acc
     }
 
     #[test]
@@ -923,7 +904,7 @@ mod tests {
             e.load_script(
                 Owner::Plugin(name.into()),
                 &format!("@{name}/main.lua"),
-                format!(
+                &format!(
                     "mud.trigger('eat', 'You are hungry', function() mud.echo('{name}') end)\n\
                      mud.on_gmcp('{package}', function() mud.untrigger('eat') end)"
                 ),
@@ -1179,14 +1160,10 @@ mod tests {
     #[test]
     fn reload_replaces_gmcp_subscriptions_instead_of_adding() {
         let mut e = ScriptEngine::new().unwrap();
-        load(
-            &mut e,
-            "vitals.lua",
-            r#"mud.on_gmcp("Char.Vitals", function(d) mud.echo("hp " .. d.hp) end)"#,
-        )
-        .unwrap();
-        e.reload_scripts().unwrap();
-        e.reload_scripts().unwrap();
+        let code = r#"mud.on_gmcp("Char.Vitals", function(d) mud.echo("hp " .. d.hp) end)"#;
+        load(&mut e, "vitals.lua", code).unwrap();
+        reload(&mut e, &[("vitals.lua", code)]).unwrap();
+        reload(&mut e, &[("vitals.lua", code)]).unwrap();
         let outcome = e
             .dispatch_gmcp("Char.Vitals", &serde_json::json!({"hp": 80}))
             .unwrap();
@@ -1200,10 +1177,9 @@ mod tests {
         let code = r#"mud.on_gmcp("Room.Info", function() mud.echo("room") end)"#;
         let mut e = ScriptEngine::new().unwrap();
         let mapper = Owner::Plugin("mapper".into());
-        e.load_script(mapper.clone(), "@mapper/main.lua", code.into())
+        e.load_script(mapper.clone(), "@mapper/main.lua", code)
             .unwrap();
-        e.load_script(mapper, "@mapper/main.lua", code.into())
-            .unwrap();
+        e.load_script(mapper, "@mapper/main.lua", code).unwrap();
         let outcome = e
             .dispatch_gmcp("Room.Info", &serde_json::json!({}))
             .unwrap();
@@ -1214,18 +1190,19 @@ mod tests {
     #[test]
     fn reload_keeps_gmcp_subscriptions_the_script_did_not_make() {
         let mut e = ScriptEngine::new().unwrap();
-        load(
-            &mut e,
-            "vitals.lua",
-            r#"mud.on_gmcp("Char.Vitals", function() mud.echo("script") end)"#,
-        )
-        .unwrap();
-        load(
-            &mut e,
-            "other.lua",
-            r#"mud.on_gmcp("Char.Vitals", function() mud.echo("other") end)"#,
-        )
-        .unwrap();
+        let files = [
+            (
+                "vitals.lua",
+                r#"mud.on_gmcp("Char.Vitals", function() mud.echo("script") end)"#,
+            ),
+            (
+                "other.lua",
+                r#"mud.on_gmcp("Char.Vitals", function() mud.echo("other") end)"#,
+            ),
+        ];
+        for (name, code) in files {
+            load(&mut e, name, code).unwrap();
+        }
         e.eval(
             r#"mud.on_gmcp("Char.Vitals", function() mud.echo("typed") end)"#,
             "t",
@@ -1233,8 +1210,8 @@ mod tests {
         .unwrap();
         // A run that claimed handlers it did not make would drop them on
         // the next reload, so reload twice.
-        e.reload_scripts().unwrap();
-        e.reload_scripts().unwrap();
+        reload(&mut e, &files).unwrap();
+        reload(&mut e, &files).unwrap();
         let mut echoes = e
             .dispatch_gmcp("Char.Vitals", &serde_json::json!({}))
             .unwrap()
@@ -1256,20 +1233,16 @@ mod tests {
         // Lua globals survive a reload, but the handlers the last run
         // made do not, so a handler a global guards goes and stays gone.
         let mut e = ScriptEngine::new().unwrap();
-        load(
-            &mut e,
-            "vitals.lua",
-            r#"
+        let code = r#"
             if not hooked then
                 mud.on_gmcp("Char.Vitals", function() mud.echo("guarded") end)
                 hooked = true
             end
             mud.on_gmcp("Room.Info", function() mud.echo("room") end)
-            "#,
-        )
-        .unwrap();
-        e.reload_scripts().unwrap();
-        e.reload_scripts().unwrap();
+            "#;
+        load(&mut e, "vitals.lua", code).unwrap();
+        reload(&mut e, &[("vitals.lua", code)]).unwrap();
+        reload(&mut e, &[("vitals.lua", code)]).unwrap();
         let data = serde_json::json!({});
         let vitals = &e.dispatch_gmcp("Char.Vitals", &data).unwrap().actions;
         assert!(vitals.is_empty(), "{vitals:?}");
@@ -1310,12 +1283,12 @@ mod tests {
         let mut e = ScriptEngine::new().unwrap();
         let meals = Owner::Plugin("meals".into());
         let first = e
-            .load_script(meals.clone(), "@meals/main.lua", code.into())
+            .load_script(meals.clone(), "@meals/main.lua", code)
             .unwrap();
         let mut started = timers(&first);
         for _ in 0..3 {
             let again = e
-                .load_script(meals.clone(), "@meals/main.lua", code.into())
+                .load_script(meals.clone(), "@meals/main.lua", code)
                 .unwrap();
             // Each load cancels the timer the last one started.
             assert_eq!(cancels(&again), started);
@@ -1355,6 +1328,30 @@ mod tests {
     }
 
     #[test]
+    fn a_reload_follows_the_order_scripts_first_loaded_in() {
+        let mut e = ScriptEngine::new().unwrap();
+        load(&mut e, "b.lua", "").unwrap();
+        plugin(&mut e, "a", "").unwrap();
+        load(&mut e, "a.lua", "").unwrap();
+        // A load again keeps its place, and a first load that fails
+        // takes none.
+        load(&mut e, "b.lua", "").unwrap();
+        assert!(load(&mut e, "typo.lua", "mud.ech('x')").failed);
+        // A plugin Vosh stopped stays off, and a loose script comes back.
+        assert!(plugin(&mut e, "spin", "while true do end").failed);
+        assert!(load(&mut e, "spin.lua", "while true do end").failed);
+        assert_eq!(
+            e.reload_order(),
+            [
+                Owner::Script("b.lua".into()),
+                Owner::Plugin("a".into()),
+                Owner::Script("a.lua".into()),
+                Owner::Script("spin.lua".into()),
+            ]
+        );
+    }
+
+    #[test]
     fn a_failed_reload_keeps_the_triggers_and_timers_it_had() {
         let mut e = ScriptEngine::new().unwrap();
         let good = "mud.trigger('hunger', 'You are hungry', function() mud.echo('eat') end)\n\
@@ -1386,7 +1383,7 @@ mod tests {
                       mud.timer(60, function() end) \
                       mud.set_var('fed', 'yes') \
                     end)";
-        e.load_script(meals.clone(), "@meals/main.lua", code.into())
+        e.load_script(meals.clone(), "@meals/main.lua", code)
             .unwrap();
         // What its handler registers later is its own too.
         let later = e
@@ -1447,7 +1444,7 @@ mod tests {
         assert_eq!(held_callbacks(&e), 1);
         // Fixing the script and reloading leaves exactly one handler.
         load(&mut e, "vitals.lua", good).unwrap();
-        e.reload_scripts().unwrap();
+        reload(&mut e, &[("vitals.lua", good)]).unwrap();
         let outcome = e.dispatch_gmcp("Char.Vitals", &vitals).unwrap();
         assert_eq!(outcome.actions, vec![Action::Echo("v".into())]);
         assert_eq!(held_callbacks(&e), 1);
@@ -1486,7 +1483,7 @@ mod tests {
         e.load_script(
             Owner::Plugin(name.into()),
             &format!("@{name}/main.lua"),
-            code.into(),
+            code,
         )
     }
 
@@ -1670,8 +1667,7 @@ mod tests {
             "@watch/main.lua",
             "function watch(pattern) \
                mud.trigger('seen', pattern, function() mud.echo('seen') end) \
-             end"
-            .into(),
+             end",
         )
         .unwrap();
         e.eval("plugins.watch.watch('You are hungry')", "=#lua")
@@ -1690,7 +1686,7 @@ mod tests {
         let healer = Owner::Plugin("healer".into());
         let code = "mud.alias('hl', 'cast heal') mud.unalias('kk')";
         let loaded = e
-            .load_script(healer.clone(), "@healer/main.lua", code.into())
+            .load_script(healer.clone(), "@healer/main.lua", code)
             .unwrap();
         // A load drops the aliases the plugin made before its own run.
         assert_eq!(
@@ -1712,7 +1708,7 @@ mod tests {
         let failed = e.load_script(
             healer.clone(),
             "@healer/main.lua",
-            "mud.alias('hl', 'cast cure') error('typo')".into(),
+            "mud.alias('hl', 'cast cure') error('typo')",
         );
         assert_eq!(error_lines(&failed), ["healer/main.lua:1: typo"]);
         assert_eq!(failed.actions.len(), 1);
@@ -2146,7 +2142,7 @@ mod tests {
                       end\n\
                       mud.send(\"stand\")\n\
                     end)\n";
-        e.load_script(wait_full.clone(), "@wait_full/main.lua", code.into())
+        e.load_script(wait_full.clone(), "@wait_full/main.lua", code)
             .unwrap();
         let vitals = serde_json::json!({"hp": 186, "maxhp": 1020});
         let outcome = e.dispatch_gmcp("Char.Vitals", &vitals);
@@ -2163,7 +2159,7 @@ mod tests {
         // reload leaves it off.
         let leftover = &e.dispatch_gmcp("Char.Vitals", &vitals).actions;
         assert!(leftover.is_empty(), "{leftover:?}");
-        let leftover = &e.reload_scripts().actions;
+        let leftover = &reload(&mut e, &[]).actions;
         assert!(leftover.is_empty(), "{leftover:?}");
         let leftover = &e.dispatch_gmcp("Char.Vitals", &vitals).actions;
         assert!(leftover.is_empty(), "{leftover:?}");
@@ -2174,7 +2170,7 @@ mod tests {
         let leftover = &e.dispatch_gmcp("Char.Vitals", &full).actions;
         assert!(leftover.is_empty(), "{leftover:?}");
         let loaded = e
-            .load_script(wait_full.clone(), "@wait_full/main.lua", code.into())
+            .load_script(wait_full.clone(), "@wait_full/main.lua", code)
             .unwrap();
         assert!(!e.is_stopped(&wait_full));
         assert!(loaded.actions.contains(&Action::Send("stand".into())));
@@ -2191,7 +2187,7 @@ mod tests {
         let outcome = e.load_script(
             spin.clone(),
             "@spin/main.lua",
-            "mud.send('look')\nwhile true do end".into(),
+            "mud.send('look')\nwhile true do end",
         );
         assert_eq!(
             error_lines(&outcome),
@@ -2211,12 +2207,8 @@ mod tests {
     fn a_stopped_loose_script_stays_off_until_reload() {
         let mut e = ScriptEngine::new().unwrap();
         let combat = Owner::Script("combat.lua".into());
-        load(
-            &mut e,
-            "combat.lua",
-            "mud.trigger('hunger', 'You are hungry', function() while true do end end)",
-        )
-        .unwrap();
+        let code = "mud.trigger('hunger', 'You are hungry', function() while true do end end)";
+        load(&mut e, "combat.lua", code).unwrap();
         let outcome = e.match_line("You are hungry.");
         assert_eq!(
             error_lines(&outcome),
@@ -2226,7 +2218,7 @@ mod tests {
         let leftover = &e.lua_triggers();
         assert!(leftover.is_empty(), "{leftover:?}");
         // A reload runs it again and brings its trigger back.
-        e.reload_scripts().unwrap();
+        reload(&mut e, &[("combat.lua", code)]).unwrap();
         assert!(!e.is_stopped(&combat));
         assert_eq!(e.lua_triggers().len(), 1);
         // A load that runs away stays listed, so a reload can bring it

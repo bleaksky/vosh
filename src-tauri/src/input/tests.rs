@@ -876,17 +876,109 @@ fn lua_a_line_runs_hands_on_all_it_asks_for() {
     assert_eq!(ran.lua.new_timers.len(), 1);
     assert_eq!(ran.lua.inputs, ["#echo again"]);
     assert!(ran.lua.prompt_vars_changed);
+}
 
-    // A reload runs each loaded script again, timers and all.
-    let outcome = p.script.load_script(
-        vosh_script::Owner::Script("t.lua".into()),
-        "@t.lua",
-        "mud.timer(1, function() end)".into(),
-    );
-    assert!(!outcome.failed);
+/// A state whose app data folder is a new temporary folder, and its
+/// scripts folder.
+fn state_with_scripts() -> (tempfile::TempDir, AppState, std::path::PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let state = AppState::default();
+    state.app_data.set(dir.path().to_path_buf()).unwrap();
+    let scripts = dir.path().join("scripts");
+    std::fs::create_dir_all(&scripts).unwrap();
+    (dir, state, scripts)
+}
+
+/// The text of each `[lua]` error line in `echoes`.
+fn lua_errors(echoes: &[String]) -> Vec<String> {
+    echoes
+        .iter()
+        .filter_map(|line| {
+            line.strip_prefix("\x1b[90m[lua]\x1b[0m \x1b[31m")?
+                .strip_suffix("\x1b[0m")
+                .map(str::to_string)
+        })
+        .collect()
+}
+
+#[test]
+fn script_reload_reads_each_file_again_in_load_order() {
+    let (_dir, state, scripts) = state_with_scripts();
+    let mut p = Profile::default();
+    std::fs::write(
+        scripts.join("b.lua"),
+        "mud.echo('b one') mud.timer(60, function() end)",
+    )
+    .unwrap();
+    std::fs::write(scripts.join("a.lua"), "mud.echo('a one')").unwrap();
+    let first = [
+        run_line(&state, &mut p, "#script load b"),
+        run_line(&state, &mut p, "#script load a"),
+    ];
+    assert_eq!(first[0].lua.new_timers.len(), 1);
+    // You edit both, and b now has a typo.
+    std::fs::write(scripts.join("b.lua"), "mud.echo('b two')\nmud.ech('x')").unwrap();
+    std::fs::write(scripts.join("a.lua"), "mud.echo('a two')").unwrap();
     let ran = run_line(&state, &mut p, "#script reload");
     assert_eq!(ran.result.echo, ["scripts reloaded"]);
+    // In load order, and the error in b stops nothing after it.
+    assert_eq!(
+        ran.lua.echoes,
+        [
+            "b two",
+            "\x1b[90m[lua]\x1b[0m \x1b[31mb.lua:2: attempt to call a nil value (field 'ech')\x1b[0m",
+            "a two",
+        ]
+    );
+    // b failed, so it keeps the timer it had.
+    let leftover = &ran.lua.cancel_timers;
+    assert!(leftover.is_empty(), "{leftover:?}");
+    // A file that went away leaves its script as it was.
+    std::fs::remove_file(scripts.join("a.lua")).unwrap();
+    std::fs::write(
+        scripts.join("b.lua"),
+        "mud.echo('b three') mud.timer(60, function() end)",
+    )
+    .unwrap();
+    let ran = run_line(&state, &mut p, "#script reload");
+    assert_eq!(
+        lua_errors(&ran.lua.echoes),
+        ["Vosh could not read a.lua and left it as it was."]
+    );
+    assert_eq!(ran.lua.echoes[0], "b three");
+    // The timer the last good run of b started goes, and a new one starts.
+    assert_eq!(ran.lua.cancel_timers.len(), 1);
     assert_eq!(ran.lua.new_timers.len(), 1);
+    assert_eq!(p.script.loaded_script_names(), ["a.lua", "b.lua"]);
+}
+
+#[test]
+fn script_reload_reads_a_plugin_again_too() {
+    let (dir, state, _scripts) = state_with_scripts();
+    let plugin = dir.path().join("plugins").join("meals");
+    std::fs::create_dir_all(&plugin).unwrap();
+    std::fs::write(plugin.join("manifest.toml"), "[plugin]\nname = \"meals\"\n").unwrap();
+    std::fs::write(
+        plugin.join("main.lua"),
+        "mud.trigger('hunger', 'You are hungry', function() mud.echo('eat') end)",
+    )
+    .unwrap();
+    let mut p = Profile::default();
+    let outcome = p.script.load_script(
+        vosh_script::Owner::Plugin("meals".into()),
+        "@meals/main.lua",
+        &std::fs::read_to_string(plugin.join("main.lua")).unwrap(),
+    );
+    assert!(!outcome.failed);
+    std::fs::write(
+        plugin.join("main.lua"),
+        "mud.trigger('hunger', 'You are hungry', function() mud.echo('eat now') end)",
+    )
+    .unwrap();
+    run_line(&state, &mut p, "#script reload");
+    let fired = p.script.match_line("You are hungry.");
+    let apply = crate::script::apply_actions(&mut p, fired);
+    assert_eq!(apply.echoes, ["eat now"]);
 }
 
 #[test]
@@ -1027,7 +1119,7 @@ fn a_plugin_alias_lasts_for_the_session_and_is_never_saved() {
     let outcome = p.script.load_script(
         healer.clone(),
         "@healer/main.lua",
-        "mud.alias('hl', 'cast cure') mud.alias('bt', 'bash %1')".into(),
+        "mud.alias('hl', 'cast cure') mud.alias('bt', 'bash %1')",
     );
     let apply = crate::script::apply_actions(&mut p, outcome);
     assert!(!apply.durable_changed);

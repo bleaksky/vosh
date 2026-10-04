@@ -2,7 +2,8 @@
 //! files from the scripts folder, `#lua` runs a line of Lua, and
 //! `#scripts` lists what is loaded.
 
-use vosh_script::Owner;
+use tracing::warn;
+use vosh_script::{Action, Owner, ScriptOutcome};
 
 use super::{split_first_word, InputResult};
 use crate::app::state::AppState;
@@ -19,7 +20,7 @@ pub(super) fn slash_script(
     let (cmd, rest) = split_first_word(args);
     match cmd {
         "load" => slash_script_load(state, profile, rest, lua),
-        "reload" => slash_script_reload(profile, lua),
+        "reload" => slash_script_reload(state, profile, lua),
         "" => InputResult::error("usage #script load <name> | #script reload"),
         other => InputResult::error(format!("unknown #script subcommand `{other}`")),
     }
@@ -54,7 +55,7 @@ fn slash_script_load(
     let outcome =
         profile
             .script
-            .load_script(Owner::Script(file.clone()), &format!("@{file}"), code);
+            .load_script(Owner::Script(file.clone()), &format!("@{file}"), &code);
     let failed = outcome.failed;
     lua.append(script::apply_actions(profile, outcome));
     // A script that failed says why in its own lines.
@@ -64,11 +65,59 @@ fn slash_script_load(
     InputResult::echo_line(format!("loaded {}", path.display()))
 }
 
-fn slash_script_reload(profile: &mut Profile, lua: &mut script::ApplyResult) -> InputResult {
+/// `#script reload`. Reads each loaded plugin and loose script from disk
+/// again and loads it, in the order they first loaded, and goes on past
+/// one that fails. A file Vosh cannot read leaves its script as it was.
+fn slash_script_reload(
+    state: &AppState,
+    profile: &mut Profile,
+    lua: &mut script::ApplyResult,
+) -> InputResult {
+    let Some(app_data) = state.app_data.get() else {
+        return InputResult::error("could not resolve scripts directory");
+    };
     script::snapshot_vars(&profile.script, &profile.vars);
-    let outcome = profile.script.reload_scripts();
+    let mut outcome = ScriptOutcome::default();
+    for owner in profile.script.reload_order() {
+        match read_again(app_data, &owner) {
+            Some(Ok((chunk, code))) => {
+                outcome.append(profile.script.load_script(owner, &chunk, &code));
+            }
+            Some(Err(line)) => outcome.actions.push(Action::Error(line)),
+            None => {}
+        }
+    }
     lua.append(script::apply_actions(profile, outcome));
     InputResult::echo_line("scripts reloaded")
+}
+
+/// The chunk name and the code of the plugin or loose script `owner` as
+/// its file reads now, or the line that says Vosh could not read it.
+/// None for Lua that has no file.
+fn read_again(
+    app_data: &std::path::Path,
+    owner: &Owner,
+) -> Option<Result<(String, String), String>> {
+    Some(match owner {
+        Owner::Script(file) => {
+            let path = paths::scripts_dir(app_data).join(file);
+            std::fs::read_to_string(&path)
+                .map(|code| (format!("@{file}"), code))
+                .map_err(|e| {
+                    warn!(path = %path.display(), error = %e, "script reload could not read");
+                    format!("Vosh could not read {file} and left it as it was.")
+                })
+        }
+        Owner::Plugin(name) => {
+            crate::app::plugins::read_plugin(&paths::plugins_dir(app_data), name)
+                .map(|plugin| (plugin.chunk(name), plugin.code))
+                .map_err(|e| {
+                    warn!(plugin = %name, error = %e, "plugin reload could not read");
+                    format!("Vosh could not read plugin {name} and left it as it was.")
+                })
+        }
+        Owner::Typed | Owner::Trigger(_) | Owner::Alias(_) => return None,
+    })
 }
 
 pub(super) fn slash_scripts_list(profile: &Profile) -> InputResult {
