@@ -1062,7 +1062,8 @@
 /* The drawing: inset 8, radius 8, no fill or border of its own. The
    map paints on the panel's color, so the rooms sit in the pane with
    no box around them. It takes the height the rows leave and keeps at
-   least 96 px. */
+   least 96 px. The rooms it clips at its sides fade out over 12 px
+   instead of ending in half squares. */
 .pane-map-box {
   position: relative;
   display: flex;
@@ -1071,6 +1072,14 @@
   margin: 0 8px;
   border-radius: var(--r-row);
   overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 12px,
+    #000 calc(100% - 12px),
+    transparent
+  );
+  mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
 }
 
 .pane-map-box .server-view {
@@ -1089,6 +1098,13 @@
   outline: 1px solid var(--accent);
   outline-offset: -1px;
   border-radius: var(--r-row);
+}
+
+/* The fade would hide the sides of that ring, so the drawing shows
+   whole while it has the keyboard. */
+.pane-map-box:has(.map-canvas-host:focus-visible) {
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 .pane-map-empty {
@@ -1190,11 +1206,24 @@
   color: var(--tertiary);
 }
 
-/* The exits keep their full width until the room name is down to a
-   floor of 3em, then they give way with an ellipsis. Six exits in a wide
-   face on a narrow panel never push the name out of its row. The 8px is
-   the gap .pane-row-value leaves before the exits. */
-.pane-map-exits {
+/* The exits sit at the right of the terrain row, so the room name has
+   its whole row. On a narrow panel they give way with an ellipsis once
+   the row runs short. */
+.pane-map-where .pane-map-exits {
+  min-width: 0;
+  margin-left: auto;
+  padding-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A band with no terrain row keeps the exits beside the name. They keep
+   their full width until the name is down to a floor of 3em, then give
+   way with an ellipsis, so six exits in a wide face never push the name
+   out of its row. The 8px is the gap .pane-row-value leaves before the
+   exits. */
+.pane-map-room .pane-map-exits {
   min-width: 0;
   max-width: calc(100% - 3em - 8px);
   overflow: hidden;
