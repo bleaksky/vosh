@@ -37,7 +37,7 @@ describe('the button that says where your prompt shows', () => {
       const html = draw(value);
       expect(html, value).toMatch(
         new RegExp(
-          `<button[^>]*class="st-button st-button-secondary pc-show-button"[^>]*><span>${label}</span><svg`,
+          `<button[^>]*class="st-button st-button-secondary pc-menu-button"[^>]*><span>${label}</span><svg`,
         ),
       );
       // A screen reader hears what the button picks and the place now.

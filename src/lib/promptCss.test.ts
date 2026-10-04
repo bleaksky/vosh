@@ -67,9 +67,9 @@ describe('the foot under your design', () => {
   });
 
   it('sets where your prompt shows in the face of the preview segments', () => {
-    const button = rule('.pc-show-button');
+    const button = rule('.pc-menu-button');
     expect(button).toContain('font-size: 12px;');
     expect(button).toContain('padding: 0 6px 0 10px;');
-    expect(rule(".pc-show-button[aria-disabled='true']")).toContain('opacity: 0.45;');
+    expect(rule(".pc-menu-button[aria-disabled='true']")).toContain('opacity: 0.45;');
   });
 });
