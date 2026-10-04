@@ -5,6 +5,7 @@ import {
   clockTime,
   codeReaderStep,
   codesSourceLine,
+  editedTable,
   entryCopy,
   headerButtons,
   lastSeenLine,
@@ -13,6 +14,7 @@ import {
   matchSentences,
   matchTone,
   migratedNote,
+  movedBackTable,
   nextCardRequest,
   sampleCut,
   moreItems,
@@ -611,6 +613,37 @@ describe('what a start and an edit save', () => {
     // A move of a design of yours comes back yours.
     const yours = { ...table, mirror: false };
     expect(withMoveTakenBack(withDesign(yours, after), { ...right, mirror: false })).toEqual(yours);
+  });
+
+  it('lands an edit on the table as it stands, so a place picked meanwhile stays', () => {
+    // The edit began on the table, and while it waited on its round
+    // trips you picked Lifted at the foot and turned drawing on.
+    const now = { ...withShow(table, 'lifted'), draw: true };
+    const edited = editedTable(table, now, '[%s_bold%hp] ');
+    expect(edited).toEqual({ ...now, template: '[%s_bold%hp] ', mirror: false });
+    // Command Z takes back the design alone.
+    expect(takeBackOnto(edited!, undoEntry(now, edited!)!)).toEqual(now);
+    // An edit that left the design as it was saves nothing.
+    expect(editedTable(table, now, table.template)).toBeNull();
+    // With no table to land on, it lands on the one it began on.
+    expect(editedTable(table, null, '[%s_bold%hp] ')).toEqual(withDesign(table, '[%s_bold%hp] '));
+  });
+
+  it('lands a move taken back on the table as it stands too', () => {
+    const after = '[ %hp]';
+    const moved = withDesign(table, after);
+    const right: MoveMade = {
+      before: table.template,
+      after,
+      from: 1,
+      landed: 2,
+      dir: 1,
+      mirror: table.mirror,
+    };
+    // You picked In the text while the move went back.
+    const now = withShow(moved, 'text');
+    expect(movedBackTable(moved, now, right)).toEqual({ ...table, show: 'text' });
+    expect(movedBackTable(moved, null, right)).toEqual(table);
   });
 });
 
