@@ -39,7 +39,7 @@ use crate::disk::paths::{catalog_path, loadouts_path};
 use crate::disk::save::PERSIST_LOCK;
 use crate::loadouts::catalog::{load_global_catalog, save_global_catalog, GlobalCatalog};
 use crate::loadouts::set::{load_loadout_set, save_loadout_set, Loadout, LoadoutSet};
-use crate::profile::file::{GroupFolders, PluginsPersist, ProfileConfig};
+use crate::profile::file::{GroupFolders, OnSwitch, PluginsPersist, ProfileConfig};
 use crate::profile::live::{Macro, Timer};
 use crate::profile::login_match::AutoMatch;
 use crate::profile::panes::{DockEntryPersist, PaneLayoutPersist, PaneNode};
@@ -590,9 +590,36 @@ fn full_profile() -> ProfileConfig {
             macros: BTreeMap::from([("travel".into(), Vec::new())]),
         },
         prompt: None,
+        alerts: full_alerts(),
+        // Reconnect when the link drops, turned off (Alerts Q14).
+        reconnect: OnSwitch(false),
     };
     config.set_prompt(full_prompt());
     config
+}
+
+/// What two alert presets do, the `[alerts]` table of Alerts Q5.
+fn full_alerts() -> BTreeMap<String, AlertParts> {
+    BTreeMap::from([
+        (
+            "alert_tells".into(),
+            AlertParts {
+                banner: true,
+                sound: Some("bell".into()),
+                attention: Some(Attention::Once),
+                background: true,
+                words: false,
+            },
+        ),
+        (
+            "alert_low_health".into(),
+            AlertParts {
+                sound: Some("low".into()),
+                background: false,
+                ..AlertParts::default()
+            },
+        ),
+    ])
 }
 
 /// The full profile with a regex capture in place of Aabahran's codes,
@@ -667,6 +694,7 @@ fn full_catalog() -> GlobalCatalog {
         triggers: full_triggers(),
         macros: full_macros(),
         enabled_presets: Some(vec!["healing_basics".into(), "sent_tells".into()]),
+        alerts: full_alerts(),
     }
 }
 

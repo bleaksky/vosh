@@ -2,6 +2,7 @@ disabled_alias_groups = ["social"]
 disabled_trigger_groups = ["spam"]
 disabled_macro_groups = ["travel"]
 disabled_timer_groups = ["upkeep"]
+reconnect = false
 
 [[aliases]]
 name = "kk"
@@ -324,3 +325,16 @@ fprompt = "<%hhp %mm %vmv [%e]> "
 follow_game = false
 seen_at = "2026-09-30T21:14:05-07:00"
 source = "gmcp"
+
+[alerts.alert_low_health]
+banner = false
+sound = "low"
+background = false
+words = false
+
+[alerts.alert_tells]
+banner = true
+sound = "bell"
+attention = "once"
+background = true
+words = false

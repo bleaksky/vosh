@@ -2,11 +2,12 @@
 //! characters share in loadout mode. Vosh runs in loadout mode while the
 //! file is on disk.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use tracing::warn;
+use vosh_automation::alert::AlertParts;
 use vosh_automation::alias::{Alias, AliasStore};
 use vosh_automation::trigger::{Trigger, TriggerStore};
 
@@ -39,17 +40,25 @@ pub(crate) struct GlobalCatalog {
     /// [`super::presets::adopt_catalog_presets`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled_presets: Option<Vec<String>>,
+    /// What each alert preset does, by preset id, the `[alerts]` table a
+    /// profile file holds in per profile mode. It moves here with
+    /// `enabled_presets`, since the list says which of them ring. Left
+    /// out while it holds none.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub alerts: BTreeMap<String, AlertParts>,
 }
 
 impl GlobalCatalog {
     /// The catalog as the live profile holds it: its aliases, triggers,
-    /// macros, and enabled presets. A save in loadout mode writes this.
+    /// macros, enabled presets and alert presets. A save in loadout mode
+    /// writes this.
     pub(crate) fn from_profile(profile: &crate::profile::live::Profile) -> Self {
         Self {
             aliases: profile.aliases.list().into_iter().cloned().collect(),
             triggers: profile.triggers.list(),
             macros: profile.macros.clone(),
             enabled_presets: Some(profile.ui.enabled_presets.clone()),
+            alerts: profile.alerts.clone(),
         }
     }
 }
@@ -105,6 +114,8 @@ pub(crate) fn lay_catalog_over(p: &mut Profile, catalog: &GlobalCatalog, set: Op
     // triggers, so the profile's own list gives way to it.
     if let Some(list) = &catalog.enabled_presets {
         p.ui.enabled_presets.clone_from(list);
+        // So does what each alert preset does.
+        p.alerts.clone_from(&catalog.alerts);
     }
     if let Some(set) = set {
         apply_effective_state(set, p);
@@ -152,6 +163,9 @@ pub(crate) fn lay_catalog_change_over(
         if let Some(list) = &after.enabled_presets {
             p.ui.enabled_presets.clone_from(list);
         }
+    }
+    if after.alerts != before.alerts {
+        p.alerts.clone_from(&after.alerts);
     }
     if let Some(set) = set {
         apply_effective_state(set, p);
@@ -265,6 +279,36 @@ mod tests {
         p.ui.enabled_presets = vec!["healing_basics".into(), "potion_labels".into()];
         lay_catalog_over(&mut p, &catalog, None);
         assert_eq!(p.ui.enabled_presets, ["healing_basics"]);
+    }
+
+    #[test]
+    fn the_alert_presets_move_with_the_list_of_presets_that_are_on() {
+        let tells = AlertParts {
+            banner: true,
+            ..Default::default()
+        };
+        let catalog = GlobalCatalog {
+            enabled_presets: Some(vec!["alert_tells".into()]),
+            alerts: std::collections::BTreeMap::from([("alert_tells".into(), tells.clone())]),
+            ..GlobalCatalog::default()
+        };
+        let mut p = Profile::default();
+        p.alerts.insert("alert_name".into(), AlertParts::default());
+        lay_catalog_over(&mut p, &catalog, None);
+        assert_eq!(p.alerts, catalog.alerts);
+        assert_eq!(GlobalCatalog::from_profile(&p).alerts, catalog.alerts);
+        // A change another open profile saved reaches this one.
+        let after = GlobalCatalog {
+            alerts: std::collections::BTreeMap::new(),
+            ..catalog.clone()
+        };
+        lay_catalog_change_over(&mut p, &catalog, &after, None);
+        assert!(p.alerts.is_empty(), "{:?}", p.alerts);
+        // A catalog that never took the list leaves the profile's own.
+        let mut q = Profile::default();
+        q.alerts.insert("alert_tells".into(), tells);
+        lay_catalog_over(&mut q, &GlobalCatalog::default(), None);
+        assert_eq!(q.alerts.len(), 1);
     }
 
     #[test]
