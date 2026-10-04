@@ -50,7 +50,8 @@ export interface AppTheme {
   /// The colors Fit game colors draws in play, the slots the game color
   /// fit (lib/gameFit) moves off the published palette, from body text
   /// and the 16 ANSI colors. A built in theme stores them computed
-  /// ahead, since a fit takes about two seconds.
+  /// ahead, since a fit takes about two seconds, and a custom theme
+  /// keeps the fit Settings made when you imported or changed it.
   fitted?: Partial<XtermPalette>;
   /// False keeps the published palette in play with Fit game colors on.
   fitGameColors?: false;
@@ -1315,20 +1316,23 @@ export function customThemeLabel(custom: { id: string; label: string }): string 
 /** Convert a CustomTheme record (the on-disk shape with bare maps)
  *  into a full AppTheme. The xterm map overlays a Kanso Zen base so
  *  missing slots fall back to a sensible default rather than rendering
- *  as undefined, and the chrome map becomes token overrides. The label
- *  is never blank (customThemeLabel). */
+ *  as undefined, and the chrome map becomes token overrides. The fit
+ *  Settings kept carries over. The label is never blank
+ *  (customThemeLabel). */
 export function customToAppTheme(custom: {
   id: string;
   label: string;
   description: string;
   xterm: Record<string, string>;
   chrome: Record<string, string>;
+  fitted?: Record<string, string>;
 }): AppTheme {
   return {
     id: custom.id,
     label: customThemeLabel(custom),
     description: custom.description,
     xterm: { ...kansoZen.xterm, ...(custom.xterm as Partial<XtermPalette>) },
+    ...(custom.fitted && { fitted: { ...(custom.fitted as Partial<XtermPalette>) } }),
     chrome: migrateCustomChrome(custom.chrome),
   };
 }

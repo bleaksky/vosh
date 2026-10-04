@@ -36,6 +36,7 @@ import { Button, Card, Row, Section, Segmented, Select, Toggle } from '../ui';
 import { AdvancedAppearance } from './appearance/AdvancedAppearance';
 import { CollapseRows } from './appearance/CollapseRows';
 import { ThemeGallery } from './appearance/ThemeGallery';
+import { useKeepFit } from './appearance/useKeepFit';
 
 // Appearance, from the approved board (SettingsAppearance.dc.html).
 // Theme holds Import… and the gallery of every theme, a caption that
@@ -100,6 +101,7 @@ function systemName(): string {
 
 export function AppearancePage({ target, navSeq, config, setConfig, onError }: SettingsPageProps) {
   const { update } = useSettingsAutoSave(setConfig, onError);
+  const keepFitOf = useKeepFit(config, update);
   const [advancedOpen, setAdvancedOpen] = useState(() => opensAdvanced(target));
   const [importError, setImportError] = useState<string | null>(null);
   const [installedFonts, setInstalledFonts] = useState<SystemFontEntry[]>([]);
@@ -180,13 +182,19 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
     const current = configRef.current;
     if (!current) return;
     const taken = [...BUILTIN_THEMES.map((t) => t.id), ...current.custom_themes.map((t) => t.id)];
+    let theme: CustomTheme;
     try {
-      addTheme(parseThemeFile(file.name, text, taken));
+      theme = parseThemeFile(file.name, text, taken);
     } catch (e) {
       setImportError(
         e instanceof ThemeFileError ? e.message : 'Vosh could not read that theme file.',
       );
+      return;
     }
+    // The theme shows at once, and its game colors are fitted once,
+    // off the main thread, and kept with it.
+    addTheme(theme);
+    keepFitOf(theme);
   };
 
   const fontValue = config.font_family || BUNDLED_FONTS[0].value;

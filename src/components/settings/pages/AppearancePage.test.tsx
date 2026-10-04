@@ -1,6 +1,8 @@
-import { act, createElement } from 'react';
+import { act, createElement, useState } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import tokyoNight from '../../../../fixtures/themes/tokyonight_night.conf?raw';
 import type { SystemFontEntry, UiConfig } from '../../../lib/session';
+import type { XtermPalette } from '../../../lib/themes';
 import { FakeDocument, findAll, type FakeElement, type FakeNode } from '../../../test/fakeDom';
 import type { AppearancePage as AppearancePageType } from './AppearancePage';
 
@@ -24,6 +26,21 @@ const invoke = vi.hoisted(() =>
 );
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
+
+// The game color fit runs in a worker. Here it answers when a test says.
+const fitting = vi.hoisted(() => {
+  const asked: XtermPalette[] = [];
+  let answer: (fitted: Partial<XtermPalette> | null) => void = () => {};
+  const fitOffThread = vi.fn(
+    (palette: XtermPalette) =>
+      new Promise<Partial<XtermPalette> | null>((resolve) => {
+        asked.push(palette);
+        answer = resolve;
+      }),
+  );
+  return { asked, fitOffThread, answer: (fitted: Partial<XtermPalette>) => answer(fitted) };
+});
+vi.mock('../../../lib/fitOffThread', () => ({ fitOffThread: fitting.fitOffThread }));
 vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
@@ -652,6 +669,57 @@ describe('AppearancePage', () => {
     const own = await panelRow('panel-size', { ...config(), panel_font_size: 20 });
     expect(own.value).toBe('20');
     expect(own.options.at(-1)).toEqual({ label: '20 pt', value: '20' });
+  });
+
+  it('adds an imported theme at once and keeps its fit once the fit answers', async () => {
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    let shown: UiConfig = config();
+    function Host() {
+      const [cfg, setCfg] = useState<UiConfig | null>(shown);
+      if (cfg) shown = cfg;
+      return createElement(AppearancePage, {
+        target: { group: 'appearance' },
+        navSeq: 0,
+        config: cfg,
+        setConfig: (next) => setCfg((c) => next(c)),
+        onError: () => undefined,
+        pathB: false,
+        navigate: () => undefined,
+        setLeaveGuard: () => undefined,
+      });
+    }
+    await act(async () => {
+      root.render(createElement(Host));
+    });
+    const [input] = findAll(container, (el) => el.getAttribute('type') === 'file');
+    const key = Object.keys(input).find((k) => k.startsWith('__reactProps$')) ?? '';
+    const props = (input as unknown as Record<string, { onChange: (e: unknown) => void }>)[key];
+    await act(async () => {
+      props.onChange({
+        target: {
+          files: [{ name: 'tokyonight_night.conf', text: async () => tokyoNight }],
+          value: '',
+        },
+      });
+    });
+    // The theme is in and on screen before the fit answers. The built
+    // in Tokyo Night holds its id.
+    const [theme] = shown.custom_themes;
+    expect(theme.id).toBe('tokyo-night-2');
+    expect(shown.theme).toBe(theme.id);
+    expect(theme).not.toHaveProperty('fitted');
+    expect(fitting.asked).toHaveLength(1);
+    expect(fitting.asked[0].background).toBe(theme.xterm.background);
+    await act(async () => {
+      fitting.answer({ red: '#f8809b', brightBlack: '#6d7498' });
+    });
+    expect(shown.custom_themes[0].fitted).toEqual({ red: '#f8809b', brightBlack: '#6d7498' });
+    expect(shown.custom_themes[0].xterm).toEqual(theme.xterm);
+    await act(async () => {
+      root.unmount();
+    });
   });
 
   it('saves the choice you press in each row', async () => {

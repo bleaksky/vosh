@@ -4,7 +4,7 @@ import type { BandEnv } from './bandCells';
 import { useFitGameColors } from './fitGameColors';
 import { ansi16Of, xtermThemeFor } from './terminalTheme';
 import { getCurrentThemeId } from './theme';
-import { findTheme, themeTokens } from './themes';
+import { findTheme, onCustomThemesChanged, themeTokens } from './themes';
 
 // The colors terminal text outside the renderers draws with. The pinned
 // band and the prompt card read them, so a prompt looks there as it does
@@ -13,7 +13,8 @@ import { findTheme, themeTokens } from './themes';
 /** The colors the terminal draws with now: the theme's, fitted while Fit
  *  game colors is on, or the base palette while "Use the theme's colors
  *  for MUD text" is off. It follows a theme change (every apply writes
- *  data-theme on the root), an edit to the base palette, and Fit game
+ *  data-theme on the root), a new custom theme list, which brings a
+ *  custom theme its fit, an edit to the base palette, and Fit game
  *  colors. */
 export function useBandEnv(
   themeTerminalColors: boolean,
@@ -28,10 +29,12 @@ export function useBandEnv(
     observer.observe(document.documentElement, {
       attributeFilter: ['data-theme', 'data-appearance'],
     });
-    const unsubscribe = subscribeBaseAnsi(bump);
+    const stopBase = subscribeBaseAnsi(bump);
+    const stopList = onCustomThemesChanged(bump);
     return () => {
       observer.disconnect();
-      unsubscribe();
+      stopBase();
+      stopList();
     };
   }, []);
   return useMemo(() => {

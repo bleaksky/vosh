@@ -23,7 +23,7 @@ import {
   terminalScreenRows,
   terminalLocalWrite,
 } from '../lib/session';
-import { findTheme } from '../lib/themes';
+import { findTheme, onCustomThemesChanged } from '../lib/themes';
 import { getFitGameColors, subscribeFitGameColors } from '../lib/fitGameColors';
 import { setHighlightGround } from '../lib/highlightGround';
 import { nativeThemeOf, xtermThemeFor } from '../lib/terminalTheme';
@@ -1599,7 +1599,8 @@ export function Terminal({
   }, [lifted]);
 
   // Re-apply when the user edits the base ANSI palette (the colors
-  // used while the tint toggle is off) or turns Fit game colors on or off.
+  // used while the tint toggle is off), turns Fit game colors on or off,
+  // or a new custom theme list brings the theme on screen its fit.
   useEffect(() => {
     const reapply = () => {
       const term = termRef.current;
@@ -1613,9 +1614,11 @@ export function Terminal({
     };
     const stopBase = subscribeBaseAnsi(reapply);
     const stopFit = subscribeFitGameColors(reapply);
+    const stopList = onCustomThemesChanged(reapply);
     return () => {
       stopBase();
       stopFit();
+      stopList();
     };
   }, [liftsHere]);
 

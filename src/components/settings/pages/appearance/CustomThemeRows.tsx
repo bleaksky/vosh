@@ -1,7 +1,8 @@
 import { emit } from '@tauri-apps/api/event';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   copyTheme,
+  customFitKey,
   editCustomTheme,
   removeCustomTheme,
   THEME_SLOT_GROUPS,
@@ -27,6 +28,11 @@ import { ConfirmDialog } from '../../../ConfirmDialog';
 import type { UpdateConfig } from '../../legacy/useSettingsAutoSave';
 import { Button, Field, PlusIcon, Row, Select } from '../../ui';
 import { ColorBlock, ColorGroup } from './ColorGrid';
+import { useKeepFit } from './useKeepFit';
+
+/** How long the colors rest after an edit before Vosh fits the game
+ *  colors to them, so a drag through the picker fits once. */
+export const FIT_SETTLE_MS = 600;
 
 interface CustomThemeRowsProps {
   config: UiConfig;
@@ -39,6 +45,9 @@ interface CustomThemeRowsProps {
 export function CustomThemeRows({ config, update }: CustomThemeRowsProps) {
   const [editId, setEditId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const keepFitOf = useKeepFit(config, update);
+  const refit = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(refit.current), []);
   const customs = config.custom_themes;
   const shown = activeThemeFor(config);
   // The theme the editor holds: the one you chose, else the custom
@@ -58,6 +67,9 @@ export function CustomThemeRows({ config, update }: CustomThemeRowsProps) {
     applyThemePrefs(next);
     update({ custom_themes: list, ...themePrefsOf(next) }, { now: true });
     setEditId(theme.id);
+    // A copy keeps the fit of the theme it copies, and one with none
+    // to keep is fitted now.
+    if (!theme.fitted) keepFitOf(theme);
   };
 
   const edit = (id: string, patch: Partial<CustomTheme>) => {
@@ -74,6 +86,14 @@ export function CustomThemeRows({ config, update }: CustomThemeRowsProps) {
         .catch(() => {});
     }
     update({ custom_themes: list });
+    // A change to a color the fit reads dropped the fit in
+    // editCustomTheme. Fit the new colors once they rest.
+    const before = customs.find((t) => t.id === id);
+    const after = list.find((t) => t.id === id);
+    if (before && after && customFitKey(before) !== customFitKey(after)) {
+      clearTimeout(refit.current);
+      refit.current = setTimeout(() => keepFitOf(after), FIT_SETTLE_MS);
+    }
   };
 
   const remove = (id: string) => {

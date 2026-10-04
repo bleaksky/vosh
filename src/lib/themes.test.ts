@@ -622,6 +622,18 @@ describe('fitted game colors', () => {
     expect(playPalette(dark, true)).toBe(dark.xterm);
   });
 
+  it('draws a custom theme in the fit it kept, and as published without one', () => {
+    const base = { id: 'dusk', label: 'Dusk', description: '', chrome: {} };
+    const xterm = { background: '#1a1b26', foreground: '#c0caf5' };
+    const kept = customToAppTheme({ ...base, xterm, fitted: { red: '#cb7b74' } });
+    expect(kept.fitted).toEqual({ red: '#cb7b74' });
+    expect(playPalette(kept, true)).toEqual({ ...kept.xterm, red: '#cb7b74' });
+    expect(playPalette(kept, false)).toBe(kept.xterm);
+    const none = customToAppTheme({ ...base, xterm });
+    expect(none.fitted).toBeUndefined();
+    expect(playPalette(none, true)).toBe(none.xterm);
+  });
+
   it('stores only the slots the fit moved, from body text and the 16 colors', () => {
     for (const theme of BUILTIN_THEMES) {
       for (const [slot, hex] of Object.entries(theme.fitted ?? {})) {

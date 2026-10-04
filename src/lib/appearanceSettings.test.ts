@@ -8,6 +8,7 @@ import {
   editCustomTheme,
   fontChoices,
   fontLabel,
+  keepFit,
   pairChoices,
   panelFontChoices,
   panelSizeChoices,
@@ -363,6 +364,13 @@ describe('copyTheme', () => {
     copy.xterm.background = '#000000';
     expect(nord.xterm.background).not.toBe('#000000');
   });
+
+  it('keeps the fit of the theme it copies, which has the same colors', () => {
+    const kanso = findTheme('kanso-zen');
+    expect(copyTheme(kanso, []).fitted).toEqual(kanso.fitted);
+    // Solarized Dark keeps out of the fit, so it has none to keep.
+    expect(copyTheme(findTheme('solarized-dark'), [])).not.toHaveProperty('fitted');
+  });
 });
 
 describe('editCustomTheme', () => {
@@ -371,6 +379,38 @@ describe('editCustomTheme', () => {
     const next = editCustomTheme(list, 'b', { label: 'Bee' });
     expect(next.map((t) => t.label)).toEqual(['a', 'Bee']);
     expect(list[1].label).toBe('b');
+  });
+
+  it('drops the fit when a color the fit reads changes, and only then', () => {
+    const fitted = { red: '#cb7b74' };
+    const list = [{ ...custom('dusk'), xterm: { background: '#1a1b26' }, fitted }];
+    const red = editCustomTheme(list, 'dusk', { xterm: { background: '#1a1b26', red: '#ff0000' } });
+    expect(red[0]).not.toHaveProperty('fitted');
+    const ground = editCustomTheme(list, 'dusk', { xterm: { background: '#000000' } });
+    expect(ground[0]).not.toHaveProperty('fitted');
+    // The cursor, a name and a pinned chrome color leave the fit alone.
+    const cursor = editCustomTheme(list, 'dusk', {
+      xterm: { background: '#1a1b26', cursor: '#ff0000' },
+    });
+    expect(cursor[0].fitted).toBe(fitted);
+    expect(editCustomTheme(list, 'dusk', { label: 'Dusk' })[0].fitted).toBe(fitted);
+    expect(editCustomTheme(list, 'dusk', { chrome: { accent: '#ff0000' } })[0].fitted).toBe(fitted);
+  });
+});
+
+describe('keepFit', () => {
+  const dusk = { ...custom('dusk'), xterm: { background: '#1a1b26' } };
+  const palette = customToAppTheme(dusk).xterm;
+
+  it('keeps the fit with the theme it was fitted for', () => {
+    const list = keepFit([custom('a'), dusk], 'dusk', palette, { red: '#cb7b74' });
+    expect(list?.map((t) => t.fitted)).toEqual([undefined, { red: '#cb7b74' }]);
+  });
+
+  it('drops a fit for a theme that is gone or has new colors since', () => {
+    expect(keepFit([custom('a')], 'dusk', palette, { red: '#cb7b74' })).toBeNull();
+    const changed = { ...dusk, xterm: { background: '#000000' } };
+    expect(keepFit([changed], 'dusk', palette, { red: '#cb7b74' })).toBeNull();
   });
 });
 

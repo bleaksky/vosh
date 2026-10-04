@@ -240,6 +240,10 @@ foreground = "#c0caf5"
 accent = "#ff9e64"
 surface = "#16161e"
 
+[ui.custom_themes.fitted]
+brightBlack = "#94989f"
+red = "#cb7b74"
+
 [ui.vitals]
 show_bar = false
 show_percent = false

@@ -1729,6 +1729,10 @@ export interface CustomTheme {
   description: string;
   xterm: Record<string, string>;
   chrome: Record<string, string>;
+  /** The game color fit of the palette, kept once Settings has fitted
+   *  it (lib/gameFit). None on a theme saved before the fit or by Vosh
+   *  0.8.1, which drops it. */
+  fitted?: Record<string, string>;
 }
 
 /** Caret shapes the command line can paint. Each one renders inside the
