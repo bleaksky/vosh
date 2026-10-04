@@ -12,9 +12,11 @@
 //! profile and the prompt engine on the session's connection under their
 //! locks, the profile's first, and lets go of the connection's before it
 //! emits anything. A command that needs only the engine takes only the
-//! connection's lock. A change to the table repaints the open row through
-//! the session task, since only that task writes session output, and
-//! every window hears `vosh://prompt-config-changed`.
+//! connection's lock. A change to the table reaches the engine of every
+//! other session on the profile too, which keeps what its own game showed
+//! it. It repaints the open row of each session whose prompt it changed
+//! through that session's task, since only that task writes session
+//! output, and every window hears `vosh://prompt-config-changed`.
 
 use std::sync::atomic::Ordering;
 
@@ -33,28 +35,33 @@ use crate::app::state::SharedState;
 use crate::disk::save::mark_profile_dirty;
 use crate::prompt::last_seen::{last_seen, LastSeen};
 use crate::prompt::{
-    capture_from_line, card_open, compile, describe, designs, edit, forms, line_triggers,
-    prompt_show_state, prompt_state, render_all, reported_hidden, request_prompt_repaint,
-    set_config, set_config_as_is, Edited, LineTrigger, PromptDesign, PromptShowState,
-    RenderRequest, ValuesFrom,
+    capture_from_line, card_open, choose_in_other_sessions, compile, describe, designs, edit,
+    forms, line_triggers, prompt_show_state, prompt_state, render_all, reported_hidden,
+    request_prompt_repaint, set_config, set_config_as_is, Edited, LineTrigger, PromptDesign,
+    PromptShowState, RenderRequest, ValuesFrom,
 };
 use crate::sessions::SessionId;
 
-/// The `[prompt]` table of the profile the session plays.
+/// The `[prompt]` table of the session's prompt engine: what you chose
+/// on the profile it plays, with the codes and the design its own game
+/// gave it.
 #[tauri::command]
 pub(crate) async fn prompt_config_get(
     state: State<'_, SharedState>,
     session: Option<SessionId>,
 ) -> Result<PromptConfig, String> {
-    Ok(state.session(session)?.lock_profile().await.prompt.clone())
+    let session = state.session(session)?;
+    let c = session.connection.lock();
+    Ok(c.prompt.config().clone())
 }
 
 /// Take a `[prompt]` table for the active profile. A new capture that does
 /// not compile changes nothing, and the error says why in a sentence. A table
-/// that changes anything saves shortly, repaints the open row and tells
-/// every window. Turning drawing on with an empty design follows the
-/// game. With `as_is`, the design is taken exactly as sent, so Start
-/// empty keeps it empty as drawing turns on.
+/// that changes anything saves shortly, reaches every other session on the
+/// profile, repaints the open row and tells every window. Turning drawing
+/// on with an empty design follows the game. With `as_is`, the design is
+/// taken exactly as sent, so Start empty keeps it empty as drawing turns
+/// on.
 #[tauri::command]
 pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
     app: AppHandle<R>,
@@ -67,7 +74,7 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
     // The locks cover only the change. The repaint waits on the session
     // slot, which Disconnect holds while the loop ends, and the loop's end
     // takes the profile, so holding the profile here would hang both.
-    let (open, changed) = {
+    let (open, chosen) = {
         let mut p = session.lock_profile().await;
         let c = &mut *session.connection.lock();
         let changed = if as_is.unwrap_or(false) {
@@ -75,10 +82,11 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
         } else {
             set_config(&mut p, c, config)?
         };
-        (p.open().clone(), changed)
+        (p.open().clone(), changed.then(|| c.prompt.config().clone()))
     };
-    if changed {
+    if let Some(chosen) = chosen {
         mark_profile_dirty(&app, &open);
+        choose_in_other_sessions(&state, session.id, &open, &chosen).await;
         request_prompt_repaint(&session).await;
         broadcast_prompt_config_changed(&app);
     }
@@ -88,7 +96,8 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
 /// The card opened. When the design differs from the newest earlier one,
 /// it goes first among the earlier designs, so trying a preset and
 /// closing never loses it. Returns the table as it now
-/// stands. It saves shortly and tells every window when it changed.
+/// stands. When it changed, it saves shortly, reaches every other session
+/// on the profile and tells every window.
 #[tauri::command]
 pub(crate) async fn prompt_card_open<R: tauri::Runtime>(
     app: AppHandle<R>,
@@ -103,6 +112,7 @@ pub(crate) async fn prompt_card_open<R: tauri::Runtime>(
     };
     if changed {
         mark_profile_dirty(&app, &open);
+        choose_in_other_sessions(&state, session.id, &open, &config).await;
         broadcast_prompt_config_changed(&app);
     }
     Ok(config)

@@ -742,12 +742,14 @@ const DIRTY: LineEffects = LineEffects {
     replaced: false,
     dirty: true,
     tick_before: None,
+    prompt: None,
 };
 
 const REPLACED: LineEffects = LineEffects {
     replaced: true,
     dirty: false,
     tick_before: None,
+    prompt: None,
 };
 
 /// Whether `line` changed the tick settings of `p`.
@@ -943,6 +945,7 @@ fn a_reset_replaces_the_profile_and_saves_nothing() {
             replaced: true,
             dirty: true,
             tick_before: None,
+            prompt: None,
         }
     );
 }

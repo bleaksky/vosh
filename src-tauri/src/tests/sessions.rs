@@ -10,9 +10,10 @@
 
 use serde_json::json;
 use tauri::Manager;
+use vosh_prompt::testkit::mud::{PROMPT, PROMPT_ALL};
 use vosh_prompt::testkit::{Build, Options};
 
-use super::fake_mud::harness::{FakeServer, Harness};
+use super::fake_mud::harness::{codes, codes_of, FakeServer, Harness};
 use crate::profile::set::DEFAULT_PROFILE_NAME;
 use crate::sessions::SessionId;
 
@@ -1141,6 +1142,121 @@ async fn a_switch_beside_a_connected_session_keeps_the_tick_you_turned_off_off()
     assert!(!h.state.selected_profile().await.tick.config.enabled);
     assert_eq!(last_tick(&h, two), None);
     assert!(second.connection.lock().tick.in_session);
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+/// The setting `prompt` types in the first game, and what it stores.
+const TYPED_X: &str = "<%h/%Hhp %m/%Mmn>";
+const PROMPT_X: &str = "<%h/%Hhp %m/%Mmn> ";
+
+/// The Aabahran codes the prompt engine of `session` reads with.
+fn own_codes(h: &Harness, session: SessionId) -> String {
+    let session = h.state.session(Some(session)).expect("the session");
+    let c = session.connection.lock();
+    codes_of(&c.prompt.config().capture).0
+}
+
+/// The last row the terminal of `session` shows.
+fn last_row(h: &Harness, session: SessionId) -> String {
+    h.screen_of(session).pop().unwrap_or_default()
+}
+
+/// [`two_sessions_on_two_games`] with the first game on the fake game's
+/// PROMPT and the second on `PROMPT_ALL`, under a profile that draws
+/// `<%hp>` and follows the game from codes neither game holds. Each
+/// session has drawn its first prompt.
+async fn two_sessions_with_codes_of_their_own() -> (Harness, SessionId, SessionId) {
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.servers[1].options.lock().expect("the options").prompt = PROMPT_ALL.into();
+    h.set_prompt(codes("<%hhp> ")).await;
+    let (h, one, two) = log_in_two_sessions(h).await;
+    h.until("a drawn prompt in each session", |h| {
+        last_row(h, one) == "<1020>" && last_row(h, two) == "<1020>"
+    })
+    .await;
+    (h, one, two)
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn each_session_reads_its_prompt_with_the_codes_its_own_game_sent() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_with_codes_of_their_own().await;
+    assert_eq!(own_codes(&h, one), PROMPT);
+    assert_eq!(own_codes(&h, two), PROMPT_ALL);
+
+    // The first game shows its PROMPT again, then takes a new one. The
+    // profile keeps the codes of the session that saw them last, and the
+    // second session reads with its own.
+    h.type_in(one, "prompt").await;
+    h.until("the PROMPT again", |h| shows(h, one, "Current prompt"))
+        .await;
+    assert_eq!(own_codes(&h, two), PROMPT_ALL);
+    h.type_in(one, &format!("prompt {TYPED_X}")).await;
+    h.until("the new codes", |h| own_codes(h, one) == PROMPT_X)
+        .await;
+    assert_eq!(codes_of(&h.capture().await).0, PROMPT_X);
+    assert_eq!(own_codes(&h, two), PROMPT_ALL);
+    h.type_in(two, "spam 1").await;
+    h.until("a prompt drawn from the second game's codes", |h| {
+        shows(h, two, "Line 1 of 1 of the spam.") && last_row(h, two) == "<1020>"
+    })
+    .await;
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_prompt_edit_in_one_session_reaches_the_other_which_keeps_its_codes() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_with_codes_of_their_own().await;
+
+    // Settings saves a new design in the first session, and both draw it.
+    let config = crate::ipc::prompt::prompt_config_get(h.app.state(), Some(one))
+        .await
+        .expect("the table");
+    crate::ipc::prompt::prompt_config_set(
+        h.app.handle().clone(),
+        h.app.state(),
+        vosh_prompt::PromptConfig {
+            template: "<%hp>%mana".into(),
+            ..config
+        },
+        None,
+        Some(one),
+    )
+    .await
+    .expect("the table saves");
+    h.until("the new design in both sessions", |h| {
+        last_row(h, one) == "<1020>800" && last_row(h, two) == "<1020>800"
+    })
+    .await;
+    assert_eq!(own_codes(&h, two), PROMPT_ALL);
+    assert_eq!(codes_of(&h.capture().await).0, PROMPT);
+
+    // Drawing off in the first session repaints the second with its
+    // game's own prompt. The line you typed closed the first session's
+    // prompt, so its next one shows the game's own.
+    h.type_in(one, "#prompt draw off").await;
+    h.until("the second game's own prompt", |h| {
+        last_row(h, two) == "<1020hp 800m 930mv>"
+    })
+    .await;
+    h.type_in(one, "").await;
+    h.until("the first game's own prompt", |h| {
+        last_row(h, one) == "[1020/1020hp 800/800mn 930/930mv]"
+    })
+    .await;
+    let second = crate::ipc::prompt::prompt_config_get(h.app.state(), Some(two))
+        .await
+        .expect("the second table");
+    assert!(!second.draw);
+    assert_eq!(second.template, "<%hp>%mana");
+    assert_eq!(codes_of(&second.capture).0, PROMPT_ALL);
 
     h.disconnect_session(two).await;
     h.finish(grid).await;

@@ -57,15 +57,17 @@ pub(crate) struct Profile {
     /// The catalog groups each of this profile's folders became in the
     /// shared catalog, which `#group` follows. See [`GroupFolders`].
     pub(crate) group_folders: GroupFolders,
-    /// The custom prompt's `[prompt]` table, which the profile file saves
-    /// and `prompt_config_get` answers with. It is a copy of the table
-    /// the prompt engine on the connection runs, and the engine's is the
-    /// one that counts. One rule keeps the two the same. A table from
-    /// outside the engine goes in through [`crate::prompt::take_config`],
-    /// and a step that lets the engine change its table, as when it
-    /// follows the game's prompt settings, copies it back through
-    /// [`crate::prompt::keep_table`]. A step that skips the copy leaves
-    /// the next save writing the old table.
+    /// The custom prompt's `[prompt]` table, which the profile file saves.
+    /// It is a copy of the table the prompt engine on a session's
+    /// connection runs, and the engine's is the one that counts and the
+    /// one `prompt_config_get` answers with. One rule keeps the two the
+    /// same. A table from outside the engine goes in through
+    /// [`crate::prompt::take_config`], and a step that lets the engine
+    /// change its table, as when it follows the game's prompt settings,
+    /// copies it back through [`crate::prompt::keep_table`]. A step that
+    /// skips the copy leaves the next save writing the old table. The
+    /// engines of the other sessions on the profile take only what you
+    /// choose, through [`crate::prompt::choose_in_other_sessions`].
     pub(crate) prompt: vosh_prompt::PromptConfig,
     /// Its name in the profile set, which `#profile save` and `#profile
     /// load` find its file by and the custom prompt draws for `%profile`
