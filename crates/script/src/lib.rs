@@ -327,28 +327,22 @@ impl ScriptEngine {
     /// itself. Returns what the run asks for, and whether the code ran to
     /// its end, whatever a handler it made did with a packet after.
     fn run_script(&mut self, owner: &Owner, chunk: &str, code: &str) -> (ScriptOutcome, bool) {
-        let env = match owner {
-            Owner::Plugin(name) => match self.envs.create(&self.lua, name) {
-                Ok(env) => Some(env),
-                Err(err) => {
-                    let outcome = ScriptOutcome {
-                        actions: vec![Action::Error(report::describe(&err))],
-                        failed: true,
-                        stopped: Vec::new(),
-                    };
-                    return (outcome, false);
-                }
-            },
-            _ => None,
-        };
         let before = self.owned_callbacks(owner);
+        // A plugin's environment is made inside the call, by Lua that
+        // runs under the call's own clock, so a failure to make it is the
+        // load's error.
+        let mut env: Option<Table> = None;
+        let envs = &self.envs;
         let called = self.call(owner, |lua| {
             let chunk = lua.load(code).set_name(chunk);
-            match env.clone() {
-                Some(env) => chunk.set_environment(env),
-                None => chunk,
+            match owner {
+                Owner::Plugin(name) => {
+                    let made = envs.create(lua, name)?;
+                    env = Some(made.clone());
+                    chunk.set_environment(made).exec()
+                }
+                _ => chunk.exec(),
             }
-            .exec()
         });
         if called.stop.is_some() {
             return (self.finish(owner, &Site::Entry, called), false);
@@ -552,7 +546,9 @@ impl ScriptEngine {
     }
 
     /// Run `body` as one call of `owner`, under the limits. What the call
-    /// queued waits in the pending list for [`Self::finish`].
+    /// queued waits in the pending list for [`Self::finish`]. Every piece
+    /// of Lua Vosh runs goes through here, since Lua that runs outside a
+    /// call stops at the hook's first look.
     fn call(&self, owner: &Owner, body: impl FnOnce(&Lua) -> mlua::Result<()>) -> Called {
         let start = match self.state.cell.lock() {
             Ok(mut s) => {
@@ -1616,6 +1612,20 @@ mod tests {
         // A loose script shares the globals, which a reload keeps.
         load(&mut e, "counter.lua", code).unwrap();
         assert_eq!(echoes(&load(&mut e, "counter.lua", code).unwrap()), ["2"]);
+    }
+
+    #[test]
+    fn a_plugin_loads_wherever_the_hook_count_stands() {
+        // The count of instructions to the hook's next look carries over
+        // from the call before, so a loop of each length leaves it at
+        // another place when the load begins.
+        for spin in (0..limits::HOOK_EVERY).step_by(7) {
+            let mut e = ScriptEngine::new().unwrap();
+            e.eval(&format!("for i = 1, {spin} do end"), "=#lua")
+                .unwrap();
+            let loaded = plugin(&mut e, "helpers", "mud.echo('on')");
+            assert_eq!(echoes(&loaded.unwrap()), ["on"], "{spin}");
+        }
     }
 
     #[test]
