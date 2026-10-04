@@ -411,12 +411,15 @@ struct Harness {
     shown: Arc<StdMutex<Vec<Shown>>>,
     world: Arc<StdMutex<World>>,
     port: u16,
+    /// The folder the session log lives in.
+    _dir: tempfile::TempDir,
 }
 
 impl Harness {
     /// A fake game that starts you at the fountain, and an app not yet
     /// connected, whose capture follows the game's prompt settings. It
-    /// loads no profile set, so a save writes nothing.
+    /// loads no profile set, so a save writes nothing, and keeps a log in
+    /// a temporary folder.
     async fn new() -> Self {
         let h = Self::unread().await;
         h.state
@@ -441,6 +444,9 @@ impl Harness {
         }));
         let port = serve(world.clone()).await;
         let state: SharedState = Arc::new(AppState::default());
+        let dir = tempfile::tempdir().expect("a temporary folder");
+        let log = vosh_log::LogStore::open(&dir.path().join("logs.sqlite")).expect("the log");
+        *state.logs.lock().await = Some(log);
         let app = mock_builder()
             .build(mock_context(noop_assets()))
             .expect("a mock app");
@@ -459,6 +465,7 @@ impl Harness {
             shown,
             world,
             port,
+            _dir: dir,
         }
     }
 
@@ -622,6 +629,23 @@ impl Harness {
             h.walk_lines() == lines
         })
         .await;
+    }
+
+    /// End the session, and return every row its log holds.
+    async fn end(&self) -> Vec<String> {
+        let handle = self.state.session.lock().await.take();
+        if let Some(handle) = handle {
+            handle.shutdown().await;
+        }
+        let guard = self.state.logs.lock().await;
+        let store = guard.as_ref().expect("the log");
+        let id = store.list_sessions(0, false).expect("the sessions")[0].id;
+        store
+            .export_session(id, false)
+            .expect("the rows")
+            .lines()
+            .map(str::to_string)
+            .collect()
     }
 
     async fn finish(self) {
@@ -932,6 +956,43 @@ async fn a_command_you_send_stops_the_walk_and_a_hash_command_does_not() {
     h.until_heard(&["w", "", "w", "e", "look"]).await;
     h.until("the look after the step", |h| h.looks() == 4).await;
     assert_eq!(h.heard(), ["w", "", "w", "e", "look"]);
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_command_after_bare_walk_or_walk_stop_goes_out_as_you_typed_it() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    let go = Arc::new(Notify::new());
+    h.script([Answer::Wait(go.clone())]);
+    h.type_line("#walk 2w").await;
+    h.until_heard(&["w"]).await;
+    // A command after a bare #walk stops the walk, as it does alone.
+    h.type_line("#walk;look").await;
+    h.until_said(&[
+        "[walk] 2 of 2 steps left.",
+        "[walk] Stopped after 0 of 2 steps.",
+    ])
+    .await;
+    go.notify_one();
+    h.until_heard(&["w", "look"]).await;
+    h.type_line("#walk stop;look").await;
+    h.until_heard(&["w", "look", "look"]).await;
+    h.until_said(&[
+        "[walk] 2 of 2 steps left.",
+        "[walk] Stopped after 0 of 2 steps.",
+        "[walk] You are not walking.",
+    ])
+    .await;
+    // Both join the log as lines you sent.
+    let log = h.end().await;
+    assert_eq!(
+        log.iter().filter(|row| *row == "> look").count(),
+        2,
+        "{log:#?}"
+    );
     h.finish().await;
 }
 

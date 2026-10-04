@@ -26,7 +26,8 @@ use super::batch::Settle;
 use super::connection::Stream;
 use super::echo::ServerEcho;
 use super::effects::{
-    apply_script_result, deliver_tick_step, framed_echoes, run_fired_command, OutputSink, ScriptIo,
+    collect_script_result, deliver_tick_step, framed_echoes, run_fired_command, Collected,
+    OutputSink,
 };
 use super::lines::LineAccumulator;
 use super::log_sink::{capture_held_lines, capture_pending_line, LogSink};
@@ -152,66 +153,10 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
             biased;
             outgoing = rx_outgoing.recv() => match outgoing {
                 Some(OutgoingMsg::Send { bytes, masked }) => {
-                    // A partial waiting for the next read paints before
-                    // your line leaves, so it never goes unseen.
-                    if hold_until.take().is_some() {
-                        flush_hold(&mut conn).await;
+                    let sent = send_typed(&mut conn, &mut log_sink, &mut hold_until, &bytes, masked);
+                    if let Err(reason) = sent.await {
+                        break Some(reason);
                     }
-                    // Lines held for the rest of a prompt let go as they
-                    // show, before your line leaves, since it follows them.
-                    if let Err(e) = let_go_held_lines(&mut conn, &mut log_sink).await {
-                        warn!(error = %e, "letting go of held lines failed");
-                    }
-                    // A command you send stops a walk, and the walk says
-                    // so under the echo of your line.
-                    let stopped = conn.walker.typed(&bytes);
-                    echo_lines(&conn.app, &stopped.lines);
-                    // The send records a prompt candidate and closes the
-                    // open row. On a server that sends no Char.Vitals it
-                    // also starts the next pulse, after which the values
-                    // the last prompt set go stale.
-                    let pulse = {
-                        let mut p = conn.profile.lock().await;
-                        send_step(&mut p, &conn.accumulator, &bytes, now_ms())
-                    };
-                    // The frontend already echoed the typed line inline
-                    // with the on-screen prompt. Drop the buffered partial
-                    // so the next chunk from the server starts fresh on a
-                    // new row instead of merging with the displayed prompt.
-                    conn.accumulator.forget_partial();
-                    if pulse {
-                        emit_hidden_change(&conn.app, &conn.profile).await;
-                        emit_prompt_vars(&conn.app, &conn.profile, false).await;
-                    }
-                    // The input line(s) go in the same log session as
-                    // server output so transcripts include both
-                    // directions. While the server holds echo (a
-                    // password prompt), and for any line typed into the
-                    // masked field, each line is logged as `> (hidden)`
-                    // and its text never reaches the store. See
-                    // `vosh_log::sent_rows`. The rows and their
-                    // time are taken as the line leaves, and they wait
-                    // behind the rows before them for the log, which
-                    // writes them once the socket is quiet, so a log
-                    // write never holds your line or its answer back.
-                    let sent = log_sink.id().map(|sid| {
-                        let rows = vosh_log::sent_rows(&bytes, conn.server_echo.hides(masked));
-                        (sid, now_ms(), rows)
-                    });
-                    let wrote = match conn.stream.write_all(&bytes).await {
-                        Err(e) => Err(("write failed", e)),
-                        Ok(()) => conn.stream.flush().await.map_err(|e| ("flush failed", e)),
-                    };
-                    if let Some((sid, at, rows)) = sent {
-                        conn.settle.queue_rows(vosh_log::sent_entries(sid, at, rows));
-                    }
-                    if let Err((what, e)) = wrote {
-                        error!(error = %e, "{what}");
-                        break Some(format!("{what}: {e}"));
-                    }
-                    // Lines sent back to back never wait on the log, but
-                    // their rows still go in once they waited too long.
-                    conn.settle.overdue_now(&conn.app, &log_sink, &mut conn.perf);
                 }
                 Some(OutgoingMsg::WindowSize { cols, rows }) => {
                     // A design that pushes part of a row to the right
@@ -276,9 +221,9 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     p.prompt.stage.local_write(after);
                 }
                 Some(OutgoingMsg::Walk(command)) => {
-                    if let Err(e) = walk_command(&mut conn, command).await {
-                        error!(error = %e, "walk failed");
-                        break Some(format!("write failed: {e}"));
+                    let walked = walk_command(&mut conn, &mut log_sink, &mut hold_until, command);
+                    if let Err(reason) = walked.await {
+                        break Some(reason);
                     }
                 }
                 Some(OutgoingMsg::PromptRepaint) => {
@@ -549,39 +494,130 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     );
 }
 
+/// Send `bytes`, a line you typed with its line ends, to the game. A
+/// partial waiting for the next read paints first, and the lines held
+/// for the rest of a prompt let go. A command stops a walk, the send
+/// records a prompt candidate and closes the open row, the partial goes,
+/// and the line joins the log. `masked` says you typed it into the
+/// masked field. Returns the reason the connection ends when the write
+/// fails.
+async fn send_typed<R: tauri::Runtime>(
+    conn: &mut Conn<R>,
+    log_sink: &mut LogSink,
+    hold_until: &mut Option<Instant>,
+    bytes: &[u8],
+    masked: bool,
+) -> Result<(), String> {
+    // A partial waiting for the next read paints before your line leaves,
+    // so it never goes unseen.
+    if hold_until.take().is_some() {
+        flush_hold(conn).await;
+    }
+    // Lines held for the rest of a prompt let go as they show, before
+    // your line leaves, since it follows them.
+    if let Err(e) = let_go_held_lines(conn, log_sink).await {
+        warn!(error = %e, "letting go of held lines failed");
+    }
+    // A command you send stops a walk, and the walk says so under the
+    // echo of your line.
+    let stopped = conn.walker.typed(bytes);
+    echo_lines(&conn.app, &stopped.lines);
+    // The send records a prompt candidate and closes the open row. On a
+    // server that sends no Char.Vitals it also starts the next pulse,
+    // after which the values the last prompt set go stale.
+    let pulse = {
+        let mut p = conn.profile.lock().await;
+        send_step(&mut p, &conn.accumulator, bytes, now_ms())
+    };
+    // The frontend already echoed the typed line inline with the
+    // on-screen prompt. Drop the buffered partial so the next chunk from
+    // the server starts fresh on a new row instead of merging with the
+    // displayed prompt.
+    conn.accumulator.forget_partial();
+    if pulse {
+        emit_hidden_change(&conn.app, &conn.profile).await;
+        emit_prompt_vars(&conn.app, &conn.profile, false).await;
+    }
+    // The input line(s) go in the same log session as server output so
+    // transcripts include both directions. While the server holds echo
+    // (a password prompt), and for any line typed into the masked field,
+    // each line is logged as `> (hidden)` and its text never reaches the
+    // store. See `vosh_log::sent_rows`. The rows and their time are taken
+    // as the line leaves, and they wait behind the rows before them for
+    // the log, which writes them once the socket is quiet, so a log write
+    // never holds your line or its answer back.
+    let sent = log_sink.id().map(|sid| {
+        let rows = vosh_log::sent_rows(bytes, conn.server_echo.hides(masked));
+        (sid, now_ms(), rows)
+    });
+    let wrote = match conn.stream.write_all(bytes).await {
+        Err(e) => Err(("write failed", e)),
+        Ok(()) => conn.stream.flush().await.map_err(|e| ("flush failed", e)),
+    };
+    if let Some((sid, at, rows)) = sent {
+        conn.settle
+            .queue_rows(vosh_log::sent_entries(sid, at, rows));
+    }
+    if let Err((what, e)) = wrote {
+        error!(error = %e, "{what}");
+        return Err(format!("{what}: {e}"));
+    }
+    // Lines sent back to back never wait on the log, but their rows still
+    // go in once they waited too long.
+    conn.settle.overdue_now(&conn.app, log_sink, &mut conn.perf);
+    Ok(())
+}
+
 /// Hand the walker a `#walk` you typed, or Esc. The step goes out at
 /// once. A line the walker prints follows the echo of your typed line,
 /// and Esc echoes nothing, so its line starts a row of its own. What a
-/// `#walk stop` or a bare `#walk` held runs right after.
+/// `#walk stop` or a bare `#walk` held is the rest of the line you typed,
+/// so it runs right after and goes out through [`send_typed`] as a typed
+/// line does. A `#walk` among it comes back here. Returns the reason the
+/// connection ends when a write fails.
 async fn walk_command<R: tauri::Runtime>(
     conn: &mut Conn<R>,
+    log_sink: &mut LogSink,
+    hold_until: &mut Option<Instant>,
     command: WalkCommand,
-) -> std::io::Result<()> {
-    let key = matches!(command, WalkCommand::Stop { key: true, .. });
-    let out = conn.walker.command(command, Instant::now());
-    if !out.send.is_empty() {
-        conn.stream.write_all(&out.send).await?;
-        conn.stream.flush().await?;
-    }
-    if key {
-        if !out.lines.is_empty() {
-            emit_output(&conn.app, framed_echoes(&out.lines));
+) -> Result<(), String> {
+    let mut next = Some(command);
+    while let Some(command) = next.take() {
+        let key = matches!(command, WalkCommand::Stop { key: true, .. });
+        let out = conn.walker.command(command, Instant::now());
+        if !out.send.is_empty() {
+            let wrote = match conn.stream.write_all(&out.send).await {
+                Ok(()) => conn.stream.flush().await,
+                Err(e) => Err(e),
+            };
+            if let Err(e) = wrote {
+                error!(error = %e, "walk failed");
+                return Err(format!("write failed: {e}"));
+            }
         }
-    } else {
-        echo_lines(&conn.app, &out.lines);
+        if key {
+            if !out.lines.is_empty() {
+                emit_output(&conn.app, framed_echoes(&out.lines));
+            }
+        } else {
+            echo_lines(&conn.app, &out.lines);
+        }
+        if out.release.is_empty() {
+            continue;
+        }
+        let apply = walk::release(&conn.profile, out.release).await;
+        let Collected {
+            bytes,
+            echoes,
+            walk,
+        } = collect_script_result(&conn.app, &conn.profile, &conn.lua_timers, apply).await;
+        echo_lines(&conn.app, &echoes);
+        if !bytes.is_empty() {
+            send_typed(conn, log_sink, hold_until, &bytes, false).await?;
+        }
+        next = walk;
     }
-    if out.release.is_empty() {
-        return Ok(());
-    }
-    let apply = walk::release(&conn.profile, out.release).await;
-    apply_script_result(
-        &conn.app,
-        &mut ScriptIo::Session(&mut conn.stream, &mut OutputSink::Direct, &mut conn.walker),
-        &conn.profile,
-        &conn.lua_timers,
-        apply,
-    )
-    .await
+    Ok(())
 }
 
 async fn handle_tick<R: tauri::Runtime>(
