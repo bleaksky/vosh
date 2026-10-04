@@ -148,12 +148,15 @@ pub(crate) struct ScrollbackLoad {
     pub seeded_native: bool,
 }
 
-/// Keep highlight colors readable. `background` is the theme's terminal
-/// background as `#rrggbb` while the setting is on, and `None` while it is
-/// off. A background that does not read turns lifting off too.
+/// Keep highlight colors readable and Fit game colors. `background` is the
+/// theme's terminal background as `#rrggbb` while Keep highlight colors
+/// readable is on, and `None` while it is off. `game` is the same
+/// background while Fit game colors is on, and `None` while it is off. A
+/// background that does not read turns its lift off too.
 #[tauri::command]
-pub(crate) fn highlight_ground_set(background: Option<String>) {
-    crate::session::highlight_ground::set(background.as_deref().and_then(readable::parse_hex));
+pub(crate) fn highlight_ground_set(background: Option<String>, game: Option<String>) {
+    let ground = |hex: Option<String>| hex.as_deref().and_then(readable::parse_hex);
+    crate::session::highlight_ground::set(ground(background), ground(game));
 }
 
 #[cfg(test)]

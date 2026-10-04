@@ -7,11 +7,12 @@
 //! batch or return the output, and a line step returns what is left for
 //! after the locks as a [`LineStep`].
 
+use std::borrow::Cow;
 use std::time::Duration;
 
 use tokio::time::Instant;
 use tracing::debug;
-use vosh_automation::trigger::{LineResult, MatchScope};
+use vosh_automation::trigger::{readable, LineResult, MatchScope};
 use vosh_prompt::stage::{Block, BlockLine, End, Offer, Output};
 use vosh_protocol::telnet::Negotiator;
 use vosh_script::{Owner, ScriptOutcome};
@@ -56,6 +57,7 @@ fn line_pass(
         plain,
         scope,
         highlight_ground::get(),
+        highlight_ground::game(),
     );
     let tick_step = tick_reset(p, c, plain, now);
     script::snapshot_vars(&p.script, &p.vars);
@@ -463,6 +465,7 @@ fn prompt_block(
         &last.plain,
         MatchScope::Prompt,
         highlight_ground::get(),
+        highlight_ground::game(),
     );
     if !result.scripts.is_empty() {
         script::snapshot_vars(&p.script, &p.vars);
@@ -584,16 +587,23 @@ fn unread_partial(
     partial: &Partial,
     plain: &str,
 ) -> LineStep {
+    let game = highlight_ground::game();
     let result = vosh_automation::trigger::process_on_ground(
         &p.triggers,
         &partial.bytes,
         plain,
         MatchScope::Prompt,
         highlight_ground::get(),
+        game,
     );
+    // What the partial shows when no trigger acts on it, the game's faded
+    // 256 colors lifted while Fit game colors is on.
+    let bare = game.map_or(Cow::Borrowed(partial.bytes.as_slice()), |game| {
+        readable::lift_game_sgr(&partial.bytes, game)
+    });
     let effect = match &result.display {
         None => true,
-        Some(text) => text.as_bytes() != partial.bytes,
+        Some(text) => text.as_bytes() != bare.as_ref(),
     } || !result.sends.is_empty()
         || !result.routes.is_empty()
         || !result.scripts.is_empty();
