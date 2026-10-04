@@ -1385,6 +1385,35 @@ mod tests {
     }
 
     #[test]
+    fn garbage_near_the_cap_leaves_each_call_its_own_limit() {
+        let mut e = ScriptEngine::new().unwrap();
+        // 70 MB held, then 40 MB of garbage the collector, stopped,
+        // leaves in place.
+        e.eval("held = {} collectgarbage('stop')", "=#lua").unwrap();
+        for _ in 0..7 {
+            e.eval(
+                "held[#held + 1] = string.rep('x', 10 * 1024 * 1024)",
+                "=#lua",
+            )
+            .unwrap();
+        }
+        for _ in 0..4 {
+            e.eval("local junk = string.rep('y', 10 * 1024 * 1024)", "=#lua")
+                .unwrap();
+        }
+        // A call that holds 40 MB more is past its own 32 MB, whatever
+        // the garbage made the state look like when it began.
+        let outcome = e.eval(
+            "for i = 1, 4 do held[#held + 1] = string.rep('z', 10 * 1024 * 1024) end",
+            "=#lua",
+        );
+        assert_eq!(
+            error_lines(&outcome),
+            ["Vosh stopped your #lua line. One call used more than 32 MB."]
+        );
+    }
+
+    #[test]
     fn lua_that_runs_with_the_hook_off_cannot_spin() {
         let mut e = ScriptEngine::new().unwrap();
         // A __gc method runs with every hook off, so none may be set.

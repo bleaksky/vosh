@@ -112,6 +112,11 @@ impl Limits {
     /// Start a call: clear the stop, start the clock, and let the call
     /// hold [`CALL_MEMORY`] more than the state holds now.
     pub(crate) fn begin(self: &Arc<Self>, lua: &Lua) {
+        // Near the whole state's limit, garbage left by an earlier call
+        // could pass for memory your scripts hold, so collect it first.
+        if lua.used_memory().saturating_add(CALL_MEMORY) > STATE_MEMORY {
+            let _ = lua.gc_collect();
+        }
         let memory_limit = lua
             .used_memory()
             .saturating_add(CALL_MEMORY)
