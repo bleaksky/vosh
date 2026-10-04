@@ -616,9 +616,10 @@ export function cardAnchor(input: {
 
 /** Where a menu opens from its button: under it with their right edges
  *  together (More), above it with their left edges together (Presets),
- *  under it with their left edges together (a name), or beside a row
- *  (From another profile). */
-export type MenuPlace = 'below-end' | 'above-start' | 'below-start' | 'beside';
+ *  above it with their right edges together (the preview), under it with
+ *  their left edges together (a name), or beside a row (From another
+ *  profile). */
+export type MenuPlace = 'below-end' | 'above-start' | 'above-end' | 'below-start' | 'beside';
 
 /** How far a menu sits from its button, and from the window's edge. */
 const GAP = 4;
@@ -643,10 +644,10 @@ export function menuPosition(
     left = anchor.right + GAP;
     top = anchor.top - 6;
   } else {
-    left = place === 'below-end' ? anchor.right - size.width : anchor.left;
+    left = place === 'below-end' || place === 'above-end' ? anchor.right - size.width : anchor.left;
     const roomAbove = anchor.top - GAP - EDGE;
     const roomBelow = viewport.height - EDGE - anchor.bottom - GAP;
-    const wantsAbove = place === 'above-start';
+    const wantsAbove = place === 'above-start' || place === 'above-end';
     const [own, other] = wantsAbove ? [roomAbove, roomBelow] : [roomBelow, roomAbove];
     let above = wantsAbove;
     if (own < height) {

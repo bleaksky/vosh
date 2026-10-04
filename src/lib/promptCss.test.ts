@@ -49,27 +49,34 @@ describe('the foot under your design', () => {
     return prompt.slice(at, prompt.indexOf('}', at));
   };
 
-  it('keeps Done in the card when the foot runs out of room', () => {
-    // Draw your prompt, where it shows, the four previews and Done run
-    // past 560 px in the system face, so the right group takes a second
-    // row on the right. 10 above and below the preview's 32 px track
-    // keep one row 52 tall.
-    const foot = rule('.pc-foot.is-design');
-    expect(foot).toContain('flex-wrap: wrap;');
-    expect(foot).toContain('row-gap: 8px;');
-    expect(foot).toContain('height: auto;');
-    expect(foot).toContain('min-height: 52px;');
-    expect(foot).toContain('padding-top: 10px;');
-    expect(foot).toContain('padding-bottom: 10px;');
+  it('keeps the foot under your design one row 52 tall, with drawing on or off', () => {
+    // The Preview menu took the place of the four segments, so the foot
+    // fits one row and never wraps. 28 px controls sit centered in it.
+    const foot = rule('.pc-foot');
+    expect(foot).toContain('display: flex;');
+    expect(foot).toContain('align-items: center;');
+    expect(foot).toContain('height: 52px;');
+    expect(foot).not.toContain('flex-wrap');
+    expect(foot).not.toContain('min-height');
+    // No rule lets any foot wrap or grow past the row.
+    expect(prompt).not.toContain('.pc-foot.is-design');
+    for (const at of prompt.matchAll(/\.pc-foot[\w.-]*[^{]*\{([^}]*)\}/g)) {
+      expect(at[1]).not.toContain('flex-wrap');
+      expect(at[1]).not.toMatch(/(?:^|[^-])height: auto/);
+    }
+    // The preview and Done hold the right end.
     const end = rule('.pc-foot-end');
     expect(end).toContain('margin-left: auto;');
     expect(end).toContain('flex: none;');
   });
 
-  it('sets where your prompt shows in the face of the preview segments', () => {
+  it('sets the menu buttons at the foot in the 12/500 face of a segmented control', () => {
     const button = rule('.pc-menu-button');
     expect(button).toContain('font-size: 12px;');
     expect(button).toContain('padding: 0 6px 0 10px;');
     expect(rule(".pc-menu-button[aria-disabled='true']")).toContain('opacity: 0.45;');
+    // Preview: reads in the secondary tone, the preview in the text color.
+    expect(rule('.pc-menu-button-lead')).toContain('color: var(--secondary);');
+    expect(rule('.pc-menu-button svg')).toContain('color: var(--secondary);');
   });
 });
