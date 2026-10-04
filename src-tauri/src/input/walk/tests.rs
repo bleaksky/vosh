@@ -206,6 +206,23 @@ fn walk_args_reads_a_piece_as_the_dispatcher_does() {
 }
 
 #[test]
+fn the_summary_lists_walk() {
+    let lines: Vec<&str> = crate::input::slash::HELP_TEXT.lines().collect();
+    for (command, says) in [
+        ("#walk <steps> ", "walk the steps one room at a time"),
+        ("#walk ", "say how many steps are left"),
+        ("#walk stop ", "stop walking"),
+    ] {
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.trim_start().starts_with(command) && l.contains(says)),
+            "{command:?}"
+        );
+    }
+}
+
+#[test]
 fn a_walk_line_asks_for_no_save() {
     for line in ["#walk 3n2e", "#walk;#alias x y", "#walk stop", "#walk"] {
         let mut effects = crate::input::LineEffects::default();
