@@ -202,6 +202,10 @@ pub(crate) const TRACKED_AFFECTS_CHANGED: &str = "vosh://tracked-affects-changed
 /// a replace. Settings sends its own saves. The payload is the way,
 /// such as `"up"`. `subscribeTickCountChanged` hears it.
 pub(crate) const TICK_COUNT_CHANGED: &str = "vosh://tick-count-changed";
+/// Sent to every window with the clock the status line reads the game
+/// time on, on a replace. Settings sends its own saves. The payload is
+/// the clock, `"24h"` or `"12h"`. `subscribeGameTimeChanged` hears it.
+pub(crate) const GAME_TIME_CHANGED: &str = "vosh://game-time-changed";
 /// Sent to every window with the style of the time and tick chips, on
 /// a replace. Settings sends its own saves. The payload is the style,
 /// such as `"value_only"`. `subscribeChipStyleChanged` hears it.
@@ -462,6 +466,7 @@ pub(crate) struct ProfileUiEvents {
     pub(crate) panes: PaneLayoutEnvelope,
     pub(crate) tracked: Vec<crate::profile::ui::TrackedAffect>,
     pub(crate) tick_count: String,
+    pub(crate) game_time: String,
     pub(crate) chip_style: String,
     pub(crate) affects_display: AffectsDisplay,
     pub(crate) chat_colors: std::collections::BTreeMap<String, String>,
@@ -477,6 +482,7 @@ impl ProfileUiEvents {
             event_json(PANE_LAYOUT_CHANGED, &self.panes),
             event_json(TRACKED_AFFECTS_CHANGED, &self.tracked),
             event_json(TICK_COUNT_CHANGED, &self.tick_count),
+            event_json(GAME_TIME_CHANGED, &self.game_time),
             event_json(CHIP_STYLE_CHANGED, &self.chip_style),
             event_json(AFFECTS_DISPLAY_CHANGED, &self.affects_display),
             event_json(CHAT_COLORS_CHANGED, &self.chat_colors),
@@ -511,6 +517,7 @@ pub(crate) fn profile_ui_events(state: &AppState, p: &Profile) -> ProfileUiEvent
         panes: pane_layout_envelope(state, p),
         tracked: p.ui.tracked_affects.clone(),
         tick_count: p.ui.tick_count.clone(),
+        game_time: p.ui.game_time.clone(),
         chip_style: p.ui.chip_style.clone(),
         affects_display: AffectsDisplay::of(&p.ui),
         chat_colors: p.ui.chat_colors.clone(),
@@ -519,8 +526,8 @@ pub(crate) fn profile_ui_events(state: &AppState, p: &Profile) -> ProfileUiEvent
 }
 
 /// Hand every window the active profile's panes, tracked affects, tick
-/// settings, chip style, affects display, and chat colors, then say the
-/// UI config was replaced. For
+/// settings, game time clock, chip style, affects display, and chat
+/// colors, then say the UI config was replaced. For
 /// the paths that replace the live UI config wholesale (a profile
 /// switch, an import, `#profile load` and `reset`), which must also bump
 /// the pane generation under the profile lock as they swap. Only a
@@ -813,6 +820,7 @@ mod tests {
         let mut file = crate::profile::file::ProfileConfig::default();
         file.ui.chip_style = "caption_value".into();
         file.ui.tick_count = "down_past_zero".into();
+        file.ui.game_time = "12h".into();
         let _ = file.apply_to(&mut profile);
         let events = super::profile_ui_events(&state, &profile);
         assert_eq!(
@@ -822,6 +830,21 @@ mod tests {
         assert_eq!(
             event_payload(&events, "vosh://tick-count-changed"),
             serde_json::json!("down_past_zero")
+        );
+        assert_eq!(
+            event_payload(&events, "vosh://game-time-changed"),
+            serde_json::json!("12h")
+        );
+
+        // A reset puts back the 24 hour clock.
+        let ran = crate::input::run_line(&state, &mut profile, "#profile reset");
+        assert!(ran.replaced);
+        assert_eq!(
+            event_payload(
+                &super::profile_ui_events(&state, &profile),
+                "vosh://game-time-changed"
+            ),
+            serde_json::json!("24h")
         );
     }
 
@@ -894,6 +917,7 @@ mod tests {
                 "vosh://pane-layout-changed",
                 "vosh://tracked-affects-changed",
                 "vosh://tick-count-changed",
+                "vosh://game-time-changed",
                 "vosh://chip-style-changed",
                 "vosh://affects-display-changed",
                 "vosh://chat-colors-changed",

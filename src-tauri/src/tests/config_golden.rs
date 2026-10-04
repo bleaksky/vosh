@@ -373,6 +373,7 @@ fn full_ui() -> UiConfig {
         moons_position: "before-time".into(),
         chip_style: "icon_value".into(),
         tick_count: "down_past_zero".into(),
+        game_time: "12h".into(),
         affects_style: "chips".into(),
         affects_marker: "plus_minus".into(),
         affects_tint: true,
@@ -529,6 +530,8 @@ fn full_prompt() -> PromptConfig {
             source: Some(CaptureSource::Gmcp),
         }),
         show: PromptShow::Pinned,
+        // A design of yours, which the file says with no mirror key.
+        mirror: false,
     }
 }
 

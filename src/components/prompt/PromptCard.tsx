@@ -26,6 +26,9 @@ import {
   takeBackOnto,
   undoEntry,
   withCapture,
+  withDesign,
+  withMoveTakenBack,
+  withStart,
   type CardStep,
   type MoreItemId,
   type UndoEntry,
@@ -577,12 +580,18 @@ export function PromptCard({
   /** Make `ops` one after another on the design as it stands, save the
    *  result once, and follow the part the first one acted on: pick it,
    *  or with `caret`, put the caret past it. `made` hears the design
-   *  before and after, and where that part landed. Edits queue, so typing
-   *  fast loses no character. */
+   *  before and after, where that part landed, and whether the design
+   *  followed the game before. Edits queue, so typing fast loses no
+   *  character. */
   const edit = (
     ops: PromptEditOp[],
     follow: 'pick' | 'caret' = 'pick',
-    made?: (change: { before: string; after: string; landed: number | null }) => void,
+    made?: (change: {
+      before: string;
+      after: string;
+      landed: number | null;
+      mirror: boolean;
+    }) => void,
   ) => {
     edits.current = edits.current.then(async () => {
       const base = latest.current;
@@ -610,9 +619,9 @@ export function PromptCard({
         // Another profile became active meanwhile, so the edit was for a
         // table the card no longer shows.
         if (at !== opens.current) return;
-        if (text !== base.template) save({ ...base, template: text });
+        if (text !== base.template) save(withDesign(base, text));
         if (data) setDescribed({ template: text, data });
-        made?.({ before: base.template, after: text, landed });
+        made?.({ before: base.template, after: text, landed, mirror: base.mirror });
         const first = ops[0];
         if (landed === null || first.op === 'remove') {
           setPointing({ picked: null, caret: caretAfter(first, null) });
@@ -627,9 +636,9 @@ export function PromptCard({
     });
   };
 
-  /** Put the design back as it was before move `back`, with the part it
-   *  moved picked where it was. Only while the design is still what the
-   *  move made. */
+  /** Put the design back as it was before move `back`, following the
+   *  game again when it did then, with the part it moved picked where it
+   *  was. Only while the design is still what the move made. */
   const takeMoveBack = (back: MoveMade) => {
     edits.current = edits.current.then(async () => {
       const base = latest.current;
@@ -640,7 +649,7 @@ export function PromptCard({
         () => null,
       );
       if (at !== opens.current) return;
-      save({ ...base, template: back.before });
+      save(withMoveTakenBack(base, back));
       if (data) setDescribed({ template: back.before, data });
       setPointing({ picked: back.from, caret: null });
     });
@@ -657,11 +666,12 @@ export function PromptCard({
     }
     const op = moveOp(pieces, pointing.picked, dir);
     if (!op || op.op !== 'move') return;
-    edit([op], 'pick', ({ before, after, landed }) => {
+    edit([op], 'pick', ({ before, after, landed, mirror }) => {
       if (landed === null || before === after) return;
-      moves.current = [...moves.current, { before, after, from: op.piece, landed, dir }].slice(
-        -UNDO_DEPTH,
-      );
+      moves.current = [
+        ...moves.current,
+        { before, after, from: op.piece, landed, dir, mirror },
+      ].slice(-UNDO_DEPTH);
     });
   };
 
@@ -1022,7 +1032,7 @@ export function PromptCard({
               template={config.template}
               tokens={described?.data.tokens ?? []}
               describedFor={described?.template ?? ''}
-              onChange={(next) => save({ ...config, template: next })}
+              onChange={(next) => save(withDesign(config, next))}
               onCaretPiece={(piece) => setPointing({ picked: piece, caret: null })}
               onInsertValue={() => openPicker('text')}
               insertRef={insertRef}
@@ -1059,11 +1069,12 @@ export function PromptCard({
                   ? notMatchingLine(state.status.last_match_at)
                   : null
               }
-              onPick={(template) => {
+              onPick={(row) => {
                 setPointing(NOWHERE);
                 // Picking a start is how you ask Vosh to draw it, so
-                // drawing turns on. Start empty keeps its empty design.
-                save({ ...config, template, draw: true }, true, template === '');
+                // drawing turns on. Same as the game follows the game,
+                // and Start empty keeps its empty design.
+                save(withStart(config, row), true, row.template === '');
               }}
               onInsertValue={() => openPicker('design')}
             >

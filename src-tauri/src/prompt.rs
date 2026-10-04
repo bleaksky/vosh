@@ -40,16 +40,19 @@ use crate::profile::live::Profile;
 ///
 /// [`prompt_config_set`]: crate::ipc::prompt::prompt_config_set
 pub(crate) fn set_config(p: &mut Profile, mut config: PromptConfig) -> Result<bool, String> {
-    // Turning drawing on with no design draws Vosh's default, as Settings
-    // and #prompt draw do.
+    // Turning drawing on with no design follows the game, as Settings,
+    // the card's switch and #prompt draw do.
     if config.draw && !p.prompt.config().draw && config.template.is_empty() {
-        config.template = vosh_prompt::DEFAULT_DESIGN.to_string();
+        config.mirror = true;
     }
     set_config_as_is(p, config)
 }
 
 /// [`set_config`] with the design exactly as sent, an empty one too, for
-/// Start empty in the card.
+/// Start empty in the card. A table that says it follows the game takes
+/// the design written from its codes in place of the one sent, so a
+/// table read before the codes last changed never brings back the old
+/// design.
 pub(crate) fn set_config_as_is(p: &mut Profile, mut config: PromptConfig) -> Result<bool, String> {
     if config.capture != p.prompt.config().capture {
         vosh_prompt::card::report::check_capture(&config.capture, p.prompt.who())?;
@@ -167,8 +170,11 @@ pub(crate) async fn designs(state: &SharedState) -> Result<Vec<PromptDesign>, St
             }
             None => ProfileConfig::fresh(),
         };
-        let template = config.prompt_config().template;
-        if template.is_empty() || template == vosh_prompt::DEFAULT_DESIGN {
+        let config = config.prompt_config();
+        // A design that follows the game is that profile's codes, which
+        // Same as the game offers for yours.
+        let template = config.template;
+        if config.mirror || template.is_empty() || template == vosh_prompt::DEFAULT_DESIGN {
             continue;
         }
         out.push(PromptDesign {

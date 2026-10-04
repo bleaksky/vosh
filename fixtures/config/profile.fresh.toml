@@ -31,7 +31,7 @@ paste_line_delay_ms = 500
 spellcheck_prompt = false
 input_cursor_style = "block"
 prompt_template_enabled = false
-prompt_template = "%{if:fight}%{if:tank}%tank:%{if:tank_hp} %{tank_hp:bar:10}%{end}%nl%{end}%{end}%{if:hp}%{if:maxhp}%c_hp%{end}%hp%{c:245}%{if:maxhp}/%{maxhp}%{end}hp%c_default%{end}%{if:mana} %{if:maxmana}%c_mana%{end}%mana%{c:245}%{if:maxmana}/%{maxmana}%{end}mn%c_default%{end}%{if:move} %{if:maxmove}%c_move%{end}%move%{c:245}%{if:maxmove}/%{maxmove}%{end}mv%c_default%{end}%{if:exits}  %{c:245}[%c_default%exits%{c:245}]%c_default%{end}%{if:gold}  %{gold:grouped}%{c:245}g%c_default%{end} "
+prompt_template = ""
 vitals_density = "rows"
 vitals_values = "current-max"
 vitals_meter = "line"
@@ -70,7 +70,3 @@ low_hp_vignette = false
 
 [plugins]
 enabled = []
-
-[prompt]
-draw = false
-template = "%{if:fight}%{if:tank}%tank:%{if:tank_hp} %{tank_hp:bar:10}%{end}%nl%{end}%{end}%{if:hp}%{if:maxhp}%c_hp%{end}%hp%{c:245}%{if:maxhp}/%{maxhp}%{end}hp%c_default%{end}%{if:mana} %{if:maxmana}%c_mana%{end}%mana%{c:245}%{if:maxmana}/%{maxmana}%{end}mn%c_default%{end}%{if:move} %{if:maxmove}%c_move%{end}%move%{c:245}%{if:maxmove}/%{maxmove}%{end}mv%c_default%{end}%{if:exits}  %{c:245}[%c_default%exits%{c:245}]%c_default%{end}%{if:gold}  %{gold:grouped}%{c:245}g%c_default%{end} "

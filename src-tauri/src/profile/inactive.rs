@@ -435,7 +435,8 @@ mod tests {
         let detail = profile_detail(&state, "Test-Prompt").await.unwrap();
         assert_eq!(names(&detail.tracked_affects), ["Fly"]);
         assert_eq!(detail.panes, PaneLayoutPersist::default_layout());
-        // The file starts the way a switch would, with the default design.
+        // The file starts the way a switch would, following the game with
+        // drawing off.
         let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         let file = ProfileConfig::load(&set.profile_path("Test-Prompt")).unwrap();
         assert_eq!(file.prompt_config(), vosh_prompt::PromptConfig::fresh());
@@ -548,7 +549,7 @@ mod tests {
         assert_eq!(names(&back.ui.tracked_affects), ["Sanctuary"]);
 
         // Test-Prompt never saved a file, so it exports what a switch to
-        // it loads, the defaults with Vosh's default design.
+        // it loads, the defaults, following the game with drawing off.
         let blank = profile_toml(&state, "Test-Prompt").await.unwrap();
         let back = ProfileConfig::from_toml(&blank).unwrap();
         let leftover = &back.ui.tracked_affects;

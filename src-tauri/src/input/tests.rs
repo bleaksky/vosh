@@ -375,9 +375,19 @@ fn prompt_default_puts_the_default_design_in_place_and_keeps_yours() {
     assert!(super::slash::HELP_TEXT.contains("#prompt default "));
 }
 
+/// Same as the game for the PROMPT these tests type, as the game stores
+/// it, for a mortal.
+fn same_as_the_game() -> String {
+    vosh_prompt::card::presets::game(
+        vosh_prompt::testkit::mud::PROMPT,
+        "",
+        vosh_prompt::aabahran::Who::default(),
+    )
+    .expect("the codes compile")
+}
+
 #[test]
 fn prompt_draw_turns_drawing_on_and_off() {
-    use vosh_prompt::DEFAULT_DESIGN;
     // No design and nothing reads the prompt yet.
     let state = AppState::default();
     let mut p = Profile::default();
@@ -394,16 +404,22 @@ fn prompt_draw_turns_drawing_on_and_off() {
     assert!(leftover.is_empty(), "{leftover:?}");
     let config = p.prompt.config();
     assert!(config.draw);
-    // Drawing with no design draws Vosh's default, as Settings does.
-    assert_eq!(config.template, DEFAULT_DESIGN);
+    // Drawing with no design follows the game, as Settings does. With
+    // no codes to follow you see the game's own prompt.
+    assert!(config.mirror);
+    assert_eq!(config.template, "");
+    assert!(!p.prompt.draws());
     let file = crate::profile::file::ProfileConfig::from_profile(&p);
     assert!(file.ui.prompt_template_enabled);
 
+    // Once Vosh reads your codes it draws them as the game does.
     let _ = run_line(
         &state,
         &mut p,
         "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
     );
+    assert_eq!(p.prompt.config().template, same_as_the_game());
+    assert!(p.prompt.draws());
     let ran = run_line(&state, &mut p, "#prompt draw off");
     assert_eq!(
         ran.result.echo,
@@ -412,9 +428,10 @@ fn prompt_draw_turns_drawing_on_and_off() {
     assert!(!p.prompt.config().draw);
     assert_eq!(
         p.prompt.config().template,
-        DEFAULT_DESIGN,
+        same_as_the_game(),
         "the design stays"
     );
+    assert!(p.prompt.config().mirror);
     let ran = run_line(&state, &mut p, "#prompt draw ON");
     assert_eq!(
         ran.result.echo,
@@ -427,6 +444,39 @@ fn prompt_draw_turns_drawing_on_and_off() {
     assert!(p.prompt.config().draw);
     // The help names it.
     assert!(super::slash::HELP_TEXT.contains("#prompt draw on|off"));
+
+    // A pattern of another game gives no codes to follow, so drawing on
+    // with no design still shows the game's own prompt, and says so.
+    let mut p = Profile::default();
+    p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(false, ""));
+    let _ = run_line(&state, &mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
+    let ran = run_line(&state, &mut p, "#prompt draw on");
+    assert_eq!(
+        ran.result.echo,
+        [
+            "Drawing is on. Vosh draws your design in place of your prompt.",
+            "You have no design yet, so you see the game's own prompt. Pick one in Customize prompt.",
+        ]
+    );
+    assert!(p.prompt.config().draw);
+    assert!(p.prompt.config().mirror);
+    assert!(!p.prompt.draws());
+    // So do codes the game sent that Vosh cannot draw, where a color
+    // runs into a code.
+    let mut p = Profile::default();
+    p.set_prompt_config(vosh_prompt::PromptConfig {
+        capture: vosh_prompt::CaptureConfig::Aabahran(vosh_prompt::config::AabahranCapture {
+            prompt: "<`%h> ".into(),
+            ..vosh_prompt::config::AabahranCapture::default()
+        }),
+        ..vosh_prompt::PromptConfig::from_legacy(false, "")
+    });
+    let ran = run_line(&state, &mut p, "#prompt draw on");
+    assert_eq!(
+        ran.result.echo[1],
+        "You have no design yet, so you see the game's own prompt. Pick one in Customize prompt."
+    );
+    assert!(!p.prompt.draws());
 }
 
 #[test]
@@ -465,24 +515,28 @@ fn prompt_default_says_what_else_it_takes_to_see_the_design() {
     let leftover = &p.prompt.config().previous_templates;
     assert!(leftover.is_empty(), "{leftover:?}");
 
-    // A fresh profile already holds the default design, and still
-    // hears what else it takes.
+    // A fresh profile follows the game, so Vosh's default is a choice
+    // that keeps nothing, and it still hears what else it takes.
     let mut p = Profile::default();
     p.set_prompt_config(vosh_prompt::PromptConfig::fresh());
-    let ran = run_line(&state, &mut p, "#prompt default");
-    assert_eq!(
-        ran.result.echo,
-        [
-            "Your design is already Vosh's default.",
-            "Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start.",
-            "Turn on Draw your own prompt in Settings under Input, then Prompt, to see it."
-        ]
-    );
     let _ = run_line(
         &state,
         &mut p,
         "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
     );
+    assert_eq!(p.prompt.config().template, same_as_the_game());
+    let ran = run_line(&state, &mut p, "#prompt default");
+    assert_eq!(
+        ran.result.echo,
+        [
+            "Your design is now Vosh's default.",
+            "Turn on Draw your own prompt in Settings under Input, then Prompt, to see it."
+        ]
+    );
+    assert!(!p.prompt.config().mirror);
+    // New codes leave the default you chose alone.
+    let _ = run_line(&state, &mut p, "#prompt game {%n%P%C<%hhp %mm %vmv> }");
+    assert_eq!(p.prompt.config().template, vosh_prompt::DEFAULT_DESIGN);
     let ran = run_line(&state, &mut p, "#prompt default");
     assert_eq!(
         ran.result.echo,

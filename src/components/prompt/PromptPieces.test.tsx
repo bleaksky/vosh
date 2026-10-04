@@ -4,7 +4,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BandEnv } from '../../lib/bandCells';
 import { BY_VALUE_HINT, THEME_HINT, WHEN_FIXED_HINT } from '../../lib/promptPieces';
 import { TEXT_HELP } from '../../lib/promptText';
-import type { PromptFieldState, PromptForm, PromptPiece, PromptState } from '../../lib/session';
+import type {
+  PromptFieldState,
+  PromptForm,
+  PromptPiece,
+  PromptPreset,
+  PromptState,
+} from '../../lib/session';
 import { LineTriggers } from './PromptCodes';
 import { PromptPicker } from './PromptPicker';
 import { MoreStyleItems, PromptPieceBody } from './PromptPiece';
@@ -583,6 +589,58 @@ describe('the D6 row', () => {
   });
 });
 
+describe('the start list while your design follows the game', () => {
+  const GAME = '[%{c:hp:game}%hp%c_reset/%{maxhp}hp] ';
+  const presets: PromptPreset[] = [
+    { id: 'default', label: "Vosh's default", template: 'DEFAULT ' },
+    { id: 'game', label: 'Same as the game', template: GAME },
+    { id: 'minimal', label: 'Minimal', template: '%{hp}h %{mana}m %{move}v > ' },
+    { id: 'empty', label: 'Start empty', template: '' },
+  ];
+  const starts = (mirror: boolean, template: string) => (
+    <Starts
+      mode="start"
+      config={{
+        draw: false,
+        template,
+        previous_templates: [],
+        capture: { kind: 'aabahran', prompt: '[%h/%Hhp] ', fprompt: '', follow_game: true },
+        show: 'text',
+        mirror,
+      }}
+      presets={presets}
+      designs={[]}
+      values="live"
+      refresh={0}
+      env={NORD}
+      cellW={7.8}
+      onPick={() => {}}
+      onInsertValue={() => {}}
+    />
+  );
+  /** The names of the rows that carry the check. */
+  const checked = (html: string) =>
+    [
+      ...html.matchAll(
+        /aria-checked="true"[^>]*>(?:<svg[\s\S]*?<\/svg>)?<span class="pc-start-name">([^<]*)</g,
+      ),
+    ].map((m) => m[1].replace(/&#x27;/g, "'"));
+
+  it('checks Same as the game', () => {
+    expect(checked(renderToStaticMarkup(starts(true, GAME)))).toEqual(['Same as the game']);
+  });
+
+  it('checks nothing while there are no codes to follow, not even Start empty', () => {
+    expect(checked(renderToStaticMarkup(starts(true, '')))).toEqual([]);
+  });
+
+  it('checks the row that holds your own design, never Same as the game', () => {
+    expect(checked(renderToStaticMarkup(starts(false, 'DEFAULT ')))).toEqual(["Vosh's default"]);
+    expect(checked(renderToStaticMarkup(starts(false, GAME)))).toEqual([]);
+    expect(checked(renderToStaticMarkup(starts(false, '')))).toEqual(['Start empty']);
+  });
+});
+
 describe('the card at rest', () => {
   const rest = (
     promptsOff: boolean,
@@ -598,6 +656,7 @@ describe('the card at rest', () => {
           previous_templates: [],
           capture: { kind: 'none' },
           show: 'text',
+          mirror: false,
         }}
         presets={[]}
         designs={[]}

@@ -31,6 +31,7 @@
     "vitals_hide_when_pinned": true,
     "chip_style": "value_only",
     "tick_count": "up",
+    "game_time": "24h",
     "affects_style": "timers",
     "affects_marker": "dot",
     "affects_tint": false,

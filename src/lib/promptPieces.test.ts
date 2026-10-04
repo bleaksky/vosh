@@ -118,7 +118,7 @@ describe('picking a part', () => {
     // all, rather than moving the bar past the whole run.
     const before = '[%c_hp%hp%c_default/%{maxhp:bar:10}hp ';
     const after = '[%c_hp%hp%c_default/hp %{maxhp:bar:10}';
-    const right = { before, after, from: 3, landed: 3, dir: 1 as const };
+    const right = { before, after, from: 3, landed: 3, dir: 1 as const, mirror: false };
     expect(moveBack([right], after, 3, -1)).toEqual(right);
     // The same way again is a move of its own.
     expect(moveBack([right], after, 3, 1)).toBeNull();
@@ -127,7 +127,14 @@ describe('picking a part', () => {
     expect(moveBack([right], after, 1, -1)).toBeNull();
     expect(moveBack([], after, 3, -1)).toBeNull();
     // Two moves come back newest first.
-    const again = { before: after, after: 'later', from: 3, landed: 4, dir: 1 as const };
+    const again = {
+      before: after,
+      after: 'later',
+      from: 3,
+      landed: 4,
+      dir: 1 as const,
+      mirror: false,
+    };
     expect(moveBack([right, again], 'later', 4, -1)).toEqual(again);
     expect(moveBack([right], after, 3, -1)).toEqual(right);
   });

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { VitalsOptions } from '../../lib/session';
 import { useChipStyle } from '../../lib/stores/chipStyleStore';
 import { useCombat } from '../../lib/stores/combatStore';
+import { useGameTime } from '../../lib/stores/gameTimeStore';
 import { useTarget } from '../../lib/stores/targetStore';
 import { useTickCount } from '../../lib/stores/tickCountStore';
 import { shownTick, useTick } from '../../lib/stores/tickStore';
@@ -39,7 +40,8 @@ import { statusMoons } from './statusMoons';
 // old input row chip kept the tick and the time, 8 px apart inside it.
 // The tick counts up from the last tick and turns the warn tone on a
 // soft warn ground in the last seconds you set in the tick config. The
-// time takes a daylight tint from your theme. The moons in the sky show
+// time reads on the 24 or 12 hour clock you pick in Settings and takes
+// a daylight tint from your theme. The moons in the sky show
 // as phase icons in their own colors, with a word for an eclipse, the
 // triad, or a near alignment. The chip style in Settings shows each
 // value alone, after a caption, or after an icon.
@@ -133,15 +135,16 @@ function toneClass(tone: VitalTone): string {
   return 'shell-status-value';
 }
 
-/** Reads the tick, the way it counts, the game time, the moons, and the
- *  theme for StatusClock. The moons show only while connected. */
+/** Reads the tick, the way it counts, the game time on its clock, the
+ *  moons, and the theme for StatusClock. The moons show only while
+ *  connected. */
 function ClockItem({ connected }: { connected: boolean }) {
   const style = useChipStyle();
   const tick = useTick();
   const shown = shownTick(tick, useTickCount());
   const world = useWorld();
   const theme = useActiveTheme();
-  const text = formatGameTime(world.time);
+  const text = formatGameTime(world.time, useGameTime());
   const hour = world.time?.hour ?? null;
   const tokens = useMemo(() => themeTokens(theme), [theme]);
   const tint = useMemo(() => daylightTint(hour, theme.xterm, tokens), [hour, theme, tokens]);
