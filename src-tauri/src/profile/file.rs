@@ -767,7 +767,12 @@ mod tests {
         let mut profile = synced_profile(t0);
         let next_fire = profile.tick.next_fire();
         let state = crate::app::state::AppState::default();
-        let ran = crate::input::run_line(&state, &mut profile, "#profile reset");
+        let ran = crate::input::run_line(
+            &state,
+            &mut profile,
+            &mut crate::session::connection::Connection::default(),
+            "#profile reset",
+        );
         assert!(ran.replaced);
         assert_eq!(profile.tick.next_fire(), next_fire);
         assert!(profile.tick.synced);

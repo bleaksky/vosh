@@ -8,8 +8,9 @@
 //!   connection. It sends your lines, takes each socket read, repaints
 //!   your prompt when a deadline passes, polls the tick and the timers,
 //!   and ends the connection.
-//! - `connection` holds what a connection shares with the commands: the
-//!   target you pick, its quick keys and the characters in the room.
+//! - `connection` holds the [`connection::Connection`] a connection
+//!   shares with the commands: the target you pick, its quick keys and
+//!   the characters in the room.
 //! - `socket` opens the plain or TLS socket.
 //! - `read` is the socket read path, from each telnet event to what the
 //!   end of a read sends.
@@ -104,12 +105,12 @@ pub(crate) struct TargetPayload {
 }
 
 impl TargetPayload {
-    /// The target and quick keys `p` holds now.
-    pub(crate) fn of(p: &crate::profile::live::Profile) -> Self {
+    /// The target and quick keys `c` holds now.
+    pub(crate) fn of(c: &connection::Connection) -> Self {
         Self {
-            name: p.target.name.clone(),
-            room_idx: p.target.room_idx,
-            quick_keys: p.target.quick_keys.clone(),
+            name: c.target.name.clone(),
+            room_idx: c.target.room_idx,
+            quick_keys: c.target.quick_keys.clone(),
         }
     }
 }
@@ -363,8 +364,9 @@ pub(crate) async fn disconnect<R: tauri::Runtime>(app: &AppHandle<R>, state: &Sh
 /// the custom prompt follows. The caller says so, which lets a test have
 /// a fake game on a local port count as it.
 ///
-/// The session shares the live profile, the Lua timers, the log store and
-/// the scrollback ring in `state` with the rest of the app.
+/// The session shares the live profile, the connection's target and room
+/// list, the Lua timers, the log store and the scrollback ring in `state`
+/// with the rest of the app.
 pub(crate) async fn spawn<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: &SharedState,
@@ -431,6 +433,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         stream,
         rx_outgoing,
         state.profile.clone(),
+        state.connection.clone(),
         state.lua_timers.clone(),
         log_sink,
         negotiator,

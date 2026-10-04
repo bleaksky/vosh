@@ -1,8 +1,9 @@
 //! The steps the session loop takes under the profile lock for each
 //! line, prompt, partial and GA or EOR the game sends, and for each
-//! repaint of your prompt. None of them sends anything. They write to
-//! the read's batch or return the output, and a line step returns what
-//! is left for after the lock as a [`LineStep`].
+//! repaint of your prompt. A step that reads your target takes the
+//! [`Connection`] too, locked after the profile. None of them sends
+//! anything. They write to the read's batch or return the output, and a
+//! line step returns what is left for after the lock as a [`LineStep`].
 
 use std::time::Duration;
 
@@ -18,6 +19,7 @@ use crate::script::{self, ApplyResult};
 use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
+use super::connection::Connection;
 use super::lines::{Line, LineAccumulator, Partial};
 use super::prompt_view::prompt_view;
 use super::{highlight_ground, now_ms, room_block};
@@ -117,6 +119,7 @@ pub(super) struct LineStep {
 /// start an earlier read painted.
 pub(super) fn line_step(
     p: &mut Profile,
+    c: &Connection,
     batch: &mut ReadBatch,
     line: Line,
     plain: String,
@@ -134,14 +137,23 @@ pub(super) fn line_step(
         .prompt
         .stage
         .offer(&line.bytes, &plain, line.painted, End::Line);
-    let mut steps = released_steps(p, batch, offered.released, now, log_session_id);
+    let mut steps = released_steps(p, c, batch, offered.released, now, log_session_id);
     match offered.offer {
         Offer::Prompt(block, painted) => {
-            steps.push(prompt_block(p, batch, block, painted, now, log_session_id));
+            steps.push(prompt_block(
+                p,
+                c,
+                batch,
+                block,
+                painted,
+                now,
+                log_session_id,
+            ));
         }
         Offer::Held => {}
         Offer::Line => steps.push(text_line_step(
             p,
+            c,
             batch,
             line.bytes,
             plain,
@@ -156,6 +168,7 @@ pub(super) fn line_step(
 /// Lines the stage held and let go, each through the Line pass in order.
 fn released_steps(
     p: &mut Profile,
+    c: &Connection,
     batch: &mut ReadBatch,
     released: Vec<vosh_prompt::stage::Released>,
     now: Instant,
@@ -166,6 +179,7 @@ fn released_steps(
         .map(|line| {
             text_line_step(
                 p,
+                c,
                 batch,
                 line.raw,
                 line.plain,
@@ -184,6 +198,7 @@ fn released_steps(
 /// scrollback.
 pub(super) fn let_go_held(
     p: &mut Profile,
+    c: &Connection,
     batch: &mut ReadBatch,
     now: Instant,
     log_session_id: Option<i64>,
@@ -195,6 +210,7 @@ pub(super) fn let_go_held(
         .map(|line| {
             text_line_step(
                 p,
+                c,
                 batch,
                 line.raw,
                 line.plain,
@@ -247,11 +263,11 @@ enum Shows {
 /// thing or person the look lists, and [`MatchScope::Line`] for any other
 /// line. The look's Room.Chars packet comes before its text, so the
 /// place is one in this look, the one `tar` marks with `>`.
-fn room_scope(p: &mut Profile, plain: &str, bytes: &[u8]) -> MatchScope {
+fn room_scope(p: &mut Profile, c: &Connection, plain: &str, bytes: &[u8]) -> MatchScope {
     use room_block::RoomLine;
     match p.room_block.line(plain, bytes) {
         RoomLine::Other => MatchScope::Line,
-        RoomLine::Person(place) if p.target.room_idx == Some(place) => MatchScope::RoomTarget,
+        RoomLine::Person(place) if c.target.room_idx == Some(place) => MatchScope::RoomTarget,
         RoomLine::Army | RoomLine::Thing | RoomLine::Person(_) => MatchScope::Room,
     }
 }
@@ -262,6 +278,7 @@ fn room_scope(p: &mut Profile, plain: &str, bytes: &[u8]) -> MatchScope {
 /// painted it (`shows`).
 fn text_line_step(
     p: &mut Profile,
+    c: &Connection,
     batch: &mut ReadBatch,
     bytes: Vec<u8>,
     plain: String,
@@ -272,7 +289,7 @@ fn text_line_step(
     // Every complete line that is not your prompt passes the room look
     // tracker in the order the game sent it, so it knows the lines that
     // list a room's armies, things and people.
-    let scope = room_scope(p, &plain, &bytes);
+    let scope = room_scope(p, c, &plain, &bytes);
     let LinePass {
         result,
         tick_step,
@@ -400,6 +417,7 @@ fn text_line_step(
 /// shows. The prompt vars go out after the batch.
 fn prompt_block(
     p: &mut Profile,
+    c: &Connection,
     batch: &mut ReadBatch,
     block: Block,
     painted: Option<u64>,
@@ -464,7 +482,7 @@ fn prompt_block(
         }
         // What the open card shows, a preview among them, with the live
         // render behind it, which the region carries as its restore.
-        let view = prompt_view(p, now);
+        let view = prompt_view(p, c, now);
         // A line above the last one your design reads nothing on has
         // nothing drawn in its place, so it shows as the game sent it.
         let last_index = block.lines.len() - 1;
@@ -612,6 +630,7 @@ fn unread_partial(
 /// pass first. The candidates ring records one entry either way.
 pub(super) fn marker_step(
     p: &mut Profile,
+    c: &Connection,
     accumulator: &mut LineAccumulator,
     batch: &mut ReadBatch,
     now: Instant,
@@ -621,7 +640,7 @@ pub(super) fn marker_step(
         // A GA after lines the stage held ends them, since the rest of
         // the prompt never came.
         let released = p.prompt.stage.release();
-        let steps = released_steps(p, batch, released, now, log_session_id);
+        let steps = released_steps(p, c, batch, released, now, log_session_id);
         p.prompt.record(None, now_ms());
         // The marker ends any room look before it, and the round that
         // ended a fight.
@@ -635,10 +654,18 @@ pub(super) fn marker_step(
         .prompt
         .stage
         .offer(&partial.bytes, &plain, painted, End::Marker);
-    let mut steps = released_steps(p, batch, offered.released, now, log_session_id);
+    let mut steps = released_steps(p, c, batch, offered.released, now, log_session_id);
     match offered.offer {
         Offer::Prompt(block, painted) => {
-            steps.push(prompt_block(p, batch, block, painted, now, log_session_id));
+            steps.push(prompt_block(
+                p,
+                c,
+                batch,
+                block,
+                painted,
+                now,
+                log_session_id,
+            ));
             p.prompt.record(None, now_ms());
         }
         Offer::Held | Offer::Line => {
@@ -669,6 +696,7 @@ pub(super) fn marker_step(
 /// wrote.
 pub(super) fn partial_step(
     p: &mut Profile,
+    c: &Connection,
     accumulator: &mut LineAccumulator,
     batch: &mut ReadBatch,
     now: Instant,
@@ -686,6 +714,7 @@ pub(super) fn partial_step(
                     .map(|(gen, _)| gen);
                 step = Some(prompt_block(
                     p,
+                    c,
                     batch,
                     block,
                     region.or(painted),
@@ -763,11 +792,16 @@ pub(super) fn late_repaint_after(
 /// The late GMCP repaint fires: your prompt as it shows now, when there is
 /// still a row or a band to repaint, which is empty when nothing changed.
 /// `other` says output from elsewhere landed since the session last wrote.
-pub(super) fn late_repaint_step(p: &mut Profile, other: bool, now: Instant) -> Output {
+pub(super) fn late_repaint_step(
+    p: &mut Profile,
+    c: &Connection,
+    other: bool,
+    now: Instant,
+) -> Output {
     if !p.prompt.stage.repaintable() {
         return Output::new(other);
     }
-    repaint_step(p, other, now)
+    repaint_step(p, c, other, now)
 }
 
 /// How long after a clock piece turns to its next second Vosh repaints
@@ -819,7 +853,13 @@ pub(super) fn clock_after(p: &Profile, now: Instant) -> Option<Instant> {
 /// replace with nothing after it, so it never lands on your typed text
 /// and never reaches history. `other` says output from elsewhere landed
 /// since the session last wrote, which closed the row.
-pub(super) fn clock_step(p: &mut Profile, other: bool, reading: bool, now: Instant) -> Output {
+pub(super) fn clock_step(
+    p: &mut Profile,
+    c: &Connection,
+    other: bool,
+    reading: bool,
+    now: Instant,
+) -> Output {
     let pinned = p.prompt.show() == vosh_prompt::PromptShow::Pinned;
     if p.prompt.clock().is_none()
         || p.prompt.preview().is_some()
@@ -828,7 +868,7 @@ pub(super) fn clock_step(p: &mut Profile, other: bool, reading: bool, now: Insta
     {
         return Output::new(other);
     }
-    repaint_step(p, other, now)
+    repaint_step(p, c, other, now)
 }
 
 /// A line you sent. The candidates ring records the prompt it answers,
@@ -898,9 +938,9 @@ pub(super) fn window_size_step(
 /// the row carries as its restore. `other` says output from elsewhere
 /// landed since the session last wrote, which closed the row. Returns the
 /// repaint, empty when no row is open.
-pub(super) fn repaint_step(p: &mut Profile, other: bool, now: Instant) -> Output {
+pub(super) fn repaint_step(p: &mut Profile, c: &Connection, other: bool, now: Instant) -> Output {
     let mut out = Output::new(other);
-    let view = prompt_view(p, now);
+    let view = prompt_view(p, c, now);
     p.prompt.stage.repaint_view(&mut out, view.stage());
     out
 }
@@ -910,12 +950,17 @@ pub(super) fn repaint_step(p: &mut Profile, other: bool, now: Instant) -> Output
 /// row, or on the band while pinned, since nothing else may land to make
 /// the renderers write the restore they hold. Empty with no preview, and
 /// when no row or band is left to repaint.
-pub(super) fn end_preview_step(p: &mut Profile, other: bool, now: Instant) -> Output {
+pub(super) fn end_preview_step(
+    p: &mut Profile,
+    c: &Connection,
+    other: bool,
+    now: Instant,
+) -> Output {
     if p.prompt.preview().is_none() {
         return Output::new(other);
     }
     p.prompt.set_preview(None);
-    repaint_step(p, other, now)
+    repaint_step(p, c, other, now)
 }
 
 /// A trigger hid a line or partial. When nothing reads your prompt in

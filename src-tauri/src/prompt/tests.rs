@@ -445,7 +445,7 @@ fn renders_draw_live_or_sample_values_with_overrides() {
         {"template": "%hp", "preview": "now"},
     ]))
     .unwrap();
-    let plain: Vec<String> = render_all(&p, &requests)
+    let plain: Vec<String> = render_all(&p, &Connection::default(), &requests)
         .into_iter()
         .map(|r| r.plain)
         .collect();
@@ -474,7 +474,7 @@ fn an_edit_writes_the_design_and_draws_it_with_placeholders() {
         "field": "gold",
     }))
     .unwrap();
-    let edited = edit(&p, "[", &op).unwrap();
+    let edited = edit(&p, &Connection::default(), "[", &op).unwrap();
     assert_eq!(edited.template, "[%gold");
     assert_eq!(edited.rendered.plain, "[Gold");
     assert_eq!(edited.rendered.spans.len(), 2);
@@ -486,7 +486,7 @@ fn an_edit_writes_the_design_and_draws_it_with_placeholders() {
     }))
     .unwrap();
     assert_eq!(
-        edit(&p, "[", &unknown),
+        edit(&p, &Connection::default(), "[", &unknown),
         Err("Vosh does not know that value.".into())
     );
     // Each op reads from the card in its own shape.
@@ -514,11 +514,17 @@ fn a_design_is_described_with_the_values_the_card_shows() {
         json!({"hp": 850, "maxhp": 900}),
         chrono::Local::now().fixed_offset(),
     );
-    let live = describe(&p, "[%hp]", None, None);
+    let live = describe(&p, &Connection::default(), "[%hp]", None, None);
     let hp = &live.pieces[1];
     assert_eq!(hp.label, "Health");
     assert_eq!(hp.meta.as_deref(), Some("850 of 900"));
-    let low = describe(&p, "[%hp]", Some(Preview::LowHealth), None);
+    let low = describe(
+        &p,
+        &Connection::default(),
+        "[%hp]",
+        Some(Preview::LowHealth),
+        None,
+    );
     assert_eq!(
         low.pieces[1].meta.as_deref(),
         Some("180 of 900 in this preview")
@@ -530,13 +536,13 @@ fn a_design_is_described_with_the_values_the_card_shows() {
     assert_eq!(json["pieces"][1]["when"], "always");
     assert_eq!(json["tokens"][1]["kind"], "value");
     // The picker's forms, a field with a parameter among them.
-    let hp_forms = forms(&p, "hp", None);
+    let hp_forms = forms(&p, &Connection::default(), "hp", None);
     assert_eq!(hp_forms[1].sample.plain, "850/900");
     assert_eq!(hp_forms[1].label, "Current and max");
     let json = serde_json::to_value(&hp_forms[0]).unwrap();
     assert_eq!(json["format"], "value");
     assert_eq!(json["segment"], "850");
-    let labels: Vec<&str> = forms(&p, "aff:sanctuary", None)
+    let labels: Vec<&str> = forms(&p, &Connection::default(), "aff:sanctuary", None)
         .iter()
         .map(|f| f.label)
         .collect();
@@ -628,7 +634,7 @@ fn the_state_lists_the_catalog_with_live_states() {
         json!({"enabled": true, "prompt": "%h ", "fprompt": ""}),
         chrono::Local::now().fixed_offset(),
     );
-    let state = prompt_state(&p);
+    let state = prompt_state(&p, &Connection::default());
     assert!(state.new_build);
     // The Forsaken Lands rules hold on its host.
     assert!(state.forsaken);

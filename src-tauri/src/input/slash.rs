@@ -1,5 +1,6 @@
 //! The slash command dispatcher. A line that starts with `#` runs the
-//! command its first word names, against the live profile.
+//! command its first word names, against the live profile, or against
+//! the connection for your target and quick keys.
 
 use super::automation::{
     slash_alias, slash_aliases_list, slash_endrec, slash_group, slash_groups_list, slash_record,
@@ -18,10 +19,12 @@ use super::{split_first_word, InputResult};
 use crate::app::state::AppState;
 use crate::profile::live::Profile;
 use crate::script::ApplyResult;
+use crate::session::connection::Connection;
 
 pub(super) fn handle_slash(
     state: &AppState,
     profile: &mut Profile,
+    c: &mut Connection,
     rest: &str,
     replaced: &mut bool,
     lua: &mut ApplyResult,
@@ -32,7 +35,7 @@ pub(super) fn handle_slash(
     }
     let (cmd, args) = split_first_word(rest);
     match cmd {
-        "alias" => slash_alias(profile, args),
+        "alias" => slash_alias(profile, c, args),
         "unalias" => slash_unalias(profile, args),
         "aliases" => slash_aliases_list(profile),
         "var" => slash_var(profile, args),
@@ -57,12 +60,12 @@ pub(super) fn handle_slash(
         "logs" => InputResult::error("type #logs at the input bar"),
         "record" => slash_record(profile, args),
         "endrec" => slash_endrec(profile),
-        "target" => slash_target(profile, args),
-        "tarn" => run_target_cycle(profile, 1),
-        "tarp" => run_target_cycle(profile, -1),
-        "tarclear" => run_target_clear(profile),
-        "qkey" => slash_qkey(profile, args),
-        "qkeys" => slash_qkeys_list(profile),
+        "target" => slash_target(c, &mut profile.vars, args),
+        "tarn" => run_target_cycle(c, &mut profile.vars, 1),
+        "tarp" => run_target_cycle(c, &mut profile.vars, -1),
+        "tarclear" => run_target_clear(c, &mut profile.vars),
+        "qkey" => slash_qkey(c, &profile.aliases, args),
+        "qkeys" => slash_qkeys_list(c),
         "help" => InputResult::echo_lines(HELP_TEXT.lines().map(str::to_string).collect()),
         "" => InputResult::error("missing slash command. try #help"),
         other => InputResult::error(format!("unknown slash command #{other}. try #help")),

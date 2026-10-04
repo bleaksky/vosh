@@ -4,22 +4,30 @@
 use crate::app::state::AppState;
 use crate::input::{LineEffects, LineFrom};
 use crate::profile::live::Profile;
+use crate::session::connection::Connection;
 
 #[test]
 fn a_timer_command_that_edits_the_profile_marks_it_dirty() {
     let state = AppState::default();
     let mut p = Profile::default();
-    let run = super::run_fired_locked(&state, &mut p, "#alias greet wave", None);
+    let mut c = Connection::default();
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "#alias greet wave", None);
     assert!(run.effects.dirty);
     assert!(run.apply.lists.aliases);
     assert!(p.aliases.get("greet").is_some());
 
-    let run = super::run_fired_locked(&state, &mut p, "#trigger flee {^You flee} send look", None);
+    let run = super::run_fired_locked(
+        &state,
+        &mut p,
+        &mut c,
+        "#trigger flee {^You flee} send look",
+        None,
+    );
     assert!(run.effects.dirty);
     assert!(run.apply.lists.triggers);
 
     // A plain command leaves the saved profile alone.
-    let run = super::run_fired_locked(&state, &mut p, "greet", None);
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "greet", None);
     assert_eq!(run.effects, LineEffects::default());
     assert_eq!(run.apply.send_bytes, b"wave\r\n");
 }
@@ -28,13 +36,14 @@ fn a_timer_command_that_edits_the_profile_marks_it_dirty() {
 fn a_script_alias_body_hands_on_all_it_asks_for() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.aliases.set(
         vosh_automation::alias::Alias::new("kk", "ignored").with_script(
             "mud.echo('ready') mud.send(captures[1]) mud.timer(1, function() end) \
          mud.input('look') mud.set_prompt_var('mark', 'on')",
         ),
     );
-    let ran = crate::input::run_line(&state, &mut p, "stand;kk orc");
+    let ran = crate::input::run_line(&state, &mut p, &mut c, "stand;kk orc");
     let apply = super::line_script_result(ran);
     // What the body sends goes out where you typed the alias, and all
     // else it asks for comes with the line.
@@ -49,18 +58,19 @@ fn a_script_alias_body_hands_on_all_it_asks_for() {
 fn a_timer_command_runs_the_body_of_a_lua_alias() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.aliases.set(
         vosh_automation::alias::Alias::new("kk", "ignored")
             .with_script("mud.send('kick ' .. captures[1])\nmud.echo('kicked')"),
     );
-    let run = super::run_fired_locked(&state, &mut p, "kk dragon", None);
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "kk dragon", None);
     assert_eq!(run.apply.send_bytes, b"kick dragon\r\n");
     assert_eq!(run.apply.echoes, ["kicked"]);
     assert_eq!(run.effects, LineEffects::default());
     // What the body sends goes out where the command names the alias.
-    let run = super::run_fired_locked(&state, &mut p, "kk dragon;wave", None);
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "kk dragon;wave", None);
     assert_eq!(run.apply.send_bytes, b"kick dragon\r\nwave\r\n");
-    let run = super::run_fired_locked(&state, &mut p, "wave;kk dragon;bow", None);
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "wave;kk dragon;bow", None);
     assert_eq!(run.apply.send_bytes, b"wave\r\nkick dragon\r\nbow\r\n");
 }
 
@@ -92,17 +102,18 @@ fn a_timer_group_line_reports_a_macro_group_that_turned() {
     // has to reach it, or the keys go on firing.
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.macros.push(crate::profile::live::Macro {
         key: "F1".into(),
         command: "kick".into(),
         group: Some("combat".into()),
         enabled: true,
     });
-    let run = super::run_fired_locked(&state, &mut p, "#group combat off", None);
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "#group combat off", None);
     assert!(run.apply.lists.macro_groups);
     assert!(p.disabled_macro_groups.contains("combat"));
     // Off already, so nothing turned.
-    let run = super::run_fired_locked(&state, &mut p, "#group combat off", None);
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "#group combat off", None);
     assert!(!run.apply.lists.macro_groups);
 }
 
@@ -110,10 +121,12 @@ fn a_timer_group_line_reports_a_macro_group_that_turned() {
 fn tick_and_lua_lines_note_what_they_ask_of_the_profile() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     let mut effects = LineEffects::default();
     let _ = super::run_and_note_line(
         &state,
         &mut p,
+        &mut c,
         LineFrom::You,
         "#alias greet wave",
         &mut effects,
@@ -127,6 +140,7 @@ fn tick_and_lua_lines_note_what_they_ask_of_the_profile() {
     let _ = super::run_and_note_line(
         &state,
         &mut p,
+        &mut c,
         LineFrom::You,
         "#profile reset",
         &mut effects,
@@ -147,11 +161,13 @@ fn tick_and_lua_lines_note_what_they_ask_of_the_profile() {
 fn a_reset_from_a_timer_turns_away_a_config_save_read_before_it() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     let mut effects = LineEffects::default();
     let before = state.ui_config_generation();
     let _ = super::run_and_note_line(
         &state,
         &mut p,
+        &mut c,
         LineFrom::You,
         "#profile reset",
         &mut effects,
@@ -164,10 +180,11 @@ fn a_reset_from_a_timer_turns_away_a_config_save_read_before_it() {
 fn a_tick_command_from_a_timer_notes_the_tick_change() {
     let state = AppState::default();
     let mut p = Profile::default();
-    let run = super::run_fired_locked(&state, &mut p, "#tick warn at 10", None);
+    let mut c = Connection::default();
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "#tick warn at 10", None);
     assert!(run.effects.tick_changed);
     assert_eq!(p.tick.config.warn_at_secs, Some(10));
-    let run = super::run_fired_locked(&state, &mut p, "#tick", None);
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "#tick", None);
     assert!(!run.effects.tick_changed);
 }
 
@@ -175,19 +192,20 @@ fn a_tick_command_from_a_timer_notes_the_tick_change() {
 fn a_timer_command_says_what_it_changed_outside_the_text() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     // A plain command changes neither, so nothing goes out.
-    let run = super::run_fired_locked(&state, &mut p, "look", None);
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "look", None);
     assert_eq!(run.shown, super::ShownChanges::default());
 
-    let run = super::run_fired_locked(&state, &mut p, "tar goblin", None);
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "tar goblin", None);
     let target = run.shown.target.expect("the new target");
     assert_eq!(target.name.as_deref(), Some("goblin"));
     assert!(!run.shown.repaint);
     // The same target again changes nothing.
-    let run = super::run_fired_locked(&state, &mut p, "tar goblin", None);
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "tar goblin", None);
     assert_eq!(run.shown, super::ShownChanges::default());
 
-    let run = super::run_fired_locked(&state, &mut p, "#prompt default", None);
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "#prompt default", None);
     assert!(run.shown.repaint);
     assert!(run.shown.target.is_none());
 }
@@ -203,12 +221,13 @@ fn a_timer_reset_keeps_the_shared_settings() {
         crate::profile::shared::ScopeConfig::default(),
     );
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.ui.theme = "night-ink".into();
     p.ui.font_family = "Iosevka".into();
     p.ui.keep_last_command = true;
-    let _ = super::run_fired_locked(&state, &mut p, "#alias greet wave", None);
+    let _ = super::run_fired_locked(&state, &mut p, &mut c, "#alias greet wave", None);
 
-    let run = super::run_fired_locked(&state, &mut p, "#profile reset", Some(&layer));
+    let run = super::run_fired_locked(&state, &mut p, &mut c, "#profile reset", Some(&layer));
 
     assert!(run.effects.replaced);
     assert!(p.aliases.get("greet").is_none());
@@ -272,7 +291,12 @@ fn a_function_a_trigger_body_left_behind_turns_its_trigger_off_too() {
         package: "World.Time".into(),
         data: serde_json::json!({}),
     };
-    let (_, apply) = super::gmcp_step(&mut p, &msg, tokio::time::Instant::now());
+    let (_, apply) = super::gmcp_step(
+        &mut p,
+        &mut Connection::default(),
+        &msg,
+        tokio::time::Instant::now(),
+    );
     assert!(p.triggers.is_stopped("day"));
     assert_eq!(
         apply.echoes,
@@ -286,12 +310,13 @@ fn a_function_a_trigger_body_left_behind_turns_its_trigger_off_too() {
 fn an_alias_body_that_runs_away_turns_its_alias_off() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.aliases.set(
         vosh_automation::alias::Alias::new("heal", "ignored")
             .with_script("mud.send('cast heal') while true do end"),
     );
     // The second heal of the line runs nothing once the first stopped.
-    let ran = crate::input::run_line(&state, &mut p, "heal;heal");
+    let ran = crate::input::run_line(&state, &mut p, &mut c, "heal;heal");
     let apply = super::line_script_result(ran);
     let leftover = &apply.send_bytes;
     assert!(leftover.is_empty(), "{leftover:?}");
@@ -303,7 +328,7 @@ fn an_alias_body_that_runs_away_turns_its_alias_off() {
     );
     assert!(p.aliases.is_stopped("heal"));
     // Typed again, it passes through, as an alias you turned off does.
-    let ran = crate::input::run_line(&state, &mut p, "heal");
+    let ran = crate::input::run_line(&state, &mut p, &mut c, "heal");
     assert_eq!(super::line_script_result(ran).send_bytes, b"heal\r\n");
 }
 

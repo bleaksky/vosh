@@ -28,6 +28,7 @@ use crate::profile::switch::read_shared_layer;
 use crate::prompt::request_prompt_repaint;
 use crate::script::{run_alias_body, ApplyResult};
 use crate::session;
+use crate::session::connection::Connection;
 use crate::session::effects::LinesRun;
 
 use slash::handle_slash;
@@ -228,10 +229,10 @@ pub(crate) const NOT_CONNECTED: &[u8] = b"\r\n[not connected]\r\n";
 
 /// Run a line you typed, the body of `session_send_input`. `#help` and
 /// `#logs` take their short cuts. Any other line runs through the
-/// pipeline under the profile lock. Then the prompt repaints when the
-/// line changed how it looks, the line's saves and events go out with
-/// your target when it changed, and what it sends and echoes is
-/// delivered.
+/// pipeline under the profile lock and the connection's. Then the prompt
+/// repaints when the line changed how it looks, the line's saves and
+/// events go out with your target when it changed, and what it sends and
+/// echoes is delivered.
 pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
@@ -271,9 +272,11 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         effects,
     } = {
         let mut profile = state.profile.lock().await;
+        let mut connection = state.connection.lock().await;
         session::effects::run_lines_locked(
             state,
             &mut profile,
+            &mut connection,
             [(LineFrom::You, line)],
             shared_layer.as_ref(),
         )
@@ -370,25 +373,32 @@ pub(crate) struct Ran {
 
 /// [`run_line_from`] for a line you type, for a test.
 #[cfg(test)]
-pub(crate) fn run_line(state: &AppState, profile: &mut Profile, line: &str) -> Ran {
-    run_line_from(state, profile, line, LineFrom::You)
+pub(crate) fn run_line(
+    state: &AppState,
+    profile: &mut Profile,
+    c: &mut Connection,
+    line: &str,
+) -> Ran {
+    run_line_from(state, profile, c, line, LineFrom::You)
 }
 
 /// Run `line`, which `from` asks for, through the input pipeline: what
 /// to send, what to echo, what the Lua it ran asks for, whether it
 /// replaced the live profile, and whether it changed the tick settings,
-/// for [`LineEffects::note_ran`]. Who asked decides the slash commands it
-/// may run, those a quick key in it expands to included.
+/// for [`LineEffects::note_ran`]. The target words and the quick keys
+/// read and set your target on `c`. Who asked decides the slash commands
+/// it may run, those a quick key in it expands to included.
 pub(crate) fn run_line_from(
     state: &AppState,
     profile: &mut Profile,
+    c: &mut Connection,
     line: &str,
     from: LineFrom,
 ) -> Ran {
     let mut replaced = false;
     let mut lua = ApplyResult::default();
     let tick_before = profile.tick.config.clone();
-    let result = process_line(state, profile, line, from, &mut replaced, &mut lua);
+    let result = process_line(state, profile, c, line, from, &mut replaced, &mut lua);
     let tick_changed = profile.tick.config != tick_before;
     Ran {
         result,
@@ -466,10 +476,18 @@ impl LineEffects {
 /// Run the input pipeline against the given profile and return what to send
 /// and what to echo locally. The app runs every line through [`run_line_from`],
 /// which also says whether the line replaced the profile. A test that
-/// needs no app state of its own runs here, on a fresh one.
+/// needs no app state of its own runs here, on a fresh one, with a fresh
+/// connection that the line's target words and quick keys change and
+/// then drop.
 #[cfg(test)]
 pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
-    run_line(&AppState::default(), profile, line).result
+    run_line(
+        &AppState::default(),
+        profile,
+        &mut Connection::default(),
+        line,
+    )
+    .result
 }
 
 /// The body of [`run_line_from`]. Sets `replaced` when a `#profile reset`
@@ -480,6 +498,7 @@ pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
 fn process_line(
     state: &AppState,
     profile: &mut Profile,
+    c: &mut Connection,
     line: &str,
     from: LineFrom,
     replaced: &mut bool,
@@ -493,7 +512,7 @@ fn process_line(
         if let Some(refusal) = slash_refusal(from, trimmed) {
             return InputResult::echo_lines(crate::script::lua_error_lines(&refusal).collect());
         }
-        return handle_slash(state, profile, rest, replaced, lua);
+        return handle_slash(state, profile, c, rest, replaced, lua);
     }
 
     // A bare Enter sends a blank line to the server. MUDs use this to
@@ -508,10 +527,10 @@ fn process_line(
     // shadowed by aliases or quick-keys.
     let (head, rest) = split_first_word(trimmed);
     match head {
-        "tar" => return run_target_set(profile, rest),
-        "tarn" => return run_target_cycle(profile, 1),
-        "tarp" => return run_target_cycle(profile, -1),
-        "tarclear" => return run_target_clear(profile),
+        "tar" => return run_target_set(c, &mut profile.vars, rest),
+        "tarn" => return run_target_cycle(c, &mut profile.vars, 1),
+        "tarp" => return run_target_cycle(c, &mut profile.vars, -1),
+        "tarclear" => return run_target_clear(c, &mut profile.vars),
         _ => {}
     }
 
@@ -525,18 +544,18 @@ fn process_line(
     // then to the MUD if no alias matches), so a default-but-unused
     // name like `gg` does not shadow a user alias of the same name
     // with a "no verb is set" error.
-    if let Some(qk) = profile
+    if let Some(qk) = c
         .target
         .quick_keys
         .iter()
         .find(|q| q.name == head && !q.verb.is_empty())
     {
-        let target = profile.target.name.clone().unwrap_or_default();
+        let target = c.target.name.clone().unwrap_or_default();
         if target.is_empty() {
             return InputResult::error("no target — set one with `tar <name|index>` first");
         }
         let expansion = format!("{} {}", qk.verb, target);
-        let mut inner = process_line(state, profile, &expansion, from, replaced, lua);
+        let mut inner = process_line(state, profile, c, &expansion, from, replaced, lua);
         // Echo the resolved line like any other typed command, with the
         // caret and the Sent command color. The frontend suppresses its
         // own echo for quick-keys, so this is the only echo that lands.

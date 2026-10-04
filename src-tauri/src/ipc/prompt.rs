@@ -188,7 +188,9 @@ pub(crate) async fn prompt_render(
         overrides,
         placeholders: placeholders.unwrap_or(false),
     };
-    Ok(render_all(&*state.profile.lock().await, std::slice::from_ref(&request)).remove(0))
+    let p = state.profile.lock().await;
+    let c = state.connection.lock().await;
+    Ok(render_all(&p, &c, std::slice::from_ref(&request)).remove(0))
 }
 
 /// Draw several designs at once, such as the start list.
@@ -197,7 +199,9 @@ pub(crate) async fn prompt_render_many(
     state: State<'_, SharedState>,
     requests: Vec<RenderRequest>,
 ) -> Result<Vec<Rendered>, String> {
-    Ok(render_all(&*state.profile.lock().await, &requests))
+    let p = state.profile.lock().await;
+    let c = state.connection.lock().await;
+    Ok(render_all(&p, &c, &requests))
 }
 
 /// What each piece and token of a design is, as the card shows it, with
@@ -209,12 +213,9 @@ pub(crate) async fn prompt_describe(
     preview: Option<Preview>,
     overrides: Option<Overrides>,
 ) -> Result<Described, String> {
-    Ok(describe(
-        &*state.profile.lock().await,
-        &template,
-        preview,
-        overrides,
-    ))
+    let p = state.profile.lock().await;
+    let c = state.connection.lock().await;
+    Ok(describe(&p, &c, &template, preview, overrides))
 }
 
 /// The forms a field takes, each drawn as the card shows it, for the
@@ -226,7 +227,9 @@ pub(crate) async fn prompt_forms(
     field: String,
     preview: Option<Preview>,
 ) -> Result<Vec<FormView>, String> {
-    Ok(forms(&*state.profile.lock().await, &field, preview))
+    let p = state.profile.lock().await;
+    let c = state.connection.lock().await;
+    Ok(forms(&p, &c, &field, preview))
 }
 
 /// Show what the open card shows on your prompt in place of the live
@@ -270,7 +273,9 @@ pub(crate) async fn prompt_edit(
     template: String,
     op: EditOp,
 ) -> Result<Edited, String> {
-    edit(&*state.profile.lock().await, &template, &op)
+    let p = state.profile.lock().await;
+    let c = state.connection.lock().await;
+    edit(&p, &c, &template, &op)
 }
 
 /// The catalog with each field's live state and source, the status, the
@@ -278,7 +283,8 @@ pub(crate) async fn prompt_edit(
 #[tauri::command]
 pub(crate) async fn prompt_state_get(state: State<'_, SharedState>) -> Result<PromptState, String> {
     let p = state.profile.lock().await;
-    Ok(prompt_state(&p))
+    let c = state.connection.lock().await;
+    Ok(prompt_state(&p, &c))
 }
 
 /// Watch your prompt: while on, `session://prompt-state` follows each

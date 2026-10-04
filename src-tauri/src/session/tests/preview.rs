@@ -518,7 +518,7 @@ fn the_live_render_comes_back_when_the_connection_ends_during_a_preview() {
         let low = session.repaint();
         let _ = grid_after(&mut grid, [&quiet.out, &low]);
         // You disconnect with the card open, and nothing else lands.
-        let out = end_preview_step(&mut session.p, false, now);
+        let out = end_preview_step(&mut session.p, &session.c, false, now);
         assert!(session.p.prompt.preview().is_none(), "{label}");
         assert!(out.restore.is_none(), "{label}");
         if show == PromptShow::Pinned {
@@ -542,5 +542,5 @@ fn the_live_render_comes_back_when_the_connection_ends_during_a_preview() {
     // With no preview, the connection ends with nothing to write.
     let mut session = Session::new(profile(CODES, HP, true));
     let _ = session.read(&wire_fixture("quiet"));
-    assert!(end_preview_step(&mut session.p, false, now).is_empty());
+    assert!(end_preview_step(&mut session.p, &session.c, false, now).is_empty());
 }

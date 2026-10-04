@@ -4,7 +4,7 @@ use super::slash::{parse_braced_pattern, HELP_TEXT};
 use super::target::{read_room_chars, set_room_chars};
 use super::*;
 use crate::profile::file::ProfileConfig;
-use crate::session::connection::RoomChar;
+use crate::session::connection::{Connection, RoomChar};
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{NamedColor, TriggerAction};
 use vosh_automation::vars::Scope;
@@ -20,10 +20,12 @@ fn regex_capture(p: &Profile) -> vosh_prompt::config::RegexCapture {
 fn prompt_writes_a_regex_capture_to_the_profile() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
     let ran = run_line(
         &state,
         &mut p,
+        &mut c,
         r"#prompt {\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)m\]}",
     );
     assert_eq!(
@@ -52,14 +54,14 @@ fn prompt_writes_a_regex_capture_to_the_profile() {
     assert!(p.prompt.stage.has_recognizer());
 
     // An anchored pattern that ends in text settles.
-    let ran = run_line(&state, &mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
+    let ran = run_line(&state, &mut p, &mut c, r"#prompt {^<(?<hp>\d+)hp> $}");
     assert_eq!(
         ran.result.echo,
         ["Vosh reads hp from your prompt with this pattern."]
     );
     assert!(regex_capture(&p).settle);
     // A pattern with no groups only says where your prompt is.
-    let ran = run_line(&state, &mut p, "#prompt {^> $}");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt {^> $}");
     assert_eq!(
         ran.result.echo,
         ["Vosh reads your prompt with this pattern."]
@@ -70,16 +72,17 @@ fn prompt_writes_a_regex_capture_to_the_profile() {
 fn prompt_with_a_bad_pattern_changes_nothing() {
     let state = AppState::default();
     let mut p = Profile::default();
-    let _ = run_line(&state, &mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
+    let mut c = Connection::default();
+    let _ = run_line(&state, &mut p, &mut c, r"#prompt {^<(?<hp>\d+)hp> $}");
     let before = p.prompt.config().clone();
-    let ran = run_line(&state, &mut p, r"#prompt {\[(?<hp>\d+}");
+    let ran = run_line(&state, &mut p, &mut c, r"#prompt {\[(?<hp>\d+}");
     assert!(
         ran.result.echo[0].starts_with("[Vosh cannot read that pattern."),
         "{:?}",
         ran.result.echo
     );
     assert_eq!(*p.prompt.config(), before);
-    let ran = run_line(&state, &mut p, "#prompt {");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt {");
     assert!(ran.result.echo[0].starts_with("[usage #prompt"));
 }
 
@@ -94,10 +97,12 @@ fn codes_of(p: &Profile) -> vosh_prompt::config::AabahranCapture {
 fn prompt_game_stores_the_setting_as_the_game_does_and_says_what_it_reads() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
     let ran = run_line(
         &state,
         &mut p,
+        &mut c,
         "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
     );
     assert_eq!(
@@ -118,14 +123,14 @@ fn prompt_game_stores_the_setting_as_the_game_does_and_says_what_it_reads() {
     assert_eq!(p.prompt.config().template, "%hp", "the design stays");
 
     // As do_prompt stores it: prompt all, and a space added.
-    let _ = run_line(&state, &mut p, "#prompt game {all}");
+    let _ = run_line(&state, &mut p, &mut c, "#prompt game {all}");
     assert_eq!(codes_of(&p).prompt, "%n%P%C<%hhp %mm %vmv> ");
-    let _ = run_line(&state, &mut p, "#prompt game {<%hhp>}");
+    let _ = run_line(&state, &mut p, &mut c, "#prompt game {<%hhp>}");
     assert_eq!(codes_of(&p).prompt, "<%hhp> ");
     // No space around the setting reaches the game.
-    let _ = run_line(&state, &mut p, "#prompt game { <%hhp %mm> }");
+    let _ = run_line(&state, &mut p, &mut c, "#prompt game { <%hhp %mm> }");
     assert_eq!(codes_of(&p).prompt, "<%hhp %mm> ");
-    let _ = run_line(&state, &mut p, "#prompt game { all }");
+    let _ = run_line(&state, &mut p, &mut c, "#prompt game { all }");
     assert_eq!(codes_of(&p).prompt, "%n%P%C<%hhp %mm %vmv> ");
 }
 
@@ -133,7 +138,8 @@ fn prompt_game_stores_the_setting_as_the_game_does_and_says_what_it_reads() {
 fn prompt_game_says_every_warning_and_refuses_what_it_cannot_read() {
     let state = AppState::default();
     let mut p = Profile::default();
-    let ran = run_line(&state, &mut p, "#prompt game {<%h%m %vmv>}");
+    let mut c = Connection::default();
+    let ran = run_line(&state, &mut p, &mut c, "#prompt game {<%h%m %vmv>}");
     assert_eq!(
         ran.result.echo,
         [
@@ -144,18 +150,18 @@ fn prompt_game_says_every_warning_and_refuses_what_it_cannot_read() {
     // The game keeps a typed backtick only from trust 55.
     trusted(&mut p);
     let before = p.prompt.config().clone();
-    let ran = run_line(&state, &mut p, "#prompt game {<`%h>}");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt game {<`%h>}");
     assert_eq!(
         ran.result.echo,
         ["[A color code runs into %h. Put a space between them in the game.]"]
     );
     assert_eq!(*p.prompt.config(), before);
-    let ran = run_line(&state, &mut p, "#prompt game {off}");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt game {off}");
     assert_eq!(
         ran.result.echo,
         ["[That turns prompts off in the game. Type the prompt setting you use.]"]
     );
-    let ran = run_line(&state, &mut p, "#prompt game");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt game");
     assert_eq!(
         ran.result.echo,
         ["[usage #prompt game {your PROMPT setting}]"]
@@ -178,10 +184,11 @@ fn prompt_game_stores_what_the_game_keeps_of_your_backticks() {
     // each backtick and the character after it.
     let state = AppState::default();
     let mut p = Profile::default();
-    let _ = run_line(&state, &mut p, "#prompt game {`(240)[%h/%Hhp]}");
+    let mut c = Connection::default();
+    let _ = run_line(&state, &mut p, &mut c, "#prompt game {`(240)[%h/%Hhp]}");
     assert_eq!(codes_of(&p).prompt, "240)[%h/%Hhp] ");
     trusted(&mut p);
-    let _ = run_line(&state, &mut p, "#prompt game {`(240)[%h/%Hhp]}");
+    let _ = run_line(&state, &mut p, &mut c, "#prompt game {`(240)[%h/%Hhp]}");
     assert_eq!(codes_of(&p).prompt, "`(240)[%h/%Hhp] ");
 }
 
@@ -189,15 +196,16 @@ fn prompt_game_stores_what_the_game_keeps_of_your_backticks() {
 fn prompt_fight_sets_the_fight_prompt_beside_your_prompt() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     trusted(&mut p);
-    let ran = run_line(&state, &mut p, "#prompt fight {`1%h``hp [%p] >}");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt fight {`1%h``hp [%p] >}");
     assert_eq!(
         ran.result.echo,
         ["Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start."]
     );
     assert!(p.prompt.config().capture.is_none());
-    let _ = run_line(&state, &mut p, "#prompt game {<%hhp>}");
-    let ran = run_line(&state, &mut p, "#prompt fight {`1%h``hp [%p] >}");
+    let _ = run_line(&state, &mut p, &mut c, "#prompt game {<%hhp>}");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt fight {`1%h``hp [%p] >}");
     assert_eq!(
         ran.result.echo,
         ["Vosh reads Health from this fight prompt. It also reads Tank health."]
@@ -205,7 +213,7 @@ fn prompt_fight_sets_the_fight_prompt_beside_your_prompt() {
     let codes = codes_of(&p);
     assert_eq!(codes.prompt, "<%hhp> ");
     assert_eq!(codes.fprompt, "`1%h``hp [%p] > ");
-    let _ = run_line(&state, &mut p, "#prompt fight {off}");
+    let _ = run_line(&state, &mut p, &mut c, "#prompt fight {off}");
     assert_eq!(codes_of(&p).fprompt, "");
     assert_eq!(codes_of(&p).prompt, "<%hhp> ");
 }
@@ -216,6 +224,7 @@ fn prompt_alone_says_how_vosh_reads_your_prompt() {
     let status = |p: &Profile| super::prompt::prompt_status(p, now).echo;
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     assert_eq!(
         status(&p),
         ["Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start."]
@@ -224,6 +233,7 @@ fn prompt_alone_says_how_vosh_reads_your_prompt() {
     let _ = run_line(
         &state,
         &mut p,
+        &mut c,
         "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
     );
     assert_eq!(
@@ -246,7 +256,7 @@ fn prompt_alone_says_how_vosh_reads_your_prompt() {
         status(&p)[1],
         "No prompt has matched since 5:04. If you changed it in the game, point at it again."
     );
-    let _ = run_line(&state, &mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
+    let _ = run_line(&state, &mut p, &mut c, r"#prompt {^<(?<hp>\d+)hp> $}");
     p.set_prompt_config(vosh_prompt::PromptConfig {
         draw: false,
         ..p.prompt.config().clone()
@@ -271,8 +281,9 @@ fn prompt_show_picks_where_your_prompt_shows_and_the_status_says_it() {
     let now = chrono::DateTime::parse_from_rfc3339("2026-09-30T09:00:00-05:00").unwrap();
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     // With nothing reading your prompt there is nothing to show.
-    let ran = run_line(&state, &mut p, "#prompt show pinned");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt show pinned");
     assert_eq!(
         ran.result.echo,
         ["Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start."]
@@ -283,6 +294,7 @@ fn prompt_show_picks_where_your_prompt_shows_and_the_status_says_it() {
     let _ = run_line(
         &state,
         &mut p,
+        &mut c,
         "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
     );
     for (line, show, echo, status) in [
@@ -305,7 +317,7 @@ fn prompt_show_picks_where_your_prompt_shows_and_the_status_says_it() {
             "It shows in the text.",
         ),
     ] {
-        let ran = run_line(&state, &mut p, line);
+        let ran = run_line(&state, &mut p, &mut c, line);
         assert_eq!(ran.result.echo, [echo], "{line}");
         assert_eq!(p.prompt.config().show, show, "{line}");
         let said = super::prompt::prompt_status(&p, now).echo;
@@ -319,7 +331,7 @@ fn prompt_show_picks_where_your_prompt_shows_and_the_status_says_it() {
     assert!(p.prompt.config().capture.is_aabahran());
 
     for line in ["#prompt show", "#prompt show sideways"] {
-        let ran = run_line(&state, &mut p, line);
+        let ran = run_line(&state, &mut p, &mut c, line);
         assert_eq!(
             ran.result.echo,
             ["[usage #prompt show text | lifted | pinned]"],
@@ -336,6 +348,7 @@ fn prompt_default_puts_the_default_design_in_place_and_keeps_yours() {
     use vosh_prompt::{PromptShow, DEFAULT_DESIGN};
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.set_prompt_config(vosh_prompt::PromptConfig {
         show: PromptShow::Pinned,
         ..vosh_prompt::PromptConfig::from_legacy(true, "%hp")
@@ -343,11 +356,12 @@ fn prompt_default_puts_the_default_design_in_place_and_keeps_yours() {
     let _ = run_line(
         &state,
         &mut p,
+        &mut c,
         "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
     );
     let capture = p.prompt.config().capture.clone();
 
-    let ran = run_line(&state, &mut p, "#prompt default");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt default");
     assert_eq!(
         ran.result.echo,
         ["Your design is now Vosh's default. Vosh keeps the one you had as an earlier design."]
@@ -365,11 +379,11 @@ fn prompt_default_puts_the_default_design_in_place_and_keeps_yours() {
     let file = crate::profile::file::ProfileConfig::from_profile(&p);
     assert_eq!(file.ui.prompt_template, DEFAULT_DESIGN);
 
-    let ran = run_line(&state, &mut p, "#prompt default");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt default");
     assert_eq!(ran.result.echo, ["Your design is already Vosh's default."]);
     assert_eq!(p.prompt.config().previous_templates, ["%hp"]);
 
-    let ran = run_line(&state, &mut p, "#prompt default please");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt default please");
     assert_eq!(ran.result.echo, ["[usage #prompt default]"]);
     // The help names it.
     assert!(super::slash::HELP_TEXT.contains("#prompt default "));
@@ -391,8 +405,9 @@ fn prompt_draw_turns_drawing_on_and_off() {
     // No design and nothing reads the prompt yet.
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(false, ""));
-    let ran = run_line(&state, &mut p, "#prompt draw on");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt draw on");
     assert_eq!(
         ran.result.echo,
         [
@@ -416,11 +431,12 @@ fn prompt_draw_turns_drawing_on_and_off() {
     let _ = run_line(
         &state,
         &mut p,
+        &mut c,
         "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
     );
     assert_eq!(p.prompt.config().template, same_as_the_game());
     assert!(p.prompt.draws());
-    let ran = run_line(&state, &mut p, "#prompt draw off");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt draw off");
     assert_eq!(
         ran.result.echo,
         ["Drawing is off. You see the game's own prompt again."]
@@ -432,13 +448,13 @@ fn prompt_draw_turns_drawing_on_and_off() {
         "the design stays"
     );
     assert!(p.prompt.config().mirror);
-    let ran = run_line(&state, &mut p, "#prompt draw ON");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt draw ON");
     assert_eq!(
         ran.result.echo,
         ["Drawing is on. Vosh draws your design in place of your prompt."]
     );
     for line in ["#prompt draw", "#prompt draw maybe"] {
-        let ran = run_line(&state, &mut p, line);
+        let ran = run_line(&state, &mut p, &mut c, line);
         assert_eq!(ran.result.echo, ["[usage #prompt draw on | off]"], "{line}");
     }
     assert!(p.prompt.config().draw);
@@ -449,8 +465,8 @@ fn prompt_draw_turns_drawing_on_and_off() {
     // with no design still shows the game's own prompt, and says so.
     let mut p = Profile::default();
     p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(false, ""));
-    let _ = run_line(&state, &mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
-    let ran = run_line(&state, &mut p, "#prompt draw on");
+    let _ = run_line(&state, &mut p, &mut c, r"#prompt {^<(?<hp>\d+)hp> $}");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt draw on");
     assert_eq!(
         ran.result.echo,
         [
@@ -471,7 +487,7 @@ fn prompt_draw_turns_drawing_on_and_off() {
         }),
         ..vosh_prompt::PromptConfig::from_legacy(false, "")
     });
-    let ran = run_line(&state, &mut p, "#prompt draw on");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt draw on");
     assert_eq!(
         ran.result.echo[1],
         "You have no design yet, so you see the game's own prompt. Pick one in Customize prompt."
@@ -484,13 +500,15 @@ fn prompt_default_says_what_else_it_takes_to_see_the_design() {
     // Drawing off.
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(false, "%hp"));
     let _ = run_line(
         &state,
         &mut p,
+        &mut c,
         "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
     );
-    let ran = run_line(&state, &mut p, "#prompt default");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt default");
     assert_eq!(
         ran.result.echo,
         [
@@ -502,7 +520,7 @@ fn prompt_default_says_what_else_it_takes_to_see_the_design() {
 
     // Nothing reads your prompt yet, and there was no design to keep.
     let mut p = Profile::default();
-    let ran = run_line(&state, &mut p, "#prompt default");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt default");
     assert_eq!(
         ran.result.echo,
         [
@@ -522,10 +540,11 @@ fn prompt_default_says_what_else_it_takes_to_see_the_design() {
     let _ = run_line(
         &state,
         &mut p,
+        &mut c,
         "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}",
     );
     assert_eq!(p.prompt.config().template, same_as_the_game());
-    let ran = run_line(&state, &mut p, "#prompt default");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt default");
     assert_eq!(
         ran.result.echo,
         [
@@ -535,9 +554,14 @@ fn prompt_default_says_what_else_it_takes_to_see_the_design() {
     );
     assert!(!p.prompt.config().mirror);
     // New codes leave the default you chose alone.
-    let _ = run_line(&state, &mut p, "#prompt game {%n%P%C<%hhp %mm %vmv> }");
+    let _ = run_line(
+        &state,
+        &mut p,
+        &mut c,
+        "#prompt game {%n%P%C<%hhp %mm %vmv> }",
+    );
     assert_eq!(p.prompt.config().template, vosh_prompt::DEFAULT_DESIGN);
-    let ran = run_line(&state, &mut p, "#prompt default");
+    let ran = run_line(&state, &mut p, &mut c, "#prompt default");
     assert_eq!(
         ran.result.echo,
         [
@@ -599,9 +623,15 @@ fn a_pattern_you_set_never_switches_to_the_codes_the_game_sends() {
     let now = chrono::DateTime::parse_from_rfc3339("2026-09-30T09:00:00-05:00").unwrap();
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.set_prompt_config(migrated());
     p.prompt.connect(true);
-    let _ = run_line(&state, &mut p, r"#prompt {\[(?<hp>\d+)/(?<maxhp>\d+)hp\]}");
+    let _ = run_line(
+        &state,
+        &mut p,
+        &mut c,
+        r"#prompt {\[(?<hp>\d+)/(?<maxhp>\d+)hp\]}",
+    );
     let typed = p.prompt.config().clone();
     assert!(!typed.capture.is_migrated());
     p.prompt.observe(
@@ -615,7 +645,7 @@ fn a_pattern_you_set_never_switches_to_the_codes_the_game_sends() {
     let mut p = Profile::default();
     p.set_prompt_config(migrated());
     p.prompt.connect(true);
-    let _ = run_line(&state, &mut p, "#unprompt");
+    let _ = run_line(&state, &mut p, &mut c, "#unprompt");
     p.prompt.observe(
         "Char.Prompt",
         serde_json::json!({"enabled": true, "prompt": "<%hhp> ", "fprompt": ""}),
@@ -628,14 +658,15 @@ fn a_pattern_you_set_never_switches_to_the_codes_the_game_sends() {
 fn unprompt_stops_reading_and_keeps_the_design() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
-    let ran = run_line(&state, &mut p, "#unprompt");
+    let ran = run_line(&state, &mut p, &mut c, "#unprompt");
     assert_eq!(
         ran.result.echo,
         ["Vosh does not read your prompt in this profile."]
     );
-    let _ = run_line(&state, &mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
-    let ran = run_line(&state, &mut p, "#unprompt");
+    let _ = run_line(&state, &mut p, &mut c, r"#prompt {^<(?<hp>\d+)hp> $}");
+    let ran = run_line(&state, &mut p, &mut c, "#unprompt");
     assert_eq!(
         ran.result.echo,
         ["Vosh stopped reading your prompt. Your design stays saved."]
@@ -651,9 +682,10 @@ fn unprompt_stops_reading_and_keeps_the_design() {
 fn effects_of(lines: &[&str]) -> LineEffects {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     let mut effects = LineEffects::default();
     for line in lines {
-        let ran = run_line(&state, &mut p, line);
+        let ran = run_line(&state, &mut p, &mut c, line);
         effects.note_ran(line, &ran);
     }
     effects
@@ -672,13 +704,14 @@ const REPLACED: LineEffects = LineEffects {
 };
 
 /// Whether `line` changed the tick settings of `p`.
-fn changes_tick(p: &mut Profile, line: &str) -> bool {
-    run_line(&AppState::default(), p, line).tick_changed
+fn changes_tick(p: &mut Profile, c: &mut Connection, line: &str) -> bool {
+    run_line(&AppState::default(), p, c, line).tick_changed
 }
 
 #[test]
 fn a_tick_command_that_changes_a_setting_says_so() {
     let mut p = Profile::default();
+    let mut c = Connection::default();
     for line in [
         "#tick warn at 10",
         "#tick warn at 5",
@@ -694,7 +727,7 @@ fn a_tick_command_that_changes_a_setting_says_so() {
         "#tick disable",
         "#tick enable",
     ] {
-        assert!(changes_tick(&mut p, line), "{line}");
+        assert!(changes_tick(&mut p, &mut c, line), "{line}");
     }
 }
 
@@ -702,7 +735,8 @@ fn a_tick_command_that_changes_a_setting_says_so() {
 fn a_line_that_leaves_the_tick_settings_alone_says_nothing() {
     let state = AppState::default();
     let mut p = Profile::default();
-    let _ = run_line(&state, &mut p, "#tick warn at 10");
+    let mut c = Connection::default();
+    let _ = run_line(&state, &mut p, &mut c, "#tick warn at 10");
     for line in [
         "look",
         "#tick",
@@ -713,7 +747,7 @@ fn a_line_that_leaves_the_tick_settings_alone_says_nothing() {
         "#tick interval 0",
         "#alias greet wave",
     ] {
-        assert!(!changes_tick(&mut p, line), "{line}");
+        assert!(!changes_tick(&mut p, &mut c, line), "{line}");
     }
 }
 
@@ -896,17 +930,18 @@ fn a_reset_or_load_that_echoes_saves_nothing() {
 fn a_lua_alias_body_that_changes_durable_state_marks_the_profile_dirty() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.aliases
         .set(Alias::new("kk", "ignored").with_script("mud.send('kick')"));
     p.aliases
         .set(Alias::new("keep", "ignored").with_script("mud.alias('greet', 'wave')"));
     let mut effects = LineEffects::default();
     for line in ["kk", "look"] {
-        let ran = run_line(&state, &mut p, line);
+        let ran = run_line(&state, &mut p, &mut c, line);
         effects.note_ran(line, &ran);
     }
     assert_eq!(effects, LineEffects::default());
-    let ran = run_line(&state, &mut p, "keep");
+    let ran = run_line(&state, &mut p, &mut c, "keep");
     effects.note_ran("keep", &ran);
     assert_eq!(effects, DIRTY);
 }
@@ -915,9 +950,11 @@ fn a_lua_alias_body_that_changes_durable_state_marks_the_profile_dirty() {
 fn lua_a_line_runs_hands_on_all_it_asks_for() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     let ran = run_line(
         &state,
         &mut p,
+        &mut c,
         "#lua mud.echo('hi') mud.send('look') mud.timer(1, function() end) \
          mud.input('#echo again') mud.set_prompt_var('mark', 'on')",
     );
@@ -962,6 +999,7 @@ fn lua_errors(echoes: &[String]) -> Vec<String> {
 fn script_reload_reads_each_file_again_in_load_order() {
     let (_dir, state, scripts) = state_with_scripts();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     std::fs::write(
         scripts.join("b.lua"),
         "mud.echo('b one') mud.timer(60, function() end)",
@@ -969,14 +1007,14 @@ fn script_reload_reads_each_file_again_in_load_order() {
     .unwrap();
     std::fs::write(scripts.join("a.lua"), "mud.echo('a one')").unwrap();
     let first = [
-        run_line(&state, &mut p, "#script load b"),
-        run_line(&state, &mut p, "#script load a"),
+        run_line(&state, &mut p, &mut c, "#script load b"),
+        run_line(&state, &mut p, &mut c, "#script load a"),
     ];
     assert_eq!(first[0].lua.new_timers.len(), 1);
     // You edit both, and b now has a typo.
     std::fs::write(scripts.join("b.lua"), "mud.echo('b two')\nmud.ech('x')").unwrap();
     std::fs::write(scripts.join("a.lua"), "mud.echo('a two')").unwrap();
-    let ran = run_line(&state, &mut p, "#script reload");
+    let ran = run_line(&state, &mut p, &mut c, "#script reload");
     assert_eq!(ran.result.echo, ["scripts reloaded"]);
     // In load order, and the error in b stops nothing after it.
     assert_eq!(
@@ -997,7 +1035,7 @@ fn script_reload_reads_each_file_again_in_load_order() {
         "mud.echo('b three') mud.timer(60, function() end)",
     )
     .unwrap();
-    let ran = run_line(&state, &mut p, "#script reload");
+    let ran = run_line(&state, &mut p, &mut c, "#script reload");
     assert_eq!(
         lua_errors(&ran.lua.echoes),
         ["Vosh could not read a.lua and left it as it was."]
@@ -1021,6 +1059,7 @@ fn script_reload_reads_a_plugin_again_too() {
     )
     .unwrap();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     let outcome = p.script.load_script(
         vosh_script::Owner::Plugin("meals".into()),
         "@meals/main.lua",
@@ -1032,7 +1071,7 @@ fn script_reload_reads_a_plugin_again_too() {
         "mud.trigger('hunger', 'You are hungry', function() mud.echo('eat now') end)",
     )
     .unwrap();
-    run_line(&state, &mut p, "#script reload");
+    run_line(&state, &mut p, &mut c, "#script reload");
     let fired = p.script.match_line("You are hungry.");
     let apply = crate::script::apply_actions(&mut p, fired);
     assert_eq!(apply.echoes, ["eat now"]);
@@ -1050,6 +1089,7 @@ fn script_reload_tries_again_a_plugin_whose_first_load_failed() {
     )
     .unwrap();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.plugins.enabled = vec!["meals".into()];
     let launch = crate::app::plugins::follow_profile_plugins(&mut p, &dir.path().join("plugins"));
     assert_eq!(lua_errors(&launch.echoes).len(), 1, "{:?}", launch.echoes);
@@ -1059,7 +1099,7 @@ fn script_reload_tries_again_a_plugin_whose_first_load_failed() {
         "mud.trigger('hunger', 'You are hungry', function() mud.echo('eat') end)",
     )
     .unwrap();
-    let ran = run_line(&state, &mut p, "#script reload");
+    let ran = run_line(&state, &mut p, &mut c, "#script reload");
     assert_eq!(ran.result.echo, ["scripts reloaded"]);
     let fired = p.script.match_line("You are hungry.");
     let apply = crate::script::apply_actions(&mut p, fired);
@@ -1071,6 +1111,7 @@ fn a_plugin_vosh_could_not_read_says_so_and_a_reload_tries_it_again() {
     let (dir, state, _scripts) = state_with_scripts();
     let plugins = dir.path().join("plugins");
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.plugins.enabled = vec!["meals".into()];
     let launch = crate::app::plugins::follow_profile_plugins(&mut p, &plugins);
     assert_eq!(
@@ -1086,7 +1127,7 @@ fn a_plugin_vosh_could_not_read_says_so_and_a_reload_tries_it_again() {
         "mud.trigger('hunger', 'You are hungry', function() mud.echo('eat') end)",
     )
     .unwrap();
-    let ran = run_line(&state, &mut p, "#script reload");
+    let ran = run_line(&state, &mut p, &mut c, "#script reload");
     let leftover = &ran.lua.echoes;
     assert!(leftover.is_empty(), "{leftover:?}");
     let fired = p.script.match_line("You are hungry.");
@@ -1098,8 +1139,14 @@ fn a_plugin_vosh_could_not_read_says_so_and_a_reload_tries_it_again() {
 fn lua_you_type_reads_the_variables_with_no_other_lua_loaded() {
     let state = AppState::default();
     let mut p = Profile::default();
-    run_line(&state, &mut p, "#var mark on");
-    let ran = run_line(&state, &mut p, "#lua mud.echo(tostring(mud.var('mark')))");
+    let mut c = Connection::default();
+    run_line(&state, &mut p, &mut c, "#var mark on");
+    let ran = run_line(
+        &state,
+        &mut p,
+        &mut c,
+        "#lua mud.echo(tostring(mud.var('mark')))",
+    );
     assert_eq!(ran.lua.echoes, ["on"]);
 }
 
@@ -1107,20 +1154,21 @@ fn lua_you_type_reads_the_variables_with_no_other_lua_loaded() {
 fn lua_errors_and_print_reach_the_terminal_as_lua_lines() {
     let state = AppState::default();
     let mut p = Profile::default();
-    let ran = run_line(&state, &mut p, "#lua print('hp', 80)");
+    let mut c = Connection::default();
+    let ran = run_line(&state, &mut p, &mut c, "#lua print('hp', 80)");
     assert_eq!(ran.lua.echoes, ["\x1b[90m[lua]\x1b[0m hp\t80"]);
-    let ran = run_line(&state, &mut p, "#lua mud.echo('one') error('boom')");
+    let ran = run_line(&state, &mut p, &mut c, "#lua mud.echo('one') error('boom')");
     assert_eq!(
         ran.lua.echoes,
         ["one", "\x1b[90m[lua]\x1b[0m \x1b[31m#lua:1: boom\x1b[0m",]
     );
     // A line of text from print with a break in it shows as two lines.
-    let ran = run_line(&state, &mut p, "#lua print('a\\nb')");
+    let ran = run_line(&state, &mut p, &mut c, "#lua print('a\\nb')");
     assert_eq!(
         ran.lua.echoes,
         ["\x1b[90m[lua]\x1b[0m a", "\x1b[90m[lua]\x1b[0m b"]
     );
-    let ran = run_line(&state, &mut p, "#lua while true do end");
+    let ran = run_line(&state, &mut p, &mut c, "#lua while true do end");
     assert_eq!(
         ran.lua.echoes,
         ["\x1b[90m[lua]\x1b[0m \x1b[31mVosh stopped your #lua line after 100 ms.\x1b[0m"]
@@ -1140,13 +1188,14 @@ fn a_loose_script_runs_as_its_file_and_stops_until_a_reload() {
     )
     .unwrap();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     // A bare name and the name with .lua load as one script.
-    let ran = run_line(&state, &mut p, "#script load combat");
+    let ran = run_line(&state, &mut p, &mut c, "#script load combat");
     assert_eq!(
         ran.result.echo,
         [format!("loaded {}", scripts.join("combat.lua").display())]
     );
-    run_line(&state, &mut p, "#script load combat.lua");
+    run_line(&state, &mut p, &mut c, "#script load combat.lua");
     assert_eq!(p.script.loaded_script_names(), ["combat.lua"]);
     let outcome = p.script.match_line("You are hungry.");
     let apply = crate::script::apply_actions(&mut p, outcome);
@@ -1157,7 +1206,7 @@ fn a_loose_script_runs_as_its_file_and_stops_until_a_reload() {
     let leftover = &p.script.lua_triggers();
     assert!(leftover.is_empty(), "{leftover:?}");
     // A reload runs it again.
-    run_line(&state, &mut p, "#script reload");
+    run_line(&state, &mut p, &mut c, "#script reload");
     assert_eq!(p.script.lua_triggers().len(), 1);
     // A script with an error says so, and no loaded line shows.
     std::fs::write(
@@ -1165,7 +1214,7 @@ fn a_loose_script_runs_as_its_file_and_stops_until_a_reload() {
         "mud.echo('one')\nmud.ech('two')\n",
     )
     .unwrap();
-    let ran = run_line(&state, &mut p, "#script load typo");
+    let ran = run_line(&state, &mut p, &mut c, "#script load typo");
     let leftover = &ran.result.echo;
     assert!(leftover.is_empty(), "{leftover:?}");
     assert_eq!(
@@ -1190,8 +1239,9 @@ fn a_script_loads_as_one_whatever_case_you_type() {
         return;
     }
     let mut p = Profile::default();
-    run_line(&state, &mut p, "#script load Combat");
-    let ran = run_line(&state, &mut p, "#script load combat");
+    let mut c = Connection::default();
+    run_line(&state, &mut p, &mut c, "#script load Combat");
+    let ran = run_line(&state, &mut p, &mut c, "#script load combat");
     assert_eq!(
         ran.result.echo,
         [format!("loaded {}", scripts.join("Combat.lua").display())]
@@ -1217,13 +1267,14 @@ fn script_load_stays_inside_the_scripts_folder() {
     )
     .unwrap();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     let outside = dir.path().join("outside.lua");
     for line in [
         "#script load ../../outside".to_string(),
         "#script load combat/../../../outside.lua".to_string(),
         format!("#script load {}", outside.display()),
     ] {
-        let ran = run_line(&state, &mut p, &line);
+        let ran = run_line(&state, &mut p, &mut c, &line);
         assert_eq!(
             ran.result.echo,
             ["[Vosh loads scripts from your scripts folder only.]"],
@@ -1235,7 +1286,7 @@ fn script_load_stays_inside_the_scripts_folder() {
     let leftover = &p.script.loaded_script_names();
     assert!(leftover.is_empty(), "{leftover:?}");
     // A folder inside the scripts folder is fine.
-    let ran = run_line(&state, &mut p, "#script load ./combat/bash");
+    let ran = run_line(&state, &mut p, &mut c, "#script load ./combat/bash");
     assert_eq!(ran.lua.echoes, ["bash"]);
     assert_eq!(p.script.loaded_script_names(), ["combat/bash.lua"]);
 }
@@ -1249,14 +1300,15 @@ fn refused(why: &str) -> Vec<String> {
 fn lua_cannot_blank_your_profile_through_mud_input() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.aliases
         .set(vosh_automation::alias::Alias::new("kk", "kick %1"));
-    let ran = run_line(&state, &mut p, "#lua mud.input('#profile reset')");
+    let ran = run_line(&state, &mut p, &mut c, "#lua mud.input('#profile reset')");
     assert_eq!(
         ran.lua.inputs,
         [(LineFrom::YourLua, "#profile reset".to_string())]
     );
-    let ran = run_line_from(&state, &mut p, "#profile reset", LineFrom::YourLua);
+    let ran = run_line_from(&state, &mut p, &mut c, "#profile reset", LineFrom::YourLua);
     assert_eq!(
         ran.result.echo,
         refused("Vosh runs #profile only when you type it.")
@@ -1270,6 +1322,7 @@ fn mud_input_keeps_file_and_profile_commands_to_you() {
     let (_dir, state, scripts) = state_with_scripts();
     std::fs::write(scripts.join("combat.lua"), "mud.echo('loaded')").unwrap();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     for (line, command) in [
         ("#profile reset", "#profile"),
         ("  #profile load", "#profile"),
@@ -1277,7 +1330,7 @@ fn mud_input_keeps_file_and_profile_commands_to_you() {
         ("#script  load combat", "#script load"),
         ("#script reload", "#script reload"),
     ] {
-        let ran = run_line_from(&state, &mut p, line, LineFrom::YourLua);
+        let ran = run_line_from(&state, &mut p, &mut c, line, LineFrom::YourLua);
         assert_eq!(
             ran.result.echo,
             refused(&format!("Vosh runs {command} only when you type it.")),
@@ -1288,9 +1341,9 @@ fn mud_input_keeps_file_and_profile_commands_to_you() {
     }
     let leftover = &p.script.loaded_script_names();
     assert!(leftover.is_empty(), "{leftover:?}");
-    let ran = run_line_from(&state, &mut p, "#scripts", LineFrom::YourLua);
+    let ran = run_line_from(&state, &mut p, &mut c, "#scripts", LineFrom::YourLua);
     assert_eq!(ran.result.echo, ["no scripts loaded"]);
-    let ran = run_line_from(&state, &mut p, "look", LineFrom::YourLua);
+    let ran = run_line_from(&state, &mut p, &mut c, "look", LineFrom::YourLua);
     assert_eq!(ran.result.bytes, b"look\r\n");
 }
 
@@ -1303,11 +1356,12 @@ fn a_script_that_asks_for_a_reload_cannot_run_one() {
     )
     .unwrap();
     let mut p = Profile::default();
-    let ran = run_line(&state, &mut p, "#script load again");
+    let mut c = Connection::default();
+    let ran = run_line(&state, &mut p, &mut c, "#script load again");
     assert_eq!(ran.lua.echoes, ["ran"]);
     assert_eq!(ran.lua.inputs.len(), 50);
     let (from, line) = &ran.lua.inputs[0];
-    let ran = run_line_from(&state, &mut p, line, *from);
+    let ran = run_line_from(&state, &mut p, &mut c, line, *from);
     assert_eq!(
         ran.result.echo,
         refused("Vosh runs #script reload only when you type it.")
@@ -1320,6 +1374,7 @@ fn a_script_that_asks_for_a_reload_cannot_run_one() {
 fn a_plugin_runs_no_slash_command_but_echo_through_mud_input() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     let outcome = p.script.load_script(
         vosh_script::Owner::Plugin("helpers".into()),
         "@helpers/main.lua",
@@ -1329,7 +1384,7 @@ fn a_plugin_runs_no_slash_command_but_echo_through_mud_input() {
     let mut echoes = Vec::new();
     for (from, line) in &apply.inputs {
         assert_eq!(*from, LineFrom::Plugin, "{line}");
-        let ran = run_line_from(&state, &mut p, line, *from);
+        let ran = run_line_from(&state, &mut p, &mut c, line, *from);
         echoes.extend(ran.result.echo);
         echoes.extend(ran.lua.echoes);
     }
@@ -1347,24 +1402,31 @@ fn a_plugin_runs_no_slash_command_but_echo_through_mud_input() {
 fn a_quick_key_cannot_carry_lua_to_a_slash_command() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.aliases.set(Alias::new("kk", "kick %1"));
     // Lua cannot make the quick key.
-    let ran = run_line_from(&state, &mut p, "#qkey zq #profile", LineFrom::YourLua);
+    let ran = run_line_from(
+        &state,
+        &mut p,
+        &mut c,
+        "#qkey zq #profile",
+        LineFrom::YourLua,
+    );
     assert_eq!(
         ran.result.echo,
         refused("Vosh sets a quick key to a # command only when you type it.")
     );
-    assert!(p.target.quick_keys.iter().all(|q| q.name != "zq"));
+    assert!(c.target.quick_keys.iter().all(|q| q.name != "zq"));
     // Nor can it run one you made, here or from a plugin.
-    run_line(&state, &mut p, "#qkey zq #profile");
-    run_line_from(&state, &mut p, "tar reset", LineFrom::YourLua);
-    let ran = run_line_from(&state, &mut p, "zq", LineFrom::YourLua);
+    run_line(&state, &mut p, &mut c, "#qkey zq #profile");
+    run_line_from(&state, &mut p, &mut c, "tar reset", LineFrom::YourLua);
+    let ran = run_line_from(&state, &mut p, &mut c, "zq", LineFrom::YourLua);
     assert_eq!(
         ran.result.echo[1..],
         refused("Vosh runs #profile only when you type it.")
     );
     assert!(!ran.replaced);
-    let ran = run_line_from(&state, &mut p, "zq", LineFrom::Plugin);
+    let ran = run_line_from(&state, &mut p, &mut c, "zq", LineFrom::Plugin);
     assert_eq!(
         ran.result.echo[1..],
         refused("Vosh never runs #profile for a plugin.")
@@ -1372,7 +1434,7 @@ fn a_quick_key_cannot_carry_lua_to_a_slash_command() {
     assert!(!ran.replaced);
     assert!(p.aliases.get("kk").is_some());
     // A quick key that sends to the game is fine.
-    let ran = run_line_from(&state, &mut p, "#qkey zk kick", LineFrom::YourLua);
+    let ran = run_line_from(&state, &mut p, &mut c, "#qkey zk kick", LineFrom::YourLua);
     assert_eq!(ran.result.echo, ["quick-key `zk` -> kick"]);
 }
 
@@ -1380,9 +1442,11 @@ fn a_quick_key_cannot_carry_lua_to_a_slash_command() {
 fn lua_cannot_set_the_tick_command_to_a_slash_command() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     let ran = run_line_from(
         &state,
         &mut p,
+        &mut c,
         "#tick fire  #profile reset",
         LineFrom::YourLua,
     );
@@ -1391,7 +1455,13 @@ fn lua_cannot_set_the_tick_command_to_a_slash_command() {
         refused("Vosh sets the tick command to a # command only when you type it.")
     );
     assert_eq!(p.tick.config.auto_fire, None);
-    let ran = run_line_from(&state, &mut p, "#tick fire stand", LineFrom::YourLua);
+    let ran = run_line_from(
+        &state,
+        &mut p,
+        &mut c,
+        "#tick fire stand",
+        LineFrom::YourLua,
+    );
     assert_eq!(ran.result.echo, ["tick auto-fire set to: stand"]);
     assert_eq!(p.tick.config.auto_fire.as_deref(), Some("stand"));
 }
@@ -1400,6 +1470,7 @@ fn lua_cannot_set_the_tick_command_to_a_slash_command() {
 fn a_plugin_alias_lasts_for_the_session_and_is_never_saved() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.aliases.set(Alias::new("hl", "cast heal"));
     let healer = vosh_script::Owner::Plugin("healer".into());
     let outcome = p.script.load_script(
@@ -1411,7 +1482,7 @@ fn a_plugin_alias_lasts_for_the_session_and_is_never_saved() {
     assert!(!apply.durable_changed);
     // It takes the place of your own alias of its name.
     assert_eq!(
-        run_line(&state, &mut p, "hl").result.bytes,
+        run_line(&state, &mut p, &mut c, "hl").result.bytes,
         b"cast cure\r\n"
     );
     // No profile file holds it, and laying one over the profile, as a
@@ -1425,7 +1496,7 @@ fn a_plugin_alias_lasts_for_the_session_and_is_never_saved() {
     assert_eq!(saved, [("hl", "cast heal")]);
     config.apply_to(&mut p);
     assert_eq!(
-        run_line(&state, &mut p, "bt Orla").result.bytes,
+        run_line(&state, &mut p, &mut c, "bt Orla").result.bytes,
         b"bash Orla\r\n"
     );
     assert_eq!(
@@ -1441,11 +1512,11 @@ fn a_plugin_alias_lasts_for_the_session_and_is_never_saved() {
     let outcome = p.script.unload(&healer);
     crate::script::apply_actions(&mut p, outcome);
     assert_eq!(
-        run_line(&state, &mut p, "hl").result.bytes,
+        run_line(&state, &mut p, &mut c, "hl").result.bytes,
         b"cast heal\r\n"
     );
     assert_eq!(
-        run_line(&state, &mut p, "bt Orla").result.bytes,
+        run_line(&state, &mut p, &mut c, "bt Orla").result.bytes,
         b"bt Orla\r\n"
     );
 }
@@ -1539,11 +1610,12 @@ fn a_lua_alias_body_reads_the_variables_as_they_are_now() {
 fn what_else_a_lua_alias_body_asks_for_comes_back_with_the_line() {
     let state = AppState::default();
     let mut p = Profile::default();
+    let mut c = Connection::default();
     p.aliases.set(Alias::new("later", "ignored").with_script(
         "mud.timer(1, function() end)\nmud.input('#echo again')\n\
          mud.set_prompt_var('mark', 'on')\nmud.send('now')",
     ));
-    let ran = run_line(&state, &mut p, "later;look");
+    let ran = run_line(&state, &mut p, &mut c, "later;look");
     assert_eq!(ran.result.bytes, b"now\r\nlook\r\n");
     let leftover = &ran.lua.send_bytes;
     assert!(leftover.is_empty(), "{leftover:?}");
@@ -1594,6 +1666,11 @@ fn slash_alias_sets_and_lists() {
     assert!(r.echo.iter().any(|l| l.contains("greet -> wave;bow")));
 }
 
+/// Run `line` as you type it, with your target and quick keys on `c`.
+fn process_on(p: &mut Profile, c: &mut Connection, line: &str) -> InputResult {
+    run_line(&AppState::default(), p, c, line).result
+}
+
 fn rc(name: &str, npc: bool) -> RoomChar {
     RoomChar {
         name: name.to_string(),
@@ -1631,10 +1708,15 @@ fn room_chars_need_a_name_and_read_npc_in_each_form() {
 #[test]
 fn tar_by_index_sets_target_and_idx() {
     let mut p = Profile::default();
-    set_room_chars(&mut p, vec![rc("Bob", false), rc("ogre", true)]);
-    let r = process(&mut p, "tar 2");
-    assert_eq!(p.target.name.as_deref(), Some("ogre"));
-    assert_eq!(p.target.room_idx, Some(2));
+    let mut c = Connection::default();
+    set_room_chars(
+        &mut c,
+        &mut p.vars,
+        vec![rc("Bob", false), rc("ogre", true)],
+    );
+    let r = process_on(&mut p, &mut c, "tar 2");
+    assert_eq!(c.target.name.as_deref(), Some("ogre"));
+    assert_eq!(c.target.room_idx, Some(2));
     assert!(r.echo.iter().any(|l| l.contains("ogre")));
 }
 
@@ -1646,89 +1728,104 @@ fn tar_string_keeps_literal_resolves_idx_via_substring() {
     // case-insensitive substring so the `>` marker lands on the
     // matching chip.
     let mut p = Profile::default();
+    let mut c = Connection::default();
     set_room_chars(
-        &mut p,
+        &mut c,
+        &mut p.vars,
         vec![rc("The Baron Grisvald", true), rc("ogre", true)],
     );
-    let _ = process(&mut p, "tar gris");
-    assert_eq!(p.target.name.as_deref(), Some("gris"));
-    assert_eq!(p.target.room_idx, Some(1));
+    let _ = process_on(&mut p, &mut c, "tar gris");
+    assert_eq!(c.target.name.as_deref(), Some("gris"));
+    assert_eq!(c.target.room_idx, Some(1));
 }
 
 #[test]
 fn tar_unknown_keeps_literal_with_no_idx() {
     let mut p = Profile::default();
-    set_room_chars(&mut p, vec![rc("Bob", false)]);
-    let _ = process(&mut p, "tar Alice");
-    assert_eq!(p.target.name.as_deref(), Some("Alice"));
-    assert_eq!(p.target.room_idx, None);
+    let mut c = Connection::default();
+    set_room_chars(&mut c, &mut p.vars, vec![rc("Bob", false)]);
+    let _ = process_on(&mut p, &mut c, "tar Alice");
+    assert_eq!(c.target.name.as_deref(), Some("Alice"));
+    assert_eq!(c.target.room_idx, None);
 }
 
 #[test]
 fn target_syncs_to_var_store_for_interpolation() {
     let mut p = Profile::default();
-    set_room_chars(&mut p, vec![rc("Bob", false)]);
-    let _ = process(&mut p, "tar 1");
+    let mut c = Connection::default();
+    set_room_chars(&mut c, &mut p.vars, vec![rc("Bob", false)]);
+    let _ = process_on(&mut p, &mut c, "tar 1");
     // `${target}` should now interpolate to "Bob".
-    let r = process(&mut p, "cast 'bless' ${target}");
+    let r = process_on(&mut p, &mut c, "cast 'bless' ${target}");
     assert_eq!(r.bytes, b"cast 'bless' Bob\r\n");
 }
 
 #[test]
 fn tarn_cycles_forward_and_wraps() {
     let mut p = Profile::default();
-    set_room_chars(&mut p, vec![rc("A", true), rc("B", true), rc("C", true)]);
-    let _ = process(&mut p, "tarn");
-    assert_eq!(p.target.name.as_deref(), Some("A"));
-    let _ = process(&mut p, "tarn");
-    assert_eq!(p.target.name.as_deref(), Some("B"));
-    let _ = process(&mut p, "tarn");
-    let _ = process(&mut p, "tarn");
-    assert_eq!(p.target.name.as_deref(), Some("A"));
+    let mut c = Connection::default();
+    set_room_chars(
+        &mut c,
+        &mut p.vars,
+        vec![rc("A", true), rc("B", true), rc("C", true)],
+    );
+    let _ = process_on(&mut p, &mut c, "tarn");
+    assert_eq!(c.target.name.as_deref(), Some("A"));
+    let _ = process_on(&mut p, &mut c, "tarn");
+    assert_eq!(c.target.name.as_deref(), Some("B"));
+    let _ = process_on(&mut p, &mut c, "tarn");
+    let _ = process_on(&mut p, &mut c, "tarn");
+    assert_eq!(c.target.name.as_deref(), Some("A"));
 }
 
 #[test]
 fn tarclear_drops_target_and_var() {
     let mut p = Profile::default();
-    set_room_chars(&mut p, vec![rc("Bob", false)]);
-    let _ = process(&mut p, "tar 1");
-    let _ = process(&mut p, "tarclear");
-    assert!(p.target.name.is_none());
+    let mut c = Connection::default();
+    set_room_chars(&mut c, &mut p.vars, vec![rc("Bob", false)]);
+    let _ = process_on(&mut p, &mut c, "tar 1");
+    let _ = process_on(&mut p, &mut c, "tarclear");
+    assert!(c.target.name.is_none());
     assert!(p.vars.get("target").is_none());
 }
 
 #[test]
 fn quick_key_expands_to_verb_plus_target() {
     let mut p = Profile::default();
-    set_room_chars(&mut p, vec![rc("ogre", true)]);
-    let _ = process(&mut p, "tar 1");
-    let _ = process(&mut p, "#qkey gg kick");
-    let r = process(&mut p, "gg");
+    let mut c = Connection::default();
+    set_room_chars(&mut c, &mut p.vars, vec![rc("ogre", true)]);
+    let _ = process_on(&mut p, &mut c, "tar 1");
+    let _ = process_on(&mut p, &mut c, "#qkey gg kick");
+    let r = process_on(&mut p, &mut c, "gg");
     assert_eq!(r.bytes, b"kick ogre\r\n");
 }
 
 #[test]
 fn a_quick_key_echoes_like_a_typed_command() {
     let mut p = Profile::default();
-    set_room_chars(&mut p, vec![rc("ogre", true)]);
-    let _ = process(&mut p, "tar 1");
-    let _ = process(&mut p, "#qkey gg kick");
+    let mut c = Connection::default();
+    set_room_chars(&mut c, &mut p.vars, vec![rc("ogre", true)]);
+    let _ = process_on(&mut p, &mut c, "tar 1");
+    let _ = process_on(&mut p, &mut c, "#qkey gg kick");
     // The caret is on by default, before the command in the
     // terminal's own color.
     assert_eq!(
-        process(&mut p, "gg").echo,
+        process_on(&mut p, &mut c, "gg").echo,
         vec!["\x1b[90m\u{203a} \x1b[0mkick ogre".to_string()]
     );
     // The Sent command color wraps the command, never the caret.
     p.ui.input_echo_color = Some("#88AAff".into());
     assert_eq!(
-        process(&mut p, "gg").echo,
+        process_on(&mut p, &mut c, "gg").echo,
         vec!["\x1b[90m\u{203a} \x1b[0m\x1b[38;2;136;170;255mkick ogre\x1b[0m".to_string()]
     );
     // With the caret off the command echoes bare.
     p.ui.input_echo_caret = false;
     p.ui.input_echo_color = None;
-    assert_eq!(process(&mut p, "gg").echo, vec!["kick ogre".to_string()]);
+    assert_eq!(
+        process_on(&mut p, &mut c, "gg").echo,
+        vec!["kick ogre".to_string()]
+    );
 }
 
 #[test]
@@ -1760,18 +1857,20 @@ fn quick_key_uses_literal_keyword_not_full_name() {
     // resolves it on its side rather than getting the full
     // descriptor "The Baron Grisvald".
     let mut p = Profile::default();
-    set_room_chars(&mut p, vec![rc("The Baron Grisvald", true)]);
-    let _ = process(&mut p, "tar gris");
-    let _ = process(&mut p, "#qkey gg cast 'fireball'");
-    let r = process(&mut p, "gg");
+    let mut c = Connection::default();
+    set_room_chars(&mut c, &mut p.vars, vec![rc("The Baron Grisvald", true)]);
+    let _ = process_on(&mut p, &mut c, "tar gris");
+    let _ = process_on(&mut p, &mut c, "#qkey gg cast 'fireball'");
+    let r = process_on(&mut p, &mut c, "gg");
     assert_eq!(r.bytes, b"cast 'fireball' gris\r\n");
 }
 
 #[test]
 fn quick_key_without_target_errors() {
     let mut p = Profile::default();
-    let _ = process(&mut p, "#qkey gg kick");
-    let r = process(&mut p, "gg");
+    let mut c = Connection::default();
+    let _ = process_on(&mut p, &mut c, "#qkey gg kick");
+    let r = process_on(&mut p, &mut c, "gg");
     let leftover = &r.bytes;
     assert!(leftover.is_empty(), "{leftover:?}");
     assert!(r.echo.iter().any(|l| l.contains("no target")));
@@ -1780,8 +1879,9 @@ fn quick_key_without_target_errors() {
 #[test]
 fn alias_cannot_shadow_quick_key() {
     let mut p = Profile::default();
-    let _ = process(&mut p, "#qkey gg kick");
-    let r = process(&mut p, "#alias gg cast 'fireball'");
+    let mut c = Connection::default();
+    let _ = process_on(&mut p, &mut c, "#qkey gg kick");
+    let r = process_on(&mut p, &mut c, "#alias gg cast 'fireball'");
     assert!(r.echo.iter().any(|l| l.contains("quick-key")));
     assert!(p.aliases.get("gg").is_none());
 }
@@ -1791,30 +1891,32 @@ fn qkey_cannot_shadow_alias() {
     // Use a name that isn't a default quick-key slot so the alias
     // can register first, then verify qkey refuses to shadow it.
     let mut p = Profile::default();
-    let _ = process(&mut p, "#alias kk kick");
-    let r = process(&mut p, "#qkey kk kick");
+    let mut c = Connection::default();
+    let _ = process_on(&mut p, &mut c, "#alias kk kick");
+    let r = process_on(&mut p, &mut c, "#qkey kk kick");
     assert!(r.echo.iter().any(|l| l.contains("alias")));
-    assert!(p.target.quick_keys.iter().all(|q| q.name != "kk"));
+    assert!(c.target.quick_keys.iter().all(|q| q.name != "kk"));
 }
 
 #[test]
 fn qkey_cannot_use_reserved_target_keyword() {
     let mut p = Profile::default();
-    let r = process(&mut p, "#qkey tar foo");
+    let mut c = Connection::default();
+    let r = process_on(&mut p, &mut c, "#qkey tar foo");
     assert!(r.echo.iter().any(|l| l.contains("target keyword")));
 }
 
 #[test]
 fn default_quick_keys_are_present_but_empty() {
-    let p = Profile::default();
-    let names: Vec<&str> = p
+    let c = Connection::default();
+    let names: Vec<&str> = c
         .target
         .quick_keys
         .iter()
         .map(|q| q.name.as_str())
         .collect();
     assert_eq!(names, ["gg", "xx", "zz", "tt"]);
-    assert!(p.target.quick_keys.iter().all(|q| q.verb.is_empty()));
+    assert!(c.target.quick_keys.iter().all(|q| q.verb.is_empty()));
 }
 
 #[test]

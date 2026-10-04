@@ -11,7 +11,6 @@ use vosh_script::ScriptEngine;
 
 use crate::profile::file::{GroupFolders, PluginsPersist};
 use crate::profile::ui::UiConfig;
-use crate::session::connection::{RoomChar, TargetState};
 use crate::tick::TickRuntime;
 
 #[derive(Debug, Default)]
@@ -32,15 +31,6 @@ pub(crate) struct Profile {
     /// buffer and on stop saved as an alias whose expansion is the
     /// `;`-joined sequence.
     pub(crate) recording_macro: Option<MacroRecorder>,
-    /// User-controlled target state plus configured quick-key verbs.
-    /// `name` clears on disconnect. `quick_keys` live in memory only. No
-    /// profile file holds them, so a restart brings back the stock gg,
-    /// xx, zz and tt slots, as HELP.md says.
-    pub(crate) target: TargetState,
-    /// Latest `Room.Chars` snapshot — kept here so `tar` slash
-    /// commands can resolve a numeric index or partial name without
-    /// round-tripping through the frontend.
-    pub(crate) room_chars: Vec<RoomChar>,
     /// The room look the session is following, which tells the lines
     /// that list a room's things and people apart for Room triggers. It
     /// resets on a disconnect.

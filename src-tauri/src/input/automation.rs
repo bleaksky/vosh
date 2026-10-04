@@ -9,8 +9,9 @@ use super::slash::parse_braced_pattern;
 use super::target::is_target_keyword;
 use super::{split_first_word, InputResult};
 use crate::profile::live::{MacroRecorder, Profile};
+use crate::session::connection::Connection;
 
-pub(super) fn slash_alias(profile: &mut Profile, args: &str) -> InputResult {
+pub(super) fn slash_alias(profile: &mut Profile, c: &Connection, args: &str) -> InputResult {
     let (name, expansion) = split_first_word(args);
     if name.is_empty() {
         return InputResult::error("usage #alias <name> <expansion>");
@@ -27,7 +28,7 @@ pub(super) fn slash_alias(profile: &mut Profile, args: &str) -> InputResult {
             "`{name}` is a target keyword — pick another alias name"
         ));
     }
-    if profile.target.quick_keys.iter().any(|q| q.name == name) {
+    if c.target.quick_keys.iter().any(|q| q.name == name) {
         return InputResult::error(format!(
             "quick-key `{name}` exists — `#qkey clear {name}` first if you want this name"
         ));
