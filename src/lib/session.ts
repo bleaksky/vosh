@@ -2076,6 +2076,10 @@ export interface UiConfig {
    *  means none, which reads as on unless your system reduces motion.
    *  Resolve with resolveBlinkText before use. */
   blink_text: boolean | null;
+  /** Fit game colors. While on, play draws the game's colors in the
+   *  slots the theme fits for them (themes.ts playPalette), and Settings
+   *  keeps the theme as published. On unless you turn it off. */
+  fit_game_colors: boolean;
   /** Keep highlight colors readable. While on, the session draws a true
    *  color a trigger paints text in at a lightness that reads on the
    *  theme's terminal background. On unless you turn it off. */
@@ -2229,6 +2233,7 @@ export interface RawUiConfig {
   theme_terminal_colors?: boolean;
   bright_bold?: boolean;
   blink_text?: boolean | null;
+  fit_game_colors?: boolean;
   readable_highlights?: boolean;
   collapse_repeats?: boolean;
   collapse_fight_lines?: boolean;
@@ -2317,6 +2322,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
       typeof cfg.theme_terminal_colors === 'boolean' ? cfg.theme_terminal_colors : null,
     bright_bold: Boolean(cfg.bright_bold),
     blink_text: typeof cfg.blink_text === 'boolean' ? cfg.blink_text : null,
+    fit_game_colors: cfg.fit_game_colors !== false,
     readable_highlights: cfg.readable_highlights !== false,
     collapse_repeats: cfg.collapse_repeats === true,
     collapse_fight_lines: cfg.collapse_fight_lines !== false,
@@ -2398,6 +2404,7 @@ const BLINK_TEXT_EVENT = 'vosh://blink-text-changed';
 const VITALS_DENSITY_EVENT = 'vosh://vitals-density-changed';
 const VITALS_OPTIONS_EVENT = 'vosh://vitals-options-changed';
 const AFFECTS_DISPLAY_EVENT = 'vosh://affects-display-changed';
+const FIT_GAME_COLORS_EVENT = 'vosh://fit-game-colors-changed';
 const READABLE_HIGHLIGHTS_EVENT = 'vosh://readable-highlights-changed';
 
 async function emitChanged<T>(
@@ -2478,6 +2485,7 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   // Your choice as you made it. Each window reads its own system's
   // reduce motion setting to resolve none.
   await emitChanged(BLINK_TEXT_EVENT, config.blink_text, prev?.blink_text);
+  await emitChanged(FIT_GAME_COLORS_EVENT, config.fit_game_colors, prev?.fit_game_colors);
   await emitChanged(
     READABLE_HIGHLIGHTS_EVENT,
     config.readable_highlights,
@@ -2745,6 +2753,7 @@ function uiConfigPayload(config: UiConfig): Record<string, unknown> {
     theme_terminal_colors: config.theme_terminal_colors,
     bright_bold: config.bright_bold,
     blink_text: config.blink_text,
+    fit_game_colors: config.fit_game_colors,
     readable_highlights: config.readable_highlights,
     collapse_repeats: config.collapse_repeats,
     collapse_fight_lines: config.collapse_fight_lines,
@@ -2920,6 +2929,16 @@ export async function subscribeBrightBoldChanged(
 ): Promise<UnlistenFn> {
   return listen<boolean>('vosh://bright-bold-changed', (event) => {
     cb(Boolean(event.payload));
+  });
+}
+
+/** Hear Fit game colors change, saved in Settings or brought by
+ *  another profile. */
+export async function subscribeFitGameColorsChanged(
+  cb: (value: boolean) => void,
+): Promise<UnlistenFn> {
+  return listen<boolean>(FIT_GAME_COLORS_EVENT, (event) => {
+    cb(event.payload !== false);
   });
 }
 

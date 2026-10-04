@@ -35,6 +35,7 @@ pub(crate) struct UiConfigPayload {
     /// None until you choose.
     #[serde(default)]
     pub blink_text: Option<bool>,
+    pub fit_game_colors: bool,
     pub readable_highlights: bool,
     pub collapse_repeats: bool,
     pub collapse_fight_lines: bool,
@@ -98,6 +99,7 @@ impl UiConfigPayload {
             theme_terminal_colors: ui.theme_terminal_colors,
             bright_bold: ui.bright_bold,
             blink_text: ui.blink_text,
+            fit_game_colors: ui.fit_game_colors,
             readable_highlights: ui.readable_highlights,
             collapse_repeats: ui.collapse_repeats,
             collapse_fight_lines: ui.collapse_fight_lines,
@@ -153,6 +155,7 @@ impl UiConfigPayload {
             theme_terminal_colors,
             bright_bold,
             blink_text,
+            fit_game_colors,
             readable_highlights,
             collapse_repeats,
             collapse_fight_lines,
@@ -198,6 +201,7 @@ impl UiConfigPayload {
         ui.theme_terminal_colors = theme_terminal_colors;
         ui.bright_bold = bright_bold;
         ui.blink_text = blink_text;
+        ui.fit_game_colors = fit_game_colors;
         ui.readable_highlights = readable_highlights;
         ui.collapse_repeats = collapse_repeats;
         ui.collapse_fight_lines = collapse_fight_lines;
@@ -797,6 +801,15 @@ mod tests {
         assert!(!through_payload(&ui).vitals_warn_thirds);
         ui.vitals_warn_thirds = true;
         assert!(through_payload(&ui).vitals_warn_thirds);
+    }
+
+    #[test]
+    fn fit_game_colors_round_trips() {
+        let mut ui = UiConfig::default();
+        assert!(ui.fit_game_colors);
+        assert!(through_payload(&ui).fit_game_colors);
+        ui.fit_game_colors = false;
+        assert!(!through_payload(&ui).fit_game_colors);
     }
 
     #[test]

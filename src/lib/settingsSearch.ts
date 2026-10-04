@@ -130,6 +130,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('appearance', 'text', 'theme-colors'),
   },
   {
+    label: 'Fit game colors',
+    description:
+      'While you play, Vosh lifts the game colors that fade on the theme, and Settings keeps the theme as published.',
+    keywords: 'contrast faint legible readable ansi room names published play',
+    target: at('appearance', 'text', 'fit-game-colors'),
+  },
+  {
     label: 'Keep highlight colors readable',
     description:
       'Vosh darkens or lightens a color your triggers set when the theme would make it faint.',
