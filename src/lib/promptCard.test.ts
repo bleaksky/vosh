@@ -29,12 +29,14 @@ import {
   savedForName,
   withCapture,
   withDesign,
+  withMoveTakenBack,
   withStart,
   startRows,
   takeBackOnto,
   undoEntry,
   type CardStep,
 } from './promptCard';
+import { moveBack, type MoveMade } from './promptPieces';
 import type {
   PromptCapture,
   PromptCaptureCheck,
@@ -569,6 +571,31 @@ describe('what a start and an edit save', () => {
     const entry = undoEntry(table, edited);
     expect(entry).toEqual({ template: '[%hp] ', mirror: true });
     expect(takeBackOnto(edited, entry!)).toEqual(table);
+  });
+
+  it('takes a move back with the other Option key to following the game', () => {
+    // Option with Right moves a part of a design that follows the game,
+    // which makes the design yours. The move keeps what the design was.
+    const after = '[ %hp]';
+    const moved = withDesign(table, after);
+    expect(moved.mirror).toBe(false);
+    const right: MoveMade = {
+      before: table.template,
+      after,
+      from: 1,
+      landed: 2,
+      dir: 1,
+      mirror: table.mirror,
+    };
+    // Option with Left takes it back, and the design follows the game
+    // again, as Command Z does.
+    const back = moveBack([right], moved.template, 2, -1);
+    expect(back).toEqual(right);
+    expect(withMoveTakenBack(moved, back!)).toEqual(table);
+    expect(withMoveTakenBack(moved, back!)).toEqual(takeBackOnto(moved, undoEntry(table, moved)!));
+    // A move of a design of yours comes back yours.
+    const yours = { ...table, mirror: false };
+    expect(withMoveTakenBack(withDesign(yours, after), { ...right, mirror: false })).toEqual(yours);
   });
 });
 
