@@ -16,7 +16,7 @@
 // recall) can be toggled independently from must-see ones (your own
 // buffs falling, your own recall).
 
-import type { HighlightStyle, TriggerRecord } from './session';
+import type { HighlightStyle, TriggerRecord, TriggerTarget } from './session';
 import { colorize } from './colorTokens';
 
 export type PresetCategory =
@@ -34,7 +34,27 @@ export interface Preset {
   category: PresetCategory;
   name: string;
   description: string;
+  /** One to three lines the game prints that show what the preset does,
+   *  each in the game's own words, with the place in the game's source it
+   *  comes from beside it. A character or a number the game fills in comes
+   *  from the repo fixtures. presets.test.ts runs each line through the
+   *  preset's own triggers and checks the colors it paints. */
+  sample: readonly PresetSampleLine[];
   triggers: Omit<TriggerRecord, 'preset'>[];
+}
+
+/** A line of a preset's sample. */
+export interface PresetSampleLine {
+  /** The line, word for word as the game prints it, without the colors
+   *  the game sends. */
+  text: string;
+  /** The name of the trigger of the preset the line shows. */
+  shows: string;
+  /** Where the line sits for a trigger that matches through a target.
+   *  room for a line a room look lists after its exits line, and
+   *  room_target for the line of the one you target among them. A plain
+   *  line leaves it out. */
+  target?: Extract<TriggerTarget, 'room' | 'room_target'>;
 }
 
 // Category names as Settings, Automation shows them over the presets.
@@ -237,6 +257,12 @@ export const PRESETS: Preset[] = [
     category: 'healing',
     name: 'Cures and heals',
     description: 'Turns cure and heal lines green so you spot them at a glance.',
+    // The heal of cure critical (magic.c spell_cure_critical) and poison
+    // wearing off (the poison row of skill_table in const.c).
+    sample: [
+      { text: 'You feel a lot better!', shows: 'cure.feel_lot_better' },
+      { text: 'You feel less sick.', shows: 'cure.less_sick' },
+    ],
     triggers: [
       highlight('cure.feel_lot_better', 'You feel a lot better!$', GREEN),
       highlight('cure.feel_better', 'You feel better\\.$', GREEN),
@@ -259,6 +285,14 @@ export const PRESETS: Preset[] = [
     category: 'defensive',
     name: 'Parries, dodges, and blocks',
     description: 'Dims routine parries, dodges, and blocks to the dark grey your TinTin++ uses.',
+    // check_parry, check_dodge and check_shield_block in fight.c, against
+    // a villager, mob 5287 in area/fortblac.are, which fixtures/room-colors
+    // names by its short text.
+    sample: [
+      { text: "You parry a villager's attack.", shows: 'def.dodge_or_parry' },
+      { text: "You dodge a villager's attack.", shows: 'def.dodge_or_parry' },
+      { text: "You block a villager's attack with your shield.", shows: 'def.block_shield' },
+    ],
     triggers: [
       // Generic "You dodge X." / "You parry X." — matches the bare
       // form in highlights.tin line 97. Lower priority so the more
@@ -336,6 +370,12 @@ export const PRESETS: Preset[] = [
     // From highlights.tin lines 105 to 134.
     name: 'Disarms and fading buffs',
     description: 'Marks a disarm and a buff that wears off.',
+    // disarm in skills.c, here by Maren, and sanctuary wearing off (the
+    // sanctuary row of skill_table in const.c).
+    sample: [
+      { text: 'Maren disarms you and sends your weapon flying!', shows: 'disarm.primary' },
+      { text: 'The protective aura around your body fades.', shows: 'buff.protective_aura' },
+    ],
     triggers: [
       // Visual recolor + auto-rearm send, demonstrating the
       // multi-action support. Mirrors the user's tintin #ACTION at
@@ -413,6 +453,13 @@ export const PRESETS: Preset[] = [
     // From highlights.tin line 124.
     name: 'Terror weapon drop',
     description: 'Turns the line bold red, then picks up your weapon and wields it.',
+    // multi_hit in fight.c.
+    sample: [
+      {
+        text: 'Filled with terror, your weapon slips through your slippery fingers.',
+        shows: 'terror.drop',
+      },
+    ],
     triggers: [
       {
         name: 'terror.drop',
@@ -443,6 +490,9 @@ export const PRESETS: Preset[] = [
     description:
       'Colors the damage verb amber in lines that start with Your, so your hits stand out ' +
       'and the rest of the line keeps its color.',
+    // The top hit in dam_message in fight.c, on a villager, mob 5287 in
+    // area/fortblac.are.
+    sample: [{ text: 'You do UNSPEAKABLE things to a villager!', shows: 'combat.outgoing' }],
     triggers: [
       // Mirrors the TinTin `You%1` form so both "Your kick LACERATES
       // X" and "You LACERATE X" / "You miss X" lines fire — the
@@ -476,6 +526,12 @@ export const PRESETS: Preset[] = [
     description:
       'Dims lines where something hits you to grey, with the damage verb in red and ' +
       'misses in pale cyan.',
+    // A hit and a miss on you in dam_message in fight.c, from a villager,
+    // mob 5287 in area/fortblac.are, whose attack is a punch.
+    sample: [
+      { text: "A villager's punch grazes you.", shows: 'combat.incoming' },
+      { text: "A villager's punch misses you.", shows: 'combat.incoming_miss' },
+    ],
     triggers: [
       replace(
         'combat.incoming',
@@ -501,6 +557,12 @@ export const PRESETS: Preset[] = [
     // From highlights.tin lines 170 to 174.
     name: 'Gold, experience, and levels',
     description: 'Marks the gold, experience, levels, and skills you gain.',
+    // group_gain in fight.c, with the 250 of fixtures/gmcp/aabahran
+    // char-vitals.gmcp, then gain_exp in update.c.
+    sample: [
+      { text: 'You receive 250 experience points.', shows: 'loot.xp' },
+      { text: 'You raise a level!!', shows: 'loot.level' },
+    ],
     triggers: [
       replace(
         'loot.gold',
@@ -539,6 +601,12 @@ export const PRESETS: Preset[] = [
     // against the bubbly potions do_brew makes in skills5.c.
     name: 'Potion labels',
     description: 'Adds the spell a potion casts after its name.',
+    // do_brew in skills5.c, which makes a pink potion of cure light from
+    // food, and do_quaff in act_obj.c.
+    sample: [
+      { text: 'You brew a bubbly pink potion from a large kettle!', shows: 'potion.pink' },
+      { text: 'You quaff a bubbly pink potion.', shows: 'potion.pink' },
+    ],
     triggers: [
       replace('potion.blue', 'a bubbly blue potion', 'a bubbly blue potion {fg:248}(armor){reset}'),
       replace(
@@ -593,6 +661,9 @@ export const PRESETS: Preset[] = [
     // From highlights.tin lines 192 to 209.
     name: 'Herb labels',
     description: 'Adds the spell an herb casts after its name.',
+    // do_smoke in act_obj.c with object 1147 in area/hamlet.are, whose
+    // smoke casts protection.
+    sample: [{ text: 'You light some rosemary and begin to smoke it.', shows: 'herb.rosemary' }],
     triggers: [
       replace(
         'herb.purple_seaweed',
@@ -656,6 +727,10 @@ export const PRESETS: Preset[] = [
     category: 'chat',
     name: 'Tells you send',
     description: 'Puts each tell you send in the chat pane, beside the ones you get.',
+    // compose_tell in languages.c, to Tolliver. The tell quotes a time of
+    // day line, as the says and tells in fixtures/room-colors do, so the
+    // sample holds no words a player wrote.
+    sample: [{ text: "You tell Tolliver 'The day has begun.'", shows: 'chat.sent_tells' }],
     triggers: [
       {
         name: 'chat.sent_tells',
@@ -696,6 +771,18 @@ export const PRESETS: Preset[] = [
       'Colors the exits green, what is in the room yellow, your target in the room bright ' +
       'red, the time of day blue, a change in the weather pale blue, and the WiZNET tag ' +
       'magenta.',
+    // The first look in fixtures/room-colors/looks.json, the Bank of
+    // Aabahran. Its exits line, the villager it lists after them, and the
+    // time of day message that follows the look in the same pulse.
+    sample: [
+      { text: '[Exits: south]', shows: 'room.exits' },
+      {
+        text: 'A Blackwatch villager scurries about, taking care of business.',
+        shows: 'room.contents',
+        target: 'room',
+      },
+      { text: 'The day has begun.', shows: 'time.of_day' },
+    ],
     triggers: [
       highlight('room.exits', EXITS_LINE, { fg: 'green', base: true }, 6),
       {
