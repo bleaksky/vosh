@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SECTORS, sectorForCode, sectorIndex } from './mapPalette';
+import { SECTORS, roomFill, sectorForCode, sectorIndex } from './mapPalette';
 
 describe('sectorForCode', () => {
   it('colors desert, lava and snow as Map.Tiles sends them, as numbers', () => {
@@ -33,5 +33,37 @@ describe('sectorIndex', () => {
     expect(sectorIndex('b')).toBe(11);
     expect(sectorIndex('13')).toBe(0);
     expect(sectorIndex('')).toBe(0);
+  });
+});
+
+describe('roomFill', () => {
+  it('mixes each sector border 22 percent into the paper in OKLab, as Chrome draws it', () => {
+    // What Chrome paints for color-mix(in oklab, <border> 22%, #f7f4ee),
+    // Vellum's panel, read back off a canvas, Inside through Snow.
+    const paper = '#f7f4ee';
+    expect(Object.values(SECTORS).map((sector) => roomFill(sector, paper, true))).toEqual([
+      '#d2d0ce',
+      '#e3dccd',
+      '#d1dcc9',
+      '#cad9c2',
+      '#dedcc9',
+      '#d2d0d0',
+      '#ccd5dc',
+      '#c8d1d8',
+      '#ceccbf',
+      '#d4dcdf',
+      '#e6dcc7',
+      '#eacbc1',
+      '#e2e0dc',
+    ]);
+  });
+
+  it('keeps the sector fill on a dark theme', () => {
+    expect(roomFill(SECTORS[1], '#050403', false)).toBe('#28221a');
+    expect(roomFill(SECTORS[0], '#050403', false)).toBe('#222228');
+  });
+
+  it('keeps the sector fill when the panel is not hex', () => {
+    expect(roomFill(SECTORS[1], 'rgba(247, 244, 238, 1)', true)).toBe('#28221a');
   });
 });
