@@ -296,6 +296,13 @@ fn text_line_step(
     }
     let collapse = p.ui.collapse_repeats;
     p.prompt.stage.set_collapse(collapse);
+    // In a fight and Attack lines say whether a line of a fight and an
+    // attack line join a run. The pulse's Char.Combat came before its
+    // text, so the line reads the fight it belongs to.
+    let rules = vosh_prompt::stage::CollapseRules {
+        fights: p.ui.collapse_fight_lines,
+        attacks: p.ui.collapse_attack_lines,
+    };
     let mut repeat = None;
     // Whether the ring keeps the line. While Collapse repeated lines is
     // on, it keeps what the screen shows, so the line end a pinned
@@ -303,15 +310,18 @@ fn text_line_step(
     let mut ring = true;
     let kept = match shows {
         // Collapse repeated lines shows a line the same as the one before
-        // it once, with the count before it. Only what shows collapses.
-        // Its triggers ran above, and it is logged below as any line that
+        // it once, with the count before it. Only what shows collapses,
+        // and only a line the rules take, judged by what the game sent.
+        // Any other line shows whole and ends the run before it. Its
+        // triggers ran above, and it is logged below as any line that
         // shows.
         Shows::Now(painted)
             if collapse
                 && result
                     .display
                     .as_ref()
-                    .is_some_and(|text| vosh_prompt::stage::collapsible(text.as_bytes())) =>
+                    .is_some_and(|text| vosh_prompt::stage::collapsible(text.as_bytes()))
+                && rules.takes(p.prompt.vars.gmcp().fighting(), &plain) =>
         {
             let text = result.display.as_deref().unwrap_or_default().as_bytes();
             let made = p
