@@ -179,6 +179,19 @@ impl Limits {
         true
     }
 
+    /// True when the call running now is out of time, which stops it at
+    /// the nearest place in your Lua, or was stopped already. Rust code
+    /// that loops for Lua asks it now and then, as the hook would.
+    pub(crate) fn out_of_time(&self, lua: &Lua) -> bool {
+        self.on_hook(|| caller(lua))
+    }
+
+    /// How many more bytes the call running now may hold, which caps
+    /// what Rust builds for it before it hands the result to Lua.
+    pub(crate) fn memory_room(&self, lua: &Lua) -> usize {
+        self.inner().memory_limit.saturating_sub(lua.used_memory())
+    }
+
     /// What a wrapped `pcall`, `xpcall` or `coroutine.resume` hands back:
     /// its results as they are, or the stop raised again while one
     /// holds. A failed allocation the call caught stops the call too.
@@ -197,7 +210,7 @@ impl Limits {
 
 /// The error a stop raises. The script never sees its text, since the
 /// stop ends the call and Vosh prints its own line.
-fn stopped() -> mlua::Error {
+pub(crate) fn stopped() -> mlua::Error {
     mlua::Error::RuntimeError("Vosh stopped this Lua".into())
 }
 

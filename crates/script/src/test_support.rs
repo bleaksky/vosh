@@ -52,3 +52,15 @@ pub(crate) fn same_as_stock(bodies: &[&str]) {
         assert_eq!(vosh, stock, "{body}");
     }
 }
+
+/// The lines Vosh printed about the Lua, errors and stops alike.
+pub(crate) fn error_lines(outcome: &ScriptOutcome) -> Vec<String> {
+    outcome
+        .actions
+        .iter()
+        .filter_map(|action| match action {
+            Action::Error(line) => Some(line.clone()),
+            _ => None,
+        })
+        .collect()
+}
