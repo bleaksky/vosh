@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   ACCENT_APART,
   CHROME_COLOR_KEYS,
@@ -30,6 +30,9 @@ import {
   findTheme,
   migrateCustomChrome,
   playPalette,
+  RETIRED_THEMES,
+  setCustomThemes,
+  themeShownBy,
   themeTokens,
   type XtermPalette,
 } from './themes';
@@ -76,14 +79,15 @@ interface TokenSheet {
 
 // The token sheets under the one ground rule (Themes review Q7, board
 // 11). The One Window canvas sheets predate it, so the panel now sits
-// on the ground, the lines step in lightness, the title takes the
-// secondary tone, and Vellum floats on its paper instead of white.
-// Ember's is the sheet the board draws, and Nord's and Vellum's are the
-// rule's with their pins. The selection is each scheme's own, opaque,
-// with its own text (Q9), where the canvas drew the accent with alpha.
-// The control washes (Q10) on Ember and Vellum are the ones the
-// stylesheets fixed per appearance, but for Vellum's field, now its
-// raised paper and no longer white, and on Nord they are the rule's.
+// on the ground, the lines step in lightness, and the title takes the
+// secondary tone. Ember's is the sheet the board draws, and Nord's is
+// the rule's with its pins. The light sheet is Rubric's from the
+// shortlist, since Rubric took Vellum's place (Q14) and Vellum's sheet
+// went with it. The selection is each scheme's own, opaque, with its
+// own text (Q9), where the canvas drew the accent with alpha. The
+// control washes (Q10) on Ember are the ones the stylesheets fixed, and
+// on Nord and Rubric they are the rule's, with Rubric's field its
+// raised paper.
 const NORD: TokenSheet = {
   id: 'nord',
   appearance: 'dark',
@@ -150,42 +154,42 @@ const EMBER: TokenSheet = {
   },
 };
 
-const VELLUM: TokenSheet = {
-  id: 'vellum',
+const RUBRIC: TokenSheet = {
+  id: 'rubric',
   appearance: 'light',
   tokens: {
-    bg: '#f7f4ee',
-    panel: '#f7f4ee',
-    sep: '#d2d0cb',
-    divider: '#e3e0db',
-    selrow: '#fffdfa',
-    hover: '#e9e6e1',
-    inputband: '#eeebe6',
-    text: '#2a2622',
-    secondary: '#5f5c57',
-    tertiary: '#8c8984',
-    title: '#5f5c57',
-    raised: '#fffdfa',
-    accent: '#3f6690',
+    bg: '#f0e5cf',
+    panel: '#f0e5cf',
+    sep: '#cbc1af',
+    divider: '#dcd1bd',
+    selrow: '#f5efe4',
+    hover: '#e2d8c3',
+    inputband: '#e7ddc7',
+    text: '#151d2a',
+    secondary: '#525558',
+    tertiary: '#83817d',
+    title: '#525558',
+    raised: '#f5efe4',
+    accent: '#3656b1',
     onAccent: '#ffffff',
-    danger: '#a8453a',
-    dangerText: '#a8453a',
-    warn: '#94661a',
-    warnText: '#94661a',
-    success: '#4f7a3a',
-    selection: '#a4b4c4',
-    selectionText: '#2a2622',
-    field: '#fffdfa',
-    track: 'rgba(0, 0, 0, 0.14)',
-    menuHi: 'rgba(0, 0, 0, 0.05)',
-    keyRing: 'rgba(0, 0, 0, 0.12)',
-    edge: 'rgba(0, 0, 0, 0.14)',
+    danger: '#e15400',
+    dangerText: '#b24100',
+    warn: '#5d4000',
+    warnText: '#5d4000',
+    success: '#007873',
+    selection: '#cbc8c9',
+    selectionText: '#151d2a',
+    field: '#f5efe4',
+    track: 'rgba(0, 0, 0, 0.146)',
+    menuHi: 'rgba(0, 0, 0, 0.052)',
+    keyRing: 'rgba(0, 0, 0, 0.124)',
+    edge: 'rgba(0, 0, 0, 0.146)',
   },
 };
 
 // The canvas drew Ember's title in #8e8e8e on a second sheet. The title
 // is the secondary tone now, so that sheet is gone.
-const SHEETS: TokenSheet[] = [NORD, EMBER, VELLUM];
+const SHEETS: TokenSheet[] = [NORD, EMBER, RUBRIC];
 
 describe('built-in themes reproduce the one ground boards', () => {
   SHEETS.forEach((sheet, n) => {
@@ -276,7 +280,6 @@ describe('contrast floors', () => {
       catppuccin: '#f5c2e7',
       dracula: '#bd93f9',
       monokai: '#f92672',
-      'one-dark': '#61afef',
       'one-half-dark': '#61afef',
       'tango-dark': '#729fcf',
       'classic-vivid': '#ffaa00',
@@ -379,8 +382,48 @@ describe('Triad and Rubric', () => {
   });
 });
 
+describe('retired themes', () => {
+  afterEach(() => setCustomThemes([]));
+
+  it('give each retired id a successor Vosh ships (Q13, Q14 and Q16)', () => {
+    expect([...RETIRED_THEMES]).toEqual([
+      ['one-dark', 'one-half-dark'],
+      ['vellum', 'rubric'],
+      ['everforest-light', 'melange-light'],
+    ]);
+    const ids = BUILTIN_THEMES.map((t) => t.id);
+    for (const [retired, successor] of RETIRED_THEMES) {
+      expect(ids, retired).not.toContain(retired);
+      expect(findTheme(retired).id, retired).toBe(successor);
+    }
+  });
+
+  it('paint a saved vellum in the tokens of Rubric', () => {
+    expect(themeTokens(findTheme('vellum'))).toEqual(themeTokens(findTheme('rubric')));
+  });
+
+  it('let a custom theme with a retired id win over its successor', () => {
+    const mine = customToAppTheme({
+      id: 'vellum',
+      label: 'My Vellum',
+      description: '',
+      xterm: { background: '#f7f4ee', foreground: '#2a2622' },
+      chrome: {},
+    });
+    setCustomThemes([mine]);
+    expect(findTheme('vellum').label).toBe('My Vellum');
+    expect(themeShownBy([...BUILTIN_THEMES, mine], 'vellum')).toBe(mine);
+    expect(findTheme('one-dark').id).toBe('one-half-dark');
+  });
+
+  it('find nothing for an id no theme has and none retired', () => {
+    expect(themeShownBy(BUILTIN_THEMES, 'gone')).toBeUndefined();
+    expect(findTheme('gone').id).toBe('obsidian-ember');
+  });
+});
+
 describe('Everforest and Green Screen', () => {
-  const NEW_THEMES = ['everforest-dark', 'everforest-light', 'green-screen'];
+  const NEW_THEMES = ['everforest-dark', 'green-screen'];
   // Black and bright black stay near the ground on purpose in many
   // palettes, Everforest's own mapping included. Every other slot draws
   // game text.
@@ -407,24 +450,13 @@ describe('Everforest and Green Screen', () => {
     const ids = BUILTIN_THEMES.map((t) => t.id);
     for (const id of NEW_THEMES) expect(ids, id).toContain(id);
     expect(themeTokens(findTheme('everforest-dark')).appearance).toBe('dark');
-    expect(themeTokens(findTheme('everforest-light')).appearance).toBe('light');
     expect(themeTokens(findTheme('green-screen')).appearance).toBe('dark');
   });
 
-  // The colors Everforest and CGA publish under 3:1 on their own ground.
-  // The terminal draws them as published. The chat pane lifts them where
-  // it draws them on the panel (chatColors.test.ts).
+  // The colors CGA publishes under 3:1 on its own ground. The terminal
+  // draws them as published. The chat pane lifts them where it draws
+  // them on the panel (chatColors.test.ts).
   const PUBLISHED_FAINT: Record<string, readonly (typeof WORD_SLOTS)[number][]> = {
-    'everforest-light': [
-      'green',
-      'yellow',
-      'magenta',
-      'cyan',
-      'brightGreen',
-      'brightYellow',
-      'brightMagenta',
-      'brightCyan',
-    ],
     'green-screen': ['red', 'blue'],
   };
 
@@ -443,12 +475,12 @@ describe('Everforest and Green Screen', () => {
 
   it('keep the published Everforest and CGA colors', () => {
     const everforest: Partial<XtermPalette> = {
-      red: '#f85552',
-      green: '#8da101',
-      yellow: '#dfa000',
-      blue: '#3a94c5',
-      magenta: '#df69ba',
-      cyan: '#35a77c',
+      red: '#e67e80',
+      green: '#a7c080',
+      yellow: '#dbbc7f',
+      blue: '#7fbbb3',
+      magenta: '#d699b6',
+      cyan: '#83c092',
     };
     // Everforest repeats the six colors in the bright slots.
     const brights = Object.fromEntries(
@@ -457,7 +489,7 @@ describe('Everforest and Green Screen', () => {
         value,
       ]),
     );
-    expect(findTheme('everforest-light').xterm).toMatchObject({ ...everforest, ...brights });
+    expect(findTheme('everforest-dark').xterm).toMatchObject({ ...everforest, ...brights });
     expect(findTheme('green-screen').xterm).toMatchObject({
       black: '#000000',
       red: '#aa0000',
@@ -480,18 +512,10 @@ describe('Everforest and Green Screen', () => {
 
   it('store the Everforest selection as its bg_visual', () => {
     expect(findTheme('everforest-dark').xterm.selectionBackground).toBe('#543a48');
-    expect(findTheme('everforest-light').xterm.selectionBackground).toBe('#eaedc8');
   });
 
   it('take Everforest green as the accent', () => {
     expect(themeTokens(findTheme('everforest-dark')).accent).toBe('#a7c080');
-    // The published green lifted to 3:1. The pin keeps the shade the
-    // chrome derived for success while menus floated on white, a step
-    // darker than the one ground rule's success on the paper.
-    const light = themeTokens(findTheme('everforest-light'));
-    expect(light.accent).toBe('#809300');
-    expect(Math.abs(hue(light.accent) - hue('#8da101'))).toBeLessThan(2);
-    expect(contrast(hex(light.accent), hex(light.bg))).toBeGreaterThanOrEqual(3);
   });
 
   it('give Green Screen soft phosphor text on a green black ground', () => {

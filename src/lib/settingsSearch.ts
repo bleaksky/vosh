@@ -91,7 +91,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   // Appearance, from the approved board.
   {
     label: 'Theme',
-    keywords: 'colors palette gallery dark light nord ember vellum',
+    keywords: 'colors palette gallery dark light nord ember rubric',
     target: at('appearance', 'theme'),
   },
   {

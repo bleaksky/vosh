@@ -202,17 +202,15 @@ describe('pairChoices', () => {
     ]);
     expect(dark).toContain('Everforest Dark');
     expect(dark).toContain('Green Screen');
-    expect(dark).not.toContain('Vellum');
+    expect(dark).not.toContain('Rubric');
     expect(dark).toContain('Solarized Dark');
-    expect(dark).not.toContain('Everforest Light');
+    expect(dark).not.toContain('Melange Light');
     expect(dark).not.toContain('Solarized Light');
   });
 
   it('lists the light themes', () => {
-    expect(pairChoices(themes, 'light', 'vellum').map((c) => c.value)).toEqual([
+    expect(pairChoices(themes, 'light', 'rubric').map((c) => c.value)).toEqual([
       'rubric',
-      'vellum',
-      'everforest-light',
       'melange-light',
       'solarized-light',
     ]);
@@ -221,7 +219,7 @@ describe('pairChoices', () => {
   it('keeps a pick of the other appearance, first', () => {
     const light = pairChoices(themes, 'light', 'nord');
     expect(light[0]).toEqual({ value: 'nord', label: 'Nord' });
-    expect(light.map((c) => c.value)).toContain('vellum');
+    expect(light.map((c) => c.value)).toContain('rubric');
   });
 
   it('keeps an id it cannot find', () => {
@@ -241,8 +239,8 @@ describe('stepGalleryTheme', () => {
   const last = themes[themes.length - 1].id;
 
   it('steps through every theme while follow is off', () => {
-    expect(stepGalleryTheme(themes, 'obsidian-ember', 1)).toBe('vellum');
-    expect(stepGalleryTheme(themes, 'vellum', -1)).toBe('obsidian-ember');
+    expect(stepGalleryTheme(themes, 'rubric', 1)).toBe('nord');
+    expect(stepGalleryTheme(themes, 'nord', -1)).toBe('rubric');
   });
 
   it('wraps at both ends', () => {
@@ -257,31 +255,28 @@ describe('stepGalleryTheme', () => {
   });
 
   it('steps from a theme of the other appearance you clicked', () => {
-    expect(stepGalleryTheme(themes, 'vellum', 1, 'dark')).toBe('gruvbox');
-    expect(stepGalleryTheme(themes, 'vellum', -1, 'dark')).toBe('obsidian-ember');
+    expect(stepGalleryTheme(themes, 'rubric', 1, 'dark')).toBe('nord');
+    expect(stepGalleryTheme(themes, 'rubric', -1, 'dark')).toBe('triad');
   });
 
   it('steps between the light themes while follow is on', () => {
-    expect(stepGalleryTheme(themes, 'vellum', 1, 'light')).toBe('everforest-light');
-    expect(stepGalleryTheme(themes, 'everforest-light', 1, 'light')).toBe('melange-light');
+    expect(stepGalleryTheme(themes, 'rubric', 1, 'light')).toBe('melange-light');
     expect(stepGalleryTheme(themes, 'melange-light', 1, 'light')).toBe('solarized-light');
     expect(stepGalleryTheme(themes, 'solarized-light', 1, 'light')).toBe('rubric');
-    expect(stepGalleryTheme(themes, 'rubric', 1, 'light')).toBe('vellum');
-    expect(stepGalleryTheme(themes, 'vellum', -1, 'light')).toBe('rubric');
     expect(stepGalleryTheme(themes, 'rubric', -1, 'light')).toBe('solarized-light');
-    expect(stepGalleryTheme(themes, 'everforest-light', -1, 'light')).toBe('vellum');
+    expect(stepGalleryTheme(themes, 'melange-light', -1, 'light')).toBe('rubric');
   });
 
   it('stays put when no other theme has that appearance', () => {
-    const oneLight = ['nord', 'vellum', 'gruvbox'].map((id) => findTheme(id));
-    expect(stepGalleryTheme(oneLight, 'vellum', 1, 'light')).toBe('vellum');
+    const oneLight = ['nord', 'rubric', 'gruvbox'].map((id) => findTheme(id));
+    expect(stepGalleryTheme(oneLight, 'rubric', 1, 'light')).toBe('rubric');
   });
 
   it('shows every step and leaves the light theme alone on a dark system', () => {
     let ui = {
       theme: 'nord',
       follow_system_appearance: true,
-      light_theme: 'vellum',
+      light_theme: 'rubric',
       dark_theme: 'nord',
     };
     let id = 'nord';
@@ -291,7 +286,7 @@ describe('stepGalleryTheme', () => {
       // The radio the arrow lands on is the one the gallery checks.
       expect(resolveActiveTheme(ui, true)).toBe(id);
     }
-    expect(ui.light_theme).toBe('vellum');
+    expect(ui.light_theme).toBe('rubric');
   });
 });
 
@@ -436,6 +431,7 @@ describe('removeCustomTheme', () => {
   };
 
   it('drops the theme and resets every pick that named it', () => {
+    // The light pick falls back to the light default, which shows Rubric.
     expect(removeCustomTheme(ui, 'mine')).toEqual({
       theme: 'obsidian-ember',
       follow_system_appearance: true,

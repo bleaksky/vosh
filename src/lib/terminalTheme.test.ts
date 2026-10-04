@@ -4,7 +4,7 @@ import { BUILTIN_THEMES, findTheme, themeTokens } from './themes';
 
 describe('the xterm theme', () => {
   it('selects in the opaque token pair, with the theme colors for MUD text on or off', () => {
-    for (const id of ['obsidian-ember', 'kanso-zen', 'solarized-dark', 'vellum']) {
+    for (const id of ['obsidian-ember', 'kanso-zen', 'solarized-dark', 'rubric']) {
       const theme = findTheme(id);
       const tokens = themeTokens(theme);
       for (const tinted of [true, false]) {

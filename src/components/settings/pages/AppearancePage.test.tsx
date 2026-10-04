@@ -207,6 +207,62 @@ describe('AppearancePage', () => {
     expect(await caption({ ...config(), theme: 'dusk', custom_themes: [blank] })).toEqual([]);
   });
 
+  it('marks the theme a retired id shows as chosen, in the gallery and the selects', async () => {
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    // The window above reads every media query as a match, so the OS is
+    // dark and the gallery shows the dark theme.
+    const ui = {
+      ...config(),
+      theme: 'vellum',
+      follow_system_appearance: true,
+      light_theme: 'vellum',
+      dark_theme: 'one-dark',
+    };
+    await act(async () => {
+      root.render(
+        createElement(AppearancePage, {
+          target: { group: 'appearance' },
+          navSeq: 0,
+          config: ui,
+          setConfig: () => undefined,
+          onError: () => undefined,
+          pathB: false,
+          navigate: () => undefined,
+          setLeaveGuard: () => undefined,
+        }),
+      );
+    });
+    const isChecked = (el: FakeElement) => (el as unknown as { checked?: boolean }).checked;
+    const radios = findAll(container, (el) => el.getAttribute('type') === 'radio');
+    expect(radios.filter(isChecked).map((el) => el.value)).toEqual(['one-half-dark']);
+    const select = (anchor: string) => {
+      const [row] = findAll(container, (el) => el.getAttribute('data-st-anchor') === anchor);
+      const [found] = findAll(row, (el) => el.nodeName === 'SELECT');
+      return found;
+    };
+    const isSelected = (el: FakeElement) => (el as unknown as { selected?: boolean }).selected;
+    for (const [anchor, saved, shown] of [
+      ['light-theme', 'vellum', 'rubric'],
+      ['dark-theme', 'one-dark', 'one-half-dark'],
+    ]) {
+      const options = select(anchor).options;
+      expect(
+        options.filter(isSelected).map((o) => o.value),
+        anchor,
+      ).toEqual([shown]);
+      // The retired theme gets no option of its own.
+      expect(
+        options.map((o) => o.value),
+        anchor,
+      ).not.toContain(saved);
+    }
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it('starts Blinking text off while your system reduces motion and keeps your choice', async () => {
     // The window above answers every media query, reduce motion among
     // them, as a match.
@@ -717,6 +773,46 @@ describe('AppearancePage', () => {
     });
     expect(shown.custom_themes[0].fitted).toEqual({ red: '#f8809b', brightBlack: '#6d7498' });
     expect(shown.custom_themes[0].xterm).toEqual(theme.xterm);
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('keeps an imported theme off the id of a retired theme', async () => {
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    let shown: UiConfig = { ...config(), dark_theme: 'one-dark' };
+    function Host() {
+      const [cfg, setCfg] = useState<UiConfig | null>(shown);
+      if (cfg) shown = cfg;
+      return createElement(AppearancePage, {
+        target: { group: 'appearance' },
+        navSeq: 0,
+        config: cfg,
+        setConfig: (next) => setCfg((c) => next(c)),
+        onError: () => undefined,
+        pathB: false,
+        navigate: () => undefined,
+        setLeaveGuard: () => undefined,
+      });
+    }
+    await act(async () => {
+      root.render(createElement(Host));
+    });
+    const [input] = findAll(container, (el) => el.getAttribute('type') === 'file');
+    const key = Object.keys(input).find((k) => k.startsWith('__reactProps$')) ?? '';
+    const props = (input as unknown as Record<string, { onChange: (e: unknown) => void }>)[key];
+    // A One Dark file you import. Your saved One Dark still shows One
+    // Half Dark, not the import.
+    const oneDark = tokyoNight.replace('## name: Tokyo Night', '## name: One Dark');
+    await act(async () => {
+      props.onChange({
+        target: { files: [{ name: 'one_dark.conf', text: async () => oneDark }], value: '' },
+      });
+    });
+    expect(shown.custom_themes.map((t) => t.id)).toEqual(['one-dark-2']);
+    expect(shown.dark_theme).toBe('one-dark');
     await act(async () => {
       root.unmount();
     });

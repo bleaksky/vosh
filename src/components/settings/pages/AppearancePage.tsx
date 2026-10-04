@@ -29,7 +29,14 @@ import {
 } from '../../../lib/theme';
 import { parseThemeFile, ThemeFileError } from '../../../lib/themeImport';
 import { galleryThemes } from '../../../lib/themeThumb';
-import { BUILTIN_THEMES, customToAppTheme, findTheme, setCustomThemes } from '../../../lib/themes';
+import {
+  BUILTIN_THEMES,
+  customToAppTheme,
+  findTheme,
+  RETIRED_THEMES,
+  setCustomThemes,
+  themeShownBy,
+} from '../../../lib/themes';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
 import { Button, Card, Row, Section, Segmented, Select, Toggle } from '../ui';
@@ -134,7 +141,12 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
   if (!config) return null;
 
   const themes = galleryThemes(BUILTIN_THEMES, config.custom_themes.map(customToAppTheme));
-  const shown = activeThemeFor(config);
+  // The id of the theme a saved pick shows. A retired id shows its
+  // successor, which the gallery and the selects mark as chosen.
+  const shownId = (id: string) => themeShownBy(themes, id)?.id ?? id;
+  const shown = shownId(activeThemeFor(config));
+  const lightTheme = shownId(config.light_theme);
+  const darkTheme = shownId(config.dark_theme);
   // An id no theme has draws the fallback theme, so the caption names it.
   const caption = themeCaption(themes.find((t) => t.id === shown) ?? findTheme(shown));
   // While follow is on the arrow keys stay among the themes the OS
@@ -181,7 +193,12 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
     }
     const current = configRef.current;
     if (!current) return;
-    const taken = [...BUILTIN_THEMES.map((t) => t.id), ...current.custom_themes.map((t) => t.id)];
+    // A saved pick may still name a retired id, so an import never takes one.
+    const taken = [
+      ...BUILTIN_THEMES.map((t) => t.id),
+      ...RETIRED_THEMES.keys(),
+      ...current.custom_themes.map((t) => t.id),
+    ];
     let theme: CustomTheme;
     try {
       theme = parseThemeFile(file.name, text, taken);
@@ -256,15 +273,15 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           </Row>
           <Row anchor="light-theme" label="Light theme">
             <Select
-              value={config.light_theme}
-              options={pairChoices(themes, 'light', config.light_theme)}
+              value={lightTheme}
+              options={pairChoices(themes, 'light', lightTheme)}
               onChange={(id) => setPrefs({ light_theme: id })}
             />
           </Row>
           <Row anchor="dark-theme" label="Dark theme">
             <Select
-              value={config.dark_theme}
-              options={pairChoices(themes, 'dark', config.dark_theme)}
+              value={darkTheme}
+              options={pairChoices(themes, 'dark', darkTheme)}
               onChange={(id) => setPrefs({ dark_theme: id })}
             />
           </Row>

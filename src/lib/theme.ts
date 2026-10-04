@@ -30,6 +30,7 @@ import {
   DEFAULT_THEME_ID,
   findTheme,
   onCustomThemesChanged,
+  RETIRED_THEMES,
   setCustomThemes,
   themeTokens,
   type AppTheme,
@@ -363,8 +364,9 @@ export function applyTheme(choice: string) {
   }
 
   const found = findTheme(choice);
-  if (found.id === choice || !choice) {
-    // A blank choice shows the first theme, and that is all it shows.
+  if (found.id === choice || found.id === RETIRED_THEMES.get(choice) || !choice) {
+    // A blank choice shows the first theme, and a retired id its
+    // successor, and that is all either shows.
     applyToRoot(found, choice);
     return;
   }

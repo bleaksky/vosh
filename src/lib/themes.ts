@@ -668,54 +668,15 @@ const monokai: AppTheme = {
   chrome: { accent: '#f92672' },
 };
 
-// ── One Dark ────────────────────────────────────────────────────────
-// Atom editor classic. Cool slate background, soft pastel semantics,
-// blue accent (#61afef). Bright variants kept identical to base so a
-// trigger highlighting on bold colors does not jump.
-const oneDark: AppTheme = {
-  id: 'one-dark',
-  label: 'One Dark',
-  description: 'Cool slate in the style of Atom. Soft pastels, blue accent.',
-  source: 'One Dark for Atom',
-  author: 'GitHub',
-  license: 'MIT',
-  xterm: {
-    background: '#282c34',
-    foreground: '#abb2bf',
-    cursor: '#abb2bf',
-    cursorAccent: '#282c34',
-    selectionBackground: '#3e4451',
-    selectionForeground: '#ffffff',
-    black: '#282c34',
-    red: '#e06c75',
-    green: '#98c379',
-    yellow: '#e5c07b',
-    blue: '#61afef',
-    magenta: '#c678dd',
-    cyan: '#56b6c2',
-    white: '#abb2bf',
-    brightBlack: '#5c6370',
-    brightRed: '#e06c75',
-    brightGreen: '#98c379',
-    brightYellow: '#e5c07b',
-    brightBlue: '#61afef',
-    brightMagenta: '#c678dd',
-    brightCyan: '#56b6c2',
-    brightWhite: '#ffffff',
-  },
-  // The blue it has always drawn. The chrome rule alone would take its
-  // magenta, the scheme's strongest hue.
-  chrome: { accent: '#61afef' },
-};
-
 // ── One Half Dark ───────────────────────────────────────────────────
-// Sublime Text / iTerm2 One Half Dark. Same color family as One
-// Dark with a brighter foreground (#dcdfe4) and a touch cooler
-// surface tones. Reads slightly higher-contrast at the same brightness.
+// One Half Dark as its Sublime Text and iTerm2 ports ship it. Atom's
+// One Dark colors with a brighter foreground (#dcdfe4), which lifts body
+// text from Lc 56 to Lc 83. It took the place of One Dark (Themes review
+// Q13), so a saved One Dark shows it (RETIRED_THEMES).
 const oneHalfDark: AppTheme = {
   id: 'one-half-dark',
   label: 'One Half Dark',
-  description: 'Brighter foreground variant of One Dark. Higher contrast.',
+  description: 'Cool slate in the style of Atom. Soft pastels, a bright foreground, blue accent.',
   source: 'One Half',
   author: 'Son A. Pham',
   license: 'MIT',
@@ -887,44 +848,6 @@ const highContrast: AppTheme = {
   chrome: { accent: '#ffff00' },
 };
 
-// ── Vellum ──────────────────────────────────────────────────────────
-// Vosh's own warm light theme, built by the same rule as the dark
-// ones: a paper ground, ink foreground, and ANSI slots dark enough to
-// read as text on the paper. The ink blue cursor becomes the accent.
-const vellum: AppTheme = {
-  id: 'vellum',
-  label: 'Vellum',
-  description: 'Warm paper light theme. Ink text, muted ANSI, ink blue accent.',
-  source: 'Vosh',
-  author: 'James Wright',
-  license: 'GPL-3.0',
-  xterm: {
-    background: '#f7f4ee',
-    foreground: '#2a2622',
-    cursor: '#3f6690',
-    cursorAccent: '#f7f4ee',
-    // The accent at 45 percent over the paper.
-    selectionBackground: '#a4b4c4',
-    selectionForeground: '#2a2622',
-    black: '#2a2622',
-    red: '#a8453a',
-    green: '#4f7a3a',
-    yellow: '#94661a',
-    blue: '#3f6690',
-    magenta: '#7a4f8a',
-    cyan: '#357a78',
-    white: '#7c766e',
-    brightBlack: '#6b645c',
-    brightRed: '#c2574a',
-    brightGreen: '#5f9146',
-    brightYellow: '#b88226',
-    brightBlue: '#4d7cb0',
-    brightMagenta: '#9163a6',
-    brightCyan: '#3f9592',
-    brightWhite: '#3b3632',
-  },
-};
-
 // ── Rosé Pine ───────────────────────────────────────────────────────
 // The main Rosé Pine variant as its own terminal ports ship it. The
 // cursor is a neutral highlight, so the chrome takes iris as its
@@ -978,19 +901,15 @@ const rosePine: AppTheme = {
 };
 
 // ── Everforest ──────────────────────────────────────────────────────
-// Everforest at its medium background. The palette comes from
+// Everforest Dark at its medium background. The palette comes from
 // autoload/everforest.vim and the ANSI mapping from the Terminal section
 // of colors/everforest.vim, which repeats the eight colors for the
 // bright slots and maps black and white as below.
 //
-//   dark    bg0 #2d353b  bg3 #475258  fg #d3c6aa  bg_visual #543a48
-//           red #e67e80  green #a7c080  yellow #dbbc7f  blue #7fbbb3
-//           purple #d699b6  aqua #83c092
-//           black bg3, white fg
-//   light   bg0 #fdf6e3  bg3 #e6e2cc  fg #5c6a72  bg_visual #eaedc8
-//           red #f85552  green #8da101  yellow #dfa000  blue #3a94c5
-//           purple #df69ba  aqua #35a77c
-//           black fg, white bg3
+//   bg0 #2d353b  bg3 #475258  fg #d3c6aa  bg_visual #543a48
+//   red #e67e80  green #a7c080  yellow #dbbc7f  blue #7fbbb3
+//   purple #d699b6  aqua #83c092
+//   black bg3, white fg
 //
 // The cursor is fg on bg0, Everforest's default reversed cursor, and the
 // selection is bg_visual. Everforest's green is the accent, the color
@@ -1042,50 +961,6 @@ const everforestDark: AppTheme = {
     brightWhite: '#fcefd2',
   },
   chrome: { accent: '#a7c080' },
-};
-
-// The light variant keeps every published color but white and bright
-// white, which map to fg as on the dark variant, since bg3 sits at 1.2:1
-// on bg0 and would hide the white text games send. Green, yellow,
-// purple, and aqua sit between 2.1:1 and 2.8:1 on bg0 as published, and
-// the terminal draws them that way. The chat pane lifts the game colors
-// it draws on the panel (chatColors.ts). The published green sits under
-// 3:1 on bg0, so the accent pins it lifted to 3:1 on the panel and the
-// raised surface.
-const everforestLight: AppTheme = {
-  id: 'everforest-light',
-  label: 'Everforest Light',
-  description: 'Soft forest greens and warm ink on cream paper.',
-  source: 'Everforest',
-  author: 'sainnhe',
-  license: 'MIT',
-  xterm: {
-    background: '#fdf6e3',
-    foreground: '#5c6a72',
-    cursor: '#5c6a72',
-    cursorAccent: '#fdf6e3',
-    selectionBackground: '#eaedc8',
-    selectionForeground: '#5c6a72',
-    black: '#5c6a72',
-    red: '#f85552',
-    green: '#8da101',
-    yellow: '#dfa000',
-    blue: '#3a94c5',
-    magenta: '#df69ba',
-    cyan: '#35a77c',
-    // Everforest maps bg3 #e6e2cc here.
-    white: '#5c6a72',
-    brightBlack: '#5c6a72',
-    brightRed: '#f85552',
-    brightGreen: '#8da101',
-    brightYellow: '#dfa000',
-    brightBlue: '#3a94c5',
-    brightMagenta: '#df69ba',
-    brightCyan: '#35a77c',
-    // Everforest maps bg3 #e6e2cc here too.
-    brightWhite: '#5c6a72',
-  },
-  chrome: { accent: '#809300' },
 };
 
 // ── Green Screen ────────────────────────────────────────────────────
@@ -1571,7 +1446,6 @@ export const BUILTIN_THEMES: AppTheme[] = [
   obsidianEmber,
   triad,
   rubric,
-  vellum,
   kansoZen,
   tokyoNight,
   nord,
@@ -1580,7 +1454,6 @@ export const BUILTIN_THEMES: AppTheme[] = [
   catppuccin,
   dracula,
   monokai,
-  oneDark,
   oneHalfDark,
   solarizedDark,
   solarizedLight,
@@ -1588,7 +1461,6 @@ export const BUILTIN_THEMES: AppTheme[] = [
   classicVivid,
   highContrast,
   everforestDark,
-  everforestLight,
   greenScreen,
   srcery,
   nightfly,
@@ -1771,7 +1643,25 @@ export const THEMES: AppTheme[] = new Proxy([] as AppTheme[], {
 
 export const DEFAULT_THEME_ID = 'obsidian-ember';
 
+/** Themes Vosh no longer ships, each by the id of the theme that took
+ *  its place (Themes review Q13, Q14 and Q16). A saved pick keeps the
+ *  retired id until you pick another theme, so an older build that still
+ *  ships the theme reads it as it was, and this build shows the
+ *  successor. */
+export const RETIRED_THEMES: ReadonlyMap<string, string> = new Map([
+  ['one-dark', 'one-half-dark'],
+  ['vellum', 'rubric'],
+  ['everforest-light', 'melange-light'],
+]);
+
+/** The theme in `themes` that `id` shows: the one with that id, a custom
+ *  theme included, else the successor of a retired id. */
+export function themeShownBy(themes: readonly AppTheme[], id: string): AppTheme | undefined {
+  return themes.find((t) => t.id === id) ?? themes.find((t) => t.id === RETIRED_THEMES.get(id));
+}
+
+/** The theme `id` shows (themeShownBy), else Obsidian Ember. */
 export function findTheme(id: string | undefined): AppTheme {
   const all = [...BUILTIN_THEMES, ...CUSTOM_THEMES];
-  return all.find((t) => t.id === id) ?? all[0];
+  return (id !== undefined && themeShownBy(all, id)) || all[0];
 }

@@ -40,13 +40,13 @@ export function themeThumb(theme: AppTheme): ThemeThumb {
 }
 
 /** The themes the gallery shows first: Vosh's signature pair, then the
- *  six the approved board shows first, in its order. */
+ *  six the approved board shows first, in its order, less Vellum, which
+ *  Rubric replaced (Themes review Q14). */
 export const GALLERY_LEAD_IDS = [
   'triad',
   'rubric',
   'nord',
   'obsidian-ember',
-  'vellum',
   'gruvbox',
   'rose-pine',
   'tokyo-night',

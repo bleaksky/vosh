@@ -11,7 +11,7 @@ import {
   pickTheme,
 } from './theme';
 import { galleryThemes } from './themeThumb';
-import { BUILTIN_THEMES, THEMES, type AppTheme } from './themes';
+import { BUILTIN_THEMES, THEMES, themeShownBy, type AppTheme } from './themes';
 
 // Command registry for the ⌘K palette. Commands are built fresh each
 // time the palette opens so checks and labels reflect live state
@@ -339,7 +339,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       run: deps.toggleSplit,
     });
   }
-  const currentTheme = THEMES.find((t) => t.id === getCurrentThemeId());
+  const currentTheme = themeShownBy(THEMES, getCurrentThemeId());
   entries.push({
     id: 'theme',
     section: 'view',
@@ -473,7 +473,9 @@ export function themesInGalleryOrder(): { theme: AppTheme; custom: boolean }[] {
  *  appearance is on it fills the light or dark slot and shows only when
  *  that matches the OS. The pick applies in every window and saves. */
 export function themeEntries(): PaletteEntry[] {
-  const current = getCurrentThemeId();
+  // A retired id, from a paint cache an older build wrote, shows its
+  // successor.
+  const current = themeShownBy(THEMES, getCurrentThemeId())?.id;
   return themesInGalleryOrder().map(({ theme: t }) => ({
     id: `theme-${t.id}`,
     section: 'view' as const,

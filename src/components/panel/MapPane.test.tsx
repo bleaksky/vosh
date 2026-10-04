@@ -22,9 +22,9 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 const kansoTheme = findTheme('kanso-zen');
-const vellumTheme = findTheme('vellum');
+const rubricTheme = findTheme('rubric');
 const kanso = themeTokens(kansoTheme);
-const vellum = themeTokens(vellumTheme);
+const rubric = themeTokens(rubricTheme);
 
 function room(data: Record<string, unknown>): RoomInfo {
   const base: RoomInfoBase | null = parseRoomInfo(data);
@@ -127,10 +127,10 @@ describe('the band under the map', () => {
 
   it('draws the name from the theme the terminal draws it in', () => {
     const [onKanso] = band(ICE_BARS);
-    const [onVellum] = band(ICE_BARS, { theme: vellumTheme });
+    const [onRubric] = band(ICE_BARS, { theme: rubricTheme });
     expect(onKanso.color).toBe(roomNameColor(0, kansoTheme.xterm, kanso));
-    expect(onVellum.color).toBe(roomNameColor(0, vellumTheme.xterm, vellum));
-    expect(onKanso.color).not.toBe(onVellum.color);
+    expect(onRubric.color).toBe(roomNameColor(0, rubricTheme.xterm, rubric));
+    expect(onKanso.color).not.toBe(onRubric.color);
     // The 256 color tint do_look prints first never shows, since the
     // name's own code resets it.
     expect(onKanso.color).not.toBe('#eeeeee');

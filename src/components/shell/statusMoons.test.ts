@@ -24,8 +24,8 @@ function sky(active: [boolean, boolean, boolean], flags: Partial<Moons> = {}): M
 describe('statusMoons', () => {
   it('draws the moons as ink on a light theme only', () => {
     expect(statusMoons(sky([true, true, true]), nord.xterm, tokens)?.onLight).toBe(false);
-    const vellum = findTheme('vellum');
-    expect(statusMoons(sky([true, true, true]), vellum.xterm, themeTokens(vellum))?.onLight).toBe(
+    const rubric = findTheme('rubric');
+    expect(statusMoons(sky([true, true, true]), rubric.xterm, themeTokens(rubric))?.onLight).toBe(
       true,
     );
   });
