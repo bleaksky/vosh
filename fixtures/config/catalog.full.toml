@@ -33,9 +33,10 @@ pattern = '^(\w+) whispers to you'
 enabled = false
 
 [[triggers.patterns]]
-pattern = "Tolliver tells you"
+pattern = '^\s*Tolliver tells you.*'
 enabled = true
 mode = "starts_with"
+text = "Tolliver tells you"
 
 [[triggers.actions]]
 kind = "highlight"
@@ -75,9 +76,10 @@ pattern = '^You are hungry\.$'
 enabled = true
 
 [[triggers.patterns]]
-pattern = "You are thirsty."
+pattern = '^\s*You are thirsty\.\s*$'
 enabled = true
 mode = "text"
+text = "You are thirsty."
 
 [[triggers.actions]]
 kind = "gag"

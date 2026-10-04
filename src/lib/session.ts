@@ -216,11 +216,21 @@ export type TriggerAction =
  *  per-pattern editor so a user can keep, e.g., a list of mob names
  *  as separate togglable rows instead of one long pipe regex. */
 export interface TriggerPattern {
+  /** The regex of a Regex row. A Text or Starts with row from the store
+   *  holds the regex its text compiles to, which builds up to 0.8.1
+   *  read, and the store reads `text` in its place. An edit changes only
+   *  `text`, and the store writes the new regex here on Save. Read and
+   *  edit what you typed through `patternSource` and `withPatternSource`. */
   pattern: string;
   enabled: boolean;
-  /** How the store reads `pattern`. Left out, and on the wire, while it
+  /** How the store reads the row. Left out, and on the wire, while it
    *  is 'regex'. See `MatchMode` in crates/automation/src/trigger/store.rs. */
   mode?: MatchMode;
+  /** What you typed in a Text or Starts with row. A row with one of
+   *  those modes and no text, as builds before the field saved it,
+   *  reads `pattern` as the text, and normalizePatterns copies it here.
+   *  A Regex row has none. */
+  text?: string;
 }
 
 /** 'text' matches a line that is exactly the pattern, with spaces at
@@ -280,8 +290,15 @@ export function normalizePatterns(raw: unknown): TriggerPattern[] {
         enabled: rr.enabled !== false,
       };
       // A save sends the row back as the page holds it, so the mode has
-      // to ride along or the store reads the text as a regex.
-      if (rr.mode === 'text' || rr.mode === 'starts_with') out.mode = rr.mode;
+      // to ride along or the store reads the text as a regex. So does the
+      // text, or the store reads the regex in `pattern` as the text. A
+      // row with no text, as builds before the field saved it, takes
+      // `pattern` as its text, so every such row on the page holds one
+      // and a row you edit and type back matches its saved copy.
+      if (rr.mode === 'text' || rr.mode === 'starts_with') {
+        out.mode = rr.mode;
+        out.text = typeof rr.text === 'string' ? rr.text : out.pattern;
+      }
       return out;
     });
   }

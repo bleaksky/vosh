@@ -227,6 +227,30 @@ export function withMainPattern(
   return { ...trigger, patterns };
 }
 
+function isTextRow(row: TriggerPattern): boolean {
+  return row.mode === 'text' || row.mode === 'starts_with';
+}
+
+/** What you typed in a row, the one the Pattern fields show: the text of
+ *  a Text or Starts with row, the regex of a Regex row. */
+export function patternSource(row: TriggerPattern): string {
+  return isTextRow(row) ? (row.text ?? row.pattern) : row.pattern;
+}
+
+/** A row with what you typed set to `value`. A Text or Starts with row
+ *  takes it in `text` and keeps `pattern` as the store sent it. The store
+ *  reads `text` and writes the new regex in `pattern` when it saves, and
+ *  a row you type back as it was matches its saved copy, so the page
+ *  reads as saved again. */
+export function withPatternSource(row: TriggerPattern, value: string): TriggerPattern {
+  return isTextRow(row) ? { ...row, text: value } : { ...row, pattern: value };
+}
+
+/** Set what you typed in the main pattern. */
+export function withMainPatternSource(trigger: TriggerRecord, value: string): TriggerRecord {
+  return withMainPattern(trigger, withPatternSource(mainPattern(trigger), value));
+}
+
 /** Set a trigger's group. Blank means no group. */
 export function withGroup<T extends { group?: string | null }>(item: T, group: string): T {
   const trimmed = group.trim();
@@ -317,7 +341,7 @@ export function validateTriggers(list: readonly TriggerRecord[]): string | null 
     if (!name) return 'Give every trigger a name before you save.';
     if (seen.has(name)) return `Two triggers are named ${quote(name)}. Give each one its own name.`;
     seen.add(name);
-    if (!t.patterns.some((p) => p.pattern.trim().length > 0)) {
+    if (!t.patterns.some((p) => patternSource(p).trim().length > 0)) {
       return `The trigger ${quote(name)} needs a pattern.`;
     }
   }
