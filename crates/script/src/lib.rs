@@ -295,9 +295,12 @@ impl ScriptEngine {
         self.stopped.remove(&owner);
         let (outcome, ran) = self.run_script(&owner, chunk, code);
         // A stopped script stays on the list, so `#script reload` can
-        // bring it back. A script that failed keeps its place, or never
-        // takes one.
-        if (ran || self.stopped.contains(&owner)) && !self.loaded_scripts.contains(&owner) {
+        // bring it back. A plugin that failed takes its place too, since
+        // the profile turned it on and a reload should try it again once
+        // you fix it. A loose script that failed keeps its place, or
+        // never takes one, so a name you mistyped does not stick.
+        let listed = ran || self.stopped.contains(&owner) || matches!(owner, Owner::Plugin(_));
+        if listed && !self.loaded_scripts.contains(&owner) {
             self.loaded_scripts.push(owner);
         }
         outcome
@@ -2512,6 +2515,19 @@ mod tests {
         e.load_script(spin.clone(), "@spin/main.lua", "x = 1")
             .unwrap();
         assert!(!e.is_stopped(&spin));
+    }
+
+    #[test]
+    fn a_plugin_that_failed_its_first_load_waits_for_a_reload() {
+        let mut e = ScriptEngine::new().unwrap();
+        let typo = Owner::Plugin("typo".into());
+        let failed = e.load_script(typo.clone(), "@typo/main.lua", "mud.ech('x')");
+        assert!(failed.failed);
+        assert_eq!(e.reload_order(), std::slice::from_ref(&typo));
+        // A loose script that failed takes no place.
+        let failed = load(&mut e, "missing.lua", "error('typo')");
+        assert!(failed.failed);
+        assert_eq!(e.reload_order(), [typo]);
     }
 
     #[test]
