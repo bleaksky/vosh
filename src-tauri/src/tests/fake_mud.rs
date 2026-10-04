@@ -2170,6 +2170,52 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
     h.finish(grid).await;
 }
 
+// What a plugin prints as it loads at launch waits for a terminal, then
+// shows once you connect: its print and its error as [lua] lines, and
+// the stop of a plugin that runs away. The guard keeps other tests off
+// the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lua_a_plugin_load_prints_its_lines_once_you_connect() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    let plugins = h.dir.path().join("plugins");
+    for (name, body) in [
+        ("noisy", "print('noisy is here')\nmud.ech('typo')\n"),
+        ("spin", "while true do end\n"),
+    ] {
+        let plugin = plugins.join(name);
+        std::fs::create_dir_all(&plugin).expect("the plugin folder");
+        std::fs::write(
+            plugin.join("manifest.toml"),
+            format!("[plugin]\nname = \"{name}\"\n"),
+        )
+        .expect("the manifest");
+        std::fs::write(plugin.join("main.lua"), body).expect("the entry script");
+    }
+    h.state.profile.lock().await.plugins.enabled = vec!["noisy".into(), "spin".into()];
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, plugins).await;
+    assert!(h
+        .state
+        .profile
+        .lock()
+        .await
+        .script
+        .is_stopped(&vosh_script::Owner::Plugin("spin".into())));
+
+    h.connect().await;
+    h.until_shown("[lua] noisy is here").await;
+    h.until_shown("[lua] noisy/main.lua:2: attempt to call a nil value (field 'ech')")
+        .await;
+    h.until_shown("[lua] Vosh stopped spin at main.lua line 1 after 100 ms.")
+        .await;
+    h.until_shown(
+        "[lua] spin stays off until you save it under Scripts in Settings or restart Vosh.",
+    )
+    .await;
+    h.finish(grid).await;
+}
+
 // The command a Settings timer runs does all its Lua asks, as it does
 // when you type it. Here the Lua starts a timer of its own and runs a
 // line through mud.input. The guard keeps other tests off the shared

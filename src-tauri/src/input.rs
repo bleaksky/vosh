@@ -170,6 +170,8 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     state: &SharedState,
     line: &str,
 ) -> Result<(), String> {
+    // What the plugins printed at launch, if nothing showed it yet.
+    crate::app::plugins::show_launch_lines(app, state);
     // `#help <words>` opens Help on those words. The topics live in the
     // page, so the main window searches them, opens Help on the best
     // match, or says in the terminal that none matched.
