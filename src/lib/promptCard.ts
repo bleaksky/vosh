@@ -6,6 +6,7 @@
 // prompt. Pure, so the components stay about layout.
 
 import { profileDisplayName, profilePossessive } from './profileLabel';
+import type { MoveMade } from './promptPieces';
 import { cellWidth, parseSgrCells, type Cell } from './sgrCells';
 import type {
   PromptCapture,
@@ -678,6 +679,16 @@ export function withStart(
  *  starting from the text it edited, even one that followed the game. */
 export function withDesign(config: PromptConfig, template: string): PromptConfig {
   return { ...config, template, mirror: false };
+}
+
+/** The table once the opposite Option key takes move `back` back. The
+ *  design is the one before the move, and it follows the game again when
+ *  it did then, as Command Z puts it back. */
+export function withMoveTakenBack(
+  config: PromptConfig,
+  back: Pick<MoveMade, 'before' | 'mirror'>,
+): PromptConfig {
+  return { ...withDesign(config, back.before), mirror: back.mirror };
 }
 
 /** What Command Z puts back: the fields one change of yours made, as
