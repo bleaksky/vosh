@@ -347,6 +347,50 @@ fn a_new_walk_takes_over_once_the_step_in_flight_lands() {
 }
 
 #[test]
+fn a_walk_that_arrives_as_a_new_one_waits_lets_go_of_what_it_held() {
+    let t = Instant::now();
+    let mut w = standing_in(FOUNTAIN, t);
+    let _ = w.command(start("w", &["deposit all"]), t);
+    assert_eq!(w.command(start("e", &["say back"]), t), WalkOut::default());
+    // The last step arrived, so the walk ended as planned. What it held
+    // goes, and the new walk starts after it.
+    assert_eq!(
+        arrive(&mut w, ROAD, t),
+        WalkOut {
+            send: b"e\r\n".to_vec(),
+            release: held(&["deposit all"]),
+            ..WalkOut::default()
+        }
+    );
+    assert_eq!(arrive(&mut w, FOUNTAIN, t).release, held(&["say back"]));
+}
+
+#[test]
+fn a_step_that_leads_elsewhere_hands_over_to_the_walk_that_waits() {
+    let t = Instant::now();
+    let mut w = standing_in(FOUNTAIN, t);
+    let _ = w.command(start("2w", &["get all"]), t);
+    let _ = w.command(start("e", &["say back"]), t);
+    // The new walk plans from the room the step reached, as it would
+    // after a step that failed.
+    assert_eq!(
+        w.room_info(&room_info(4631), t),
+        WalkOut {
+            send: b"e\r\n".to_vec(),
+            lines: vec![
+                "[walk] Stopped after 0 of 2 steps, so Vosh did not send the rest of the line."
+                    .to_string()
+            ],
+            ..WalkOut::default()
+        }
+    );
+    assert_eq!(
+        w.room_info(&room_info(4446), t).release,
+        held(&["say back"])
+    );
+}
+
+#[test]
 fn a_new_walk_waits_for_the_step_of_a_walk_you_stopped() {
     let t = Instant::now();
     let mut w = standing_in(FOUNTAIN, t);

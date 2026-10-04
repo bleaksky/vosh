@@ -103,7 +103,8 @@ fn is_failure(line: &str) -> bool {
 /// What the walker asks of the session after an event.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct WalkOut {
-    /// The step to send the game, with its line end.
+    /// The step to send the game, with its line end, after what
+    /// `release` runs.
     pub(crate) send: Vec<u8>,
     /// Lines to print.
     pub(crate) lines: Vec<String>,
@@ -383,29 +384,23 @@ impl Walker {
     }
 
     /// The step in flight ended as `landing`. The walk goes on, arrives,
-    /// or stops, and a walk waiting to take over starts from here.
+    /// or stops, and a walk waiting to take over starts from here. A walk
+    /// that arrives lets go of what it held first, even with a walk
+    /// waiting.
     fn landed(&mut self, landing: Landing, now: Instant, out: &mut WalkOut) {
         if let Some(mut walk) = self.walk.take() {
             if matches!(landing, Landing::Arrived | Landing::Unseen) {
                 walk.done += 1;
             }
             match landing {
+                Landing::Arrived if walk.done == walk.total() => out.release = walk.rest,
                 Landing::Arrived if self.next.is_none() => {
-                    if walk.done == walk.total() {
-                        out.release = walk.rest;
-                    } else {
-                        self.walk = Some(walk);
-                        self.send_next(now, out);
-                    }
-                    return;
-                }
-                Landing::Elsewhere => {
-                    out.lines.push(stopped_line(&walk, Why::Plain));
-                    self.next = None;
+                    self.walk = Some(walk);
+                    self.send_next(now, out);
                     return;
                 }
                 Landing::Unseen => out.lines.push(stopped_line(&walk, Why::LostSight)),
-                Landing::Arrived | Landing::Failed => {
+                Landing::Arrived | Landing::Elsewhere | Landing::Failed => {
                     out.lines.push(stopped_line(&walk, Why::Plain));
                 }
             }

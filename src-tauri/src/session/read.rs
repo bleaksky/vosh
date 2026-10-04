@@ -281,9 +281,11 @@ async fn deliver_line_step<R: tauri::Runtime>(
     Ok(())
 }
 
-/// Do what the walker asked for in a read: send its step at once, keep
-/// its lines for the end of the read, and run what a walk held once you
-/// arrive, as its line would have run it.
+/// Do what the walker asked for in a read: keep its lines for the end of
+/// the read, run what a walk held once you arrive, as its line would have
+/// run it, and send its step at once. What an arrived walk held goes
+/// before the first step of a walk that takes over from it, so it acts in
+/// the room the walk reached.
 pub(super) async fn walked<R: tauri::Runtime>(
     conn: &mut Conn<R>,
     out: WalkOut,
@@ -294,27 +296,27 @@ pub(super) async fn walked<R: tauri::Runtime>(
         lines,
         release,
     } = out;
+    conn.walk_lines.extend(lines);
+    if !release.is_empty() {
+        let apply = walk::release(&conn.profile, release).await;
+        apply_script_result(
+            &conn.app,
+            &mut ScriptIo::Session(
+                &mut conn.stream,
+                &mut OutputSink::Batch(batch),
+                &mut conn.walker,
+            ),
+            &conn.profile,
+            &conn.lua_timers,
+            apply,
+        )
+        .await?;
+    }
     if !send.is_empty() {
         conn.stream.write_all(&send).await?;
         conn.stream.flush().await?;
     }
-    conn.walk_lines.extend(lines);
-    if release.is_empty() {
-        return Ok(());
-    }
-    let apply = walk::release(&conn.profile, release).await;
-    apply_script_result(
-        &conn.app,
-        &mut ScriptIo::Session(
-            &mut conn.stream,
-            &mut OutputSink::Batch(batch),
-            &mut conn.walker,
-        ),
-        &conn.profile,
-        &conn.lua_timers,
-        apply,
-    )
-    .await
+    Ok(())
 }
 
 /// The end of a read, see [`partial_step`], and the IO its prompt left.
