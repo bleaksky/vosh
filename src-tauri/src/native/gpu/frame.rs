@@ -19,8 +19,8 @@ use super::bands::{
 };
 use super::decor::{line_instances, Decor};
 use super::style::{
-    blend_over, blinks_visibly, drawn_char, draws_lines, paint_to_rgba, rgb_to_rgba, styled_colors,
-    underline_color, wants_bold_font, ChromePaint, Rgba, SCROLLBAR_TRACK_SHARE,
+    blend_over, blinks_visibly, dimmed, drawn_char, draws_lines, paint_to_rgba, rgb_to_rgba,
+    styled_colors, underline_color, wants_bold_font, ChromePaint, Rgba, SCROLLBAR_TRACK_SHARE,
 };
 use super::{Drawn, Placement};
 use crate::native::grid::find::FindMatch;
@@ -298,8 +298,10 @@ pub(super) fn build_frame(
     let divider = paint_to_rgba(chrome.divider);
 
     // Selection highlight: compute the range once, composite the
-    // selection color over each selected cell's own background.
+    // selection color over each selected cell's own background, and draw
+    // its text in the selection text when the page sends one.
     let selection = grid.selection_bounds();
+    let selection_text = chrome.selection_text.map(paint_to_rgba);
 
     // Find-match highlight, stronger for the current match. Keyed by
     // grid line for an O(1) lookup per cell.
@@ -399,6 +401,10 @@ pub(super) fn build_frame(
             if cell_in_selection(selection, grid_line, col) {
                 tints[tinted] = chrome.selection;
                 tinted += 1;
+                // Dim text stays dim on the selection, as xterm draws it.
+                if let Some(text) = selection_text {
+                    fg_rgba = if flags.dim { dimmed(text) } else { text };
+                }
             }
             if let Some(ranges) = find_by_line.get(&grid_line) {
                 for &(start, end, active) in ranges {

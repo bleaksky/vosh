@@ -170,17 +170,19 @@ pub(crate) fn native_surface_set_divider_color(color: Option<String>) {
 
 /// Tier 3 native renderer: the chrome colors the page derives with its
 /// theme tokens, as CSS colors (hex, or `rgb()`/`rgba()` with alpha). The
-/// split divider, the selection, every find match, the current match, a
-/// hovered link, the scrollbar thumb, and the selected row fill a lifted
-/// prompt's band takes. `appearance` is the theme's, and a light one gives
-/// the band its inset ring. Each call replaces the whole set, and a
-/// missing or unreadable color falls back to one derived from the terminal
-/// palette. The divider setting still wins over `divider`.
+/// split divider, the selection and its text, every find match, the
+/// current match, a hovered link, the scrollbar thumb, and the selected
+/// row fill a lifted prompt's band takes. Without a selection text a
+/// selected cell keeps its own color. `appearance` is the theme's, and a
+/// light one gives the band its inset ring. Each call replaces the whole
+/// set, and a missing or unreadable color falls back to one derived from
+/// the terminal palette. The divider setting still wins over `divider`.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn native_surface_set_tokens(
     divider: Option<String>,
     selection: Option<String>,
+    selection_text: Option<String>,
     find_match: Option<String>,
     current_match: Option<String>,
     link: Option<String>,
@@ -194,6 +196,7 @@ pub(crate) fn native_surface_set_tokens(
         crate::native::gpu::style::set_tokens(crate::native::gpu::style::ChromeTokens {
             divider: parse(divider),
             selection: parse(selection),
+            selection_text: parse(selection_text),
             find_match: parse(find_match),
             current_match: parse(current_match),
             link: parse(link),
@@ -208,6 +211,7 @@ pub(crate) fn native_surface_set_tokens(
         let _ = (
             divider,
             selection,
+            selection_text,
             find_match,
             current_match,
             link,
