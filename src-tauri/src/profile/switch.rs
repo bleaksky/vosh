@@ -356,7 +356,10 @@ pub(crate) async fn switch_profile(
         persist_state(state, &leaving).await;
     }
 
-    switch_live_profile(state, session, name).await
+    let plugins = switch_live_profile(state, session, name).await?;
+    // A launch restores the session on the profile it moved to.
+    crate::profile::set::save_sessions(state).await;
+    Ok(plugins)
 }
 
 /// Switch `session` to the profile that claims `character` on the
