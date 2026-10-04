@@ -167,6 +167,9 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
     broadcast_profile_ui(app, state).await;
 
     broadcast(app, PROFILE_SWITCHED, &name);
+
+    // The plugins this profile turns on start, and the others stop.
+    crate::app::plugins::follow_profile(app, state).await;
     Ok(())
 }
 

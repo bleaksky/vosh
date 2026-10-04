@@ -2196,6 +2196,71 @@ async fn lua_a_new_gmcp_handler_hears_the_last_packet_at_once() {
     h.finish(grid).await;
 }
 
+// A profile switch turns on the plugins the next profile turns on and
+// turns off the ones it does not, while you play. A plugin both turn on
+// keeps running, and one that turns on hears the last Char.Status at
+// once. The guard keeps other tests off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lua_a_profile_switch_turns_its_plugins_on_and_the_others_off() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    let plugins = h.dir.path().join("plugins");
+    for (name, body) in [
+        ("everywhere", "mud.echo('everywhere loaded')"),
+        (
+            "healer_only",
+            "mud.alias('hl', 'cast heal')\n\
+             mud.on_gmcp('Char.Status', function(d) mud.echo('healer_only sees ' .. d.name) end)",
+        ),
+    ] {
+        let plugin = plugins.join(name);
+        std::fs::create_dir_all(&plugin).expect("the plugin folder");
+        std::fs::write(
+            plugin.join("manifest.toml"),
+            format!("[plugin]\nname = \"{name}\"\n"),
+        )
+        .expect("the manifest");
+        std::fs::write(plugin.join("main.lua"), body).expect("the entry script");
+    }
+    let mut healer = crate::profile::file::ProfileConfig::default();
+    healer.plugins.enabled = vec!["everywhere".into(), "healer_only".into()];
+    healer
+        .save(&h.profile_file("Healer").await)
+        .expect("Healer's file");
+    h.state.profile.lock().await.plugins.enabled = vec!["everywhere".into()];
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, plugins).await;
+    h.connect().await;
+    h.until_shown("Welcome to the fake Aabahran, Tester.").await;
+
+    crate::profile::switch::apply_profile_switch(h.app.handle(), &h.state, "Healer")
+        .await
+        .expect("the switch");
+    h.until_shown("healer_only sees Tester").await;
+    let shown = |h: &Harness, text: &str| h.screen().iter().filter(|r| r.contains(text)).count();
+    assert_eq!(shown(&h, "everywhere loaded"), 1, "it kept running");
+    {
+        let p = h.state.profile.lock().await;
+        assert_eq!(p.script.loaded_plugins(), ["everywhere", "healer_only"]);
+        assert_eq!(p.plugin_aliases.list().len(), 1);
+    }
+
+    crate::profile::switch::apply_profile_switch(h.app.handle(), &h.state, DEFAULT_PROFILE_NAME)
+        .await
+        .expect("the switch back");
+    {
+        let p = h.state.profile.lock().await;
+        assert_eq!(p.script.loaded_plugins(), ["everywhere"]);
+        let leftover = &p.plugin_aliases.list();
+        assert!(leftover.is_empty(), "{leftover:?}");
+    }
+    h.finish(grid).await;
+}
+
 // What a plugin prints as it loads at launch waits for a terminal, then
 // shows once you connect: its print and its error as [lua] lines, and
 // the stop of a plugin that runs away. The guard keeps other tests off

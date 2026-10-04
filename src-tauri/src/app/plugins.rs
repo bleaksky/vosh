@@ -5,8 +5,9 @@
 //! `ScriptEngine` on launch.
 //!
 //! The `[plugins] enabled` list in the profile file says which plugins
-//! are on. You edit it by hand, and a change takes effect at the next
-//! launch.
+//! are on in that profile. The plugins it names load at launch, and a
+//! profile switch turns the next profile's plugins on and the others off
+//! while you play. You edit the list by hand while Vosh is closed.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -19,6 +20,8 @@ use tracing::{error, info};
 use vosh_script::Owner;
 
 use crate::app::state::SharedState;
+use crate::profile::live::Profile;
+use crate::script::ApplyResult;
 
 #[derive(Debug, Error)]
 pub(crate) enum PluginError {
@@ -257,6 +260,118 @@ pub(crate) fn seed_example_plugins(plugins_dir: &std::path::Path) {
     }
 }
 
+/// Turn the plugin `name` on, or load it again: read it from
+/// `plugins_dir` as it stands and load it. Returns what it asks of the
+/// session, or None when Vosh could not read it, which the log says.
+pub(crate) fn plugin_on(
+    p: &mut Profile,
+    plugins_dir: &std::path::Path,
+    name: &str,
+) -> Option<ApplyResult> {
+    let plugin = match read_plugin(plugins_dir, name) {
+        Ok(plugin) => plugin,
+        Err(e) => {
+            error!(name = %name, error = %e, "plugin entry missing");
+            return None;
+        }
+    };
+    crate::script::snapshot_vars(&p.script, &p.vars);
+    let outcome = p.script.load_script(
+        Owner::Plugin(name.to_string()),
+        &plugin.chunk(name),
+        &plugin.code,
+    );
+    if outcome.failed {
+        error!(name = %name, "plugin script error");
+    } else {
+        info!(name = %name, "loaded plugin");
+    }
+    Some(crate::script::apply_actions(p, outcome))
+}
+
+/// Turn the plugin `name` off: take back its Lua triggers, GMCP
+/// handlers, timers and aliases. The variables it set and the groups it
+/// turned on or off stay.
+pub(crate) fn plugin_off(p: &mut Profile, name: &str) -> ApplyResult {
+    let outcome = p.script.unload(&Owner::Plugin(name.to_string()));
+    info!(name = %name, "unloaded plugin");
+    crate::script::apply_actions(p, outcome)
+}
+
+/// Turn off each plugin that runs and the live profile does not turn
+/// on, then turn on each one it turns on that does not run yet, in the
+/// order its list gives. A plugin both profiles turn on keeps running as
+/// it is, a stopped one included.
+pub(crate) fn follow_profile_plugins(
+    p: &mut Profile,
+    plugins_dir: &std::path::Path,
+) -> ApplyResult {
+    let mut wanted: Vec<String> = Vec::new();
+    for name in &p.plugins.enabled {
+        if !wanted.contains(name) {
+            wanted.push(name.clone());
+        }
+    }
+    let running = p.script.loaded_plugins();
+    let mut apply = ApplyResult::default();
+    for name in running.iter().filter(|name| !wanted.contains(name)) {
+        apply.append(plugin_off(p, name));
+    }
+    for name in wanted.iter().filter(|name| !running.contains(name)) {
+        if let Some(loaded) = plugin_on(p, plugins_dir, name) {
+            apply.append(loaded);
+        }
+    }
+    apply
+}
+
+/// Once a profile switch made the next profile live, turn its plugins on
+/// and the others off, and deliver what they ask for. Their lines print
+/// in the terminal, and what they send goes to the game when one
+/// listens.
+pub(crate) async fn follow_profile<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    state: &SharedState,
+) {
+    let Some(app_data) = state.app_data.get() else {
+        return;
+    };
+    let plugins_dir = crate::disk::paths::plugins_dir(app_data);
+    let enabled = state.profile.lock().await.plugins.enabled.clone();
+    {
+        let mut mgr = state.plugins.lock().await;
+        mgr.set_plugins_dir(plugins_dir.clone());
+        if let Err(e) = mgr.discover() {
+            error!(error = %e, "plugin discovery failed");
+        }
+        mgr.set_enabled(enabled);
+    }
+    let apply = {
+        let mut p = state.profile.lock().await;
+        follow_profile_plugins(&mut p, &plugins_dir)
+    };
+    let (bytes, echoes) = crate::session::effects::collect_script_result(
+        app,
+        &state.profile,
+        &state.lua_timers,
+        apply,
+    )
+    .await;
+    crate::output::echo_lines(app, &echoes);
+    if bytes.is_empty() {
+        return;
+    }
+    let sent = state
+        .session
+        .lock()
+        .await
+        .as_ref()
+        .is_some_and(|handle| handle.send(bytes));
+    if !sent {
+        info!("plugin sends at a profile switch have no game to go to");
+    }
+}
+
 /// Find the plugins in `plugins_dir` and load each one the profile turns
 /// on, as launch does. What an entry script asks for applies as on every
 /// other path that runs Lua, so its timers, `mud.input` lines and prompt
@@ -279,26 +394,9 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     };
     mgr.set_enabled(enabled.clone());
     for name in &enabled {
-        let apply = match read_plugin(&plugins_dir, name) {
-            Ok(plugin) => {
-                let mut p = state.profile.lock().await;
-                crate::script::snapshot_vars(&p.script, &p.vars);
-                let outcome = p.script.load_script(
-                    Owner::Plugin(name.clone()),
-                    &plugin.chunk(name),
-                    &plugin.code,
-                );
-                if outcome.failed {
-                    error!(name = %name, "plugin script error");
-                } else {
-                    info!(name = %name, "loaded plugin");
-                }
-                crate::script::apply_actions(&mut p, outcome)
-            }
-            Err(e) => {
-                error!(name = %name, error = %e, "plugin entry missing");
-                continue;
-            }
+        let loaded = plugin_on(&mut *state.profile.lock().await, &plugins_dir, name);
+        let Some(apply) = loaded else {
+            continue;
         };
         let (bytes, echoes) = crate::session::effects::collect_script_result(
             app,
@@ -454,6 +552,69 @@ mod tests {
                 Err(PluginError::EntryOutside(..))
             ));
         }
+    }
+
+    #[test]
+    fn a_profile_switch_turns_its_plugins_on_and_the_others_off() {
+        let tmp = tempdir();
+        write_plugin(
+            tmp.path(),
+            "everywhere",
+            "everywhere",
+            "mud.alias('ev', 'look') mud.timer(600, function() end)",
+        );
+        write_plugin(
+            tmp.path(),
+            "healer_only",
+            "healer_only",
+            "mud.alias('hl', 'cast heal')",
+        );
+        write_plugin(
+            tmp.path(),
+            "warrior_only",
+            "warrior_only",
+            "mud.trigger('hunger', 'You are hungry', function() end) \
+             mud.timer(600, function() end)",
+        );
+        let mut p = Profile::default();
+        p.plugins.enabled = vec!["everywhere".into(), "warrior_only".into()];
+        let launch = follow_profile_plugins(&mut p, tmp.path());
+        assert_eq!(launch.new_timers.len(), 2);
+        let warrior_timer = launch.new_timers[1].timer_id;
+        // The next profile lists one plugin twice and one it does not
+        // have.
+        p.plugins.enabled = vec![
+            "healer_only".into(),
+            "everywhere".into(),
+            "healer_only".into(),
+            "missing".into(),
+        ];
+        let switched = follow_profile_plugins(&mut p, tmp.path());
+        assert_eq!(p.script.loaded_plugins(), ["everywhere", "healer_only"]);
+        let leftover = &p.script.lua_triggers();
+        assert!(leftover.is_empty(), "{leftover:?}");
+        // Only the plugin that went off lost its timer, and the one both
+        // turn on did not load again.
+        assert_eq!(switched.cancel_timers, [warrior_timer]);
+        let leftover = &switched.new_timers;
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let aliases: Vec<(&str, &str)> = p
+            .plugin_aliases
+            .list()
+            .into_iter()
+            .map(|(by, alias)| (by, alias.name.as_str()))
+            .collect();
+        assert_eq!(aliases, [("everywhere", "ev"), ("healer_only", "hl")]);
+        // Back again, the healer's alias goes with it.
+        p.plugins.enabled = vec!["everywhere".into()];
+        follow_profile_plugins(&mut p, tmp.path());
+        let aliases: Vec<&str> = p
+            .plugin_aliases
+            .list()
+            .into_iter()
+            .map(|(by, _)| by)
+            .collect();
+        assert_eq!(aliases, ["everywhere"]);
     }
 
     fn tempdir() -> tempfile::TempDir {
