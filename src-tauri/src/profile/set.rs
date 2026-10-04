@@ -269,6 +269,11 @@ impl ProfileSet {
         &self.index.active
     }
 
+    /// The sessions a launch restores, with the one selected.
+    pub(crate) fn sessions(&self) -> (&[SessionEntry], Option<SessionId>) {
+        (&self.index.sessions, self.index.selected)
+    }
+
     pub(crate) fn active_path(&self) -> PathBuf {
         self.profile_path(&self.index.active)
     }
@@ -691,8 +696,9 @@ pub(crate) async fn rename_profile(
         .rename(old, &new)
         .map_err(|e| e.to_string())?;
     // Every session on it plays it under the new name, and the custom
-    // prompt draws that name.
-    if let Some(open) = open {
+    // prompt draws that name. A restored session that has yet to open it
+    // opens it under the new name.
+    for open in open.into_iter().chain(state.waiting_on(old)) {
         open.lock().await.set_name(&new);
     }
     crate::loadouts::set::follow_profile_name(state, old, Some(&new)).await;

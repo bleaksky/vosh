@@ -2,8 +2,8 @@
 //! holds apart from the profile and points at the profile it plays, and
 //! [`Sessions`] lists them in order with the one selected, beside the
 //! profiles they play, each open once. The app starts with one session,
-//! selected, and a command that names no session acts on the selected
-//! one.
+//! selected, and launch puts the sessions profiles.toml lists in its
+//! place. A command that names no session acts on the selected one.
 //!
 //! The map's lock comes after the save lock and ahead of every other
 //! lock of the app. A step takes it only to find, add or remove a session
@@ -29,6 +29,7 @@ use crate::affects::snapshot::AffectsSnapshot;
 use crate::logs::SharedScrollback;
 use crate::profile::live::Profile;
 use crate::profile::open::{OpenProfile, ProfileGuard};
+use crate::profile::set::SessionEntry;
 use crate::script::SharedTimers;
 use crate::session::connection::{Connection, SharedConnection};
 use crate::session::SessionHandle;
@@ -49,10 +50,18 @@ pub(crate) struct Address {
     pub(crate) tls: bool,
 }
 
-/// A session's number, which no other session of this run shares.
+/// A session's number, which no other session of this run shares. A
+/// session restored at launch keeps the number it had, which names its
+/// scrollback file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub(crate) struct SessionId(u32);
+
+impl std::fmt::Display for SessionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 impl SessionId {
     /// The session the app starts with.
@@ -103,8 +112,9 @@ pub(crate) struct Session {
     pub(crate) connection: SharedConnection,
     /// The `mud.timer` timers the session loop fires.
     pub(crate) lua_timers: SharedTimers,
-    /// The ring of recent lines, which launch reads from scrollback.txt
-    /// and the session saves back to it as it ends.
+    /// The ring of recent lines, which launch, or a restored session's
+    /// first selection, reads from the session's scrollback file, and the
+    /// session saves back to it as it ends.
     pub(crate) scrollback: SharedScrollback,
     /// Last terminal size the frontend reported, kept while no connection
     /// runs so a fresh connect seeds the telnet `Negotiator` with the real
@@ -423,13 +433,87 @@ impl Sessions {
             .count()
     }
 
-    /// Close `open` when no session plays it. Returns whether it closed.
+    /// Close `open` when no session plays it. Returns whether it closed,
+    /// which a profile a restored session waits on never does, since it
+    /// never opened.
     pub(crate) fn close_unplayed(&mut self, open: &Arc<OpenProfile>) -> bool {
-        let played = self.players(open) > 0;
-        if !played {
-            self.profiles.retain(|kept| !Arc::ptr_eq(kept, open));
+        if self.players(open) > 0 || !self.is_open(open) {
+            return false;
         }
-        !played
+        self.profiles.retain(|kept| !Arc::ptr_eq(kept, open));
+        true
+    }
+
+    /// Whether `open` is one of the profiles the sessions play, rather
+    /// than one a restored session waits on, see [`Sessions::restore`].
+    pub(crate) fn is_open(&self, open: &Arc<OpenProfile>) -> bool {
+        self.profiles.iter().any(|kept| Arc::ptr_eq(kept, open))
+    }
+
+    /// The profiles restored sessions wait on under the name `name`.
+    pub(crate) fn waiting_on(&self, name: &str) -> Vec<Arc<OpenProfile>> {
+        self.list
+            .iter()
+            .map(|session| session.profile())
+            .filter(|open| !self.is_open(open) && open.name().as_deref() == Some(name))
+            .collect()
+    }
+
+    /// Put the sessions `entries` lists, in order and none connected, in
+    /// place of the one the app starts with, and select the one `selected`
+    /// names, or else the first. The selected session plays the profile
+    /// the app starts on, which launch then loads. Each other one waits
+    /// under the name of the profile it last played, on defaults kept out
+    /// of the open profiles so no save writes them, until its first
+    /// selection opens that profile, see
+    /// [`crate::app::launch::open_restored`]. An entry whose id an earlier
+    /// one took is left out.
+    pub(crate) fn restore(&mut self, entries: &[SessionEntry], selected: Option<SessionId>) {
+        let Some(first) = entries.first() else {
+            return;
+        };
+        let selected = selected
+            .filter(|id| entries.iter().any(|entry| entry.id == *id))
+            .unwrap_or(first.id);
+        let starting = self.selected().profile();
+        let mut list: Vec<Arc<Session>> = Vec::new();
+        for entry in entries {
+            if list.iter().any(|session| session.id == entry.id) {
+                continue;
+            }
+            let profile = if entry.id == selected {
+                starting.clone()
+            } else {
+                let id = self.next_profile;
+                self.next_profile += 1;
+                let name = Some(entry.profile.clone());
+                Arc::new(OpenProfile::new(id, name, Profile::default()))
+            };
+            let session = Session::new(entry.id, profile);
+            session.rename(entry.name.as_deref());
+            *session
+                .address
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = entry
+                .host
+                .clone()
+                .zip(entry.port)
+                .map(|(host, port)| Address {
+                    host,
+                    port,
+                    tls: entry.tls,
+                });
+            list.push(Arc::new(session));
+        }
+        self.next = list
+            .iter()
+            .map(|session| session.id.0.saturating_add(1))
+            .max()
+            .unwrap_or(self.next);
+        self.list = list;
+        self.selected = selected;
+        #[cfg(any(native_surface, test))]
+        crate::native::grid::show(selected);
     }
 
     /// Select the session `id` names, and show its grid in the place of

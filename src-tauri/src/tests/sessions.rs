@@ -818,7 +818,7 @@ async fn profiles_toml_keeps_the_sessions_while_they_say_more_than_the_active_pr
         .await
         .expect("the switch");
     assert_eq!(kept_sessions(&h).0[1].profile, "Healer");
-    crate::ipc::session::session_select(h.app.state(), two)
+    crate::ipc::session::session_select(h.app.handle().clone(), h.app.state(), two)
         .await
         .expect("the selection moves");
     let (_, selected, active) = kept_sessions(&h);
@@ -844,7 +844,7 @@ async fn a_profile_a_session_plays_stays_on_delete_and_renames_for_every_session
     let three = open_session_on(&h, "Healer").await;
     // With the second session selected, profiles.toml names Healer, and
     // Default stays open for the first.
-    crate::ipc::session::session_select(h.app.state(), two)
+    crate::ipc::session::session_select(h.app.handle().clone(), h.app.state(), two)
         .await
         .expect("the selection moves");
     assert_eq!(h.state.active_profile().as_deref(), Some("Healer"));
@@ -1525,7 +1525,7 @@ async fn a_loadout_turned_on_in_the_second_session_gates_its_own_profile_only() 
     // Healer opens through the top-level stack.
     let two = open_session_on(&h, "Healer").await;
     assert_eq!(combat_and_heals(&h, two).await, (true, false));
-    crate::ipc::session::session_select(h.app.state(), two)
+    crate::ipc::session::session_select(h.app.handle().clone(), h.app.state(), two)
         .await
         .expect("the selection moves");
     set_active_loadouts(h.app.handle(), vec!["Heals".into()])
@@ -1537,7 +1537,7 @@ async fn a_loadout_turned_on_in_the_second_session_gates_its_own_profile_only() 
     assert_eq!(saved.active, ["Melee"]);
     assert_eq!(saved.profiles["Healer"].active, ["Heals"]);
     assert_eq!(shown_active(&h).await, ["Heals"]);
-    crate::ipc::session::session_select(h.app.state(), one)
+    crate::ipc::session::session_select(h.app.handle().clone(), h.app.state(), one)
         .await
         .expect("the selection moves back");
     assert_eq!(shown_active(&h).await, ["Melee"]);
@@ -1573,13 +1573,13 @@ async fn an_alias_added_in_the_first_session_reaches_healer_and_survives_its_sav
     let (one, two) = (h.first, open_session_on(&h, "Healer").await);
     // Healer keeps a stack of its own, Heals alone, and an alias no save
     // has written yet.
-    crate::ipc::session::session_select(h.app.state(), two)
+    crate::ipc::session::session_select(h.app.handle().clone(), h.app.state(), two)
         .await
         .expect("the selection moves");
     set_active_loadouts(h.app.handle(), vec!["Heals".into()])
         .await
         .expect("Heals turns on");
-    crate::ipc::session::session_select(h.app.state(), one)
+    crate::ipc::session::session_select(h.app.handle().clone(), h.app.state(), one)
         .await
         .expect("the selection moves back");
     let second = h.state.session(Some(two)).expect("the second session");

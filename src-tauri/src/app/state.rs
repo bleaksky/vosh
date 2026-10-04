@@ -176,6 +176,29 @@ impl AppState {
         self.sessions().close_unplayed(open)
     }
 
+    /// Whether `open` is one of the profiles the sessions play, see
+    /// [`Sessions::is_open`].
+    pub(crate) fn is_open(&self, open: &Arc<OpenProfile>) -> bool {
+        self.sessions().is_open(open)
+    }
+
+    /// The profiles restored sessions wait on under the name `name`, see
+    /// [`Sessions::waiting_on`].
+    pub(crate) fn waiting_on(&self, name: &str) -> Vec<Arc<OpenProfile>> {
+        self.sessions().waiting_on(name)
+    }
+
+    /// Put the sessions profiles.toml lists in place of the one the app
+    /// starts with, see [`Sessions::restore`]. Launch calls it before it
+    /// loads a profile.
+    pub(crate) fn restore_sessions(
+        &self,
+        entries: &[crate::profile::set::SessionEntry],
+        selected: Option<SessionId>,
+    ) {
+        self.sessions().restore(entries, selected);
+    }
+
     /// Hold `set` as launch does once it read it, with the selected
     /// session on its active profile, for a test.
     #[cfg(test)]

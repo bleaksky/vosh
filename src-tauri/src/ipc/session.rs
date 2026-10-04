@@ -41,36 +41,32 @@ pub(crate) async fn session_open<R: tauri::Runtime>(
         save_sessions(state.inner()).await;
         session
     };
-    {
-        let mut p = session.lock_profile().await;
-        let tick_before = p.tick.config.clone();
-        let mut c = session.connection.lock();
-        crate::profile::switch::hand_to_connection(&mut p, &mut c, &tick_before);
-    }
-    if let Some(app_data) = state.app_data.get() {
-        let plugins_dir = crate::disk::paths::plugins_dir(app_data);
-        crate::app::plugins::load_enabled_plugins(&app, state.inner(), &session, plugins_dir).await;
-    }
+    crate::app::launch::start_on_profile(&app, state.inner(), &session).await;
     Ok(session.id)
 }
 
 /// Select the session `session` names. The commands that name no session
-/// act on it from then on, and its native grid shows. profiles.toml then
-/// keeps it as the selected one, and names the profile it plays as the
-/// active one.
+/// act on it from then on, and its native grid shows. A session launch
+/// restored opens its profile and reads its scrollback the first time,
+/// see [`crate::app::launch::open_restored`]. profiles.toml then keeps it
+/// as the selected one, and names the profile it plays as the active one.
 #[tauri::command]
-pub(crate) async fn session_select(
+pub(crate) async fn session_select<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, SharedState>,
     session: SessionId,
 ) -> Result<(), String> {
     state.select_session(session)?;
+    let selected = state.session(Some(session))?;
+    let opened = crate::app::launch::open_restored(&app, state.inner(), &selected).await;
     let _persist_guard = PERSIST_LOCK.lock().await;
     save_sessions(state.inner()).await;
-    Ok(())
+    opened
 }
 
 /// Close the session `session` names. Its connection ends as on
-/// Disconnect, and its grid and the Lua stops it made go. With it go its
+/// Disconnect, and its grid, its scrollback file and the Lua stops it
+/// made go. With it go its
 /// connection's state, its Lua engine with the aliases its plugins made
 /// and its recording. Its profile saves, unless `#profile reset` or
 /// `#profile load` holds it, and closes when no other session plays it.
@@ -91,6 +87,9 @@ pub(crate) async fn session_close<R: tauri::Runtime>(
         state.close_session(session)?
     };
     crate::session::disconnect(&app, state.inner(), &closed).await;
+    if let Some(app_data) = state.app_data.get() {
+        let _ = std::fs::remove_file(crate::disk::paths::scrollback_path(app_data, closed.id));
+    }
     let _persist_guard = PERSIST_LOCK.lock().await;
     let open = closed.profile();
     {
