@@ -5,6 +5,7 @@
 use super::marks::mark;
 use super::output::{escape_end, plain_text, shows_anything, Above, Output};
 use super::Stage;
+use crate::aabahran::damage::attack_line;
 use crate::render::{Color, SgrState};
 
 /// `line` as a run of `count` repeated lines shows it, when the text
@@ -94,6 +95,49 @@ fn apply_sgr(state: &mut SgrState, bytes: &[u8]) {
 /// line end or carriage return inside it.
 pub fn collapsible(line: &[u8]) -> bool {
     shows_anything(line) && !line.iter().any(|&b| b == b'\r' || b == b'\n')
+}
+
+/// Which lines Collapse repeated lines takes, from the two rows under it
+/// in Settings. A line it leaves whole shows as any other line and ends
+/// the run before it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CollapseRules {
+    /// In a fight: the lines that come while Char.Combat names a target
+    /// collapse. On at first. Off, every line of a fight shows, attack
+    /// lines too, wherever they come.
+    pub fights: bool,
+    /// Attack lines: the hits and misses `dam_message` prints collapse,
+    /// in a fight or not (see [`attack_line`]). Off at first, so a count
+    /// never hides how many hits landed, and off while In a fight is.
+    pub attacks: bool,
+}
+
+impl Default for CollapseRules {
+    fn default() -> Self {
+        Self {
+            fights: true,
+            attacks: false,
+        }
+    }
+}
+
+impl CollapseRules {
+    /// True when attack lines collapse: their row says so, and so does
+    /// In a fight, which leaves them whole while it is off.
+    pub fn attacks_collapse(self) -> bool {
+        self.fights && self.attacks
+    }
+
+    /// True when Collapse repeated lines takes a line that reads `plain`
+    /// without its colors. `fighting` says Char.Combat named a target as
+    /// it came. The game sends a pulse's packets before its text, so a
+    /// line of a round reads the round's own Char.Combat.
+    pub fn takes(self, fighting: bool, plain: &str) -> bool {
+        if fighting && !self.fights {
+            return false;
+        }
+        self.attacks_collapse() || !attack_line(plain)
+    }
 }
 
 /// What [`Stage::repeat_line`] made of a line.
