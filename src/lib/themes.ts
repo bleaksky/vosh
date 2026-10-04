@@ -541,9 +541,7 @@ const vellum: AppTheme = {
     foreground: '#2a2622',
     cursor: '#3f6690',
     cursorAccent: '#f7f4ee',
-    // The accent at 45 percent over the paper. The terminal paints the
-    // selection at 40 percent of this, which lands on the canvas value
-    // of the accent at 18 percent.
+    // The accent at 45 percent over the paper.
     selectionBackground: '#a4b4c4',
     selectionForeground: '#2a2622',
     black: '#2a2622',
@@ -616,11 +614,9 @@ const rosePine: AppTheme = {
 //           purple #df69ba  aqua #35a77c
 //           black fg, white bg3
 //
-// The cursor is fg on bg0, Everforest's default reversed cursor. The
-// terminal paints the selection at 40 percent of selectionBackground,
-// so each variant stores the color that lands on its bg_visual there.
-// Everforest's green is the accent, the color its status line and
-// ports lead with.
+// The cursor is fg on bg0, Everforest's default reversed cursor, and the
+// selection is bg_visual. Everforest's green is the accent, the color
+// its status line and ports lead with.
 const everforestDark: AppTheme = {
   id: 'everforest-dark',
   label: 'Everforest Dark',
@@ -630,7 +626,7 @@ const everforestDark: AppTheme = {
     foreground: '#d3c6aa',
     cursor: '#d3c6aa',
     cursorAccent: '#2d353b',
-    selectionBackground: '#8f425c',
+    selectionBackground: '#543a48',
     selectionForeground: '#d3c6aa',
     black: '#475258',
     red: '#e67e80',
@@ -669,7 +665,7 @@ const everforestLight: AppTheme = {
     foreground: '#5c6a72',
     cursor: '#5c6a72',
     cursorAccent: '#fdf6e3',
-    selectionBackground: '#cee0a0',
+    selectionBackground: '#eaedc8',
     selectionForeground: '#5c6a72',
     black: '#5c6a72',
     red: '#f85552',
@@ -769,9 +765,8 @@ const greenScreen: AppTheme = {
 // canonical base2 sits at 1.1:1 on base3.
 //
 // The selection takes the tones Solarized's own Visual mode uses, base01
-// dark and base1 light, because the terminal paints it at 40 percent and
-// the published base02 and base2 would barely show. Neither cursor
-// carries color, so the chrome pins Solarized blue as its accent.
+// dark and base1 light. Neither cursor carries color, so the chrome pins
+// Solarized blue as its accent.
 //
 // The dark theme also pins danger. A dark theme's chrome reads danger
 // from bright red, which Solarized fills with orange, so low HP and

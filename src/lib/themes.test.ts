@@ -75,8 +75,8 @@ interface TokenSheet {
 // on the ground, the lines step in lightness, the title takes the
 // secondary tone, and Vellum floats on its paper instead of white.
 // Ember's is the sheet the board draws, and Nord's and Vellum's are the
-// rule's with their pins. The selection keeps the canvas values, since
-// the selection token has not changed yet.
+// rule's with their pins. The selection is each scheme's own, opaque,
+// with its own text (Q9), where the canvas drew the accent with alpha.
 const NORD: TokenSheet = {
   id: 'nord',
   appearance: 'dark',
@@ -100,7 +100,8 @@ const NORD: TokenSheet = {
     warn: '#ebcb8b',
     warnText: '#ebcb8b',
     success: '#a3be8c',
-    selection: 'rgba(136, 192, 208, 0.22)',
+    selection: '#4c566a',
+    selectionText: '#eceff4',
   },
 };
 
@@ -127,7 +128,8 @@ const EMBER: TokenSheet = {
     warn: '#ecc985',
     warnText: '#ecc985',
     success: '#8fdaa8',
-    selection: 'rgba(239, 143, 47, 0.20)',
+    selection: '#201d1c',
+    selectionText: '#f2efee',
   },
 };
 
@@ -154,7 +156,8 @@ const VELLUM: TokenSheet = {
     warn: '#94661a',
     warnText: '#94661a',
     success: '#4f7a3a',
-    selection: 'rgba(63, 102, 144, 0.18)',
+    selection: '#a4b4c4',
+    selectionText: '#2a2622',
   },
 };
 
@@ -362,17 +365,9 @@ describe('Everforest and Green Screen', () => {
     });
   });
 
-  it('paint the Everforest selection on its bg_visual', () => {
-    const visual: Record<string, string> = {
-      'everforest-dark': '#543a48',
-      'everforest-light': '#eaedc8',
-    };
-    for (const [id, want] of Object.entries(visual)) {
-      const x = findTheme(id).xterm;
-      // The terminal paints the selection at 40 percent.
-      const painted = composite(hex(x.selectionBackground), hex(x.background), 0.4);
-      expect(deltaE2000(painted, hex(want)), id).toBeLessThan(1);
-    }
+  it('store the Everforest selection as its bg_visual', () => {
+    expect(findTheme('everforest-dark').xterm.selectionBackground).toBe('#543a48');
+    expect(findTheme('everforest-light').xterm.selectionBackground).toBe('#eaedc8');
   });
 
   it('take Everforest green as the accent', () => {

@@ -5,8 +5,7 @@
 
 import type { ITheme } from '@xterm/xterm';
 import { baseAnsiRecord } from './baseAnsi';
-import { hexToRgba } from './mapPalette';
-import type { AppTheme } from './themes';
+import { themeTokens, type AppTheme } from './themes';
 
 // Canonical xterm-256 palette for ANSI codes 0-15. Used when the
 // terminal renders in "independent palette" mode (the default) so
@@ -20,18 +19,15 @@ export function xtermThemeFor(theme: AppTheme, themeTerminalColors: boolean): IT
   // the BASE palette applies — the canonical xterm-256 chart unless
   // the user replaced slots in the themes tab (lib/baseAnsi). Either
   // way the chrome theme owns the surfaces (background, foreground,
-  // cursor, selection).
+  // cursor, selection). The selection is the window's token pair, an
+  // opaque fill with its own text, so xterm draws what the native
+  // renderer and the window draw.
   const base: ITheme = themeTerminalColors
     ? { ...theme.xterm }
     : { ...theme.xterm, ...baseAnsiRecord() };
-  // Make the selection translucent. Some themes ship a solid (and light)
-  // selectionBackground; the search addon selects every active match, so
-  // a washed-out selection means an unreadable search hit. Blending over
-  // the dark terminal surface keeps the cell dark enough that the line's
-  // own text stays legible, while still marking the selection.
-  if (theme.xterm.selectionBackground) {
-    base.selectionBackground = hexToRgba(theme.xterm.selectionBackground, 0.4);
-  }
+  const tokens = themeTokens(theme);
+  base.selectionBackground = tokens.selection;
+  base.selectionForeground = tokens.selectionText;
   return base;
 }
 

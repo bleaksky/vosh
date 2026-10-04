@@ -8,6 +8,8 @@ const ENV: BandEnv = {
   palette: Array.from({ length: 16 }, () => '#888888'),
   fg: '#e5e9f0',
   bg: '#2e3440',
+  selection: '#4c566a',
+  selectionText: '#eceff4',
   renderer: 'xterm',
   brightBold: false,
 };
@@ -44,6 +46,22 @@ describe('a line drawn cell by cell', () => {
     // Each empty cell stays a glyph of its own.
     const shades = [...html.matchAll(/<span class="pc-cells-glyph"[^>]*>░<\/span>/g)];
     expect(shades).toHaveLength(4);
+  });
+
+  it('draws a marked value too dim on the selection in the selection text', () => {
+    const html = renderToStaticMarkup(
+      <CellLine
+        cells={parseSgrCells('\x1b[38;5;240m60\x1b[0m hp')[0] ?? []}
+        env={ENV}
+        cellW={7.8}
+        marks={[{ from: 0, to: 2, warn: false }]}
+      />,
+    );
+    const color = (ch: string) => new RegExp(`color:([^;"]*)[^>]*>${ch}<`).exec(html)?.[1] ?? null;
+    // 256 color 240 reads 1.04:1 on Nord's selection, so the marked 60
+    // takes the selection text, and the unmarked hp keeps the text color.
+    expect(color('6')).toBe('#eceff4');
+    expect(color('h')).toBe('#e5e9f0');
   });
 
   it('reads as far as a cut sample shows, its ellipsis too', () => {

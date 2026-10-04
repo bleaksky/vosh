@@ -14,7 +14,7 @@ import { Button, PlusIcon } from '../settings/ui';
 // Edit as text (P9): your design byte for byte in the terminal's face,
 // each token colored by what it is, wrapping only between tokens. The
 // token under the caret carries the selection token, and the part it
-// draws carries the token and the accent ring on your prompt. Every
+// draws carries the accent tint and ring on your prompt. Every
 // change saves as you type and redraws your prompt. The token rows add a
 // token at the caret, and Insert value… picks a value and adds its token
 // there.

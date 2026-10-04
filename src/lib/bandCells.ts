@@ -13,6 +13,9 @@ export interface BandEnv {
   /** The terminal's text and ground colors. */
   fg: string;
   bg: string;
+  /** The selection token and the text drawn on it. */
+  selection: string;
+  selectionText: string;
   renderer: 'xterm' | 'native';
   /** Bright bold, which only the native grid follows. */
   brightBold: boolean;

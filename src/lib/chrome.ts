@@ -32,6 +32,12 @@
 //               bright, with the most chroma that stands as far. Else
 //               bright blue. Lifted at its hue to 3:1 on the panel.
 //   on accent   white, or the theme's dark end lifted down to 4.5:1
+//   selection   the scheme's own selection, opaque, when it stands a step
+//               of 6 off the ground and its own selection text, else the
+//               foreground, reads 4.5:1 on it. Else the accent over the
+//               ground at 0.28 on dark and 0.20 on light, with the text
+//               tier on it. The selection text token travels with the
+//               fill, so the window and both renderers draw one pair.
 //
 // Tertiary and the status colors also draw on raised surfaces (menu
 // shortcuts, palette keycaps, a danger row), so their floors hold on
@@ -56,7 +62,6 @@ import {
   shiftLightness,
   solveAlphaForContrast,
   toHex,
-  toRgba,
   type Rgb,
 } from './color';
 import type { XtermPalette } from './themes';
@@ -101,8 +106,10 @@ export interface ChromeTokens {
   /// Words drawn in the warn tone, 4.5:1 on the panel.
   warnText: string;
   success: string;
-  /// Terminal selection, the accent with alpha.
+  /// Terminal selection, opaque.
   selection: string;
+  /// Text drawn on the selection.
+  selectionText: string;
 }
 
 export type ChromeOverrides = Partial<ChromeTokens>;
@@ -129,6 +136,7 @@ export const CHROME_COLOR_KEYS = [
   'warnText',
   'success',
   'selection',
+  'selectionText',
 ] as const satisfies readonly (keyof ChromeTokens)[];
 
 export type ChromeColorKey = (typeof CHROME_COLOR_KEYS)[number];
@@ -172,8 +180,12 @@ const RAISED_LIGHT_MAX_L = 0.995;
 /// so a step on a dark ground keeps at least the alpha it takes here.
 const NEAR_BLACK: Rgb = { r: 5, g: 4, b: 3 };
 
-/// The terminal selection, the accent at this alpha.
-const SELECTION_ALPHA = { dark: 0.22, light: 0.18 } as const;
+/// The scheme's own selection draws when it stands this far off the
+/// ground, in OKLab L times 100, and its text reads this well on it.
+const SELECTION_STEP = 6;
+const SELECTION_TEXT_CONTRAST = 4.5;
+/// Otherwise the selection is the accent over the ground at this alpha.
+const SELECTION_ALPHA = { dark: 0.28, light: 0.2 } as const;
 
 /// The scheme's own hues the accent may come from, normal and bright.
 /// Red stays out, since red in the window means trouble.
@@ -219,6 +231,24 @@ function washAlpha(wash: Rgb, ground: Rgb, dl: number): number {
     else hi = a;
   }
   return hi;
+}
+
+/** The lightness step between two colors, in OKLab L times 100. Below
+ *  NEAR_BLACK, where OKLab L runs too steep, a step counts as the one
+ *  that gives the same contrast on NEAR_BLACK. */
+function stepDL(a: Rgb, b: Rgb): number {
+  const base = lightness(NEAR_BLACK);
+  if (Math.min(lightness(a), lightness(b)) >= base) return Math.abs(lightness(a) - lightness(b));
+  const ratio = contrast(a, b);
+  if (ratio <= 1) return 0;
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 30; i += 1) {
+    const alpha = (lo + hi) / 2;
+    if (contrast(composite(WHITE, NEAR_BLACK, alpha), NEAR_BLACK) < ratio) lo = alpha;
+    else hi = alpha;
+  }
+  return lightness(composite(WHITE, NEAR_BLACK, hi)) - base;
 }
 
 /// The alpha each step takes on NEAR_BLACK, worked out once.
@@ -355,6 +385,17 @@ export function deriveChrome(x: XtermPalette, overrides: ChromeOverrides = {}): 
       : liftAtHue(ink, accent.rgb, ON_ACCENT_CONTRAST, -1),
   );
 
+  // The scheme's own selection and its text when the pair reads, else
+  // the accent over the ground with the text tier on it.
+  const schemeFill = parseHex(x.selectionBackground);
+  const schemeText = parseHex(x.selectionForeground) ?? hexOr(x.foreground, FALLBACK_FG);
+  const selection =
+    schemeFill !== null &&
+    stepDL(schemeFill, bg.rgb) >= SELECTION_STEP &&
+    contrast(schemeText, schemeFill) >= SELECTION_TEXT_CONTRAST
+      ? { fill: schemeFill, text: schemeText }
+      : { fill: composite(accent.rgb, bg.rgb, SELECTION_ALPHA[appearance]), text: text.rgb };
+
   return {
     appearance,
     bg: bg.css,
@@ -376,7 +417,8 @@ export function deriveChrome(x: XtermPalette, overrides: ChromeOverrides = {}): 
     warn: warn.css,
     warnText: warnText.css,
     success: success.css,
-    selection: o.selection ?? toRgba(accent.rgb, SELECTION_ALPHA[appearance]),
+    selection: pick(o.selection, selection.fill).css,
+    selectionText: pick(o.selectionText, selection.text).css,
   };
 }
 

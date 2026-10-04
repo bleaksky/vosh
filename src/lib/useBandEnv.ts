@@ -3,7 +3,7 @@ import { subscribeBaseAnsi } from './baseAnsi';
 import type { BandEnv } from './bandCells';
 import { ansi16Of, xtermThemeFor } from './terminalTheme';
 import { getCurrentThemeId } from './theme';
-import { findTheme } from './themes';
+import { findTheme, themeTokens } from './themes';
 
 // The colors terminal text outside the renderers draws with. The pinned
 // band and the prompt card read them, so a prompt looks there as it does
@@ -32,11 +32,15 @@ export function useBandEnv(
     };
   }, []);
   return useMemo(() => {
-    const resolved = xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColors);
+    const theme = findTheme(getCurrentThemeId());
+    const resolved = xtermThemeFor(theme, themeTerminalColors);
+    const { selection, selectionText } = themeTokens(theme);
     return {
       palette: ansi16Of(resolved),
       fg: resolved.foreground ?? '#cccccc',
       bg: resolved.background ?? '#101218',
+      selection,
+      selectionText,
       renderer,
       brightBold,
     };
