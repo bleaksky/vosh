@@ -373,6 +373,7 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
     } = crate::session::effects::collect_script_result(
         app,
         &state.profile,
+        &state.connection,
         &state.lua_timers,
         apply,
     )
@@ -417,6 +418,7 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     let collected = crate::session::effects::collect_script_result(
         app,
         &state.profile,
+        &state.connection,
         &state.lua_timers,
         apply,
     )

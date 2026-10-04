@@ -24,7 +24,7 @@ use crate::script::{ApplyResult, SharedTimers};
 use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
-use super::connection::Connection;
+use super::connection::{Connection, SharedConnection};
 use super::prompt_view::emit_prompt_vars;
 use super::socket::Stream;
 use super::walk::{self, Walker};
@@ -46,15 +46,16 @@ impl OutputSink<'_> {
         }
     }
 
-    /// A prompt var changed. A read sends the prompt vars once after its
-    /// output, and anything else sends them now.
-    async fn prompt_vars<R: tauri::Runtime>(&mut self, app: &AppHandle<R>) {
+    /// A prompt var of `connection` changed. A read sends the prompt vars
+    /// once after its output, and anything else sends them now.
+    async fn prompt_vars<R: tauri::Runtime>(
+        &mut self,
+        app: &AppHandle<R>,
+        connection: &SharedConnection,
+    ) {
         match self {
             OutputSink::Batch(batch) => batch.prompt_vars = true,
-            OutputSink::Direct => {
-                let state = app.state::<SharedState>();
-                emit_prompt_vars(app, &state.connection, true).await;
-            }
+            OutputSink::Direct => emit_prompt_vars(app, connection, true).await,
         }
     }
 }
@@ -95,13 +96,14 @@ impl ScriptIo<'_, '_> {
         }
     }
 
-    async fn prompt_vars<R: tauri::Runtime>(&mut self, app: &AppHandle<R>) {
+    async fn prompt_vars<R: tauri::Runtime>(
+        &mut self,
+        app: &AppHandle<R>,
+        connection: &SharedConnection,
+    ) {
         match self {
-            ScriptIo::Session(_, sink, _) => sink.prompt_vars(app).await,
-            ScriptIo::Collect { .. } => {
-                let state = app.state::<SharedState>();
-                emit_prompt_vars(app, &state.connection, true).await;
-            }
+            ScriptIo::Session(_, sink, _) => sink.prompt_vars(app, connection).await,
+            ScriptIo::Collect { .. } => emit_prompt_vars(app, connection, true).await,
         }
     }
 
@@ -113,6 +115,7 @@ impl ScriptIo<'_, '_> {
         &mut self,
         app: &AppHandle<R>,
         profile: &Arc<Mutex<Profile>>,
+        connection: &SharedConnection,
         command: WalkCommand,
     ) -> std::io::Result<Option<ApplyResult>> {
         match self {
@@ -128,10 +131,7 @@ impl ScriptIo<'_, '_> {
                 if out.release.is_empty() {
                     return Ok(None);
                 }
-                let state = app.state::<SharedState>();
-                Ok(Some(
-                    walk::release(profile, &state.connection, out.release).await,
-                ))
+                Ok(Some(walk::release(profile, connection, out.release).await))
             }
             ScriptIo::Collect { walk, .. } => {
                 **walk = Some(command);
@@ -206,6 +206,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
     io: &mut ScriptIo<'_, '_>,
     profile: &Arc<Mutex<Profile>>,
+    connection: &SharedConnection,
     lua_timers: &SharedTimers,
     apply: ApplyResult,
 ) -> std::io::Result<()> {
@@ -233,7 +234,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
         // timers and `mud.input` lines join this result's.
         let mut walking = apply.walk.take();
         while let Some(command) = walking.take() {
-            let Some(mut released) = io.walk(app, profile, command).await? else {
+            let Some(mut released) = io.walk(app, profile, connection, command).await? else {
                 continue;
             };
             if released.durable_changed {
@@ -259,7 +260,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             guard.retain(|t| !apply.cancel_timers.contains(&t.timer_id));
         }
         if apply.prompt_vars_changed {
-            io.prompt_vars(app).await;
+            io.prompt_vars(app, connection).await;
         }
         if apply.inputs.is_empty() {
             return Ok(());
@@ -292,7 +293,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             effects,
         } = {
             let mut p = profile.lock().await;
-            let mut c = state.connection.lock();
+            let mut c = connection.lock();
             run_lines_locked(
                 &state,
                 &mut p,
@@ -323,6 +324,7 @@ pub(crate) struct Collected {
 pub(crate) async fn collect_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
     profile: &Arc<Mutex<Profile>>,
+    connection: &SharedConnection,
     lua_timers: &SharedTimers,
     apply: ApplyResult,
 ) -> Collected {
@@ -333,7 +335,8 @@ pub(crate) async fn collect_script_result<R: tauri::Runtime>(
         walk: &mut collected.walk,
     };
     // Collecting writes to no stream, so it never fails.
-    if let Err(e) = apply_script_result(app, &mut io, profile, lua_timers, apply).await {
+    if let Err(e) = apply_script_result(app, &mut io, profile, connection, lua_timers, apply).await
+    {
         warn!(error = %e, "applying a script result failed");
     }
     collected
@@ -498,7 +501,7 @@ pub(crate) fn run_lines_locked<'a>(
 }
 
 /// Run one command produced by a timer (or any non-typed source) through
-/// the full input pipeline and deliver its results through
+/// the full input pipeline and deliver its results to `io` through
 /// [`apply_script_result`]: echo lines to the terminal and bytes to the
 /// server, with what the Lua bodies of its script aliases send among them
 /// in the order the command names them, and all else the Lua it ran asks
@@ -508,12 +511,11 @@ pub(crate) fn run_lines_locked<'a>(
 /// script-bodied aliases.
 pub(super) async fn run_fired_command<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    stream: &mut Stream,
-    walker: &mut Walker,
+    io: &mut ScriptIo<'_, '_>,
     profile: &Arc<Mutex<Profile>>,
+    connection: &SharedConnection,
     lua_timers: &SharedTimers,
     command: &str,
-    sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
     let shared = crate::profile::switch::shared_layer_for_lines(app, [command]).await;
     let state = app.state::<SharedState>();
@@ -523,13 +525,12 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
         effects,
     } = {
         let mut p = profile.lock().await;
-        let mut c = state.connection.lock();
+        let mut c = connection.lock();
         run_fired_locked(&state, &mut p, &mut c, command, shared.as_ref())
     };
     crate::disk::save::settle_line_effects(app, effects).await;
     shown.send(app);
-    let mut io = ScriptIo::Session(stream, sink, walker);
-    apply_script_result(app, &mut io, profile, lua_timers, apply).await
+    apply_script_result(app, io, profile, connection, lua_timers, apply).await
 }
 
 /// Report a tick step on `session://tick`, so the frontend counts and
@@ -537,18 +538,17 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
 /// through the full input pipeline like a timer command.
 pub(super) async fn deliver_tick_step<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    stream: &mut Stream,
-    walker: &mut Walker,
+    io: &mut ScriptIo<'_, '_>,
     profile: &Arc<Mutex<Profile>>,
+    connection: &SharedConnection,
     lua_timers: &SharedTimers,
     step: TickStep,
-    sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
     if let Err(e) = app.emit(events::TICK, &step.payload) {
         warn!(error = %e, "failed to emit tick payload");
     }
     if let Some(command) = step.command {
-        run_fired_command(app, stream, walker, profile, lua_timers, &command, sink).await?;
+        run_fired_command(app, io, profile, connection, lua_timers, &command).await?;
     }
     Ok(())
 }

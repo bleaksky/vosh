@@ -51,7 +51,7 @@ pub(super) async fn fire_due<R: tauri::Runtime>(
     }
     let mut sink = OutputSink::Direct;
     let mut io = ScriptIo::Session(stream, &mut sink, walker);
-    apply_script_result(app, &mut io, profile, lua_timers, apply).await
+    apply_script_result(app, &mut io, profile, connection, lua_timers, apply).await
 }
 
 /// Put `held`, the timers a round had no time for, back at the front of

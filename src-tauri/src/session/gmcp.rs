@@ -93,23 +93,24 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         }
     }
     let mut sink = OutputSink::Batch(batch);
+    let mut io = ScriptIo::Session(&mut conn.stream, &mut sink, &mut conn.walker);
     if let Some(step) = tick_step {
         conn.perf.ticks += 1;
         deliver_tick_step(
             &conn.app,
-            &mut conn.stream,
-            &mut conn.walker,
+            &mut io,
             &conn.profile,
+            &conn.connection,
             &conn.lua_timers,
             step,
-            &mut sink,
         )
         .await?;
     }
     apply_script_result(
         &conn.app,
-        &mut ScriptIo::Session(&mut conn.stream, &mut sink, &mut conn.walker),
+        &mut io,
         &conn.profile,
+        &conn.connection,
         &conn.lua_timers,
         script_apply,
     )
