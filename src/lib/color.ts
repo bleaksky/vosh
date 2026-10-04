@@ -211,6 +211,14 @@ export function solveAlphaForContrast(
   return { alpha: 1, color: fg };
 }
 
+/** The straight OKLab distance between two colors, times 100. The
+ *  chrome rule holds an accent it picks this far from the status colors. */
+export function deltaEOk(x: Rgb, y: Rgb): number {
+  const p = rgbToOklab(x);
+  const q = rgbToOklab(y);
+  return 100 * Math.hypot(p.L - q.L, p.a - q.a, p.b - q.b);
+}
+
 /** CIELAB (D65) coordinates. */
 export interface Lab {
   L: number;

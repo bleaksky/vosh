@@ -251,7 +251,10 @@ describe('roomNameColor', () => {
       const quiet = contrast(hex(tokens.tertiary), panel);
       for (const sector of sectors) {
         const name = contrast(hex(roomNameColor(sector, theme.xterm, tokens)!), panel);
-        expect(name, `${theme.id} ${sector}`).toBeGreaterThan(quiet + 1);
+        // The one ground rule holds the quiet tier at 3.1:1 on menus too,
+        // a step over the panel, so on the panel it reads up to 4.1:1 and
+        // a name at 4.5:1 stands less than 1 above it.
+        expect(name, `${theme.id} ${sector}`).toBeGreaterThan(quiet + 0.4);
       }
     }
   });

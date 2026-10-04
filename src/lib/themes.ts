@@ -77,9 +77,10 @@ const kansoZen: AppTheme = {
 
 // ── Obsidian Ember ──────────────────────────────────────────────────
 // The Ember redesign palette. A warm near-black ground, pastel ANSI,
-// and an ember cursor the chrome takes as its single accent. The
-// derived panel, hairlines, and text tiers land on the approved One
-// Window canvas values.
+// and an ember cursor the theme pins as its single accent. The orange
+// sits 8.1 dE from the danger red, under the 12 the chrome rule asks of
+// an accent it picks itself, so without the pin the rule would take
+// Ember's magenta. The orange is what the name promises.
 const obsidianEmber: AppTheme = {
   id: 'obsidian-ember',
   label: 'Obsidian Ember',
@@ -108,8 +109,9 @@ const obsidianEmber: AppTheme = {
     brightCyan: '#97dde8',
     brightWhite: '#ece7e1',
   },
-  // The ember ink the approved canvas sets on accent buttons.
-  chrome: { onAccent: '#140b02' },
+  // The ember accent, and the ember ink the approved canvas sets on
+  // accent buttons.
+  chrome: { accent: '#ef8f2f', onAccent: '#140b02' },
 };
 
 // ── Tokyo Night Storm ───────────────────────────────────────────────
@@ -143,6 +145,9 @@ const tokyoNight: AppTheme = {
     brightCyan: '#7dcfff',
     brightWhite: '#c0caf5',
   },
+  // The frost blue it has always drawn. The chrome rule alone would
+  // take its magenta, the scheme's strongest hue.
+  chrome: { accent: '#7aa2f7' },
 };
 
 // ── Nord ────────────────────────────────────────────────────────────
@@ -401,6 +406,9 @@ const oneDark: AppTheme = {
     brightCyan: '#56b6c2',
     brightWhite: '#ffffff',
   },
+  // The blue it has always drawn. The chrome rule alone would take its
+  // magenta, the scheme's strongest hue.
+  chrome: { accent: '#61afef' },
 };
 
 // ── One Half Dark ───────────────────────────────────────────────────
@@ -435,6 +443,9 @@ const oneHalfDark: AppTheme = {
     brightCyan: '#56b6c2',
     brightWhite: '#ffffff',
   },
+  // The blue it has always drawn. The chrome rule alone would take its
+  // magenta, the scheme's strongest hue.
+  chrome: { accent: '#61afef' },
 };
 
 // ── Tango Dark ──────────────────────────────────────────────────────
@@ -469,12 +480,15 @@ const tangoDark: AppTheme = {
     brightCyan: '#34e2e2',
     brightWhite: '#eeeeec',
   },
+  // The bright blue it has always drawn. The chrome rule alone would
+  // take its green, the scheme's strongest hue.
+  chrome: { accent: '#729fcf' },
 };
 
 // ── High Contrast ───────────────────────────────────────────────────
 // Re-thought from the original WCAG-AA stab: an off-black ground (so
 // it isn't a flat black void), pure white text, and a yellow cursor
-// the chrome takes as its accent.
+// the theme pins as its accent.
 const highContrast: AppTheme = {
   id: 'high-contrast',
   label: 'High Contrast',
@@ -508,6 +522,10 @@ const highContrast: AppTheme = {
     brightCyan: '#88ffff',
     brightWhite: '#ffffff',
   },
+  // The yellow cursor it has always drawn as its accent. It sits close
+  // to the yellow warn tone, so the chrome rule alone would take the
+  // magenta.
+  chrome: { accent: '#ffff00' },
 };
 
 // ── Vellum ──────────────────────────────────────────────────────────
@@ -641,7 +659,7 @@ const everforestDark: AppTheme = {
 // the terminal draws them that way. The chat pane lifts the game colors
 // it draws on the panel (chatColors.ts). The published green sits under
 // 3:1 on bg0, so the accent pins it lifted to 3:1 on the panel and the
-// raised surface, the same color the chrome derives for success.
+// raised surface.
 const everforestLight: AppTheme = {
   id: 'everforest-light',
   label: 'Everforest Light',
@@ -681,8 +699,8 @@ const everforestLight: AppTheme = {
 // ground is near black with the faintest green cast. Default text is
 // a softened phosphor green near 11:1, the reading level of the house
 // dark themes, where pure #00ff00 would glare at 14:1. The cursor is
-// the same phosphor at full glow and becomes the accent, and the
-// selection is a deeper phosphor green.
+// the same phosphor at full glow and the theme pins it as the accent,
+// and the selection is a deeper phosphor green.
 //
 // The sixteen slots are the CGA palette (#aa0000, #00aa00, #aa5500,
 // #0000aa, #aa00aa, #00aaaa, #aaaaaa, #555555, then the 55 and ff
@@ -718,6 +736,10 @@ const greenScreen: AppTheme = {
     brightCyan: '#55ffff',
     brightWhite: '#ffffff',
   },
+  // The phosphor cursor it has always drawn as its accent. It sits close
+  // to the green success tone, so the chrome rule alone would take the
+  // magenta.
+  chrome: { accent: '#79f887' },
 };
 
 // ── Solarized ───────────────────────────────────────────────────────

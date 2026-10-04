@@ -153,12 +153,13 @@ describe('ChatLog', () => {
       '#e46876',
       '#87a987',
     ]);
-    // Vellum's bright yellow sits at 2.87:1 on its panel, so say darkens
-    // to 3:1 there. The terminal keeps #b88226.
+    // Vellum's bright yellow reads at 3.06:1 on its panel, which sits on
+    // the paper under the one ground rule, so say keeps #b88226 as the
+    // terminal draws it.
     expect(drawn(BOARD.slice(4, 7), vellum, vellumGround).map((m) => m.color)).toEqual([
       '#4f7a3a',
       '#4f7a3a',
-      '#b37d1f',
+      '#b88226',
     ]);
   });
 
