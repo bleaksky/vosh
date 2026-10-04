@@ -27,8 +27,10 @@ pub(crate) async fn profile_detail_get(
 
 /// Turn the login toggle for `name` on or off for `character`. On takes
 /// the character from every other profile on the same world and names
-/// them in `released_from`. Never switches the live profile, since the
-/// toggle applies at the next login. See [`ProfileSet::set_login`].
+/// them in `released_from`, or pins an older claim on the host alone to
+/// the world's own port and names it in `pinned`. Never switches the
+/// live profile, since the toggle applies at the next login. See
+/// [`ProfileSet::set_login`].
 ///
 /// [`ProfileSet::set_login`]: crate::profile::set::ProfileSet::set_login
 #[tauri::command]
