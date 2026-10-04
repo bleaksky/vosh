@@ -18,6 +18,13 @@
 //! all came from triggers, and on the open of each highlight and base color
 //! it draws over the bytes the game sent, so the colors the game sends never
 //! reach it.
+//!
+//! The game's own 256 colors get a floor of their own. On a light ground
+//! [`lift_game_sgr`] darkens a 256 color past the 16 that the game sends
+//! text in until it reads at [`GAME_LC`], by the same move in lightness
+//! alone. Aabahran's minimap draws desert in yellow 220 and snow in white
+//! 255, which read at Lc 0 on a parchment ground. A dark ground keeps the
+//! game's colors as sent.
 
 use std::borrow::Cow;
 use std::ops::Range;
@@ -31,6 +38,11 @@ pub type Rgb = (u8, u8, u8);
 /// for body text and the floor the chrome gives words drawn in a status
 /// color.
 pub const READABLE_CONTRAST: f64 = 4.5;
+
+/// The APCA lightness contrast a 256 color the game sends text in must
+/// reach on a light ground. Lc 30 is APCA's least contrast for text of
+/// any kind, so a map glyph or a prompt tag still shows.
+pub const GAME_LC: f64 = 30.0;
 
 /// The Oklab lightness under which a ground counts as dark, the page's
 /// `APPEARANCE_THRESHOLD` in src/lib/chrome.ts.
@@ -101,6 +113,45 @@ pub fn luminance(c: Rgb) -> f64 {
 pub fn contrast(a: Rgb, b: Rgb) -> f64 {
     let (la, lb) = (luminance(a), luminance(b));
     (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+}
+
+/// APCA lightness contrast, Lc, of `text` on `ground`, by the constants of
+/// APCA 0.0.98G-4g, the release the theme review read every Lc with. It
+/// is positive for text darker than its ground and negative for text
+/// lighter than it, from about 106 for black on white to about -108 for
+/// white on black, and 0 for two colors too close for APCA to read apart.
+pub fn apca_lc(text: Rgb, ground: Rgb) -> f64 {
+    // Screen luminance on APCA's plain 2.4 power curve, with the darkest
+    // colors eased up off black.
+    let screen = |c: Rgb| {
+        let channel = |v: u8| (f64::from(v) / 255.0).powf(2.4);
+        let y = 0.212_672_9 * channel(c.0) + 0.715_152_2 * channel(c.1) + 0.072_175 * channel(c.2);
+        if y < 0.022 {
+            y + (0.022 - y).powf(1.414)
+        } else {
+            y
+        }
+    };
+    let (text, ground) = (screen(text), screen(ground));
+    if (ground - text).abs() < 0.0005 {
+        return 0.0;
+    }
+    let lc = if ground > text {
+        let s = (ground.powf(0.56) - text.powf(0.57)) * 1.14;
+        if s < 0.1 {
+            0.0
+        } else {
+            s - 0.027
+        }
+    } else {
+        let s = (ground.powf(0.65) - text.powf(0.62)) * 1.14;
+        if s > -0.1 {
+            0.0
+        } else {
+            s + 0.027
+        }
+    };
+    lc * 100.0
 }
 
 /// OKLCH coordinates, the hue in radians.
@@ -558,6 +609,128 @@ pub fn lift_sgr(text: &str, ground: Rgb) -> Cow<'_, str> {
         return Cow::Borrowed(text);
     }
     out.push_str(&text[copied..]);
+    Cow::Owned(out)
+}
+
+/// What the game's escapes have set so far that takes its text off the
+/// terminal ground.
+#[derive(Debug, Default)]
+struct OffGround {
+    /// A background, from the theme's 16 or fixed.
+    background: bool,
+    /// Inverse video, which draws the text color behind the text.
+    inverse: bool,
+}
+
+impl OffGround {
+    /// Take one SGR sequence the game sent, and return its parameters
+    /// rewritten when the 256 color it leaves text in fades on `ground`.
+    fn sgr(&mut self, params: &str, ground: Rgb) -> Option<String> {
+        let mut items: Vec<String> = params.split(';').map(str::to_string).collect();
+        // The 256 color this sequence leaves text in, and where it sits.
+        let mut text: Option<(At, u8)> = None;
+        let mut k = 0;
+        while k < items.len() {
+            if items[k].contains(':') {
+                let subs: Vec<&str> = items[k].split(':').collect();
+                match (subs[0], subs.get(1).copied()) {
+                    ("38", Some("5")) => {
+                        let index = subs.get(2).and_then(|n| n.parse().ok());
+                        text = index.map(|n| (At::IndexedColons(k), n));
+                    }
+                    ("38", _) => text = None,
+                    ("48", _) => self.background = true,
+                    _ => {}
+                }
+                k += 1;
+                continue;
+            }
+            let code: u16 = if items[k].is_empty() {
+                0
+            } else if let Ok(code) = items[k].parse() {
+                code
+            } else {
+                k += 1;
+                continue;
+            };
+            match code {
+                0 => {
+                    *self = OffGround::default();
+                    text = None;
+                }
+                38 | 48 | 58 => {
+                    let args = match items.get(k + 1).map(String::as_str) {
+                        Some("5") => 2,
+                        Some("2") => 4,
+                        _ => 0,
+                    };
+                    if code == 38 {
+                        let index = items.get(k + 2).and_then(|n| n.parse().ok());
+                        text = index
+                            .filter(|_| args == 2)
+                            .map(|n| (At::IndexedSemicolons(k), n));
+                    } else if code == 48 {
+                        self.background = true;
+                    }
+                    k += args;
+                }
+                30..=37 | 39 | 90..=97 => text = None,
+                40..=47 | 100..=107 => self.background = true,
+                49 => self.background = false,
+                7 => self.inverse = true,
+                27 => self.inverse = false,
+                _ => {}
+            }
+            k += 1;
+        }
+        if self.background || self.inverse {
+            return None;
+        }
+        let (at, index) = text?;
+        let asked = xterm256(index)?;
+        let reads = |rgb: Rgb| apca_lc(rgb, ground).abs() >= GAME_LC;
+        if reads(asked) {
+            return None;
+        }
+        // Black reads at about Lc 40 on a gray right at the dark ground
+        // line, so the search finds a color on every light ground a theme
+        // ships. Where it finds none, the color stays.
+        let drawn = lift_toward(oklch(asked), 0.0, reads)?;
+        write_at(&mut items, at, drawn);
+        Some(items.join(";"))
+    }
+}
+
+/// Rewrite the 256 colors past the 16 that the game sends text in, in
+/// `line` as the game sent it, so each reads at [`GAME_LC`] on `ground`
+/// when `ground` is light. A color under it moves only in OKLCH lightness,
+/// darker, at its own hue, gives up chroma only where the sRGB gamut runs
+/// out, and goes out as a true color. A color the line sets while a
+/// background or inverse video is in force keeps its index, since it does
+/// not draw on the ground. The theme's 16 colors, true colors, underline
+/// colors and backgrounds never change. Borrows `line` back on a dark
+/// ground, and when every color already reads.
+pub fn lift_game_sgr(line: &[u8], ground: Rgb) -> Cow<'_, [u8]> {
+    if oklch(ground).l < DARK_GROUND_L {
+        return Cow::Borrowed(line);
+    }
+    let mut off = OffGround::default();
+    let mut out = Vec::new();
+    // The end of the line copied into `out` so far.
+    let mut copied = 0;
+    for (at, params) in plain_sgrs(line) {
+        if let Some(rewritten) = off.sgr(params, ground) {
+            out.extend_from_slice(&line[copied..at.start]);
+            out.extend_from_slice(b"\x1b[");
+            out.extend_from_slice(rewritten.as_bytes());
+            out.push(b'm');
+            copied = at.end;
+        }
+    }
+    if copied == 0 {
+        return Cow::Borrowed(line);
+    }
+    out.extend_from_slice(&line[copied..]);
     Cow::Owned(out)
 }
 
@@ -1051,5 +1224,166 @@ mod tests {
             lift_sgr(line, VELLUM),
             format!("\x1b[2K\x1b[?25l\x1b[38;2;{r};{g};{b}mrain\x1b[")
         );
+    }
+
+    const RUBRIC: Rgb = (0xf0, 0xe5, 0xcf);
+    const MELANGE_LIGHT: Rgb = (0xf1, 0xf1, 0xf1);
+    const TRIAD: Rgb = (0x15, 0x0c, 0x22);
+
+    /// The fixed colors Aabahran sends text in: 240, the Wizi and Incog
+    /// tags before the prompt, then the minimap's sector colors from
+    /// minimap.c, and 213, the @ that marks you on it.
+    const GAME_FIXED: [u8; 15] = [
+        240, 249, 180, 77, 34, 143, 241, 75, 33, 58, 117, 220, 196, 255, 213,
+    ];
+
+    /// `rgb` at the lightness nearest it that reads at [`GAME_LC`] on
+    /// `ground`, darker.
+    fn game_floor(rgb: Rgb, ground: Rgb) -> Rgb {
+        lift_toward(oklch(rgb), 0.0, |c| apca_lc(c, ground).abs() >= GAME_LC).unwrap()
+    }
+
+    #[test]
+    fn apca_lc_matches_the_reference_and_the_review() {
+        // APCA's own sample pair, #888 on white and white on #888, and
+        // its ends.
+        let gray = (0x88, 0x88, 0x88);
+        assert!((apca_lc(gray, (255, 255, 255)) - 63.056).abs() < 0.001);
+        assert!((apca_lc((255, 255, 255), gray) + 68.541).abs() < 0.001);
+        assert!((apca_lc((0, 0, 0), (255, 255, 255)) - 106.041).abs() < 0.001);
+        assert!((apca_lc((255, 255, 255), (0, 0, 0)) + 107.885).abs() < 0.001);
+        // The figures the review read: gray 249 at Lc 26.8 on Rubric, the
+        // Wizi tag at -16.8 on Triad, and desert yellow at 0 on Rubric.
+        assert!((apca_lc(xterm256(249).unwrap(), RUBRIC) - 26.783).abs() < 0.001);
+        assert!((apca_lc(xterm256(240).unwrap(), TRIAD) + 16.765).abs() < 0.001);
+        assert!(apca_lc(xterm256(220).unwrap(), RUBRIC).abs() < 1e-9);
+    }
+
+    /// The game's fixed colors as minimap glyphs on one line, each its
+    /// own run, lifted for `ground`, with the indices that changed. Every
+    /// glyph reads at [`GAME_LC`] afterwards, and each one that changed
+    /// went darker at its own hue.
+    fn minimap_on(ground: Rgb) -> Vec<u8> {
+        let line = GAME_FIXED.map(|n| format!("\x1b[38;5;{n}m+")).concat();
+        let out = lift_game_sgr(line.as_bytes(), ground);
+        let runs = fixed_runs(std::str::from_utf8(&out).unwrap());
+        assert_eq!(runs.len(), GAME_FIXED.len());
+        let mut lifted = Vec::new();
+        for (&n, (_, now)) in GAME_FIXED.iter().zip(runs) {
+            let was = xterm256(n).unwrap();
+            let lc = apca_lc(now, ground);
+            assert!(lc.abs() >= GAME_LC, "{n} reads at Lc {lc:.1}");
+            if now == was {
+                continue;
+            }
+            lifted.push(n);
+            let (was, now) = (oklch(was), oklch(now));
+            assert!(now.l < was.l, "{n} darkens");
+            if was.c < 1e-3 {
+                assert!(now.c < 1e-3, "{n} stays gray");
+            } else {
+                assert!(hue_gap(was, now) < 2.0, "{n} keeps its hue");
+                assert!(now.c <= was.c + 0.005, "{n} gains no chroma");
+            }
+        }
+        lifted
+    }
+
+    #[test]
+    fn seven_game_colors_lift_on_rubric() {
+        assert_eq!(minimap_on(RUBRIC), [249, 180, 77, 117, 220, 255, 213]);
+    }
+
+    #[test]
+    fn four_game_colors_lift_on_melange_light() {
+        assert_eq!(minimap_on(MELANGE_LIGHT), [77, 117, 220, 255]);
+    }
+
+    #[test]
+    fn a_dark_ground_keeps_every_game_color() {
+        // On Triad the Wizi tag, gray 241 and olive 58 sit under Lc 30,
+        // and they stay as the game sends them.
+        let under: Vec<u8> = GAME_FIXED
+            .into_iter()
+            .filter(|&n| apca_lc(xterm256(n).unwrap(), TRIAD).abs() < GAME_LC)
+            .collect();
+        assert_eq!(under, [240, 241, 58]);
+        for n in 16..=255u8 {
+            let line = format!("\x1b[38;5;{n}m+");
+            assert!(matches!(
+                lift_game_sgr(line.as_bytes(), TRIAD),
+                Cow::Borrowed(_)
+            ));
+        }
+    }
+
+    #[test]
+    fn a_game_color_lifts_in_either_form_beside_other_attributes() {
+        let (r, g, b) = game_floor(xterm256(220).unwrap(), RUBRIC);
+        let lift = |line: &str| {
+            String::from_utf8(lift_game_sgr(line.as_bytes(), RUBRIC).into_owned()).unwrap()
+        };
+        assert_eq!(
+            lift("\x1b[1;38;5;220;4m.\x1b[0m"),
+            format!("\x1b[1;38;2;{r};{g};{b};4m.\x1b[0m")
+        );
+        assert_eq!(lift("\x1b[38:5:220m."), format!("\x1b[38:2::{r}:{g}:{b}m."));
+        // The tint the game sends before a room name, which the name's own
+        // color then replaces, lifts alone.
+        let (r, g, b) = game_floor(xterm256(255).unwrap(), RUBRIC);
+        assert_eq!(
+            lift("\x1b[38;5;255m\x1b[0;1;30mBefore the Temple of Neutrality\x1b[0;0m"),
+            format!("\x1b[38;2;{r};{g};{b}m\x1b[0;1;30mBefore the Temple of Neutrality\x1b[0;0m")
+        );
+    }
+
+    #[test]
+    fn palette_true_underline_and_background_colors_stay() {
+        for line in [
+            "\x1b[38;5;11m+\x1b[93m+\x1b[38;5;3m+",
+            "\x1b[38;2;255;215;0m+\x1b[38:2::238:238:238m+",
+            "\x1b[4;58;5;220m+\x1b[4;58:5:255m+",
+            "\x1b[48;5;220m \x1b[48;2;238;238;238m ",
+            "plain text",
+        ] {
+            assert!(
+                matches!(lift_game_sgr(line.as_bytes(), RUBRIC), Cow::Borrowed(_)),
+                "{line:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_game_color_off_the_ground_keeps_its_index() {
+        // Text on a background or in inverse video does not draw on the
+        // ground, so it keeps the color the game sent.
+        for line in [
+            "\x1b[48;5;19;38;5;255m+",
+            "\x1b[44m\x1b[38;5;255m+",
+            "\x1b[48:5:19m\x1b[38:5:255m+",
+            "\x1b[7;38;5;255m+",
+        ] {
+            assert!(
+                matches!(lift_game_sgr(line.as_bytes(), RUBRIC), Cow::Borrowed(_)),
+                "{line:?}"
+            );
+        }
+        // A color the line sets once the background or the inverse ends
+        // lifts.
+        let (r, g, b) = game_floor(xterm256(255).unwrap(), RUBRIC);
+        for (line, want) in [
+            (
+                "\x1b[44m \x1b[0m\x1b[38;5;255m+",
+                "\x1b[44m \x1b[0m\x1b[38;2;{}m+",
+            ),
+            ("\x1b[44m \x1b[49;38;5;255m+", "\x1b[44m \x1b[49;38;2;{}m+"),
+            ("\x1b[7m \x1b[27;38;5;255m+", "\x1b[7m \x1b[27;38;2;{}m+"),
+        ] {
+            assert_eq!(
+                lift_game_sgr(line.as_bytes(), RUBRIC).as_ref(),
+                want.replace("{}", &format!("{r};{g};{b}")).as_bytes(),
+                "{line:?}"
+            );
+        }
     }
 }
