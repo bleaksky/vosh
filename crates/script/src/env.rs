@@ -5,7 +5,9 @@
 //! reach a plugin read only.
 //!
 //! Your `#lua` lines, the bodies of your triggers and aliases, and loose
-//! scripts share the global environment, as they always have.
+//! scripts share the global environment, as they always have. They
+//! reach a plugin's globals through `plugins.<name>`, a read only view
+//! that follows the plugin across a reload.
 
 use mlua::{Function, Lua, Table, Value};
 
@@ -58,6 +60,65 @@ return function(mud)
 end
 "#;
 
+/// Lua that puts `plugins` in the global environment. It takes the
+/// table of environments by plugin name. `plugins.<name>` is a view of
+/// that plugin's globals that reads the environment it has now, or
+/// nothing while it is off, and refuses a change.
+const PLUGINS: &str = r#"
+local by_name = ...
+local error, next, setmetatable = error, next, setmetatable
+local views = {}
+
+local function view_of(name)
+  local view = views[name]
+  if view ~= nil then
+    return view
+  end
+  local label = "plugins." .. name
+  view = {}
+  setmetatable(view, {
+    __index = function(_, key)
+      local env = by_name[name]
+      if env ~= nil then
+        return env[key]
+      end
+    end,
+    __newindex = function()
+      error(label .. " is read only", 2)
+    end,
+    __pairs = function()
+      local env = by_name[name] or {}
+      return function(_, key) return next(env, key) end, view, nil
+    end,
+    __metatable = false,
+  })
+  views[name] = view
+  return view
+end
+
+local plugins = {}
+plugins = setmetatable(plugins, {
+  __index = function(_, name)
+    if by_name[name] ~= nil then
+      return view_of(name)
+    end
+  end,
+  __newindex = function()
+    error("plugins is read only", 2)
+  end,
+  __pairs = function()
+    return function(_, name)
+      local after = next(by_name, name)
+      if after ~= nil then
+        return after, view_of(after)
+      end
+    end, plugins, nil
+  end,
+  __metatable = false,
+})
+return plugins
+"#;
+
 /// The environments of the plugins that run.
 pub(crate) struct Envs {
     /// Each running plugin's environment, by plugin name.
@@ -68,7 +129,8 @@ pub(crate) struct Envs {
 
 impl Envs {
     /// Take the standard library as it stands now, after the sandbox and
-    /// the limits and before the `mud` table, for every plugin to read.
+    /// the limits and before the `mud` table, for every plugin to read,
+    /// then put `plugins` in the global environment.
     pub(crate) fn install(lua: &Lua) -> mlua::Result<Self> {
         let std = lua.create_table()?;
         for pair in lua.globals().pairs::<Value, Value>() {
@@ -78,10 +140,13 @@ impl Envs {
             }
         }
         let make = lua.load(ENV).set_name(INTERNAL_CHUNK).call(std)?;
-        Ok(Self {
-            by_name: lua.create_table()?,
-            make,
-        })
+        let by_name = lua.create_table()?;
+        let plugins: Table = lua
+            .load(PLUGINS)
+            .set_name(INTERNAL_CHUNK)
+            .call(by_name.clone())?;
+        lua.globals().set("plugins", plugins)?;
+        Ok(Self { by_name, make })
     }
 
     /// A new environment for the plugin `name`, with a `mud` table of
