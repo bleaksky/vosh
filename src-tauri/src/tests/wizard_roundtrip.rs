@@ -446,6 +446,7 @@ fn generate(seed: u64) -> Set {
                 preset: None,
                 group: item_group(&mut rng, usual[&format!("trigger {name}")].as_ref()),
                 target: TriggerTarget::Line,
+                alert: None,
             });
         }
         // Now and then a file holds a second copy of a name further on,

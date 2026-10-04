@@ -25,6 +25,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use vosh_automation::alert::{AlertParts, Attention};
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{
     HighlightStyle, MatchMode, NamedColor, Trigger, TriggerAction, TriggerPattern, TriggerTarget,
@@ -472,6 +473,14 @@ fn full_triggers() -> Vec<Trigger> {
             preset: Some("sent_tells".into()),
             group: Some("comms".into()),
             target: TriggerTarget::Prompt,
+            // The alert table of Alerts Q6, which 0.8.1 skips.
+            alert: Some(AlertParts {
+                banner: true,
+                sound: Some("chime".into()),
+                attention: Some(Attention::Until),
+                background: false,
+                words: true,
+            }),
         },
         Trigger {
             name: "spam".into(),
@@ -488,6 +497,7 @@ fn full_triggers() -> Vec<Trigger> {
             preset: None,
             group: None,
             target: TriggerTarget::Line,
+            alert: None,
         },
         // A Room trigger, which goes under `room_triggers` (D14).
         Trigger {
@@ -505,6 +515,7 @@ fn full_triggers() -> Vec<Trigger> {
             preset: None,
             group: None,
             target: TriggerTarget::Room,
+            alert: None,
         },
     ]
 }
