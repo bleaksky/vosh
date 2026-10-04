@@ -2052,3 +2052,62 @@ fn the_prompts_off_wire_counts_no_miss_while_the_packages_keep_coming() {
         Some("You turned prompts off in the game. Type prompt in the game to turn them back on.")
     );
 }
+
+/// Rubric's terminal ground, a light parchment.
+const RUBRIC: vosh_automation::trigger::readable::Rgb = (0xf0, 0xe5, 0xcf);
+
+/// A minimap row as minimap.c prints it, two rooms of desert in yellow
+/// 220 and you in pink 213, which both fade on Rubric's parchment.
+const DESERT_ROW: &str = "\x1b[38;5;220m. \x1b[38;5;220m. \x1b[38;5;213m@\x1b[0;0m";
+
+/// What the terminal gets for `read`, a GA after it when `ga`, with the
+/// game ground at `game`, and whether the read told the webview of a
+/// prompt.
+fn shown_on_game_ground(
+    read: &str,
+    ga: bool,
+    game: Option<vosh_automation::trigger::readable::Rgb>,
+) -> (String, bool) {
+    super::highlight_ground::set(None, game);
+    let batch = Wire::new(Live::default()).read_with(read.as_bytes(), ga, false);
+    super::highlight_ground::set(None, None);
+    (
+        String::from_utf8(batch.out.bytes).unwrap(),
+        batch.prompt_vars,
+    )
+}
+
+/// `shown` with yellow 220 and pink 213 lifted for Rubric, each as a true
+/// color.
+fn lifted_on_rubric(shown: &str) -> String {
+    let [yellow, pink] = [220, 213].map(|n| {
+        let open = format!("\x1b[38;5;{n}m");
+        let lift = vosh_automation::trigger::readable::lift_game_sgr(open.as_bytes(), RUBRIC);
+        let lift = String::from_utf8(lift.into_owned()).unwrap();
+        assert!(lift.starts_with("\x1b[38;2;"), "{lift:?}");
+        (open, lift)
+    });
+    shown
+        .replace(&yellow.0, &yellow.1)
+        .replace(&pink.0, &pink.1)
+}
+
+#[test]
+fn the_game_256_colors_lift_on_a_light_ground_while_fit_game_colors_is_on() {
+    let line = format!("{DESERT_ROW}\n\r");
+    let as_sent = format!("{DESERT_ROW}\r\n");
+    let (fit_on, _) = shown_on_game_ground(&line, false, Some(RUBRIC));
+    assert_eq!(fit_on, lifted_on_rubric(&as_sent));
+    let (fit_off, _) = shown_on_game_ground(&line, false, None);
+    assert_eq!(fit_off, as_sent);
+
+    // A partial a GA ends that Vosh does not read as your prompt lifts
+    // too, and with no trigger acting on it the webview hears of no
+    // prompt.
+    let (fit_off, told) = shown_on_game_ground(DESERT_ROW, true, None);
+    assert!(fit_off.contains(DESERT_ROW), "{fit_off:?}");
+    assert!(!told);
+    let (fit_on, told) = shown_on_game_ground(DESERT_ROW, true, Some(RUBRIC));
+    assert_eq!(fit_on, lifted_on_rubric(&fit_off));
+    assert!(!told);
+}

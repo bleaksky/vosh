@@ -964,6 +964,7 @@ mod tests {
                     &plain,
                     crate::trigger::MatchScope::Line,
                     ground,
+                    None,
                 )
                 .display
                 .unwrap()
