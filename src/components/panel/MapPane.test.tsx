@@ -113,7 +113,7 @@ describe('the band under the map', () => {
     expect(name.html).toBe(
       `<span class="pane-row-name" title="Between Ice Bars" style="color:${ink}">` +
         'Between Ice Bars</span>' +
-        '<span class="pane-row-value pane-map-exits">west</span>',
+        '<span class="pane-row-value pane-map-exits" title="west">west</span>',
     );
     expect(where.html).toBe(
       '<span class="pane-map-terrain">Inside</span>' +
@@ -182,5 +182,15 @@ describe('the band under the map', () => {
     expect(region).toContain('min-width: 0;');
     expect(region).toContain('text-overflow: ellipsis;');
     expect(region).toContain('white-space: nowrap;');
+  });
+
+  it('keeps a floor under the room name and lets the exits give way after it', () => {
+    const exits = rule('.pane-map-exits');
+    expect(exits).toContain('max-width: calc(100% - 3em - 8px);');
+    expect(exits).toContain('min-width: 0;');
+    expect(exits).toContain('overflow: hidden;');
+    expect(exits).toContain('text-overflow: ellipsis;');
+    // The 8px is the gap the value class leaves before the exits.
+    expect(rule('.pane-row-value')).toContain('margin-left: 8px;');
   });
 });

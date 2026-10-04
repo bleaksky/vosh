@@ -80,6 +80,7 @@ export function MapBandRows({
   const color = info ? roomNameColor(info.sector, palette, ground) : null;
   const terrain = info ? terrainLabel(info.sector, info.terrain) : null;
   const region = info?.region ?? null;
+  const exits = info && info.exits.length > 0 ? exitsLabel(info.exits) : null;
 
   return (
     <>
@@ -87,8 +88,10 @@ export function MapBandRows({
         <span className="pane-row-name" title={info?.name} style={color ? { color } : undefined}>
           {info?.name}
         </span>
-        {info && info.exits.length > 0 && (
-          <span className="pane-row-value pane-map-exits">{exitsLabel(info.exits)}</span>
+        {exits && (
+          <span className="pane-row-value pane-map-exits" title={exits}>
+            {exits}
+          </span>
         )}
       </li>
       {layout.where && (
