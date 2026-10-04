@@ -2,6 +2,13 @@
 //! with the payload it carries and the page function that hears it, and
 //! [`broadcast`] sends an event to every window.
 //!
+//! Each event of the session's stream whose payload is an object names
+//! the session that sent it in a `session` field beside the payload's
+//! own, through [`crate::sessions::Session::emit`], and `session://output`
+//! names it in [`crate::output::OutputPayload`]. `session://prompt-vars`,
+//! a map of values, and the GMCP packages, each the packet as the game
+//! sent it, keep their shape.
+//!
 //! Two names stay where they are built. The session sends each GMCP
 //! package from a `format!` template in session/gmcp.rs,
 //! `session://gmcp/` and the package name, because the contract test
@@ -175,9 +182,9 @@ pub(crate) const LOADOUTS_CHANGED: &str = "vosh://loadouts-changed";
 /// Sent to every window once the wizard wrote its files. The payload is
 /// null. `subscribeMigrationApplied` hears it.
 pub(crate) const MIGRATION_APPLIED: &str = "vosh://migration-applied";
-/// Sent to every window with the whole map whenever it changes, see
-/// [`crate::affects::full::FullMap`]. `subscribeAffectFullChanged` hears
-/// it.
+/// Sent to every window with the whole map of a session's connection
+/// whenever it changes, see [`crate::affects::full::FullMap`]. The map
+/// names no session. `subscribeAffectFullChanged` hears it.
 pub(crate) const AFFECT_FULL_CHANGED: &str = "vosh://affect-full-changed";
 
 // The profile's `[ui]` table.
@@ -543,7 +550,7 @@ pub(crate) async fn broadcast_profile_ui<R: tauri::Runtime>(
     state: &SharedState,
 ) {
     let events = {
-        let p = state.profile.lock().await;
+        let p = state.selected_session().lock_profile().await;
         profile_ui_events(state, &p)
     };
     for (event, payload) in events.events() {
@@ -566,7 +573,7 @@ pub(crate) fn line_effect_events(
     if effects.replaced {
         return profile_ui_events(state, p).events();
     }
-    if effects.tick_changed {
+    if effects.tick_before.is_some() {
         return event_json(TICK_CONFIG_CHANGED, &p.tick.config)
             .into_iter()
             .collect();

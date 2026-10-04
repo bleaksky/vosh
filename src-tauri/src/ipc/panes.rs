@@ -3,13 +3,15 @@
 //! panes. The command palette and Settings > Characters put a profile's
 //! panes back to the stock tree.
 
+use std::sync::Arc;
+
 use tauri::{AppHandle, State};
 
 use crate::app::events::{pane_layout_envelope, PaneLayoutEnvelope, PANE_LAYOUT_CHANGED};
 use crate::app::state::SharedState;
-use crate::disk::save::{save_then_broadcast, SavePolicy};
+use crate::disk::save::{save_by, save_then_broadcast, SavePolicy};
 use crate::profile::inactive::{
-    active_name, broadcast_profile_changed, reset_inactive_panes, reset_live_panes,
+    broadcast_profile_changed, reset_inactive_panes, reset_open_panes, Stored,
 };
 use crate::profile::panes::PaneLayoutPersist;
 
@@ -20,7 +22,7 @@ use crate::profile::panes::PaneLayoutPersist;
 pub(crate) async fn pane_layout_get(
     state: State<'_, SharedState>,
 ) -> Result<PaneLayoutEnvelope, String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_session().lock_profile().await;
     Ok(pane_layout_envelope(&state, &p))
 }
 
@@ -44,20 +46,21 @@ pub(crate) async fn pane_layout_set(
 ) -> Result<bool, String> {
     let mut layout = layout;
     layout.sanitize();
-    let current = {
-        let mut p = state.profile.lock().await;
+    let (open, current) = {
+        let mut p = state.selected_session().lock_profile().await;
         let current = state.panes_generation();
         if generation.is_some_and(|g| g != current) {
             return Ok(false);
         }
         p.ui.panes = Some(layout.clone());
-        current
+        (p.open().clone(), current)
     };
     // A layout tweak after `#profile reset` must not save the blanked
     // profile, so this schedules without clearing the suppression.
     save_then_broadcast(
         &app,
         &state,
+        &open,
         SavePolicy::SoonUnlessHeld,
         PANE_LAYOUT_CHANGED,
         &PaneLayoutEnvelope {
@@ -70,15 +73,16 @@ pub(crate) async fn pane_layout_set(
 }
 
 /// Put a profile's panes back to the stock map over affects tree,
-/// keeping whether its panel shows and how wide it is. The active
-/// profile when `profile` is absent.
+/// keeping whether its panel shows and how wide it is. The selected
+/// session's profile when `profile` is absent.
 ///
-/// The live path bumps the pane generation under the profile lock, so
+/// A profile a session plays resets in memory and saves at once, unless
+/// `#profile reset` or `load` left it diverged from disk. The selected
+/// session's profile bumps the pane generation under the profile lock, so
 /// a splitter drag still in flight is refused rather than undoing the
-/// reset, persists at once (unless `#profile reset` or `load` left the
-/// profile diverged from disk), and broadcasts
-/// `vosh://pane-layout-changed`. An inactive profile has its file
-/// rewritten and only `vosh://profile-changed` goes out.
+/// reset, and broadcasts `vosh://pane-layout-changed`. Any other profile
+/// a session plays sends only `vosh://profile-changed`, and one no session
+/// plays has its file rewritten and sends the same.
 #[tauri::command]
 pub(crate) async fn pane_layout_reset(
     app: AppHandle,
@@ -86,26 +90,44 @@ pub(crate) async fn pane_layout_reset(
     profile: Option<String>,
 ) -> Result<PaneLayoutEnvelope, String> {
     let shared: SharedState = state.inner().clone();
-    if let Some(name) = profile.as_deref() {
-        if let Some(layout) = reset_inactive_panes(&shared, name).await? {
-            broadcast_profile_changed(&app, name);
-            return Ok(PaneLayoutEnvelope {
-                layout,
-                generation: None,
-            });
-        }
+    let named = match profile.as_deref() {
+        Some(name) => match reset_inactive_panes(&shared, name).await? {
+            Stored::File(layout) => {
+                broadcast_profile_changed(&app, name);
+                return Ok(PaneLayoutEnvelope {
+                    layout,
+                    generation: None,
+                });
+            }
+            Stored::Open(open) => Some(open),
+        },
+        None => None,
+    };
+    let selected = shared.selected_session();
+    let (open, shown, envelope) = {
+        let mut p = match &named {
+            Some(open) => open.lock().await,
+            None => selected.lock_profile().await,
+        };
+        let shown = Arc::ptr_eq(p.open(), &selected.profile());
+        let envelope = reset_open_panes(&shared, &mut p, shown);
+        (p.open().clone(), shown, envelope)
+    };
+    if shown {
+        save_then_broadcast(
+            &app,
+            &shared,
+            &open,
+            SavePolicy::NowUnlessHeld,
+            PANE_LAYOUT_CHANGED,
+            &envelope,
+        )
+        .await;
+    } else {
+        save_by(&app, &shared, &open, SavePolicy::NowUnlessHeld).await;
     }
-    let envelope = reset_live_panes(&shared).await;
-    save_then_broadcast(
-        &app,
-        &shared,
-        SavePolicy::NowUnlessHeld,
-        PANE_LAYOUT_CHANGED,
-        &envelope,
-    )
-    .await;
-    if let Some(active) = active_name(&shared).await {
-        broadcast_profile_changed(&app, &active);
+    if let Some(name) = open.name() {
+        broadcast_profile_changed(&app, &name);
     }
     Ok(envelope)
 }

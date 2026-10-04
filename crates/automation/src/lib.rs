@@ -16,7 +16,9 @@ mod groups;
 mod revision;
 mod script_call;
 mod split;
+mod stops;
 pub mod trigger;
 pub mod vars;
 
 pub use script_call::ScriptCall;
+pub use stops::StopKey;

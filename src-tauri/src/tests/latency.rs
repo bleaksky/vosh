@@ -81,6 +81,7 @@ impl Harness {
         let handle = crate::session::spawn(
             app.handle().clone(),
             &state,
+            &state.selected_session(),
             "127.0.0.1".into(),
             port,
             false,
@@ -90,7 +91,7 @@ impl Harness {
         )
         .await
         .expect("the game answers");
-        *state.session.lock().await = Some(handle);
+        *state.selected_session().slot.lock().await = Some(handle);
         let socket = accept.await.expect("the accept task");
         socket.set_nodelay(true).expect("no delay");
         let (mut reader, to_client) = socket.into_split();
@@ -144,13 +145,19 @@ impl Harness {
     /// Type `line` and press Enter, as the command line does: the echo
     /// first, then the line through the input path.
     async fn type_line(&self, line: &str) {
-        crate::ipc::terminal::terminal_local_write(self.app.state(), format!("{line}\r\n"), None)
-            .await
-            .expect("the echo");
+        crate::ipc::terminal::terminal_local_write(
+            self.app.state(),
+            format!("{line}\r\n"),
+            None,
+            None,
+        )
+        .await
+        .expect("the echo");
         crate::ipc::session::session_send_input(
             self.app.handle().clone(),
             self.app.state(),
             line.to_string(),
+            None,
         )
         .await
         .expect("the line goes out");
@@ -162,6 +169,7 @@ impl Harness {
             self.app.handle().clone(),
             self.app.state(),
             line.to_string(),
+            None,
         )
         .await
         .expect("the line goes out");
@@ -232,7 +240,7 @@ impl Harness {
     }
 
     async fn disconnect(&self) {
-        let handle = self.state.session.lock().await.take();
+        let handle = self.state.selected_session().slot.lock().await.take();
         if let Some(handle) = handle {
             handle.shutdown().await;
         }

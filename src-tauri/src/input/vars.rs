@@ -1,40 +1,46 @@
-//! The `#var`, `#unvar` and `#vars` commands on your variables.
+//! The `#var`, `#unvar` and `#vars` commands on your variables. `#var`
+//! sets a session variable, which stays in the session you type it in.
 
 use vosh_automation::vars::Scope;
 
 use super::{split_first_word, InputResult};
 use crate::profile::live::Profile;
+use crate::session::connection::Connection;
 
-pub(super) fn slash_var(profile: &mut Profile, args: &str) -> InputResult {
+pub(super) fn slash_var(profile: &Profile, c: &mut Connection, args: &str) -> InputResult {
     let (name, value) = split_first_word(args);
     if name.is_empty() {
         return InputResult::error("usage #var <name> [value]");
     }
     if value.is_empty() {
-        return match profile.vars.get(name) {
+        return match c.var_view(profile).get(name) {
             Some(v) => InputResult::echo_line(format!("{name} = {v}")),
             None => InputResult::error(format!("var {name} not set")),
         };
     }
-    profile.vars.set(Scope::Session, name, value);
+    c.vars.set(name, value);
     InputResult::echo_line(format!("var {name} set"))
 }
 
-pub(super) fn slash_unvar(profile: &mut Profile, args: &str) -> InputResult {
+/// `#unvar` removes the name from both scopes, so the profile's value
+/// goes for every session on the profile.
+pub(super) fn slash_unvar(profile: &mut Profile, c: &mut Connection, args: &str) -> InputResult {
     let name = args.trim();
     if name.is_empty() {
         return InputResult::error("usage #unvar <name>");
     }
-    if profile.vars.remove(name) {
+    let session = c.vars.remove(name);
+    let shared = profile.vars.remove(name);
+    if session || shared {
         InputResult::echo_line(format!("var {name} removed"))
     } else {
         InputResult::error(format!("var {name} not set"))
     }
 }
 
-pub(super) fn slash_vars_list(profile: &Profile) -> InputResult {
-    let mut entries: Vec<_> = profile
-        .vars
+pub(super) fn slash_vars_list(profile: &Profile, c: &Connection) -> InputResult {
+    let mut entries: Vec<_> = c
+        .var_view(profile)
         .iter()
         .map(|(k, v, scope)| (k.to_string(), v.to_string(), scope))
         .collect();

@@ -422,9 +422,10 @@ impl Harness {
     /// a temporary folder.
     async fn new() -> Self {
         let h = Self::unread().await;
+        let session = h.state.selected_session();
         crate::prompt::take_config(
-            &mut *h.state.profile.lock().await,
-            &mut h.state.connection.lock(),
+            &mut *h.state.selected_profile().await,
+            &mut session.connection.lock(),
             vosh_prompt::PromptConfig {
                 capture: vosh_prompt::CaptureConfig::Aabahran(
                     vosh_prompt::config::AabahranCapture::default(),
@@ -476,6 +477,7 @@ impl Harness {
         let handle = crate::session::spawn(
             self.app.handle().clone(),
             &self.state,
+            &self.state.selected_session(),
             "127.0.0.1".into(),
             self.port,
             false,
@@ -485,15 +487,22 @@ impl Harness {
         )
         .await
         .expect("the fake game answers");
-        *self.state.session.lock().await = Some(handle);
+        *self.state.selected_session().slot.lock().await = Some(handle);
         self.until("the look at login", |h| h.text().contains("[Exits:"))
             .await;
-        let reads = !self.state.profile.lock().await.prompt.capture.is_none();
+        let reads = !self.state.selected_profile().await.prompt.capture.is_none();
         if !reads {
             return;
         }
         for _ in 0..1000 {
-            let read = self.state.connection.lock().prompt.vars.prompt_vars();
+            let read = self
+                .state
+                .selected_session()
+                .connection
+                .lock()
+                .prompt
+                .vars
+                .prompt_vars();
             if read.values().any(|value| value == "1020") {
                 return;
             }
@@ -529,13 +538,14 @@ impl Harness {
             shown.push(Shown::Echo(format!("{line}\r\n")));
             after
         };
-        if let Some(handle) = self.state.session.lock().await.as_ref() {
+        if let Some(handle) = self.state.selected_session().slot.lock().await.as_ref() {
             let _ = handle.local_write(after);
         }
         crate::ipc::session::session_send_input(
             self.app.handle().clone(),
             self.app.state(),
             line.to_string(),
+            None,
         )
         .await
         .expect("the line goes out");
@@ -543,7 +553,7 @@ impl Harness {
 
     /// Press Esc in the command line.
     async fn escape(&self) {
-        crate::ipc::session::session_walk_stop(self.app.state())
+        crate::ipc::session::session_walk_stop(self.app.state(), None)
             .await
             .expect("Esc reaches the session");
     }
@@ -630,7 +640,7 @@ impl Harness {
 
     /// End the session, and return every row its log holds.
     async fn end(&self) -> Vec<String> {
-        let handle = self.state.session.lock().await.take();
+        let handle = self.state.selected_session().slot.lock().await.take();
         if let Some(handle) = handle {
             handle.shutdown().await;
         }
@@ -646,7 +656,7 @@ impl Harness {
     }
 
     async fn finish(self) {
-        let handle = self.state.session.lock().await.take();
+        let handle = self.state.selected_session().slot.lock().await.take();
         if let Some(handle) = handle {
             handle.shutdown().await;
         }
@@ -988,7 +998,7 @@ async fn an_alias_a_macro_and_a_piece_of_a_line_each_walk() {
     let _grid = grid();
     let h = Harness::new().await;
     {
-        let mut p = h.state.profile.lock().await;
+        let mut p = h.state.selected_profile().await;
         p.aliases.set(vosh_automation::alias::Alias::new(
             "road",
             "#walk w;get all",
@@ -1012,7 +1022,7 @@ async fn an_alias_a_macro_and_a_piece_of_a_line_each_walk() {
 
     // A macro sends its command the way the command line sends a line,
     // and a script alias it holds runs once you arrive.
-    let command = h.state.profile.lock().await.macros[0].command.clone();
+    let command = h.state.selected_profile().await.macros[0].command.clone();
     h.type_line(&command).await;
     h.until_heard(&["w", "get all", "e", "kick"]).await;
     assert_eq!(h.here(), FOUNTAIN);

@@ -1,8 +1,14 @@
 //! The commands the page sends the native terminal surface. A build
 //! without the surface keeps every one, so the page calls them the same
-//! way on every platform, and there each one does nothing.
+//! way on every platform, and there each one does nothing. A command that
+//! reads or changes what a grid holds names the session whose grid it
+//! acts on, or acts on the selected session's when it names none. The
+//! pointer and the wheel act on the grid that shows.
 
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
+
+use crate::app::state::SharedState;
+use crate::sessions::SessionId;
 
 /// Tier 3 native renderer (macOS). The frontend reports the terminal
 /// pane's screen rectangle (CSS pixels, top-left origin, relative to the
@@ -90,21 +96,35 @@ pub(crate) fn native_surface_wheel(app: AppHandle, delta_y: f64) {
 /// Tier 3 native renderer (macOS): copy the current selection to the
 /// clipboard. Used by the Cmd+C / Ctrl+C path; a no-op elsewhere.
 #[tauri::command]
-pub(crate) fn native_surface_copy() {
+pub(crate) fn native_surface_copy(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    let session = state.session(session)?;
     #[cfg(native_surface)]
-    crate::native::surface::pointer::request_copy();
+    crate::native::surface::pointer::request_copy(session.id);
+    #[cfg(not(native_surface))]
+    let _ = session;
+    Ok(())
 }
 
 /// Tier 3 native renderer: select everything in the grid, scrollback
 /// included, for the terminal menu's Select all and Cmd+A on an empty
 /// command line. Repaints; a no-op elsewhere.
 #[tauri::command]
-pub(crate) fn native_surface_select_all() {
+pub(crate) fn native_surface_select_all(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    let session = state.session(session)?;
     #[cfg(native_surface)]
     {
-        crate::native::grid::select_all();
+        crate::native::grid::select_all(session.id);
         crate::native::surface::request_redraw();
     }
+    #[cfg(not(native_surface))]
+    let _ = session;
+    Ok(())
 }
 
 /// Parse a `#rrggbb` (or `rrggbb`) hex color.
@@ -218,19 +238,26 @@ pub(crate) fn native_surface_set_tokens(
     }
 }
 
-/// Tier 3 native renderer: draw a band under each lifted prompt while your
-/// prompt shows lifted. The grid tags a lift's cells either way.
+/// Tier 3 native renderer: draw a band under each lifted prompt of the
+/// session while your prompt shows lifted there. The grid tags a lift's
+/// cells either way.
 #[tauri::command]
-pub(crate) fn native_surface_set_prompt_bands(on: bool) {
+pub(crate) fn native_surface_set_prompt_bands(
+    state: State<'_, SharedState>,
+    on: bool,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    let session = state.session(session)?;
     #[cfg(native_surface)]
     {
-        crate::native::gpu::bands::set_prompt_bands(on);
+        crate::native::grid::set_prompt_bands(session.id, on);
         crate::native::surface::request_redraw();
     }
     #[cfg(not(native_surface))]
     {
-        let _ = on;
+        let _ = (on, session);
     }
+    Ok(())
 }
 
 /// Tier 3 native renderer: widen the band under the open row by `px` CSS
@@ -302,35 +329,51 @@ pub(crate) fn native_surface_set_cell_metrics(width: u32, height: u32, char_heig
 /// returning `[0, 0]` elsewhere.
 #[tauri::command]
 pub(crate) fn native_surface_find(
+    state: State<'_, SharedState>,
     query: String,
     regex: bool,
     case_sensitive: bool,
     whole_word: bool,
     forward: bool,
-) -> (usize, usize) {
+    session: Option<SessionId>,
+) -> Result<(usize, usize), String> {
+    let session = state.session(session)?;
     #[cfg(native_surface)]
     {
-        let result =
-            crate::native::grid::find::find_run(&query, regex, case_sensitive, whole_word, forward);
+        let result = crate::native::grid::find::find_run(
+            session.id,
+            &query,
+            regex,
+            case_sensitive,
+            whole_word,
+            forward,
+        );
         crate::native::surface::request_redraw();
-        result
+        Ok(result)
     }
     #[cfg(not(native_surface))]
     {
-        let _ = (query, regex, case_sensitive, whole_word, forward);
-        (0, 0)
+        let _ = (session, query, regex, case_sensitive, whole_word, forward);
+        Ok((0, 0))
     }
 }
 
 /// Tier 3 native renderer (macOS): clear the find highlight. A no-op
 /// elsewhere.
 #[tauri::command]
-pub(crate) fn native_surface_find_clear() {
+pub(crate) fn native_surface_find_clear(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    let session = state.session(session)?;
     #[cfg(native_surface)]
     {
-        crate::native::grid::find::find_clear();
+        crate::native::grid::find::find_clear(session.id);
         crate::native::surface::request_redraw();
     }
+    #[cfg(not(native_surface))]
+    let _ = session;
+    Ok(())
 }
 
 /// Tier 3 native renderer (macOS): rebuild the surface atlas at a new font
@@ -352,19 +395,25 @@ pub(crate) fn native_surface_set_font(family: String, size: u32) {
 /// tail, at the tail it pages up into scrollback. Scrolls the grid and
 /// repaints; a no-op elsewhere.
 #[tauri::command]
-pub(crate) fn native_surface_scroll(kind: String) {
+pub(crate) fn native_surface_scroll(
+    state: State<'_, SharedState>,
+    kind: String,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    let session = state.session(session)?.id;
     #[cfg(native_surface)]
     {
+        use crate::native::grid::{scroll_metrics, scroll_page, scroll_to_bottom};
         match kind.as_str() {
-            "pageup" => crate::native::grid::scroll_page(true),
-            "pagedown" => crate::native::grid::scroll_page(false),
-            "bottom" => crate::native::grid::scroll_to_bottom(),
+            "pageup" => scroll_page(session, true),
+            "pagedown" => scroll_page(session, false),
+            "bottom" => scroll_to_bottom(session),
             "toggle" => {
-                let (offset, _) = crate::native::grid::scroll_metrics();
+                let (offset, _) = scroll_metrics(session);
                 if offset > 0 {
-                    crate::native::grid::scroll_to_bottom();
+                    scroll_to_bottom(session);
                 } else {
-                    crate::native::grid::scroll_page(true);
+                    scroll_page(session, true);
                 }
             }
             _ => {}
@@ -373,6 +422,7 @@ pub(crate) fn native_surface_scroll(kind: String) {
     }
     #[cfg(not(native_surface))]
     {
-        let _ = kind;
+        let _ = (kind, session);
     }
+    Ok(())
 }

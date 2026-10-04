@@ -1,25 +1,31 @@
 //! lib.rs hands [`setup`] to the app's setup hook. It runs every step the
 //! app takes as it starts, in order. [`load`] is what launch loads from
 //! the app data folder before any window opens: the profile set with the
-//! active profile, then the shared catalog and the loadouts when you use
-//! loadout mode. Tests run [`load`] to relaunch over a folder of their
-//! own.
+//! sessions you had and the active profile, then the shared catalog and
+//! the loadouts when you use loadout mode. [`start_selected`] then gives
+//! the selected session its scrollback and plugins, and a restored
+//! session opens its own on its first selection, see [`open_restored`].
+//! Tests run [`load`] to relaunch over a folder of their own.
 
 use std::path::Path;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
-use tauri::Manager;
+use tauri::{AppHandle, Manager};
 use tracing::{error, info};
 use vosh_log::LogStore;
 
 use crate::app::state::SharedState;
 use crate::disk::paths;
+use crate::disk::save::PERSIST_LOCK;
 use crate::loadouts;
 use crate::loadouts::catalog::{lay_catalog_over, loadout_mode_on, save_global_catalog};
 use crate::loadouts::presets::{adopt_catalog_presets, profile_preset_lists};
 use crate::loadouts::wizard::journal::{self, WizardRun};
 use crate::profile::file::load_at_launch;
+use crate::profile::open::lock_both;
 use crate::profile::set::ProfileSet;
+use crate::sessions::Session;
 
 /// Every startup step, in order, as the app's setup hook runs them.
 pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
@@ -35,7 +41,7 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
     if let Ok(path) = app.path().app_data_dir() {
         // How full each affect was cast, per character, for the
         // Affects pane's gauges. Read when the game names you.
-        state.affect_full.set_path(paths::affect_full_path(&path));
+        state.affect_file.set_path(paths::affect_full_path(&path));
 
         // The profile set and the active profile, then the
         // shared catalog and loadouts in loadout mode. See `load`.
@@ -64,24 +70,7 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
                 error!(error = %e, "log store failed to open; logging disabled");
             }
         }
-        let scrollback_path = paths::scrollback_path(&path);
-        if let Ok(bytes) = std::fs::read(&scrollback_path) {
-            let scrollback = state.scrollback.clone();
-            tauri::async_runtime::block_on(async move {
-                let mut sb = scrollback.lock().await;
-                sb.load_from_bytes(&bytes);
-            });
-            info!(path = %scrollback_path.display(), "loaded scrollback");
-        }
-
-        let plugins_dir = paths::plugins_dir(&path);
-        let _ = std::fs::create_dir_all(&plugins_dir);
-        crate::app::plugins::seed_example_plugins(&plugins_dir);
-        tauri::async_runtime::block_on(crate::app::plugins::load_enabled_plugins(
-            app.handle(),
-            state,
-            plugins_dir,
-        ));
+        tauri::async_runtime::block_on(start_selected(app.handle(), state, &path));
     }
     #[cfg(target_os = "macos")]
     {
@@ -146,26 +135,35 @@ pub(crate) async fn load(state: &SharedState, app_data: &Path) {
     }
 }
 
-/// Load whichever profile `set`, the profile set launch read, marks as
-/// active into the live profile, and overlay the shared global.toml
-/// (theme, font, dock layout, keep last, auto update) so those UI prefs
-/// stay the same across every profile.
+/// Restore the sessions `set`, the profile set launch read, lists, none
+/// connected, see [`Sessions::restore`]. Then load whichever profile it
+/// marks as active into the profile the selected session plays, which
+/// takes its name, and overlay the shared global.toml (theme, font, dock
+/// layout, keep last, auto update) so those UI prefs stay the same across
+/// every profile. The session takes the profile's tick settings and
+/// `[prompt]` table. With no list, the one session the app starts with
+/// plays the active profile.
+///
+/// [`Sessions::restore`]: crate::sessions::Sessions::restore
 pub(crate) async fn load_profiles(state: &SharedState, mut set: ProfileSet) {
+    let (sessions, selected) = set.sessions();
+    state.restore_sessions(sessions, selected);
+    let session = state.selected_session();
     // What an earlier session left to tell you, once.
     state.add_launch_notices(set.take_notices());
     // A file that does not read keeps the defaults in its place for this
     // session, and no save writes over it. The notices tell you so once
     // the main window shows.
     let notices = {
-        let mut p = state.profile.lock().await;
+        let mut p = session.lock_profile().await;
+        p.set_name(set.active_name());
         let tick_before = p.tick.config.clone();
         let notices = load_at_launch(&set, &mut p);
-        let mut c = state.connection.lock();
+        let mut c = session.connection.lock();
         crate::profile::switch::hand_to_connection(&mut p, &mut c, &tick_before);
         notices
     };
     state.add_launch_notices(notices);
-    state.note_active_profile(set.active_name());
     *state.profile_set.lock().await = Some(set);
 }
 
@@ -205,8 +203,9 @@ pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> b
     } else {
         None
     };
+    let session = state.selected_session();
     let presets_moved = {
-        let mut p = state.profile.lock().await;
+        let mut p = session.lock_profile().await;
         adopt_catalog_presets(&mut catalog, &mut p, preset_lists.as_ref())
     };
     if let Some(lists) = &preset_lists {
@@ -222,11 +221,115 @@ pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> b
     }
     // adopt_catalog_presets left the live preset list equal to the
     // catalog's, or the catalog with none, so the overlay leaves it as is.
-    lay_catalog_over(&mut *state.profile.lock().await, &catalog, Some(&set));
+    {
+        let mut p = session.lock_profile().await;
+        let gate = set.for_profile(p.name.as_deref());
+        lay_catalog_over(&mut p, &catalog, Some(&gate));
+    }
     *state.global_catalog.lock().await = Some(catalog);
     *state.loadout_set.lock().await = Some(set);
     info!("loaded catalog.toml and loadouts.toml");
     true
+}
+
+/// Start the session launch selected on what it kept: its scrollback,
+/// then the plugins its profile turns on, once the example plugins are in
+/// the plugins folder.
+pub(crate) async fn start_selected<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    app_data: &Path,
+) {
+    let session = state.selected_session();
+    read_scrollback(&session, app_data).await;
+    let plugins_dir = paths::plugins_dir(app_data);
+    let _ = std::fs::create_dir_all(&plugins_dir);
+    crate::app::plugins::seed_example_plugins(&plugins_dir);
+    crate::app::plugins::load_enabled_plugins(app, state, &session, plugins_dir).await;
+}
+
+/// Hand `session` what the profile it plays holds for a session that
+/// starts on it, new or restored: its connection takes the tick settings
+/// and the `[prompt]` table, and its Lua engine loads the plugins the
+/// profile turns on, as the first session's does at launch.
+pub(crate) async fn start_on_profile<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    session: &Arc<Session>,
+) {
+    {
+        let mut p = session.lock_profile().await;
+        let tick_before = p.tick.config.clone();
+        let mut c = session.connection.lock();
+        crate::profile::switch::hand_to_connection(&mut p, &mut c, &tick_before);
+    }
+    if let Some(app_data) = state.app_data.get() {
+        let plugins_dir = paths::plugins_dir(app_data);
+        crate::app::plugins::load_enabled_plugins(app, state, session, plugins_dir).await;
+    }
+}
+
+/// Open the profile a restored session last played the first time you
+/// select it, or join it when another session plays it, and start the
+/// session on it, see [`start_on_profile`]. A profile the set no longer
+/// lists gives way to the active one. The session's grid then takes the
+/// lines its scrollback file kept. Does nothing for a session whose
+/// profile is open. A profile that does not open leaves the session
+/// waiting, and the error says why, as it does for a session that
+/// closed.
+pub(crate) async fn open_restored<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    session: &Arc<Session>,
+) -> Result<(), String> {
+    {
+        // No other step opens or closes a profile until the session plays
+        // it.
+        let _persist_guard = PERSIST_LOCK.lock().await;
+        // A session that closed opens nothing, since no close would close
+        // the profile it opened. The close takes the session out of the
+        // map under this lock.
+        state.session(Some(session.id))?;
+        let waiting = session.profile();
+        if state.is_open(&waiting) {
+            return Ok(());
+        }
+        let name = {
+            let set = state.loaded_profile_set().await?;
+            waiting
+                .name()
+                .filter(|name| set.get(name).is_some())
+                .unwrap_or_else(|| set.active_name().to_string())
+        };
+        let open = crate::profile::switch::open_or_join(state, &name).await?;
+        let _both = lock_both(&waiting, &open).await;
+        session.play(open);
+    }
+    start_on_profile(app, state, session).await;
+    if let Some(app_data) = state.app_data.get() {
+        read_scrollback(session, app_data).await;
+    }
+    // The grid takes the lines once, as the selected session's does when
+    // the page loads its scrollback.
+    #[cfg(any(native_surface, test))]
+    if crate::native::grid::claim_seed(session.id) {
+        let bytes = session.scrollback.lock().await.dump_live();
+        if !bytes.is_empty() {
+            crate::native::grid::feed_local(session.id, &bytes);
+            #[cfg(native_surface)]
+            crate::native::surface::request_redraw();
+        }
+    }
+    Ok(())
+}
+
+/// Read the lines the scrollback file of `session` kept into its ring.
+async fn read_scrollback(session: &Session, app_data: &Path) {
+    let path = paths::scrollback_path(app_data, session.id);
+    if let Ok(bytes) = std::fs::read(&path) {
+        session.scrollback.lock().await.load_from_bytes(&bytes);
+        info!(path = %path.display(), "loaded scrollback");
+    }
 }
 
 /// Create the app data folder and the `scripts` folder in it, where
@@ -244,4 +347,257 @@ fn open_log_store(dir: &std::path::Path) -> Result<LogStore, Box<dyn std::error:
     let path = paths::log_db_path(dir);
     info!(path = %path.display(), "opening log store");
     Ok(LogStore::open(&path)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+    use std::sync::Arc;
+
+    use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
+    use tauri::{App, Manager};
+
+    use crate::app::state::{AppState, SharedState};
+    use crate::disk::paths;
+    use crate::ipc::session::{session_close, session_open, session_rename, session_select};
+    use crate::profile::file::ProfileConfig;
+    use crate::profile::live::Profile;
+    use crate::profile::set::{ProfileSet, SessionEntry, DEFAULT_PROFILE_NAME};
+    use crate::sessions::SessionId;
+
+    /// Launch over `root` as the app does, with a mock app that holds the
+    /// state.
+    async fn launch(root: &Path) -> (SharedState, App<MockRuntime>) {
+        let state: SharedState = Arc::new(AppState::default());
+        let app = mock_builder()
+            .build(mock_context(noop_assets()))
+            .expect("a mock app");
+        app.manage::<SharedState>(state.clone());
+        super::load(&state, root).await;
+        super::start_selected(app.handle(), &state, root).await;
+        (state, app)
+    }
+
+    /// Each session's id, name, profile and whether it is selected, with
+    /// none connected.
+    fn rows(state: &SharedState) -> Vec<(SessionId, Option<String>, Option<String>, bool)> {
+        let rows = state.session_rows();
+        assert!(rows.iter().all(|row| !row.connected), "{rows:?}");
+        rows.into_iter()
+            .map(|row| (row.id, row.name, row.profile, row.selected))
+            .collect()
+    }
+
+    fn open_names(state: &SharedState) -> Vec<String> {
+        state
+            .open_profiles()
+            .iter()
+            .filter_map(|open| open.name())
+            .collect()
+    }
+
+    /// What the plugins printed in the session `id` as they loaded.
+    fn plugin_lines(state: &SharedState, id: SessionId) -> String {
+        let session = state.session(Some(id)).expect("the session");
+        let lines = session.launch_lua_lines.lock().expect("the lines");
+        lines.concat()
+    }
+
+    /// What the scrollback ring of the session `id` holds.
+    async fn kept(state: &SharedState, id: SessionId) -> String {
+        let session = state.session(Some(id)).expect("the session");
+        let bytes = session.scrollback.lock().await.dump();
+        String::from_utf8(bytes).expect("text")
+    }
+
+    fn shows(id: SessionId, text: &str) -> bool {
+        crate::native::grid::screen_rows(id)
+            .is_some_and(|screen| screen.rows.iter().any(|row| row.contains(text)))
+    }
+
+    /// Write the session `n`'s scrollback file in `root`.
+    fn scrollback(root: &Path, n: u32, line: &str) {
+        let path = paths::scrollback_path(root, SessionId::numbered(n));
+        std::fs::write(path, format!("{line}\r\n")).expect("the scrollback");
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn three_sessions_restore_unconnected_and_each_opens_its_profile_when_first_selected() {
+        // A selection shows the session's grid, which other tests read.
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
+        let dir = tempfile::tempdir().expect("a folder");
+        let root = dir.path();
+        let mut set = ProfileSet::load_or_migrate(root.to_path_buf()).expect("a set");
+        set.create("Healer").expect("Healer");
+        let entry = |n, name: Option<&str>, profile: &str| SessionEntry {
+            id: SessionId::numbered(n),
+            name: name.map(str::to_string),
+            host: None,
+            port: None,
+            tls: false,
+            profile: profile.into(),
+        };
+        let (one, two, three) = (
+            SessionId::numbered(1),
+            SessionId::numbered(2),
+            SessionId::numbered(3),
+        );
+        let entries = vec![
+            entry(1, Some("Main"), DEFAULT_PROFILE_NAME),
+            entry(2, None, "Healer"),
+            entry(3, None, "Healer"),
+        ];
+        set.keep_sessions(Some("Healer"), entries, Some(two))
+            .expect("the list saves");
+        // Healer turns on a plugin that says so as it loads.
+        let mut healer = Profile::default();
+        healer.plugins.enabled = vec!["hello".into()];
+        ProfileConfig::from_profile(&healer)
+            .save(&set.profile_path("Healer"))
+            .expect("Healer's file");
+        let plugin = paths::plugins_dir(root).join("hello");
+        std::fs::create_dir_all(&plugin).expect("the plugin folder");
+        std::fs::write(plugin.join("manifest.toml"), "[plugin]\nname = \"hello\"\n")
+            .expect("the manifest");
+        std::fs::write(plugin.join("main.lua"), "print('Healer is here')\n").expect("the script");
+        for (n, line) in [(1, "Line one"), (2, "Line two"), (3, "Line three")] {
+            scrollback(root, n, line);
+        }
+
+        let (state, app) = launch(root).await;
+        let healer = Some("Healer".to_string());
+        assert_eq!(
+            rows(&state),
+            [
+                (
+                    one,
+                    Some("Main".into()),
+                    Some(DEFAULT_PROFILE_NAME.into()),
+                    false
+                ),
+                (two, None, healer.clone(), true),
+                (three, None, healer.clone(), false),
+            ]
+        );
+        // Only the selected session's profile is open, with its plugins
+        // and its scrollback.
+        assert_eq!(open_names(&state), ["Healer"]);
+        assert!(plugin_lines(&state, two).contains("Healer is here"));
+        assert_eq!(plugin_lines(&state, three), "");
+        assert!(kept(&state, two).await.contains("Line two"));
+        assert_eq!(kept(&state, one).await, "");
+
+        // The first selection of a session opens its profile and seeds its
+        // grid from its scrollback, and one on an open profile joins it.
+        session_select(app.handle().clone(), app.state(), one)
+            .await
+            .expect("the first session opens");
+        assert_eq!(open_names(&state), ["Healer", DEFAULT_PROFILE_NAME]);
+        assert!(kept(&state, one).await.contains("Line one"));
+        assert!(shows(one, "Line one"));
+        session_select(app.handle().clone(), app.state(), three)
+            .await
+            .expect("the third session joins Healer");
+        assert_eq!(open_names(&state), ["Healer", DEFAULT_PROFILE_NAME]);
+        let plays = |id| state.session(Some(id)).expect("a session").profile();
+        assert!(Arc::ptr_eq(&plays(three), &plays(two)));
+        assert!(plugin_lines(&state, three).contains("Healer is here"));
+        assert!(shows(three, "Line three"));
+        // A new session takes the next number.
+        let four = session_open(app.handle().clone(), app.state(), None)
+            .await
+            .expect("a new session");
+        assert_eq!(four, SessionId::numbered(4));
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn a_session_that_closes_before_its_first_selection_opens_no_profile() {
+        // A selection shows the session's grid, which other tests read.
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
+        let dir = tempfile::tempdir().expect("a folder");
+        let root = dir.path();
+        let mut set = ProfileSet::load_or_migrate(root.to_path_buf()).expect("a set");
+        set.create("Healer").expect("Healer");
+        let entry = |n, profile: &str| SessionEntry {
+            id: SessionId::numbered(n),
+            name: None,
+            host: None,
+            port: None,
+            tls: false,
+            profile: profile.into(),
+        };
+        let entries = vec![entry(1, DEFAULT_PROFILE_NAME), entry(2, "Healer")];
+        set.keep_sessions(Some(DEFAULT_PROFILE_NAME), entries, None)
+            .expect("the list saves");
+
+        let (state, app) = launch(root).await;
+        let two = state
+            .session(Some(SessionId::numbered(2)))
+            .expect("the second session");
+        // A close takes the session out of the map first and then waits
+        // for its connection to end. A selection that lands in that wait
+        // opens no profile.
+        state.close_session(two.id).expect("the close");
+        assert_eq!(
+            super::open_restored(app.handle(), &state, &two).await,
+            Err(crate::sessions::NO_SUCH_SESSION.to_string())
+        );
+        assert_eq!(open_names(&state), [DEFAULT_PROFILE_NAME]);
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn an_index_with_no_list_gives_one_session_and_a_name_survives_a_relaunch() {
+        // A selection shows the session's grid, which other tests read.
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
+        let dir = tempfile::tempdir().expect("a folder");
+        let root = dir.path();
+        // profiles.toml as 0.8.1 writes it, with Healer active.
+        let written = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../fixtures/config/profiles.full.toml"
+        );
+        std::fs::copy(written, paths::profiles_index_path(root)).expect("the index");
+        scrollback(root, 1, "Line one");
+        let healer = Some("Healer".to_string());
+
+        let (state, app) = launch(root).await;
+        let first = SessionId::FIRST;
+        assert_eq!(rows(&state), [(first, None, healer.clone(), true)]);
+        assert!(kept(&state, first).await.contains("Line one"));
+        let two = session_open(app.handle().clone(), app.state(), Some("Ranger".into()))
+            .await
+            .expect("a second session");
+        session_rename(app.state(), two, Some("Alt".into()))
+            .await
+            .expect("the rename");
+
+        let (state, app) = launch(root).await;
+        let ranger = Some("Ranger".to_string());
+        assert_eq!(
+            rows(&state),
+            [
+                (first, None, healer.clone(), true),
+                (two, Some("Alt".into()), ranger, false),
+            ]
+        );
+        // A profile renamed before the session opens it opens under its
+        // new name.
+        crate::profile::set::rename_profile(&state, "Ranger", "Scout")
+            .await
+            .expect("the profile rename");
+        session_select(app.handle().clone(), app.state(), two)
+            .await
+            .expect("the second session opens Scout");
+        assert_eq!(open_names(&state), ["Healer", "Scout"]);
+        // Closing a session takes its scrollback file with it.
+        scrollback(root, 2, "Line two");
+        session_close(app.handle().clone(), app.state(), two)
+            .await
+            .expect("the second session closes");
+        assert!(!paths::scrollback_path(root, two).exists());
+        assert!(paths::scrollback_path(root, first).exists());
+    }
 }

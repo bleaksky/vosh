@@ -3,12 +3,15 @@
 //! font picker. The main window's palette saves a theme pick, and the
 //! chat pane's menu its channel colors, without the rest of the config.
 
+use std::sync::Arc;
+
 use tauri::{AppHandle, State};
 
 use crate::app::events::CHAT_COLORS_CHANGED;
 use crate::app::state::SharedState;
 use crate::app::system_fonts::FontEntry;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
+use crate::profile::open::OpenProfile;
 
 /// The Settings payload. Every field falls back to the default a fresh
 /// profile has, so a page that leaves one out still saves (D12).
@@ -239,7 +242,7 @@ impl UiConfigPayload {
 pub(crate) async fn ui_get_config(
     state: State<'_, SharedState>,
 ) -> Result<UiConfigPayload, String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_session().lock_profile().await;
     Ok(ui_config_of(&p, state.ui_config_generation()))
 }
 
@@ -261,15 +264,15 @@ pub(crate) async fn ui_set_config(
     state: State<'_, SharedState>,
     config: UiConfigPayload,
 ) -> Result<bool, String> {
-    let applied = {
-        let mut p = state.profile.lock().await;
-        apply_ui_config(&mut p.ui, config, state.ui_config_generation())
+    let open = {
+        let mut p = state.selected_session().lock_profile().await;
+        if !apply_ui_config(&mut p.ui, config, state.ui_config_generation()) {
+            return Ok(false);
+        }
+        p.open().clone()
     };
-    if !applied {
-        return Ok(false);
-    }
     let shared: SharedState = state.inner().clone();
-    persist_profile(&shared).await;
+    persist_profile(&shared, &open).await;
     Ok(true)
 }
 
@@ -301,14 +304,15 @@ pub(crate) async fn ui_set_theme(
     light_theme: Option<String>,
     dark_theme: Option<String>,
 ) -> Result<(), String> {
-    {
-        let mut p = state.profile.lock().await;
+    let open = {
+        let mut p = state.selected_session().lock_profile().await;
         if !apply_theme_pick(&mut p.ui, theme, light_theme, dark_theme) {
             return Ok(());
         }
-    }
+        p.open().clone()
+    };
     let shared: SharedState = state.inner().clone();
-    persist_profile(&shared).await;
+    persist_profile(&shared, &open).await;
     Ok(())
 }
 
@@ -373,7 +377,7 @@ const CHAT_COLOR_SLOTS: [&str; 16] = [
 pub(crate) async fn ui_get_chat_colors(
     state: State<'_, SharedState>,
 ) -> Result<std::collections::BTreeMap<String, String>, String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_session().lock_profile().await;
     Ok(p.ui.chat_colors.clone())
 }
 
@@ -388,11 +392,12 @@ pub(crate) async fn ui_set_chat_color(
     channel: String,
     color: Option<String>,
 ) -> Result<(), String> {
-    let changed = {
-        let mut p = state.profile.lock().await;
-        apply_chat_color(&mut p.ui, channel, color)
+    let (open, changed) = {
+        let mut p = state.selected_session().lock_profile().await;
+        let changed = apply_chat_color(&mut p.ui, channel, color);
+        (p.open().clone(), changed)
     };
-    send_chat_colors(&app, state.inner(), changed).await;
+    send_chat_colors(&app, state.inner(), &open, changed).await;
     Ok(())
 }
 
@@ -402,24 +407,34 @@ pub(crate) async fn ui_reset_chat_colors(
     app: AppHandle,
     state: State<'_, SharedState>,
 ) -> Result<(), String> {
-    let changed = {
-        let mut p = state.profile.lock().await;
-        reset_chat_colors(&mut p.ui)
+    let (open, changed) = {
+        let mut p = state.selected_session().lock_profile().await;
+        let changed = reset_chat_colors(&mut p.ui);
+        (p.open().clone(), changed)
     };
-    send_chat_colors(&app, state.inner(), changed).await;
+    send_chat_colors(&app, state.inner(), &open, changed).await;
     Ok(())
 }
 
-/// Save the profile and tell every window, when a chat color moved.
+/// Save `open` and tell every window, when a chat color moved.
 async fn send_chat_colors(
     app: &AppHandle,
     state: &SharedState,
+    open: &Arc<OpenProfile>,
     changed: Option<std::collections::BTreeMap<String, String>>,
 ) {
     let Some(colors) = changed else {
         return;
     };
-    save_then_broadcast(app, state, SavePolicy::Now, CHAT_COLORS_CHANGED, &colors).await;
+    save_then_broadcast(
+        app,
+        state,
+        open,
+        SavePolicy::Now,
+        CHAT_COLORS_CHANGED,
+        &colors,
+    )
+    .await;
 }
 
 /// Write a chat color pick onto the live UI config. The channel matches

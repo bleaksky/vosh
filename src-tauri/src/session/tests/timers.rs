@@ -9,12 +9,12 @@ use crate::session::lua_timers::{fire_round, hold};
 
 #[test]
 fn timers_a_plugin_had_no_time_for_go_back_on_the_list() {
-    let mut p = Profile {
+    let mut p = Profile::default();
+    let mut c = Connection {
         script: vosh_script::testkit::engine_with_nap(),
-        ..Profile::default()
+        ..Connection::default()
     };
-    let mut c = Connection::default();
-    let loaded = p.script.load_script(
+    let loaded = c.script.load_script(
         Owner::Plugin("slow".into()),
         "@slow/main.lua",
         "for i = 1, 6 do \
@@ -52,12 +52,12 @@ fn timers_a_plugin_had_no_time_for_go_back_on_the_list() {
 
 #[test]
 fn held_timers_fire_before_a_later_timer_of_the_same_plugin() {
-    let mut p = Profile {
+    let mut p = Profile::default();
+    let mut c = Connection {
         script: vosh_script::testkit::engine_with_nap(),
-        ..Profile::default()
+        ..Connection::default()
     };
-    let mut c = Connection::default();
-    let loaded = p.script.load_script(
+    let loaded = c.script.load_script(
         Owner::Plugin("slow".into()),
         "@slow/main.lua",
         "for i = 1, 6 do \

@@ -6,6 +6,7 @@ mod echo;
 mod fake_mud;
 mod ipc_contract;
 mod latency;
+mod sessions;
 mod throughput;
 mod upgrade_order;
 pub(crate) mod walk;

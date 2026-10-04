@@ -1367,7 +1367,7 @@ fn render_frame(
         target: [w, h],
         blink_hidden,
     };
-    // No link under the pointer and no find.
+    // No link under the pointer, no find and no bands.
     let drawn = renderer.draw(
         &device,
         &queue,
@@ -1377,6 +1377,7 @@ fn render_frame(
         None,
         Vec::new(),
         None,
+        false,
         w,
         h,
         0.5,

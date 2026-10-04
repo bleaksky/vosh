@@ -14,6 +14,7 @@ use vosh_prompt::aabahran::observer;
 
 use crate::app::state::SharedState;
 use crate::profile::set::ProfileEntry;
+use crate::sessions::Session;
 
 /// `prompt_last_seen`: your prompt settings and where Vosh saw them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -134,13 +135,17 @@ fn stamp(at: DateTime<FixedOffset>) -> String {
     at.to_rfc3339_opts(SecondsFormat::Secs, false)
 }
 
-/// The body of [`prompt_last_seen`].
+/// The body of [`prompt_last_seen`], for `session`.
 ///
 /// [`prompt_last_seen`]: crate::ipc::prompt::prompt_last_seen
-pub(crate) async fn last_seen(state: &SharedState) -> Option<LastSeen> {
-    let character = state.current_character.lock().ok().and_then(|g| g.clone());
+pub(crate) async fn last_seen(state: &SharedState, session: &Session) -> Option<LastSeen> {
+    let character = session
+        .current_character
+        .lock()
+        .ok()
+        .and_then(|g| g.clone());
     {
-        let c = state.connection.lock();
+        let c = session.connection.lock();
         if let Some(packet) = c.prompt.vars.gmcp().char_prompt() {
             return Some(LastSeen {
                 prompt: Some(packet.prompt.clone()),
@@ -165,7 +170,11 @@ pub(crate) async fn last_seen(state: &SharedState) -> Option<LastSeen> {
         }
     }
     let (host, port, characters) = {
-        let connection = state.current_connection.lock().ok().and_then(|g| g.clone());
+        let connection = session
+            .current_connection
+            .lock()
+            .ok()
+            .and_then(|g| g.clone());
         let guard = state.profile_set.lock().await;
         let set = guard.as_ref()?;
         let active = set.get(set.active_name())?;
@@ -362,9 +371,10 @@ mod tests {
     #[tokio::test]
     async fn last_seen_prefers_char_prompt_then_the_session() {
         let state: SharedState = std::sync::Arc::new(crate::app::state::AppState::default());
-        assert_eq!(last_seen(&state).await, None, "nothing anywhere");
+        let session = state.selected_session();
+        assert_eq!(last_seen(&state, &session).await, None, "nothing anywhere");
         {
-            let mut c = state.connection.lock();
+            let mut c = session.connection.lock();
             c.prompt.connect(true);
             c.prompt
                 .note_send("prompt %h\r\n", chrono::Local::now().timestamp_millis());
@@ -372,18 +382,20 @@ mod tests {
             c.prompt
                 .observe_line(b"Prompt set to %h ", "Prompt set to %h ", now);
         }
-        let seen = last_seen(&state).await.expect("the session saw it");
+        let seen = last_seen(&state, &session)
+            .await
+            .expect("the session saw it");
         assert_eq!(seen.source, "session");
         assert_eq!(seen.prompt.as_deref(), Some("%h "));
         {
-            let mut c = state.connection.lock();
+            let mut c = session.connection.lock();
             c.prompt.observe(
                 "Char.Prompt",
                 serde_json::json!({"enabled": false, "prompt": "%m ", "fprompt": ""}),
                 chrono::Local::now().fixed_offset(),
             );
         }
-        let seen = last_seen(&state).await.expect("the game sent it");
+        let seen = last_seen(&state, &session).await.expect("the game sent it");
         assert_eq!(seen.source, "gmcp");
         assert_eq!(seen.prompt.as_deref(), Some("%m "));
         assert_eq!(seen.enabled, Some(false));

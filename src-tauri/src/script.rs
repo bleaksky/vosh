@@ -11,12 +11,14 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
 use vosh_automation::alias::Alias;
-use vosh_automation::vars::{Scope, VariableStore};
-use vosh_script::{Action, Owner, ScriptEngine, ScriptOutcome};
+use vosh_automation::vars::Scope;
+use vosh_automation::StopKey;
+use vosh_script::{Action, Owner, ScriptOutcome};
 
 use crate::app::events::{ListChanges, ListRevisions};
 use crate::input::LineFrom;
 use crate::profile::live::Profile;
+use crate::profile::open::OpenProfile;
 use crate::session::connection::Connection;
 
 /// One pending one-shot Lua timer.
@@ -38,21 +40,22 @@ pub(crate) type SharedTimers = Arc<Mutex<Vec<PendingTimer>>>;
 /// is wasted work. This is the common case for users who don't
 /// write Lua, and matches what the engine's match/dispatch paths
 /// would do anyway (no-op when nothing is registered).
-pub(crate) fn snapshot_vars(script: &ScriptEngine, vars: &VariableStore) {
-    if script.has_handlers() {
-        refresh_vars(script, vars);
+pub(crate) fn snapshot_vars(profile: &Profile, c: &Connection) {
+    if c.script.has_handlers() {
+        refresh_vars(profile, c);
     }
 }
 
-/// Give Lua the current variables, so `mud.var(name)` reads them. Call
-/// before Lua that runs for certain, such as the body of a script alias,
-/// a `#lua` line or a load.
-pub(crate) fn refresh_vars(script: &ScriptEngine, vars: &VariableStore) {
-    let snapshot: std::collections::HashMap<String, String> = vars
+/// Give the session's Lua its variables over the profile's, so
+/// `mud.var(name)` reads them. Call before Lua that runs for certain,
+/// such as the body of a script alias, a `#lua` line or a load.
+pub(crate) fn refresh_vars(profile: &Profile, c: &Connection) {
+    let snapshot: std::collections::HashMap<String, String> = c
+        .var_view(profile)
         .iter()
         .map(|(k, v, _)| (k.to_string(), v.to_string()))
         .collect();
-    script.set_var_snapshot(snapshot);
+    c.script.set_var_snapshot(snapshot);
 }
 
 /// Run the Lua body of a script alias with the words typed after its
@@ -66,23 +69,24 @@ pub(crate) fn run_alias_body(
     c: &mut Connection,
     call: &vosh_automation::ScriptCall,
 ) -> ApplyResult {
-    if profile.aliases.is_stopped(&call.source) {
+    if profile.aliases.is_stopped(&call.source, c.stop_key) {
         return ApplyResult::default();
     }
-    refresh_vars(&profile.script, &profile.vars);
+    refresh_vars(profile, c);
     let owner = Owner::Alias(call.source.clone());
-    let outcome = profile.script.run_body(&owner, &call.body, &call.captures);
+    let outcome = c.script.run_body(&owner, &call.body, &call.captures);
     apply_actions(profile, c, outcome)
 }
 
 /// Turn off each trigger and alias whose Lua Vosh stopped in `outcome`,
-/// until you save it again or restart Vosh. The engine holds a stopped
-/// plugin or loose script off itself.
-pub(crate) fn turn_off_stopped(profile: &mut Profile, outcome: &ScriptOutcome) {
+/// in the session whose stops `key` names, until you save it again or
+/// restart Vosh. The engine holds a stopped plugin or loose script off
+/// itself.
+pub(crate) fn turn_off_stopped(profile: &mut Profile, key: StopKey, outcome: &ScriptOutcome) {
     for owner in &outcome.stopped {
         match owner {
-            Owner::Trigger(name) => profile.triggers.stop(name),
-            Owner::Alias(name) => profile.aliases.stop(name),
+            Owner::Trigger(name) => profile.triggers.stop(name, key),
+            Owner::Alias(name) => profile.aliases.stop(name, key),
             Owner::Plugin(_) | Owner::Script(_) | Owner::Typed => {}
         }
     }
@@ -125,6 +129,11 @@ pub(crate) struct ApplyResult {
     /// debounced profile persist; ephemeral runtime state (prompt
     /// vars, timers, echoes) does not set it.
     pub durable_changed: bool,
+    /// The profile the Lua ran under, which a durable change marks to
+    /// save. The step that held its lock names it through
+    /// [`ApplyResult::ran_under`], since the session may play another
+    /// profile by the time the result applies.
+    pub profile: Option<Arc<OpenProfile>>,
     /// The trigger and alias lists this apply changed, like an alias a
     /// Lua `mud.alias` set. The caller tells the windows.
     pub lists: ListChanges,
@@ -145,12 +154,19 @@ impl ApplyResult {
         self.inputs.extend(later.inputs);
         self.prompt_vars_changed |= later.prompt_vars_changed;
         self.durable_changed |= later.durable_changed;
+        self.profile = later.profile.or(self.profile.take());
         self.lists = self.lists.or(later.lists);
         self.new_timers.extend(later.new_timers);
         self.cancel_timers.extend(later.cancel_timers);
         if later.walk.is_some() {
             self.walk = later.walk;
         }
+    }
+
+    /// This result, whose Lua ran under `open` while the step held it.
+    pub(crate) fn ran_under(mut self, open: &Arc<OpenProfile>) -> Self {
+        self.profile = Some(Arc::clone(open));
+        self
     }
 }
 
@@ -166,7 +182,7 @@ pub(crate) fn apply_actions(
 ) -> ApplyResult {
     let mut result = ApplyResult::default();
     let lists_before = ListRevisions::of(profile, c);
-    turn_off_stopped(profile, &outcome);
+    turn_off_stopped(profile, c.stop_key, &outcome);
     for action in outcome.actions {
         match action {
             Action::Send(line) => {
@@ -193,26 +209,29 @@ pub(crate) fn apply_actions(
                 profile.aliases.remove(&name);
                 result.durable_changed = true;
             }
-            // A plugin's aliases last for the session, so nothing saves.
+            // A plugin's aliases last in its session, so nothing saves.
             Action::SetPluginAlias {
                 plugin,
                 name,
                 expansion,
-            } => profile.plugin_aliases.set(&plugin, name, expansion),
+            } => c.plugin_aliases.set(&plugin, name, expansion),
             Action::RemovePluginAlias { plugin, name } => {
-                profile.plugin_aliases.remove(&plugin, &name);
+                c.plugin_aliases.remove(&plugin, &name);
             }
-            Action::DropPluginAliases(plugin) => profile.plugin_aliases.remove_plugin(&plugin),
-            Action::SetVar { scope, name, value } => {
-                // Only profile-scoped vars are persisted; session vars
-                // marking durable would reset the persist debounce on
-                // every combat line for busy Lua triggers.
-                if matches!(scope, Scope::Profile) {
+            Action::DropPluginAliases(plugin) => c.plugin_aliases.remove_plugin(&plugin),
+            // Only profile-scoped vars are persisted; session vars
+            // marking durable would reset the persist debounce on
+            // every combat line for busy Lua triggers.
+            Action::SetVar { scope, name, value } => match scope {
+                Scope::Session => c.vars.set(name, value),
+                Scope::Profile => {
+                    profile.vars.set(name, value);
                     result.durable_changed = true;
                 }
-                profile.vars.set(scope, name, value);
-            }
+            },
+            // Both scopes, so the profile half goes for every session.
             Action::RemoveVar(name) => {
+                c.vars.remove(&name);
                 profile.vars.remove(&name);
                 result.durable_changed = true;
             }

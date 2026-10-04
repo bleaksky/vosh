@@ -231,8 +231,7 @@ impl Session {
     /// One socket read of raw wire bytes, then the end of the read and
     /// the hold's deadline before the next one.
     fn read(&mut self, data: &[u8]) -> Read {
-        let mut batch = ReadBatch::new(0);
-        batch.out = Output::new(std::mem::take(&mut self.other));
+        let mut batch = ReadBatch::new(std::mem::take(&mut self.other));
         let now = Instant::now();
         let mut kept = Vec::new();
         let mut repeats = Vec::new();
@@ -311,8 +310,7 @@ impl Session {
 
     /// You send `line`: held lines let go first, then the send step.
     fn send(&mut self, line: &str) -> Read {
-        let mut batch = ReadBatch::new(0);
-        batch.out = Output::new(false);
+        let mut batch = ReadBatch::new(false);
         let mut kept = Vec::new();
         for step in let_go_held(
             &mut self.p,
@@ -381,8 +379,7 @@ impl Wire {
     /// One socket read: `data`, then `ga` when the read ends in a GA,
     /// then the end of the read. Returns what the terminal gets.
     fn read_with(&mut self, data: &[u8], ga: bool, other: bool) -> ReadBatch {
-        let mut batch = ReadBatch::new(crate::output::output_count());
-        batch.out = vosh_prompt::stage::Output::new(other);
+        let mut batch = ReadBatch::new(other);
         let now = tokio::time::Instant::now();
         for line in self.acc.feed(data) {
             let plain = vosh_protocol::ansi::plain_text(&line.bytes);
@@ -416,7 +413,7 @@ impl Wire {
     /// One socket read that leaves a partial waiting, as the session
     /// does until the next read or the deadline. Returns the batch.
     fn read_holding(&mut self, data: &[u8]) -> ReadBatch {
-        let mut batch = ReadBatch::new(crate::output::output_count());
+        let mut batch = ReadBatch::new(false);
         let now = tokio::time::Instant::now();
         for line in self.acc.feed(data) {
             let plain = vosh_protocol::ansi::plain_text(&line.bytes);
@@ -443,7 +440,7 @@ impl Wire {
 
     /// You send a line. Held lines let go first, as in the session.
     fn send(&mut self) {
-        let mut batch = ReadBatch::new(crate::output::output_count());
+        let mut batch = ReadBatch::new(false);
         let _ = let_go_held(
             &mut self.p,
             &mut self.c,
@@ -472,8 +469,7 @@ impl Wire {
     /// GA or EOR through the marker step. Then the end of the read,
     /// and the hold's deadline before the next one.
     fn read_wire(&mut self, data: &[u8]) -> vosh_prompt::stage::Output {
-        let mut batch = ReadBatch::new(crate::output::output_count());
-        batch.out = vosh_prompt::stage::Output::new(false);
+        let mut batch = ReadBatch::new(false);
         let now = tokio::time::Instant::now();
         for event in self.parser.feed(data) {
             match event {
@@ -522,7 +518,7 @@ impl Wire {
     /// One socket read of `events` in order, as the session handles
     /// them, then the end of the read.
     fn read_events(&mut self, events: &[Ev]) -> vosh_prompt::stage::Output {
-        let mut batch = ReadBatch::new(crate::output::output_count());
+        let mut batch = ReadBatch::new(false);
         let now = tokio::time::Instant::now();
         for event in events {
             match event {

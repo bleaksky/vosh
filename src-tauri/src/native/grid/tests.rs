@@ -5,6 +5,16 @@ use super::*;
 use alacritty_terminal::term::cell::Cell;
 use alacritty_terminal::vte::ansi::{Color, NamedColor};
 
+/// The session the app starts with, whose grid shows.
+const ONE: SessionId = SessionId::FIRST;
+
+/// A second session's number, as the session map gives it.
+fn two() -> SessionId {
+    let mut sessions = crate::sessions::Sessions::default();
+    let defaults = sessions.selected().profile();
+    sessions.open(defaults).id
+}
+
 fn cell_fg(g: &TermGrid, line: usize, col: usize) -> Color {
     g.term.grid()[Line(line as i32)][Column(col)].fg
 }
@@ -321,55 +331,154 @@ fn long_line_wraps_to_the_next_row() {
 }
 
 #[test]
-fn the_grid_seeds_from_scrollback_once() {
-    assert!(claim_seed());
-    assert!(!claim_seed());
-    assert!(!claim_seed());
+fn each_session_seeds_its_grid_from_scrollback_once() {
+    let _shared = lock_shared_grid_for_test();
+    let two = two();
+    assert!(claim_seed(ONE));
+    assert!(!claim_seed(ONE));
+    assert!(claim_seed(two));
+    assert!(!claim_seed(two));
+    assert!(!claim_seed(ONE));
 }
 
 #[test]
 fn a_local_write_creates_and_fills_the_shared_grid() {
     let _shared = lock_shared_grid_for_test();
-    *grid_slot().lock().unwrap() = None;
-    feed_local(b"shared");
-    let slot = grid_slot().lock().unwrap();
-    let g = slot.as_ref().expect("grid created on first feed");
-    assert!(g.row_string(0).starts_with("shared"));
+    feed_local(ONE, b"shared");
+    let row = with_grid_mut(ONE, |g| g.row_string(0)).expect("grid created on first feed");
+    assert!(row.starts_with("shared"));
 }
 
 #[test]
 fn a_local_write_names_the_newest_output_of_the_stage_the_grid_took() {
     let _shared = lock_shared_grid_for_test();
     blank_shared_grid_for_test(40, 10);
-    assert_eq!(feed_local(b"restored\r\n"), 0, "none yet");
+    assert_eq!(feed_local(ONE, b"restored\r\n"), 0, "none yet");
     let mut first = Output::new(false);
     first.text(&marked(1, b"<1020hp> "));
-    feed_session_output(&first, Some(first.id()));
+    feed_session_output(ONE, &first, Some(first.id()));
     // Output from elsewhere, such as a slash command's echo, is none
     // of the stage's.
     let mut other = Output::new(false);
     other.text(b"[not connected]\r\n");
-    feed_session_output(&other, None);
-    assert_eq!(feed_local(b"look\r\n"), first.id());
+    feed_session_output(ONE, &other, None);
+    assert_eq!(feed_local(ONE, b"look\r\n"), first.id());
     let mut next = Output::new(false);
     next.text(&marked(2, b"<1000hp> "));
-    feed_session_output(&next, Some(next.id()));
-    assert_eq!(feed_local(b"x"), next.id());
+    feed_session_output(ONE, &next, Some(next.id()));
+    assert_eq!(feed_local(ONE, b"x"), next.id());
+}
+
+/// The rows on the screen of the grid of `session`, trailing blanks
+/// trimmed.
+fn rows_of(session: SessionId) -> Vec<String> {
+    screen_rows(session).map(|r| r.rows).unwrap_or_default()
+}
+
+#[test]
+fn two_sessions_write_each_to_a_grid_of_its_own() {
+    let _shared = lock_shared_grid_for_test();
+    let two = two();
+    feed_session_output(ONE, &text(b"You rest.\r\n"), None);
+    feed_session_output(two, &text(b"You wake.\r\n"), None);
+    feed_local(two, b"look\r\n");
+    assert_eq!(rows_of(ONE)[..2], ["You rest.", ""]);
+    assert_eq!(rows_of(two)[..3], ["You wake.", "look", ""]);
+    // A scroll or a selection in one grid leaves the other's alone.
+    for n in 0..30 {
+        feed_session_output(two, &text(format!("{n}\r\n").as_bytes()), None);
+    }
+    scroll(two, 3);
+    start_selection(two, 0, 0);
+    update_selection(two, 1, 2);
+    assert!(reader_busy(two));
+    assert!(!reader_busy(ONE));
+    assert_eq!(selection_text(ONE), None);
+}
+
+#[test]
+fn a_find_in_one_session_leaves_the_others_matches() {
+    let _shared = lock_shared_grid_for_test();
+    let two = two();
+    feed_session_output(ONE, &text(b"a goblin\r\nan orc\r\na goblin\r\n"), None);
+    feed_session_output(two, &text(b"an orc\r\n"), None);
+    assert_eq!(
+        find::find_run(ONE, "goblin", false, false, false, true),
+        (1, 2)
+    );
+    assert_eq!(
+        find::find_run(two, "orc", false, false, false, true),
+        (1, 1)
+    );
+    find::find_clear(two);
+    let ones = with_shown(|shown| shown.expect("the first grid").find().snapshot());
+    assert_eq!(ones, (vec![(0, 2, 8), (2, 2, 8)], Some((0, 2, 8))));
+    // The same query again steps on in its own session only.
+    assert_eq!(
+        find::find_run(ONE, "goblin", false, false, false, true),
+        (2, 2)
+    );
+    assert_eq!(
+        find::find_run(two, "goblin", false, false, false, true),
+        (0, 0)
+    );
+}
+
+#[test]
+fn selecting_a_session_shows_its_grid_and_sizes_only_the_hidden_one() {
+    let _shared = lock_shared_grid_for_test();
+    let state = crate::app::state::AppState::default();
+    let two = state.open_session(state.selected_session().profile()).id;
+    feed_session_output(ONE, &text(b"You rest.\r\n"), None);
+    feed_session_output(two, &text(b"You wake.\r\n"), None);
+    set_prompt_bands(two, true);
+    assert_eq!(shared_screen_rows_for_test()[0], "You rest.");
+    assert_eq!(state.select_session(two), Ok(()));
+    assert_eq!(super::shown(), two);
+    // A frame draws the second session's rows and its bands, and sizes
+    // its grid alone.
+    assert_eq!(shared_screen_rows_for_test()[0], "You wake.");
+    assert!(with_shown(
+        |shown| shown.is_some_and(SessionGrid::prompt_bands)
+    ));
+    resize_grid(60, 20);
+    // The hidden grid takes the size its window size gives, and the
+    // shown one keeps the frame's.
+    size_hidden(ONE, 40, 12);
+    size_hidden(two, 100, 50);
+    let size = |session| with_grid_mut(session, |g| (g.columns(), g.screen_lines()));
+    assert_eq!((size(ONE), size(two)), (Some((40, 12)), Some((60, 20))));
+    // Selecting the first again shows its rows as they were.
+    assert_eq!(state.select_session(ONE), Ok(()));
+    assert_eq!(shared_screen_rows_for_test()[0], "You rest.");
+}
+
+/// A mock app with the app state, for the terminal commands.
+#[cfg(native_surface)]
+fn app() -> tauri::App<tauri::test::MockRuntime> {
+    use tauri::Manager;
+    let app = tauri::test::mock_builder()
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .expect("a mock app");
+    app.manage::<crate::app::state::SharedState>(std::sync::Arc::default());
+    app
 }
 
 // The command reads the grid only where the surface draws it.
 #[cfg(native_surface)]
 #[test]
 fn terminal_cursor_reports_the_shared_grid() {
+    use tauri::Manager;
     let _shared = lock_shared_grid_for_test();
-    *grid_slot().lock().unwrap() = None;
-    assert_eq!(crate::ipc::terminal::terminal_cursor(), None, "no grid yet");
+    let app = app();
+    let cursor = || crate::ipc::terminal::terminal_cursor(app.state(), None);
+    assert_eq!(cursor(), Ok(None), "no grid yet");
     blank_shared_grid_for_test(40, 10);
     let mut out = Output::new(false);
     out.text(b"You are hungry.\r\n");
     out.text(&marked(3, b"<1020hp> "));
-    feed_session_output(&out, Some(out.id()));
-    let report = serde_json::to_value(crate::ipc::terminal::terminal_cursor()).expect("json");
+    feed_session_output(ONE, &out, Some(out.id()));
+    let report = serde_json::to_value(cursor().expect("the session")).expect("json");
     assert_eq!(
         report,
         serde_json::json!({
@@ -380,26 +489,24 @@ fn terminal_cursor_reports_the_shared_grid() {
             "region": {"gen": 3, "line": 1, "col": 0},
         })
     );
-    feed_local(b"look\r\n");
-    assert_eq!(cursor_report().and_then(|r| r.region), None);
+    feed_local(ONE, b"look\r\n");
+    assert_eq!(cursor_report(ONE).and_then(|r| r.region), None);
 }
 
 // The command reads the grid only where the surface draws it.
 #[cfg(native_surface)]
 #[test]
 fn terminal_screen_rows_reads_the_shared_screen_as_text() {
+    use tauri::Manager;
     let _shared = lock_shared_grid_for_test();
-    *grid_slot().lock().unwrap() = None;
-    assert_eq!(
-        crate::ipc::terminal::terminal_screen_rows(),
-        None,
-        "no grid yet"
-    );
+    let app = app();
+    let rows = || crate::ipc::terminal::terminal_screen_rows(app.state(), None);
+    assert_eq!(rows(), Ok(None), "no grid yet");
     blank_shared_grid_for_test(20, 4);
     let mut out = Output::new(false);
     out.text("You rest.\r\n<1020hp> 中文 ".as_bytes());
-    feed_session_output(&out, Some(out.id()));
-    let report = serde_json::to_value(crate::ipc::terminal::terminal_screen_rows()).expect("json");
+    feed_session_output(ONE, &out, Some(out.id()));
+    let report = serde_json::to_value(rows().expect("the session")).expect("json");
     // A wide character takes two cells and reads once.
     assert_eq!(
         report,
@@ -1230,35 +1337,30 @@ fn marks_are_found_whole_and_only_whole() {
 #[test]
 fn session_feed_word_wraps_at_the_grid_width() {
     let _shared = lock_shared_grid_for_test();
-    let Ok(mut slot) = grid_slot().lock() else {
-        panic!("grid lock");
-    };
-    *slot = Some(TermGrid::new(10, 24));
-    drop(slot);
-    feed_session_output(&text(b"the quick brown fox\r\n"), None);
-    let slot = grid_slot().lock().unwrap();
-    let g = slot.as_ref().unwrap();
-    assert!(g.row_string(0).starts_with("the quick"));
-    assert!(g.row_string(1).starts_with("brown fox"));
+    blank_shared_grid_for_test(10, 24);
+    feed_session_output(ONE, &text(b"the quick brown fox\r\n"), None);
+    let rows = with_grid_mut(ONE, |g| [g.row_string(0), g.row_string(1)]).unwrap();
+    assert!(rows[0].starts_with("the quick"));
+    assert!(rows[1].starts_with("brown fox"));
 }
 
 #[test]
 fn a_selection_or_a_read_back_keeps_the_reader_busy() {
     let _shared = lock_shared_grid_for_test();
     blank_shared_grid_for_test(20, 4);
-    feed_session_output(&text(b"1\r\n2\r\n3\r\n4\r\n5\r\n6\r\n7"), None);
-    assert!(!reader_busy());
+    feed_session_output(ONE, &text(b"1\r\n2\r\n3\r\n4\r\n5\r\n6\r\n7"), None);
+    assert!(!reader_busy(ONE));
     // A click with no drag selects nothing.
-    start_selection(1, 0);
-    assert!(!reader_busy());
-    update_selection(2, 1);
-    assert!(reader_busy());
-    clear_selection();
-    assert!(!reader_busy());
-    scroll(2);
-    assert!(reader_busy());
-    scroll(-2);
-    assert!(!reader_busy());
+    start_selection(ONE, 1, 0);
+    assert!(!reader_busy(ONE));
+    update_selection(ONE, 2, 1);
+    assert!(reader_busy(ONE));
+    clear_selection(ONE);
+    assert!(!reader_busy(ONE));
+    scroll(ONE, 2);
+    assert!(reader_busy(ONE));
+    scroll(ONE, -2);
+    assert!(!reader_busy(ONE));
 }
 
 #[test]

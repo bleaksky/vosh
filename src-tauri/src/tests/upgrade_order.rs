@@ -228,7 +228,7 @@ async fn launch_runs_the_upgrades_in_order() {
     // 6. The active profile loaded last, so the live profile holds what
     //    every step wrote, the moved theme too.
     {
-        let p = state.profile.lock().await;
+        let p = state.selected_profile().await;
         assert_eq!(p.ui.enabled_presets, with_rollout);
         assert!(p.prompt.capture.is_migrated());
         let trigger = p.triggers.get("prompt-capture").expect("the moved trigger");
@@ -240,7 +240,7 @@ async fn launch_runs_the_upgrades_in_order() {
     //    stays.
     {
         let _persist = PERSIST_LOCK.lock().await;
-        persist_state(&state).await;
+        persist_state(&state, &state.selected_session().profile()).await;
     }
     assert_eq!(shared_theme_ids(&set), ["custom-dusk"]);
 }

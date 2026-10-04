@@ -1,34 +1,50 @@
-//! What one connection holds apart from the profile: the target you pick,
-//! its quick keys and the characters in the room, which the commands
-//! share, the room look and the end of a fight, which the loop follows
-//! line by line, and the tick's count and the prompt engine, which both
-//! read. The app state holds the [`Connection`] behind a lock of its own,
-//! [`SharedConnection`], and the session loop holds a handle to it, so a
-//! command reads it straight from the app state and never asks the loop.
+//! All the session state the line pipeline changes, under one std lock
+//! that lives as long as the session. That is the target you pick, its
+//! quick keys and the characters in the room, which the commands share,
+//! the room look and the end of a fight, which the loop follows line by
+//! line, the tick's count and the prompt engine, which both read, and the
+//! session's variables, its Lua engine, with the aliases its plugins make
+//! and the macro recorder, and the key its Lua stops go under. The split
+//! with [`Session`](crate::sessions::Session) is by lock, not by meaning.
+//! The engine, the variables, the recorder and the plugin aliases belong
+//! to the session and outlive each connection, and they sit here because
+//! a line changes them together with the rest, beside the profile. The
+//! session keeps who it is and the facts leaf locks guard. Each session
+//! holds its [`Connection`] behind [`SharedConnection`], and the session
+//! loop holds a handle to it, so a command reads it straight from the
+//! session and never asks the loop.
 //!
-//! Its lock comes after the profile lock and the profile set, never before
-//! them. The session slot comes before it, since `disconnect` holds the
-//! slot while the loop ends and clears it. No holder awaits, and the only
-//! locks a holder takes are leaves: the Lua limits mutex in the script
-//! crate for each Lua run, `UNREAD_FILES` in `disk/atomic.rs` for
-//! `#profile save` and `#profile load`, and a try of `PERSIST_LOCK` for
-//! `#profile save`. [`SharedConnection`] says how long a holder keeps it.
+//! Its lock comes after the session map, the profile lock and the profile
+//! set, never before them. The session slot comes before it, since
+//! `disconnect` holds the slot while the loop ends and clears it. No
+//! holder awaits, and the only locks a holder takes are leaves: the Lua
+//! limits mutex in the script crate for each Lua run, `UNREAD_FILES` in
+//! `disk/atomic.rs` for `#profile save` and `#profile load`, and a try of
+//! `PERSIST_LOCK` for `#profile save`. [`SharedConnection`] says how long
+//! a holder keeps it.
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
+use vosh_automation::alias::PluginAliases;
+use vosh_automation::vars::{VarView, VariableStore};
+use vosh_automation::StopKey;
+use vosh_script::ScriptEngine;
+
 use super::room_block::RoomBlock;
+use crate::profile::live::Profile;
 use crate::tick::TickRuntime;
 
-/// What one connection holds apart from the profile. The app holds one,
-/// which outlives each session, so a target you set offline carries into
-/// the next connection and your quick keys last until you quit. R14b
-/// gives each tab its own.
+/// All the session state the line pipeline changes. Each session holds
+/// one, which lives as long as the session and outlives each connection
+/// it makes, so a target you set offline carries into the next
+/// connection, your quick keys last until the session closes, and the Lua
+/// engine runs `#lua` and plugin aliases while no game listens.
 #[derive(Debug, Default)]
 pub(crate) struct Connection {
     /// Your target plus the quick keys that aim at it. The target clears
     /// on disconnect. The quick keys live in memory only. No profile file
-    /// holds them, so a restart brings back the stock gg, xx, zz and tt
-    /// slots, as HELP.md says.
+    /// holds them, so a restart, like a new session, brings back the
+    /// stock gg, xx, zz and tt slots, as HELP.md says.
     pub(crate) target: TargetState,
     /// The latest Room.Chars list, so `tar` can pick a character by its
     /// place or by part of its name without asking the page.
@@ -59,29 +75,64 @@ pub(crate) struct Connection {
     /// [`crate::profile::live::Profile::prompt`] for the rule that keeps
     /// the two the same.
     pub(crate) prompt: vosh_prompt::PromptEngine,
+    /// The session's Lua engine, which runs your scripts and the plugins
+    /// the profile turns on. Each session runs its own, so a Lua global,
+    /// a Lua trigger or a timer stays in the session that made it, while
+    /// what Lua asks of the profile reaches every session on it. It keeps
+    /// the latest GMCP packet of each package for a new handler, and
+    /// forgets them as a connection ends. No file saves its state.
+    pub(crate) script: ScriptEngine,
+    /// The aliases the session's plugins made, beside the engine that
+    /// runs them, which last while their plugin runs. No profile file
+    /// holds them, so a switch or a save leaves them be, and a plugin that
+    /// turns off takes its own.
+    pub(crate) plugin_aliases: PluginAliases,
+    /// The session's variables: those `#var`, `mud.set_var` and `tar`
+    /// set and those the GMCP packages bind. They clear as the session
+    /// connects, and no file saves them. A lookup reads them over the
+    /// profile's through [`Connection::var_view`].
+    pub(crate) vars: VariableStore,
+    /// The macro recorder, `Some` between `#record <name>` and `#endrec`.
+    /// It takes each line you type in this session, and `#endrec` saves
+    /// them to the profile as an alias whose expansion is the `;`-joined
+    /// sequence.
+    pub(crate) recording_macro: Option<MacroRecorder>,
+    /// The key the profile's trigger and alias stores hold this session's
+    /// Lua stops under, made from the session's id. A trigger or an alias
+    /// whose Lua Vosh stopped here stays on in every other session.
+    pub(crate) stop_key: StopKey,
 }
 
 impl Connection {
-    /// The connection ended, and your target, the room list, the room
-    /// look and the fight's tail end with it. Your quick keys stay.
-    /// Returns whether a target was set.
+    /// The connection ended, and your target with the variable that
+    /// mirrors it, the room list, the room look and the fight's tail end
+    /// with it. Your quick keys stay. Returns whether a target was set.
     pub(crate) fn clear_on_disconnect(&mut self) -> bool {
         let had = self.target.name.is_some();
         self.target.name = None;
         self.target.room_idx = None;
+        self.vars.remove("target");
         self.room_chars.clear();
         self.room_block = RoomBlock::default();
         self.fight_tail = false;
         had
     }
+
+    /// The session's variables over those of `profile`, the one it plays.
+    pub(crate) fn var_view<'a>(&'a self, profile: &'a Profile) -> VarView<'a> {
+        VarView {
+            session: &self.vars,
+            profile: &profile.vars,
+        }
+    }
 }
 
-/// The handle to the [`Connection`] that the app state, the session loop
-/// and the commands share. The loop takes it for every line the game
-/// sends, right after the profile lock, and an async mutex there costs
-/// each line a poll and a share of the task's cooperative budget, about 3
-/// percent of P2. No step holds it across an await, and a task's guard
-/// cannot cross one, so a plain mutex fits.
+/// The handle to the [`Connection`] that the session, its loop and the
+/// commands share. The loop takes it for every line the game sends, right
+/// after the profile lock, and an async mutex there costs each line a
+/// poll and a share of the task's cooperative budget, about 3 percent of
+/// P2. No step holds it across an await, and a task's guard cannot cross
+/// one, so a plain mutex fits.
 ///
 /// The price is that a waiter blocks its runtime thread instead of
 /// yielding, for as long as the holder keeps the guard. A line the game
@@ -95,10 +146,14 @@ impl Connection {
 /// `target_get` that comes in the middle waits on its thread through all
 /// of it, so on a machine with few cores a switch with plugins can hold
 /// up the other tasks until it ends.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct SharedConnection(Arc<Mutex<Connection>>);
 
 impl SharedConnection {
+    pub(crate) fn new(connection: Connection) -> Self {
+        Self(Arc::new(Mutex::new(connection)))
+    }
+
     /// Lock the connection. A step that panicked while it held the lock
     /// left the connection as the step had it, and the next holder takes
     /// it as it stands.
@@ -117,10 +172,10 @@ pub(crate) struct TargetState {
     pub(crate) room_idx: Option<usize>,
     /// Configurable quick-key slots. Defaults to `gg`/`xx`/`zz`/`tt`
     /// with empty verbs; users edit via `#qkey <name> <verb>`. They
-    /// belong to no one connection and last until you quit. They sit
-    /// here because every target payload carries them, and `target_get`
-    /// and the end of a session build one under this lock alone. R14b,
-    /// with a connection per tab, decides where they live.
+    /// belong to the session. Each new session starts with the stock
+    /// slots, and they last until it closes. They sit here because every
+    /// target payload carries them, and `target_get` and the end of a
+    /// connection build one under this lock alone.
     pub(crate) quick_keys: Vec<QuickKey>,
 }
 
@@ -132,6 +187,12 @@ impl Default for TargetState {
             quick_keys: Self::default_quick_keys(),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct MacroRecorder {
+    pub(crate) name: String,
+    pub(crate) commands: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -179,7 +240,9 @@ mod tests {
         c.room_block.room_chars(1);
         assert_ne!(c.room_block, RoomBlock::default());
         c.fight_tail = true;
+        c.vars.set("target", "goblin");
         assert!(c.clear_on_disconnect(), "a target was set");
+        assert_eq!(c.vars.get("target"), None);
         assert_eq!(c.target.name, None);
         assert_eq!(c.target.room_idx, None);
         let leftover = &c.room_chars;

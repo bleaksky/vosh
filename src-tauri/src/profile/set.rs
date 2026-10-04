@@ -35,6 +35,7 @@ use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::profile::file::{ConfigError, ProfileConfig};
 use crate::profile::login_match::AutoMatch;
 use crate::profile::shared::ScopeConfig;
+use crate::sessions::{SessionId, SessionRow};
 
 #[derive(Debug, Error)]
 pub(crate) enum ProfileSetError {
@@ -106,6 +107,62 @@ pub(crate) struct ProfilesIndex {
     /// the Line triggers that matched your prompt and no longer see it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<String>,
+    /// The sessions you had open, in order, for the next launch to
+    /// restore. Left out with `selected` while they say nothing `active`
+    /// does not, see [`SessionEntry::list`]. An older build drops both on
+    /// its next save, and the launch after it opens one session on
+    /// `active` (D14).
+    #[serde(default, rename = "session", skip_serializing_if = "Vec::is_empty")]
+    pub sessions: Vec<SessionEntry>,
+    /// The session that was selected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected: Option<SessionId>,
+}
+
+/// A session as profiles.toml keeps it for the next launch: its id, which
+/// names its scrollback file, the name you gave it, where it last
+/// connected and the profile it last played.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct SessionEntry {
+    pub id: SessionId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tls: bool,
+    pub profile: String,
+}
+
+impl SessionEntry {
+    /// The list profiles.toml keeps for `rows`, the sessions in order,
+    /// with the id of the selected one. Both stay empty while the one
+    /// session open is the first and has no name, since `active` then
+    /// says all a launch needs and the file stays as today.
+    pub(crate) fn list(rows: &[SessionRow]) -> (Vec<Self>, Option<SessionId>) {
+        if let [row] = rows {
+            if row.id == SessionId::FIRST && row.name.is_none() {
+                return (Vec::new(), None);
+            }
+        }
+        let entries = rows
+            .iter()
+            .map(|row| Self {
+                id: row.id,
+                name: row.name.clone(),
+                host: row.host.clone(),
+                port: row.port,
+                tls: row.tls,
+                profile: row.profile.clone().unwrap_or_default(),
+            })
+            .collect();
+        (
+            entries,
+            rows.iter().find(|row| row.selected).map(|row| row.id),
+        )
+    }
 }
 
 pub(crate) const DEFAULT_PROFILE_NAME: &str = "default";
@@ -189,6 +246,8 @@ impl ProfileSet {
             scope: ScopeConfig::default(),
             migrations: Vec::new(),
             notices: Vec::new(),
+            sessions: Vec::new(),
+            selected: None,
         };
         let set = Self { root, index };
         set.save_index()?;
@@ -208,6 +267,11 @@ impl ProfileSet {
 
     pub(crate) fn active_name(&self) -> &str {
         &self.index.active
+    }
+
+    /// The sessions a launch restores, with the one selected.
+    pub(crate) fn sessions(&self) -> (&[SessionEntry], Option<SessionId>) {
+        (&self.index.sessions, self.index.selected)
     }
 
     pub(crate) fn active_path(&self) -> PathBuf {
@@ -368,6 +432,11 @@ impl ProfileSet {
         if self.index.active == old {
             self.index.active.clone_from(&new);
         }
+        for session in &mut self.index.sessions {
+            if session.profile == old {
+                session.profile.clone_from(&new);
+            }
+        }
         self.index.profiles[idx].name = new;
         self.save_index()?;
         Ok(())
@@ -393,6 +462,36 @@ impl ProfileSet {
         let previous = std::mem::replace(&mut self.index.active, name.to_string());
         if let Err(e) = self.save_index() {
             self.index.active = previous;
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// Keep `sessions` and `selected`, the list a launch restores, and
+    /// name `active`, the profile the selected session plays, as the
+    /// active one while the set lists it. The index saves only when one of
+    /// them changed, and one that does not save keeps what it had in
+    /// memory too.
+    pub(crate) fn keep_sessions(
+        &mut self,
+        active: Option<&str>,
+        sessions: Vec<SessionEntry>,
+        selected: Option<SessionId>,
+    ) -> Result<(), ProfileSetError> {
+        let active = active
+            .filter(|name| self.get(name).is_some())
+            .unwrap_or(&self.index.active)
+            .to_string();
+        let index = &self.index;
+        if active == index.active && sessions == index.sessions && selected == index.selected {
+            return Ok(());
+        }
+        let before = self.index.clone();
+        self.index.active = active;
+        self.index.sessions = sessions;
+        self.index.selected = selected;
+        if let Err(e) = self.save_index() {
+            self.index = before;
             return Err(e);
         }
         Ok(())
@@ -500,26 +599,37 @@ pub(crate) fn sanitize_name(name: &str) -> Result<String, ProfileSetError> {
     Ok(trimmed.to_string())
 }
 
-/// Write the live profile to its file before a copy of `source` reads
-/// that file, when `source` is the live profile. Call with
-/// [`PERSIST_LOCK`] held across this and the copy, so the copy reads
-/// what the flush wrote and no persist rewrites the source mid copy.
+/// Write `source` to its file before a copy reads that file, when a
+/// session plays it. Call with [`PERSIST_LOCK`] held across this and the
+/// copy, so the copy reads what the flush wrote and no persist rewrites
+/// the source mid copy.
 async fn flush_before_copy(shared: &SharedState, source: &str) {
-    let copying_live = shared
-        .profile_set
-        .lock()
-        .await
-        .as_ref()
-        .is_some_and(|set| set.active_name() == source);
-    // The live profile can run two seconds ahead of its file. After
+    // An open profile can run two seconds ahead of its file. After
     // `#profile reset` or `load` it is deliberately diverged, and the
     // copy takes the file as it stands.
-    if copying_live
-        && !shared
-            .auto_persist_suppressed
-            .load(std::sync::atomic::Ordering::Acquire)
-    {
-        persist_state(shared).await;
+    if let Some(open) = shared.open_profile(source).filter(|open| !open.held()) {
+        persist_state(shared, &open).await;
+    }
+}
+
+/// Keep the sessions in profiles.toml for the next launch to restore,
+/// with the profile the selected one plays as active, see
+/// [`ProfileSet::keep_sessions`]. Call with [`PERSIST_LOCK`] held, so no
+/// step opens, closes or moves a session between the read of the
+/// sessions and the save, and with no profile held, since each row takes
+/// its session's connection lock. An index that does not save is logged,
+/// and the next change to the sessions saves the list again.
+pub(crate) async fn save_sessions(state: &SharedState) {
+    let rows = state.session_rows();
+    let active = rows
+        .iter()
+        .find(|row| row.selected)
+        .and_then(|row| row.profile.clone());
+    let (sessions, selected) = SessionEntry::list(&rows);
+    if let Some(set) = state.profile_set.lock().await.as_mut() {
+        if let Err(e) = set.keep_sessions(active.as_deref(), sessions, selected) {
+            tracing::error!(error = %e, "could not save the sessions to profiles.toml");
+        }
     }
 }
 
@@ -578,19 +688,38 @@ pub(crate) async fn rename_profile(
     {
         return Err(RENAME_MIGRATION_PENDING.into());
     }
-    let live = {
-        let mut set = state.loaded_profile_set().await?;
-        let renames_live = set.active_name() == old;
-        set.rename(old, new).map_err(|e| e.to_string())?;
-        if renames_live {
-            state.note_active_profile(set.active_name());
-        }
-        renames_live.then(|| display_name(set.active_name()))
-    };
-    // The custom prompt draws the live profile's new name.
-    if let Some(name) = live {
-        state.profile.lock().await.display_name = Some(name);
+    let new = sanitize_name(new).map_err(|e| e.to_string())?;
+    let open = state.open_profile(old);
+    state
+        .loaded_profile_set()
+        .await?
+        .rename(old, &new)
+        .map_err(|e| e.to_string())?;
+    // Every session on it plays it under the new name, and the custom
+    // prompt draws that name. A restored session that has yet to open it
+    // opens it under the new name.
+    for open in open.into_iter().chain(state.waiting_on(old)) {
+        open.lock().await.set_name(&new);
     }
+    crate::loadouts::set::follow_profile_name(state, old, Some(&new)).await;
+    Ok(())
+}
+
+/// The body of [`profile_delete`]. A profile a session plays stays, with
+/// its file.
+///
+/// [`profile_delete`]: crate::ipc::profiles::profile_delete
+pub(crate) async fn delete_profile(state: &SharedState, name: &str) -> Result<(), String> {
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    if state.open_profile(name).is_some() {
+        return Err(ProfileSetError::CannotDeleteActive(name.to_string()).to_string());
+    }
+    state
+        .loaded_profile_set()
+        .await?
+        .delete(name)
+        .map_err(|e| e.to_string())?;
+    crate::loadouts::set::follow_profile_name(state, name, None).await;
     Ok(())
 }
 
@@ -688,6 +817,29 @@ pub(crate) mod tests {
 
         set.delete("bench").unwrap();
         assert_eq!(set.list().len(), 1);
+    }
+
+    #[test]
+    fn the_session_list_saves_and_follows_a_profile_rename() {
+        let dir = tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.create("scratch").unwrap();
+        let two = SessionId::numbered(2);
+        let on = |profile: &str| SessionEntry {
+            id: two,
+            name: Some("Alt".into()),
+            host: None,
+            port: None,
+            tls: false,
+            profile: profile.into(),
+        };
+        set.keep_sessions(Some("scratch"), vec![on("scratch")], Some(two))
+            .unwrap();
+        set.rename("scratch", "bench").unwrap();
+        let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        assert_eq!(reloaded.index.sessions, [on("bench")]);
+        assert_eq!(reloaded.index.selected, Some(two));
+        assert_eq!(reloaded.active_name(), "bench");
     }
 
     #[test]

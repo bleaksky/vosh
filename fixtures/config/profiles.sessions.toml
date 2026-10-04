@@ -1,0 +1,55 @@
+active = "Healer"
+migrations = [
+    "prompt-capture-to-profile",
+    "preset-sent-tells-on",
+    "prompt-line-triggers",
+]
+notices = ["Vosh moved your prompt capture into the Default profile."]
+selected = 3
+
+[[profile]]
+name = "default"
+
+[[profile]]
+name = "Healer"
+description = "Cleric main"
+
+[profile.auto_match]
+host = "play.theforsakenlands.com"
+port = 1848
+characters = [
+    "Tester",
+    "Testalt",
+]
+
+[[profile]]
+name = "Ranger"
+
+[profile.auto_match]
+host = "play.theforsakenlands.com"
+enabled = false
+
+[scope]
+theme = "profile"
+font = "global"
+dock_layout = "profile"
+keep_last_command = "profile"
+auto_update = "global"
+
+[[session]]
+id = 1
+host = "play.theforsakenlands.com"
+port = 1848
+profile = "Healer"
+
+[[session]]
+id = 3
+name = "Build port"
+host = "play.theforsakenlands.com"
+port = 1825
+tls = true
+profile = "Healer"
+
+[[session]]
+id = 4
+profile = "default"

@@ -28,8 +28,9 @@ use crate::profile::live::Profile;
 /// What the loadouts decide about one group of the catalog, while they
 /// decide it: on or off, and the active loadouts that decide. Every
 /// apply point lays this state over the group again, so a change made
-/// to it by hand lasts only until the next switch or launch, and the
-/// switch on the group heading in Settings waits while it holds.
+/// to it by hand lasts only until the next switch, launch or change
+/// another open profile saves to the catalog, and the switch on the
+/// group heading in Settings waits while it holds.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct LoadoutHold {
     /// Whether the loadouts turn the group on.
@@ -232,6 +233,7 @@ mod tests {
             active: active.iter().map(|n| (*n).to_string()).collect(),
             dormant,
             loadouts: vec![healer, warrior, Loadout::empty("Quiet")],
+            ..Default::default()
         }
     }
 
@@ -398,6 +400,7 @@ mod tests {
             dormant: false,
             loadouts: vec![warrior, crafter],
             active: vec!["warrior".into(), "crafter".into()],
+            ..Default::default()
         };
 
         apply_loadout_state(&set, &mut profile);
@@ -431,6 +434,7 @@ mod tests {
             dormant: false,
             loadouts: vec![Loadout::empty("default"), Loadout::empty("Healer")],
             active: vec!["default".into(), "Healer".into()],
+            ..Default::default()
         };
         apply_loadout_state(&set, &mut profile);
         assert_eq!(
@@ -461,6 +465,7 @@ mod tests {
             dormant: false,
             loadouts: vec![warrior],
             active: vec!["warrior".into()],
+            ..Default::default()
         };
         apply_loadout_state(&set, &mut profile);
         assert_eq!(
@@ -541,6 +546,7 @@ mod tests {
             dormant: false,
             loadouts: vec![warrior],
             active: vec!["warrior".into()],
+            ..Default::default()
         };
 
         apply_loadout_state(&set, &mut profile);

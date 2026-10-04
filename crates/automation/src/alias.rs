@@ -13,7 +13,7 @@
 //! Multiple commands separated by `;` in an expansion are split and each is
 //! re-fed through the engine, bounded by a maximum recursion depth.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -21,6 +21,7 @@ use thiserror::Error;
 use crate::groups::GroupSwitch;
 use crate::revision::next_revision;
 use crate::split::split_commands;
+use crate::stops::{StopKey, Stops};
 use crate::ScriptCall;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -165,10 +166,10 @@ pub struct AliasStore {
     groups: GroupSwitch,
     /// See [`AliasStore::revision`].
     revision: u64,
-    /// The aliases whose Lua Vosh stopped this session. A stopped alias
-    /// passes through, as an off one does, until you save it again. Vosh
-    /// never saves this, so a restart turns them all back on.
-    stopped: HashSet<String>,
+    /// The aliases whose Lua Vosh stopped, each under the key of the
+    /// session it stopped in. A stopped alias passes through there, as an
+    /// off one does, until you save it again.
+    stopped: Stops,
 }
 
 impl Default for AliasStore {
@@ -184,7 +185,7 @@ impl AliasStore {
             max_depth: DEFAULT_MAX_DEPTH,
             groups: GroupSwitch::default(),
             revision: 0,
-            stopped: HashSet::new(),
+            stopped: Stops::default(),
         }
     }
 
@@ -243,15 +244,15 @@ impl AliasStore {
     }
 
     /// Insert or replace an alias. Saving an alias Vosh stopped turns
-    /// it back on.
+    /// it back on everywhere.
     pub fn set(&mut self, alias: Alias) {
-        self.stopped.remove(&alias.name);
+        self.stopped.clear(&alias.name);
         self.aliases.insert(alias.name.clone(), alias);
         self.revision = next_revision();
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
-        self.stopped.remove(name);
+        self.stopped.clear(name);
         let removed = self.aliases.remove(name).is_some();
         if removed {
             self.revision = next_revision();
@@ -263,28 +264,32 @@ impl AliasStore {
         self.aliases.get(name)
     }
 
-    /// Turn the alias `name` off for the rest of the session, after Vosh
-    /// stopped its Lua. It stays off until you save it again.
-    pub fn stop(&mut self, name: &str) {
+    /// Turn the alias `name` off under `key`, after Vosh stopped its Lua
+    /// there. It stays off there until you save it again.
+    pub fn stop(&mut self, name: &str, key: StopKey) {
         if self.aliases.contains_key(name) {
-            self.stopped.insert(name.to_string());
+            self.stopped.stop(name, key);
         }
     }
 
-    /// True while Vosh holds the alias `name` off after a stop.
-    pub fn is_stopped(&self, name: &str) -> bool {
-        self.stopped.contains(name)
+    /// True while Vosh holds the alias `name` off under `key` after a
+    /// stop.
+    pub fn is_stopped(&self, name: &str, key: StopKey) -> bool {
+        self.stopped.contains(name, key)
     }
 
-    /// Keep the stops of `old` for each alias this store holds as `old`
-    /// held it. The Settings editor saves the whole list at once, so
-    /// only the alias you changed comes back on.
+    /// Drop every stop under `key`, as the session it names closes.
+    pub fn forget_stops(&mut self, key: StopKey) {
+        self.stopped.forget(key);
+    }
+
+    /// Take the stops of `old`, each under its key, for each alias this
+    /// store holds as `old` held it. The Settings editor saves the whole
+    /// list at once, so only the alias you changed comes back on.
     pub fn keep_stops_from(&mut self, old: &AliasStore) {
-        for name in &old.stopped {
-            if self.aliases.get(name) == old.aliases.get(name) {
-                self.stopped.insert(name.clone());
-            }
-        }
+        self.stopped = old
+            .stopped
+            .kept(|name| self.aliases.get(name) == old.aliases.get(name));
     }
 
     pub fn list(&self) -> Vec<&Alias> {
@@ -298,9 +303,9 @@ impl AliasStore {
     /// Test only, since the input path runs script bodies and so calls
     /// [`expand_line_full`](Self::expand_line_full).
     #[cfg(test)]
-    pub fn expand_line(&self, line: &str) -> Result<Vec<String>, ExpandError> {
+    pub fn expand_line(&self, line: &str, key: StopKey) -> Result<Vec<String>, ExpandError> {
         Ok(self
-            .expand_line_full(line, &PluginAliases::default())?
+            .expand_line_full(line, &PluginAliases::default(), key)?
             .into_iter()
             .filter_map(|step| match step {
                 ExpandStep::Command(command) => Some(command),
@@ -313,11 +318,13 @@ impl AliasStore {
     /// script aliases queue, in the order you typed them. The input
     /// pipeline runs each body where it stands, so what a body sends goes
     /// out between the commands around it. An alias in `plugins` takes
-    /// the place of a saved one of its name.
+    /// the place of a saved one of its name. A saved alias Vosh stopped
+    /// under `key`, the session you typed the line in, passes through.
     pub fn expand_line_full(
         &self,
         line: &str,
         plugins: &PluginAliases,
+        key: StopKey,
     ) -> Result<Vec<ExpandStep>, ExpandError> {
         let mut steps = Vec::new();
         for raw in split_commands(line) {
@@ -325,7 +332,7 @@ impl AliasStore {
             if trimmed.is_empty() {
                 continue;
             }
-            self.expand_into(trimmed, 0, plugins, &mut steps)?;
+            self.expand_into(trimmed, 0, plugins, key, &mut steps)?;
         }
         Ok(steps)
     }
@@ -335,6 +342,7 @@ impl AliasStore {
         command: &str,
         depth: usize,
         plugins: &PluginAliases,
+        key: StopKey,
         out: &mut Vec<ExpandStep>,
     ) -> Result<(), ExpandError> {
         if depth >= self.max_depth {
@@ -346,7 +354,7 @@ impl AliasStore {
         //   * the named entry exists, AND
         //   * its own `enabled` flag is true, AND
         //   * its group is enabled (or it is ungrouped), AND
-        //   * Vosh has not stopped its Lua this session.
+        //   * Vosh has not stopped its Lua in this session.
         // Disabled groups short-circuit to pass-through so the user
         // can flip whole "Combat" / "Crafting" loadouts off without
         // editing each row. An alias a plugin made has none of these and
@@ -355,7 +363,7 @@ impl AliasStore {
             self.aliases.get(name).filter(|a| {
                 a.enabled
                     && self.groups.allows(a.group.as_deref())
-                    && !self.stopped.contains(&a.name)
+                    && !self.stopped.contains(&a.name, key)
             })
         };
         let Some(alias) = plugins.get(name).or_else(saved) else {
@@ -381,7 +389,7 @@ impl AliasStore {
             if trimmed.is_empty() {
                 continue;
             }
-            self.expand_into(trimmed, depth + 1, plugins, out)?;
+            self.expand_into(trimmed, depth + 1, plugins, key, out)?;
         }
         Ok(())
     }
@@ -469,6 +477,10 @@ fn args_from_word(args: &str, n: usize) -> &str {
 mod tests {
     use super::*;
 
+    /// The session the lines here are typed in, and another.
+    const SESSION: StopKey = StopKey(1);
+    const OTHER: StopKey = StopKey(2);
+
     fn store(entries: &[(&str, &str)]) -> AliasStore {
         let mut s = AliasStore::new();
         for (n, e) in entries {
@@ -480,7 +492,7 @@ mod tests {
     /// The commands `line` sends with `plugins` over `store`.
     fn sends(store: &AliasStore, plugins: &PluginAliases, line: &str) -> Vec<String> {
         store
-            .expand_line_full(line, plugins)
+            .expand_line_full(line, plugins, SESSION)
             .unwrap()
             .into_iter()
             .filter_map(|step| match step {
@@ -548,20 +560,26 @@ mod tests {
     #[test]
     fn no_alias_passes_through() {
         let s = AliasStore::new();
-        assert_eq!(s.expand_line("look").unwrap(), vec!["look".to_string()]);
+        assert_eq!(
+            s.expand_line("look", SESSION).unwrap(),
+            vec!["look".to_string()]
+        );
     }
 
     #[test]
     fn simple_alias_expands() {
         let s = store(&[("greet", "wave")]);
-        assert_eq!(s.expand_line("greet").unwrap(), vec!["wave".to_string()]);
+        assert_eq!(
+            s.expand_line("greet", SESSION).unwrap(),
+            vec!["wave".to_string()]
+        );
     }
 
     #[test]
     fn alias_with_param_zero_takes_full_args() {
         let s = store(&[("chat", "say %0")]);
         assert_eq!(
-            s.expand_line("chat hello there").unwrap(),
+            s.expand_line("chat hello there", SESSION).unwrap(),
             vec!["say hello there".to_string()]
         );
     }
@@ -570,7 +588,7 @@ mod tests {
     fn alias_with_positional_params() {
         let s = store(&[("kill", "attack %1 with %2")]);
         assert_eq!(
-            s.expand_line("kill goblin sword").unwrap(),
+            s.expand_line("kill goblin sword", SESSION).unwrap(),
             vec!["attack goblin with sword".to_string()]
         );
     }
@@ -579,7 +597,10 @@ mod tests {
     fn missing_positional_param_substitutes_empty() {
         // %1 with no args expands to nothing. Trailing whitespace is trimmed.
         let s = store(&[("strike", "kick %1")]);
-        assert_eq!(s.expand_line("strike").unwrap(), vec!["kick".to_string()]);
+        assert_eq!(
+            s.expand_line("strike", SESSION).unwrap(),
+            vec!["kick".to_string()]
+        );
     }
 
     #[test]
@@ -588,7 +609,7 @@ mod tests {
         // guard catches it instead of running away.
         let s = store(&[("say", "say %0")]);
         assert!(matches!(
-            s.expand_line("say hello"),
+            s.expand_line("say hello", SESSION),
             Err(ExpandError::RecursionLimit(_))
         ));
     }
@@ -597,7 +618,8 @@ mod tests {
     fn range_param_takes_from_nth_word_onward() {
         let s = store(&[("tell", "%1 says: %2-")]);
         assert_eq!(
-            s.expand_line("tell bob hello there friend").unwrap(),
+            s.expand_line("tell bob hello there friend", SESSION)
+                .unwrap(),
             vec!["bob says: hello there friend".to_string()]
         );
     }
@@ -609,7 +631,7 @@ mod tests {
         // why `args_from_word` walks `args` directly.
         let s = store(&[("echo", "[%2-]")]);
         assert_eq!(
-            s.expand_line("echo skip  foo   bar").unwrap(),
+            s.expand_line("echo skip  foo   bar", SESSION).unwrap(),
             vec!["[foo   bar]".to_string()]
         );
     }
@@ -619,11 +641,11 @@ mod tests {
         // `%1-` is the same as `%0`: every word starting from the first.
         let s = store(&[("a", "%1-"), ("b", "%0")]);
         assert_eq!(
-            s.expand_line("a foo bar baz").unwrap(),
+            s.expand_line("a foo bar baz", SESSION).unwrap(),
             vec!["foo bar baz".to_string()]
         );
         assert_eq!(
-            s.expand_line("b foo bar baz").unwrap(),
+            s.expand_line("b foo bar baz", SESSION).unwrap(),
             vec!["foo bar baz".to_string()]
         );
     }
@@ -635,7 +657,7 @@ mod tests {
         // predictable rather than rejecting it.
         let s = store(&[("a", "%0-")]);
         assert_eq!(
-            s.expand_line("a foo bar baz").unwrap(),
+            s.expand_line("a foo bar baz", SESSION).unwrap(),
             vec!["foo bar baz".to_string()]
         );
     }
@@ -644,7 +666,7 @@ mod tests {
     fn range_param_with_too_few_words_expands_empty() {
         let s = store(&[("tell", "%1 says: %3-")]);
         assert_eq!(
-            s.expand_line("tell bob hi").unwrap(),
+            s.expand_line("tell bob hi", SESSION).unwrap(),
             vec!["bob says:".to_string()]
         );
     }
@@ -652,14 +674,17 @@ mod tests {
     #[test]
     fn range_param_with_no_args_expands_empty() {
         let s = store(&[("emote", "[%1-]")]);
-        assert_eq!(s.expand_line("emote").unwrap(), vec!["[]".to_string()]);
+        assert_eq!(
+            s.expand_line("emote", SESSION).unwrap(),
+            vec!["[]".to_string()]
+        );
     }
 
     #[test]
     fn double_percent_is_literal() {
         let s = store(&[("scream", "say 100%% effort")]);
         assert_eq!(
-            s.expand_line("scream").unwrap(),
+            s.expand_line("scream", SESSION).unwrap(),
             vec!["say 100% effort".to_string()]
         );
     }
@@ -668,7 +693,7 @@ mod tests {
     fn semicolon_separated_expansion_yields_multiple_commands() {
         let s = store(&[("morning", "wave;bow;say good morning")]);
         assert_eq!(
-            s.expand_line("morning").unwrap(),
+            s.expand_line("morning", SESSION).unwrap(),
             vec![
                 "wave".to_string(),
                 "bow".to_string(),
@@ -680,14 +705,14 @@ mod tests {
     #[test]
     fn recursive_alias_expands_chain() {
         let s = store(&[("a", "b"), ("b", "c")]);
-        assert_eq!(s.expand_line("a").unwrap(), vec!["c".to_string()]);
+        assert_eq!(s.expand_line("a", SESSION).unwrap(), vec!["c".to_string()]);
     }
 
     #[test]
     fn cyclic_alias_hits_recursion_limit() {
         let s = store(&[("a", "b"), ("b", "a")]);
         assert!(matches!(
-            s.expand_line("a"),
+            s.expand_line("a", SESSION),
             Err(ExpandError::RecursionLimit(_))
         ));
     }
@@ -698,14 +723,17 @@ mod tests {
         let mut alias = s.get("greet").unwrap().clone();
         alias.enabled = false;
         s.set(alias);
-        assert_eq!(s.expand_line("greet").unwrap(), vec!["greet".to_string()]);
+        assert_eq!(
+            s.expand_line("greet", SESSION).unwrap(),
+            vec!["greet".to_string()]
+        );
     }
 
     #[test]
     fn user_input_with_semicolons_splits_first() {
         let s = AliasStore::new();
         assert_eq!(
-            s.expand_line("look;sip water").unwrap(),
+            s.expand_line("look;sip water", SESSION).unwrap(),
             vec!["look".to_string(), "sip water".to_string()]
         );
     }
@@ -714,7 +742,7 @@ mod tests {
     fn escaped_semicolon_stays_literal() {
         let s = AliasStore::new();
         assert_eq!(
-            s.expand_line("say hello\\;world").unwrap(),
+            s.expand_line("say hello\\;world", SESSION).unwrap(),
             vec!["say hello;world".to_string()]
         );
     }
@@ -725,20 +753,20 @@ mod tests {
         s.set(Alias::new("kk", "kick %1").with_group("Combat"));
         // Group enabled by default — the alias fires.
         assert_eq!(
-            s.expand_line("kk goblin").unwrap(),
+            s.expand_line("kk goblin", SESSION).unwrap(),
             vec!["kick goblin".to_string()]
         );
         // Disable the whole group and the alias passes through as
         // typed (no expansion, no error).
         s.set_group_enabled("Combat", false);
         assert_eq!(
-            s.expand_line("kk goblin").unwrap(),
+            s.expand_line("kk goblin", SESSION).unwrap(),
             vec!["kk goblin".to_string()]
         );
         // Re-enable and it fires again.
         s.set_group_enabled("Combat", true);
         assert_eq!(
-            s.expand_line("kk goblin").unwrap(),
+            s.expand_line("kk goblin", SESSION).unwrap(),
             vec!["kick goblin".to_string()]
         );
     }
@@ -751,7 +779,10 @@ mod tests {
         let mut s = AliasStore::new();
         s.set(Alias::new("greet", "wave"));
         s.set_disabled_groups([String::new(), "Combat".to_string()]);
-        assert_eq!(s.expand_line("greet").unwrap(), vec!["wave".to_string()]);
+        assert_eq!(
+            s.expand_line("greet", SESSION).unwrap(),
+            vec!["wave".to_string()]
+        );
     }
 
     #[test]
@@ -786,7 +817,10 @@ mod tests {
         let mut s = store(&[("greet", "wave")]);
         assert!(s.remove("greet"));
         assert!(!s.remove("greet"));
-        assert_eq!(s.expand_line("greet").unwrap(), vec!["greet".to_string()]);
+        assert_eq!(
+            s.expand_line("greet", SESSION).unwrap(),
+            vec!["greet".to_string()]
+        );
     }
 
     #[test]
@@ -818,31 +852,57 @@ mod tests {
     fn set_overwrites_existing_alias() {
         let mut s = store(&[("greet", "wave")]);
         s.set(Alias::new("greet", "bow"));
-        assert_eq!(s.expand_line("greet").unwrap(), vec!["bow".to_string()]);
+        assert_eq!(
+            s.expand_line("greet", SESSION).unwrap(),
+            vec!["bow".to_string()]
+        );
     }
 
     #[test]
-    fn a_stopped_alias_passes_through_until_you_save_it() {
+    fn a_stopped_alias_passes_through_in_its_session_until_you_save_it() {
         let mut s = store(&[("hl", "cast heal")]);
-        s.stop("hl");
-        assert!(s.is_stopped("hl"));
-        assert_eq!(s.expand_line("hl").unwrap(), vec!["hl".to_string()]);
+        s.stop("hl", SESSION);
+        assert!(s.is_stopped("hl", SESSION));
+        assert_eq!(
+            s.expand_line("hl", SESSION).unwrap(),
+            vec!["hl".to_string()]
+        );
+        // The other session still expands it.
+        assert!(!s.is_stopped("hl", OTHER));
+        assert_eq!(
+            s.expand_line("hl", OTHER).unwrap(),
+            vec!["cast heal".to_string()]
+        );
+        s.stop("hl", OTHER);
         s.set(Alias::new("hl", "cast heal"));
-        assert!(!s.is_stopped("hl"));
-        assert_eq!(s.expand_line("hl").unwrap(), vec!["cast heal".to_string()]);
+        for key in [SESSION, OTHER] {
+            assert!(!s.is_stopped("hl", key));
+            assert_eq!(
+                s.expand_line("hl", key).unwrap(),
+                vec!["cast heal".to_string()]
+            );
+        }
+        // The stops of a session that closed go with it.
+        s.stop("hl", SESSION);
+        s.forget_stops(SESSION);
+        assert!(!s.is_stopped("hl", SESSION));
     }
 
     #[test]
-    fn a_whole_list_save_keeps_only_the_unchanged_alias_stops() {
+    fn a_whole_list_save_keeps_only_the_unchanged_alias_stops_in_each_session() {
         let mut old = store(&[("hl", "cast heal"), ("kk", "kick")]);
-        old.stop("hl");
-        old.stop("kk");
+        old.stop("hl", SESSION);
+        old.stop("kk", SESSION);
+        old.stop("kk", OTHER);
         let mut saved = store(&[("hl", "cast heal"), ("kk", "kick %1")]);
         saved.keep_stops_from(&old);
-        assert!(saved.is_stopped("hl"));
-        assert!(!saved.is_stopped("kk"));
+        assert!(saved.is_stopped("hl", SESSION));
+        assert!(!saved.is_stopped("hl", OTHER));
+        for key in [SESSION, OTHER] {
+            assert!(!saved.is_stopped("kk", key));
+        }
         assert!(saved.remove("hl"));
-        assert!(!saved.is_stopped("hl"));
+        assert!(!saved.is_stopped("hl", SESSION));
     }
 
     #[test]
@@ -869,7 +929,8 @@ mod tests {
         assert_eq!(
             s.expand_line_full(
                 "kk  big   dragon;look;hunt rat;wave",
-                &PluginAliases::default()
+                &PluginAliases::default(),
+                SESSION
             )
             .unwrap(),
             vec![
@@ -881,7 +942,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            s.expand_line("kk dragon;look;hunt rat").unwrap(),
+            s.expand_line("kk dragon;look;hunt rat", SESSION).unwrap(),
             vec!["look".to_string(), "flee".to_string()]
         );
     }
@@ -890,7 +951,7 @@ mod tests {
     fn recursion_limit_can_be_lowered() {
         let s = store(&[("a", "a")]).with_max_depth(2);
         assert!(matches!(
-            s.expand_line("a"),
+            s.expand_line("a", SESSION),
             Err(ExpandError::RecursionLimit(2))
         ));
     }

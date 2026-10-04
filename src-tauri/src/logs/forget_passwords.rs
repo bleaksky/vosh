@@ -7,6 +7,8 @@
 //! store hands back row ids and counts only, and an error names what
 //! failed, never a row.
 
+use std::sync::Arc;
+
 use tauri::{AppHandle, Manager};
 use tracing::warn;
 use vosh_log::{Forgotten, PasswordLines};
@@ -14,6 +16,7 @@ use vosh_log::{Forgotten, PasswordLines};
 use crate::app::state::SharedState;
 use crate::input::LogsCommand;
 use crate::logs::SharedLogStore;
+use crate::sessions::Session;
 
 /// How a run ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -159,28 +162,35 @@ pub(crate) fn message(outcome: &Outcome) -> String {
 /// The echo for a `#logs` line that is not a known command.
 pub(crate) const USAGE: &str = "[usage #logs forget-passwords [now]]";
 
-/// Run `command` off the input path and echo what it found or did.
-pub(crate) fn start<R: tauri::Runtime>(app: &AppHandle<R>, command: LogsCommand) {
+/// Run `command` off the input path and echo what it found or did in
+/// the terminal of `session`, where you typed it.
+pub(crate) fn start<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    session: &Arc<Session>,
+    command: LogsCommand,
+) {
     let now = match command {
         LogsCommand::Usage => {
-            echo(app, USAGE);
+            echo(app, session, USAGE);
             return;
         }
         LogsCommand::Preview => false,
         LogsCommand::Forget => true,
     };
     let app = app.clone();
+    let session = Arc::clone(session);
     tauri::async_runtime::spawn(async move {
         let state: SharedState = app.state::<SharedState>().inner().clone();
         let outcome = forget(&state.logs, &state.log_reader, now).await;
-        echo(&app, &message(&outcome));
+        echo(&app, &session, &message(&outcome));
     });
 }
 
-/// Print `line` in the terminal pane the way other slash commands do,
-/// through the one path that feeds the native renderer and xterm alike.
-fn echo<R: tauri::Runtime>(app: &AppHandle<R>, line: &str) {
-    crate::output::emit_output(app, format!("{line}\r\n").into_bytes());
+/// Print `line` in the terminal of `session` the way other slash
+/// commands do, through the one path that feeds the native renderer and
+/// xterm alike.
+fn echo<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, line: &str) {
+    crate::output::emit_output(app, session, format!("{line}\r\n").into_bytes());
 }
 
 #[cfg(test)]

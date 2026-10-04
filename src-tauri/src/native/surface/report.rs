@@ -11,6 +11,7 @@ use tauri::{Emitter, Manager};
 
 use super::APP;
 use crate::app::events::{NATIVE_GRID_SIZE, NATIVE_SCROLL};
+use crate::sessions::Session;
 
 /// What the frames last reported, so each report goes out only when it
 /// changes.
@@ -80,28 +81,30 @@ pub(super) fn report_sizes(cols: usize, rows: usize, game_rows: usize) {
     if !game_news {
         return;
     }
-    let state = app.state::<crate::app::state::SharedState>();
-    if let Ok(mut ws) = state.window_size.lock() {
+    let session = app
+        .state::<crate::app::state::SharedState>()
+        .selected_session();
+    if let Ok(mut ws) = session.window_size.lock() {
         *ws = (cols, game_rows);
     }
-    tell_session(state.inner(), &REPORTED.game_size);
+    tell_session(&session, &REPORTED.game_size);
 }
 
-/// Tell the live session the game's size that `newest` holds, packed as
-/// `changed` keeps it. The frame runs on the main thread, so it never
-/// waits on the session lock. When a command holds the lock, a task waits
-/// for it instead and then sends the size that is newest by then. The
-/// frames after this one see no new size, so without the task the game
-/// would wrap at the old width until the window changed again.
-fn tell_session(state: &crate::app::state::SharedState, newest: &'static AtomicU32) {
-    if let Ok(session) = state.session.try_lock() {
-        send_game_size(session.as_ref(), newest);
+/// Tell the connection `session` runs the game's size that `newest`
+/// holds, packed as `changed` keeps it. The frame runs on the main thread,
+/// so it never waits on the session slot. When a command holds the slot,
+/// a task waits for it instead and then sends the size that is newest by
+/// then. The frames after this one see no new size, so without the task
+/// the game would wrap at the old width until the window changed again.
+fn tell_session(session: &Arc<Session>, newest: &'static AtomicU32) {
+    if let Ok(slot) = session.slot.try_lock() {
+        send_game_size(slot.as_ref(), newest);
         return;
     }
-    let state = Arc::clone(state);
+    let session = Arc::clone(session);
     tauri::async_runtime::spawn(async move {
-        let session = state.session.lock().await;
-        send_game_size(session.as_ref(), newest);
+        let slot = session.slot.lock().await;
+        send_game_size(slot.as_ref(), newest);
     });
 }
 
@@ -125,13 +128,13 @@ fn scroll_report_key(offset: usize, max: usize) -> u64 {
     (clamp(offset) << 32) | max
 }
 
-/// Send the page the display offset and the history length as
-/// `vosh://native-scroll` `[offset, max]`. The page learns from it
+/// Send the page the display offset and the history length of the shown
+/// grid as `vosh://native-scroll` `[offset, max]`. The page learns from it
 /// whether the scrollback split is open, and draws the scroll depth from
 /// it. Only fires when `scroll_report_key` changes, so the live
 /// tail reports once as `[0, max]` and then stays quiet.
 pub(super) fn report_scroll_if_changed() {
-    let (offset, max) = crate::native::grid::scroll_metrics();
+    let (offset, max) = crate::native::grid::scroll_metrics(crate::native::grid::shown());
     let key = scroll_report_key(offset, max);
     if REPORTED.scroll.swap(key, Ordering::AcqRel) == key {
         return;
@@ -364,6 +367,7 @@ mod tests {
         let handle = crate::session::spawn(
             app.handle().clone(),
             &state,
+            &state.selected_session(),
             "127.0.0.1".into(),
             port,
             false,
@@ -373,7 +377,7 @@ mod tests {
         )
         .await
         .expect("the game answers");
-        *state.session.lock().await = Some(handle);
+        *state.selected_session().slot.lock().await = Some(handle);
         let mut game = accept.await.expect("the accept task");
         let mut heard = Vec::new();
 
@@ -391,7 +395,7 @@ mod tests {
 
     /// End the session `state` holds.
     async fn end_session(state: &crate::app::state::SharedState) {
-        let handle = state.session.lock().await.take();
+        let handle = state.selected_session().slot.lock().await.take();
         if let Some(handle) = handle {
             handle.shutdown().await;
         }
@@ -418,14 +422,15 @@ mod tests {
         let frame = |cols: u16| {
             on_a_plain_thread(|| {
                 if changed(&LAST, cols, 40) {
-                    tell_session(&state, &LAST);
+                    tell_session(&state.selected_session(), &LAST);
                 }
             });
         };
         frame(100);
         // You widen the window while a command holds the session.
         {
-            let _busy = state.session.lock().await;
+            let session = state.selected_session();
+            let _busy = session.slot.lock().await;
             frame(120);
         }
         // Frames go on at the new size, which none of them reports.
@@ -457,21 +462,22 @@ mod tests {
         } = sized_game().await;
         assert!(changed(&LAST, 100, 40));
 
-        // The waiting task holds a clone of the state until it has sent,
-        // so the count falls back to this once it is done.
-        let idle = Arc::strong_count(&state);
+        // The waiting task holds a clone of the session until it has
+        // sent, so the count falls back to this once it is done.
+        let session = state.selected_session();
+        let idle = Arc::strong_count(&session);
         {
-            let busy = state.session.lock().await;
+            let busy = session.slot.lock().await;
             // You widen the window while a command holds the session.
             assert!(changed(&LAST, 120, 40));
-            on_a_plain_thread(|| tell_session(&state, &LAST));
+            on_a_plain_thread(|| tell_session(&session, &LAST));
             // You widen it again, and that frame takes the session before
             // the waiting task does.
             assert!(changed(&LAST, 130, 40));
             send_game_size(busy.as_ref(), &LAST);
         }
         let deadline = tokio::time::Instant::now() + WAIT;
-        while Arc::strong_count(&state) > idle {
+        while Arc::strong_count(&session) > idle {
             assert!(
                 tokio::time::Instant::now() < deadline,
                 "the waiting task never sent"
@@ -482,8 +488,8 @@ mod tests {
         // What the session sends next lands behind every size it sent
         // before, so the last size ahead of it is the one the game keeps.
         let marker = b"after the resize";
-        let sent = state
-            .session
+        let sent = session
+            .slot
             .lock()
             .await
             .as_ref()

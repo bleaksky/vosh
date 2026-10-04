@@ -1,6 +1,9 @@
 //! The `#prompt` and `#unprompt` commands, which set how Vosh reads
 //! your prompt in the active profile, where it shows and whether
-//! Vosh draws your design in its place.
+//! Vosh draws your design in its place. Each acts on the engine of the
+//! session you type it in, and once the line has run, every other session
+//! on the profile takes what it chose, through
+//! [`settle_line_effects`](crate::disk::save::settle_line_effects).
 
 use vosh_prompt::card::sentences::and_list;
 

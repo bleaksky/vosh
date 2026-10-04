@@ -56,14 +56,15 @@ fn line_pass(
         plain,
         scope,
         highlight_ground::get(),
+        c.stop_key,
     );
     let tick_step = tick_reset(p, c, plain, now);
-    script::snapshot_vars(&p.script, &p.vars);
-    let mut outcome = p.script.match_line(plain);
-    script::turn_off_stopped(p, &outcome);
+    script::snapshot_vars(p, c);
+    let mut outcome = c.script.match_line(plain);
+    script::turn_off_stopped(p, c.stop_key, &outcome);
     // The Lua bodies of this line's Script actions join the outcome the
     // Lua registered triggers wrote, so one apply takes both.
-    outcome.append(run_trigger_scripts(p, &result));
+    outcome.append(run_trigger_scripts(p, c, &result));
     let apply = script::apply_actions(p, c, outcome);
     LinePass {
         result,
@@ -85,15 +86,19 @@ fn tick_reset(p: &Profile, c: &mut Connection, plain: &str, now: Instant) -> Opt
 /// captures, and return what they produced. A body Vosh stops turns its
 /// trigger off at once, so a later match of the same trigger on this
 /// line runs nothing.
-pub(super) fn run_trigger_scripts(p: &mut Profile, result: &LineResult) -> ScriptOutcome {
+pub(super) fn run_trigger_scripts(
+    p: &mut Profile,
+    c: &mut Connection,
+    result: &LineResult,
+) -> ScriptOutcome {
     let mut acc = ScriptOutcome::default();
     for call in &result.scripts {
-        if p.triggers.is_stopped(&call.source) {
+        if p.triggers.is_stopped(&call.source, c.stop_key) {
             continue;
         }
         let owner = Owner::Trigger(call.source.clone());
-        let outcome = p.script.run_body(&owner, &call.body, &call.captures);
-        script::turn_off_stopped(p, &outcome);
+        let outcome = c.script.run_body(&owner, &call.body, &call.captures);
+        script::turn_off_stopped(p, c.stop_key, &outcome);
         acc.append(outcome);
     }
     acc
@@ -449,8 +454,12 @@ fn prompt_block(
         }
         // Line triggers no longer see it. Note the ones that would have
         // fired, for the one-time notice.
-        let matched =
-            vosh_automation::trigger::matching(&p.triggers, &line.plain, MatchScope::Line);
+        let matched = vosh_automation::trigger::matching(
+            &p.triggers,
+            &line.plain,
+            MatchScope::Line,
+            c.stop_key,
+        );
         c.prompt
             .stage
             .line_triggers_matched(matched.into_iter().map(|t| t.name.as_str()));
@@ -463,11 +472,12 @@ fn prompt_block(
         &last.plain,
         MatchScope::Prompt,
         highlight_ground::get(),
+        c.stop_key,
     );
     if !result.scripts.is_empty() {
-        script::snapshot_vars(&p.script, &p.vars);
+        script::snapshot_vars(p, c);
     }
-    let outcome = run_trigger_scripts(p, &result);
+    let outcome = run_trigger_scripts(p, c, &result);
     let mut apply = script::apply_actions(p, c, outcome);
     batch.prompt_vars = true;
     batch.prompt = true;
@@ -590,6 +600,7 @@ fn unread_partial(
         plain,
         MatchScope::Prompt,
         highlight_ground::get(),
+        c.stop_key,
     );
     let effect = match &result.display {
         None => true,
@@ -599,8 +610,8 @@ fn unread_partial(
         || !result.scripts.is_empty();
     let mut apply = ApplyResult::default();
     if effect {
-        script::snapshot_vars(&p.script, &p.vars);
-        let outcome = run_trigger_scripts(p, &result);
+        script::snapshot_vars(p, c);
+        let outcome = run_trigger_scripts(p, c, &result);
         apply = script::apply_actions(p, c, outcome);
         // The webview hears every prompt a Prompts trigger acted on.
         batch.prompt_vars = true;
@@ -984,7 +995,7 @@ fn note_gag_without_reader(
     if c.prompt.stage.has_recognizer() {
         return;
     }
-    for trigger in vosh_automation::trigger::matching(&p.triggers, plain, scope) {
+    for trigger in vosh_automation::trigger::matching(&p.triggers, plain, scope, c.stop_key) {
         if hides_and_reads_prompt(trigger) && c.prompt.stage.gag_without_reader(&trigger.name) {
             batch.gag_without_reader.push(trigger.name.clone());
         }

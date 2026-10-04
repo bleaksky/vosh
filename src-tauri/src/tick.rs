@@ -24,14 +24,21 @@
 //!
 //! The profile keeps the settings, [`TickSettings`], since its file saves
 //! them. The connection keeps the count, [`TickRuntime`], and each of its
-//! methods takes the settings it reads or writes.
+//! methods takes the settings it reads or writes. Every session on a
+//! profile counts against its settings, so a change from one session
+//! reaches the others through [`follow_in_other_sessions`].
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
 use tracing::warn;
+
+use crate::app::state::AppState;
+use crate::profile::open::OpenProfile;
+use crate::sessions::SessionId;
 
 /// Default tick interval in seconds. Matches the typical ROM 2.4 tick.
 pub(crate) const DEFAULT_INTERVAL_SECS: u64 = 30;
@@ -186,14 +193,32 @@ pub(crate) struct TickStep {
 }
 
 impl TickRuntime {
-    /// Start the timer for a new connection. It starts unsynced, and the
-    /// first `World.Time` hour of the session primes again, so an hour
-    /// that moved while you were away is not a tick.
+    /// Start the timer for a new connection, with your switch turned on.
+    /// It starts unsynced, and the first `World.Time` hour of the session
+    /// primes again, so an hour that moved while you were away is not a
+    /// tick.
     pub(crate) fn start_session(&mut self, settings: &mut TickSettings, now: Instant) {
+        self.begin_session();
+        self.enable(settings, now);
+    }
+
+    /// Start the timer for a new connection while another session on the
+    /// profile is connected. That session's count already follows your
+    /// switch, so it stays as it stands, and the count starts only while
+    /// it is on.
+    pub(crate) fn join_connected(&mut self, settings: &TickSettings, now: Instant) {
+        self.begin_session();
+        if settings.config.enabled {
+            self.restart(now);
+        } else {
+            self.stop();
+        }
+    }
+
+    fn begin_session(&mut self) {
         self.in_session = true;
         self.last_world_hour = None;
         self.forget_sync();
-        self.enable(settings, now);
     }
 
     /// Stop the timer when the connection ends. `config.enabled` is your
@@ -215,27 +240,36 @@ impl TickRuntime {
     /// [`set_interval`](Self::set_interval).
     ///
     /// A running tick stays on, whatever the new profile saved. A
-    /// connection starts the tick whatever the profile says, and earlier
-    /// builds saved it off whenever the game had disconnected, so a
-    /// saved off cannot be told from one you chose. You stop the tick
+    /// connection alone on its profile starts the tick whatever the
+    /// profile says, and earlier builds saved it off whenever the game
+    /// had disconnected, so a saved off cannot be told from one you
+    /// chose. You stop the tick
     /// yourself with `#tick disable` or the Tick switch in Settings. A
     /// config that turns the tick on while a session runs starts a
     /// stopped one now. Between sessions the config's setting applies
     /// as saved, and the timer stays stopped until the next connection
     /// starts it.
     pub(crate) fn adopt(&mut self, settings: &mut TickSettings, before: &TickConfig, now: Instant) {
-        let was_on = before.enabled;
-        let was_interval = before.interval();
-        if self.in_session && was_on && self.last_tick.is_some() {
+        if self.in_session && before.enabled && self.last_tick.is_some() {
             settings.config.enabled = true;
         }
+        self.follow(settings, before, now);
+    }
+
+    /// Follow the tick settings as they read now, which read `before`
+    /// until they changed. A switch turned off stops the count, one
+    /// turned on while a session runs starts it, and a new interval
+    /// moves the expected tick and starts the fallback's wait again as
+    /// [`set_interval`](Self::set_interval) does. Every other session on
+    /// a profile follows a change to its settings this way.
+    pub(crate) fn follow(&mut self, settings: &TickSettings, before: &TickConfig, now: Instant) {
         if !settings.config.enabled {
             self.stop();
-        } else if self.in_session && (!was_on || self.last_tick.is_none()) {
+        } else if self.in_session && (!before.enabled || self.last_tick.is_none()) {
             self.forget_sync();
             self.restart(now);
         } else {
-            self.note_interval_change(settings, was_interval, now);
+            self.note_interval_change(settings, before.interval(), now);
         }
     }
 
@@ -458,6 +492,28 @@ fn fire_command(settings: &TickSettings, fired: bool) -> Option<String> {
         settings.config.auto_fire.clone()
     } else {
         None
+    }
+}
+
+/// Bring the count of every session on `open` but `session` to the tick
+/// settings `open` holds now, which read `before` until `session` changed
+/// them. The sessions come from the map before the profile lock, and
+/// each one's connection is locked in turn under it, never two at once.
+/// Call with no lock held.
+pub(crate) async fn follow_in_other_sessions(
+    state: &AppState,
+    session: SessionId,
+    open: &Arc<OpenProfile>,
+    before: &TickConfig,
+) {
+    let others = state.other_sessions(session);
+    if others.is_empty() {
+        return;
+    }
+    let p = open.lock().await;
+    let now = Instant::now();
+    for other in p.players(&others) {
+        other.connection.lock().tick.follow(&p.tick, before, now);
     }
 }
 
@@ -986,6 +1042,22 @@ mod tests {
     }
 
     #[test]
+    fn a_connect_beside_a_connected_session_keeps_the_switch_as_it_stands() {
+        let t0 = Instant::now();
+        let mut s = TickSettings::default();
+        s.config.enabled = false;
+        let mut t = TickRuntime::default();
+        t.join_connected(&s, t0);
+        assert!(t.in_session);
+        assert_eq!(t.next_fire(&s), None);
+
+        s.config.enabled = true;
+        let mut t = TickRuntime::default();
+        t.join_connected(&s, t0);
+        assert_eq!(t.remaining(&s, t0), Some(secs(30.0)));
+    }
+
+    #[test]
     fn the_warning_prints_once_per_cycle_and_not_again_while_overdue() {
         let t0 = Instant::now();
         let (mut s, mut t) = session(t0);
@@ -1199,6 +1271,64 @@ mod tests {
                 .payload
                 .fired
         );
+    }
+
+    // ── A count follows a change from another session ───────────────
+
+    #[test]
+    fn following_a_switch_turned_off_stops_the_count() {
+        let t0 = Instant::now();
+        let (mut s, mut t, _) = synced_session(t0);
+        let before = s.config.clone();
+        s.config.enabled = false;
+        t.follow(&s, &before, t0 + secs(8.0));
+        assert_eq!(t.last_tick, None);
+        assert!(!t.synced);
+        assert!(t.in_session);
+    }
+
+    #[test]
+    fn following_a_switch_turned_on_starts_the_count_only_in_a_session() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        t.disable(&mut s);
+        let before = s.config.clone();
+        s.config.enabled = true;
+        let on = t0 + secs(8.0);
+        t.follow(&s, &before, on);
+        assert_eq!(t.remaining(&s, on), Some(secs(30.0)));
+        // Between connections the count waits for the next one.
+        let mut idle = TickRuntime::default();
+        idle.follow(&s, &before, on);
+        assert_eq!(idle.next_fire(&s), None);
+    }
+
+    #[test]
+    fn following_a_new_interval_moves_the_expected_tick_and_keeps_the_count() {
+        let t0 = Instant::now();
+        let (mut s, mut t, tick) = synced_session(t0);
+        let before = s.config.clone();
+        s.config.interval_secs = 45;
+        let change = tick + secs(10.0);
+        t.follow(&s, &before, change);
+        assert_eq!(t.next_fire(&s), Some(tick + secs(45.0)));
+        assert!(t.synced);
+        assert_eq!(t.interval_changed_at, Some(change));
+    }
+
+    #[test]
+    fn a_profile_laid_over_keeps_a_running_tick_on_where_a_change_stops_it() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        let before = s.config.clone();
+        s.config.enabled = false;
+        t.adopt(&mut s, &before, t0 + secs(8.0));
+        assert!(s.config.enabled);
+        assert_eq!(t.last_tick, Some(t0));
+
+        s.config.enabled = false;
+        t.follow(&s, &before, t0 + secs(9.0));
+        assert_eq!(t.last_tick, None);
     }
 
     #[test]

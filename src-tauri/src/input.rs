@@ -6,7 +6,7 @@
 //! in it to the walker there.
 
 mod automation;
-mod profile;
+pub(crate) mod profile;
 mod prompt;
 mod script;
 mod slash;
@@ -15,8 +15,11 @@ mod tick;
 mod vars;
 pub(crate) mod walk;
 
+use std::sync::Arc;
+
 use tauri::{AppHandle, Emitter};
 use vosh_automation::alias::{ExpandError, ExpandStep};
+use vosh_prompt::PromptConfig;
 use walk::WalkCommand;
 
 use crate::app::events::{self, HELP_OPEN};
@@ -27,9 +30,10 @@ use crate::profile::live::Profile;
 use crate::profile::switch::read_shared_layer;
 use crate::prompt::request_prompt_repaint;
 use crate::script::{run_alias_body, ApplyResult};
-use crate::session;
 use crate::session::connection::Connection;
-use crate::session::effects::LinesRun;
+use crate::session::effects::{collect_script_result, run_lines_locked, Collected, LinesRun};
+use crate::sessions::Session;
+use crate::tick::TickConfig;
 
 use slash::handle_slash;
 use target::{run_target_clear, run_target_cycle, run_target_set};
@@ -82,20 +86,30 @@ impl InputResult {
     }
 }
 
-/// True when `line` is `#profile reset` or `#profile load`, tokenized
+/// The two `#profile` commands that lay a profile over the live one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProfileReplace {
+    /// `#profile reset` lays the defaults over it.
+    Reset,
+    /// `#profile load` lays its file over it.
+    Load,
+}
+
+/// Which of `#profile reset` and `#profile load` `line` is, tokenized
 /// exactly like the slash dispatcher, so the persist-suppression
 /// decision in [`run_typed_line`] cannot drift from what actually
 /// executes ("#profile  reset" and "# profile load" count too).
-pub(crate) fn is_profile_reset_or_load(line: &str) -> bool {
-    let Some(rest) = line.trim_start().strip_prefix('#') else {
-        return false;
-    };
+pub(crate) fn profile_replace(line: &str) -> Option<ProfileReplace> {
+    let rest = line.trim_start().strip_prefix('#')?;
     let (cmd, rest) = split_first_word(rest);
     if cmd != "profile" {
-        return false;
+        return None;
     }
-    let (sub, _) = split_first_word(rest);
-    matches!(sub, "reset" | "load")
+    match split_first_word(rest).0 {
+        "reset" => Some(ProfileReplace::Reset),
+        "load" => Some(ProfileReplace::Load),
+        _ => None,
+    }
 }
 
 /// Who asked for a line the input pipeline runs, which decides the
@@ -221,25 +235,26 @@ pub(crate) fn may_replace_profile(state: &AppState, line: &str) -> bool {
     !state
         .loadout_mode
         .load(std::sync::atomic::Ordering::Acquire)
-        && is_profile_reset_or_load(line)
+        && profile_replace(line).is_some()
 }
 
 /// What the terminal prints when you send a line with no connection.
 pub(crate) const NOT_CONNECTED: &[u8] = b"\r\n[not connected]\r\n";
 
-/// Run a line you typed, the body of `session_send_input`. `#help` and
-/// `#logs` take their short cuts. Any other line runs through the
-/// pipeline under the profile lock and the connection's. Then the prompt
-/// repaints when the line changed how it looks, the line's saves and
-/// events go out with your target when it changed, and what it sends and
-/// echoes is delivered.
+/// Run a line you typed in `session`, the body of
+/// `session_send_input`. `#help` and `#logs` take their short cuts. Any
+/// other line runs through the pipeline under the profile lock and the
+/// connection's. Then the prompt repaints when the line changed how it
+/// looks, the line's saves and events go out with your target when it
+/// changed, and what it sends and echoes is delivered.
 pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
+    session: &Arc<Session>,
     line: &str,
 ) -> Result<(), String> {
     // What the plugins printed at launch, if nothing showed it yet.
-    crate::app::plugins::show_launch_lines(app, state);
+    crate::app::plugins::show_launch_lines(app, session);
     // `#help <words>` opens Help on those words. The topics live in the
     // page, so the main window searches them, opens Help on the best
     // match, or says in the terminal that none matched.
@@ -252,7 +267,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     // while on a large log, so it runs on its own task and echoes when
     // done.
     if let Some(command) = logs_command(line) {
-        crate::logs::forget_passwords::start(app, command);
+        crate::logs::forget_passwords::start(app, session, command);
         return Ok(());
     }
     // `#profile reset` and `#profile load` replace the live profile
@@ -266,65 +281,63 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         None
     };
     // The line runs the way a line from a timer, the tick or Lua runs.
-    let LinesRun {
-        apply,
-        shown,
-        effects,
-    } = {
-        let mut profile = state.profile.lock().await;
-        let mut connection = state.connection.lock();
-        session::effects::run_lines_locked(
+    let (
+        open,
+        LinesRun {
+            apply,
+            shown,
+            effects,
+            replaced_by,
+        },
+    ) = {
+        let mut profile = session.lock_profile().await;
+        let mut connection = session.connection.lock();
+        let run = run_lines_locked(
             state,
             &mut profile,
             &mut connection,
             [(LineFrom::You, line)],
             shared_layer.as_ref(),
-        )
+        );
+        (profile.open().clone(), run)
     };
     // `#prompt draw` and `#prompt show` change the prompt on screen at
     // once, and `#prompt default` draws the new design there. A typed
     // line runs outside the session loop, so it waits for the repaint.
     if shown.repaint {
-        request_prompt_repaint(state).await;
+        request_prompt_repaint(session).await;
     }
 
-    settle_line_effects(app, effects).await;
+    settle_line_effects(app, session, &open, effects, replaced_by).await;
 
     if let Some(payload) = shown.target {
-        let _ = app.emit(events::TARGET, payload);
+        session.emit(app, events::TARGET, &payload);
     }
 
-    deliver_script_result(app, state, apply).await
+    deliver_script_result(app, session, apply.ran_under(&open)).await
 }
 
 /// Apply a script result outside the session loop, the way every path
 /// applies one, then print its echo lines on the terminal, send its bytes
-/// to the game and hand a `#walk` to the walker after them. With no
-/// connection the terminal says so.
+/// to the game `session` runs and hand a `#walk` to its walker after them.
+/// With no connection the terminal says so.
 async fn deliver_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    state: &SharedState,
+    session: &Arc<Session>,
     apply: ApplyResult,
 ) -> Result<(), String> {
-    let session::effects::Collected {
+    let Collected {
         bytes,
         echoes,
         walk,
-    } = session::effects::collect_script_result(
-        app,
-        &state.profile,
-        &state.connection,
-        &state.lua_timers,
-        apply,
-    )
-    .await;
-    output::echo_lines(app, &echoes);
+    } = collect_script_result(app, session, apply).await;
+    output::echo_lines(app, session, &echoes);
 
     if bytes.is_empty() && walk.is_none() {
         return Ok(());
     }
 
-    let mut current = state.session.lock().await;
+    let mut current = session.slot.lock().await;
     if let Some(handle) = current.as_ref() {
         let sent = bytes.is_empty() || handle.send(bytes);
         if sent && walk.map_or(true, |walk| handle.walk(walk)) {
@@ -336,7 +349,7 @@ async fn deliver_script_result<R: tauri::Runtime>(
         // it. Take the handle out, so this line and every one after it
         // finds no connection, as after a disconnect.
         *current = None;
-        output::emit_output(app, NOT_CONNECTED.to_vec());
+        output::emit_output(app, session, NOT_CONNECTED.to_vec());
         return Ok(());
     }
     // With no connection no walk is under way, so `#walk` and `#walk stop`
@@ -350,10 +363,14 @@ async fn deliver_script_result<R: tauri::Runtime>(
         walk,
         Some(WalkCommand::Stop { key: false, .. } | WalkCommand::Status { .. })
     ) {
-        output::echo_lines(app, &[session::walk::NOT_WALKING.to_string()]);
+        output::echo_lines(
+            app,
+            session,
+            &[crate::session::walk::NOT_WALKING.to_string()],
+        );
     }
     if !bytes.is_empty() || reaches_game {
-        output::emit_output(app, NOT_CONNECTED.to_vec());
+        output::emit_output(app, session, NOT_CONNECTED.to_vec());
     }
     Ok(())
 }
@@ -373,8 +390,12 @@ pub(crate) struct Ran {
     /// A `#profile reset`, or a `#profile load` that read its file,
     /// replaced the live profile.
     pub(crate) replaced: bool,
-    /// The line changed the tick settings, like `#tick warn at 10`.
-    pub(crate) tick_changed: bool,
+    /// The tick settings before the line, when it changed them, like
+    /// `#tick warn at 10`.
+    pub(crate) tick_before: Option<TickConfig>,
+    /// The `[prompt]` table the line left in the engine, when it changed
+    /// it without laying another profile over, like `#prompt draw off`.
+    pub(crate) prompt: Option<PromptConfig>,
 }
 
 /// [`run_line_from`] for a line you type, for a test.
@@ -390,10 +411,11 @@ pub(crate) fn run_line(
 
 /// Run `line`, which `from` asks for, through the input pipeline: what
 /// to send, what to echo, what the Lua it ran asks for, whether it
-/// replaced the live profile, and whether it changed the tick settings,
-/// for [`LineEffects::note_ran`]. The target words and the quick keys
-/// read and set your target on `c`. Who asked decides the slash commands
-/// it may run, those a quick key in it expands to included.
+/// replaced the live profile, and whether it changed the tick settings
+/// or the `[prompt]` table, for [`LineEffects::note_ran`]. The target
+/// words and the quick keys read and set your target on `c`. Who asked
+/// decides the slash commands it may run, those a quick key in it
+/// expands to included.
 pub(crate) fn run_line_from(
     state: &AppState,
     profile: &mut Profile,
@@ -404,13 +426,17 @@ pub(crate) fn run_line_from(
     let mut replaced = false;
     let mut lua = ApplyResult::default();
     let tick_before = profile.tick.config.clone();
+    let prompt_before = c.prompt.revision();
     let result = process_line(state, profile, c, line, from, &mut replaced, &mut lua);
-    let tick_changed = profile.tick.config != tick_before;
+    let tick_before = (profile.tick.config != tick_before).then_some(tick_before);
+    let prompt =
+        (!replaced && c.prompt.revision() != prompt_before).then(|| c.prompt.config().clone());
     Ran {
         result,
         lua,
         replaced,
-        tick_changed,
+        tick_before,
+        prompt,
     }
 }
 
@@ -421,28 +447,36 @@ pub(crate) fn run_line_from(
 /// disk the way the same line typed at the prompt does. Lua that changed
 /// durable state marks the profile dirty where its result is applied,
 /// after these.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct LineEffects {
     /// A `#profile reset` or `#profile load` replaced the live profile,
     /// which leaves it diverged from disk on purpose.
     pub(crate) replaced: bool,
     /// A slash command came after the last replace, or with none.
     pub(crate) dirty: bool,
-    /// A `#tick` command changed the tick settings. The status line and
-    /// the Settings Tick card show them, so every window hears the new
-    /// settings once the lines have run.
-    pub(crate) tick_changed: bool,
+    /// The tick settings before the first line that changed them, like a
+    /// `#tick` command. The status line and the Settings Tick card show
+    /// them, so every window hears the new settings once the lines have
+    /// run, and every other session on the profile follows them.
+    pub(crate) tick_before: Option<TickConfig>,
+    /// The `[prompt]` table the last line that changed it left in its
+    /// engine, like `#prompt draw off`. The engine of every other session
+    /// on the profile takes what you chose in it.
+    pub(crate) prompt: Option<PromptConfig>,
 }
 
 impl LineEffects {
     /// Note one line [`run_line_from`] ran: [`Self::note`] with whether it
-    /// replaced the live profile, whether it changed the tick settings,
-    /// and whether the Lua bodies of its script aliases changed durable
-    /// state.
+    /// replaced the live profile, whether it changed the tick settings or
+    /// the `[prompt]` table, and whether the Lua bodies of its script
+    /// aliases changed durable state.
     pub(crate) fn note_ran(&mut self, line: &str, ran: &Ran) {
         self.note(line, ran.replaced);
-        if ran.tick_changed {
-            self.tick_changed = true;
+        if self.tick_before.is_none() {
+            self.tick_before.clone_from(&ran.tick_before);
+        }
+        if ran.prompt.is_some() {
+            self.prompt.clone_from(&ran.prompt);
         }
         if ran.lua.durable_changed {
             self.dirty = true;
@@ -463,7 +497,7 @@ impl LineEffects {
         // and loadout mode turns the pair into echoes, so neither counts
         // as a change to save. Saving after a failed load would write a
         // profile an earlier `#profile reset` blanked.
-        if is_profile_reset_or_load(line) {
+        if profile_replace(line).is_some() {
             return;
         }
         // A `#walk` changes nothing a save keeps, and what it holds runs
@@ -483,8 +517,8 @@ impl LineEffects {
 /// and what to echo locally. The app runs every line through [`run_line_from`],
 /// which also says whether the line replaced the profile. A test that
 /// needs no app state of its own runs here, on a fresh one, with a fresh
-/// connection that the line's target words and quick keys change and
-/// then drop.
+/// connection, so what the line leaves on it, such as a target, a Lua
+/// global or a recording, drops with it.
 #[cfg(test)]
 pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
     run_line(
@@ -533,10 +567,10 @@ fn process_line(
     // shadowed by aliases or quick-keys.
     let (head, rest) = split_first_word(trimmed);
     match head {
-        "tar" => return run_target_set(c, &mut profile.vars, rest),
-        "tarn" => return run_target_cycle(c, &mut profile.vars, 1),
-        "tarp" => return run_target_cycle(c, &mut profile.vars, -1),
-        "tarclear" => return run_target_clear(c, &mut profile.vars),
+        "tar" => return run_target_set(c, rest),
+        "tarn" => return run_target_cycle(c, 1),
+        "tarp" => return run_target_cycle(c, -1),
+        "tarclear" => return run_target_clear(c),
         _ => {}
     }
 
@@ -573,17 +607,17 @@ fn process_line(
     // so the recorded macro stays high-level: a recorded `fb dragon`
     // re-expands through the alias engine on replay rather than
     // freezing the alias definition at record time.
-    if let Some(recorder) = profile.recording_macro.as_mut() {
+    if let Some(recorder) = c.recording_macro.as_mut() {
         recorder.commands.push(trimmed.to_string());
     }
 
     // Plain input. Interpolate variables, then expand aliases, then encode.
     // An alias that runs Lua runs its body where it stands, so what the
     // body sends goes out in the order you typed the line.
-    let interpolated = profile.vars.interpolate(trimmed);
+    let interpolated = c.var_view(profile).interpolate(trimmed);
     let steps = match profile
         .aliases
-        .expand_line_full(&interpolated, &profile.plugin_aliases)
+        .expand_line_full(&interpolated, &c.plugin_aliases, c.stop_key)
     {
         Ok(steps) => steps,
         Err(ExpandError::RecursionLimit(depth)) => {
