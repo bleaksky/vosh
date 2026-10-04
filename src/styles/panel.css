@@ -1217,9 +1217,17 @@
   color: var(--tertiary);
 }
 
+/* The meter is 48 px while the percent fits beside it. In a narrow pane
+   the name gives way first, then the percent runs into the 12 px inset
+   on the right, and only then does the meter give way, so the percent
+   stops 2 px short of the pane's edge and is never cut at any size
+   Settings offers. The 100% is the row inside its insets, and the 6px
+   is the two 8 px gaps less the 10 px of the inset the percent may
+   take. At 12 px the meter keeps its 48 px in every pane from the
+   narrowest, 120 px, up, as it always drew. */
 .pane-member-meter {
   flex: none;
-  width: 48px;
+  width: clamp(0px, 100% - 6px - round(36px * var(--mud-scale), 1px), 48px);
   height: 3px;
   margin-left: 8px;
   border-radius: 1.5px;
