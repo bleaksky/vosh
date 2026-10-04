@@ -451,8 +451,10 @@ export const PRESETS: Preset[] = [
       ),
       replace(
         'buff.sanctuary',
-        '^The white aura around (.+) fades\\.$',
-        '{bold_red}##{reset} {fg:178}The white aura around $1 fades.{reset}',
+        // Sanctuary wearing off someone else (const.c, its msg_off2).
+        // Your own fade is buff.protective_aura.
+        '^The protective aura around (.+) fades\\.$',
+        '{bold_red}##{reset} {fg:178}The protective aura around $1 fades.{reset}',
       ),
       replace(
         'buff.spell_turning',
