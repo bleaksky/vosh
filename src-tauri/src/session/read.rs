@@ -269,10 +269,12 @@ async fn deliver_line_step<R: tauri::Runtime>(
     }
     send_trigger_outputs(&mut conn.stream, &result.sends).await?;
     let mut sink = OutputSink::Batch(batch);
+    let mut io = ScriptIo::Session(&mut conn.stream, &mut sink, &mut conn.walker);
     apply_script_result(
         &conn.app,
-        &mut ScriptIo::Session(&mut conn.stream, &mut sink, &mut conn.walker),
+        &mut io,
         &conn.profile,
+        &conn.connection,
         &conn.lua_timers,
         apply,
     )
@@ -281,12 +283,11 @@ async fn deliver_line_step<R: tauri::Runtime>(
         conn.perf.ticks += 1;
         deliver_tick_step(
             &conn.app,
-            &mut conn.stream,
-            &mut conn.walker,
+            &mut io,
             &conn.profile,
+            &conn.connection,
             &conn.lua_timers,
             step,
-            &mut sink,
         )
         .await?;
     }
@@ -319,6 +320,7 @@ pub(super) async fn walked<R: tauri::Runtime>(
                 &mut conn.walker,
             ),
             &conn.profile,
+            &conn.connection,
             &conn.lua_timers,
             apply,
         )

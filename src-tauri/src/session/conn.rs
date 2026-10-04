@@ -27,7 +27,7 @@ use super::connection::SharedConnection;
 use super::echo::ServerEcho;
 use super::effects::{
     collect_script_result, deliver_tick_step, framed_echoes, run_fired_command, Collected,
-    OutputSink,
+    OutputSink, ScriptIo,
 };
 use super::lines::LineAccumulator;
 use super::log_sink::{capture_held_lines, capture_pending_line, LogSink};
@@ -412,6 +412,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     &mut conn.stream,
                     &mut conn.walker,
                     &conn.profile,
+                    &conn.connection,
                     &conn.lua_timers,
                     &mut timer_next,
                 )
@@ -637,7 +638,14 @@ async fn walk_command<R: tauri::Runtime>(
             bytes,
             echoes,
             walk,
-        } = collect_script_result(&conn.app, &conn.profile, &conn.lua_timers, apply).await;
+        } = collect_script_result(
+            &conn.app,
+            &conn.profile,
+            &conn.connection,
+            &conn.lua_timers,
+            apply,
+        )
+        .await;
         echo_lines(&conn.app, &echoes);
         if !bytes.is_empty() {
             send_typed(conn, log_sink, hold_until, &bytes, false).await?;
@@ -670,12 +678,11 @@ async fn handle_tick<R: tauri::Runtime>(
     }
     deliver_tick_step(
         app,
-        stream,
-        walker,
+        &mut ScriptIo::Session(stream, &mut OutputSink::Direct, walker),
         profile,
+        connection,
         lua_timers,
         step,
-        &mut OutputSink::Direct,
     )
     .await
 }
@@ -689,21 +696,15 @@ async fn fire_due_settings_timers<R: tauri::Runtime>(
     stream: &mut Stream,
     walker: &mut Walker,
     profile: &Arc<Mutex<Profile>>,
+    connection: &SharedConnection,
     lua_timers: &SharedTimers,
     timer_next: &mut HashMap<u32, Instant>,
 ) -> std::io::Result<()> {
     let due = due_settings_timers(&*profile.lock().await, timer_next, Instant::now());
+    let mut sink = OutputSink::Direct;
+    let mut io = ScriptIo::Session(stream, &mut sink, walker);
     for command in due {
-        run_fired_command(
-            app,
-            stream,
-            walker,
-            profile,
-            lua_timers,
-            &command,
-            &mut OutputSink::Direct,
-        )
-        .await?;
+        run_fired_command(app, &mut io, profile, connection, lua_timers, &command).await?;
     }
     Ok(())
 }

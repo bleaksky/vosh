@@ -310,8 +310,14 @@ async fn deliver_script_result<R: tauri::Runtime>(
         bytes,
         echoes,
         walk,
-    } = session::effects::collect_script_result(app, &state.profile, &state.lua_timers, apply)
-        .await;
+    } = session::effects::collect_script_result(
+        app,
+        &state.profile,
+        &state.connection,
+        &state.lua_timers,
+        apply,
+    )
+    .await;
     output::echo_lines(app, &echoes);
 
     if bytes.is_empty() && walk.is_none() {
