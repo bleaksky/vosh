@@ -31,13 +31,13 @@ pub(super) fn handle_slash(
 ) -> InputResult {
     // `#walk` reads its own line, which a `;` may follow straight away.
     if let Some(args) = slash_walk_args(rest) {
-        return slash_walk(profile, args);
+        return slash_walk(profile, c, args);
     }
     let (cmd, args) = split_first_word(rest);
     match cmd {
         "alias" => slash_alias(profile, c, args),
         "unalias" => slash_unalias(profile, args),
-        "aliases" => slash_aliases_list(profile),
+        "aliases" => slash_aliases_list(profile, c),
         "var" => slash_var(profile, args),
         "unvar" => slash_unvar(profile, args),
         "vars" => slash_vars_list(profile),
@@ -58,8 +58,8 @@ pub(super) fn handle_slash(
         // Typed input runs #logs before the pipeline (see `logs_command`),
         // so only a timer, the tick command, or Lua gets here.
         "logs" => InputResult::error("type #logs at the input bar"),
-        "record" => slash_record(profile, args),
-        "endrec" => slash_endrec(profile),
+        "record" => slash_record(c, args),
+        "endrec" => slash_endrec(profile, c),
         "target" => slash_target(c, &mut profile.vars, args),
         "tarn" => run_target_cycle(c, &mut profile.vars, 1),
         "tarp" => run_target_cycle(c, &mut profile.vars, -1),

@@ -8,8 +8,8 @@ use vosh_automation::trigger::{
 use super::slash::parse_braced_pattern;
 use super::target::is_target_keyword;
 use super::{split_first_word, InputResult};
-use crate::profile::live::{MacroRecorder, Profile};
-use crate::session::connection::Connection;
+use crate::profile::live::Profile;
+use crate::session::connection::{Connection, MacroRecorder};
 
 pub(super) fn slash_alias(profile: &mut Profile, c: &Connection, args: &str) -> InputResult {
     let (name, expansion) = split_first_word(args);
@@ -49,9 +49,9 @@ pub(super) fn slash_unalias(profile: &mut Profile, args: &str) -> InputResult {
     }
 }
 
-pub(super) fn slash_aliases_list(profile: &Profile) -> InputResult {
+pub(super) fn slash_aliases_list(profile: &Profile, c: &Connection) -> InputResult {
     let aliases = profile.aliases.list();
-    let from_plugins = profile.plugin_aliases.list();
+    let from_plugins = c.plugin_aliases.list();
     if aliases.is_empty() && from_plugins.is_empty() {
         return InputResult::echo_line("no aliases defined");
     }
@@ -387,11 +387,11 @@ pub(super) fn slash_groups_list(profile: &Profile) -> InputResult {
     InputResult::echo_lines(lines)
 }
 
-pub(super) fn slash_record(profile: &mut Profile, args: &str) -> InputResult {
+pub(super) fn slash_record(c: &mut Connection, args: &str) -> InputResult {
     let trimmed = args.trim();
     // `#record` with no args prints status.
     if trimmed.is_empty() {
-        return match &profile.recording_macro {
+        return match &c.recording_macro {
             Some(r) => InputResult::echo_line(format!(
                 "recording `{}` ({} command(s) captured) — `#endrec` to save, `#record cancel` to discard",
                 r.name,
@@ -402,7 +402,7 @@ pub(super) fn slash_record(profile: &mut Profile, args: &str) -> InputResult {
     }
     // `#record cancel` aborts an in-progress recording.
     if trimmed == "cancel" {
-        return match profile.recording_macro.take() {
+        return match c.recording_macro.take() {
             Some(r) => InputResult::echo_line(format!(
                 "recording cancelled — `{}` was at {} command(s)",
                 r.name,
@@ -411,7 +411,7 @@ pub(super) fn slash_record(profile: &mut Profile, args: &str) -> InputResult {
             None => InputResult::error("not recording — nothing to cancel"),
         };
     }
-    if profile.recording_macro.is_some() {
+    if c.recording_macro.is_some() {
         return InputResult::error(
             "already recording — `#endrec` to save or `#record cancel` to discard",
         );
@@ -420,7 +420,7 @@ pub(super) fn slash_record(profile: &mut Profile, args: &str) -> InputResult {
     if name.is_empty() {
         return InputResult::error("usage #record <name>");
     }
-    profile.recording_macro = Some(MacroRecorder {
+    c.recording_macro = Some(MacroRecorder {
         name: name.to_string(),
         commands: Vec::new(),
     });
@@ -429,8 +429,8 @@ pub(super) fn slash_record(profile: &mut Profile, args: &str) -> InputResult {
     ))
 }
 
-pub(super) fn slash_endrec(profile: &mut Profile) -> InputResult {
-    let Some(recorder) = profile.recording_macro.take() else {
+pub(super) fn slash_endrec(profile: &mut Profile, c: &mut Connection) -> InputResult {
+    let Some(recorder) = c.recording_macro.take() else {
         return InputResult::error("not recording. start with `#record <name>`");
     };
     if recorder.commands.is_empty() {

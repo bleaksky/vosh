@@ -618,7 +618,7 @@ mod tests {
         assert_eq!(switched.cancel_timers, [warrior_timer]);
         let leftover = &switched.new_timers;
         assert!(leftover.is_empty(), "{leftover:?}");
-        let aliases: Vec<(&str, &str)> = p
+        let aliases: Vec<(&str, &str)> = c
             .plugin_aliases
             .list()
             .into_iter()
@@ -628,7 +628,7 @@ mod tests {
         // Back again, the healer's alias goes with it.
         p.plugins.enabled = vec!["everywhere".into()];
         follow_profile_plugins(&mut p, &mut c, tmp.path());
-        let aliases: Vec<&str> = p
+        let aliases: Vec<&str> = c
             .plugin_aliases
             .list()
             .into_iter()
@@ -666,7 +666,7 @@ mod tests {
         let leftover = &c.script.loaded_plugins();
         assert!(leftover.is_empty(), "{leftover:?}");
         assert!(c.script.is_stopped(&Owner::Plugin("runaway".into())));
-        let leftover = &p.plugin_aliases.list();
+        let leftover = &c.plugin_aliases.list();
         assert!(leftover.is_empty(), "{leftover:?}");
         let quiet = c
             .script

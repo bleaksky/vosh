@@ -193,16 +193,16 @@ pub(crate) fn apply_actions(
                 profile.aliases.remove(&name);
                 result.durable_changed = true;
             }
-            // A plugin's aliases last for the session, so nothing saves.
+            // A plugin's aliases last in its session, so nothing saves.
             Action::SetPluginAlias {
                 plugin,
                 name,
                 expansion,
-            } => profile.plugin_aliases.set(&plugin, name, expansion),
+            } => c.plugin_aliases.set(&plugin, name, expansion),
             Action::RemovePluginAlias { plugin, name } => {
-                profile.plugin_aliases.remove(&plugin, &name);
+                c.plugin_aliases.remove(&plugin, &name);
             }
-            Action::DropPluginAliases(plugin) => profile.plugin_aliases.remove_plugin(&plugin),
+            Action::DropPluginAliases(plugin) => c.plugin_aliases.remove_plugin(&plugin),
             Action::SetVar { scope, name, value } => {
                 // Only profile-scoped vars are persisted; session vars
                 // marking durable would reset the persist debounce on

@@ -32,9 +32,11 @@ async fn two_sessions_on_two_games() -> (Harness, SessionId, SessionId) {
     log_in_two_sessions(Harness::new(Options::new(Build::New)).await).await
 }
 
-/// A plugin that answers the end of `spam 2` with `afk`.
-const HELPER: &str =
-    "mud.trigger('afk', 'Line 2 of 2 of the spam', function() mud.send('afk') end)";
+/// A plugin that answers the end of `spam 2` with `afk`, and the end of
+/// `spam 1` with an alias of its own, `hh`, for `spam 3`.
+const HELPER: &str = "\
+    mud.trigger('afk', 'Line 2 of 2 of the spam', function() mud.send('afk') end)\n\
+    mud.trigger('hh', 'Line 1 of 1 of the spam', function() mud.alias('hh', 'spam 3') end)";
 
 /// [`two_sessions_on_two_games`] with the plugin [`HELPER`] on in the
 /// profile both play. The first session loads it at launch and the second
@@ -321,6 +323,75 @@ async fn an_alias_lua_makes_in_one_session_expands_in_the_other_and_saves_once()
     };
     h.until("the save", |_| saved(&file) > 0).await;
     assert_eq!(saved(&file), 1);
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_alias_a_plugin_makes_in_one_session_passes_through_in_the_other() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_with_a_plugin().await;
+    h.type_in(one, "spam 1").await;
+    h.until("the first game to answer", |h| {
+        shows(h, one, "Line 1 of 1 of the spam.")
+    })
+    .await;
+    h.type_in(one, "hh").await;
+    h.type_in(two, "hh").await;
+    h.until("both games to answer hh", |h| {
+        shows(h, one, "Line 3 of 3 of the spam.") && shows(h, two, "Huh?")
+    })
+    .await;
+
+    // The first session expanded it, and the second sent it as typed.
+    assert!(!sent(&h.servers[0]).contains("hh"));
+    let second = sent(&h.servers[1]);
+    assert!(
+        second.contains("hh\r\n") && !second.contains("spam 3"),
+        "{second:?}"
+    );
+    let second = h.state.session(Some(two)).expect("the second session");
+    let leftover = second.connection.lock().plugin_aliases.list().len();
+    assert_eq!(leftover, 0);
+    assert!(h.state.profile.lock().await.aliases.get("hh").is_none());
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_recording_takes_only_its_own_sessions_lines_and_its_alias_expands_in_both() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_with_a_plugin().await;
+    h.type_in(one, "#record walkabout").await;
+    h.type_in(two, "look").await;
+    h.type_in(one, "spam 3").await;
+    h.type_in(two, "#record").await;
+    h.type_in(one, "#endrec").await;
+    h.until("the recording to save", |h| {
+        shows(h, one, "saved macro `walkabout` (1 command(s))")
+    })
+    .await;
+    assert!(shows(&h, two, "not recording."));
+    let expansion = h
+        .state
+        .profile
+        .lock()
+        .await
+        .aliases
+        .get("walkabout")
+        .map(|a| a.expansion.clone());
+    assert_eq!(expansion.as_deref(), Some("spam 3"));
+
+    h.type_in(two, "walkabout").await;
+    h.until("the second game to answer the alias", |h| {
+        shows(h, two, "Line 3 of 3 of the spam.")
+    })
+    .await;
+    assert!(sent(&h.servers[1]).contains("spam 3"));
 
     h.disconnect_session(two).await;
     h.finish(grid).await;
