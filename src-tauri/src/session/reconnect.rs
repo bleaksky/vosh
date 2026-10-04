@@ -348,8 +348,9 @@ pub(crate) async fn took_character<R: tauri::Runtime>(
             continue;
         }
         other.connection.lock().link.taken = true;
-        if let Some(redial) = other.take_redial() {
+        if let Some(redial) = other.take_redial().filter(|redial| !redial.ended()) {
             redial.end().await;
+            other.redialed.store(false, Ordering::Release);
             print(app, &other, &taken_line(&other));
             other.emit(
                 app,
@@ -363,9 +364,14 @@ pub(crate) async fn took_character<R: tauri::Runtime>(
 /// End the series `session` runs, if any, and say so to the page.
 pub(crate) async fn cancel<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session) {
     if let Some(redial) = session.take_redial() {
+        let running = !redial.ended();
         redial.end().await;
-        session.emit(app, events::RECONNECT, &ReconnectPayload::Cancelled);
+        if running {
+            session.emit(app, events::RECONNECT, &ReconnectPayload::Cancelled);
+        }
     }
+    // A try the cancel cut short leaves no ring for the next link.
+    session.redialed.store(false, Ordering::Release);
 }
 
 /// The redials of one series, each after its wait, until one connects or
