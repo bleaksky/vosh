@@ -224,18 +224,26 @@ impl TickRuntime {
     /// as saved, and the timer stays stopped until the next connection
     /// starts it.
     pub(crate) fn adopt(&mut self, settings: &mut TickSettings, before: &TickConfig, now: Instant) {
-        let was_on = before.enabled;
-        let was_interval = before.interval();
-        if self.in_session && was_on && self.last_tick.is_some() {
+        if self.in_session && before.enabled && self.last_tick.is_some() {
             settings.config.enabled = true;
         }
+        self.follow(settings, before, now);
+    }
+
+    /// Follow the tick settings as they read now, which read `before`
+    /// until they changed. A switch turned off stops the count, one
+    /// turned on while a session runs starts it, and a new interval
+    /// moves the expected tick and starts the fallback's wait again as
+    /// [`set_interval`](Self::set_interval) does. Every other session on
+    /// a profile follows a change to its settings this way.
+    pub(crate) fn follow(&mut self, settings: &TickSettings, before: &TickConfig, now: Instant) {
         if !settings.config.enabled {
             self.stop();
-        } else if self.in_session && (!was_on || self.last_tick.is_none()) {
+        } else if self.in_session && (!before.enabled || self.last_tick.is_none()) {
             self.forget_sync();
             self.restart(now);
         } else {
-            self.note_interval_change(settings, was_interval, now);
+            self.note_interval_change(settings, before.interval(), now);
         }
     }
 
@@ -1199,6 +1207,64 @@ mod tests {
                 .payload
                 .fired
         );
+    }
+
+    // ── A count follows a change from another session ───────────────
+
+    #[test]
+    fn following_a_switch_turned_off_stops_the_count() {
+        let t0 = Instant::now();
+        let (mut s, mut t, _) = synced_session(t0);
+        let before = s.config.clone();
+        s.config.enabled = false;
+        t.follow(&s, &before, t0 + secs(8.0));
+        assert_eq!(t.last_tick, None);
+        assert!(!t.synced);
+        assert!(t.in_session);
+    }
+
+    #[test]
+    fn following_a_switch_turned_on_starts_the_count_only_in_a_session() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        t.disable(&mut s);
+        let before = s.config.clone();
+        s.config.enabled = true;
+        let on = t0 + secs(8.0);
+        t.follow(&s, &before, on);
+        assert_eq!(t.remaining(&s, on), Some(secs(30.0)));
+        // Between connections the count waits for the next one.
+        let mut idle = TickRuntime::default();
+        idle.follow(&s, &before, on);
+        assert_eq!(idle.next_fire(&s), None);
+    }
+
+    #[test]
+    fn following_a_new_interval_moves_the_expected_tick_and_keeps_the_count() {
+        let t0 = Instant::now();
+        let (mut s, mut t, tick) = synced_session(t0);
+        let before = s.config.clone();
+        s.config.interval_secs = 45;
+        let change = tick + secs(10.0);
+        t.follow(&s, &before, change);
+        assert_eq!(t.next_fire(&s), Some(tick + secs(45.0)));
+        assert!(t.synced);
+        assert_eq!(t.interval_changed_at, Some(change));
+    }
+
+    #[test]
+    fn a_profile_laid_over_keeps_a_running_tick_on_where_a_change_stops_it() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        let before = s.config.clone();
+        s.config.enabled = false;
+        t.adopt(&mut s, &before, t0 + secs(8.0));
+        assert!(s.config.enabled);
+        assert_eq!(t.last_tick, Some(t0));
+
+        s.config.enabled = false;
+        t.follow(&s, &before, t0 + secs(9.0));
+        assert_eq!(t.last_tick, None);
     }
 
     #[test]
