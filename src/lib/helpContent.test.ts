@@ -819,7 +819,13 @@ describe('the help on group switches and timer groups', () => {
     expect(text).toContain('a group you just named gets its switch once you save it');
     expect(text).toContain('`Tab` from a heading reaches its switch, and `Space` flips it.');
     expect(text).toContain(
-      'Its switch waits, and a note under the heading names the loadouts that decide it.',
+      'In loadout mode, while an active loadout lists groups or while you keep the catalog dormant, the loadouts decide each group of triggers, aliases, and macros.',
+    );
+    expect(text).toContain(
+      'Its switch waits, and a note under the heading names the loadouts that decide it, or says every loadout is off.',
+    );
+    expect(text).toContain(
+      '`#group` still turns such a group, and the note then says when the loadouts turn it back.',
     );
     expect(text).toContain(
       'with the switch on the heading of their group or with `#group <name> on|off`',
@@ -844,6 +850,20 @@ describe('the help on group switches and timer groups', () => {
     expect(body('reference.keyboard-shortcuts')).toContain(
       '`Tab` from a heading reaches its group switch, and `Space` flips it.',
     );
+  });
+
+  it('says a dormant catalog holds every switch too', () => {
+    const loadouts = body('characters-and-data.loadouts');
+    expect(loadouts).toContain(
+      'When no active loadout declares any enabled groups, the loadouts impose nothing and each group stays on or off as you left it, unless you keep the catalog dormant.',
+    );
+    expect(loadouts).toContain(
+      'While they impose, and while the catalog is dormant, the switch on each catalog group in Automation waits, with a note that names the loadouts that decide it or says every loadout is off.',
+    );
+    const paragraph =
+      loadouts.split('\n\n').find((p) => p.startsWith('When no active loadout')) ?? '';
+    expect(paragraph).not.toBe('');
+    expect(paragraph.replace(/`[^`]*`/g, '')).not.toMatch(/[:;–—]| - /);
   });
 
   it('reads the same in HELP.md', () => {
