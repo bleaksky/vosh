@@ -154,6 +154,21 @@
   margin-left: 8px;
 }
 
+/* A count beside the label keeps at least its first digit, which then
+   reads whole, and once the pane is too narrow for both the label gives
+   way, ending in an ellipsis. The room kept is the widest digit of the
+   count, the zero of the label's face scaled from the label's size to
+   the count's, after the 8px gap above. At 12 px the label gives way in
+   no pane, so every header draws as it did, and at 14 px and up an
+   Affects pane at its narrowest still shows how many you miss. */
+.pane-label:has(+ .pane-meta) {
+  max-width: calc(
+    100% - 8px - 1ch * round(11 * var(--mud-scale), 1) / round(10 * var(--mud-scale), 1)
+  );
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .pane-meta {
   min-width: 0;
   overflow: hidden;

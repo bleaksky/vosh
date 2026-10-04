@@ -237,6 +237,24 @@ describe('the panel in panel.css', () => {
     expect(TOKENS.get('--mud-scale')).toBe('calc(var(--panel-text-px, 12) / 12)');
   });
 
+  it('keeps a count beside the label a digit wide, the label giving way first', () => {
+    const label = declarations('.pane-label:has(+ .pane-meta)');
+    // The room kept is the zero of the label's face scaled from the
+    // label's size to the count's, after the gap the label leaves.
+    expect(label.get('max-width')?.replace(/\s+/g, ' ')).toBe(
+      'calc( 100% - 8px - 1ch * round(11 * var(--mud-scale), 1) / round(10 * var(--mud-scale), 1) )',
+    );
+    expect(label.get('overflow')).toBe('hidden');
+    expect(label.get('text-overflow')).toBe('ellipsis');
+    expect(declarations('.pane-header > .pane-label + *').get('margin-left')).toBe('8px');
+    // The two sizes it scales between are the label's and the count's.
+    for (const size of [11, 12, 14, 16, 18, 20]) {
+      const scale = size / 12;
+      expect(computed('.pane-label', 'font-size', size)).toBe(`${Math.round(10 * scale)}px`);
+      expect(computed('.pane-meta', 'font-size', size)).toBe(`${Math.round(11 * scale)}px`);
+    }
+  });
+
   it('sets every text in the panes at your panel size, and the menus at their own', () => {
     let read = 0;
     for (const { selector, body } of RULES) {
@@ -282,9 +300,14 @@ describe('the panel in panel.css', () => {
       ),
     );
     // The Group meter reads your size and the pane's width, and a Group
-    // row below holds it.
+    // row below holds it. The label's room beside a count reads it too,
+    // and its own test above holds it.
     expect(reading.sort()).toEqual(
-      [...SCALED.map(([s, p]) => `${s} ${p}`), '.pane-member-meter width'].sort(),
+      [
+        ...SCALED.map(([s, p]) => `${s} ${p}`),
+        '.pane-member-meter width',
+        '.pane-label:has(+ .pane-meta) max-width',
+      ].sort(),
     );
   });
 
