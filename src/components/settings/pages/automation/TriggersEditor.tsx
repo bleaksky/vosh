@@ -10,6 +10,7 @@ import {
   loadTriggers,
   mainPattern,
   normalizeTrigger,
+  patternSource,
   replaceTemplateOf,
   saveTriggerDraft,
   TRIGGER_STYLE_OPTIONS,
@@ -21,6 +22,8 @@ import {
   withGroup,
   withHighlight,
   withMainPattern,
+  withMainPatternSource,
+  withPatternSource,
   withReplaceTemplate,
   withTriggerStyle,
   type HighlightPatch,
@@ -75,7 +78,7 @@ const TRIGGERS_SPEC: KindSpec<TriggerRecord> = {
     text: searchText(
       t.name,
       t.group,
-      t.patterns.map((p) => p.pattern).join('\n'),
+      t.patterns.map(patternSource).join('\n'),
       effectOf(t.actions, 'send'),
     ),
   }),
@@ -183,9 +186,9 @@ function TriggerDetail({ value: t, update, fresh, revealInList }: DetailProps<Tr
         <Field
           mono
           width="100%"
-          value={mainPattern(t).pattern}
+          value={patternSource(mainPattern(t))}
           disabled={locked}
-          onChange={(pattern) => update((v) => withMainPattern(v, { pattern }))}
+          onChange={(pattern) => update((v) => withMainPatternSource(v, pattern))}
         />
       </Row>
       <Row label="Style">
@@ -405,7 +408,7 @@ function PatternsBlock({
             onChange={(enabled) => update((v) => withMainPattern(v, { enabled }))}
           />
           <span className="st-auto-pattern-main st-auto-mono">
-            {main.pattern || 'Main pattern'}
+            {patternSource(main) || 'Main pattern'}
           </span>
         </li>
         {extra.map((p, i) => (
@@ -422,10 +425,12 @@ function PatternsBlock({
               mono
               width="100%"
               aria-label={`Pattern ${i + 2}`}
-              value={p.pattern}
+              value={patternSource(p)}
               disabled={locked}
               onChange={(pattern) =>
-                setPatterns((rest) => rest.map((r, j) => (j === i ? { ...r, pattern } : r)))
+                setPatterns((rest) =>
+                  rest.map((r, j) => (j === i ? withPatternSource(r, pattern) : r)),
+                )
               }
             />
             {!locked && (
