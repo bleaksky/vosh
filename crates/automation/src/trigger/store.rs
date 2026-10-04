@@ -49,10 +49,13 @@ impl TriggerPattern {
 /// regular expression.
 ///
 /// - `Text` matches a line that is exactly the text, with any spaces at
-///   either end of the line skipped. It compiles to `^\s*<text>\s*$`.
+///   either end of the line and of the text skipped. It compiles to
+///   `^\s*<text>\s*$`.
 /// - `StartsWith` matches a line that starts with the text, after any
-///   spaces at its start. It compiles to `^\s*<text>.*`, so the match
-///   runs to the end of the line and a highlight colors the whole line.
+///   spaces at the start of the line and of the text. It compiles to
+///   `^\s*<text>.*`, so the match runs to the end of the line and a
+///   highlight colors the whole line. Spaces at the end of the text stay,
+///   since they can mark the end of a word.
 /// - `Regex` compiles the pattern as typed. Its groups fill `$1` on, and
 ///   Text and Starts with have none.
 ///
@@ -78,8 +81,10 @@ impl MatchMode {
     pub fn regex_source(self, pattern: &str) -> Cow<'_, str> {
         match self {
             MatchMode::Regex => Cow::Borrowed(pattern),
-            MatchMode::Text => Cow::Owned(format!(r"^\s*{}\s*$", regex::escape(pattern))),
-            MatchMode::StartsWith => Cow::Owned(format!(r"^\s*{}.*", regex::escape(pattern))),
+            MatchMode::Text => Cow::Owned(format!(r"^\s*{}\s*$", regex::escape(pattern.trim()))),
+            MatchMode::StartsWith => {
+                Cow::Owned(format!(r"^\s*{}.*", regex::escape(pattern.trim_start())))
+            }
         }
     }
 }
@@ -575,6 +580,28 @@ mod tests {
         assert_eq!(
             row(r"You feel better\.$", MatchMode::Regex).regex_source(),
             r"You feel better\.$"
+        );
+        // Text skips the spaces at either end of what you typed, and Starts
+        // with the spaces at its start. A space at the end of a Starts with
+        // text stays, since it can mark the end of a word.
+        for copy in [
+            "You feel better. ",
+            "     You feel better.",
+            " You feel better.  ",
+        ] {
+            assert_eq!(
+                row(copy, MatchMode::Text).regex_source(),
+                r"^\s*You feel better\.\s*$",
+                "{copy:?}"
+            );
+        }
+        assert_eq!(
+            row("     You feel ", MatchMode::StartsWith).regex_source(),
+            r"^\s*You feel .*"
+        );
+        assert_eq!(
+            row(" ^You feel ", MatchMode::Regex).regex_source(),
+            " ^You feel "
         );
         // Text and Starts with escape what they hold, so a bracket or a
         // brace never fails the trigger.
