@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tracing::{error, info};
+use vosh_script::Owner;
 
 use crate::app::state::SharedState;
 
@@ -221,18 +222,22 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     for name in &enabled {
         let apply = match mgr.read_entry(name) {
             Ok(code) => {
+                let entry = mgr
+                    .get(name)
+                    .map_or_else(default_entry, |record| record.manifest.entry.clone());
                 let mut p = state.profile.lock().await;
                 crate::script::snapshot_vars(&p.script, &p.vars);
-                match p.script.load_script(&format!("plugin:{name}"), code) {
-                    Ok(outcome) => {
-                        info!(name = %name, "loaded plugin");
-                        crate::script::apply_actions(&mut p, outcome)
-                    }
-                    Err(e) => {
-                        error!(name = %name, error = %e, "plugin script error");
-                        continue;
-                    }
+                let outcome = p.script.load_script(
+                    Owner::Plugin(name.clone()),
+                    &format!("@{name}/{entry}"),
+                    code,
+                );
+                if outcome.failed {
+                    error!(name = %name, "plugin script error");
+                } else {
+                    info!(name = %name, "loaded plugin");
                 }
+                crate::script::apply_actions(&mut p, outcome)
             }
             Err(e) => {
                 error!(name = %name, error = %e, "plugin entry missing");

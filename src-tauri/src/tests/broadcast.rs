@@ -243,6 +243,7 @@ fn toggle_from_lua(
             name: name.into(),
             enabled,
         }],
+        ..vosh_script::ScriptOutcome::default()
     };
     let apply = crate::script::apply_actions(p, outcome);
     broadcast_list_changes(handle, apply.lists);

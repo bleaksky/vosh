@@ -80,7 +80,7 @@ fn a_trigger_body_reads_the_whole_match_then_each_group() {
         .expect("the trigger compiles");
     let result = vosh_automation::trigger::process(&p.triggers, b"Bob says hi");
     assert_eq!(
-        super::run_trigger_scripts(&mut p, &result, "t"),
+        super::run_trigger_scripts(&mut p, &result).actions,
         [vosh_script::Action::Send("Bob says hi|Bob|hi".into())]
     );
 }
@@ -194,4 +194,94 @@ fn a_timer_reset_keeps_the_shared_settings() {
     assert_eq!(p.ui.theme, "night-ink");
     assert_eq!(p.ui.font_family, "Iosevka");
     assert!(p.ui.keep_last_command);
+}
+
+/// The terminal line for a Lua error or stop, as the apply prints it.
+fn lua_error(text: &str) -> String {
+    format!("\x1b[90m[lua]\x1b[0m \x1b[31m{text}\x1b[0m")
+}
+
+#[test]
+fn a_trigger_body_that_runs_away_turns_its_trigger_off() {
+    let mut p = Profile::default();
+    p.triggers
+        .set(vosh_automation::trigger::Trigger::new(
+            "hunger",
+            "^You are hungry",
+            vosh_automation::trigger::TriggerAction::Script {
+                body: "mud.send('eat') while true do end".into(),
+            },
+        ))
+        .expect("the trigger compiles");
+    let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.");
+    let outcome = super::run_trigger_scripts(&mut p, &result);
+    assert!(p.triggers.is_stopped("hunger"));
+    let apply = crate::script::apply_actions(&mut p, outcome);
+    // A stopped body sends nothing it queued.
+    let leftover = &apply.send_bytes;
+    assert!(leftover.is_empty(), "{leftover:?}");
+    assert_eq!(
+        apply.echoes,
+        [lua_error(
+            "Vosh stopped the Lua in trigger hunger after 100 ms. hunger stays off until you save it or restart Vosh."
+        )]
+    );
+    // It matches nothing until you save it again.
+    let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.");
+    let leftover = &result.scripts;
+    assert!(leftover.is_empty(), "{leftover:?}");
+}
+
+#[test]
+fn a_function_a_trigger_body_left_behind_turns_its_trigger_off_too() {
+    let mut p = Profile::default();
+    p.triggers
+        .set(vosh_automation::trigger::Trigger::new(
+            "day",
+            "^The day has begun",
+            vosh_automation::trigger::TriggerAction::Script {
+                body: "mud.on_gmcp('World.Time', function() while true do end end)".into(),
+            },
+        ))
+        .expect("the trigger compiles");
+    let result = vosh_automation::trigger::process(&p.triggers, b"The day has begun.");
+    let outcome = super::run_trigger_scripts(&mut p, &result);
+    crate::script::apply_actions(&mut p, outcome);
+    let msg = vosh_protocol::gmcp::Message {
+        package: "World.Time".into(),
+        data: serde_json::json!({}),
+    };
+    let (_, apply) = super::gmcp_step(&mut p, &msg, tokio::time::Instant::now());
+    assert!(p.triggers.is_stopped("day"));
+    assert_eq!(
+        apply.echoes,
+        [lua_error(
+            "Vosh stopped the Lua in trigger day after 100 ms. day stays off until you save it or restart Vosh."
+        )]
+    );
+}
+
+#[test]
+fn an_alias_body_that_runs_away_turns_its_alias_off() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    p.aliases.set(
+        vosh_automation::alias::Alias::new("heal", "ignored")
+            .with_script("mud.send('cast heal') while true do end"),
+    );
+    // The second heal of the line runs nothing once the first stopped.
+    let ran = crate::input::run_line(&state, &mut p, "heal;heal");
+    let apply = super::line_script_result(ran);
+    let leftover = &apply.send_bytes;
+    assert!(leftover.is_empty(), "{leftover:?}");
+    assert_eq!(
+        apply.echoes,
+        [lua_error(
+            "Vosh stopped the Lua in alias heal after 100 ms. heal stays off until you save it or restart Vosh."
+        )]
+    );
+    assert!(p.aliases.is_stopped("heal"));
+    // Typed again, it passes through, as an alias you turned off does.
+    let ran = crate::input::run_line(&state, &mut p, "heal");
+    assert_eq!(super::line_script_result(ran).send_bytes, b"heal\r\n");
 }

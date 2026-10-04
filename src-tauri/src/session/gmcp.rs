@@ -204,13 +204,7 @@ pub(super) fn gmcp_step(
     }
     let tick_step = crate::tick::observe_world_time_for_tick(&mut p.tick, msg, now);
     script::snapshot_vars(&p.script, &p.vars);
-    let outcome = match p.script.dispatch_gmcp(&msg.package, &msg.data) {
-        Ok(o) => o,
-        Err(err) => {
-            warn!(error = %err, "lua dispatch_gmcp failed");
-            vosh_script::ScriptOutcome::default()
-        }
-    };
+    let outcome = p.script.dispatch_gmcp(&msg.package, &msg.data);
     let apply = script::apply_actions(p, outcome);
     (tick_step, apply)
 }

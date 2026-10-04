@@ -1,0 +1,69 @@
+//! Who a piece of Lua belongs to, so a stop can name it and Vosh knows
+//! what to turn off.
+
+/// Who a piece of Lua belongs to. Every call runs for one owner, and a
+/// function a call hands to `mud.trigger`, `mud.on_gmcp` or `mud.timer`
+/// keeps the owner of the call that made it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Owner {
+    /// A plugin, by the name in its manifest.
+    Plugin(String),
+    /// A loose file from the scripts folder, by its path inside the
+    /// folder with `.lua` on the end.
+    Script(String),
+    /// A `#lua` line you typed.
+    Typed,
+    /// The Script action of the trigger of this name.
+    Trigger(String),
+    /// The Lua body of the alias of this name.
+    Alias(String),
+}
+
+impl Owner {
+    /// The name `#scripts` lists a loaded script under.
+    pub(crate) fn listed_name(&self) -> String {
+        match self {
+            Owner::Plugin(name) => format!("plugin:{name}"),
+            Owner::Script(name) => name.clone(),
+            Owner::Typed => "#lua".to_string(),
+            Owner::Trigger(name) => format!("trigger {name}"),
+            Owner::Alias(name) => format!("alias {name}"),
+        }
+    }
+
+    /// The chunk name a body of this owner runs under, which Lua puts
+    /// before the line number of an error in it.
+    pub(crate) fn body_chunk(&self) -> String {
+        match self {
+            Owner::Trigger(name) => format!("=trigger {name}"),
+            Owner::Alias(name) => format!("=alias {name}"),
+            Owner::Typed => "=#lua".to_string(),
+            Owner::Plugin(name) | Owner::Script(name) => format!("={name}"),
+        }
+    }
+}
+
+/// What part of an owner's Lua a call runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Site {
+    /// The owner's own code: a load, a body or a `#lua` line.
+    Entry,
+    /// The function of the Lua trigger of this name.
+    LuaTrigger { name: String, callback_id: i64 },
+    /// A handler of this GMCP package.
+    Gmcp { package: String, callback_id: i64 },
+    /// A timer.
+    Timer { callback_id: i64 },
+}
+
+impl Site {
+    /// The callback the call runs, when it runs one.
+    pub(crate) fn callback_id(&self) -> Option<i64> {
+        match self {
+            Site::Entry => None,
+            Site::LuaTrigger { callback_id, .. }
+            | Site::Gmcp { callback_id, .. }
+            | Site::Timer { callback_id } => Some(*callback_id),
+        }
+    }
+}
