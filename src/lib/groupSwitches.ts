@@ -1,7 +1,8 @@
 // The on and off switch on each group heading in Settings, Automation.
 // It turns the whole group at once, the way #group does, and keeps the
 // items' own switches as they are. While the loadouts decide a group,
-// its switch shows what they set and waits, with a note that names them.
+// its switch shows the group as it is and waits, with a note that names
+// them and says when they turn back a group #group turned.
 
 import type { GroupSwitch, LoadoutHold } from './session';
 
@@ -48,11 +49,24 @@ function nameList(names: readonly string[]): string {
   return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
 }
 
-/** The note under a heading whose group the loadouts decide. */
-export function loadoutHoldNote(hold: LoadoutHold): string {
-  if (hold.by.length === 0) return 'Every loadout is off, so this group stays off.';
+/** When the loadouts lay their state over every group again. */
+const UNTIL = 'when you next launch Vosh, switch profiles, or save Loadouts';
+
+/** The note under a heading whose group the loadouts decide. `enabled`
+ *  is the group's switch. `#group` and Lua still turn a group the
+ *  loadouts decide, so the switch can differ from the loadouts until
+ *  they lay their state over the group again, and the note says when. */
+export function loadoutHoldNote(hold: LoadoutHold, enabled: boolean): string {
+  const turned = enabled !== hold.on;
+  if (hold.by.length === 0) {
+    return turned
+      ? `Every loadout is off, so this group goes off again ${UNTIL}.`
+      : 'Every loadout is off, so this group stays off.';
+  }
   const one = hold.by.length === 1;
   const who = `The ${nameList(hold.by)} ${one ? 'loadout' : 'loadouts'}`;
-  if (hold.on) return `${who} ${one ? 'turns' : 'turn'} this group on.`;
+  const verb = one ? 'turns' : 'turn';
+  if (turned) return `${who} ${verb} this group ${hold.on ? 'on' : 'off'} again ${UNTIL}.`;
+  if (hold.on) return `${who} ${verb} this group on.`;
   return `${who} ${one ? 'leaves' : 'leave'} this group off.`;
 }

@@ -1434,8 +1434,8 @@ export async function timersDelete(id: number): Promise<Timer[]> {
 export type GroupList = 'triggers' | 'aliases' | 'macros' | 'timers';
 
 /** What the loadouts decide about a group while they decide it. Every
- *  loadout switch and launch lays it over the group again, so the
- *  switch waits. */
+ *  launch, profile switch and Loadouts save lays it over the group
+ *  again, so the switch waits. */
 export interface LoadoutHold {
   /** Whether the loadouts turn the group on. */
   on: boolean;

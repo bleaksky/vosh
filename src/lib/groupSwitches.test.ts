@@ -55,20 +55,38 @@ describe('the group switches', () => {
   });
 
   it('names the loadouts that decide a group', () => {
-    expect(loadoutHoldNote({ on: true, by: ['Healer'] })).toBe(
+    expect(loadoutHoldNote({ on: true, by: ['Healer'] }, true)).toBe(
       'The Healer loadout turns this group on.',
     );
-    expect(loadoutHoldNote({ on: true, by: ['Healer', 'Warrior'] })).toBe(
+    expect(loadoutHoldNote({ on: true, by: ['Healer', 'Warrior'] }, true)).toBe(
       'The Healer and Warrior loadouts turn this group on.',
     );
-    expect(loadoutHoldNote({ on: false, by: ['Healer'] })).toBe(
+    expect(loadoutHoldNote({ on: false, by: ['Healer'] }, false)).toBe(
       'The Healer loadout leaves this group off.',
     );
-    expect(loadoutHoldNote({ on: false, by: ['Healer', 'Warrior', 'Scout'] })).toBe(
+    expect(loadoutHoldNote({ on: false, by: ['Healer', 'Warrior', 'Scout'] }, false)).toBe(
       'The Healer, Warrior, and Scout loadouts leave this group off.',
     );
-    expect(loadoutHoldNote({ on: false, by: [] })).toBe(
+    expect(loadoutHoldNote({ on: false, by: [] }, false)).toBe(
       'Every loadout is off, so this group stays off.',
+    );
+  });
+
+  it('says when the loadouts turn back a group that #group turned', () => {
+    // #group combat off while Healer holds combat on.
+    expect(loadoutHoldNote({ on: true, by: ['Healer'] }, false)).toBe(
+      'The Healer loadout turns this group on again when you next launch Vosh, switch profiles, or save Loadouts.',
+    );
+    expect(loadoutHoldNote({ on: true, by: ['Healer', 'Warrior'] }, false)).toBe(
+      'The Healer and Warrior loadouts turn this group on again when you next launch Vosh, switch profiles, or save Loadouts.',
+    );
+    // #group loot on while the loadouts leave loot off.
+    expect(loadoutHoldNote({ on: false, by: ['Healer'] }, true)).toBe(
+      'The Healer loadout turns this group off again when you next launch Vosh, switch profiles, or save Loadouts.',
+    );
+    // #group combat on while the catalog is dormant.
+    expect(loadoutHoldNote({ on: false, by: [] }, true)).toBe(
+      'Every loadout is off, so this group goes off again when you next launch Vosh, switch profiles, or save Loadouts.',
     );
   });
 });
