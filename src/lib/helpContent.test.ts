@@ -862,6 +862,9 @@ describe('the help on Lua', () => {
     expect(text).toContain(
       'A new `mud.on_gmcp` handler runs at once on the last packet of its package',
     );
+    expect(text).toContain(
+      'A new `Comm.Channel` handler waits for the next message instead, since each chat packet is one message and not a state.',
+    );
   });
 
   it('says what a plugin keeps to itself and how your Lua reaches it', () => {
