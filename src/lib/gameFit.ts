@@ -453,6 +453,12 @@ function search(src: XtermPalette, seed: number, start: XtermPalette | undefined
   return best;
 }
 
+/** The colors fit() reads, the ground, body text and the 16 ANSI
+ *  colors, as one string. Two palettes with the same key fit the same. */
+export function fitKey(p: XtermPalette): string {
+  return [p.background, ...GAME_SLOTS.map((k) => p[k])].join(' ');
+}
+
 /** Fit a published palette to the checks. The best of six searches,
  *  three seeds each from the published colors and from tune(), and it
  *  returns only the slots it moved. What still misses stays missed, so

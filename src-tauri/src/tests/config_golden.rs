@@ -296,6 +296,12 @@ fn full_theme() -> CustomTheme {
             ("accent".into(), "#ff9e64".into()),
             ("surface".into(), "#16161e".into()),
         ]),
+        // Decision Q2 of the Themes review keeps the game color fit of an
+        // imported theme with it. Two slots of this theme's real fit.
+        fitted: BTreeMap::from([
+            ("brightBlack".into(), "#94989f".into()),
+            ("red".into(), "#cb7b74".into()),
+        ]),
     }
 }
 

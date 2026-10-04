@@ -862,6 +862,13 @@ pub(crate) struct CustomTheme {
     /// borderHover, accent, accentSoft, warn, danger, info, success.
     #[serde(default)]
     pub chrome: std::collections::BTreeMap<String, String>,
+    /// The game color fit of `xterm`: the slots Fit game colors moves
+    /// in play, body text and the 16 ANSI colors. Settings fits a theme
+    /// once when you import it or change one of those colors, and keeps
+    /// the fit here. Left out of the file while empty. Vosh 0.8.1 drops
+    /// it on save, and the next build fits the theme again.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub fitted: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for UiConfig {
@@ -1412,6 +1419,32 @@ name = "haste"
         // A file from before the switch reads it on.
         let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
         assert!(old.ui.fit_game_colors);
+    }
+
+    #[test]
+    fn a_custom_theme_keeps_its_fit_and_writes_none_while_empty() {
+        let mut ui = UiConfig {
+            custom_themes: vec![CustomTheme {
+                id: "dusk".into(),
+                label: "Dusk".into(),
+                ..CustomTheme::default()
+            }],
+            ..UiConfig::default()
+        };
+        let config = ProfileConfig {
+            ui: ui.clone(),
+            ..ProfileConfig::default()
+        };
+        let empty = config.to_toml().unwrap();
+        assert!(!empty.contains("fitted"), "{empty}");
+        ui.custom_themes[0].fitted =
+            std::collections::BTreeMap::from([("red".into(), "#cb7b74".into())]);
+        assert_eq!(through_toml(&ui).custom_themes, ui.custom_themes);
+        // A theme saved before the fit reads with none.
+        let old =
+            ProfileConfig::from_toml("[[ui.custom_themes]]\nid = \"dusk\"\nlabel = \"Dusk\"\n")
+                .unwrap();
+        assert!(old.ui.custom_themes[0].fitted.is_empty());
     }
 
     #[test]
