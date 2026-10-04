@@ -146,7 +146,7 @@ One priority rule. When the command line itself holds a selection, `Cmd+C` copie
 
 `Paste` in the right click menu inserts the clipboard into the command line without sending anything. Edit the line as needed, then press `Enter` yourself.
 
-With the xterm renderer the right click menu also offers `Clear scrollback`, which wipes the terminal buffer.
+The right click menu also offers `Clear scrollback`, which empties what you can scroll back through, now and at your next launch. Your session log keeps every line.
 
 ### 2.7 Use the command palette
 
@@ -175,7 +175,7 @@ The terminal right click menu collects the terminal's everyday actions in one pl
 - `Select all` selects the whole terminal, scrollback included.
 - `Find in scrollback…` opens the find bar.
 - `Settings` opens a list beside the menu. `Triggers`, `Aliases`, `Macros`, and `Timers` open Settings under Automation on that list. `General`, `Appearance`, `Layout`, `Input`, `Automation`, and `Characters` open that page of Settings. `Help` opens the Help window.
-- `Clear scrollback` wipes the terminal. The item appears only with the xterm renderer, since the native grid has no clear command.
+- `Clear scrollback` empties what you can scroll back through, and Vosh restores none of it at your next launch. Your session log keeps every line.
 
 Items with a shortcut show it on the right, and `Settings` shows an arrow. The arrow keys move through the menu and `Enter` picks an item. `ArrowRight` or `Enter` on `Settings` opens its list on the first row, and `ArrowLeft` steps back out. Pointing at `Settings` opens the list too. `Esc` closes the list first, then the menu. The menu also closes on a click anywhere outside it, or the instant you pick an item. It keeps itself inside the window, so a right click near a corner never opens it half off screen. Near the right edge the Settings list opens on the left of the menu, and near the bottom it rises from its row.
 

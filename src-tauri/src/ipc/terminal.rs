@@ -123,6 +123,21 @@ pub(crate) async fn scrollback_load(
     })
 }
 
+/// Clear scrollback in the terminal menu. Vosh forgets the lines it keeps
+/// for the next launch, and on the native renderer the grid drops its
+/// history too. The xterm renderer clears its own buffer. The session log
+/// keeps every line.
+#[tauri::command]
+pub(crate) async fn scrollback_clear(state: State<'_, SharedState>) -> Result<(), String> {
+    state.scrollback.lock().await.clear();
+    #[cfg(native_surface)]
+    {
+        crate::native::grid::clear_history();
+        crate::native::surface::request_redraw();
+    }
+    Ok(())
+}
+
 /// The persisted scrollback for a mounting terminal, and whether this call
 /// also wrote it into the native grid. The page mirrors its restored banner
 /// into the grid only when the seed landed here, so a reloaded page, whose

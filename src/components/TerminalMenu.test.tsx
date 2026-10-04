@@ -492,6 +492,13 @@ describe('the Settings list in the terminal menu', () => {
     ]);
   });
 
+  it('clears the scrollback through the backend, and xterm clears its own buffer', async () => {
+    const m = await mount();
+    calls.log.length = 0;
+    await act(async () => on(m.row('Clear scrollback')).onClick());
+    expect(calls.log).toEqual(['close', 'invoke scrollback_clear']);
+  });
+
   it('closes the menu, then opens Settings on each row, or Help', async () => {
     for (const row of SETTINGS_MENU.flat()) {
       const m = await mount();

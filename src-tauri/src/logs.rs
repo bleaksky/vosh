@@ -48,6 +48,13 @@ pub(crate) struct Scrollback {
 }
 
 impl Scrollback {
+    /// Forget every line, for Clear scrollback. The next launch restores
+    /// nothing from before it.
+    pub(crate) fn clear(&mut self) {
+        self.lines.clear();
+        self.run = None;
+    }
+
     pub(crate) fn push(&mut self, raw_line: Vec<u8>) {
         if self.lines.len() == SCROLLBACK_CAP {
             self.lines.pop_front();
@@ -187,6 +194,20 @@ mod tests {
             s.lines.back().unwrap(),
             format!("line {}", SCROLLBACK_CAP + 4).as_bytes()
         );
+    }
+
+    #[test]
+    fn clear_forgets_every_line_and_the_run() {
+        let mut s = Scrollback::default();
+        s.push(b"first".to_vec());
+        s.push(b"second".to_vec());
+        s.clear();
+        let leftover = &s.dump();
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let live = &s.dump_live();
+        assert!(live.is_empty(), "{live:?}");
+        s.push(b"after".to_vec());
+        assert_eq!(s.lines.len(), 1);
     }
 
     #[test]

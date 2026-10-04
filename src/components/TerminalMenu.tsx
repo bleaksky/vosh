@@ -156,9 +156,15 @@ export function TerminalMenu({
       .catch(() => {});
   };
 
-  // Groups split by separators. Clear only reaches the xterm buffer.
-  // The native grid has no clear command, so the item hides where it
-  // would visibly do nothing.
+  // Clear scrollback empties what you can scroll back through on either
+  // renderer, and the lines Vosh keeps for the next launch. xterm clears
+  // its own buffer, and the backend clears the native grid.
+  const runClear = () => {
+    if (!nativeSurfaceEnabled()) termRef.current?.clear();
+    void invoke('scrollback_clear').catch(() => {});
+  };
+
+  // Groups split by separators.
   const groups: Item[][] = [
     [{ id: 'customize-prompt', label: 'Customize prompt…', run: onCustomizePrompt }],
     [
@@ -168,17 +174,8 @@ export function TerminalMenu({
     ],
     [{ id: 'find', label: 'Find in scrollback…', keys: APP_SHORTCUTS.find, run: onOpenFind }],
     [{ id: 'settings', label: 'Settings', submenu: true, run: () => openSub(true) }],
+    [{ id: 'clear', label: 'Clear scrollback', danger: true, run: runClear }],
   ];
-  if (!nativeSurfaceEnabled()) {
-    groups.push([
-      {
-        id: 'clear',
-        label: 'Clear scrollback',
-        danger: true,
-        run: () => termRef.current?.clear(),
-      },
-    ]);
-  }
   const items = groups.flat();
   const settingsAt = items.findIndex((item) => item.submenu);
 
