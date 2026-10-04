@@ -51,8 +51,8 @@ use super::{emit_input_mode, emit_state, now_ms, OutgoingMsg, StatePayload, Targ
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 /// What the loop owns for one connection, and a handle to the
-/// [`Connection`] it shares with the commands, whose state the app state
-/// holds. The read path and the GMCP handler take it whole, with the
+/// [`Connection`](super::connection::Connection) it shares with the
+/// commands, whose state the app state holds. The read path and the GMCP handler take it whole, with the
 /// connection's [`LogSink`] beside it, in place of a list of its parts.
 pub(super) struct Conn<R: tauri::Runtime> {
     pub(super) app: AppHandle<R>,
