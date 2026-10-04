@@ -328,7 +328,8 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   },
   {
     label: 'Mark your commands',
-    description: 'Draws a grey › before each command you send.',
+    description:
+      'Draws a grey › before each command you send, except after a prompt that already ends in >.',
     keywords: 'echo caret arrow prefix typed input sent',
     target: at('input', 'command-line', 'mark-commands'),
   },

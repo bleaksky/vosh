@@ -117,7 +117,7 @@ export function InputGroup({ target, navSeq, config, setConfig, onError }: Setti
         </Row>
         <Row
           label="Mark your commands"
-          description="Draws a grey › before each command you send."
+          description="Draws a grey › before each command you send, except after a prompt that already ends in >."
           anchor="mark-commands"
         >
           <Toggle
