@@ -31,6 +31,7 @@ import {
   themeTokens,
   type XtermPalette,
 } from './themes';
+import credits from '../../public/theme-credits.txt?raw';
 
 const hex = (h: string): Rgb => {
   const c = parseHex(h);
@@ -688,5 +689,42 @@ describe('theme credits', () => {
     expect(custom.source).toBeUndefined();
     expect(custom.author).toBeUndefined();
     expect(custom.license).toBeUndefined();
+  });
+});
+
+describe('public/theme-credits.txt', () => {
+  // Each section opens under a rule of equals signs. Its first line
+  // names the themes it covers, its Source line the work and its author.
+  const sections = credits
+    .split(/^=+$/m)
+    .slice(1)
+    .map((text) => {
+      const [title = '', ...rest] = text.trim().split('\n');
+      return { themes: title.split(/, | and /), body: rest.join('\n') };
+    });
+  const sectionFor = (label: string) => sections.find((s) => s.themes.includes(label));
+  const flat = (text: string) => text.replace(/\s+/g, ' ');
+  const PERMISSION =
+    'Permission is hereby granted, free of charge, to any person obtaining a copy of this ' +
+    'software and associated documentation files (the "Software"), to deal in the Software ' +
+    'without restriction';
+
+  it('credits every built in theme and its author', () => {
+    for (const theme of BUILTIN_THEMES) {
+      const section = sectionFor(theme.label);
+      expect(section, theme.id).toBeDefined();
+      const source = /^Source (.*)$/m.exec(section?.body ?? '')?.[1] ?? '';
+      expect(source.toLowerCase(), theme.id).toContain(String(theme.author).toLowerCase());
+    }
+  });
+
+  it('keeps the copyright line and the permission of every MIT theme', () => {
+    const mit = BUILTIN_THEMES.filter((t) => t.license === 'MIT');
+    expect(mit.length).toBeGreaterThan(0);
+    for (const theme of mit) {
+      const body = sectionFor(theme.label)?.body ?? '';
+      expect(body, theme.id).toMatch(/^Copyright \(c\) \d{4}\S* \S/m);
+      expect(flat(body), theme.id).toContain(PERMISSION);
+    }
   });
 });
