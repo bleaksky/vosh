@@ -20,7 +20,7 @@ import { PANE_TEXT_BASE, PANE_TEXT_PX, paneText } from './paneTextSize';
 //
 // The lines, the gaps between them, and the width for the gutter
 // follow your terminal size (paneTextSize.ts), and the measure is in
-// your terminal face at that size. The numbers here are at 12 px.
+// the panel face at that size. The numbers here are at 12 px.
 
 export type ChipGroupId = 'recast' | 'tracked' | 'other';
 
@@ -85,17 +85,17 @@ export function chipLabelMode(
   return width < affectsTwoColumnsW(size) ? 'runin' : 'gutter';
 }
 
-/** Text widths in the faces the pane draws. */
+/** Text widths in the face the pane draws, the panel face. */
 export interface ChipMeasure {
-  /** A name or hours in the terminal face at your terminal size. */
+  /** A name or hours at your terminal size. */
   mono: (s: string) => number;
-  /** The hours in the terminal face at your terminal size and the
-   *  heaviest weight they draw in, so a face whose bold runs wider
-   *  never overflows its line. The name's measure when left out. */
+  /** The hours at your terminal size and the heaviest weight they draw
+   *  in, so a face whose bold runs wider never overflows its line. The
+   *  name's measure when left out. */
   hours?: (s: string) => number;
-  /** A group name in the UI face at 600 11 px. */
+  /** A group name at 600 11 px. */
   label: (s: string) => number;
-  /** The count, `N more`, in the UI face at 12 px. */
+  /** The count, `N more`, at 12 px. */
   count: (s: string) => number;
 }
 

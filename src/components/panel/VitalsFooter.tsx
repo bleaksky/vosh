@@ -1,11 +1,13 @@
 import {
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
   type Ref,
   type RefObject,
 } from 'react';
+import { readPanelFace, usePanelFaceVersion } from '../../lib/panelFace';
 import type { VitalsDensity, VitalsOptions } from '../../lib/session';
 import { useCombat, type CombatOpponent } from '../../lib/stores/combatStore';
 import { useVitalsDensity } from '../../lib/stores/vitalsDensityStore';
@@ -72,20 +74,26 @@ export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean 
   const density = useVitalsDensity();
   const options = useVitalsOptions();
   const sectionRef = useRef<HTMLElement | null>(null);
-  const box = useFooterBox(sectionRef, density === 'line');
+  const width = useFooterWidth(sectionRef, density === 'line');
+  // The vitals draw in the panel face, so they measure in it, again
+  // each time it changes or a face loads.
+  const faceVersion = usePanelFaceVersion();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const face = useMemo(() => readPanelFace(), [faceVersion]);
   // Fit by each vital at its max, the widest its value reads, so the
   // line does not jump between forms as a value loses a digit in a
-  // fight. Only a new max, a new Values form, or a new panel width
-  // moves it.
+  // fight. Only a new max, a new Values form, a new panel width, or a
+  // new face moves it.
   const fit =
     density === 'line' && vitals !== null
       ? vitalsLineFit(
-          box.width,
+          width,
           shownRows(vitals).map((r) => ({
-            label: textWidth(r.label, `400 12px ${box.family}`),
+            label: textWidth(r.label, `400 12px ${face}`, faceVersion),
             value: textWidth(
               widestVital(options.values, vitals[r.max], vitals.hidden),
-              `500 12px ${box.family}`,
+              `500 12px ${face}`,
+              faceVersion,
             ),
           })),
         )
@@ -239,32 +247,22 @@ function toneClass(tone: VitalTone): string | undefined {
   return undefined;
 }
 
-/** The footer's drawn width and UI font while One line is chosen. The
- *  width sits under the saved panel width when the window is too
- *  narrow for it, and the saved width stands in until the first
- *  measure. */
-function useFooterBox(
-  el: RefObject<HTMLElement | null>,
-  active: boolean,
-): { width: number; family: string } {
+/** The footer's drawn width while One line is chosen. It sits under
+ *  the saved panel width when the window is too narrow for it, and the
+ *  saved width stands in until the first measure. */
+function useFooterWidth(el: RefObject<HTMLElement | null>, active: boolean): number {
   const saved = panelWidthOf(usePanelLayout());
-  const [box, setBox] = useState<{ width: number; family: string } | null>(null);
+  const [width, setWidth] = useState<number | null>(null);
   useLayoutEffect(() => {
     const node = el.current;
     if (!active || !node) return;
-    const measure = () => {
-      const width = node.getBoundingClientRect().width;
-      const family = getComputedStyle(node).fontFamily;
-      setBox((prev) =>
-        prev && prev.width === width && prev.family === family ? prev : { width, family },
-      );
-    };
+    const measure = () => setWidth(node.getBoundingClientRect().width);
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(node);
     return () => observer.disconnect();
   }, [el, active]);
-  return box ?? { width: saved, family: 'system-ui' };
+  return width ?? saved;
 }
 
 let measureCanvas: HTMLCanvasElement | null = null;
@@ -273,10 +271,12 @@ let measureCanvas: HTMLCanvasElement | null = null;
 const widths = new Map<string, number>();
 
 /** How wide `text` draws in `font`. Values use tabular numbers, where
- *  every digit is as wide as a zero, so digits measure as zeros. */
-function textWidth(text: string, font: string): number {
+ *  every digit is as wide as a zero, so digits measure as zeros. A
+ *  width taken before a face loaded is its fallback's, so `faceVersion`
+ *  keys each width to the faces loaded when it was taken. */
+function textWidth(text: string, font: string, faceVersion: number): number {
   const shape = text.replace(/[0-9]/g, '0');
-  const key = `${font}|${shape}`;
+  const key = `${faceVersion}|${font}|${shape}`;
   const known = widths.get(key);
   if (known !== undefined) return known;
   measureCanvas ??= document.createElement('canvas');

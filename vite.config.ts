@@ -51,10 +51,12 @@ export default defineConfig(async () => ({
     // Vitest hands back CSS as an empty string. The status line and
     // vitals footer tests read frame.css and panel.css as text to check
     // the rule behind a class, the prompt band tests read prompt.css, the
-    // prompt.css token test reads the stylesheets that define tokens, and
-    // the help article test reads help.css.
+    // prompt.css token test reads the stylesheets that define tokens, the
+    // help article test reads help.css, and the panel font test reads
+    // every sheet, src/styles.css with the map's glyph rules included.
     css: {
       include: [
+        /src\/styles\.css/,
         /frame\.css/,
         /panel\.css/,
         /prompt\.css/,

@@ -27,8 +27,8 @@ export function affectsRulePx(size: number = PANE_TEXT_PX): number {
 }
 
 /** Narrowest pane that draws two columns at 12 px. Each column then
- *  keeps room for the hours and a name of about 16 characters in the
- *  terminal face. A narrower pane draws one column. */
+ *  keeps room for the hours and a name of about 16 characters in a
+ *  monospace panel face. A narrower pane draws one column. */
 export const AFFECTS_TWO_COLUMNS_W = PANE_TEXT_BASE.twoColumns;
 
 /** Narrowest pane that draws two columns at text `size` px. */

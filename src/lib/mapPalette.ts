@@ -3,6 +3,8 @@
 // used for area-name watermarks. The mapping and server map views both pull
 // from this table so a tile in either mode reads the same.
 
+import { readPanelFace } from './panelFace';
+
 export interface SectorTheme {
   name: string;
   fill: string;
@@ -99,7 +101,7 @@ export interface MapInks {
   accent: string;
   /** The accent at 13 percent, the fill of your cell in Squares. */
   accentSoft: string;
-  /** The interface face, for the floor numbers. */
+  /** The panel face, for the floor numbers. */
   font: string;
 }
 
@@ -115,7 +117,7 @@ export function mapInks(): MapInks {
     sep: readCssVar('--sep', '#1d1b19'),
     accent: MAP_COLORS.origin,
     accentSoft: MAP_COLORS.originFill,
-    font: readCssVar('--font-ui', 'system-ui, sans-serif'),
+    font: readPanelFace(),
   };
 }
 

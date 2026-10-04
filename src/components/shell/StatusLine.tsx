@@ -26,11 +26,12 @@ import { statusMoons } from './statusMoons';
 
 // The quiet line under the input band (SPEC 10 G4): your target, then
 // the tick, the game time, and the moons together, 20 px apart in the
-// UI face with tabular numbers. With the panel hidden, the vitals it
-// pins lead the line so you never lose them. They follow Values and
-// Warn before you run low from Settings, Layout, Vitals, and never draw
-// a meter (VitalsOptions.dc.html). While you fight the target you set,
-// its health follows its name in the warn tone.
+// panel face, the Panel font, with tabular numbers. With the panel
+// hidden, the vitals it pins lead the line so you never lose them. They
+// follow Values and Warn before you run low from Settings, Layout,
+// Vitals, and never draw a meter (VitalsOptions.dc.html). While you
+// fight the target you set, its health follows its name in the warn
+// tone.
 //
 // While the game hides your vitals (lamented tears) each one reads `?`
 // in its Values form in tertiary and never warns. The target health

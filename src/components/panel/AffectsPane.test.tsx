@@ -392,9 +392,13 @@ describe('AffectsPaneView', () => {
     expect(cells[0]).toBe('up 5 sanctuary , 5 hours');
   });
 
-  it('sets the names and the hours in the terminal face', () => {
-    expect(rule('.pane-affect-name')).toContain('font-family: var(--font-mud');
-    expect(rule('.pane-affect-hours')).toContain('font-family: var(--font-mud');
+  it('sets the names and the hours at your terminal size in the panel face', () => {
+    // The face comes from .panel-host, so the pane draws in your Panel
+    // font (src/lib/panelFont.test.ts).
+    expect(rule('.pane-affect-name')).not.toContain('font-family');
+    expect(rule('.pane-affect-hours')).not.toContain('font-family');
+    expect(rule('.pane-affect-name')).toContain('font-size: var(--mud-text)');
+    expect(rule('.pane-affect-hours')).toContain('font-size: var(--mud-text)');
     expect(rule('.pane-affect-hours')).toContain('text-align: right');
     expect(rule('.pane-affect-hours.is-danger')).toContain('font-weight: 700');
   });

@@ -1,18 +1,19 @@
 import { createContext, useContext } from 'react';
 
 // The game text in the panes (your affects, the chips, chat) follows
-// your terminal size, the way it follows your terminal font. The panes
-// were drawn at 12 px, and every length that sits with that text, a row
-// or a line or the gap between two, scales by your size over 12 and
-// rounds to whole px, so the rows stay as dense at 16 px as at 12. At
-// 12 px every length is its base, exactly as the panes drew before.
+// your terminal size. Its face is the Panel font, your terminal font
+// until you pick another. The panes were drawn at 12 px, and every
+// length that sits with that text, a row or a line or the gap between
+// two, scales by your size over 12 and rounds to whole px, so the rows
+// stay as dense at 16 px as at 12. At 12 px every length is its base,
+// exactly as the panes drew before.
 //
 // PanelHost writes your size on the panel as --font-mud-px, and
 // panel.css declares the lengths it draws on .panel-host as --mud-*,
 // each round(Npx * var(--mud-scale), 1px) over a base below. The pane
 // geometry reads the same bases here, so a pane, its minimum, and the
-// tests agree on every row. Headers, labels, and counts stay in the UI
-// face at their own sizes.
+// tests agree on every row. Headers, labels, and counts keep their own
+// sizes in the same face.
 
 /** The size the panes were drawn at, and the size each base is
  *  measured at. */
