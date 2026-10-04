@@ -2,7 +2,7 @@
 //! asks of the session and your profile.
 
 use crate::app::state::AppState;
-use crate::input::LineEffects;
+use crate::input::{LineEffects, LineFrom};
 use crate::profile::live::Profile;
 
 #[test]
@@ -41,7 +41,7 @@ fn a_script_alias_body_hands_on_all_it_asks_for() {
     assert_eq!(apply.send_bytes, b"stand\r\norc\r\n");
     assert_eq!(apply.echoes, ["ready"]);
     assert_eq!(apply.new_timers.len(), 1);
-    assert_eq!(apply.inputs, ["look"]);
+    assert_eq!(apply.inputs, [(LineFrom::YourLua, "look".to_string())]);
     assert!(apply.prompt_vars_changed);
 }
 
@@ -80,7 +80,7 @@ fn a_trigger_body_reads_the_whole_match_then_each_group() {
         .expect("the trigger compiles");
     let result = vosh_automation::trigger::process(&p.triggers, b"Bob says hi");
     assert_eq!(
-        super::run_trigger_scripts(&mut p, &result, "t"),
+        super::run_trigger_scripts(&mut p, &result).actions,
         [vosh_script::Action::Send("Bob says hi|Bob|hi".into())]
     );
 }
@@ -111,13 +111,27 @@ fn tick_and_lua_lines_note_what_they_ask_of_the_profile() {
     let state = AppState::default();
     let mut p = Profile::default();
     let mut effects = LineEffects::default();
-    let _ = super::run_and_note_line(&state, &mut p, "#alias greet wave", &mut effects, None);
+    let _ = super::run_and_note_line(
+        &state,
+        &mut p,
+        LineFrom::You,
+        "#alias greet wave",
+        &mut effects,
+        None,
+    );
     assert!(effects.dirty);
     assert!(p.aliases.get("greet").is_some());
 
     // A reset from a timer or a script keeps the blanked profile off
     // the disk, as it does when you type it.
-    let _ = super::run_and_note_line(&state, &mut p, "#profile reset", &mut effects, None);
+    let _ = super::run_and_note_line(
+        &state,
+        &mut p,
+        LineFrom::You,
+        "#profile reset",
+        &mut effects,
+        None,
+    );
     assert_eq!(
         effects,
         LineEffects {
@@ -135,7 +149,14 @@ fn a_reset_from_a_timer_turns_away_a_config_save_read_before_it() {
     let mut p = Profile::default();
     let mut effects = LineEffects::default();
     let before = state.ui_config_generation();
-    let _ = super::run_and_note_line(&state, &mut p, "#profile reset", &mut effects, None);
+    let _ = super::run_and_note_line(
+        &state,
+        &mut p,
+        LineFrom::You,
+        "#profile reset",
+        &mut effects,
+        None,
+    );
     assert!(state.ui_config_generation() > before);
 }
 
@@ -194,4 +215,117 @@ fn a_timer_reset_keeps_the_shared_settings() {
     assert_eq!(p.ui.theme, "night-ink");
     assert_eq!(p.ui.font_family, "Iosevka");
     assert!(p.ui.keep_last_command);
+}
+
+/// The terminal line for a Lua error or stop, as the apply prints it.
+fn lua_error(text: &str) -> String {
+    format!("\x1b[90m[lua]\x1b[0m \x1b[31m{text}\x1b[0m")
+}
+
+#[test]
+fn a_trigger_body_that_runs_away_turns_its_trigger_off() {
+    let mut p = Profile::default();
+    p.triggers
+        .set(vosh_automation::trigger::Trigger::new(
+            "hunger",
+            "^You are hungry",
+            vosh_automation::trigger::TriggerAction::Script {
+                body: "mud.send('eat') while true do end".into(),
+            },
+        ))
+        .expect("the trigger compiles");
+    let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.");
+    let outcome = super::run_trigger_scripts(&mut p, &result);
+    assert!(p.triggers.is_stopped("hunger"));
+    let apply = crate::script::apply_actions(&mut p, outcome);
+    // A stopped body sends nothing it queued.
+    let leftover = &apply.send_bytes;
+    assert!(leftover.is_empty(), "{leftover:?}");
+    assert_eq!(
+        apply.echoes,
+        [lua_error(
+            "Vosh stopped the Lua in trigger hunger after 100 ms. hunger stays off until you save it or restart Vosh."
+        )]
+    );
+    // It matches nothing until you save it again.
+    let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.");
+    let leftover = &result.scripts;
+    assert!(leftover.is_empty(), "{leftover:?}");
+}
+
+#[test]
+fn a_function_a_trigger_body_left_behind_turns_its_trigger_off_too() {
+    let mut p = Profile::default();
+    p.triggers
+        .set(vosh_automation::trigger::Trigger::new(
+            "day",
+            "^The day has begun",
+            vosh_automation::trigger::TriggerAction::Script {
+                body: "mud.on_gmcp('World.Time', function() while true do end end)".into(),
+            },
+        ))
+        .expect("the trigger compiles");
+    let result = vosh_automation::trigger::process(&p.triggers, b"The day has begun.");
+    let outcome = super::run_trigger_scripts(&mut p, &result);
+    crate::script::apply_actions(&mut p, outcome);
+    let msg = vosh_protocol::gmcp::Message {
+        package: "World.Time".into(),
+        data: serde_json::json!({}),
+    };
+    let (_, apply) = super::gmcp_step(&mut p, &msg, tokio::time::Instant::now());
+    assert!(p.triggers.is_stopped("day"));
+    assert_eq!(
+        apply.echoes,
+        [lua_error(
+            "Vosh stopped the Lua in trigger day after 100 ms. day stays off until you save it or restart Vosh."
+        )]
+    );
+}
+
+#[test]
+fn an_alias_body_that_runs_away_turns_its_alias_off() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    p.aliases.set(
+        vosh_automation::alias::Alias::new("heal", "ignored")
+            .with_script("mud.send('cast heal') while true do end"),
+    );
+    // The second heal of the line runs nothing once the first stopped.
+    let ran = crate::input::run_line(&state, &mut p, "heal;heal");
+    let apply = super::line_script_result(ran);
+    let leftover = &apply.send_bytes;
+    assert!(leftover.is_empty(), "{leftover:?}");
+    assert_eq!(
+        apply.echoes,
+        [lua_error(
+            "Vosh stopped the Lua in alias heal after 100 ms. heal stays off until you save it or restart Vosh."
+        )]
+    );
+    assert!(p.aliases.is_stopped("heal"));
+    // Typed again, it passes through, as an alias you turned off does.
+    let ran = crate::input::run_line(&state, &mut p, "heal");
+    assert_eq!(super::line_script_result(ran).send_bytes, b"heal\r\n");
+}
+
+#[test]
+fn one_result_runs_100_mud_input_lines_in_all_its_rounds() {
+    let lines = |n: usize| -> Vec<(LineFrom, String)> {
+        (0..n)
+            .map(|_| (LineFrom::YourLua, "#lua fan()".to_string()))
+            .collect()
+    };
+    let mut budget = super::InputBudget::new();
+    let (run, said) = budget.take(lines(60));
+    assert_eq!(run.len(), 60);
+    assert!(said.is_empty(), "{said:?}");
+    let (run, said) = budget.take(lines(100));
+    assert_eq!(run.len(), 40);
+    assert_eq!(
+        said,
+        ["\x1b[90m[lua]\x1b[0m \x1b[31mVosh ran 100 lines from mud.input and dropped the rest.\x1b[0m"]
+    );
+    // Lines that each asked for 100 more run none, and Vosh says so once.
+    let (run, said) = budget.take(lines(40 * 100));
+    assert!(run.is_empty(), "{run:?}");
+    assert!(said.is_empty(), "{said:?}");
 }

@@ -6,20 +6,42 @@ use std::time::Duration;
 
 use vosh_automation::vars::Scope;
 
+use crate::owner::Owner;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     /// Bytes to send to the server, with CRLF appended by the session.
     Send(String),
-    /// Run text through the input pipeline (vars, aliases, slash commands).
-    Input(String),
+    /// Run text through the input pipeline (vars, aliases, slash
+    /// commands), for the Lua of `owner`, which decides the slash
+    /// commands the line may run.
+    Input {
+        owner: Owner,
+        line: String,
+    },
     /// Echo a line locally to the terminal pane.
     Echo(String),
-    /// Insert or replace an alias.
+    /// Insert or replace an alias you keep, which Vosh saves.
     SetAlias {
         name: String,
         expansion: String,
     },
     RemoveAlias(String),
+    /// Make an alias for the plugin `plugin`, which lasts for the
+    /// session and is never saved.
+    SetPluginAlias {
+        plugin: String,
+        name: String,
+        expansion: String,
+    },
+    /// Remove the alias `name` when the plugin `plugin` made it.
+    RemovePluginAlias {
+        plugin: String,
+        name: String,
+    },
+    /// Remove every alias the plugin of this name made. Vosh adds it
+    /// itself when the plugin turns off, stops or loads again.
+    DropPluginAliases(String),
     /// Insert or replace a variable.
     SetVar {
         scope: Scope,
@@ -46,12 +68,19 @@ pub enum Action {
         enabled: bool,
     },
     /// Insert or replace a regex trigger that fires a Lua callback by id.
+    /// It replaces the trigger of its name that `owner` shares names
+    /// with, so two plugins can each have a trigger of the same name.
     SetLuaTrigger {
+        owner: Owner,
         name: String,
         pattern: String,
         callback_id: i64,
     },
-    RemoveLuaTrigger(String),
+    /// Remove the Lua trigger `name` that `owner` shares names with.
+    RemoveLuaTrigger {
+        owner: Owner,
+        name: String,
+    },
     /// Subscribe a Lua callback to a GMCP package.
     SubscribeGmcp {
         package: String,
@@ -65,6 +94,61 @@ pub enum Action {
     },
     /// Cancel a previously scheduled timer.
     CancelTimer(u32),
-    /// Log a debug line (currently echoes to the terminal in a faint color).
+    /// A line from `print` or `mud.log`, for the terminal under the
+    /// `[lua]` tag.
     Log(String),
+    /// A Lua error, with its file and line where Lua knows them, or a
+    /// line about a stop or the action cap. The terminal shows it under
+    /// the `[lua]` tag in red. Vosh adds these itself, so no call's
+    /// action cap counts them.
+    Error(String),
+}
+
+impl Action {
+    /// How many bytes of text the action holds, which the text a call
+    /// may queue counts.
+    pub(crate) fn text_len(&self) -> usize {
+        match self {
+            Action::Send(text)
+            | Action::Input { line: text, .. }
+            | Action::Echo(text)
+            | Action::RemoveAlias(text)
+            | Action::DropPluginAliases(text)
+            | Action::RemoveVar(text)
+            | Action::RemovePromptVar(text)
+            | Action::Log(text)
+            | Action::Error(text) => text.len(),
+            Action::SetAlias { name, expansion } => name.len() + expansion.len(),
+            Action::SetPluginAlias {
+                plugin,
+                name,
+                expansion,
+            } => plugin.len() + name.len() + expansion.len(),
+            Action::RemovePluginAlias { plugin, name } => plugin.len() + name.len(),
+            Action::SetVar { name, value, .. } | Action::SetPromptVar { name, value } => {
+                name.len() + value.len()
+            }
+            Action::SetGroupEnabled { name, .. } | Action::RemoveLuaTrigger { name, .. } => {
+                name.len()
+            }
+            Action::SetLuaTrigger { name, pattern, .. } => name.len() + pattern.len(),
+            Action::SubscribeGmcp { package, .. } => package.len(),
+            Action::Timer { .. } | Action::CancelTimer(_) => 0,
+        }
+    }
+
+    /// True for an action that registers something for its owner or
+    /// takes a registration away, which a failed load takes back so the
+    /// owner keeps what it had.
+    pub(crate) fn registers(&self) -> bool {
+        matches!(
+            self,
+            Action::SetLuaTrigger { .. }
+                | Action::RemoveLuaTrigger { .. }
+                | Action::SubscribeGmcp { .. }
+                | Action::Timer { .. }
+                | Action::SetPluginAlias { .. }
+                | Action::RemovePluginAlias { .. }
+        )
+    }
 }

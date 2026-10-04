@@ -2117,14 +2117,21 @@ async fn lua_you_type_starts_timers_runs_input_and_sets_prompt_values() {
     h.type_line("#lua function again() mud.input('#lua again()') end again()")
         .await;
     h.until_shown("[mud.input recursion limit hit (16)]").await;
+
+    // Lua whose lines each ask for 100 more runs 100 lines in all.
+    h.type_line("#lua function fan() for i = 1, 100 do mud.input('#lua fan()') end end fan()")
+        .await;
+    h.until_shown("[lua] Vosh ran 100 lines from mud.input and dropped the rest.")
+        .await;
     h.finish(grid).await;
 }
 
 // A plugin you turned on does all its entry script asks as it loads at
 // launch, the way the Lua you type does. Here it runs a line through
 // mud.input, gives your prompt a value and starts a timer, which fires
-// once the game connects. The guard keeps other tests off the shared
-// native grid.
+// once the game connects. Of the slash commands it runs only #echo, so
+// it neither makes an alias nor loads itself again for good. The guard
+// keeps other tests off the shared native grid.
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
@@ -2141,7 +2148,9 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
     std::fs::write(
         plugin.join("main.lua"),
         "mud.timer(0, function() mud.echo('the plugin timer fired') end)\n\
+         mud.input('#echo the plugin ran ' .. 'mud.input')\n\
          mud.input('#alias plugged kick')\n\
+         for i = 1, 50 do mud.input('#script reload') end\n\
          mud.set_prompt_var('plugin_mark', 'on')\n",
     )
     .expect("the entry script");
@@ -2155,8 +2164,8 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
             .await
             .aliases
             .get("plugged")
-            .is_some(),
-        "the mud.input line ran"
+            .is_none(),
+        "a plugin made an alias you keep"
     );
     h.until("the value the plugin gave your prompt", |h| {
         h.events("session://prompt-vars")
@@ -2167,6 +2176,159 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
 
     h.connect().await;
     h.until_shown("the plugin timer fired").await;
+    h.until_shown("the plugin ran mud.input").await;
+    h.until_shown("[lua] Vosh never runs #alias for a plugin.")
+        .await;
+    h.until_shown("[lua] Vosh never runs #script for a plugin.")
+        .await;
+    h.finish(grid).await;
+}
+
+// A Lua GMCP handler you make mid session runs at once on the last
+// packet of its package, here the Char.Status of the login, and the
+// packets end with the connection. The guard keeps other tests off the
+// shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lua_a_new_gmcp_handler_hears_the_last_packet_at_once() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.connect().await;
+    h.until_shown("Welcome to the fake Aabahran, Tester.").await;
+    h.type_line(
+        "#lua mud.on_gmcp('Char.Status', function(d) mud.echo(d.name .. ' is level ' .. d.level) end)",
+    )
+    .await;
+    h.until_shown("Tester is level 50").await;
+    h.disconnect().await;
+    let after = h.state.profile.lock().await.script.eval(
+        "mud.on_gmcp('Char.Status', function() mud.echo('stale') end)",
+        "=#lua",
+    );
+    let leftover = &after.actions;
+    assert!(leftover.is_empty(), "{leftover:?}");
+    h.finish(grid).await;
+}
+
+// A profile switch turns on the plugins the next profile turns on and
+// turns off the ones it does not, while you play. A plugin both turn on
+// keeps running, and one that turns on sends to the game and hears the
+// last Char.Status at once. The guard keeps other tests off the shared
+// native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lua_a_profile_switch_turns_its_plugins_on_and_the_others_off() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    let plugins = h.dir.path().join("plugins");
+    for (name, body) in [
+        ("everywhere", "mud.echo('everywhere loaded')"),
+        (
+            "healer_only",
+            "mud.alias('hl', 'cast heal')\n\
+             mud.send('afk')\n\
+             mud.on_gmcp('Char.Status', function(d) mud.echo('healer_only sees ' .. d.name) end)",
+        ),
+    ] {
+        let plugin = plugins.join(name);
+        std::fs::create_dir_all(&plugin).expect("the plugin folder");
+        std::fs::write(
+            plugin.join("manifest.toml"),
+            format!("[plugin]\nname = \"{name}\"\n"),
+        )
+        .expect("the manifest");
+        std::fs::write(plugin.join("main.lua"), body).expect("the entry script");
+    }
+    let mut healer = crate::profile::file::ProfileConfig::default();
+    healer.plugins.enabled = vec!["everywhere".into(), "healer_only".into()];
+    healer
+        .save(&h.profile_file("Healer").await)
+        .expect("Healer's file");
+    h.state.profile.lock().await.plugins.enabled = vec!["everywhere".into()];
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, plugins).await;
+    h.connect().await;
+    h.until_shown("Welcome to the fake Aabahran, Tester.").await;
+
+    crate::profile::switch::apply_profile_switch(h.app.handle(), &h.state, "Healer")
+        .await
+        .expect("the switch");
+    h.until_shown("healer_only sees Tester").await;
+    // What it sends as it loads reaches the game.
+    h.until_shown("You are now in AFK mode.").await;
+    let shown = |h: &Harness, text: &str| h.screen().iter().filter(|r| r.contains(text)).count();
+    assert_eq!(shown(&h, "everywhere loaded"), 1, "it kept running");
+    {
+        let p = h.state.profile.lock().await;
+        assert_eq!(p.script.loaded_plugins(), ["everywhere", "healer_only"]);
+        assert_eq!(p.plugin_aliases.list().len(), 1);
+    }
+
+    crate::profile::switch::apply_profile_switch(h.app.handle(), &h.state, DEFAULT_PROFILE_NAME)
+        .await
+        .expect("the switch back");
+    {
+        let p = h.state.profile.lock().await;
+        assert_eq!(p.script.loaded_plugins(), ["everywhere"]);
+        let leftover = &p.plugin_aliases.list();
+        assert!(leftover.is_empty(), "{leftover:?}");
+    }
+    h.finish(grid).await;
+}
+
+// What a plugin prints as it loads at launch waits for a terminal, then
+// shows once you connect: its print and its error as [lua] lines, and
+// the stop of a plugin that runs away. A plugin the profile lists twice
+// loads once. The guard keeps other tests off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lua_a_plugin_load_prints_its_lines_once_you_connect() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    let plugins = h.dir.path().join("plugins");
+    for (name, body) in [
+        ("noisy", "print('noisy is here')\nmud.ech('typo')\n"),
+        ("spin", "while true do end\n"),
+    ] {
+        let plugin = plugins.join(name);
+        std::fs::create_dir_all(&plugin).expect("the plugin folder");
+        std::fs::write(
+            plugin.join("manifest.toml"),
+            format!("[plugin]\nname = \"{name}\"\n"),
+        )
+        .expect("the manifest");
+        std::fs::write(plugin.join("main.lua"), body).expect("the entry script");
+    }
+    h.state.profile.lock().await.plugins.enabled =
+        vec!["noisy".into(), "spin".into(), "noisy".into()];
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, plugins).await;
+    assert!(h
+        .state
+        .profile
+        .lock()
+        .await
+        .script
+        .is_stopped(&vosh_script::Owner::Plugin("spin".into())));
+
+    h.connect().await;
+    h.until_shown("[lua] noisy is here").await;
+    h.until_shown("[lua] noisy/main.lua:2: attempt to call a nil value (field 'ech')")
+        .await;
+    h.until_shown("[lua] Vosh stopped spin at main.lua line 1 after 100 ms.")
+        .await;
+    h.until_shown(
+        "[lua] spin stays off until you save it under Scripts in Settings or restart Vosh.",
+    )
+    .await;
+    let noisy = h
+        .screen()
+        .iter()
+        .filter(|row| row.contains("noisy is here"))
+        .count();
+    assert_eq!(noisy, 1, "{:#?}", h.screen());
     h.finish(grid).await;
 }
 

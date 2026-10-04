@@ -79,6 +79,11 @@ pub(crate) struct AppState {
     /// takes them through `launch_notices_take`, since launch runs before
     /// any window listens.
     pub(crate) launch_notices: std::sync::Mutex<Vec<String>>,
+    /// The terminal lines the plugins printed as they loaded at launch,
+    /// their `[lua]` errors and stops among them. Launch runs before any
+    /// window listens, so they wait for the first connect or the first
+    /// line you type, see [`crate::app::plugins::show_launch_lines`].
+    pub(crate) launch_lua_lines: std::sync::Mutex<Vec<String>>,
     /// The active profile's name, kept beside the profile set so an event
     /// can name it without waiting for that lock. Set at launch, on a
     /// switch and on a rename. None before any profile loads.
@@ -233,6 +238,7 @@ impl Default for AppState {
             global_catalog: Arc::new(Mutex::new(None)),
             loadout_set: Arc::new(Mutex::new(None)),
             launch_notices: std::sync::Mutex::new(Vec::new()),
+            launch_lua_lines: std::sync::Mutex::new(Vec::new()),
             active_profile: std::sync::Mutex::new(None),
             prompt_watch: std::sync::atomic::AtomicBool::new(false),
             reader_busy: std::sync::atomic::AtomicBool::new(false),

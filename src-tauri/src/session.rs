@@ -397,6 +397,8 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
             tls,
         },
     );
+    // What the plugins printed at launch, if nothing showed it yet.
+    crate::app::plugins::show_launch_lines(&app, state);
 
     let log_sink = LogSink::open(
         state.logs.clone(),

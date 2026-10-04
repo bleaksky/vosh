@@ -1,6 +1,8 @@
 //! Trigger store. Owns the user-defined triggers, compiles their regex on
 //! insert, and exposes them in priority order.
 
+use std::collections::HashSet;
+
 use regex::Regex;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -262,6 +264,10 @@ pub struct TriggerStore {
     groups: GroupSwitch,
     /// See [`TriggerStore::revision`].
     revision: u64,
+    /// The triggers whose Lua Vosh stopped this session. A stopped
+    /// trigger matches nothing until you save it again. Vosh never saves
+    /// this, so a restart turns them all back on.
+    stopped: HashSet<String>,
 }
 
 impl TriggerStore {
@@ -295,6 +301,8 @@ impl TriggerStore {
             regexes.push(regex);
         }
         self.items.retain(|t| t.trigger.name != trigger.name);
+        // Saving a trigger Vosh stopped turns it back on.
+        self.stopped.remove(&trigger.name);
         self.items.push(CompiledTrigger { trigger, regexes });
         self.items
             .sort_by_key(|t| std::cmp::Reverse(t.trigger.priority));
@@ -303,6 +311,7 @@ impl TriggerStore {
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
+        self.stopped.remove(name);
         let before = self.items.len();
         self.items.retain(|t| t.trigger.name != name);
         let removed = before != self.items.len();
@@ -332,6 +341,19 @@ impl TriggerStore {
             .map(|t| &t.trigger)
     }
 
+    /// Turn the trigger `name` off for the rest of the session, after
+    /// Vosh stopped its Lua. It stays off until you save it again.
+    pub fn stop(&mut self, name: &str) {
+        if self.get(name).is_some() {
+            self.stopped.insert(name.to_string());
+        }
+    }
+
+    /// True while Vosh holds the trigger `name` off after a stop.
+    pub fn is_stopped(&self, name: &str) -> bool {
+        self.stopped.contains(name)
+    }
+
     pub fn list(&self) -> Vec<Trigger> {
         self.items.iter().map(|t| t.trigger.clone()).collect()
     }
@@ -348,13 +370,15 @@ impl TriggerStore {
     }
 
     /// Iterate the compiled triggers in priority order (high to low),
-    /// filtering out anything whose group is in the disabled set. The
+    /// filtering out anything whose group is in the disabled set and
+    /// any trigger Vosh stopped. The
     /// engine consumes this directly; per-trigger and per-pattern
     /// enable flags still apply downstream of the group check.
     pub(crate) fn iter_compiled(&self) -> impl Iterator<Item = &CompiledTrigger> {
-        self.items
-            .iter()
-            .filter(|c| self.groups.allows(c.trigger.group.as_deref()))
+        self.items.iter().filter(|c| {
+            self.groups.allows(c.trigger.group.as_deref())
+                && !self.stopped.contains(&c.trigger.name)
+        })
     }
 
     /// True when the named group is effectively enabled. Empty / missing
@@ -407,6 +431,13 @@ impl TriggerStore {
         // a bad pattern must leave self (including its disabled set)
         // untouched.
         next.groups = std::mem::take(&mut self.groups);
+        // The editor saves the whole list at once, so a trigger Vosh
+        // stopped stays off unless this save changed it.
+        for name in &self.stopped {
+            if next.get(name).is_some() && next.get(name) == self.get(name) {
+                next.stopped.insert(name.clone());
+            }
+        }
         next.revision = next_revision();
         *self = next;
         Ok(self.items.len())
@@ -424,6 +455,7 @@ impl std::fmt::Debug for TriggerStore {
             .field("count", &self.items.len())
             .field("groups", &self.groups)
             .field("revision", &self.revision)
+            .field("stopped", &self.stopped)
             .finish()
     }
 }
@@ -465,6 +497,55 @@ mod tests {
         store.set_disabled_groups(["combat"]);
         assert!(store.import_json("not json").is_err());
         assert_eq!(store.revision(), rev);
+    }
+
+    /// Whether `store` gags `line`, the one action the test triggers take.
+    fn gags(store: &TriggerStore, line: &str) -> bool {
+        crate::trigger::process(store, line.as_bytes())
+            .display
+            .is_none()
+    }
+
+    #[test]
+    fn a_stopped_trigger_stays_off_until_you_save_it() {
+        let mut store = TriggerStore::new();
+        store.set(trigger("hunger", "^You are hungry")).unwrap();
+        store.stop("hunger");
+        assert!(store.is_stopped("hunger"));
+        assert!(!gags(&store, "You are hungry."));
+        // The list and its revision stay as they were, so Settings and
+        // the saved profile still hold the trigger as you wrote it.
+        assert_eq!(store.list().len(), 1);
+        store.set(trigger("hunger", "^You are hungry")).unwrap();
+        assert!(!store.is_stopped("hunger"));
+        assert!(gags(&store, "You are hungry."));
+        // No trigger of that name, nothing to stop.
+        store.stop("missing");
+        assert!(!store.is_stopped("missing"));
+    }
+
+    #[test]
+    fn a_whole_list_save_keeps_only_the_unchanged_stops() {
+        let mut store = TriggerStore::new();
+        store.set(trigger("hunger", "^You are hungry")).unwrap();
+        store.set(trigger("day", "^The day has begun")).unwrap();
+        store.stop("hunger");
+        store.stop("day");
+        let mut edited = store.list();
+        for t in &mut edited {
+            if t.name == "day" {
+                t.priority = 5;
+            }
+        }
+        store
+            .import_json(&serde_json::to_string(&edited).unwrap())
+            .unwrap();
+        assert!(store.is_stopped("hunger"));
+        assert!(!gags(&store, "You are hungry."));
+        assert!(!store.is_stopped("day"));
+        assert!(gags(&store, "The day has begun."));
+        assert!(store.remove("hunger"));
+        assert!(!store.is_stopped("hunger"));
     }
 
     #[test]

@@ -12,9 +12,10 @@ use tokio::sync::Mutex;
 use tokio::time::Instant;
 use vosh_automation::alias::Alias;
 use vosh_automation::vars::{Scope, VariableStore};
-use vosh_script::{Action, ScriptEngine, ScriptOutcome};
+use vosh_script::{Action, Owner, ScriptEngine, ScriptOutcome};
 
 use crate::app::events::{ListChanges, ListRevisions};
+use crate::input::LineFrom;
 use crate::profile::live::Profile;
 
 /// One pending one-shot Lua timer.
@@ -43,8 +44,9 @@ pub(crate) fn snapshot_vars(script: &ScriptEngine, vars: &VariableStore) {
 }
 
 /// Give Lua the current variables, so `mud.var(name)` reads them. Call
-/// before Lua that runs for certain, such as the body of a script alias.
-fn refresh_vars(script: &ScriptEngine, vars: &VariableStore) {
+/// before Lua that runs for certain, such as the body of a script alias,
+/// a `#lua` line or a load.
+pub(crate) fn refresh_vars(script: &ScriptEngine, vars: &VariableStore) {
     let snapshot: std::collections::HashMap<String, String> = vars
         .iter()
         .map(|(k, v, _)| (k.to_string(), v.to_string()))
@@ -54,22 +56,52 @@ fn refresh_vars(script: &ScriptEngine, vars: &VariableStore) {
 
 /// Run the Lua body of a script alias with the words typed after its
 /// name, and apply what it asks of the profile. Lua reads the current
-/// variables. A body that fails is logged and asks for nothing.
+/// variables. A body that fails asks for what it queued before the
+/// error, and its error line prints. A body Vosh stopped asks for
+/// nothing and turns its alias off, so a later step of the same line
+/// that names the alias runs nothing.
 pub(crate) fn run_alias_body(
     profile: &mut Profile,
     call: &vosh_automation::ScriptCall,
 ) -> ApplyResult {
+    if profile.aliases.is_stopped(&call.source) {
+        return ApplyResult::default();
+    }
     refresh_vars(&profile.script, &profile.vars);
-    match profile
-        .script
-        .run_body(&call.body, &call.captures, "alias-script")
-    {
-        Ok(outcome) => apply_actions(profile, outcome),
-        Err(err) => {
-            tracing::warn!(error = %err, "alias script eval failed");
-            ApplyResult::default()
+    let owner = Owner::Alias(call.source.clone());
+    let outcome = profile.script.run_body(&owner, &call.body, &call.captures);
+    apply_actions(profile, outcome)
+}
+
+/// Turn off each trigger and alias whose Lua Vosh stopped in `outcome`,
+/// until you save it again or restart Vosh. The engine holds a stopped
+/// plugin or loose script off itself.
+pub(crate) fn turn_off_stopped(profile: &mut Profile, outcome: &ScriptOutcome) {
+    for owner in &outcome.stopped {
+        match owner {
+            Owner::Trigger(name) => profile.triggers.stop(name),
+            Owner::Alias(name) => profile.aliases.stop(name),
+            Owner::Plugin(_) | Owner::Script(_) | Owner::Typed => {}
         }
     }
+}
+
+/// The `[lua]` tag before each line Vosh prints about Lua, in the
+/// theme's bright black, so the line reads as Vosh and not the game.
+const LUA_TAG: &str = "\x1b[90m[lua]\x1b[0m";
+
+/// The terminal lines for `text` from `print` or `mud.log`, one tagged
+/// line for each line of the text, in the default color.
+fn lua_lines(text: &str) -> impl Iterator<Item = String> + '_ {
+    text.split('\n')
+        .map(|line| format!("{LUA_TAG} {}", line.trim_end_matches('\r')))
+}
+
+/// The terminal lines for a Lua error or a stop, tagged and in the
+/// theme's red.
+pub(crate) fn lua_error_lines(text: &str) -> impl Iterator<Item = String> + '_ {
+    text.split('\n')
+        .map(|line| format!("{LUA_TAG} \x1b[31m{}\x1b[0m", line.trim_end_matches('\r')))
 }
 
 /// Result of applying a [`ScriptOutcome`]: bytes to send, lines to echo,
@@ -79,8 +111,9 @@ pub(crate) fn run_alias_body(
 pub(crate) struct ApplyResult {
     pub send_bytes: Vec<u8>,
     pub echoes: Vec<String>,
-    /// Lines of input to feed back through the input pipeline.
-    pub inputs: Vec<String>,
+    /// Lines of input to feed back through the input pipeline, each with
+    /// whose Lua asked for it.
+    pub inputs: Vec<(LineFrom, String)>,
     /// True when any prompt var changed during apply — the session
     /// emits a `session://prompt-vars` snapshot to the frontend
     /// once per apply rather than once per individual set.
@@ -123,20 +156,24 @@ impl ApplyResult {
 pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> ApplyResult {
     let mut result = ApplyResult::default();
     let lists_before = ListRevisions::of(profile);
+    turn_off_stopped(profile, &outcome);
     for action in outcome.actions {
         match action {
             Action::Send(line) => {
                 result.send_bytes.extend_from_slice(line.as_bytes());
                 result.send_bytes.extend_from_slice(b"\r\n");
             }
-            Action::Input(line) => {
-                result.inputs.push(line);
-            }
+            // The input pipeline decides what the line may run, from
+            // whose Lua asked for it.
+            Action::Input { owner, line } => result.inputs.push((LineFrom::lua(&owner), line)),
             Action::Echo(line) => {
                 result.echoes.push(line);
             }
-            Action::Log(line) => {
-                result.echoes.push(format!("[lua] {line}"));
+            Action::Log(text) => {
+                result.echoes.extend(lua_lines(&text));
+            }
+            Action::Error(text) => {
+                result.echoes.extend(lua_error_lines(&text));
             }
             Action::SetAlias { name, expansion } => {
                 define_alias(profile, name, expansion);
@@ -146,6 +183,16 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
                 profile.aliases.remove(&name);
                 result.durable_changed = true;
             }
+            // A plugin's aliases last for the session, so nothing saves.
+            Action::SetPluginAlias {
+                plugin,
+                name,
+                expansion,
+            } => profile.plugin_aliases.set(&plugin, name, expansion),
+            Action::RemovePluginAlias { plugin, name } => {
+                profile.plugin_aliases.remove(&plugin, &name);
+            }
+            Action::DropPluginAliases(plugin) => profile.plugin_aliases.remove_plugin(&plugin),
             Action::SetVar { scope, name, value } => {
                 // Only profile-scoped vars are persisted; session vars
                 // marking durable would reset the persist debounce on
@@ -180,7 +227,7 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
                 result.durable_changed = true;
             }
             Action::SetLuaTrigger { .. }
-            | Action::RemoveLuaTrigger(_)
+            | Action::RemoveLuaTrigger { .. }
             | Action::SubscribeGmcp { .. } => {
                 // The script engine consumes these in its own drain loop;
                 // they should not reach here. Ignore defensively.
@@ -190,11 +237,19 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
                 callback_id,
                 timer_id,
             } => {
-                result.new_timers.push(PendingTimer {
-                    deadline: Instant::now() + delay,
-                    callback_id,
-                    timer_id,
-                });
+                // Lua caps a delay at a day, and a deadline past what the
+                // clock can hold never comes, so such a timer waits a day.
+                let now = Instant::now();
+                let deadline = now
+                    .checked_add(delay)
+                    .or_else(|| now.checked_add(std::time::Duration::from_secs(24 * 60 * 60)));
+                if let Some(deadline) = deadline {
+                    result.new_timers.push(PendingTimer {
+                        deadline,
+                        callback_id,
+                        timer_id,
+                    });
+                }
             }
             Action::CancelTimer(id) => {
                 result.cancel_timers.push(id);
@@ -360,6 +415,7 @@ mod tests {
                 name: name.into(),
                 expansion: expansion.into(),
             }],
+            ..ScriptOutcome::default()
         }
     }
 
@@ -446,10 +502,26 @@ mod tests {
                 name: "combat".into(),
                 enabled: false,
             }],
+            ..ScriptOutcome::default()
         };
         apply_actions(&mut p, outcome);
         let leftover = &aliases_on(&p);
         assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
+    #[test]
+    fn a_timer_no_clock_can_hold_still_applies() {
+        let mut p = Profile::default();
+        let outcome = ScriptOutcome {
+            actions: vec![Action::Timer {
+                delay: std::time::Duration::MAX,
+                callback_id: 1,
+                timer_id: 1,
+            }],
+            ..ScriptOutcome::default()
+        };
+        let apply = apply_actions(&mut p, outcome);
+        assert_eq!(apply.new_timers.len(), 1);
     }
 
     #[test]

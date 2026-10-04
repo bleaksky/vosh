@@ -89,6 +89,80 @@ pub(crate) fn is_profile_reset_or_load(line: &str) -> bool {
     matches!(sub, "reset" | "load")
 }
 
+/// Who asked for a line the input pipeline runs, which decides the
+/// slash commands it may run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LineFrom {
+    /// You: a line you type, a Settings timer or the tick command.
+    You,
+    /// Your own Lua through `mud.input`: a `#lua` line, the Lua of a
+    /// trigger or an alias, or a script from `#script load`.
+    YourLua,
+    /// A plugin through `mud.input`.
+    Plugin,
+}
+
+impl LineFrom {
+    /// Who asked for a `mud.input` line that the Lua of `owner` queued.
+    pub(crate) fn lua(owner: &vosh_script::Owner) -> Self {
+        match owner {
+            vosh_script::Owner::Plugin(_) => LineFrom::Plugin,
+            _ => LineFrom::YourLua,
+        }
+    }
+}
+
+/// The command in `line` that Lua may not run through `mud.input`, read
+/// the way the slash dispatcher reads it: `#script load`, which runs a
+/// file, `#script reload`, which runs every loaded file again,
+/// `#import-tintin`, which reads a file, and `#profile`, which saves,
+/// loads or blanks your profile. None for any other line.
+pub(crate) fn kept_from_lua(line: &str) -> Option<&'static str> {
+    let rest = line.trim_start().strip_prefix('#')?;
+    let (cmd, rest) = split_first_word(rest);
+    match cmd {
+        "profile" => Some("#profile"),
+        "import-tintin" => Some("#import-tintin"),
+        "script" => match split_first_word(rest).0 {
+            "load" => Some("#script load"),
+            "reload" => Some("#script reload"),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Why Vosh does not run the slash command `line` that `from` asks for,
+/// read the way the slash dispatcher reads it, or None when it runs. A
+/// plugin runs no slash command but `#echo`. Your own Lua runs any but
+/// those [`kept_from_lua`] names, and it cannot set a quick key or the
+/// tick command to a slash command, which would later run as yours.
+fn slash_refusal(from: LineFrom, line: &str) -> Option<String> {
+    let rest = line.trim_start().strip_prefix('#')?;
+    let (cmd, args) = split_first_word(rest);
+    let runs_slash = |text: &str| text.trim_start().starts_with('#');
+    match from {
+        LineFrom::You => None,
+        LineFrom::Plugin => (!matches!(cmd, "echo" | "showme"))
+            .then(|| format!("Vosh never runs #{cmd} for a plugin.")),
+        LineFrom::YourLua => {
+            if let Some(command) = kept_from_lua(line) {
+                return Some(format!("Vosh runs {command} only when you type it."));
+            }
+            let (word, text) = split_first_word(args);
+            match cmd {
+                "qkey" if word != "clear" && runs_slash(text) => {
+                    Some("Vosh sets a quick key to a # command only when you type it.".to_string())
+                }
+                "tick" if word == "fire" && runs_slash(text) => Some(
+                    "Vosh sets the tick command to a # command only when you type it.".to_string(),
+                ),
+                _ => None,
+            }
+        }
+    }
+}
+
 /// What a `#logs` line asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LogsCommand {
@@ -133,7 +207,7 @@ pub(crate) fn help_query(line: &str) -> Option<String> {
 /// `#profile load` outside loadout mode, which turns the pair into
 /// echoes. A caller reads global.toml before such a line runs, to lay the
 /// shared settings back over the result. Whether it did replace the
-/// profile comes back from [`run_line`].
+/// profile comes back from [`run_line_from`].
 pub(crate) fn may_replace_profile(state: &AppState, line: &str) -> bool {
     !state
         .loadout_mode
@@ -155,6 +229,8 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     state: &SharedState,
     line: &str,
 ) -> Result<(), String> {
+    // What the plugins printed at launch, if nothing showed it yet.
+    crate::app::plugins::show_launch_lines(app, state);
     // `#help <words>` opens Help on those words. The topics live in the
     // page, so the main window searches them, opens Help on the best
     // match, or says in the terminal that none matched.
@@ -187,7 +263,12 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         effects,
     } = {
         let mut profile = state.profile.lock().await;
-        session::effects::run_lines_locked(state, &mut profile, [line], shared_layer.as_ref())
+        session::effects::run_lines_locked(
+            state,
+            &mut profile,
+            [(LineFrom::You, line)],
+            shared_layer.as_ref(),
+        )
     };
     // `#prompt draw` and `#prompt show` change the prompt on screen at
     // once, and `#prompt default` draws the new design there. A typed
@@ -257,15 +338,27 @@ pub(crate) struct Ran {
     pub(crate) tick_changed: bool,
 }
 
-/// Run `line` through the input pipeline: what to send, what to echo,
-/// what the Lua it ran asks for, whether it replaced the live profile,
-/// and whether it changed the tick settings, for
-/// [`LineEffects::note_ran`].
+/// [`run_line_from`] for a line you type, for a test.
+#[cfg(test)]
 pub(crate) fn run_line(state: &AppState, profile: &mut Profile, line: &str) -> Ran {
+    run_line_from(state, profile, line, LineFrom::You)
+}
+
+/// Run `line`, which `from` asks for, through the input pipeline: what
+/// to send, what to echo, what the Lua it ran asks for, whether it
+/// replaced the live profile, and whether it changed the tick settings,
+/// for [`LineEffects::note_ran`]. Who asked decides the slash commands it
+/// may run, those a quick key in it expands to included.
+pub(crate) fn run_line_from(
+    state: &AppState,
+    profile: &mut Profile,
+    line: &str,
+    from: LineFrom,
+) -> Ran {
     let mut replaced = false;
     let mut lua = ApplyResult::default();
     let tick_before = profile.tick.config.clone();
-    let result = process_line(state, profile, line, &mut replaced, &mut lua);
+    let result = process_line(state, profile, line, from, &mut replaced, &mut lua);
     let tick_changed = profile.tick.config != tick_before;
     Ran {
         result,
@@ -276,7 +369,7 @@ pub(crate) fn run_line(state: &AppState, profile: &mut Profile, line: &str) -> R
 }
 
 /// What a run of input lines asks of the saved profile. Every path that
-/// runs a line through [`run_line`] notes each line here in order: typed
+/// runs a line through [`run_line_from`] notes each line here in order: typed
 /// input, a Settings timer command, the tick auto-fire command, and a
 /// Lua `mud.input` line. So `#alias` or `#trigger` from a timer reaches
 /// disk the way the same line typed at the prompt does. Lua that changed
@@ -296,7 +389,7 @@ pub(crate) struct LineEffects {
 }
 
 impl LineEffects {
-    /// Note one line [`run_line`] ran: [`Self::note`] with whether it
+    /// Note one line [`run_line_from`] ran: [`Self::note`] with whether it
     /// replaced the live profile, whether it changed the tick settings,
     /// and whether the Lua bodies of its script aliases changed durable
     /// state.
@@ -310,7 +403,7 @@ impl LineEffects {
         }
     }
 
-    /// Note one line that ran through [`run_line`], with whether it
+    /// Note one line that ran through [`run_line_from`], with whether it
     /// replaced the live profile. The line alone cannot say: a `#profile
     /// load` whose file does not read leaves the profile as it was, and
     /// the pending save and the exit flush must still write it.
@@ -334,7 +427,7 @@ impl LineEffects {
 }
 
 /// Run the input pipeline against the given profile and return what to send
-/// and what to echo locally. The app runs every line through [`run_line`],
+/// and what to echo locally. The app runs every line through [`run_line_from`],
 /// which also says whether the line replaced the profile. A test that
 /// needs no app state of its own runs here, on a fresh one.
 #[cfg(test)]
@@ -342,21 +435,27 @@ pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
     run_line(&AppState::default(), profile, line).result
 }
 
-/// The body of [`run_line`]. Sets `replaced` when a `#profile reset` or a
-/// `#profile load` that read its file replaced the live profile, and adds
-/// to `lua` what the Lua the line ran asks for. A script alias body's
-/// sends and echo lines go in the result instead, where you typed it.
+/// The body of [`run_line_from`]. Sets `replaced` when a `#profile reset`
+/// or a `#profile load` that read its file replaced the live profile, and
+/// adds to `lua` what the Lua the line ran asks for. A script alias
+/// body's sends and echo lines go in the result instead, where you typed
+/// it.
 fn process_line(
     state: &AppState,
     profile: &mut Profile,
     line: &str,
+    from: LineFrom,
     replaced: &mut bool,
     lua: &mut ApplyResult,
 ) -> InputResult {
     let trimmed = line.trim_start();
 
-    // Slash commands target the local profile.
+    // Slash commands target the local profile. Lua runs only those its
+    // owner may, here where a quick key's expansion arrives too.
     if let Some(rest) = trimmed.strip_prefix('#') {
+        if let Some(refusal) = slash_refusal(from, trimmed) {
+            return InputResult::echo_lines(crate::script::lua_error_lines(&refusal).collect());
+        }
         return handle_slash(state, profile, rest, replaced, lua);
     }
 
@@ -400,7 +499,7 @@ fn process_line(
             return InputResult::error("no target — set one with `tar <name|index>` first");
         }
         let expansion = format!("{} {}", qk.verb, target);
-        let mut inner = process_line(state, profile, &expansion, replaced, lua);
+        let mut inner = process_line(state, profile, &expansion, from, replaced, lua);
         // Echo the resolved line like any other typed command, with the
         // caret and the Sent command color. The frontend suppresses its
         // own echo for quick-keys, so this is the only echo that lands.
@@ -420,7 +519,10 @@ fn process_line(
     // An alias that runs Lua runs its body where it stands, so what the
     // body sends goes out in the order you typed the line.
     let interpolated = profile.vars.interpolate(trimmed);
-    let steps = match profile.aliases.expand_line_full(&interpolated) {
+    let steps = match profile
+        .aliases
+        .expand_line_full(&interpolated, &profile.plugin_aliases)
+    {
         Ok(steps) => steps,
         Err(ExpandError::RecursionLimit(depth)) => {
             return InputResult::error(format!("alias recursion limit hit ({depth})"));

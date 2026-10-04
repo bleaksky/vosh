@@ -107,7 +107,7 @@ slash commands:
   #tick warn color <name>              color the warning (red, bright-red, ...)
   #tick warn off                       disable the warning
   #script load <name>                  load <name>.lua from the scripts dir
-  #script reload                       re-run all loaded scripts
+  #script reload                       read every loaded script again and run it
   #scripts                             list loaded scripts and Lua triggers
   #lua <code>                          evaluate Lua inline
   #echo <text>                         print text locally (also #showme)

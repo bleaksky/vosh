@@ -2,6 +2,9 @@
 //! files from the scripts folder, `#lua` runs a line of Lua, and
 //! `#scripts` lists what is loaded.
 
+use tracing::warn;
+use vosh_script::{Action, Owner, ScriptOutcome};
+
 use super::{split_first_word, InputResult};
 use crate::app::state::AppState;
 use crate::disk::paths;
@@ -17,7 +20,7 @@ pub(super) fn slash_script(
     let (cmd, rest) = split_first_word(args);
     match cmd {
         "load" => slash_script_load(state, profile, rest, lua),
-        "reload" => slash_script_reload(profile, lua),
+        "reload" => slash_script_reload(state, profile, lua),
         "" => InputResult::error("usage #script load <name> | #script reload"),
         other => InputResult::error(format!("unknown #script subcommand `{other}`")),
     }
@@ -38,28 +41,88 @@ fn slash_script_load(
     let Some(app_data) = state.app_data.get() else {
         return InputResult::error("could not resolve scripts directory");
     };
-    let path = script_path_for(app_data, name);
+    // A loose file's owner is its path inside the scripts folder with
+    // `.lua` on the end, so `combat` and `combat.lua` load as one.
+    let Some(file) = script_file_name(name) else {
+        return InputResult::error(OUTSIDE_SCRIPTS);
+    };
+    let scripts = paths::scripts_dir(app_data);
+    let path = scripts.join(&file);
     let code = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(e) => return InputResult::error(format!("read failed: {e} ({})", path.display())),
     };
-    script::snapshot_vars(&profile.script, &profile.vars);
-    let outcome = match profile.script.load_script(name, code) {
-        Ok(o) => o,
-        Err(e) => return InputResult::error(format!("script error: {e}")),
-    };
+    // A disk that ignores case opens `Combat.lua` for `combat`, so the
+    // owner takes the name the folder gives the file.
+    let file = spelled_on_disk(&scripts, &file);
+    let path = scripts.join(&file);
+    script::refresh_vars(&profile.script, &profile.vars);
+    let outcome =
+        profile
+            .script
+            .load_script(Owner::Script(file.clone()), &format!("@{file}"), &code);
+    let failed = outcome.failed;
     lua.append(script::apply_actions(profile, outcome));
+    // A script that failed says why in its own lines.
+    if failed {
+        return InputResult::empty();
+    }
     InputResult::echo_line(format!("loaded {}", path.display()))
 }
 
-fn slash_script_reload(profile: &mut Profile, lua: &mut script::ApplyResult) -> InputResult {
-    script::snapshot_vars(&profile.script, &profile.vars);
-    let outcome = match profile.script.reload_scripts() {
-        Ok(o) => o,
-        Err(e) => return InputResult::error(format!("reload error: {e}")),
+/// `#script reload`. Reads each loaded plugin and loose script from disk
+/// again and loads it, in the order they first loaded, and goes on past
+/// one that fails. A file Vosh cannot read leaves its script as it was.
+fn slash_script_reload(
+    state: &AppState,
+    profile: &mut Profile,
+    lua: &mut script::ApplyResult,
+) -> InputResult {
+    let Some(app_data) = state.app_data.get() else {
+        return InputResult::error("could not resolve scripts directory");
     };
+    script::refresh_vars(&profile.script, &profile.vars);
+    let mut outcome = ScriptOutcome::default();
+    for owner in profile.script.reload_order() {
+        match read_again(app_data, &owner) {
+            Some(Ok((chunk, code))) => {
+                outcome.append(profile.script.load_script(owner, &chunk, &code));
+            }
+            Some(Err(line)) => outcome.actions.push(Action::Error(line)),
+            None => {}
+        }
+    }
     lua.append(script::apply_actions(profile, outcome));
     InputResult::echo_line("scripts reloaded")
+}
+
+/// The chunk name and the code of the plugin or loose script `owner` as
+/// its file reads now, or the line that says Vosh could not read it.
+/// None for Lua that has no file.
+fn read_again(
+    app_data: &std::path::Path,
+    owner: &Owner,
+) -> Option<Result<(String, String), String>> {
+    Some(match owner {
+        Owner::Script(file) => {
+            let path = paths::scripts_dir(app_data).join(file);
+            std::fs::read_to_string(&path)
+                .map(|code| (format!("@{file}"), code))
+                .map_err(|e| {
+                    warn!(path = %path.display(), error = %e, "script reload could not read");
+                    format!("Vosh could not read {file} and left it as it was.")
+                })
+        }
+        Owner::Plugin(name) => {
+            crate::app::plugins::read_plugin(&paths::plugins_dir(app_data), name)
+                .map(|plugin| (plugin.chunk(name), plugin.code))
+                .map_err(|e| {
+                    warn!(plugin = %name, error = %e, "plugin reload could not read");
+                    format!("Vosh could not read plugin {name} and left it as it was.")
+                })
+        }
+        Owner::Typed | Owner::Trigger(_) | Owner::Alias(_) => return None,
+    })
 }
 
 pub(super) fn slash_scripts_list(profile: &Profile) -> InputResult {
@@ -77,9 +140,13 @@ pub(super) fn slash_scripts_list(profile: &Profile) -> InputResult {
     if !triggers.is_empty() {
         lines.push(format!("{} lua trigger(s):", triggers.len()));
         // Every Lua trigger runs at priority 0. The column lines up with
-        // the #triggers listing.
+        // the #triggers listing. Two scripts may each have a trigger of
+        // one name, so each line names who registered it.
         for t in triggers {
-            lines.push(format!("    [  0] {} /{}/", t.name, t.pattern));
+            lines.push(format!(
+                "    [  0] {} /{}/ from {}",
+                t.name, t.pattern, t.owner
+            ));
         }
     }
     InputResult::echo_lines(lines)
@@ -94,25 +161,91 @@ pub(super) fn slash_lua(
     if code.is_empty() {
         return InputResult::error("usage #lua <code>");
     }
-    script::snapshot_vars(&profile.script, &profile.vars);
-    let outcome = match profile.script.eval(code, "#lua") {
-        Ok(o) => o,
-        Err(e) => return InputResult::error(format!("lua error: {e}")),
-    };
+    script::refresh_vars(&profile.script, &profile.vars);
+    let outcome = profile.script.eval(code, "=#lua");
     lua.append(script::apply_actions(profile, outcome));
     InputResult::empty()
 }
 
-/// The file `#script load <name>` reads, `<app_data>/scripts/<name>.lua`
-/// under the app data folder `app_data`.
-fn script_path_for(app_data: &std::path::Path, name: &str) -> std::path::PathBuf {
-    let dir = paths::scripts_dir(app_data);
-    if std::path::Path::new(name)
+/// `file`, a path inside `scripts` that opened, as the folders on disk
+/// spell it. A disk that ignores case, as macOS and Windows have by
+/// default, opens `Combat.lua` for `combat.lua`, and one file must be one
+/// script whatever case you type. Each part keeps the case you typed when
+/// an entry has it exactly, as on a disk that heeds case, and otherwise
+/// takes the one entry that matches it in any case.
+fn spelled_on_disk(scripts: &std::path::Path, file: &str) -> String {
+    let mut dir = scripts.to_path_buf();
+    let mut spelled = Vec::new();
+    for part in file.split('/') {
+        let names: Vec<String> = std::fs::read_dir(&dir)
+            .map(|entries| {
+                entries
+                    .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let name = if names.iter().any(|name| name == part) {
+            part.to_string()
+        } else {
+            let lower = part.to_lowercase();
+            let mut matches = names
+                .into_iter()
+                .filter(|name| name.to_lowercase() == lower);
+            match (matches.next(), matches.next()) {
+                (Some(name), None) => name,
+                _ => part.to_string(),
+            }
+        };
+        dir.push(&name);
+        spelled.push(name);
+    }
+    spelled.join("/")
+}
+
+/// What `#script load` says to a name that leads out of the scripts
+/// folder.
+const OUTSIDE_SCRIPTS: &str = "Vosh loads scripts from your scripts folder only.";
+
+/// The path inside the scripts folder that `#script load <name>` reads,
+/// with `.lua` on the end unless it ends so already, or None for an
+/// absolute path or one that climbs out with `..`.
+fn script_file_name(name: &str) -> Option<String> {
+    use std::path::Component;
+    let mut parts = Vec::new();
+    for part in std::path::Path::new(name).components() {
+        match part {
+            Component::Normal(part) => parts.push(part.to_str()?),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+    let path = parts.join("/");
+    if path.is_empty() {
+        return None;
+    }
+    let has_lua = std::path::Path::new(&path)
         .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("lua"))
-    {
-        dir.join(name)
-    } else {
-        dir.join(format!("{name}.lua"))
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("lua"));
+    Some(if has_lua { path } else { format!("{path}.lua") })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::spelled_on_disk;
+
+    #[test]
+    fn a_script_takes_the_name_its_folder_gives_it() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("Combat")).unwrap();
+        std::fs::write(dir.path().join("Combat").join("Bash.lua"), "").unwrap();
+        std::fs::write(dir.path().join("heal.lua"), "").unwrap();
+        assert_eq!(
+            spelled_on_disk(dir.path(), "combat/bash.lua"),
+            "Combat/Bash.lua"
+        );
+        assert_eq!(spelled_on_disk(dir.path(), "HEAL.lua"), "heal.lua");
+        assert_eq!(spelled_on_disk(dir.path(), "heal.lua"), "heal.lua");
+        // A name no entry matches stays as you typed it.
+        assert_eq!(spelled_on_disk(dir.path(), "flee.lua"), "flee.lua");
     }
 }

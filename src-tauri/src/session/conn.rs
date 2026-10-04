@@ -481,6 +481,9 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         p.vars.remove("target");
         line_triggers = p.prompt.stage.line_trigger_notice();
         end_prompt(&mut p);
+        // A new GMCP handler gets the last packet of its package, and
+        // the packets of this connection end with it.
+        p.script.forget_gmcp_packets();
         had.then(|| TargetPayload::of(&p))
     };
     // Line triggers no longer see a prompt the profile reads, so the first
