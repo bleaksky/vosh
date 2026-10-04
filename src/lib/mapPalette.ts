@@ -4,6 +4,7 @@
 // from this table so a tile in either mode reads the same.
 
 import { textPx } from '../components/panel/paneTextSize';
+import { oklabToRgb, parseHex, rgbToOklab, toHex } from './color';
 import { readPanelFace, readPanelTextPx } from './panelFace';
 
 export interface SectorTheme {
@@ -109,11 +110,32 @@ export interface MapInks {
   labelPx: number;
 }
 
+/** The page draws a light theme. */
+export function lightAppearance(): boolean {
+  return typeof document !== 'undefined' && document.documentElement.dataset.appearance === 'light';
+}
+
+/** How much of a sector's border a room's fill takes on a light theme. */
+const LIGHT_FILL_MIX = 0.22;
+
+/** A room's fill in Squares. A dark theme keeps the sector's own dim
+ *  fill. On a light theme that fill would read near black on the paper,
+ *  so the room fills with its sector's border mixed 22 percent into the
+ *  panel in OKLab, and City reads as a sepia tint. A panel that is not
+ *  hex keeps the dark fill. */
+export function roomFill(sector: SectorTheme, panel: string, light: boolean): string {
+  const ground = light ? parseHex(panel) : null;
+  const border = parseHex(sector.border);
+  if (!ground || !border) return sector.fill;
+  const g = rgbToOklab(ground);
+  const b = rgbToOklab(border);
+  const mix = (from: number, to: number) => from + (to - from) * LIGHT_FILL_MIX;
+  return toHex(oklabToRgb({ L: mix(g.L, b.L), a: mix(g.a, b.a), b: mix(g.b, b.b) }));
+}
+
 export function mapInks(): MapInks {
-  const light =
-    typeof document !== 'undefined' && document.documentElement.dataset.appearance === 'light';
   return {
-    light,
+    light: lightAppearance(),
     ground: MAP_COLORS.panel,
     text: readCssVar('--text', '#c0bdbb'),
     secondary: readCssVar('--secondary', '#918e8c'),
