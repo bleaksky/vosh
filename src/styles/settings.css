@@ -1,7 +1,7 @@
 /* Settings window (milestone 2). The frame, the sidebar, and the
    primitives in src/components/settings/ui. Every rule sits under an
-   st- class and reads the One Window tokens, plus the literal fills
-   SPEC 4 gives for settings controls. Geometry follows the approved
+   st- class and reads the One Window tokens, the control tones among
+   them, for the SPEC 4 settings controls. Geometry follows the approved
    boards SettingsAppearance, SettingsAutomation, and SettingsCharacters.
    The root is not under .settings-app. In styles.css only the
    .settings-app font rule and .settings-btn remain, for the migration
@@ -9,19 +9,16 @@
 
 /* ── Root ──────────────────────────────────────────────────────────── */
 
-/* Control fills from SPEC 4. Light themes swap each one below. A
-   surface outside Settings that draws these controls, such as the prompt
-   card in the main window, takes .st-controls for the same fills. */
+/* Control rings and the segmented track from SPEC 4. The fills are the
+   theme's control tones in tokens.css. Light themes swap each one below.
+   A surface outside Settings that draws these controls, such as the
+   prompt card in the main window, takes .st-controls for the same rings. */
 .st-app,
 .st-controls {
-  --st-fill: rgba(255, 255, 255, 0.06);
   --st-fill-ring: 0 0 0 0 transparent;
-  --st-track-off: rgba(255, 255, 255, 0.16);
-  --st-key-ring: rgba(255, 255, 255, 0.14);
-  --st-seg-track: rgba(255, 255, 255, 0.06);
+  --st-seg-track: var(--field);
   --st-seg-ring: 0 0 0 0 transparent;
   --st-selrow-ring: 0 0 0 0 transparent;
-  --st-edge: rgba(255, 255, 255, 0.18);
 }
 
 .st-app {
@@ -50,16 +47,16 @@
   }
 }
 
+/* On paper a field is the raised paper, so it takes a hairline ring.
+   The segmented track takes the black wash of the menu highlight, as
+   SPEC 4 drew it, so the pressed segment on the raised paper stands
+   out of it. */
 :root[data-appearance='light'] .st-app,
 :root[data-appearance='light'] .st-controls {
-  --st-fill: #ffffff;
   --st-fill-ring: inset 0 0 0 1px var(--sep);
-  --st-track-off: rgba(0, 0, 0, 0.14);
-  --st-key-ring: rgba(0, 0, 0, 0.12);
-  --st-seg-track: rgba(0, 0, 0, 0.05);
+  --st-seg-track: var(--menu-hi);
   --st-seg-ring: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.1);
   --st-selrow-ring: 0 0 0 1px var(--sep);
-  --st-edge: rgba(0, 0, 0, 0.14);
 }
 
 /* Window edge for the frameless window on Windows and Linux. macOS
@@ -71,7 +68,7 @@
   inset: 0;
   z-index: 50;
   border-radius: inherit;
-  box-shadow: inset 0 0 0 1px var(--st-edge);
+  box-shadow: inset 0 0 0 1px var(--edge);
   pointer-events: none;
 }
 
@@ -126,7 +123,7 @@
   margin: 12px 12px 0;
   padding: 0 6px 0 8px;
   border-radius: 999px;
-  background: var(--st-fill);
+  background: var(--field);
   box-shadow: var(--st-fill-ring);
 }
 
@@ -655,7 +652,7 @@
   width: 38px;
   height: 22px;
   border-radius: 11px;
-  background: var(--st-track-off);
+  background: var(--track);
 }
 
 .st-toggle-knob {
@@ -739,7 +736,7 @@
   border: 0;
   border-radius: var(--r-row);
   outline: none;
-  background: var(--st-fill);
+  background: var(--field);
   box-shadow: var(--st-fill-ring);
   color: var(--text);
   font: inherit;
@@ -774,7 +771,7 @@
   border: 0;
   border-radius: var(--r-row);
   outline: none;
-  background: var(--st-fill);
+  background: var(--field);
   box-shadow: var(--st-fill-ring);
   color: var(--text);
   font: inherit;
@@ -858,7 +855,7 @@
   height: 28px;
   padding: 0 10px 0 6px;
   border-radius: var(--r-row);
-  background: var(--st-fill);
+  background: var(--field);
   box-shadow: var(--st-fill-ring);
 }
 
@@ -880,7 +877,7 @@
   width: 16px;
   height: 16px;
   border-radius: var(--r-key);
-  box-shadow: inset 0 0 0 1px var(--st-key-ring);
+  box-shadow: inset 0 0 0 1px var(--key-ring);
 }
 
 .st-color-picker {
@@ -1007,7 +1004,7 @@
   min-width: 20px;
   height: 20px;
   padding: 0 4px;
-  border: 1px solid var(--st-key-ring);
+  border: 1px solid var(--key-ring);
   border-radius: var(--r-key);
   background: transparent;
   color: var(--secondary);
@@ -1731,7 +1728,7 @@
   border: 0;
   border-radius: 999px;
   outline: none;
-  background: var(--st-fill);
+  background: var(--field);
   box-shadow: inset 0 0 0 1px var(--sep);
   color: var(--text);
   font: inherit;
@@ -1753,8 +1750,6 @@
 
 /* Suggestions hang under the field on the floating recipe (SPEC 7). */
 .st-suggest {
-  --st-menu-hi: rgba(255, 255, 255, 0.08);
-
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
@@ -1768,10 +1763,6 @@
   border-radius: var(--r-float);
   background: var(--raised);
   box-shadow: var(--shadow-float);
-}
-
-:root[data-appearance='light'] .st-suggest {
-  --st-menu-hi: rgba(0, 0, 0, 0.05);
 }
 
 .st-suggest[hidden] {
@@ -1792,7 +1783,7 @@
 }
 
 .st-suggest-item[aria-selected='true'] {
-  background: var(--st-menu-hi);
+  background: var(--menu-hi);
 }
 
 /* Panel layout: the 180×110 schematic and a column beside it that
@@ -2412,7 +2403,7 @@
 .st-app .st-code .cm-editor {
   border: 0;
   border-radius: var(--r-row);
-  background: var(--st-fill);
+  background: var(--field);
   box-shadow: var(--st-fill-ring);
   color: var(--text);
   font-family: var(--font-mud);

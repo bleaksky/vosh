@@ -7,6 +7,7 @@ import {
   STATUS_CONTRAST,
   STATUS_TEXT_CONTRAST,
   TERTIARY_CONTRAST,
+  WASH_STEP,
   type Appearance,
   type ChromeColorKey,
 } from './chrome';
@@ -77,6 +78,9 @@ interface TokenSheet {
 // Ember's is the sheet the board draws, and Nord's and Vellum's are the
 // rule's with their pins. The selection is each scheme's own, opaque,
 // with its own text (Q9), where the canvas drew the accent with alpha.
+// The control washes (Q10) on Ember and Vellum are the ones the
+// stylesheets fixed per appearance, but for Vellum's field, now its
+// raised paper and no longer white, and on Nord they are the rule's.
 const NORD: TokenSheet = {
   id: 'nord',
   appearance: 'dark',
@@ -102,6 +106,11 @@ const NORD: TokenSheet = {
     success: '#a3be8c',
     selection: '#4c566a',
     selectionText: '#eceff4',
+    field: 'rgba(255, 255, 255, 0.102)',
+    track: 'rgba(255, 255, 255, 0.249)',
+    menuHi: 'rgba(255, 255, 255, 0.108)',
+    keyRing: 'rgba(255, 255, 255, 0.219)',
+    edge: 'rgba(255, 255, 255, 0.219)',
   },
 };
 
@@ -130,6 +139,11 @@ const EMBER: TokenSheet = {
     success: '#8fdaa8',
     selection: '#201d1c',
     selectionText: '#f2efee',
+    field: 'rgba(255, 255, 255, 0.06)',
+    track: 'rgba(255, 255, 255, 0.16)',
+    menuHi: 'rgba(255, 255, 255, 0.08)',
+    keyRing: 'rgba(255, 255, 255, 0.14)',
+    edge: 'rgba(255, 255, 255, 0.14)',
   },
 };
 
@@ -158,6 +172,11 @@ const VELLUM: TokenSheet = {
     success: '#4f7a3a',
     selection: '#a4b4c4',
     selectionText: '#2a2622',
+    field: '#fffdfa',
+    track: 'rgba(0, 0, 0, 0.14)',
+    menuHi: 'rgba(0, 0, 0, 0.05)',
+    keyRing: 'rgba(0, 0, 0, 0.12)',
+    edge: 'rgba(0, 0, 0, 0.14)',
   },
 };
 
@@ -262,6 +281,62 @@ describe('contrast floors', () => {
     };
     for (const [id, accent] of Object.entries(accents)) {
       expect(themeTokens(findTheme(id)).accent, id).toBe(accent);
+    }
+  });
+});
+
+describe('control washes', () => {
+  // The surface each wash sits on and steps: the field, the track and
+  // the keycap ring the panel, the menu highlight raised, the edge the
+  // ground.
+  const SURFACE = {
+    field: 'panel',
+    track: 'panel',
+    keyRing: 'panel',
+    menuHi: 'raised',
+    edge: 'bg',
+  } as const;
+  type Wash = keyof typeof SURFACE;
+  const WASHES = Object.keys(SURFACE) as Wash[];
+
+  for (const theme of BUILTIN_THEMES) {
+    it(`${theme.id} stands each wash its step off its surface`, () => {
+      const t = themeTokens(theme);
+      const steps: Partial<Record<Wash, number>> = WASH_STEP[t.appearance];
+      for (const key of WASHES) {
+        const step = steps[key];
+        // A light field is the raised paper, below.
+        if (step === undefined) continue;
+        const ground = t[SURFACE[key]];
+        // A three place alpha and whole channels round a step by up to
+        // about 0.4.
+        expect(Math.abs(stepDL(paint(t[key], ground), hex(ground)) - step), key).toBeLessThan(0.5);
+      }
+    });
+  }
+
+  it('fields a light theme on its raised paper, never on white', () => {
+    const light = BUILTIN_THEMES.map(themeTokens).filter((t) => t.appearance === 'light');
+    expect(light.length).toBeGreaterThan(0);
+    for (const t of light) {
+      expect(t.field).toBe(t.raised);
+      expect(t.field).not.toBe('#ffffff');
+    }
+  });
+
+  it('paints Obsidian Ember within dE 1 of the washes the stylesheets fixed', () => {
+    const t = themeTokens(findTheme('obsidian-ember'));
+    const fixed: Record<Wash, number> = {
+      field: 0.06,
+      track: 0.16,
+      keyRing: 0.14,
+      menuHi: 0.08,
+      edge: 0.14,
+    };
+    for (const key of WASHES) {
+      const ground = t[SURFACE[key]];
+      const before = composite(WHITE, hex(ground), fixed[key]);
+      expect(deltaEOk(paint(t[key], ground), before), key).toBeLessThan(1);
     }
   });
 });

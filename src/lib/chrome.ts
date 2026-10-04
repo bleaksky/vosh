@@ -38,6 +38,13 @@
 //               ground at 0.28 on dark and 0.20 on light, with the text
 //               tier on it. The selection text token travels with the
 //               fill, so the window and both renderers draw one pair.
+//   controls    the field, the off switch track, the keycap ring, the
+//               menu highlight and the edge are washes, white on dark
+//               and black on light, at the alpha that steps the surface
+//               each sits on by WASH_STEP, with the same floor near
+//               black. A wash, so a field takes its step on the panel
+//               and on a raised card alike. A light field is the raised
+//               paper itself, never white.
 //
 // Tertiary and the status colors also draw on raised surfaces (menu
 // shortcuts, palette keycaps, a danger row), so their floors hold on
@@ -62,6 +69,7 @@ import {
   shiftLightness,
   solveAlphaForContrast,
   toHex,
+  toRgba,
   type Rgb,
 } from './color';
 import type { XtermPalette } from './themes';
@@ -110,6 +118,18 @@ export interface ChromeTokens {
   selection: string;
   /// Text drawn on the selection.
   selectionText: string;
+  /// Control fill: text fields, selects, chips, and the segmented
+  /// track on dark.
+  field: string;
+  /// A switch track while the switch is off.
+  track: string;
+  /// The hovered or keyboard row on a floating surface.
+  menuHi: string;
+  /// Keycap ring, and the ring inside a color swatch in Settings.
+  keyRing: string;
+  /// Window edge, the ring inside a floating surface on dark, and the
+  /// edge a small surface draws inside itself to read on its ground.
+  edge: string;
 }
 
 export type ChromeOverrides = Partial<ChromeTokens>;
@@ -137,6 +157,11 @@ export const CHROME_COLOR_KEYS = [
   'success',
   'selection',
   'selectionText',
+  'field',
+  'track',
+  'menuHi',
+  'keyRing',
+  'edge',
 ] as const satisfies readonly (keyof ChromeTokens)[];
 
 export type ChromeColorKey = (typeof CHROME_COLOR_KEYS)[number];
@@ -186,6 +211,30 @@ const SELECTION_STEP = 6;
 const SELECTION_TEXT_CONTRAST = 4.5;
 /// Otherwise the selection is the accent over the ground at this alpha.
 const SELECTION_ALPHA = { dark: 0.28, light: 0.2 } as const;
+
+/// The steps the control washes take off the surface they sit on, in
+/// OKLab L times 100: the field, the track and the keycap ring off the
+/// panel, the menu highlight off raised, and the edge off the ground.
+/// Each is the step the fixed wash before them took there (Themes
+/// review Q10), white on Obsidian Ember and black on Vellum, so those
+/// two paint as they did. The edge takes the 0.14 the swatch edge took,
+/// the one alpha every edge shared on light. A light field is the
+/// raised paper, so it has no step.
+export const WASH_STEP = {
+  dark: {
+    field: 7.94, // white 0.06
+    track: 18.57, // white 0.16
+    keyRing: 16.53, // white 0.14
+    menuHi: 8.35, // white 0.08
+    edge: 16.53, // white 0.14
+  },
+  light: {
+    track: 10.39, // black 0.14
+    keyRing: 8.88, // black 0.12
+    menuHi: 3.86, // black 0.05
+    edge: 10.39, // black 0.14
+  },
+} as const;
 
 /// The scheme's own hues the accent may come from, normal and bright.
 /// Red stays out, since red in the window means trouble.
@@ -261,6 +310,15 @@ function stepOver(ground: Rgb, key: Step, dark: boolean): Rgb {
   const wash = dark ? WHITE : BLACK;
   const alpha = washAlpha(wash, ground, STEP[key]);
   return composite(wash, ground, dark ? Math.max(alpha, NEAR_BLACK_ALPHA[key]) : alpha);
+}
+
+/** A wash that steps `ground` by `dl` in OKLab L, as rgba(): white on
+ *  dark, black on light. On dark it keeps at least the alpha the same
+ *  step takes on NEAR_BLACK. */
+function washOver(ground: Rgb, dl: number, dark: boolean): string {
+  const wash = dark ? WHITE : BLACK;
+  const alpha = washAlpha(wash, ground, dl);
+  return toRgba(wash, dark ? Math.max(alpha, washAlpha(WHITE, NEAR_BLACK, dl)) : alpha);
 }
 
 /** Move `c` in OKLab lightness, away from `against`, until it reaches
@@ -396,6 +454,10 @@ export function deriveChrome(x: XtermPalette, overrides: ChromeOverrides = {}): 
       ? { fill: schemeFill, text: schemeText }
       : { fill: composite(accent.rgb, bg.rgb, SELECTION_ALPHA[appearance]), text: text.rgb };
 
+  // The control washes. An override, like pick's, wins as it stands.
+  const steps = WASH_STEP[appearance];
+  const field = dark ? washOver(panel.rgb, WASH_STEP.dark.field, true) : raised.css;
+
   return {
     appearance,
     bg: bg.css,
@@ -419,6 +481,11 @@ export function deriveChrome(x: XtermPalette, overrides: ChromeOverrides = {}): 
     success: success.css,
     selection: pick(o.selection, selection.fill).css,
     selectionText: pick(o.selectionText, selection.text).css,
+    field: o.field || field,
+    track: o.track || washOver(panel.rgb, steps.track, dark),
+    menuHi: o.menuHi || washOver(raised.rgb, steps.menuHi, dark),
+    keyRing: o.keyRing || washOver(panel.rgb, steps.keyRing, dark),
+    edge: o.edge || washOver(bg.rgb, steps.edge, dark),
   };
 }
 

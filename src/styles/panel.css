@@ -1554,7 +1554,6 @@
 /* Menus keep the system face whatever the Panel font, like every other
    menu. */
 .pane-menu {
-  --menu-hi: rgba(255, 255, 255, 0.08);
   position: fixed;
   z-index: 1000;
   min-width: 232px;
@@ -1572,10 +1571,6 @@
   font-weight: 400;
   -webkit-user-select: none;
   user-select: none;
-}
-
-:root[data-appearance='light'] .pane-menu {
-  --menu-hi: rgba(0, 0, 0, 0.05);
 }
 
 .pane-menu-narrow,

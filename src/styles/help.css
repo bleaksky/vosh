@@ -138,7 +138,7 @@
 .hp-chip {
   padding: 1px 5px;
   border-radius: var(--r-key);
-  background: var(--st-fill);
+  background: var(--field);
   box-shadow: var(--st-fill-ring);
   color: var(--text);
   font-family: var(--font-mud);

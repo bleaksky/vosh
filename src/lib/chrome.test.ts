@@ -40,6 +40,7 @@ describe('derivation rules', () => {
     const t = deriveChrome(paper);
     expect(t.raised).toBe('#fffdfa');
     expect(t.selrow).toBe(t.raised);
+    expect(t.field).toBe(t.raised);
     const lift = rgbToOklch(hex(t.raised)).L - rgbToOklch(hex(paper.background)).L;
     expect(lift).toBeGreaterThan(0.02);
     expect(lift).toBeLessThan(0.035);
@@ -72,6 +73,16 @@ describe('derivation rules', () => {
       '#0b0b0b',
       '#040404',
     ]);
+    // The control washes on the ground keep the alpha they take there.
+    const e = deriveChrome(ember);
+    expect([t.field, t.track, t.keyRing, t.edge]).toEqual([e.field, e.track, e.keyRing, e.edge]);
+  });
+
+  it('lays the control washes in white on dark and black on light', () => {
+    expect(deriveChrome(ember).track).toBe('rgba(255, 255, 255, 0.158)');
+    expect(deriveChrome(paper).track).toBe('rgba(0, 0, 0, 0.141)');
+    // A pin wins as it stands.
+    expect(deriveChrome(ember, { edge: '#333333' }).edge).toBe('#333333');
   });
 
   it('solves the text tiers against the panel', () => {
