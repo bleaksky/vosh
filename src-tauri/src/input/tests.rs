@@ -1408,6 +1408,37 @@ fn slash_trigger_invalid_regex_rejected() {
 }
 
 #[test]
+fn slash_triggers_lists_each_first_pattern_in_its_mode() {
+    use vosh_automation::trigger::{MatchMode, Trigger, TriggerPattern};
+    let mut p = Profile::default();
+    let _ = process(&mut p, r"#trigger hungry {^You are hungry\.$} gag");
+    for (name, pattern, mode) in [
+        ("thirsty", "You are thirsty.", MatchMode::Text),
+        ("tells", "Tolliver tells you", MatchMode::StartsWith),
+    ] {
+        p.triggers
+            .set(Trigger {
+                patterns: vec![TriggerPattern {
+                    mode,
+                    ..TriggerPattern::regex(pattern)
+                }],
+                ..Trigger::new(name, "", TriggerAction::Gag)
+            })
+            .unwrap();
+    }
+    let r = process(&mut p, "#triggers");
+    assert_eq!(
+        r.echo,
+        [
+            "3 trigger(s) by priority:",
+            r"    [  0] hungry /^You are hungry\.$/ -> gag",
+            "    [  0] thirsty text \"You are thirsty.\" -> gag",
+            "    [  0] tells starts with \"Tolliver tells you\" -> gag",
+        ]
+    );
+}
+
+#[test]
 fn slash_untrigger_removes() {
     let mut p = Profile::default();
     let _ = process(&mut p, "#trigger spam {tingle} gag");

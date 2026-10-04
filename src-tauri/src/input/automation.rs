@@ -1,7 +1,9 @@
 //! The commands that change your aliases, triggers and groups, and
 //! the macro recorder that saves what you type as an alias.
 
-use vosh_automation::trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
+use vosh_automation::trigger::{
+    HighlightStyle, MatchMode, NamedColor, Trigger, TriggerAction, TriggerPattern,
+};
 
 use super::slash::parse_braced_pattern;
 use super::target::is_target_keyword;
@@ -106,14 +108,27 @@ pub(super) fn slash_triggers_list(profile: &Profile) -> InputResult {
             .map(describe_action)
             .collect::<Vec<_>>()
             .join(" + ");
+        let pattern = t
+            .patterns
+            .first()
+            .map_or_else(|| "//".to_string(), describe_pattern);
         lines.push(format!(
-            "  {mark} [{:>3}] {} /{}/ -> {action}",
-            t.priority,
-            t.name,
-            t.first_pattern(),
+            "  {mark} [{:>3}] {} {pattern} -> {action}",
+            t.priority, t.name,
         ));
     }
     InputResult::echo_lines(lines)
+}
+
+/// A pattern as `#triggers` lists it. A regex sits between slashes, and
+/// Text and Starts with name their mode before the text in quotes, so a
+/// dot in them never reads as a regex dot.
+fn describe_pattern(row: &TriggerPattern) -> String {
+    match row.mode {
+        MatchMode::Regex => format!("/{}/", row.pattern),
+        MatchMode::Text => format!("text \"{}\"", row.pattern),
+        MatchMode::StartsWith => format!("starts with \"{}\"", row.pattern),
+    }
 }
 
 fn parse_action(input: &str) -> Result<TriggerAction, String> {
