@@ -322,6 +322,17 @@ pub(crate) struct UiConfig {
     /// profile, like `chip_style`. Unknown values coerce back to `up`.
     #[serde(default = "default_tick_count")]
     pub tick_count: String,
+    /// How the status line shows the game time. `24h` (the default)
+    /// reads like 18:00, and `12h` like 6:00 PM. Per profile, like
+    /// `tick_count`. Written only once it differs from the default, so
+    /// a profile that never changed it writes nothing new and an older
+    /// build reads the file as it always has. Unknown values coerce back
+    /// to `24h` on save.
+    #[serde(
+        default = "default_game_time",
+        skip_serializing_if = "is_default_game_time"
+    )]
+    pub game_time: String,
     /// Which layout the Affects pane draws: `timers` (the default,
     /// Timers first), `countdown`, `chips` (Grouped chips), or
     /// `chips_drain` (Draining chips). Per profile, like the rest of the
@@ -619,6 +630,27 @@ pub(crate) fn coerce_tick_count(value: String) -> String {
     }
 }
 
+/// The clocks the status line reads the game time on. Anything else
+/// saves as the default, the 24 hour clock.
+pub(crate) const GAME_TIMES: [&str; 2] = ["24h", "12h"];
+
+fn default_game_time() -> String {
+    "24h".to_string()
+}
+
+fn is_default_game_time(value: &str) -> bool {
+    value == "24h"
+}
+
+/// Keep a known clock and turn anything else into `24h`.
+pub(crate) fn coerce_game_time(value: String) -> String {
+    if GAME_TIMES.contains(&value.as_str()) {
+        value
+    } else {
+        default_game_time()
+    }
+}
+
 /// The layouts the Affects pane draws. Anything else saves as the
 /// default, Timers first.
 pub(crate) const AFFECTS_STYLES: [&str; 4] = ["timers", "countdown", "chips", "chips_drain"];
@@ -830,6 +862,7 @@ impl Default for UiConfig {
             moons_position: default_moons_position(),
             chip_style: default_chip_style(),
             tick_count: default_tick_count(),
+            game_time: default_game_time(),
             affects_style: default_affects_style(),
             affects_marker: default_affects_marker(),
             affects_tint: false,
@@ -1275,6 +1308,48 @@ name = "haste"
         .to_toml()
         .unwrap();
         assert!(toml.contains("tick_count = \"down\""));
+    }
+
+    #[test]
+    fn the_game_time_round_trips_and_stays_out_of_the_file_at_24_hours() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.game_time, "24h");
+        for clock in ["24h", "12h"] {
+            ui.game_time = clock.into();
+            assert_eq!(through_toml(&ui).game_time, clock);
+        }
+        let file = |game_time: &str| {
+            ProfileConfig {
+                ui: UiConfig {
+                    game_time: game_time.into(),
+                    ..UiConfig::default()
+                },
+                ..ProfileConfig::default()
+            }
+            .to_toml()
+            .unwrap()
+        };
+        assert!(file("12h").contains("game_time = \"12h\""));
+        // At the default the key stays out, so a file reads as it did
+        // before the row.
+        assert!(!file("24h").contains("game_time"));
+        assert_eq!(file("24h"), ProfileConfig::default().to_toml().unwrap());
+    }
+
+    #[test]
+    fn a_profile_without_the_game_time_reads_24_hours() {
+        let ui = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n")
+            .unwrap()
+            .ui;
+        assert_eq!(ui.game_time, "24h");
+    }
+
+    #[test]
+    fn an_unknown_game_time_saves_as_24_hours() {
+        assert_eq!(super::coerce_game_time("12h".into()), "12h");
+        assert_eq!(super::coerce_game_time("24h".into()), "24h");
+        assert_eq!(super::coerce_game_time("noon".into()), "24h");
+        assert_eq!(super::coerce_game_time(String::new()), "24h");
     }
 
     #[test]

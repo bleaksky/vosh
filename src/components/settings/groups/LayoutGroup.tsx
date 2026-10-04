@@ -27,6 +27,7 @@ import {
 } from '../../panel/panelLayoutStore';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
+import { GameTimeRow } from '../rows/GameTimeRow';
 import { TickCountRow } from '../rows/TickCountRow';
 import { TickTimeStyleRow } from '../rows/TickTimeStyleRow';
 import {
@@ -194,7 +195,8 @@ export function LayoutGroup({ config, setConfig, onError, navigate }: SettingsPa
 }
 
 /** The Status line card: how the tick, the time, and the moons show,
- *  and under it which way the tick counts. Exported for its test. */
+ *  then the clock the game time reads on, and under them which way the
+ *  tick counts. Exported for its test. */
 export function StatusLineSection({
   config,
   setConfig,
@@ -207,6 +209,7 @@ export function StatusLineSection({
       help={{ topic: 'tick.tick-timer', subject: 'the tick timer' }}
     >
       <TickTimeStyleRow config={config} setConfig={setConfig} onError={onError} />
+      <GameTimeRow config={config} setConfig={setConfig} onError={onError} />
       <TickCountRow config={config} setConfig={setConfig} onError={onError} />
     </Section>
   );

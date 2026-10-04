@@ -239,6 +239,12 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('layout', 'status', 'tick-time'),
   },
   {
+    label: 'Game time',
+    description: 'How the game time shows in the status line, like 18:00 or 6:00 PM.',
+    keywords: 'clock 12 24 hour hours am pm time of day military',
+    target: at('layout', 'status', 'game-time'),
+  },
+  {
     label: 'Tick counts',
     description:
       'Up shows the seconds since the last tick and Down the seconds left until the next. Down waits at 0 when the game is late, and Down past 0 keeps counting below zero until the tick lands.',

@@ -140,6 +140,7 @@ event vosh://custom-themes-changed app page heard
 event vosh://echo-macros-changed page heard
 event vosh://flush-pending-writes app heard
 event vosh://font-changed page heard
+event vosh://game-time-changed app page heard
 event vosh://help-find app heard
 event vosh://help-goto page heard
 event vosh://help-open app heard
