@@ -9,6 +9,7 @@ use vosh_protocol::ansi::plain_text;
 use vosh_protocol::ansi::PieceKind;
 
 use crate::split::split_commands;
+use crate::stops::StopKey;
 use crate::trigger::action::{HighlightStyle, TriggerAction};
 use crate::trigger::readable;
 use crate::trigger::store::{Trigger, TriggerStore, TriggerTarget};
@@ -74,11 +75,11 @@ pub struct LineResult {
 /// matches and leaves the rest of the line as the game sent it, colors
 /// included. A Replace or a wash rebuilds the line from its plain text.
 ///
-/// Equivalent to `process_scoped(store, original, MatchScope::Line)`.
+/// Equivalent to `process_scoped(store, original, MatchScope::Line, key)`.
 /// Test only, like `process_scoped`.
 #[cfg(any(test, feature = "testkit"))]
-pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
-    process_scoped(store, original, MatchScope::Line)
+pub fn process(store: &TriggerStore, original: &[u8], key: StopKey) -> LineResult {
+    process_scoped(store, original, MatchScope::Line, key)
 }
 
 /// Run the trigger store against a buffer, only firing triggers whose
@@ -87,8 +88,13 @@ pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
 /// The session calls [`process_on_ground`] with the plain text it
 /// already holds and the terminal background.
 #[cfg(any(test, feature = "testkit"))]
-pub fn process_scoped(store: &TriggerStore, original: &[u8], scope: MatchScope) -> LineResult {
-    process_on_ground(store, original, &plain_text(original), scope, None)
+pub fn process_scoped(
+    store: &TriggerStore,
+    original: &[u8],
+    scope: MatchScope,
+    key: StopKey,
+) -> LineResult {
+    process_on_ground(store, original, &plain_text(original), scope, None, key)
 }
 
 /// Run the trigger store against a line or a prompt buffer, firing only
@@ -101,13 +107,15 @@ pub fn process_scoped(store: &TriggerStore, original: &[u8], scope: MatchScope) 
 /// it draws on (see [`readable::lift_sgr`]). `None` leaves each color as
 /// the trigger set it. The game's own colors never change either way. A
 /// line no trigger matched keeps the bytes the game sent, and a highlight
-/// drawn over those bytes lifts its own open alone.
+/// drawn over those bytes lifts its own open alone. A trigger Vosh stopped
+/// under `key`, the session the line came to, matches nothing.
 pub fn process_on_ground(
     store: &TriggerStore,
     original: &[u8],
     plain: &str,
     scope: MatchScope,
     ground: Option<readable::Rgb>,
+    key: StopKey,
 ) -> LineResult {
     if store.is_empty() {
         return LineResult {
@@ -129,7 +137,7 @@ pub fn process_on_ground(
     // A Replace ran, so the line is rebuilt from its plain text.
     let mut replaced = false;
 
-    for compiled in store.iter_compiled() {
+    for compiled in store.iter_compiled(key) {
         if !compiled.trigger.enabled {
             continue;
         }
@@ -311,12 +319,17 @@ pub fn process_on_ground(
 
 /// The triggers that would fire on `plain` in `scope`, in priority order,
 /// without running any of their actions. A trigger counts when it is on,
-/// its group is on, and any of its enabled patterns matches. The session
-/// uses it to name triggers, such as a Line trigger that matched a line
-/// Vosh read as your prompt.
-pub fn matching<'a>(store: &'a TriggerStore, plain: &str, scope: MatchScope) -> Vec<&'a Trigger> {
+/// its group is on, Vosh has not stopped it under `key`, and any of its
+/// enabled patterns matches. The session uses it to name triggers, such
+/// as a Line trigger that matched a line Vosh read as your prompt.
+pub fn matching<'a>(
+    store: &'a TriggerStore,
+    plain: &str,
+    scope: MatchScope,
+    key: StopKey,
+) -> Vec<&'a Trigger> {
     store
-        .iter_compiled()
+        .iter_compiled(key)
         .filter(|c| c.trigger.enabled && scope.matches(c.trigger.target))
         .filter(|c| c.regexes.iter().any(|r| r.is_match(plain)))
         .map(|c| &c.trigger)
@@ -635,6 +648,9 @@ mod tests {
     use crate::trigger::action::HighlightStyle;
     use crate::trigger::color::NamedColor;
 
+    /// The session every line here comes to.
+    const SESSION: StopKey = StopKey(1);
+
     fn store(triggers: Vec<Trigger>) -> TriggerStore {
         let mut s = TriggerStore::new();
         for t in triggers {
@@ -672,7 +688,7 @@ mod tests {
         assert_eq!(s.disabled_groups(), vec!["combat".to_string()]);
         // And the gate holds: the trigger in the disabled group is
         // filtered even though its own enabled flag is true.
-        let r = process(&s, b"ouch that hurt");
+        let r = process(&s, b"ouch that hurt", SESSION);
         assert!(r.display.is_some());
         assert_eq!(r.display.as_deref(), Some("ouch that hurt"));
     }
@@ -716,7 +732,7 @@ mod tests {
         s.set_disabled_groups(vec!["combat".to_string()]);
 
         let names = |scope| -> Vec<String> {
-            matching(&s, "[850/900hp]", scope)
+            matching(&s, "[850/900hp]", scope, SESSION)
                 .into_iter()
                 .map(|t| t.name.clone())
                 .collect()
@@ -728,14 +744,14 @@ mod tests {
         assert_eq!(line, ["low", "two"]);
         assert_eq!(names(MatchScope::Prompt), ["prompt-look"]);
         let empty = TriggerStore::new();
-        let leftover = matching(&empty, "hp", MatchScope::Line);
+        let leftover = matching(&empty, "hp", MatchScope::Line, SESSION);
         assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]
     fn no_triggers_returns_original() {
         let s = TriggerStore::new();
-        let r = process(&s, b"plain text");
+        let r = process(&s, b"plain text", SESSION);
         assert_eq!(r.display.as_deref(), Some("plain text"));
         let leftover = &r.sends;
         assert!(leftover.is_empty(), "{leftover:?}");
@@ -744,14 +760,14 @@ mod tests {
     #[test]
     fn no_match_returns_original() {
         let s = store(vec![highlight("h", "goblin", NamedColor::Cyan)]);
-        let r = process(&s, b"a peaceful meadow");
+        let r = process(&s, b"a peaceful meadow", SESSION);
         assert_eq!(r.display.as_deref(), Some("a peaceful meadow"));
     }
 
     #[test]
     fn highlight_wraps_matched_substring() {
         let s = store(vec![highlight("tells", r"\w+ tells you", NamedColor::Cyan)]);
-        let r = process(&s, b"Bob tells you 'hi'");
+        let r = process(&s, b"Bob tells you 'hi'", SESSION);
         let text = r.display.unwrap();
         assert!(text.contains("\x1b[36m"));
         assert!(text.contains("Bob tells you"));
@@ -761,7 +777,7 @@ mod tests {
     #[test]
     fn gag_drops_line() {
         let s = store(vec![Trigger::new("spam", "tingle", TriggerAction::Gag)]);
-        let r = process(&s, b"You feel a tingle.");
+        let r = process(&s, b"You feel a tingle.", SESSION);
         assert!(r.display.is_none());
     }
 
@@ -774,7 +790,7 @@ mod tests {
                 template: "wolf".into(),
             },
         )]);
-        let r = process(&s, b"You see a goblin.");
+        let r = process(&s, b"You see a goblin.", SESSION);
         assert_eq!(r.display.as_deref(), Some("You see a wolf."));
     }
 
@@ -787,7 +803,7 @@ mod tests {
                 template: "$who calmly says".into(),
             },
         )]);
-        let r = process(&s, b"Bob yells");
+        let r = process(&s, b"Bob yells", SESSION);
         assert_eq!(r.display.as_deref(), Some("Bob calmly says"));
     }
 
@@ -800,7 +816,7 @@ mod tests {
                 template: "loot $1".into(),
             },
         )]);
-        let r = process(&s, b"The goblin is DEAD!");
+        let r = process(&s, b"The goblin is DEAD!", SESSION);
         assert_eq!(r.sends, vec!["loot goblin".to_string()]);
     }
 
@@ -813,7 +829,7 @@ mod tests {
                 pane: "chat".into(),
             },
         )]);
-        let r = process(&s, b"Bob tells you 'hi'");
+        let r = process(&s, b"Bob tells you 'hi'", SESSION);
         assert_eq!(r.routes, vec!["chat".to_string()]);
     }
 
@@ -834,7 +850,7 @@ mod tests {
             route("log", "chat", 1),
             route("preset", "tell", 0),
         ]);
-        let r = process(&s, b"You tell Tolliver 'hi'");
+        let r = process(&s, b"You tell Tolliver 'hi'", SESSION);
         assert_eq!(r.routes, vec!["tell".to_string(), "chat".to_string()]);
     }
 
@@ -868,7 +884,7 @@ mod tests {
         // resulting "H"), so its replace also runs on the original "x"
         // pattern against current text "H" which finds nothing. Net result
         // is "H".
-        let r = process(&s, b"x");
+        let r = process(&s, b"x", SESSION);
         assert_eq!(r.display.as_deref(), Some("H"));
     }
 
@@ -878,7 +894,7 @@ mod tests {
         let mut t = highlight("tells", r"tells you", NamedColor::Cyan);
         t.enabled = false;
         s.set(t).unwrap();
-        let r = process(&s, b"Bob tells you 'hi'");
+        let r = process(&s, b"Bob tells you 'hi'", SESSION);
         let text = r.display.unwrap();
         assert!(!text.contains("\x1b["));
     }
@@ -888,7 +904,7 @@ mod tests {
         let s = store(vec![highlight("tells", r"Bob tells you", NamedColor::Cyan)]);
         // Server sends gray text. Trigger should still match, and the
         // rest of the line stays gray.
-        let r = process(&s, b"\x1b[37mBob tells you 'hi'\x1b[0m");
+        let r = process(&s, b"\x1b[37mBob tells you 'hi'\x1b[0m", SESSION);
         assert_eq!(
             r.display.as_deref(),
             Some("\x1b[37m\x1b[0;36mBob tells you\x1b[0;37m 'hi'\x1b[0m")
@@ -936,7 +952,7 @@ mod tests {
             "TICK!",
         ] {
             assert_eq!(
-                process(&s, wiznet(message).as_bytes()).display,
+                process(&s, wiznet(message).as_bytes(), SESSION).display,
                 Some(wiznet_tagged("\x1b[0;1;35m", message)),
                 "{message}"
             );
@@ -951,7 +967,7 @@ mod tests {
         let s = store(vec![highlight("name", "Tolliver", NamedColor::Cyan)]);
         let line = "[\x1b[0;31mAFK\x1b[0;0m] Tolliver is resting here.";
         assert_eq!(
-            process(&s, line.as_bytes()).display.as_deref(),
+            process(&s, line.as_bytes(), SESSION).display.as_deref(),
             Some("[\x1b[0;31mAFK\x1b[0;0m] \x1b[36mTolliver\x1b[0m is resting here.")
         );
     }
@@ -962,7 +978,7 @@ mod tests {
         let s = store(vec![highlight("day", "day", NamedColor::Cyan)]);
         let line = "Tolliver says '\x1b[0;1;33mThe day has begun.\x1b[0;0m'";
         assert_eq!(
-            process(&s, line.as_bytes()).display.as_deref(),
+            process(&s, line.as_bytes(), SESSION).display.as_deref(),
             Some(
                 "Tolliver says '\x1b[0;1;33mThe \x1b[0;36mday\x1b[0;1;33m has begun.\
                  \x1b[0;0m'"
@@ -1017,7 +1033,7 @@ mod tests {
             target: TriggerTarget::Line,
         }]);
         let line = "[\x1b[0;31mAFK\x1b[0;0m] Tolliver is resting here.";
-        let r = process(&s, line.as_bytes());
+        let r = process(&s, line.as_bytes(), SESSION);
         assert_eq!(r.display.as_deref(), Some(line));
         assert_eq!(r.sends, ["wake Tolliver"]);
     }
@@ -1030,7 +1046,9 @@ mod tests {
             template: "Maren".into(),
         }];
         assert_eq!(
-            process(&store(vec![rename]), line).display.as_deref(),
+            process(&store(vec![rename]), line, SESSION)
+                .display
+                .as_deref(),
             Some("Maren says 'The day has begun.'")
         );
         let mut wash = highlight("wash", "says", NamedColor::Red);
@@ -1041,7 +1059,7 @@ mod tests {
                 ..Default::default()
             },
         }];
-        let washed = process(&store(vec![wash]), line).display.unwrap();
+        let washed = process(&store(vec![wash]), line, SESSION).display.unwrap();
         assert!(!washed.contains("\x1b[0;1;33m"), "{washed:?}");
     }
 
@@ -1054,6 +1072,7 @@ mod tests {
             "Tolliver",
             MatchScope::Line,
             None,
+            SESSION,
         );
         assert_eq!(r.display.as_deref(), Some("\x1b[36mTolliver\x1b[0m"));
     }
@@ -1065,7 +1084,7 @@ mod tests {
         let s = store(vec![base("room", "^.+$", NamedColor::Yellow, 4), name]);
         let line = "[\x1b[0;31mAFK\x1b[0;0m] Tolliver is resting here.";
         assert_eq!(
-            process(&s, line.as_bytes()).display.as_deref(),
+            process(&s, line.as_bytes(), SESSION).display.as_deref(),
             Some(
                 "\x1b[33m[\x1b[0;31mAFK\x1b[0;0m\x1b[33m] \x1b[36mTolliver\x1b[0m\x1b[33m \
                  is resting here.\x1b[0m"
@@ -1175,12 +1194,12 @@ mod tests {
             ] {
                 let s = store(vec![in_mode(copy, mode)]);
                 assert_eq!(
-                    matching(&s, line, MatchScope::Line).len(),
+                    matching(&s, line, MatchScope::Line, SESSION).len(),
                     1,
                     "{mode:?} {copy:?} on {line:?}"
                 );
                 // The span covers the whole line, the spaces included.
-                let compiled = s.iter_compiled().next().unwrap();
+                let compiled = s.iter_compiled(SESSION).next().unwrap();
                 let style = HighlightStyle {
                     fg: Some(NamedColor::Cyan),
                     ..Default::default()
@@ -1200,14 +1219,17 @@ mod tests {
     fn text_matches_only_the_whole_line_and_starts_with_only_its_start() {
         use crate::trigger::MatchMode;
         let s = store(vec![in_mode("walks in.", MatchMode::Text)]);
-        let leftover = &matching(&s, "Maren walks in.", MatchScope::Line);
+        let leftover = &matching(&s, "Maren walks in.", MatchScope::Line, SESSION);
         assert!(leftover.is_empty(), "{leftover:?}");
         let s = store(vec![in_mode("walks in", MatchMode::StartsWith)]);
-        let leftover = &matching(&s, "Maren walks in.", MatchScope::Line);
+        let leftover = &matching(&s, "Maren walks in.", MatchScope::Line, SESSION);
         assert!(leftover.is_empty(), "{leftover:?}");
         // Text skips trailing spaces on the line.
         let s = store(vec![in_mode("Maren walks in.", MatchMode::Text)]);
-        assert_eq!(matching(&s, "Maren walks in.  ", MatchScope::Line).len(), 1);
+        assert_eq!(
+            matching(&s, "Maren walks in.  ", MatchScope::Line, SESSION).len(),
+            1
+        );
     }
 
     #[test]
@@ -1216,13 +1238,16 @@ mod tests {
         // A Text pattern copied with a space after it matches the line
         // without one.
         let s = store(vec![in_mode("You feel better. ", MatchMode::Text)]);
-        assert_eq!(matching(&s, "You feel better.", MatchScope::Line).len(), 1);
+        assert_eq!(
+            matching(&s, "You feel better.", MatchScope::Line, SESSION).len(),
+            1
+        );
         // A pattern copied with the five spaces of a look matches the same
         // words printed with none.
         for mode in [MatchMode::Text, MatchMode::StartsWith] {
             let s = store(vec![in_mode("     Maren walks in.", mode)]);
             assert_eq!(
-                matching(&s, "Maren walks in.", MatchScope::Line).len(),
+                matching(&s, "Maren walks in.", MatchScope::Line, SESSION).len(),
                 1,
                 "{mode:?}"
             );
@@ -1235,7 +1260,7 @@ mod tests {
         let line = "     A black-steel helm is here, gleaming darkly.";
         let s = store(vec![in_mode("A black-steel helm", MatchMode::StartsWith)]);
         assert_eq!(
-            process(&s, line.as_bytes()).display.as_deref(),
+            process(&s, line.as_bytes(), SESSION).display.as_deref(),
             Some(format!("\x1b[36m{line}\x1b[0m").as_str())
         );
     }
@@ -1255,13 +1280,13 @@ mod tests {
             // The parentheses are text, so this pattern needs them in the
             // line.
             let s = store(vec![t.clone()]);
-            let leftover = &process(&s, line.as_bytes()).sends;
+            let leftover = &process(&s, line.as_bytes(), SESSION).sends;
             assert!(leftover.is_empty(), "{leftover:?}");
             t.patterns[0].pattern = "Maren walks".into();
             if mode == MatchMode::Text {
                 t.patterns[0].pattern = line.into();
             }
-            let r = process(&store(vec![t]), line.as_bytes());
+            let r = process(&store(vec![t]), line.as_bytes(), SESSION);
             assert_eq!(r.sends, ["say []"], "{mode:?}");
             assert_eq!(r.scripts[0].captures, [line], "{mode:?}");
         }
@@ -1279,14 +1304,18 @@ mod tests {
             .push(crate::trigger::TriggerPattern::regex(r"^\[Exits: (\w+)\]$"));
         let s = store(vec![t]);
         for line in ["The day has begun.", "Maren walks in.", "[Exits: south]"] {
-            assert_eq!(matching(&s, line, MatchScope::Line).len(), 1, "{line}");
+            assert_eq!(
+                matching(&s, line, MatchScope::Line, SESSION).len(),
+                1,
+                "{line}"
+            );
         }
         // The More pattern in Starts with reads Maren as text at the start,
         // so a line that holds Maren after its start stays plain.
         let leftover = &matching(
             &s,
             "Chuckling and grinning to herself, Orla walks in and quickly prepares the gallows for Maren.",
-            MatchScope::Line,
+            MatchScope::Line, SESSION,
         );
         assert!(leftover.is_empty(), "{leftover:?}");
     }
@@ -1318,9 +1347,9 @@ mod tests {
             group: None,
             target: TriggerTarget::Line,
         }]);
-        let r1 = process(&s, b"You see a goblin.");
+        let r1 = process(&s, b"You see a goblin.", SESSION);
         assert!(r1.display.unwrap().contains("\x1b[31m"));
-        let r2 = process(&s, b"An orc charges.");
+        let r2 = process(&s, b"An orc charges.", SESSION);
         assert!(r2.display.unwrap().contains("\x1b[31m"));
     }
 
@@ -1343,10 +1372,10 @@ mod tests {
             target: TriggerTarget::Line,
         }]);
         // goblin pattern (enabled) gags.
-        assert!(process(&s, b"You see a goblin.").display.is_none());
+        assert!(process(&s, b"You see a goblin.", SESSION).display.is_none());
         // orc pattern (disabled) does not fire.
         assert_eq!(
-            process(&s, b"An orc charges.").display.as_deref(),
+            process(&s, b"An orc charges.", SESSION).display.as_deref(),
             Some("An orc charges.")
         );
     }
@@ -1376,7 +1405,7 @@ mod tests {
             style.wash = true;
         }
         let s = store(vec![t]);
-        let r = process(&s, b"Your sanctuary flickers and fades.");
+        let r = process(&s, b"Your sanctuary flickers and fades.", SESSION);
         let text = r.display.unwrap();
         // Quarter-strength canonical yellow (0xcd/4 = 0x33 = 51) —
         // NamedColor::Yellow.wash_tint(), the exact value the native
@@ -1394,7 +1423,7 @@ mod tests {
     #[test]
     fn wash_off_keeps_plain_close() {
         let s = store(vec![highlight("tells", r"tells you", NamedColor::Cyan)]);
-        let r = process(&s, b"Bob tells you 'hi'");
+        let r = process(&s, b"Bob tells you 'hi'", SESSION);
         let text = r.display.unwrap();
         assert!(!text.contains("48;2;"));
         assert!(text.contains("\x1b[0m"));
@@ -1408,7 +1437,7 @@ mod tests {
             style.bg = Some(NamedColor::Red);
         }
         let s = store(vec![t]);
-        let r = process(&s, b"DANGER close behind you");
+        let r = process(&s, b"DANGER close behind you", SESSION);
         let text = r.display.unwrap();
         // Wash derives from the explicit red bg (0xcd/4 = 51), not the
         // white fg.
@@ -1428,7 +1457,7 @@ mod tests {
         }
         let digits = highlight("numbers", r"\d+", NamedColor::Red);
         let s = store(vec![washy, digits]);
-        let r = process(&s, b"sanctuary fades in 42 seconds");
+        let r = process(&s, b"sanctuary fades in 42 seconds", SESSION);
         let text = r.display.unwrap();
         assert_eq!(plain_text(text.as_bytes()), "sanctuary fades in 42 seconds");
         // And the digit highlight still landed on the real digits.
@@ -1444,7 +1473,7 @@ mod tests {
         a.priority = 10;
         let b = highlight("word", "you", NamedColor::Red);
         let s = store(vec![a, b]);
-        let r = process(&s, b"Bob tells you 'hi'");
+        let r = process(&s, b"Bob tells you 'hi'", SESSION);
         let text = r.display.unwrap();
         assert!(text.contains("\x1b[36mtells you\x1b[0m"));
         assert!(!text.contains("\x1b[31m"));
@@ -1458,7 +1487,7 @@ mod tests {
             ..Trigger::new("p", "hp", TriggerAction::Gag)
         }]);
         // Line-scope pass MUST NOT fire a prompt-target trigger.
-        let r = process_scoped(&s, b"100/100 hp", MatchScope::Line);
+        let r = process_scoped(&s, b"100/100 hp", MatchScope::Line, SESSION);
         assert_eq!(r.display.as_deref(), Some("100/100 hp"));
     }
 
@@ -1468,7 +1497,7 @@ mod tests {
             target: TriggerTarget::Prompt,
             ..Trigger::new("p", "hp", TriggerAction::Gag)
         }]);
-        let r = process_scoped(&s, b"100/100 hp", MatchScope::Prompt);
+        let r = process_scoped(&s, b"100/100 hp", MatchScope::Prompt, SESSION);
         assert!(r.display.is_none());
     }
 
@@ -1476,7 +1505,7 @@ mod tests {
     fn line_target_skipped_on_prompt_scope() {
         let s = store(vec![Trigger::new("l", "hp", TriggerAction::Gag)]);
         // Prompt-scope pass MUST NOT fire a line-target trigger.
-        let r = process_scoped(&s, b"100/100 hp", MatchScope::Prompt);
+        let r = process_scoped(&s, b"100/100 hp", MatchScope::Prompt, SESSION);
         assert_eq!(r.display.as_deref(), Some("100/100 hp"));
     }
 
@@ -1493,13 +1522,13 @@ mod tests {
         let s = store(vec![room_yellow(4)]);
         let line = b"     A black-steel helm is here, gleaming darkly.";
         assert_eq!(
-            process_scoped(&s, line, MatchScope::Room)
+            process_scoped(&s, line, MatchScope::Room, SESSION)
                 .display
                 .as_deref(),
             Some("\x1b[33m     A black-steel helm is here, gleaming darkly.\x1b[0m")
         );
         for scope in [MatchScope::Line, MatchScope::Prompt] {
-            let r = process_scoped(&s, line, scope);
+            let r = process_scoped(&s, line, scope, SESSION);
             assert_eq!(
                 r.display.as_deref(),
                 Some("     A black-steel helm is here, gleaming darkly."),
@@ -1520,21 +1549,23 @@ mod tests {
             template: "wave".into(),
         }];
         let s = store(vec![room_yellow(4), name, sends]);
-        let r = process_scoped(&s, b"Tolliver is resting here.", MatchScope::Room);
+        let r = process_scoped(&s, b"Tolliver is resting here.", MatchScope::Room, SESSION);
         assert_eq!(
             r.display.as_deref(),
             Some("\x1b[36mTolliver\x1b[0m is resting here.")
         );
         assert_eq!(r.sends, vec!["wave".to_string()]);
-        let names: Vec<String> = matching(&s, "Tolliver is resting here.", MatchScope::Room)
-            .into_iter()
-            .map(|t| t.name.clone())
-            .collect();
+        let names: Vec<String> =
+            matching(&s, "Tolliver is resting here.", MatchScope::Room, SESSION)
+                .into_iter()
+                .map(|t| t.name.clone())
+                .collect();
         assert_eq!(names, ["name", "room", "greet"]);
-        let line_only: Vec<String> = matching(&s, "Tolliver is resting here.", MatchScope::Line)
-            .into_iter()
-            .map(|t| t.name.clone())
-            .collect();
+        let line_only: Vec<String> =
+            matching(&s, "Tolliver is resting here.", MatchScope::Line, SESSION)
+                .into_iter()
+                .map(|t| t.name.clone())
+                .collect();
         assert_eq!(line_only, ["name", "greet"]);
     }
 
@@ -1569,7 +1600,7 @@ mod tests {
         }];
         let s = store(vec![room, target, send]);
         let text = "A young werebeast stands here, leaning on his spear.";
-        let shown = |scope| process_scoped(&s, text.as_bytes(), scope).display;
+        let shown = |scope| process_scoped(&s, text.as_bytes(), scope, SESSION).display;
         assert_eq!(
             shown(MatchScope::RoomTarget).as_deref(),
             Some(format!("\x1b[91m{text}\x1b[0m").as_str())
@@ -1582,7 +1613,7 @@ mod tests {
             assert_eq!(shown(scope).as_deref(), Some(text), "{scope:?}");
         }
         let names = |scope| -> Vec<String> {
-            matching(&s, text, scope)
+            matching(&s, text, scope, SESSION)
                 .into_iter()
                 .map(|t| t.name.clone())
                 .collect()
@@ -1618,17 +1649,17 @@ mod tests {
         let s = store(vec![base("exits", r"^\[Exits:", NamedColor::Green, 6)]);
         let line = "[Exits: up (\x1b[0;1;31m+\x1b[0;0mdown)]";
         assert_eq!(
-            process(&s, line.as_bytes()).display.as_deref(),
+            process(&s, line.as_bytes(), SESSION).display.as_deref(),
             Some("\x1b[32m[Exits: up (\x1b[0;1;31m+\x1b[0;0m\x1b[32mdown)]\x1b[0m")
         );
         // A line with no codes takes the color whole.
         assert_eq!(
-            process(&s, b"[Exits: south]").display.as_deref(),
+            process(&s, b"[Exits: south]", SESSION).display.as_deref(),
             Some("\x1b[32m[Exits: south]\x1b[0m")
         );
         // A line it does not match is left as sent.
         assert_eq!(
-            process(&s, b"Obvious exits:").display.as_deref(),
+            process(&s, b"Obvious exits:", SESSION).display.as_deref(),
             Some("Obvious exits:")
         );
     }
@@ -1642,7 +1673,7 @@ mod tests {
         let line =
             "[\x1b[0;31mAFK\x1b[0;0m] a\x1b[mb\x1b[1;39mc\x1b[38;5;208md\x1b[48;5;0me\x1b[0;1mf";
         assert_eq!(
-            process(&s, line.as_bytes()).display.as_deref(),
+            process(&s, line.as_bytes(), SESSION).display.as_deref(),
             Some(
                 "\x1b[33m[\x1b[0;31mAFK\x1b[0;0m\x1b[33m] a\x1b[m\x1b[33mb\x1b[1;39m\x1b[33mc\
                  \x1b[38;5;208md\x1b[48;5;0me\x1b[0;1m\x1b[33mf\x1b[0m"
@@ -1658,7 +1689,9 @@ mod tests {
         name.priority = 5;
         let s = store(vec![base("room", "^.+$", NamedColor::Yellow, 4), name]);
         assert_eq!(
-            process(&s, b"Tolliver is resting here.").display.as_deref(),
+            process(&s, b"Tolliver is resting here.", SESSION)
+                .display
+                .as_deref(),
             Some("\x1b[33m\x1b[36mTolliver\x1b[0m\x1b[33m is resting here.\x1b[0m")
         );
     }
@@ -1671,7 +1704,9 @@ mod tests {
         }];
         let s = store(vec![base("room", "^.+$", NamedColor::Yellow, 4), label]);
         assert_eq!(
-            process(&s, b"a bubbly brown potion").display.as_deref(),
+            process(&s, b"a bubbly brown potion", SESSION)
+                .display
+                .as_deref(),
             Some(
                 "\x1b[33ma bubbly brown potion \x1b[38;5;248m(cure serious)\x1b[0m\x1b[33m\x1b[0m"
             )
@@ -1685,7 +1720,7 @@ mod tests {
             base("high", "^.+$", NamedColor::Green, 6),
         ]);
         assert_eq!(
-            process(&s, b"x").display.as_deref(),
+            process(&s, b"x", SESSION).display.as_deref(),
             Some("\x1b[32mx\x1b[0m")
         );
     }
@@ -1735,7 +1770,7 @@ mod tests {
 
     fn on_ground(s: &TriggerStore, line: &[u8], ground: Option<readable::Rgb>) -> String {
         let plain = plain_text(line);
-        process_on_ground(s, line, &plain, MatchScope::Line, ground)
+        process_on_ground(s, line, &plain, MatchScope::Line, ground, SESSION)
             .display
             .unwrap()
     }
@@ -1767,7 +1802,9 @@ mod tests {
         let set = "\x1b[38;2;143;167;217mIt starts to rain.\x1b[0m";
         assert_eq!(on_ground(&s, b"It starts to rain.", None), set);
         assert_eq!(
-            process(&s, b"It starts to rain.").display.as_deref(),
+            process(&s, b"It starts to rain.", SESSION)
+                .display
+                .as_deref(),
             Some(set)
         );
     }
@@ -1799,7 +1836,7 @@ mod tests {
             style.wash = true;
         }
         let s = store(vec![washed]);
-        let plain = process(&s, b"The snowstorm becomes a blizzard.")
+        let plain = process(&s, b"The snowstorm becomes a blizzard.", SESSION)
             .display
             .unwrap();
         assert_eq!(
@@ -1856,7 +1893,7 @@ mod tests {
             shown,
             "\x1b[38;5;255m\x1b[0;1;30mThe \x1b[0;36mBank\x1b[0;1;30m of Aabahran\x1b[0;0m\x1b[0;0m"
         );
-        assert_eq!(Some(shown), process(&s, BANK.as_bytes()).display);
+        assert_eq!(Some(shown), process(&s, BANK.as_bytes(), SESSION).display);
     }
 
     /// The Room, time and weather colors preset as presets.ts makes it,
@@ -1954,7 +1991,10 @@ mod tests {
         assert!(misses.iter().any(|l| l.contains("It starts to rain.")));
         for line in &misses {
             let plain = plain_text(line.as_bytes());
-            assert!(matching(&s, &plain, MatchScope::Line).is_empty(), "{plain}");
+            assert!(
+                matching(&s, &plain, MatchScope::Line, SESSION).is_empty(),
+                "{plain}"
+            );
             assert_eq!(on_ground(&s, line.as_bytes(), Some(VELLUM)), *line);
         }
     }

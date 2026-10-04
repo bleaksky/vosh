@@ -494,3 +494,75 @@ async fn a_recording_takes_only_its_own_sessions_lines_and_its_alias_expands_in_
     h.disconnect_session(two).await;
     h.finish(grid).await;
 }
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_trigger_vosh_stops_in_one_session_fires_in_the_other_until_you_save_it() {
+    use vosh_automation::trigger::{Trigger, TriggerAction};
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_on_two_games().await;
+    let body = "if spin then while true do end end mud.send('afk')";
+    let ender = Trigger::new(
+        "ender",
+        "^Line 1 of 1 of the spam",
+        TriggerAction::Script { body: body.into() },
+    );
+    h.state
+        .profile
+        .lock()
+        .await
+        .triggers
+        .set(ender)
+        .expect("the trigger compiles");
+    h.type_in(one, "#lua spin = true").await;
+    h.type_in(one, "spam 1").await;
+    h.until("the stop in the first session", |h| {
+        shows(h, one, "Vosh stopped the Lua in trigger ender")
+    })
+    .await;
+    h.type_in(two, "spam 1").await;
+    h.until("the second game to go afk", |h| {
+        shows(h, two, "You are now in AFK mode.")
+    })
+    .await;
+    assert!(!shows(&h, two, "Vosh stopped"));
+    {
+        let p = h.state.profile.lock().await;
+        assert!(p.triggers.is_stopped("ender", one.stop_key()));
+        assert!(!p.triggers.is_stopped("ender", two.stop_key()));
+    }
+
+    // It stays off in the first session, though its Lua would no longer
+    // spin there. The game answers spam 2 after any afk it heard first.
+    h.type_in(one, "#lua spin = false").await;
+    h.type_in(one, "spam 1").await;
+    h.until("the first game to answer again", |h| {
+        let rows = h.screen_of(one);
+        rows.iter()
+            .filter(|row| row.contains("Line 1 of 1 of the spam."))
+            .count()
+            == 2
+    })
+    .await;
+    h.type_in(one, "spam 2").await;
+    h.until("the first game to answer spam 2", |h| {
+        shows(h, one, "Line 2 of 2 of the spam.")
+    })
+    .await;
+    let first = sent(&h.servers[0]);
+    assert!(!first.contains("afk"), "{first:?}");
+
+    // Saving it in either session turns it back on in the first.
+    h.type_in(two, "#trigger ender {^Line 1 of 1 of the spam} send afk")
+        .await;
+    h.until("the save", |h| shows(h, two, "trigger ender set"))
+        .await;
+    h.type_in(one, "spam 1").await;
+    h.until("the first game to go afk", |h| {
+        shows(h, one, "You are now in AFK mode.")
+    })
+    .await;
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}

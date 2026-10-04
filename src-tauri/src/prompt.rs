@@ -320,6 +320,7 @@ pub(crate) fn line_triggers(
                 &p.triggers,
                 line,
                 vosh_automation::trigger::MatchScope::Line,
+                c.stop_key,
             ) {
                 if out.iter().any(|t| t.name == trigger.name) {
                     continue;

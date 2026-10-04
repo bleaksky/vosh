@@ -780,6 +780,7 @@ mod tests {
                     &plain,
                     crate::trigger::MatchScope::Line,
                     ground,
+                    crate::StopKey(1),
                 )
                 .display
                 .unwrap()

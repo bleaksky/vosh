@@ -56,11 +56,12 @@ fn line_pass(
         plain,
         scope,
         highlight_ground::get(),
+        c.stop_key,
     );
     let tick_step = tick_reset(p, c, plain, now);
     script::snapshot_vars(p, c);
     let mut outcome = c.script.match_line(plain);
-    script::turn_off_stopped(p, &outcome);
+    script::turn_off_stopped(p, c.stop_key, &outcome);
     // The Lua bodies of this line's Script actions join the outcome the
     // Lua registered triggers wrote, so one apply takes both.
     outcome.append(run_trigger_scripts(p, c, &result));
@@ -92,12 +93,12 @@ pub(super) fn run_trigger_scripts(
 ) -> ScriptOutcome {
     let mut acc = ScriptOutcome::default();
     for call in &result.scripts {
-        if p.triggers.is_stopped(&call.source) {
+        if p.triggers.is_stopped(&call.source, c.stop_key) {
             continue;
         }
         let owner = Owner::Trigger(call.source.clone());
         let outcome = c.script.run_body(&owner, &call.body, &call.captures);
-        script::turn_off_stopped(p, &outcome);
+        script::turn_off_stopped(p, c.stop_key, &outcome);
         acc.append(outcome);
     }
     acc
@@ -453,8 +454,12 @@ fn prompt_block(
         }
         // Line triggers no longer see it. Note the ones that would have
         // fired, for the one-time notice.
-        let matched =
-            vosh_automation::trigger::matching(&p.triggers, &line.plain, MatchScope::Line);
+        let matched = vosh_automation::trigger::matching(
+            &p.triggers,
+            &line.plain,
+            MatchScope::Line,
+            c.stop_key,
+        );
         c.prompt
             .stage
             .line_triggers_matched(matched.into_iter().map(|t| t.name.as_str()));
@@ -467,6 +472,7 @@ fn prompt_block(
         &last.plain,
         MatchScope::Prompt,
         highlight_ground::get(),
+        c.stop_key,
     );
     if !result.scripts.is_empty() {
         script::snapshot_vars(p, c);
@@ -594,6 +600,7 @@ fn unread_partial(
         plain,
         MatchScope::Prompt,
         highlight_ground::get(),
+        c.stop_key,
     );
     let effect = match &result.display {
         None => true,
@@ -988,7 +995,7 @@ fn note_gag_without_reader(
     if c.prompt.stage.has_recognizer() {
         return;
     }
-    for trigger in vosh_automation::trigger::matching(&p.triggers, plain, scope) {
+    for trigger in vosh_automation::trigger::matching(&p.triggers, plain, scope, c.stop_key) {
         if hides_and_reads_prompt(trigger) && c.prompt.stage.gag_without_reader(&trigger.name) {
             batch.gag_without_reader.push(trigger.name.clone());
         }

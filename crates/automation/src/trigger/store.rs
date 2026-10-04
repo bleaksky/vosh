@@ -2,7 +2,6 @@
 //! insert, and exposes them in priority order.
 
 use std::borrow::Cow;
-use std::collections::HashSet;
 
 use regex::Regex;
 use serde::ser::SerializeStruct;
@@ -11,6 +10,7 @@ use thiserror::Error;
 
 use crate::groups::GroupSwitch;
 use crate::revision::next_revision;
+use crate::stops::{StopKey, Stops};
 use crate::trigger::action::TriggerAction;
 
 /// A single pattern row inside a trigger. Mirrors Mudlet's per-pattern
@@ -420,10 +420,10 @@ pub struct TriggerStore {
     groups: GroupSwitch,
     /// See [`TriggerStore::revision`].
     revision: u64,
-    /// The triggers whose Lua Vosh stopped this session. A stopped
-    /// trigger matches nothing until you save it again. Vosh never saves
-    /// this, so a restart turns them all back on.
-    stopped: HashSet<String>,
+    /// The triggers whose Lua Vosh stopped, each under the key of the
+    /// session it stopped in. A stopped trigger matches nothing under its
+    /// key until you save it again.
+    stopped: Stops,
 }
 
 impl TriggerStore {
@@ -458,8 +458,8 @@ impl TriggerStore {
             regexes.push(regex);
         }
         self.items.retain(|t| t.trigger.name != trigger.name);
-        // Saving a trigger Vosh stopped turns it back on.
-        self.stopped.remove(&trigger.name);
+        // Saving a trigger Vosh stopped turns it back on everywhere.
+        self.stopped.clear(&trigger.name);
         self.items.push(CompiledTrigger { trigger, regexes });
         self.items
             .sort_by_key(|t| std::cmp::Reverse(t.trigger.priority));
@@ -468,7 +468,7 @@ impl TriggerStore {
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
-        self.stopped.remove(name);
+        self.stopped.clear(name);
         let before = self.items.len();
         self.items.retain(|t| t.trigger.name != name);
         let removed = before != self.items.len();
@@ -498,17 +498,23 @@ impl TriggerStore {
             .map(|t| &t.trigger)
     }
 
-    /// Turn the trigger `name` off for the rest of the session, after
-    /// Vosh stopped its Lua. It stays off until you save it again.
-    pub fn stop(&mut self, name: &str) {
+    /// Turn the trigger `name` off under `key`, after Vosh stopped its Lua
+    /// there. It stays off there until you save it again.
+    pub fn stop(&mut self, name: &str, key: StopKey) {
         if self.get(name).is_some() {
-            self.stopped.insert(name.to_string());
+            self.stopped.stop(name, key);
         }
     }
 
-    /// True while Vosh holds the trigger `name` off after a stop.
-    pub fn is_stopped(&self, name: &str) -> bool {
-        self.stopped.contains(name)
+    /// True while Vosh holds the trigger `name` off under `key` after a
+    /// stop.
+    pub fn is_stopped(&self, name: &str, key: StopKey) -> bool {
+        self.stopped.contains(name, key)
+    }
+
+    /// Drop every stop under `key`, as the session it names closes.
+    pub fn forget_stops(&mut self, key: StopKey) {
+        self.stopped.forget(key);
     }
 
     pub fn list(&self) -> Vec<Trigger> {
@@ -528,13 +534,14 @@ impl TriggerStore {
 
     /// Iterate the compiled triggers in priority order (high to low),
     /// filtering out anything whose group is in the disabled set and
-    /// any trigger Vosh stopped. The
+    /// any trigger Vosh stopped under `key`. The
     /// engine consumes this directly; per-trigger and per-pattern
     /// enable flags still apply downstream of the group check.
-    pub(crate) fn iter_compiled(&self) -> impl Iterator<Item = &CompiledTrigger> {
-        self.items.iter().filter(|c| {
+    pub(crate) fn iter_compiled(&self, key: StopKey) -> impl Iterator<Item = &CompiledTrigger> {
+        let stopped = self.stopped.under(key);
+        self.items.iter().filter(move |c| {
             self.groups.allows(c.trigger.group.as_deref())
-                && !self.stopped.contains(&c.trigger.name)
+                && !stopped.is_some_and(|names| names.contains(&c.trigger.name))
         })
     }
 
@@ -589,12 +596,11 @@ impl TriggerStore {
         // untouched.
         next.groups = std::mem::take(&mut self.groups);
         // The editor saves the whole list at once, so a trigger Vosh
-        // stopped stays off unless this save changed it.
-        for name in &self.stopped {
-            if next.get(name).is_some() && next.get(name) == self.get(name) {
-                next.stopped.insert(name.clone());
-            }
-        }
+        // stopped stays off, under each key, unless this save changed it.
+        next.stopped = self.stopped.kept(|name| {
+            let now = next.get(name);
+            now.is_some() && now == self.get(name)
+        });
         next.revision = next_revision();
         *self = next;
         Ok(self.items.len())
@@ -656,38 +662,54 @@ mod tests {
         assert_eq!(store.revision(), rev);
     }
 
-    /// Whether `store` gags `line`, the one action the test triggers take.
-    fn gags(store: &TriggerStore, line: &str) -> bool {
-        crate::trigger::process(store, line.as_bytes())
+    /// The session the lines here come to, and another.
+    const SESSION: StopKey = StopKey(1);
+    const OTHER: StopKey = StopKey(2);
+
+    /// Whether `store` gags `line` under `key`, the one action the test
+    /// triggers take.
+    fn gags(store: &TriggerStore, line: &str, key: StopKey) -> bool {
+        crate::trigger::process(store, line.as_bytes(), key)
             .display
             .is_none()
     }
 
     #[test]
-    fn a_stopped_trigger_stays_off_until_you_save_it() {
+    fn a_stopped_trigger_stays_off_in_its_session_until_you_save_it() {
         let mut store = TriggerStore::new();
         store.set(trigger("hunger", "^You are hungry")).unwrap();
-        store.stop("hunger");
-        assert!(store.is_stopped("hunger"));
-        assert!(!gags(&store, "You are hungry."));
+        store.stop("hunger", SESSION);
+        assert!(store.is_stopped("hunger", SESSION));
+        assert!(!gags(&store, "You are hungry.", SESSION));
+        // The other session still matches it.
+        assert!(!store.is_stopped("hunger", OTHER));
+        assert!(gags(&store, "You are hungry.", OTHER));
         // The list and its revision stay as they were, so Settings and
         // the saved profile still hold the trigger as you wrote it.
         assert_eq!(store.list().len(), 1);
+        store.stop("hunger", OTHER);
         store.set(trigger("hunger", "^You are hungry")).unwrap();
-        assert!(!store.is_stopped("hunger"));
-        assert!(gags(&store, "You are hungry."));
+        for key in [SESSION, OTHER] {
+            assert!(!store.is_stopped("hunger", key));
+            assert!(gags(&store, "You are hungry.", key));
+        }
         // No trigger of that name, nothing to stop.
-        store.stop("missing");
-        assert!(!store.is_stopped("missing"));
+        store.stop("missing", SESSION);
+        assert!(!store.is_stopped("missing", SESSION));
+        // The stops of a session that closed go with it.
+        store.stop("hunger", SESSION);
+        store.forget_stops(SESSION);
+        assert!(gags(&store, "You are hungry.", SESSION));
     }
 
     #[test]
-    fn a_whole_list_save_keeps_only_the_unchanged_stops() {
+    fn a_whole_list_save_keeps_only_the_unchanged_stops_in_each_session() {
         let mut store = TriggerStore::new();
         store.set(trigger("hunger", "^You are hungry")).unwrap();
         store.set(trigger("day", "^The day has begun")).unwrap();
-        store.stop("hunger");
-        store.stop("day");
+        store.stop("hunger", SESSION);
+        store.stop("day", SESSION);
+        store.stop("day", OTHER);
         let mut edited = store.list();
         for t in &mut edited {
             if t.name == "day" {
@@ -697,12 +719,15 @@ mod tests {
         store
             .import_json(&serde_json::to_string(&edited).unwrap())
             .unwrap();
-        assert!(store.is_stopped("hunger"));
-        assert!(!gags(&store, "You are hungry."));
-        assert!(!store.is_stopped("day"));
-        assert!(gags(&store, "The day has begun."));
+        assert!(store.is_stopped("hunger", SESSION));
+        assert!(!gags(&store, "You are hungry.", SESSION));
+        assert!(!store.is_stopped("hunger", OTHER));
+        for key in [SESSION, OTHER] {
+            assert!(!store.is_stopped("day", key));
+            assert!(gags(&store, "The day has begun.", key));
+        }
         assert!(store.remove("hunger"));
-        assert!(!store.is_stopped("hunger"));
+        assert!(!store.is_stopped("hunger", SESSION));
     }
 
     /// A trigger whose rows are `rows`, each a pattern with its mode.

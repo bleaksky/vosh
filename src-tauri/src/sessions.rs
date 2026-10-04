@@ -19,11 +19,12 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
 use tracing::warn;
+use vosh_automation::StopKey;
 
 use crate::affects::snapshot::AffectsSnapshot;
 use crate::logs::SharedScrollback;
 use crate::script::SharedTimers;
-use crate::session::connection::SharedConnection;
+use crate::session::connection::{Connection, SharedConnection};
 use crate::session::SessionHandle;
 
 /// What a command says when it names a session Vosh does not hold.
@@ -37,6 +38,11 @@ pub(crate) struct SessionId(u32);
 impl SessionId {
     /// The session the app starts with.
     pub(crate) const FIRST: Self = Self(1);
+
+    /// The key the profile's stores hold the session's Lua stops under.
+    pub(crate) fn stop_key(self) -> StopKey {
+        StopKey(self.0)
+    }
 }
 
 /// What one session holds apart from the profile: the task that runs its
@@ -107,7 +113,10 @@ impl Session {
         Self {
             id,
             slot: Mutex::new(None),
-            connection: SharedConnection::default(),
+            connection: SharedConnection::new(Connection {
+                stop_key: id.stop_key(),
+                ..Connection::default()
+            }),
             lua_timers: SharedTimers::default(),
             scrollback: SharedScrollback::default(),
             // Matches `Negotiator::default()`, so a connect that comes

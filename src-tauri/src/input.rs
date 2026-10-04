@@ -584,7 +584,7 @@ fn process_line(
     let interpolated = c.var_view(profile).interpolate(trimmed);
     let steps = match profile
         .aliases
-        .expand_line_full(&interpolated, &c.plugin_aliases)
+        .expand_line_full(&interpolated, &c.plugin_aliases, c.stop_key)
     {
         Ok(steps) => steps,
         Err(ExpandError::RecursionLimit(depth)) => {

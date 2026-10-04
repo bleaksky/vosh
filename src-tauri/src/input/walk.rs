@@ -238,7 +238,10 @@ pub(super) fn slash_walk(profile: &mut Profile, c: &Connection, args: &str) -> I
     let args = c.var_view(profile).interpolate(args);
     let (head, tail) = split_at_separator(&args);
     let rest = match tail {
-        Some(tail) => match profile.aliases.expand_line_full(tail, &c.plugin_aliases) {
+        Some(tail) => match profile
+            .aliases
+            .expand_line_full(tail, &c.plugin_aliases, c.stop_key)
+        {
             Ok(steps) => steps,
             Err(ExpandError::RecursionLimit(depth)) => {
                 return InputResult::error(format!("alias recursion limit hit ({depth})"));
