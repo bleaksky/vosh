@@ -17,16 +17,72 @@ use crate::trigger::action::TriggerAction;
 /// editor: each row carries its own enable flag so a user can toggle
 /// individual mob names on/off without editing a long pipe-delineated
 /// regex.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// On disk and on the wire a Regex row is `pattern` and `enabled`, as
+/// every build writes it. A Text or Starts with row adds `mode`, and
+/// keeps what you typed in `text` and the regex it compiles to in
+/// `pattern`. Builds up to 0.8.1 know no mode and read `pattern` as a
+/// regex, so they match the same lines and their next save keeps the
+/// trigger, as a Regex row (D14). `PatternRaw` says how a row reads.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(from = "PatternRaw")]
 pub struct TriggerPattern {
+    /// What you typed: the regex of a Regex row, the text of a Text or
+    /// Starts with row.
     pub pattern: String,
-    #[serde(default = "default_enabled")]
     pub enabled: bool,
-    /// How the store reads `pattern`. A row with no mode reads as Regex,
-    /// and a Regex row leaves the field out, so a file written by an
-    /// older build reads the same and an older build reads every trigger.
-    #[serde(default, skip_serializing_if = "MatchMode::is_regex")]
+    /// How the store reads `pattern`.
     pub mode: MatchMode,
+}
+
+/// A pattern row as a file or the page holds it.
+///
+/// - A row with no mode is Regex and reads `pattern`. It drops any
+///   `text`, so a mode this build does not know reads the regex its
+///   build saved beside the text, which matches the same lines.
+/// - A Text or Starts with row reads what you typed from `text`.
+/// - A Text or Starts with row with no `text`, which builds wrote before
+///   the field, reads `pattern` as the text.
+#[derive(Deserialize)]
+struct PatternRaw {
+    pattern: String,
+    #[serde(default = "default_enabled")]
+    enabled: bool,
+    #[serde(default)]
+    mode: MatchMode,
+    #[serde(default)]
+    text: Option<String>,
+}
+
+impl From<PatternRaw> for TriggerPattern {
+    fn from(raw: PatternRaw) -> Self {
+        let pattern = match (raw.mode, raw.text) {
+            (MatchMode::Regex, _) | (_, None) => raw.pattern,
+            (_, Some(text)) => text,
+        };
+        Self {
+            pattern,
+            enabled: raw.enabled,
+            mode: raw.mode,
+        }
+    }
+}
+
+impl Serialize for TriggerPattern {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let typed = !self.mode.is_regex();
+        let mut state = serializer.serialize_struct("TriggerPattern", if typed { 4 } else { 2 })?;
+        state.serialize_field("pattern", &self.regex_source())?;
+        state.serialize_field("enabled", &self.enabled)?;
+        if typed {
+            state.serialize_field("mode", &self.mode)?;
+            state.serialize_field("text", &self.pattern)?;
+        }
+        state.end()
+    }
 }
 
 impl TriggerPattern {
@@ -72,8 +128,7 @@ pub enum MatchMode {
 }
 
 impl MatchMode {
-    /// Regex, the mode a row with none reads as. serde hands the field
-    /// by reference.
+    /// Regex, the mode a row with none reads as.
     pub fn is_regex(&self) -> bool {
         *self == MatchMode::Regex
     }
@@ -279,8 +334,13 @@ impl Serialize for Trigger {
             + usize::from(emit_target);
         let mut state = serializer.serialize_struct("Trigger", field_count)?;
         state.serialize_field("name", &self.name)?;
-        let first_pattern = self.patterns.first().map_or("", |p| p.pattern.as_str());
-        state.serialize_field("pattern", first_pattern)?;
+        // Those builds read it as a regex, so a Text or Starts with row
+        // gives the regex it compiles to.
+        let first_pattern = self
+            .patterns
+            .first()
+            .map_or(Cow::Borrowed(""), TriggerPattern::regex_source);
+        state.serialize_field("pattern", &first_pattern)?;
         state.serialize_field("patterns", &self.patterns)?;
         state.serialize_field("priority", &self.priority)?;
         state.serialize_field("enabled", &self.enabled)?;
@@ -735,6 +795,29 @@ mod tests {
         assert_eq!(json["patterns"][0]["mode"], "text");
         assert_eq!(json["patterns"][1]["mode"], "starts_with");
         assert!(json["patterns"][2].get("mode").is_none());
+        // Each Text and Starts with row holds the regex it compiles to in
+        // `pattern`, which older builds read, and what you typed in `text`.
+        assert_eq!(
+            json["patterns"],
+            serde_json::json!([
+                {
+                    "pattern": r"^\s*You feel better\.\s*$",
+                    "enabled": true,
+                    "mode": "text",
+                    "text": "You feel better.",
+                },
+                {
+                    "pattern": r"^\s*You feel.*",
+                    "enabled": true,
+                    "mode": "starts_with",
+                    "text": "You feel",
+                },
+                { "pattern": r"better\.$", "enabled": true },
+            ])
+        );
+        // The pattern before the rows, which builds older than the rows
+        // read, is the regex of the first row too.
+        assert_eq!(json["pattern"], r"^\s*You feel better\.\s*$");
         let back: Trigger = serde_json::from_value(json).unwrap();
         assert_eq!(back, t);
         // Through the store too, as the Settings editor saves.
@@ -746,11 +829,94 @@ mod tests {
         assert_eq!(again.list(), [t]);
     }
 
+    /// The rows of the one trigger in `json`, as this build reads them.
+    fn rows_of(json: &str) -> Vec<TriggerPattern> {
+        serde_json::from_str::<Trigger>(json).unwrap().patterns
+    }
+
+    #[test]
+    fn a_text_or_starts_with_row_reads_what_you_typed_from_text() {
+        // `text` wins over `pattern`, whatever `pattern` holds, so a page
+        // that leaves the old regex in `pattern` after an edit saves the
+        // new text.
+        let rows = rows_of(
+            r#"{"name":"x","patterns":[
+                {"pattern":"^\\s*You feel better\\.\\s*$","mode":"text","text":"You feel better."},
+                {"pattern":"stale","mode":"starts_with","text":"*** Too Dark ***"}
+            ],"actions":[]}"#,
+        );
+        assert_eq!(
+            rows,
+            [
+                TriggerPattern {
+                    mode: MatchMode::Text,
+                    ..TriggerPattern::regex("You feel better.")
+                },
+                TriggerPattern {
+                    mode: MatchMode::StartsWith,
+                    ..TriggerPattern::regex("*** Too Dark ***")
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_text_row_with_no_text_reads_pattern_as_the_text() {
+        // The shape builds wrote before `text`, with what you typed in
+        // `pattern`.
+        let rows = rows_of(
+            r#"{"name":"x","patterns":[
+                {"pattern":"You feel better.","mode":"text"},
+                {"pattern":"*** Too Dark ***","enabled":false,"mode":"starts_with"}
+            ],"actions":[]}"#,
+        );
+        assert_eq!(rows[0].pattern, "You feel better.");
+        assert_eq!(rows[0].mode, MatchMode::Text);
+        assert_eq!(rows[1].pattern, "*** Too Dark ***");
+        assert!(!rows[1].enabled);
+        // The next save moves the text to `text` and puts its regex in
+        // `pattern`.
+        let t = Trigger {
+            patterns: rows,
+            ..Trigger::new("x", "", TriggerAction::Gag)
+        };
+        let json = serde_json::to_value(&t).unwrap();
+        assert_eq!(json["patterns"][0]["text"], "You feel better.");
+        assert_eq!(json["patterns"][0]["pattern"], r"^\s*You feel better\.\s*$");
+        assert_eq!(json["patterns"][1]["text"], "*** Too Dark ***");
+        assert_eq!(
+            json["patterns"][1]["pattern"],
+            r"^\s*\*\*\* Too Dark \*\*\*.*"
+        );
+    }
+
+    #[test]
+    fn a_regex_row_reads_pattern_and_drops_text() {
+        let rows = rows_of(
+            r#"{"name":"x","patterns":[{"pattern":"^You feel","text":"You feel better."}],"actions":[]}"#,
+        );
+        assert_eq!(rows, [TriggerPattern::regex("^You feel")]);
+        let t = Trigger {
+            patterns: rows,
+            ..Trigger::new("x", "", TriggerAction::Gag)
+        };
+        assert_eq!(
+            serde_json::to_value(&t).unwrap()["patterns"],
+            serde_json::json!([{ "pattern": "^You feel", "enabled": true }])
+        );
+    }
+
     #[test]
     fn a_mode_this_build_does_not_know_reads_as_regex() {
         let later = r#"{"name":"x","patterns":[{"pattern":"^a","mode":"glob"}],"actions":[]}"#;
         let t: Trigger = serde_json::from_str(later).unwrap();
         assert_eq!(t.patterns[0].mode, MatchMode::Regex);
+        // A later build that saves a regex in `pattern` beside its own
+        // text matches the same lines here.
+        let rows = rows_of(
+            r#"{"name":"x","patterns":[{"pattern":"^\\s*You feel","mode":"glob","text":"You feel*"}],"actions":[]}"#,
+        );
+        assert_eq!(rows, [TriggerPattern::regex(r"^\s*You feel")]);
         // A value that is not a name reads as Regex too, and the rows
         // around it keep their modes.
         for value in ["1", "true", "null", "[]", "{}", "1.5"] {
