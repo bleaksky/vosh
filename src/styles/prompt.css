@@ -235,18 +235,19 @@
 }
 
 /* The foot under your design: Draw your prompt and where your prompt
-   shows on the left, the preview and Done on the right. 12 above and
-   below its 28 px controls keep it 52 tall. A foot too narrow for both
-   groups, as with the four previews of The Forsaken Lands in the system
-   face, puts the right group on a second row, still on the right, so
-   Done never leaves the card. */
+   shows on the left, the preview and Done on the right. 10 above and
+   below the preview's 32 px track keep one row 52 tall, and it stays 52
+   with drawing off. A foot too narrow for both groups, as with the four
+   previews of The Forsaken Lands in the system face, puts the right
+   group on a second row, still on the right, so Done never leaves the
+   card. */
 .pc-foot.is-design {
   flex-wrap: wrap;
   row-gap: 8px;
   height: auto;
   min-height: 52px;
-  padding-top: 12px;
-  padding-bottom: 12px;
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 
 .pc-foot-end {
