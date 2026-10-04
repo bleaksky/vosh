@@ -101,10 +101,13 @@ pub enum TriggerAction {
     /// Route the line to a named pane. The session sends that pane the
     /// line as it displays, and a gagged line goes to no pane.
     Route { pane: String },
-    /// Evaluate a Lua body in the session's `ScriptEngine` with regex
-    /// captures bound as a local `captures` table (`captures[1]`,
-    /// `[2]`, … plus named captures by key). The body has access to
-    /// the same sandboxed `mud.*` API as standalone Lua scripts —
-    /// `mud.send`, `mud.echo`, `mud.log`, etc.
+    /// Run a Lua body in the session's `ScriptEngine`, once for each
+    /// match on the line. The body reads that match as a local
+    /// `captures` table of strings. `captures[1]` holds the whole match
+    /// and `captures[2]` onward the groups in order, with an empty
+    /// string for a group that took no part. A named group comes
+    /// through by its place alone, so `captures.name` is nil. The body
+    /// reaches the same sandboxed `mud` table standalone scripts do,
+    /// such as `mud.send`, `mud.echo` and `mud.log`.
     Script { body: String },
 }
