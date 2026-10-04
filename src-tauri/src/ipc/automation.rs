@@ -285,8 +285,9 @@ pub(crate) async fn groups_list(
     state: State<'_, SharedState>,
     list: GroupList,
 ) -> Result<Vec<GroupSwitchState>, String> {
+    let session = state.selected_session();
     let set = state.loadout_set.lock().await;
-    let p = state.selected_session().lock_profile().await;
+    let p = session.lock_profile().await;
     let set = set.as_ref().map(|set| set.for_profile(p.name.as_deref()));
     Ok(group_switches(&p, set.as_deref(), list))
 }
