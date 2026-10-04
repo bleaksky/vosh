@@ -145,6 +145,14 @@ impl AppState {
         self.sessions().profiles()
     }
 
+    /// How many sessions play `open`. Every step that opens or closes a
+    /// session or moves one to another profile holds
+    /// [`PERSIST_LOCK`](crate::disk::save::PERSIST_LOCK), so under it the
+    /// count stays as read.
+    pub(crate) fn players(&self, open: &Arc<OpenProfile>) -> usize {
+        self.sessions().players(open)
+    }
+
     /// Close `open` when no session plays it, see
     /// [`Sessions::close_unplayed`].
     pub(crate) fn close_unplayed(&self, open: &Arc<OpenProfile>) -> bool {
