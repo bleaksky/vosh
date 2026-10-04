@@ -1035,6 +1035,8 @@ What waits for the page half. The GMCP packages, `session://prompt-vars` and `vo
 
 What wants a decision before the page half. `aliases_import` never kept the Lua stops of unchanged aliases as the trigger import does, so a Settings save of the alias list turns every stopped alias back on, and `AliasStore::keep_stops_from` either joins that import or goes. The tick settings, what you choose in `[prompt]` and a `#profile load` or `#profile reset` reach the other sessions on the profile once the edit lets go of its locks, so two edits at the same instant in two sessions, or a Char.Prompt in that gap, can leave their engines apart until the next edit. Handing them on under the edit's own locks would hold two connections at once. A switch away from a profile while another session on it is still closing saves and closes the profile before that session's disconnect ends, so what the disconnect changes after that save is lost. The shape the GMCP packages, `session://prompt-vars` and `vosh://affect-full-changed` take to name their session, such as `{session, data}` around today's payload, needs settling before R20 builds the GMCP factory on today's shape. Q29 A keeps only what you chose in the profile's `[prompt]` table and each game's codes on its own connection, while the build keeps the last engine's whole table, codes included. Keeping Q29 A means the profile file stops holding the codes your game showed, so one session no longer writes the file as before and 0.8.1 reads a table without them, or the codes move to a second place 0.8.1 never reads. And `Connection` now holds the Lua engine, the session variables, the recorder and the plugin aliases for the lock, so it may take a name that says session state, or keep the name you chose in R14.
 
+Your answers on October 4. The `[prompt]` table keeps the build's way for now, whole with the codes, so one session writes the file as 0.8.1 does, and the question comes back when the sidebar first lets two sessions show the difference. The GMCP packages, `session://prompt-vars` and `vosh://affect-full-changed` take `{session, data}` around today's payload, and R15 makes the change with the page's listeners, before R20. `Connection` keeps its name. Quick keys stay one set for each session, starting from the stock slots.
+
 Checks. All gates, the digests, the fake MUD tests, the latency tests and the perf set, plus the app check with one session open and with two.
 
 Size. About 9,600 changed lines in two halves, Rust about 6,000 and the page about 3,600.
@@ -1052,6 +1054,7 @@ Work.
 3. The raw native surface calls in App, Terminal, Input and TerminalMenu move into `ipc/nativeSurface.ts`.
 4. Event names become constants that the contract test checks against Rust.
 5. The theme echo logic moves into `theme/`, which ends the import loop between session.ts and theme.ts.
+6. The GMCP packages, `session://prompt-vars` and `vosh://affect-full-changed` move to `{session, data}`, as you chose on October 4, in Rust and in their listeners together.
 
 Checks. All gates, the contract test and the app check.
 
