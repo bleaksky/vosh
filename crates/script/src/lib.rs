@@ -1704,11 +1704,13 @@ mod tests {
     #[test]
     fn a_memory_grab_inside_pcall_stops() {
         let mut e = ScriptEngine::new().unwrap();
+        // Large steps reach 32 MB long before 100 ms, even in a debug
+        // build with every test running at once.
         let outcome = e.eval(
             "mud.send('look')\n\
              local ok = pcall(function()\n\
                local t = {}\n\
-               for i = 1, 1e9 do t[i] = string.rep('x', 64) .. i end\n\
+               for i = 1, 1e9 do t[i] = string.rep('x', 65536) .. i end\n\
              end)\n\
              mud.send('survived ' .. tostring(ok))",
             "=#lua",
