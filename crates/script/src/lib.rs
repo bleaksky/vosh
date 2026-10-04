@@ -1471,6 +1471,97 @@ mod tests {
     }
 
     #[test]
+    fn your_lua_reaches_a_plugin_through_plugins() {
+        let mut e = ScriptEngine::new().unwrap();
+        plugin(
+            &mut e,
+            "helpers",
+            "function rescue(name) return 'rescue ' .. name end",
+        )
+        .unwrap();
+        let typed = e
+            .eval("mud.send(plugins.helpers.rescue('Orla'))", "=#lua")
+            .unwrap();
+        assert_eq!(typed.actions, vec![Action::Send("rescue Orla".into())]);
+        let body = e
+            .run_body(
+                &Owner::Trigger("guard".into()),
+                "mud.send(plugins.helpers.rescue(captures[1]))",
+                &["Maren".into()],
+            )
+            .unwrap();
+        assert_eq!(body.actions, vec![Action::Send("rescue Maren".into())]);
+        // It lists the plugin's own globals.
+        let listed = e
+            .eval(
+                "local names = {} \
+                 for name in pairs(plugins.helpers) do names[#names + 1] = name end \
+                 table.sort(names) mud.echo(table.concat(names, ' '))",
+                "=#lua",
+            )
+            .unwrap();
+        assert_eq!(echoes(&listed), ["_G mud rescue"]);
+        // A plugin sees neither the others nor this view.
+        let inside = plugin(&mut e, "nosy", "mud.echo(tostring(plugins))").unwrap();
+        assert_eq!(echoes(&inside), ["nil"]);
+    }
+
+    #[test]
+    fn plugins_reads_only_and_follows_a_reload() {
+        let mut e = ScriptEngine::new().unwrap();
+        plugin(&mut e, "helpers", "level = 1").unwrap();
+        e.eval("held = plugins.helpers", "=#lua").unwrap();
+        for (code, line) in [
+            (
+                "plugins.helpers.level = 2",
+                "#lua:1: plugins.helpers is read only",
+            ),
+            ("plugins.helpers = {}", "#lua:1: plugins is read only"),
+        ] {
+            assert_eq!(error_lines(&e.eval(code, "=#lua")), [line], "{code}");
+        }
+        plugin(&mut e, "helpers", "level = 3").unwrap();
+        let read = e
+            .eval(
+                "mud.echo(tostring(held.level) .. tostring(plugins.missing))",
+                "=#lua",
+            )
+            .unwrap();
+        assert_eq!(echoes(&read), ["3nil"]);
+        e.unload(&Owner::Plugin("helpers".into())).unwrap();
+        let read = e
+            .eval(
+                "mud.echo(tostring(held.level) .. tostring(plugins.helpers))",
+                "=#lua",
+            )
+            .unwrap();
+        assert_eq!(echoes(&read), ["nilnil"]);
+    }
+
+    #[test]
+    fn what_a_plugin_function_registers_is_the_plugin_s_whoever_calls_it() {
+        let mut e = ScriptEngine::new().unwrap();
+        let watch = Owner::Plugin("watch".into());
+        e.load_script(
+            watch.clone(),
+            "@watch/main.lua",
+            "function watch(pattern) \
+               mud.trigger('seen', pattern, function() mud.echo('seen') end) \
+             end"
+            .into(),
+        )
+        .unwrap();
+        e.eval("plugins.watch.watch('You are hungry')", "=#lua")
+            .unwrap();
+        let listed: Vec<String> = e.lua_triggers().into_iter().map(|t| t.owner).collect();
+        assert_eq!(listed, ["plugin:watch"]);
+        // So turning the plugin off takes it.
+        e.unload(&watch).unwrap();
+        let leftover = &e.lua_triggers();
+        assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
+    #[test]
     fn sandbox_blocks_dangerous_globals() {
         let mut e = ScriptEngine::new().unwrap();
         // Each is removed, so calling it calls nil.
