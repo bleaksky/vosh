@@ -287,7 +287,8 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     }
                     // A game that never pauses still gets its frame and
                     // its rows every FRAME_BUDGET.
-                    conn.settle.overdue_now(&conn.app, &log_sink, &mut conn.perf);
+                    conn.settle
+                        .overdue_now(&conn.app, &conn.session, &log_sink, &mut conn.perf);
                 }
                 Err(e) => {
                     error!(error = %e, "read failed");
@@ -426,7 +427,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
             // now and the burst of reads that just ended shows in one
             // frame.
             () = std::future::ready(()), if conn.settle.frame => {
-                conn.settle.frame_now(&conn.app);
+                conn.settle.frame_now(&conn.app, &conn.session);
             }
             // Then the log takes the burst's rows once it is free, so a
             // busy log never holds the loop.
@@ -459,7 +460,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     }
     // The last burst still owes its frame and its rows, which go in the
     // log before the lines the session captures as it ends.
-    conn.settle.frame_now(&conn.app);
+    conn.settle.frame_now(&conn.app, &conn.session);
     conn.settle
         .write_log(log_sink.logs.lock().await.as_mut(), &mut conn.perf);
     capture_held_lines(&conn.session.connection, &log_sink).await;
@@ -586,7 +587,8 @@ async fn send_typed<R: tauri::Runtime>(
     }
     // Lines sent back to back never wait on the log, but their rows still
     // go in once they waited too long.
-    conn.settle.overdue_now(&conn.app, log_sink, &mut conn.perf);
+    conn.settle
+        .overdue_now(&conn.app, &conn.session, log_sink, &mut conn.perf);
     Ok(())
 }
 
@@ -737,22 +739,22 @@ pub(super) fn due_settings_timers(
 }
 
 /// You are selecting text or reading back in the terminal. The webview
-/// says so for xterm (`terminal_reader_busy`), and the native grid holds
-/// its own selection and scroll.
+/// says so for xterm (`terminal_reader_busy`), and the session's native
+/// grid holds its own selection and scroll.
 fn reader_busy(session: &Session) -> bool {
     let webview = session
         .reader_busy
         .load(std::sync::atomic::Ordering::Acquire);
-    webview || native_reader_busy()
+    webview || native_reader_busy(session)
 }
 
 #[cfg(any(native_surface, test))]
-fn native_reader_busy() -> bool {
-    crate::native::grid::reader_busy()
+fn native_reader_busy(session: &Session) -> bool {
+    crate::native::grid::reader_busy(session.id)
 }
 
 #[cfg(not(any(native_surface, test)))]
-fn native_reader_busy() -> bool {
+fn native_reader_busy(_session: &Session) -> bool {
     false
 }
 

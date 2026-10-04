@@ -128,13 +128,13 @@ fn scroll_report_key(offset: usize, max: usize) -> u64 {
     (clamp(offset) << 32) | max
 }
 
-/// Send the page the display offset and the history length as
-/// `vosh://native-scroll` `[offset, max]`. The page learns from it
+/// Send the page the display offset and the history length of the shown
+/// grid as `vosh://native-scroll` `[offset, max]`. The page learns from it
 /// whether the scrollback split is open, and draws the scroll depth from
 /// it. Only fires when `scroll_report_key` changes, so the live
 /// tail reports once as `[0, max]` and then stays quiet.
 pub(super) fn report_scroll_if_changed() {
-    let (offset, max) = crate::native::grid::scroll_metrics();
+    let (offset, max) = crate::native::grid::scroll_metrics(crate::native::grid::shown());
     let key = scroll_report_key(offset, max);
     if REPORTED.scroll.swap(key, Ordering::AcqRel) == key {
         return;

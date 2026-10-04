@@ -197,7 +197,7 @@ pub(crate) fn emit_repaint<R: tauri::Runtime>(app: &AppHandle<R>, session: &Sess
 /// session task makes and sends those in order. Output from elsewhere can
 /// take an id before an output of the session and still go out after it,
 /// so it carries none. `frame` asks the native renderer for a frame at
-/// once. Returns the count after it.
+/// once, while the session's grid shows. Returns the count after it.
 pub(crate) fn emit_counted<R: tauri::Runtime>(
     app: &AppHandle<R>,
     session: &Session,
@@ -223,16 +223,16 @@ pub(crate) fn emit_counted<R: tauri::Runtime>(
     } else {
         session.output_count()
     };
-    // Feed the native terminal grid the same bytes xterm receives,
+    // Feed the session's native grid the same bytes xterm receives,
     // for every output path, then repaint. This is the single choke point
     // so nothing reaches xterm without also reaching the grid.
     // Word wrapped at the grid width, matching the frontend WordWrapper
     // that xterm receives this same stream through. The grid finds each
     // region in its own rows, as xterm does.
     #[cfg(any(native_surface, test))]
-    crate::native::grid::feed_session_output(out, id);
+    crate::native::grid::feed_session_output(session.id, out, id);
     if frame {
-        request_frame(app);
+        request_frame(app, session);
     }
     if let Err(e) = app.emit(events::OUTPUT, payload) {
         warn!(error = %e, "failed to emit session output");
@@ -244,8 +244,16 @@ pub(crate) fn emit_counted<R: tauri::Runtime>(
 #[cfg(test)]
 pub(crate) const TEST_FRAME_EVENT: &str = "test://frame";
 
-/// Ask the native renderer for a frame of what the grid holds now.
-pub(crate) fn request_frame<R: tauri::Runtime>(app: &AppHandle<R>) {
+/// Ask the native renderer for a frame of what the grid of `session`
+/// holds now. A session whose grid does not show asks for none, since
+/// the frame draws only the grid that shows.
+pub(crate) fn request_frame<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session) {
+    #[cfg(any(native_surface, test))]
+    if crate::native::grid::shown() != session.id {
+        return;
+    }
+    #[cfg(not(any(native_surface, test)))]
+    let _ = session;
     #[cfg(native_surface)]
     crate::native::surface::request_redraw();
     #[cfg(test)]

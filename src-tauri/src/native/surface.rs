@@ -134,6 +134,14 @@ pub(crate) fn request_redraw() {
     let _ = app.run_on_main_thread(redraw_now);
 }
 
+/// Another session's grid shows. The pointer lets go of what it held on
+/// the grid that showed before, and a frame draws the new one. Takes no
+/// lock but the pointer's state, so the session map may be held.
+pub(crate) fn grid_shown() {
+    pointer::let_go();
+    request_redraw();
+}
+
 /// Past the flip, so the timer's frame lands in the new half even when
 /// its clock and the wall clock part by a millisecond. The page's blink
 /// timer waits the same (`BLINK_SLACK_MS` in src/lib/blink.ts).
@@ -290,27 +298,28 @@ fn render(state: &mut GpuState) {
         blink_hidden: now_ms.is_some_and(|now| !crate::native::gpu::style::blink_shown(now)),
     };
     let cell_renderer = &mut state.cell_renderer;
-    let drawn = crate::native::grid::with_grid(|grid| {
-        grid.map(|grid| {
-            // Read with the grid held, so the lock order stays surface
-            // slot, then grid, then the find list and hover.
-            let (find, find_active) = crate::native::grid::find::find_snapshot();
-            let hover = hover_url();
-            cell_renderer.draw(
-                device,
-                queue,
-                &mut encoder,
-                &view,
-                grid,
-                hover,
-                find,
-                find_active,
-                pane_w,
-                pane_h,
-                split_ratio(),
-                placement,
-            )
-        })
+    let drawn = crate::native::grid::with_shown(|shown| {
+        let shown = shown?;
+        let grid = shown.term()?;
+        // Read with the grid map held, so the lock order stays surface
+        // slot, then grid map, then hover.
+        let (find, find_active) = shown.find().snapshot();
+        let hover = hover_url();
+        Some(cell_renderer.draw(
+            device,
+            queue,
+            &mut encoder,
+            &view,
+            grid,
+            hover,
+            find,
+            find_active,
+            shown.prompt_bands(),
+            pane_w,
+            pane_h,
+            split_ratio(),
+            placement,
+        ))
     });
     if let Some(drawn) = drawn {
         set_divider_frac(drawn.divider);

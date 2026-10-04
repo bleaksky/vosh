@@ -11,6 +11,8 @@ use tauri::Emitter;
 
 use super::{platform, redraw_now, split_drag, APP, PANE};
 use crate::app::events::{NATIVE_COPIED, TERMINAL_CLICKED, TERMINAL_CURSOR};
+use crate::native::grid;
+use crate::sessions::SessionId;
 
 /// The pointer input in flight: the drag a press started, the wheel's
 /// remainder, the link under the pointer and the cursor the page shows.
@@ -151,30 +153,32 @@ fn surface_frame(height_px: f64) -> split_drag::Frame {
     }
 }
 
-/// Map a physical-pixel point inside the surface to a grid cell
-/// `(line, col)`, mirroring the renderer's split mapping: the bottom (live)
-/// region of an open split reads at offset 0, the top (history) region at
-/// the scroll offset. `height_px` is the surface height in physical pixels.
-fn phys_point_to_cell(phys_x: f64, phys_y: f64, height_px: f64) -> Option<(i32, usize)> {
-    let offset = crate::native::grid::current_display_offset();
-    let view = surface_frame(height_px).view(offset)?;
-    Some(view.cell_at(phys_x, phys_y))
+/// Map the event's point to a cell `(line, col)` of the grid it acts on,
+/// mirroring the renderer's split mapping: the bottom (live) region of an
+/// open split reads at offset 0, the top (history) region at the scroll
+/// offset.
+fn phys_point_to_cell(ev: &PointerEvent) -> Option<(i32, usize)> {
+    let offset = grid::current_display_offset(ev.session);
+    let view = surface_frame(ev.height).view(offset)?;
+    Some(view.cell_at(ev.x, ev.y))
 }
 
-/// A pointer event in surface-physical pixels, with the surface size and
-/// the open-link modifier (Cmd) state.
+/// A pointer event in surface-physical pixels, with the surface size, the
+/// open-link modifier (Cmd) state, and the session whose grid showed as
+/// it came, which it acts on.
 struct PointerEvent {
     pub x: f64,
     pub y: f64,
     pub width: f64,
     pub height: f64,
     pub open_modifier: bool,
+    pub session: SessionId,
 }
 
 /// True when the point falls in the scrollbar hit zone (right edge) while
 /// scrolled. The zone is wider than the drawn bar for forgiving grabs.
 fn in_scrollbar_zone(ev: &PointerEvent) -> bool {
-    let (offset, scrollback) = crate::native::grid::scroll_metrics();
+    let (offset, scrollback) = grid::scroll_metrics(ev.session);
     if offset == 0 || scrollback == 0 {
         return false;
     }
@@ -191,7 +195,7 @@ fn scrollbar_scroll_to(ev: &PointerEvent) {
     if cell_h <= 0.0 || ev.height <= 0.0 {
         return;
     }
-    let (_, scrollback) = crate::native::grid::scroll_metrics();
+    let (_, scrollback) = grid::scroll_metrics(ev.session);
     if scrollback == 0 {
         return;
     }
@@ -199,18 +203,19 @@ fn scrollbar_scroll_to(ev: &PointerEvent) {
     let total = scrollback as f64 + rows;
     let scroll_top = ((ev.y / ev.height) * total - rows / 2.0).clamp(0.0, scrollback as f64);
     let target = scrollback as f64 - scroll_top;
-    crate::native::grid::scroll_to_offset(target.round().max(0.0) as usize);
+    grid::scroll_to_offset(ev.session, target.round().max(0.0) as usize);
     redraw_now();
 }
 
-/// Middle-click toggles the split: scrolled snaps back to the live tail;
-/// at the tail it pages up into scrollback to open the split.
-fn middle_click() {
-    let (offset, _) = crate::native::grid::scroll_metrics();
+/// Middle-click toggles the split of the grid of `session`: scrolled
+/// snaps back to the live tail; at the tail it pages up into scrollback
+/// to open the split.
+fn middle_click(session: SessionId) {
+    let (offset, _) = grid::scroll_metrics(session);
     if offset > 0 {
-        crate::native::grid::scroll_to_bottom();
+        grid::scroll_to_bottom(session);
     } else {
-        crate::native::grid::scroll_page(true);
+        grid::scroll_page(session, true);
     }
     redraw_now();
     // A middle click never reaches pointer_up, so it sends the event that
@@ -221,8 +226,8 @@ fn middle_click() {
 }
 
 /// A wheel delta forwarded from the page. Positive reveals older lines.
-/// The grid scrolls by whole lines and the accumulator keeps the rest.
-/// Main thread only.
+/// The shown grid scrolls by whole lines and the accumulator keeps the
+/// rest. Main thread only.
 pub(crate) fn forward_wheel(delta_y: f64) {
     let Ok(mut acc) = POINTER.scroll_accum.lock() else {
         return;
@@ -233,7 +238,7 @@ pub(crate) fn forward_wheel(delta_y: f64) {
     *acc -= f64::from(lines);
     drop(acc);
     if lines != 0 {
-        crate::native::grid::scroll(lines);
+        grid::scroll(grid::shown(), lines);
         redraw_now();
     }
 }
@@ -249,10 +254,10 @@ fn pointer_down(ev: &PointerEvent) {
     POINTER.dragging_divider.store(false, Ordering::Release);
     POINTER.selecting.store(false, Ordering::Release);
     POINTER.from_history.store(false, Ordering::Release);
-    let cell = phys_point_to_cell(ev.x, ev.y, ev.height);
+    let cell = phys_point_to_cell(ev);
     if ev.open_modifier {
         if let Some((line, col)) = cell {
-            if let Some((url, _, _)) = crate::native::grid::links::url_at(line, col) {
+            if let Some((url, _, _)) = grid::links::url_at(ev.session, line, col) {
                 platform::open_url(&url);
                 return;
             }
@@ -269,11 +274,11 @@ fn pointer_down(ev: &PointerEvent) {
         POINTER.dragging_divider.store(true, Ordering::Release);
         return;
     }
-    crate::native::grid::clear_selection();
+    grid::clear_selection(ev.session);
     if let Some((line, col)) = cell {
-        crate::native::grid::start_selection(line, col);
+        grid::start_selection(ev.session, line, col);
         POINTER.selecting.store(true, Ordering::Release);
-        let offset = crate::native::grid::current_display_offset();
+        let offset = grid::current_display_offset(ev.session);
         let from_history = surface_frame(ev.height)
             .view(offset)
             .is_some_and(|view| view.in_history(ev.y));
@@ -302,8 +307,8 @@ fn pointer_dragged(ev: &PointerEvent) {
             history_drag(ev);
             return;
         }
-        if let Some((line, col)) = phys_point_to_cell(ev.x, ev.y, ev.height) {
-            crate::native::grid::update_selection(line, col);
+        if let Some((line, col)) = phys_point_to_cell(ev) {
+            grid::update_selection(ev.session, line, col);
             redraw_now();
         }
     }
@@ -317,9 +322,10 @@ fn history_drag(ev: &PointerEvent) {
         *last = Some((ev.x, ev.y, ev.height));
     }
     let frame = surface_frame(ev.height);
-    let scroll =
-        crate::native::grid::with_grid_mut(|grid| split_drag::drag(grid, &frame, ev.x, ev.y))
-            .unwrap_or(0);
+    let scroll = grid::with_grid_mut(ev.session, |grid| {
+        split_drag::drag(grid, &frame, ev.x, ev.y)
+    })
+    .unwrap_or(0);
     redraw_now();
     if scroll > 0 {
         arm_autoscroll();
@@ -363,10 +369,10 @@ fn arm_autoscroll() {
     });
 }
 
-/// One autoscroll tick of a drag from the history half. Runs on the main
-/// thread. False, with the ticker's flag cleared, once the drag ended,
-/// the pointer came back above the divider, or the split closed at the
-/// tail.
+/// One autoscroll tick of a drag from the history half of the shown
+/// grid. Runs on the main thread. False, with the ticker's flag cleared,
+/// once the drag ended, the pointer came back above the divider, or the
+/// split closed at the tail.
 fn autoscroll_tick() -> bool {
     let point = POINTER.last_drag.lock().ok().and_then(|last| *last);
     let more = match point {
@@ -376,7 +382,7 @@ fn autoscroll_tick() -> bool {
         {
             let frame = surface_frame(height);
             let more =
-                crate::native::grid::with_grid_mut(|grid| split_drag::tick(grid, &frame, x, y))
+                grid::with_grid_mut(grid::shown(), |grid| split_drag::tick(grid, &frame, x, y))
                     .unwrap_or(false);
             redraw_now();
             more
@@ -389,13 +395,13 @@ fn autoscroll_tick() -> bool {
     more
 }
 
-fn pointer_up() {
+fn pointer_up(session: SessionId) {
     POINTER.from_history.store(false, Ordering::Release);
     let was_scrollbar = POINTER.dragging_scrollbar.swap(false, Ordering::AcqRel);
     let was_divider = POINTER.dragging_divider.swap(false, Ordering::AcqRel);
     if !was_scrollbar && !was_divider && POINTER.selecting.swap(false, Ordering::AcqRel) {
         // Copy the selection to the clipboard on release.
-        copy_selection();
+        copy_selection(session);
     }
     // Clicking the terminal focuses the command input, like clicking any
     // other part of the window. The page cancels the press it forwards,
@@ -421,21 +427,36 @@ pub(crate) fn window_blurred() {
     }
 }
 
+/// Another session's grid shows. What the pointer held on the grid that
+/// showed before ends here, as a blur ends it: a drag with its autoscroll,
+/// the wheel's remainder, the hovered link and the divider the last frame
+/// drew. The selection stays in that grid. Asks for no frame itself, so
+/// it takes no lock but the pointer's state.
+pub(super) fn let_go() {
+    window_blurred();
+    if let Ok(mut acc) = POINTER.scroll_accum.lock() {
+        *acc = 0.0;
+    }
+    if let Ok(mut hover) = POINTER.hover_url.lock() {
+        *hover = None;
+    }
+    set_divider_frac(None);
+}
+
 /// Track the URL under the pointer so the renderer can underline it. Only
 /// repaints when the hovered range actually changes.
 fn pointer_moved(ev: Option<&PointerEvent>) {
-    let next = ev
-        .and_then(|e| phys_point_to_cell(e.x, e.y, e.height))
-        .and_then(|(line, col)| {
-            crate::native::grid::links::url_at(line, col).map(|(_, s, e)| (line, s, e))
-        });
+    let next = ev.and_then(|e| {
+        let (line, col) = phys_point_to_cell(e)?;
+        grid::links::url_at(e.session, line, col).map(|(_, s, end)| (line, s, end))
+    });
     set_hover_url(next);
 }
 
 /// A pointer event forwarded from the page, which sits on top and
 /// receives every click. `x` and `y` are CSS px relative to the pane's
 /// top-left corner. `kind` is "down", "drag", "up", "move", "leave", or
-/// "middle". Must run on the main thread.
+/// "middle". It acts on the shown grid. Must run on the main thread.
 pub(crate) fn forward_pointer(kind: &str, x: f64, y: f64, open_modifier: bool) {
     let dpr = f64::from(load_f32(&CELLS.dpr, 2.0));
     let (width, height) = PANE
@@ -450,14 +471,15 @@ pub(crate) fn forward_pointer(kind: &str, x: f64, y: f64, open_modifier: bool) {
         width,
         height,
         open_modifier,
+        session: grid::shown(),
     };
     match kind {
         "down" => pointer_down(&ev),
         "drag" => pointer_dragged(&ev),
-        "up" => pointer_up(),
+        "up" => pointer_up(ev.session),
         "move" => pointer_moved(Some(&ev)),
         "leave" => pointer_moved(None),
-        "middle" => middle_click(),
+        "middle" => middle_click(ev.session),
         _ => {}
     }
     let hint = if kind == "leave" {
@@ -543,11 +565,11 @@ fn report_cursor(hint: CursorHint) {
     }
 }
 
-/// Copy the current selection to the clipboard (no-op when empty) and send
-/// the count of characters copied as `vosh://native-copied`, so the page
-/// shows the copy toast.
-fn copy_selection() {
-    let Some(text) = crate::native::grid::selection_text() else {
+/// Copy the selection in the grid of `session` to the clipboard (no-op
+/// when empty) and send the count of characters copied as
+/// `vosh://native-copied`, so the page shows the copy toast.
+fn copy_selection(session: SessionId) {
+    let Some(text) = grid::selection_text(session) else {
         return;
     };
     if text.is_empty() {
@@ -559,18 +581,21 @@ fn copy_selection() {
     }
 }
 
-/// Copy the native selection, dispatched to the main thread. Called by the
-/// Cmd+C / Ctrl+C path from the frontend.
-pub(crate) fn request_copy() {
+/// Copy the selection in the grid of `session`, dispatched to the main
+/// thread. Called by the Cmd+C / Ctrl+C path from the frontend.
+pub(crate) fn request_copy(session: SessionId) {
     let Some(app) = APP.get() else {
         return;
     };
-    let _ = app.run_on_main_thread(copy_selection);
+    let _ = app.run_on_main_thread(move || copy_selection(session));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The session whose grid shows in these tests.
+    const ONE: SessionId = SessionId::FIRST;
 
     /// A pointer event on a 160 by 120 px surface at scale 1.
     fn at(x: f64, y: f64) -> PointerEvent {
@@ -580,17 +605,18 @@ mod tests {
             width: 160.0,
             height: 120.0,
             open_modifier: false,
+            session: ONE,
         }
     }
 
-    /// Lay the shared grid out as a split at offset `offset`: 10 px rows
+    /// Lay the shown grid out as a split at offset `offset`: 10 px rows
     /// on 120 px, L00 to L59 with L48 to L59 on the screen, and the
-    /// divider the renderer draws at 79 px. Call with the shared grid
+    /// divider the renderer draws at 79 px. Call with the grids' test
     /// lock held, and `reset_pointer` after.
     fn split_surface(offset: i32) {
         crate::native::grid::blank_shared_grid_for_test(20, 12);
         let text: Vec<String> = (0..60).map(|n| format!("L{n:02}")).collect();
-        crate::native::grid::with_grid_mut(|grid| {
+        crate::native::grid::with_grid_mut(ONE, |grid| {
             grid.feed(text.join("\r\n").as_bytes());
             grid.scroll(offset);
         });
@@ -609,7 +635,7 @@ mod tests {
         CELLS.cell_h.store(0, Ordering::Release);
         CELLS.dpr.store(0, Ordering::Release);
         set_divider_frac(None);
-        crate::native::grid::clear_selection();
+        crate::native::grid::clear_selection(ONE);
     }
 
     #[test]
@@ -621,19 +647,19 @@ mod tests {
         // Past the divider the selection ends on the last history line,
         // L47 at offset 8, and nothing of the live half.
         pointer_dragged(&at(40.0, 100.0));
-        let text = crate::native::grid::selection_text().expect("a selection");
+        let text = crate::native::grid::selection_text(ONE).expect("a selection");
         assert_eq!(text.lines().last(), Some("L47"));
-        assert_eq!(crate::native::grid::current_display_offset(), 8);
+        assert_eq!(crate::native::grid::current_display_offset(ONE), 8);
         // Each tick scrolls 7 lines toward the tail, and the second
         // reaches it, which closes the split. The selection runs on to
         // the pointer's cell in the full view.
         assert!(autoscroll_tick());
-        assert_eq!(crate::native::grid::current_display_offset(), 1);
-        let text = crate::native::grid::selection_text().expect("a selection");
+        assert_eq!(crate::native::grid::current_display_offset(ONE), 1);
+        let text = crate::native::grid::selection_text(ONE).expect("a selection");
         assert_eq!(text.lines().last(), Some("L54"));
         assert!(!autoscroll_tick());
-        assert_eq!(crate::native::grid::current_display_offset(), 0);
-        let text = crate::native::grid::selection_text().expect("a selection");
+        assert_eq!(crate::native::grid::current_display_offset(ONE), 0);
+        let text = crate::native::grid::selection_text(ONE).expect("a selection");
         let lines: Vec<&str> = text.lines().collect();
         let want: Vec<String> = (41..=58).map(|n| format!("L{n:02}")).collect();
         assert_eq!(lines, want);
@@ -655,13 +681,13 @@ mod tests {
         POINTER.autoscroll_armed.store(true, Ordering::Release);
         assert!(!autoscroll_tick());
         assert!(!POINTER.autoscroll_armed.load(Ordering::Acquire));
-        assert_eq!(crate::native::grid::current_display_offset(), 8);
-        let text = crate::native::grid::selection_text().expect("a selection");
+        assert_eq!(crate::native::grid::current_display_offset(ONE), 8);
+        let text = crate::native::grid::selection_text(ONE).expect("a selection");
         assert_eq!(text.lines().last(), Some("L47"));
         // A drag event that still comes moves nothing.
         pointer_dragged(&at(40.0, 110.0));
-        assert_eq!(crate::native::grid::current_display_offset(), 8);
-        let after = crate::native::grid::selection_text().expect("a selection");
+        assert_eq!(crate::native::grid::current_display_offset(ONE), 8);
+        let after = crate::native::grid::selection_text(ONE).expect("a selection");
         assert_eq!(after, text);
         reset_pointer();
     }
@@ -675,11 +701,11 @@ mod tests {
         pointer_down(&at(0.0, 105.0));
         assert!(!POINTER.from_history.load(Ordering::Acquire));
         pointer_dragged(&at(0.0, 25.0));
-        let text = crate::native::grid::selection_text().expect("a selection");
+        let text = crate::native::grid::selection_text(ONE).expect("a selection");
         assert_eq!(text.lines().next(), Some("L42"));
         assert_eq!(text.lines().last(), Some("L57"));
         assert!(!autoscroll_tick());
-        assert_eq!(crate::native::grid::current_display_offset(), 8);
+        assert_eq!(crate::native::grid::current_display_offset(ONE), 8);
         reset_pointer();
     }
 

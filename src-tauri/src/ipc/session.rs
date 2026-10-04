@@ -28,7 +28,7 @@ pub(crate) async fn session_open(state: State<'_, SharedState>) -> Result<Sessio
 }
 
 /// Select the session `session` names. The commands that name no session
-/// act on it from then on.
+/// act on it from then on, and its native grid shows.
 #[tauri::command]
 pub(crate) fn session_select(
     state: State<'_, SharedState>,
@@ -117,7 +117,9 @@ pub(crate) async fn session_disconnect(
 /// Inform the session of a new terminal size. The backend updates the
 /// telnet negotiator and, when NAWS has already been negotiated with
 /// the server, pushes a NAWS subnegotiation so the MUD re-wraps its
-/// output at the new column count. No-op when not connected.
+/// output at the new column count. No-op when not connected. While
+/// another session's grid shows, the session's native grid takes the
+/// size too, since no frame sizes it.
 #[tauri::command]
 pub(crate) async fn session_set_window_size(
     state: State<'_, SharedState>,
@@ -135,6 +137,8 @@ pub(crate) async fn session_set_window_size(
     if let Ok(mut guard) = session.window_size.lock() {
         *guard = (cols, rows);
     }
+    #[cfg(any(native_surface, test))]
+    crate::native::grid::size_hidden(session.id, usize::from(cols), usize::from(rows));
     let current = session.slot.lock().await;
     if let Some(handle) = current.as_ref() {
         if !handle.set_window_size(cols, rows) {

@@ -1,13 +1,13 @@
-//! Find in the terminal. A search over every line the shared grid holds,
-//! with the matches the renderer marks and the one you stepped to.
-
-use std::sync::Mutex;
+//! Find in the terminal. A search over every line a session's grid
+//! holds, with the matches the renderer marks and the one you stepped
+//! to.
 
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Line};
 use regex::RegexBuilder;
 
-use super::{grid_slot, TermGrid};
+use super::{with_session, TermGrid};
+use crate::sessions::SessionId;
 
 /// A grid's find. The matches run in reading order, top of scrollback to
 /// bottom, and `active` indexes the one you stepped to. The query stays,
@@ -70,13 +70,6 @@ impl Find {
     }
 }
 
-// The find of the shared grid, taken after the grid's lock.
-static FIND: Mutex<Find> = Mutex::new(Find {
-    matches: Vec::new(),
-    active: 0,
-    query: String::new(),
-});
-
 fn build_find_regex(
     query: &str,
     is_regex: bool,
@@ -131,34 +124,26 @@ pub(super) fn collect_matches(
     matches
 }
 
-/// All matches plus the active match, for the renderer's highlight pass.
-pub(crate) fn find_snapshot() -> (Vec<FindMatch>, Option<FindMatch>) {
-    FIND.lock()
-        .map_or_else(|_| (Vec::new(), None), |find| find.snapshot())
-}
-
-/// Search the shared grid and step to the next (or previous) match, see
-/// [`Find::run`]. (0, 0) before the grid exists.
+/// Search the grid of `session` and step to the next (or previous)
+/// match, see [`Find::run`]. (0, 0) before the grid exists.
 pub(crate) fn find_run(
+    session: SessionId,
     query: &str,
     is_regex: bool,
     case_sensitive: bool,
     whole_word: bool,
     forward: bool,
 ) -> (usize, usize) {
-    let Ok(mut slot) = grid_slot().lock() else {
-        return (0, 0);
-    };
-    let Ok(mut find) = FIND.lock() else {
-        return (0, 0);
-    };
-    match slot.as_mut() {
-        Some(grid) => find.run(grid, query, is_regex, case_sensitive, whole_word, forward),
+    with_session(session, |held| match held.term.as_mut() {
+        Some(grid) => held
+            .find
+            .run(grid, query, is_regex, case_sensitive, whole_word, forward),
         None => {
-            find.clear();
+            held.find.clear();
             (0, 0)
         }
-    }
+    })
+    .unwrap_or((0, 0))
 }
 
 /// Scroll the display so `line` sits near the middle of the screen.
@@ -174,9 +159,7 @@ fn scroll_to_grid_line(grid: &mut TermGrid, line: i32) {
     }
 }
 
-/// Clear the find state (matches, active, query).
-pub(crate) fn find_clear() {
-    if let Ok(mut find) = FIND.lock() {
-        find.clear();
-    }
+/// Clear the find of `session` (matches, active, query).
+pub(crate) fn find_clear(session: SessionId) {
+    with_session(session, |held| held.find.clear());
 }
