@@ -35,6 +35,7 @@ import {
   sendInput,
   sendMaskedInput,
   setAffectsDisplay,
+  stopWalk,
   setUiConfig,
   terminalLocalWrite,
   TERMINAL_LINE_HEIGHTS,
@@ -1008,6 +1009,13 @@ describe('sending a line', () => {
     vi.mocked(invoke).mockClear();
     await sendInput('look');
     expect(vi.mocked(invoke)).toHaveBeenCalledWith('session_send_input', { line: 'look' });
+  });
+
+  it('stops a walk on Esc with a call of its own, which sends the game nothing', async () => {
+    vi.mocked(invoke).mockClear();
+    await stopWalk();
+    expect(vi.mocked(invoke)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith('session_walk_stop');
   });
 });
 

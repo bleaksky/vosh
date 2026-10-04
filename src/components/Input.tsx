@@ -18,6 +18,7 @@ import {
   onTarget,
   sendInput,
   sendMaskedInput,
+  stopWalk,
   subscribeMacroGroupsChanged,
   subscribeMacrosChanged,
   type GroupState,
@@ -879,6 +880,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         setPasteBurst(null);
         return;
       }
+      void stopWalk().catch(() => {});
       onExitSplit?.();
       if (nativeSurfaceEnabled()) {
         void invoke('native_surface_scroll', { kind: 'bottom' }).catch(() => {});
