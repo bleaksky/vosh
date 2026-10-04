@@ -1150,21 +1150,32 @@ fn a_your_target_trigger_saves_where_0_8_0_still_reads_the_file() {
     );
 }
 
+/// A pattern row as 0.8.1 and older read and save it. They know no
+/// `mode` or `text`, and they read `pattern` as a regex.
+#[derive(serde::Deserialize, serde::Serialize)]
+struct OldRow {
+    pattern: String,
+    enabled: bool,
+}
+
+/// A trigger as those builds read its rows, with its actions kept as
+/// they are so it saves again.
+#[derive(serde::Deserialize, serde::Serialize)]
+struct OldRows {
+    name: String,
+    patterns: Vec<OldRow>,
+    actions: toml::Value,
+}
+
+/// The triggers of a profile file or catalog.toml, as those builds read
+/// their rows.
+#[derive(serde::Deserialize, serde::Serialize)]
+struct OldRowsFile {
+    triggers: Vec<OldRows>,
+}
+
 #[test]
-fn match_modes_round_trip_through_toml_and_0_8_0_reads_every_row() {
-    /// A pattern row as 0.8.0 and 0.7.2 read it, which skips `mode`.
-    #[derive(serde::Deserialize)]
-    struct OldRow {
-        pattern: String,
-    }
-    #[derive(serde::Deserialize)]
-    struct OldRows {
-        patterns: Vec<OldRow>,
-    }
-    #[derive(serde::Deserialize)]
-    struct OldFile {
-        triggers: Vec<OldRows>,
-    }
+fn match_modes_round_trip_through_toml_and_0_8_1_reads_every_row() {
     let row = |pattern: &str, mode| TriggerPattern {
         mode,
         ..TriggerPattern::regex(pattern)
@@ -1187,8 +1198,11 @@ fn match_modes_round_trip_through_toml_and_0_8_0_reads_every_row() {
         assert!(text.contains("mode = \"text\""), "{text}");
         assert!(text.contains("mode = \"starts_with\""), "{text}");
         assert_eq!(text.matches("\nmode = ").count(), 2, "{text}");
-        // An older build reads each row's text, and reads it as a regex.
-        let old: OldFile = toml::from_str(text).unwrap();
+        assert!(text.contains("text = \"You are thirsty.\""), "{text}");
+        assert!(text.contains("text = \"You are hungry\""), "{text}");
+        assert_eq!(text.matches("\ntext = ").count(), 2, "{text}");
+        // An older build reads the regex each row compiles to.
+        let old: OldRowsFile = toml::from_str(text).unwrap();
         let rows: Vec<&str> = old.triggers[0]
             .patterns
             .iter()
@@ -1196,7 +1210,11 @@ fn match_modes_round_trip_through_toml_and_0_8_0_reads_every_row() {
             .collect();
         assert_eq!(
             rows,
-            ["You are thirsty.", "You are hungry", r"^You are hungry\.$"]
+            [
+                r"^\s*You are thirsty\.\s*$",
+                r"^\s*You are hungry.*",
+                r"^You are hungry\.$"
+            ]
         );
     }
     let loaded = ProfileConfig::from_toml(&texts[0]).unwrap();
