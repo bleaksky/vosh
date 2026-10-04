@@ -33,9 +33,10 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::aabahran::Who;
 
-/// Vosh's default, the design Vosh draws for a profile that has none of
-/// its own. It mirrors the pinned band of the gallery mockup, with the
-/// tank in place of your opponent, as James asked on 2026-09-30.
+/// Vosh's default, the design `#prompt default` and the Vosh's default
+/// start put in place. A profile with no design of its own follows the
+/// game instead. It mirrors the pinned band of the gallery mockup, with
+/// the tank in place of your opponent, as James asked on 2026-09-30.
 ///
 /// Out of a fight it draws one row: your health, mana and moves as
 /// current over max, or current alone when nothing gives the max, then
