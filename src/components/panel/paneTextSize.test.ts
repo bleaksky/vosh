@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import panelCss from '../../styles/panel.css?raw';
 import frameCss from '../../styles/frame.css?raw';
 import tokensCss from '../../styles/tokens.css?raw';
+import { TEXT_SIZES } from '../../lib/appearanceSettings';
 import { liveChipMeasure } from './chipMeasure';
+import { MIN_PANE_W } from './paneGeometry';
 import { PANE_TEXT_BASE, PANE_TEXT_PX, paneText, paneTextSize, textPx } from './paneTextSize';
 
 // Every pane and the status line draw at your panel size, and every
@@ -52,16 +54,22 @@ function resolve(value: string, size: number): string {
   return out;
 }
 
-/** One length, computed in px the way CSS does: calc arithmetic, and
- *  round() to the nearest step with a tie going up. */
-function lengthPx(term: string, size: number): number {
-  const expr = resolve(term, size)
+/** One length, computed in px the way CSS does: calc arithmetic,
+ *  round() to the nearest step with a tie going up, and clamp(). A
+ *  percent is of `percentOf` px, the box the length sits in. */
+function lengthPx(term: string, size: number, percentOf?: number): number {
+  const resolved = resolve(term, size);
+  if (resolved.includes('%')) expect(percentOf, `${term} needs its box`).toBeDefined();
+  const expr = resolved
+    .replace(/(\d+(?:\.\d+)?)%/g, (_, n: string) => `(${n} * ${percentOf ?? 0} / 100)`)
     .replace(/px/g, '')
     .replace(/calc\(/g, '(')
+    .replace(/clamp\(/g, 'C(')
     .replace(/round\(/g, 'R(');
-  expect(expr, term).toMatch(/^[\d\s.+\-*/(),R]+$/);
+  expect(expr, term).toMatch(/^[\d\s.+\-*/(),RC]+$/);
   const round = (x: number, step: number) => Math.round(x / step) * step;
-  return new Function('R', `return ${expr};`)(round) as number;
+  const clamp = (lo: number, x: number, hi: number) => Math.max(lo, Math.min(x, hi));
+  return new Function('R', 'C', `return ${expr};`)(round, clamp) as number;
 }
 
 /** A value as the webview computes it at panel size `size` px: each
@@ -273,7 +281,11 @@ describe('the panel in panel.css', () => {
         (m) => `${r.selector} ${m[1]}`,
       ),
     );
-    expect(reading.sort()).toEqual(SCALED.map(([s, p]) => `${s} ${p}`).sort());
+    // The Group meter reads your size and the pane's width, and a Group
+    // row below holds it.
+    expect(reading.sort()).toEqual(
+      [...SCALED.map(([s, p]) => `${s} ${p}`), '.pane-member-meter width'].sort(),
+    );
   });
 
   it('draws every length at 12 px exactly as before', () => {
@@ -291,7 +303,7 @@ describe('the panel in panel.css', () => {
   it('keeps the marks, the meters, and the side insets at their px', () => {
     expect(declarations('.pane-affect-mark').get('width')).toBe('8px');
     expect(declarations('.pane-marker').get('width')).toBe('8px');
-    expect(declarations('.pane-member-meter').get('width')).toBe('48px');
+    expect(declarations('.pane-member-meter').get('width')).toMatch(/^clamp\(0px, .*, 48px\)$/);
     expect(declarations('.pane-member-meter').get('height')).toBe('3px');
     expect(declarations('.pane-more').get('height')).toBe('20px');
     expect(declarations('.pane-chips-line').get('left')).toBe('18px');
@@ -302,6 +314,48 @@ describe('the panel in panel.css', () => {
     const msg = declarations('.pane-chat-msg');
     expect(msg.get('padding')).toBe('0 0 0 2ch');
     expect(msg.get('text-indent')).toBe('-2ch');
+  });
+});
+
+describe('a Group row in panel.css', () => {
+  /** Where a member's meter and percent sit in a `pane` px wide Group
+   *  pane at panel size `size` px, as the webview lays the row out. The
+   *  name takes what the row has spare and gives way first, so in a
+   *  narrow pane the percent ends where the insets, the gaps, the meter
+   *  and the percent add up to. */
+  function memberRow(pane: number, size: number) {
+    const [, right, , left] = (declarations('.pane-row').get('padding') ?? '')
+      .split(' ')
+      .map((v) => parseFloat(v));
+    const meter = declarations('.pane-member-meter');
+    const pct = declarations('.pane-member-pct');
+    const meterW = lengthPx(meter.get('width') ?? '', size, pane - left - right);
+    const pctW = lengthPx(pct.get('width') ?? '', size);
+    const gaps =
+      parseFloat(meter.get('margin-left') ?? '') + parseFloat(pct.get('margin-left') ?? '');
+    return { meter: meterW, end: Math.max(pane - right, left + gaps + meterW + pctW) };
+  }
+
+  it('keeps the meter at 48 px at 12 px in every Group pane from the narrowest up', () => {
+    for (let pane = MIN_PANE_W; pane <= 600; pane += 1) {
+      expect(memberRow(pane, 12).meter, `${pane} px`).toBe(48);
+    }
+    // The percent runs 10 px into the inset on the right, as before.
+    expect(memberRow(MIN_PANE_W, 12).end).toBe(118);
+    expect(memberRow(300, 12).end).toBe(288);
+  });
+
+  it('lets the meter give way so the percent stays in the narrowest pane at every size', () => {
+    for (const size of TEXT_SIZES) {
+      const row = memberRow(MIN_PANE_W, size);
+      expect(row.end, `${size} px`).toBeLessThanOrEqual(MIN_PANE_W - 2);
+      expect(row.meter, `${size} px`).toBeGreaterThan(0);
+      expect(memberRow(300, size).meter, `${size} px at 300 px`).toBe(48);
+    }
+    // At 16 px the percent is 48 px wide, and the meter gives up 12.
+    expect(memberRow(MIN_PANE_W, 16)).toEqual({ meter: 36, end: 118 });
+    expect(memberRow(130, 16)).toEqual({ meter: 46, end: 128 });
+    expect(memberRow(132, 16)).toEqual({ meter: 48, end: 130 });
   });
 });
 
