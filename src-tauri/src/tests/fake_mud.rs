@@ -2198,8 +2198,9 @@ async fn lua_a_new_gmcp_handler_hears_the_last_packet_at_once() {
 
 // A profile switch turns on the plugins the next profile turns on and
 // turns off the ones it does not, while you play. A plugin both turn on
-// keeps running, and one that turns on hears the last Char.Status at
-// once. The guard keeps other tests off the shared native grid.
+// keeps running, and one that turns on sends to the game and hears the
+// last Char.Status at once. The guard keeps other tests off the shared
+// native grid.
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn lua_a_profile_switch_turns_its_plugins_on_and_the_others_off() {
@@ -2215,6 +2216,7 @@ async fn lua_a_profile_switch_turns_its_plugins_on_and_the_others_off() {
         (
             "healer_only",
             "mud.alias('hl', 'cast heal')\n\
+             mud.send('afk')\n\
              mud.on_gmcp('Char.Status', function(d) mud.echo('healer_only sees ' .. d.name) end)",
         ),
     ] {
@@ -2241,6 +2243,8 @@ async fn lua_a_profile_switch_turns_its_plugins_on_and_the_others_off() {
         .await
         .expect("the switch");
     h.until_shown("healer_only sees Tester").await;
+    // What it sends as it loads reaches the game.
+    h.until_shown("You are now in AFK mode.").await;
     let shown = |h: &Harness, text: &str| h.screen().iter().filter(|r| r.contains(text)).count();
     assert_eq!(shown(&h, "everywhere loaded"), 1, "it kept running");
     {
