@@ -127,12 +127,14 @@ async fn play(session: Arc<Vec<u8>>) -> Run {
         .lock()
         .await
         .set_prompt_config(vosh_prompt::PromptConfig {
-            draw: true,
             capture: vosh_prompt::CaptureConfig::Aabahran(vosh_prompt::config::AabahranCapture {
                 prompt: PROMPT.into(),
                 ..vosh_prompt::config::AabahranCapture::default()
             }),
-            ..vosh_prompt::PromptConfig::fresh()
+            // Vosh's default as your choice. A design that follows the
+            // game draws the row the game sends, which `drawn` cannot
+            // tell from the game's own prompt.
+            ..vosh_prompt::PromptConfig::from_legacy(true, vosh_prompt::DEFAULT_DESIGN)
         });
 
     let app = mock_builder()
