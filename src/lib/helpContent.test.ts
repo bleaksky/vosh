@@ -827,6 +827,16 @@ describe('the help on Lua', () => {
     );
   });
 
+  it('says what the budget for one line, packet or round of timers does', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain(
+      'Each plugin and each script from `#script load` also gets 100 ms in all for one game line, one packet, or the timers that fall due together.',
+    );
+    expect(text).toContain(
+      'Once it has used them, Vosh skips the rest of its triggers and handlers for that line or packet, holds the rest of its timers a quarter second, and says so in a red `[lua]` line.',
+    );
+  });
+
   it('says what the sandbox takes away', () => {
     const text = body('automate.lua-scripts');
     expect(text).toContain(
