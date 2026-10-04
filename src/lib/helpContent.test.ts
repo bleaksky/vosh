@@ -436,11 +436,12 @@ describe('the help on where your prompt shows', () => {
   it('names the button in Customize prompt that picks the same places', () => {
     const text = topic().body;
     expect(text).toContain(
-      'In Customize prompt, the button beside `Draw your prompt` at its foot names where your prompt shows now. Click it and pick another place, and the card follows your prompt there.',
+      'At the foot of Customize prompt, the button beside `Draw your prompt` names where your prompt shows now. Click it and pick another place, and Customize prompt moves with your prompt.',
     );
-    expect(text).toContain(
-      'Until it does, the row and the button in Customize prompt stay off and say what to do first,',
-    );
+    expect(text).not.toContain('the card');
+    // Customize prompt asks for your prompt before its foot shows, so
+    // only the row says what to do first.
+    expect(text).toContain('Until it does, the row stays off and says what to do first,');
   });
 
   it('says where xterm shows a lifted prompt plain', () => {

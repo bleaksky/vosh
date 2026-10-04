@@ -473,11 +473,11 @@ Once Vosh reads your prompt, you choose where it shows. Open Settings, choose In
 - `Lifted` keeps every prompt in the text on a raised band in the selected row color of your theme, scrollback included. A prompt that ends on a character gains one space after its band, so your echo never touches it.
 - `Pinned` takes your prompts out of the text and shows your latest one on a band above the command line. The band is only as tall as your prompt. When a fight adds a row, the text above gives up its top line to make room and gets it back when the fight ends, so one blank line always sits between your newest line and the band, as the game leaves one before each prompt. Every prompt still reaches the session log and your Prompts triggers. While your prompt is pinned, the panel hides its vitals and gives their room to the panes, all but your opponent's row in a fight. Turn off `Hide vitals while your prompt is pinned` under Layout, then Vitals, to keep them.
 
-In Customize prompt, the button beside `Draw your prompt` at its foot names where your prompt shows now. Click it and pick another place, and the card follows your prompt there.
+At the foot of Customize prompt, the button beside `Draw your prompt` names where your prompt shows now. Click it and pick another place, and Customize prompt moves with your prompt.
 
 From the command line, `#prompt show lifted` picks the same place, and `text` or `pinned` in its place picks the others. `#prompt` alone also says where your prompt shows.
 
-The choice needs Vosh to read your prompt. Until it does, the row and the button in Customize prompt stay off and say what to do first, and `#prompt show` tells you to type `#prompt game` with your prompt setting in braces. While you have prompts off in the game, the pinned band says so and shows nothing else.
+The choice needs Vosh to read your prompt. Until it does, the row stays off and says what to do first, and `#prompt show` tells you to type `#prompt game` with your prompt setting in braces. While you have prompts off in the game, the pinned band says so and shows nothing else.
 
 With the xterm renderer, the newest 1000 prompts keep their bands and older ones show plain. The split history pane shows them plain too. The native renderer keeps a band on every prompt in the scrollback.
 
