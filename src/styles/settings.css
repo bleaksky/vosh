@@ -1998,9 +1998,8 @@
    the filter, the rest 8 below the divider block. Each heading is a
    24 high button that folds its group: the 12 px chevron sits before
    the name and turns down while the group is open, and a folded group
-   counts its items at the rows' right edge, where their dots sit. The
-   heading row keeps the room after the button for the group's on and
-   off switch. */
+   counts its items at its right edge. The group's on and off switch
+   sits after the button, its right edge on the rows' dots. */
 .st-auto-headrow {
   display: flex;
   align-items: center;
@@ -2077,6 +2076,20 @@
   padding-left: 8px;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
+}
+
+.st-auto-groupswitch {
+  margin: 0 11px 0 4px;
+}
+
+/* Why a group's switch waits: the loadouts decide it. 12/400 tertiary,
+   under the heading's name and above its rows. */
+.st-auto-groupnote {
+  margin: 0;
+  padding: 0 11px 6px 18px;
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .st-auto-divider {

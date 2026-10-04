@@ -177,3 +177,77 @@ describe('collapsible groups in the Automation list', () => {
     );
   });
 });
+
+describe('the switch on a group heading', () => {
+  const sections = buildSections([
+    entry('a', 'Echo my deaths', true),
+    entry('b1', 'Flee below 20 percent', true, 'combat'),
+    entry('c1', 'Sleep when mana is low', true, 'idle'),
+    { ...entry('p1', 'room.target', true), preset: true },
+  ]);
+  const turned: [string, boolean][] = [];
+  const switches = {
+    byName: new Map([
+      ['combat', { name: 'combat', enabled: true }],
+      ['idle', { name: 'idle', enabled: false, loadouts: { on: false, by: ['Healer'] } }],
+      ['loot', { name: 'loot', enabled: true }],
+    ]),
+    turn: (group: string, enabled: boolean) => void turned.push([group, enabled]),
+  };
+  /** The switch input after the heading of `group`. */
+  const switchOf = (html: string, group: string) =>
+    new RegExp(`<input[^>]*data-group-switch="${group}"[^>]*>`).exec(html)?.[0] ?? null;
+
+  it('sits after each group heading the store knows, and never on the rest', () => {
+    const html = renderList({ sections, groupSwitches: switches });
+    expect(switchOf(html, 'combat')).toMatch(/role="switch"/);
+    expect(switchOf(html, 'combat')).toMatch(/aria-label="combat group"/);
+    expect(switchOf(html, 'combat')).toMatch(/checked=""/);
+    expect(switchOf(html, 'idle')).not.toMatch(/checked=""/);
+    // The switch follows the heading's h2, inside the heading row.
+    expect(html).toMatch(
+      /<h2 class="st-auto-heading">(?:(?!<\/h2>).)*<\/h2><span class="st-toggle st-auto-groupswitch"><input[^>]*data-group-switch="combat"/,
+    );
+    // No switch for the ungrouped items, the presets, or a list with none.
+    expect(html.match(/data-group-switch=/g)).toHaveLength(2);
+    expect(renderList({ sections })).not.toContain('data-group-switch');
+  });
+
+  it('waits while the loadouts decide the group, and says which', () => {
+    const html = renderList({ sections, groupSwitches: switches });
+    const idle = switchOf(html, 'idle') ?? '';
+    expect(idle).toMatch(/disabled=""/);
+    const note = /aria-describedby="([^"]+)"/.exec(idle)?.[1];
+    expect(note).toBeTruthy();
+    expect(html).toContain(
+      `<p id="${note}" class="st-auto-groupnote">The Healer loadout leaves this group off.</p>`,
+    );
+    // The heading carries the same note, since a switch that waits takes
+    // no focus.
+    const heading = /<button[^>]*data-fold="g:idle"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(heading).toContain(`aria-describedby="${note}"`);
+    expect(switchOf(html, 'combat')).not.toMatch(/disabled|aria-describedby/);
+  });
+
+  it('takes Tab only from its heading, so the list keeps one stop from outside', () => {
+    const tabbable = (html: string) =>
+      [...html.matchAll(/<(?:button|input)[^>]*tabindex="0"[^>]*>/g)].map(
+        (m) => /data-(?:uid|fold|group-switch)="([^"]+)"/.exec(m[0])?.[1],
+      );
+    expect(tabbable(renderList({ sections, groupSwitches: switches, selected: 'b1' }))).toEqual([
+      'b1',
+    ]);
+    // With the selection in a folded group its heading holds the stop, and
+    // its switch follows it.
+    expect(
+      tabbable(
+        renderList({
+          sections,
+          groupSwitches: switches,
+          selected: 'b1',
+          folded: new Set(['g:combat']),
+        }),
+      ),
+    ).toEqual(['g:combat', 'combat']);
+  });
+});
