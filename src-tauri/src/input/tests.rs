@@ -1124,6 +1124,31 @@ fn a_loose_script_runs_as_its_file_and_stops_until_a_reload() {
 }
 
 #[test]
+fn a_script_loads_as_one_whatever_case_you_type() {
+    let (_dir, state, scripts) = state_with_scripts();
+    std::fs::write(
+        scripts.join("Combat.lua"),
+        "mud.trigger('hunger', 'You are hungry', function() mud.echo('eat') end)",
+    )
+    .unwrap();
+    // Only a disk that ignores case opens the file for another case.
+    if !scripts.join("combat.lua").exists() {
+        return;
+    }
+    let mut p = Profile::default();
+    run_line(&state, &mut p, "#script load Combat");
+    let ran = run_line(&state, &mut p, "#script load combat");
+    assert_eq!(
+        ran.result.echo,
+        [format!("loaded {}", scripts.join("Combat.lua").display())]
+    );
+    assert_eq!(p.script.loaded_script_names(), ["Combat.lua"]);
+    let fired = p.script.match_line("You are hungry.");
+    let apply = crate::script::apply_actions(&mut p, fired);
+    assert_eq!(apply.echoes, ["eat"]);
+}
+
+#[test]
 fn script_load_stays_inside_the_scripts_folder() {
     let dir = tempfile::tempdir().unwrap();
     let state = AppState::default();
