@@ -69,9 +69,9 @@ pub(crate) fn run_alias_body(
     if profile.aliases.is_stopped(&call.source) {
         return ApplyResult::default();
     }
-    refresh_vars(&profile.script, &profile.vars);
+    refresh_vars(&c.script, &profile.vars);
     let owner = Owner::Alias(call.source.clone());
-    let outcome = profile.script.run_body(&owner, &call.body, &call.captures);
+    let outcome = c.script.run_body(&owner, &call.body, &call.captures);
     apply_actions(profile, c, outcome)
 }
 

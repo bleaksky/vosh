@@ -15,15 +15,25 @@ use crate::sessions::SessionId;
 
 /// Open a session after the others, with nothing connected, and return
 /// its id. It plays the live profile, so its connection takes the
-/// profile's tick settings and `[prompt]` table, as the first session's
-/// does at launch.
+/// profile's tick settings and `[prompt]` table, and its Lua engine loads
+/// the plugins the profile turns on, as the first session's does at
+/// launch.
 #[tauri::command]
-pub(crate) async fn session_open(state: State<'_, SharedState>) -> Result<SessionId, String> {
+pub(crate) async fn session_open<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+) -> Result<SessionId, String> {
     let session = state.open_session();
-    let mut p = state.profile.lock().await;
-    let tick_before = p.tick.config.clone();
-    let mut c = session.connection.lock();
-    crate::profile::switch::hand_to_connection(&mut p, &mut c, &tick_before);
+    {
+        let mut p = state.profile.lock().await;
+        let tick_before = p.tick.config.clone();
+        let mut c = session.connection.lock();
+        crate::profile::switch::hand_to_connection(&mut p, &mut c, &tick_before);
+    }
+    if let Some(app_data) = state.app_data.get() {
+        let plugins_dir = crate::disk::paths::plugins_dir(app_data);
+        crate::app::plugins::load_enabled_plugins(&app, state.inner(), &session, plugins_dir).await;
+    }
     Ok(session.id)
 }
 
@@ -215,7 +225,7 @@ mod tests {
             p.prompt.template = "<%hp>".into();
         }
 
-        let id = super::session_open(app.state::<SharedState>())
+        let id = super::session_open(app.handle().clone(), app.state::<SharedState>())
             .await
             .unwrap();
         let session = state.session(Some(id)).unwrap();

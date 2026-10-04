@@ -1,6 +1,8 @@
 //! Two sessions on the one profile, each against a fake game of its own,
 //! through the harness of the fake MUD tests. Each test holds a rule
-//! that keeps one session's connection apart from the other's.
+//! that keeps one session's connection or Lua engine apart from the
+//! other's, or that lets what one session changes on the profile reach
+//! the other.
 //!
 //! Every session output also feeds the shared native grid, so each test
 //! holds its guard to keep the others off it. No task of a session takes
@@ -27,7 +29,40 @@ fn shows(h: &Harness, session: SessionId, text: &str) -> bool {
 /// The harness with a second session, the first session logged in to the
 /// first game and the second to the second.
 async fn two_sessions_on_two_games() -> (Harness, SessionId, SessionId) {
+    log_in_two_sessions(Harness::new(Options::new(Build::New)).await).await
+}
+
+/// A plugin that answers the end of `spam 2` with `afk`.
+const HELPER: &str =
+    "mud.trigger('afk', 'Line 2 of 2 of the spam', function() mud.send('afk') end)";
+
+/// [`two_sessions_on_two_games`] with the plugin [`HELPER`] on in the
+/// profile both play. The first session loads it at launch and the second
+/// as it opens, each into its own engine.
+async fn two_sessions_with_a_plugin() -> (Harness, SessionId, SessionId) {
     let h = Harness::new(Options::new(Build::New)).await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    let plugins = crate::disk::paths::plugins_dir(h.dir.path());
+    let helper = plugins.join("helper");
+    std::fs::create_dir_all(&helper).expect("the plugin folder");
+    std::fs::write(
+        helper.join("manifest.toml"),
+        "[plugin]\nname = \"helper\"\n",
+    )
+    .expect("the manifest");
+    std::fs::write(helper.join("main.lua"), HELPER).expect("the entry script");
+    h.state.profile.lock().await.plugins.enabled = vec!["helper".into()];
+    let first = h.state.selected_session();
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, &first, plugins).await;
+    log_in_two_sessions(h).await
+}
+
+/// Open a second session in `h`, and log the first session in to the
+/// first game and the second to the second.
+async fn log_in_two_sessions(h: Harness) -> (Harness, SessionId, SessionId) {
     let (one, two) = (h.first, h.open_session().await);
     h.connect_to(one, &h.servers[0]).await;
     h.connect_to(two, &h.servers[1]).await;
@@ -174,5 +209,119 @@ async fn a_disconnect_in_one_session_leaves_the_other_connected_with_its_target(
     })
     .await;
     assert!(sent(&h.servers[0]).contains("spam 2"));
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_plugin_trigger_sends_only_to_the_game_of_the_line_it_matched() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_with_a_plugin().await;
+    for id in [one, two] {
+        let session = h.state.session(Some(id)).expect("the session");
+        assert_eq!(
+            session.connection.lock().script.loaded_plugins(),
+            ["helper"]
+        );
+    }
+    h.type_in(one, "spam 2").await;
+    h.until("the first game to go afk", |h| {
+        shows(h, one, "You are now in AFK mode.")
+    })
+    .await;
+    h.type_in(two, "spam 1").await;
+    h.until("the second game to answer", |h| {
+        shows(h, two, "Line 1 of 1 of the spam.")
+    })
+    .await;
+
+    assert!(sent(&h.servers[0]).contains("afk"));
+    let second = sent(&h.servers[1]);
+    assert!(!second.contains("afk"), "{second:?}");
+    assert!(!shows(&h, two, "AFK"));
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_lua_timer_fires_only_in_the_session_that_set_it() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_with_a_plugin().await;
+    h.type_in(
+        one,
+        "#lua mud.timer(0.1, function() mud.echo('The timer rang.') end)",
+    )
+    .await;
+    h.until("the timer in the first session", |h| {
+        shows(h, one, "The timer rang.")
+    })
+    .await;
+    // Two more polls of the second session find nothing due.
+    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+
+    assert!(!shows(&h, two, "The timer rang."));
+    let second = h.state.session(Some(two)).expect("the second session");
+    let leftover = second.lua_timers.lock().await.len();
+    assert_eq!(leftover, 0);
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_lua_global_stays_in_the_session_that_set_it() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_with_a_plugin().await;
+    h.type_in(one, "#lua x = 1").await;
+    h.type_in(one, "#lua mud.echo('The first has ' .. tostring(x) .. '.')")
+        .await;
+    h.type_in(
+        two,
+        "#lua mud.echo('The second has ' .. tostring(x) .. '.')",
+    )
+    .await;
+    h.until("both answers", |h| {
+        shows(h, one, "The first has 1.") && shows(h, two, "The second has nil.")
+    })
+    .await;
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_alias_lua_makes_in_one_session_expands_in_the_other_and_saves_once() {
+    use std::sync::atomic::Ordering;
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_with_a_plugin().await;
+    let marks = || h.state.profile_dirty_gen.load(Ordering::Acquire);
+    let before = marks();
+    h.type_in(one, "#lua mud.alias('ww', 'spam 3')").await;
+    let after = marks();
+    assert!(after > before, "the line marks the profile to save");
+
+    h.type_in(two, "ww").await;
+    h.until("the second game to answer the alias", |h| {
+        shows(h, two, "Line 3 of 3 of the spam.")
+    })
+    .await;
+    assert!(sent(&h.servers[1]).contains("spam 3"));
+    // The second session marks nothing, so the one save the line started
+    // writes the alias once to the file of the profile both play.
+    assert_eq!(marks(), after);
+    let file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    let saved = |file: &std::path::Path| {
+        crate::profile::file::ProfileConfig::load(file).map_or(0, |config| {
+            config.aliases.iter().filter(|a| a.name == "ww").count()
+        })
+    };
+    h.until("the save", |_| saved(&file) > 0).await;
+    assert_eq!(saved(&file), 1);
+
+    h.disconnect_session(two).await;
     h.finish(grid).await;
 }

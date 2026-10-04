@@ -90,7 +90,7 @@ fn a_trigger_body_reads_the_whole_match_then_each_group() {
         .expect("the trigger compiles");
     let result = vosh_automation::trigger::process(&p.triggers, b"Bob says hi");
     assert_eq!(
-        super::run_trigger_scripts(&mut p, &result).actions,
+        super::run_trigger_scripts(&mut p, &mut Connection::default(), &result).actions,
         [vosh_script::Action::Send("Bob says hi|Bob|hi".into())]
     );
 }
@@ -253,10 +253,11 @@ fn a_trigger_body_that_runs_away_turns_its_trigger_off() {
             },
         ))
         .expect("the trigger compiles");
+    let mut c = Connection::default();
     let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.");
-    let outcome = super::run_trigger_scripts(&mut p, &result);
+    let outcome = super::run_trigger_scripts(&mut p, &mut c, &result);
     assert!(p.triggers.is_stopped("hunger"));
-    let apply = crate::script::apply_actions(&mut p, &mut Connection::default(), outcome);
+    let apply = crate::script::apply_actions(&mut p, &mut c, outcome);
     // A stopped body sends nothing it queued.
     let leftover = &apply.send_bytes;
     assert!(leftover.is_empty(), "{leftover:?}");
@@ -284,9 +285,9 @@ fn a_function_a_trigger_body_left_behind_turns_its_trigger_off_too() {
             },
         ))
         .expect("the trigger compiles");
-    let result = vosh_automation::trigger::process(&p.triggers, b"The day has begun.");
-    let outcome = super::run_trigger_scripts(&mut p, &result);
     let mut c = Connection::default();
+    let result = vosh_automation::trigger::process(&p.triggers, b"The day has begun.");
+    let outcome = super::run_trigger_scripts(&mut p, &mut c, &result);
     crate::script::apply_actions(&mut p, &mut c, outcome);
     let msg = vosh_protocol::gmcp::Message {
         package: "World.Time".into(),

@@ -88,10 +88,11 @@ pub(crate) struct Session {
     /// the webview last said. A clock repaint of your prompt waits while
     /// it holds, so the row you select or read never moves.
     pub(crate) reader_busy: AtomicBool,
-    /// The terminal lines the plugins printed as they loaded at launch,
-    /// their `[lua]` errors and stops among them. Launch runs before any
-    /// window listens, so they wait for the first connect or the first
-    /// line you type, see [`crate::app::plugins::show_launch_lines`].
+    /// The terminal lines the plugins printed as they loaded into the
+    /// session's engine, at launch or as the session opened, their
+    /// `[lua]` errors and stops among them. No terminal shows the session
+    /// yet, so they wait for the first connect or the first line you
+    /// type, see [`crate::app::plugins::show_launch_lines`].
     pub(crate) launch_lua_lines: std::sync::Mutex<Vec<String>>,
     /// How many outputs reached the session's terminal, repaints aside.
     /// The session loop notes it after each of its writes, and a count

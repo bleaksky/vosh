@@ -230,8 +230,8 @@ pub(super) fn gmcp_step(
         }
     }
     let tick_step = crate::tick::observe_world_time_for_tick(&p.tick, &mut c.tick, msg, now);
-    script::snapshot_vars(&p.script, &p.vars);
-    let outcome = p.script.dispatch_gmcp(&msg.package, &msg.data);
+    script::snapshot_vars(&c.script, &p.vars);
+    let outcome = c.script.dispatch_gmcp(&msg.package, &msg.data);
     let apply = script::apply_actions(p, c, outcome);
     (tick_step, apply)
 }
