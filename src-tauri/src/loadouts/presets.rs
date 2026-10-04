@@ -16,6 +16,26 @@ use crate::profile::set::ProfileSet;
 /// src/lib/automationRecords.ts, and a test here reads that line.
 pub(crate) const PRESETS_OFF: &str = "none";
 
+/// The presets an empty `ui.enabled_presets` list turns on, which are the
+/// eleven the library held when new presets began to ship off. The list
+/// is frozen. A preset added later starts off, and an empty list, the
+/// value every profile holds until you change a preset, keeps the meaning
+/// it had when it was saved. Mirrors `PRESETS_ON_BY_DEFAULT` in
+/// src/lib/presets.ts, and a test here reads that list.
+pub(crate) const PRESETS_ON_BY_DEFAULT: &[&str] = &[
+    "healing_basics",
+    "defensive_combat",
+    "disarm_buff_fade",
+    "terror_events",
+    "combat_outgoing",
+    "combat_incoming",
+    "loot_progression",
+    "potion_labels",
+    "herb_labels",
+    "sent_tells",
+    "room_and_time",
+];
+
 /// The enabled preset lists of the profile files, for a catalog that
 /// takes the list for the first time. See [`profile_preset_lists`].
 #[derive(Debug, Default)]
@@ -91,21 +111,27 @@ pub(crate) fn profile_preset_lists(set: &ProfileSet) -> ProfilePresetLists {
 }
 
 /// Every preset that is on in any of `lists`, in the `enabled_presets`
-/// shape. An empty list means the defaults, and every preset in the
-/// library is on by default (a test in this module checks
-/// src/lib/presets.ts), so the defaults hold every preset a list can
-/// name and the union is the defaults. A list that turned every preset
-/// off adds none.
+/// shape. An empty list means the defaults, [`PRESETS_ON_BY_DEFAULT`].
+/// When one list holds the defaults and the others name no preset past
+/// them, the union is the defaults and stays the empty list. A preset
+/// past them, one added after the list froze, joins the defaults in a
+/// list that names them all. A list that turned every preset off adds
+/// none.
 fn presets_on_in_any(lists: &[Vec<String>]) -> Vec<String> {
-    if lists.iter().any(Vec::is_empty) {
-        return Vec::new();
-    }
-    let on: BTreeSet<&str> = lists
+    let defaults = lists.iter().any(Vec::is_empty);
+    let mut on: BTreeSet<&str> = lists
         .iter()
         .flatten()
         .map(String::as_str)
         .filter(|id| *id != PRESETS_OFF)
         .collect();
+    if defaults {
+        on.retain(|id| !PRESETS_ON_BY_DEFAULT.contains(id));
+        if on.is_empty() {
+            return Vec::new();
+        }
+        on.extend(PRESETS_ON_BY_DEFAULT);
+    }
     if on.is_empty() {
         return vec![PRESETS_OFF.to_string()];
     }
@@ -388,13 +414,62 @@ mod tests {
     }
 
     #[test]
-    fn every_preset_in_the_library_is_on_by_default() {
-        // `presets_on_in_any` takes the defaults as holding every preset
-        // a profile list can name. A preset that is off by default needs
-        // its id listed there instead.
+    fn the_defaults_are_the_eleven_presets_an_empty_list_has_always_meant() {
+        assert_eq!(
+            PRESETS_ON_BY_DEFAULT,
+            [
+                "healing_basics",
+                "defensive_combat",
+                "disarm_buff_fade",
+                "terror_events",
+                "combat_outgoing",
+                "combat_incoming",
+                "loot_progression",
+                "potion_labels",
+                "herb_labels",
+                "sent_tells",
+                "room_and_time",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_defaults_are_the_list_the_page_holds() {
         let library = include_str!("../../../src/lib/presets.ts");
-        assert!(library.contains("defaultEnabled: true"));
-        assert!(!library.contains("defaultEnabled: false"));
+        let list = regex::Regex::new(
+            r"export const PRESETS_ON_BY_DEFAULT: readonly string\[\] = \[([^\]]*)\];",
+        )
+        .unwrap()
+        .captures(library)
+        .expect("presets.ts declares PRESETS_ON_BY_DEFAULT");
+        let ids: Vec<&str> = regex::Regex::new(r"'([^']*)'")
+            .unwrap()
+            .captures_iter(list.get(1).unwrap().as_str())
+            .map(|id| id.get(1).unwrap().as_str())
+            .collect();
+        assert_eq!(ids, PRESETS_ON_BY_DEFAULT);
+    }
+
+    #[test]
+    fn the_defaults_and_presets_past_them_join_in_one_list() {
+        // The defaults with a list that names only presets among them stay
+        // the defaults, as they always have.
+        let leftover = &presets_on_in_any(&[presets(&[]), presets(&["herb_labels", "sent_tells"])]);
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &presets_on_in_any(&[presets(&["none"]), presets(&[])]);
+        assert!(leftover.is_empty(), "{leftover:?}");
+        // A preset added after the list froze is off by default, so a
+        // character who turned it on keeps it beside the defaults.
+        let mut joined: Vec<String> = PRESETS_ON_BY_DEFAULT
+            .iter()
+            .chain(&["later_preset"])
+            .map(|id| (*id).to_string())
+            .collect();
+        joined.sort();
+        assert_eq!(
+            presets_on_in_any(&[presets(&[]), presets(&["later_preset", "herb_labels"])]),
+            joined
+        );
     }
 
     #[test]

@@ -16,7 +16,7 @@
 // recall) can be toggled independently from must-see ones (your own
 // buffs falling, your own recall).
 
-import type { HighlightStyle, TriggerRecord } from './session';
+import type { HighlightStyle, TriggerRecord, TriggerTarget } from './session';
 import { colorize } from './colorTokens';
 
 export type PresetCategory =
@@ -34,9 +34,44 @@ export interface Preset {
   category: PresetCategory;
   name: string;
   description: string;
-  defaultEnabled: boolean;
+  /** The worlds Get started suggests the preset on, each by the name
+   *  KNOWN_WORLDS in useConnection.ts gives it. Empty when no world
+   *  suggests it. Get started and the Presets page read this one field.
+   *  The presets step lists the suggestions outside Chat, and the Chat
+   *  step lists the ones in it. */
+  suggest: readonly string[];
+  /** One to three lines the game prints that show what the preset does,
+   *  each in the game's own words, with the place in the game's source it
+   *  comes from beside it. A character or a number the game fills in comes
+   *  from the repo fixtures. presets.test.ts runs each line through the
+   *  preset's own triggers and checks the colors it paints. */
+  sample: readonly PresetSampleLine[];
   triggers: Omit<TriggerRecord, 'preset'>[];
 }
+
+/** A line of a preset's sample. */
+export interface PresetSampleLine {
+  /** The line, word for word as the game prints it, without the colors
+   *  the game sends. Where the line quotes what a character says, a page
+   *  that shows the sample draws the quoted words as a bar, as the
+   *  mockups draw speech, and never as text. */
+  text: string;
+  /** The name of the trigger of the preset the line shows. */
+  shows: string;
+  /** Where the line sits for a trigger that matches through a target.
+   *  room for a line a room look lists after its exits line, and
+   *  room_target for the line of the one you target among them. A plain
+   *  line leaves it out. */
+  target?: Extract<TriggerTarget, 'room' | 'room_target'>;
+}
+
+// The Forsaken Lands, as KNOWN_WORLDS in useConnection.ts names it. Get
+// started suggests six presets there. The presets step lists five, each
+// changing only how a line looks, and their samples show what most
+// characters meet early, a room, a fight, a cure and experience. The Chat
+// step lists Tells you send, which puts the tells you send in the chat
+// pane.
+const FORSAKEN_LANDS = 'The Forsaken Lands';
 
 // Category names as Settings, Automation shows them over the presets.
 export const PRESET_CATEGORIES: Record<PresetCategory, string> = {
@@ -238,7 +273,13 @@ export const PRESETS: Preset[] = [
     category: 'healing',
     name: 'Cures and heals',
     description: 'Turns cure and heal lines green so you spot them at a glance.',
-    defaultEnabled: true,
+    // The heal of cure critical (magic.c spell_cure_critical) and poison
+    // wearing off (the poison row of skill_table in const.c).
+    sample: [
+      { text: 'You feel a lot better!', shows: 'cure.feel_lot_better' },
+      { text: 'You feel less sick.', shows: 'cure.less_sick' },
+    ],
+    suggest: [FORSAKEN_LANDS],
     triggers: [
       highlight('cure.feel_lot_better', 'You feel a lot better!$', GREEN),
       highlight('cure.feel_better', 'You feel better\\.$', GREEN),
@@ -261,7 +302,15 @@ export const PRESETS: Preset[] = [
     category: 'defensive',
     name: 'Parries, dodges, and blocks',
     description: 'Dims routine parries, dodges, and blocks to the dark grey your TinTin++ uses.',
-    defaultEnabled: true,
+    // check_parry, check_dodge and check_shield_block in fight.c, against
+    // a villager, mob 5287 in area/fortblac.are, which fixtures/room-colors
+    // names by its short text.
+    sample: [
+      { text: "You parry a villager's attack.", shows: 'def.dodge_or_parry' },
+      { text: "You dodge a villager's attack.", shows: 'def.dodge_or_parry' },
+      { text: "You block a villager's attack with your shield.", shows: 'def.block_shield' },
+    ],
+    suggest: [],
     triggers: [
       // Generic "You dodge X." / "You parry X." — matches the bare
       // form in highlights.tin line 97. Lower priority so the more
@@ -339,7 +388,13 @@ export const PRESETS: Preset[] = [
     // From highlights.tin lines 105 to 134.
     name: 'Disarms and fading buffs',
     description: 'Marks a disarm and a buff that wears off.',
-    defaultEnabled: true,
+    // disarm in skills.c, here by Maren, and sanctuary wearing off (the
+    // sanctuary row of skill_table in const.c).
+    sample: [
+      { text: 'Maren disarms you and sends your weapon flying!', shows: 'disarm.primary' },
+      { text: 'The protective aura around your body fades.', shows: 'buff.protective_aura' },
+    ],
+    suggest: [],
     triggers: [
       // Visual recolor + auto-rearm send, demonstrating the
       // multi-action support. Mirrors the user's tintin #ACTION at
@@ -396,8 +451,10 @@ export const PRESETS: Preset[] = [
       ),
       replace(
         'buff.sanctuary',
-        '^The white aura around (.+) fades\\.$',
-        '{bold_red}##{reset} {fg:178}The white aura around $1 fades.{reset}',
+        // Sanctuary wearing off someone else (const.c, its msg_off2).
+        // Your own fade is buff.protective_aura.
+        '^The protective aura around (.+) fades\\.$',
+        '{bold_red}##{reset} {fg:178}The protective aura around $1 fades.{reset}',
       ),
       replace(
         'buff.spell_turning',
@@ -417,7 +474,14 @@ export const PRESETS: Preset[] = [
     // From highlights.tin line 124.
     name: 'Terror weapon drop',
     description: 'Turns the line bold red, then picks up your weapon and wields it.',
-    defaultEnabled: true,
+    // multi_hit in fight.c.
+    sample: [
+      {
+        text: 'Filled with terror, your weapon slips through your slippery fingers.',
+        shows: 'terror.drop',
+      },
+    ],
+    suggest: [],
     triggers: [
       {
         name: 'terror.drop',
@@ -448,7 +512,10 @@ export const PRESETS: Preset[] = [
     description:
       'Colors the damage verb amber in lines that start with Your, so your hits stand out ' +
       'and the rest of the line keeps its color.',
-    defaultEnabled: true,
+    // The top hit in dam_message in fight.c, on a villager, mob 5287 in
+    // area/fortblac.are.
+    sample: [{ text: 'You do UNSPEAKABLE things to a villager!', shows: 'combat.outgoing' }],
+    suggest: [FORSAKEN_LANDS],
     triggers: [
       // Mirrors the TinTin `You%1` form so both "Your kick LACERATES
       // X" and "You LACERATE X" / "You miss X" lines fire — the
@@ -482,7 +549,13 @@ export const PRESETS: Preset[] = [
     description:
       'Dims lines where something hits you to grey, with the damage verb in red and ' +
       'misses in pale cyan.',
-    defaultEnabled: true,
+    // A hit and a miss on you in dam_message in fight.c, from a villager,
+    // mob 5287 in area/fortblac.are, whose attack is a punch.
+    sample: [
+      { text: "A villager's punch grazes you.", shows: 'combat.incoming' },
+      { text: "A villager's punch misses you.", shows: 'combat.incoming_miss' },
+    ],
+    suggest: [FORSAKEN_LANDS],
     triggers: [
       replace(
         'combat.incoming',
@@ -508,7 +581,17 @@ export const PRESETS: Preset[] = [
     // From highlights.tin lines 170 to 174.
     name: 'Gold, experience, and levels',
     description: 'Marks the gold, experience, levels, and skills you gain.',
-    defaultEnabled: true,
+    // group_gain in fight.c, with the experience to the next level of
+    // fixtures/gmcp/aabahran group-info.gmcp, 1250, then gain_exp in
+    // update.c. Q5 of the first run review has the sample show experience
+    // and a skill, but the skill trigger misses every line check_improve
+    // prints (bug 16). The level line bug 14 fixed stands in for the
+    // skill, a gap against Q5 that still needs your sign off.
+    sample: [
+      { text: 'You receive 1250 experience points.', shows: 'loot.xp' },
+      { text: 'You raise a level!!', shows: 'loot.level' },
+    ],
+    suggest: [FORSAKEN_LANDS],
     triggers: [
       replace(
         'loot.gold',
@@ -517,8 +600,10 @@ export const PRESETS: Preset[] = [
       ),
       replace(
         'loot.skill_up',
-        '^You have become better at (.+)!$',
-        '{fg:120}You have become better at {fg:230}$1{fg:120}!{reset}',
+        // check_improve in skills.c adds the percent you reach, as in
+        // [78%]. A song gain (check_improve_song) prints none.
+        '^You have become better at (.+)!( \\[\\d+%\\])?$',
+        '{fg:120}You have become better at {fg:230}$1{fg:120}!$2{reset}',
       ),
       // The game prints the level and what you gain on two lines
       // (update.c gain_exp and advance_level), with hit point and
@@ -547,7 +632,13 @@ export const PRESETS: Preset[] = [
     // against the bubbly potions do_brew makes in skills5.c.
     name: 'Potion labels',
     description: 'Adds the spell a potion casts after its name.',
-    defaultEnabled: true,
+    // do_brew in skills5.c, which makes a pink potion of cure light from
+    // food, and do_quaff in act_obj.c.
+    sample: [
+      { text: 'You brew a bubbly pink potion from a large kettle!', shows: 'potion.pink' },
+      { text: 'You quaff a bubbly pink potion.', shows: 'potion.pink' },
+    ],
+    suggest: [],
     triggers: [
       replace('potion.blue', 'a bubbly blue potion', 'a bubbly blue potion {fg:248}(armor){reset}'),
       replace(
@@ -602,7 +693,10 @@ export const PRESETS: Preset[] = [
     // From highlights.tin lines 192 to 209.
     name: 'Herb labels',
     description: 'Adds the spell an herb casts after its name.',
-    defaultEnabled: true,
+    // do_smoke in act_obj.c with object 1147 in area/hamlet.are, whose
+    // smoke casts protection.
+    sample: [{ text: 'You light some rosemary and begin to smoke it.', shows: 'herb.rosemary' }],
+    suggest: [],
     triggers: [
       replace(
         'herb.purple_seaweed',
@@ -666,7 +760,13 @@ export const PRESETS: Preset[] = [
     category: 'chat',
     name: 'Tells you send',
     description: 'Puts each tell you send in the chat pane, beside the ones you get.',
-    defaultEnabled: true,
+    // compose_tell in languages.c, to Tolliver. The tell quotes a time of
+    // day line, as the says and tells in fixtures/room-colors do, so the
+    // sample holds no words a player wrote. Get started and the Looks like
+    // row still draw the quoted words as a bar, the span parseRoutedLine
+    // in chatStore.ts gives as its text.
+    sample: [{ text: "You tell Tolliver 'The day has begun.'", shows: 'chat.sent_tells' }],
+    suggest: [FORSAKEN_LANDS],
     triggers: [
       {
         name: 'chat.sent_tells',
@@ -707,7 +807,19 @@ export const PRESETS: Preset[] = [
       'Colors the exits green, what is in the room yellow, your target in the room bright ' +
       'red, the time of day blue, a change in the weather pale blue, and the WiZNET tag ' +
       'magenta.',
-    defaultEnabled: true,
+    // The first look in fixtures/room-colors/looks.json, the Bank of
+    // Aabahran. Its exits line, the villager it lists after them, and the
+    // time of day message that follows the look in the same pulse.
+    sample: [
+      { text: '[Exits: south]', shows: 'room.exits' },
+      {
+        text: 'A Blackwatch villager scurries about, taking care of business.',
+        shows: 'room.contents',
+        target: 'room',
+      },
+      { text: 'The day has begun.', shows: 'time.of_day' },
+    ],
+    suggest: [FORSAKEN_LANDS],
     triggers: [
       highlight('room.exits', EXITS_LINE, { fg: 'green', base: true }, 6),
       {
@@ -743,12 +855,34 @@ export const PRESETS: Preset[] = [
   },
 ];
 
+// The presets an empty enabled_presets list turns on, which are the
+// eleven the library held when new presets began to ship off. The list
+// is frozen. A preset added later starts off, and an empty list, the
+// value every profile holds until you change a preset, keeps the meaning
+// it had when it was saved. PRESETS_ON_BY_DEFAULT in
+// src-tauri/src/loadouts/presets.rs mirrors it, and a test there reads
+// this list.
+export const PRESETS_ON_BY_DEFAULT: readonly string[] = [
+  'healing_basics',
+  'defensive_combat',
+  'disarm_buff_fade',
+  'terror_events',
+  'combat_outgoing',
+  'combat_incoming',
+  'loot_progression',
+  'potion_labels',
+  'herb_labels',
+  'sent_tells',
+  'room_and_time',
+];
+
 export function presetTriggers(preset: Preset): TriggerRecord[] {
   return preset.triggers.map((t) => ({ ...t, preset: preset.id }));
 }
 
+/** The presets on by default, in library order. */
 export function defaultEnabledIds(): string[] {
-  return PRESETS.filter((p) => p.defaultEnabled).map((p) => p.id);
+  return PRESETS.filter((p) => PRESETS_ON_BY_DEFAULT.includes(p.id)).map((p) => p.id);
 }
 
 export function presetById(id: string): Preset | undefined {
