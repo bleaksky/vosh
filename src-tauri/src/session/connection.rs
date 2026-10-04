@@ -105,6 +105,11 @@ pub(crate) struct Connection {
     /// low latch on your health and whom you fight. See
     /// [`crate::alert::presets::Watch`].
     pub(crate) alerts: crate::alert::presets::Watch,
+    /// What decides whether a drop redials: whether you play, a closing
+    /// line, a quit of yours, and a character another session took. See
+    /// [`crate::session::reconnect::LinkWatch`]. The loop takes it as the
+    /// connection ends.
+    pub(crate) link: super::reconnect::LinkWatch,
 }
 
 impl Connection {

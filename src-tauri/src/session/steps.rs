@@ -145,6 +145,8 @@ pub(super) fn line_step(
     log_session_id: Option<i64>,
 ) -> Vec<LineStep> {
     c.prompt.note_text();
+    // Whether a drop redials reads every line since the last prompt.
+    c.link.line(&plain);
     // Without Char.Prompt this session, the game's reply to your own
     // `prompt` tells Vosh your setting, which the capture can take.
     if c.prompt.observing(now_ms()) {
@@ -445,8 +447,9 @@ fn prompt_block(
     log_session_id: Option<i64>,
 ) -> LineStep {
     // Your prompt ends any room look before it, and the round that
-    // ended a fight.
+    // ended a fight, and a closing line no longer ends the link.
     c.room_block.end();
+    c.link.prompt();
     c.fight_tail = false;
     let disagree = c.prompt.vars.capture(vosh_prompt::Capture {
         values: block.values.clone(),
@@ -919,6 +922,9 @@ pub(super) fn send_step(
         at_ms,
     );
     c.prompt.stage.close();
+    // A quit of yours, or a Y that takes a character, says how the link
+    // may end.
+    c.link.sent(sent, Instant::now());
     c.prompt.note_send(&String::from_utf8_lossy(sent), at_ms)
 }
 

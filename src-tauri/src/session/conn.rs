@@ -121,6 +121,10 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         } else {
             c.tick.start_session(&mut p.tick, Instant::now());
         }
+        // A new link starts with nothing the last one followed for the
+        // alerts and the redial.
+        c.alerts.reset();
+        c.link = super::reconnect::LinkWatch::default();
         start_prompt(&mut p, &mut c, known_host);
         // A push to the right edge reaches to the width the game is told.
         c.prompt.set_cols(usize::from(negotiator.window_size.0));
@@ -475,6 +479,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     log_sink.close().await;
 
     let line_triggers;
+    let link;
     // Your target, the Room.Chars list, the room look and the fight's
     // tail end with the connection, and so does this session's variable
     // that mirrors the target. Your quick keys outlive it, though not a
@@ -483,6 +488,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         let mut p = conn.session.lock_profile().await;
         let mut c = conn.session.connection.lock();
         let had = c.clear_on_disconnect();
+        link = std::mem::take(&mut c.link);
         line_triggers = c.prompt.stage.line_trigger_notice();
         end_prompt(&mut p, &mut c);
         // A new GMCP handler gets the last packet of its package, and
@@ -514,9 +520,12 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         &conn.app,
         &conn.session,
         StatePayload::Disconnected {
-            reason: disconnect_reason,
+            reason: disconnect_reason.clone(),
         },
     );
+    // A drop while you play may dial again, see `reconnect`.
+    super::reconnect::after_drop(&conn.app, &conn.session, disconnect_reason.as_deref(), link)
+        .await;
 }
 
 /// Send `bytes`, a line you typed with its line ends, to the game. A

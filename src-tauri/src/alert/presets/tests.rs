@@ -216,6 +216,28 @@ fn your_name_rings_as_a_whole_word_with_its_capital_once_char_status_names_you()
     assert_eq!(dropped.line(&p, line), None, "a drop forgets the name");
 }
 
+#[test]
+fn the_connection_preset_rings_each_turn_of_the_link_under_its_own_cap() {
+    let p = with_on(&[CONNECTION]);
+    let alerts: Vec<Alert> = [Link::Lost, Link::Ready, Link::Stopped]
+        .into_iter()
+        .filter_map(|link| connection(&p, link))
+        .collect();
+    let titles: Vec<&str> = alerts.iter().map(|a| a.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        ["Connection lost", "Ready to log in", "Vosh stopped trying"]
+    );
+    let mut caps = Caps::default();
+    let now = Instant::now();
+    assert!(alerts.iter().all(|a| caps.allow(&a.cap, now)));
+    assert_eq!(
+        connection(&Profile::default(), Link::Lost),
+        None,
+        "off at first"
+    );
+}
+
 /// fixtures/alerts/low-latch.json.
 fn latch_cases() -> Value {
     let text = include_str!("../../../../fixtures/alerts/low-latch.json");

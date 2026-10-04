@@ -7,6 +7,7 @@ mod echo;
 mod fake_mud;
 mod ipc_contract;
 mod latency;
+mod reconnect;
 mod sessions;
 mod throughput;
 mod upgrade_order;

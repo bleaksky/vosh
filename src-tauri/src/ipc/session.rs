@@ -204,6 +204,66 @@ pub(crate) async fn session_disconnect(
     Ok(())
 }
 
+/// What a session that waits to redial says when it does not.
+const NOT_REDIALING: &str = "Vosh is not waiting to reconnect this session.";
+
+/// Dial at once in the series of redials `session` runs after a drop,
+/// Reconnect now on the notice. Its count goes on from the try it dials.
+#[tauri::command]
+pub(crate) async fn session_reconnect_now(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    let session = state.session(session)?;
+    if session.redial_now() {
+        Ok(())
+    } else {
+        Err(NOT_REDIALING.into())
+    }
+}
+
+/// End the series of redials `session` runs after a drop, Cancel on the
+/// notice.
+#[tauri::command]
+pub(crate) async fn session_reconnect_cancel<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    let session = state.session(session)?;
+    crate::session::reconnect::cancel(&app, &session).await;
+    Ok(())
+}
+
+/// Whether the profile the selected session plays dials again after the
+/// link drops while you play (Alerts Q14). On at first.
+#[tauri::command]
+pub(crate) async fn reconnect_get(state: State<'_, SharedState>) -> Result<bool, String> {
+    Ok(state
+        .selected_session()
+        .lock_profile()
+        .await
+        .reconnect
+        .is_on())
+}
+
+/// Turn Reconnect when the link drops on or off for the profile the
+/// selected session plays, and save. A series that runs goes on.
+#[tauri::command]
+pub(crate) async fn reconnect_set<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    on: bool,
+) -> Result<(), String> {
+    let open = {
+        let mut p = state.selected_session().lock_profile().await;
+        p.reconnect = crate::profile::file::OnSwitch(on);
+        p.open().clone()
+    };
+    crate::disk::save::save_by(&app, &state, &open, crate::disk::save::SavePolicy::Now).await;
+    Ok(())
+}
+
 /// Inform the session of a new terminal size. The backend updates the
 /// telnet negotiator and, when NAWS has already been negotiated with
 /// the server, pushes a NAWS subnegotiation so the MUD re-wraps its

@@ -77,6 +77,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         conn.perf.mutex_acquires += 1;
         let mut c = conn.session.connection.lock();
         let now = Instant::now();
+        c.link.gmcp(&msg.package);
         let (tick_step, mut apply) = gmcp_step(&mut p, &mut c, &msg, now);
         // A tell you got or a fight that starts on you rings its preset.
         apply
@@ -184,6 +185,9 @@ async fn character_named<R: tauri::Runtime>(
     crate::affects::full::character_known(app, state, session, character);
     auto_switch_for_character(app, state, session, character).await;
     crate::session::identity::broadcast_session_identity(app, state, session).await;
+    // Another session that played the character here loses it to this
+    // one, so its link closes as expected.
+    super::reconnect::took_character(app, state, session, character).await;
 }
 
 /// What a GMCP packet does to the profile and the connection, under the

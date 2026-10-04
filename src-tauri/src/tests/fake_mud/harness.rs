@@ -11,6 +11,7 @@ use tauri::{App, Listener, Manager};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 use vosh_prompt::testkit::{Mud, Options};
 
 use crate::app::state::{AppState, SharedState};
@@ -19,7 +20,7 @@ use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
 use crate::sessions::SessionId;
 
 /// The events the tests read, as the webview would hear them.
-const EVENTS: [&str; 12] = [
+const EVENTS: [&str; 13] = [
     "session://output",
     "session://game-prompt-seen",
     "session://prompt-status",
@@ -32,6 +33,7 @@ const EVENTS: [&str; 12] = [
     crate::app::events::AFFECT_FULL_CHANGED,
     crate::app::events::PROMPT_CONFIG_CHANGED,
     crate::app::events::ALERT,
+    crate::app::events::RECONNECT,
 ];
 
 /// What a test hands a link of the fake game that plays.
@@ -39,6 +41,9 @@ enum Push {
     /// Bytes the game writes, such as a packet or a line no command asked
     /// for.
     Bytes(Vec<u8>),
+    /// Close the link with nothing more, as a reset or a dropped line
+    /// does.
+    Cut,
 }
 
 /// A fake game on a local port of its own.
@@ -52,6 +57,10 @@ pub(crate) struct FakeServer {
     links: Arc<StdMutex<Vec<mpsc::UnboundedSender<Push>>>>,
     /// Counts each IAC DO EOR a client sends.
     asks: Arc<AtomicUsize>,
+    /// When each connection came, on the test's clock.
+    pub(crate) connects: Arc<StdMutex<Vec<tokio::time::Instant>>>,
+    /// The task that takes connections, while the game is up.
+    accepting: StdMutex<Option<JoinHandle<()>>>,
 }
 
 impl FakeServer {
@@ -63,21 +72,64 @@ impl FakeServer {
         }
     }
 
+    /// Write `bytes` on the link that came `nth`, counting from 0.
+    pub(crate) fn push_to(&self, nth: usize, bytes: &[u8]) {
+        if let Some(link) = self.links.lock().expect("the links").get(nth) {
+            let _ = link.send(Push::Bytes(bytes.to_vec()));
+        }
+    }
+
+    /// Close every link that plays with nothing more, as a reset does.
+    pub(crate) fn cut(&self) {
+        for link in self.links.lock().expect("the links").iter() {
+            let _ = link.send(Push::Cut);
+        }
+    }
+
+    /// Close the link that came `nth`, counting from 0, with nothing
+    /// more, as the game does to the first link when a second one takes
+    /// its character.
+    pub(crate) fn cut_link(&self, nth: usize) {
+        if let Some(link) = self.links.lock().expect("the links").get(nth) {
+            let _ = link.send(Push::Cut);
+        }
+    }
+
+    /// Stop taking connections, so each dial is refused, as while the
+    /// game reboots.
+    pub(crate) fn down(&self) {
+        if let Some(task) = self.accepting.lock().expect("the listener").take() {
+            task.abort();
+        }
+    }
+
+    /// Take connections again on the same port.
+    pub(crate) fn up(&self) {
+        let listener = listen(self.port).expect("the port again");
+        self.accept(listener);
+    }
+
     fn accept(&self, listener: TcpListener) {
-        let (options, received, links, asks) = (
+        let (options, received, links, asks, connects) = (
             self.options.clone(),
             self.received.clone(),
             self.links.clone(),
             self.asks.clone(),
+            self.connects.clone(),
         );
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             while let Ok((socket, _)) = listener.accept().await {
+                connects
+                    .lock()
+                    .expect("the connects")
+                    .push(tokio::time::Instant::now());
                 let options = options.lock().expect("the options").clone();
                 let (tx, rx) = mpsc::unbounded_channel();
                 links.lock().expect("the links").push(tx);
                 tokio::spawn(play(socket, options, asks.clone(), received.clone(), rx));
             }
         });
+        *self.accepting.lock().expect("the listener") = Some(task);
     }
 }
 
@@ -101,6 +153,8 @@ fn serve_fake(options: Options, asks: Arc<AtomicUsize>) -> FakeServer {
         received: Arc::default(),
         links: Arc::default(),
         asks,
+        connects: Arc::default(),
+        accepting: StdMutex::new(None),
     };
     server.accept(listener);
     server
@@ -128,7 +182,7 @@ async fn play(
                     socket.write_all(&bytes).await?;
                     continue;
                 }
-                None => return Ok(()),
+                Some(Push::Cut) | None => return Ok(()),
             },
         };
         if n == 0 {
@@ -287,6 +341,12 @@ impl Harness {
         if let Ok(mut g) = session.current_connection.lock() {
             *g = Some(("127.0.0.1".into(), server.port));
         }
+        // Where a redial dials.
+        *session.address.lock().expect("the address") = Some(crate::sessions::Address {
+            host: "127.0.0.1".into(),
+            port: server.port,
+            tls: false,
+        });
         if let Ok(mut g) = session.current_character.lock() {
             *g = None;
         }
@@ -319,6 +379,7 @@ impl Harness {
         if let Some(handle) = handle {
             handle.shutdown().await;
         }
+        crate::session::reconnect::cancel(self.app.handle(), &session).await;
         if let Ok(mut g) = session.current_connection.lock() {
             *g = None;
         }
