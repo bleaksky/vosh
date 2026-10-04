@@ -16,10 +16,12 @@ import {
   type CardRequest,
   codeReaderStep,
   codesSourceLine,
+  editedTable,
   firstCapture,
   headerButtons,
   localStamp,
   moreItems,
+  movedBackTable,
   openingStep,
   savedCapture,
   savedForName,
@@ -27,7 +29,6 @@ import {
   undoEntry,
   withCapture,
   withDesign,
-  withMoveTakenBack,
   withShow,
   withStart,
   type CardStep,
@@ -623,7 +624,10 @@ export function PromptCard({
         // Another profile became active meanwhile, so the edit was for a
         // table the card no longer shows.
         if (at !== opens.current) return;
-        if (text !== base.template) save(withDesign(base, text));
+        // The table can change meanwhile, as when you pick a place, so
+        // the new design goes on it as it stands.
+        const edited = editedTable(base, latest.current, text);
+        if (edited) save(edited);
         if (data) setDescribed({ template: text, data });
         made?.({ before: base.template, after: text, landed, mirror: base.mirror });
         const first = ops[0];
@@ -653,7 +657,7 @@ export function PromptCard({
         () => null,
       );
       if (at !== opens.current) return;
-      save(withMoveTakenBack(base, back));
+      save(movedBackTable(base, latest.current, back));
       if (data) setDescribed({ template: back.before, data });
       setPointing({ picked: back.from, caret: null });
     });

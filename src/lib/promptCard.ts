@@ -700,6 +700,30 @@ export function withMoveTakenBack(
   return { ...withDesign(config, back.before), mirror: back.mirror };
 }
 
+/** The table an edit of the design saves once its round trips land, or
+ *  null when the design came out as it was. The edit began on `start`,
+ *  and the table can change while it waits, as when you pick where your
+ *  prompt shows or turn Draw your prompt off. So the new design goes on
+ *  the table as it stands `now`, and those changes stay. */
+export function editedTable(
+  start: PromptConfig,
+  now: PromptConfig | null,
+  template: string,
+): PromptConfig | null {
+  if (template === start.template) return null;
+  return withDesign(now ?? start, template);
+}
+
+/** The table once move `back` is taken back, on the table as it stands
+ *  `now` for the same reason. */
+export function movedBackTable(
+  start: PromptConfig,
+  now: PromptConfig | null,
+  back: Pick<MoveMade, 'before' | 'mirror'>,
+): PromptConfig {
+  return withMoveTakenBack(now ?? start, back);
+}
+
 /** What Command Z puts back: the fields one change of yours made, as
  *  they were before it. */
 export type UndoEntry = Partial<Pick<PromptConfig, 'template' | 'draw' | 'capture' | 'mirror'>>;
