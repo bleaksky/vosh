@@ -220,16 +220,18 @@ const SELECTION_ALPHA = { dark: 0.28, light: 0.2 } as const;
 /// panel, the menu highlight off raised, and the edge off the ground.
 /// Each is the step the fixed wash before them took there (Themes
 /// review Q10), white on Obsidian Ember and black on Vellum, so those
-/// two paint as they did. The edge takes the 0.14 the swatch edge took,
-/// the one alpha every edge shared on light. A light field is the
-/// raised paper, so it has no step.
+/// two paint as they did. On dark the edge takes the 0.12 of the ring
+/// inside a floating surface, the ring board 11 draws. The window edge
+/// on Windows and Linux took 0.10 in the main window and 0.18 in
+/// Settings, so one edge moves each of them on Ember. On light every
+/// edge took 0.14. A light field is the raised paper, so it has no step.
 export const WASH_STEP = {
   dark: {
     field: 7.94, // white 0.06
     track: 18.57, // white 0.16
     keyRing: 16.53, // white 0.14
     menuHi: 8.35, // white 0.08
-    edge: 16.53, // white 0.14
+    edge: 14.46, // white 0.12
   },
   light: {
     track: 10.39, // black 0.14

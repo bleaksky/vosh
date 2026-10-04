@@ -117,7 +117,7 @@ const NORD: TokenSheet = {
     track: 'rgba(255, 255, 255, 0.249)',
     menuHi: 'rgba(255, 255, 255, 0.108)',
     keyRing: 'rgba(255, 255, 255, 0.219)',
-    edge: 'rgba(255, 255, 255, 0.219)',
+    edge: 'rgba(255, 255, 255, 0.19)',
   },
 };
 
@@ -150,7 +150,7 @@ const EMBER: TokenSheet = {
     track: 'rgba(255, 255, 255, 0.16)',
     menuHi: 'rgba(255, 255, 255, 0.08)',
     keyRing: 'rgba(255, 255, 255, 0.14)',
-    edge: 'rgba(255, 255, 255, 0.14)',
+    edge: 'rgba(255, 255, 255, 0.12)',
   },
 };
 
@@ -336,12 +336,14 @@ describe('control washes', () => {
 
   it('paints Obsidian Ember within dE 1 of the washes the stylesheets fixed', () => {
     const t = themeTokens(findTheme('obsidian-ember'));
+    // The edge is the ring inside a floating surface, white 0.12, which
+    // board 11 draws. The window edges took 0.10 and 0.18 and move to it.
     const fixed: Record<Wash, number> = {
       field: 0.06,
       track: 0.16,
       keyRing: 0.14,
       menuHi: 0.08,
-      edge: 0.14,
+      edge: 0.12,
     };
     for (const key of WASHES) {
       const ground = t[SURFACE[key]];
