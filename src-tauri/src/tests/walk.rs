@@ -742,6 +742,41 @@ async fn a_failure_line_stops_the_walk_and_drops_the_rest_of_the_line() {
     h.finish().await;
 }
 
+// A profile that reads no prompt leaves each one waiting for the line
+// that ends it, and the game's answer to a step runs on from it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_answer_that_runs_on_from_an_unread_prompt_still_stops_the_walk() {
+    let _grid = grid();
+    let h = Harness::unread().await;
+    h.connect().await;
+    h.script([Answer::Go, Answer::Fail("You need a boat to go there.")]);
+    h.type_line("#walk 2w2e;get all").await;
+    h.until_said(&[
+        "[walk] Stopped after 1 of 4 steps, so Vosh did not send the rest of the line.",
+    ])
+    .await;
+    assert_eq!(h.heard(), ["w", "w"]);
+    let text = h.text();
+    assert!(
+        text.contains(&format!("{PROMPT}You need a boat to go there.")),
+        "{text}"
+    );
+
+    h.script([Answer::Dark]);
+    h.type_line("#walk e").await;
+    h.until_said(&[
+        "[walk] Stopped after 1 of 4 steps, so Vosh did not send the rest of the line.",
+        "[walk] Stopped after 1 of 1 step. Vosh lost sight of the room.",
+    ])
+    .await;
+    assert!(h
+        .text()
+        .contains(&format!("{PROMPT}It is pitch black ... ")));
+    assert_eq!(h.heard(), ["w", "w", "e"]);
+    h.finish().await;
+}
+
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_room_the_tiles_did_not_promise_stops_the_walk() {
