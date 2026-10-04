@@ -473,8 +473,8 @@ pub(crate) const UNREAD_GLOBAL_NOTICE: &str = "Vosh could not read global.toml, 
 /// `profile` at launch. A file that does not read stays as it is on
 /// disk. Vosh holds it with [`hold_unread`], keeps the defaults in its
 /// place for this session, and returns the sentence that tells you so.
-/// With no file yet, the profile is fresh and takes Vosh's default
-/// design.
+/// With no file yet, the profile is fresh. It follows the game with
+/// drawing off.
 pub(crate) fn load_at_launch(set: &ProfileSet, profile: &mut Profile) -> Vec<String> {
     let mut notices = Vec::new();
     profile.display_name = Some(crate::profile::set::display_name(set.active_name()));
