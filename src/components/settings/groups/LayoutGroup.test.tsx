@@ -48,7 +48,7 @@ describe('VitalsSection', () => {
       'Hide vitals while your prompt is pinned',
     ]);
     expect(html).toContain(
-      'While your prompt is pinned, the panes take their room. Turn it off if your prompt leaves your vitals out.',
+      'While your prompt is pinned, the panes take their room, and your opponent keeps its row in a fight. Turn it off if your prompt leaves your vitals out.',
     );
     expect(html).toContain('Current drops the maximum. Percent matches the Group pane.');
     expect(html).toContain('Bar is easier to read in a fight. None keeps only the numbers.');

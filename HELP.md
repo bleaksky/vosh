@@ -395,7 +395,7 @@ The vitals sit at the bottom of the panel, under the panes. Health, Mana, and Mo
 - Set `Values` to `Current and max` to read `186 / 1020`, to `Current` to read `186`, or to `Percent` to read `18%`.
 - Set `Meter` to `Line` for the thin meter, to `Bar` for a thicker one you can read at a glance in a fight, or to `None` to keep only the numbers on tighter rows.
 - Turn on `Warn before you run low` and a vital turns yellow under two thirds and red under one third, the way the Group pane shows your group's health.
-- Leave `Hide vitals while your prompt is pinned` on and the panel drops its vitals while `Where your prompt shows` is `Pinned`, so the panes take their room. Turn it off to keep them, or pick another place for your prompt, and they come back at once. They also come back while you have prompts off in the game, since the band then has no prompt to show.
+- Leave `Hide vitals while your prompt is pinned` on and the panel drops its vitals while `Where your prompt shows` is `Pinned`, so the panes take their room. In a fight your opponent keeps its row at the foot of the panel. Turn it off to keep them, or pick another place for your prompt, and they come back at once. They also come back while you have prompts off in the game, since the band then has no prompt to show.
 
 Each default draws the panel you already know, so nothing changes until you pick something. One line drops the Health, Mana, and Moves labels only when they no longer fit beside the values, under about 360 pt with four digit health, and keeps the values and meters. `Current` and `Percent` keep the labels even on a narrow panel. A panel too narrow for even the values stacks them in rows.
 
@@ -443,7 +443,7 @@ Once Vosh reads your prompt, you choose where it shows. Open Settings, choose In
 
 - `In the text` shows each prompt where the game sends it. The terminal reads as it always has.
 - `Lifted` keeps every prompt in the text on a raised band in the selected row color of your theme, scrollback included. A prompt that ends on a character gains one space after its band, so your echo never touches it.
-- `Pinned` takes your prompts out of the text and shows your latest one on a band above the command line. The band is only as tall as your prompt. When a fight adds a row, the text above gives up its top line to make room and gets it back when the fight ends, so one blank line always sits between your newest line and the band, as the game leaves one before each prompt. Every prompt still reaches the session log and your Prompts triggers. While your prompt is pinned, the panel hides its vitals and gives their room to the panes. Turn off `Hide vitals while your prompt is pinned` under Layout, then Vitals, to keep them.
+- `Pinned` takes your prompts out of the text and shows your latest one on a band above the command line. The band is only as tall as your prompt. When a fight adds a row, the text above gives up its top line to make room and gets it back when the fight ends, so one blank line always sits between your newest line and the band, as the game leaves one before each prompt. Every prompt still reaches the session log and your Prompts triggers. While your prompt is pinned, the panel hides its vitals and gives their room to the panes, all but your opponent's row in a fight. Turn off `Hide vitals while your prompt is pinned` under Layout, then Vitals, to keep them.
 
 From the command line, `#prompt show lifted` picks the same place, and `text` or `pinned` in its place picks the others. `#prompt` alone also says where your prompt shows.
 
