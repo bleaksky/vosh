@@ -7,6 +7,7 @@ import { startAffectsStore } from './affectsStore';
 import { startChatColorsStore } from './chatColorsStore';
 import { startChipStyleStore } from './chipStyleStore';
 import { startCombatStore } from './combatStore';
+import { startGameTimeStore } from './gameTimeStore';
 import { startGamePromptStore } from './gamePromptStore';
 import { startHiddenStore } from './hiddenStore';
 import { startPinnedPromptStore } from './pinnedPromptStore';
@@ -48,6 +49,7 @@ export function startStores(): void {
   startTargetStore();
   startTickStore();
   startTickCountStore();
+  startGameTimeStore();
   startChipStyleStore();
   startPinnedPromptStore();
 }

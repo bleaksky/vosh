@@ -10,6 +10,9 @@
 //!
 //! Every preset but Start empty ends in a space, as the game's own
 //! prompt does, so your echo starts a cell after it.
+//!
+//! A profile with no design of its own draws Same as the game, written
+//! again each time your codes change ([`game`]).
 
 use serde::Serialize;
 
@@ -170,6 +173,15 @@ pub(crate) fn other(supplied: &dyn Fn(&str) -> bool) -> Vec<Preset> {
 // ---------------------------------------------------------------------
 // Same as the game
 // ---------------------------------------------------------------------
+
+/// Same as the game for your settings as the game stores them, when
+/// they compile, as the start list offers it. A design that follows the
+/// game is this one ([`crate::PromptConfig::mirror_game`]). None when
+/// they do not compile.
+pub fn game(prompt: &str, fprompt: &str, who: Who) -> Option<String> {
+    crate::aabahran::compile(prompt, fprompt, crate::aabahran::Origin::Stored, who).ok()?;
+    same_as_the_game(prompt, fprompt, who)
+}
 
 /// Same as the game for your settings as the game stores them: the
 /// immortal prefix, each code as its piece in the game's look, the tank

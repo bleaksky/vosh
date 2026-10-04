@@ -67,6 +67,7 @@ async function load() {
     tick: await import('./tickStore'),
     chipStyle: await import('./chipStyleStore'),
     tickCount: await import('./tickCountStore'),
+    gameTime: await import('./gameTimeStore'),
     vitalsOptions: await import('./vitalsOptionsStore'),
     affectsDisplay: await import('./affectsDisplayStore'),
     chatColors: await import('./chatColorsStore'),
@@ -623,6 +624,36 @@ describe('stores on the event bus', () => {
     answer({ tracked_affects: [], tick_count: 'up' });
     await settle();
     expect(s.tickCount.getTickCount()).toBe('down_past_zero');
+  });
+
+  it('follow the game time clock Settings saves and each profile keeps', async () => {
+    commands.set('ui_get_config', { tracked_affects: [], game_time: '12h' });
+    const s = await load();
+    expect(s.gameTime.getGameTime()).toBe('12h');
+    fire('vosh://game-time-changed', '24h');
+    expect(s.gameTime.getGameTime()).toBe('24h');
+    fire('vosh://game-time-changed', '12h');
+    expect(s.gameTime.getGameTime()).toBe('12h');
+    fire('vosh://game-time-changed', 'sundial');
+    expect(s.gameTime.getGameTime()).toBe('24h');
+    commands.set('ui_get_config', { tracked_affects: [] });
+    fire('vosh://game-time-changed', '12h');
+    fire('vosh://profile-switched', 'Maren');
+    await settle();
+    // A profile saved before the setting reads the 24 hour clock.
+    expect(s.gameTime.getGameTime()).toBe('24h');
+  });
+
+  it('keep a game time clock Settings saved over a slower config read', async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    commands.set('ui_get_config', { tracked_affects: [] });
+    const s = await load();
+    commands.set('ui_get_config', new Promise((resolve) => (answer = resolve)));
+    fire('vosh://profile-switched', 'Maren');
+    fire('vosh://game-time-changed', '12h');
+    answer({ tracked_affects: [], game_time: '24h' });
+    await settle();
+    expect(s.gameTime.getGameTime()).toBe('12h');
   });
 
   it('seed the affect fulls, follow each change, and clear them on a disconnect', async () => {

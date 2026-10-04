@@ -133,10 +133,13 @@ fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputRe
 }
 
 /// `#prompt draw on|off`: draw your design in place of your prompt, or
-/// show the game's own prompt. Turning drawing on with no design draws
-/// Vosh's default, as Settings does. The design, the place and the
+/// show the game's own prompt. Turning drawing on with no design follows
+/// the game, as Settings does, so Vosh draws your prompt as your codes
+/// say until you change the design. The design, the place and the
 /// capture stay. With no capture the echo says how to start, since Vosh
-/// draws only a prompt it reads.
+/// draws only a prompt it reads. With a capture and still no design to
+/// draw, as with a pattern of another game or codes Vosh cannot draw,
+/// the echo says you see the game's own prompt.
 fn slash_prompt_draw(profile: &mut Profile, args: &str) -> InputResult {
     let draw = match args.trim().to_ascii_lowercase().as_str() {
         "on" => true,
@@ -147,7 +150,7 @@ fn slash_prompt_draw(profile: &mut Profile, args: &str) -> InputResult {
     if config.draw != draw {
         config.draw = draw;
         if draw && config.template.is_empty() {
-            config.template = vosh_prompt::DEFAULT_DESIGN.to_string();
+            config.mirror = true;
         }
         profile.set_prompt_config(config);
     }
@@ -159,6 +162,8 @@ fn slash_prompt_draw(profile: &mut Profile, args: &str) -> InputResult {
     .to_string()];
     if draw && profile.prompt.config().capture.is_none() {
         echo.push(PROMPT_NONE.to_string());
+    } else if draw && !profile.prompt.draws() {
+        echo.push(DRAW_NO_DESIGN.to_string());
     }
     InputResult::echo_lines(echo)
 }
@@ -182,16 +187,17 @@ fn slash_prompt_show(profile: &mut Profile, args: &str) -> InputResult {
 }
 
 /// `#prompt default`: put Vosh's default design in place of the one in
-/// this profile. The one you had goes first among the earlier designs,
-/// so the card can offer it back, and the switch, the place and the
+/// this profile, as your choice, so it stops following the game. The one
+/// you had goes first among the earlier designs, so the card can offer it
+/// back, unless it followed the game. The switch, the place and the
 /// capture stay. The echo says what else it takes to see the design,
-/// also when the design is the default already, as in a fresh profile.
+/// also when the design is the default already.
 fn slash_prompt_default(profile: &mut Profile, args: &str) -> InputResult {
     if !args.trim().is_empty() {
         return InputResult::error("usage #prompt default");
     }
     let mut config = profile.prompt.config().clone();
-    let had = !config.template.is_empty();
+    let had = !config.template.is_empty() && !config.mirror;
     let changed = config.use_default_design();
     let mut echo = vec![match (changed, had) {
         (false, _) => "Your design is already Vosh's default.",
@@ -228,6 +234,10 @@ fn show_sentence(show: vosh_prompt::PromptShow) -> &'static str {
 
 /// What `#prompt` says when nothing reads your prompt in this profile.
 const PROMPT_NONE: &str = "Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start.";
+/// What `#prompt draw on` says while drawing is on and the profile reads
+/// your prompt but has no design to draw in its place.
+const DRAW_NO_DESIGN: &str =
+    "You have no design yet, so you see the game's own prompt. Pick one in Customize prompt.";
 /// What `#prompt` says while you have prompts off in the game.
 const PROMPTS_OFF: &str =
     "You turned prompts off in the game. Type prompt in the game to turn them back on.";

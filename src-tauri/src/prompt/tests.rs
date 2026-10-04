@@ -111,8 +111,14 @@ fn a_table_that_compiles_is_taken_with_two_earlier_designs_at_most() {
     assert_eq!(set_config(&mut p, config), Ok(false));
 }
 
+/// Same as the game for `prompt`, for a mortal.
+fn same_as_the_game(prompt: &str) -> String {
+    vosh_prompt::card::presets::game(prompt, "", vosh_prompt::aabahran::Who::default())
+        .expect("the codes compile")
+}
+
 #[test]
-fn turning_drawing_on_with_no_design_takes_vosh_default() {
+fn turning_drawing_on_with_no_design_follows_the_game() {
     let mut p = Profile::default();
     let config = PromptConfig {
         capture: codes("<%hhp> "),
@@ -125,7 +131,23 @@ fn turning_drawing_on_with_no_design_takes_vosh_default() {
         ..p.prompt.config().clone()
     };
     assert_eq!(set_config(&mut p, on), Ok(true));
-    assert_eq!(p.prompt.config().template, vosh_prompt::DEFAULT_DESIGN);
+    assert!(p.prompt.config().mirror);
+    assert_eq!(p.prompt.config().template, same_as_the_game("<%hhp> "));
+    // A table read before the codes changed brings back no old design.
+    let stale = PromptConfig {
+        template: "%hp ".into(),
+        ..p.prompt.config().clone()
+    };
+    assert_eq!(set_config(&mut p, stale), Ok(false));
+    assert_eq!(p.prompt.config().template, same_as_the_game("<%hhp> "));
+    // An edit makes the design yours.
+    let edited = PromptConfig {
+        template: format!("{}> ", same_as_the_game("<%hhp> ")),
+        mirror: false,
+        ..p.prompt.config().clone()
+    };
+    assert_eq!(set_config(&mut p, edited.clone()), Ok(true));
+    assert_eq!(*p.prompt.config(), edited);
     // Start empty while drawing stays on keeps the design empty.
     let empty = PromptConfig {
         template: String::new(),
@@ -133,13 +155,41 @@ fn turning_drawing_on_with_no_design_takes_vosh_default() {
     };
     assert_eq!(set_config(&mut p, empty), Ok(true));
     assert_eq!(p.prompt.config().template, "");
+    assert!(!p.prompt.config().mirror);
+    // Same as the game in the start list follows the game again.
+    let game = PromptConfig {
+        template: same_as_the_game("<%hhp> "),
+        mirror: true,
+        ..p.prompt.config().clone()
+    };
+    assert_eq!(set_config(&mut p, game), Ok(true));
+    assert!(p.prompt.config().mirror);
+    assert_eq!(p.prompt.config().template, same_as_the_game("<%hhp> "));
+}
+
+#[test]
+fn turning_drawing_on_keeps_vosh_default_you_chose() {
+    let mut p = Profile::default();
+    let mut chosen = PromptConfig {
+        capture: codes("<%hhp> "),
+        ..PromptConfig::fresh()
+    };
+    assert!(chosen.use_default_design());
+    assert_eq!(set_config(&mut p, chosen), Ok(true));
+    let on = PromptConfig {
+        draw: true,
+        ..p.prompt.config().clone()
+    };
+    assert_eq!(set_config(&mut p, on), Ok(true));
+    assert_eq!(p.prompt.config().template, vosh_prompt::DEFAULT_DESIGN);
+    assert!(!p.prompt.config().mirror);
 }
 
 #[test]
 fn start_empty_keeps_the_design_empty_as_drawing_turns_on() {
-    // A fresh profile draws nothing and holds Vosh's default. Start
-    // empty in the card's start list turns drawing on with no design,
-    // and the design stays empty.
+    // A fresh profile draws nothing and follows the game. Start empty in
+    // the card's start list turns drawing on with no design, and the
+    // design stays empty and becomes yours.
     let mut p = Profile::default();
     let fresh = PromptConfig {
         capture: codes("<%hhp> "),
@@ -147,9 +197,11 @@ fn start_empty_keeps_the_design_empty_as_drawing_turns_on() {
     };
     assert_eq!(set_config(&mut p, fresh), Ok(true));
     assert!(!p.prompt.config().draw);
+    assert!(p.prompt.config().mirror);
     let empty = PromptConfig {
         template: String::new(),
         draw: true,
+        mirror: false,
         ..p.prompt.config().clone()
     };
     assert_eq!(set_config_as_is(&mut p, empty), Ok(true));
@@ -186,8 +238,8 @@ async fn designs_list_every_other_profile_with_a_design() {
     let mut third = ProfileConfig::default();
     third.ui.prompt_template = "%mana".into();
     third.save(&set.profile_path("Third")).unwrap();
-    // Fourth never saved a file, so it holds Vosh's default design,
-    // which the start list already offers. Fifth saved that design.
+    // Fourth never saved a file, so it follows the game. Fifth chose
+    // Vosh's default design, which the start list already offers.
     let mut fifth = ProfileConfig::default();
     fifth.set_prompt(PromptConfig::from_legacy(true, vosh_prompt::DEFAULT_DESIGN));
     fifth.save(&set.profile_path("Fifth")).unwrap();
@@ -197,14 +249,31 @@ async fn designs_list_every_other_profile_with_a_design() {
     let mut sixth = ProfileConfig::default();
     sixth.set_prompt(PromptConfig::from_legacy(true, sixth_design));
     sixth.save(&set.profile_path("Sixth")).unwrap();
-    // Seventh saved the default an earlier build shipped, which
-    // loads as today's.
-    let mut seventh = ProfileConfig::default();
-    seventh.set_prompt(PromptConfig::from_legacy(
-        false,
-        vosh_prompt::config::RETIRED_DEFAULTS[0],
-    ));
-    seventh.save(&set.profile_path("Seventh")).unwrap();
+    // Seventh holds the default an earlier build shipped, as that build
+    // wrote it, which loads following the game.
+    std::fs::write(
+        set.profile_path("Seventh"),
+        format!(
+            "[prompt]\ndraw = false\ntemplate = {}\n",
+            toml::Value::String(vosh_prompt::config::RETIRED_DEFAULTS[0].into())
+        ),
+    )
+    .unwrap();
+    // Eighth follows the game, so its design is its codes, which Same
+    // as the game offers for yours.
+    set.create("Eighth").unwrap();
+    let mut eighth = ProfileConfig::default();
+    eighth.set_prompt(PromptConfig {
+        draw: true,
+        capture: codes("<%hhp %mm> "),
+        ..PromptConfig::fresh()
+    });
+    eighth.save(&set.profile_path("Eighth")).unwrap();
+    let eighth = ProfileConfig::load(&set.profile_path("Eighth")).unwrap();
+    assert_eq!(
+        eighth.prompt_config().template,
+        same_as_the_game("<%hhp %mm> ")
+    );
     let mut active = ProfileConfig::default();
     active.set_prompt(PromptConfig::from_legacy(true, "%move"));
     active

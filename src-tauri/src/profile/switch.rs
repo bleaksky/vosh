@@ -464,6 +464,7 @@ pub(crate) mod tests {
             }),
             // Each profile keeps its own place, through its file.
             show: vosh_prompt::PromptShow::Pinned,
+            mirror: false,
         };
         let mut file = ProfileConfig::default();
         file.set_prompt(healer.clone());
@@ -481,8 +482,7 @@ pub(crate) mod tests {
         }
 
         // On to a profile that never saved a file, a fresh one, which
-        // holds Vosh's default design and draws nothing until you turn
-        // drawing on.
+        // follows the game and draws nothing until you turn drawing on.
         super::switch_live_profile(&state, "Test-Prompt")
             .await
             .unwrap();
@@ -494,7 +494,7 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn a_profile_you_create_starts_with_the_default_design_and_keeps_it() {
+    async fn a_profile_you_create_follows_the_game_and_keeps_following_it() {
         let dir = tempfile::tempdir().unwrap();
         let state = switch_state(dir.path()).await;
         {
@@ -512,10 +512,9 @@ pub(crate) mod tests {
         {
             let p = state.profile.lock().await;
             assert_eq!(*p.prompt.config(), vosh_prompt::PromptConfig::fresh());
-            assert_eq!(p.ui.prompt_template, vosh_prompt::DEFAULT_DESIGN);
+            assert_eq!(p.ui.prompt_template, "");
         }
-        // The first save writes it into the file, so the profile keeps it
-        // from then on.
+        // The first save keeps it following the game.
         persist(&state).await;
         let path = state
             .profile_set

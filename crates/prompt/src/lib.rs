@@ -7,8 +7,9 @@
 //! - [`engine`] is [`PromptEngine`], the front door the session keeps for
 //!   the live profile. It follows Char.Prompt, reads the game's replies to
 //!   `prompt` and `fprompt`, counts misses and reports the status.
-//! - [`config`] is the `[prompt]` table a profile file saves, with the
-//!   default design a fresh table takes.
+//! - [`config`] is the `[prompt]` table a profile file saves, with
+//!   Vosh's default design and the rule that a profile with no design of
+//!   its own follows the game.
 //! - [`design`] is the template language. It parses a design into tokens
 //!   and the pieces the editor shows, writes tokens back as text, and
 //!   holds the look algebra the editor uses to keep each piece's look.

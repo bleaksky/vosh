@@ -86,20 +86,20 @@ describe('TickCountField', () => {
 });
 
 describe('StatusLineSection', () => {
-  it('puts Tick counts directly under Tick and time', () => {
+  it('puts Game time under Tick and time, and Tick counts under them', () => {
     const html = renderToStaticMarkup(
       <StatusLineSection
-        config={config({ chip_style: 'icon_value', tick_count: 'down' })}
+        config={config({ chip_style: 'icon_value', game_time: '12h', tick_count: 'down' })}
         setConfig={() => undefined}
         onError={() => undefined}
       />,
     );
-    expect(labels(html)).toEqual(['Tick and time', 'Tick counts']);
-    expect(pressed(html)).toEqual(['Icon', 'Down']);
+    expect(labels(html)).toEqual(['Tick and time', 'Game time', 'Tick counts']);
+    expect(pressed(html)).toEqual(['Icon', '12 hour', 'Down']);
     const anchors = SETTINGS_ROWS.filter(
       (r) => r.target.group === 'layout' && r.target.section === 'status',
     ).map((r) => r.target.anchor);
-    expect(anchors).toEqual(['tick-time', 'tick-counts']);
+    expect(anchors).toEqual(['tick-time', 'game-time', 'tick-counts']);
     for (const anchor of anchors) expect(html).toContain(`data-st-anchor="${anchor}"`);
   });
 });

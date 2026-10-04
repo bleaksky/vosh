@@ -2,7 +2,7 @@
 
 A desktop MUD client for macOS, Windows, and Linux. Built for power users who want a connected map window, clean split panes, a tick timer, and the full alias and trigger toolkit they expect from TinTin++.
 
-The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, but speaks standard telnet, GMCP, MSDP, MCCP, MXP, and the rest of the modern MUD protocol stack. It works with any compliant server.
+The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, and works with any server that speaks the same protocols. Vosh negotiates telnet options and speaks GMCP. It answers TTYPE with MTTS, sends your window size with NAWS, answers NEW-ENVIRON, and asks for EOR so the server marks each prompt. Text travels as UTF-8. Vosh turns down MSDP, MCCP, and MXP.
 
 ## Status
 

@@ -10,6 +10,7 @@ import {
   decodeOutputPayload,
   followReplacedUiConfig,
   freeBuiltinThemeIds,
+  GAME_TIMES,
   getUiConfig,
   isOwnAffectsDisplayEcho,
   isOwnThemeEcho,
@@ -21,6 +22,7 @@ import {
   normalizeAffectsStyle,
   normalizeAffectsThresholds,
   normalizeChipStyle,
+  normalizeGameTime,
   normalizePromptShow,
   normalizeTerminalLineHeight,
   normalizeTickCount,
@@ -563,6 +565,39 @@ describe('tick count', () => {
     sent.mockClear();
     await broadcastUiConfigChanges({ ...base, tick_count: 'down' });
     expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://tick-count-changed');
+  });
+});
+
+describe('game time', () => {
+  it('reads unknown stored clocks as the 24 hour clock', () => {
+    expect(GAME_TIMES).toEqual(['24h', '12h']);
+    for (const clock of GAME_TIMES) expect(normalizeGameTime(clock)).toBe(clock);
+    expect(normalizeGameTime('noon')).toBe('24h');
+    expect(normalizeGameTime(undefined)).toBe('24h');
+    expect(normalizeGameTime(12)).toBe('24h');
+    expect(normalizeUiConfig(raw()).game_time).toBe('24h');
+    expect(normalizeUiConfig(raw({ game_time: '12h' })).game_time).toBe('12h');
+  });
+
+  it('saves with the rest of the config', async () => {
+    const sent = vi.mocked(invoke);
+    sent.mockClear();
+    await setUiConfig(normalizeUiConfig(raw({ game_time: '12h' })));
+    const [command, args] = sent.mock.calls[0] as [string, { config: Record<string, unknown> }];
+    expect(command).toBe('ui_set_config');
+    expect(args.config.game_time).toBe('12h');
+  });
+
+  it('tells every window when a save changes it', async () => {
+    const sent = vi.mocked(emit);
+    const base = normalizeUiConfig(raw());
+    await broadcastUiConfigChanges(base);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, game_time: '12h' });
+    expect(sent).toHaveBeenCalledWith('vosh://game-time-changed', '12h');
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, game_time: '12h' });
+    expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://game-time-changed');
   });
 });
 

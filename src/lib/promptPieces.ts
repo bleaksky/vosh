@@ -73,13 +73,15 @@ export function moveOp(
 }
 
 /** A move Option with Left or Right made: the design before and after it,
- *  where the part was and where it landed, and the way it went. */
+ *  where the part was and where it landed, the way it went, and whether
+ *  the design followed the game before it. */
 export interface MoveMade {
   before: string;
   after: string;
   from: number;
   landed: number;
   dir: -1 | 1;
+  mirror: boolean;
 }
 
 /** The move the opposite key takes back, so Option with Right then
