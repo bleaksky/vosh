@@ -28,8 +28,9 @@ use crate::profile::live::Profile;
 /// What the loadouts decide about one group of the catalog, while they
 /// decide it: on or off, and the active loadouts that decide. Every
 /// apply point lays this state over the group again, so a change made
-/// to it by hand lasts only until the next switch or launch, and the
-/// switch on the group heading in Settings waits while it holds.
+/// to it by hand lasts only until the next switch, launch or change
+/// another open profile saves to the catalog, and the switch on the
+/// group heading in Settings waits while it holds.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct LoadoutHold {
     /// Whether the loadouts turn the group on.

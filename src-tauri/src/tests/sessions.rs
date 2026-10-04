@@ -1464,3 +1464,154 @@ async fn a_loadout_turned_on_in_the_second_session_gates_its_own_profile_only() 
         .expect("the selection moves back");
     assert_eq!(shown_active(&h).await, ["Melee"]);
 }
+
+/// The names of the aliases in `names`, sorted.
+fn sorted(names: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut names: Vec<String> = names.into_iter().collect();
+    names.sort();
+    names
+}
+
+/// The aliases catalog.toml holds.
+fn catalog_aliases(h: &Harness) -> Vec<String> {
+    let catalog = crate::loadouts::catalog::load_global_catalog(h.dir.path()).expect("catalog");
+    sorted(catalog.aliases.into_iter().map(|a| a.name))
+}
+
+/// The aliases the profile `session` plays holds.
+async fn aliases_of(h: &Harness, session: SessionId) -> Vec<String> {
+    let session = h.state.session(Some(session)).expect("the session");
+    let p = session.lock_profile().await;
+    sorted(p.aliases.list().into_iter().map(|a| a.name.clone()))
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_alias_added_in_the_first_session_reaches_healer_and_survives_its_save() {
+    use crate::loadouts::set::set_active_loadouts;
+    use vosh_automation::alias::Alias;
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = loadout_mode().await;
+    let (one, two) = (h.first, open_session_on(&h, "Healer").await);
+    // Healer keeps a stack of its own, Heals alone, and an alias no save
+    // has written yet.
+    crate::ipc::session::session_select(h.app.state(), two)
+        .await
+        .expect("the selection moves");
+    set_active_loadouts(h.app.handle(), vec!["Heals".into()])
+        .await
+        .expect("Heals turns on");
+    crate::ipc::session::session_select(h.app.state(), one)
+        .await
+        .expect("the selection moves back");
+    let second = h.state.session(Some(two)).expect("the second session");
+    second
+        .lock_profile()
+        .await
+        .aliases
+        .set(Alias::new("mine", "spam 3"));
+
+    // The first session adds an alias and drops one, and Settings adds
+    // one in a group of its own.
+    h.type_in(one, "#alias ww spam 2").await;
+    h.type_in(one, "#unalias kk").await;
+    let mut loot = Alias::new("ll", "spam 1");
+    loot.group = Some("loot".into());
+    h.state.selected_profile().await.aliases.set(loot);
+    crate::disk::save::tests::persist(&h.state).await;
+    assert_eq!(catalog_aliases(&h), ["hh", "ll", "ww"]);
+    assert_eq!(aliases_of(&h, two).await, ["hh", "ll", "mine", "ww"]);
+    // Healer gates the new group through its own stack.
+    let healer_has_loot = second.lock_profile().await.aliases.is_group_enabled("loot");
+    let default_has_loot = h
+        .state
+        .selected_profile()
+        .await
+        .aliases
+        .is_group_enabled("loot");
+    assert!(!healer_has_loot && default_has_loot);
+
+    // A save from Healer keeps them, and the first session takes its own.
+    crate::disk::save::persist_profile(&h.state, &second.profile()).await;
+    assert_eq!(catalog_aliases(&h), ["hh", "ll", "mine", "ww"]);
+    assert_eq!(aliases_of(&h, one).await, ["hh", "ll", "mine", "ww"]);
+    h.finish(grid).await;
+}
+
+/// Share the theme across the profiles, or keep it per profile, from the
+/// selected session, as Settings does.
+async fn share_theme(h: &Harness, shared: bool) {
+    use crate::profile::shared::{Scope, ScopeConfig};
+    let _persist_guard = crate::disk::save::PERSIST_LOCK.lock().await;
+    let theme = if shared {
+        Scope::Global
+    } else {
+        Scope::Profile
+    };
+    let scope = ScopeConfig {
+        theme,
+        ..ScopeConfig::default()
+    };
+    crate::profile::shared::change_scope_locked(&h.state, scope)
+        .await
+        .expect("the scope changes");
+    crate::disk::save::persist_state(&h.state, &h.state.selected_session().profile()).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test]
+async fn a_shared_theme_set_in_the_first_session_survives_a_save_from_the_second() {
+    // A selection shows the session's grid, which other tests read.
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
+    for loadouts in [false, true] {
+        let h = if loadouts {
+            loadout_mode().await
+        } else {
+            let h = Harness::new(Options::new(Build::New)).await;
+            h.state
+                .app_data
+                .set(h.dir.path().to_path_buf())
+                .expect("the app data folder");
+            h
+        };
+        let two = open_session_on(&h, "Healer").await;
+        let healer = h.state.session(Some(two)).expect("the second session");
+        let global_theme = || async {
+            let global = h
+                .state
+                .profile_set
+                .lock()
+                .await
+                .as_ref()
+                .expect("the set")
+                .global_path();
+            crate::profile::shared::GlobalConfig::load(&global)
+                .expect("global.toml")
+                .theme
+        };
+        h.state.selected_profile().await.ui.theme = "nord".into();
+        crate::disk::save::tests::persist(&h.state).await;
+        assert_eq!(healer.lock_profile().await.ui.theme, "nord", "{loadouts}");
+        crate::disk::save::persist_profile(&h.state, &healer.profile()).await;
+        assert_eq!(global_theme().await.as_deref(), Some("nord"), "{loadouts}");
+
+        // Each profile keeps a theme of its own, until the first session
+        // shares its theme again.
+        share_theme(&h, false).await;
+        healer.lock_profile().await.ui.theme = "dracula".into();
+        crate::disk::save::persist_profile(&h.state, &healer.profile()).await;
+        h.state.selected_profile().await.ui.theme = "solarized".into();
+        share_theme(&h, true).await;
+        assert_eq!(
+            healer.lock_profile().await.ui.theme,
+            "solarized",
+            "{loadouts}"
+        );
+        crate::disk::save::persist_profile(&h.state, &healer.profile()).await;
+        assert_eq!(
+            global_theme().await.as_deref(),
+            Some("solarized"),
+            "{loadouts}"
+        );
+    }
+}
