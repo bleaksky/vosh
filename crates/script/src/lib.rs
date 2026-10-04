@@ -1718,6 +1718,14 @@ mod tests {
         assert_eq!(echoes(&shadowed), ["mine"]);
         let typed = e.eval("mud.echo(string.upper('hp'))", "=#lua").unwrap();
         assert_eq!(echoes(&typed), ["HP"]);
+        // Your own Lua reads the string metatable as stock Lua does.
+        let typed = e
+            .eval(
+                "mud.echo(type(getmetatable('')) .. tostring(getmetatable('').__index == string))",
+                "=#lua",
+            )
+            .unwrap();
+        assert_eq!(echoes(&typed), ["tabletrue"]);
     }
 
     #[test]
