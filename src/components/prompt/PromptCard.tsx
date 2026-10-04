@@ -28,6 +28,7 @@ import {
   withCapture,
   withDesign,
   withMoveTakenBack,
+  withShow,
   withStart,
   type CardStep,
   type MoreItemId,
@@ -110,6 +111,7 @@ import { PromptMarks } from './PromptMarks';
 import { PromptPicker } from './PromptPicker';
 import { PromptPieceBody } from './PromptPiece';
 import { PointName, PointPick, type PointedLine } from './PromptPoint';
+import { ShowButton } from './PromptShow';
 import { DrawOff, Starts } from './PromptStarts';
 import { PromptText } from './PromptText';
 
@@ -132,6 +134,8 @@ import { PromptText } from './PromptText';
 // sent with the values it reads marked, and once it draws your design it
 // labels each value with nothing to show, so you can point at it, over
 // the band of Lifted in the text. Closing it puts your live prompt back.
+// At its foot, beside Draw your prompt, a button picks where your prompt
+// shows, and the card moves with your prompt to the place you pick.
 
 /** Where the card reaches the terminal it sits over. */
 export interface PromptCardHost {
@@ -1092,7 +1096,7 @@ export function PromptCard({
           <>
             {content}
             <div className="pc-rule" aria-hidden="true" />
-            <div className="pc-foot">
+            <div className="pc-foot is-design">
               <Toggle
                 id={drawId}
                 checked={config.draw}
@@ -1101,18 +1105,24 @@ export function PromptCard({
               <label className="pc-switch" htmlFor={drawId}>
                 Draw your prompt
               </label>
-              <span className="pc-spacer" />
-              {config.draw && (
-                <Segmented
-                  label="Preview"
-                  options={previewOptions(forsaken)}
-                  value={preview}
-                  onChange={setPreview}
-                />
-              )}
-              <Button variant="primary" className="pc-done" onClick={onClose}>
-                Done
-              </Button>
+              <ShowButton
+                value={config.show}
+                state={show}
+                onChange={(place) => save(withShow(config, place))}
+              />
+              <div className="pc-foot-end">
+                {config.draw && (
+                  <Segmented
+                    label="Preview"
+                    options={previewOptions(forsaken)}
+                    value={preview}
+                    onChange={setPreview}
+                  />
+                )}
+                <Button variant="primary" className="pc-done" onClick={onClose}>
+                  Done
+                </Button>
+              </div>
             </div>
           </>
         );
