@@ -2,12 +2,45 @@ import { useId } from 'react';
 import { previewOptions } from '../../lib/promptSettings';
 import type { PromptShowState } from '../../lib/promptShow';
 import type { PromptPreviewName, PromptShow } from '../../lib/session';
-import { Button, Segmented, Toggle } from '../settings/ui';
+import { Button, Toggle } from '../settings/ui';
+import { MenuButton } from './MenuButton';
 import { ShowButton } from './PromptShow';
 
-// The foot under your design in Customize prompt: Draw your prompt and
-// where your prompt shows on the left, the preview and Done on the
-// right. The preview shows only while drawing is on.
+// The foot under your design in Customize prompt, on one row 52 tall:
+// Draw your prompt and where your prompt shows on the left, the preview
+// and Done on the right. The preview shows only while drawing is on.
+
+/** The button's name and the menu's. */
+const PREVIEW = 'Preview';
+
+/** The preview menu's width, the width of the menu of where your prompt
+ *  shows. */
+export const PREVIEW_MENU_WIDTH = 160;
+
+interface PreviewButtonProps {
+  value: PromptPreviewName;
+  /** Lament joins the previews under the Forsaken Lands rules. */
+  forsaken: boolean;
+  onChange: (preview: PromptPreviewName) => void;
+}
+
+/** The preview: a compact menu button that reads Preview: and the
+ *  preview now, and opens a menu of the previews above it, their right
+ *  edges together, the current one checked. A screen reader hears
+ *  Preview and the preview now. */
+export function PreviewButton({ value, forsaken, onChange }: PreviewButtonProps) {
+  return (
+    <MenuButton
+      name={PREVIEW}
+      lead={`${PREVIEW}:`}
+      choices={previewOptions(forsaken)}
+      value={value}
+      place="above-end"
+      width={PREVIEW_MENU_WIDTH}
+      onChange={onChange}
+    />
+  );
+}
 
 interface DesignFootProps {
   draw: boolean;
@@ -37,21 +70,14 @@ export function DesignFoot({
 }: DesignFootProps) {
   const drawId = useId();
   return (
-    <div className="pc-foot is-design">
+    <div className="pc-foot">
       <Toggle id={drawId} checked={draw} onChange={onDraw} />
       <label className="pc-switch" htmlFor={drawId}>
         Draw your prompt
       </label>
       <ShowButton value={show} state={showState} onChange={onShow} />
       <div className="pc-foot-end">
-        {draw && (
-          <Segmented
-            label="Preview"
-            options={previewOptions(forsaken)}
-            value={preview}
-            onChange={onPreview}
-          />
-        )}
+        {draw && <PreviewButton value={preview} forsaken={forsaken} onChange={onPreview} />}
         <Button variant="primary" className="pc-done" onClick={onDone}>
           Done
         </Button>

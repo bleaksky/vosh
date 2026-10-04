@@ -36,6 +36,8 @@ export function on(el: FakeElement): Record<string, Handler> {
 }
 
 export interface MountedMenuButton {
+  /** What the element drew into. */
+  container: FakeElement;
   button: FakeElement;
   /** The menu, or null while it is shut. */
   menu: () => FakeElement | null;
@@ -51,7 +53,7 @@ export interface MountedMenuButton {
   escape: () => Promise<void>;
   /** Press somewhere outside the button and its menu. */
   pressOutside: () => Promise<void>;
-  /** Draw the button again from another element. */
+  /** Draw again from another element. */
   update: (element: ReactElement) => Promise<void>;
 }
 
@@ -145,7 +147,12 @@ export function menuButtonDom() {
     await act(async () => fn());
   };
 
-  async function mount(element: ReactElement): Promise<MountedMenuButton> {
+  /** Mounts `element` and finds the menu button in it: the first button,
+   *  or the button `which` picks. */
+  async function mount(
+    element: ReactElement,
+    which: (button: FakeElement) => boolean = () => true,
+  ): Promise<MountedMenuButton> {
     const container = doc.createElement('div');
     doc.body.appendChild(container);
     const root = createRoot(container as unknown as HTMLElement);
@@ -158,7 +165,7 @@ export function menuButtonDom() {
       await act(async () => root.unmount());
       doc.body.removeChild(container);
     });
-    const [button] = findAll(container, (el) => el.nodeName === 'BUTTON');
+    const [button] = findAll(container, (el) => el.nodeName === 'BUTTON' && which(el));
     if (!button) throw new Error('no button');
     const menu = () => findAll(container, (el) => el.getAttribute('role') === 'menu')[0] ?? null;
     const items = () => {
@@ -167,6 +174,7 @@ export function menuButtonDom() {
       return findAll(shown, (el) => el.getAttribute('role') === 'menuitemradio');
     };
     return {
+      container,
       button,
       menu,
       items,

@@ -128,7 +128,8 @@ import { PromptText } from './PromptText';
 // labels each value with nothing to show, so you can point at it, over
 // the band of Lifted in the text. Closing it puts your live prompt back.
 // At its foot, beside Draw your prompt, a button picks where your prompt
-// shows, and the card moves with your prompt to the place you pick.
+// shows, and the card moves with your prompt to the place you pick. A
+// menu before Done picks the preview while drawing is on (DesignFoot).
 
 /** Where the card reaches the terminal it sits over. */
 export interface PromptCardHost {
@@ -241,6 +242,11 @@ export function PromptCard({
   const forsaken =
     codesChosen || (state?.forsaken ?? false) || knownHost || config?.capture.kind === 'aabahran';
   const gameSent = (state?.new_build ?? false) || game !== null;
+  // Lament leaves with the Forsaken Lands rules, and the preview goes
+  // back to Now, so the Preview menu always names the preview it draws.
+  useEffect(() => {
+    if (!forsaken && preview === 'lament') setPreview('now');
+  }, [forsaken, preview]);
 
   const take = (next: PromptConfig) => {
     latest.current = next;
