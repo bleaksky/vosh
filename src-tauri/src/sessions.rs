@@ -21,6 +21,9 @@ use crate::script::SharedTimers;
 use crate::session::connection::SharedConnection;
 use crate::session::SessionHandle;
 
+/// What a command says when it names a session Vosh does not hold.
+pub(crate) const NO_SUCH_SESSION: &str = "Vosh has no such session.";
+
 /// A session's number, which no other session of this run shares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -112,12 +115,14 @@ pub(crate) struct Sessions {
 }
 
 impl Sessions {
+    /// The session `id` names, while the list holds it.
+    pub(crate) fn get(&self, id: SessionId) -> Option<Arc<Session>> {
+        self.list.iter().find(|session| session.id == id).cloned()
+    }
+
     /// The selected session.
     pub(crate) fn selected(&self) -> Arc<Session> {
-        self.list
-            .iter()
-            .find(|session| session.id == self.selected)
-            .cloned()
+        self.get(self.selected)
             .expect("the selected session is in the list")
     }
 }
@@ -130,5 +135,23 @@ impl Default for Sessions {
             list: vec![Arc::new(Session::new(first))],
             selected: first,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SessionId, NO_SUCH_SESSION};
+    use crate::app::state::AppState;
+
+    #[test]
+    fn a_command_acts_on_the_session_it_names_or_on_the_selected_one() {
+        let state = AppState::default();
+        let selected = state.selected_session().id;
+        assert_eq!(state.session(None).map(|s| s.id), Ok(selected));
+        assert_eq!(state.session(Some(selected)).map(|s| s.id), Ok(selected));
+        assert_eq!(
+            state.session(Some(SessionId(2))).map(|s| s.id),
+            Err(NO_SUCH_SESSION.to_string())
+        );
     }
 }

@@ -1,12 +1,17 @@
 //! The commands for the terminal pane on either renderer. The page writes
 //! its own text through them, reads back the native grid's cursor and
 //! screen, loads the saved scrollback as a pane mounts, and reports the
-//! ground your highlight colors must read on.
+//! ground your highlight colors must read on. Each that reads or changes
+//! a session's terminal acts on the session it names, or on the selected
+//! session when it names none. Vosh keeps one native grid, which every
+//! session writes to, so a command that reads only the grid needs its
+//! session only to be one Vosh holds.
 
 use tauri::State;
 use vosh_automation::trigger::readable;
 
 use crate::app::state::SharedState;
+use crate::sessions::SessionId;
 
 /// Write text the webview drew itself, such as your typed echo or an
 /// error notice. The native grid takes it too, as it takes every session
@@ -24,7 +29,9 @@ pub(crate) async fn terminal_local_write(
     state: State<'_, SharedState>,
     text: String,
     after: Option<u64>,
+    session: Option<SessionId>,
 ) -> Result<(), String> {
+    let session = state.session(session)?;
     #[cfg(native_surface)]
     let taken = {
         let taken = crate::native::grid::feed_local(text.as_bytes());
@@ -38,7 +45,6 @@ pub(crate) async fn terminal_local_write(
         let _ = &text;
         u64::MAX
     };
-    let session = state.selected_session();
     if let Some(handle) = session.slot.lock().await.as_ref() {
         let _ = handle.local_write(after.unwrap_or(taken));
     }
@@ -51,11 +57,16 @@ pub(crate) async fn terminal_local_write(
 /// moves. The native grid holds its own selection and scroll,
 /// which the session reads itself.
 #[tauri::command]
-pub(crate) fn terminal_reader_busy(state: State<'_, SharedState>, busy: bool) {
+pub(crate) fn terminal_reader_busy(
+    state: State<'_, SharedState>,
+    busy: bool,
+    session: Option<SessionId>,
+) -> Result<(), String> {
     state
-        .selected_session()
+        .session(session)?
         .reader_busy
         .store(busy, std::sync::atomic::Ordering::Release);
+    Ok(())
 }
 
 /// Where the native grid's cursor sits and where the open region starts,
@@ -65,15 +76,23 @@ pub(crate) fn terminal_reader_busy(state: State<'_, SharedState>, busy: bool) {
 /// own buffer and marker instead.
 #[cfg(native_surface)]
 #[tauri::command]
-pub(crate) fn terminal_cursor() -> Option<crate::native::grid::regions::CursorReport> {
-    crate::native::grid::cursor_report()
+pub(crate) fn terminal_cursor(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<Option<crate::native::grid::regions::CursorReport>, String> {
+    state.session(session)?;
+    Ok(crate::native::grid::cursor_report())
 }
 
 /// No native grid on this build, so there is nothing to report.
 #[cfg(not(native_surface))]
 #[tauri::command]
-pub(crate) fn terminal_cursor() -> Option<()> {
-    None
+pub(crate) fn terminal_cursor(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<Option<()>, String> {
+    state.session(session)?;
+    Ok(None)
 }
 
 /// The native grid's live screen as text, row by row, so the prompt card
@@ -82,23 +101,32 @@ pub(crate) fn terminal_cursor() -> Option<()> {
 /// buffer instead.
 #[cfg(native_surface)]
 #[tauri::command]
-pub(crate) fn terminal_screen_rows() -> Option<crate::native::grid::regions::ScreenRows> {
-    crate::native::grid::screen_rows()
+pub(crate) fn terminal_screen_rows(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<Option<crate::native::grid::regions::ScreenRows>, String> {
+    state.session(session)?;
+    Ok(crate::native::grid::screen_rows())
 }
 
 /// No native grid on this build, so there is nothing to read.
 #[cfg(not(native_surface))]
 #[tauri::command]
-pub(crate) fn terminal_screen_rows() -> Option<()> {
-    None
+pub(crate) fn terminal_screen_rows(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<Option<()>, String> {
+    state.session(session)?;
+    Ok(None)
 }
 
 #[tauri::command]
 pub(crate) async fn scrollback_load(
     state: State<'_, SharedState>,
     feed_native: bool,
+    session: Option<SessionId>,
 ) -> Result<ScrollbackLoad, String> {
-    let session = state.selected_session();
+    let session = state.session(session)?;
     let sb = session.scrollback.lock().await;
     // With the run of repeated lines the screen ends on marked, so a pane
     // that loads it during the run rewrites the count in place.
@@ -131,8 +159,11 @@ pub(crate) async fn scrollback_load(
 /// history too. The xterm renderer clears its own buffer. The session log
 /// keeps every line.
 #[tauri::command]
-pub(crate) async fn scrollback_clear(state: State<'_, SharedState>) -> Result<(), String> {
-    let session = state.selected_session();
+pub(crate) async fn scrollback_clear(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    let session = state.session(session)?;
     session.scrollback.lock().await.clear();
     #[cfg(native_surface)]
     {

@@ -1,14 +1,16 @@
 //! The commands for your connection to the game. The page connects and
 //! disconnects through them, sends the lines you type, plain or masked,
 //! stops a walk on Esc, tells the game the size of the terminal, and
-//! reads the target you track.
+//! reads the target you track. Each acts on the session it names, or on
+//! the selected session when it names none.
 
 use tauri::{AppHandle, State};
 
 use crate::app::state::SharedState;
 use crate::input;
 use crate::output;
-use crate::session::{self, TargetPayload};
+use crate::session::TargetPayload;
+use crate::sessions::SessionId;
 
 #[tauri::command]
 pub(crate) async fn session_connect(
@@ -17,8 +19,10 @@ pub(crate) async fn session_connect(
     host: String,
     port: u16,
     tls: bool,
+    session: Option<SessionId>,
 ) -> Result<(), String> {
-    session::connect(&app, state.inner(), host, port, tls).await
+    let session = state.session(session)?;
+    crate::session::connect(&app, state.inner(), &session, host, port, tls).await
 }
 
 #[tauri::command]
@@ -26,8 +30,10 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharedState>,
     line: String,
+    session: Option<SessionId>,
 ) -> Result<(), String> {
-    input::run_typed_line(&app, state.inner(), &line).await
+    let session = state.session(session)?;
+    input::run_typed_line(&app, state.inner(), &session, &line).await
 }
 
 /// Send a line typed into the masked password field, the one the input
@@ -41,8 +47,9 @@ pub(crate) async fn session_send_masked<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharedState>,
     line: String,
+    session: Option<SessionId>,
 ) -> Result<(), String> {
-    let session = state.selected_session();
+    let session = state.session(session)?;
     let current = session.slot.lock().await;
     let Some(handle) = current.as_ref() else {
         output::emit_output(&app, input::NOT_CONNECTED.to_vec());
@@ -57,8 +64,11 @@ pub(crate) async fn session_send_masked<R: tauri::Runtime>(
 /// Stop the walk under way, as Esc in the command line does. It says
 /// nothing when you are not walking or not connected.
 #[tauri::command]
-pub(crate) async fn session_walk_stop(state: State<'_, SharedState>) -> Result<(), String> {
-    let session = state.selected_session();
+pub(crate) async fn session_walk_stop(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    let session = state.session(session)?;
     if let Some(handle) = session.slot.lock().await.as_ref() {
         let _ = handle.walk(crate::input::walk::WalkCommand::Stop {
             key: true,
@@ -72,8 +82,10 @@ pub(crate) async fn session_walk_stop(state: State<'_, SharedState>) -> Result<(
 pub(crate) async fn session_disconnect(
     app: AppHandle,
     state: State<'_, SharedState>,
+    session: Option<SessionId>,
 ) -> Result<(), String> {
-    session::disconnect(&app, state.inner()).await;
+    let session = state.session(session)?;
+    crate::session::disconnect(&app, state.inner(), &session).await;
     Ok(())
 }
 
@@ -86,8 +98,9 @@ pub(crate) async fn session_set_window_size(
     state: State<'_, SharedState>,
     cols: u16,
     rows: u16,
+    session: Option<SessionId>,
 ) -> Result<(), String> {
-    let session = state.selected_session();
+    let session = state.session(session)?;
     // Always cache the size — even when no session exists, so the
     // next `session_connect` can seed the negotiator with the real
     // dimensions instead of the 80×24 default. Without this the
@@ -110,8 +123,11 @@ pub(crate) async fn session_set_window_size(
 /// Frontend uses this to seed the `TargetBar` on mount before any
 /// `session://target` events fire.
 #[tauri::command]
-pub(crate) async fn target_get(state: State<'_, SharedState>) -> Result<TargetPayload, String> {
-    let session = state.selected_session();
+pub(crate) async fn target_get(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<TargetPayload, String> {
+    let session = state.session(session)?;
     let c = session.connection.lock();
     Ok(TargetPayload::of(&c))
 }
@@ -148,7 +164,7 @@ mod tests {
 
         let answer = tokio::time::timeout(
             Duration::from_secs(1),
-            super::target_get(app.state::<SharedState>()),
+            super::target_get(app.state::<SharedState>(), None),
         )
         .await
         .expect("the target answers without the profile")

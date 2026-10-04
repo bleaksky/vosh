@@ -234,6 +234,7 @@ impl Harness {
             self.app.handle().clone(),
             self.app.state(),
             line.to_string(),
+            None,
         )
         .await
         .expect("the line goes out");
@@ -475,7 +476,7 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
     let h = Harness::new(Options::new(Build::New)).await;
     h.set_prompt(codes(PROMPT)).await;
     h.state.note_active_profile(DEFAULT_PROFILE_NAME);
-    crate::ipc::prompt::prompt_watch(h.app.state(), true);
+    crate::ipc::prompt::prompt_watch(h.app.state(), true, None).expect("the card watches");
     h.connect().await;
 
     // While the card watches, the state follows each prompt, with the
@@ -543,9 +544,15 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
         template: edited.template,
         ..h.prompt_table().await
     };
-    crate::ipc::prompt::prompt_config_set(h.app.handle().clone(), h.app.state(), config, None)
-        .await
-        .expect("the table saves");
+    crate::ipc::prompt::prompt_config_set(
+        h.app.handle().clone(),
+        h.app.state(),
+        config,
+        None,
+        None,
+    )
+    .await
+    .expect("the table saves");
     h.until_last_row("<1020>800").await;
     assert_eq!(
         h.events(crate::app::events::PROMPT_CONFIG_CHANGED),
@@ -566,7 +573,7 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
     assert_eq!(state["open_row"]["spans"][3]["col"], 6);
 
     // Once the card stops watching, no state follows the prompts.
-    crate::ipc::prompt::prompt_watch(h.app.state(), false);
+    crate::ipc::prompt::prompt_watch(h.app.state(), false, None).expect("the card stops watching");
     let watched = h.events("session://prompt-state").len();
     h.type_line("pulses 2").await;
     h.until_shown("Pulse 2 of 2.").await;
@@ -614,7 +621,7 @@ async fn a_new_width_tells_the_card_where_the_push_draws_now() {
         ..codes(PROMPT)
     })
     .await;
-    crate::ipc::prompt::prompt_watch(h.app.state(), true);
+    crate::ipc::prompt::prompt_watch(h.app.state(), true, None).expect("the card watches");
     h.connect().await;
 
     // The session starts 100 wide, so mana takes the last three columns.
@@ -676,9 +683,14 @@ async fn an_echo_the_session_hears_of_late_leaves_the_prompt_after_it_open() {
     // Your echo lands on the terminal after the login prompt, but your
     // line reaches the session first, and the game answers.
     let after = h.echo("look");
-    crate::ipc::session::session_send_input(h.app.handle().clone(), h.app.state(), "look".into())
-        .await
-        .expect("the line goes out");
+    crate::ipc::session::session_send_input(
+        h.app.handle().clone(),
+        h.app.state(),
+        "look".into(),
+        None,
+    )
+    .await
+    .expect("the line goes out");
     h.until_shown("[Exits: south]").await;
     h.until_last_row("<1020>").await;
 
@@ -692,9 +704,15 @@ async fn an_echo_the_session_hears_of_late_leaves_the_prompt_after_it_open() {
         template: "<%hp>%mana".into(),
         ..h.prompt_table().await
     };
-    crate::ipc::prompt::prompt_config_set(h.app.handle().clone(), h.app.state(), config, None)
-        .await
-        .expect("the table saves");
+    crate::ipc::prompt::prompt_config_set(
+        h.app.handle().clone(),
+        h.app.state(),
+        config,
+        None,
+        None,
+    )
+    .await
+    .expect("the table saves");
     h.until_last_row("<1020>800").await;
     assert_eq!(
         h.screen()
@@ -734,7 +752,7 @@ async fn the_new_build_gives_vosh_the_prompt_at_login_and_follows_the_game() {
         h.events("session://game-prompt-seen"),
         [serde_json::json!({"kind": "gmcp", "text": PROMPT, "applied": true})]
     );
-    let seen = crate::prompt::last_seen::last_seen(&h.state)
+    let seen = crate::prompt::last_seen::last_seen(&h.state, &h.state.selected_session())
         .await
         .expect("the game sent it");
     assert_eq!(seen.source, "gmcp");
@@ -770,7 +788,7 @@ async fn the_new_build_gives_vosh_the_prompt_at_login_and_follows_the_game() {
         .collect();
     assert_eq!(toasts.len(), 2, "one toast at login, one for prompt x");
     assert_eq!(toasts[1]["text"], PROMPT_X);
-    let seen = crate::prompt::last_seen::last_seen(&h.state)
+    let seen = crate::prompt::last_seen::last_seen(&h.state, &h.state.selected_session())
         .await
         .expect("seen");
     assert!(!seen.at_login);
@@ -891,7 +909,7 @@ async fn the_older_build_reads_your_prompt_from_the_game_replies() {
         ]
     );
     h.until_last_row("<1020>").await;
-    let last = crate::prompt::last_seen::last_seen(&h.state)
+    let last = crate::prompt::last_seen::last_seen(&h.state, &h.state.selected_session())
         .await
         .expect("seen");
     assert_eq!(last.source, "session");
@@ -1063,7 +1081,7 @@ async fn the_code_reader_the_card_chose_hears_your_prompt_on_another_host() {
 
     // More > Use Forsaken Lands prompt codes… in the card, then prompt in
     // the game: the reply fills the card's fields (P2).
-    crate::ipc::prompt::prompt_code_reader_set(h.app.state(), true)
+    crate::ipc::prompt::prompt_code_reader_set(h.app.state(), true, None)
         .await
         .expect("the card chose the code reader");
     h.type_line("prompt").await;
@@ -1097,7 +1115,7 @@ async fn the_log_lookup_finds_only_the_prompt_of_the_profiles_own_character() {
     h.disconnect().await;
 
     // Default claims Tester, so its card prefills from the log.
-    let seen = crate::prompt::last_seen::last_seen(&h.state)
+    let seen = crate::prompt::last_seen::last_seen(&h.state, &h.state.selected_session())
         .await
         .expect("the log holds Tester's prompt");
     assert_eq!(seen.source, "log");
@@ -1112,7 +1130,10 @@ async fn the_log_lookup_finds_only_the_prompt_of_the_profiles_own_character() {
             .switch("Healer")
             .expect("the switch");
     }
-    assert_eq!(crate::prompt::last_seen::last_seen(&h.state).await, None);
+    assert_eq!(
+        crate::prompt::last_seen::last_seen(&h.state, &h.state.selected_session()).await,
+        None
+    );
 
     // Healer logs in on the same game. The log still holds only
     // Tester's prompt, so Healer's card stays empty.
@@ -1130,7 +1151,10 @@ async fn the_log_lookup_finds_only_the_prompt_of_the_profiles_own_character() {
             == Some("Healer")
     })
     .await;
-    assert_eq!(crate::prompt::last_seen::last_seen(&h.state).await, None);
+    assert_eq!(
+        crate::prompt::last_seen::last_seen(&h.state, &h.state.selected_session()).await,
+        None
+    );
     h.finish(grid).await;
 }
 
@@ -1244,7 +1268,7 @@ async fn a_reconnect_reads_the_prompt_until_char_prompt_comes_again() {
         h.events("session://game-prompt-seen"),
         [serde_json::json!({"kind": "gmcp", "text": PROMPT, "applied": false})]
     );
-    let seen = crate::prompt::last_seen::last_seen(&h.state)
+    let seen = crate::prompt::last_seen::last_seen(&h.state, &h.state.selected_session())
         .await
         .expect("seen");
     assert_eq!(seen.source, "gmcp");
@@ -2646,6 +2670,7 @@ async fn a_line_typed_after_the_game_closes_the_link_says_not_connected() {
         h.app.handle().clone(),
         h.app.state(),
         "look".to_string(),
+        None,
     )
     .await;
     assert_eq!(sent, Ok(()), "look finds no session to send to");

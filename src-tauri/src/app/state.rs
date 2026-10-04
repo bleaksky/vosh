@@ -10,7 +10,7 @@ use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
 use crate::app::plugins::SharedPluginManager;
 use crate::logs::SharedLogStore;
 use crate::profile::live::Profile;
-use crate::sessions::{Session, Sessions};
+use crate::sessions::{Session, SessionId, Sessions, NO_SUCH_SESSION};
 
 /// What every command, window and session shares. The sessions, the live
 /// profile, the profile set, the log store, the plugins, the catalog and
@@ -111,6 +111,20 @@ impl AppState {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .selected()
+    }
+
+    /// The session a command acts on: the one `id` names, or the selected
+    /// session when it names none. A session Vosh does not hold is an
+    /// error, in a sentence. Take it before any other lock.
+    pub(crate) fn session(&self, id: Option<SessionId>) -> Result<Arc<Session>, String> {
+        let sessions = self
+            .sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match id {
+            None => Ok(sessions.selected()),
+            Some(id) => sessions.get(id).ok_or_else(|| NO_SUCH_SESSION.to_string()),
+        }
     }
 
     /// Keep `notices` for the main window to show.

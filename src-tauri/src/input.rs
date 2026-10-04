@@ -229,7 +229,7 @@ pub(crate) fn may_replace_profile(state: &AppState, line: &str) -> bool {
 /// What the terminal prints when you send a line with no connection.
 pub(crate) const NOT_CONNECTED: &[u8] = b"\r\n[not connected]\r\n";
 
-/// Run a line you typed in the selected session, the body of
+/// Run a line you typed in `session`, the body of
 /// `session_send_input`. `#help` and `#logs` take their short cuts. Any
 /// other line runs through the pipeline under the profile lock and the
 /// connection's. Then the prompt repaints when the line changed how it
@@ -238,11 +238,11 @@ pub(crate) const NOT_CONNECTED: &[u8] = b"\r\n[not connected]\r\n";
 pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
+    session: &Arc<Session>,
     line: &str,
 ) -> Result<(), String> {
-    let session = state.selected_session();
     // What the plugins printed at launch, if nothing showed it yet.
-    crate::app::plugins::show_launch_lines(app, &session);
+    crate::app::plugins::show_launch_lines(app, session);
     // `#help <words>` opens Help on those words. The topics live in the
     // page, so the main window searches them, opens Help on the best
     // match, or says in the terminal that none matched.
@@ -288,7 +288,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     // once, and `#prompt default` draws the new design there. A typed
     // line runs outside the session loop, so it waits for the repaint.
     if shown.repaint {
-        request_prompt_repaint(&session).await;
+        request_prompt_repaint(session).await;
     }
 
     settle_line_effects(app, effects).await;
@@ -297,7 +297,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         let _ = app.emit(events::TARGET, payload);
     }
 
-    deliver_script_result(app, state, &session, apply).await
+    deliver_script_result(app, state, session, apply).await
 }
 
 /// Apply a script result outside the session loop, the way every path
