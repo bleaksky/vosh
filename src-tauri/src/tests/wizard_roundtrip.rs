@@ -80,12 +80,16 @@ const TRIGGERS: [&str; 4] = ["flee", "loot", "greet", "tell"];
 const MACROS: [&str; 4] = ["f1", "f2", "ctrl+1", "f3"];
 
 /// The preset library the launch below installs from, as src/lib/presets.ts
-/// holds it: each preset id with the names of its triggers. Every preset
-/// is on by default, as every preset in the real library is.
-const LIBRARY: [(&str, &[&str]); 3] = [
+/// holds it: each preset id with the names of its triggers. The first
+/// three are among [`PRESETS_ON_BY_DEFAULT`], so an empty list turns them
+/// on. The last ships off, as a preset added after the defaults froze
+/// does, so an empty list leaves it off and a list beside an empty one
+/// can name it.
+const LIBRARY: [(&str, &[&str]); 4] = [
     ("healing_basics", &["preset heal 1", "preset heal 2"]),
     ("potion_labels", &["preset potion 1"]),
     ("herb_labels", &["preset herb 1", "preset herb 2"]),
+    ("later_labels", &["preset later 1"]),
 ];
 
 /// A preset an older build had, which [`LIBRARY`] no longer holds. A
@@ -789,7 +793,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         .map_err(|e| format!("analyze: {e}"))?;
     // The preview holds the preset list every character shares and the
     // list each one had, so it can say who gains or loses a preset. A
-    // profile that never saved a file has every preset on.
+    // profile that never saved a file has the presets on by default on.
     let previewed = presets_on(&plan.shared_presets);
     if previewed != shared {
         return Err(format!("the preview shares {previewed:?}, not {shared:?}"));
