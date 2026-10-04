@@ -1,21 +1,19 @@
 //! The profile in memory. It holds what its file saves, plus what runs
-//! with that profile and no file saves: the Lua engine, the aliases
-//! plugins make, the macro recorder, the revision counters that move
-//! when a group turns on or off, and the name Vosh shows for it.
+//! with that profile and no file saves: the aliases plugins make, the
+//! macro recorder, the revision counters that move when a group turns on
+//! or off, and the name Vosh shows for it. Each session runs a Lua engine
+//! of its own on its [`Connection`](crate::session::connection::Connection).
 //!
 //! Some of it still belongs to one connection, and R14b decides where it
 //! goes. The session scoped variables clear as a connection starts,
 //! among them the GMCP mirrors and `target`, which mirrors the target on
-//! the connection and clears as a session ends. The Lua engine keeps the
-//! latest GMCP packet of each package for a new handler, and forgets
-//! them as a session ends.
+//! the connection and clears as a session ends.
 
 use std::collections::BTreeSet;
 
 use vosh_automation::alias::{AliasStore, PluginAliases};
 use vosh_automation::trigger::TriggerStore;
 use vosh_automation::vars::VariableStore;
-use vosh_script::ScriptEngine;
 
 use crate::profile::file::{GroupFolders, PluginsPersist};
 use crate::profile::ui::UiConfig;
@@ -34,9 +32,6 @@ pub(crate) struct Profile {
     pub(crate) triggers: TriggerStore,
     /// The tick settings the file saves, with the reset pattern compiled.
     pub(crate) tick: TickSettings,
-    /// The Lua engine, which runs your scripts and the plugins this
-    /// profile turns on. No file saves its state.
-    pub(crate) script: ScriptEngine,
     pub(crate) ui: UiConfig,
     pub(crate) plugins: PluginsPersist,
     /// Active macro recorder. `Some` between `#record <name>` and

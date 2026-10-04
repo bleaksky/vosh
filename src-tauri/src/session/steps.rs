@@ -58,12 +58,12 @@ fn line_pass(
         highlight_ground::get(),
     );
     let tick_step = tick_reset(p, c, plain, now);
-    script::snapshot_vars(&p.script, &p.vars);
-    let mut outcome = p.script.match_line(plain);
+    script::snapshot_vars(&c.script, &p.vars);
+    let mut outcome = c.script.match_line(plain);
     script::turn_off_stopped(p, &outcome);
     // The Lua bodies of this line's Script actions join the outcome the
     // Lua registered triggers wrote, so one apply takes both.
-    outcome.append(run_trigger_scripts(p, &result));
+    outcome.append(run_trigger_scripts(p, c, &result));
     let apply = script::apply_actions(p, c, outcome);
     LinePass {
         result,
@@ -85,14 +85,18 @@ fn tick_reset(p: &Profile, c: &mut Connection, plain: &str, now: Instant) -> Opt
 /// captures, and return what they produced. A body Vosh stops turns its
 /// trigger off at once, so a later match of the same trigger on this
 /// line runs nothing.
-pub(super) fn run_trigger_scripts(p: &mut Profile, result: &LineResult) -> ScriptOutcome {
+pub(super) fn run_trigger_scripts(
+    p: &mut Profile,
+    c: &mut Connection,
+    result: &LineResult,
+) -> ScriptOutcome {
     let mut acc = ScriptOutcome::default();
     for call in &result.scripts {
         if p.triggers.is_stopped(&call.source) {
             continue;
         }
         let owner = Owner::Trigger(call.source.clone());
-        let outcome = p.script.run_body(&owner, &call.body, &call.captures);
+        let outcome = c.script.run_body(&owner, &call.body, &call.captures);
         script::turn_off_stopped(p, &outcome);
         acc.append(outcome);
     }
@@ -465,9 +469,9 @@ fn prompt_block(
         highlight_ground::get(),
     );
     if !result.scripts.is_empty() {
-        script::snapshot_vars(&p.script, &p.vars);
+        script::snapshot_vars(&c.script, &p.vars);
     }
-    let outcome = run_trigger_scripts(p, &result);
+    let outcome = run_trigger_scripts(p, c, &result);
     let mut apply = script::apply_actions(p, c, outcome);
     batch.prompt_vars = true;
     batch.prompt = true;
@@ -599,8 +603,8 @@ fn unread_partial(
         || !result.scripts.is_empty();
     let mut apply = ApplyResult::default();
     if effect {
-        script::snapshot_vars(&p.script, &p.vars);
-        let outcome = run_trigger_scripts(p, &result);
+        script::snapshot_vars(&c.script, &p.vars);
+        let outcome = run_trigger_scripts(p, c, &result);
         apply = script::apply_actions(p, c, outcome);
         // The webview hears every prompt a Prompts trigger acted on.
         batch.prompt_vars = true;

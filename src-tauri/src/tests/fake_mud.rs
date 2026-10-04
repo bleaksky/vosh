@@ -1896,7 +1896,7 @@ async fn lua_a_new_gmcp_handler_hears_the_last_packet_at_once() {
     .await;
     h.until_shown("Tester is level 50").await;
     h.disconnect().await;
-    let after = h.state.profile.lock().await.script.eval(
+    let after = h.state.selected_session().connection.lock().script.eval(
         "mud.on_gmcp('Char.Status', function() mud.echo('stale') end)",
         "=#lua",
     );
@@ -1969,7 +1969,9 @@ async fn lua_a_profile_switch_turns_its_plugins_on_and_the_others_off() {
     assert_eq!(shown(&h, "everywhere loaded"), 1, "it kept running");
     {
         let p = h.state.profile.lock().await;
-        assert_eq!(p.script.loaded_plugins(), ["everywhere", "healer_only"]);
+        let session = h.state.selected_session();
+        let c = session.connection.lock();
+        assert_eq!(c.script.loaded_plugins(), ["everywhere", "healer_only"]);
         assert_eq!(p.plugin_aliases.list().len(), 1);
     }
 
@@ -1983,7 +1985,9 @@ async fn lua_a_profile_switch_turns_its_plugins_on_and_the_others_off() {
     .expect("the switch back");
     {
         let p = h.state.profile.lock().await;
-        assert_eq!(p.script.loaded_plugins(), ["everywhere"]);
+        let session = h.state.selected_session();
+        let c = session.connection.lock();
+        assert_eq!(c.script.loaded_plugins(), ["everywhere"]);
         let leftover = &p.plugin_aliases.list();
         assert!(leftover.is_empty(), "{leftover:?}");
     }
@@ -2024,9 +2028,9 @@ async fn lua_a_plugin_load_prints_its_lines_once_you_connect() {
     .await;
     assert!(h
         .state
-        .profile
+        .selected_session()
+        .connection
         .lock()
-        .await
         .script
         .is_stopped(&vosh_script::Owner::Plugin("spin".into())));
 

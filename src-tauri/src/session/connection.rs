@@ -1,8 +1,8 @@
 //! What one connection holds apart from the profile: the target you pick,
 //! its quick keys and the characters in the room, which the commands
 //! share, the room look and the end of a fight, which the loop follows
-//! line by line, and the tick's count and the prompt engine, which both
-//! read. Each [`Session`](crate::sessions::Session) holds its
+//! line by line, the tick's count and the prompt engine, which both read,
+//! and the session's Lua engine. Each [`Session`](crate::sessions::Session) holds its
 //! [`Connection`] behind a lock of its own, [`SharedConnection`], and the
 //! session loop holds a handle to it, so a command reads it straight from
 //! the session and never asks the loop.
@@ -18,13 +18,16 @@
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
+use vosh_script::ScriptEngine;
+
 use super::room_block::RoomBlock;
 use crate::tick::TickRuntime;
 
 /// What one connection holds apart from the profile. Each session holds
 /// one, which outlives each connection the session makes, so a target you
-/// set offline carries into the next connection and your quick keys last
-/// until you quit.
+/// set offline carries into the next connection, your quick keys last
+/// until you quit, and the Lua engine runs `#lua` and plugin aliases
+/// while no game listens.
 #[derive(Debug, Default)]
 pub(crate) struct Connection {
     /// Your target plus the quick keys that aim at it. The target clears
@@ -61,6 +64,13 @@ pub(crate) struct Connection {
     /// [`crate::profile::live::Profile::prompt`] for the rule that keeps
     /// the two the same.
     pub(crate) prompt: vosh_prompt::PromptEngine,
+    /// The session's Lua engine, which runs your scripts and the plugins
+    /// the profile turns on. Each session runs its own, so a Lua global,
+    /// a Lua trigger or a timer stays in the session that made it, while
+    /// what Lua asks of the profile reaches every session on it. It keeps
+    /// the latest GMCP packet of each package for a new handler, and
+    /// forgets them as a connection ends. No file saves its state.
+    pub(crate) script: ScriptEngine,
 }
 
 impl Connection {

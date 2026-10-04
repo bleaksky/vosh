@@ -450,7 +450,7 @@ pub(crate) mod tests {
         // Once the swap lets go of the profile, the plugins of the one you
         // left are off, and what the new one printed waits to show.
         assert_eq!(
-            state.profile.lock().await.script.loaded_plugins(),
+            session.connection.lock().script.loaded_plugins(),
             ["everywhere", "healer_only"]
         );
         assert_eq!(apply.echoes, ["healer_only on"]);

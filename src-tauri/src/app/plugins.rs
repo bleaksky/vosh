@@ -1,13 +1,14 @@
 //! Lua plugin manager. A plugin is a directory under
 //! `<app_data_dir>/plugins/<slug>/` containing a `manifest.toml` and one or
 //! more Lua files. The manifest declares which file is the entry point;
-//! enabled plugins have their entry script loaded into the shared
-//! `ScriptEngine` on launch.
+//! enabled plugins have their entry script loaded into each session's
+//! Lua engine as the session opens its profile.
 //!
 //! The `[plugins] enabled` list in the profile file says which plugins
-//! are on in that profile. The plugins it names load at launch, and a
-//! profile switch turns the next profile's plugins on and the others off
-//! while you play. You edit the list by hand while Vosh is closed.
+//! are on in that profile. The plugins it names load at launch and in
+//! each session you open, and a profile switch turns the next profile's
+//! plugins on and the others off in the session it switches while you
+//! play. You edit the list by hand while Vosh is closed.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -276,7 +277,7 @@ pub(crate) fn plugin_on(
         Ok(plugin) => plugin,
         Err(e) => {
             error!(name = %name, error = %e, "plugin entry missing");
-            p.script.list_unread_plugin(name);
+            c.script.list_unread_plugin(name);
             let outcome = vosh_script::ScriptOutcome {
                 actions: vec![vosh_script::Action::Error(format!(
                     "Vosh could not read plugin {name} and left it off."
@@ -289,8 +290,8 @@ pub(crate) fn plugin_on(
     };
     // A load runs Lua for certain, even when nothing else is loaded,
     // as at a switch that turned every other plugin off first.
-    crate::script::refresh_vars(&p.script, &p.vars);
-    let outcome = p.script.load_script(
+    crate::script::refresh_vars(&c.script, &p.vars);
+    let outcome = c.script.load_script(
         Owner::Plugin(name.to_string()),
         &plugin.chunk(name),
         &plugin.code,
@@ -307,7 +308,7 @@ pub(crate) fn plugin_on(
 /// handlers, timers and aliases. The variables it set and the groups it
 /// turned on or off stay.
 pub(crate) fn plugin_off(p: &mut Profile, c: &mut Connection, name: &str) -> ApplyResult {
-    let outcome = p.script.unload(&Owner::Plugin(name.to_string()));
+    let outcome = c.script.unload(&Owner::Plugin(name.to_string()));
     info!(name = %name, "unloaded plugin");
     crate::script::apply_actions(p, c, outcome)
 }
@@ -329,13 +330,13 @@ pub(crate) fn follow_profile_plugins(
             wanted.push(name.clone());
         }
     }
-    let running = p.script.loaded_plugins();
+    let running = c.script.loaded_plugins();
     let mut apply = ApplyResult::default();
     for name in running.iter().filter(|name| !wanted.contains(name)) {
         apply.append(plugin_off(p, c, name));
     }
     for name in wanted.iter().filter(|name| !running.contains(name)) {
-        if p.script.is_stopped(&Owner::Plugin(name.clone())) {
+        if c.script.is_stopped(&Owner::Plugin(name.clone())) {
             continue;
         }
         apply.append(plugin_on(p, c, plugins_dir, name));
@@ -393,12 +394,14 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
 }
 
 /// Find the plugins in `plugins_dir` and load each one the profile turns
-/// on for `session`, once each in the order its list gives, as a switch
-/// does from a start with none running. What an entry script asks for
-/// applies as on every other path that runs Lua, so its timers,
-/// `mud.input` lines and prompt values take effect. No terminal shows and
-/// no game listens yet, so the lines it prints wait for
-/// [`show_launch_lines`], and what it would send goes to the log.
+/// on into the engine of `session`, once each in the order its list
+/// gives, as a switch does from a start with none running. Launch calls
+/// it for the session the app starts with, and `session_open` for each
+/// session you open. What an entry script asks for applies as on every
+/// other path that runs Lua, so its timers, `mud.input` lines and prompt
+/// values take effect. No terminal shows the session and no game listens
+/// yet, so the lines it prints wait for [`show_launch_lines`], and what
+/// it would send goes to the log.
 pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     state: &SharedState,
@@ -417,7 +420,7 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
         info!(
             bytes = collected.bytes.len(),
             walk = collected.walk.is_some(),
-            "plugin output at launch has no game to go to"
+            "plugin output before a connect has no game to go to"
         );
     }
     session
@@ -427,8 +430,8 @@ pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
         .extend(collected.echoes);
 }
 
-/// Print the lines the plugins printed as they loaded into `session` at
-/// launch, once, now that a terminal listens. The first connect and the
+/// Print the lines the plugins printed as they loaded into `session`, at
+/// launch or as it opened, once, now that a terminal listens. The first connect and the
 /// first line you type each call it, and whichever comes first prints
 /// them.
 pub(crate) fn show_launch_lines<R: tauri::Runtime>(app: &tauri::AppHandle<R>, session: &Session) {
@@ -605,10 +608,10 @@ mod tests {
             ["\x1b[90m[lua]\x1b[0m \x1b[31mVosh could not read plugin missing and left it off.\x1b[0m"]
         );
         assert_eq!(
-            p.script.loaded_plugins(),
+            c.script.loaded_plugins(),
             ["everywhere", "healer_only", "missing"]
         );
-        let leftover = &p.script.lua_triggers();
+        let leftover = &c.script.lua_triggers();
         assert!(leftover.is_empty(), "{leftover:?}");
         // Only the plugin that went off lost its timer, and the one both
         // turn on did not load again.
@@ -648,7 +651,7 @@ mod tests {
         let mut c = Connection::default();
         p.plugins.enabled = vec!["runaway".into()];
         follow_profile_plugins(&mut p, &mut c, tmp.path());
-        let stopped = p
+        let stopped = c
             .script
             .dispatch_gmcp("Char.Vitals", &serde_json::json!({}));
         assert_eq!(stopped.stopped, [Owner::Plugin("runaway".into())]);
@@ -660,12 +663,12 @@ mod tests {
         let back = follow_profile_plugins(&mut p, &mut c, tmp.path());
         let leftover = &back.echoes;
         assert!(leftover.is_empty(), "{leftover:?}");
-        let leftover = &p.script.loaded_plugins();
+        let leftover = &c.script.loaded_plugins();
         assert!(leftover.is_empty(), "{leftover:?}");
-        assert!(p.script.is_stopped(&Owner::Plugin("runaway".into())));
+        assert!(c.script.is_stopped(&Owner::Plugin("runaway".into())));
         let leftover = &p.plugin_aliases.list();
         assert!(leftover.is_empty(), "{leftover:?}");
-        let quiet = p
+        let quiet = c
             .script
             .dispatch_gmcp("Char.Vitals", &serde_json::json!({}));
         assert!(quiet.actions.is_empty(), "{:?}", quiet.actions);

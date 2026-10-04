@@ -59,11 +59,10 @@ fn slash_script_load(
     // owner takes the name the folder gives the file.
     let file = spelled_on_disk(&scripts, &file);
     let path = scripts.join(&file);
-    script::refresh_vars(&profile.script, &profile.vars);
-    let outcome =
-        profile
-            .script
-            .load_script(Owner::Script(file.clone()), &format!("@{file}"), &code);
+    script::refresh_vars(&c.script, &profile.vars);
+    let outcome = c
+        .script
+        .load_script(Owner::Script(file.clone()), &format!("@{file}"), &code);
     let failed = outcome.failed;
     lua.append(script::apply_actions(profile, c, outcome));
     // A script that failed says why in its own lines.
@@ -85,12 +84,12 @@ fn slash_script_reload(
     let Some(app_data) = state.app_data.get() else {
         return InputResult::error("could not resolve scripts directory");
     };
-    script::refresh_vars(&profile.script, &profile.vars);
+    script::refresh_vars(&c.script, &profile.vars);
     let mut outcome = ScriptOutcome::default();
-    for owner in profile.script.reload_order() {
+    for owner in c.script.reload_order() {
         match read_again(app_data, &owner) {
             Some(Ok((chunk, code))) => {
-                outcome.append(profile.script.load_script(owner, &chunk, &code));
+                outcome.append(c.script.load_script(owner, &chunk, &code));
             }
             Some(Err(line)) => outcome.actions.push(Action::Error(line)),
             None => {}
@@ -129,9 +128,9 @@ fn read_again(
     })
 }
 
-pub(super) fn slash_scripts_list(profile: &Profile) -> InputResult {
-    let names = profile.script.loaded_script_names();
-    let triggers = profile.script.lua_triggers();
+pub(super) fn slash_scripts_list(c: &Connection) -> InputResult {
+    let names = c.script.loaded_script_names();
+    let triggers = c.script.lua_triggers();
     let mut lines = Vec::new();
     if names.is_empty() {
         lines.push("no scripts loaded".to_string());
@@ -166,8 +165,8 @@ pub(super) fn slash_lua(
     if code.is_empty() {
         return InputResult::error("usage #lua <code>");
     }
-    script::refresh_vars(&profile.script, &profile.vars);
-    let outcome = profile.script.eval(code, "=#lua");
+    script::refresh_vars(&c.script, &profile.vars);
+    let outcome = c.script.eval(code, "=#lua");
     lua.append(script::apply_actions(profile, c, outcome));
     InputResult::empty()
 }
