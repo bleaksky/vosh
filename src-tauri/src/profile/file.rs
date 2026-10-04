@@ -19,7 +19,7 @@ use crate::profile::live::{Macro, Profile, Timer};
 use crate::profile::set::ProfileSet;
 use crate::profile::shared::GlobalConfig;
 use crate::profile::ui::{coerce_affects_thresholds, UiConfig};
-use crate::tick::TickConfig;
+use crate::tick::{TickConfig, TickSettings};
 
 #[derive(Debug, Error)]
 pub(crate) enum ConfigError {
@@ -272,7 +272,9 @@ impl ProfileConfig {
     }
 
     /// Apply a snapshot onto a live profile, replacing the relevant pieces.
-    /// Triggers with invalid regex are reported and skipped.
+    /// Triggers with invalid regex are reported and skipped. A caller with
+    /// a live connection then hands its tick count the config this
+    /// replaced, through [`crate::tick::TickRuntime::adopt`].
     pub(crate) fn apply_to(&self, profile: &mut Profile) -> Vec<String> {
         let mut warnings = Vec::new();
 
@@ -316,23 +318,20 @@ impl ProfileConfig {
         triggers.set_disabled_groups(self.disabled_trigger_groups.iter().cloned());
         profile.triggers = triggers;
 
-        // Tick: take the persisted settings and keep the running count.
-        // A switch mid session would otherwise drop the last tick and
-        // freeze the status line until the game's next tick. A running
-        // tick stays on (see `TickRuntime::adopt`).
+        // Tick: take the persisted settings. The running count stays on
+        // the connection, which follows them (see `TickRuntime::adopt`).
         let reset_regex = crate::tick::compile_reset_pattern(self.tick.reset_pattern.as_deref())
             .unwrap_or_else(|e| {
                 warnings.push(format!("tick reset pattern rejected: {e}"));
                 None
             });
-        profile.tick.adopt(
-            TickConfig {
+        profile.tick = TickSettings {
+            config: TickConfig {
                 interval_secs: self.tick.interval_secs.max(1),
                 ..self.tick.clone()
             },
             reset_regex,
-            tokio::time::Instant::now(),
-        );
+        };
 
         // UI preferences carry across as a single clone (see the
         // matching note in `from_profile`).
@@ -544,6 +543,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+    use crate::session::connection::Connection;
     use vosh_automation::trigger::{HighlightStyle, NamedColor, TriggerAction};
 
     #[test]
@@ -608,23 +608,42 @@ mod tests {
         Duration::from_secs(s)
     }
 
-    /// A live profile in a session whose 30 second tick synced to the
-    /// game's tick 3 seconds after it connected, with the world hour
-    /// primed and the warning already printed this cycle.
-    fn synced_profile(start: tokio::time::Instant) -> Profile {
+    /// A live profile and its connection in a session whose 30 second
+    /// tick synced to the game's tick 3 seconds after it connected, with
+    /// the world hour primed and the warning already printed this cycle.
+    fn synced_profile(start: tokio::time::Instant) -> (Profile, Connection) {
         let mut profile = Profile::default();
-        profile.tick.start_session(start);
-        let _ = profile.tick.observe_world_hour("9");
-        assert!(profile.tick.on_game_tick(start + secs(3)).is_some());
-        profile.tick.warned_this_cycle = true;
-        profile
+        let mut c = Connection::default();
+        c.tick.start_session(&mut profile.tick, start);
+        let _ = c.tick.observe_world_hour("9");
+        assert!(c
+            .tick
+            .on_game_tick(&profile.tick, start + secs(3))
+            .is_some());
+        c.tick.warned_this_cycle = true;
+        (profile, c)
+    }
+
+    /// Lay `incoming` over the live profile as a switch, `#profile load`
+    /// or `#profile reset` does: the file's settings, then the count on
+    /// the connection follows them.
+    fn lay_over(
+        incoming: &ProfileConfig,
+        profile: &mut Profile,
+        c: &mut Connection,
+    ) -> Vec<String> {
+        let before = profile.tick.config.clone();
+        let warnings = incoming.apply_to(profile);
+        c.tick
+            .adopt(&mut profile.tick, &before, tokio::time::Instant::now());
+        warnings
     }
 
     #[test]
     fn a_profile_switch_mid_count_keeps_the_running_tick() {
         let t0 = tokio::time::Instant::now();
-        let mut profile = synced_profile(t0);
-        let next_fire = profile.tick.next_fire();
+        let (mut profile, mut c) = synced_profile(t0);
+        let next_fire = c.tick.next_fire(&profile.tick);
 
         let mut incoming = ProfileConfig::default();
         incoming.tick.auto_fire = Some("score".into());
@@ -632,28 +651,28 @@ mod tests {
         incoming.tick.reset_pattern = Some("^You feel".into());
         incoming.tick.warn_at_secs = Some(8);
         incoming.tick.warn_message = Some("Tick soon".into());
-        let leftover = &incoming.apply_to(&mut profile);
+        let leftover = &lay_over(&incoming, &mut profile, &mut c);
         assert!(leftover.is_empty(), "{leftover:?}");
 
-        let tick = &profile.tick;
+        let (settings, tick) = (&profile.tick, &c.tick);
         assert_eq!(tick.last_tick, Some(t0 + secs(3)));
-        assert_eq!(tick.next_fire(), next_fire);
+        assert_eq!(tick.next_fire(settings), next_fire);
         assert!(tick.synced);
         assert!(tick.in_session);
         assert!(tick.warned_this_cycle);
         assert_eq!(tick.last_world_hour.as_deref(), Some("9"));
         // The new profile's settings.
-        assert_eq!(tick.config.auto_fire.as_deref(), Some("score"));
-        assert!(!tick.config.sound);
-        assert_eq!(tick.config.warn_at_secs, Some(8));
-        assert_eq!(tick.config.warn_message.as_deref(), Some("Tick soon"));
-        assert!(tick.check_reset_match("You feel less tired."));
+        assert_eq!(settings.config.auto_fire.as_deref(), Some("score"));
+        assert!(!settings.config.sound);
+        assert_eq!(settings.config.warn_at_secs, Some(8));
+        assert_eq!(settings.config.warn_message.as_deref(), Some("Tick soon"));
+        assert!(settings.check_reset_match("You feel less tired."));
         // The same tick again is still the same tick, and the next one
         // fires with the new command.
-        assert!(profile.tick.on_game_tick(t0 + secs(4)).is_none());
-        let step = profile
+        assert!(c.tick.on_game_tick(&profile.tick, t0 + secs(4)).is_none());
+        let step = c
             .tick
-            .on_game_tick(t0 + secs(31))
+            .on_game_tick(&profile.tick, t0 + secs(31))
             .expect("the next tick");
         assert_eq!(step.command.as_deref(), Some("score"));
     }
@@ -661,13 +680,13 @@ mod tests {
     #[test]
     fn a_profile_switch_to_another_interval_keeps_the_count() {
         let t0 = tokio::time::Instant::now();
-        let mut profile = synced_profile(t0);
+        let (mut profile, mut c) = synced_profile(t0);
         let mut incoming = ProfileConfig::default();
         incoming.tick.interval_secs = 40;
-        let _ = incoming.apply_to(&mut profile);
-        assert_eq!(profile.tick.last_tick, Some(t0 + secs(3)));
-        assert_eq!(profile.tick.next_fire(), Some(t0 + secs(43)));
-        assert!(profile.tick.synced);
+        let _ = lay_over(&incoming, &mut profile, &mut c);
+        assert_eq!(c.tick.last_tick, Some(t0 + secs(3)));
+        assert_eq!(c.tick.next_fire(&profile.tick), Some(t0 + secs(43)));
+        assert!(c.tick.synced);
     }
 
     #[test]
@@ -675,19 +694,19 @@ mod tests {
         // Earlier builds saved the tick off whenever the game had
         // disconnected, so many files say off that you never turned off.
         let t0 = tokio::time::Instant::now();
-        let mut profile = synced_profile(t0);
-        let next_fire = profile.tick.next_fire();
+        let (mut profile, mut c) = synced_profile(t0);
+        let next_fire = c.tick.next_fire(&profile.tick);
         let mut incoming = ProfileConfig::default();
         incoming.tick.enabled = false;
         incoming.tick.auto_fire = Some("score".into());
-        let _ = incoming.apply_to(&mut profile);
+        let _ = lay_over(&incoming, &mut profile, &mut c);
         assert!(profile.tick.config.enabled);
-        assert_eq!(profile.tick.next_fire(), next_fire);
-        assert!(profile.tick.synced);
+        assert_eq!(c.tick.next_fire(&profile.tick), next_fire);
+        assert!(c.tick.synced);
         assert_eq!(profile.tick.config.auto_fire.as_deref(), Some("score"));
-        let step = profile
+        let step = c
             .tick
-            .on_game_tick(t0 + secs(33))
+            .on_game_tick(&profile.tick, t0 + secs(33))
             .expect("the next tick");
         assert!(step.payload.fired);
         // Saved again, the profile now keeps the tick on.
@@ -697,62 +716,63 @@ mod tests {
     #[test]
     fn a_profile_saved_with_the_tick_off_loads_it_off_between_sessions() {
         let mut profile = Profile::default();
+        let mut c = Connection::default();
         let mut incoming = ProfileConfig::default();
         incoming.tick.enabled = false;
-        let _ = incoming.apply_to(&mut profile);
+        let _ = lay_over(&incoming, &mut profile, &mut c);
         assert!(!profile.tick.config.enabled);
-        assert_eq!(profile.tick.next_fire(), None);
+        assert_eq!(c.tick.next_fire(&profile.tick), None);
     }
 
     #[test]
     fn a_tick_you_turned_off_stays_off_across_a_switch_to_one_saved_off() {
         let t0 = tokio::time::Instant::now();
-        let mut profile = synced_profile(t0);
-        profile.tick.disable();
+        let (mut profile, mut c) = synced_profile(t0);
+        c.tick.disable(&mut profile.tick);
         let mut off = ProfileConfig::default();
         off.tick.enabled = false;
-        let _ = off.apply_to(&mut profile);
+        let _ = lay_over(&off, &mut profile, &mut c);
         assert!(!profile.tick.config.enabled);
-        assert_eq!(profile.tick.next_fire(), None);
-        assert!(profile.tick.on_game_tick(t0 + secs(20)).is_none());
+        assert_eq!(c.tick.next_fire(&profile.tick), None);
+        assert!(c.tick.on_game_tick(&profile.tick, t0 + secs(20)).is_none());
     }
 
     #[test]
     fn a_profile_switch_that_turns_the_tick_on_arms_it() {
         let t0 = tokio::time::Instant::now();
-        let mut profile = synced_profile(t0);
+        let (mut profile, mut c) = synced_profile(t0);
         // You turned the tick off with #tick disable or in Settings.
-        profile.tick.disable();
-        assert_eq!(profile.tick.next_fire(), None);
+        c.tick.disable(&mut profile.tick);
+        assert_eq!(c.tick.next_fire(&profile.tick), None);
 
         let before = tokio::time::Instant::now();
-        let _ = ProfileConfig::default().apply_to(&mut profile);
-        let armed = profile.tick.last_tick.expect("the tick runs again");
+        let _ = lay_over(&ProfileConfig::default(), &mut profile, &mut c);
+        let armed = c.tick.last_tick.expect("the tick runs again");
         assert!(armed >= before);
-        assert_eq!(profile.tick.next_fire(), Some(armed + secs(30)));
-        assert!(!profile.tick.synced);
+        assert_eq!(c.tick.next_fire(&profile.tick), Some(armed + secs(30)));
+        assert!(!c.tick.synced);
         // It counts on its own until the game's next tick syncs it.
-        assert!(profile.tick.try_consume_fire(armed + secs(30)));
+        assert!(c.tick.try_consume_fire(&profile.tick, armed + secs(30)));
     }
 
     #[test]
     fn a_profile_load_between_sessions_leaves_the_tick_stopped() {
         let t0 = tokio::time::Instant::now();
-        let mut profile = synced_profile(t0);
-        profile.tick.end_session();
-        let _ = ProfileConfig::default().apply_to(&mut profile);
+        let (mut profile, mut c) = synced_profile(t0);
+        c.tick.end_session();
+        let _ = lay_over(&ProfileConfig::default(), &mut profile, &mut c);
         assert!(profile.tick.config.enabled);
-        assert_eq!(profile.tick.next_fire(), None);
+        assert_eq!(c.tick.next_fire(&profile.tick), None);
         // The next connection starts it.
-        profile.tick.start_session(t0 + secs(100));
-        assert_eq!(profile.tick.next_fire(), Some(t0 + secs(130)));
+        c.tick.start_session(&mut profile.tick, t0 + secs(100));
+        assert_eq!(c.tick.next_fire(&profile.tick), Some(t0 + secs(130)));
     }
 
     #[test]
     fn a_profile_saved_after_the_game_disconnects_keeps_the_tick_on() {
         let t0 = tokio::time::Instant::now();
-        let mut profile = synced_profile(t0);
-        profile.tick.end_session();
+        let (profile, mut c) = synced_profile(t0);
+        c.tick.end_session();
         // The exit flush, or any save while you are not connected.
         let saved = ProfileConfig::from_profile(&profile);
         assert!(saved.tick.enabled);
@@ -764,32 +784,27 @@ mod tests {
     #[test]
     fn profile_reset_keeps_the_running_tick() {
         let t0 = tokio::time::Instant::now();
-        let mut profile = synced_profile(t0);
-        let next_fire = profile.tick.next_fire();
+        let (mut profile, mut c) = synced_profile(t0);
+        let next_fire = c.tick.next_fire(&profile.tick);
         let state = crate::app::state::AppState::default();
-        let ran = crate::input::run_line(
-            &state,
-            &mut profile,
-            &mut crate::session::connection::Connection::default(),
-            "#profile reset",
-        );
+        let ran = crate::input::run_line(&state, &mut profile, &mut c, "#profile reset");
         assert!(ran.replaced);
-        assert_eq!(profile.tick.next_fire(), next_fire);
-        assert!(profile.tick.synced);
+        assert_eq!(c.tick.next_fire(&profile.tick), next_fire);
+        assert!(c.tick.synced);
     }
 
     #[test]
     fn a_bad_reset_pattern_on_switch_warns_and_keeps_the_count() {
         let t0 = tokio::time::Instant::now();
-        let mut profile = synced_profile(t0);
+        let (mut profile, mut c) = synced_profile(t0);
         let mut incoming = ProfileConfig::default();
         incoming.tick.reset_pattern = Some("[bad".into());
-        let warnings = incoming.apply_to(&mut profile);
+        let warnings = lay_over(&incoming, &mut profile, &mut c);
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].starts_with("tick reset pattern rejected"));
         assert_eq!(profile.tick.config.reset_pattern.as_deref(), Some("[bad"));
         assert!(!profile.tick.check_reset_match("[bad"));
-        assert_eq!(profile.tick.last_tick, Some(t0 + secs(3)));
+        assert_eq!(c.tick.last_tick, Some(t0 + secs(3)));
     }
 
     #[test]

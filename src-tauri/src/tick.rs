@@ -21,6 +21,10 @@
 //! drops back to unsynced, so it never freezes when GMCP stops. A new
 //! interval starts that wait again, so a shorter one never makes a game
 //! that still ticks look quiet.
+//!
+//! The profile keeps the settings, [`TickSettings`], since its file saves
+//! them. The connection keeps the count, [`TickRuntime`], and each of its
+//! methods takes the settings it reads or writes.
 
 use std::time::Duration;
 
@@ -102,12 +106,45 @@ fn default_interval_secs() -> u64 {
     DEFAULT_INTERVAL_SECS
 }
 
+/// The tick settings the profile keeps: the `[tick]` table and its
+/// compiled Reset on pattern.
 #[derive(Debug, Default)]
-pub(crate) struct TickRuntime {
+pub(crate) struct TickSettings {
     pub config: TickConfig,
     /// Compiled form of `config.reset_pattern`. Recompiled when the pattern
     /// changes via the slash command.
     pub reset_regex: Option<Regex>,
+}
+
+impl TickSettings {
+    pub(crate) fn set_reset_pattern(
+        &mut self,
+        pattern: Option<String>,
+    ) -> Result<(), regex::Error> {
+        let regex = compile_reset_pattern(pattern.as_deref())?;
+        self.set_compiled_reset_pattern(pattern, regex);
+        Ok(())
+    }
+
+    /// Install a pattern that [`compile_reset_pattern`] already
+    /// compiled, so a caller that checked it first cannot fail here.
+    pub(crate) fn set_compiled_reset_pattern(
+        &mut self,
+        pattern: Option<String>,
+        regex: Option<Regex>,
+    ) {
+        self.config.reset_pattern = pattern;
+        self.reset_regex = regex;
+    }
+
+    pub(crate) fn check_reset_match(&self, line: &str) -> bool {
+        self.reset_regex.as_ref().is_some_and(|r| r.is_match(line))
+    }
+}
+
+/// The running count of one connection.
+#[derive(Debug, Default)]
+pub(crate) struct TickRuntime {
     /// When the count last restarted: the last tick, real or local, a
     /// reset, or the moment the timer started. `None` while the timer is
     /// off. The expected tick is one interval after it.
@@ -152,11 +189,11 @@ impl TickRuntime {
     /// Start the timer for a new connection. It starts unsynced, and the
     /// first `World.Time` hour of the session primes again, so an hour
     /// that moved while you were away is not a tick.
-    pub(crate) fn start_session(&mut self, now: Instant) {
+    pub(crate) fn start_session(&mut self, settings: &mut TickSettings, now: Instant) {
         self.in_session = true;
         self.last_world_hour = None;
         self.forget_sync();
-        self.enable(now);
+        self.enable(settings, now);
     }
 
     /// Stop the timer when the connection ends. `config.enabled` is your
@@ -168,12 +205,13 @@ impl TickRuntime {
         self.stop();
     }
 
-    /// Take another profile's tick settings mid session, as a live
-    /// profile switch, `#profile load`, or `#profile reset` does. The
-    /// running count carries across: the last tick, the synced state, the
-    /// world hour, and whether this cycle warned. Only the settings
-    /// change, so the expected tick moves with a new interval, and the
-    /// fallback's wait starts again as it does for
+    /// Follow the tick settings another profile laid over `settings` mid
+    /// session, as a live profile switch, `#profile load`, or `#profile
+    /// reset` does. `before` is the config they replaced. The running
+    /// count carries across: the last tick, the synced state, the world
+    /// hour, and whether this cycle warned. Only the settings change, so
+    /// the expected tick moves with a new interval, and the fallback's
+    /// wait starts again as it does for
     /// [`set_interval`](Self::set_interval).
     ///
     /// A running tick stays on, whatever the new profile saved. A
@@ -185,44 +223,37 @@ impl TickRuntime {
     /// stopped one now. Between sessions the config's setting applies
     /// as saved, and the timer stays stopped until the next connection
     /// starts it.
-    pub(crate) fn adopt(
-        &mut self,
-        mut config: TickConfig,
-        reset_regex: Option<Regex>,
-        now: Instant,
-    ) {
-        let was_on = self.config.enabled;
-        let was_interval = self.config.interval();
+    pub(crate) fn adopt(&mut self, settings: &mut TickSettings, before: &TickConfig, now: Instant) {
+        let was_on = before.enabled;
+        let was_interval = before.interval();
         if self.in_session && was_on && self.last_tick.is_some() {
-            config.enabled = true;
+            settings.config.enabled = true;
         }
-        self.config = config;
-        self.reset_regex = reset_regex;
-        if !self.config.enabled {
+        if !settings.config.enabled {
             self.stop();
         } else if self.in_session && (!was_on || self.last_tick.is_none()) {
             self.forget_sync();
             self.restart(now);
         } else {
-            self.note_interval_change(was_interval, now);
+            self.note_interval_change(settings, was_interval, now);
         }
     }
 
-    pub(crate) fn enable(&mut self, now: Instant) {
-        if !self.config.enabled {
+    pub(crate) fn enable(&mut self, settings: &mut TickSettings, now: Instant) {
+        if !settings.config.enabled {
             self.forget_sync();
         }
-        self.config.enabled = true;
+        settings.config.enabled = true;
         self.last_tick = Some(now);
         self.warned_this_cycle = false;
     }
 
-    pub(crate) fn disable(&mut self) {
-        self.config.enabled = false;
+    pub(crate) fn disable(&mut self, settings: &mut TickSettings) {
+        settings.config.enabled = false;
         self.stop();
     }
 
-    /// Stop the count and forget the game's tick, leaving the config.
+    /// Stop the count and forget the game's tick, leaving the settings.
     fn stop(&mut self) {
         self.last_tick = None;
         self.warned_this_cycle = false;
@@ -238,8 +269,8 @@ impl TickRuntime {
 
     /// Restart the count now, as `#tick reset` asks. A synced timer stays
     /// synced, and the next real tick restarts the count again.
-    pub(crate) fn reset(&mut self, now: Instant) {
-        if self.config.enabled {
+    pub(crate) fn reset(&mut self, settings: &TickSettings, now: Instant) {
+        if settings.config.enabled {
             self.last_tick = Some(now);
         }
         self.warned_this_cycle = false;
@@ -250,13 +281,13 @@ impl TickRuntime {
     /// expected length, so the count carries on, the expected tick moves,
     /// and a warning this tick already printed does not print again. A
     /// new interval also starts the fallback's wait again.
-    pub(crate) fn set_interval(&mut self, secs: u64, now: Instant) {
-        let was_interval = self.config.interval();
-        self.config.interval_secs = secs.max(1);
-        if self.config.enabled && !self.synced {
+    pub(crate) fn set_interval(&mut self, settings: &mut TickSettings, secs: u64, now: Instant) {
+        let was_interval = settings.config.interval();
+        settings.config.interval_secs = secs.max(1);
+        if settings.config.enabled && !self.synced {
             self.restart(now);
         } else {
-            self.note_interval_change(was_interval, now);
+            self.note_interval_change(settings, was_interval, now);
         }
     }
 
@@ -264,34 +295,15 @@ impl TickRuntime {
     /// synced count runs. The wait is twice the interval, so without
     /// this a shorter interval could put the game's last tick past it
     /// and fire the fallback at once while the game still ticks.
-    fn note_interval_change(&mut self, was_interval: Duration, now: Instant) {
-        if self.synced && self.config.interval() != was_interval {
+    fn note_interval_change(
+        &mut self,
+        settings: &TickSettings,
+        was_interval: Duration,
+        now: Instant,
+    ) {
+        if self.synced && settings.config.interval() != was_interval {
             self.interval_changed_at = Some(now);
         }
-    }
-
-    pub(crate) fn set_reset_pattern(
-        &mut self,
-        pattern: Option<String>,
-    ) -> Result<(), regex::Error> {
-        let regex = compile_reset_pattern(pattern.as_deref())?;
-        self.set_compiled_reset_pattern(pattern, regex);
-        Ok(())
-    }
-
-    /// Install a pattern that [`compile_reset_pattern`] already
-    /// compiled, so a caller that checked it first cannot fail here.
-    pub(crate) fn set_compiled_reset_pattern(
-        &mut self,
-        pattern: Option<String>,
-        regex: Option<Regex>,
-    ) {
-        self.config.reset_pattern = pattern;
-        self.reset_regex = regex;
-    }
-
-    pub(crate) fn check_reset_match(&self, line: &str) -> bool {
-        self.reset_regex.as_ref().is_some_and(|r| r.is_match(line))
     }
 
     /// Update the last observed world hour. Returns true when the value
@@ -314,21 +326,21 @@ impl TickRuntime {
 
     /// The expected tick, one interval after the last. `None` while the
     /// timer is off.
-    pub(crate) fn next_fire(&self) -> Option<Instant> {
-        if !self.config.enabled {
+    pub(crate) fn next_fire(&self, settings: &TickSettings) -> Option<Instant> {
+        if !settings.config.enabled {
             return None;
         }
-        Some(self.last_tick? + self.config.interval())
+        Some(self.last_tick? + settings.config.interval())
     }
 
     /// Time left until the expected tick, zero once it has passed.
-    pub(crate) fn remaining(&self, now: Instant) -> Option<Duration> {
-        Some(self.next_fire()?.saturating_duration_since(now))
+    pub(crate) fn remaining(&self, settings: &TickSettings, now: Instant) -> Option<Duration> {
+        Some(self.next_fire(settings)?.saturating_duration_since(now))
     }
 
     /// Time since the last tick. `None` while the timer is off.
-    pub(crate) fn elapsed(&self, now: Instant) -> Option<Duration> {
-        if !self.config.enabled {
+    pub(crate) fn elapsed(&self, settings: &TickSettings, now: Instant) -> Option<Duration> {
+        if !settings.config.enabled {
             return None;
         }
         Some(now.saturating_duration_since(self.last_tick?))
@@ -346,15 +358,15 @@ impl TickRuntime {
     /// real tick has come for twice the interval, counted from the later
     /// of the last tick and the last change of the interval, then drops
     /// back to unsynced. Firing restarts the count.
-    pub(crate) fn try_consume_fire(&mut self, now: Instant) -> bool {
-        let Some(last) = self.last_tick.filter(|_| self.config.enabled) else {
+    pub(crate) fn try_consume_fire(&mut self, settings: &TickSettings, now: Instant) -> bool {
+        let Some(last) = self.last_tick.filter(|_| settings.config.enabled) else {
             return false;
         };
         let due = if self.synced {
             let from = self.interval_changed_at.map_or(last, |at| at.max(last));
-            from + self.config.interval() * 2
+            from + settings.config.interval() * 2
         } else {
-            last + self.config.interval()
+            last + settings.config.interval()
         };
         if now < due {
             return false;
@@ -377,14 +389,14 @@ impl TickRuntime {
     /// which is the time left at or under Warn at seconds. So the
     /// warning prints on the report that turns the status line to warn,
     /// never up to a second before it.
-    pub(crate) fn try_consume_warn(&mut self, now: Instant) -> bool {
-        if !self.config.enabled || self.warned_this_cycle {
+    pub(crate) fn try_consume_warn(&mut self, settings: &TickSettings, now: Instant) -> bool {
+        if !settings.config.enabled || self.warned_this_cycle {
             return false;
         }
-        let Some(secs) = self.config.warn_at_secs else {
+        let Some(secs) = settings.config.warn_at_secs else {
             return false;
         };
-        let Some(remaining) = self.remaining(now) else {
+        let Some(remaining) = self.remaining(settings, now) else {
             return false;
         };
         if remaining <= Duration::from_secs(secs) && remaining > Duration::ZERO {
@@ -397,13 +409,13 @@ impl TickRuntime {
     /// One step of the session loop, four times a second. Fires the local
     /// timer when [`try_consume_fire`](Self::try_consume_fire) says so,
     /// takes the warning, and reports.
-    pub(crate) fn poll(&mut self, now: Instant) -> TickStep {
-        let fired = self.try_consume_fire(now);
-        let warned = self.try_consume_warn(now);
+    pub(crate) fn poll(&mut self, settings: &TickSettings, now: Instant) -> TickStep {
+        let fired = self.try_consume_fire(settings, now);
+        let warned = self.try_consume_warn(settings, now);
         TickStep {
-            payload: TickPayload::from_runtime(self, now, fired),
-            command: self.fire_command(fired),
-            warn_echo: warned.then(|| warn_echo(&self.config)),
+            payload: TickPayload::from_runtime(settings, self, now, fired),
+            command: fire_command(settings, fired),
+            warn_echo: warned.then(|| warn_echo(&settings.config)),
         }
     }
 
@@ -413,8 +425,12 @@ impl TickRuntime {
     /// timer is off and for a signal inside [`SAME_TICK_WINDOW`] of the
     /// tick it belongs to. A real tick just after a local fire restarts
     /// the count on the game's tick and reports without firing again.
-    pub(crate) fn on_game_tick(&mut self, now: Instant) -> Option<TickStep> {
-        if !self.config.enabled || self.last_tick.is_none() {
+    pub(crate) fn on_game_tick(
+        &mut self,
+        settings: &TickSettings,
+        now: Instant,
+    ) -> Option<TickStep> {
+        if !settings.config.enabled || self.last_tick.is_none() {
             return None;
         }
         let within = |at: Option<Instant>| {
@@ -429,18 +445,19 @@ impl TickRuntime {
         self.last_local_fire = None;
         self.restart(now);
         Some(TickStep {
-            payload: TickPayload::from_runtime(self, now, fired),
-            command: self.fire_command(fired),
+            payload: TickPayload::from_runtime(settings, self, now, fired),
+            command: fire_command(settings, fired),
             warn_echo: None,
         })
     }
+}
 
-    fn fire_command(&self, fired: bool) -> Option<String> {
-        if fired {
-            self.config.auto_fire.clone()
-        } else {
-            None
-        }
+/// The Send each tick command to run, when the timer fired.
+fn fire_command(settings: &TickSettings, fired: bool) -> Option<String> {
+    if fired {
+        settings.config.auto_fire.clone()
+    } else {
+        None
     }
 }
 
@@ -449,6 +466,7 @@ impl TickRuntime {
 /// every server tick, so an hour change is the tick. Returns the step to
 /// deliver when the change counted as a tick.
 pub(crate) fn observe_world_time_for_tick(
+    settings: &TickSettings,
     tick: &mut TickRuntime,
     msg: &vosh_protocol::gmcp::Message,
     now: Instant,
@@ -462,7 +480,7 @@ pub(crate) fn observe_world_time_for_tick(
         _ => return None,
     };
     if tick.observe_world_hour(&hour_str) {
-        tick.on_game_tick(now)
+        tick.on_game_tick(settings, now)
     } else {
         None
     }
@@ -565,18 +583,23 @@ pub(crate) struct TickPayload {
 }
 
 impl TickPayload {
-    pub(crate) fn from_runtime(runtime: &TickRuntime, now: Instant, fired: bool) -> Self {
+    pub(crate) fn from_runtime(
+        settings: &TickSettings,
+        runtime: &TickRuntime,
+        now: Instant,
+        fired: bool,
+    ) -> Self {
         let millis = |d: Duration| d.as_millis() as u64;
-        let elapsed = runtime.elapsed(now);
+        let elapsed = runtime.elapsed(settings, now);
         Self {
-            enabled: runtime.config.enabled,
-            interval_ms: millis(runtime.config.interval()),
-            remaining_ms: runtime.remaining(now).map_or(0, millis),
+            enabled: settings.config.enabled,
+            interval_ms: millis(settings.config.interval()),
+            remaining_ms: runtime.remaining(settings, now).map_or(0, millis),
             elapsed_ms: elapsed.map_or(0, millis),
-            overdue: elapsed.is_some_and(|e| e >= runtime.config.interval()),
+            overdue: elapsed.is_some_and(|e| e >= settings.config.interval()),
             synced: runtime.synced,
             fired,
-            sound: runtime.config.sound,
+            sound: settings.config.sound,
         }
     }
 }
@@ -586,14 +609,16 @@ impl TickPayload {
 const TICK_RESET_PATTERN_ERROR: &str =
     "Vosh could not read the Reset on pattern. Check it and save again.";
 
-/// Apply a tick configuration from Settings to `tick`. Checks the Reset
-/// on pattern before it changes anything, so a pattern that does not
-/// compile leaves the running tick exactly as it was and returns a
-/// sentence. Routes interval changes through `TickRuntime::set_interval`
-/// so the next-fire deadline rebuilds. Other fields are direct
-/// assignments. Returns the configuration as it now reads.
+/// Apply a tick configuration from Settings to `settings` and the count
+/// `tick`. Checks the Reset on pattern before it changes anything, so a
+/// pattern that does not compile leaves the running tick exactly as it
+/// was and returns a sentence. Routes interval changes through
+/// `TickRuntime::set_interval` so the next-fire deadline rebuilds. Other
+/// fields are direct assignments. Returns the configuration as it now
+/// reads.
 pub(crate) fn apply_tick_config(
-    tick: &mut crate::tick::TickRuntime,
+    settings: &mut TickSettings,
+    tick: &mut TickRuntime,
     config: &TickConfig,
     now: tokio::time::Instant,
 ) -> Result<TickConfig, String> {
@@ -628,24 +653,24 @@ pub(crate) fn apply_tick_config(
         })?;
 
     if config.enabled {
-        if !tick.config.enabled {
-            tick.enable(now);
+        if !settings.config.enabled {
+            tick.enable(settings, now);
         }
-        tick.set_interval(config.interval_secs, now);
+        tick.set_interval(settings, config.interval_secs, now);
     } else {
-        tick.disable();
+        tick.disable(settings);
         // Still record the interval so the user can flip enabled
         // back on without re-typing it.
-        tick.config.interval_secs = config.interval_secs.max(1);
+        settings.config.interval_secs = config.interval_secs.max(1);
     }
-    tick.set_compiled_reset_pattern(reset_pattern, reset_regex);
-    tick.config.auto_fire = auto_fire;
-    tick.config.sound = config.sound;
-    tick.config.warn_at_secs = config.warn_at_secs.filter(|s| *s > 0);
-    tick.config.warn_message = warn_message;
-    tick.config.warn_color = warn_color;
+    settings.set_compiled_reset_pattern(reset_pattern, reset_regex);
+    settings.config.auto_fire = auto_fire;
+    settings.config.sound = config.sound;
+    settings.config.warn_at_secs = config.warn_at_secs.filter(|s| *s > 0);
+    settings.config.warn_message = warn_message;
+    settings.config.warn_color = warn_color;
 
-    Ok(tick.config.clone())
+    Ok(settings.config.clone())
 }
 
 #[cfg(test)]
@@ -659,66 +684,71 @@ mod tests {
 
     #[test]
     fn enable_sets_next_fire() {
+        let mut s = TickSettings::default();
         let mut t = TickRuntime::default();
         let start = Instant::now();
-        t.enable(start);
-        let remaining = t.remaining(start).unwrap();
+        t.enable(&mut s, start);
+        let remaining = t.remaining(&s, start).unwrap();
         assert_eq!(remaining.as_secs(), DEFAULT_INTERVAL_SECS);
     }
 
     #[test]
     fn disable_clears_next_fire() {
+        let mut s = TickSettings::default();
         let mut t = TickRuntime::default();
-        t.enable(Instant::now());
-        t.disable();
-        assert!(t.next_fire().is_none());
-        assert!(t.remaining(Instant::now()).is_none());
+        t.enable(&mut s, Instant::now());
+        t.disable(&mut s);
+        assert!(t.next_fire(&s).is_none());
+        assert!(t.remaining(&s, Instant::now()).is_none());
     }
 
     #[test]
     fn reset_pushes_next_fire() {
+        let mut s = TickSettings::default();
         let mut t = TickRuntime::default();
         let start = Instant::now();
-        t.enable(start);
+        t.enable(&mut s, start);
         let later = now_plus(Duration::from_secs(10));
-        t.reset(later);
-        let remaining = t.remaining(later).unwrap();
+        t.reset(&s, later);
+        let remaining = t.remaining(&s, later).unwrap();
         assert_eq!(remaining.as_secs(), DEFAULT_INTERVAL_SECS);
     }
 
     #[test]
     fn try_consume_fire_only_after_due() {
+        let mut s = TickSettings::default();
         let mut t = TickRuntime::default();
         let start = Instant::now();
-        t.enable(start);
-        assert!(!t.try_consume_fire(start));
-        let after = start + t.config.interval();
-        assert!(t.try_consume_fire(after));
+        t.enable(&mut s, start);
+        assert!(!t.try_consume_fire(&s, start));
+        let after = start + s.config.interval();
+        assert!(t.try_consume_fire(&s, after));
         // Reschedules to one interval ahead.
-        let remaining = t.remaining(after).unwrap();
+        let remaining = t.remaining(&s, after).unwrap();
         assert_eq!(remaining.as_secs(), DEFAULT_INTERVAL_SECS);
     }
 
     #[test]
     fn set_interval_clamps_to_one_second_minimum() {
+        let mut s = TickSettings::default();
         let mut t = TickRuntime::default();
         let now = Instant::now();
-        t.set_interval(0, now);
-        assert_eq!(t.config.interval(), Duration::from_secs(1));
+        t.set_interval(&mut s, 0, now);
+        assert_eq!(s.config.interval(), Duration::from_secs(1));
     }
 
     #[test]
     fn reset_pattern_compiles_or_fails() {
-        let mut t = TickRuntime::default();
-        assert!(t.set_reset_pattern(Some("good (.*)".into())).is_ok());
-        assert!(t.check_reset_match("good morning"));
-        assert!(t.set_reset_pattern(Some("[bad".into())).is_err());
+        let mut s = TickSettings::default();
+        assert!(s.set_reset_pattern(Some("good (.*)".into())).is_ok());
+        assert!(s.check_reset_match("good morning"));
+        assert!(s.set_reset_pattern(Some("[bad".into())).is_err());
     }
 
     #[test]
     fn check_reset_match_false_when_no_pattern() {
-        let t = TickRuntime::default();
-        assert!(!t.check_reset_match("anything"));
+        let s = TickSettings::default();
+        assert!(!s.check_reset_match("anything"));
     }
 
     #[test]
@@ -745,20 +775,26 @@ mod tests {
 
     /// A 30 second timer that sends `score` on each tick, started at
     /// the moment a session connects.
-    fn session(start: Instant) -> TickRuntime {
+    fn session(start: Instant) -> (TickSettings, TickRuntime) {
+        let mut s = TickSettings::default();
+        s.config.auto_fire = Some("score".into());
         let mut t = TickRuntime::default();
-        t.config.auto_fire = Some("score".into());
-        t.start_session(start);
-        t
+        t.start_session(&mut s, start);
+        (s, t)
     }
 
     /// Poll every 250 ms from `from` up to and not including `to`, the
     /// way the session loop does, and return the instants that fired.
-    fn poll_span(t: &mut TickRuntime, from: Instant, to: Instant) -> Vec<Instant> {
+    fn poll_span(
+        s: &TickSettings,
+        t: &mut TickRuntime,
+        from: Instant,
+        to: Instant,
+    ) -> Vec<Instant> {
         let mut fired = Vec::new();
         let mut at = from;
         while at < to {
-            if t.poll(at).payload.fired {
+            if t.poll(s, at).payload.fired {
                 fired.push(at);
             }
             at += Duration::from_millis(250);
@@ -769,24 +805,24 @@ mod tests {
     #[test]
     fn unsynced_the_local_timer_fires_at_the_interval_as_before() {
         let t0 = Instant::now();
-        let mut t = session(t0);
+        let (s, mut t) = session(t0);
         assert!(!t.synced);
-        let leftover = &poll_span(&mut t, t0, t0 + secs(30.0));
+        let leftover = &poll_span(&s, &mut t, t0, t0 + secs(30.0));
         assert!(leftover.is_empty(), "{leftover:?}");
-        let step = t.poll(t0 + secs(30.0));
+        let step = t.poll(&s, t0 + secs(30.0));
         assert!(step.payload.fired);
         assert_eq!(step.command.as_deref(), Some("score"));
         // The count restarts from the fire.
-        assert_eq!(t.remaining(t0 + secs(30.0)), Some(secs(30.0)));
-        assert!(!t.poll(t0 + secs(45.0)).payload.fired);
-        assert!(t.poll(t0 + secs(60.0)).payload.fired);
+        assert_eq!(t.remaining(&s, t0 + secs(30.0)), Some(secs(30.0)));
+        assert!(!t.poll(&s, t0 + secs(45.0)).payload.fired);
+        assert!(t.poll(&s, t0 + secs(60.0)).payload.fired);
         assert!(!t.synced);
     }
 
     #[test]
     fn the_first_world_hour_only_primes() {
         let t0 = Instant::now();
-        let mut t = session(t0);
+        let (_, mut t) = session(t0);
         assert!(!t.observe_world_hour("9"));
         assert!(!t.synced);
     }
@@ -794,45 +830,45 @@ mod tests {
     #[test]
     fn a_game_tick_fires_once_and_syncs_the_timer() {
         let t0 = Instant::now();
-        let mut t = session(t0);
-        let step = t.on_game_tick(t0 + secs(12.0)).expect("the tick lands");
+        let (s, mut t) = session(t0);
+        let step = t.on_game_tick(&s, t0 + secs(12.0)).expect("the tick lands");
         assert!(step.payload.fired);
         assert_eq!(step.command.as_deref(), Some("score"));
         assert!(t.synced);
-        assert_eq!(t.remaining(t0 + secs(12.0)), Some(secs(30.0)));
+        assert_eq!(t.remaining(&s, t0 + secs(12.0)), Some(secs(30.0)));
     }
 
     #[test]
     fn once_synced_the_local_timer_no_longer_fires_at_the_interval() {
         let t0 = Instant::now();
-        let mut t = session(t0);
+        let (s, mut t) = session(t0);
         let _ = t.observe_world_hour("9");
         assert!(t.observe_world_hour("10"));
         let tick = t0 + secs(10.0);
-        assert!(t.on_game_tick(tick).is_some());
+        assert!(t.on_game_tick(&s, tick).is_some());
         // Past the interval the timer waits for the game, overdue.
-        let leftover = &poll_span(&mut t, tick, tick + secs(59.0));
+        let leftover = &poll_span(&s, &mut t, tick, tick + secs(59.0));
         assert!(leftover.is_empty(), "{leftover:?}");
         assert!(t.synced);
-        assert_eq!(t.remaining(tick + secs(45.0)), Some(Duration::ZERO));
+        assert_eq!(t.remaining(&s, tick + secs(45.0)), Some(Duration::ZERO));
     }
 
     #[test]
     fn real_ticks_at_25_30_and_35_seconds_each_fire_once_and_restart_the_count() {
         let t0 = Instant::now();
-        let mut t = session(t0);
+        let (s, mut t) = session(t0);
         let mut tick = t0 + secs(4.0);
-        assert!(t.on_game_tick(tick).is_some());
+        assert!(t.on_game_tick(&s, tick).is_some());
         for gap in [25.0, 30.0, 35.0] {
             let next = tick + secs(gap);
             assert!(
-                poll_span(&mut t, tick, next).is_empty(),
+                poll_span(&s, &mut t, tick, next).is_empty(),
                 "no local fire in a {gap} second tick"
             );
-            let step = t.on_game_tick(next).expect("the tick lands");
+            let step = t.on_game_tick(&s, next).expect("the tick lands");
             assert!(step.payload.fired, "a {gap} second tick fires");
             assert_eq!(step.command.as_deref(), Some("score"));
-            assert_eq!(t.remaining(next), Some(secs(30.0)));
+            assert_eq!(t.remaining(&s, next), Some(secs(30.0)));
             assert_eq!(t.last_tick, Some(next));
             tick = next;
         }
@@ -841,24 +877,24 @@ mod tests {
     #[test]
     fn a_world_hour_change_and_a_reset_line_for_one_tick_fire_once() {
         let t0 = Instant::now();
-        let mut t = session(t0);
+        let (s, mut t) = session(t0);
         let tick = t0 + secs(20.0);
-        assert!(t.on_game_tick(tick).is_some());
-        assert!(t.on_game_tick(tick + secs(1.5)).is_none());
+        assert!(t.on_game_tick(&s, tick).is_some());
+        assert!(t.on_game_tick(&s, tick + secs(1.5)).is_none());
         // The second signal leaves the count where the first put it.
         assert_eq!(t.last_tick, Some(tick));
         // Past the window a new signal is a new tick.
-        assert!(t.on_game_tick(tick + secs(2.0)).is_some());
+        assert!(t.on_game_tick(&s, tick + secs(2.0)).is_some());
     }
 
     #[test]
     fn a_pattern_that_matches_three_lines_of_one_tick_fires_once() {
         let t0 = Instant::now();
-        let mut t = session(t0);
+        let (s, mut t) = session(t0);
         let tick = t0 + secs(20.0);
         let fired: Vec<bool> = [0.0, 0.01, 0.02]
             .iter()
-            .map(|d| t.on_game_tick(tick + secs(*d)).is_some())
+            .map(|d| t.on_game_tick(&s, tick + secs(*d)).is_some())
             .collect();
         assert_eq!(fired, [true, false, false]);
     }
@@ -866,112 +902,114 @@ mod tests {
     #[test]
     fn a_game_tick_just_after_a_local_fire_restarts_the_count_without_firing_again() {
         let t0 = Instant::now();
-        let mut t = session(t0);
-        assert!(t.poll(t0 + secs(30.0)).payload.fired);
-        let step = t.on_game_tick(t0 + secs(31.0)).expect("the count restarts");
+        let (s, mut t) = session(t0);
+        assert!(t.poll(&s, t0 + secs(30.0)).payload.fired);
+        let step = t
+            .on_game_tick(&s, t0 + secs(31.0))
+            .expect("the count restarts");
         assert!(!step.payload.fired);
         assert_eq!(step.command, None);
         assert!(t.synced);
-        assert_eq!(t.remaining(t0 + secs(31.0)), Some(secs(30.0)));
+        assert_eq!(t.remaining(&s, t0 + secs(31.0)), Some(secs(30.0)));
     }
 
     #[test]
     fn no_game_tick_for_twice_the_interval_fires_once_locally_and_unsyncs() {
         let t0 = Instant::now();
-        let mut t = session(t0);
+        let (s, mut t) = session(t0);
         let tick = t0 + secs(5.0);
-        assert!(t.on_game_tick(tick).is_some());
-        let leftover = &poll_span(&mut t, tick, tick + secs(60.0));
+        assert!(t.on_game_tick(&s, tick).is_some());
+        let leftover = &poll_span(&s, &mut t, tick, tick + secs(60.0));
         assert!(leftover.is_empty(), "{leftover:?}");
-        let step = t.poll(tick + secs(60.0));
+        let step = t.poll(&s, tick + secs(60.0));
         assert!(step.payload.fired);
         assert_eq!(step.command.as_deref(), Some("score"));
         assert!(!t.synced);
         // Back to counting on its own, one interval at a time.
         let fallback = tick + secs(60.0);
         assert_eq!(
-            poll_span(&mut t, fallback, fallback + secs(60.25)),
+            poll_span(&s, &mut t, fallback, fallback + secs(60.25)),
             [fallback + secs(30.0), fallback + secs(60.0)]
         );
         // The next real tick syncs it again.
-        assert!(t.on_game_tick(fallback + secs(70.0)).is_some());
+        assert!(t.on_game_tick(&s, fallback + secs(70.0)).is_some());
         assert!(t.synced);
     }
 
     #[test]
     fn a_disabled_timer_ignores_game_ticks() {
         let t0 = Instant::now();
-        let mut t = session(t0);
-        t.disable();
-        assert!(t.on_game_tick(t0 + secs(10.0)).is_none());
+        let (mut s, mut t) = session(t0);
+        t.disable(&mut s);
+        assert!(t.on_game_tick(&s, t0 + secs(10.0)).is_none());
         assert!(!t.synced);
-        assert!(!t.poll(t0 + secs(40.0)).payload.fired);
+        assert!(!t.poll(&s, t0 + secs(40.0)).payload.fired);
     }
 
     #[test]
     fn a_new_connection_starts_unsynced_and_primes_the_world_hour_again() {
         let t0 = Instant::now();
-        let mut t = session(t0);
+        let (mut s, mut t) = session(t0);
         let _ = t.observe_world_hour("9");
-        assert!(t.on_game_tick(t0 + secs(10.0)).is_some());
+        assert!(t.on_game_tick(&s, t0 + secs(10.0)).is_some());
         assert!(t.synced);
         t.end_session();
         let t1 = t0 + secs(100.0);
-        t.start_session(t1);
+        t.start_session(&mut s, t1);
         assert!(!t.synced);
         assert_eq!(t.last_world_hour, None);
         // The first hour of the new session primes, even when it moved.
         assert!(!t.observe_world_hour("11"));
-        assert_eq!(t.remaining(t1), Some(secs(30.0)));
+        assert_eq!(t.remaining(&s, t1), Some(secs(30.0)));
     }
 
     #[test]
     fn the_end_of_a_session_stops_the_count_and_keeps_your_tick_setting() {
         let t0 = Instant::now();
-        let mut t = session(t0);
-        assert!(t.on_game_tick(t0 + secs(10.0)).is_some());
+        let (s, mut t) = session(t0);
+        assert!(t.on_game_tick(&s, t0 + secs(10.0)).is_some());
         t.end_session();
-        assert!(t.config.enabled, "the saved setting stays on");
+        assert!(s.config.enabled, "the saved setting stays on");
         assert!(!t.in_session);
         assert!(!t.synced);
-        assert_eq!(t.next_fire(), None);
-        assert!(t.on_game_tick(t0 + secs(40.0)).is_none());
+        assert_eq!(t.next_fire(&s), None);
+        assert!(t.on_game_tick(&s, t0 + secs(40.0)).is_none());
     }
 
     #[test]
     fn a_tick_you_turned_off_stays_off_when_the_session_ends() {
         let t0 = Instant::now();
-        let mut t = session(t0);
-        t.disable();
+        let (mut s, mut t) = session(t0);
+        t.disable(&mut s);
         t.end_session();
-        assert!(!t.config.enabled);
+        assert!(!s.config.enabled);
     }
 
     #[test]
     fn the_warning_prints_once_per_cycle_and_not_again_while_overdue() {
         let t0 = Instant::now();
-        let mut t = session(t0);
-        t.config.warn_at_secs = Some(5);
+        let (mut s, mut t) = session(t0);
+        s.config.warn_at_secs = Some(5);
         let tick = t0 + secs(3.0);
-        assert!(t.on_game_tick(tick).is_some());
-        let warned = |t: &mut TickRuntime, from: f64, to: f64| -> usize {
+        assert!(t.on_game_tick(&s, tick).is_some());
+        let warned = |s: &TickSettings, t: &mut TickRuntime, from: f64, to: f64| -> usize {
             let mut n = 0;
             let mut at = tick + secs(from);
             while at < tick + secs(to) {
-                if t.poll(at).warn_echo.is_some() {
+                if t.poll(s, at).warn_echo.is_some() {
                     n += 1;
                 }
                 at += Duration::from_millis(250);
             }
             n
         };
-        assert_eq!(warned(&mut t, 0.0, 24.0), 0);
-        assert_eq!(warned(&mut t, 24.0, 30.0), 1);
+        assert_eq!(warned(&s, &mut t, 0.0, 24.0), 0);
+        assert_eq!(warned(&s, &mut t, 24.0, 30.0), 1);
         // The game runs late. No second warning while overdue.
-        assert_eq!(warned(&mut t, 30.0, 40.0), 0);
+        assert_eq!(warned(&s, &mut t, 30.0, 40.0), 0);
         let late = tick + secs(40.0);
-        assert!(t.on_game_tick(late).is_some());
-        let step = t.poll(late + secs(26.0));
+        assert!(t.on_game_tick(&s, late).is_some());
+        let step = t.poll(&s, late + secs(26.0));
         assert_eq!(
             step.warn_echo.as_deref(),
             Some("\r\n\x1b[1;31mTICK IN 5s\x1b[0m\r\n")
@@ -980,11 +1018,11 @@ mod tests {
 
     /// Count the warnings the session loop prints polling every 250 ms
     /// from `from` up to and not including `to`.
-    fn warns_between(t: &mut TickRuntime, from: Instant, to: Instant) -> usize {
+    fn warns_between(s: &TickSettings, t: &mut TickRuntime, from: Instant, to: Instant) -> usize {
         let mut n = 0;
         let mut at = from;
         while at < to {
-            if t.poll(at).warn_echo.is_some() {
+            if t.poll(s, at).warn_echo.is_some() {
                 n += 1;
             }
             at += Duration::from_millis(250);
@@ -995,86 +1033,91 @@ mod tests {
     #[test]
     fn a_new_interval_while_synced_does_not_warn_again_this_tick() {
         let t0 = Instant::now();
-        let mut t = session(t0);
-        t.config.warn_at_secs = Some(5);
+        let (mut s, mut t) = session(t0);
+        s.config.warn_at_secs = Some(5);
         let tick = t0 + secs(10.0);
-        assert!(t.on_game_tick(tick).is_some());
-        assert_eq!(warns_between(&mut t, tick, tick + secs(26.5)), 1);
+        assert!(t.on_game_tick(&s, tick).is_some());
+        assert_eq!(warns_between(&s, &mut t, tick, tick + secs(26.5)), 1);
         // The same interval again, as a Settings save of another field
         // or `#tick interval 30` does, inside the warn window.
-        t.set_interval(30, tick + secs(26.5));
+        t.set_interval(&mut s, 30, tick + secs(26.5));
         assert_eq!(
-            warns_between(&mut t, tick + secs(26.5), tick + secs(33.0)),
+            warns_between(&s, &mut t, tick + secs(26.5), tick + secs(33.0)),
             0
         );
         // Overdue, a longer interval puts the expected tick ahead again.
-        t.set_interval(35, tick + secs(33.0));
+        t.set_interval(&mut s, 35, tick + secs(33.0));
         assert_eq!(
-            warns_between(&mut t, tick + secs(33.0), tick + secs(40.0)),
+            warns_between(&s, &mut t, tick + secs(33.0), tick + secs(40.0)),
             0
         );
         // The next tick opens a new cycle, and it warns again.
         let next = tick + secs(40.0);
-        assert!(t.on_game_tick(next).is_some());
-        assert_eq!(warns_between(&mut t, next, next + secs(35.0)), 1);
+        assert!(t.on_game_tick(&s, next).is_some());
+        assert_eq!(warns_between(&s, &mut t, next, next + secs(35.0)), 1);
     }
 
     #[test]
     fn a_new_interval_unsynced_restarts_the_count_and_the_warning() {
         let t0 = Instant::now();
-        let mut t = session(t0);
-        t.config.warn_at_secs = Some(5);
-        assert_eq!(warns_between(&mut t, t0, t0 + secs(27.0)), 1);
-        t.set_interval(30, t0 + secs(27.0));
+        let (mut s, mut t) = session(t0);
+        s.config.warn_at_secs = Some(5);
+        assert_eq!(warns_between(&s, &mut t, t0, t0 + secs(27.0)), 1);
+        t.set_interval(&mut s, 30, t0 + secs(27.0));
         assert_eq!(t.last_tick, Some(t0 + secs(27.0)));
-        assert_eq!(warns_between(&mut t, t0 + secs(27.0), t0 + secs(57.0)), 1);
+        assert_eq!(
+            warns_between(&s, &mut t, t0 + secs(27.0), t0 + secs(57.0)),
+            1
+        );
     }
 
     #[test]
     fn a_manual_reset_while_synced_restarts_the_count_and_stays_synced() {
         let t0 = Instant::now();
-        let mut t = session(t0);
-        assert!(t.on_game_tick(t0 + secs(5.0)).is_some());
-        t.reset(t0 + secs(15.0));
+        let (s, mut t) = session(t0);
+        assert!(t.on_game_tick(&s, t0 + secs(5.0)).is_some());
+        t.reset(&s, t0 + secs(15.0));
         assert!(t.synced);
-        assert_eq!(t.remaining(t0 + secs(15.0)), Some(secs(30.0)));
+        assert_eq!(t.remaining(&s, t0 + secs(15.0)), Some(secs(30.0)));
     }
 
     #[test]
     fn a_new_interval_while_synced_keeps_the_count() {
         let t0 = Instant::now();
-        let mut t = session(t0);
+        let (mut s, mut t) = session(t0);
         let tick = t0 + secs(5.0);
-        assert!(t.on_game_tick(tick).is_some());
-        t.set_interval(40, tick + secs(10.0));
+        assert!(t.on_game_tick(&s, tick).is_some());
+        t.set_interval(&mut s, 40, tick + secs(10.0));
         assert_eq!(t.last_tick, Some(tick));
-        assert_eq!(t.remaining(tick + secs(10.0)), Some(secs(30.0)));
+        assert_eq!(t.remaining(&s, tick + secs(10.0)), Some(secs(30.0)));
     }
 
     // ── A new interval never makes the game look quiet ──────────────
 
     /// A synced session whose game ticked 5 seconds in, with the time
     /// of that tick.
-    fn synced_session(t0: Instant) -> (TickRuntime, Instant) {
-        let mut t = session(t0);
+    fn synced_session(t0: Instant) -> (TickSettings, TickRuntime, Instant) {
+        let (s, mut t) = session(t0);
         let tick = t0 + secs(5.0);
-        assert!(t.on_game_tick(tick).is_some());
-        (t, tick)
+        assert!(t.on_game_tick(&s, tick).is_some());
+        (s, t, tick)
     }
 
     #[test]
     fn lowering_the_interval_while_synced_does_not_fire_the_fallback() {
         let t0 = Instant::now();
-        let (mut t, tick) = synced_session(t0);
+        let (mut s, mut t, tick) = synced_session(t0);
         // 25 seconds into the tick you set Every to 10, as #tick
         // interval and a Settings save do.
         let change = tick + secs(25.0);
-        t.set_interval(10, change);
-        let leftover = &poll_span(&mut t, change, tick + secs(30.0));
+        t.set_interval(&mut s, 10, change);
+        let leftover = &poll_span(&s, &mut t, change, tick + secs(30.0));
         assert!(leftover.is_empty(), "{leftover:?}");
         assert!(t.synced);
         // The game's tick lands on time and fires once.
-        let step = t.on_game_tick(tick + secs(30.0)).expect("the tick lands");
+        let step = t
+            .on_game_tick(&s, tick + secs(30.0))
+            .expect("the tick lands");
         assert!(step.payload.fired);
         assert_eq!(step.command.as_deref(), Some("score"));
         assert!(t.synced);
@@ -1083,16 +1126,18 @@ mod tests {
     #[test]
     fn a_profile_with_a_shorter_interval_does_not_fire_the_fallback() {
         let t0 = Instant::now();
-        let (mut t, tick) = synced_session(t0);
+        let (mut s, mut t, tick) = synced_session(t0);
         // A switch, #profile load, reset, or an import brings Every 10.
-        let mut config = t.config.clone();
-        config.interval_secs = 10;
+        let before = s.config.clone();
+        s.config.interval_secs = 10;
         let change = tick + secs(25.0);
-        t.adopt(config, None, change);
-        let leftover = &poll_span(&mut t, change, tick + secs(30.0));
+        t.adopt(&mut s, &before, change);
+        let leftover = &poll_span(&s, &mut t, change, tick + secs(30.0));
         assert!(leftover.is_empty(), "{leftover:?}");
         assert!(t.synced);
-        let step = t.on_game_tick(tick + secs(30.0)).expect("the tick lands");
+        let step = t
+            .on_game_tick(&s, tick + secs(30.0))
+            .expect("the tick lands");
         assert!(step.payload.fired);
         assert!(t.synced);
     }
@@ -1100,14 +1145,14 @@ mod tests {
     #[test]
     fn after_a_shorter_interval_the_fallback_waits_twice_it_from_the_change() {
         let t0 = Instant::now();
-        let (mut t, tick) = synced_session(t0);
+        let (mut s, mut t, tick) = synced_session(t0);
         let change = tick + secs(25.0);
-        t.set_interval(10, change);
+        t.set_interval(&mut s, 10, change);
         // The game goes quiet. Twice the new interval after the change
         // the timer fires once on its own and drops back to unsynced.
-        let leftover = &poll_span(&mut t, change, change + secs(20.0));
+        let leftover = &poll_span(&s, &mut t, change, change + secs(20.0));
         assert!(leftover.is_empty(), "{leftover:?}");
-        let step = t.poll(change + secs(20.0));
+        let step = t.poll(&s, change + secs(20.0));
         assert!(step.payload.fired);
         assert_eq!(step.command.as_deref(), Some("score"));
         assert!(!t.synced);
@@ -1116,35 +1161,40 @@ mod tests {
     #[test]
     fn raising_the_interval_while_synced_does_not_fire_the_fallback() {
         let t0 = Instant::now();
-        let (mut t, tick) = synced_session(t0);
+        let (mut s, mut t, tick) = synced_session(t0);
         let change = tick + secs(25.0);
-        t.set_interval(60, change);
+        t.set_interval(&mut s, 60, change);
         // The game runs a little late and ticks once.
-        let leftover = &poll_span(&mut t, change, tick + secs(35.0));
+        let leftover = &poll_span(&s, &mut t, change, tick + secs(35.0));
         assert!(leftover.is_empty(), "{leftover:?}");
         let next = tick + secs(35.0);
-        assert!(t.on_game_tick(next).expect("the tick lands").payload.fired);
+        assert!(
+            t.on_game_tick(&s, next)
+                .expect("the tick lands")
+                .payload
+                .fired
+        );
         // Then it goes quiet, and the fallback waits twice the new one.
-        let leftover = &poll_span(&mut t, next, next + secs(120.0));
+        let leftover = &poll_span(&s, &mut t, next, next + secs(120.0));
         assert!(leftover.is_empty(), "{leftover:?}");
         assert!(t.synced);
-        assert!(t.poll(next + secs(120.0)).payload.fired);
+        assert!(t.poll(&s, next + secs(120.0)).payload.fired);
         assert!(!t.synced);
     }
 
     #[test]
     fn a_profile_with_a_longer_interval_does_not_fire_the_fallback() {
         let t0 = Instant::now();
-        let (mut t, tick) = synced_session(t0);
-        let mut config = t.config.clone();
-        config.interval_secs = 60;
+        let (mut s, mut t, tick) = synced_session(t0);
+        let before = s.config.clone();
+        s.config.interval_secs = 60;
         let change = tick + secs(25.0);
-        t.adopt(config, None, change);
-        let leftover = &poll_span(&mut t, change, tick + secs(35.0));
+        t.adopt(&mut s, &before, change);
+        let leftover = &poll_span(&s, &mut t, change, tick + secs(35.0));
         assert!(leftover.is_empty(), "{leftover:?}");
         assert!(t.synced);
         assert!(
-            t.on_game_tick(tick + secs(35.0))
+            t.on_game_tick(&s, tick + secs(35.0))
                 .expect("the tick lands")
                 .payload
                 .fired
@@ -1155,16 +1205,16 @@ mod tests {
     fn a_new_interval_unsynced_fires_at_the_new_interval_from_the_change() {
         for every in [10, 60] {
             let t0 = Instant::now();
-            let mut t = session(t0);
+            let (mut s, mut t) = session(t0);
             let change = t0 + secs(25.0);
-            t.set_interval(every, change);
+            t.set_interval(&mut s, every, change);
             let due = change + Duration::from_secs(every);
             assert!(
-                poll_span(&mut t, change, due).is_empty(),
+                poll_span(&s, &mut t, change, due).is_empty(),
                 "no fire before a new {every} second interval runs out"
             );
             assert!(
-                t.poll(due).payload.fired,
+                t.poll(&s, due).payload.fired,
                 "fires at the new {every} seconds"
             );
             assert!(!t.synced);
@@ -1191,10 +1241,10 @@ mod tests {
     fn the_warning_prints_exactly_when_the_status_line_turns_to_warn() {
         for (into, warns) in WARN_BOUNDARY {
             let t0 = Instant::now();
-            let (mut t, tick) = synced_session(t0);
-            t.config.warn_at_secs = Some(5);
+            let (mut s, mut t, tick) = synced_session(t0);
+            s.config.warn_at_secs = Some(5);
             assert_eq!(
-                t.try_consume_warn(tick + secs(into)),
+                t.try_consume_warn(&s, tick + secs(into)),
                 warns,
                 "{into} seconds into the tick"
             );
@@ -1204,12 +1254,12 @@ mod tests {
     #[test]
     fn the_session_loop_prints_the_warning_on_the_report_that_turns_warn() {
         let t0 = Instant::now();
-        let (mut t, tick) = synced_session(t0);
-        t.config.warn_at_secs = Some(5);
+        let (mut s, mut t, tick) = synced_session(t0);
+        s.config.warn_at_secs = Some(5);
         let mut warned = Vec::new();
         let mut at = tick;
         while at < tick + secs(30.0) {
-            if t.poll(at).warn_echo.is_some() {
+            if t.poll(&s, at).warn_echo.is_some() {
                 warned.push(at);
             }
             at += Duration::from_millis(250);
@@ -1220,8 +1270,8 @@ mod tests {
     #[test]
     fn the_report_carries_the_time_since_the_tick_and_whether_it_is_overdue() {
         let t0 = Instant::now();
-        let mut t = session(t0);
-        let p = t.poll(t0 + secs(12.5)).payload;
+        let (mut s, mut t) = session(t0);
+        let p = t.poll(&s, t0 + secs(12.5)).payload;
         assert_eq!(
             (p.elapsed_ms, p.remaining_ms, p.interval_ms),
             (12_500, 17_500, 30_000)
@@ -1230,25 +1280,25 @@ mod tests {
         assert!(!p.synced);
 
         let tick = t0 + secs(14.0);
-        let p = t.on_game_tick(tick).expect("the tick lands").payload;
+        let p = t.on_game_tick(&s, tick).expect("the tick lands").payload;
         assert_eq!((p.elapsed_ms, p.remaining_ms), (0, 30_000));
         assert!(p.synced);
         assert!(p.fired);
 
         // At the expected tick and past it, the report says overdue and
         // keeps counting while the time left holds at zero.
-        let p = t.poll(tick + secs(30.0)).payload;
+        let p = t.poll(&s, tick + secs(30.0)).payload;
         assert_eq!((p.elapsed_ms, p.remaining_ms), (30_000, 0));
         assert!(p.overdue);
-        let p = t.poll(tick + secs(36.75)).payload;
+        let p = t.poll(&s, tick + secs(36.75)).payload;
         assert_eq!((p.elapsed_ms, p.remaining_ms), (36_750, 0));
         assert!(p.overdue);
         assert!(p.synced);
         assert!(!p.fired);
 
         // Off, the report counts nothing.
-        t.disable();
-        let p = t.poll(tick + secs(40.0)).payload;
+        t.disable(&mut s);
+        let p = t.poll(&s, tick + secs(40.0)).payload;
         assert!(!p.enabled);
         assert_eq!((p.elapsed_ms, p.remaining_ms), (0, 0));
         assert!(!p.overdue);
@@ -1258,9 +1308,9 @@ mod tests {
     #[test]
     fn the_report_serializes_the_new_fields() {
         let t0 = Instant::now();
-        let t = session(t0);
+        let (s, t) = session(t0);
         let json =
-            serde_json::to_value(TickPayload::from_runtime(&t, t0 + secs(2.0), false)).unwrap();
+            serde_json::to_value(TickPayload::from_runtime(&s, &t, t0 + secs(2.0), false)).unwrap();
         assert_eq!(json["elapsed_ms"], 2_000);
         assert_eq!(json["overdue"], false);
         assert_eq!(json["synced"], false);
@@ -1298,74 +1348,80 @@ mod tests {
     }
 
     /// A running 30 second tick that resets on `^You feel`.
-    fn running_tick(now: tokio::time::Instant) -> crate::tick::TickRuntime {
+    fn running_tick(
+        now: tokio::time::Instant,
+    ) -> (crate::tick::TickSettings, crate::tick::TickRuntime) {
+        let mut s = crate::tick::TickSettings::default();
         let mut tick = crate::tick::TickRuntime::default();
-        tick.enable(now);
-        tick.set_reset_pattern(Some("^You feel".into())).unwrap();
-        tick
+        tick.enable(&mut s, now);
+        s.set_reset_pattern(Some("^You feel".into())).unwrap();
+        (s, tick)
     }
 
     #[test]
     fn a_tick_config_with_a_bad_reset_pattern_changes_nothing() {
         let now = tokio::time::Instant::now();
-        let mut tick = running_tick(now);
-        let before = format!("{:?}", tick.config);
-        let next_fire = tick.next_fire();
+        let (mut s, mut tick) = running_tick(now);
+        let before = format!("{:?}", s.config);
+        let next_fire = tick.next_fire(&s);
 
-        let err = super::apply_tick_config(&mut tick, &tick_payload("[bad"), now).unwrap_err();
+        let err =
+            super::apply_tick_config(&mut s, &mut tick, &tick_payload("[bad"), now).unwrap_err();
         assert_eq!(
             err,
             "Vosh could not read the Reset on pattern. Check it and save again."
         );
         // Still on, still every 30 seconds, still on the same clock, and
         // still resetting on the old pattern.
-        assert_eq!(format!("{:?}", tick.config), before);
-        assert!(tick.config.enabled);
-        assert_eq!(tick.config.interval_secs, 30);
-        assert_eq!(tick.next_fire(), next_fire);
-        assert!(tick.check_reset_match("You feel less tired."));
+        assert_eq!(format!("{:?}", s.config), before);
+        assert!(s.config.enabled);
+        assert_eq!(s.config.interval_secs, 30);
+        assert_eq!(tick.next_fire(&s), next_fire);
+        assert!(s.check_reset_match("You feel less tired."));
     }
 
     #[test]
     fn a_tick_config_that_reads_applies_every_field() {
         let now = tokio::time::Instant::now();
-        let mut tick = running_tick(now);
+        let (mut s, mut tick) = running_tick(now);
 
-        let saved = super::apply_tick_config(&mut tick, &tick_payload(" ^Dawn "), now).unwrap();
+        let saved =
+            super::apply_tick_config(&mut s, &mut tick, &tick_payload(" ^Dawn "), now).unwrap();
         assert!(!saved.enabled);
         assert_eq!(saved.interval_secs, 60);
         assert_eq!(saved.auto_fire.as_deref(), Some("score"));
         assert_eq!(saved.reset_pattern.as_deref(), Some("^Dawn"));
         assert_eq!(saved.warn_at_secs, Some(5));
-        assert!(!tick.config.enabled);
-        assert_eq!(tick.next_fire(), None);
-        assert_eq!(tick.config.interval_secs, 60);
-        assert!(!tick.config.sound);
-        assert!(tick.check_reset_match("Dawn breaks."));
-        assert!(!tick.check_reset_match("You feel less tired."));
+        assert!(!s.config.enabled);
+        assert_eq!(tick.next_fire(&s), None);
+        assert_eq!(s.config.interval_secs, 60);
+        assert!(!s.config.sound);
+        assert!(s.check_reset_match("Dawn breaks."));
+        assert!(!s.check_reset_match("You feel less tired."));
 
         // Turned back on, the tick runs at the saved interval, and a
         // blank pattern clears the reset.
         let mut on = tick_payload("  ");
         on.enabled = true;
-        let saved = super::apply_tick_config(&mut tick, &on, now).unwrap();
+        let saved = super::apply_tick_config(&mut s, &mut tick, &on, now).unwrap();
         assert!(saved.enabled);
         assert_eq!(saved.reset_pattern, None);
         assert_eq!(
-            tick.next_fire(),
+            tick.next_fire(&s),
             Some(now + std::time::Duration::from_secs(60))
         );
-        assert!(!tick.check_reset_match("Dawn breaks."));
+        assert!(!s.check_reset_match("Dawn breaks."));
     }
 
     #[test]
     fn a_tick_save_inside_the_warn_window_does_not_warn_twice() {
         let t0 = tokio::time::Instant::now();
         let at = |s: f64| t0 + std::time::Duration::from_secs_f64(s);
+        let mut s = crate::tick::TickSettings::default();
         let mut tick = crate::tick::TickRuntime::default();
-        tick.start_session(t0);
-        tick.config.warn_at_secs = Some(5);
-        assert!(tick.on_game_tick(at(1.0)).is_some());
+        tick.start_session(&mut s, t0);
+        s.config.warn_at_secs = Some(5);
+        assert!(tick.on_game_tick(&s, at(1.0)).is_some());
         let mut warns = 0;
         let mut now = 1.0;
         while now < 40.0 {
@@ -1376,9 +1432,9 @@ mod tests {
                 quiet.enabled = true;
                 quiet.interval_secs = 30;
                 quiet.sound = false;
-                super::apply_tick_config(&mut tick, &quiet, at(now)).unwrap();
+                super::apply_tick_config(&mut s, &mut tick, &quiet, at(now)).unwrap();
             }
-            if tick.poll(at(now)).warn_echo.is_some() {
+            if tick.poll(&s, at(now)).warn_echo.is_some() {
                 warns += 1;
             }
             now += 0.25;
@@ -1391,24 +1447,25 @@ mod tests {
     fn a_tick_save_with_a_shorter_interval_does_not_fire_while_the_game_ticks() {
         let t0 = tokio::time::Instant::now();
         let at = |s: f64| t0 + std::time::Duration::from_secs_f64(s);
+        let mut s = crate::tick::TickSettings::default();
         let mut tick = crate::tick::TickRuntime::default();
-        tick.start_session(t0);
-        tick.config.auto_fire = Some("score".into());
-        assert!(tick.on_game_tick(at(1.0)).is_some());
+        tick.start_session(&mut s, t0);
+        s.config.auto_fire = Some("score".into());
+        assert!(tick.on_game_tick(&s, at(1.0)).is_some());
         // 25 seconds into the tick, Settings saves Every 10.
         let mut shorter = tick_payload("");
         shorter.enabled = true;
         shorter.interval_secs = 10;
-        super::apply_tick_config(&mut tick, &shorter, at(26.0)).unwrap();
+        super::apply_tick_config(&mut s, &mut tick, &shorter, at(26.0)).unwrap();
         let mut now = 26.0;
         while now < 31.0 {
-            let step = tick.poll(at(now));
+            let step = tick.poll(&s, at(now));
             assert!(!step.payload.fired, "no fallback at {now}");
             assert_eq!(step.command, None);
             now += 0.25;
         }
         assert!(tick.synced);
-        let step = tick.on_game_tick(at(31.0)).expect("the tick lands");
+        let step = tick.on_game_tick(&s, at(31.0)).expect("the tick lands");
         assert!(step.payload.fired);
         assert_eq!(step.command.as_deref(), Some("score"));
     }
@@ -1423,30 +1480,35 @@ mod tests {
     #[test]
     fn a_world_hour_change_is_the_tick_and_fires_once() {
         let t0 = tokio::time::Instant::now();
+        let mut s = crate::tick::TickSettings::default();
         let mut tick = crate::tick::TickRuntime::default();
-        tick.config.auto_fire = Some("score".into());
-        tick.start_session(t0);
+        s.config.auto_fire = Some("score".into());
+        tick.start_session(&mut s, t0);
         let at = |s: u64| t0 + std::time::Duration::from_secs(s);
 
         // The first hour of the session primes.
         assert!(
-            super::observe_world_time_for_tick(&mut tick, &world_time(9.into()), at(1)).is_none()
+            super::observe_world_time_for_tick(&s, &mut tick, &world_time(9.into()), at(1))
+                .is_none()
         );
         // The same hour again is no tick.
         assert!(
-            super::observe_world_time_for_tick(&mut tick, &world_time(9.into()), at(5)).is_none()
+            super::observe_world_time_for_tick(&s, &mut tick, &world_time(9.into()), at(5))
+                .is_none()
         );
-        let step = super::observe_world_time_for_tick(&mut tick, &world_time("10".into()), at(12))
-            .expect("the hour moved");
+        let step =
+            super::observe_world_time_for_tick(&s, &mut tick, &world_time("10".into()), at(12))
+                .expect("the hour moved");
         assert!(step.payload.fired);
         assert_eq!(step.command.as_deref(), Some("score"));
         assert!(tick.synced);
         // A Reset on line for the same tick does not fire again.
-        assert!(tick.on_game_tick(at(13)).is_none());
+        assert!(tick.on_game_tick(&s, at(13)).is_none());
         // Past the interval the timer waits for the next hour.
-        assert!(!tick.poll(at(45)).payload.fired);
-        let step = super::observe_world_time_for_tick(&mut tick, &world_time(11.into()), at(46))
-            .expect("the next tick");
+        assert!(!tick.poll(&s, at(45)).payload.fired);
+        let step =
+            super::observe_world_time_for_tick(&s, &mut tick, &world_time(11.into()), at(46))
+                .expect("the next tick");
         assert!(step.payload.fired);
 
         // Other packages and a World.Time without an hour are no tick.
@@ -1454,11 +1516,11 @@ mod tests {
             package: "Char.Vitals".into(),
             data: serde_json::json!({ "hour": 12 }),
         };
-        assert!(super::observe_world_time_for_tick(&mut tick, &other, at(80)).is_none());
+        assert!(super::observe_world_time_for_tick(&s, &mut tick, &other, at(80)).is_none());
         let no_hour = vosh_protocol::gmcp::Message {
             package: "World.Time".into(),
             data: serde_json::json!({ "sunlight": "light" }),
         };
-        assert!(super::observe_world_time_for_tick(&mut tick, &no_hour, at(80)).is_none());
+        assert!(super::observe_world_time_for_tick(&s, &mut tick, &no_hour, at(80)).is_none());
     }
 }

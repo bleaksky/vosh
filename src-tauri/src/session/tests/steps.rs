@@ -1112,8 +1112,8 @@ fn exits_draw_from_room_info_only_on_the_new_build() {
 fn vosh_supplies_the_tick_target_tracked_affects_and_profile() {
     let mut p = forsaken_profile("%tick|%{tick:unit}|%target|%{missing:names}|%profile");
     let now = tokio::time::Instant::now();
-    p.tick.enable(now);
     let mut c = super::Connection::default();
+    c.tick.enable(&mut p.tick, now);
     c.target.name = Some("guard".into());
     p.display_name = Some("Default".into());
     p.ui.tracked_affects = vec![crate::profile::ui::TrackedAffect {

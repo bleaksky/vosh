@@ -1,25 +1,27 @@
-//! The `#tick` command, which shows and changes the tick timer settings.
+//! The `#tick` command, which shows and changes the tick timer settings
+//! on the profile and its count on the connection.
 
 use tokio::time::Instant;
 
 use super::slash::parse_braced_pattern;
 use super::{split_first_word, InputResult};
 use crate::profile::live::Profile;
+use crate::session::connection::Connection;
 
-pub(super) fn slash_tick(profile: &mut Profile, args: &str) -> InputResult {
+pub(super) fn slash_tick(profile: &mut Profile, c: &mut Connection, args: &str) -> InputResult {
     let (cmd, rest) = split_first_word(args);
     let now = Instant::now();
     match cmd {
-        "" => slash_tick_show(profile, now),
+        "" => slash_tick_show(profile, c, now),
         "interval" => match rest.trim().parse::<u64>() {
             Ok(secs) if secs > 0 => {
-                profile.tick.set_interval(secs, now);
+                c.tick.set_interval(&mut profile.tick, secs, now);
                 InputResult::echo_line(format!("tick interval set to {secs}s"))
             }
             _ => InputResult::error("usage #tick interval <secs>"),
         },
         "reset" => {
-            profile.tick.reset(now);
+            c.tick.reset(&profile.tick, now);
             InputResult::echo_line("tick reset")
         }
         "on" => {
@@ -61,11 +63,11 @@ pub(super) fn slash_tick(profile: &mut Profile, args: &str) -> InputResult {
             _ => InputResult::error("usage #tick sound on|off"),
         },
         "disable" => {
-            profile.tick.disable();
+            c.tick.disable(&mut profile.tick);
             InputResult::echo_line("tick disabled")
         }
         "enable" => {
-            profile.tick.enable(now);
+            c.tick.enable(&mut profile.tick, now);
             InputResult::echo_line("tick enabled")
         }
         "warn" => slash_tick_warn(profile, rest),
@@ -130,12 +132,12 @@ fn slash_tick_warn(profile: &mut Profile, args: &str) -> InputResult {
     }
 }
 
-fn slash_tick_show(profile: &Profile, now: Instant) -> InputResult {
+fn slash_tick_show(profile: &Profile, c: &Connection, now: Instant) -> InputResult {
     let cfg = &profile.tick.config;
     let mut lines = Vec::new();
     let state = if cfg.enabled { "enabled" } else { "disabled" };
     lines.push(format!("tick {state}, interval {}s", cfg.interval_secs));
-    if let Some(remaining) = profile.tick.remaining(now) {
+    if let Some(remaining) = c.tick.remaining(&profile.tick, now) {
         lines.push(format!("  remaining {}s", remaining.as_secs()));
     } else {
         lines.push("  remaining (not running)".to_string());

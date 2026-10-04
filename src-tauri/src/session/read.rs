@@ -113,11 +113,11 @@ async fn handle_event<R: tauri::Runtime>(
                     .then(|| walk::answer(&plain, ended.as_deref()).to_string());
                 let trigger_t0 = std::time::Instant::now();
                 // The tick step for a line that matches the Reset on
-                // pattern comes under the same lock as the triggers and
-                // Lua, so reading the tick takes no second lock. The
+                // pattern comes under the same locks as the triggers and
+                // Lua, so reading the tick takes no lock of its own. The
                 // line is the game's tick, so the step fires once per
                 // tick and carries the Send each tick command to run
-                // after the lock drops.
+                // after the locks drop.
                 let steps = {
                     let lock_t0 = std::time::Instant::now();
                     let mut p = conn.profile.lock().await;
@@ -392,7 +392,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
             p.prompt.take_seen(),
             p.prompt.take_status_change(),
             watched.then(|| crate::prompt::prompt_state(&p, &c)),
-            clock_after(&p, Instant::now()),
+            clock_after(&p, &c, Instant::now()),
         )
     };
     if !out.is_empty() {

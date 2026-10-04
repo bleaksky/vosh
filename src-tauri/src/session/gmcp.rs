@@ -65,8 +65,8 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     // duplicate-member server bug).
     info!(package = %msg.package, "gmcp received");
     tracing::debug!(package = %msg.package, data = %msg.data, "gmcp payload");
-    // Take the tick step for a World.Time hour change under this lock, as
-    // the line path does, so the tick needs no second lock after it.
+    // Take the tick step for a World.Time hour change under these locks,
+    // as the line path does, so the tick needs no lock of its own after.
     let (tick_step, script_apply) = {
         let lock_t0 = std::time::Instant::now();
         let mut p = conn.profile.lock().await;
@@ -235,7 +235,7 @@ pub(super) fn gmcp_step(
             c.room_block.room_items(arr.len());
         }
     }
-    let tick_step = crate::tick::observe_world_time_for_tick(&mut p.tick, msg, now);
+    let tick_step = crate::tick::observe_world_time_for_tick(&p.tick, &mut c.tick, msg, now);
     script::snapshot_vars(&p.script, &p.vars);
     let outcome = p.script.dispatch_gmcp(&msg.package, &msg.data);
     let apply = script::apply_actions(p, outcome);

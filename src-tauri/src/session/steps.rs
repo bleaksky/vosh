@@ -1,10 +1,10 @@
 //! The steps the session loop takes under the profile lock for each
 //! line, prompt, partial and GA or EOR the game sends, and for each
-//! repaint of your prompt. A step that reads your target or follows the
-//! room look takes the [`Connection`] too, locked after the profile. None
-//! of them sends anything. They write to the read's batch or return the
-//! output, and a line step returns what is left for after the lock as a
-//! [`LineStep`].
+//! repaint of your prompt. A step that reads your target, follows the
+//! room look or reads the tick's count takes the [`Connection`] too,
+//! locked after the profile. None of them sends anything. They write to
+//! the read's batch or return the output, and a line step returns what
+//! is left for after the lock as a [`LineStep`].
 
 use std::time::Duration;
 
@@ -35,13 +35,15 @@ struct LinePass {
 
 /// Run one complete line through Line triggers, the tick reset pattern,
 /// Lua triggers and the Script bodies the triggers queued, all under the
-/// profile lock the caller holds. `plain` is the line without ANSI, so
-/// no pattern has to allow for escape bytes and the line is stripped
-/// once. `scope` is [`MatchScope::Room`] for a line that lists a room's
-/// armies, things or people, so Room triggers run on it too, and
-/// [`MatchScope::RoomTarget`] for the line of the person you target.
+/// profile and connection locks the caller holds. `plain` is the line
+/// without ANSI, so no pattern has to allow for escape bytes and the line
+/// is stripped once. `scope` is [`MatchScope::Room`] for a line that
+/// lists a room's armies, things or people, so Room triggers run on it
+/// too, and [`MatchScope::RoomTarget`] for the line of the person you
+/// target.
 fn line_pass(
     p: &mut Profile,
+    c: &mut Connection,
     bytes: &[u8],
     plain: &str,
     scope: MatchScope,
@@ -54,7 +56,7 @@ fn line_pass(
         scope,
         highlight_ground::get(),
     );
-    let tick_step = tick_reset(p, plain, now);
+    let tick_step = tick_reset(p, c, plain, now);
     script::snapshot_vars(&p.script, &p.vars);
     let mut outcome = p.script.match_line(plain);
     script::turn_off_stopped(p, &outcome);
@@ -70,9 +72,9 @@ fn line_pass(
 }
 
 /// The tick step when `plain` matches the tick's Reset on pattern.
-fn tick_reset(p: &mut Profile, plain: &str, now: Instant) -> Option<TickStep> {
+fn tick_reset(p: &Profile, c: &mut Connection, plain: &str, now: Instant) -> Option<TickStep> {
     if p.tick.check_reset_match(plain) {
-        p.tick.on_game_tick(now)
+        c.tick.on_game_tick(&p.tick, now)
     } else {
         None
     }
@@ -295,7 +297,7 @@ fn text_line_step(
         result,
         tick_step,
         mut apply,
-    } = line_pass(p, &bytes, &plain, scope, now);
+    } = line_pass(p, c, &bytes, &plain, scope, now);
     if result.display.is_none() {
         note_gag_without_reader(p, batch, &plain, scope);
     }
@@ -439,7 +441,7 @@ fn prompt_block(
     }
     let mut tick_step = None;
     for line in &block.lines {
-        if let Some(step) = tick_reset(p, &line.plain, now) {
+        if let Some(step) = tick_reset(p, c, &line.plain, now) {
             tick_step.get_or_insert(step);
         }
         // Line triggers no longer see it. Note the ones that would have
@@ -819,14 +821,14 @@ pub(super) const CLOCK_SLACK: Duration = Duration::from_millis(5);
 /// up from the same restart. The time and the date turn on the local
 /// clock's seconds. With both, the tick sets the pace, so your prompt
 /// repaints at most once a second.
-pub(super) fn clock_after(p: &Profile, now: Instant) -> Option<Instant> {
+pub(super) fn clock_after(p: &Profile, c: &Connection, now: Instant) -> Option<Instant> {
     let clock = p.prompt.clock()?;
     let tick = clock
         .tick
-        .then(|| p.tick.remaining(now))
+        .then(|| c.tick.remaining(&p.tick, now))
         .flatten()
         .filter(|left| !left.is_zero());
-    let late = clock.tick.then(|| p.tick.elapsed(now)).flatten();
+    let late = clock.tick.then(|| c.tick.elapsed(&p.tick, now)).flatten();
     let wait = match (tick, late) {
         (Some(left), _) => match left.as_nanos() % 1_000_000_000 {
             0 => Duration::from_secs(1),

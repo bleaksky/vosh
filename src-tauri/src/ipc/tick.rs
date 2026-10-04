@@ -28,7 +28,13 @@ pub(crate) async fn tick_set_config(
 ) -> Result<TickConfig, String> {
     let snapshot = {
         let mut p = state.profile.lock().await;
-        apply_tick_config(&mut p.tick, &config, tokio::time::Instant::now())?
+        let mut c = state.connection.lock().await;
+        apply_tick_config(
+            &mut p.tick,
+            &mut c.tick,
+            &config,
+            tokio::time::Instant::now(),
+        )?
     };
     save_then_broadcast(
         &app,
