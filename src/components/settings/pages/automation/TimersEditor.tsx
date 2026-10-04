@@ -6,21 +6,20 @@ import {
   updateDraftItem,
   type Draft,
 } from '../../../../lib/automationDraft';
-import { searchText } from '../../../../lib/automationList';
 import {
   automationSaveError,
   blankTimer,
-  formatInterval,
   jsonListText,
   normalizeTick,
   normalizeTimer,
   parseJsonList,
   saveTimerDraft,
+  timerEntry,
   timerKey,
-  timerLabel,
   validateTimers,
   type TimerRecord,
 } from '../../../../lib/automationRecords';
+import { withGroup } from '../../../../lib/automationTriggers';
 import {
   subscribeTimersChanged,
   tickGetConfig,
@@ -31,7 +30,7 @@ import {
 import { followTickDraft } from '../../../../lib/tickDraft';
 import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
 import { DraftEditor, type PinnedPart } from './DraftEditor';
-import { NumberField } from './fields';
+import { GroupField, NumberField } from './fields';
 import type { DetailProps, DirtyReport, KindSpec } from './types';
 
 const TIMERS_SPEC: KindSpec<TimerRecord> = {
@@ -46,13 +45,7 @@ const TIMERS_SPEC: KindSpec<TimerRecord> = {
   // One call per timer, the way the old Timers tab saved cards.
   save: (draft, written) => saveTimerDraft(draft, written),
   validate: validateTimers,
-  entry: (t) => ({
-    name: timerLabel(t),
-    meta: `Every ${formatInterval(t.interval_secs)}`,
-    group: '',
-    enabled: t.enabled,
-    text: searchText(t.name, t.command),
-  }),
+  entry: timerEntry,
   keyOf: timerKey,
   blank: blankTimer,
   json: {
@@ -166,7 +159,7 @@ export function TimersEditor({ json, onJson, onDirty, onError, tickSeq }: Timers
   );
 }
 
-function TimerDetail({ value: t, update, fresh }: DetailProps<TimerRecord>) {
+function TimerDetail({ value: t, update, fresh, revealInList }: DetailProps<TimerRecord>) {
   const nameRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -184,6 +177,16 @@ function TimerDetail({ value: t, update, fresh }: DetailProps<TimerRecord>) {
           value={t.name}
           placeholder="Optional"
           onChange={(name) => set({ name })}
+        />
+      </Row>
+      <Row label="Group">
+        <GroupField
+          width="100%"
+          value={t.group ?? ''}
+          onCommit={(group) => {
+            update((v) => withGroup(v, group));
+            revealInList();
+          }}
         />
       </Row>
       <Row label="Every">
