@@ -1,6 +1,8 @@
 //! Trigger store. Owns the user-defined triggers, compiles their regex on
 //! insert, and exposes them in priority order.
 
+use std::borrow::Cow;
+
 use regex::Regex;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -19,6 +21,84 @@ pub struct TriggerPattern {
     pub pattern: String,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    /// How the store reads `pattern`. A row with no mode reads as Regex,
+    /// and a Regex row leaves the field out, so a file written by an
+    /// older build reads the same and an older build reads every trigger.
+    #[serde(default, skip_serializing_if = "MatchMode::is_regex")]
+    pub mode: MatchMode,
+}
+
+impl TriggerPattern {
+    /// An enabled row that reads `pattern` as a regex.
+    pub fn regex(pattern: impl Into<String>) -> Self {
+        Self {
+            pattern: pattern.into(),
+            enabled: true,
+            mode: MatchMode::Regex,
+        }
+    }
+
+    /// The regex the store compiles for this row, see [`MatchMode`].
+    pub fn regex_source(&self) -> Cow<'_, str> {
+        self.mode.regex_source(&self.pattern)
+    }
+}
+
+/// How a pattern matches a line. Text and Starts with take the line as
+/// you copy it out of the game, with no escaping, and Regex takes a
+/// regular expression.
+///
+/// - `Text` matches a line that is exactly the text, with any spaces at
+///   either end of the line skipped. It compiles to `^\s*<text>\s*$`.
+/// - `StartsWith` matches a line that starts with the text, after any
+///   spaces at its start. It compiles to `^\s*<text>.*`, so the match
+///   runs to the end of the line and a highlight colors the whole line.
+/// - `Regex` compiles the pattern as typed. Its groups fill `$1` on, and
+///   Text and Starts with have none.
+///
+/// The game prints each thing in a look after five spaces, so a line you
+/// copy with or without them matches in both of the first two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MatchMode {
+    Text,
+    StartsWith,
+    #[default]
+    Regex,
+}
+
+impl MatchMode {
+    /// Regex, the mode a row with none reads as. serde hands the field
+    /// by reference.
+    pub fn is_regex(&self) -> bool {
+        *self == MatchMode::Regex
+    }
+
+    /// The regex `pattern` compiles to in this mode.
+    pub fn regex_source(self, pattern: &str) -> Cow<'_, str> {
+        match self {
+            MatchMode::Regex => Cow::Borrowed(pattern),
+            MatchMode::Text => Cow::Owned(format!(r"^\s*{}\s*$", regex::escape(pattern))),
+            MatchMode::StartsWith => Cow::Owned(format!(r"^\s*{}.*", regex::escape(pattern))),
+        }
+    }
+}
+
+/// A mode this build does not know, from a hand edit or a later build,
+/// reads as Regex like a missing one, so one row never fails the whole
+/// file. The next save leaves it out.
+impl<'de> Deserialize<'de> for MatchMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let name = String::deserialize(deserializer)?;
+        Ok(match name.as_str() {
+            "text" => MatchMode::Text,
+            "starts_with" => MatchMode::StartsWith,
+            _ => MatchMode::Regex,
+        })
+    }
 }
 
 /// Which side of the line pipeline a trigger matches against.
@@ -145,10 +225,7 @@ impl<'de> Deserialize<'de> for Trigger {
         };
         let patterns = match (raw.pattern, raw.patterns) {
             (_, Some(list)) if !list.is_empty() => list,
-            (Some(p), _) => vec![TriggerPattern {
-                pattern: p,
-                enabled: true,
-            }],
+            (Some(p), _) => vec![TriggerPattern::regex(p)],
             (None, _) => {
                 return Err(serde::de::Error::custom(
                     "trigger needs either `pattern` or non-empty `patterns`",
@@ -212,10 +289,7 @@ impl Trigger {
     pub fn new(name: impl Into<String>, pattern: impl Into<String>, action: TriggerAction) -> Self {
         Self {
             name: name.into(),
-            patterns: vec![TriggerPattern {
-                pattern: pattern.into(),
-                enabled: true,
-            }],
+            patterns: vec![TriggerPattern::regex(pattern)],
             priority: 0,
             enabled: true,
             actions: vec![action],
@@ -288,10 +362,11 @@ impl TriggerStore {
             if !entry.enabled {
                 continue;
             }
-            let regex = Regex::new(&entry.pattern).map_err(|e| TriggerError::InvalidRegex {
-                pattern: entry.pattern.clone(),
-                source: e,
-            })?;
+            let regex =
+                Regex::new(&entry.regex_source()).map_err(|e| TriggerError::InvalidRegex {
+                    pattern: entry.pattern.clone(),
+                    source: e,
+                })?;
             regexes.push(regex);
         }
         self.items.retain(|t| t.trigger.name != trigger.name);
@@ -465,6 +540,100 @@ mod tests {
         store.set_disabled_groups(["combat"]);
         assert!(store.import_json("not json").is_err());
         assert_eq!(store.revision(), rev);
+    }
+
+    /// A trigger whose rows are `rows`, each a pattern with its mode.
+    fn with_modes(name: &str, rows: &[(&str, MatchMode)]) -> Trigger {
+        Trigger {
+            patterns: rows
+                .iter()
+                .map(|&(pattern, mode)| TriggerPattern {
+                    mode,
+                    ..TriggerPattern::regex(pattern)
+                })
+                .collect(),
+            ..Trigger::new(name, "", TriggerAction::Gag)
+        }
+    }
+
+    #[test]
+    fn each_mode_compiles_to_its_regex() {
+        // The preset line cure.feel_better, as the board shows each mode
+        // holding it.
+        let row = |pattern: &str, mode| TriggerPattern {
+            mode,
+            ..TriggerPattern::regex(pattern)
+        };
+        assert_eq!(
+            row("You feel better.", MatchMode::Text).regex_source(),
+            r"^\s*You feel better\.\s*$"
+        );
+        assert_eq!(
+            row("You feel better", MatchMode::StartsWith).regex_source(),
+            r"^\s*You feel better.*"
+        );
+        assert_eq!(
+            row(r"You feel better\.$", MatchMode::Regex).regex_source(),
+            r"You feel better\.$"
+        );
+        // Text and Starts with escape what they hold, so a bracket or a
+        // brace never fails the trigger.
+        let mut store = TriggerStore::new();
+        store
+            .set(with_modes(
+                "afk",
+                &[("[AFK] (", MatchMode::Text), ("{x", MatchMode::StartsWith)],
+            ))
+            .unwrap();
+        assert!(store
+            .set(with_modes("bad", &[("[AFK] (", MatchMode::Regex)]))
+            .is_err());
+    }
+
+    #[test]
+    fn a_row_with_no_mode_reads_as_regex_and_writes_none() {
+        let old = r#"{"name":"flee","pattern":"^You flee","actions":[{"kind":"gag"}]}"#;
+        let t: Trigger = serde_json::from_str(old).unwrap();
+        assert_eq!(t.patterns[0].mode, MatchMode::Regex);
+        let rows = r#"{"name":"flee","patterns":[{"pattern":"^You flee"}],"actions":[]}"#;
+        let t: Trigger = serde_json::from_str(rows).unwrap();
+        assert_eq!(t.patterns[0].mode, MatchMode::Regex);
+        // A Regex row leaves the field out, so the shape an older build
+        // reads stays the same.
+        let written = serde_json::to_string(&t).unwrap();
+        assert!(!written.contains("mode"), "{written}");
+    }
+
+    #[test]
+    fn text_and_starts_with_round_trip_through_json() {
+        let t = with_modes(
+            "feel",
+            &[
+                ("You feel better.", MatchMode::Text),
+                ("You feel", MatchMode::StartsWith),
+                ("better\\.$", MatchMode::Regex),
+            ],
+        );
+        let json = serde_json::to_value(&t).unwrap();
+        assert_eq!(json["patterns"][0]["mode"], "text");
+        assert_eq!(json["patterns"][1]["mode"], "starts_with");
+        assert!(json["patterns"][2].get("mode").is_none());
+        let back: Trigger = serde_json::from_value(json).unwrap();
+        assert_eq!(back, t);
+        // Through the store too, as the Settings editor saves.
+        let mut store = TriggerStore::new();
+        store.set(t.clone()).unwrap();
+        let text = store.export_json().unwrap();
+        let mut again = TriggerStore::new();
+        again.import_json(&text).unwrap();
+        assert_eq!(again.list(), [t]);
+    }
+
+    #[test]
+    fn a_mode_this_build_does_not_know_reads_as_regex() {
+        let later = r#"{"name":"x","patterns":[{"pattern":"^a","mode":"glob"}],"actions":[]}"#;
+        let t: Trigger = serde_json::from_str(later).unwrap();
+        assert_eq!(t.patterns[0].mode, MatchMode::Regex);
     }
 
     #[test]

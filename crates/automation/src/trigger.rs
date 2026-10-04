@@ -3,7 +3,9 @@
 //! Triggers match against the plain text of a server line (ANSI escapes
 //! stripped) and fire any of six actions: highlight, gag, replace, send,
 //! route, or a Lua script. The store compiles regexes once on insert;
-//! matching pays no parsing cost per line.
+//! matching pays no parsing cost per line. Each pattern has a match mode,
+//! Text, Starts with or Regex, and the store compiles Text and Starts
+//! with into a regex too (see [`MatchMode`]).
 //!
 //! A trigger's target picks the lines it sees. `Line` takes each completed
 //! line and `Prompt` the prompt text the game ends with GA or EOR. `Room`
@@ -24,4 +26,4 @@ pub use color::NamedColor;
 pub use engine::{matching, process_on_ground, LineResult, MatchScope};
 #[cfg(any(test, feature = "testkit"))]
 pub use engine::{process, process_scoped};
-pub use store::{Trigger, TriggerError, TriggerPattern, TriggerStore, TriggerTarget};
+pub use store::{MatchMode, Trigger, TriggerError, TriggerPattern, TriggerStore, TriggerTarget};
