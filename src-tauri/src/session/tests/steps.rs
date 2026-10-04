@@ -567,6 +567,7 @@ fn a_capture_trigger_with_no_reader_hides_the_prompt_and_is_named_once() {
             preset: None,
             group: None,
             target: vosh_automation::trigger::TriggerTarget::Line,
+            alert: None,
         })
         .expect("the trigger compiles");
     take_config(
@@ -1356,6 +1357,7 @@ fn a_held_line_a_script_hides_still_shows_and_its_echo_follows() {
             preset: None,
             group: None,
             target: vosh_automation::trigger::TriggerTarget::Line,
+            alert: None,
         })
         .unwrap();
     let mut wire = Wire::new((p, c));

@@ -211,6 +211,7 @@ fn commit_mudlet_trigger(item: MudletItem, report: &mut ImportReport) {
         preset: None,
         group: None,
         target: vosh_automation::trigger::TriggerTarget::Line,
+        alert: None,
     });
 }
 

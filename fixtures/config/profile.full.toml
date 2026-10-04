@@ -69,6 +69,13 @@ pane = "chat"
 kind = "script"
 body = "mud.echo(captures[1])"
 
+[triggers.alert]
+banner = true
+sound = "chime"
+attention = "until"
+background = false
+words = true
+
 [[triggers]]
 name = "spam"
 pattern = '^You are hungry\.$'

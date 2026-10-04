@@ -133,6 +133,7 @@ fn mushclient_trigger_from(e: &BytesStart, report: &mut ImportReport) -> Option<
         actions,
         preset: None,
         target: vosh_automation::trigger::TriggerTarget::Line,
+        alert: None,
     })
 }
 
