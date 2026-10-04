@@ -1210,6 +1210,25 @@ mod tests {
     }
 
     #[test]
+    fn spaces_at_the_ends_of_the_text_you_typed_never_stop_a_match() {
+        use crate::trigger::MatchMode;
+        // A Text pattern copied with a space after it matches the line
+        // without one.
+        let s = store(vec![in_mode("You feel better. ", MatchMode::Text)]);
+        assert_eq!(matching(&s, "You feel better.", MatchScope::Line).len(), 1);
+        // A pattern copied with the five spaces of a look matches the same
+        // words printed with none.
+        for mode in [MatchMode::Text, MatchMode::StartsWith] {
+            let s = store(vec![in_mode("     Maren walks in.", mode)]);
+            assert_eq!(
+                matching(&s, "Maren walks in.", MatchScope::Line).len(),
+                1,
+                "{mode:?}"
+            );
+        }
+    }
+
+    #[test]
     fn a_starts_with_highlight_colors_the_whole_line() {
         use crate::trigger::MatchMode;
         let line = "     A black-steel helm is here, gleaming darkly.";

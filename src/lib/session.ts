@@ -218,9 +218,10 @@ export interface TriggerPattern {
 }
 
 /** 'text' matches a line that is exactly the pattern, with spaces at
- *  either end of the line skipped. 'starts_with' matches a line that
- *  starts with it, after any spaces, and its match runs to the end of
- *  the line. Neither has groups. 'regex' reads the pattern as typed. */
+ *  either end of the line and of the pattern skipped. 'starts_with'
+ *  matches a line that starts with it, after any spaces at the start of
+ *  either, and its match runs to the end of the line. Neither has
+ *  groups. 'regex' reads the pattern as typed. */
 export type MatchMode = 'text' | 'starts_with' | 'regex';
 
 export interface TriggerRecord {
