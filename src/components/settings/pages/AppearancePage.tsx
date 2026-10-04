@@ -29,6 +29,7 @@ import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
 import { Button, Card, Row, Section, Segmented, Select, Toggle } from '../ui';
 import { AdvancedAppearance } from './appearance/AdvancedAppearance';
+import { CollapseRows } from './appearance/CollapseRows';
 import { ThemeGallery } from './appearance/ThemeGallery';
 
 // Appearance, from the approved board (SettingsAppearance.dc.html).
@@ -37,8 +38,11 @@ import { ThemeGallery } from './appearance/ThemeGallery';
 // Terminal text holds the font, size, line height, whether MUD text
 // takes the theme's colors, whether Vosh keeps the colors your triggers
 // set readable on the theme, and whether a line the same as the one
-// before it shows once with a count. A quiet Advanced row at the end holds
-// what the board leaves out. Every change saves on its own.
+// before it shows once with a count. While that is on, two rows under it
+// choose whether the lines of a fight collapse, and whether attack lines
+// do. A link to either row shows them even while it is off, so search
+// lands on them. A quiet Advanced row at the end holds what the board
+// leaves out. Every change saves on its own.
 
 const LINE_HEIGHTS = [
   { value: 'compact', label: 'Compact' },
@@ -63,6 +67,17 @@ function opensAdvanced(target: SettingsTarget): boolean {
   return (
     target.section === 'advanced' ||
     (target.anchor !== undefined && ADVANCED_ANCHORS.has(target.anchor))
+  );
+}
+
+/** The rows under Collapse repeated lines. */
+const COLLAPSE_ANCHORS: ReadonlySet<string> = new Set(['collapse-fights', 'collapse-attacks']);
+
+/** The rows under Collapse repeated lines show while it is on, and a
+ *  link to either shows them while it is off, waiting. */
+function showsCollapseRows(config: UiConfig, target: SettingsTarget): boolean {
+  return (
+    config.collapse_repeats || (target.anchor !== undefined && COLLAPSE_ANCHORS.has(target.anchor))
   );
 }
 
@@ -288,6 +303,7 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
             onChange={(on) => update({ collapse_repeats: on }, { now: true })}
           />
         </Row>
+        {showsCollapseRows(config, target) && <CollapseRows config={config} update={update} />}
       </Section>
 
       <AdvancedAppearance

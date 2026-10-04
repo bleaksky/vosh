@@ -13,6 +13,8 @@
 //!   your prompt by, with the settle flag of each.
 //! - [`observer`] reads the lines the game answers `prompt` and
 //!   `fprompt` with, and your own `prompt off`.
+//! - [`damage`] holds the damage ladder of `dam_message` and tells the
+//!   attack lines it prints, which Collapse repeated lines can leave whole.
 //!
 //! Every warning carries the span of the setting it is about, as the
 //! game stores it, and a sentence the card and `#prompt` show as they
@@ -20,6 +22,7 @@
 
 pub mod codes;
 pub(crate) mod colors;
+pub mod damage;
 pub mod lex;
 pub mod observer;
 pub mod shapes;

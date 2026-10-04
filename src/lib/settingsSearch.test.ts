@@ -73,10 +73,28 @@ describe('searchSettingsRows', () => {
   });
 
   it('finds Collapse repeated lines by what it does to spam', () => {
-    expect(labels('collapse')).toEqual(['Collapse repeated lines']);
+    expect(labels('collapse')).toEqual(['Collapse repeated lines', 'In a fight', 'Attack lines']);
     expect(labels('spam')).toEqual(['Collapse repeated lines']);
     expect(labels('duplicate lines')).toEqual(['Collapse repeated lines']);
     expect(labels('repeated')[0]).toBe('Collapse repeated lines');
+  });
+
+  it('finds In a fight and Attack lines under Collapse repeated lines', () => {
+    expect(labels('fight')[0]).toBe('In a fight');
+    expect(labels('combat')).toEqual(['In a fight', 'Attack lines']);
+    expect(labels('attack')[0]).toBe('Attack lines');
+    expect(labels('damage')).toEqual(['Attack lines']);
+    const target = (label: string) => SETTINGS_ROWS.find((r) => r.label === label)?.target;
+    expect(target('In a fight')).toEqual({
+      group: 'appearance',
+      section: 'text',
+      anchor: 'collapse-fights',
+    });
+    expect(target('Attack lines')).toEqual({
+      group: 'appearance',
+      section: 'text',
+      anchor: 'collapse-attacks',
+    });
   });
 
   it('finds the Input rows, Advanced ones included', () => {

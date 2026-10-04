@@ -2381,6 +2381,51 @@ fn the_count_draws_gray_before_the_line_from_the_second_on() {
 }
 
 #[test]
+fn the_rules_take_fight_lines_and_leave_attack_lines_whole_at_first() {
+    let hit = "Your slash hits a Blackwatch guard.";
+    let battle = "A Blackwatch guard has quite a few wounds. ";
+    let dodge = "You dodge Quenby's attack.";
+    let rules = CollapseRules::default();
+    assert_eq!(
+        rules,
+        CollapseRules {
+            fights: true,
+            attacks: false
+        }
+    );
+    // In a fight or not, every line but an attack line collapses.
+    for fighting in [false, true] {
+        assert!(rules.takes(fighting, battle));
+        assert!(rules.takes(fighting, dodge));
+        assert!(!rules.takes(fighting, hit));
+    }
+    // Attack lines collapse too once you say so.
+    let all = CollapseRules {
+        fights: true,
+        attacks: true,
+    };
+    assert!(all.attacks_collapse());
+    for fighting in [false, true] {
+        assert!(all.takes(fighting, hit));
+        assert!(all.takes(fighting, battle));
+    }
+    // With In a fight showing every line, nothing in a fight collapses,
+    // and attack lines show every line anywhere, whatever their row says.
+    for attacks in [false, true] {
+        let whole = CollapseRules {
+            fights: false,
+            attacks,
+        };
+        assert!(!whole.attacks_collapse());
+        assert!(!whole.takes(true, battle));
+        assert!(!whole.takes(true, dodge));
+        assert!(!whole.takes(true, hit));
+        assert!(!whole.takes(false, hit));
+        assert!(whole.takes(false, dodge));
+    }
+}
+
+#[test]
 fn repeated_lines_in_one_output_show_once_with_the_count() {
     let mut stage = Stage::default();
     let mut out = Output::new(false);

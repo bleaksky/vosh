@@ -33,6 +33,8 @@ pub(crate) struct UiConfigPayload {
     pub blink_text: Option<bool>,
     pub readable_highlights: bool,
     pub collapse_repeats: bool,
+    pub collapse_fight_lines: bool,
+    pub collapse_attack_lines: bool,
     pub terminal_base_ansi: Option<Vec<String>>,
     pub custom_themes: Vec<crate::profile::ui::CustomTheme>,
     pub split_divider_color: Option<String>,
@@ -92,6 +94,8 @@ impl UiConfigPayload {
             blink_text: ui.blink_text,
             readable_highlights: ui.readable_highlights,
             collapse_repeats: ui.collapse_repeats,
+            collapse_fight_lines: ui.collapse_fight_lines,
+            collapse_attack_lines: ui.collapse_attack_lines,
             terminal_base_ansi: ui.terminal_base_ansi.clone(),
             custom_themes: ui.custom_themes.clone(),
             split_divider_color: ui.split_divider_color.clone(),
@@ -143,6 +147,8 @@ impl UiConfigPayload {
             blink_text,
             readable_highlights,
             collapse_repeats,
+            collapse_fight_lines,
+            collapse_attack_lines,
             terminal_base_ansi,
             custom_themes,
             split_divider_color,
@@ -184,6 +190,8 @@ impl UiConfigPayload {
         ui.blink_text = blink_text;
         ui.readable_highlights = readable_highlights;
         ui.collapse_repeats = collapse_repeats;
+        ui.collapse_fight_lines = collapse_fight_lines;
+        ui.collapse_attack_lines = collapse_attack_lines;
         ui.terminal_base_ansi = terminal_base_ansi;
         ui.custom_themes = custom_themes;
         ui.split_divider_color = crate::profile::ui::normalize_optional_color(split_divider_color);
@@ -757,6 +765,34 @@ mod tests {
         assert!(!through_payload(&ui).collapse_repeats);
         ui.collapse_repeats = true;
         assert!(through_payload(&ui).collapse_repeats);
+    }
+
+    #[test]
+    fn collapse_fight_and_attack_lines_round_trip() {
+        let mut ui = UiConfig::default();
+        assert!(ui.collapse_fight_lines);
+        assert!(!ui.collapse_attack_lines);
+        let back = through_payload(&ui);
+        assert!(back.collapse_fight_lines);
+        assert!(!back.collapse_attack_lines);
+        ui.collapse_fight_lines = false;
+        ui.collapse_attack_lines = true;
+        let back = through_payload(&ui);
+        assert!(!back.collapse_fight_lines);
+        assert!(back.collapse_attack_lines);
+        // A page from before the two choices saves without them, and the
+        // profile takes their defaults.
+        let payload: UiConfigPayload =
+            serde_json::from_str(r#"{"collapse_repeats":true}"#).unwrap();
+        let mut out = UiConfig {
+            collapse_fight_lines: false,
+            collapse_attack_lines: true,
+            ..UiConfig::default()
+        };
+        payload.apply_to(&mut out);
+        assert!(out.collapse_repeats);
+        assert!(out.collapse_fight_lines);
+        assert!(!out.collapse_attack_lines);
     }
 
     #[test]

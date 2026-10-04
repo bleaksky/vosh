@@ -202,10 +202,16 @@ pub(super) fn gmcp_step(
     msg: &vosh_protocol::gmcp::Message,
     now: Instant,
 ) -> (Option<TickStep>, ApplyResult) {
+    let fought = p.prompt.vars.gmcp().fighting();
     gmcp_vars::apply(&mut p.vars, msg);
     // Before Lua, so a value a GMCP handler sets with
     // `mud.set_prompt_var` belongs to the pulse this packet starts.
     observe_prompt_gmcp(p, msg);
+    // The fight is over, and the text of the round that ended it is
+    // still to come.
+    if fought && !p.prompt.vars.gmcp().fighting() {
+        p.fight_tail = true;
+    }
     // Cache the latest Room.Chars snapshot in the profile so
     // bare `tar <index>` / `tarn` / `tarp` commands can resolve
     // against the current room without round-tripping to the

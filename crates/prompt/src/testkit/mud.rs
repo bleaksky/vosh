@@ -540,6 +540,18 @@ impl Mud {
         self.pulse(Vec::new(), &format!("{reply}\n\r"), true).bytes
     }
 
+    /// The combat round that ends your fight, such as the one your
+    /// opponent dies in: `reply` on a new line, then the prompt.
+    /// `stop_fighting` (fight.c:10278) writes Char.Combat `{}` straight to
+    /// the socket in the middle of the round, so it comes before the
+    /// prompt time packages, and the round's text waits in the output
+    /// buffer until the pulse ends.
+    pub fn fight_ends_later(&mut self, reply: &str) -> Vec<u8> {
+        self.stop_fighting();
+        let early = self.combat();
+        self.pulse(early, &format!("{reply}\n\r"), true).bytes
+    }
+
     /// Hand over a pulse, cut in two when `split` asked for it.
     fn deliver(&mut self, pulse: Pulse) -> Vec<Write> {
         let Some(at) = pulse.prompt_at.filter(|_| self.split_next) else {
@@ -662,23 +674,28 @@ impl Mud {
     }
 
     fn fight(&mut self) -> Pulse {
-        self.state.fighting = !self.state.fighting;
-        let reply = if self.state.fighting {
-            self.state.hit = FIGHT_HIT;
-            self.state.position = 8;
-            self.state.tank = Some(Tank {
-                name: self.name.clone(),
-                hit: FIGHT_HIT,
-                max_hit: self.state.max_hit,
-            });
-            "A Blackwatch guard attacks you!\n\r"
-        } else {
-            self.state.hit = self.state.max_hit;
-            self.state.position = 9;
-            self.state.tank = None;
-            "A Blackwatch guard flees south.\n\r"
-        };
-        self.pulse(Vec::new(), reply, false)
+        if self.state.fighting {
+            self.stop_fighting();
+            return self.pulse(Vec::new(), "A Blackwatch guard flees south.\n\r", false);
+        }
+        self.state.fighting = true;
+        self.state.hit = FIGHT_HIT;
+        self.state.position = 8;
+        self.state.tank = Some(Tank {
+            name: self.name.clone(),
+            hit: FIGHT_HIT,
+            max_hit: self.state.max_hit,
+        });
+        self.pulse(Vec::new(), "A Blackwatch guard attacks you!\n\r", false)
+    }
+
+    /// The fight is over: your health comes back, you stand, and nobody
+    /// tanks.
+    fn stop_fighting(&mut self) {
+        self.state.fighting = false;
+        self.state.hit = self.state.max_hit;
+        self.state.position = 9;
+        self.state.tank = None;
     }
 
     /// `cast N name`: the affect lands for N hours, or its hours start
