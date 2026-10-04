@@ -28,7 +28,7 @@ pub(crate) async fn tick_set_config(
 ) -> Result<TickConfig, String> {
     let snapshot = {
         let mut p = state.profile.lock().await;
-        let mut c = state.connection.lock().await;
+        let mut c = state.connection.lock();
         apply_tick_config(
             &mut p.tick,
             &mut c.tick,

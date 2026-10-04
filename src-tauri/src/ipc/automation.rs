@@ -286,7 +286,7 @@ pub(crate) async fn groups_set_enabled<R: tauri::Runtime>(
     let (switches, lists) = {
         let set = state.loadout_set.lock().await;
         let mut p = state.profile.lock().await;
-        let c = state.connection.lock().await;
+        let c = state.connection.lock();
         let before = ListRevisions::of(&p, &c);
         switch_group(&mut p, set.as_ref(), list, &group, enabled)?;
         (
@@ -479,7 +479,7 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
     let lists;
     {
         let mut p = state.profile.lock().await;
-        let c = state.connection.lock().await;
+        let c = state.connection.lock();
         let lists_before = ListRevisions::of(&p, &c);
         for alias in &report.aliases {
             p.aliases.set(alias.clone());

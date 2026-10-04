@@ -140,7 +140,7 @@ fn stamp(at: DateTime<FixedOffset>) -> String {
 pub(crate) async fn last_seen(state: &SharedState) -> Option<LastSeen> {
     let character = state.current_character.lock().ok().and_then(|g| g.clone());
     {
-        let c = state.connection.lock().await;
+        let c = state.connection.lock();
         if let Some(packet) = c.prompt.vars.gmcp().char_prompt() {
             return Some(LastSeen {
                 prompt: Some(packet.prompt.clone()),
@@ -364,7 +364,7 @@ mod tests {
         let state: SharedState = std::sync::Arc::new(crate::app::state::AppState::default());
         assert_eq!(last_seen(&state).await, None, "nothing anywhere");
         {
-            let mut c = state.connection.lock().await;
+            let mut c = state.connection.lock();
             c.prompt.connect(true);
             c.prompt
                 .note_send("prompt %h\r\n", chrono::Local::now().timestamp_millis());
@@ -376,7 +376,7 @@ mod tests {
         assert_eq!(seen.source, "session");
         assert_eq!(seen.prompt.as_deref(), Some("%h "));
         {
-            let mut c = state.connection.lock().await;
+            let mut c = state.connection.lock();
             c.prompt.observe(
                 "Char.Prompt",
                 serde_json::json!({"enabled": false, "prompt": "%m ", "fprompt": ""}),

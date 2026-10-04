@@ -272,7 +272,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         effects,
     } = {
         let mut profile = state.profile.lock().await;
-        let mut connection = state.connection.lock().await;
+        let mut connection = state.connection.lock();
         session::effects::run_lines_locked(
             state,
             &mut profile,

@@ -32,7 +32,7 @@ use crate::input::walk::{Dir, WalkCommand, WalkPlan};
 use crate::profile::live::Profile;
 use crate::script::ApplyResult;
 
-use super::connection::Connection;
+use super::connection::SharedConnection;
 
 /// How long a step waits for its Room.Info before the walker gives up
 /// on the walk.
@@ -516,13 +516,13 @@ fn here_exits(data: &Value) -> Option<HashMap<Dir, i64>> {
 /// A `#walk` among them comes back in the result's `walk`.
 pub(super) async fn release(
     profile: &Arc<Mutex<Profile>>,
-    connection: &Arc<Mutex<Connection>>,
+    connection: &SharedConnection,
     rest: Vec<ExpandStep>,
 ) -> ApplyResult {
     let mut lua = ApplyResult::default();
     let result = {
         let mut p = profile.lock().await;
-        let mut c = connection.lock().await;
+        let mut c = connection.lock();
         crate::input::run_expanded(&mut p, &mut c, rest, &mut lua)
     };
     let mut apply = ApplyResult {

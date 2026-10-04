@@ -11,7 +11,7 @@ use crate::app::plugins::SharedPluginManager;
 use crate::logs::{SharedLogStore, SharedScrollback};
 use crate::profile::live::Profile;
 use crate::script::SharedTimers;
-use crate::session::connection::Connection;
+use crate::session::connection::SharedConnection;
 use crate::session::SessionHandle;
 
 /// What every command, window and session shares. The one session slot,
@@ -29,8 +29,8 @@ pub(crate) struct AppState {
     pub(crate) profile: Arc<Mutex<Profile>>,
     /// What one connection holds apart from the profile, your target and
     /// the room list among it. The session loop holds a handle to it. See
-    /// [`Connection`] for where its lock sits.
-    pub(crate) connection: Arc<Mutex<Connection>>,
+    /// [`crate::session::connection`] for where its lock sits.
+    pub(crate) connection: SharedConnection,
     pub(crate) lua_timers: SharedTimers,
     pub(crate) logs: SharedLogStore,
     /// A second connection to the same log database for the read
@@ -226,7 +226,7 @@ impl Default for AppState {
         Self {
             session: Mutex::new(None),
             profile: Arc::new(Mutex::new(Profile::default())),
-            connection: Arc::new(Mutex::new(Connection::default())),
+            connection: SharedConnection::default(),
             lua_timers: SharedTimers::default(),
             logs: SharedLogStore::default(),
             log_reader: SharedLogStore::default(),

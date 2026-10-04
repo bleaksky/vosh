@@ -424,7 +424,7 @@ impl Harness {
         let h = Self::unread().await;
         crate::prompt::take_config(
             &mut *h.state.profile.lock().await,
-            &mut *h.state.connection.lock().await,
+            &mut h.state.connection.lock(),
             vosh_prompt::PromptConfig {
                 capture: vosh_prompt::CaptureConfig::Aabahran(
                     vosh_prompt::config::AabahranCapture::default(),
@@ -493,7 +493,7 @@ impl Harness {
             return;
         }
         for _ in 0..1000 {
-            let read = self.state.connection.lock().await.prompt.vars.prompt_vars();
+            let read = self.state.connection.lock().prompt.vars.prompt_vars();
             if read.values().any(|value| value == "1020") {
                 return;
             }

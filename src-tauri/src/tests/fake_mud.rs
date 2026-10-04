@@ -175,7 +175,7 @@ impl Harness {
     /// Give the live profile the prompt table `config`, as a load does.
     async fn set_prompt(&self, config: vosh_prompt::PromptConfig) {
         let mut p = self.state.profile.lock().await;
-        let mut c = self.state.connection.lock().await;
+        let mut c = self.state.connection.lock();
         crate::prompt::take_config(&mut p, &mut c, config);
     }
 
@@ -530,7 +530,7 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
     .expect("an op");
     let edited = {
         let p = h.state.profile.lock().await;
-        let c = h.state.connection.lock().await;
+        let c = h.state.connection.lock();
         crate::prompt::edit(&p, &c, "<%hp>", &op).expect("the edit")
     };
     assert_eq!(edited.template, "<%hp>%mana");
@@ -737,7 +737,7 @@ async fn the_new_build_gives_vosh_the_prompt_at_login_and_follows_the_game() {
     assert_eq!(seen.prompt.as_deref(), Some(PROMPT));
     assert_eq!(seen.enabled, Some(true));
     assert_eq!(seen.character.as_deref(), Some("Tester"));
-    assert!(h.state.connection.lock().await.prompt.vars.new_build());
+    assert!(h.state.connection.lock().prompt.vars.new_build());
 
     // prompt x in the game: Char.Prompt comes before its reply, and the
     // prompt right after the reply reads with the new codes.
@@ -1200,7 +1200,7 @@ async fn a_reconnect_reads_the_prompt_until_char_prompt_comes_again() {
     // and the prompt reads from the saved codes all the same.
     h.until_shown("Reconnecting.").await;
     h.until_last_row("<1020>").await;
-    assert!(!h.state.connection.lock().await.prompt.vars.new_build());
+    assert!(!h.state.connection.lock().prompt.vars.new_build());
     let leftover = &h.events("session://game-prompt-seen");
     assert!(leftover.is_empty(), "{leftover:?}");
     // prompt in the game sends Char.Prompt again.
@@ -1210,7 +1210,7 @@ async fn a_reconnect_reads_the_prompt_until_char_prompt_comes_again() {
         !h.events("session://game-prompt-seen").is_empty()
     })
     .await;
-    assert!(h.state.connection.lock().await.prompt.vars.new_build());
+    assert!(h.state.connection.lock().prompt.vars.new_build());
     assert_eq!(
         h.events("session://game-prompt-seen"),
         [serde_json::json!({"kind": "gmcp", "text": PROMPT, "applied": false})]
@@ -1977,7 +1977,7 @@ async fn with_no_design_of_your_own_vosh_draws_your_prompt_as_the_game_does() {
     h.until_shown("Drawing is on.").await;
     h.type_line("look").await;
     h.until_last_row("[1020/1020hp 800/800mn 930/930mv]").await;
-    assert!(h.state.connection.lock().await.prompt.draws());
+    assert!(h.state.connection.lock().prompt.draws());
 
     // Change it in the game, and the drawn prompt follows.
     h.type_line(&format!("prompt {TYPED_X}")).await;
@@ -2731,7 +2731,7 @@ async fn a_disconnect_clears_your_target_the_room_list_and_both_prompt_feeds() {
     {
         let mut p = h.state.profile.lock().await;
         crate::input::target::set_room_chars(
-            &mut *h.state.connection.lock().await,
+            &mut h.state.connection.lock(),
             &mut p.vars,
             crate::input::target::read_room_chars(&[
                 serde_json::json!({"name": "a goblin", "npc": true}),

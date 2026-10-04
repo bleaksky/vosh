@@ -2,14 +2,16 @@
 //! its quick keys and the characters in the room, which the commands
 //! share, the room look and the end of a fight, which the loop follows
 //! line by line, and the tick's count and the prompt engine, which both
-//! read. The app state holds the [`Connection`] behind its own lock, and
-//! the session loop holds a handle to it, so a command reads it without
-//! waiting on the loop.
+//! read. The app state holds the [`Connection`] behind a lock of its own,
+//! [`SharedConnection`], and the session loop holds a handle to it, so a
+//! command reads it without waiting on the loop.
 //!
 //! Its lock comes after the profile lock and the profile set, never before
 //! them. A step that holds it takes no other lock and never awaits. The
 //! session slot comes before it, since `disconnect` holds the slot while
 //! the loop ends and clears it.
+
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use super::room_block::RoomBlock;
 use crate::tick::TickRuntime;
@@ -64,6 +66,25 @@ impl Connection {
         self.room_block = RoomBlock::default();
         self.fight_tail = false;
         had
+    }
+}
+
+/// The handle to the [`Connection`] that the app state, the session loop
+/// and the commands share. The loop takes it for every line the game
+/// sends, right after the profile lock, and an async mutex there costs
+/// each line a poll and a share of the task's cooperative budget, about 3
+/// percent of P2. No step holds it across an await, and a task's guard
+/// cannot cross one, so a plain mutex fits. A command that finds it held
+/// waits on its thread for one step, which the Lua time budget bounds.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct SharedConnection(Arc<Mutex<Connection>>);
+
+impl SharedConnection {
+    /// Lock the connection. A step that panicked while it held the lock
+    /// left the connection as the step had it, and the next holder takes
+    /// it as it stands.
+    pub(crate) fn lock(&self) -> MutexGuard<'_, Connection> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 

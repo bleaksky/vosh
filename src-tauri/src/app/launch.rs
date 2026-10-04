@@ -159,7 +159,7 @@ pub(crate) async fn load_profiles(state: &SharedState, mut set: ProfileSet) {
     let notices = {
         let mut p = state.profile.lock().await;
         let notices = load_at_launch(&set, &mut p);
-        let mut c = state.connection.lock().await;
+        let mut c = state.connection.lock();
         let table = p.prompt.clone();
         crate::prompt::take_config(&mut p, &mut c, table);
         notices

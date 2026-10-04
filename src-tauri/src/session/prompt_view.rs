@@ -4,10 +4,8 @@
 //! prompt state the session sends.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::Mutex;
 use tokio::time::Instant;
 use tracing::warn;
 
@@ -15,7 +13,7 @@ use crate::app::events;
 use crate::profile::live::Profile;
 use crate::prompt::{client_values, keep_table};
 
-use super::connection::Connection;
+use super::connection::{Connection, SharedConnection};
 
 #[cfg(test)]
 thread_local! {
@@ -156,9 +154,9 @@ pub(super) fn observe_prompt_gmcp(
 /// after a send that starts a pulse.
 pub(super) async fn emit_hidden_change<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    connection: &Arc<Mutex<Connection>>,
+    connection: &SharedConnection,
 ) {
-    let change = connection.lock().await.prompt.vars.take_hidden_change();
+    let change = connection.lock().prompt.vars.take_hidden_change();
     if let Some(hidden) = change {
         if let Err(e) = app.emit(events::HIDDEN, hidden) {
             warn!(error = %e, "failed to emit the hidden state");
@@ -175,10 +173,10 @@ pub(super) async fn emit_hidden_change<R: tauri::Runtime>(
 /// went stale or was unset drops out.
 pub(super) async fn emit_prompt_vars<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    connection: &Arc<Mutex<Connection>>,
+    connection: &SharedConnection,
     always: bool,
 ) {
-    let vars = connection.lock().await.prompt.take_prompt_vars(always);
+    let vars = connection.lock().prompt.take_prompt_vars(always);
     if let Some(vars) = vars {
         send_prompt_vars(app, &vars);
     }

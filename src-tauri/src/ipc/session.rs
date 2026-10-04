@@ -108,7 +108,7 @@ pub(crate) async fn session_set_window_size(
 /// `session://target` events fire.
 #[tauri::command]
 pub(crate) async fn target_get(state: State<'_, SharedState>) -> Result<TargetPayload, String> {
-    Ok(TargetPayload::of(&*state.connection.lock().await))
+    Ok(TargetPayload::of(&state.connection.lock()))
 }
 
 #[cfg(test)]
@@ -126,7 +126,7 @@ mod tests {
         let app = mock_builder().build(mock_context(noop_assets())).unwrap();
         app.manage::<SharedState>(Arc::new(AppState::default()));
         let state: SharedState = app.state::<SharedState>().inner().clone();
-        state.connection.lock().await.target.name = Some("goblin".into());
+        state.connection.lock().target.name = Some("goblin".into());
 
         // Another task holds the profile, as the session loop does while
         // it runs a line.

@@ -150,7 +150,7 @@ pub(crate) async fn switch_live_profile(
         // takes only the next profile's tick settings and [prompt] table.
         // The tick keeps its count under the new settings, so the status
         // line counts on from the last tick.
-        let mut c = state.connection.lock().await;
+        let mut c = state.connection.lock();
         c.tick
             .adopt(&mut p.tick, &tick_before, tokio::time::Instant::now());
         // The values the last profile's prompt read go, since they came
@@ -192,7 +192,7 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
 ) -> Result<(), String> {
     let plugins = switch_profile(state, name).await?;
     // The new profile's capture took the game's latest prompt settings.
-    let seen = state.connection.lock().await.prompt.take_seen();
+    let seen = state.connection.lock().prompt.take_seen();
     crate::prompt::report_game_prompt_seen(app, seen);
 
     // Hand every window the new profile's panes, tracked affects, tick
@@ -407,7 +407,7 @@ pub(crate) mod tests {
         }
         {
             let mut p = state.profile.lock().await;
-            let mut c = state.connection.lock().await;
+            let mut c = state.connection.lock();
             p.plugins.enabled = vec!["default_only".into(), "everywhere".into()];
             crate::app::plugins::follow_profile_plugins(&mut p, &mut c, &plugins);
         }
@@ -432,7 +432,7 @@ pub(crate) mod tests {
         *state.current_connection.lock().unwrap() =
             Some(("play.theforsakenlands.com".into(), 1848));
         {
-            let mut c = state.connection.lock().await;
+            let mut c = state.connection.lock();
             c.prompt.connect(true);
             let at = chrono::Local::now().fixed_offset();
             c.prompt.vars.observe(
@@ -450,7 +450,7 @@ pub(crate) mod tests {
 
         super::switch_live_profile(&state, "Healer").await.unwrap();
 
-        let c = state.connection.lock().await;
+        let c = state.connection.lock();
         assert!(c.prompt.forsaken());
         assert!(
             c.prompt.vars.new_build(),
@@ -482,7 +482,7 @@ pub(crate) mod tests {
         let vitals = serde_json::json!({"hp": 850, "maxhp": 900});
         let (look, count, who, pulse) = {
             let mut p = state.profile.lock().await;
-            let mut c = state.connection.lock().await;
+            let mut c = state.connection.lock();
             c.target.name = Some("goblin".into());
             c.target.room_idx = Some(1);
             c.target.quick_keys = vec![gg.clone()];
@@ -519,7 +519,7 @@ pub(crate) mod tests {
         super::switch_live_profile(&state, "Healer").await.unwrap();
 
         let p = state.profile.lock().await;
-        let c = state.connection.lock().await;
+        let c = state.connection.lock();
         assert_eq!(c.target.name.as_deref(), Some("goblin"));
         assert_eq!(c.target.room_idx, Some(1));
         assert_eq!(c.target.quick_keys, [gg]);
@@ -545,7 +545,7 @@ pub(crate) mod tests {
         let state = switch_state(dir.path()).await;
         {
             let mut p = state.profile.lock().await;
-            let mut c = state.connection.lock().await;
+            let mut c = state.connection.lock();
             // A world Vosh does not know, where no Forsaken Lands rule
             // holds until a capture reads Aabahran's codes.
             c.prompt.connect(false);
@@ -580,7 +580,7 @@ pub(crate) mod tests {
         super::switch_live_profile(&state, "Healer").await.unwrap();
         {
             let p = state.profile.lock().await;
-            let c = state.connection.lock().await;
+            let c = state.connection.lock();
             assert_eq!(*c.prompt.config(), healer);
             assert!(!p.ui.prompt_template_enabled);
             assert_eq!(p.ui.prompt_template, "%mana");
@@ -594,7 +594,7 @@ pub(crate) mod tests {
         super::switch_live_profile(&state, "Test-Prompt")
             .await
             .unwrap();
-        let c = state.connection.lock().await;
+        let c = state.connection.lock();
         assert_eq!(*c.prompt.config(), vosh_prompt::PromptConfig::fresh());
         assert!(!c.prompt.draws());
         assert!(!c.prompt.forsaken());
@@ -619,7 +619,7 @@ pub(crate) mod tests {
         super::switch_live_profile(&state, "Fresh").await.unwrap();
         {
             let p = state.profile.lock().await;
-            let c = state.connection.lock().await;
+            let c = state.connection.lock();
             assert_eq!(*c.prompt.config(), vosh_prompt::PromptConfig::fresh());
             assert_eq!(p.ui.prompt_template, "");
         }
@@ -639,7 +639,7 @@ pub(crate) mod tests {
 
         super::switch_live_profile(&state, "Mortal").await.unwrap();
         let p = state.profile.lock().await;
-        assert!(state.connection.lock().await.prompt.config().is_default());
+        assert!(state.connection.lock().prompt.config().is_default());
         assert_eq!(live_names(&p.ui.tracked_affects), ["Haste"]);
     }
 
@@ -653,7 +653,7 @@ pub(crate) mod tests {
         let state = switch_state(dir.path()).await;
         let game = "%n%P%C<%hhp %mm %vmv> ";
         {
-            let mut c = state.connection.lock().await;
+            let mut c = state.connection.lock();
             c.prompt.connect(true);
             c.prompt.observe(
                 "Char.Prompt",
@@ -678,7 +678,7 @@ pub(crate) mod tests {
 
         super::switch_live_profile(&state, "Healer").await.unwrap();
         {
-            let mut c = state.connection.lock().await;
+            let mut c = state.connection.lock();
             let vosh_prompt::CaptureConfig::Aabahran(taken) = &c.prompt.config().capture else {
                 panic!("an aabahran capture");
             };
@@ -697,7 +697,7 @@ pub(crate) mod tests {
             .await
             .unwrap();
         super::switch_live_profile(&state, "Healer").await.unwrap();
-        let mut c = state.connection.lock().await;
+        let mut c = state.connection.lock();
         assert_eq!(*c.prompt.config(), codes(false));
         let leftover = &c.prompt.take_seen();
         assert!(leftover.is_empty(), "{leftover:?}");

@@ -13,7 +13,7 @@ use tokio::time::Instant;
 use crate::profile::live::Profile;
 use crate::script::{self, ApplyResult, PendingTimer, SharedTimers};
 
-use super::connection::Connection;
+use super::connection::{Connection, SharedConnection};
 use super::effects::{apply_script_result, OutputSink, ScriptIo};
 use super::socket::Stream;
 use super::walk::Walker;
@@ -25,7 +25,7 @@ pub(super) async fn fire_due<R: tauri::Runtime>(
     stream: &mut Stream,
     walker: &mut Walker,
     profile: &Arc<Mutex<Profile>>,
-    connection: &Arc<Mutex<Connection>>,
+    connection: &SharedConnection,
     lua_timers: &SharedTimers,
 ) -> std::io::Result<()> {
     let now = Instant::now();
@@ -42,7 +42,7 @@ pub(super) async fn fire_due<R: tauri::Runtime>(
     }
     let (apply, held) = {
         let mut p = profile.lock().await;
-        let mut c = connection.lock().await;
+        let mut c = connection.lock();
         fire_round(&mut p, &mut c, due)
     };
     // Before the apply, so a cancel among its actions finds them.

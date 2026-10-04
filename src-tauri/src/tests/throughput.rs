@@ -124,7 +124,7 @@ async fn play(session: Arc<Vec<u8>>) -> Run {
     *state.logs.lock().await = Some(vosh_log::LogStore::open(&log).expect("the log"));
     crate::prompt::take_config(
         &mut *state.profile.lock().await,
-        &mut *state.connection.lock().await,
+        &mut state.connection.lock(),
         vosh_prompt::PromptConfig {
             capture: vosh_prompt::CaptureConfig::Aabahran(vosh_prompt::config::AabahranCapture {
                 prompt: PROMPT.into(),

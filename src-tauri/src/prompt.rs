@@ -506,7 +506,7 @@ pub(crate) fn prompt_state(p: &Profile, c: &Connection) -> PromptState {
 
 /// The body of [`hidden_get`](crate::ipc::prompt::hidden_get).
 pub(crate) async fn reported_hidden(state: &SharedState) -> vosh_prompt::values::Hidden {
-    state.connection.lock().await.prompt.vars.reported()
+    state.connection.lock().prompt.vars.reported()
 }
 
 /// Where your prompt shows, with what the Settings row and the main

@@ -68,7 +68,7 @@ async fn the_profile_keeps_the_table_the_engine_holds() {
 
     {
         let mut p = state.profile.lock().await;
-        let mut c = state.connection.lock().await;
+        let mut c = state.connection.lock();
         start_prompt(&mut p, &mut c, true);
         // A Settings save.
         crate::prompt::set_config(&mut p, &mut c, mirroring("<%hhp> ")).unwrap();
@@ -103,7 +103,7 @@ async fn the_profile_keeps_the_table_the_engine_holds() {
         .await
         .unwrap();
     let mut p = state.profile.lock().await;
-    let mut c = state.connection.lock().await;
+    let mut c = state.connection.lock();
     assert_eq!(codes(&p.prompt), MOVED);
     same(&p, &c);
 
