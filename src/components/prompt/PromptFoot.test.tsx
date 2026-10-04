@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PromptShowState } from '../../lib/promptShow';
 import type { PromptPreviewName } from '../../lib/session';
 import { findAll, type FakeElement } from '../../test/fakeDom';
-import { BUTTON, menuButtonDom, menuHeight, on } from '../../test/menuButtonDom';
+import { BUTTON, checkMarks, menuButtonDom, menuHeight, on } from '../../test/menuButtonDom';
 import { MENU_BUTTON_MENU_WIDTH } from './MenuButton';
 import { DesignFoot, PreviewButton } from './PromptFoot';
 
@@ -119,9 +119,6 @@ describe('the foot under your design', () => {
 // React DOM mounts the button on the stand in DOM with the card's own
 // menu (src/test/menuButtonDom.ts).
 
-const checks = (el: FakeElement) =>
-  findAll(el, (e) => e.nodeName === 'SVG' && e.getAttribute('class') === 'pane-menu-check').length;
-
 const isPreview = (el: FakeElement) =>
   el.getAttribute('aria-label')?.startsWith('Preview') ?? false;
 
@@ -153,7 +150,9 @@ describe('the Preview menu', () => {
     for (const item of m.items()) {
       expect(item.getAttribute('class')).toBe('ov-menu-item');
       expect(item.getAttribute('role')).toBe('menuitemradio');
-      expect(checks(item), item.textContent ?? '').toBe(item.textContent === 'Low health' ? 1 : 0);
+      expect(checkMarks(item), item.textContent ?? '').toBe(
+        item.textContent === 'Low health' ? 1 : 0,
+      );
     }
     expect(m.checked()).toEqual(['Low health']);
     // It opens above the button, their right edges together, the width
