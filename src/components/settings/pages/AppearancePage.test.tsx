@@ -727,14 +727,18 @@ describe('AppearancePage', () => {
     expect(own.options.at(-1)).toEqual({ label: '20 pt', value: '20' });
   });
 
-  it('adds an imported theme at once and keeps its fit once the fit answers', async () => {
+  /** The page on `start`, under the config the Settings window keeps.
+   *  `shown()` is that config now, and `leave()` moves the window to
+   *  another page. */
+  async function openPage(start: UiConfig) {
     const container = doc.createElement('div');
     doc.body.appendChild(container);
     const root = createRoot(container as unknown as HTMLElement);
-    let shown: UiConfig = config();
-    function Host() {
+    let shown = start;
+    function Host({ page }: { page: boolean }) {
       const [cfg, setCfg] = useState<UiConfig | null>(shown);
       if (cfg) shown = cfg;
+      if (!page) return null;
       return createElement(AppearancePage, {
         target: { group: 'appearance' },
         navSeq: 0,
@@ -747,8 +751,23 @@ describe('AppearancePage', () => {
       });
     }
     await act(async () => {
-      root.render(createElement(Host));
+      root.render(createElement(Host, { page: true }));
     });
+    return {
+      container,
+      shown: () => shown,
+      leave: () =>
+        act(async () => {
+          root.render(createElement(Host, { page: false }));
+        }),
+      close: () =>
+        act(async () => {
+          root.unmount();
+        }),
+    };
+  }
+
+  async function importTokyoNight(container: FakeNode) {
     const [input] = findAll(container, (el) => el.getAttribute('type') === 'file');
     const key = Object.keys(input).find((k) => k.startsWith('__reactProps$')) ?? '';
     const props = (input as unknown as Record<string, { onChange: (e: unknown) => void }>)[key];
@@ -760,22 +779,79 @@ describe('AppearancePage', () => {
         },
       });
     });
+  }
+
+  it('adds an imported theme at once and keeps its fit once the fit answers', async () => {
+    fitting.asked.length = 0;
+    const page = await openPage(config());
+    await importTokyoNight(page.container);
     // The theme is in and on screen before the fit answers. The built
     // in Tokyo Night holds its id.
-    const [theme] = shown.custom_themes;
+    const [theme] = page.shown().custom_themes;
     expect(theme.id).toBe('tokyo-night-2');
-    expect(shown.theme).toBe(theme.id);
+    expect(page.shown().theme).toBe(theme.id);
     expect(theme).not.toHaveProperty('fitted');
     expect(fitting.asked).toHaveLength(1);
     expect(fitting.asked[0].background).toBe(theme.xterm.background);
     await act(async () => {
       fitting.answer({ red: '#f8809b', brightBlack: '#6d7498' });
     });
-    expect(shown.custom_themes[0].fitted).toEqual({ red: '#f8809b', brightBlack: '#6d7498' });
-    expect(shown.custom_themes[0].xterm).toEqual(theme.xterm);
-    await act(async () => {
-      root.unmount();
+    expect(page.shown().custom_themes[0].fitted).toEqual({
+      red: '#f8809b',
+      brightBlack: '#6d7498',
     });
+    expect(page.shown().custom_themes[0].xterm).toEqual(theme.xterm);
+    await page.close();
+  });
+
+  it('keeps the fit of an imported theme that answers after you leave the page', async () => {
+    fitting.asked.length = 0;
+    const page = await openPage(config());
+    await importTokyoNight(page.container);
+    expect(fitting.asked).toHaveLength(1);
+    await page.leave();
+    await act(async () => {
+      fitting.answer({ red: '#f8809b' });
+    });
+    expect(page.shown().custom_themes[0].fitted).toEqual({ red: '#f8809b' });
+    await page.close();
+  });
+
+  it('fits each custom theme that keeps no fit once the page opens', async () => {
+    fitting.asked.length = 0;
+    const triad = BUILTIN_THEMES.find((t) => t.id === 'triad');
+    const custom = (
+      id: string,
+      xterm: Record<string, string>,
+      fitted?: Record<string, string>,
+    ) => ({
+      id,
+      label: id,
+      description: '',
+      xterm,
+      chrome: {},
+      ...(fitted && { fitted }),
+    });
+    const dusk = custom('dusk', { background: '#1a1b26', foreground: '#c0caf5' });
+    const start = {
+      ...config(),
+      custom_themes: [
+        dusk,
+        // Kept its fit already.
+        custom('paper', { background: '#f7f4ee', foreground: '#2a2a2a' }, { red: '#a8322c' }),
+        // Passes every check, so a fit would move nothing.
+        custom('calm', { ...(triad?.xterm as unknown as Record<string, string>) }),
+      ],
+    };
+    const page = await openPage(start);
+    expect(fitting.asked).toHaveLength(1);
+    expect(fitting.asked[0].background).toBe('#1a1b26');
+    await act(async () => {
+      fitting.answer({ red: '#cb7b74' });
+    });
+    const kept = page.shown().custom_themes;
+    expect(kept.map((t) => t.fitted)).toEqual([{ red: '#cb7b74' }, { red: '#a8322c' }, undefined]);
+    await page.close();
   });
 
   it('keeps an imported theme off the id of a retired theme', async () => {

@@ -459,6 +459,18 @@ export function fitKey(p: XtermPalette): string {
   return [p.background, ...GAME_SLOTS.map((k) => p[k])].join(' ');
 }
 
+/** Whether a fit of `p` can move anything. A palette that passes every
+ *  check fits to no change, which a config cannot keep, since it leaves
+ *  an empty fit out, so Vosh never fits one. Neither does it fit a
+ *  palette with a color that is not hex, which the fit cannot read. */
+export function needsFit(p: XtermPalette): boolean {
+  try {
+    return checks(p).some((c) => !c.ok);
+  } catch {
+    return false;
+  }
+}
+
 /** Fit a published palette to the checks. The best of six searches,
  *  three seeds each from the published colors and from tune(), and it
  *  returns only the slots it moved. What still misses stays missed, so
