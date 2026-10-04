@@ -104,6 +104,14 @@ export function usePromptShow(): PromptShowState | null {
   return state;
 }
 
+/** What each place reads as, in the Settings row and in the menu of
+ *  Customize prompt. */
+export const PROMPT_SHOW_LABELS: Record<PromptShow, string> = {
+  text: 'In the text',
+  lifted: 'Lifted',
+  pinned: 'Pinned',
+};
+
 /** The sentence under the Settings row for each place. */
 export const PROMPT_SHOW_HELP: Record<PromptShow, string> = {
   text: 'Your prompt shows in the text, where the game sends it.',
@@ -117,4 +125,16 @@ export const PROMPT_SHOW_HELP: Record<PromptShow, string> = {
  *  sentence in the same state. */
 export function promptShowDisabledHelp(gameSent: boolean): string {
   return gameSent ? 'Customize your prompt first.' : "Tell Vosh your game's prompt first.";
+}
+
+/** Whether you can pick a place now. Not until Vosh knows whether the
+ *  profile reads a prompt, and not while it reads none, which `why`
+ *  explains. The Settings row and the card's button both follow it. */
+export function promptShowLock(state: PromptShowState | null): {
+  locked: boolean;
+  why: string | null;
+} {
+  if (state === null) return { locked: true, why: null };
+  if (!state.capture) return { locked: true, why: promptShowDisabledHelp(state.gameSent) };
+  return { locked: false, why: null };
 }
