@@ -203,8 +203,9 @@ export function previewHeight(rows: number): number {
   return 28 + 17.5 * Math.max(0, rows - 1);
 }
 
-/** The previews the Settings Segmented offers, as the card's footer
- *  does. Lament only under the Forsaken Lands rules. */
+/** The previews Settings and the foot of Customize prompt offer. Lament
+ *  only under the Forsaken Lands rules, where the game hides your values
+ *  under lamented tears. */
 export function previewOptions(forsaken: boolean): { value: PromptPreviewName; label: string }[] {
   const options: { value: PromptPreviewName; label: string }[] = [
     { value: 'now', label: 'Now' },
@@ -213,6 +214,13 @@ export function previewOptions(forsaken: boolean): { value: PromptPreviewName; l
   ];
   if (forsaken) options.push({ value: 'lament', label: 'Lament' });
   return options;
+}
+
+/** The preview Settings and the foot of Customize prompt draw for the
+ *  one you picked: Now while Lament is your pick and the Forsaken Lands
+ *  rules are away. Your pick stays, so Lament comes back with them. */
+export function shownPreview(preview: PromptPreviewName, forsaken: boolean): PromptPreviewName {
+  return previewOptions(forsaken).some((o) => o.value === preview) ? preview : 'now';
 }
 
 /** The meta under the preview: where to change your design, or that it

@@ -238,6 +238,22 @@ describe('where a card menu opens', () => {
     });
   });
 
+  it('opens the Preview menu above its button with their right edges together', () => {
+    // Preview: Low health before Done at the foot of a card at the
+    // window's foot, its menu of four previews.
+    const preview = { left: 360, top: 740, right: 492, bottom: 768 };
+    expect(menuPosition(preview, { width: 160, height: 132 }, 'above-end', viewport)).toEqual({
+      left: 332,
+      top: 604,
+    });
+    // With no room above, it opens below, still on the button's right.
+    const high = { left: 360, top: 40, right: 492, bottom: 68 };
+    expect(menuPosition(high, { width: 160, height: 132 }, 'above-end', viewport)).toEqual({
+      left: 332,
+      top: 72,
+    });
+  });
+
   it('opens More styles above its button, clear of the Underline row below', () => {
     // Its four styles and four underline kinds at 30 px a row, the rule
     // between them, and the menu's padding.

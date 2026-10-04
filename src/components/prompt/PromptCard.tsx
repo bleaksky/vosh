@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -14,12 +13,15 @@ import { BAND_OUTSET_Y, dockGap, type CellSize } from '../../lib/promptBand';
 import {
   cardAnchor,
   type CardRequest,
+  cardShowState,
   codeReaderStep,
   codesSourceLine,
+  editedTable,
   firstCapture,
   headerButtons,
   localStamp,
   moreItems,
+  movedBackTable,
   openingStep,
   savedCapture,
   savedForName,
@@ -27,7 +29,7 @@ import {
   undoEntry,
   withCapture,
   withDesign,
-  withMoveTakenBack,
+  withShow,
   withStart,
   type CardStep,
   type MoreItemId,
@@ -51,7 +53,7 @@ import {
   type MoveMade,
   type Pointing,
 } from '../../lib/promptPieces';
-import { notMatchingLine } from '../../lib/promptSettings';
+import { notMatchingLine, shownPreview } from '../../lib/promptSettings';
 import type { PromptShowState } from '../../lib/promptShow';
 import {
   onPromptState,
@@ -95,20 +97,13 @@ import { useCellWidth, useLabelMeasure } from '../../lib/useCellWidth';
 import { knownWorld } from '../../lib/useConnection';
 import { ConfirmDialog } from '../ConfirmDialog';
 import type { TerminalHandle } from '../Terminal';
-import {
-  Button,
-  CloseIcon,
-  IconButton,
-  MoreIcon,
-  Segmented,
-  Toggle,
-  type SegmentedOption,
-} from '../settings/ui';
+import { Button, CloseIcon, IconButton, MoreIcon } from '../settings/ui';
 import { CardMenu, MenuSeparator } from './CardMenu';
 import { CodesEntry, CodesRead, LineTriggers, type CodesRequest } from './PromptCodes';
 import { PromptMarks } from './PromptMarks';
 import { PromptPicker } from './PromptPicker';
 import { PromptPieceBody } from './PromptPiece';
+import { DesignFoot } from './PromptFoot';
 import { PointName, PointPick, type PointedLine } from './PromptPoint';
 import { DrawOff, Starts } from './PromptStarts';
 import { PromptText } from './PromptText';
@@ -132,6 +127,9 @@ import { PromptText } from './PromptText';
 // sent with the values it reads marked, and once it draws your design it
 // labels each value with nothing to show, so you can point at it, over
 // the band of Lifted in the text. Closing it puts your live prompt back.
+// At its foot, beside Draw your prompt, a button picks where your prompt
+// shows, and the card moves with your prompt to the place you pick. A
+// menu before Done picks the preview while drawing is on (DesignFoot).
 
 /** Where the card reaches the terminal it sits over. */
 export interface PromptCardHost {
@@ -166,18 +164,6 @@ interface PromptCardProps {
   onClose: () => void;
 }
 
-/** The previews the footer offers. Lament only under the Forsaken Lands
- *  rules, where the game hides your values under lamented tears. */
-function previewOptions(forsaken: boolean): SegmentedOption<PromptPreviewName>[] {
-  const options: SegmentedOption<PromptPreviewName>[] = [
-    { value: 'now', label: 'Now' },
-    { value: 'low_health', label: 'Low health' },
-    { value: 'fight', label: 'Fight' },
-  ];
-  if (forsaken) options.push({ value: 'lament', label: 'Lament' });
-  return options;
-}
-
 /** What the Lament preview hides, under the card at rest (P8c). */
 const LAMENT_NOTE =
   "Lament hides your vitals, your tank's health, your opponent's health, your affects and your group. Vosh draws ? where the game hides a value.";
@@ -197,7 +183,6 @@ export function PromptCard({
   onBand,
   onClose,
 }: PromptCardProps) {
-  const drawId = useId();
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [config, setConfig] = useState<PromptConfig | null>(null);
   const latest = useRef<PromptConfig | null>(null);
@@ -208,8 +193,7 @@ export function PromptCard({
   const [step, setStep] = useState<CardStep | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [preview, setPreview] = useState<PromptPreviewName>('now');
-  const previewRef = useRef(preview);
-  previewRef.current = preview;
+  const previewRef = useRef<PromptPreviewName>('now');
   const [moreAt, setMoreAt] = useState<HTMLElement | null>(null);
   const [confirmForget, setConfirmForget] = useState(false);
   // The code reader for another game, once you choose it in More.
@@ -257,6 +241,12 @@ export function PromptCard({
   const forsaken =
     codesChosen || (state?.forsaken ?? false) || knownHost || config?.capture.kind === 'aabahran';
   const gameSent = (state?.new_build ?? false) || game !== null;
+  // Lament leaves with the Forsaken Lands rules, and the card draws Now
+  // until they come back, as Settings does. Your pick stays, so a
+  // profile that opens again keeps Lament, and the Preview menu always
+  // names the preview it draws.
+  const drawn = shownPreview(preview, forsaken);
+  previewRef.current = drawn;
 
   const take = (next: PromptConfig) => {
     latest.current = next;
@@ -392,9 +382,9 @@ export function PromptCard({
   useEffect(() => {
     if (step === null) return;
     void promptPreviewSet(
-      reading ? { raw: true } : { placeholders: true, preview: preview === 'now' ? null : preview },
+      reading ? { raw: true } : { placeholders: true, preview: drawn === 'now' ? null : drawn },
     ).catch(() => {});
-  }, [step, reading, preview]);
+  }, [step, reading, drawn]);
 
   // Past the capture steps the card works on your design: as text even
   // with drawing off (P11), and on your prompt while drawing is on.
@@ -442,7 +432,7 @@ export function PromptCard({
   useEffect(() => {
     if (step !== 'start' && step !== 'rest') return;
     let alive = true;
-    void promptDescribe(template, preview === 'now' ? null : preview)
+    void promptDescribe(template, drawn === 'now' ? null : drawn)
       .then((data) => {
         if (alive) setDescribed({ template, data });
       })
@@ -450,7 +440,7 @@ export function PromptCard({
     return () => {
       alive = false;
     };
-  }, [template, step, preview, refresh]);
+  }, [template, step, drawn, refresh]);
 
   // The parts as last described. Right after a change they can trail the
   // design for a moment, and the card keeps showing them meanwhile, so the
@@ -508,7 +498,7 @@ export function PromptCard({
 
   useLayoutEffect(() => {
     void relayout();
-  }, [relayout, step, refresh, view, template, preview]);
+  }, [relayout, step, refresh, view, template, drawn]);
 
   useEffect(() => {
     const onResize = () => void relayout();
@@ -619,7 +609,10 @@ export function PromptCard({
         // Another profile became active meanwhile, so the edit was for a
         // table the card no longer shows.
         if (at !== opens.current) return;
-        if (text !== base.template) save(withDesign(base, text));
+        // The table can change meanwhile, as when you pick a place, so
+        // the new design goes on it as it stands.
+        const edited = editedTable(base, latest.current, text);
+        if (edited) save(edited);
         if (data) setDescribed({ template: text, data });
         made?.({ before: base.template, after: text, landed, mirror: base.mirror });
         const first = ops[0];
@@ -649,7 +642,7 @@ export function PromptCard({
         () => null,
       );
       if (at !== opens.current) return;
-      save(withMoveTakenBack(base, back));
+      save(movedBackTable(base, latest.current, back));
       if (data) setDescribed({ template: back.before, data });
       setPointing({ picked: back.from, caret: null });
     });
@@ -1017,7 +1010,7 @@ export function PromptCard({
           content = (
             <PromptPicker
               state={state}
-              preview={preview}
+              preview={drawn}
               env={env}
               cellW={cellW}
               refresh={refresh}
@@ -1062,7 +1055,7 @@ export function PromptCard({
               refresh={refresh}
               env={env}
               cellW={cellW}
-              note={step === 'rest' && preview === 'lament' ? LAMENT_NOTE : null}
+              note={step === 'rest' && drawn === 'lament' ? LAMENT_NOTE : null}
               promptsOff={state?.status.status === 'prompts_off' || (show?.promptsOff ?? false)}
               notMatching={
                 state?.status.status === 'not_matching'
@@ -1092,28 +1085,17 @@ export function PromptCard({
           <>
             {content}
             <div className="pc-rule" aria-hidden="true" />
-            <div className="pc-foot">
-              <Toggle
-                id={drawId}
-                checked={config.draw}
-                onChange={(draw) => save({ ...config, draw })}
-              />
-              <label className="pc-switch" htmlFor={drawId}>
-                Draw your prompt
-              </label>
-              <span className="pc-spacer" />
-              {config.draw && (
-                <Segmented
-                  label="Preview"
-                  options={previewOptions(forsaken)}
-                  value={preview}
-                  onChange={setPreview}
-                />
-              )}
-              <Button variant="primary" className="pc-done" onClick={onClose}>
-                Done
-              </Button>
-            </div>
+            <DesignFoot
+              draw={config.draw}
+              onDraw={(draw) => save({ ...config, draw })}
+              show={config.show}
+              showState={cardShowState(show, config.capture)}
+              onShow={(place) => save(withShow(config, place))}
+              preview={drawn}
+              forsaken={forsaken}
+              onPreview={setPreview}
+              onDone={onClose}
+            />
           </>
         );
         break;

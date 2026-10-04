@@ -24,6 +24,7 @@ import {
   previewOptions,
   previewRows,
   promptWorld,
+  shownPreview,
   type CodesMeta,
 } from '../../../lib/promptSettings';
 import { usePromptShow, type PromptShowState } from '../../../lib/promptShow';
@@ -250,9 +251,9 @@ export function PromptSection({
     state?.status.status === 'not_matching' ? notMatchingLine(state.status.last_match_at) : null;
   const owner = savedForName(identity, active);
   const previews = previewOptions(forsaken);
-  // Lament leaves with the Forsaken Lands rules, and the preview goes
-  // back to Now.
-  const shown = previews.some((o) => o.value === preview) ? preview : 'now';
+  // Lament leaves with the Forsaken Lands rules, and the preview draws
+  // Now until they come back.
+  const shown = shownPreview(preview, forsaken);
 
   const save = (change: (config: PromptConfig) => PromptConfig) => {
     data.setConfig(change(config));

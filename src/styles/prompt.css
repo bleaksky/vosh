@@ -234,6 +234,52 @@
   margin-left: 4px;
 }
 
+/* The foot under your design (DesignFoot) keeps the one row 52 tall of
+   every foot, with drawing on or off: Draw your prompt and where your
+   prompt shows on the left, the preview and Done on the right. The
+   preview is a menu button, so even the longest place and preview, In
+   the text and Preview: Low health, leave 66 px to spare in the 560 px
+   card in the system face. */
+.pc-foot-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* The compact menu buttons at the foot (MenuButton), where your prompt
+   shows and the preview, in the 12/500 face of a segmented control, the
+   chevron in the secondary tone. */
+.pc-menu-button {
+  gap: 2px;
+  padding: 0 6px 0 10px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* Preview: before the preview it reads, in the secondary tone. */
+.pc-menu-button-lead {
+  color: var(--secondary);
+}
+
+.pc-menu-button svg {
+  display: block;
+  color: var(--secondary);
+}
+
+.pc-menu-button[aria-expanded='true'] {
+  background: var(--ov-hl);
+}
+
+.pc-menu-button[aria-disabled='true'] {
+  opacity: 0.45;
+}
+
+.pc-menu-button[aria-disabled='true']:hover {
+  background: transparent;
+}
+
 .pc-switch {
   display: flex;
   align-items: center;

@@ -13,6 +13,7 @@ import {
   previewRows,
   promptWorld,
   settingsMatchLine,
+  shownPreview,
   type GameCodes,
 } from './promptSettings';
 import type {
@@ -423,6 +424,18 @@ describe('the preview block', () => {
       'Lament',
     ]);
     expect(previewOptions(false).map((o) => o.value)).toEqual(['now', 'low_health', 'fight']);
+  });
+
+  it('draws Now for a Lament pick while the Forsaken Lands rules are away', () => {
+    expect(shownPreview('lament', true)).toBe('lament');
+    expect(shownPreview('lament', false)).toBe('now');
+  });
+
+  it('draws the other previews as you pick them, with the rules or without', () => {
+    for (const preview of ['now', 'low_health', 'fight'] as const) {
+      expect(shownPreview(preview, true), preview).toBe(preview);
+      expect(shownPreview(preview, false), preview).toBe(preview);
+    }
   });
 
   it('reads the drawn design into rows, the trailing empty one left out', () => {
