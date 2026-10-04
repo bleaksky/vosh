@@ -71,10 +71,17 @@ function fromLinear(v: number): number {
   return c * 255;
 }
 
+/** The linear sRGB channels of a color, each 0..1. */
+export function rgbToLinear(c: Rgb): [number, number, number] {
+  return [toLinear(c.r), toLinear(c.g), toLinear(c.b)];
+}
+
 export function rgbToOklab(c: Rgb): Oklab {
-  const r = toLinear(c.r);
-  const g = toLinear(c.g);
-  const b = toLinear(c.b);
+  return linearToOklab(rgbToLinear(c));
+}
+
+/** OKLab from linear sRGB channels, each 0..1. */
+export function linearToOklab([r, g, b]: [number, number, number]): Oklab {
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
   const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
