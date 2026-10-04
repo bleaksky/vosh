@@ -832,7 +832,7 @@
 .pc-menu > li.pc-menu-sep {
   height: 1px;
   margin: 6px 12px;
-  background: var(--divider);
+  background: var(--sep);
 }
 
 .pc-menu .ov-menu-item:hover,

@@ -379,7 +379,7 @@
 .ov-menu-sep {
   height: 1px;
   margin: 6px 12px;
-  background: var(--divider);
+  background: var(--sep);
 }
 
 /* Find bar (Menus board). 40 tall, 8 below the band, its right edge 16
