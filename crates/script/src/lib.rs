@@ -12,6 +12,7 @@
 mod actions;
 mod api;
 mod env;
+mod hook;
 mod limits;
 mod owner;
 mod report;
@@ -178,6 +179,9 @@ impl ScriptEngine {
         // before the shared `mud` table joins the globals.
         let envs = Envs::install(&lua)?;
         api::install(&lua)?;
+        // The hook goes on last, since Lua that runs outside a call stops
+        // at its first look.
+        hook::install(&lua, &limits)?;
         Ok(Self {
             lua,
             state,
@@ -1927,15 +1931,15 @@ mod tests {
 
     #[test]
     fn a_loop_after_a_coroutine_yields_still_stops() {
-        // The hook goes back to the thread that resumed the coroutine.
+        // The thread that resumed the coroutine keeps its own hook.
         let mut e = ScriptEngine::new().unwrap();
         stops_in_time(
             &mut e,
             "local step = coroutine.wrap(function() coroutine.yield() end) \
              step() while true do end",
         );
-        // A coroutine left suspended by one call leaves the next call's
-        // hook on the main thread.
+        // A coroutine left suspended by one call leaves the next call
+        // under the hook.
         e.eval(
             "parked = coroutine.create(function() coroutine.yield() end) \
              coroutine.resume(parked)",
@@ -2098,6 +2102,117 @@ mod tests {
              coroutine.resume(c) \
              coroutine.close(c)",
         );
+    }
+
+    /// Run `f` on a thread of its own and hand back what it returns,
+    /// failing the test when it has not returned within ten seconds, so
+    /// Lua that never stops fails a test instead of hanging the suite.
+    fn returns_in_time<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(f());
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(10))
+            .expect("the Lua never came back")
+    }
+
+    /// A `<close>` method that spins, as Lua source.
+    const SPINNING_CLOSE: &str = "setmetatable({}, {__close = function() while true do end end})";
+
+    #[test]
+    fn a_close_method_that_spins_stops_on_every_path() {
+        let loads = [
+            // A plugin load, on the main thread.
+            format!("local x <close> = {SPINNING_CLOSE} while true do end"),
+            // In a coroutine.
+            format!(
+                "local co = coroutine.wrap(function() \
+                   local x <close> = {SPINNING_CLOSE} while true do end \
+                 end) co()"
+            ),
+            // The closing value of a generic for.
+            format!(
+                "for _ in function() return 1 end, nil, nil, {SPINNING_CLOSE} do \
+                   while true do end \
+                 end"
+            ),
+        ];
+        for code in loads {
+            let outcome = returns_in_time(move || {
+                let mut e = ScriptEngine::new().unwrap();
+                plugin(&mut e, "spin", &code)
+            });
+            assert_eq!(outcome.stopped, [Owner::Plugin("spin".into())]);
+        }
+        // A metatable that gains __close after setmetatable, in a body.
+        let outcome = returns_in_time(|| {
+            let mut e = ScriptEngine::new().unwrap();
+            e.run_body(
+                &Owner::Trigger("late".into()),
+                "local mt = {} local t = setmetatable({}, mt) \
+                 mt.__close = function() while true do end end \
+                 local x <close> = t while true do end",
+                &[],
+            )
+        });
+        assert_eq!(outcome.stopped, [Owner::Trigger("late".into())]);
+    }
+
+    #[test]
+    fn a_coroutine_a_stop_ended_never_runs_its_close_methods() {
+        let (first, later) = returns_in_time(|| {
+            let mut e = ScriptEngine::new().unwrap();
+            let first = e.eval(
+                &format!(
+                    "co = coroutine.create(function() \
+                       local x <close> = {SPINNING_CLOSE} while true do end \
+                     end) coroutine.resume(co)"
+                ),
+                "=#lua",
+            );
+            let later = e.eval(
+                "local ok, err = coroutine.close(co) mud.echo(tostring(ok) .. ' ' .. err)",
+                "=#lua",
+            );
+            (first, later)
+        });
+        assert_eq!(
+            error_lines(&first),
+            ["Vosh stopped your #lua line after 100 ms."]
+        );
+        assert_eq!(
+            later.unwrap().actions,
+            vec![Action::Echo("false Vosh stopped this Lua".into())]
+        );
+        // A coroutine an ordinary error ended still closes.
+        let mut e = ScriptEngine::new().unwrap();
+        let closed = e
+            .eval(
+                "local co = coroutine.create(function() \
+                   local x <close> = setmetatable({}, {__close = function() mud.echo('closed') end}) \
+                   error('boom', 0) \
+                 end) \
+                 coroutine.resume(co) mud.echo(select(2, coroutine.close(co)))",
+                "=#lua",
+            )
+            .unwrap();
+        assert_eq!(echoes(&closed), ["closed", "boom"]);
+    }
+
+    #[test]
+    fn closing_the_main_thread_from_a_coroutine_still_stops() {
+        let outcome = returns_in_time(|| {
+            let mut e = ScriptEngine::new().unwrap();
+            plugin(
+                &mut e,
+                "closer",
+                "local main = coroutine.running() \
+                 local co = coroutine.wrap(function() \
+                   pcall(coroutine.close, main) while true do end \
+                 end) co()",
+            )
+        });
+        assert_eq!(outcome.stopped, [Owner::Plugin("closer".into())]);
     }
 
     #[test]

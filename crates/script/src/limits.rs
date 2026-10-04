@@ -8,21 +8,18 @@
 //! A hook counts instructions and checks the clock every [`HOOK_EVERY`],
 //! and a stop sets a flag that `pcall`, `xpcall` and the coroutine
 //! functions rethrow while it holds, so no protected loop can catch the
-//! stop and spin on.
+//! stop and spin on. [`crate::hook`] sets the hook, on every coroutine
+//! too.
 //!
-//! mlua drops a hook on any thread but the one it was set on, so a
-//! coroutine would run free. The wrapped `coroutine.resume`,
-//! `coroutine.close` and `coroutine.wrap` point the hook at the
-//! coroutine while it runs and back at the thread that resumed it after.
-//!
-//! The hook cannot look inside one C function, so a Lua pattern that
-//! backtracks for a long time in `string.find` runs past the budget.
+//! The hook cannot look inside one C function, so the wrapped library
+//! functions that could run long inside one do their work where the
+//! limits see it.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use mlua::{Debug, Function, HookTriggers, Lua, MultiValue, Value, VmState};
+use mlua::{Function, Lua, MultiValue, Value};
 
 /// How long one call may run.
 pub(crate) const TIME_BUDGET: Duration = Duration::from_millis(100);
@@ -76,9 +73,6 @@ pub(crate) struct Limits {
     /// Set once a call is stopped, and cleared when the next one
     /// begins. Read on every hook and every protected call.
     stopped: AtomicBool,
-    /// The hook sits on a coroutine, or on a thread that resumed one,
-    /// so the next call points it at the main thread again.
-    hook_moved: AtomicBool,
     inner: Mutex<Inner>,
 }
 
@@ -96,7 +90,6 @@ impl Limits {
     pub(crate) fn new() -> Arc<Self> {
         Arc::new(Self {
             stopped: AtomicBool::new(false),
-            hook_moved: AtomicBool::new(false),
             inner: Mutex::new(Inner {
                 deadline: Instant::now(),
                 memory_limit: STATE_MEMORY,
@@ -111,7 +104,7 @@ impl Limits {
 
     /// Start a call: clear the stop, start the clock, and let the call
     /// hold [`CALL_MEMORY`] more than the state holds now.
-    pub(crate) fn begin(self: &Arc<Self>, lua: &Lua) {
+    pub(crate) fn begin(&self, lua: &Lua) {
         // Near the whole state's limit, garbage left by an earlier call
         // could pass for memory your scripts hold, so collect it first.
         if lua.used_memory().saturating_add(CALL_MEMORY) > STATE_MEMORY {
@@ -130,9 +123,6 @@ impl Limits {
             inner.stop = None;
         }
         self.stopped.store(false, Ordering::SeqCst);
-        if self.hook_moved.swap(false, Ordering::SeqCst) {
-            lua.set_hook(triggers(), hook(Arc::clone(self)));
-        }
     }
 
     /// End a call. The memory limit goes back to [`STATE_MEMORY`] and
@@ -175,17 +165,18 @@ impl Limits {
         self.stop(reason, at);
     }
 
-    /// The hook: past the deadline it stops the call, and while a stop
-    /// holds it raises again on every look.
-    fn on_hook(&self, lua: &Lua, debug: &Debug<'_>) -> mlua::Result<VmState> {
+    /// What the hook asks: true when the call must stop. Past the
+    /// deadline it stops the call at the place `place` gives, and while
+    /// a stop holds it says so on every look.
+    pub(crate) fn on_hook(&self, place: impl FnOnce() -> Option<At>) -> bool {
         if self.is_stopped() {
-            return Err(stopped());
+            return true;
         }
         if Instant::now() < self.inner().deadline {
-            return Ok(VmState::Continue);
+            return false;
         }
-        self.stop(StopReason::Time, at_of(debug).or_else(|| caller(lua)));
-        Err(stopped())
+        self.stop(StopReason::Time, place());
+        true
     }
 
     /// What a wrapped `pcall`, `xpcall` or `coroutine.resume` hands back:
@@ -202,16 +193,6 @@ impl Limits {
         }
         Ok(results)
     }
-}
-
-/// How often the hook runs.
-fn triggers() -> HookTriggers {
-    HookTriggers::new().every_nth_instruction(HOOK_EVERY)
-}
-
-/// The hook function, for any thread.
-fn hook(limits: Arc<Limits>) -> impl Fn(&Lua, Debug<'_>) -> mlua::Result<VmState> + Send + 'static {
-    move |lua, debug| limits.on_hook(lua, &debug)
 }
 
 /// The error a stop raises. The script never sees its text, since the
@@ -242,7 +223,7 @@ fn is_memory_value(value: &Value) -> bool {
 }
 
 /// Where `debug` stands, when it stands in your Lua.
-fn at_of(debug: &Debug<'_>) -> Option<At> {
+fn at_of(debug: &mlua::Debug<'_>) -> Option<At> {
     let line = u32::try_from(debug.curr_line())
         .ok()
         .filter(|line| *line > 0)?;
@@ -255,7 +236,7 @@ fn at_of(debug: &Debug<'_>) -> Option<At> {
 
 /// The nearest place on the stack that stands in your Lua, past Vosh's
 /// own functions and the C ones.
-fn caller(lua: &Lua) -> Option<At> {
+pub(crate) fn caller(lua: &Lua) -> Option<At> {
     (0..64).find_map(|level| lua.inspect_stack(level).as_ref().and_then(at_of))
 }
 
@@ -263,12 +244,14 @@ fn caller(lua: &Lua) -> Option<At> {
 /// `setmetatable` and `print`. It keeps the originals as upvalues, and
 /// with no `debug` library in the sandbox no script can reach them.
 ///
-/// Lua runs two kinds of function with every hook off: a message
-/// handler that handles an error the hook raised, and a `__gc` method.
-/// So the wrapped `xpcall` skips your handler while a stop holds, and
-/// `setmetatable` refuses a metatable with `__gc` in it.
+/// Lua runs three kinds of function with every hook off: a message
+/// handler that handles an error the hook raised, a `__gc` method, and
+/// the `__close` methods of a coroutine the hook stopped once something
+/// closes it. So the wrapped `xpcall` skips your handler while a stop
+/// holds, `setmetatable` refuses a metatable with `__gc` in it, and the
+/// wrapped `coroutine.close` leaves a coroutine the hook stopped alone.
 const GUARDS: &str = r##"
-local settle, hook_on, after_resume, is_stopped, log = ...
+local settle, stopped_dead, is_stopped, log = ...
 local raw_pcall, raw_xpcall, raw_setmetatable = pcall, xpcall, setmetatable
 local error, rawget, select, type = error, rawget, select, type
 local tostring, concat = tostring, table.concat
@@ -301,16 +284,18 @@ function setmetatable(t, mt)
 end
 
 local function resume(c, ...)
-  hook_on(c)
-  return after_resume(raw_resume(c, ...))
+  return settle(raw_resume(c, ...))
 end
 co.resume = resume
 
 -- Closing a coroutine runs the __close methods it still holds, on the
--- coroutine itself.
+-- coroutine itself, under the hook it took from the thread that made
+-- it. One the hook stopped has its hook off, so it stays as it is.
 local function close(c)
-  hook_on(c)
-  return after_resume(raw_close(c))
+  if stopped_dead(c) then
+    return false, "Vosh stopped this Lua"
+  end
+  return settle(raw_close(c))
 end
 co.close = close
 
@@ -344,45 +329,26 @@ end
 "##;
 
 /// Wrap `pcall`, `xpcall`, `setmetatable`, `coroutine.resume`,
-/// `coroutine.close`, `coroutine.wrap` and `print`, set the whole
-/// state's memory limit, and set the hook. `log` takes the line a
-/// `print` makes.
+/// `coroutine.close`, `coroutine.wrap` and `print`, and set the whole
+/// state's memory limit. `log` takes the line a `print` makes. The hook
+/// goes on last, from [`crate::hook::install`].
 pub(crate) fn install(lua: &Lua, limits: &Arc<Limits>, log: Function) -> mlua::Result<()> {
     let settle = {
         let limits = Arc::clone(limits);
         lua.create_function(move |lua, results: MultiValue| limits.settle(lua, results))?
     };
-    let hook_on = {
-        let limits = Arc::clone(limits);
-        lua.create_function(move |_, thread: Value| {
-            if let Value::Thread(thread) = thread {
-                limits.hook_moved.store(true, Ordering::SeqCst);
-                thread.set_hook(triggers(), hook(Arc::clone(&limits)));
-            }
-            Ok(())
-        })?
-    };
-    let after_resume = {
-        let limits = Arc::clone(limits);
-        lua.create_function(move |lua, results: MultiValue| {
-            limits.hook_moved.store(true, Ordering::SeqCst);
-            lua.current_thread()
-                .set_hook(triggers(), hook(Arc::clone(&limits)));
-            limits.settle(lua, results)
-        })?
-    };
+    let stopped_dead =
+        lua.create_function(|_, thread: Value| Ok(crate::hook::stopped_dead(&thread)))?;
     let is_stopped = {
         let limits = Arc::clone(limits);
         lua.create_function(move |_, ()| Ok(limits.is_stopped()))?
     };
     lua.load(GUARDS).set_name(INTERNAL_CHUNK).call::<()>((
         settle,
-        hook_on,
-        after_resume,
+        stopped_dead,
         is_stopped,
         log,
     ))?;
     lua.set_memory_limit(STATE_MEMORY)?;
-    lua.set_hook(triggers(), hook(Arc::clone(limits)));
     Ok(())
 }
