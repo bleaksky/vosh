@@ -1,6 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { normalizePromptShowState, type PromptShowState } from '../../../lib/promptShow';
+import {
+  normalizePromptShowState,
+  PROMPT_SHOW_LABELS,
+  promptShowLock,
+  type PromptShowState,
+} from '../../../lib/promptShow';
 import type { PromptShow } from '../../../lib/session';
 import { SETTINGS_ROWS } from '../../../lib/settingsSearch';
 import { PromptShowField } from './PromptShowRow';
@@ -73,6 +78,25 @@ describe('PromptShowField', () => {
     const html = draw('pinned', null);
     expect(disabled(html)).toBe(3);
     expect(html).not.toContain('is-disabled');
+  });
+});
+
+describe('when you can pick a place', () => {
+  it('waits for the state, then locks with a reason while the profile reads no prompt', () => {
+    expect(promptShowLock(null)).toEqual({ locked: true, why: null });
+    expect(promptShowLock(reads)).toEqual({ locked: false, why: null });
+    expect(promptShowLock({ ...reads, capture: false })).toEqual({
+      locked: true,
+      why: 'Customize your prompt first.',
+    });
+    expect(promptShowLock({ ...reads, capture: false, gameSent: false })).toEqual({
+      locked: true,
+      why: "Tell Vosh your game's prompt first.",
+    });
+  });
+
+  it('names each place the same in the row and the card', () => {
+    expect(PROMPT_SHOW_LABELS).toEqual({ text: 'In the text', lifted: 'Lifted', pinned: 'Pinned' });
   });
 });
 
