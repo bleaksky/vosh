@@ -9,6 +9,7 @@ import {
   fontChoices,
   fontLabel,
   pairChoices,
+  panelFontChoices,
   primaryFontFamily,
   removeCustomTheme,
   sizeChoices,
@@ -54,6 +55,27 @@ describe('fontLabel', () => {
   it('names any other list by its first family', () => {
     expect(fontLabel('"Iosevka Term", monospace')).toBe('Iosevka Term');
     expect(fontLabel('Menlo, monospace')).toBe('Menlo');
+  });
+});
+
+describe('panelFontChoices', () => {
+  it('offers the terminal font and the system font, then the Font list', () => {
+    const choices = panelFontChoices('', installed);
+    expect(choices.slice(0, 2)).toEqual([
+      { value: '', label: 'Same as terminal' },
+      { value: 'system', label: 'System font' },
+    ]);
+    expect(choices.slice(2)).toEqual(fontChoices('', installed));
+    expect(panelFontChoices('system', installed)).toEqual(choices);
+  });
+
+  it('keeps a font you picked with its exact list, first when the list lacks it', () => {
+    const picked = 'Menlo, monospace';
+    expect(panelFontChoices(picked, installed).filter((c) => c.value === picked)).toEqual([
+      { label: 'Menlo', value: picked },
+    ]);
+    const gone = '"PT Mono", Menlo, monospace';
+    expect(panelFontChoices(gone, installed)[2]).toEqual({ label: 'PT Mono', value: gone });
   });
 });
 
