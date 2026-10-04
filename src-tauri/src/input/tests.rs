@@ -1002,6 +1002,23 @@ fn script_load_stays_inside_the_scripts_folder() {
 }
 
 #[test]
+fn lua_cannot_blank_your_profile_through_mud_input() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    p.aliases
+        .set(vosh_automation::alias::Alias::new("kk", "kick %1"));
+    let ran = run_line(&state, &mut p, "#lua mud.input('#profile reset')");
+    let leftover = &ran.lua.inputs;
+    assert!(leftover.is_empty(), "{leftover:?}");
+    assert_eq!(
+        ran.lua.echoes,
+        ["\x1b[90m[lua]\x1b[0m \x1b[31mVosh runs #profile only when you type it.\x1b[0m"]
+    );
+    assert!(!ran.replaced);
+    assert!(p.aliases.get("kk").is_some());
+}
+
+#[test]
 fn scripts_lists_lua_triggers_by_name() {
     let mut p = Profile::default();
     process(

@@ -89,6 +89,21 @@ pub(crate) fn is_profile_reset_or_load(line: &str) -> bool {
     matches!(sub, "reset" | "load")
 }
 
+/// The command in `line` that Lua may not run through `mud.input`, read
+/// the way the slash dispatcher reads it: `#script load`, which runs a
+/// file, `#import-tintin`, which reads one, and `#profile`, which saves,
+/// loads or blanks your profile. None for any other line.
+pub(crate) fn kept_from_lua(line: &str) -> Option<&'static str> {
+    let rest = line.trim_start().strip_prefix('#')?;
+    let (cmd, rest) = split_first_word(rest);
+    match cmd {
+        "profile" => Some("#profile"),
+        "import-tintin" => Some("#import-tintin"),
+        "script" if split_first_word(rest).0 == "load" => Some("#script load"),
+        _ => None,
+    }
+}
+
 /// What a `#logs` line asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LogsCommand {
