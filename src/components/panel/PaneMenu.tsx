@@ -18,8 +18,8 @@ import {
 import { profilesList, resetChatColors, setAffectsDisplay, setChatColor } from '../../lib/session';
 import { useAffectsDisplay } from '../../lib/stores/affectsDisplayStore';
 import { useChatColors } from '../../lib/stores/chatColorsStore';
+import { usePlayPalette } from '../../lib/fitGameColors';
 import type { XtermPalette } from '../../lib/themes';
-import { useActiveTheme } from '../../lib/useActiveTheme';
 import { splitPane, type PaneLeaf, type SplitDir } from '../../lib/paneLayout';
 import { openSettingsTab } from '../../lib/settingsLink';
 import { formatSettingsTarget } from '../../lib/settingsNav';
@@ -73,7 +73,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
   const chanRefs = useRef<Partial<Record<string, HTMLButtonElement | null>>>({});
   const display = useAffectsDisplay();
   const chatColors = useChatColors();
-  const palette = useActiveTheme().xterm;
+  const palette = usePlayPalette();
   const textSize = useContext(PaneTextSizeContext);
   const menuId = `pane-menu-${leaf.id}`;
   const subId = (which: PaneSubmenu) => `${menuId}-${which}`;

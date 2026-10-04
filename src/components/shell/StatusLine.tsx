@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { usePlayPalette } from '../../lib/fitGameColors';
 import type { VitalsOptions } from '../../lib/session';
 import { useChipStyle } from '../../lib/stores/chipStyleStore';
 import { useCombat } from '../../lib/stores/combatStore';
@@ -137,21 +138,23 @@ function toneClass(tone: VitalTone): string {
 }
 
 /** Reads the tick, the way it counts, the game time on its clock, the
- *  moons, and the theme for StatusClock. The moons show only while
- *  connected. */
+ *  moons, and the theme for StatusClock. The daylight tint and the moons
+ *  take the play palette, fitted while Fit game colors is on. The moons
+ *  show only while connected. */
 function ClockItem({ connected }: { connected: boolean }) {
   const style = useChipStyle();
   const tick = useTick();
   const shown = shownTick(tick, useTickCount());
   const world = useWorld();
   const theme = useActiveTheme();
+  const palette = usePlayPalette();
   const text = formatGameTime(world.time, useGameTime());
   const hour = world.time?.hour ?? null;
   const tokens = useMemo(() => themeTokens(theme), [theme]);
-  const tint = useMemo(() => daylightTint(hour, theme.xterm, tokens), [hour, theme, tokens]);
+  const tint = useMemo(() => daylightTint(hour, palette, tokens), [hour, palette, tokens]);
   const moons = useMemo(
-    () => (connected ? statusMoons(world.moons, theme.xterm, tokens) : null),
-    [connected, world.moons, theme, tokens],
+    () => (connected ? statusMoons(world.moons, palette, tokens) : null),
+    [connected, world.moons, palette, tokens],
   );
   return (
     <StatusClock

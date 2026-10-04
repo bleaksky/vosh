@@ -7,6 +7,7 @@ import {
   type CSSProperties,
   type RefObject,
 } from 'react';
+import { usePlayPalette } from '../../lib/fitGameColors';
 import { roomNameColor, terrainLabel, type RoomNameGround } from '../../lib/roomName';
 import { groupPeople, useRoom, type RoomInfo, type RoomPerson } from '../../lib/stores/roomStore';
 import { themeTokens, type XtermPalette } from '../../lib/themes';
@@ -30,6 +31,7 @@ import { PaneTextSizeContext } from './paneTextSize';
 export function MapPane() {
   const { info, people } = useRoom();
   const theme = useActiveTheme();
+  const palette = usePlayPalette();
   const ground = useMemo(() => themeTokens(theme), [theme]);
   const boxRef = useRef<HTMLDivElement | null>(null);
   const rowsRef = useRef<HTMLUListElement | null>(null);
@@ -46,13 +48,7 @@ export function MapPane() {
         className="pane-rows pane-map-rows"
         style={{ '--band-rows': rows } as CSSProperties}
       >
-        <MapBandRows
-          info={info}
-          people={people}
-          rows={rows}
-          palette={theme.xterm}
-          ground={ground}
-        />
+        <MapBandRows info={info} people={people} rows={rows} palette={palette} ground={ground} />
       </ul>
     </>
   );
