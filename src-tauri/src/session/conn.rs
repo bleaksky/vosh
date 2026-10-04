@@ -44,9 +44,7 @@ use super::steps::{
     repaint_step, send_step, window_size_step,
 };
 use super::walk::{self, Walker};
-use super::{
-    emit_input_mode, emit_state, now_ms, room_block, OutgoingMsg, StatePayload, TargetPayload,
-};
+use super::{emit_input_mode, emit_state, now_ms, OutgoingMsg, StatePayload, TargetPayload};
 
 /// The 250 ms poll that drives the tick, the Lua timers and the Settings
 /// timers.
@@ -479,15 +477,13 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     log_sink.close().await;
 
     let line_triggers;
-    // Your target and the Room.Chars list end with the connection, and so
-    // does the variable that mirrors the target. Your quick keys outlive
-    // it, though not a restart.
+    // Your target, the Room.Chars list, the room look and the fight's
+    // tail end with the connection, and so does the variable that mirrors
+    // the target. Your quick keys outlive it, though not a restart.
     let target_after = {
         let mut p = conn.profile.lock().await;
         let mut c = conn.connection.lock().await;
         let had = c.clear_on_disconnect();
-        p.room_block = room_block::RoomBlock::default();
-        p.fight_tail = false;
         p.vars.remove("target");
         line_triggers = p.prompt.stage.line_trigger_notice();
         end_prompt(&mut p);

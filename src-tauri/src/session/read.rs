@@ -123,10 +123,10 @@ async fn handle_event<R: tauri::Runtime>(
                     let mut p = conn.profile.lock().await;
                     conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
                     conn.perf.mutex_acquires += 1;
-                    let c = conn.connection.lock().await;
+                    let mut c = conn.connection.lock().await;
                     line_step(
                         &mut p,
-                        &c,
+                        &mut c,
                         batch,
                         line,
                         plain,
@@ -161,10 +161,10 @@ async fn handle_event<R: tauri::Runtime>(
             // entry.
             let steps = {
                 let mut p = conn.profile.lock().await;
-                let c = conn.connection.lock().await;
+                let mut c = conn.connection.lock().await;
                 marker_step(
                     &mut p,
-                    &c,
+                    &mut c,
                     &mut conn.accumulator,
                     batch,
                     Instant::now(),
@@ -229,8 +229,8 @@ pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
         if !p.prompt.stage.holds() {
             return Ok(());
         }
-        let c = conn.connection.lock().await;
-        let_go_held(&mut p, &c, &mut batch, Instant::now(), log_sink.id())
+        let mut c = conn.connection.lock().await;
+        let_go_held(&mut p, &mut c, &mut batch, Instant::now(), log_sink.id())
     };
     for step in steps {
         deliver_line_step(conn, log_sink, &mut batch, step).await?;
@@ -339,10 +339,10 @@ async fn end_read<R: tauri::Runtime>(
 ) -> std::io::Result<()> {
     let step = {
         let mut p = conn.profile.lock().await;
-        let c = conn.connection.lock().await;
+        let mut c = conn.connection.lock().await;
         partial_step(
             &mut p,
-            &c,
+            &mut c,
             &mut conn.accumulator,
             batch,
             Instant::now(),

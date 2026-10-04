@@ -31,18 +31,6 @@ pub(crate) struct Profile {
     /// buffer and on stop saved as an alias whose expansion is the
     /// `;`-joined sequence.
     pub(crate) recording_macro: Option<MacroRecorder>,
-    /// The room look the session is following, which tells the lines
-    /// that list a room's things and people apart for Room triggers. It
-    /// resets on a disconnect.
-    pub(crate) room_block: crate::session::room_block::RoomBlock,
-    /// The round that ended your fight is still coming. `stop_fighting`
-    /// (fight.c:10278) writes Char.Combat `{}` straight to the socket in
-    /// the middle of the round, and the round's text waits for the end of
-    /// the pulse, so the last attacks, the death and the experience all
-    /// come after it. Set when a Char.Combat with no target follows one
-    /// that named one, and cleared by the prompt, GA or EOR that ends the
-    /// pulse, and on a disconnect.
-    pub(crate) fight_tail: bool,
     /// Keyboard macro bindings. Each entry maps a canonical key
     /// string (e.g. "F1", "Ctrl+N", "Numpad7") to a command line
     /// (which may itself contain `;`-separated subcommands).

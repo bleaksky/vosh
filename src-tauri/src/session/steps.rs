@@ -1,9 +1,10 @@
 //! The steps the session loop takes under the profile lock for each
 //! line, prompt, partial and GA or EOR the game sends, and for each
-//! repaint of your prompt. A step that reads your target takes the
-//! [`Connection`] too, locked after the profile. None of them sends
-//! anything. They write to the read's batch or return the output, and a
-//! line step returns what is left for after the lock as a [`LineStep`].
+//! repaint of your prompt. A step that reads your target or follows the
+//! room look takes the [`Connection`] too, locked after the profile. None
+//! of them sends anything. They write to the read's batch or return the
+//! output, and a line step returns what is left for after the lock as a
+//! [`LineStep`].
 
 use std::time::Duration;
 
@@ -119,7 +120,7 @@ pub(super) struct LineStep {
 /// start an earlier read painted.
 pub(super) fn line_step(
     p: &mut Profile,
-    c: &Connection,
+    c: &mut Connection,
     batch: &mut ReadBatch,
     line: Line,
     plain: String,
@@ -168,7 +169,7 @@ pub(super) fn line_step(
 /// Lines the stage held and let go, each through the Line pass in order.
 fn released_steps(
     p: &mut Profile,
-    c: &Connection,
+    c: &mut Connection,
     batch: &mut ReadBatch,
     released: Vec<vosh_prompt::stage::Released>,
     now: Instant,
@@ -198,7 +199,7 @@ fn released_steps(
 /// scrollback.
 pub(super) fn let_go_held(
     p: &mut Profile,
-    c: &Connection,
+    c: &mut Connection,
     batch: &mut ReadBatch,
     now: Instant,
     log_session_id: Option<i64>,
@@ -263,9 +264,9 @@ enum Shows {
 /// thing or person the look lists, and [`MatchScope::Line`] for any other
 /// line. The look's Room.Chars packet comes before its text, so the
 /// place is one in this look, the one `tar` marks with `>`.
-fn room_scope(p: &mut Profile, c: &Connection, plain: &str, bytes: &[u8]) -> MatchScope {
+fn room_scope(c: &mut Connection, plain: &str, bytes: &[u8]) -> MatchScope {
     use room_block::RoomLine;
-    match p.room_block.line(plain, bytes) {
+    match c.room_block.line(plain, bytes) {
         RoomLine::Other => MatchScope::Line,
         RoomLine::Person(place) if c.target.room_idx == Some(place) => MatchScope::RoomTarget,
         RoomLine::Army | RoomLine::Thing | RoomLine::Person(_) => MatchScope::Room,
@@ -278,7 +279,7 @@ fn room_scope(p: &mut Profile, c: &Connection, plain: &str, bytes: &[u8]) -> Mat
 /// painted it (`shows`).
 fn text_line_step(
     p: &mut Profile,
-    c: &Connection,
+    c: &mut Connection,
     batch: &mut ReadBatch,
     bytes: Vec<u8>,
     plain: String,
@@ -289,7 +290,7 @@ fn text_line_step(
     // Every complete line that is not your prompt passes the room look
     // tracker in the order the game sent it, so it knows the lines that
     // list a room's armies, things and people.
-    let scope = room_scope(p, c, &plain, &bytes);
+    let scope = room_scope(c, &plain, &bytes);
     let LinePass {
         result,
         tick_step,
@@ -322,7 +323,7 @@ fn text_line_step(
         fights: p.ui.collapse_fight_lines,
         attacks: p.ui.collapse_attack_lines,
     };
-    let fighting = p.prompt.vars.gmcp().fighting() || p.fight_tail;
+    let fighting = p.prompt.vars.gmcp().fighting() || c.fight_tail;
     let mut repeat = None;
     // Whether the ring keeps the line. While Collapse repeated lines is
     // on, it keeps what the screen shows, so the line end a pinned
@@ -417,7 +418,7 @@ fn text_line_step(
 /// shows. The prompt vars go out after the batch.
 fn prompt_block(
     p: &mut Profile,
-    c: &Connection,
+    c: &mut Connection,
     batch: &mut ReadBatch,
     block: Block,
     painted: Option<u64>,
@@ -426,8 +427,8 @@ fn prompt_block(
 ) -> LineStep {
     // Your prompt ends any room look before it, and the round that
     // ended a fight.
-    p.room_block.end();
-    p.fight_tail = false;
+    c.room_block.end();
+    c.fight_tail = false;
     let disagree = p.prompt.vars.capture(vosh_prompt::Capture {
         values: block.values.clone(),
         raw: Some(block.raw_text()),
@@ -630,7 +631,7 @@ fn unread_partial(
 /// pass first. The candidates ring records one entry either way.
 pub(super) fn marker_step(
     p: &mut Profile,
-    c: &Connection,
+    c: &mut Connection,
     accumulator: &mut LineAccumulator,
     batch: &mut ReadBatch,
     now: Instant,
@@ -644,8 +645,8 @@ pub(super) fn marker_step(
         p.prompt.record(None, now_ms());
         // The marker ends any room look before it, and the round that
         // ended a fight.
-        p.room_block.end();
-        p.fight_tail = false;
+        c.room_block.end();
+        c.fight_tail = false;
         return steps;
     };
     let plain = vosh_protocol::ansi::plain_text(&partial.bytes);
@@ -683,8 +684,8 @@ pub(super) fn marker_step(
             p.prompt.record(Some((&partial.bytes, &plain)), now_ms());
         }
     }
-    p.room_block.end();
-    p.fight_tail = false;
+    c.room_block.end();
+    c.fight_tail = false;
     steps
 }
 
@@ -696,7 +697,7 @@ pub(super) fn marker_step(
 /// wrote.
 pub(super) fn partial_step(
     p: &mut Profile,
-    c: &Connection,
+    c: &mut Connection,
     accumulator: &mut LineAccumulator,
     batch: &mut ReadBatch,
     now: Instant,

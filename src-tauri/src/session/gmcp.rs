@@ -196,10 +196,10 @@ async fn character_named<R: tauri::Runtime>(
 
 /// What a GMCP packet does to the profile and the connection, under the
 /// locks the caller holds: the variables and the custom prompt take it,
-/// the connection keeps Room.Chars for the target commands, a World.Time
-/// hour change is the tick, and Lua GMCP handlers run. Returns the tick
-/// step and what the handlers asked for, which the caller delivers once
-/// the locks drop.
+/// the connection keeps Room.Chars for the target commands and follows
+/// the room look and the end of a fight, a World.Time hour change is the
+/// tick, and Lua GMCP handlers run. Returns the tick step and what the
+/// handlers asked for, which the caller delivers once the locks drop.
 pub(super) fn gmcp_step(
     p: &mut Profile,
     c: &mut Connection,
@@ -214,7 +214,7 @@ pub(super) fn gmcp_step(
     // The fight is over, and the text of the round that ended it is
     // still to come.
     if fought && !p.prompt.vars.gmcp().fighting() {
-        p.fight_tail = true;
+        c.fight_tail = true;
     }
     // The connection keeps the latest Room.Chars list, so a bare
     // `tar <index>`, `tarn` or `tarp` resolves against the current room
@@ -223,7 +223,7 @@ pub(super) fn gmcp_step(
         if let Some(arr) = msg.data.as_array() {
             // The look this packet goes with lists one line for each
             // entry after its things.
-            p.room_block.room_chars(arr.len());
+            c.room_block.room_chars(arr.len());
             let chars = input::target::read_room_chars(arr);
             input::target::set_room_chars(c, &mut p.vars, chars);
         }
@@ -232,7 +232,7 @@ pub(super) fn gmcp_step(
     // objects share, five spaces or their count before it.
     if msg.package == "Room.Items" {
         if let Some(arr) = msg.data.as_array() {
-            p.room_block.room_items(arr.len());
+            c.room_block.room_items(arr.len());
         }
     }
     let tick_step = crate::tick::observe_world_time_for_tick(&mut p.tick, msg, now);

@@ -132,8 +132,8 @@ fn wire(events: &[LookEvent]) -> Vec<u8> {
 }
 
 /// One socket read of `data` through the steps the session runs for each
-/// event, then the end of the read, with your target and the room list in
-/// `c`. Returns what the terminal gets.
+/// event, then the end of the read, with your target, the room list and
+/// the room look in `c`. Returns what the terminal gets.
 fn read(p: &mut Profile, c: &mut Connection, data: &[u8]) -> String {
     let mut parser = Parser::new();
     let mut acc = LineAccumulator::new();
