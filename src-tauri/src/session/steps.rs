@@ -298,11 +298,14 @@ fn text_line_step(
     p.prompt.stage.set_collapse(collapse);
     // In a fight and Attack lines say whether a line of a fight and an
     // attack line join a run. The pulse's Char.Combat came before its
-    // text, so the line reads the fight it belongs to.
+    // text, so the line reads the fight it belongs to. The round that
+    // ends a fight comes after the Char.Combat {} that ended it, and its
+    // lines are still the fight's until the prompt that ends it.
     let rules = vosh_prompt::stage::CollapseRules {
         fights: p.ui.collapse_fight_lines,
         attacks: p.ui.collapse_attack_lines,
     };
+    let fighting = p.prompt.vars.gmcp().fighting() || p.fight_tail;
     let mut repeat = None;
     // Whether the ring keeps the line. While Collapse repeated lines is
     // on, it keeps what the screen shows, so the line end a pinned
@@ -321,7 +324,7 @@ fn text_line_step(
                     .display
                     .as_ref()
                     .is_some_and(|text| vosh_prompt::stage::collapsible(text.as_bytes()))
-                && rules.takes(p.prompt.vars.gmcp().fighting(), &plain) =>
+                && rules.takes(fighting, &plain) =>
         {
             let text = result.display.as_deref().unwrap_or_default().as_bytes();
             let made = p
@@ -403,8 +406,10 @@ fn prompt_block(
     now: Instant,
     log_session_id: Option<i64>,
 ) -> LineStep {
-    // Your prompt ends any room look before it.
+    // Your prompt ends any room look before it, and the round that
+    // ended a fight.
     p.room_block.end();
+    p.fight_tail = false;
     let disagree = p.prompt.vars.capture(vosh_prompt::Capture {
         values: block.values.clone(),
         raw: Some(block.raw_text()),
@@ -618,8 +623,10 @@ pub(super) fn marker_step(
         let released = p.prompt.stage.release();
         let steps = released_steps(p, batch, released, now, log_session_id);
         p.prompt.record(None, now_ms());
-        // The marker ends any room look before it.
+        // The marker ends any room look before it, and the round that
+        // ended a fight.
         p.room_block.end();
+        p.fight_tail = false;
         return steps;
     };
     let plain = vosh_protocol::ansi::plain_text(&partial.bytes);
@@ -650,6 +657,7 @@ pub(super) fn marker_step(
         }
     }
     p.room_block.end();
+    p.fight_tail = false;
     steps
 }
 

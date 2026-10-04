@@ -196,11 +196,11 @@ pub(crate) struct UiConfig {
     /// before.
     #[serde(default, skip_serializing_if = "is_false")]
     pub collapse_repeats: bool,
-    /// In a fight, under Collapse repeated lines: the lines that come while
-    /// Char.Combat names a target collapse. On by default, and a file
-    /// written before this choice reads it on. Off, every line of a fight
-    /// shows, and attack lines show every line anywhere. Written only
-    /// while off.
+    /// In a fight, under Collapse repeated lines: the lines of a fight
+    /// collapse, from the round Char.Combat names a target in to the round
+    /// that ends the fight. On by default, and a file written before this
+    /// choice reads it on. Off, every line of a fight shows, and attack
+    /// lines show every line anywhere. Written only while off.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub collapse_fight_lines: bool,
     /// Attack lines, under Collapse repeated lines: the hits and misses

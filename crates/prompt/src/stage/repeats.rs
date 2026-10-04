@@ -102,9 +102,10 @@ pub fn collapsible(line: &[u8]) -> bool {
 /// the run before it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CollapseRules {
-    /// In a fight: the lines that come while Char.Combat names a target
-    /// collapse. On at first. Off, every line of a fight shows, attack
-    /// lines too, wherever they come.
+    /// In a fight: the lines of a fight collapse, from the round
+    /// Char.Combat names a target in to the round that ends the fight. On
+    /// at first. Off, every line of a fight shows, attack lines too,
+    /// wherever they come.
     pub fights: bool,
     /// Attack lines: the hits and misses `dam_message` prints collapse,
     /// in a fight or not (see [`attack_line`]). Off at first, so a count
@@ -129,9 +130,13 @@ impl CollapseRules {
     }
 
     /// True when Collapse repeated lines takes a line that reads `plain`
-    /// without its colors. `fighting` says Char.Combat named a target as
-    /// it came. The game sends a pulse's packets before its text, so a
-    /// line of a round reads the round's own Char.Combat.
+    /// without its colors. `fighting` says the line belongs to a fight:
+    /// Char.Combat named a target as it came, or the round it belongs to
+    /// ended the fight. The game sends a pulse's packets before its text,
+    /// so a line of a round reads the round's own Char.Combat. The `{}`
+    /// that ends a fight comes in the middle of the round that ends it,
+    /// before all of that round's text, so the session counts that round
+    /// as the fight's until the prompt that ends it.
     pub fn takes(self, fighting: bool, plain: &str) -> bool {
         if fighting && !self.fights {
             return false;
