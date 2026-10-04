@@ -51,7 +51,7 @@ fn slash_script_load(
         Ok(c) => c,
         Err(e) => return InputResult::error(format!("read failed: {e} ({})", path.display())),
     };
-    script::snapshot_vars(&profile.script, &profile.vars);
+    script::refresh_vars(&profile.script, &profile.vars);
     let outcome =
         profile
             .script
@@ -76,7 +76,7 @@ fn slash_script_reload(
     let Some(app_data) = state.app_data.get() else {
         return InputResult::error("could not resolve scripts directory");
     };
-    script::snapshot_vars(&profile.script, &profile.vars);
+    script::refresh_vars(&profile.script, &profile.vars);
     let mut outcome = ScriptOutcome::default();
     for owner in profile.script.reload_order() {
         match read_again(app_data, &owner) {
@@ -156,7 +156,7 @@ pub(super) fn slash_lua(
     if code.is_empty() {
         return InputResult::error("usage #lua <code>");
     }
-    script::snapshot_vars(&profile.script, &profile.vars);
+    script::refresh_vars(&profile.script, &profile.vars);
     let outcome = profile.script.eval(code, "=#lua");
     lua.append(script::apply_actions(profile, outcome));
     InputResult::empty()
