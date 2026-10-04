@@ -670,3 +670,129 @@ async fn a_switch_moves_one_session_and_each_profile_saves_to_its_own_file() {
     h.disconnect_session(two).await;
     h.finish(grid).await;
 }
+
+/// Open a session on the profile `name`, as the page does with the
+/// session form's Profile row.
+async fn open_session_on(h: &Harness, name: &str) -> SessionId {
+    crate::ipc::session::session_open(h.app.handle().clone(), h.app.state(), Some(name.into()))
+        .await
+        .expect("a new session")
+}
+
+/// The names of the profiles the sessions play, in the order they
+/// opened.
+fn open_names(h: &Harness) -> Vec<String> {
+    h.state
+        .open_profiles()
+        .iter()
+        .filter_map(|open| open.name())
+        .collect()
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_session_on_its_own_profile_saves_only_that_file_and_closing_it_closes_the_profile() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    let two = open_session_on(&h, "Healer").await;
+    let second = h.state.session(Some(two)).expect("the second session");
+    assert_eq!(second.profile().name().as_deref(), Some("Healer"));
+    assert_eq!(open_names(&h), [DEFAULT_PROFILE_NAME, "Healer"]);
+    h.connect_to(two, &h.servers[1]).await;
+    h.until("the second login", |h| {
+        shows(h, two, "Welcome to the fake Aabahran, Tester.")
+    })
+    .await;
+
+    let (default_file, healer_file) = (
+        h.profile_file(DEFAULT_PROFILE_NAME).await,
+        h.profile_file("Healer").await,
+    );
+    crate::disk::save::tests::persist(&h.state).await;
+    let default_backups = backups(&default_file);
+    h.type_in(two, "#alias hh spam 2").await;
+    h.until("the Healer save", |_| saved_aliases(&healer_file, "hh") > 0)
+        .await;
+    let healer_backups = backups(&healer_file);
+    h.type_in(two, "#profile save").await;
+    h.until("the save in the second session", |h| {
+        shows(h, two, "profile saved to")
+    })
+    .await;
+    assert_eq!(backups(&healer_file), healer_backups + 1);
+    assert_eq!(saved_aliases(&default_file, "hh"), 0);
+    assert_eq!(backups(&default_file), default_backups);
+
+    // A change the debounce has yet to write saves as the session closes.
+    second.lock_profile().await.vars.set("home", "Hollow");
+    crate::ipc::session::session_close(h.app.handle().clone(), h.app.state(), two)
+        .await
+        .expect("the second session closes");
+    assert!(second.slot.lock().await.is_none(), "its connection ended");
+    assert!(h.state.session(Some(two)).is_err());
+    assert_eq!(open_names(&h), [DEFAULT_PROFILE_NAME]);
+    let saved = crate::profile::file::ProfileConfig::load(&healer_file).expect("Healer's file");
+    assert_eq!(
+        saved.profile_vars.get("home").map(String::as_str),
+        Some("Hollow")
+    );
+    // Vosh keeps the only session.
+    assert_eq!(
+        crate::ipc::session::session_close(h.app.handle().clone(), h.app.state(), h.first).await,
+        Err(crate::sessions::ONLY_SESSION.to_string())
+    );
+
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test]
+async fn a_profile_a_session_plays_stays_on_delete_and_renames_for_every_session_on_it() {
+    // A selection shows the session's grid, which other tests read.
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    let two = open_session_on(&h, "Healer").await;
+    let three = open_session_on(&h, "Healer").await;
+    // With the second session selected, profiles.toml names Healer, and
+    // Default stays open for the first.
+    crate::ipc::session::session_select(h.app.state(), two)
+        .await
+        .expect("the selection moves");
+    assert_eq!(h.state.active_profile().as_deref(), Some("Healer"));
+    assert_eq!(
+        crate::profile::set::delete_profile(&h.state, DEFAULT_PROFILE_NAME).await,
+        Err(
+            crate::profile::set::ProfileSetError::CannotDeleteActive(DEFAULT_PROFILE_NAME.into())
+                .to_string()
+        )
+    );
+    assert!(h
+        .state
+        .profile_set
+        .lock()
+        .await
+        .as_ref()
+        .expect("the set")
+        .get(DEFAULT_PROFILE_NAME)
+        .is_some());
+
+    crate::profile::set::rename_profile(&h.state, "Healer", "Cleric")
+        .await
+        .expect("the rename");
+    for id in [two, three] {
+        let session = h.state.session(Some(id)).expect("the session");
+        assert_eq!(session.profile().name().as_deref(), Some("Cleric"));
+        let shown = crate::prompt::client_values(
+            &*session.lock_profile().await,
+            &session.connection.lock(),
+            tokio::time::Instant::now(),
+        );
+        assert_eq!(shown.profile.as_deref(), Some("Cleric"));
+    }
+    assert_eq!(open_names(&h), [DEFAULT_PROFILE_NAME, "Cleric"]);
+    assert_eq!(h.state.active_profile().as_deref(), Some("Cleric"));
+}

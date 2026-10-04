@@ -26,77 +26,84 @@ use crate::session::connection::Connection;
 use crate::sessions::Session;
 use crate::tick::TickConfig;
 
-/// The files a switch to a profile loads: its own file, None for a
-/// profile that never saved one, and global.toml, None before the first
-/// save.
-struct SwitchFiles {
+/// The files a profile opens from: its own file, None for a profile that
+/// never saved one, and global.toml, None before the first save.
+struct ProfileFiles {
     per_profile: Option<ProfileConfig>,
     global: Option<GlobalConfig>,
+    /// Where the profile's own file lives, or would.
+    path: std::path::PathBuf,
 }
 
-/// Read the files a switch to `name` loads, away from `leaving`, the
-/// profile the session plays. When the session is `selected`, point the
-/// index at `name` once both read. A file that does not read changes
-/// nothing, so the session stays on the profile it plays.
-fn open_profile_for_switch(
-    set: &mut crate::profile::set::ProfileSet,
-    name: &str,
-    leaving: &str,
-    selected: bool,
-) -> Result<SwitchFiles, String> {
-    use crate::profile::set::{display_name, ProfileSetError};
-    if set.get(name).is_none() {
-        return Err(ProfileSetError::NotFound(name.to_string()).to_string());
-    }
-    let refused = |what: &str| {
-        format!(
-            "Vosh could not open the {} profile because it could not read {what}. You are \
-             still using the {} profile.",
-            display_name(name),
-            display_name(leaving),
-        )
-    };
-    let path = set.profile_path(name);
-    let per_profile = if path.exists() {
-        match ProfileConfig::load(&path) {
-            Ok(config) => Some(config),
-            Err(e) => {
-                warn!(error = %e, path = %path.display(), "profile file unreadable at switch");
-                return Err(refused("the profile file"));
+impl ProfileFiles {
+    /// Read the files the profile `name` opens from. A file that does not
+    /// read is an error that names it, and that adds that you still use
+    /// the profile `using` when a switch asks.
+    fn read(
+        set: &crate::profile::set::ProfileSet,
+        name: &str,
+        using: Option<&str>,
+    ) -> Result<Self, String> {
+        use crate::profile::set::{display_name, ProfileSetError};
+        if set.get(name).is_none() {
+            return Err(ProfileSetError::NotFound(name.to_string()).to_string());
+        }
+        let refused = |what: &str| {
+            let refusal = format!(
+                "Vosh could not open the {} profile because it could not read {what}.",
+                display_name(name)
+            );
+            match using {
+                Some(using) => format!(
+                    "{refusal} You are still using the {} profile.",
+                    display_name(using)
+                ),
+                None => refusal,
             }
-        }
-    } else {
-        None
-    };
-    let global_path = set.global_path();
-    // Only the categories the scope shares, so a value global.toml still
-    // holds from before cannot cover the one the profile file owns.
-    let global = match GlobalConfig::load_shared(&global_path, set.scope()) {
-        Ok(config) => config,
-        Err(e) => {
-            warn!(error = %e, path = %global_path.display(), "global config unreadable at switch");
-            return Err(refused("global.toml, which holds your shared settings"));
-        }
-    };
-    if selected {
-        set.switch(name).map_err(|e| e.to_string())?;
+        };
+        let path = set.profile_path(name);
+        let per_profile = if path.exists() {
+            match ProfileConfig::load(&path) {
+                Ok(config) => Some(config),
+                Err(e) => {
+                    warn!(error = %e, path = %path.display(), "profile file unreadable at open");
+                    return Err(refused("the profile file"));
+                }
+            }
+        } else {
+            None
+        };
+        let global_path = set.global_path();
+        // Only the categories the scope shares, so a value global.toml
+        // still holds from before cannot cover the one the profile file
+        // owns.
+        let global = match GlobalConfig::load_shared(&global_path, set.scope()) {
+            Ok(config) => config,
+            Err(e) => {
+                warn!(error = %e, path = %global_path.display(), "global config unreadable at open");
+                return Err(refused("global.toml, which holds your shared settings"));
+            }
+        };
+        Ok(Self {
+            per_profile,
+            global,
+            path,
+        })
     }
-    // Both files read, and the next profile is about to hold what they
-    // say, so the saves may write them again.
-    for path in [&path, &global_path] {
-        crate::disk::atomic::release_unread(path);
+
+    /// The profile's file read, and a profile is about to hold what it
+    /// says, so the saves may write it again. global.toml stays held
+    /// while another open profile may hold the defaults in its place.
+    fn release(&self) {
+        crate::disk::atomic::release_unread(&self.path);
     }
-    Ok(SwitchFiles {
-        per_profile,
-        global,
-    })
 }
 
 /// A profile as a switch opens it from `files`: its file or a fresh one,
 /// global.toml over it, then in loadout mode the catalog with the
 /// loadouts, so no save finds it without its aliases, triggers and
 /// macros.
-async fn profile_from_files(state: &SharedState, files: SwitchFiles) -> Profile {
+async fn profile_from_files(state: &SharedState, files: ProfileFiles) -> Profile {
     let catalog = state.global_catalog.lock().await.clone();
     let loadouts = state.loadout_set.lock().await.clone();
     let mut p = Profile::default();
@@ -114,18 +121,35 @@ async fn profile_from_files(state: &SharedState, files: SwitchFiles) -> Profile 
     p
 }
 
+/// The open profile `name`, or when no session plays it, that profile
+/// read from its files and kept open. Call with [`PERSIST_LOCK`] held, so
+/// no other step opens or closes it meanwhile.
+pub(crate) async fn open_or_join(
+    state: &SharedState,
+    name: &str,
+) -> Result<Arc<OpenProfile>, String> {
+    if let Some(open) = state.open_profile(name) {
+        return Ok(open);
+    }
+    let files = ProfileFiles::read(&*state.loaded_profile_set().await?, name, None)?;
+    files.release();
+    let profile = profile_from_files(state, files).await;
+    Ok(state.add_open_profile(name, profile))
+}
+
 /// Steps 2 and 3 of a switch, after the save of the profile `session`
 /// leaves. Call with [`PERSIST_LOCK`] held. The session joins `name`
 /// when another session plays it, and otherwise opens it from its files,
-/// see [`profile_from_files`]. Either every step lands or none does. The
-/// session moves while it holds both profiles, so its next step finds
-/// the next profile whole, and its connection takes that profile's tick
-/// settings and `[prompt]` table and keeps the rest as it was. Its prompt
-/// drops the values the last profile's prompt read. The plugins the next
-/// profile turns on start in the session's engine and the others stop in
-/// the same step, and what they ask for comes back for the caller to
-/// deliver once the locks drop. The profile it left closes when no other
-/// session plays it.
+/// see [`profile_from_files`]. When the session is the selected one, the
+/// index then names `name` as active. Either every step lands or none
+/// does. The session moves while it holds both profiles, so its next step
+/// finds the next profile whole, and its connection takes that profile's
+/// tick settings and `[prompt]` table and keeps the rest as it was. Its
+/// prompt drops the values the last profile's prompt read. The plugins
+/// the next profile turns on start in the session's engine and the others
+/// stop in the same step, and what they ask for comes back for the caller
+/// to deliver once the locks drop. The profile it left closes when no
+/// other session plays it.
 pub(crate) async fn switch_live_profile(
     state: &SharedState,
     session: &Session,
@@ -133,29 +157,40 @@ pub(crate) async fn switch_live_profile(
 ) -> Result<ApplyResult, String> {
     let from = session.profile();
     let selected = state.selected_session().id == session.id;
-    let to = match state.open_profile(name) {
+    let point_index = || async {
+        if selected {
+            let mut set = state.loaded_profile_set().await?;
+            set.switch(name).map_err(|e| e.to_string())?;
+        }
+        Ok::<(), String>(())
+    };
+    let (to, read) = match state.open_profile(name) {
         // The session plays it already.
         Some(to) if Arc::ptr_eq(&to, &from) => return Ok(ApplyResult::default()),
         Some(to) => {
-            if selected {
-                let mut set = state.loaded_profile_set().await?;
-                set.switch(name).map_err(|e| e.to_string())?;
-            }
-            to
+            point_index().await?;
+            (to, false)
         }
         None => {
-            let files = {
-                let mut set = state.loaded_profile_set().await?;
-                let leaving = from.name().unwrap_or_default();
-                open_profile_for_switch(&mut set, name, &leaving, selected)?
-            };
+            let using = from.name().unwrap_or_default();
+            let files =
+                ProfileFiles::read(&*state.loaded_profile_set().await?, name, Some(&using))?;
+            point_index().await?;
+            files.release();
             let profile = profile_from_files(state, files).await;
-            state.add_open_profile(name, profile)
+            (state.add_open_profile(name, profile), true)
         }
     };
     let plugins = move_session(state, session, &from, &to).await;
     if state.close_unplayed(&from) {
         leave_file(state, &from).await;
+    }
+    // The one profile left open read global.toml in this switch, so the
+    // saves may write it again.
+    if read && state.open_profiles().len() == 1 {
+        if let Some(set) = state.profile_set.lock().await.as_ref() {
+            crate::disk::atomic::release_unread(&set.global_path());
+        }
     }
     Ok(plugins)
 }
@@ -204,7 +239,7 @@ async fn move_session(
 /// The file of `left`, a profile that just closed, no longer stands
 /// behind a profile in memory, and every other write to it reads it
 /// first, so a file that did not read at launch is safe from here on.
-async fn leave_file(state: &SharedState, left: &OpenProfile) {
+pub(crate) async fn leave_file(state: &SharedState, left: &OpenProfile) {
     let Some(name) = left.name() else {
         return;
     };

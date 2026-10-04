@@ -47,6 +47,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         native_surface::native_surface_set_blink_text,
         session::session_open,
         session::session_select,
+        session::session_close,
         session::session_connect,
         session::session_send_input,
         session::session_send_masked,

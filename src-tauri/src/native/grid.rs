@@ -458,6 +458,13 @@ pub(crate) fn show(session: SessionId) {
     }
 }
 
+/// Drop the grid of `session`, which closed, with its find and its bands.
+pub(crate) fn forget(session: SessionId) {
+    if let Ok(mut grids) = GRIDS.lock() {
+        grids.by_session.remove(&session);
+    }
+}
+
 /// The session whose grid shows.
 pub(crate) fn shown() -> SessionId {
     GRIDS.lock().map_or(SessionId::FIRST, |grids| grids.shown)

@@ -164,6 +164,18 @@ pub(crate) async fn save_then_broadcast<R: tauri::Runtime, S: serde::Serialize +
     event: &str,
     payload: &S,
 ) {
+    save_by(app, state, open, policy).await;
+    broadcast(app, event, payload);
+}
+
+/// Save `open` by `policy`, for a command that tells no window of the
+/// change but the ones its caller picks.
+pub(crate) async fn save_by<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    open: &Arc<OpenProfile>,
+    policy: SavePolicy,
+) {
     match policy {
         SavePolicy::Now => persist_profile(state, open).await,
         SavePolicy::NowUnlessHeld => {
@@ -173,7 +185,6 @@ pub(crate) async fn save_then_broadcast<R: tauri::Runtime, S: serde::Serialize +
         }
         SavePolicy::SoonUnlessHeld => schedule_profile_persist(app, open),
     }
-    broadcast(app, event, payload);
 }
 
 /// The body of [`persist_profile`]. Call with [`PERSIST_LOCK`] held. A

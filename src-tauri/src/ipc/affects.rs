@@ -3,23 +3,27 @@
 //! menu changes how it draws, and the tracked affects editor saves the
 //! list of affects it watches for.
 
+use std::sync::Arc;
+
 use serde_json::Value;
 use tauri::{AppHandle, State};
 
 use crate::affects::full::FullMap;
 use crate::app::events::{AffectsDisplay, AFFECTS_DISPLAY_CHANGED, TRACKED_AFFECTS_CHANGED};
 use crate::app::state::SharedState;
-use crate::disk::save::{save_then_broadcast, SavePolicy};
+use crate::disk::save::{save_by, save_then_broadcast, SavePolicy};
+use crate::profile::inactive::{broadcast_profile_changed, edit_inactive_profile, Stored};
 use crate::sessions::SessionId;
 
 /// Replace a profile's tracked affects without touching the rest of
 /// its UI config, so an editor outside Settings cannot write a stale
 /// snapshot over other fields. Returns the normalized list.
 ///
-/// With no `profile`, or the active one, the live profile takes the
-/// list, persists, and broadcasts it as `vosh://tracked-affects-changed`
-/// to every window. An inactive `profile` has its file rewritten
-/// instead, and only `vosh://profile-changed` goes out, since the
+/// With no `profile` the selected session's profile takes the list. A
+/// `profile` a session plays takes it in memory and saves, and any other
+/// has its file rewritten. The selected session's profile also
+/// broadcasts the list as `vosh://tracked-affects-changed` to every
+/// window. Any other sends only `vosh://profile-changed`, since the
 /// tracked affects event would hand another profile's list to the main
 /// window's store.
 #[tauri::command]
@@ -31,33 +35,44 @@ pub(crate) async fn tracked_affects_set(
 ) -> Result<Vec<crate::profile::ui::TrackedAffect>, String> {
     let list = crate::profile::ui::normalize_tracked_affects(list);
     let shared: SharedState = state.inner().clone();
-    if let Some(name) = profile.as_deref() {
-        let written =
-            crate::profile::inactive::edit_inactive_profile(&shared, name, |_, config| {
-                config.ui.tracked_affects.clone_from(&list);
-            })
-            .await?;
-        if written.is_some() {
-            crate::profile::inactive::broadcast_profile_changed(&app, name);
-            return Ok(list);
-        }
-    }
+    let named = match profile.as_deref() {
+        Some(name) => match edit_inactive_profile(&shared, name, |_, config| {
+            config.ui.tracked_affects.clone_from(&list);
+        })
+        .await?
+        {
+            Stored::File(()) => {
+                broadcast_profile_changed(&app, name);
+                return Ok(list);
+            }
+            Stored::Open(open) => Some(open),
+        },
+        None => None,
+    };
+    let selected = shared.selected_session();
     let open = {
-        let mut p = state.selected_session().lock_profile().await;
+        let mut p = match &named {
+            Some(open) => open.lock().await,
+            None => selected.lock_profile().await,
+        };
         p.ui.tracked_affects.clone_from(&list);
         p.open().clone()
     };
-    save_then_broadcast(
-        &app,
-        &shared,
-        &open,
-        SavePolicy::Now,
-        TRACKED_AFFECTS_CHANGED,
-        &list,
-    )
-    .await;
-    if let Some(active) = crate::profile::inactive::active_name(&shared).await {
-        crate::profile::inactive::broadcast_profile_changed(&app, &active);
+    if Arc::ptr_eq(&open, &selected.profile()) {
+        save_then_broadcast(
+            &app,
+            &shared,
+            &open,
+            SavePolicy::Now,
+            TRACKED_AFFECTS_CHANGED,
+            &list,
+        )
+        .await;
+    } else {
+        save_by(&app, &shared, &open, SavePolicy::Now).await;
+    }
+    if let Some(name) = open.name() {
+        broadcast_profile_changed(&app, &name);
     }
     Ok(list)
 }
