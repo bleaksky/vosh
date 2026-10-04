@@ -1,0 +1,49 @@
+//! The Lua timers one poll of the session fires as a round.
+
+use vosh_script::Owner;
+
+use crate::profile::live::Profile;
+use crate::script::{self, PendingTimer};
+use crate::session::lua_timers::fire_round;
+
+#[test]
+fn timers_a_plugin_had_no_time_for_go_back_on_the_list() {
+    let mut p = Profile {
+        script: vosh_script::testkit::engine_with_nap(),
+        ..Profile::default()
+    };
+    let loaded = p.script.load_script(
+        Owner::Plugin("slow".into()),
+        "@slow/main.lua",
+        "for i = 1, 6 do \
+           mud.timer(0, function() os.nap(30) mud.echo('slow ' .. i) end) \
+         end",
+    );
+    assert!(!loaded.failed, "{:?}", loaded.actions);
+    let due = script::apply_actions(&mut p, loaded).new_timers;
+    assert_eq!(due.len(), 6);
+    let (apply, held) = fire_round(&mut p, due.clone());
+    // Four naps use the budget, so one to four timers ran, the first ones.
+    let ran = apply
+        .echoes
+        .iter()
+        .filter(|line| line.starts_with("slow "))
+        .count();
+    assert!((1..=4).contains(&ran), "{:?}", apply.echoes);
+    assert_eq!(
+        apply.echoes.last().map(String::as_str),
+        Some(
+            "\x1b[90m[lua]\x1b[0m \x1b[31mslow used its 100 ms for this round of timers, \
+             so the rest of its timers wait for the next round.\x1b[0m"
+        )
+    );
+    // The rest come back as they were, deadline and id, for the next poll.
+    let key = |t: &PendingTimer| (t.timer_id, t.callback_id, t.deadline);
+    assert_eq!(
+        held.iter().map(key).collect::<Vec<_>>(),
+        due[ran..].iter().map(key).collect::<Vec<_>>()
+    );
+    // The next round runs the first of them.
+    let (next, _) = fire_round(&mut p, held);
+    assert_eq!(next.echoes.first(), Some(&format!("slow {}", ran + 1)));
+}
