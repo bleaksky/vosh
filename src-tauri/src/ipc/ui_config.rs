@@ -49,6 +49,7 @@ pub(crate) struct UiConfigPayload {
     pub vitals_hide_when_pinned: bool,
     pub chip_style: String,
     pub tick_count: String,
+    pub game_time: String,
     pub affects_style: String,
     pub affects_marker: String,
     pub affects_tint: bool,
@@ -107,6 +108,7 @@ impl UiConfigPayload {
             vitals_hide_when_pinned: ui.vitals_hide_when_pinned,
             chip_style: ui.chip_style.clone(),
             tick_count: ui.tick_count.clone(),
+            game_time: ui.game_time.clone(),
             affects_style: ui.affects_style.clone(),
             affects_marker: ui.affects_marker.clone(),
             affects_tint: ui.affects_tint,
@@ -157,6 +159,7 @@ impl UiConfigPayload {
             vitals_hide_when_pinned,
             chip_style,
             tick_count,
+            game_time,
             affects_style,
             affects_marker,
             affects_tint,
@@ -198,6 +201,7 @@ impl UiConfigPayload {
         ui.vitals_hide_when_pinned = vitals_hide_when_pinned;
         ui.chip_style = crate::profile::ui::coerce_chip_style(chip_style);
         ui.tick_count = crate::profile::ui::coerce_tick_count(tick_count);
+        ui.game_time = crate::profile::ui::coerce_game_time(game_time);
         ui.affects_style = crate::profile::ui::coerce_affects_style(affects_style);
         ui.affects_marker = crate::profile::ui::coerce_affects_marker(affects_marker);
         ui.affects_tint = affects_tint;
@@ -775,6 +779,19 @@ mod tests {
         // An unknown direction saves as counting up.
         ui.tick_count = "sideways".into();
         assert_eq!(through_payload(&ui).tick_count, "up");
+    }
+
+    #[test]
+    fn game_time_round_trips() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.game_time, "24h");
+        for clock in ["24h", "12h"] {
+            ui.game_time = clock.into();
+            assert_eq!(through_payload(&ui).game_time, clock);
+        }
+        // An unknown clock saves as the 24 hour one.
+        ui.game_time = "noon".into();
+        assert_eq!(through_payload(&ui).game_time, "24h");
     }
 
     #[test]

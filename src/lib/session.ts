@@ -2030,6 +2030,9 @@ export interface UiConfig {
   chip_style: ChipStyle;
   /** Which way the status line tick counts, one of TICK_COUNTS. */
   tick_count: TickCount;
+  /** The clock the status line reads the game time on, one of
+   *  GAME_TIMES. */
+  game_time: GameTime;
   /** The Affects pane's layout, one of AFFECTS_STYLES. */
   affects_style: AffectsStyle;
   /** The mark beside each tracked affect, one of AFFECTS_MARKERS. */
@@ -2067,6 +2070,17 @@ export type TickCount = (typeof TICK_COUNTS)[number];
 /** Read a stored or broadcast tick count. Anything unknown counts up. */
 export function normalizeTickCount(raw: unknown): TickCount {
   return TICK_COUNTS.find((count) => count === raw) ?? 'up';
+}
+
+/** The clocks the status line reads the game time on. `24h`, the
+ *  default, reads like 18:00, and `12h` like 6:00 PM. */
+export const GAME_TIMES = ['24h', '12h'] as const;
+export type GameTime = (typeof GAME_TIMES)[number];
+
+/** Read a stored or broadcast clock. Anything unknown is the 24 hour
+ *  clock. */
+export function normalizeGameTime(raw: unknown): GameTime {
+  return GAME_TIMES.find((clock) => clock === raw) ?? '24h';
 }
 
 // Dedupe the mount-time burst: App, Input, and the tracked affects
@@ -2119,6 +2133,7 @@ export interface RawUiConfig {
   vitals_hide_when_pinned?: boolean;
   chip_style?: string;
   tick_count?: string;
+  game_time?: string;
   affects_style?: string;
   affects_marker?: string;
   affects_tint?: boolean;
@@ -2216,6 +2231,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     vitals_hide_when_pinned: cfg.vitals_hide_when_pinned !== false,
     chip_style: normalizeChipStyle(cfg.chip_style),
     tick_count: normalizeTickCount(cfg.tick_count),
+    game_time: normalizeGameTime(cfg.game_time),
     affects_style: normalizeAffectsStyle(cfg.affects_style),
     affects_marker: normalizeAffectsMarker(cfg.affects_marker),
     affects_tint: cfg.affects_tint === true,
@@ -2366,6 +2382,7 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   );
   await emitChanged('vosh://chip-style-changed', config.chip_style, prev?.chip_style);
   await emitChanged('vosh://tick-count-changed', config.tick_count, prev?.tick_count);
+  await emitChanged('vosh://game-time-changed', config.game_time, prev?.game_time);
   const display = affectsDisplayOf(config);
   const prevDisplay = prev ? affectsDisplayOf(prev) : undefined;
   if (!prevDisplay || !deepEqual(display, prevDisplay)) noteAffectsDisplayEcho(display);
@@ -2597,6 +2614,7 @@ function uiConfigPayload(config: UiConfig): Record<string, unknown> {
     vitals_hide_when_pinned: config.vitals_hide_when_pinned,
     chip_style: config.chip_style,
     tick_count: config.tick_count,
+    game_time: config.game_time,
     affects_style: config.affects_style,
     affects_marker: config.affects_marker,
     affects_tint: config.affects_tint,
@@ -2646,6 +2664,15 @@ export async function subscribeTickCountChanged(
 ): Promise<UnlistenFn> {
   return listen<unknown>('vosh://tick-count-changed', (event) => {
     cb(normalizeTickCount(event.payload));
+  });
+}
+
+/** Hear a new game time clock saved from Settings, or the one a
+ *  profile switch brings. setUiConfig emits it to every window, so the
+ *  main window's status line follows at once. */
+export async function subscribeGameTimeChanged(cb: (value: GameTime) => void): Promise<UnlistenFn> {
+  return listen<unknown>('vosh://game-time-changed', (event) => {
+    cb(normalizeGameTime(event.payload));
   });
 }
 
