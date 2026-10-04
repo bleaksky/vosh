@@ -20,7 +20,7 @@ use crate::profile::panes::PaneLayoutPersist;
 pub(crate) async fn pane_layout_get(
     state: State<'_, SharedState>,
 ) -> Result<PaneLayoutEnvelope, String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_session().lock_profile().await;
     Ok(pane_layout_envelope(&state, &p))
 }
 
@@ -45,7 +45,7 @@ pub(crate) async fn pane_layout_set(
     let mut layout = layout;
     layout.sanitize();
     let current = {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         let current = state.panes_generation();
         if generation.is_some_and(|g| g != current) {
             return Ok(false);

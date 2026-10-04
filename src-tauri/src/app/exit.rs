@@ -291,10 +291,7 @@ fn flush_profile_on_exit(app_handle: &AppHandle) {
     state.affect_full.flush();
     // Honor a #profile reset/load: the in-memory profile is
     // deliberately diverged from disk; do not write it back.
-    if state
-        .auto_persist_suppressed
-        .load(std::sync::atomic::Ordering::Acquire)
-    {
+    if state.selected_session().profile().held() {
         info!("exit flush: skipped, persist suppressed by profile reset or load");
         return;
     }

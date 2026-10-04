@@ -424,7 +424,7 @@ impl Harness {
         let h = Self::unread().await;
         let session = h.state.selected_session();
         crate::prompt::take_config(
-            &mut *h.state.profile.lock().await,
+            &mut *h.state.selected_profile().await,
             &mut session.connection.lock(),
             vosh_prompt::PromptConfig {
                 capture: vosh_prompt::CaptureConfig::Aabahran(
@@ -490,7 +490,7 @@ impl Harness {
         *self.state.selected_session().slot.lock().await = Some(handle);
         self.until("the look at login", |h| h.text().contains("[Exits:"))
             .await;
-        let reads = !self.state.profile.lock().await.prompt.capture.is_none();
+        let reads = !self.state.selected_profile().await.prompt.capture.is_none();
         if !reads {
             return;
         }
@@ -998,7 +998,7 @@ async fn an_alias_a_macro_and_a_piece_of_a_line_each_walk() {
     let _grid = grid();
     let h = Harness::new().await;
     {
-        let mut p = h.state.profile.lock().await;
+        let mut p = h.state.selected_profile().await;
         p.aliases.set(vosh_automation::alias::Alias::new(
             "road",
             "#walk w;get all",
@@ -1022,7 +1022,7 @@ async fn an_alias_a_macro_and_a_piece_of_a_line_each_walk() {
 
     // A macro sends its command the way the command line sends a line,
     // and a script alias it holds runs once you arrive.
-    let command = h.state.profile.lock().await.macros[0].command.clone();
+    let command = h.state.selected_profile().await.macros[0].command.clone();
     h.type_line(&command).await;
     h.until_heard(&["w", "get all", "e", "kick"]).await;
     assert_eq!(h.here(), FOUNTAIN);

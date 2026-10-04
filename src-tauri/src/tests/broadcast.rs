@@ -209,7 +209,7 @@ fn the_prompt_table_event_names_the_active_profile() {
     // Before any profile loads it names none.
     crate::app::events::broadcast_list_changes(handle, ListChanges::PROMPT);
     let state: SharedState = app.state::<SharedState>().inner().clone();
-    state.note_active_profile("Second");
+    state.selected_session().profile().set_name("Second");
     crate::app::events::broadcast_prompt_config_changed(handle);
     app.unlisten(id);
     assert_eq!(
@@ -327,7 +327,7 @@ fn a_loadout_switch_tells_the_command_line_when_a_macro_group_turned() {
             dormant: false,
             loadouts: vec![fight, walk],
         });
-        state.profile.lock().await.macros = vec![
+        state.selected_profile().await.macros = vec![
             grouped_macro("F1", "kick", "combat"),
             grouped_macro("F2", "north", "travel"),
         ];
@@ -336,7 +336,7 @@ fn a_loadout_switch_tells_the_command_line_when_a_macro_group_turned() {
             crate::loadouts::set::set_active_loadouts(handle, active)
         };
         let off = || async {
-            let p = state.profile.lock().await;
+            let p = state.selected_profile().await;
             p.disabled_macro_groups.iter().cloned().collect::<Vec<_>>()
         };
 
@@ -376,7 +376,7 @@ fn a_group_switch_tells_every_window_once() {
     let mut heard = Report::new();
     let mut want = Report::new();
     tauri::async_runtime::block_on(async {
-        state.profile.lock().await.macros = vec![grouped_macro("F1", "kick", "combat")];
+        state.selected_profile().await.macros = vec![grouped_macro("F1", "kick", "combat")];
         let turn = |enabled| {
             crate::ipc::automation::groups_set_enabled(
                 handle.clone(),

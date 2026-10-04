@@ -1,16 +1,20 @@
 //! The sessions the app holds. Each [`Session`] keeps what one connection
-//! holds apart from the profile, and [`Sessions`] lists them in order
-//! with the one selected. The app starts with one session, selected, and
-//! a command that names no session acts on the selected one.
+//! holds apart from the profile and points at the profile it plays, and
+//! [`Sessions`] lists them in order with the one selected, beside the
+//! profiles they play, each open once. The app starts with one session,
+//! selected, and a command that names no session acts on the selected
+//! one.
 //!
-//! The map's lock comes ahead of every other lock of the app. A step
-//! takes it only to find, add or remove a session or to read or change
-//! the selection, and no holder awaits. A holder takes no other lock but
-//! one: a change of selection shows the grid of the session it selects,
-//! which takes the native grid map and then the pointer's state, and
-//! neither of those holders ever takes the session map. No step takes it
-//! while it holds a session slot, a profile or a connection, so each step
-//! resolves its session before it takes any other lock.
+//! The map's lock comes after the save lock and ahead of every other
+//! lock of the app. A step takes it only to find, add or remove a session
+//! or an open profile or to read or change the selection, and no holder
+//! awaits. A holder takes no other lock but leaf locks, a session's
+//! profile pointer and an open profile's name, and one more: a change of
+//! selection shows the grid of the session it selects, which takes the
+//! native grid map and then the pointer's state, and neither of those
+//! holders ever takes the session map. No step takes it while it holds a
+//! session slot, a profile or a connection, so each step resolves its
+//! session before it takes any other lock.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -23,6 +27,8 @@ use vosh_automation::StopKey;
 
 use crate::affects::snapshot::AffectsSnapshot;
 use crate::logs::SharedScrollback;
+use crate::profile::live::Profile;
+use crate::profile::open::{OpenProfile, ProfileGuard};
 use crate::script::SharedTimers;
 use crate::session::connection::{Connection, SharedConnection};
 use crate::session::SessionHandle;
@@ -49,9 +55,14 @@ impl SessionId {
 /// connection, what that connection shares with the commands, its Lua
 /// timers and scrollback, the count of what reached its terminal, and
 /// what the app keeps about its connection, the host and port, the
-/// character logged in, the terminal size and the last affects.
+/// character logged in, the terminal size and the last affects. It
+/// points at the profile it plays.
 pub(crate) struct Session {
     pub(crate) id: SessionId,
+    /// The profile the session plays. A leaf lock, held for a copy. A
+    /// switch moves it while it holds the profile it leaves locked, see
+    /// [`Session::lock_profile`].
+    profile: std::sync::Mutex<Arc<OpenProfile>>,
     /// The handle to the task that runs the connection, while one runs.
     /// It comes before every lock the task takes, since `disconnect`
     /// holds it while the task ends, and the task locks the profile, the
@@ -109,9 +120,10 @@ pub(crate) struct Session {
 }
 
 impl Session {
-    fn new(id: SessionId) -> Self {
+    fn new(id: SessionId, profile: Arc<OpenProfile>) -> Self {
         Self {
             id,
+            profile: std::sync::Mutex::new(profile),
             slot: Mutex::new(None),
             connection: SharedConnection::new(Connection {
                 stop_key: id.stop_key(),
@@ -131,6 +143,37 @@ impl Session {
             launch_lua_lines: std::sync::Mutex::new(Vec::new()),
             output_count: AtomicU64::new(0),
         }
+    }
+
+    /// The profile the session plays.
+    pub(crate) fn profile(&self) -> Arc<OpenProfile> {
+        self.profile
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Lock the profile the session plays. A switch moves the session
+    /// while it holds the profile it leaves, so a step that waited for
+    /// that lock finds the session gone from it and takes the next one.
+    pub(crate) async fn lock_profile(&self) -> ProfileGuard {
+        loop {
+            let open = self.profile();
+            let guard = open.lock().await;
+            if Arc::ptr_eq(&open, &self.profile()) {
+                return guard;
+            }
+        }
+    }
+
+    /// Point the session at `open`. Call with the profile it plays now
+    /// locked, and `open` too, so no step of the session runs between
+    /// the two.
+    pub(crate) fn play(&self, open: Arc<OpenProfile>) {
+        *self
+            .profile
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = open;
     }
 
     /// How many outputs reached the session's terminal so far, see
@@ -172,7 +215,8 @@ struct Named<'a, T> {
     payload: &'a T,
 }
 
-/// The sessions in the order the window lists them, and the one selected.
+/// The sessions in the order the window lists them, the one selected,
+/// and the profiles they play.
 pub(crate) struct Sessions {
     list: Vec<Arc<Session>>,
     /// Always names a session in `list`.
@@ -180,16 +224,54 @@ pub(crate) struct Sessions {
     /// The number the next session takes. It only grows, so a late event
     /// from a session that closed never names a newer one.
     next: u32,
+    /// The profiles the sessions play, each once, in the order they
+    /// opened.
+    profiles: Vec<Arc<OpenProfile>>,
+    /// The place the next profile to open takes in that order.
+    next_profile: u64,
 }
 
 impl Sessions {
-    /// Add a session after the others, with nothing connected, and return
-    /// it. It plays the live profile, the one every session plays.
-    pub(crate) fn open(&mut self) -> Arc<Session> {
-        let session = Arc::new(Session::new(SessionId(self.next)));
+    /// Add a session after the others, with nothing connected, that
+    /// plays `profile`, and return it.
+    pub(crate) fn open(&mut self, profile: Arc<OpenProfile>) -> Arc<Session> {
+        let session = Arc::new(Session::new(SessionId(self.next), profile));
         self.next += 1;
         self.list.push(session.clone());
         session
+    }
+
+    /// The open profile named `name`, while a session plays it.
+    pub(crate) fn profile(&self, name: &str) -> Option<Arc<OpenProfile>> {
+        self.profiles
+            .iter()
+            .find(|open| open.name().as_deref() == Some(name))
+            .cloned()
+    }
+
+    /// Keep `profile`, which `name` names in the profile set, open, for a
+    /// session to play.
+    pub(crate) fn add_profile(&mut self, name: &str, profile: Profile) -> Arc<OpenProfile> {
+        let open = Arc::new(OpenProfile::new(
+            self.next_profile,
+            Some(name.to_string()),
+            profile,
+        ));
+        self.next_profile += 1;
+        self.profiles.push(open.clone());
+        open
+    }
+
+    /// Close `open` when no session plays it. Returns whether it closed.
+    pub(crate) fn close_unplayed(&mut self, open: &Arc<OpenProfile>) -> bool {
+        let played = self
+            .list
+            .iter()
+            .any(|session| Arc::ptr_eq(&session.profile(), open));
+        if !played {
+            self.profiles.retain(|kept| !Arc::ptr_eq(kept, open));
+        }
+        !played
     }
 
     /// Select the session `id` names, and show its grid in the place of
@@ -220,12 +302,16 @@ impl Sessions {
 }
 
 impl Default for Sessions {
-    /// One session, selected.
+    /// One session, selected, on the defaults until launch loads a
+    /// profile.
     fn default() -> Self {
+        let defaults = Arc::new(OpenProfile::new(0, None, Profile::default()));
         Self {
-            list: vec![Arc::new(Session::new(SessionId::FIRST))],
+            list: vec![Arc::new(Session::new(SessionId::FIRST, defaults.clone()))],
             selected: SessionId::FIRST,
             next: 2,
+            profiles: vec![defaults],
+            next_profile: 1,
         }
     }
 }
@@ -241,7 +327,14 @@ mod tests {
     use super::{Session, SessionId, NO_SUCH_SESSION};
     use crate::app::events;
     use crate::app::state::AppState;
+    use crate::profile::live::Profile;
     use crate::session::{StatePayload, TargetPayload};
+
+    /// A session `id` that plays the defaults.
+    fn on_defaults(id: SessionId) -> Session {
+        let defaults = crate::profile::open::OpenProfile::new(0, None, Profile::default());
+        Session::new(id, Arc::new(defaults))
+    }
 
     fn app() -> App<MockRuntime> {
         mock_builder()
@@ -265,7 +358,7 @@ mod tests {
         let app = app();
         let states = hear(&app, events::STATE);
         let targets = hear(&app, events::TARGET);
-        let session = Session::new(SessionId(7));
+        let session = on_defaults(SessionId(7));
         session.emit(
             app.handle(),
             events::STATE,
@@ -306,7 +399,7 @@ mod tests {
         let _grid = crate::native::grid::lock_shared_grid_for_test();
         let app = app();
         let outputs = hear(&app, events::OUTPUT);
-        let (one, two) = (Session::new(SessionId(1)), Session::new(SessionId(2)));
+        let (one, two) = (on_defaults(SessionId(1)), on_defaults(SessionId(2)));
         crate::output::echo_lines(app.handle(), &two, &["You wave.".to_string()]);
         assert_eq!((one.output_count(), two.output_count()), (0, 1));
         assert_eq!(outputs.lock().unwrap()[0]["session"], 2);
@@ -330,7 +423,8 @@ mod tests {
         let app = app();
         let frames = hear(&app, crate::output::TEST_FRAME_EVENT);
         let state = AppState::default();
-        let (one, two) = (state.selected_session(), state.open_session());
+        let one = state.selected_session();
+        let two = state.open_session(one.profile());
         crate::output::echo_lines(app.handle(), &two, &["You wave.".to_string()]);
         assert_eq!(frames.lock().unwrap().len(), 0);
         crate::output::echo_lines(app.handle(), &one, &["You nod.".to_string()]);
@@ -350,7 +444,9 @@ mod tests {
         // A selection shows the session's grid, which other tests read.
         let _grid = crate::native::grid::lock_shared_grid_for_test();
         let state = AppState::default();
-        let (two, three) = (state.open_session().id, state.open_session().id);
+        let defaults = state.selected_session().profile();
+        let two = state.open_session(defaults.clone()).id;
+        let three = state.open_session(defaults).id;
         assert_eq!((two, three), (SessionId(2), SessionId(3)));
         assert_eq!(state.selected_session().id, SessionId(1));
         assert_eq!(state.select_session(three), Ok(()));

@@ -146,7 +146,7 @@ fn presets_on(stored: &[String]) -> Vec<&'static str> {
 /// saves, as the real commands do.
 async fn preset_launch_plan(state: &SharedState) {
     let (remove, install) = {
-        let p = state.profile.lock().await;
+        let p = state.selected_profile().await;
         let on = presets_on(&p.ui.enabled_presets);
         let installed: BTreeSet<String> = p
             .triggers
@@ -161,7 +161,11 @@ async fn preset_launch_plan(state: &SharedState) {
         (remove, on)
     };
     for id in remove {
-        state.profile.lock().await.triggers.remove_by_preset(&id);
+        state
+            .selected_profile()
+            .await
+            .triggers
+            .remove_by_preset(&id);
         save(state).await;
     }
     let triggers: Vec<Trigger> = LIBRARY
@@ -171,7 +175,7 @@ async fn preset_launch_plan(state: &SharedState) {
         .collect();
     if !triggers.is_empty() {
         crate::loadouts::presets::install_preset_triggers(
-            &mut *state.profile.lock().await,
+            &mut *state.selected_profile().await,
             triggers,
         )
         .unwrap();
@@ -649,7 +653,7 @@ fn group_steps(seed: u64) -> Vec<(&'static str, bool)> {
 /// Run `steps` as `#group` commands on the live profile of `state`, and
 /// return the items on after each.
 async fn run_group_steps(state: &SharedState, steps: &[(&str, bool)]) -> Vec<Vec<String>> {
-    let mut p = state.profile.lock().await;
+    let mut p = state.selected_profile().await;
     steps
         .iter()
         .map(|(folder, on)| {
@@ -673,7 +677,7 @@ async fn before_wizard(
         copy_dir(dir, copy.path());
         let mut state = launch_as(copy.path(), name).await;
         let (settings_now, list) = {
-            let p = state.profile.lock().await;
+            let p = state.selected_profile().await;
             (
                 settings(ProfileConfig::from_profile(&p)),
                 p.ui.enabled_presets.clone(),
@@ -690,7 +694,7 @@ async fn before_wizard(
             config.save(&path).unwrap();
             state = launch_as(copy.path(), name).await;
         }
-        let on = on_rows(&*state.profile.lock().await);
+        let on = on_rows(&*state.selected_profile().await);
         out.push(Before {
             settings: settings_now,
             on,
@@ -733,7 +737,7 @@ async fn check(
     before: &Before,
     want: &[String],
 ) -> Result<(), String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_profile().await;
     diff(name, when, &on_rows(&p), want)?;
     let now = settings(ProfileConfig::from_profile(&p));
     if now != before.settings {
@@ -774,7 +778,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
             .await
             .map_err(|e| format!("switch: {e}"))?;
     }
-    let live = wizard.profile.lock().await.ui.enabled_presets.clone();
+    let live = wizard.selected_profile().await.ui.enabled_presets.clone();
     let shared = shared_presets(dir, names, unsaved, &live);
     let files_before: Vec<Option<String>> = {
         let profiles = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();

@@ -231,7 +231,7 @@ pub(crate) async fn profile_detail(
     Ok(match stored {
         Some(ui) => ProfileDetail::new(entry, false, login_on, &ui, None),
         None => {
-            let p = state.profile.lock().await;
+            let p = state.selected_session().lock_profile().await;
             ProfileDetail::new(
                 entry,
                 active,
@@ -260,7 +260,7 @@ pub(crate) async fn reset_inactive_panes(
 
 /// Reset the live profile's tree and hand back its new envelope.
 pub(crate) async fn reset_live_panes(state: &SharedState) -> PaneLayoutEnvelope {
-    let mut p = state.profile.lock().await;
+    let mut p = state.selected_session().lock_profile().await;
     let layout = p.ui.pane_layout().with_default_tree();
     p.ui.panes = Some(layout);
     state.bump_panes_generation();
@@ -286,7 +286,7 @@ pub(crate) async fn profile_toml(state: &SharedState, name: &str) -> Result<Stri
     };
     let config = match stored {
         Some(config) => config,
-        None => ProfileConfig::from_profile(&*state.profile.lock().await),
+        None => ProfileConfig::from_profile(&*state.selected_session().lock_profile().await),
     };
     config.to_toml().map_err(|e| {
         warn!(error = %e, profile = name, "profile export failed");
@@ -339,8 +339,8 @@ mod tests {
     /// live and tracking Sanctuary.
     async fn james_like_state(dir: &std::path::Path) -> SharedState {
         let state: SharedState = Arc::new(AppState::default());
-        state.profile.lock().await.ui.tracked_affects = vec![affect("Sanctuary")];
-        *state.profile_set.lock().await = Some(james_like_set(dir));
+        state.selected_profile().await.ui.tracked_affects = vec![affect("Sanctuary")];
+        state.set_profiles(james_like_set(dir)).await;
         state
     }
 
@@ -420,7 +420,7 @@ mod tests {
         );
 
         // The live profile and the active file never moved.
-        let live = state.profile.lock().await;
+        let live = state.selected_profile().await;
         assert_eq!(names(&live.ui.tracked_affects), ["Sanctuary"]);
         assert!(!set.profile_path(DEFAULT_PROFILE_NAME).exists());
     }
@@ -486,7 +486,7 @@ mod tests {
     async fn resetting_an_inactive_profile_rewrites_only_its_file() {
         let dir = tempfile::tempdir().unwrap();
         let state = james_like_state(dir.path()).await;
-        state.profile.lock().await.ui.panes = Some(arranged());
+        state.selected_profile().await.ui.panes = Some(arranged());
         let mut config = ProfileConfig::default();
         config.ui.panes = Some(arranged());
         config.ui.tracked_affects = vec![affect("Haste")];
@@ -504,21 +504,21 @@ mod tests {
         assert_eq!(detail.panes, reset);
         assert_eq!(names(&detail.tracked_affects), ["Haste"]);
         // The live profile keeps its own arrangement.
-        assert_eq!(state.profile.lock().await.ui.panes, Some(arranged()));
+        assert_eq!(state.selected_profile().await.ui.panes, Some(arranged()));
     }
 
     #[tokio::test]
     async fn resetting_the_live_profile_moves_the_generation() {
         let dir = tempfile::tempdir().unwrap();
         let state = james_like_state(dir.path()).await;
-        state.profile.lock().await.ui.panes = Some(arranged());
+        state.selected_profile().await.ui.panes = Some(arranged());
         let before = state.panes_generation();
 
         let envelope = reset_live_panes(&state).await;
         assert_eq!(envelope.layout, arranged().with_default_tree());
         assert!(envelope.generation.unwrap() > before);
         assert_eq!(
-            state.profile.lock().await.ui.panes,
+            state.selected_profile().await.ui.panes,
             Some(arranged().with_default_tree())
         );
         assert!(reset_inactive_panes(&state, DEFAULT_PROFILE_NAME)

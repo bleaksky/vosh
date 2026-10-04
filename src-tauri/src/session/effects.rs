@@ -9,7 +9,6 @@
 use std::sync::Arc;
 
 use tauri::{AppHandle, Manager};
-use tokio::sync::Mutex;
 use tokio::time::Instant;
 use tracing::warn;
 
@@ -120,7 +119,6 @@ impl ScriptIo<'_, '_> {
     async fn walk<R: tauri::Runtime>(
         &mut self,
         app: &AppHandle<R>,
-        profile: &Arc<Mutex<Profile>>,
         session: &Session,
         command: WalkCommand,
     ) -> std::io::Result<Option<ApplyResult>> {
@@ -137,7 +135,7 @@ impl ScriptIo<'_, '_> {
                 if out.release.is_empty() {
                     return Ok(None);
                 }
-                Ok(Some(walk::release(profile, session, out.release).await))
+                Ok(Some(walk::release(session, out.release).await))
             }
             ScriptIo::Collect { walk, .. } => {
                 **walk = Some(command);
@@ -211,7 +209,6 @@ impl InputBudget {
 pub(super) async fn apply_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
     io: &mut ScriptIo<'_, '_>,
-    profile: &Arc<Mutex<Profile>>,
     session: &Arc<Session>,
     apply: ApplyResult,
 ) -> std::io::Result<()> {
@@ -239,7 +236,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
         // timers and `mud.input` lines join this result's.
         let mut walking = apply.walk.take();
         while let Some(command) = walking.take() {
-            let Some(mut released) = io.walk(app, profile, session, command).await? else {
+            let Some(mut released) = io.walk(app, session, command).await? else {
                 continue;
             };
             if released.durable_changed {
@@ -298,7 +295,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             shown,
             effects,
         } = {
-            let mut p = profile.lock().await;
+            let mut p = session.lock_profile().await;
             let mut c = session.connection.lock();
             run_lines_locked(
                 &state,
@@ -329,7 +326,6 @@ pub(crate) struct Collected {
 /// session.
 pub(crate) async fn collect_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    profile: &Arc<Mutex<Profile>>,
     session: &Arc<Session>,
     apply: ApplyResult,
 ) -> Collected {
@@ -340,7 +336,7 @@ pub(crate) async fn collect_script_result<R: tauri::Runtime>(
         walk: &mut collected.walk,
     };
     // Collecting writes to no stream, so it never fails.
-    if let Err(e) = apply_script_result(app, &mut io, profile, session, apply).await {
+    if let Err(e) = apply_script_result(app, &mut io, session, apply).await {
         warn!(error = %e, "applying a script result failed");
     }
     collected
@@ -513,7 +509,6 @@ pub(crate) fn run_lines_locked<'a>(
 pub(super) async fn run_fired_command<R: tauri::Runtime>(
     app: &AppHandle<R>,
     io: &mut ScriptIo<'_, '_>,
-    profile: &Arc<Mutex<Profile>>,
     session: &Arc<Session>,
     command: &str,
 ) -> std::io::Result<()> {
@@ -524,13 +519,13 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
         shown,
         effects,
     } = {
-        let mut p = profile.lock().await;
+        let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
         run_fired_locked(&state, &mut p, &mut c, command, shared.as_ref())
     };
     crate::disk::save::settle_line_effects(app, effects).await;
     shown.send(app, session);
-    apply_script_result(app, io, profile, session, apply).await
+    apply_script_result(app, io, session, apply).await
 }
 
 /// Report a tick step of `session` on `session://tick`, so the frontend
@@ -539,13 +534,12 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
 pub(super) async fn deliver_tick_step<R: tauri::Runtime>(
     app: &AppHandle<R>,
     io: &mut ScriptIo<'_, '_>,
-    profile: &Arc<Mutex<Profile>>,
     session: &Arc<Session>,
     step: TickStep,
 ) -> std::io::Result<()> {
     session.emit(app, events::TICK, &step.payload);
     if let Some(command) = step.command {
-        run_fired_command(app, io, profile, session, &command).await?;
+        run_fired_command(app, io, session, &command).await?;
     }
     Ok(())
 }

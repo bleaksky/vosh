@@ -10,7 +10,9 @@ const ONE: SessionId = SessionId::FIRST;
 
 /// A second session's number, as the session map gives it.
 fn two() -> SessionId {
-    crate::sessions::Sessions::default().open().id
+    let mut sessions = crate::sessions::Sessions::default();
+    let defaults = sessions.selected().profile();
+    sessions.open(defaults).id
 }
 
 fn cell_fg(g: &TermGrid, line: usize, col: usize) -> Color {
@@ -426,7 +428,7 @@ fn a_find_in_one_session_leaves_the_others_matches() {
 fn selecting_a_session_shows_its_grid_and_sizes_only_the_hidden_one() {
     let _shared = lock_shared_grid_for_test();
     let state = crate::app::state::AppState::default();
-    let two = state.open_session().id;
+    let two = state.open_session(state.selected_session().profile()).id;
     feed_session_output(ONE, &text(b"You rest.\r\n"), None);
     feed_session_output(two, &text(b"You wake.\r\n"), None);
     set_prompt_bands(two, true);

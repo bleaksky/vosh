@@ -229,7 +229,7 @@ impl UiConfigPayload {
 pub(crate) async fn ui_get_config(
     state: State<'_, SharedState>,
 ) -> Result<UiConfigPayload, String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_session().lock_profile().await;
     Ok(ui_config_of(&p, state.ui_config_generation()))
 }
 
@@ -252,7 +252,7 @@ pub(crate) async fn ui_set_config(
     config: UiConfigPayload,
 ) -> Result<bool, String> {
     let applied = {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         apply_ui_config(&mut p.ui, config, state.ui_config_generation())
     };
     if !applied {
@@ -292,7 +292,7 @@ pub(crate) async fn ui_set_theme(
     dark_theme: Option<String>,
 ) -> Result<(), String> {
     {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         if !apply_theme_pick(&mut p.ui, theme, light_theme, dark_theme) {
             return Ok(());
         }
@@ -363,7 +363,7 @@ const CHAT_COLOR_SLOTS: [&str; 16] = [
 pub(crate) async fn ui_get_chat_colors(
     state: State<'_, SharedState>,
 ) -> Result<std::collections::BTreeMap<String, String>, String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_session().lock_profile().await;
     Ok(p.ui.chat_colors.clone())
 }
 
@@ -379,7 +379,7 @@ pub(crate) async fn ui_set_chat_color(
     color: Option<String>,
 ) -> Result<(), String> {
     let changed = {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         apply_chat_color(&mut p.ui, channel, color)
     };
     send_chat_colors(&app, state.inner(), changed).await;
@@ -393,7 +393,7 @@ pub(crate) async fn ui_reset_chat_colors(
     state: State<'_, SharedState>,
 ) -> Result<(), String> {
     let changed = {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         reset_chat_colors(&mut p.ui)
     };
     send_chat_colors(&app, state.inner(), changed).await;

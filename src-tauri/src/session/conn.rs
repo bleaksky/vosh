@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tauri::{AppHandle, Manager};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
 use vosh_protocol::telnet::{option as telnet_option, Negotiator, Parser};
@@ -66,9 +66,8 @@ pub(super) struct Conn<R: tauri::Runtime> {
     /// It lives and dies with the connection, so one that dropped mid
     /// password prompt hands nothing to the next one.
     pub(super) server_echo: ServerEcho,
-    pub(super) profile: Arc<Mutex<Profile>>,
     /// The session this loop runs for. Lock its connection after the
-    /// profile.
+    /// profile it plays.
     pub(super) session: Arc<Session>,
     /// What the loop counts on its hot path, see [`PerfCounters`].
     pub(super) perf: PerfCounters,
@@ -98,7 +97,6 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     app: AppHandle<R>,
     stream: Stream,
     mut rx_outgoing: mpsc::UnboundedReceiver<OutgoingMsg>,
-    profile: Arc<Mutex<Profile>>,
     session: Arc<Session>,
     mut log_sink: LogSink,
     negotiator: Negotiator,
@@ -110,7 +108,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // first tick. The user can disable it later through the slash command.
     // The prompt engine starts with no packets and the host's rules.
     {
-        let mut p = profile.lock().await;
+        let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
         c.tick.start_session(&mut p.tick, Instant::now());
         start_prompt(&mut p, &mut c, known_host);
@@ -133,7 +131,6 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         parser: Parser::new(),
         accumulator: LineAccumulator::new(),
         server_echo: ServerEcho::default(),
-        profile,
         session,
         perf: PerfCounters::default(),
         seen_output,
@@ -176,7 +173,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     // edge draws again at the new width. The card hears
                     // the state with it, so its marks move with the push.
                     let (out, state) = {
-                        let p = conn.profile.lock().await;
+                        let p = conn.session.lock_profile().await;
                         let mut c = conn.session.connection.lock();
                         let redraw = window_size_step(
                             &mut c,
@@ -245,7 +242,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     // the bytes stay the same, since the pieces in them can
                     // be numbered anew.
                     let (out, state) = {
-                        let p = conn.profile.lock().await;
+                        let p = conn.session.lock_profile().await;
                         let mut c = conn.session.connection.lock();
                         let now = Instant::now();
                         let out = repaint_step(&p, &mut c, conn.others_wrote(), now);
@@ -339,7 +336,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
             () = sleep_until_hold(late_until), if late_until.is_some() => {
                 late_until = None;
                 let (out, state) = {
-                    let p = conn.profile.lock().await;
+                    let p = conn.session.lock_profile().await;
                     let mut c = conn.session.connection.lock();
                     let out = late_repaint_step(&p, &mut c, conn.others_wrote(), Instant::now());
                     let state = if out.is_empty() {
@@ -366,7 +363,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 // reading back, and then the next second tries again.
                 let reading = reader_busy(&conn.session);
                 let (out, state) = {
-                    let p = conn.profile.lock().await;
+                    let p = conn.session.lock_profile().await;
                     let mut c = conn.session.connection.lock();
                     let now = Instant::now();
                     let out = clock_step(&p, &mut c, conn.others_wrote(), reading, now);
@@ -388,7 +385,6 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     &conn.app,
                     &mut conn.stream,
                     &mut conn.walker,
-                    &conn.profile,
                     &conn.session,
                 )
                 .await
@@ -400,7 +396,6 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     &conn.app,
                     &mut conn.stream,
                     &mut conn.walker,
-                    &conn.profile,
                     &conn.session,
                 )
                 .await
@@ -411,7 +406,6 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     &conn.app,
                     &mut conn.stream,
                     &mut conn.walker,
-                    &conn.profile,
                     &conn.session,
                     &mut timer_next,
                 )
@@ -440,7 +434,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // A preview the card shows on your prompt goes with the connection,
     // so the live render goes back on the row first.
     let out = {
-        let p = conn.profile.lock().await;
+        let p = conn.session.lock_profile().await;
         let mut c = conn.session.connection.lock();
         end_preview_step(&p, &mut c, conn.others_wrote(), Instant::now())
     };
@@ -476,7 +470,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // that mirrors the target. Your quick keys outlive it, though not a
     // restart.
     let target_after = {
-        let mut p = conn.profile.lock().await;
+        let mut p = conn.session.lock_profile().await;
         let mut c = conn.session.connection.lock();
         let had = c.clear_on_disconnect();
         line_triggers = c.prompt.stage.line_trigger_notice();
@@ -629,12 +623,12 @@ async fn walk_command<R: tauri::Runtime>(
         if out.release.is_empty() {
             continue;
         }
-        let apply = walk::release(&conn.profile, &conn.session, out.release).await;
+        let apply = walk::release(&conn.session, out.release).await;
         let Collected {
             bytes,
             echoes,
             walk,
-        } = collect_script_result(&conn.app, &conn.profile, &conn.session, apply).await;
+        } = collect_script_result(&conn.app, &conn.session, apply).await;
         echo_lines(&conn.app, &conn.session, &echoes);
         if !bytes.is_empty() {
             send_typed(conn, log_sink, hold_until, &bytes, false).await?;
@@ -648,13 +642,12 @@ async fn handle_tick<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     walker: &mut Walker,
-    profile: &Arc<Mutex<Profile>>,
     session: &Arc<Session>,
 ) -> std::io::Result<()> {
     // Take the firing decision under the locks, then run the Send each
     // tick command, if the timer fired, after releasing them.
     let step = {
-        let p = profile.lock().await;
+        let p = session.lock_profile().await;
         let mut c = session.connection.lock();
         c.tick.poll(&p.tick, Instant::now())
     };
@@ -667,7 +660,6 @@ async fn handle_tick<R: tauri::Runtime>(
     deliver_tick_step(
         app,
         &mut ScriptIo::Session(stream, &mut OutputSink::Direct, walker),
-        profile,
         session,
         step,
     )
@@ -682,15 +674,14 @@ async fn fire_due_settings_timers<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     walker: &mut Walker,
-    profile: &Arc<Mutex<Profile>>,
     session: &Arc<Session>,
     timer_next: &mut HashMap<u32, Instant>,
 ) -> std::io::Result<()> {
-    let due = due_settings_timers(&*profile.lock().await, timer_next, Instant::now());
+    let due = due_settings_timers(&*session.lock_profile().await, timer_next, Instant::now());
     let mut sink = OutputSink::Direct;
     let mut io = ScriptIo::Session(stream, &mut sink, walker);
     for command in due {
-        run_fired_command(app, &mut io, profile, session, &command).await?;
+        run_fired_command(app, &mut io, session, &command).await?;
     }
     Ok(())
 }

@@ -550,7 +550,7 @@ pub(crate) async fn broadcast_profile_ui<R: tauri::Runtime>(
     state: &SharedState,
 ) {
     let events = {
-        let p = state.profile.lock().await;
+        let p = state.selected_session().lock_profile().await;
         profile_ui_events(state, &p)
     };
     for (event, payload) in events.events() {

@@ -12,7 +12,7 @@ use crate::tick::{apply_tick_config, TickConfig};
 /// Read the live tick configuration.
 #[tauri::command]
 pub(crate) async fn tick_get_config(state: State<'_, SharedState>) -> Result<TickConfig, String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_session().lock_profile().await;
     Ok(p.tick.config.clone())
 }
 
@@ -28,7 +28,7 @@ pub(crate) async fn tick_set_config(
 ) -> Result<TickConfig, String> {
     let session = state.selected_session();
     let snapshot = {
-        let mut p = state.profile.lock().await;
+        let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
         apply_tick_config(
             &mut p.tick,

@@ -10,7 +10,7 @@
 //!    so `#profile save`, which runs under the profile lock, only tries
 //!    it.
 //! 2. The loadouts and the plugin manager in [`AppState`].
-//! 3. The profile.
+//! 3. The profiles the sessions play, the one that opened first first.
 //! 4. The profile set. The save in loadout mode reads the sharing scope
 //!    from it while it holds the profile, so a step that holds the set
 //!    never waits for the profile.
@@ -46,8 +46,9 @@ pub(crate) static PERSIST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::con
 /// exit hook flushes immediately as a backstop.
 pub(crate) fn mark_profile_dirty<R: tauri::Runtime>(app: &AppHandle<R>) {
     app.state::<SharedState>()
-        .auto_persist_suppressed
-        .store(false, std::sync::atomic::Ordering::Release);
+        .selected_session()
+        .profile()
+        .hold(false);
     schedule_profile_persist(app);
 }
 
@@ -58,15 +59,15 @@ pub(crate) fn mark_profile_dirty<R: tauri::Runtime>(app: &AppHandle<R>) {
 /// durable change or an explicit `#profile save`. For incidental edits
 /// such as a pane layout drag.
 pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(app: &AppHandle<R>) {
-    use std::sync::atomic::Ordering;
     let shared: SharedState = app.state::<SharedState>().inner().clone();
-    let gen = shared.profile_dirty_gen.fetch_add(1, Ordering::AcqRel) + 1;
+    let open = shared.selected_session().profile();
+    let gen = open.mark();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        if shared.profile_dirty_gen.load(Ordering::Acquire) != gen {
+        if open.marks() != gen {
             return; // a newer mark restarted the clock
         }
-        if shared.auto_persist_suppressed.load(Ordering::Acquire) {
+        if open.held() {
             return; // a #profile reset/load intervened
         }
         persist_profile(&shared).await;
@@ -97,14 +98,13 @@ pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
     effects: crate::input::LineEffects,
 ) {
     let shared: SharedState = app.state::<SharedState>().inner().clone();
+    let session = shared.selected_session();
     if effects.replaced {
-        shared
-            .auto_persist_suppressed
-            .store(true, std::sync::atomic::Ordering::Release);
+        session.profile().hold(true);
     }
     if effects.replaced || effects.tick_changed {
         let events = {
-            let p = shared.profile.lock().await;
+            let p = session.lock_profile().await;
             line_effect_events(&shared, &effects, &p)
         };
         for (event, payload) in events {
@@ -139,9 +139,9 @@ pub(crate) enum SavePolicy {
     Now,
     /// Save at once, unless `#profile reset` or `#profile load` left the
     /// live profile apart from disk and no durable change has wanted it
-    /// saved since ([`AppState::auto_persist_suppressed`]).
+    /// saved since ([`OpenProfile::held`]).
     ///
-    /// [`AppState::auto_persist_suppressed`]: crate::app::state::AppState::auto_persist_suppressed
+    /// [`OpenProfile::held`]: crate::profile::open::OpenProfile::held
     NowUnlessHeld,
     /// Save once the burst settles, through [`schedule_profile_persist`],
     /// which keeps that hold. For edits that land several times a second.
@@ -161,10 +161,7 @@ pub(crate) async fn save_then_broadcast<R: tauri::Runtime, S: serde::Serialize +
     match policy {
         SavePolicy::Now => persist_profile(state).await,
         SavePolicy::NowUnlessHeld => {
-            if !state
-                .auto_persist_suppressed
-                .load(std::sync::atomic::Ordering::Acquire)
-            {
+            if !state.selected_session().profile().held() {
                 persist_profile(state).await;
             }
         }
@@ -222,7 +219,7 @@ pub(crate) async fn persist_state(state: &SharedState) {
     };
 
     let (per_profile_snapshot, global_snapshot) = {
-        let p = state.profile.lock().await;
+        let p = state.selected_session().lock_profile().await;
         (
             active_profile_file(&p, Some(&scope)),
             GlobalConfig::from_profile(&p, &scope),
@@ -274,7 +271,7 @@ async fn persist_loadout_mode(state: &SharedState, dir: &std::path::Path) {
     // so an overwrite here is correct — anything the user typed via
     // #alias / Settings made it into Profile and now into the file.
     let (catalog, global_snapshot, scope) = {
-        let p = state.profile.lock().await;
+        let p = state.selected_session().lock_profile().await;
         // The enabled presets ride along, since the preset triggers they
         // name live in the catalog too.
         let mut catalog = crate::loadouts::catalog::GlobalCatalog::from_profile(&p);
@@ -333,7 +330,7 @@ async fn persist_loadout_mode(state: &SharedState, dir: &std::path::Path) {
     // shared list, which the next load replaces with the catalog's.
     if let Some(p) = per_profile_path {
         let mut per_profile_snapshot = {
-            let live = state.profile.lock().await;
+            let live = state.selected_session().lock_profile().await;
             ProfileConfig::from_profile(&live)
         };
         per_profile_snapshot.clear_catalog_items();
@@ -371,7 +368,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) async fn live_affects(state: &super::SharedState) -> Vec<String> {
-        let p = state.profile.lock().await;
+        let p = state.selected_profile().await;
         p.ui.tracked_affects
             .iter()
             .map(|t| t.name.clone())
@@ -432,7 +429,7 @@ pub(crate) mod tests {
         assert!(leftover.is_empty(), "{leftover:?}");
 
         // The app keeps running on the defaults, and an edit saves.
-        state.profile.lock().await.ui.tracked_affects = vec![affect("Haste")];
+        state.selected_profile().await.ui.tracked_affects = vec![affect("Haste")];
         persist(&state).await;
         assert_eq!(read(&set.active_path()), UNREADABLE);
         // global.toml read, so the shared settings still save.
@@ -459,7 +456,7 @@ pub(crate) mod tests {
             [crate::profile::file::UNREAD_GLOBAL_NOTICE]
         );
         {
-            let mut p = state.profile.lock().await;
+            let mut p = state.selected_profile().await;
             p.ui.theme = "nord".into();
             p.ui.tracked_affects = vec![affect("Fly")];
         }
@@ -511,7 +508,7 @@ pub(crate) mod tests {
         let state: super::SharedState = std::sync::Arc::new(AppState::default());
         crate::app::launch::load(&state, dir.path()).await;
         assert!(state.profile_set.lock().await.is_none());
-        state.profile.lock().await.ui.tracked_affects = vec![affect("Haste")];
+        state.selected_profile().await.ui.tracked_affects = vec![affect("Haste")];
         persist(&state).await;
         assert!(!dir.path().join("profile.toml").exists());
 
@@ -529,12 +526,12 @@ pub(crate) mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state: super::SharedState = Arc::new(AppState::default());
         state.app_data.set(dir.path().to_path_buf()).unwrap();
-        *state.profile_set.lock().await = Some(james_like_set(dir.path()));
+        state.set_profiles(james_like_set(dir.path())).await;
         // No profile file read at launch, so the catalog took no list and
         // the live profile kept its own.
         *state.global_catalog.lock().await =
             Some(crate::loadouts::catalog::GlobalCatalog::default());
-        state.profile.lock().await.ui.enabled_presets = vec!["healing_basics".into()];
+        state.selected_profile().await.ui.enabled_presets = vec!["healing_basics".into()];
 
         persist(&state).await;
         let saved = crate::loadouts::catalog::load_global_catalog(dir.path()).unwrap();

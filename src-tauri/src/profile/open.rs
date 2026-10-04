@@ -1,0 +1,139 @@
+//! The profiles the sessions play. Each one is in memory once, however
+//! many sessions play it, so an edit from any of them reaches every
+//! session on it. The session map keeps them, see [`crate::sessions`],
+//! and each [`Session`](crate::sessions::Session) points at the one it
+//! plays.
+
+use std::ops::{Deref, DerefMut};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
+
+use tokio::sync::{Mutex, OwnedMutexGuard};
+
+use crate::profile::live::Profile;
+
+/// One profile the sessions play, with what holds its saves back.
+pub(crate) struct OpenProfile {
+    /// Its place in the order the profiles opened. A step that holds two
+    /// profiles at once takes the lower first.
+    id: u64,
+    /// Its name in the profile set. None only for the defaults the app
+    /// starts on, before launch loads a profile or when profiles.toml
+    /// does not read. A leaf lock, held for a copy.
+    name: std::sync::Mutex<Option<String>>,
+    profile: Arc<Mutex<Profile>>,
+    /// Counts the marks that ask for a save, so the save a burst of them
+    /// started writes once, after the last.
+    dirty_gen: AtomicU64,
+    /// Set by `#profile reset` and `#profile load`, which leave the
+    /// profile apart from its file on purpose, so the passive saves, the
+    /// debounce and quit, leave the file alone. The next durable change
+    /// clears it.
+    persist_held: AtomicBool,
+}
+
+impl OpenProfile {
+    pub(crate) fn new(id: u64, name: Option<String>, profile: Profile) -> Self {
+        Self {
+            id,
+            name: std::sync::Mutex::new(name),
+            profile: Arc::new(Mutex::new(profile)),
+            dirty_gen: AtomicU64::new(0),
+            persist_held: AtomicBool::new(false),
+        }
+    }
+
+    /// Its name in the profile set, see [`OpenProfile::name`].
+    pub(crate) fn name(&self) -> Option<String> {
+        self.name
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Give it the name `name` in the profile set.
+    pub(crate) fn set_name(&self, name: &str) {
+        *self
+            .name
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(name.to_string());
+    }
+
+    /// Lock the profile.
+    pub(crate) async fn lock(self: &Arc<Self>) -> ProfileGuard {
+        ProfileGuard {
+            guard: self.profile.clone().lock_owned().await,
+            open: self.clone(),
+        }
+    }
+
+    /// The profile, locked, unless another step holds it. A frame of the
+    /// native surface reads the font this way, so it never waits.
+    #[cfg(native_surface)]
+    pub(crate) fn try_lock(&self) -> Option<tokio::sync::MutexGuard<'_, Profile>> {
+        self.profile.try_lock().ok()
+    }
+
+    /// Count one more mark, and return the count after it.
+    pub(crate) fn mark(&self) -> u64 {
+        self.dirty_gen.fetch_add(1, Ordering::AcqRel) + 1
+    }
+
+    /// The count of marks so far.
+    pub(crate) fn marks(&self) -> u64 {
+        self.dirty_gen.load(Ordering::Acquire)
+    }
+
+    /// Whether `#profile reset` or `#profile load` holds the passive
+    /// saves back.
+    pub(crate) fn held(&self) -> bool {
+        self.persist_held.load(Ordering::Acquire)
+    }
+
+    /// Hold the passive saves back, or let them go again.
+    pub(crate) fn hold(&self, held: bool) {
+        self.persist_held.store(held, Ordering::Release);
+    }
+}
+
+/// An open profile, locked. It reads and writes as the [`Profile`] and
+/// keeps the [`OpenProfile`] it came from at hand.
+pub(crate) struct ProfileGuard {
+    guard: OwnedMutexGuard<Profile>,
+    open: Arc<OpenProfile>,
+}
+
+impl ProfileGuard {
+    /// The open profile this guard holds.
+    pub(crate) fn open(&self) -> &Arc<OpenProfile> {
+        &self.open
+    }
+}
+
+impl Deref for ProfileGuard {
+    type Target = Profile;
+
+    fn deref(&self) -> &Profile {
+        &self.guard
+    }
+}
+
+impl DerefMut for ProfileGuard {
+    fn deref_mut(&mut self) -> &mut Profile {
+        &mut self.guard
+    }
+}
+
+/// Lock `a` and `b`, two profiles, the one that opened first first.
+pub(crate) async fn lock_both(
+    a: &Arc<OpenProfile>,
+    b: &Arc<OpenProfile>,
+) -> (ProfileGuard, ProfileGuard) {
+    if a.id <= b.id {
+        let first = a.lock().await;
+        (first, b.lock().await)
+    } else {
+        let second = b.lock().await;
+        (a.lock().await, second)
+    }
+}

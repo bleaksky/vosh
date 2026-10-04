@@ -3,13 +3,15 @@
 //! `panes.rs` its pane layout. `shared.rs` holds global.toml and the
 //! sharing scope, `set.rs` profiles.toml and the set of profiles,
 //! `login_match.rs` which profile a login picks and `worlds.rs` the
-//! worlds Vosh knows. `switch.rs` switches the active profile, and
-//! `inactive.rs` reads and edits a profile that is not active.
+//! worlds Vosh knows. `open.rs` holds a profile the sessions play,
+//! `switch.rs` moves a session to another profile, and `inactive.rs`
+//! reads and edits a profile that is not active.
 
 pub(crate) mod file;
 pub(crate) mod inactive;
 pub(crate) mod live;
 pub(crate) mod login_match;
+pub(crate) mod open;
 pub(crate) mod panes;
 pub(crate) mod set;
 pub(crate) mod shared;

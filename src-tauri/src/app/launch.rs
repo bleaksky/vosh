@@ -151,10 +151,11 @@ pub(crate) async fn load(state: &SharedState, app_data: &Path) {
 }
 
 /// Load whichever profile `set`, the profile set launch read, marks as
-/// active into the live profile, and overlay the shared global.toml
-/// (theme, font, dock layout, keep last, auto update) so those UI prefs
-/// stay the same across every profile. The selected session takes the
-/// profile's tick settings and `[prompt]` table.
+/// active into the profile the selected session plays, which takes its
+/// name, and overlay the shared global.toml (theme, font, dock layout,
+/// keep last, auto update) so those UI prefs stay the same across every
+/// profile. The session takes the profile's tick settings and `[prompt]`
+/// table.
 pub(crate) async fn load_profiles(state: &SharedState, mut set: ProfileSet) {
     let session = state.selected_session();
     // What an earlier session left to tell you, once.
@@ -163,7 +164,8 @@ pub(crate) async fn load_profiles(state: &SharedState, mut set: ProfileSet) {
     // session, and no save writes over it. The notices tell you so once
     // the main window shows.
     let notices = {
-        let mut p = state.profile.lock().await;
+        let mut p = session.lock_profile().await;
+        p.open().set_name(set.active_name());
         let tick_before = p.tick.config.clone();
         let notices = load_at_launch(&set, &mut p);
         let mut c = session.connection.lock();
@@ -171,7 +173,6 @@ pub(crate) async fn load_profiles(state: &SharedState, mut set: ProfileSet) {
         notices
     };
     state.add_launch_notices(notices);
-    state.note_active_profile(set.active_name());
     *state.profile_set.lock().await = Some(set);
 }
 
@@ -211,8 +212,9 @@ pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> b
     } else {
         None
     };
+    let session = state.selected_session();
     let presets_moved = {
-        let mut p = state.profile.lock().await;
+        let mut p = session.lock_profile().await;
         adopt_catalog_presets(&mut catalog, &mut p, preset_lists.as_ref())
     };
     if let Some(lists) = &preset_lists {
@@ -228,7 +230,7 @@ pub(crate) async fn load_loadout_mode(state: &SharedState, app_data: &Path) -> b
     }
     // adopt_catalog_presets left the live preset list equal to the
     // catalog's, or the catalog with none, so the overlay leaves it as is.
-    lay_catalog_over(&mut *state.profile.lock().await, &catalog, Some(&set));
+    lay_catalog_over(&mut *session.lock_profile().await, &catalog, Some(&set));
     *state.global_catalog.lock().await = Some(catalog);
     *state.loadout_set.lock().await = Some(set);
     info!("loaded catalog.toml and loadouts.toml");

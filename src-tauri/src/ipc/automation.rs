@@ -22,13 +22,13 @@ use crate::script::{list_groups, set_list_group, GroupList};
 
 #[tauri::command]
 pub(crate) async fn triggers_list(state: State<'_, SharedState>) -> Result<Vec<Trigger>, String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_session().lock_profile().await;
     Ok(p.triggers.list())
 }
 
 #[tauri::command]
 pub(crate) async fn triggers_export(state: State<'_, SharedState>) -> Result<String, String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_session().lock_profile().await;
     p.triggers.export_json().map_err(|e| e.to_string())
 }
 
@@ -39,7 +39,7 @@ pub(crate) async fn triggers_import(
     json: String,
 ) -> Result<usize, String> {
     let count = {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         p.triggers.import_json(&json).map_err(|e| e.to_string())?
     };
     // The editor's save path lands here: persist, or the "saved" state
@@ -55,7 +55,7 @@ pub(crate) async fn triggers_import(
 /// same way, through automationRecords.ts and automationTriggers.ts.
 #[tauri::command]
 pub(crate) async fn aliases_export(state: State<'_, SharedState>) -> Result<String, String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_session().lock_profile().await;
     aliases_json(&p.aliases)
 }
 
@@ -80,7 +80,7 @@ pub(crate) async fn aliases_import(
         serde_json::from_str(&json).map_err(|e| e.to_string())?;
     let count = parsed.len();
     {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         let mut store = vosh_automation::alias::AliasStore::new();
         for alias in parsed {
             store.set(alias);
@@ -104,7 +104,7 @@ pub(crate) async fn aliases_import(
 /// `vosh://macros-changed` event fires.
 #[tauri::command]
 pub(crate) async fn macros_list(state: State<'_, SharedState>) -> Result<Vec<Macro>, String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_session().lock_profile().await;
     Ok(p.macros.clone())
 }
 
@@ -136,7 +136,7 @@ pub(crate) async fn macros_set(
         .map(|g| g.trim().to_string())
         .filter(|g| !g.is_empty());
     let updated = {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         if let Some(existing) = p.macros.iter_mut().find(|m| m.key == key) {
             existing.command = command;
             existing.group = group;
@@ -165,7 +165,7 @@ pub(crate) async fn macros_delete(
     key: String,
 ) -> Result<Vec<Macro>, String> {
     let updated = {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         p.macros.retain(|m| m.key != key);
         p.macros.clone()
     };
@@ -186,7 +186,7 @@ pub(crate) struct GroupState {
 pub(crate) async fn macros_groups_list(
     state: State<'_, SharedState>,
 ) -> Result<Vec<GroupState>, String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_session().lock_profile().await;
     let mut names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for m in &p.macros {
         if let Some(g) = &m.group {
@@ -268,7 +268,7 @@ pub(crate) async fn groups_list(
     list: GroupList,
 ) -> Result<Vec<GroupSwitchState>, String> {
     let set = state.loadout_set.lock().await;
-    let p = state.profile.lock().await;
+    let p = state.selected_session().lock_profile().await;
     Ok(group_switches(&p, set.as_ref(), list))
 }
 
@@ -286,7 +286,7 @@ pub(crate) async fn groups_set_enabled<R: tauri::Runtime>(
     let session = state.selected_session();
     let (switches, lists) = {
         let set = state.loadout_set.lock().await;
-        let mut p = state.profile.lock().await;
+        let mut p = session.lock_profile().await;
         let c = session.connection.lock();
         let before = ListRevisions::of(&p, &c);
         switch_group(&mut p, set.as_ref(), list, &group, enabled)?;
@@ -306,7 +306,7 @@ pub(crate) async fn groups_set_enabled<R: tauri::Runtime>(
 /// List every interval timer, in stored order.
 #[tauri::command]
 pub(crate) async fn timers_list(state: State<'_, SharedState>) -> Result<Vec<Timer>, String> {
-    let p = state.profile.lock().await;
+    let p = state.selected_session().lock_profile().await;
     Ok(p.timers.clone())
 }
 
@@ -326,7 +326,7 @@ pub(crate) async fn timers_set(
     group: Option<String>,
 ) -> Result<Vec<Timer>, String> {
     let updated = {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         set_timer(&mut p, id, name, interval_secs, command, enabled, group)?;
         p.timers.clone()
     };
@@ -384,7 +384,7 @@ pub(crate) async fn timers_delete(
     id: u32,
 ) -> Result<Vec<Timer>, String> {
     let updated = {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         p.timers.retain(|t| t.id != id);
         p.timers.clone()
     };
@@ -403,7 +403,7 @@ pub(crate) async fn presets_install(
     triggers: Vec<Trigger>,
 ) -> Result<usize, String> {
     let installed = {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         install_preset_triggers(&mut p, triggers)?
     };
     let shared: SharedState = state.inner().clone();
@@ -423,7 +423,7 @@ pub(crate) async fn presets_remove(
     preset_id: String,
 ) -> Result<usize, String> {
     let removed = {
-        let mut p = state.profile.lock().await;
+        let mut p = state.selected_session().lock_profile().await;
         p.triggers.remove_by_preset(&preset_id)
     };
     let shared: SharedState = state.inner().clone();
@@ -480,7 +480,7 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
     let lists;
     let session = state.selected_session();
     {
-        let mut p = state.profile.lock().await;
+        let mut p = session.lock_profile().await;
         let c = session.connection.lock();
         let lists_before = ListRevisions::of(&p, &c);
         for alias in &report.aliases {
@@ -773,7 +773,7 @@ mod tests {
         app.manage::<SharedState>(Arc::new(AppState::default()));
         let state: SharedState = app.state::<SharedState>().inner().clone();
         tauri::async_runtime::block_on(async {
-            *state.profile.lock().await = grouped();
+            *state.selected_profile().await = grouped();
             let answer = super::groups_set_enabled(
                 app.handle().clone(),
                 app.state::<SharedState>(),
@@ -784,7 +784,7 @@ mod tests {
             .await
             .unwrap();
             assert_eq!(answer, [switch("combat", false)]);
-            let p = state.profile.lock().await;
+            let p = state.selected_profile().await;
             assert!(p.disabled_macro_groups.contains("combat"));
             drop(p);
             let listed = super::groups_list(app.state::<SharedState>(), GroupList::Macros)

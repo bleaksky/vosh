@@ -1,10 +1,11 @@
-//! Switching the active profile, when you pick one and when a login
-//! names a character another profile claims. A switch saves the profile
-//! you leave, reads the next one's file and global.toml, and lays them
-//! over the live profile. The connection carries on as it was, apart
-//! from the tick settings and the prompt table the next profile hands
-//! it. The same read of global.toml keeps your shared settings across a
-//! `#profile reset` or `#profile load`.
+//! Switching profiles, when you pick one and when a login names a
+//! character another profile claims. A switch moves one session. It
+//! saves the profile the session leaves, then joins the next profile
+//! when another session plays it, or else reads the next one's file and
+//! global.toml into a profile of its own. The connection carries on as
+//! it was, apart from the tick settings and the prompt table the next
+//! profile hands it. The same read of global.toml keeps your shared
+//! settings across a `#profile reset` or `#profile load`.
 
 use std::sync::Arc;
 
@@ -18,6 +19,7 @@ use crate::loadouts::catalog::lay_catalog_over;
 use crate::output;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
+use crate::profile::open::{lock_both, OpenProfile};
 use crate::profile::shared::{GlobalConfig, SharedLayer};
 use crate::script::ApplyResult;
 use crate::session::connection::Connection;
@@ -32,13 +34,15 @@ struct SwitchFiles {
     global: Option<GlobalConfig>,
 }
 
-/// Read the files a switch to `name` loads, and only then point the
-/// index at it. A file that does not read changes nothing, so the index
-/// keeps naming the profile the live state holds and the next persist
-/// still writes that profile to its own file.
+/// Read the files a switch to `name` loads, away from `leaving`, the
+/// profile the session plays. When the session is `selected`, point the
+/// index at `name` once both read. A file that does not read changes
+/// nothing, so the session stays on the profile it plays.
 fn open_profile_for_switch(
     set: &mut crate::profile::set::ProfileSet,
     name: &str,
+    leaving: &str,
+    selected: bool,
 ) -> Result<SwitchFiles, String> {
     use crate::profile::set::{display_name, ProfileSetError};
     if set.get(name).is_none() {
@@ -49,7 +53,7 @@ fn open_profile_for_switch(
             "Vosh could not open the {} profile because it could not read {what}. You are \
              still using the {} profile.",
             display_name(name),
-            display_name(set.active_name()),
+            display_name(leaving),
         )
     };
     let path = set.profile_path(name);
@@ -74,14 +78,12 @@ fn open_profile_for_switch(
             return Err(refused("global.toml, which holds your shared settings"));
         }
     };
-    let leaving = set.active_path();
-    set.switch(name).map_err(|e| e.to_string())?;
-    // Both files read, and the live profile is about to hold what they
-    // say, so the saves may write them again. The file of the profile you
-    // left no longer stands behind the live profile, and every other write
-    // to it reads it first, so a file that did not read at launch is safe
-    // from here on.
-    for path in [&leaving, &path, &global_path] {
+    if selected {
+        set.switch(name).map_err(|e| e.to_string())?;
+    }
+    // Both files read, and the next profile is about to hold what they
+    // say, so the saves may write them again.
+    for path in [&path, &global_path] {
         crate::disk::atomic::release_unread(path);
     }
     Ok(SwitchFiles {
@@ -90,93 +92,127 @@ fn open_profile_for_switch(
     })
 }
 
-/// Steps 2 and 3 of a switch, after the flush of the outgoing profile.
-/// Call with [`PERSIST_LOCK`] held. Loads the incoming profile's file
-/// and global.toml, points the index at it, then lays both over the
-/// live profile, and in loadout mode the catalog and the loadouts too.
-/// Either every step lands or none does, and a save that waits on the
-/// lock finds the live profile whole. The connection then takes the
-/// incoming profile's tick settings and `[prompt]` table and keeps the
-/// rest as it was, and its prompt drops the values the last profile's
-/// prompt read. The plugins the incoming profile turns on start and the
-/// others stop in the same step, and what they ask for comes back for
-/// the caller to deliver once the lock drops.
+/// The profile `name` as a switch opens it: its file or a fresh one,
+/// global.toml over it, then in loadout mode the catalog with the
+/// loadouts, so no save finds it without its aliases, triggers and
+/// macros.
+async fn profile_from_files(state: &SharedState, name: &str, files: SwitchFiles) -> Profile {
+    let catalog = state.global_catalog.lock().await.clone();
+    let loadouts = state.loadout_set.lock().await.clone();
+    let mut p = Profile {
+        display_name: Some(crate::profile::set::display_name(name)),
+        ..Profile::default()
+    };
+    // A profile that never saved a file is fresh.
+    let file = files.per_profile.unwrap_or_else(ProfileConfig::fresh);
+    file.apply_to(&mut p);
+    // Then global.toml, so theme, font, keep last, auto update and the
+    // dock layout survive the switch.
+    if let Some(g) = files.global {
+        g.apply_to(&mut p);
+    }
+    if let Some(catalog) = &catalog {
+        lay_catalog_over(&mut p, catalog, loadouts.as_ref());
+    }
+    p
+}
+
+/// Steps 2 and 3 of a switch, after the save of the profile `session`
+/// leaves. Call with [`PERSIST_LOCK`] held. The session joins `name`
+/// when another session plays it, and otherwise opens it from its files,
+/// see [`profile_from_files`]. Either every step lands or none does. The
+/// session moves while it holds both profiles, so its next step finds
+/// the next profile whole, and its connection takes that profile's tick
+/// settings and `[prompt]` table and keeps the rest as it was. Its prompt
+/// drops the values the last profile's prompt read. The plugins the next
+/// profile turns on start in the session's engine and the others stop in
+/// the same step, and what they ask for comes back for the caller to
+/// deliver once the locks drop. The profile it left closes when no other
+/// session plays it.
 pub(crate) async fn switch_live_profile(
     state: &SharedState,
     session: &Session,
     name: &str,
 ) -> Result<ApplyResult, String> {
-    // Step 2: read the incoming files, then flip the active pointer in
-    // the index.
-    let SwitchFiles {
-        per_profile,
-        global,
-    } = {
-        let mut set = state.loaded_profile_set().await?;
-        open_profile_for_switch(&mut set, name)?
+    let from = session.profile();
+    let selected = state.selected_session().id == session.id;
+    let to = match state.open_profile(name) {
+        // The session plays it already.
+        Some(to) if Arc::ptr_eq(&to, &from) => return Ok(ApplyResult::default()),
+        Some(to) => {
+            if selected {
+                let mut set = state.loaded_profile_set().await?;
+                set.switch(name).map_err(|e| e.to_string())?;
+            }
+            to
+        }
+        None => {
+            let files = {
+                let mut set = state.loaded_profile_set().await?;
+                let leaving = from.name().unwrap_or_default();
+                open_profile_for_switch(&mut set, name, &leaving, selected)?
+            };
+            let profile = profile_from_files(state, name, files).await;
+            state.add_open_profile(name, profile)
+        }
     };
+    let plugins = move_session(state, session, &from, &to).await;
+    if state.close_unplayed(&from) {
+        leave_file(state, &from).await;
+    }
+    Ok(plugins)
+}
 
-    // In loadout mode the catalog holds the aliases, triggers, and
-    // macros, so it fills the stores in the same step. Were a save to
-    // find the stores empty in between, it would write an empty catalog.
-    let catalog = state.global_catalog.lock().await.clone();
-    let loadouts = state.loadout_set.lock().await.clone();
+/// Move `session` from `from` to `to` with both locked, and hand its
+/// connection what `to` holds for it. Returns what the plugins `to` turns
+/// on and the others ask for.
+async fn move_session(
+    state: &SharedState,
+    session: &Session,
+    from: &Arc<OpenProfile>,
+    to: &Arc<OpenProfile>,
+) -> ApplyResult {
+    let (left, mut p) = lock_both(from, to).await;
+    session.play(to.clone());
+    // Under the same locks as the move, so a pane layout write edited
+    // from the old profile's tree, or a whole config save read from the
+    // old profile, is refused from here on.
+    state.note_ui_config_replaced();
 
-    // Step 3: lay the per-profile file (or defaults) over the live
-    // profile, then global.toml so theme/font/keep-last/auto-update/
-    // dock_layout survive the switch, then the catalog. The connection
-    // lock comes after these, so a command that reads only the connection
-    // never waits while the files apply.
-    {
-        let mut p = state.profile.lock().await;
-        p.display_name = Some(crate::profile::set::display_name(name));
-        state.note_active_profile(name);
-        let tick_before = p.tick.config.clone();
-        match per_profile {
-            Some(snap) => {
-                snap.apply_to(&mut p);
-            }
-            None => {
-                // A profile that never saved a file is fresh.
-                let fresh = ProfileConfig::fresh();
-                fresh.apply_to(&mut p);
-            }
-        }
-        if let Some(g) = global {
-            g.apply_to(&mut p);
-        }
-        if let Some(catalog) = &catalog {
-            lay_catalog_over(&mut p, catalog, loadouts.as_ref());
-        }
-        // Under the same lock as the swap, so a pane layout write edited
-        // from the old profile's tree, or a whole config save read from
-        // the old profile, is refused from here on.
-        state.note_ui_config_replaced();
+    // The connection did not change, so it keeps what it holds and takes
+    // only the next profile's tick settings and [prompt] table. The
+    // values the last profile's prompt read go first, since they came
+    // from its capture and its scripts.
+    let mut c = session.connection.lock();
+    c.prompt.switch_profile();
+    hand_to_connection(&mut p, &mut c, &left.tick.config);
+    // The latest Char.Prompt of the connection applies to the next
+    // profile's capture by the rule every packet follows, and the profile
+    // keeps the table as it then stands.
+    let before = c.prompt.revision();
+    c.prompt.follow_latest(chrono::Local::now().fixed_offset());
+    crate::prompt::keep_table(&mut p, &c, before);
+    // Under both locks, so no plugin of the profile you left answers a
+    // line or a packet for the next one.
+    match state.app_data.get() {
+        Some(app_data) => crate::app::plugins::follow_profile_plugins(
+            &mut p,
+            &mut c,
+            &crate::disk::paths::plugins_dir(app_data),
+        ),
+        None => ApplyResult::default(),
+    }
+}
 
-        // The connection did not change, so it keeps what it holds and
-        // takes only the next profile's tick settings and [prompt] table.
-        // The values the last profile's prompt read go first, since they
-        // came from its capture and its scripts.
-        let mut c = session.connection.lock();
-        c.prompt.switch_profile();
-        hand_to_connection(&mut p, &mut c, &tick_before);
-        // The latest Char.Prompt of the connection applies to the new
-        // profile's capture by the rule every packet follows, and the
-        // profile keeps the table as it then stands.
-        let before = c.prompt.revision();
-        c.prompt.follow_latest(chrono::Local::now().fixed_offset());
-        crate::prompt::keep_table(&mut p, &c, before);
-        // Under both locks, so no plugin of the profile you left answers
-        // a line or a packet for the next one.
-        let plugins = match state.app_data.get() {
-            Some(app_data) => crate::app::plugins::follow_profile_plugins(
-                &mut p,
-                &mut c,
-                &crate::disk::paths::plugins_dir(app_data),
-            ),
-            None => ApplyResult::default(),
-        };
-        Ok(plugins)
+/// The file of `left`, a profile that just closed, no longer stands
+/// behind a profile in memory, and every other write to it reads it
+/// first, so a file that did not read at launch is safe from here on.
+async fn leave_file(state: &SharedState, left: &OpenProfile) {
+    let Some(name) = left.name() else {
+        return;
+    };
+    if let Some(set) = state.profile_set.lock().await.as_ref() {
+        crate::disk::atomic::release_unread(&set.profile_path(&name));
     }
 }
 
@@ -194,11 +230,11 @@ pub(crate) fn hand_to_connection(p: &mut Profile, c: &mut Connection, tick_befor
     crate::prompt::take_config(p, c, table);
 }
 
-/// Shared body for switching the active profile, for `session`. The
+/// Shared body for switching `session` to the profile `name`. The
 /// `profile_switch` Tauri command and the Char.Status auto-switch
 /// path in `auto_switch_for_character` both call this so the
 /// persist + load + flip sequence stays identical. An error is a
-/// sentence for you, and leaves the index and the live profile on the
+/// sentence for you, and leaves the index and the session on the
 /// profile you were using.
 pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
     app: &AppHandle<R>,
@@ -255,23 +291,20 @@ pub(crate) async fn switch_profile(
         return Err(SWITCH_MIGRATION_PENDING.into());
     }
 
-    // Step 1: snapshot + write the CURRENT active profile so user
+    // Step 1: snapshot + write the profile the session leaves so your
     // changes since the last persist are not lost on switch. Skipped
-    // after a #profile reset/load: the live profile is deliberately
-    // diverged from disk and a passive switch (the GMCP Char.Status
-    // auto-switch reaches here too) must not write it back.
-    if !state
-        .auto_persist_suppressed
-        .load(std::sync::atomic::Ordering::Acquire)
-    {
+    // after a #profile reset/load: the profile is deliberately diverged
+    // from disk and a passive switch (the GMCP Char.Status auto-switch
+    // reaches here too) must not write it back.
+    if !session.profile().held() {
         persist_state(state).await;
     }
 
     switch_live_profile(state, session, name).await
 }
 
-/// Switch to the profile that claims `character` on the connection
-/// `session` runs, when that is not the active one already.
+/// Switch `session` to the profile that claims `character` on the
+/// connection it runs, when it does not play that one already.
 pub(crate) async fn auto_switch_for_character<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
@@ -295,7 +328,7 @@ pub(crate) async fn auto_switch_for_character<R: tauri::Runtime>(
 }
 
 /// The profile that `character` logging in on the connection `session`
-/// runs should load, when that is not the active one already.
+/// runs should play, when it does not play that one already.
 async fn auto_switch_target(
     state: &SharedState,
     session: &Session,
@@ -306,10 +339,11 @@ async fn auto_switch_target(
         .lock()
         .ok()
         .and_then(|g| g.clone())?;
+    let playing = session.profile().name();
     let guard = state.profile_set.lock().await;
     let set = guard.as_ref()?;
     set.resolve_match(&host, port, Some(character))
-        .filter(|name| name != set.active_name())
+        .filter(|name| Some(name) != playing.as_ref())
 }
 
 /// The terminal line that says a login switched the profile, in the
@@ -382,8 +416,8 @@ pub(crate) mod tests {
     async fn switch_state(dir: &std::path::Path) -> super::SharedState {
         let state: super::SharedState = std::sync::Arc::new(AppState::default());
         state.app_data.set(dir.to_path_buf()).unwrap();
-        state.profile.lock().await.ui.tracked_affects = vec![affect("Sanctuary")];
-        *state.profile_set.lock().await = Some(james_like_set(dir));
+        state.selected_profile().await.ui.tracked_affects = vec![affect("Sanctuary")];
+        state.set_profiles(james_like_set(dir)).await;
         state
     }
 
@@ -435,7 +469,7 @@ pub(crate) mod tests {
             std::fs::write(plugin.join("main.lua"), format!("mud.echo('{name} on')")).unwrap();
         }
         {
-            let mut p = state.profile.lock().await;
+            let mut p = state.selected_profile().await;
             let mut c = session.connection.lock();
             p.plugins.enabled = vec!["default_only".into(), "everywhere".into()];
             crate::app::plugins::follow_profile_plugins(&mut p, &mut c, &plugins);
@@ -516,7 +550,7 @@ pub(crate) mod tests {
         let char_state = serde_json::json!({"language": ""});
         let vitals = serde_json::json!({"hp": 850, "maxhp": 900});
         let (look, count, who, pulse) = {
-            let mut p = state.profile.lock().await;
+            let mut p = state.selected_profile().await;
             let mut c = session.connection.lock();
             c.target.name = Some("goblin".into());
             c.target.room_idx = Some(1);
@@ -555,7 +589,7 @@ pub(crate) mod tests {
             .await
             .unwrap();
 
-        let p = state.profile.lock().await;
+        let p = state.selected_profile().await;
         let c = session.connection.lock();
         assert_eq!(c.target.name.as_deref(), Some("goblin"));
         assert_eq!(c.target.room_idx, Some(1));
@@ -582,7 +616,7 @@ pub(crate) mod tests {
         let state = switch_state(dir.path()).await;
         let session = state.selected_session();
         {
-            let mut p = state.profile.lock().await;
+            let mut p = state.selected_profile().await;
             let mut c = session.connection.lock();
             // A world Vosh does not know, where no Forsaken Lands rule
             // holds until a capture reads Aabahran's codes.
@@ -619,7 +653,7 @@ pub(crate) mod tests {
             .await
             .unwrap();
         {
-            let p = state.profile.lock().await;
+            let p = state.selected_profile().await;
             let c = session.connection.lock();
             assert_eq!(*c.prompt.config(), healer);
             assert!(!p.ui.prompt_template_enabled);
@@ -661,7 +695,7 @@ pub(crate) mod tests {
             .await
             .unwrap();
         {
-            let p = state.profile.lock().await;
+            let p = state.selected_profile().await;
             let c = session.connection.lock();
             assert_eq!(*c.prompt.config(), vosh_prompt::PromptConfig::fresh());
             assert_eq!(p.ui.prompt_template, "");
@@ -683,7 +717,7 @@ pub(crate) mod tests {
         super::switch_live_profile(&state, &session, "Mortal")
             .await
             .unwrap();
-        let p = state.profile.lock().await;
+        let p = state.selected_profile().await;
         assert!(session.connection.lock().prompt.config().is_default());
         assert_eq!(live_names(&p.ui.tracked_affects), ["Haste"]);
     }
@@ -854,7 +888,7 @@ pub(crate) mod tests {
             .await
             .unwrap();
         assert_eq!(live_affects(&state).await, ["Haste"]);
-        state.profile.lock().await.ui.tracked_affects = vec![affect("Fly")];
+        state.selected_profile().await.ui.tracked_affects = vec![affect("Fly")];
         persist(&state).await;
 
         let saved = ProfileConfig::load(&set.profile_path("Healer")).unwrap();

@@ -72,7 +72,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     // as the line path does, so the tick needs no lock of its own after.
     let (tick_step, script_apply) = {
         let lock_t0 = std::time::Instant::now();
-        let mut p = conn.profile.lock().await;
+        let mut p = conn.session.lock_profile().await;
         conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
         conn.perf.mutex_acquires += 1;
         let mut c = conn.session.connection.lock();
@@ -99,16 +99,9 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     let mut io = ScriptIo::Session(&mut conn.stream, &mut sink, &mut conn.walker);
     if let Some(step) = tick_step {
         conn.perf.ticks += 1;
-        deliver_tick_step(&conn.app, &mut io, &conn.profile, &conn.session, step).await?;
+        deliver_tick_step(&conn.app, &mut io, &conn.session, step).await?;
     }
-    apply_script_result(
-        &conn.app,
-        &mut io,
-        &conn.profile,
-        &conn.session,
-        script_apply,
-    )
-    .await?;
+    apply_script_result(&conn.app, &mut io, &conn.session, script_apply).await?;
     walk_gmcp(conn, &msg, batch).await?;
     // Keep the last affects list for a window that opens between ticks.
     conn.session.last_affects.observe(&msg.package, &msg.data);
