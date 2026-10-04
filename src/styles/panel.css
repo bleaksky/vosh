@@ -1150,6 +1150,17 @@
   color: var(--tertiary);
 }
 
+/* The exits keep their full width until the room name is down to a
+   floor of 3em, then they give way with an ellipsis. Six exits in a wide
+   face on a narrow panel never push the name out of its row. The 8px is
+   the gap .pane-row-value leaves before the exits. */
+.pane-map-exits {
+  min-width: 0;
+  max-width: calc(100% - 3em - 8px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .pane-map-person .pane-row-name {
   color: var(--secondary);
 }
