@@ -324,15 +324,21 @@ describe('the Gold, experience, and levels preset', () => {
 describe('the Disarms and fading buffs preset', () => {
   const sanctuary = presetTrigger('disarm_buff_fade', 'buff.sanctuary');
 
-  // Bug 17, open. The sanctuary trigger wants The white aura around a
+  // Bug 17. The sanctuary trigger wanted The white aura around a
   // character fades, a line the game never prints. When sanctuary leaves
   // someone else, the room reads the line the sanctuary row of skill_table
   // holds for others, The protective aura around $n fades., here with
   // Maren. The nearest line in words, The angry white aura around $n
   // fades., is holy vengeance wearing off (effect.c), not sanctuary.
-  // it.fails holds the bug until its fix makes this a plain it.
-  it.fails('marks sanctuary fading from another character (bug 17)', () => {
+  it('marks sanctuary fading from another character (bug 17)', () => {
     expect(triggerMatches(sanctuary, 'The protective aura around Maren fades.')).toBe(true);
+    expect(rewritten('disarm_buff_fade', 'The protective aura around Maren fades.')).toBe(
+      '## The protective aura around Maren fades.',
+    );
+    // Your own fade comes out once, the same.
+    expect(rewritten('disarm_buff_fade', 'The protective aura around your body fades.')).toBe(
+      '## The protective aura around your body fades.',
+    );
   });
 });
 
