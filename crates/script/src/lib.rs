@@ -141,9 +141,6 @@ pub struct ScriptEngine {
     /// The scripts `#script reload` runs again, in the order they first
     /// loaded.
     loaded_scripts: Vec<LoadedScript>,
-    /// GMCP subscriptions each loaded script owns, as package and
-    /// callback id, so a later run can replace them.
-    script_gmcp: HashMap<Owner, Vec<(String, i64)>>,
     /// The plugins and loose scripts Vosh stopped. A plugin stays off
     /// until it loads again, and a loose script until `#script reload`.
     stopped: HashSet<Owner>,
@@ -157,7 +154,6 @@ impl std::fmt::Debug for ScriptEngine {
             .field("trigger_count", &self.triggers.len())
             .field("gmcp_subscriptions", &self.gmcp_subs.len())
             .field("loaded_scripts", &self.loaded_scripts.len())
-            .field("script_gmcp", &self.script_gmcp.len())
             .field("stopped", &self.stopped)
             .finish_non_exhaustive()
     }
@@ -185,7 +181,6 @@ impl ScriptEngine {
             triggers: Vec::new(),
             gmcp_subs: HashMap::new(),
             loaded_scripts: Vec::new(),
-            script_gmcp: HashMap::new(),
             stopped: HashSet::new(),
         })
     }
@@ -270,11 +265,17 @@ impl ScriptEngine {
         self.finish(owner, &Site::Entry, called)
     }
 
-    /// Load a script as a named chunk so a later `reload` can re-execute
-    /// it. `owner` names the plugin or the loose file, and `chunk` is the
-    /// chunk name its errors name, like `@vitals_alert/main.lua`. Loading
-    /// an owner again runs it the way a reload does, and turns it back on
-    /// after a stop.
+    /// Load a plugin or a loose script, or load it again, as a named
+    /// chunk a later `reload` can run again. `owner` names the plugin or
+    /// the loose file, and `chunk` is the chunk name its errors name, like
+    /// `@vitals_alert/main.lua`.
+    ///
+    /// A load that succeeds takes the place of all `owner` registered
+    /// before, its Lua triggers, GMCP handlers and timers, so a load
+    /// never doubles them. A load that fails registers nothing and leaves
+    /// what `owner` had, and its other actions go ahead. A load Vosh
+    /// stops leaves `owner` off with nothing registered. Loading turns an
+    /// owner back on after a stop.
     pub fn load_script(&mut self, owner: Owner, chunk: &str, code: String) -> ScriptOutcome {
         self.stopped.remove(&owner);
         let outcome = self.run_script(&owner, chunk, &code);
@@ -299,13 +300,10 @@ impl ScriptEngine {
     }
 
     /// Re-execute every loaded script in the order they loaded, and go on
-    /// past one that fails. A loose script Vosh stopped runs again, and a
-    /// plugin Vosh stopped stays off. A trigger the script sets again
-    /// replaces the one of that name. A GMCP package the script
-    /// subscribes to again drops the handlers it made for that package
-    /// before, and a package it leaves alone keeps them. Other state, like
-    /// a timer the script schedules, is not cleared, so scripts that want
-    /// clean state manage it themselves.
+    /// past one that fails. Each run that succeeds takes the place of all
+    /// its script registered before, as [`Self::load_script`] says. A
+    /// loose script Vosh stopped runs again, and a plugin Vosh stopped
+    /// stays off. Lua globals and the variables a script set stay.
     pub fn reload_scripts(&mut self) -> ScriptOutcome {
         let scripts: Vec<(Owner, String, String)> = self
             .loaded_scripts
@@ -329,71 +327,67 @@ impl ScriptEngine {
         acc
     }
 
-    /// Run a loaded script's code. `mud.on_gmcp` has no name to replace a
-    /// subscription by, so a run that succeeds and subscribes to a package
-    /// drops the handlers the script made for that package on earlier
-    /// runs. Without that each reload added one more handler. A package the
-    /// run does not subscribe to keeps its handlers, so a script that sets
-    /// a global to subscribe only once keeps the one it has. A run that
-    /// fails keeps the old handlers and adds none.
+    /// Run a loaded script's code as one call of `owner`. A run that
+    /// succeeds lets go of all `owner` registered before it began, and
+    /// one that fails takes back what it registered itself.
     fn run_script(&mut self, owner: &Owner, chunk: &str, code: &str) -> ScriptOutcome {
+        let before = self.owned_callbacks(owner);
         let called = self.call(owner, |lua| lua.load(code).set_name(chunk).exec());
         if called.stop.is_some() {
             return self.finish(owner, &Site::Entry, called);
         }
         if called.error.is_some() {
-            self.discard_gmcp_subscriptions_since(called.start);
+            self.discard_registrations_since(called.start);
             return self.finish(owner, &Site::Entry, called);
         }
-        let made: Vec<(String, i64)> = match self.state.cell.lock() {
-            Ok(s) => s
-                .pending
-                .get(called.start..)
-                .unwrap_or_default()
-                .iter()
-                .filter_map(|action| match action {
-                    Action::SubscribeGmcp {
-                        package,
-                        callback_id,
-                    } => Some((package.clone(), *callback_id)),
-                    _ => None,
-                })
-                .collect(),
-            Err(_) => Vec::new(),
+        let mut outcome = ScriptOutcome {
+            actions: self.release(&before),
+            ..ScriptOutcome::default()
         };
-        let outcome = self.finish(owner, &Site::Entry, called);
-        let renewed: HashSet<&str> = made.iter().map(|(package, _)| package.as_str()).collect();
-        let (dropped, mut owned): (Vec<_>, Vec<_>) = self
-            .script_gmcp
-            .remove(owner)
-            .unwrap_or_default()
-            .into_iter()
-            .partition(|(package, _)| renewed.contains(package.as_str()));
-        let dropped: Vec<i64> = dropped.into_iter().map(|(_, id)| id).collect();
-        self.forget_callbacks(&dropped);
-        owned.extend(made);
-        self.script_gmcp.insert(owner.clone(), owned);
+        outcome.append(self.finish(owner, &Site::Entry, called));
         outcome
     }
 
-    /// Take back the GMCP subscriptions a failed script run queued past
-    /// `start` and free their callbacks. Left queued, the drain would
-    /// install them with no script to own them, so no later reload could
-    /// drop them. The run's other actions stay queued as before. A
-    /// trigger replaces the one of its name and a timer frees itself when
-    /// it fires, so neither piles up the same way.
-    fn discard_gmcp_subscriptions_since(&self, start: usize) {
+    /// Turn the plugin or loose script `owner` off: let go of the Lua
+    /// triggers, GMCP handlers and timers it registered, and take it off
+    /// the list `#script reload` runs. The variables it set and the
+    /// groups it turned on or off stay as they are.
+    pub fn unload(&mut self, owner: &Owner) -> ScriptOutcome {
+        self.loaded_scripts.retain(|script| script.owner != *owner);
+        self.stopped.remove(owner);
+        let owned = self.owned_callbacks(owner);
+        ScriptOutcome {
+            actions: self.release(&owned),
+            ..ScriptOutcome::default()
+        }
+    }
+
+    /// The functions `owner` handed over that Vosh still holds.
+    fn owned_callbacks(&self, owner: &Owner) -> Vec<i64> {
+        match self.state.cell.lock() {
+            Ok(s) => s
+                .callbacks
+                .iter()
+                .filter(|(_, cb)| cb.owner == *owner)
+                .map(|(id, _)| *id)
+                .collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Take back the registrations a failed load queued past `start` and
+    /// let go of their functions, so its owner keeps what it had. The
+    /// load's other actions stay queued.
+    fn discard_registrations_since(&self, start: usize) {
         let Ok(mut s) = self.state.cell.lock() else {
             return;
         };
         let start = start.min(s.pending.len());
-        let queued = s.pending.split_off(start);
-        for action in queued {
-            match action {
-                Action::SubscribeGmcp { callback_id, .. } => {
-                    s.callbacks.remove(&callback_id);
-                }
-                other => s.pending.push(other),
+        for action in s.pending.split_off(start) {
+            if action.registers() {
+                s.forget_registration(&action);
+            } else {
+                s.pending.push(action);
             }
         }
     }
@@ -551,8 +545,9 @@ impl ScriptEngine {
     fn finish(&mut self, owner: &Owner, site: &Site, called: Called) -> ScriptOutcome {
         if let Some(stop) = called.stop {
             self.discard_since(called.start);
-            self.stop_owner(owner, site);
+            let released = self.stop_owner(owner, site);
             let mut outcome = self.drain();
+            outcome.actions.extend(released);
             outcome.actions.extend(
                 report::stop_lines(owner, site, &stop)
                     .into_iter()
@@ -575,60 +570,53 @@ impl ScriptEngine {
         outcome
     }
 
-    /// Turn off what a stop of `owner` in `site` leaves off. A plugin
-    /// and a loose script lose every function they handed over and stay
-    /// stopped. A trigger or an alias loses its functions, and the caller
-    /// turns it off. A function from a `#lua` line goes alone.
-    fn stop_owner(&mut self, owner: &Owner, site: &Site) {
-        match owner {
-            Owner::Typed => {
-                if let Some(id) = site.callback_id() {
-                    self.forget_callbacks(&[id]);
-                }
-            }
+    /// Turn off what a stop of `owner` in `site` leaves off, and return
+    /// the actions that tell the session. A plugin and a loose script
+    /// lose every function they handed over and stay stopped. A trigger
+    /// or an alias loses its functions, and the caller turns it off. A
+    /// function from a `#lua` line goes alone.
+    fn stop_owner(&mut self, owner: &Owner, site: &Site) -> Vec<Action> {
+        let ids = match owner {
+            Owner::Typed => site.callback_id().into_iter().collect(),
             Owner::Plugin(_) | Owner::Script(_) => {
                 self.stopped.insert(owner.clone());
-                self.forget_owned(owner);
+                self.owned_callbacks(owner)
             }
-            Owner::Trigger(_) | Owner::Alias(_) => self.forget_owned(owner),
-        }
-    }
-
-    /// Let go of every function `owner` handed over.
-    fn forget_owned(&mut self, owner: &Owner) {
-        let ids: Vec<i64> = match self.state.cell.lock() {
-            Ok(s) => s
-                .callbacks
-                .iter()
-                .filter(|(_, cb)| cb.owner == *owner)
-                .map(|(id, _)| *id)
-                .collect(),
-            Err(_) => Vec::new(),
+            Owner::Trigger(_) | Owner::Alias(_) => self.owned_callbacks(owner),
         };
-        self.forget_callbacks(&ids);
-        self.script_gmcp.remove(owner);
+        self.release(&ids)
     }
 
     /// Let go of the functions `ids` names, and of the Lua triggers, GMCP
-    /// subscriptions and timers that would call them.
-    fn forget_callbacks(&mut self, ids: &[i64]) {
+    /// subscriptions and timers that would call them. Returns a cancel
+    /// for each timer that goes, so the session drops it too.
+    fn release(&mut self, ids: &[i64]) -> Vec<Action> {
         if ids.is_empty() {
-            return;
+            return Vec::new();
         }
+        let mut cancels = Vec::new();
         if let Ok(mut s) = self.state.cell.lock() {
             for id in ids {
                 s.callbacks.remove(id);
             }
-            s.timer_callbacks.retain(|_, id| !ids.contains(id));
+            s.timer_callbacks.retain(|timer_id, id| {
+                let keep = !ids.contains(id);
+                if !keep {
+                    cancels.push(Action::CancelTimer(*timer_id));
+                }
+                keep
+            });
         }
+        cancels.sort_by_key(|action| match action {
+            Action::CancelTimer(timer_id) => *timer_id,
+            _ => 0,
+        });
         self.triggers.retain(|t| !ids.contains(&t.callback_id));
         for subs in self.gmcp_subs.values_mut() {
             subs.retain(|id| !ids.contains(id));
         }
         self.gmcp_subs.retain(|_, subs| !subs.is_empty());
-        for owned in self.script_gmcp.values_mut() {
-            owned.retain(|(_, id)| !ids.contains(id));
-        }
+        cancels
     }
 
     /// Drop a callback's registry key. Idempotent.
@@ -1100,8 +1088,9 @@ mod tests {
     }
 
     #[test]
-    fn reload_keeps_a_gmcp_handler_the_script_guards_with_a_global() {
-        // Lua globals survive a reload, so a script can subscribe once.
+    fn a_reload_takes_back_each_handler_the_script_made_before() {
+        // Lua globals survive a reload, but the handlers the last run
+        // made do not, so a handler a global guards goes and stays gone.
         let mut e = ScriptEngine::new().unwrap();
         load(
             &mut e,
@@ -1118,10 +1107,162 @@ mod tests {
         e.reload_scripts().unwrap();
         e.reload_scripts().unwrap();
         let data = serde_json::json!({});
-        let vitals = e.dispatch_gmcp("Char.Vitals", &data).unwrap().actions;
-        assert_eq!(vitals, vec![Action::Echo("guarded".into())]);
+        let vitals = &e.dispatch_gmcp("Char.Vitals", &data).unwrap().actions;
+        assert!(vitals.is_empty(), "{vitals:?}");
         let room = e.dispatch_gmcp("Room.Info", &data).unwrap().actions;
         assert_eq!(room, vec![Action::Echo("room".into())]);
+        assert_eq!(held_callbacks(&e), 1);
+    }
+
+    /// The timer ids an outcome cancels.
+    fn cancels(outcome: &ScriptOutcome) -> Vec<u32> {
+        outcome
+            .actions
+            .iter()
+            .filter_map(|action| match action {
+                Action::CancelTimer(id) => Some(*id),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The timer id each timer in an outcome starts with.
+    fn timers(outcome: &ScriptOutcome) -> Vec<u32> {
+        outcome
+            .actions
+            .iter()
+            .filter_map(|action| match action {
+                Action::Timer { timer_id, .. } => Some(*timer_id),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_reload_never_doubles_what_a_plugin_registers() {
+        let code = "mud.trigger('hunger', 'You are hungry', function() mud.echo('eat') end)\n\
+                    mud.on_gmcp('Char.Vitals', function() mud.echo('vitals') end)\n\
+                    mud.timer(60, function() mud.echo('later') end)";
+        let mut e = ScriptEngine::new().unwrap();
+        let meals = Owner::Plugin("meals".into());
+        let first = e
+            .load_script(meals.clone(), "@meals/main.lua", code.into())
+            .unwrap();
+        let mut started = timers(&first);
+        for _ in 0..3 {
+            let again = e
+                .load_script(meals.clone(), "@meals/main.lua", code.into())
+                .unwrap();
+            // Each load cancels the timer the last one started.
+            assert_eq!(cancels(&again), started);
+            started = timers(&again);
+        }
+        assert_eq!(
+            e.match_line("You are hungry.").unwrap().actions,
+            vec![Action::Echo("eat".into())]
+        );
+        assert_eq!(
+            e.dispatch_gmcp("Char.Vitals", &serde_json::json!({}))
+                .unwrap()
+                .actions,
+            vec![Action::Echo("vitals".into())]
+        );
+        assert_eq!(held_callbacks(&e), 3);
+        assert_eq!(e.state.cell.lock().unwrap().timer_callbacks.len(), 1);
+    }
+
+    #[test]
+    fn a_reload_drops_what_the_new_code_no_longer_registers() {
+        let mut e = ScriptEngine::new().unwrap();
+        let both = "mud.trigger('hunger', 'You are hungry', function() mud.echo('eat') end)\n\
+                    mud.trigger('thirst', 'You are thirsty', function() mud.echo('drink') end)";
+        load(&mut e, "meals.lua", both).unwrap();
+        assert_eq!(e.lua_triggers().len(), 2);
+        load(
+            &mut e,
+            "meals.lua",
+            "mud.trigger('hunger', 'You are hungry', function() mud.echo('eat') end)",
+        )
+        .unwrap();
+        let names: Vec<String> = e.lua_triggers().into_iter().map(|t| t.name).collect();
+        assert_eq!(names, ["hunger"]);
+        let leftover = &e.match_line("You are thirsty.").unwrap().actions;
+        assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
+    #[test]
+    fn a_failed_reload_keeps_the_triggers_and_timers_it_had() {
+        let mut e = ScriptEngine::new().unwrap();
+        let good = "mud.trigger('hunger', 'You are hungry', function() mud.echo('eat') end)\n\
+                    mud.timer(60, function() end)";
+        load(&mut e, "meals.lua", good).unwrap();
+        let bad = "mud.trigger('hunger', 'You are hungry', function() mud.echo('new') end)\n\
+                   mud.timer(60, function() end)\n\
+                   error('typo')";
+        let outcome = load(&mut e, "meals.lua", bad);
+        assert!(outcome.failed);
+        let leftover = &cancels(&outcome);
+        assert!(leftover.is_empty(), "{leftover:?}");
+        let leftover = &timers(&outcome);
+        assert!(leftover.is_empty(), "{leftover:?}");
+        assert_eq!(
+            e.match_line("You are hungry.").unwrap().actions,
+            vec![Action::Echo("eat".into())]
+        );
+        assert_eq!(held_callbacks(&e), 2);
+    }
+
+    #[test]
+    fn an_unload_takes_exactly_what_its_owner_registered() {
+        let mut e = ScriptEngine::new().unwrap();
+        let meals = Owner::Plugin("meals".into());
+        let code = "mud.trigger('hunger', 'You are hungry', function() mud.echo('meals') end)\n\
+                    mud.on_gmcp('Char.Vitals', function() mud.echo('meals') end)\n\
+                    mud.on_gmcp('Room.Info', function() \
+                      mud.timer(60, function() end) \
+                      mud.set_var('fed', 'yes') \
+                    end)";
+        e.load_script(meals.clone(), "@meals/main.lua", code.into())
+            .unwrap();
+        // What its handler registers later is its own too.
+        let later = e
+            .dispatch_gmcp("Room.Info", &serde_json::json!({}))
+            .unwrap();
+        let started = timers(&later);
+        load(
+            &mut e,
+            "hunger.lua",
+            "mud.trigger('hunger', 'You are hungry', function() mud.echo('hunger') end)",
+        )
+        .unwrap();
+        e.eval(
+            "mud.on_gmcp('Char.Vitals', function() mud.echo('typed') end)",
+            "=#lua",
+        )
+        .unwrap();
+        let outcome = e.unload(&meals).unwrap();
+        assert_eq!(cancels(&outcome), started);
+        assert_eq!(e.loaded_script_names(), ["hunger.lua"]);
+        assert_eq!(
+            e.match_line("You are hungry.").unwrap().actions,
+            vec![Action::Echo("hunger".into())]
+        );
+        assert_eq!(
+            e.dispatch_gmcp("Char.Vitals", &serde_json::json!({}))
+                .unwrap()
+                .actions,
+            vec![Action::Echo("typed".into())]
+        );
+        let leftover = &e
+            .dispatch_gmcp("Room.Info", &serde_json::json!({}))
+            .unwrap()
+            .actions;
+        assert!(leftover.is_empty(), "{leftover:?}");
+        // The variable it set stays, since the session holds it.
+        assert_eq!(
+            e.eval("mud.echo(mud.var('fed'))", "=#lua").unwrap().actions,
+            vec![Action::Echo("yes".into())]
+        );
         assert_eq!(held_callbacks(&e), 2);
     }
 
