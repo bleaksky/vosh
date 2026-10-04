@@ -125,11 +125,13 @@ pub(crate) struct UiConfig {
     #[serde(default = "default_terminal_line_height")]
     pub terminal_line_height: String,
     /// The font every pane in the right panel and the status line under
-    /// the terminal draw their text in: empty for the terminal font, the
-    /// default, `system` for the system font, or a CSS font list the way
-    /// `font_family` holds one. Part of the `font` scope category. Written
-    /// only once you pick a font, so a profile that never does saves the
-    /// bytes it saved before. A build without it reads past the key.
+    /// the terminal draw their text in: empty for As designed, the
+    /// default, where each text keeps the face the panes were designed
+    /// in, `terminal` for the terminal font, `system` for the system
+    /// font, or a CSS font list the way `font_family` holds one. Part of
+    /// the `font` scope category. Written only once you pick a font, so
+    /// a profile that never does saves the bytes it saved before. A build
+    /// without it reads past the key.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub panel_font: String,
     /// The size in pixels every pane and the status line under the
@@ -1024,19 +1026,22 @@ pub(crate) fn coerce_font_size(size: u32) -> u32 {
     size.clamp(6, 64)
 }
 
-/// What the Panel font row saves for the system font. Empty is the
-/// terminal font.
+/// What the Panel font row saves for the terminal font. Empty is As
+/// designed.
+pub(crate) const PANEL_FONT_TERMINAL: &str = "terminal";
+
+/// What the Panel font row saves for the system font.
 pub(crate) const PANEL_FONT_SYSTEM: &str = "system";
 
-/// Trim a panel font pick and spell the system font one way. Anything
-/// else is a font list, kept as written.
+/// Trim a panel font pick and spell the terminal font and the system
+/// font one way each. Anything else is a font list, kept as written.
 pub(crate) fn normalize_panel_font(value: String) -> String {
     let value = value.trim();
-    if value.eq_ignore_ascii_case(PANEL_FONT_SYSTEM) {
-        PANEL_FONT_SYSTEM.to_string()
-    } else {
-        value.to_string()
-    }
+    [PANEL_FONT_TERMINAL, PANEL_FONT_SYSTEM]
+        .into_iter()
+        .find(|named| value.eq_ignore_ascii_case(named))
+        .unwrap_or(value)
+        .to_string()
 }
 
 /// What the panel Size row saves to follow the terminal size.
@@ -1267,15 +1272,15 @@ name = "haste"
 
     #[test]
     fn the_panel_font_round_trips_and_stays_out_of_the_file_until_you_pick_one() {
-        // Same as terminal, the default, writes nothing, so every file
-        // saved before the row keeps its bytes and reads it back.
+        // As designed, the default, writes nothing, so every file saved
+        // before the row keeps its bytes and reads it back.
         let written = ProfileConfig::default().to_toml().unwrap();
         assert!(!written.contains("panel_font"), "{written}");
         let old = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n").unwrap();
         assert_eq!(old.ui.panel_font, "");
         let mut ui = UiConfig::default();
         assert_eq!(through_toml(&ui).panel_font, "");
-        for pick in ["system", "\"Iosevka\", Menlo, monospace"] {
+        for pick in ["terminal", "system", "\"Iosevka\", Menlo, monospace"] {
             ui.panel_font = pick.into();
             assert_eq!(through_toml(&ui).panel_font, pick);
         }
@@ -1291,18 +1296,25 @@ name = "haste"
     }
 
     #[test]
-    fn a_panel_font_pick_trims_and_spells_the_system_font_one_way() {
+    fn a_panel_font_pick_trims_and_spells_the_named_fonts_one_way() {
         assert_eq!(normalize_panel_font(String::new()), "");
         assert_eq!(normalize_panel_font("  ".into()), "");
+        assert_eq!(normalize_panel_font(" Terminal ".into()), "terminal");
+        assert_eq!(normalize_panel_font("TERMINAL".into()), "terminal");
         assert_eq!(normalize_panel_font(" System ".into()), "system");
         assert_eq!(
             normalize_panel_font(" \"Iosevka\", Menlo, monospace ".into()),
             "\"Iosevka\", Menlo, monospace"
         );
-        // A family named system, as the Font list saves one, stays a font.
+        // A family named system or terminal, as the Font list saves one,
+        // stays a font.
         assert_eq!(
             normalize_panel_font("\"system\", Menlo, monospace".into()),
             "\"system\", Menlo, monospace"
+        );
+        assert_eq!(
+            normalize_panel_font("\"Terminal\", monospace".into()),
+            "\"Terminal\", monospace"
         );
     }
 
