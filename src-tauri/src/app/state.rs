@@ -28,8 +28,10 @@ pub(crate) struct AppState {
     pub(crate) session: Mutex<Option<SessionHandle>>,
     pub(crate) profile: Arc<Mutex<Profile>>,
     /// What one connection holds apart from the profile, your target and
-    /// the room list among it. The session loop holds a handle to it. See
-    /// [`crate::session::connection`] for where its lock sits.
+    /// the room list among it. The app holds one, which outlives each
+    /// session, until R14b gives each tab its own. The session loop holds
+    /// a handle to it. See [`crate::session::connection`] for where its
+    /// lock sits.
     pub(crate) connection: SharedConnection,
     pub(crate) lua_timers: SharedTimers,
     pub(crate) logs: SharedLogStore,

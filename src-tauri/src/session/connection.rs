@@ -4,21 +4,25 @@
 //! line by line, and the tick's count and the prompt engine, which both
 //! read. The app state holds the [`Connection`] behind a lock of its own,
 //! [`SharedConnection`], and the session loop holds a handle to it, so a
-//! command reads it without waiting on the loop.
+//! command reads it straight from the app state and never asks the loop.
 //!
 //! Its lock comes after the profile lock and the profile set, never before
-//! them. A step that holds it takes no other lock and never awaits. The
-//! session slot comes before it, since `disconnect` holds the slot while
-//! the loop ends and clears it.
+//! them. The session slot comes before it, since `disconnect` holds the
+//! slot while the loop ends and clears it. No holder awaits, and the only
+//! locks a holder takes are leaves: the Lua limits mutex in the script
+//! crate for each Lua run, `UNREAD_FILES` in `disk/atomic.rs` for
+//! `#profile save` and `#profile load`, and a try of `PERSIST_LOCK` for
+//! `#profile save`. [`SharedConnection`] says how long a holder keeps it.
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use super::room_block::RoomBlock;
 use crate::tick::TickRuntime;
 
-/// What one connection holds apart from the profile. It outlives each
-/// connection, so a target you set offline carries into the next one and
-/// your quick keys last until you quit.
+/// What one connection holds apart from the profile. The app holds one,
+/// which outlives each session, so a target you set offline carries into
+/// the next connection and your quick keys last until you quit. R14b
+/// gives each tab its own.
 #[derive(Debug, Default)]
 pub(crate) struct Connection {
     /// Your target plus the quick keys that aim at it. The target clears
@@ -50,7 +54,10 @@ pub(crate) struct Connection {
     /// with `mud.set_prompt_var(name, value)`, the latest packet of each
     /// GMCP package, and the hidden state worked out from them. A profile
     /// switch keeps the packets and drops the values, and a disconnect
-    /// clears both.
+    /// clears both. The engine's table is the one that counts. The
+    /// profile keeps a copy for its file, see
+    /// [`crate::profile::live::Profile::prompt`] for the rule that keeps
+    /// the two the same.
     pub(crate) prompt: vosh_prompt::PromptEngine,
 }
 
@@ -74,8 +81,20 @@ impl Connection {
 /// sends, right after the profile lock, and an async mutex there costs
 /// each line a poll and a share of the task's cooperative budget, about 3
 /// percent of P2. No step holds it across an await, and a task's guard
-/// cannot cross one, so a plain mutex fits. A command that finds it held
-/// waits on its thread for one step, which the Lua time budget bounds.
+/// cannot cross one, so a plain mutex fits.
+///
+/// The price is that a waiter blocks its runtime thread instead of
+/// yielding, for as long as the holder keeps the guard. A line the game
+/// sends keeps it through its triggers and its Lua, each Lua call within
+/// its time budget. A line you type keeps it through the whole input
+/// pipeline, file work included: `#profile save` writes the profile file
+/// and its backups, `#profile load` reads and parses one, and `#script
+/// load` and `#script reload` read scripts. A profile switch keeps it
+/// while it reads each plugin the next profile turns on and runs its
+/// entry script, one Lua budget per plugin in a row. A command such as
+/// `target_get` that comes in the middle waits on its thread through all
+/// of it, so on a machine with few cores a switch with plugins can hold
+/// up the other tasks until it ends.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct SharedConnection(Arc<Mutex<Connection>>);
 
@@ -97,7 +116,11 @@ pub(crate) struct TargetState {
     /// when the target isn't in the current room (or no target set).
     pub(crate) room_idx: Option<usize>,
     /// Configurable quick-key slots. Defaults to `gg`/`xx`/`zz`/`tt`
-    /// with empty verbs; users edit via `#qkey <name> <verb>`.
+    /// with empty verbs; users edit via `#qkey <name> <verb>`. They
+    /// belong to no one connection and last until you quit. They sit
+    /// here because every target payload carries them, and `target_get`
+    /// and the end of a session build one under this lock alone. R14b,
+    /// with a connection per tab, decides where they live.
     pub(crate) quick_keys: Vec<QuickKey>,
 }
 

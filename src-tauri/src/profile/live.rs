@@ -2,6 +2,13 @@
 //! with that profile and no file saves: the Lua engine, the aliases
 //! plugins make, the macro recorder, the revision counters that move
 //! when a group turns on or off, and the name Vosh shows for it.
+//!
+//! Some of it still belongs to one connection, and R14b decides where it
+//! goes. The session scoped variables clear as a connection starts,
+//! among them the GMCP mirrors and `target`, which mirrors the target on
+//! the connection and clears as a session ends. The Lua engine keeps the
+//! latest GMCP packet of each package for a new handler, and forgets
+//! them as a session ends.
 
 use std::collections::BTreeSet;
 
@@ -69,10 +76,15 @@ pub(crate) struct Profile {
     /// The catalog groups each of this profile's folders became in the
     /// shared catalog, which `#group` follows. See [`GroupFolders`].
     pub(crate) group_folders: GroupFolders,
-    /// The custom prompt's `[prompt]` table, which the profile file
-    /// saves. It stays the table the prompt engine runs, game edits
-    /// included, see [`crate::prompt::take_config`] and
-    /// [`crate::prompt::keep_table`].
+    /// The custom prompt's `[prompt]` table, which the profile file saves
+    /// and `prompt_config_get` answers with. It is a copy of the table
+    /// the prompt engine on the connection runs, and the engine's is the
+    /// one that counts. One rule keeps the two the same. A table from
+    /// outside the engine goes in through [`crate::prompt::take_config`],
+    /// and a step that lets the engine change its table, as when it
+    /// follows the game's prompt settings, copies it back through
+    /// [`crate::prompt::keep_table`]. A step that skips the copy leaves
+    /// the next save writing the old table.
     pub(crate) prompt: vosh_prompt::PromptConfig,
     /// The active profile's name as Vosh shows it, `Default` for the
     /// reserved default, which the custom prompt draws for `%profile`.
