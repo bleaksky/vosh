@@ -13,6 +13,7 @@ use tokio::time::Instant;
 use crate::profile::live::Profile;
 use crate::script::{self, ApplyResult, PendingTimer, SharedTimers};
 
+use super::connection::Connection;
 use super::effects::{apply_script_result, OutputSink, ScriptIo};
 use super::socket::Stream;
 use super::walk::Walker;
@@ -24,6 +25,7 @@ pub(super) async fn fire_due<R: tauri::Runtime>(
     stream: &mut Stream,
     walker: &mut Walker,
     profile: &Arc<Mutex<Profile>>,
+    connection: &Arc<Mutex<Connection>>,
     lua_timers: &SharedTimers,
 ) -> std::io::Result<()> {
     let now = Instant::now();
@@ -40,7 +42,8 @@ pub(super) async fn fire_due<R: tauri::Runtime>(
     }
     let (apply, held) = {
         let mut p = profile.lock().await;
-        fire_round(&mut p, due)
+        let mut c = connection.lock().await;
+        fire_round(&mut p, &mut c, due)
     };
     // Before the apply, so a cancel among its actions finds them.
     if !held.is_empty() {
@@ -59,12 +62,13 @@ pub(super) fn hold(list: &mut Vec<PendingTimer>, held: Vec<PendingTimer>) {
     list.splice(0..0, held);
 }
 
-/// Fire `due` as one round under the profile lock the caller holds.
-/// Returns what the callbacks ask of the profile, and the timers whose
-/// owner used its time for the round, which never ran and wait for the
-/// next.
+/// Fire `due` as one round under the profile lock and the connection's,
+/// which the caller holds. Returns what the callbacks ask of the profile,
+/// and the timers whose owner used its time for the round, which never
+/// ran and wait for the next.
 pub(super) fn fire_round(
     p: &mut Profile,
+    c: &mut Connection,
     due: Vec<PendingTimer>,
 ) -> (ApplyResult, Vec<PendingTimer>) {
     script::snapshot_vars(&p.script, &p.vars);
@@ -74,5 +78,5 @@ pub(super) fn fire_round(
         .into_iter()
         .filter(|t| fired.held.contains(&t.callback_id))
         .collect();
-    (script::apply_actions(p, fired.outcome), held)
+    (script::apply_actions(p, c, fired.outcome), held)
 }

@@ -286,11 +286,12 @@ pub(crate) async fn groups_set_enabled<R: tauri::Runtime>(
     let (switches, lists) = {
         let set = state.loadout_set.lock().await;
         let mut p = state.profile.lock().await;
-        let before = ListRevisions::of(&p);
+        let c = state.connection.lock().await;
+        let before = ListRevisions::of(&p, &c);
         switch_group(&mut p, set.as_ref(), list, &group, enabled)?;
         (
             group_switches(&p, set.as_ref(), list),
-            ListChanges::since(before, &p),
+            ListChanges::since(before, &p, &c),
         )
     };
     if lists.groups {
@@ -478,7 +479,8 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
     let lists;
     {
         let mut p = state.profile.lock().await;
-        let lists_before = ListRevisions::of(&p);
+        let c = state.connection.lock().await;
+        let lists_before = ListRevisions::of(&p, &c);
         for alias in &report.aliases {
             p.aliases.set(alias.clone());
         }
@@ -500,7 +502,7 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
                 .set(vosh_automation::vars::Scope::Profile, k.clone(), v.clone());
         }
         macros_snapshot = p.macros.clone();
-        lists = ListChanges::since(lists_before, &p);
+        lists = ListChanges::since(lists_before, &p, &c);
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&shared).await;

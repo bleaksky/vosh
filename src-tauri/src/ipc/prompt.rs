@@ -7,10 +7,13 @@
 //! your prompt shows, what the game hides and the triggers that hid your
 //! prompt while the profile reads none.
 //!
-//! Every command reads or writes the live profile under its lock and lets
-//! go before it emits anything. A change to the table repaints the open
-//! row through the session task, since only that task writes session
-//! output, and every window hears `vosh://prompt-config-changed`.
+//! Every command reads or writes the live profile and the prompt engine
+//! on the connection under their locks, the profile's first, and lets go
+//! of the connection's before it emits anything. A command that needs
+//! only the engine takes only the connection's lock. A change to the
+//! table repaints the open row through the session task, since only that
+//! task writes session output, and every window hears
+//! `vosh://prompt-config-changed`.
 
 use std::sync::atomic::Ordering;
 
@@ -40,7 +43,7 @@ use crate::prompt::{
 pub(crate) async fn prompt_config_get(
     state: State<'_, SharedState>,
 ) -> Result<PromptConfig, String> {
-    Ok(state.profile.lock().await.prompt.config().clone())
+    Ok(state.profile.lock().await.prompt.clone())
 }
 
 /// Take a `[prompt]` table for the active profile. A new capture that does
@@ -57,10 +60,13 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
     as_is: Option<bool>,
 ) -> Result<(), String> {
     let p = &mut *state.profile.lock().await;
-    let changed = if as_is.unwrap_or(false) {
-        set_config_as_is(p, config)?
-    } else {
-        set_config(p, config)?
+    let changed = {
+        let c = &mut *state.connection.lock().await;
+        if as_is.unwrap_or(false) {
+            set_config_as_is(p, c, config)?
+        } else {
+            set_config(p, c, config)?
+        }
     };
     if changed {
         mark_profile_dirty(&app);
@@ -79,7 +85,11 @@ pub(crate) async fn prompt_card_open<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharedState>,
 ) -> Result<PromptConfig, String> {
-    let (config, changed) = card_open(&mut *state.profile.lock().await);
+    let (config, changed) = {
+        let mut p = state.profile.lock().await;
+        let mut c = state.connection.lock().await;
+        card_open(&mut p, &mut c)
+    };
     if changed {
         mark_profile_dirty(&app);
         broadcast_prompt_config_changed(&app);
@@ -107,7 +117,7 @@ pub(crate) async fn prompt_compile(
     state: State<'_, SharedState>,
     capture: CompileRequest,
 ) -> Result<CompileReport, String> {
-    Ok(compile(&*state.profile.lock().await, &capture))
+    Ok(compile(&*state.connection.lock().await, &capture))
 }
 
 /// What a capture built from one entry of the candidates ring reads: the
@@ -120,7 +130,11 @@ pub(crate) async fn prompt_capture_from_line(
     id: u64,
     names: Option<Vec<String>>,
 ) -> Result<CompileReport, String> {
-    capture_from_line(&*state.profile.lock().await, id, &names.unwrap_or_default())
+    capture_from_line(
+        &*state.connection.lock().await,
+        id,
+        &names.unwrap_or_default(),
+    )
 }
 
 /// The candidates ring grouped by shape, with counts.
@@ -128,8 +142,8 @@ pub(crate) async fn prompt_capture_from_line(
 pub(crate) async fn prompt_candidates(
     state: State<'_, SharedState>,
 ) -> Result<Vec<CandidateGroup>, String> {
-    let p = state.profile.lock().await;
-    Ok(vosh_prompt::card::candidates::groups(p.prompt.stage.ring()))
+    let c = state.connection.lock().await;
+    Ok(vosh_prompt::card::candidates::groups(c.prompt.stage.ring()))
 }
 
 /// How a capture matches the candidates ring and the lines in your
@@ -140,9 +154,9 @@ pub(crate) async fn prompt_capture_check(
     capture: CaptureConfig,
 ) -> Result<CaptureCheck, String> {
     let (recognizer, ring) = {
-        let p = state.profile.lock().await;
-        let recognizer = Recognizer::compile_for(&capture, p.prompt.who());
-        let ring: Vec<vosh_prompt::stage::Candidate> = p.prompt.stage.ring().cloned().collect();
+        let c = state.connection.lock().await;
+        let recognizer = Recognizer::compile_for(&capture, c.prompt.who());
+        let ring: Vec<vosh_prompt::stage::Candidate> = c.prompt.stage.ring().cloned().collect();
         (recognizer, ring)
     };
     let lines: Vec<String> = {
@@ -167,7 +181,9 @@ pub(crate) async fn prompt_line_triggers(
     state: State<'_, SharedState>,
     capture: CaptureConfig,
 ) -> Result<Vec<LineTrigger>, String> {
-    Ok(line_triggers(&*state.profile.lock().await, &capture))
+    let p = state.profile.lock().await;
+    let c = state.connection.lock().await;
+    Ok(line_triggers(&p, &c, &capture))
 }
 
 /// Draw a design with live or sample values, a preview and overrides on
@@ -245,7 +261,7 @@ pub(crate) async fn prompt_preview_set(
     state: State<'_, SharedState>,
     preview: Option<PromptPreview>,
 ) -> Result<(), String> {
-    state.profile.lock().await.prompt.set_preview(preview);
+    state.connection.lock().await.prompt.set_preview(preview);
     request_prompt_repaint(state.inner()).await;
     Ok(())
 }
@@ -261,7 +277,7 @@ pub(crate) async fn prompt_code_reader_set(
     state: State<'_, SharedState>,
     on: bool,
 ) -> Result<(), String> {
-    state.profile.lock().await.prompt.set_reader(on);
+    state.connection.lock().await.prompt.set_reader(on);
     Ok(())
 }
 
@@ -321,7 +337,7 @@ pub(crate) async fn hidden_get(
 pub(crate) async fn prompt_show_get(
     state: State<'_, SharedState>,
 ) -> Result<PromptShowState, String> {
-    Ok(prompt_show_state(&*state.profile.lock().await))
+    Ok(prompt_show_state(&*state.connection.lock().await))
 }
 
 /// The triggers that hid your prompt this session while the profile
@@ -333,8 +349,8 @@ pub(crate) async fn prompt_show_get(
 pub(crate) async fn prompt_gags_without_reader(
     state: State<'_, SharedState>,
 ) -> Result<Vec<String>, String> {
-    let p = state.profile.lock().await;
-    Ok(p.prompt
+    let c = state.connection.lock().await;
+    Ok(c.prompt
         .stage
         .gags_without_reader()
         .map(str::to_string)

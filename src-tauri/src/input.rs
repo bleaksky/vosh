@@ -584,7 +584,7 @@ fn process_line(
             return InputResult::error(format!("alias recursion limit hit ({depth})"));
         }
     };
-    run_expanded(profile, steps, lua)
+    run_expanded(profile, c, steps, lua)
 }
 
 /// Run the steps a line expanded to, in order: each command goes out as
@@ -596,6 +596,7 @@ fn process_line(
 /// once you arrive.
 pub(crate) fn run_expanded(
     profile: &mut Profile,
+    c: &mut Connection,
     steps: Vec<ExpandStep>,
     lua: &mut ApplyResult,
 ) -> InputResult {
@@ -618,7 +619,7 @@ pub(crate) fn run_expanded(
                 bytes.extend_from_slice(b"\r\n");
             }
             ExpandStep::Script(call) => {
-                let mut apply = run_alias_body(profile, &call);
+                let mut apply = run_alias_body(profile, c, &call);
                 bytes.append(&mut apply.send_bytes);
                 echo.append(&mut apply.echoes);
                 lua.append(apply);

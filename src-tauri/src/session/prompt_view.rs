@@ -13,7 +13,7 @@ use tracing::warn;
 
 use crate::app::events;
 use crate::profile::live::Profile;
-use crate::prompt::client_values;
+use crate::prompt::{client_values, keep_table};
 
 use super::connection::Connection;
 
@@ -34,9 +34,9 @@ fn render_prompt(p: &Profile, c: &Connection, now: Instant) -> vosh_prompt::Rend
     RENDERS.with(|n| n.set(n.get() + 1));
     let client = client_values(p, c, now);
     vosh_prompt::render_str(
-        &p.prompt.config().template,
-        &p.prompt.vars.resolver(&client),
-        p.prompt.render_options(false),
+        &c.prompt.config().template,
+        &c.prompt.vars.resolver(&client),
+        c.prompt.render_options(false),
     )
 }
 
@@ -71,14 +71,14 @@ impl PromptView {
 /// live render rides behind it. Overrides never reach
 /// `session://prompt-vars`, so the panes keep the live values.
 pub(super) fn prompt_view(p: &Profile, c: &Connection, now: Instant) -> PromptView {
-    if !p.prompt.draws() {
+    if !c.prompt.draws() {
         return PromptView {
             shown: None,
             live: None,
         };
     }
     let live = render_prompt(p, c, now);
-    let Some(preview) = p.prompt.preview() else {
+    let Some(preview) = c.prompt.preview() else {
         return PromptView {
             shown: Some(live),
             live: None,
@@ -91,16 +91,16 @@ pub(super) fn prompt_view(p: &Profile, c: &Connection, now: Instant) -> PromptVi
         };
     }
     let client = client_values(p, c, now);
-    let resolver = p.prompt.vars.resolver(&client);
+    let resolver = c.prompt.vars.resolver(&client);
     let overrides = preview.overrides(&resolver);
     let shown = vosh_prompt::render_str(
-        &p.prompt.config().template,
+        &c.prompt.config().template,
         &vosh_prompt::values::overrides::Overridden::new(
             &resolver,
             &overrides,
             chrono::Local::now().naive_local(),
         ),
-        p.prompt.render_options(preview.placeholders),
+        c.prompt.render_options(preview.placeholders),
     );
     PromptView {
         shown: Some(shown),
@@ -110,28 +110,45 @@ pub(super) fn prompt_view(p: &Profile, c: &Connection, now: Instant) -> PromptVi
 
 /// Start the custom prompt's session with no packets and no values.
 /// `known_host` is whether the host is The Forsaken Lands, whose rules
-/// also hold when the profile's capture reads Aabahran's codes.
-pub(super) fn start_prompt(p: &mut Profile, known_host: bool) {
-    p.prompt.connect(known_host);
-    p.prompt.stage.set_collapse(p.ui.collapse_repeats);
+/// also hold when the profile's capture reads Aabahran's codes. A new
+/// connection starts as a mortal in your own body, so the profile keeps
+/// a design that follows the game as the engine writes it for that.
+pub(super) fn start_prompt(p: &mut Profile, c: &mut Connection, known_host: bool) {
+    let before = c.prompt.revision();
+    c.prompt.connect(known_host);
+    keep_table(p, c, before);
+    c.prompt.stage.set_collapse(p.ui.collapse_repeats);
 }
 
 /// The custom prompt's packets, values and hidden state go with the
 /// connection. The webview stores clear on the disconnected state, so
-/// the hidden state that ends here is never reported.
-pub(super) fn end_prompt(p: &mut Profile) {
-    p.prompt.disconnect();
-    let _ = p.prompt.vars.take_hidden_change();
+/// the hidden state that ends here is never reported. Who you are goes
+/// too, so the profile keeps a design that follows the game as the
+/// engine writes it again.
+pub(super) fn end_prompt(p: &mut Profile, c: &mut Connection) {
+    let before = c.prompt.revision();
+    c.prompt.disconnect();
+    keep_table(p, c, before);
+    let _ = c.prompt.vars.take_hidden_change();
 }
 
 /// Keep a GMCP packet for the custom prompt, stamped with the local
-/// time it arrived.
-pub(super) fn observe_prompt_gmcp(p: &mut Profile, msg: &vosh_protocol::gmcp::Message) {
-    p.prompt.observe(
+/// time it arrived. The profile keeps the table the engine holds after
+/// it, since Char.Prompt can hand the capture the game's settings and
+/// Char.Status or Char.State can say you are someone the design that
+/// follows the game draws for differently.
+pub(super) fn observe_prompt_gmcp(
+    p: &mut Profile,
+    c: &mut Connection,
+    msg: &vosh_protocol::gmcp::Message,
+) {
+    let before = c.prompt.revision();
+    c.prompt.observe(
         &msg.package,
         msg.data.clone(),
         chrono::Local::now().fixed_offset(),
     );
+    keep_table(p, c, before);
 }
 
 /// Tell the webview which values the game hides, when that changed
@@ -140,8 +157,12 @@ pub(super) fn observe_prompt_gmcp(p: &mut Profile, msg: &vosh_protocol::gmcp::Me
 pub(super) async fn emit_hidden_change<R: tauri::Runtime>(
     app: &AppHandle<R>,
     profile: &Arc<Mutex<Profile>>,
+    connection: &Arc<Mutex<Connection>>,
 ) {
-    let change = profile.lock().await.prompt.vars.take_hidden_change();
+    let change = {
+        let _p = profile.lock().await;
+        connection.lock().await.prompt.vars.take_hidden_change()
+    };
     if let Some(hidden) = change {
         if let Err(e) = app.emit(events::HIDDEN, hidden) {
             warn!(error = %e, "failed to emit the hidden state");
@@ -159,9 +180,13 @@ pub(super) async fn emit_hidden_change<R: tauri::Runtime>(
 pub(super) async fn emit_prompt_vars<R: tauri::Runtime>(
     app: &AppHandle<R>,
     profile: &Arc<Mutex<Profile>>,
+    connection: &Arc<Mutex<Connection>>,
     always: bool,
 ) {
-    let vars = profile.lock().await.prompt.take_prompt_vars(always);
+    let vars = {
+        let _p = profile.lock().await;
+        connection.lock().await.prompt.take_prompt_vars(always)
+    };
     if let Some(vars) = vars {
         send_prompt_vars(app, &vars);
     }

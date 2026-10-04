@@ -4,6 +4,7 @@ use vosh_script::Owner;
 
 use crate::profile::live::Profile;
 use crate::script::{self, PendingTimer};
+use crate::session::connection::Connection;
 use crate::session::lua_timers::{fire_round, hold};
 
 #[test]
@@ -12,6 +13,7 @@ fn timers_a_plugin_had_no_time_for_go_back_on_the_list() {
         script: vosh_script::testkit::engine_with_nap(),
         ..Profile::default()
     };
+    let mut c = Connection::default();
     let loaded = p.script.load_script(
         Owner::Plugin("slow".into()),
         "@slow/main.lua",
@@ -20,9 +22,9 @@ fn timers_a_plugin_had_no_time_for_go_back_on_the_list() {
          end",
     );
     assert!(!loaded.failed, "{:?}", loaded.actions);
-    let due = script::apply_actions(&mut p, loaded).new_timers;
+    let due = script::apply_actions(&mut p, &mut c, loaded).new_timers;
     assert_eq!(due.len(), 6);
-    let (apply, held) = fire_round(&mut p, due.clone());
+    let (apply, held) = fire_round(&mut p, &mut c, due.clone());
     // Four naps use the budget, so one to four timers ran, the first ones.
     let ran = apply
         .echoes
@@ -44,7 +46,7 @@ fn timers_a_plugin_had_no_time_for_go_back_on_the_list() {
         due[ran..].iter().map(key).collect::<Vec<_>>()
     );
     // The next round runs the first of them.
-    let (next, _) = fire_round(&mut p, held);
+    let (next, _) = fire_round(&mut p, &mut c, held);
     assert_eq!(next.echoes.first(), Some(&format!("slow {}", ran + 1)));
 }
 
@@ -54,6 +56,7 @@ fn held_timers_fire_before_a_later_timer_of_the_same_plugin() {
         script: vosh_script::testkit::engine_with_nap(),
         ..Profile::default()
     };
+    let mut c = Connection::default();
     let loaded = p.script.load_script(
         Owner::Plugin("slow".into()),
         "@slow/main.lua",
@@ -63,12 +66,12 @@ fn held_timers_fire_before_a_later_timer_of_the_same_plugin() {
          mud.timer(1, function() mud.echo('later') end)",
     );
     assert!(!loaded.failed, "{:?}", loaded.actions);
-    let mut timers = script::apply_actions(&mut p, loaded).new_timers;
+    let mut timers = script::apply_actions(&mut p, &mut c, loaded).new_timers;
     assert_eq!(timers.len(), 7);
     // The first poll finds the six due, and the later timer stays on the
     // list.
     let mut list = timers.split_off(6);
-    let (apply, held) = fire_round(&mut p, timers);
+    let (apply, held) = fire_round(&mut p, &mut c, timers);
     let ran = apply
         .echoes
         .iter()
@@ -84,7 +87,7 @@ fn held_timers_fire_before_a_later_timer_of_the_same_plugin() {
     assert_eq!(list.iter().map(key).collect::<Vec<_>>(), want);
     // The later timer comes due before the next poll, which still runs
     // the held timers first.
-    let (next, _) = fire_round(&mut p, list);
+    let (next, _) = fire_round(&mut p, &mut c, list);
     assert_eq!(next.echoes.first(), Some(&format!("slow {}", ran + 1)));
     let last_slow = next
         .echoes

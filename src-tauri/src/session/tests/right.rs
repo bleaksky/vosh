@@ -21,7 +21,7 @@ fn at(show: PromptShow, cols: u16) -> (Session, Negotiator) {
     let mut session = Session::new(showing(profile(CODES, RIGHT, true), show));
     let mut negotiator = Negotiator::new();
     negotiator.set_window_size(cols, 40);
-    session.p.prompt.set_cols(usize::from(cols));
+    session.c.prompt.set_cols(usize::from(cols));
     (session, negotiator)
 }
 
@@ -71,7 +71,7 @@ fn a_new_width_draws_the_push_again_where_your_prompt_shows() {
         grid.session_output(&session.read(&wire_fixture("quiet")).out);
         // The size the session holds draws nothing again.
         assert!(!window_size_step(
-            &mut session.p,
+            &mut session.c,
             &mut negotiator,
             40,
             20,
@@ -79,14 +79,14 @@ fn a_new_width_draws_the_push_again_where_your_prompt_shows() {
         ));
         // A new width keeps the row open, and the repaint reaches to it.
         assert!(window_size_step(
-            &mut session.p,
+            &mut session.c,
             &mut negotiator,
             30,
             20,
             false
         ));
-        assert!(session.p.prompt.stage.open_row().is_some(), "{show:?}");
-        let out = repaint_step(&mut session.p, &session.c, false, Instant::now());
+        assert!(session.c.prompt.stage.open_row().is_some(), "{show:?}");
+        let out = repaint_step(&session.p, &mut session.c, false, Instant::now());
         assert!(out.replace.is_some(), "{show:?}");
         grid.resize(30, 20);
         grid.session_output(&out);
@@ -99,13 +99,13 @@ fn a_new_width_draws_the_push_again_where_your_prompt_shows() {
         );
         // Wider again, and it follows.
         assert!(window_size_step(
-            &mut session.p,
+            &mut session.c,
             &mut negotiator,
             50,
             20,
             false
         ));
-        let out = repaint_step(&mut session.p, &session.c, false, Instant::now());
+        let out = repaint_step(&session.p, &mut session.c, false, Instant::now());
         grid.resize(50, 20);
         grid.session_output(&out);
         assert_eq!(rows_of(&grid).last(), Some(&row(50)), "{show:?}");
@@ -114,13 +114,13 @@ fn a_new_width_draws_the_push_again_where_your_prompt_shows() {
     let (mut session, mut negotiator) = at(PromptShow::Pinned, 40);
     let _ = session.read(&wire_fixture("quiet"));
     assert!(window_size_step(
-        &mut session.p,
+        &mut session.c,
         &mut negotiator,
         30,
         20,
         false
     ));
-    let out = repaint_step(&mut session.p, &session.c, false, Instant::now());
+    let out = repaint_step(&session.p, &mut session.c, false, Instant::now());
     assert_eq!(band(&out), Some(row(30)));
 }
 
@@ -131,18 +131,18 @@ fn a_design_with_no_push_still_closes_the_row_at_a_new_width() {
     negotiator.set_window_size(40, 20);
     let _ = session.read(&wire_fixture("quiet"));
     assert!(!window_size_step(
-        &mut session.p,
+        &mut session.c,
         &mut negotiator,
         30,
         20,
         false
     ));
-    assert!(session.p.prompt.stage.open_row().is_none());
+    assert!(session.c.prompt.stage.open_row().is_none());
     // Nor does a push draw again while Vosh draws the game's own prompt.
     let mut session = Session::new(showing(profile(CODES, RIGHT, false), PromptShow::Text));
     let _ = session.read(&wire_fixture("quiet"));
     assert!(!window_size_step(
-        &mut session.p,
+        &mut session.c,
         &mut negotiator,
         40,
         20,

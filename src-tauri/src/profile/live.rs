@@ -64,13 +64,10 @@ pub(crate) struct Profile {
     /// The catalog groups each of this profile's folders became in the
     /// shared catalog, which `#group` follows. See [`GroupFolders`].
     pub(crate) group_folders: GroupFolders,
-    /// The custom prompt: the profile's `[prompt]` table, and what the
-    /// session feeds it, the values triggers write with
-    /// `mud.set_prompt_var(name, value)`, the latest packet of each GMCP
-    /// package, and the hidden state worked out from them. The table lasts
-    /// with the profile. A profile switch keeps the packets and drops the
-    /// values, and a disconnect clears both.
-    pub(crate) prompt: vosh_prompt::PromptEngine,
+    /// The custom prompt's `[prompt]` table, which the profile file
+    /// saves. The prompt engine on the connection runs it, and the profile
+    /// keeps the copy the engine holds, see [`crate::prompt::take_config`].
+    pub(crate) prompt: vosh_prompt::PromptConfig,
     /// The active profile's name as Vosh shows it, `Default` for the
     /// reserved default, which the custom prompt draws for `%profile`.
     /// Set at launch, on a switch and on a rename, so the session reads
@@ -92,13 +89,6 @@ impl Profile {
             && timer.group.as_deref().map_or(true, |g| {
                 g.is_empty() || !self.disabled_timer_groups.contains(g)
             })
-    }
-
-    /// Take a `[prompt]` table. Nothing reads the live `[ui]` copy of its
-    /// switch and design, and a save writes the file's copy from this
-    /// table, see [`crate::profile::file::ProfileConfig::from_profile`].
-    pub(crate) fn set_prompt_config(&mut self, config: vosh_prompt::PromptConfig) {
-        self.prompt.set_config(config);
     }
 }
 

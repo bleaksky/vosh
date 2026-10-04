@@ -1061,7 +1061,7 @@ mud.set_prompt_var('move', captures[4])"""
         assert_eq!(state.take_launch_notices(), [MOVED_INTO_DEFAULT]);
 
         let p = state.profile.lock().await;
-        let prompt = p.prompt.config();
+        let prompt = &p.prompt;
         assert!(prompt.draw);
         assert_eq!(prompt.template, TEMPLATE);
         assert_eq!(moved_capture(prompt).lines, [PATTERN]);

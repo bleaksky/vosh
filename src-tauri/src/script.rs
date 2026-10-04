@@ -17,6 +17,7 @@ use vosh_script::{Action, Owner, ScriptEngine, ScriptOutcome};
 use crate::app::events::{ListChanges, ListRevisions};
 use crate::input::LineFrom;
 use crate::profile::live::Profile;
+use crate::session::connection::Connection;
 
 /// One pending one-shot Lua timer.
 #[derive(Debug, Clone, Copy)]
@@ -62,6 +63,7 @@ pub(crate) fn refresh_vars(script: &ScriptEngine, vars: &VariableStore) {
 /// that names the alias runs nothing.
 pub(crate) fn run_alias_body(
     profile: &mut Profile,
+    c: &mut Connection,
     call: &vosh_automation::ScriptCall,
 ) -> ApplyResult {
     if profile.aliases.is_stopped(&call.source) {
@@ -70,7 +72,7 @@ pub(crate) fn run_alias_body(
     refresh_vars(&profile.script, &profile.vars);
     let owner = Owner::Alias(call.source.clone());
     let outcome = profile.script.run_body(&owner, &call.body, &call.captures);
-    apply_actions(profile, outcome)
+    apply_actions(profile, c, outcome)
 }
 
 /// Turn off each trigger and alias whose Lua Vosh stopped in `outcome`,
@@ -152,13 +154,18 @@ impl ApplyResult {
     }
 }
 
-/// Apply Lua-produced actions to the profile. The caller hands the
-/// returned [`ApplyResult`] to
+/// Apply Lua-produced actions to the profile, and the prompt values a
+/// script sets to the prompt engine on the connection. The caller hands
+/// the returned [`ApplyResult`] to
 /// `session::effects::apply_script_result`, which does the IO it lists
 /// on every path.
-pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> ApplyResult {
+pub(crate) fn apply_actions(
+    profile: &mut Profile,
+    c: &mut Connection,
+    outcome: ScriptOutcome,
+) -> ApplyResult {
     let mut result = ApplyResult::default();
-    let lists_before = ListRevisions::of(profile);
+    let lists_before = ListRevisions::of(profile, c);
     turn_off_stopped(profile, &outcome);
     for action in outcome.actions {
         match action {
@@ -210,7 +217,7 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
                 result.durable_changed = true;
             }
             Action::SetPromptVar { name, value } => {
-                profile.prompt.vars.set_script(&name, &value);
+                c.prompt.vars.set_script(&name, &value);
                 // Always flag as changed. A gate on change would send
                 // nothing after the first prompt while you sit at full
                 // vitals and the prompt repeats unchanged, so the page
@@ -221,7 +228,7 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
                 result.prompt_vars_changed = true;
             }
             Action::RemovePromptVar(name) => {
-                if profile.prompt.vars.remove_script(&name) {
+                if c.prompt.vars.remove_script(&name) {
                     result.prompt_vars_changed = true;
                 }
             }
@@ -259,7 +266,7 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
             }
         }
     }
-    result.lists = ListChanges::since(lists_before, profile);
+    result.lists = ListChanges::since(lists_before, profile, c);
     result
 }
 
@@ -507,10 +514,11 @@ mod tests {
     #[test]
     fn a_lua_alias_replaces_one_in_its_group() {
         let mut p = Profile::default();
+        let mut c = Connection::default();
         let mut heal = Alias::new("hl", "cast heal");
         heal.group = Some("healing".into());
         p.aliases.set(heal);
-        apply_actions(&mut p, set_alias("hl", "cast 'cure light'"));
+        apply_actions(&mut p, &mut c, set_alias("hl", "cast 'cure light'"));
         let hl = p.aliases.get("hl").unwrap();
         assert_eq!(hl.expansion, "cast 'cure light'");
         // It used to lose its group, so turning the group off no longer
@@ -589,7 +597,7 @@ mod tests {
             }],
             ..ScriptOutcome::default()
         };
-        apply_actions(&mut p, outcome);
+        apply_actions(&mut p, &mut Connection::default(), outcome);
         let leftover = &aliases_on(&p);
         assert!(leftover.is_empty(), "{leftover:?}");
     }
@@ -597,6 +605,7 @@ mod tests {
     #[test]
     fn a_timer_no_clock_can_hold_still_applies() {
         let mut p = Profile::default();
+        let mut c = Connection::default();
         let outcome = ScriptOutcome {
             actions: vec![Action::Timer {
                 delay: std::time::Duration::MAX,
@@ -605,14 +614,15 @@ mod tests {
             }],
             ..ScriptOutcome::default()
         };
-        let apply = apply_actions(&mut p, outcome);
+        let apply = apply_actions(&mut p, &mut c, outcome);
         assert_eq!(apply.new_timers.len(), 1);
     }
 
     #[test]
     fn a_new_lua_alias_has_no_group() {
         let mut p = Profile::default();
-        apply_actions(&mut p, set_alias("hl", "cast heal"));
+        let mut c = Connection::default();
+        apply_actions(&mut p, &mut c, set_alias("hl", "cast heal"));
         assert_eq!(p.aliases.get("hl").unwrap().group, None);
     }
 }

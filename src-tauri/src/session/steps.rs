@@ -1,10 +1,11 @@
-//! The steps the session loop takes under the profile lock for each
-//! line, prompt, partial and GA or EOR the game sends, and for each
-//! repaint of your prompt. A step that reads your target, follows the
-//! room look or reads the tick's count takes the [`Connection`] too,
-//! locked after the profile. None of them sends anything. They write to
-//! the read's batch or return the output, and a line step returns what
-//! is left for after the lock as a [`LineStep`].
+//! The steps the session loop takes for each line, prompt, partial and GA
+//! or EOR the game sends, and for each repaint of your prompt. Each takes
+//! the [`Connection`], which holds the prompt engine, your target, the
+//! room look and the tick's count, and a step that runs triggers or Lua
+//! or reads the profile's settings takes the profile too, locked before
+//! the connection. None of them sends anything. They write to the read's
+//! batch or return the output, and a line step returns what is left for
+//! after the locks as a [`LineStep`].
 
 use std::time::Duration;
 
@@ -63,7 +64,7 @@ fn line_pass(
     // The Lua bodies of this line's Script actions join the outcome the
     // Lua registered triggers wrote, so one apply takes both.
     outcome.append(run_trigger_scripts(p, &result));
-    let apply = script::apply_actions(p, outcome);
+    let apply = script::apply_actions(p, c, outcome);
     LinePass {
         result,
         tick_step,
@@ -129,14 +130,16 @@ pub(super) fn line_step(
     now: Instant,
     log_session_id: Option<i64>,
 ) -> Vec<LineStep> {
-    p.prompt.note_text();
+    c.prompt.note_text();
     // Without Char.Prompt this session, the game's reply to your own
-    // `prompt` tells Vosh your setting.
-    if p.prompt.observing(now_ms()) {
-        p.prompt
+    // `prompt` tells Vosh your setting, which the capture can take.
+    if c.prompt.observing(now_ms()) {
+        let before = c.prompt.revision();
+        c.prompt
             .observe_line(&line.bytes, &plain, chrono::Local::now().fixed_offset());
+        crate::prompt::keep_table(p, c, before);
     }
-    let offered = p
+    let offered = c
         .prompt
         .stage
         .offer(&line.bytes, &plain, line.painted, End::Line);
@@ -206,7 +209,7 @@ pub(super) fn let_go_held(
     now: Instant,
     log_session_id: Option<i64>,
 ) -> Vec<LineStep> {
-    p.prompt
+    c.prompt
         .stage
         .release()
         .into_iter()
@@ -229,12 +232,12 @@ pub(super) fn let_go_held(
 /// read painted them, so each is logged and kept for scrollback as it
 /// shows. Returns the log rows and the scrollback lines.
 pub(super) fn end_held(
-    p: &mut Profile,
+    c: &mut Connection,
     log_session_id: Option<i64>,
 ) -> (Vec<vosh_log::LogEntry>, Vec<Vec<u8>>) {
     let mut log = Vec::new();
     let mut kept = Vec::new();
-    for line in p.prompt.stage.release() {
+    for line in c.prompt.stage.release() {
         if let Some(sid) = log_session_id {
             log.push(vosh_log::LogEntry {
                 session_id: sid,
@@ -299,7 +302,7 @@ fn text_line_step(
         mut apply,
     } = line_pass(p, c, &bytes, &plain, scope, now);
     if result.display.is_none() {
-        note_gag_without_reader(p, batch, &plain, scope);
+        note_gag_without_reader(p, c, batch, &plain, scope);
     }
     // In-place echo replacement. When a trigger gags the line AND its
     // Script action emits one or more `mud.echo(...)` outputs, those
@@ -315,7 +318,7 @@ fn text_line_step(
         }
     }
     let collapse = p.ui.collapse_repeats;
-    p.prompt.stage.set_collapse(collapse);
+    c.prompt.stage.set_collapse(collapse);
     // In a fight and Attack lines say whether a line of a fight and an
     // attack line join a run. The pulse's Char.Combat came before its
     // text, so the line reads the fight it belongs to. The round that
@@ -325,7 +328,7 @@ fn text_line_step(
         fights: p.ui.collapse_fight_lines,
         attacks: p.ui.collapse_attack_lines,
     };
-    let fighting = p.prompt.vars.gmcp().fighting() || c.fight_tail;
+    let fighting = c.prompt.vars.gmcp().fighting() || c.fight_tail;
     let mut repeat = None;
     // Whether the ring keeps the line. While Collapse repeated lines is
     // on, it keeps what the screen shows, so the line end a pinned
@@ -347,13 +350,13 @@ fn text_line_step(
                 && rules.takes(fighting, &plain) =>
         {
             let text = result.display.as_deref().unwrap_or_default().as_bytes();
-            let made = p
+            let made = c
                 .prompt
                 .stage
                 .repeat_line(&mut batch.out, &bytes, &plain, painted, text);
             // The run as it shows, its count before it in the colors the
             // text carried into it, and the region it shows in.
-            let (shows, gen) = p
+            let (shows, gen) = c
                 .prompt
                 .stage
                 .run_shown()
@@ -366,7 +369,7 @@ fn text_line_step(
                 shown.extend_from_slice(text.as_bytes());
                 shown.extend_from_slice(b"\r\n");
             }
-            let swallowed = p
+            let swallowed = c
                 .prompt
                 .stage
                 .line(&mut batch.out, &bytes, &plain, painted, &shown);
@@ -376,7 +379,7 @@ fn text_line_step(
         Shows::Painted => {
             // It shows as the game sent it, whatever its triggers do. What
             // a script echoed in place of a hidden line lands after it.
-            p.prompt
+            c.prompt
                 .stage
                 .line(&mut batch.out, &bytes, &plain, None, &shown);
             Some(bytes.clone())
@@ -431,11 +434,11 @@ fn prompt_block(
     // ended a fight.
     c.room_block.end();
     c.fight_tail = false;
-    let disagree = p.prompt.vars.capture(vosh_prompt::Capture {
+    let disagree = c.prompt.vars.capture(vosh_prompt::Capture {
         values: block.values.clone(),
         raw: Some(block.raw_text()),
     });
-    p.prompt.note_prompt(chrono::Local::now().fixed_offset());
+    c.prompt.note_prompt(chrono::Local::now().fixed_offset());
     if !disagree.is_empty() {
         debug!(target: "vosh::prompt", fields = ?disagree, "the prompt and GMCP disagree");
     }
@@ -448,7 +451,7 @@ fn prompt_block(
         // fired, for the one-time notice.
         let matched =
             vosh_automation::trigger::matching(&p.triggers, &line.plain, MatchScope::Line);
-        p.prompt
+        c.prompt
             .stage
             .line_triggers_matched(matched.into_iter().map(|t| t.name.as_str()));
     }
@@ -465,7 +468,7 @@ fn prompt_block(
         script::snapshot_vars(&p.script, &p.vars);
     }
     let outcome = run_trigger_scripts(p, &result);
-    let mut apply = script::apply_actions(p, outcome);
+    let mut apply = script::apply_actions(p, c, outcome);
     batch.prompt_vars = true;
     batch.prompt = true;
     // The prompt draws with the packets that came before it.
@@ -475,9 +478,9 @@ fn prompt_block(
     let mut scrollback = Vec::new();
     // Pinned, the prompt leaves the text for the band above the command
     // line. It is logged and kept exactly as it is in the text.
-    let pinned = p.prompt.show() == vosh_prompt::PromptShow::Pinned;
+    let pinned = c.prompt.show() == vosh_prompt::PromptShow::Pinned;
     // The away prompt shows as sent, even while Vosh draws.
-    if p.prompt.draws() && !block.afk {
+    if c.prompt.draws() && !block.afk {
         // Echoes land where the prompt was, above the drawn prompt.
         for echo in apply.echoes.drain(..) {
             before.extend_from_slice(echo.as_bytes());
@@ -496,11 +499,11 @@ fn prompt_block(
             .map(|(_, line)| line.clone())
             .collect();
         if pinned {
-            p.prompt
+            c.prompt
                 .stage
                 .pin_view(&mut batch.out, block, painted, &before, view.stage());
         } else {
-            p.prompt
+            c.prompt
                 .stage
                 .draw_view(&mut batch.out, block, painted, &before, view.stage());
         }
@@ -519,11 +522,11 @@ fn prompt_block(
         // triggers do to the last one.
         let heads: Vec<BlockLine> = block.lines[..block.lines.len() - 1].to_vec();
         if pinned {
-            p.prompt
+            c.prompt
                 .stage
                 .pin_shown(&mut batch.out, block, painted, &before, display);
         } else {
-            p.prompt
+            c.prompt
                 .stage
                 .show_as_sent(&mut batch.out, block, painted, &before, display);
         }
@@ -576,6 +579,7 @@ fn keep_shown(
 /// prompt is named once a session.
 fn unread_partial(
     p: &mut Profile,
+    c: &mut Connection,
     batch: &mut ReadBatch,
     partial: &Partial,
     plain: &str,
@@ -597,12 +601,12 @@ fn unread_partial(
     if effect {
         script::snapshot_vars(&p.script, &p.vars);
         let outcome = run_trigger_scripts(p, &result);
-        apply = script::apply_actions(p, outcome);
+        apply = script::apply_actions(p, c, outcome);
         // The webview hears every prompt a Prompts trigger acted on.
         batch.prompt_vars = true;
     }
     if result.display.is_none() {
-        note_gag_without_reader(p, batch, plain, MatchScope::Prompt);
+        note_gag_without_reader(p, c, batch, plain, MatchScope::Prompt);
     }
     let mut before = Vec::new();
     if result.display.is_none() {
@@ -611,7 +615,7 @@ fn unread_partial(
             before.extend_from_slice(b"\r\n");
         }
     }
-    p.prompt.stage.end_partial(
+    c.prompt.stage.end_partial(
         &mut batch.out,
         &partial.bytes,
         partial.painted,
@@ -642,9 +646,9 @@ pub(super) fn marker_step(
     let Some(partial) = accumulator.take_partial() else {
         // A GA after lines the stage held ends them, since the rest of
         // the prompt never came.
-        let released = p.prompt.stage.release();
+        let released = c.prompt.stage.release();
         let steps = released_steps(p, c, batch, released, now, log_session_id);
-        p.prompt.record(None, now_ms());
+        c.prompt.record(None, now_ms());
         // The marker ends any room look before it, and the round that
         // ended a fight.
         c.room_block.end();
@@ -653,7 +657,7 @@ pub(super) fn marker_step(
     };
     let plain = vosh_protocol::ansi::plain_text(&partial.bytes);
     let painted = partial.painted.map(|(gen, _)| gen);
-    let offered = p
+    let offered = c
         .prompt
         .stage
         .offer(&partial.bytes, &plain, painted, End::Marker);
@@ -669,7 +673,7 @@ pub(super) fn marker_step(
                 now,
                 log_session_id,
             ));
-            p.prompt.record(None, now_ms());
+            c.prompt.record(None, now_ms());
         }
         Offer::Held | Offer::Line => {
             // The lines it released took the region the partial was
@@ -682,8 +686,8 @@ pub(super) fn marker_step(
                     ..partial
                 }
             };
-            steps.push(unread_partial(p, batch, &partial, &plain));
-            p.prompt.record(Some((&partial.bytes, &plain)), now_ms());
+            steps.push(unread_partial(p, c, batch, &partial, &plain));
+            c.prompt.record(Some((&partial.bytes, &plain)), now_ms());
         }
     }
     c.room_block.end();
@@ -707,9 +711,9 @@ pub(super) fn partial_step(
 ) -> Option<LineStep> {
     let mut step = None;
     if let Some(bytes) = accumulator.partial().map(<[u8]>::to_vec) {
-        p.prompt.note_text();
+        c.prompt.note_text();
         let plain = vosh_protocol::ansi::plain_text(&bytes);
-        match p.prompt.stage.settle(&bytes, &plain) {
+        match c.prompt.stage.settle(&bytes, &plain) {
             Some((block, region)) => {
                 let painted = accumulator
                     .take_partial()
@@ -727,36 +731,36 @@ pub(super) fn partial_step(
             }
             // It can still become your prompt, and it was not painted
             // yet, so it waits a moment for the next read.
-            None if accumulator.painted().is_none() && p.prompt.stage.live(&plain) => {
+            None if accumulator.painted().is_none() && c.prompt.stage.live(&plain) => {
                 batch.hold = true;
             }
             None => {
                 let painted =
-                    p.prompt
+                    c.prompt
                         .stage
                         .paint_partial(&mut batch.out, &bytes, accumulator.painted());
                 accumulator.set_painted(painted);
             }
         }
     } else {
-        p.prompt.stage.end_read(&mut batch.out);
+        c.prompt.stage.end_read(&mut batch.out);
     }
-    p.prompt.stage.finish(&mut batch.out);
+    c.prompt.stage.finish(&mut batch.out);
     step
 }
 
 /// A partial that waited for the next read stops waiting: it paints
 /// raw, with any held lines before it, as a region a later read
 /// replaces.
-pub(super) fn hold_step(p: &mut Profile, accumulator: &mut LineAccumulator, out: &mut Output) {
+pub(super) fn hold_step(c: &mut Connection, accumulator: &mut LineAccumulator, out: &mut Output) {
     if let Some(bytes) = accumulator.partial().map(<[u8]>::to_vec) {
-        let painted = p
+        let painted = c
             .prompt
             .stage
             .paint_partial(out, &bytes, accumulator.painted());
         accumulator.set_painted(painted);
     }
-    p.prompt.stage.finish(out);
+    c.prompt.stage.finish(out);
 }
 
 /// How long a GMCP packet that changes your prompt waits for text before
@@ -776,32 +780,32 @@ pub(super) const LATE_REPAINT: Duration = Duration::from_millis(60);
 /// fires, so deciding here draws nothing, and a pulse whose packets and
 /// text come in two reads costs no render.
 pub(super) fn late_repaint_after(
-    p: &Profile,
+    c: &Connection,
     waiting: Option<Instant>,
     gmcp: bool,
     prompt: bool,
     wrote: bool,
     now: Instant,
 ) -> Option<Instant> {
-    let pinned = p.prompt.show() == vosh_prompt::PromptShow::Pinned;
+    let pinned = c.prompt.show() == vosh_prompt::PromptShow::Pinned;
     let cancel = if pinned { prompt } else { wrote };
     let waiting = waiting.filter(|_| !cancel);
     if waiting.is_some() || !gmcp {
         return waiting;
     }
-    p.prompt.stage.repaintable().then(|| now + LATE_REPAINT)
+    c.prompt.stage.repaintable().then(|| now + LATE_REPAINT)
 }
 
 /// The late GMCP repaint fires: your prompt as it shows now, when there is
 /// still a row or a band to repaint, which is empty when nothing changed.
 /// `other` says output from elsewhere landed since the session last wrote.
 pub(super) fn late_repaint_step(
-    p: &mut Profile,
-    c: &Connection,
+    p: &Profile,
+    c: &mut Connection,
     other: bool,
     now: Instant,
 ) -> Output {
-    if !p.prompt.stage.repaintable() {
+    if !c.prompt.stage.repaintable() {
         return Output::new(other);
     }
     repaint_step(p, c, other, now)
@@ -822,7 +826,7 @@ pub(super) const CLOCK_SLACK: Duration = Duration::from_millis(5);
 /// clock's seconds. With both, the tick sets the pace, so your prompt
 /// repaints at most once a second.
 pub(super) fn clock_after(p: &Profile, c: &Connection, now: Instant) -> Option<Instant> {
-    let clock = p.prompt.clock()?;
+    let clock = c.prompt.clock()?;
     let tick = clock
         .tick
         .then(|| c.tick.remaining(&p.tick, now))
@@ -857,17 +861,17 @@ pub(super) fn clock_after(p: &Profile, c: &Connection, now: Instant) -> Option<I
 /// and never reaches history. `other` says output from elsewhere landed
 /// since the session last wrote, which closed the row.
 pub(super) fn clock_step(
-    p: &mut Profile,
-    c: &Connection,
+    p: &Profile,
+    c: &mut Connection,
     other: bool,
     reading: bool,
     now: Instant,
 ) -> Output {
-    let pinned = p.prompt.show() == vosh_prompt::PromptShow::Pinned;
-    if p.prompt.clock().is_none()
-        || p.prompt.preview().is_some()
+    let pinned = c.prompt.show() == vosh_prompt::PromptShow::Pinned;
+    if c.prompt.clock().is_none()
+        || c.prompt.preview().is_some()
         || (reading && !pinned)
-        || !p.prompt.stage.repaintable()
+        || !c.prompt.stage.repaintable()
     {
         return Output::new(other);
     }
@@ -880,7 +884,7 @@ pub(super) fn clock_step(
 /// which opens the observer's window. Returns true when the send started
 /// a pulse, on a server that sends no Char.Vitals.
 pub(super) fn send_step(
-    p: &mut Profile,
+    c: &mut Connection,
     accumulator: &LineAccumulator,
     sent: &[u8],
     at_ms: i64,
@@ -888,14 +892,14 @@ pub(super) fn send_step(
     let partial = accumulator
         .partial()
         .map(|bytes| (bytes.to_vec(), vosh_protocol::ansi::plain_text(bytes)));
-    p.prompt.record(
+    c.prompt.record(
         partial
             .as_ref()
             .map(|(bytes, plain)| (&bytes[..], plain.as_str())),
         at_ms,
     );
-    p.prompt.stage.close();
-    p.prompt.note_send(&String::from_utf8_lossy(sent), at_ms)
+    c.prompt.stage.close();
+    c.prompt.note_send(&String::from_utf8_lossy(sent), at_ms)
 }
 
 /// A window size message. While the card is closed, a new width closes
@@ -917,18 +921,18 @@ pub(super) fn send_step(
 /// card does and returns true: your prompt draws again at that width, on
 /// the row or on the band.
 pub(super) fn window_size_step(
-    p: &mut Profile,
+    c: &mut Connection,
     negotiator: &mut Negotiator,
     cols: u16,
     rows: u16,
     card_open: bool,
 ) -> bool {
-    let card_open = card_open || p.prompt.preview().is_some();
+    let card_open = card_open || c.prompt.preview().is_some();
     let new_width = negotiator.window_size.0 != cols;
-    p.prompt.set_cols(usize::from(cols));
-    let redraw = new_width && p.prompt.pushes_right();
+    c.prompt.set_cols(usize::from(cols));
+    let redraw = new_width && c.prompt.pushes_right();
     if new_width && !card_open && !redraw {
-        p.prompt.stage.close();
+        c.prompt.stage.close();
     }
     negotiator.set_window_size(cols, rows);
     redraw
@@ -941,10 +945,10 @@ pub(super) fn window_size_step(
 /// the row carries as its restore. `other` says output from elsewhere
 /// landed since the session last wrote, which closed the row. Returns the
 /// repaint, empty when no row is open.
-pub(super) fn repaint_step(p: &mut Profile, c: &Connection, other: bool, now: Instant) -> Output {
+pub(super) fn repaint_step(p: &Profile, c: &mut Connection, other: bool, now: Instant) -> Output {
     let mut out = Output::new(other);
     let view = prompt_view(p, c, now);
-    p.prompt.stage.repaint_view(&mut out, view.stage());
+    c.prompt.stage.repaint_view(&mut out, view.stage());
     out
 }
 
@@ -954,15 +958,15 @@ pub(super) fn repaint_step(p: &mut Profile, c: &Connection, other: bool, now: In
 /// the renderers write the restore they hold. Empty with no preview, and
 /// when no row or band is left to repaint.
 pub(super) fn end_preview_step(
-    p: &mut Profile,
-    c: &Connection,
+    p: &Profile,
+    c: &mut Connection,
     other: bool,
     now: Instant,
 ) -> Output {
-    if p.prompt.preview().is_none() {
+    if c.prompt.preview().is_none() {
         return Output::new(other);
     }
-    p.prompt.set_preview(None);
+    c.prompt.set_preview(None);
     repaint_step(p, c, other, now)
 }
 
@@ -970,12 +974,18 @@ pub(super) fn end_preview_step(
 /// this profile and the trigger also sets prompt values, it hides your
 /// prompt with nothing drawn in its place, so the webview hears its name
 /// once a session.
-fn note_gag_without_reader(p: &mut Profile, batch: &mut ReadBatch, plain: &str, scope: MatchScope) {
-    if p.prompt.stage.has_recognizer() {
+fn note_gag_without_reader(
+    p: &Profile,
+    c: &mut Connection,
+    batch: &mut ReadBatch,
+    plain: &str,
+    scope: MatchScope,
+) {
+    if c.prompt.stage.has_recognizer() {
         return;
     }
     for trigger in vosh_automation::trigger::matching(&p.triggers, plain, scope) {
-        if hides_and_reads_prompt(trigger) && p.prompt.stage.gag_without_reader(&trigger.name) {
+        if hides_and_reads_prompt(trigger) && c.prompt.stage.gag_without_reader(&trigger.name) {
             batch.gag_without_reader.push(trigger.name.clone());
         }
     }

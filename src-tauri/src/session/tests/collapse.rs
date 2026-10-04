@@ -36,8 +36,8 @@ const LOGIN: [&str; 4] = [
 /// `show` says, collapses repeated lines, and has a Line trigger that
 /// asks to send `seen` for each line that names Quenby, so a test can
 /// count the lines triggers saw.
-fn collapsing(show: PromptShow) -> Profile {
-    let mut p = showing(profile(CODES, HP, true), show);
+fn collapsing(show: PromptShow) -> Live {
+    let (mut p, c) = showing(profile(CODES, HP, true), show);
     p.ui.collapse_repeats = true;
     p.triggers
         .set(vosh_automation::trigger::Trigger::new(
@@ -48,7 +48,7 @@ fn collapsing(show: PromptShow) -> Profile {
             },
         ))
         .expect("the trigger compiles");
-    p
+    (p, c)
 }
 
 /// What the fake Aabahran writes after you log in, one pulse per entry
@@ -284,10 +284,10 @@ fn every_line_is_logged_and_triggers_see_each_one() {
 
 /// A profile like [`collapsing`] that pins your prompt with drawing off,
 /// so the ring keeps each prompt as the game sent it.
-fn collapsing_undrawn() -> Profile {
-    let mut p = showing(profile(CODES, HP, false), PromptShow::Pinned);
+fn collapsing_undrawn() -> Live {
+    let (mut p, c) = showing(profile(CODES, HP, false), PromptShow::Pinned);
     p.ui.collapse_repeats = true;
-    p
+    (p, c)
 }
 
 #[test]
@@ -304,7 +304,7 @@ fn the_scrollback_ring_keeps_each_run_once_in_the_order_it_came() {
     let hurt = "[765/1020hp 800/800mn 930/930mv]";
     let tank = "Tester: [===|===|===|---]";
     let battle = "A Blackwatch guard has quite a few wounds. ";
-    let cases: Vec<(&str, Profile, &str, Vec<String>)> = vec![
+    let cases: Vec<(&str, Live, &str, Vec<String>)> = vec![
         // Pinned, the ring keeps what the screen shows, and the line end
         // each pinned prompt's row took stays out of it.
         (
@@ -476,7 +476,7 @@ fn your_echo_output_from_elsewhere_and_a_new_connection_start_a_new_run() {
 
 #[test]
 fn a_hidden_line_leaves_the_run_and_another_color_starts_a_new_one() {
-    let mut p = collapsing(PromptShow::Pinned);
+    let (mut p, c) = collapsing(PromptShow::Pinned);
     p.triggers
         .set(vosh_automation::trigger::Trigger::new(
             "thirst",
@@ -484,7 +484,7 @@ fn a_hidden_line_leaves_the_run_and_another_color_starts_a_new_one() {
             vosh_automation::trigger::TriggerAction::Gag,
         ))
         .expect("the trigger compiles");
-    let mut session = Session::new(p);
+    let mut session = Session::new((p, c));
     let read = session.read(
         format!("{HUNGRY}\n\r{THIRSTY}\n\r{HUNGRY}\n\r\x1b[1;33m{HUNGRY}\x1b[0m\n\r").as_bytes(),
     );
@@ -506,9 +506,9 @@ fn a_hidden_line_leaves_the_run_and_another_color_starts_a_new_one() {
 
 #[test]
 fn with_collapse_off_every_line_shows_as_before() {
-    let mut p = collapsing(PromptShow::Pinned);
+    let (mut p, c) = collapsing(PromptShow::Pinned);
     p.ui.collapse_repeats = false;
-    let mut session = Session::new(p);
+    let mut session = Session::new((p, c));
     let read = session.read(format!("{HUNGRY}\n\r{HUNGRY}\n\r").as_bytes());
     assert_eq!(read.out.bytes, b"You are hungry.\r\nYou are hungry.\r\n");
     assert_eq!(made(&read), [None, None]);
@@ -594,11 +594,11 @@ fn highlighted(
     style: vosh_automation::trigger::HighlightStyle,
     lines: &[&str],
 ) -> Vec<Output> {
-    let mut p = collapsing(PromptShow::Pinned);
+    let (mut p, c) = collapsing(PromptShow::Pinned);
     p.triggers
         .set(highlight("mark", pattern, style))
         .expect("the trigger compiles");
-    let mut session = Session::new(p);
+    let mut session = Session::new((p, c));
     let mut mud = Mud::playing(Options {
         compact: true,
         ..Options::new(Build::New)
@@ -703,9 +703,9 @@ fn a_line_that_relies_on_the_color_before_it_keeps_it_with_its_count() {
     let green = Color::Named(NamedColor::Green);
     let text = format!("\x1b[32m{HUNGRY}\n\r{HUNGRY}\n\r{HUNGRY}\n\r{THIRSTY}\x1b[0m\n\r");
     for collapse in [false, true] {
-        let mut p = collapsing(PromptShow::Pinned);
+        let (mut p, c) = collapsing(PromptShow::Pinned);
         p.ui.collapse_repeats = collapse;
-        let mut session = Session::new(p);
+        let mut session = Session::new((p, c));
         let read = session.read(text.as_bytes());
         let mut grid = crate::native::grid::TermGrid::new(40, 10);
         grid.session_output(&read.out);
@@ -750,7 +750,7 @@ fn echo_before_the_run() -> (Vec<Output>, usize, &'static [u8]) {
     assert_eq!(made(&second), [Some(Repeat::Joins(2))]);
     // The session hears of your echo now, after the screen had the first
     // pulse only, so the run the second pulse went on with stays.
-    session.p.prompt.stage.local_write(first.out.id());
+    session.c.prompt.stage.local_write(first.out.id());
     let parry = session.read(&mud.pulse_later(PARRY));
     (
         vec![login.out, first.out, second.out, parry.out],
@@ -989,8 +989,8 @@ const DISMEMBERS: &str = "Your slash \x1b[0;33mDISMEMBERS\x1b[0;0m a Blackwatch 
 /// in to the fake Aabahran with a compact prompt pinned and plays a round
 /// in which you hit twice and dodge twice, first out of a fight, then in
 /// one.
-fn rounds_of(p: Profile) -> Vec<String> {
-    let mut session = Session::new(p);
+fn rounds_of(live: Live) -> Vec<String> {
+    let mut session = Session::new(live);
     let mut mud = Mud::playing(Options {
         compact: true,
         ..Options::new(Build::New)
@@ -1011,10 +1011,10 @@ fn rounds_of(p: Profile) -> Vec<String> {
 /// [`rounds_of`] with In a fight and Attack lines set to `fights` and
 /// `attacks`.
 fn rounds(fights: bool, attacks: bool) -> Vec<String> {
-    let mut p = collapsing(PromptShow::Pinned);
+    let (mut p, c) = collapsing(PromptShow::Pinned);
     p.ui.collapse_fight_lines = fights;
     p.ui.collapse_attack_lines = attacks;
-    rounds_of(p)
+    rounds_of((p, c))
 }
 
 #[test]
@@ -1074,9 +1074,9 @@ fn the_round_that_ends_a_fight_is_a_line_of_the_fight() {
     let battle = "A Blackwatch guard has quite a few wounds. ";
     let tank = "Tester: [===|===|===|---]";
     for fights in [true, false] {
-        let mut p = collapsing(PromptShow::Pinned);
+        let (mut p, c) = collapsing(PromptShow::Pinned);
         p.ui.collapse_fight_lines = fights;
-        let mut session = Session::new(p);
+        let mut session = Session::new((p, c));
         let mut mud = Mud::playing(Options {
             compact: true,
             ..Options::new(Build::New)
@@ -1115,9 +1115,9 @@ fn the_battle_line_shows_every_round_while_a_fight_shows_every_line() {
         .count();
     assert!(sent > 1, "{sent}");
     for fights in [true, false] {
-        let mut p = collapsing(PromptShow::Pinned);
+        let (mut p, c) = collapsing(PromptShow::Pinned);
         p.ui.collapse_fight_lines = fights;
-        let mut session = Session::new(p);
+        let mut session = Session::new((p, c));
         let reads = replay(&mut session, login, fight, &[]);
         let ring = ring_of(&reads);
         let joins = reads

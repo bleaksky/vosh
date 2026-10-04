@@ -205,9 +205,10 @@ async fn handle_event<R: tauri::Runtime>(
 /// the output count after it.
 pub(super) async fn flush_hold<R: tauri::Runtime>(conn: &mut Conn<R>) {
     let out = {
-        let mut p = conn.profile.lock().await;
+        let _p = conn.profile.lock().await;
+        let mut c = conn.connection.lock().await;
         let mut out = Output::new(output_count() != conn.seen_output);
-        hold_step(&mut p, &mut conn.accumulator, &mut out);
+        hold_step(&mut c, &mut conn.accumulator, &mut out);
         out
     };
     if !out.is_empty() {
@@ -226,10 +227,10 @@ pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
     let mut batch = ReadBatch::new(conn.seen_output);
     let steps = {
         let mut p = conn.profile.lock().await;
-        if !p.prompt.stage.holds() {
+        let mut c = conn.connection.lock().await;
+        if !c.prompt.stage.holds() {
             return Ok(());
         }
-        let mut c = conn.connection.lock().await;
         let_go_held(&mut p, &mut c, &mut batch, Instant::now(), log_sink.id())
     };
     for step in steps {
@@ -310,7 +311,7 @@ pub(super) async fn walked<R: tauri::Runtime>(
     } = out;
     conn.walk_lines.extend(lines);
     if !release.is_empty() {
-        let apply = walk::release(&conn.profile, release).await;
+        let apply = walk::release(&conn.profile, &conn.connection, release).await;
         apply_script_result(
             &conn.app,
             &mut ScriptIo::Session(
@@ -382,15 +383,15 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
     let app = &conn.app;
     let watched = prompt && watching_prompt(app);
     let (vars, hidden, prompt_seen, status, prompt_state, clock) = {
-        let mut p = conn.profile.lock().await;
-        let c = conn.connection.lock().await;
+        let p = conn.profile.lock().await;
+        let mut c = conn.connection.lock().await;
         // Echoes the end of the read wrote close the open row.
-        p.prompt.stage.finish(&mut out);
+        c.prompt.stage.finish(&mut out);
         (
-            p.prompt.take_prompt_vars(prompt_vars),
-            p.prompt.vars.take_hidden_change(),
-            p.prompt.take_seen(),
-            p.prompt.take_status_change(),
+            c.prompt.take_prompt_vars(prompt_vars),
+            c.prompt.vars.take_hidden_change(),
+            c.prompt.take_seen(),
+            c.prompt.take_status_change(),
             watched.then(|| crate::prompt::prompt_state(&p, &c)),
             clock_after(&p, &c, Instant::now()),
         )

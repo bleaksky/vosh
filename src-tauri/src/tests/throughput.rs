@@ -122,11 +122,10 @@ async fn play(session: Arc<Vec<u8>>) -> Run {
     let state: SharedState = Arc::new(AppState::default());
     let log = dir.path().join("logs.sqlite");
     *state.logs.lock().await = Some(vosh_log::LogStore::open(&log).expect("the log"));
-    state
-        .profile
-        .lock()
-        .await
-        .set_prompt_config(vosh_prompt::PromptConfig {
+    crate::prompt::take_config(
+        &mut *state.profile.lock().await,
+        &mut *state.connection.lock().await,
+        vosh_prompt::PromptConfig {
             capture: vosh_prompt::CaptureConfig::Aabahran(vosh_prompt::config::AabahranCapture {
                 prompt: PROMPT.into(),
                 ..vosh_prompt::config::AabahranCapture::default()
@@ -135,7 +134,8 @@ async fn play(session: Arc<Vec<u8>>) -> Run {
             // game draws the row the game sends, which `drawn` cannot
             // tell from the game's own prompt.
             ..vosh_prompt::PromptConfig::from_legacy(true, vosh_prompt::DEFAULT_DESIGN)
-        });
+        },
+    );
 
     let app = mock_builder()
         .build(mock_context(noop_assets()))

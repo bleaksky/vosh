@@ -25,7 +25,7 @@ const FNV_START: u64 = 0xcbf2_9ce4_8422_2325;
 /// Every payload a session sends for `reads` of `bytes`, cut after each
 /// offset in `at`, with the log rows and the kept lines, folded into one
 /// digest.
-fn digest_reads(hash: u64, profile: &dyn Fn() -> Profile, bytes: &[u8], at: &[usize]) -> u64 {
+fn digest_reads(hash: u64, profile: &dyn Fn() -> Live, bytes: &[u8], at: &[usize]) -> u64 {
     let mut session = Session::new(profile());
     let mut hash = hash;
     for read in vosh_prompt::testkit::reads(bytes, at) {
@@ -46,7 +46,7 @@ fn digest_reads(hash: u64, profile: &dyn Fn() -> Profile, bytes: &[u8], at: &[us
 
 /// One read, and two cut at every place [`cuts`] names, folded into one
 /// digest for the fixture.
-fn digest_fixture(profile: &dyn Fn() -> Profile, name: &str) -> u64 {
+fn digest_fixture(profile: &dyn Fn() -> Live, name: &str) -> u64 {
     let bytes = wire_fixture(name);
     let mut hash = digest_reads(FNV_START, profile, &bytes, &[]);
     for at in cuts(&bytes) {
@@ -92,14 +92,14 @@ fn digest_play(template: &str, draw: bool) -> u64 {
     take(&mut hash, &read);
     let read = session.read(b"\n\r[1020/1020hp 800/800mn 930/930mv]\n\r\xff\xf9");
     take(&mut hash, &read);
-    let mut config = session.p.prompt.config().clone();
+    let mut config = session.c.prompt.config().clone();
     config.template = "hp %hp> ".into();
-    session.p.set_prompt_config(config);
+    take_config(&mut session.p, &mut session.c, config);
     let out = session.repaint();
     hash = fnv(hash, payload(&out).unwrap_or_default().as_bytes());
-    let mut config = session.p.prompt.config().clone();
+    let mut config = session.c.prompt.config().clone();
     config.draw = !config.draw;
-    session.p.set_prompt_config(config);
+    take_config(&mut session.p, &mut session.c, config);
     let out = session.repaint();
     hash = fnv(hash, payload(&out).unwrap_or_default().as_bytes());
     session.local_write();
@@ -179,10 +179,10 @@ enum Step {
 /// order: the login pulse, `look`, a tell you did not ask for, `fight`,
 /// two combat rounds, Enter on an empty line, then `fight` again to end
 /// it and someone arriving.
-fn fake_play(p: Profile) -> Vec<Step> {
+fn fake_play(live: Live) -> Vec<Step> {
     use vosh_prompt::testkit::{Build, Mud, Options};
     let mut mud = Mud::playing(Options::new(Build::New));
-    let mut session = Session::new(p);
+    let mut session = Session::new(live);
     let mut steps = Vec::new();
     let read = |session: &mut Session, bytes: &[u8], steps: &mut Vec<Step>| {
         steps.push(Step::Output(payload(&session.read(bytes).out)));
@@ -242,7 +242,7 @@ fn in_the_text_every_payload_log_row_and_kept_line_stays_as_today() {
 
 /// A Prompts trigger that asks to send `seen` for every prompt, so a test
 /// can count what Prompts triggers saw.
-fn counting(mut p: Profile) -> Profile {
+fn counting((mut p, c): Live) -> Live {
     p.triggers
         .set(vosh_automation::trigger::Trigger {
             target: vosh_automation::trigger::TriggerTarget::Prompt,
@@ -255,13 +255,13 @@ fn counting(mut p: Profile) -> Profile {
             )
         })
         .expect("the trigger compiles");
-    p
+    (p, c)
 }
 
 /// Everything a session hands on for `bytes` cut at `at`, read by the
 /// profile `make` gives: the payloads, the log rows, the kept lines and
 /// what Prompts triggers sent.
-fn play_reads(make: &dyn Fn() -> Profile, bytes: &[u8], at: &[usize]) -> Vec<Read> {
+fn play_reads(make: &dyn Fn() -> Live, bytes: &[u8], at: &[usize]) -> Vec<Read> {
     replay(&mut Session::new(make()), bytes, at)
 }
 
@@ -424,9 +424,9 @@ fn tank_rows(rows: &[String]) -> usize {
 
 /// Take `template` as the design, as the card saves an edit, and repaint.
 fn edit_design(session: &mut Session, template: &str) -> Output {
-    let mut config = session.p.prompt.config().clone();
+    let mut config = session.c.prompt.config().clone();
     config.template = template.to_string();
-    session.p.set_prompt_config(config);
+    take_config(&mut session.p, &mut session.c, config);
     session.repaint()
 }
 
@@ -487,7 +487,7 @@ fn band_pieces(out: &Output) -> Option<Vec<(usize, usize, usize, usize)>> {
 #[test]
 fn a_prompts_trigger_that_hides_the_prompt_leaves_the_band_empty() {
     use vosh_prompt::PromptShow;
-    let mut p = showing(profile(CODES, HP, false), PromptShow::Pinned);
+    let (mut p, c) = showing(profile(CODES, HP, false), PromptShow::Pinned);
     p.triggers
         .set(vosh_automation::trigger::Trigger {
             target: vosh_automation::trigger::TriggerTarget::Prompt,
@@ -498,7 +498,7 @@ fn a_prompts_trigger_that_hides_the_prompt_leaves_the_band_empty() {
             )
         })
         .expect("the trigger compiles");
-    let mut session = Session::new(p);
+    let mut session = Session::new((p, c));
     let read = session.read(&wire_fixture("quiet"));
     assert_eq!(read.out.pin.as_deref(), Some(&b""[..]));
 }
@@ -511,11 +511,11 @@ fn enter_on_an_empty_line_while_pinned_moves_nothing_and_updates_the_band() {
     let mut session = Session::new(showing(profile(CODES, HP, true), PromptShow::Pinned));
     let login = session.read(&mud.login());
     assert!(!login.out.hold.is_empty(), "expected entries");
-    assert!(session.p.prompt.stage.swallows(), "armed after login");
+    assert!(session.c.prompt.stage.swallows(), "armed after login");
     // Enter on an empty line: the webview echoes nothing while pinned,
     // so only the send reaches the session.
     let _ = session.send("");
-    assert!(session.p.prompt.stage.swallows(), "armed after the send");
+    assert!(session.c.prompt.stage.swallows(), "armed after the send");
     for write in mud.command("") {
         let read = session.read(&write.bytes);
         assert!(read.out.bytes.is_empty(), "{:?}", read.out);
@@ -538,9 +538,9 @@ fn a_repaint_while_pinned_goes_to_the_band_and_a_change_of_place_moves_the_promp
     use vosh_prompt::PromptShow;
     let mut session = Session::new(profile(CODES, HP, true));
     let _ = session.read(&wire_fixture("quiet"));
-    assert!(session.p.prompt.stage.open_row().is_some());
+    assert!(session.c.prompt.stage.open_row().is_some());
     // You choose Pinned: the open row is erased and goes to the band.
-    session.p = showing(std::mem::take(&mut session.p), PromptShow::Pinned);
+    show_at(&mut session.p, &mut session.c, PromptShow::Pinned);
     let out = session.repaint();
     assert!(out
         .replace
@@ -554,9 +554,9 @@ fn a_repaint_while_pinned_goes_to_the_band_and_a_change_of_place_moves_the_promp
         Some("<1020>")
     );
     // A design change only redraws the band.
-    let mut config = session.p.prompt.config().clone();
+    let mut config = session.c.prompt.config().clone();
     config.template = "hp %hp> ".into();
-    session.p.set_prompt_config(config);
+    take_config(&mut session.p, &mut session.c, config);
     let out = session.repaint();
     assert!(out.bytes.is_empty() && out.replace.is_none());
     assert_eq!(
@@ -571,14 +571,14 @@ fn a_repaint_while_pinned_goes_to_the_band_and_a_change_of_place_moves_the_promp
         Some(vec![(0, 0, 0, 3), (1, 0, 3, 4), (2, 0, 7, 2)])
     );
     // Back to the text: the prompt comes back at the cursor.
-    session.p = showing(std::mem::take(&mut session.p), PromptShow::Text);
+    show_at(&mut session.p, &mut session.c, PromptShow::Text);
     let out = session.repaint();
     assert_eq!(out.pin.as_deref(), Some(&b""[..]));
     assert_eq!(
         drawn_after_mark(&out.bytes).as_deref(),
         Some("hp 1020> \x1b[0m")
     );
-    assert!(session.p.prompt.stage.open_row().is_some());
+    assert!(session.c.prompt.stage.open_row().is_some());
 }
 
 /// The bytes after the last region mark, as text.
@@ -1030,14 +1030,14 @@ fn enter_on_an_empty_line_ends_the_row_of_a_prompt_left_in_the_text() {
 }
 
 /// `p` with a Prompts trigger on `hp` that does `action`.
-fn prompts_trigger(mut p: Profile, action: vosh_automation::trigger::TriggerAction) -> Profile {
+fn prompts_trigger((mut p, c): Live, action: vosh_automation::trigger::TriggerAction) -> Live {
     p.triggers
         .set(vosh_automation::trigger::Trigger {
             target: vosh_automation::trigger::TriggerTarget::Prompt,
             ..vosh_automation::trigger::Trigger::new("on-prompt", "hp", action)
         })
         .expect("the trigger compiles");
-    p
+    (p, c)
 }
 
 #[test]
@@ -1072,7 +1072,7 @@ fn leaving_pinned_with_drawing_off_keeps_what_prompts_triggers_did() {
                 again.pin.is_none() || again.pin.as_ref() == Some(&band),
                 "{action:?}"
             );
-            session.p = showing(std::mem::take(&mut session.p), back);
+            show_at(&mut session.p, &mut session.c, back);
             let out = session.repaint();
             grid.session_output(&out);
             assert_eq!(
@@ -1126,7 +1126,7 @@ fn changing_where_your_prompt_shows_mid_fight_moves_the_tank_line_with_it() {
                 grid.session_output(&session.read(&fight).out);
                 let mut band = None;
                 if switch {
-                    session.p = showing(std::mem::take(&mut session.p), to);
+                    show_at(&mut session.p, &mut session.c, to);
                     let out = session.repaint();
                     band = out.pin.clone();
                     grid.session_output(&out);

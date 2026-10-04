@@ -31,6 +31,7 @@ use super::steps::*;
 use super::*;
 use crate::output::OutputPayload;
 use crate::profile::live::Profile;
+use crate::prompt::take_config;
 
 mod batch;
 mod clock;
@@ -40,6 +41,7 @@ mod gmcp;
 mod log_sink;
 mod pointer;
 mod preview;
+mod prompt_table;
 mod repaint;
 mod right;
 mod room;
@@ -55,29 +57,44 @@ const CODES_ALL: &str = vosh_prompt::testkit::mud::PROMPT_ALL;
 /// Draws the hp the capture read, so each byte of a draw is known.
 const HP: &str = "<%hp>";
 
+/// A profile and its connection, whose prompt engine took the profile's
+/// `[prompt]` table through [`crate::prompt::take_config`] as a load does.
+type Live = (Profile, Connection);
+
 /// A profile that reads Aabahran's codes `prompt` and draws `template`
-/// over them while `draw` is on, started the way a connection starts it.
-fn profile(prompt: &str, template: &str, draw: bool) -> Profile {
+/// over them while `draw` is on, with its connection, started the way a
+/// connection starts it.
+fn profile(prompt: &str, template: &str, draw: bool) -> Live {
     let mut p = Profile::default();
-    p.set_prompt_config(vosh_prompt::PromptConfig {
-        draw,
-        template: template.to_string(),
-        capture: vosh_prompt::CaptureConfig::Aabahran(vosh_prompt::config::AabahranCapture {
-            prompt: prompt.to_string(),
-            ..vosh_prompt::config::AabahranCapture::default()
-        }),
-        ..vosh_prompt::PromptConfig::default()
-    });
-    start_prompt(&mut p, false);
-    p
+    let mut c = Connection::default();
+    take_config(
+        &mut p,
+        &mut c,
+        vosh_prompt::PromptConfig {
+            draw,
+            template: template.to_string(),
+            capture: vosh_prompt::CaptureConfig::Aabahran(vosh_prompt::config::AabahranCapture {
+                prompt: prompt.to_string(),
+                ..vosh_prompt::config::AabahranCapture::default()
+            }),
+            ..vosh_prompt::PromptConfig::default()
+        },
+    );
+    start_prompt(&mut p, &mut c, false);
+    (p, c)
 }
 
-/// `p` with its prompt shown at `show`.
-fn showing(mut p: Profile, show: vosh_prompt::PromptShow) -> Profile {
-    let mut config = p.prompt.config().clone();
+/// `live` with its prompt shown at `show`.
+fn showing((mut p, mut c): Live, show: vosh_prompt::PromptShow) -> Live {
+    show_at(&mut p, &mut c, show);
+    (p, c)
+}
+
+/// Show your prompt at `show` from now on, as a Settings save does.
+fn show_at(p: &mut Profile, c: &mut Connection, show: vosh_prompt::PromptShow) {
+    let mut config = c.prompt.config().clone();
     config.show = show;
-    p.set_prompt_config(config);
-    p
+    take_config(p, c, config);
 }
 
 /// A synthetic socket read from fixtures/prompt/aabahran/wire.
@@ -173,7 +190,7 @@ struct Read {
 /// The session's state for one connection, fed through its own steps.
 struct Session {
     p: Profile,
-    /// Your target and the room list.
+    /// The prompt engine, your target and the room list.
     c: Connection,
     acc: LineAccumulator,
     parser: vosh_protocol::telnet::Parser,
@@ -182,10 +199,10 @@ struct Session {
 }
 
 impl Session {
-    fn new(p: Profile) -> Self {
+    fn new((p, c): Live) -> Self {
         Self {
             p,
-            c: Connection::default(),
+            c,
             acc: LineAccumulator::new(),
             parser: vosh_protocol::telnet::Parser::new(),
             other: false,
@@ -206,7 +223,7 @@ impl Session {
     /// the way a connect does. Cheaper than a new profile, whose script
     /// engine takes a while to start.
     fn restart(&mut self) {
-        start_prompt(&mut self.p, false);
+        start_prompt(&mut self.p, &mut self.c, false);
         self.acc = LineAccumulator::new();
         self.parser = vosh_protocol::telnet::Parser::new();
     }
@@ -278,9 +295,9 @@ impl Session {
             take(step, &mut kept, &mut repeats);
         }
         if batch.hold {
-            hold_step(&mut self.p, &mut self.acc, &mut batch.out);
+            hold_step(&mut self.c, &mut self.acc, &mut batch.out);
         }
-        self.p.prompt.stage.finish(&mut batch.out);
+        self.c.prompt.stage.finish(&mut batch.out);
         Read {
             out: batch.out,
             log: batch.log.into_iter().map(|row| row.text).collect(),
@@ -306,7 +323,7 @@ impl Session {
         ) {
             kept.extend(step.scrollback);
         }
-        let _ = send_step(&mut self.p, &self.acc, format!("{line}\r\n").as_bytes(), 0);
+        let _ = send_step(&mut self.c, &self.acc, format!("{line}\r\n").as_bytes(), 0);
         self.acc.forget_partial();
         Read {
             out: batch.out,
@@ -319,21 +336,21 @@ impl Session {
     /// The webview wrote to the terminal itself, such as your echo, after
     /// everything the session sent.
     fn local_write(&mut self) {
-        self.p.prompt.stage.local_write(u64::MAX);
+        self.c.prompt.stage.local_write(u64::MAX);
     }
 
     /// The `[prompt]` table changed, so the open row repaints.
     fn repaint(&mut self) -> Output {
-        repaint_step(&mut self.p, &self.c, false, Instant::now())
+        repaint_step(&self.p, &mut self.c, false, Instant::now())
     }
 }
 
-/// A terminal's worth of the session: the profile and the line
-/// accumulator, fed one read at a time through the same steps the
-/// session runs.
+/// A terminal's worth of the session: the profile, its connection and
+/// the line accumulator, fed one read at a time through the same steps
+/// the session runs.
 struct Wire {
     p: Profile,
-    /// Your target and the room list.
+    /// The prompt engine, your target and the room list.
     c: Connection,
     acc: LineAccumulator,
     /// The telnet parser, for reads of raw wire bytes.
@@ -344,15 +361,15 @@ struct Wire {
 }
 
 impl Wire {
-    fn new(p: Profile) -> Self {
+    fn new((p, c): Live) -> Self {
         let mut wire = Self {
             p,
-            c: Connection::default(),
+            c,
             acc: LineAccumulator::new(),
             parser: vosh_protocol::telnet::Parser::new(),
             gen0: 0,
         };
-        wire.gen0 = wire.p.prompt.stage.next_gen();
+        wire.gen0 = wire.c.prompt.stage.next_gen();
         wire
     }
 
@@ -391,7 +408,7 @@ impl Wire {
         );
         // The hold's deadline passes before the next read.
         if batch.hold {
-            hold_step(&mut self.p, &mut self.acc, &mut batch.out);
+            hold_step(&mut self.c, &mut self.acc, &mut batch.out);
         }
         batch
     }
@@ -434,14 +451,14 @@ impl Wire {
             tokio::time::Instant::now(),
             None,
         );
-        let _ = send_step(&mut self.p, &self.acc, b"look\r\n", 0);
+        let _ = send_step(&mut self.c, &self.acc, b"look\r\n", 0);
         self.acc.forget_partial();
     }
 
     /// You send `line` now.
     fn send_line(&mut self, line: &str) {
         let _ = send_step(
-            &mut self.p,
+            &mut self.c,
             &self.acc,
             format!("{line}\r\n").as_bytes(),
             super::now_ms(),
@@ -497,7 +514,7 @@ impl Wire {
             None,
         );
         if batch.hold {
-            hold_step(&mut self.p, &mut self.acc, &mut batch.out);
+            hold_step(&mut self.c, &mut self.acc, &mut batch.out);
         }
         batch.out
     }
@@ -537,7 +554,7 @@ impl Wire {
             None,
         );
         if batch.hold {
-            hold_step(&mut self.p, &mut self.acc, &mut batch.out);
+            hold_step(&mut self.c, &mut self.acc, &mut batch.out);
         }
         batch.out
     }
