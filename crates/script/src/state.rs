@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use mlua::RegistryKey;
 
 use crate::actions::Action;
-use crate::limits::ACTIONS_PER_CALL;
+use crate::limits::{ACTIONS_PER_CALL, CALL_BYTES};
 use crate::owner::Owner;
 
 /// One Lua function Vosh holds for later, and the owner of the call
@@ -18,12 +18,17 @@ pub(crate) struct Callback {
     pub(crate) owner: Owner,
 }
 
-/// The call running now: whose Lua it runs, how many actions it queued,
-/// and whether it queued more than one call may.
+/// The call running now: whose Lua it runs, how many actions and how
+/// much text it queued, and whether it queued more than one call may.
 pub(crate) struct CallInfo {
     pub(crate) owner: Owner,
     queued: usize,
+    bytes: usize,
+    /// It queued more than [`ACTIONS_PER_CALL`] actions.
     pub(crate) dropped: bool,
+    /// It queued a piece of text past its size limit, or more than
+    /// [`CALL_BYTES`] in all.
+    pub(crate) text_dropped: bool,
 }
 
 impl CallInfo {
@@ -31,7 +36,9 @@ impl CallInfo {
         Self {
             owner,
             queued: 0,
+            bytes: 0,
             dropped: false,
+            text_dropped: false,
         }
     }
 }
@@ -66,19 +73,35 @@ impl StateInner {
     }
 
     /// Queue `action` for the call running now. A call may queue
-    /// [`ACTIONS_PER_CALL`] actions, and past that each one drops, with
-    /// the function it would have registered. True when it queued.
+    /// [`ACTIONS_PER_CALL`] actions with [`CALL_BYTES`] of text among
+    /// them, and past either each one drops, with the function it would
+    /// have registered. True when it queued.
     pub(crate) fn queue(&mut self, action: Action) -> bool {
         if let Some(call) = self.call.as_mut() {
+            let bytes = action.text_len();
             if call.queued >= ACTIONS_PER_CALL {
                 call.dropped = true;
-                self.forget_registration(&action);
-                return false;
+            } else if call.bytes + bytes > CALL_BYTES {
+                call.text_dropped = true;
+            } else {
+                call.queued += 1;
+                call.bytes += bytes;
+                self.pending.push(action);
+                return true;
             }
-            call.queued += 1;
+            self.forget_registration(&action);
+            return false;
         }
         self.pending.push(action);
         true
+    }
+
+    /// Note that the call running now asked for a piece of text past its
+    /// size limit, which Vosh dropped before it copied it.
+    pub(crate) fn drop_long_text(&mut self) {
+        if let Some(call) = self.call.as_mut() {
+            call.text_dropped = true;
+        }
     }
 
     /// Free the function an action that never applies would have
