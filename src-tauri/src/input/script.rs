@@ -40,14 +40,16 @@ fn slash_script_load(
     let Some(app_data) = state.app_data.get() else {
         return InputResult::error("could not resolve scripts directory");
     };
-    let path = script_path_for(app_data, name);
+    // A loose file's owner is its path inside the scripts folder with
+    // `.lua` on the end, so `combat` and `combat.lua` load as one.
+    let Some(file) = script_file_name(name) else {
+        return InputResult::error(OUTSIDE_SCRIPTS);
+    };
+    let path = paths::scripts_dir(app_data).join(&file);
     let code = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(e) => return InputResult::error(format!("read failed: {e} ({})", path.display())),
     };
-    // A loose file's owner is its path inside the scripts folder with
-    // `.lua` on the end, so `combat` and `combat.lua` load as one.
-    let file = script_file_name(name);
     script::snapshot_vars(&profile.script, &profile.vars);
     let outcome =
         profile
@@ -107,20 +109,29 @@ pub(super) fn slash_lua(
     InputResult::empty()
 }
 
-/// The file `#script load <name>` reads, `<app_data>/scripts/<name>.lua`
-/// under the app data folder `app_data`.
-fn script_path_for(app_data: &std::path::Path, name: &str) -> std::path::PathBuf {
-    paths::scripts_dir(app_data).join(script_file_name(name))
-}
+/// What `#script load` says to a name that leads out of the scripts
+/// folder.
+const OUTSIDE_SCRIPTS: &str = "Vosh loads scripts from your scripts folder only.";
 
-/// `name` with `.lua` on the end, unless it ends so already.
-fn script_file_name(name: &str) -> String {
-    if std::path::Path::new(name)
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("lua"))
-    {
-        name.to_string()
-    } else {
-        format!("{name}.lua")
+/// The path inside the scripts folder that `#script load <name>` reads,
+/// with `.lua` on the end unless it ends so already, or None for an
+/// absolute path or one that climbs out with `..`.
+fn script_file_name(name: &str) -> Option<String> {
+    use std::path::Component;
+    let mut parts = Vec::new();
+    for part in std::path::Path::new(name).components() {
+        match part {
+            Component::Normal(part) => parts.push(part.to_str()?),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => return None,
+        }
     }
+    let path = parts.join("/");
+    if path.is_empty() {
+        return None;
+    }
+    let has_lua = std::path::Path::new(&path)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("lua"));
+    Some(if has_lua { path } else { format!("{path}.lua") })
 }
