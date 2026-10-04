@@ -72,7 +72,7 @@ use vosh_protocol::telnet::{option as telnet_option, Negotiator};
 use crate::app::events;
 use crate::app::state::SharedState;
 use crate::input::walk::WalkCommand;
-use crate::sessions::Session;
+use crate::sessions::{Address, Session};
 
 use conn::io_loop;
 use log_sink::LogSink;
@@ -273,6 +273,13 @@ pub(crate) async fn connect<R: tauri::Runtime>(
     }
     if let Ok(mut g) = session.current_character.lock() {
         *g = None;
+    }
+    if let Ok(mut g) = session.address.lock() {
+        *g = Some(Address {
+            host: host.clone(),
+            port,
+            tls,
+        });
     }
     // The old connection cleared the list as it ended. A new connection
     // starts with none until the MUD sends its own.

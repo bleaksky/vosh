@@ -41,6 +41,14 @@ pub(crate) const NO_SUCH_SESSION: &str = "Vosh has no such session.";
 pub(crate) const ONLY_SESSION: &str =
     "You cannot close your only session. Close the window instead.";
 
+/// Where a session connects: the host, the port and whether it uses TLS.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Address {
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) tls: bool,
+}
+
 /// A session's number, which no other session of this run shares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -56,14 +64,23 @@ impl SessionId {
     }
 }
 
-/// What one session holds apart from the profile: the task that runs its
-/// connection, what that connection shares with the commands, its Lua
-/// timers and scrollback, the count of what reached its terminal, and
-/// what the app keeps about its connection, the host and port, the
-/// character logged in, the terminal size and the last affects. It
-/// points at the profile it plays.
+/// What one session holds apart from the profile: the name you gave it,
+/// the task that runs its connection, what that connection shares with
+/// the commands, its Lua timers and scrollback, the count of what reached
+/// its terminal, and what the app keeps about its connection, where it
+/// last connected, the host and port, the character logged in, the
+/// terminal size and the last affects. It points at the profile it
+/// plays.
 pub(crate) struct Session {
     pub(crate) id: SessionId,
+    /// The name you gave the session, which its row and a line in another
+    /// session read in place of its character. A leaf lock, held for a
+    /// copy.
+    name: std::sync::Mutex<Option<String>>,
+    /// Where the session last connected. It outlives the connection, so
+    /// the row still names the world once the session disconnects. A leaf
+    /// lock, held for a copy.
+    pub(crate) address: std::sync::Mutex<Option<Address>>,
     /// The profile the session plays. A leaf lock, held for a copy. A
     /// switch moves it while it holds the profile it leaves locked, see
     /// [`Session::lock_profile`].
@@ -128,6 +145,8 @@ impl Session {
     fn new(id: SessionId, profile: Arc<OpenProfile>) -> Self {
         Self {
             id,
+            name: std::sync::Mutex::new(None),
+            address: std::sync::Mutex::new(None),
             profile: std::sync::Mutex::new(profile),
             slot: Mutex::new(None),
             connection: SharedConnection::new(Connection {
@@ -187,16 +206,46 @@ impl Session {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = open;
     }
 
-    /// What a line in another session calls this one: the character
-    /// logged in, or else the world it runs with the port, like `The
-    /// Forsaken Lands 1825`. None while it runs no connection.
-    pub(crate) fn label(&self) -> Option<String> {
-        let character = self
-            .current_character
+    /// The name you gave the session, if any.
+    pub(crate) fn name(&self) -> Option<String> {
+        self.name
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone();
-        character.or_else(|| {
+            .clone()
+    }
+
+    /// Name the session `name`, or with none, or a blank one, read its
+    /// character again.
+    pub(crate) fn rename(&self, name: Option<&str>) {
+        let name = name.map(str::trim).filter(|name| !name.is_empty());
+        *self
+            .name
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = name.map(str::to_string);
+    }
+
+    /// The character logged in on the live connection, if any.
+    fn character(&self) -> Option<String> {
+        self.current_character
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Whether the session's connection runs. The loop marks its tick
+    /// count in session as it starts and out as it ends, see
+    /// [`crate::tick::TickRuntime::in_session`]. Takes the connection
+    /// lock.
+    fn connected(&self) -> bool {
+        self.connection.lock().tick.in_session
+    }
+
+    /// What a line in another session calls this one: the name you gave
+    /// it, or the character logged in, or else the world it runs with the
+    /// port, like `The Forsaken Lands 1825`. None while it has no name and
+    /// runs no connection.
+    pub(crate) fn label(&self) -> Option<String> {
+        self.name().or_else(|| self.character()).or_else(|| {
             let (host, port) = self
                 .current_connection
                 .lock()
@@ -207,6 +256,27 @@ impl Session {
                 crate::profile::worlds::world_name(&host)
             ))
         })
+    }
+
+    /// The session's row in the list the window shows. Takes the
+    /// connection lock, so call it with no profile held.
+    pub(crate) fn row(&self, selected: bool) -> SessionRow {
+        let address = self
+            .address
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        SessionRow {
+            id: self.id,
+            name: self.name(),
+            character: self.character(),
+            host: address.as_ref().map(|a| a.host.clone()),
+            port: address.as_ref().map(|a| a.port),
+            tls: address.is_some_and(|a| a.tls),
+            profile: self.profile().name(),
+            connected: self.connected(),
+            selected,
+        }
     }
 
     /// How many outputs reached the session's terminal so far, see
@@ -238,6 +308,24 @@ impl Session {
             warn!(error = %e, event, "failed to emit a session event");
         }
     }
+}
+
+/// One session as the window lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct SessionRow {
+    pub(crate) id: SessionId,
+    /// The name you gave it.
+    pub(crate) name: Option<String>,
+    /// The character logged in on its live connection.
+    pub(crate) character: Option<String>,
+    /// Where it last connected, None before its first connect.
+    pub(crate) host: Option<String>,
+    pub(crate) port: Option<u16>,
+    pub(crate) tls: bool,
+    /// The profile it plays, None only before launch loads one.
+    pub(crate) profile: Option<String>,
+    pub(crate) connected: bool,
+    pub(crate) selected: bool,
 }
 
 /// A session event's payload with the session that sent it.
@@ -362,6 +450,11 @@ impl Sessions {
             .collect()
     }
 
+    /// Every session in order, with the id of the selected one.
+    pub(crate) fn in_order(&self) -> (Vec<Arc<Session>>, SessionId) {
+        (self.list.clone(), self.selected)
+    }
+
     /// The session `id` names, while the list holds it.
     pub(crate) fn get(&self, id: SessionId) -> Option<Arc<Session>> {
         self.list.iter().find(|session| session.id == id).cloned()
@@ -397,7 +490,7 @@ mod tests {
     use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
     use tauri::{App, Listener};
 
-    use super::{Session, SessionId, NO_SUCH_SESSION};
+    use super::{Session, SessionId, SessionRow, NO_SUCH_SESSION};
     use crate::app::events;
     use crate::app::state::AppState;
     use crate::profile::live::Profile;
@@ -479,7 +572,7 @@ mod tests {
     }
 
     #[test]
-    fn a_label_names_the_character_or_else_the_world_with_its_port() {
+    fn a_label_names_the_session_or_its_character_or_else_the_world_with_its_port() {
         let session = on_defaults(SessionId(2));
         assert_eq!(session.label(), None);
         *session.current_connection.lock().unwrap() =
@@ -487,6 +580,49 @@ mod tests {
         assert_eq!(session.label().as_deref(), Some("The Forsaken Lands 1825"));
         *session.current_character.lock().unwrap() = Some("Builder".into());
         assert_eq!(session.label().as_deref(), Some("Builder"));
+        session.rename(Some("  Build port  "));
+        assert_eq!(session.label().as_deref(), Some("Build port"));
+        // A blank name clears it, and the character shows again.
+        session.rename(Some(" "));
+        assert_eq!(session.name(), None);
+        assert_eq!(session.label().as_deref(), Some("Builder"));
+    }
+
+    #[test]
+    fn the_rows_list_the_sessions_in_order_with_where_each_last_connected() {
+        // A selection shows the session's grid, which other tests read.
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
+        let state = AppState::default();
+        let one = state.selected_session();
+        let two = state.open_session(one.profile());
+        one.rename(Some("Main"));
+        *two.address.lock().unwrap() = Some(super::Address {
+            host: "play.theforsakenlands.com".into(),
+            port: 1825,
+            tls: true,
+        });
+        *two.current_character.lock().unwrap() = Some("Builder".into());
+        assert_eq!(state.select_session(two.id), Ok(()));
+        let row = |id, name: Option<&str>, character: Option<&str>, port: Option<u16>, selected| {
+            SessionRow {
+                id,
+                name: name.map(str::to_string),
+                character: character.map(str::to_string),
+                host: port.map(|_| "play.theforsakenlands.com".to_string()),
+                port,
+                tls: port.is_some(),
+                profile: None,
+                connected: false,
+                selected,
+            }
+        };
+        assert_eq!(
+            state.session_rows(),
+            [
+                row(one.id, Some("Main"), None, None, false),
+                row(two.id, None, Some("Builder"), Some(1825), true),
+            ]
+        );
     }
 
     #[test]
