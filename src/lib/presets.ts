@@ -543,11 +543,13 @@ export const PRESETS: Preset[] = [
   {
     id: 'potion_labels',
     category: 'labels',
-    // From highlights.tin lines 180 to 186.
+    // From highlights.tin lines 180 to 186, with each spell checked
+    // against the bubbly potions do_brew makes in skills5.c.
     name: 'Potion labels',
     description: 'Adds the spell a potion casts after its name.',
     defaultEnabled: true,
     triggers: [
+      replace('potion.blue', 'a bubbly blue potion', 'a bubbly blue potion {fg:248}(armor){reset}'),
       replace(
         'potion.brown',
         'a bubbly brown potion',
@@ -561,17 +563,23 @@ export const PRESETS: Preset[] = [
       replace(
         'potion.crimson',
         'a bubbly crimson potion',
-        'a bubbly crimson potion {fg:248}(fireball){reset}',
+        'a bubbly crimson potion {fg:248}(frenzy){reset}',
       ),
       replace(
         'potion.green',
         'a bubbly green potion',
         'a bubbly green potion {fg:248}(haste){reset}',
       ),
+      replace('potion.grey', 'a bubbly grey potion', 'a bubbly grey potion {fg:248}(bless){reset}'),
       replace(
-        'potion.grey',
-        'a bubbly grey potion',
-        'a bubbly grey potion {fg:248}(flesh armor){reset}',
+        'potion.orange',
+        'a bubbly orange potion',
+        'a bubbly orange potion {fg:248}(fireball){reset}',
+      ),
+      replace(
+        'potion.pink',
+        'a bubbly pink potion',
+        'a bubbly pink potion {fg:248}(cure light){reset}',
       ),
       replace(
         'potion.red',
