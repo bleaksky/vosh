@@ -102,7 +102,10 @@ pub(crate) fn mud_table(lua: &Lua, owner: Option<Owner>) -> LuaResult<Table> {
     mud.set("on_gmcp", owned(lua, owner.as_ref(), mud_on_gmcp)?)?;
 
     mud.set("timer", owned(lua, owner.as_ref(), mud_timer)?)?;
-    mud.set("cancel_timer", lua.create_function(mud_cancel_timer)?)?;
+    mud.set(
+        "cancel_timer",
+        owned(lua, owner.as_ref(), mud_cancel_timer)?,
+    )?;
 
     Ok(mud)
 }
@@ -394,16 +397,22 @@ fn mud_timer(
     })
 }
 
-fn mud_cancel_timer(lua: &Lua, timer_id: u32) -> LuaResult<()> {
+/// `mud.cancel_timer`. It cancels a timer only for Lua that shares names
+/// with the timer's owner: a plugin or a loose script its own timers,
+/// and your `#lua` lines and the Lua of your triggers and aliases each
+/// other's, as they share trigger names. The engine frees the function
+/// once the cancel drains, so a call Vosh stops cancels nothing.
+fn mud_cancel_timer(lua: &Lua, owner: Option<&Owner>, timer_id: u32) -> LuaResult<()> {
     with_state(lua, |s| {
-        // Free the callback now. The session drops the schedule when it
-        // applies the cancel, and nothing else would ever free it. This
-        // removes the key directly because `with_state` already holds the
-        // lock that `ScriptEngine::drop_callback` takes.
-        if let Some(callback_id) = s.timer_callbacks.remove(&timer_id) {
-            s.callbacks.remove(&callback_id);
+        let registrant = registrant(s, owner);
+        let ours = s
+            .timer_callbacks
+            .get(&timer_id)
+            .and_then(|id| s.callbacks.get(id))
+            .is_some_and(|callback| callback.owner.shares_names_with(&registrant));
+        if ours {
+            s.queue(Action::CancelTimer(timer_id));
         }
-        s.queue(Action::CancelTimer(timer_id));
         Ok(())
     })
 }
