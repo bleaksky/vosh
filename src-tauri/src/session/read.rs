@@ -123,7 +123,16 @@ async fn handle_event<R: tauri::Runtime>(
                     let mut p = conn.profile.lock().await;
                     conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
                     conn.perf.mutex_acquires += 1;
-                    line_step(&mut p, batch, line, plain, Instant::now(), log_sink.id())
+                    let c = conn.connection.lock().await;
+                    line_step(
+                        &mut p,
+                        &c,
+                        batch,
+                        line,
+                        plain,
+                        Instant::now(),
+                        log_sink.id(),
+                    )
                 };
                 conn.perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
                 for step in steps {
@@ -152,8 +161,10 @@ async fn handle_event<R: tauri::Runtime>(
             // entry.
             let steps = {
                 let mut p = conn.profile.lock().await;
+                let c = conn.connection.lock().await;
                 marker_step(
                     &mut p,
+                    &c,
                     &mut conn.accumulator,
                     batch,
                     Instant::now(),
@@ -218,7 +229,8 @@ pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
         if !p.prompt.stage.holds() {
             return Ok(());
         }
-        let_go_held(&mut p, &mut batch, Instant::now(), log_sink.id())
+        let c = conn.connection.lock().await;
+        let_go_held(&mut p, &c, &mut batch, Instant::now(), log_sink.id())
     };
     for step in steps {
         deliver_line_step(conn, log_sink, &mut batch, step).await?;
@@ -327,8 +339,10 @@ async fn end_read<R: tauri::Runtime>(
 ) -> std::io::Result<()> {
     let step = {
         let mut p = conn.profile.lock().await;
+        let c = conn.connection.lock().await;
         partial_step(
             &mut p,
+            &c,
             &mut conn.accumulator,
             batch,
             Instant::now(),
@@ -369,6 +383,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
     let watched = prompt && watching_prompt(app);
     let (vars, hidden, prompt_seen, status, prompt_state, clock) = {
         let mut p = conn.profile.lock().await;
+        let c = conn.connection.lock().await;
         // Echoes the end of the read wrote close the open row.
         p.prompt.stage.finish(&mut out);
         (
@@ -376,7 +391,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
             p.prompt.vars.take_hidden_change(),
             p.prompt.take_seen(),
             p.prompt.take_status_change(),
-            watched.then(|| crate::prompt::prompt_state(&p)),
+            watched.then(|| crate::prompt::prompt_state(&p, &c)),
             clock_after(&p, Instant::now()),
         )
     };

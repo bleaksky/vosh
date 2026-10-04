@@ -40,7 +40,7 @@ fn the_tick_repaints_your_idle_prompt_each_time_it_shows_another_second() {
     for show in [PromptShow::Text, PromptShow::Lifted, PromptShow::Pinned] {
         let (mut session, t0) = at_prompt(TICK, show);
         let later = t0 + Duration::from_millis(1_500);
-        let out = clock_step(&mut session.p, false, false, later);
+        let out = clock_step(&mut session.p, &session.c, false, false, later);
         assert_eq!(shown(&out, show).as_deref(), Some("<1020> 29"), "{show:?}");
         // Nothing follows it in the text, so it never lands on your echo
         // and never reaches history.
@@ -49,11 +49,11 @@ fn the_tick_repaints_your_idle_prompt_each_time_it_shows_another_second() {
         // The same second again writes nothing.
         let again = t0 + Duration::from_millis(1_900);
         assert!(
-            clock_step(&mut session.p, false, false, again).is_empty(),
+            clock_step(&mut session.p, &session.c, false, false, again).is_empty(),
             "{show:?}"
         );
         let next = t0 + Duration::from_millis(2_100);
-        let out = clock_step(&mut session.p, false, false, next);
+        let out = clock_step(&mut session.p, &session.c, false, false, next);
         assert_eq!(shown(&out, show).as_deref(), Some("<1020> 28"), "{show:?}");
     }
 }
@@ -63,17 +63,17 @@ fn the_row_waits_while_you_select_or_read_back_and_the_band_does_not() {
     for show in [PromptShow::Text, PromptShow::Lifted] {
         let (mut session, t0) = at_prompt(TICK, show);
         let later = t0 + Duration::from_millis(1_500);
-        let (out, drawn) = drawing(|| clock_step(&mut session.p, false, true, later));
+        let (out, drawn) = drawing(|| clock_step(&mut session.p, &session.c, false, true, later));
         assert!(out.is_empty(), "{show:?}");
         assert_eq!(drawn, 0, "{show:?}: waiting draws nothing");
         // Once you let go, the row catches up at the next repaint.
-        let out = clock_step(&mut session.p, false, false, later);
+        let out = clock_step(&mut session.p, &session.c, false, false, later);
         assert_eq!(shown(&out, show).as_deref(), Some("<1020> 29"), "{show:?}");
     }
     // The band is not in the text, so it keeps counting.
     let (mut session, t0) = at_prompt(TICK, PromptShow::Pinned);
     let later = t0 + Duration::from_millis(1_500);
-    let out = clock_step(&mut session.p, false, true, later);
+    let out = clock_step(&mut session.p, &session.c, false, true, later);
     assert_eq!(
         shown(&out, PromptShow::Pinned).as_deref(),
         Some("<1020> 29")
@@ -86,7 +86,7 @@ fn a_design_with_no_clock_piece_never_waits_or_draws() {
         let (mut session, t0) = at_prompt("<%hp>", show);
         assert_eq!(clock_after(&session.p, t0), None, "{show:?}");
         let later = t0 + Duration::from_millis(1_500);
-        let (out, drawn) = drawing(|| clock_step(&mut session.p, false, false, later));
+        let (out, drawn) = drawing(|| clock_step(&mut session.p, &session.c, false, false, later));
         assert!(out.is_empty(), "{show:?}");
         assert_eq!(drawn, 0, "{show:?}");
     }
@@ -127,12 +127,12 @@ fn the_clock_waits_while_the_card_shows_a_preview() {
     }));
     let _ = session.repaint();
     let later = t0 + Duration::from_millis(1_500);
-    assert!(clock_step(&mut session.p, false, false, later).is_empty());
+    assert!(clock_step(&mut session.p, &session.c, false, false, later).is_empty());
     // The live render comes back with the card closed, and counts again.
     session.p.prompt.set_preview(None);
     let _ = session.repaint();
     let later = t0 + Duration::from_millis(2_500);
-    let out = clock_step(&mut session.p, false, false, later);
+    let out = clock_step(&mut session.p, &session.c, false, false, later);
     assert_eq!(shown(&out, PromptShow::Text).as_deref(), Some("<1020> 28"));
 }
 
@@ -142,21 +142,21 @@ fn text_after_your_prompt_ends_the_repaints_of_its_row() {
     let (mut session, t0) = at_prompt(TICK, PromptShow::Text);
     let _ = session.send("look");
     let later = t0 + Duration::from_millis(1_500);
-    assert!(clock_step(&mut session.p, false, false, later).is_empty());
+    assert!(clock_step(&mut session.p, &session.c, false, false, later).is_empty());
     // An echo the webview wrote itself.
     let (mut session, t0) = at_prompt(TICK, PromptShow::Text);
     session.local_write();
     let later = t0 + Duration::from_millis(1_500);
-    assert!(clock_step(&mut session.p, false, false, later).is_empty());
+    assert!(clock_step(&mut session.p, &session.c, false, false, later).is_empty());
     // A slash command's output from elsewhere.
     let (mut session, t0) = at_prompt(TICK, PromptShow::Text);
     let later = t0 + Duration::from_millis(1_500);
-    assert!(clock_step(&mut session.p, true, false, later).is_empty());
+    assert!(clock_step(&mut session.p, &session.c, true, false, later).is_empty());
     // Pinned, the band keeps counting after your line.
     let (mut session, t0) = at_prompt(TICK, PromptShow::Pinned);
     let _ = session.send("look");
     let later = t0 + Duration::from_millis(1_500);
-    let out = clock_step(&mut session.p, false, false, later);
+    let out = clock_step(&mut session.p, &session.c, false, false, later);
     assert_eq!(
         shown(&out, PromptShow::Pinned).as_deref(),
         Some("<1020> 29")
@@ -180,6 +180,7 @@ fn a_band_repaint_between_your_echo_and_its_word_keeps_the_next_line_end() {
     grid.local_write(b"look\r\n");
     let band = clock_step(
         &mut session.p,
+        &session.c,
         false,
         false,
         t0 + Duration::from_millis(1_500),
@@ -210,13 +211,13 @@ fn the_seconds_since_the_tick_count_up_past_a_late_tick() {
         let (mut session, t0) = at_prompt("<%hp> %{tick:since}", show);
         let turned = session.p.tick.last_tick.expect("the tick runs");
         let later = t0 + Duration::from_millis(1_500);
-        let out = clock_step(&mut session.p, false, false, later);
+        let out = clock_step(&mut session.p, &session.c, false, false, later);
         assert_eq!(shown(&out, show).as_deref(), Some("<1020> 1s"), "{show:?}");
         // The tick is late, so no second is left of it, and the count
         // goes on as the old TinTin prompt counted.
         let late = turned + Duration::from_millis(31_500);
         assert_eq!(session.p.tick.remaining(late), Some(Duration::ZERO));
-        let out = clock_step(&mut session.p, false, false, late);
+        let out = clock_step(&mut session.p, &session.c, false, false, late);
         assert_eq!(shown(&out, show).as_deref(), Some("<1020> 31s"), "{show:?}");
         // The next repaint lands on its next second.
         assert_eq!(

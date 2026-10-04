@@ -31,6 +31,7 @@ use crate::app::state::SharedState;
 use crate::disk::save::PERSIST_LOCK;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
+use crate::session::connection::Connection;
 
 /// The body of [`prompt_config_set`]: check and take the table. Returns
 /// whether it changed anything. Only a capture that differs from the one
@@ -95,9 +96,13 @@ pub(crate) async fn request_prompt_repaint(state: &SharedState) {
 }
 
 /// What Vosh itself supplies to the custom prompt: the tick timer, your
-/// target, the profile's name and the affects you track. The clock reads
-/// the local time.
-pub(crate) fn client_values(p: &Profile, now: Instant) -> vosh_prompt::ClientValues {
+/// target from the connection, the profile's name and the affects you
+/// track. The clock reads the local time.
+pub(crate) fn client_values(
+    p: &Profile,
+    c: &Connection,
+    now: Instant,
+) -> vosh_prompt::ClientValues {
     let tick = p.tick.remaining(now).map(|left| vosh_prompt::values::Tick {
         remaining: i64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(i64::MAX),
         interval: i64::try_from(p.tick.config.interval_secs).ok(),
@@ -108,7 +113,7 @@ pub(crate) fn client_values(p: &Profile, now: Instant) -> vosh_prompt::ClientVal
     });
     vosh_prompt::ClientValues {
         tick,
-        target: p.target.name.clone(),
+        target: c.target.name.clone(),
         profile: p.display_name.clone(),
         now: None,
         tracked: p
@@ -327,8 +332,8 @@ pub(crate) struct RenderRequest {
 ///
 /// [`prompt_render`]: crate::ipc::prompt::prompt_render
 /// [`prompt_render_many`]: crate::ipc::prompt::prompt_render_many
-pub(crate) fn render_all(p: &Profile, requests: &[RenderRequest]) -> Vec<Rendered> {
-    let client = client_values(p, Instant::now());
+pub(crate) fn render_all(p: &Profile, c: &Connection, requests: &[RenderRequest]) -> Vec<Rendered> {
+    let client = client_values(p, c, Instant::now());
     let live = p.prompt.vars.resolver(&client);
     let now = chrono::Local::now().naive_local();
     let samples = Samples { now };
@@ -363,11 +368,12 @@ pub(crate) fn render_all(p: &Profile, requests: &[RenderRequest]) -> Vec<Rendere
 /// shows them.
 fn with_values<T>(
     p: &Profile,
+    c: &Connection,
     preview: Option<Preview>,
     overrides: Option<Overrides>,
     then: impl FnOnce(&dyn Values, bool) -> T,
 ) -> T {
-    let client = client_values(p, Instant::now());
+    let client = client_values(p, c, Instant::now());
     let live = p.prompt.vars.resolver(&client);
     let now = chrono::Local::now().naive_local();
     let over = PromptPreview {
@@ -388,12 +394,13 @@ fn with_values<T>(
 /// [`prompt_describe`]: crate::ipc::prompt::prompt_describe
 pub(crate) fn describe(
     p: &Profile,
+    c: &Connection,
     template: &str,
     preview: Option<Preview>,
     overrides: Option<Overrides>,
 ) -> Described {
     let template = Template::parse(template);
-    with_values(p, preview, overrides, |values, previewed| {
+    with_values(p, c, preview, overrides, |values, previewed| {
         vosh_prompt::card::describe::describe(&template, values, previewed)
     })
 }
@@ -401,12 +408,17 @@ pub(crate) fn describe(
 /// The body of [`prompt_forms`].
 ///
 /// [`prompt_forms`]: crate::ipc::prompt::prompt_forms
-pub(crate) fn forms(p: &Profile, field: &str, preview: Option<Preview>) -> Vec<FormView> {
+pub(crate) fn forms(
+    p: &Profile,
+    c: &Connection,
+    field: &str,
+    preview: Option<Preview>,
+) -> Vec<FormView> {
     let field = match field.split_once(':') {
         Some((name, param)) => FieldRef::with_param(name, param),
         None => FieldRef::new(field),
     };
-    with_values(p, preview, None, |values, _| {
+    with_values(p, c, preview, None, |values, _| {
         vosh_prompt::card::describe::forms(&field, values)
     })
 }
@@ -425,8 +437,13 @@ pub(crate) struct Edited {
 /// The body of [`prompt_edit`].
 ///
 /// [`prompt_edit`]: crate::ipc::prompt::prompt_edit
-pub(crate) fn edit(p: &Profile, template: &str, op: &EditOp) -> Result<Edited, String> {
-    let client = client_values(p, Instant::now());
+pub(crate) fn edit(
+    p: &Profile,
+    c: &Connection,
+    template: &str,
+    op: &EditOp,
+) -> Result<Edited, String> {
+    let client = client_values(p, c, Instant::now());
     let live = p.prompt.vars.resolver(&client);
     let known = |field: &FieldRef| !matches!(live.resolve(field), Resolved::Unknown);
     let (template, piece) =
@@ -447,8 +464,8 @@ pub(crate) fn edit(p: &Profile, template: &str, op: &EditOp) -> Result<Edited, S
 /// carries too.
 ///
 /// [`prompt_state_get`]: crate::ipc::prompt::prompt_state_get
-pub(crate) fn prompt_state(p: &Profile) -> PromptState {
-    p.prompt.state(&client_values(p, Instant::now()))
+pub(crate) fn prompt_state(p: &Profile, c: &Connection) -> PromptState {
+    p.prompt.state(&client_values(p, c, Instant::now()))
 }
 
 /// The body of [`hidden_get`](crate::ipc::prompt::hidden_get).

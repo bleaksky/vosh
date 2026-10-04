@@ -456,10 +456,11 @@ pub(crate) mod tests {
         };
         let (look, count) = {
             let mut p = state.profile.lock().await;
-            p.target.name = Some("goblin".into());
-            p.target.room_idx = Some(1);
-            p.target.quick_keys = vec![gg.clone()];
-            p.room_chars = goblin.clone();
+            let mut c = state.connection.lock().await;
+            c.target.name = Some("goblin".into());
+            c.target.room_idx = Some(1);
+            c.target.quick_keys = vec![gg.clone()];
+            c.room_chars = goblin.clone();
             p.room_block.room_chars(1);
             p.fight_tail = true;
             let t0 = tokio::time::Instant::now();
@@ -472,10 +473,11 @@ pub(crate) mod tests {
         super::switch_live_profile(&state, "Healer").await.unwrap();
 
         let p = state.profile.lock().await;
-        assert_eq!(p.target.name.as_deref(), Some("goblin"));
-        assert_eq!(p.target.room_idx, Some(1));
-        assert_eq!(p.target.quick_keys, [gg]);
-        assert_eq!(p.room_chars, goblin);
+        let c = state.connection.lock().await;
+        assert_eq!(c.target.name.as_deref(), Some("goblin"));
+        assert_eq!(c.target.room_idx, Some(1));
+        assert_eq!(c.target.quick_keys, [gg]);
+        assert_eq!(c.room_chars, goblin);
         assert_eq!(p.room_block, look);
         assert!(p.fight_tail);
         assert!(p.tick.config.enabled, "a running tick stays on");

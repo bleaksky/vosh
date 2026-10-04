@@ -11,20 +11,26 @@ use crate::app::plugins::SharedPluginManager;
 use crate::logs::{SharedLogStore, SharedScrollback};
 use crate::profile::live::Profile;
 use crate::script::SharedTimers;
+use crate::session::connection::Connection;
 use crate::session::SessionHandle;
 
 /// What every command, window and session shares. The one session slot,
-/// the live profile, the profile set, the log store and scrollback, the
-/// plugins and Lua timers, the catalog and loadouts of loadout mode, the
-/// app data folder, and what the app keeps about the live connection:
-/// its target, the character logged in, the terminal size and the last
-/// affects. The generations that turn away a write read before the
-/// profile was replaced live here too, with the counter that settles a
-/// burst of changes into one save, the flags that hold the saves back
-/// and the flag that says loadout mode is live.
+/// the live profile, what the connection shares with the commands, the
+/// profile set, the log store and scrollback, the plugins and Lua timers,
+/// the catalog and loadouts of loadout mode, the app data folder, and what
+/// the app keeps about the live connection: its host and port, the
+/// character logged in, the terminal size and the last affects. The
+/// generations that turn away a write read before the profile was replaced
+/// live here too, with the counter that settles a burst of changes into
+/// one save, the flags that hold the saves back and the flag that says
+/// loadout mode is live.
 pub(crate) struct AppState {
     pub(crate) session: Mutex<Option<SessionHandle>>,
     pub(crate) profile: Arc<Mutex<Profile>>,
+    /// Your target and the room list, which belong to the connection. The
+    /// session loop holds a handle to them. See [`Connection`] for where
+    /// its lock sits.
+    pub(crate) connection: Arc<Mutex<Connection>>,
     pub(crate) lua_timers: SharedTimers,
     pub(crate) logs: SharedLogStore,
     /// A second connection to the same log database for the read
@@ -220,6 +226,7 @@ impl Default for AppState {
         Self {
             session: Mutex::new(None),
             profile: Arc::new(Mutex::new(Profile::default())),
+            connection: Arc::new(Mutex::new(Connection::default())),
             lua_timers: SharedTimers::default(),
             logs: SharedLogStore::default(),
             log_reader: SharedLogStore::default(),

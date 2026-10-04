@@ -24,6 +24,7 @@ use crate::script::{ApplyResult, SharedTimers};
 use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
+use super::connection::Connection;
 use super::prompt_view::emit_prompt_vars;
 use super::socket::Stream;
 use super::walk::{self, Walker};
@@ -290,9 +291,11 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             effects,
         } = {
             let mut p = profile.lock().await;
+            let mut c = state.connection.lock().await;
             run_lines_locked(
                 &state,
                 &mut p,
+                &mut c,
                 inputs.iter().map(|(from, line)| (*from, line.as_str())),
                 shared.as_ref(),
             )
@@ -348,22 +351,23 @@ pub(super) fn framed_echoes<S: AsRef<str>>(lines: &[S]) -> Vec<u8> {
 }
 
 /// Run `line` through the input pipeline and note what it asks of the
-/// saved profile. Call with the profile lock held. A `#profile reset`,
-/// or a `#profile load` that reads its file, swaps the live UI config
-/// and panes, so their generations move in the same step. The profile
-/// file it reads holds none of the shared settings, so `shared` goes
-/// back over the result.
+/// saved profile. Call with the profile lock held, and the connection's
+/// after it. A `#profile reset`, or a `#profile load` that reads its file,
+/// swaps the live UI config and panes, so their generations move in the
+/// same step. The profile file it reads holds none of the shared settings,
+/// so `shared` goes back over the result.
 pub(super) fn run_and_note_line(
     state: &AppState,
     p: &mut Profile,
+    c: &mut Connection,
     from: LineFrom,
     line: &str,
     effects: &mut input::LineEffects,
     shared: Option<&SharedLayer>,
 ) -> input::Ran {
     let ran = match shared.filter(|_| input::may_replace_profile(state, line)) {
-        Some(layer) => layer.keep_across(p, |p| input::run_line_from(state, p, line, from)),
-        None => input::run_line_from(state, p, line, from),
+        Some(layer) => layer.keep_across(p, |p| input::run_line_from(state, p, c, line, from)),
+        None => input::run_line_from(state, p, c, line, from),
     };
     effects.note_ran(line, &ran);
     if ran.replaced {
@@ -396,9 +400,9 @@ struct Shown {
 }
 
 impl Shown {
-    fn of(p: &Profile) -> Self {
+    fn of(p: &Profile, c: &Connection) -> Self {
         Self {
-            target: TargetPayload::of(p),
+            target: TargetPayload::of(c),
             look: crate::prompt::prompt_look(p),
         }
     }
@@ -414,9 +418,9 @@ pub(crate) struct ShownChanges {
 }
 
 impl ShownChanges {
-    /// What `p` changed since `before` was taken.
-    fn since(before: Shown, p: &Profile) -> Self {
-        let after = Shown::of(p);
+    /// What `p` and `c` changed since `before` was taken.
+    fn since(before: Shown, p: &Profile, c: &Connection) -> Self {
+        let after = Shown::of(p, c);
         Self {
             repaint: after.look != before.look,
             target: (after.target != before.target).then_some(after.target),
@@ -442,7 +446,7 @@ impl ShownChanges {
 }
 
 /// What lines run through the input pipeline produced under the profile
-/// lock.
+/// lock and the connection's.
 pub(crate) struct LinesRun {
     /// What the lines ask for, with every list they changed.
     pub(crate) apply: ApplyResult,
@@ -451,40 +455,43 @@ pub(crate) struct LinesRun {
     pub(crate) effects: input::LineEffects,
 }
 
-/// The part of [`run_fired_command`] that runs under the profile lock:
-/// the input pipeline, which runs the Lua bodies of any script aliases
-/// in the command where they stand, and all the Lua it ran asks for.
+/// The part of [`run_fired_command`] that runs under the profile lock
+/// and the connection's: the input pipeline, which runs the Lua bodies of
+/// any script aliases in the command where they stand, and all the Lua it
+/// ran asks for.
 pub(super) fn run_fired_locked(
     state: &AppState,
     p: &mut Profile,
+    c: &mut Connection,
     command: &str,
     shared: Option<&SharedLayer>,
 ) -> LinesRun {
-    run_lines_locked(state, p, [(LineFrom::You, command)], shared)
+    run_lines_locked(state, p, c, [(LineFrom::You, command)], shared)
 }
 
-/// Run `lines` through the input pipeline under the profile lock, each
-/// for whoever asked for it, as [`line_script_result`] reads it. Every
-/// path runs its lines here: a typed line, a Settings timer, the tick
-/// command and `mud.input`.
+/// Run `lines` through the input pipeline under the profile lock and the
+/// connection's, each for whoever asked for it, as [`line_script_result`]
+/// reads it. Every path runs its lines here: a typed line, a Settings
+/// timer, the tick command and `mud.input`.
 pub(crate) fn run_lines_locked<'a>(
     state: &AppState,
     p: &mut Profile,
+    c: &mut Connection,
     lines: impl IntoIterator<Item = (LineFrom, &'a str)>,
     shared: Option<&SharedLayer>,
 ) -> LinesRun {
     let lists_before = ListRevisions::of(p);
-    let shown_before = Shown::of(p);
+    let shown_before = Shown::of(p, c);
     let mut effects = input::LineEffects::default();
     let mut apply = ApplyResult::default();
     for (from, line) in lines {
-        let ran = run_and_note_line(state, p, from, line, &mut effects, shared);
+        let ran = run_and_note_line(state, p, c, from, line, &mut effects, shared);
         apply.append(line_script_result(ran));
     }
     apply.lists = ListChanges::since(lists_before, p);
     LinesRun {
         apply,
-        shown: ShownChanges::since(shown_before, p),
+        shown: ShownChanges::since(shown_before, p, c),
         effects,
     }
 }
@@ -515,7 +522,8 @@ pub(super) async fn run_fired_command<R: tauri::Runtime>(
         effects,
     } = {
         let mut p = profile.lock().await;
-        run_fired_locked(&state, &mut p, command, shared.as_ref())
+        let mut c = state.connection.lock().await;
+        run_fired_locked(&state, &mut p, &mut c, command, shared.as_ref())
     };
     crate::disk::save::settle_line_effects(app, effects).await;
     shown.send(app);

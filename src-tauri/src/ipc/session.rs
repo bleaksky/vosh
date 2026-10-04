@@ -108,5 +108,48 @@ pub(crate) async fn session_set_window_size(
 /// `session://target` events fire.
 #[tauri::command]
 pub(crate) async fn target_get(state: State<'_, SharedState>) -> Result<TargetPayload, String> {
-    Ok(TargetPayload::of(&*state.profile.lock().await))
+    Ok(TargetPayload::of(&*state.connection.lock().await))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use tauri::test::{mock_builder, mock_context, noop_assets};
+    use tauri::Manager;
+
+    use crate::app::state::{AppState, SharedState};
+
+    #[tokio::test]
+    async fn your_target_answers_while_the_profile_is_busy() {
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        app.manage::<SharedState>(Arc::new(AppState::default()));
+        let state: SharedState = app.state::<SharedState>().inner().clone();
+        state.connection.lock().await.target.name = Some("goblin".into());
+
+        // Another task holds the profile, as the session loop does while
+        // it runs a line.
+        let (held_tx, held) = tokio::sync::oneshot::channel();
+        let (release, release_rx) = tokio::sync::oneshot::channel::<()>();
+        let profile = state.profile.clone();
+        let holder = tokio::spawn(async move {
+            let _p = profile.lock().await;
+            let _ = held_tx.send(());
+            let _ = release_rx.await;
+        });
+        held.await.unwrap();
+
+        let answer = tokio::time::timeout(
+            Duration::from_secs(1),
+            super::target_get(app.state::<SharedState>()),
+        )
+        .await
+        .expect("the target answers without the profile")
+        .unwrap();
+        assert_eq!(answer.name.as_deref(), Some("goblin"));
+
+        release.send(()).unwrap();
+        holder.await.unwrap();
+    }
 }

@@ -15,6 +15,8 @@ use crate::app::events;
 use crate::profile::live::Profile;
 use crate::prompt::client_values;
 
+use super::connection::Connection;
+
 #[cfg(test)]
 thread_local! {
     /// How many times this thread drew your design from the live values,
@@ -27,10 +29,10 @@ thread_local! {
 /// then what Vosh itself knows, and draws `?` for a value the game hides.
 /// The spans say where each piece landed, which the open row keeps for
 /// the prompt card.
-fn render_prompt(p: &Profile, now: Instant) -> vosh_prompt::Rendered {
+fn render_prompt(p: &Profile, c: &Connection, now: Instant) -> vosh_prompt::Rendered {
     #[cfg(test)]
     RENDERS.with(|n| n.set(n.get() + 1));
-    let client = client_values(p, now);
+    let client = client_values(p, c, now);
     vosh_prompt::render_str(
         &p.prompt.config().template,
         &p.prompt.vars.resolver(&client),
@@ -68,14 +70,14 @@ impl PromptView {
 /// row shows the lines the game sent while the card reads your codes. The
 /// live render rides behind it. Overrides never reach
 /// `session://prompt-vars`, so the panes keep the live values.
-pub(super) fn prompt_view(p: &Profile, now: Instant) -> PromptView {
+pub(super) fn prompt_view(p: &Profile, c: &Connection, now: Instant) -> PromptView {
     if !p.prompt.draws() {
         return PromptView {
             shown: None,
             live: None,
         };
     }
-    let live = render_prompt(p, now);
+    let live = render_prompt(p, c, now);
     let Some(preview) = p.prompt.preview() else {
         return PromptView {
             shown: Some(live),
@@ -88,7 +90,7 @@ pub(super) fn prompt_view(p: &Profile, now: Instant) -> PromptView {
             live: Some(live),
         };
     }
-    let client = client_values(p, now);
+    let client = client_values(p, c, now);
     let resolver = p.prompt.vars.resolver(&client);
     let overrides = preview.overrides(&resolver);
     let shown = vosh_prompt::render_str(
@@ -179,8 +181,9 @@ pub(super) fn send_prompt_vars<R: tauri::Runtime>(
 pub(super) fn watched_state<R: tauri::Runtime>(
     app: &AppHandle<R>,
     p: &Profile,
+    c: &Connection,
 ) -> Option<vosh_prompt::card::state::PromptState> {
-    watching_prompt(app).then(|| crate::prompt::prompt_state(p))
+    watching_prompt(app).then(|| crate::prompt::prompt_state(p, c))
 }
 
 /// Send `state` on `session://prompt-state`, when there is one.

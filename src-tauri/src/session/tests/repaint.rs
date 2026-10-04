@@ -96,7 +96,7 @@ fn a_packet_with_no_text_after_it_repaints_the_open_row_late() {
         let (_, again) = read_then_wait(&mut session, &time(15), waiting, later);
         assert_eq!(again, waiting, "{show:?}");
         // It fires: a replace of the open row with nothing after it.
-        let out = late_repaint_step(&mut session.p, false, later);
+        let out = late_repaint_step(&mut session.p, &session.c, false, later);
         let replace = out.replace.as_ref().expect("the repaint");
         assert!(out.bytes.is_empty(), "{show:?}");
         assert!(
@@ -105,7 +105,7 @@ fn a_packet_with_no_text_after_it_repaints_the_open_row_late() {
             plain(&replace.bytes)
         );
         // The open row the card reads holds the new pieces.
-        let state = crate::prompt::prompt_state(&session.p);
+        let state = crate::prompt::prompt_state(&session.p, &session.c);
         let open = state.open_row.expect("the open row");
         assert_eq!(open.plain, "<1020> 15", "{show:?}");
         assert_eq!(
@@ -114,7 +114,7 @@ fn a_packet_with_no_text_after_it_repaints_the_open_row_late() {
         );
         // Nothing is left to change.
         assert!(
-            late_repaint_step(&mut session.p, false, later).is_empty(),
+            late_repaint_step(&mut session.p, &session.c, false, later).is_empty(),
             "{show:?}"
         );
     }
@@ -132,7 +132,7 @@ fn a_packet_after_the_prompt_in_its_read_repaints_it_late() {
         assert!(read.prompt, "{show:?}");
         assert!(read.gmcp, "{show:?}: the packet came after the prompt");
         assert_eq!(waiting, Some(now + LATE_REPAINT), "{show:?}");
-        let out = late_repaint_step(&mut session.p, false, now);
+        let out = late_repaint_step(&mut session.p, &session.c, false, now);
         let shown = match show {
             PromptShow::Pinned => out.pin.as_deref().map(plain),
             _ => out.replace.as_ref().map(|r| plain(&r.bytes)),
@@ -203,11 +203,11 @@ fn deciding_whether_to_wait_draws_nothing() {
     // It draws only when it fires, and then only while the row is open.
     let mut session = Session::new(profile(CODES, HOUR, true));
     let _ = session.read(&wire_fixture("quiet"));
-    let (out, drawn) = drawing(|| late_repaint_step(&mut session.p, false, now));
+    let (out, drawn) = drawing(|| late_repaint_step(&mut session.p, &session.c, false, now));
     assert!(out.is_empty());
     assert_eq!(drawn, 1);
     let _ = session.send("look");
-    let (out, drawn) = drawing(|| late_repaint_step(&mut session.p, false, now));
+    let (out, drawn) = drawing(|| late_repaint_step(&mut session.p, &session.c, false, now));
     assert!(out.is_empty());
     assert_eq!(drawn, 0);
 }
@@ -223,7 +223,7 @@ fn text_after_the_packet_cancels_the_late_repaint() {
     let (_, after) = read_then_wait(&mut session, tell, waiting, now);
     assert_eq!(after, None);
     // The text closed the row, so a repaint changes nothing.
-    assert!(late_repaint_step(&mut session.p, false, now).is_empty());
+    assert!(late_repaint_step(&mut session.p, &session.c, false, now).is_empty());
 
     // Text in the same read as the packet cancels it before it starts.
     let mut session = Session::new(profile(CODES, HOUR, true));
@@ -239,7 +239,7 @@ fn text_after_the_packet_cancels_the_late_repaint() {
     let _ = session.read(&wire_fixture("quiet"));
     let (_, waiting) = read_then_wait(&mut session, &time(14), None, now);
     assert!(waiting.is_some());
-    assert!(late_repaint_step(&mut session.p, false, now).is_empty());
+    assert!(late_repaint_step(&mut session.p, &session.c, false, now).is_empty());
     // With drawing off, the game prompt shows as sent and leaves no open
     // row, so a packet starts nothing.
     let mut session = Session::new(profile(CODES, HOUR, false));
@@ -261,7 +261,7 @@ fn the_pinned_band_repaints_late_whatever_text_came() {
     // Text that comes while it waits keeps it waiting.
     let (_, still) = read_then_wait(&mut session, b"\n\rA guard arrives.\n\r", waiting, now);
     assert_eq!(still, waiting);
-    let out = late_repaint_step(&mut session.p, false, now);
+    let out = late_repaint_step(&mut session.p, &session.c, false, now);
     assert!(out.replace.is_none() && out.bytes.is_empty() && out.restore.is_none());
     assert_eq!(out.pin.as_deref().map(plain).as_deref(), Some("<1020> 14"));
 }
@@ -278,7 +278,7 @@ fn a_late_repaint_keeps_the_preview_and_carries_the_new_live_render() {
     let _ = session.repaint();
     let (_, waiting) = read_then_wait(&mut session, &time(14), None, now);
     assert!(waiting.is_some());
-    let out = late_repaint_step(&mut session.p, false, now);
+    let out = late_repaint_step(&mut session.p, &session.c, false, now);
     let replace = out.replace.as_ref().expect("the repaint");
     assert!(plain(&replace.bytes).starts_with("<180> 14"));
     let restore = out.restore.as_ref().expect("the live render");
@@ -293,5 +293,5 @@ fn output_from_elsewhere_before_it_fires_leaves_the_row_alone() {
     let (_, waiting) = read_then_wait(&mut session, &time(14), None, now);
     assert!(waiting.is_some());
     // A slash command echoed in the meantime.
-    assert!(late_repaint_step(&mut session.p, true, now).is_empty());
+    assert!(late_repaint_step(&mut session.p, &session.c, true, now).is_empty());
 }

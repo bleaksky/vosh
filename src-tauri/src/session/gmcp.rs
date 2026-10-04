@@ -1,10 +1,10 @@
 //! What the session does with GMCP. When the game offers it, the session
 //! says hello and names the packages it reads. Each packet the game sends
 //! then updates the variables, your prompt, the room lists and the tick
-//! under the profile lock, runs the Lua that listens for it, and goes on
-//! to the windows. A new character name in Char.Status or Char.Name is a
-//! login, which loads its affect fulls, may switch the profile and sends
-//! the session identity.
+//! under the profile lock and the connection's, runs the Lua that listens
+//! for it, and goes on to the windows. A new character name in Char.Status
+//! or Char.Name is a login, which loads its affect fulls, may switch the
+//! profile and sends the session identity.
 
 use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager};
@@ -21,6 +21,7 @@ use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
 use super::conn::Conn;
+use super::connection::Connection;
 use super::effects::{apply_script_result, deliver_tick_step, OutputSink, ScriptIo};
 use super::gmcp_vars;
 use super::prompt_view::observe_prompt_gmcp;
@@ -71,7 +72,8 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         let mut p = conn.profile.lock().await;
         conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
         conn.perf.mutex_acquires += 1;
-        gmcp_step(&mut p, &msg, Instant::now())
+        let mut c = conn.connection.lock().await;
+        gmcp_step(&mut p, &mut c, &msg, Instant::now())
     };
 
     // Char.Status / Char.Name carry the logged-in character name on
@@ -192,13 +194,15 @@ async fn character_named<R: tauri::Runtime>(
     crate::session::identity::broadcast_session_identity(app, state).await;
 }
 
-/// What a GMCP packet does to the profile, under the profile lock the
-/// caller holds: the variables and the custom prompt take it, Room.Chars
-/// is kept for the target commands, a World.Time hour change is the
-/// tick, and Lua GMCP handlers run. Returns the tick step and what the
-/// handlers asked for, which the caller delivers once the lock drops.
+/// What a GMCP packet does to the profile and the connection, under the
+/// locks the caller holds: the variables and the custom prompt take it,
+/// the connection keeps Room.Chars for the target commands, a World.Time
+/// hour change is the tick, and Lua GMCP handlers run. Returns the tick
+/// step and what the handlers asked for, which the caller delivers once
+/// the locks drop.
 pub(super) fn gmcp_step(
     p: &mut Profile,
+    c: &mut Connection,
     msg: &vosh_protocol::gmcp::Message,
     now: Instant,
 ) -> (Option<TickStep>, ApplyResult) {
@@ -212,17 +216,16 @@ pub(super) fn gmcp_step(
     if fought && !p.prompt.vars.gmcp().fighting() {
         p.fight_tail = true;
     }
-    // Cache the latest Room.Chars snapshot in the profile so
-    // bare `tar <index>` / `tarn` / `tarp` commands can resolve
-    // against the current room without round-tripping to the
-    // frontend.
+    // The connection keeps the latest Room.Chars list, so a bare
+    // `tar <index>`, `tarn` or `tarp` resolves against the current room
+    // without asking the page.
     if msg.package == "Room.Chars" {
         if let Some(arr) = msg.data.as_array() {
             // The look this packet goes with lists one line for each
             // entry after its things.
             p.room_block.room_chars(arr.len());
             let chars = input::target::read_room_chars(arr);
-            input::target::set_room_chars(p, chars);
+            input::target::set_room_chars(c, &mut p.vars, chars);
         }
     }
     // The look this packet goes with lists a line for each long text its

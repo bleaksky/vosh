@@ -1,13 +1,14 @@
 //! Target words and quick keys. `tar` and its kin pick whom your
 //! commands aim at from the characters in the room, and a quick key
-//! like `gg` sends its verb at that target.
+//! like `gg` sends its verb at that target. Both live on the
+//! [`Connection`], and the session variable `target` mirrors the target.
 
 use serde_json::Value;
-use vosh_automation::vars::Scope;
+use vosh_automation::alias::AliasStore;
+use vosh_automation::vars::{Scope, VariableStore};
 
 use super::{split_first_word, InputResult};
-use crate::profile::live::Profile;
-use crate::session::connection::{QuickKey, RoomChar};
+use crate::session::connection::{Connection, QuickKey, RoomChar};
 
 const TARGET_KEYWORDS: &[&str] = &["tar", "tarn", "tarp", "tarclear"];
 
@@ -22,15 +23,14 @@ pub(super) fn is_target_keyword(name: &str) -> bool {
 /// stores "gris" as the name (so commands use the user's keyword)
 /// but resolves `room_idx` to whichever char contains "gris" so the
 /// `>` marker shows on the right chip. First match wins.
-fn refresh_target_idx(profile: &mut Profile) {
-    profile.target.room_idx = match &profile.target.name {
+fn refresh_target_idx(c: &mut Connection, vars: &mut VariableStore) {
+    c.target.room_idx = match &c.target.name {
         None => None,
         Some(name) => {
             let lower = name.to_ascii_lowercase();
-            profile
-                .room_chars
+            c.room_chars
                 .iter()
-                .position(|c| c.name.to_ascii_lowercase().contains(&lower))
+                .position(|ch| ch.name.to_ascii_lowercase().contains(&lower))
                 .map(|i| i + 1)
         }
     };
@@ -40,10 +40,10 @@ fn refresh_target_idx(profile: &mut Profile) {
     // empty, so an alias that names it keeps the token as typed.
     // Char.Combat's `target_name` stays separate (it's the
     // server-confirmed combat target).
-    if let Some(name) = &profile.target.name {
-        profile.vars.set(Scope::Session, "target", name.clone());
+    if let Some(name) = &c.target.name {
+        vars.set(Scope::Session, "target", name.clone());
     } else {
-        profile.vars.remove("target");
+        vars.remove("target");
     }
 }
 
@@ -71,29 +71,34 @@ pub(crate) fn read_room_chars(entries: &[Value]) -> Vec<RoomChar> {
         .collect()
 }
 
-pub(crate) fn set_room_chars(profile: &mut Profile, chars: Vec<RoomChar>) {
-    profile.room_chars = chars;
-    refresh_target_idx(profile);
+/// Keep `chars` as the room list and find your target in it again.
+pub(crate) fn set_room_chars(c: &mut Connection, vars: &mut VariableStore, chars: Vec<RoomChar>) {
+    c.room_chars = chars;
+    refresh_target_idx(c, vars);
 }
 
-pub(super) fn run_target_set(profile: &mut Profile, args: &str) -> InputResult {
+pub(super) fn run_target_set(
+    c: &mut Connection,
+    vars: &mut VariableStore,
+    args: &str,
+) -> InputResult {
     let arg = args.trim();
     if arg.is_empty() {
-        return list_targets(profile);
+        return list_targets(c);
     }
     // Numeric → pick from room chars by 1-based index. This is the
     // one path that resolves to the full server-supplied name, since
     // an index alone isn't usable as a command keyword.
     if let Ok(n) = arg.parse::<usize>() {
-        if n == 0 || n > profile.room_chars.len() {
+        if n == 0 || n > c.room_chars.len() {
             return InputResult::error(format!(
                 "no char #{n} in room (have {})",
-                profile.room_chars.len()
+                c.room_chars.len()
             ));
         }
-        let name = profile.room_chars[n - 1].name.clone();
-        profile.target.name = Some(name.clone());
-        refresh_target_idx(profile);
+        let name = c.room_chars[n - 1].name.clone();
+        c.target.name = Some(name.clone());
+        refresh_target_idx(c, vars);
         return InputResult::echo_line(format!("target: {name}"));
     }
     // Non-numeric → use the literal string the user typed. The MUD
@@ -102,21 +107,25 @@ pub(super) fn run_target_set(profile: &mut Profile, args: &str) -> InputResult {
     // as `kill gris` rather than the full `The Baron Grisvald`.
     // We still look for a containing room char to drive the `>`
     // marker on the room chip but don't substitute the name.
-    profile.target.name = Some(arg.to_string());
-    refresh_target_idx(profile);
-    if profile.target.room_idx.is_some() {
+    c.target.name = Some(arg.to_string());
+    refresh_target_idx(c, vars);
+    if c.target.room_idx.is_some() {
         InputResult::echo_line(format!("target: {arg}"))
     } else {
         InputResult::echo_line(format!("target: {arg} (not in room)"))
     }
 }
 
-pub(super) fn run_target_cycle(profile: &mut Profile, step: i32) -> InputResult {
-    let n = profile.room_chars.len();
+pub(super) fn run_target_cycle(
+    c: &mut Connection,
+    vars: &mut VariableStore,
+    step: i32,
+) -> InputResult {
+    let n = c.room_chars.len();
     if n == 0 {
         return InputResult::error("no chars in room to cycle through");
     }
-    let current = profile.target.room_idx.unwrap_or(0) as i32;
+    let current = c.target.room_idx.unwrap_or(0) as i32;
     let count = n as i32;
     // 1-based wraparound. step=+1 goes forward, -1 backward.
     let next = if current == 0 {
@@ -135,39 +144,39 @@ pub(super) fn run_target_cycle(profile: &mut Profile, step: i32) -> InputResult 
             raw
         }
     };
-    let name = profile.room_chars[(next - 1) as usize].name.clone();
-    profile.target.name = Some(name.clone());
-    refresh_target_idx(profile);
+    let name = c.room_chars[(next - 1) as usize].name.clone();
+    c.target.name = Some(name.clone());
+    refresh_target_idx(c, vars);
     InputResult::echo_line(format!("target: {name} (#{next}/{count})"))
 }
 
-pub(super) fn run_target_clear(profile: &mut Profile) -> InputResult {
-    if profile.target.name.is_none() {
+pub(super) fn run_target_clear(c: &mut Connection, vars: &mut VariableStore) -> InputResult {
+    if c.target.name.is_none() {
         return InputResult::echo_line("no target to clear");
     }
-    profile.target.name = None;
-    refresh_target_idx(profile);
+    c.target.name = None;
+    refresh_target_idx(c, vars);
     InputResult::echo_line("target cleared")
 }
 
-fn list_targets(profile: &Profile) -> InputResult {
+fn list_targets(c: &Connection) -> InputResult {
     let mut lines: Vec<String> = Vec::new();
-    match &profile.target.name {
+    match &c.target.name {
         Some(t) => lines.push(format!("current target: {t}")),
         None => lines.push("no target set".to_string()),
     }
-    if profile.room_chars.is_empty() {
+    if c.room_chars.is_empty() {
         lines.push("(no Room.Chars data yet)".to_string());
     } else {
-        lines.push(format!("{} char(s) in room:", profile.room_chars.len()));
-        for (i, c) in profile.room_chars.iter().enumerate() {
-            let marker = if Some(i + 1) == profile.target.room_idx {
+        lines.push(format!("{} char(s) in room:", c.room_chars.len()));
+        for (i, ch) in c.room_chars.iter().enumerate() {
+            let marker = if Some(i + 1) == c.target.room_idx {
                 ">"
             } else {
                 " "
             };
-            let kind = if c.npc { "npc" } else { "pc" };
-            lines.push(format!("  {marker} {:>2}. {} [{kind}]", i + 1, c.name));
+            let kind = if ch.npc { "npc" } else { "pc" };
+            lines.push(format!("  {marker} {:>2}. {} [{kind}]", i + 1, ch.name));
         }
         lines.push("usage: tar <N> | tar <substring> | tarn | tarp | tarclear".to_string());
     }
@@ -175,21 +184,27 @@ fn list_targets(profile: &Profile) -> InputResult {
 }
 
 /// `#target <args>` mirrors the bare `tar` shortcut.
-pub(super) fn slash_target(profile: &mut Profile, args: &str) -> InputResult {
+pub(super) fn slash_target(
+    c: &mut Connection,
+    vars: &mut VariableStore,
+    args: &str,
+) -> InputResult {
     let trimmed = args.trim();
     if trimmed == "clear" {
-        return run_target_clear(profile);
+        return run_target_clear(c, vars);
     }
     if trimmed == "next" {
-        return run_target_cycle(profile, 1);
+        return run_target_cycle(c, vars, 1);
     }
     if trimmed == "prev" {
-        return run_target_cycle(profile, -1);
+        return run_target_cycle(c, vars, -1);
     }
-    run_target_set(profile, args)
+    run_target_set(c, vars, args)
 }
 
-pub(super) fn slash_qkey(profile: &mut Profile, args: &str) -> InputResult {
+/// `#qkey`, which sets a quick key on `c`, or clears one. A name your
+/// `aliases` use stays theirs.
+pub(super) fn slash_qkey(c: &mut Connection, aliases: &AliasStore, args: &str) -> InputResult {
     let (name, rest) = split_first_word(args);
     if name.is_empty() {
         return InputResult::error("usage: #qkey <name> <verb>  |  #qkey clear <name>");
@@ -199,9 +214,9 @@ pub(super) fn slash_qkey(profile: &mut Profile, args: &str) -> InputResult {
         if target.is_empty() {
             return InputResult::error("usage: #qkey clear <name>");
         }
-        let before = profile.target.quick_keys.len();
-        profile.target.quick_keys.retain(|q| q.name != target);
-        if profile.target.quick_keys.len() == before {
+        let before = c.target.quick_keys.len();
+        c.target.quick_keys.retain(|q| q.name != target);
+        if c.target.quick_keys.len() == before {
             return InputResult::error(format!("quick-key `{target}` not found"));
         }
         return InputResult::echo_line(format!("quick-key `{target}` removed"));
@@ -212,7 +227,7 @@ pub(super) fn slash_qkey(profile: &mut Profile, args: &str) -> InputResult {
             "`{name}` is a target keyword — pick another quick-key name"
         ));
     }
-    if profile.aliases.get(name).is_some() {
+    if aliases.get(name).is_some() {
         return InputResult::error(format!(
             "alias `{name}` exists — `#unalias {name}` first if you want this name"
         ));
@@ -222,14 +237,9 @@ pub(super) fn slash_qkey(profile: &mut Profile, args: &str) -> InputResult {
         return InputResult::error(format!("usage: #qkey {name} <verb>"));
     }
     // Update in place if it exists, otherwise append.
-    match profile
-        .target
-        .quick_keys
-        .iter_mut()
-        .find(|q| q.name == name)
-    {
+    match c.target.quick_keys.iter_mut().find(|q| q.name == name) {
         Some(qk) => qk.verb = verb.to_string(),
-        None => profile.target.quick_keys.push(QuickKey {
+        None => c.target.quick_keys.push(QuickKey {
             name: name.to_string(),
             verb: verb.to_string(),
         }),
@@ -237,12 +247,12 @@ pub(super) fn slash_qkey(profile: &mut Profile, args: &str) -> InputResult {
     InputResult::echo_line(format!("quick-key `{name}` -> {verb}"))
 }
 
-pub(super) fn slash_qkeys_list(profile: &Profile) -> InputResult {
-    if profile.target.quick_keys.is_empty() {
+pub(super) fn slash_qkeys_list(c: &Connection) -> InputResult {
+    if c.target.quick_keys.is_empty() {
         return InputResult::echo_line("no quick-keys defined");
     }
-    let mut lines = vec![format!("{} quick-key(s):", profile.target.quick_keys.len())];
-    for qk in &profile.target.quick_keys {
+    let mut lines = vec![format!("{} quick-key(s):", c.target.quick_keys.len())];
+    for qk in &c.target.quick_keys {
         let verb = if qk.verb.is_empty() {
             "(unset)"
         } else {

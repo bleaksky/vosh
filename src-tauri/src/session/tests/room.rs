@@ -132,8 +132,9 @@ fn wire(events: &[LookEvent]) -> Vec<u8> {
 }
 
 /// One socket read of `data` through the steps the session runs for each
-/// event, then the end of the read. Returns what the terminal gets.
-fn read(p: &mut Profile, data: &[u8]) -> String {
+/// event, then the end of the read, with your target and the room list in
+/// `c`. Returns what the terminal gets.
+fn read(p: &mut Profile, c: &mut Connection, data: &[u8]) -> String {
     let mut parser = Parser::new();
     let mut acc = LineAccumulator::new();
     let mut batch = ReadBatch::new(crate::output::output_count());
@@ -143,20 +144,20 @@ fn read(p: &mut Profile, data: &[u8]) -> String {
             TelnetEvent::Data(bytes) => {
                 for line in acc.feed(&bytes) {
                     let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-                    let _ = line_step(p, &mut batch, line, plain, now, None);
+                    let _ = line_step(p, c, &mut batch, line, plain, now, None);
                 }
             }
             TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
                 let msg = vosh_protocol::gmcp::parse(&payload).expect("every packet parses");
-                let _ = gmcp_step(p, &msg, now);
+                let _ = gmcp_step(p, c, &msg, now);
             }
             TelnetEvent::Command(byte) if byte == telnet_codes::GA || byte == telnet_codes::EOR => {
-                let _ = marker_step(p, &mut acc, &mut batch, now, None);
+                let _ = marker_step(p, c, &mut acc, &mut batch, now, None);
             }
             _ => {}
         }
     }
-    let _ = partial_step(p, &mut acc, &mut batch, now, None);
+    let _ = partial_step(p, c, &mut acc, &mut batch, now, None);
     String::from_utf8(batch.out.bytes).expect("the output is text")
 }
 
@@ -202,12 +203,11 @@ enum Listed {
     Target,
 }
 
-/// A profile that targets what `case` gives `tar`, if anything, with no
-/// trigger yet.
-fn targeting(case: &LookCase) -> Profile {
-    let mut p = Profile::default();
-    p.target.name = case.target.clone();
-    p
+/// A connection that targets what `case` gives `tar`, if anything.
+fn targeting(case: &LookCase) -> Connection {
+    let mut c = Connection::default();
+    c.target.name = case.target.clone();
+    c
 }
 
 /// `line` without its ANSI codes, wrapped in `open` and a reset. A line
@@ -273,14 +273,15 @@ fn a_room_trigger_colors_the_things_and_people_of_each_look_and_nothing_else() {
     assert!(cases.len() >= 6);
     for case in &cases {
         // The line of your target is a room line too.
-        let mut p = targeting(case);
+        let mut c = targeting(case);
+        let mut p = Profile::default();
         p.triggers
             .set(yellow(
                 "room",
                 vosh_automation::trigger::TriggerTarget::Room,
             ))
             .unwrap();
-        let shown = read(&mut p, &wire(&case.events));
+        let shown = read(&mut p, &mut c, &wire(&case.events));
         let want = expected(&case.events, &|line, listed, _| match listed {
             Listed::Room | Listed::Target => wrapped("\x1b[33m", line),
             Listed::No => line.to_string(),
@@ -294,7 +295,8 @@ fn a_your_target_trigger_colors_the_line_of_your_target_and_nothing_else() {
     let cases = looks();
     assert!(cases.iter().filter(|c| c.target.is_some()).count() >= 4);
     for case in &cases {
-        let mut p = targeting(case);
+        let mut c = targeting(case);
+        let mut p = Profile::default();
         let mut target = yellow(
             "target",
             vosh_automation::trigger::TriggerTarget::RoomTarget,
@@ -313,7 +315,7 @@ fn a_your_target_trigger_colors_the_line_of_your_target_and_nothing_else() {
                 vosh_automation::trigger::TriggerTarget::Room,
             ))
             .unwrap();
-        let shown = read(&mut p, &wire(&case.events));
+        let shown = read(&mut p, &mut c, &wire(&case.events));
         let want = expected(&case.events, &|line, listed, _| match listed {
             Listed::Target => wrapped("\x1b[91m", line),
             Listed::Room => wrapped("\x1b[33m", line),
@@ -336,7 +338,7 @@ fn with_no_target_no_line_is_the_line_of_your_target() {
             vosh_automation::trigger::TriggerTarget::RoomTarget,
         ))
         .unwrap();
-    let shown = read(&mut p, &wire(&case.events));
+    let shown = read(&mut p, &mut Connection::default(), &wire(&case.events));
     assert_eq!(
         shown,
         expected(&case.events, &|line, _, _| line.to_string())
@@ -355,7 +357,11 @@ fn an_exits_line_someone_says_opens_no_look() {
     // languages.c, $n says with the text in `# bold yellow.
     let said = "Tolliver says '\x1b[0;1;33m[Exits: south]\x1b[0;0m'";
     let helm = "     A black-steel helm is here, gleaming darkly.";
-    let shown = read(&mut p, format!("{said}\n\r{helm}\n\r").as_bytes());
+    let shown = read(
+        &mut p,
+        &mut Connection::default(),
+        format!("{said}\n\r{helm}\n\r").as_bytes(),
+    );
     assert_eq!(shown, format!("{said}\r\n{helm}\r\n"));
 }
 
@@ -366,7 +372,7 @@ fn line_triggers_still_see_every_line_of_a_look() {
     p.triggers
         .set(yellow("all", vosh_automation::trigger::TriggerTarget::Line))
         .unwrap();
-    let shown = read(&mut p, &wire(&case.events));
+    let shown = read(&mut p, &mut Connection::default(), &wire(&case.events));
     for event in &case.events {
         if let LookEvent::Line { line, .. } = event {
             // The yellow opens on each line's text, after any codes the
@@ -401,8 +407,8 @@ fn the_preset_opens_a_look_on_the_line_the_session_reads_as_its_exits() {
 fn the_preset_colors_each_look_as_the_mockups_draw_it() {
     for case in &looks() {
         let mut p = preset_profile();
-        p.target.name = case.target.clone();
-        let shown = read(&mut p, &wire(&case.events));
+        let mut c = targeting(case);
+        let shown = read(&mut p, &mut c, &wire(&case.events));
         let want = expected(
             &case.events,
             &|line, listed, preset| match (listed, preset) {
@@ -428,7 +434,11 @@ fn the_preset_colors_each_line_it_names_and_leaves_every_near_miss_alone() {
     assert!(lines.iter().any(|l| l.trigger.is_none()));
     for case in &lines {
         let mut p = preset_profile();
-        let shown = read(&mut p, format!("{}\n\r", case.line).as_bytes());
+        let shown = read(
+            &mut p,
+            &mut Connection::default(),
+            format!("{}\n\r", case.line).as_bytes(),
+        );
         let plain = vosh_protocol::ansi::plain_text(case.line.as_bytes());
         let want = match case.trigger.as_deref() {
             None => case.line.clone(),
@@ -479,6 +489,7 @@ fn your_own_highlight_on_a_name_draws_over_the_room_color() {
     p.triggers.set(name).unwrap();
     let shown = read(
         &mut p,
+        &mut Connection::default(),
         b"\xff\xfa\xc9Room.Chars [{\"name\":\"Tolliver\",\"npc\":false}]\xff\xf0\
           [Exits: south]\n\rTolliver is resting here.\n\r",
     );

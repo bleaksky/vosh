@@ -38,12 +38,14 @@ fn capture_profile(template: &str) -> Profile {
     p
 }
 
-/// Run one complete line through the session's line step and return
-/// the drawn prompt, the bytes after its region mark, when it drew.
-fn draw_line(p: &mut Profile, line: &str) -> Option<String> {
+/// Run one complete line through the session's line step, with your
+/// target on `c`, and return the drawn prompt, the bytes after its region
+/// mark, when it drew.
+fn draw_line(p: &mut Profile, c: &super::Connection, line: &str) -> Option<String> {
     let mut batch = super::ReadBatch::new(crate::output::output_count());
     let _ = super::line_step(
         p,
+        c,
         &mut batch,
         super::Line {
             bytes: line.as_bytes().to_vec(),
@@ -183,7 +185,8 @@ fn a_line_prompt_draws_in_place_with_no_line_end() {
 #[test]
 fn the_prompt_draws_the_template_byte_for_byte() {
     let mut p = capture_profile(TEMPLATE);
-    let drawn = draw_line(&mut p, PROMPT_LINE).expect("the prompt draws");
+    let drawn =
+        draw_line(&mut p, &super::Connection::default(), PROMPT_LINE).expect("the prompt draws");
     assert_eq!(plain(&drawn), "[1020(100%)h 800(100%)m 930(100%)v] ");
     // Health at full in the theme's green, where the first renderer
     // drew 256 color 42. Every other byte is as it drew them.
@@ -196,7 +199,10 @@ fn the_prompt_draws_the_template_byte_for_byte() {
     assert!(drawn.ends_with("\x1b[0m"));
 
     // Any other line shows as sent and draws nothing.
-    assert_eq!(draw_line(&mut p, "You are hungry."), None);
+    assert_eq!(
+        draw_line(&mut p, &super::Connection::default(), "You are hungry."),
+        None
+    );
 }
 
 #[test]
@@ -217,6 +223,7 @@ fn with_drawing_off_the_prompt_shows_as_sent_and_is_logged() {
     let mut batch = super::ReadBatch::new(crate::output::output_count());
     let step = super::line_step(
         &mut wire.p,
+        &wire.c,
         &mut batch,
         super::Line {
             bytes: PROMPT_LINE.as_bytes().to_vec(),
@@ -234,6 +241,7 @@ fn with_drawing_off_the_prompt_shows_as_sent_and_is_logged() {
     let mut batch = super::ReadBatch::new(crate::output::output_count());
     let step = super::line_step(
         &mut p,
+        &super::Connection::default(),
         &mut batch,
         super::Line {
             bytes: PROMPT_LINE.as_bytes().to_vec(),
@@ -669,7 +677,7 @@ fn the_open_row_keeps_where_each_piece_of_the_design_landed() {
         ..wire.p.prompt.config().clone()
     };
     wire.p.set_prompt_config(config);
-    let _ = super::repaint_step(&mut wire.p, false, now);
+    let _ = super::repaint_step(&mut wire.p, &wire.c, false, now);
     let leftover = &spans(&wire);
     assert!(leftover.is_empty(), "{leftover:?}");
     let config = vosh_prompt::PromptConfig {
@@ -678,7 +686,7 @@ fn the_open_row_keeps_where_each_piece_of_the_design_landed() {
         ..wire.p.prompt.config().clone()
     };
     wire.p.set_prompt_config(config);
-    let _ = super::repaint_step(&mut wire.p, false, now);
+    let _ = super::repaint_step(&mut wire.p, &wire.c, false, now);
     assert_eq!(spans(&wire), [(0, 0, 1), (1, 1, 4), (2, 5, 1)]);
     assert_eq!(plain(&wire).as_deref(), Some("[1020]"));
 
@@ -699,7 +707,7 @@ fn draw_off_repaints_the_open_row_as_the_game_sent_it() {
     };
     wire.p.set_prompt_config(config);
     let now = tokio::time::Instant::now();
-    let off = super::repaint_step(&mut wire.p, false, now);
+    let off = super::repaint_step(&mut wire.p, &wire.c, false, now);
     assert_eq!(
         off.replace,
         Some(vosh_prompt::stage::Replace {
@@ -720,18 +728,18 @@ fn draw_off_repaints_the_open_row_as_the_game_sent_it() {
         ..wire.p.prompt.config().clone()
     };
     wire.p.set_prompt_config(config);
-    let on = super::repaint_step(&mut wire.p, false, now);
+    let on = super::repaint_step(&mut wire.p, &wire.c, false, now);
     assert_eq!(
         on.replace.map(|r| (r.gen, r.bytes)),
         Some((wire.gen0 + 2, with(&[&wire.mark(3), b"<1020>\x1b[0m"])))
     );
-    assert!(super::repaint_step(&mut wire.p, false, now).is_empty());
+    assert!(super::repaint_step(&mut wire.p, &wire.c, false, now).is_empty());
     let config = vosh_prompt::PromptConfig {
         template: "[%hp]".into(),
         ..wire.p.prompt.config().clone()
     };
     wire.p.set_prompt_config(config);
-    let new = super::repaint_step(&mut wire.p, false, now);
+    let new = super::repaint_step(&mut wire.p, &wire.c, false, now);
     assert_eq!(
         new.replace.map(|r| r.bytes),
         Some(with(&[&wire.mark(4), b"[1020]\x1b[0m"]))
@@ -739,14 +747,14 @@ fn draw_off_repaints_the_open_row_as_the_game_sent_it() {
 
     // Nothing repaints once other output closed the row, after a
     // send, or after the webview wrote to the terminal itself.
-    assert!(super::repaint_step(&mut wire.p, true, now).is_empty());
+    assert!(super::repaint_step(&mut wire.p, &wire.c, true, now).is_empty());
     let _ = wire.read(PROMPT_ROW);
     wire.send();
-    assert!(super::repaint_step(&mut wire.p, false, now).is_empty());
+    assert!(super::repaint_step(&mut wire.p, &wire.c, false, now).is_empty());
     let _ = wire.read(PROMPT_ROW);
     assert!(wire.p.prompt.stage.open_row().is_some());
     wire.p.prompt.stage.close();
-    assert!(super::repaint_step(&mut wire.p, false, now).is_empty());
+    assert!(super::repaint_step(&mut wire.p, &wire.c, false, now).is_empty());
 }
 
 #[test]
@@ -765,7 +773,7 @@ fn only_a_new_width_closes_the_open_row() {
     };
     wire.p.set_prompt_config(config);
     let now = tokio::time::Instant::now();
-    let off = super::repaint_step(&mut wire.p, false, now);
+    let off = super::repaint_step(&mut wire.p, &wire.c, false, now);
     assert_eq!(
         off.replace.map(|r| r.bytes),
         Some(with(&[&wire.mark(2), PROMPT_ROW_SHOWN]))
@@ -784,7 +792,7 @@ fn only_a_new_width_closes_the_open_row() {
             ..wire.p.prompt.config().clone()
         };
         wire.p.set_prompt_config(config);
-        let repaint = super::repaint_step(&mut wire.p, false, now);
+        let repaint = super::repaint_step(&mut wire.p, &wire.c, false, now);
         assert_eq!(repaint.replace.map(|r| r.gen), open, "draw {draw}");
     }
 
@@ -798,7 +806,7 @@ fn only_a_new_width_closes_the_open_row() {
         ..wire.p.prompt.config().clone()
     };
     wire.p.set_prompt_config(config);
-    assert!(super::repaint_step(&mut wire.p, false, now).is_empty());
+    assert!(super::repaint_step(&mut wire.p, &wire.c, false, now).is_empty());
 }
 
 /// The prompt row as the game sent it, with its line end.
@@ -917,7 +925,8 @@ fn the_three_lament_cases_draw_hidden_vitals_and_report_them() {
             feed(&mut p, file.as_str().expect("a file name"));
         }
         // The game prints zeros for every vital under the song.
-        let drawn = draw_line(&mut p, "[0/0hp 0/0mn 0/0mv]").expect("the prompt draws");
+        let drawn = draw_line(&mut p, &super::Connection::default(), "[0/0hp 0/0mn 0/0mv]")
+            .expect("the prompt draws");
         assert_eq!(plain(&drawn), "[?(?%)h ?(?%)m ?(?%)v] ", "{name}");
         // Each mark in bright black, then the look before it.
         assert!(
@@ -958,7 +967,12 @@ fn a_prompt_draws_again_once_the_song_ends() {
     feed(&mut p, "char-affects.gmcp");
     feed(&mut p, "char-vitals.gmcp");
     feed(&mut p, "group-info-own-row.gmcp");
-    let drawn = draw_line(&mut p, "[850/900hp 760/820mn 250/250mv]").expect("the prompt draws");
+    let drawn = draw_line(
+        &mut p,
+        &super::Connection::default(),
+        "[850/900hp 760/820mn 250/250mv]",
+    )
+    .expect("the prompt draws");
     assert_eq!(plain(&drawn), "[850(94%)h 760(93%)m 250(100%)v] ");
     let hidden = p
         .prompt
@@ -978,7 +992,8 @@ fn a_reconnect_in_the_song_hides_the_vitals_from_the_prompt_alone() {
     // true values. Only the prompt the capture reads shows the song.
     let mut p = forsaken_profile(TEMPLATE);
     feed(&mut p, "char-vitals.gmcp");
-    let drawn = draw_line(&mut p, "[0/0hp 0/0mn 0/0mv]").expect("the prompt draws");
+    let drawn = draw_line(&mut p, &super::Connection::default(), "[0/0hp 0/0mn 0/0mv]")
+        .expect("the prompt draws");
     assert_eq!(plain(&drawn), "[?(?%)h ?(?%)m ?(?%)v] ");
     let hidden = p
         .prompt
@@ -1010,7 +1025,10 @@ fn other_hosts_hide_nothing() {
         feed(&mut p, file);
     }
     assert_eq!(
-        plain(&draw_line(&mut p, PROMPT_LINE).expect("the prompt draws")),
+        plain(
+            &draw_line(&mut p, &super::Connection::default(), PROMPT_LINE)
+                .expect("the prompt draws")
+        ),
         "1020/1020 a Blackwatch guard 41"
     );
     assert!(p.prompt.vars.take_hidden_change().is_none());
@@ -1054,7 +1072,7 @@ fn the_session_draws_the_gate_pieces_from_the_new_build_packets() {
     let mut p = forsaken_profile(GATE);
     new_build_fight(&mut p);
     assert_eq!(
-        plain(&draw_line(&mut p, PROMPT_LINE).expect("the prompt draws")),
+        plain(&draw_line(&mut p, &super::Connection::default(), PROMPT_LINE).expect("the prompt draws")),
         "1250 a Blackwatch guard|FUL waning crescent|sit common rainy 60°F Coastal North|Tester [===|===|===|=--]|S"
     );
     // Nothing is hidden, so nothing is reported.
@@ -1068,12 +1086,12 @@ fn exits_draw_from_room_info_only_on_the_new_build() {
     feed(&mut p, "room-info.gmcp");
     // No Char.Prompt this session, so Room.Info feeds no exits.
     assert_eq!(
-        plain(&draw_line(&mut p, PROMPT_LINE).expect("it draws")),
+        plain(&draw_line(&mut p, &super::Connection::default(), PROMPT_LINE).expect("it draws")),
         "[]"
     );
     feed(&mut p, "char-prompt.gmcp");
     assert_eq!(
-        plain(&draw_line(&mut p, PROMPT_LINE).expect("it draws")),
+        plain(&draw_line(&mut p, &super::Connection::default(), PROMPT_LINE).expect("it draws")),
         "[S]"
     );
 }
@@ -1083,13 +1101,14 @@ fn vosh_supplies_the_tick_target_tracked_affects_and_profile() {
     let mut p = forsaken_profile("%tick|%{tick:unit}|%target|%{missing:names}|%profile");
     let now = tokio::time::Instant::now();
     p.tick.enable(now);
-    p.target.name = Some("guard".into());
+    let mut c = super::Connection::default();
+    c.target.name = Some("guard".into());
     p.display_name = Some("Default".into());
     p.ui.tracked_affects = vec![crate::profile::ui::TrackedAffect {
         name: "sanctuary".into(),
         label: None,
     }];
-    let supplied = crate::prompt::client_values(&p, now);
+    let supplied = crate::prompt::client_values(&p, &c, now);
     let interval = i64::try_from(p.tick.config.interval_secs).expect("seconds");
     assert_eq!(
         supplied.tick,
@@ -1100,7 +1119,7 @@ fn vosh_supplies_the_tick_target_tracked_affects_and_profile() {
         })
     );
     feed(&mut p, "char-affects.gmcp");
-    let drawn = plain(&draw_line(&mut p, PROMPT_LINE).expect("it draws"));
+    let drawn = plain(&draw_line(&mut p, &c, PROMPT_LINE).expect("it draws"));
     let parts: Vec<&str> = drawn.split('|').collect();
     assert!(
         parts[0]
@@ -1117,7 +1136,7 @@ fn a_new_connection_starts_the_prompt_over() {
     let mut p = forsaken_profile(GATE);
     new_build_fight(&mut p);
     assert!(p.prompt.vars.new_build());
-    let _ = draw_line(&mut p, PROMPT_LINE);
+    let _ = draw_line(&mut p, &super::Connection::default(), PROMPT_LINE);
     assert!(!p.prompt.vars.prompt_vars().is_empty());
 
     super::end_prompt(&mut p);
@@ -1286,6 +1305,7 @@ fn a_held_line_your_send_lets_go_runs_the_line_pass_and_is_logged() {
     let mut batch = super::ReadBatch::new(crate::output::output_count());
     let steps = super::let_go_held(
         &mut wire.p,
+        &wire.c,
         &mut batch,
         tokio::time::Instant::now(),
         Some(3),
@@ -1331,6 +1351,7 @@ fn a_held_line_a_script_hides_still_shows_and_its_echo_follows() {
     let mut batch = super::ReadBatch::new(crate::output::output_count());
     let steps = super::let_go_held(
         &mut wire.p,
+        &wire.c,
         &mut batch,
         tokio::time::Instant::now(),
         Some(3),
@@ -1366,7 +1387,7 @@ fn drawing_off_on_a_tank_block_brings_back_only_the_line_it_replaced() {
         draw: false,
         ..wire.p.prompt.config().clone()
     });
-    let out = super::repaint_step(&mut wire.p, false, tokio::time::Instant::now());
+    let out = super::repaint_step(&mut wire.p, &wire.c, false, tokio::time::Instant::now());
     assert_eq!(
         out.replace,
         Some(vosh_prompt::stage::Replace {
@@ -1432,6 +1453,7 @@ fn a_released_line_runs_the_line_pass_and_is_logged() {
         let plain = vosh_protocol::ansi::plain_text(&line.bytes);
         steps.extend(super::line_step(
             &mut p,
+            &super::Connection::default(),
             &mut batch,
             line,
             plain,
@@ -1464,7 +1486,7 @@ fn drawing_off_shows_the_whole_block_as_sent_and_logs_it() {
     let mut acc = super::LineAccumulator::new();
     for line in acc.feed(format!("{TANK_LINE}\n\r{FIGHT_LINE}\n\r").as_bytes()) {
         let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-        let _ = super::line_step(&mut wire.p, &mut batch, line, plain, now, Some(3));
+        let _ = super::line_step(&mut wire.p, &wire.c, &mut batch, line, plain, now, Some(3));
     }
     let logged: Vec<&str> = batch.log.iter().map(|e| e.text.as_str()).collect();
     assert_eq!(logged, [TANK_LINE, FIGHT_LINE]);
@@ -1479,7 +1501,15 @@ fn logged_and_kept(p: &mut Profile, text: &str) -> (Vec<String>, Vec<Vec<u8>>, V
     let mut kept = Vec::new();
     for line in acc.feed(text.as_bytes()) {
         let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-        for step in super::line_step(p, &mut batch, line, plain, now, Some(3)) {
+        for step in super::line_step(
+            p,
+            &super::Connection::default(),
+            &mut batch,
+            line,
+            plain,
+            now,
+            Some(3),
+        ) {
             kept.extend(step.scrollback);
         }
     }
