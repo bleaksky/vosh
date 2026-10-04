@@ -38,13 +38,25 @@ pub(crate) async fn session_open<R: tauri::Runtime>(
 }
 
 /// Select the session `session` names. The commands that name no session
-/// act on it from then on, and its native grid shows.
+/// act on it from then on, and its native grid shows. profiles.toml then
+/// names the profile it plays as the active one.
 #[tauri::command]
-pub(crate) fn session_select(
+pub(crate) async fn session_select(
     state: State<'_, SharedState>,
     session: SessionId,
 ) -> Result<(), String> {
-    state.select_session(session)
+    state.select_session(session)?;
+    // Under the save lock, so no switch moves the session between the
+    // read of its profile and the write of the index.
+    let _persist_guard = crate::disk::save::PERSIST_LOCK.lock().await;
+    let Some(name) = state.selected_session().profile().name() else {
+        return Ok(());
+    };
+    let mut guard = state.profile_set.lock().await;
+    match guard.as_mut() {
+        Some(set) if set.active_name() != name => set.switch(&name).map_err(|e| e.to_string()),
+        _ => Ok(()),
+    }
 }
 
 #[tauri::command]

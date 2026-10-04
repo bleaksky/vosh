@@ -165,7 +165,7 @@ pub(crate) async fn load_profiles(state: &SharedState, mut set: ProfileSet) {
     // the main window shows.
     let notices = {
         let mut p = session.lock_profile().await;
-        p.open().set_name(set.active_name());
+        p.set_name(set.active_name());
         let tick_before = p.tick.config.clone();
         let notices = load_at_launch(&set, &mut p);
         let mut c = session.connection.lock();

@@ -1,4 +1,5 @@
-//! `#profile save`, `load` and `reset` on the active profile file, and
+//! `#profile save`, `load` and `reset` on the file of the profile the
+//! session plays, and
 //! `#import-tintin`, which reads aliases and variables from a .tin file.
 
 use super::{split_first_word, InputResult};
@@ -21,8 +22,8 @@ const PROFILE_MIGRATION_PENDING: &str =
 /// [`crate::disk::save::PERSIST_LOCK`].
 pub(super) const PROFILE_SAVE_BUSY: &str = "Vosh is saving this profile. Try again.";
 
-/// `#profile save`, `load` and `reset` on the active profile's file in
-/// the app data folder `state` holds. A load or a reset hands the
+/// `#profile save`, `load` and `reset` on the file of `profile` in the
+/// app data folder `state` holds. A load or a reset hands the
 /// connection `c` the new tick settings and `[prompt]` table, as a
 /// profile switch does, and leaves the rest of it as it was.
 pub(super) fn slash_profile(
@@ -56,9 +57,13 @@ pub(super) fn slash_profile(
             other => InputResult::error(format!("unknown #profile subcommand `{other}`")),
         };
     }
-    let app_data = state.app_data.get().map(std::path::PathBuf::as_path);
+    let path = state
+        .app_data
+        .get()
+        .zip(profile.name.as_deref())
+        .map(|(app_data, name)| paths::profile_path(app_data, name));
     match cmd {
-        "save" => match app_data.and_then(profile_path) {
+        "save" => match path {
             Some(path) => {
                 // Every profile file write holds the persist lock. This
                 // runs under the profile lock, which the persist takes
@@ -82,7 +87,7 @@ pub(super) fn slash_profile(
             }
             None => InputResult::error("could not resolve profile path"),
         },
-        "load" => match app_data.and_then(profile_path) {
+        "load" => match path {
             Some(path) => load_profile_file(profile, c, &path, replaced),
             None => InputResult::error("could not resolve profile path"),
         },
@@ -164,23 +169,6 @@ pub(super) fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputRes
         lines.push(format!("  unparsed: {} line(s)", report.unparsed.len()));
     }
     InputResult::echo_lines(lines)
-}
-
-/// The active profile's file under the app data folder `app_data`,
-/// `<app_data>/profiles/<active>.toml`, whether or not it exists yet.
-/// Reads the profile index (`profiles.toml`) to learn which profile is
-/// active, and returns `None` when the index does not read or names no
-/// active profile.
-///
-/// It never falls back to the legacy `<app_data>/profile.toml`. Launch
-/// writes the index on every install, so that file would only ever be
-/// a stray, and a later launch without an index would move it over the
-/// default profile.
-fn profile_path(app_data: &std::path::Path) -> Option<std::path::PathBuf> {
-    let body = std::fs::read_to_string(paths::profiles_index_path(app_data)).ok()?;
-    let value = body.parse::<toml::Value>().ok()?;
-    let active = value.get("active")?.as_str()?;
-    Some(paths::profile_path(app_data, active))
 }
 
 fn expand_home(path: &str) -> std::path::PathBuf {

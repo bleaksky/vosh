@@ -92,17 +92,14 @@ fn open_profile_for_switch(
     })
 }
 
-/// The profile `name` as a switch opens it: its file or a fresh one,
+/// A profile as a switch opens it from `files`: its file or a fresh one,
 /// global.toml over it, then in loadout mode the catalog with the
 /// loadouts, so no save finds it without its aliases, triggers and
 /// macros.
-async fn profile_from_files(state: &SharedState, name: &str, files: SwitchFiles) -> Profile {
+async fn profile_from_files(state: &SharedState, files: SwitchFiles) -> Profile {
     let catalog = state.global_catalog.lock().await.clone();
     let loadouts = state.loadout_set.lock().await.clone();
-    let mut p = Profile {
-        display_name: Some(crate::profile::set::display_name(name)),
-        ..Profile::default()
-    };
+    let mut p = Profile::default();
     // A profile that never saved a file is fresh.
     let file = files.per_profile.unwrap_or_else(ProfileConfig::fresh);
     file.apply_to(&mut p);
@@ -152,7 +149,7 @@ pub(crate) async fn switch_live_profile(
                 let leaving = from.name().unwrap_or_default();
                 open_profile_for_switch(&mut set, name, &leaving, selected)?
             };
-            let profile = profile_from_files(state, name, files).await;
+            let profile = profile_from_files(state, files).await;
             state.add_open_profile(name, profile)
         }
     };
@@ -296,8 +293,9 @@ pub(crate) async fn switch_profile(
     // after a #profile reset/load: the profile is deliberately diverged
     // from disk and a passive switch (the GMCP Char.Status auto-switch
     // reaches here too) must not write it back.
-    if !session.profile().held() {
-        persist_state(state).await;
+    let leaving = session.profile();
+    if !leaving.held() {
+        persist_state(state, &leaving).await;
     }
 
     switch_live_profile(state, session, name).await

@@ -42,13 +42,15 @@ pub(crate) async fn tracked_affects_set(
             return Ok(list);
         }
     }
-    {
+    let open = {
         let mut p = state.selected_session().lock_profile().await;
         p.ui.tracked_affects.clone_from(&list);
-    }
+        p.open().clone()
+    };
     save_then_broadcast(
         &app,
         &shared,
+        &open,
         SavePolicy::Now,
         TRACKED_AFFECTS_CHANGED,
         &list,
@@ -94,9 +96,10 @@ pub(crate) async fn ui_set_affects_display(
         running_out,
         almost_gone,
     };
-    let changed = {
+    let (open, changed) = {
         let mut p = state.selected_session().lock_profile().await;
-        apply_affects_display(&mut p.ui, pick)
+        let changed = apply_affects_display(&mut p.ui, pick);
+        (p.open().clone(), changed)
     };
     let Some(display) = changed else {
         return Ok(());
@@ -104,6 +107,7 @@ pub(crate) async fn ui_set_affects_display(
     save_then_broadcast(
         &app,
         &state,
+        &open,
         SavePolicy::Now,
         AFFECTS_DISPLAY_CHANGED,
         &display,

@@ -133,6 +133,11 @@ impl AppState {
         self.sessions().add_profile(name, profile)
     }
 
+    /// The profiles the sessions play, in the order they opened.
+    pub(crate) fn open_profiles(&self) -> Vec<Arc<OpenProfile>> {
+        self.sessions().profiles()
+    }
+
     /// Close `open` when no session plays it, see
     /// [`Sessions::close_unplayed`].
     pub(crate) fn close_unplayed(&self, open: &Arc<OpenProfile>) -> bool {
@@ -143,9 +148,7 @@ impl AppState {
     /// session on its active profile, for a test.
     #[cfg(test)]
     pub(crate) async fn set_profiles(&self, set: crate::profile::set::ProfileSet) {
-        self.selected_session()
-            .profile()
-            .set_name(set.active_name());
+        self.selected_profile().await.set_name(set.active_name());
         *self.profile_set.lock().await = Some(set);
     }
 

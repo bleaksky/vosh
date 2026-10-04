@@ -1,7 +1,7 @@
 //! The commands for loadout mode. Settings reads your loadouts and which
 //! of them are on, and the Loadouts editor turns them on and off.
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::app::events::LOADOUTS_CHANGED;
 use crate::app::state::SharedState;
@@ -76,7 +76,8 @@ pub(crate) async fn loadouts_set_active(app: AppHandle, active: Vec<String>) -> 
     // flush cannot leave loadouts.toml and per-profile state
     // disagreeing. Also clears any stale persist suppression — this is
     // a durable change the user asked for.
-    mark_profile_dirty(&app);
+    let state = app.state::<SharedState>();
+    mark_profile_dirty(&app, &state.selected_session().profile());
     let _ = app.emit(LOADOUTS_CHANGED, &());
     Ok(())
 }

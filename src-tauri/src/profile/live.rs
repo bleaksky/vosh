@@ -1,9 +1,8 @@
 //! The profile in memory. It holds what its file saves, plus what runs
 //! with that profile and no file saves: the revision counters that move
-//! when a group turns on or off, and the name Vosh shows for it. Each
-//! session keeps its variables, its Lua engine, the aliases its plugins
-//! make and its macro recorder on its
-//! [`Connection`](crate::session::connection::Connection).
+//! when a group turns on or off, and its name. Each session keeps its
+//! variables, its Lua engine, the aliases its plugins make and its macro
+//! recorder on its [`Connection`](crate::session::connection::Connection).
 
 use std::collections::BTreeSet;
 
@@ -68,11 +67,14 @@ pub(crate) struct Profile {
     /// [`crate::prompt::keep_table`]. A step that skips the copy leaves
     /// the next save writing the old table.
     pub(crate) prompt: vosh_prompt::PromptConfig,
-    /// The active profile's name as Vosh shows it, `Default` for the
-    /// reserved default, which the custom prompt draws for `%profile`.
-    /// Set at launch, on a switch and on a rename, so the session reads
-    /// it without the profile set's lock. None before any profile loads.
-    pub(crate) display_name: Option<String>,
+    /// Its name in the profile set, which `#profile save` and `#profile
+    /// load` find its file by and the custom prompt draws for `%profile`
+    /// as Vosh shows it. Its [`OpenProfile`] keeps the same name for the
+    /// steps that hold no profile lock, and the two change together. None
+    /// before any profile loads.
+    ///
+    /// [`OpenProfile`]: crate::profile::open::OpenProfile
+    pub(crate) name: Option<String>,
     /// Interval timers: each fires its command every `interval_secs`
     /// while connected. Independent of the tick timer (one command on
     /// the game tick) and of Lua `mud.timer` (script callbacks). The

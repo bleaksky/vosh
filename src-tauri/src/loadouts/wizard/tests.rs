@@ -1685,7 +1685,9 @@ async fn the_live_profile_keeps_the_name_the_prompt_draws() {
     let dir = tempfile::tempdir().unwrap();
     james_like_set(dir.path());
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-    let shown = |p: &crate::profile::live::Profile| p.display_name.clone();
+    let shown = |p: &crate::profile::live::Profile| {
+        p.name.as_deref().map(crate::profile::set::display_name)
+    };
     assert_eq!(
         shown(&*state.selected_profile().await).as_deref(),
         Some("Default")
@@ -1877,7 +1879,7 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
     state.selected_profile().await.vars.set("target", "dragon");
     {
         let _persist_guard = PERSIST_LOCK.lock().await;
-        crate::disk::save::persist_state(&state).await;
+        crate::disk::save::persist_state(&state, &state.selected_session().profile()).await;
     }
     assert_eq!(read(&set.profile_path("Healer")), healer_file);
     assert_eq!(read(&catalog_path(dir.path())), catalog);

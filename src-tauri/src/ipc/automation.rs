@@ -38,14 +38,15 @@ pub(crate) async fn triggers_import(
     state: State<'_, SharedState>,
     json: String,
 ) -> Result<usize, String> {
-    let count = {
+    let (open, count) = {
         let mut p = state.selected_session().lock_profile().await;
-        p.triggers.import_json(&json).map_err(|e| e.to_string())?
+        let count = p.triggers.import_json(&json).map_err(|e| e.to_string())?;
+        (p.open().clone(), count)
     };
     // The editor's save path lands here: persist, or the "saved" state
     // lives only in memory and vanishes on restart.
     let shared: SharedState = state.inner().clone();
-    persist_profile(&shared).await;
+    persist_profile(&shared, &open).await;
     broadcast_list_changes(&app, ListChanges::TRIGGERS);
     Ok(count)
 }
@@ -79,7 +80,7 @@ pub(crate) async fn aliases_import(
     let parsed: Vec<vosh_automation::alias::Alias> =
         serde_json::from_str(&json).map_err(|e| e.to_string())?;
     let count = parsed.len();
-    {
+    let open = {
         let mut p = state.selected_session().lock_profile().await;
         let mut store = vosh_automation::alias::AliasStore::new();
         for alias in parsed {
@@ -90,10 +91,11 @@ pub(crate) async fn aliases_import(
         // re-enabled every disabled group on each editor save.
         store.set_disabled_groups(p.aliases.disabled_groups());
         p.aliases = store;
-    }
+        p.open().clone()
+    };
     // Same persistence rule as triggers_import: the editor saves here.
     let shared: SharedState = state.inner().clone();
-    persist_profile(&shared).await;
+    persist_profile(&shared, &open).await;
     broadcast_list_changes(&app, ListChanges::ALIASES);
     Ok(count)
 }
@@ -135,7 +137,7 @@ pub(crate) async fn macros_set(
     let group = group
         .map(|g| g.trim().to_string())
         .filter(|g| !g.is_empty());
-    let updated = {
+    let (open, updated) = {
         let mut p = state.selected_session().lock_profile().await;
         if let Some(existing) = p.macros.iter_mut().find(|m| m.key == key) {
             existing.command = command;
@@ -151,9 +153,17 @@ pub(crate) async fn macros_set(
                 enabled: enabled.unwrap_or(true),
             });
         }
-        p.macros.clone()
+        (p.open().clone(), p.macros.clone())
     };
-    save_then_broadcast(&app, &state, SavePolicy::Now, MACROS_CHANGED, &updated).await;
+    save_then_broadcast(
+        &app,
+        &state,
+        &open,
+        SavePolicy::Now,
+        MACROS_CHANGED,
+        &updated,
+    )
+    .await;
     Ok(updated)
 }
 
@@ -164,12 +174,20 @@ pub(crate) async fn macros_delete(
     state: State<'_, SharedState>,
     key: String,
 ) -> Result<Vec<Macro>, String> {
-    let updated = {
+    let (open, updated) = {
         let mut p = state.selected_session().lock_profile().await;
         p.macros.retain(|m| m.key != key);
-        p.macros.clone()
+        (p.open().clone(), p.macros.clone())
     };
-    save_then_broadcast(&app, &state, SavePolicy::Now, MACROS_CHANGED, &updated).await;
+    save_then_broadcast(
+        &app,
+        &state,
+        &open,
+        SavePolicy::Now,
+        MACROS_CHANGED,
+        &updated,
+    )
+    .await;
     Ok(updated)
 }
 
@@ -284,20 +302,21 @@ pub(crate) async fn groups_set_enabled<R: tauri::Runtime>(
     enabled: bool,
 ) -> Result<Vec<GroupSwitchState>, String> {
     let session = state.selected_session();
-    let (switches, lists) = {
+    let (open, switches, lists) = {
         let set = state.loadout_set.lock().await;
         let mut p = session.lock_profile().await;
         let c = session.connection.lock();
         let before = ListRevisions::of(&p, &c);
         switch_group(&mut p, set.as_ref(), list, &group, enabled)?;
         (
+            p.open().clone(),
             group_switches(&p, set.as_ref(), list),
             ListChanges::since(before, &p, &c),
         )
     };
     if lists.groups {
         let shared: SharedState = state.inner().clone();
-        persist_profile(&shared).await;
+        persist_profile(&shared, &open).await;
     }
     broadcast_list_changes(&app, lists);
     Ok(switches)
@@ -325,12 +344,20 @@ pub(crate) async fn timers_set(
     enabled: bool,
     group: Option<String>,
 ) -> Result<Vec<Timer>, String> {
-    let updated = {
+    let (open, updated) = {
         let mut p = state.selected_session().lock_profile().await;
         set_timer(&mut p, id, name, interval_secs, command, enabled, group)?;
-        p.timers.clone()
+        (p.open().clone(), p.timers.clone())
     };
-    save_then_broadcast(&app, &state, SavePolicy::Now, TIMERS_CHANGED, &updated).await;
+    save_then_broadcast(
+        &app,
+        &state,
+        &open,
+        SavePolicy::Now,
+        TIMERS_CHANGED,
+        &updated,
+    )
+    .await;
     Ok(updated)
 }
 
@@ -383,12 +410,20 @@ pub(crate) async fn timers_delete(
     state: State<'_, SharedState>,
     id: u32,
 ) -> Result<Vec<Timer>, String> {
-    let updated = {
+    let (open, updated) = {
         let mut p = state.selected_session().lock_profile().await;
         p.timers.retain(|t| t.id != id);
-        p.timers.clone()
+        (p.open().clone(), p.timers.clone())
     };
-    save_then_broadcast(&app, &state, SavePolicy::Now, TIMERS_CHANGED, &updated).await;
+    save_then_broadcast(
+        &app,
+        &state,
+        &open,
+        SavePolicy::Now,
+        TIMERS_CHANGED,
+        &updated,
+    )
+    .await;
     Ok(updated)
 }
 
@@ -402,12 +437,13 @@ pub(crate) async fn presets_install(
     state: State<'_, SharedState>,
     triggers: Vec<Trigger>,
 ) -> Result<usize, String> {
-    let installed = {
+    let (open, installed) = {
         let mut p = state.selected_session().lock_profile().await;
-        install_preset_triggers(&mut p, triggers)?
+        let installed = install_preset_triggers(&mut p, triggers)?;
+        (p.open().clone(), installed)
     };
     let shared: SharedState = state.inner().clone();
-    persist_profile(&shared).await;
+    persist_profile(&shared, &open).await;
     if installed > 0 {
         broadcast_list_changes(&app, ListChanges::TRIGGERS);
     }
@@ -422,12 +458,13 @@ pub(crate) async fn presets_remove(
     state: State<'_, SharedState>,
     preset_id: String,
 ) -> Result<usize, String> {
-    let removed = {
+    let (open, removed) = {
         let mut p = state.selected_session().lock_profile().await;
-        p.triggers.remove_by_preset(&preset_id)
+        let removed = p.triggers.remove_by_preset(&preset_id);
+        (p.open().clone(), removed)
     };
     let shared: SharedState = state.inner().clone();
-    persist_profile(&shared).await;
+    persist_profile(&shared, &open).await;
     if removed > 0 {
         broadcast_list_changes(&app, ListChanges::TRIGGERS);
     }
@@ -479,7 +516,7 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
     let macros_snapshot: Vec<Macro>;
     let lists;
     let session = state.selected_session();
-    {
+    let open = {
         let mut p = session.lock_profile().await;
         let c = session.connection.lock();
         let lists_before = ListRevisions::of(&p, &c);
@@ -504,9 +541,10 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
         }
         macros_snapshot = p.macros.clone();
         lists = ListChanges::since(lists_before, &p, &c);
-    }
+        p.open().clone()
+    };
     let shared: SharedState = state.inner().clone();
-    persist_profile(&shared).await;
+    persist_profile(&shared, &open).await;
     if macros_changed {
         broadcast(&app, MACROS_CHANGED, &macros_snapshot);
     }

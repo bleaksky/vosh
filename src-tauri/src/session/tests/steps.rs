@@ -1111,7 +1111,7 @@ fn vosh_supplies_the_tick_target_tracked_affects_and_profile() {
     let now = tokio::time::Instant::now();
     c.tick.enable(&mut p.tick, now);
     c.target.name = Some("guard".into());
-    p.display_name = Some("Default".into());
+    p.name = Some(crate::profile::set::DEFAULT_PROFILE_NAME.into());
     p.ui.tracked_affects = vec![crate::profile::ui::TrackedAffect {
         name: "sanctuary".into(),
         label: None,

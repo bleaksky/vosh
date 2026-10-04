@@ -1,7 +1,7 @@
-//! The save engine. It writes the live profile to the active profile's
-//! file and global.toml, and in loadout mode to catalog.toml and
-//! loadouts.toml too. A durable change saves a couple of seconds after
-//! its burst settles, and [`PERSIST_LOCK`] keeps two writes off one file.
+//! The save engine. It writes each open profile to its own file and
+//! global.toml, and in loadout mode to catalog.toml and loadouts.toml
+//! too. A durable change saves its profile a couple of seconds after its
+//! burst settles, and [`PERSIST_LOCK`] keeps two writes off one file.
 //!
 //! The lock order. A step that holds two of these locks at once takes
 //! them in this order, so no two tasks wait on each other for good.
@@ -20,6 +20,8 @@
 //!
 //! [`AppState`]: crate::app::state::AppState
 
+use std::sync::Arc;
+
 use tauri::{AppHandle, Manager};
 use tracing::warn;
 
@@ -27,9 +29,10 @@ use crate::app::events::{broadcast, line_effect_events};
 use crate::app::state::SharedState;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
+use crate::profile::open::OpenProfile;
 use crate::profile::shared::{strip_global_fields, GlobalConfig};
 
-/// Serializes every write of a profile file: the active profile's
+/// Serializes every write of a profile file: an open profile's
 /// persist, Settings edits to an inactive profile's file, a profile
 /// switch from its flush through loading the next file, and the
 /// rename, delete and copy of a profile file. `write_with_backup` uses
@@ -39,17 +42,14 @@ use crate::profile::shared::{strip_global_fields, GlobalConfig};
 /// profile set lock, never while holding it.
 pub(crate) static PERSIST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-/// Record that durable profile state changed (slash commands, Lua
-/// mutations) and persist shortly after the burst settles. Keeps disk
+/// Record that durable state of `open` changed (slash commands, Lua
+/// mutations) and persist it shortly after the burst settles. Keeps disk
 /// writes off latency-sensitive paths while guaranteeing the change
-/// reaches profile.toml/catalog.toml within a couple of seconds; the
-/// exit hook flushes immediately as a backstop.
-pub(crate) fn mark_profile_dirty<R: tauri::Runtime>(app: &AppHandle<R>) {
-    app.state::<SharedState>()
-        .selected_session()
-        .profile()
-        .hold(false);
-    schedule_profile_persist(app);
+/// reaches its file or catalog.toml within a couple of seconds; the exit
+/// hook flushes immediately as a backstop.
+pub(crate) fn mark_profile_dirty<R: tauri::Runtime>(app: &AppHandle<R>, open: &Arc<OpenProfile>) {
+    open.hold(false);
+    schedule_profile_persist(app, open);
 }
 
 /// Persist shortly after the burst settles, like `mark_profile_dirty`,
@@ -57,10 +57,14 @@ pub(crate) fn mark_profile_dirty<R: tauri::Runtime>(app: &AppHandle<R>) {
 /// reset` or `#profile load` left diverged from disk. While that holds,
 /// the write is skipped and the change waits in memory for the next
 /// durable change or an explicit `#profile save`. For incidental edits
-/// such as a pane layout drag.
-pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(app: &AppHandle<R>) {
+/// such as a pane layout drag. The count and the hold are those of
+/// `open`, so a burst on one profile never holds back another's save.
+pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    open: &Arc<OpenProfile>,
+) {
     let shared: SharedState = app.state::<SharedState>().inner().clone();
-    let open = shared.selected_session().profile();
+    let open = open.clone();
     let gen = open.mark();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -70,13 +74,13 @@ pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(app: &AppHandle<R>) {
         if open.held() {
             return; // a #profile reset/load intervened
         }
-        persist_profile(&shared).await;
+        persist_profile(&shared, &open).await;
     });
 }
 
-/// Act on what a run of input lines asked of the saved profile. Every
-/// path that runs lines through the input pipeline calls this after it
-/// releases the profile lock, so they all save alike.
+/// Act on what a run of input lines asked of `open`, the profile they ran
+/// on. Every path that runs lines through the input pipeline calls this
+/// after it releases the profile lock, so they all save alike.
 ///
 /// Slash commands (#alias, #trigger, #var, #endrec, #import-tintin,
 /// ...) and durable Lua actions change the profile without saving it, so
@@ -95,16 +99,16 @@ pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(app: &AppHandle<R>) {
 /// just-blanked profile.
 pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
     app: &AppHandle<R>,
+    open: &Arc<OpenProfile>,
     effects: crate::input::LineEffects,
 ) {
     let shared: SharedState = app.state::<SharedState>().inner().clone();
-    let session = shared.selected_session();
     if effects.replaced {
-        session.profile().hold(true);
+        open.hold(true);
     }
     if effects.replaced || effects.tick_changed {
         let events = {
-            let p = session.lock_profile().await;
+            let p = open.lock().await;
             line_effect_events(&shared, &effects, &p)
         };
         for (event, payload) in events {
@@ -114,31 +118,31 @@ pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
     // A durable change after the replace counts as wanting the live
     // state saved, the way a line typed after `#profile reset` does.
     if effects.dirty {
-        mark_profile_dirty(app);
+        mark_profile_dirty(app, open);
     }
 }
 
-/// Snapshot the live profile and write it to the active profile's file
-/// under `<app_data_dir>/profiles/<active>.toml`. Failures are logged
-/// but not surfaced — callers don't want a UI toggle to fail because
-/// the disk is full mid-flight, and the in-memory state is still
-/// correct for the rest of the session.
-pub(crate) async fn persist_profile(state: &SharedState) {
+/// Snapshot `open` and write it to its own file under
+/// `<app_data_dir>/profiles/<name>.toml`. Failures are logged but not
+/// surfaced — callers don't want a UI toggle to fail because the disk is
+/// full mid-flight, and the in-memory state is still correct for the
+/// rest of the session.
+pub(crate) async fn persist_profile(state: &SharedState, open: &Arc<OpenProfile>) {
     // Serialize whole-persist runs. The debounced dirty-persist and the
     // exit-time flush can overlap each other or an inline command
     // persist, and Settings can write an inactive profile's file.
     let _persist_guard = PERSIST_LOCK.lock().await;
-    persist_state(state).await;
+    persist_state(state, open).await;
 }
 
-/// When [`save_then_broadcast`] saves the live profile. Each command
-/// names the policy it has always had.
+/// When [`save_then_broadcast`] saves a profile. Each command names the
+/// policy it has always had.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum SavePolicy {
     /// Save at once, through [`persist_profile`].
     Now,
     /// Save at once, unless `#profile reset` or `#profile load` left the
-    /// live profile apart from disk and no durable change has wanted it
+    /// profile apart from disk and no durable change has wanted it
     /// saved since ([`OpenProfile::held`]).
     ///
     /// [`OpenProfile::held`]: crate::profile::open::OpenProfile::held
@@ -148,41 +152,52 @@ pub(crate) enum SavePolicy {
     SoonUnlessHeld,
 }
 
-/// Save the live profile by `policy`, then send `event` with `payload`
-/// to every window. A command that changed one part of the profile ends
-/// this way, so the save always comes before the event.
+/// Save `open`, the profile a command changed, by `policy`, then send
+/// `event` with `payload` to every window. A command that changed one
+/// part of the profile ends this way, so the save always comes before the
+/// event.
 pub(crate) async fn save_then_broadcast<R: tauri::Runtime, S: serde::Serialize + ?Sized>(
     app: &AppHandle<R>,
     state: &SharedState,
+    open: &Arc<OpenProfile>,
     policy: SavePolicy,
     event: &str,
     payload: &S,
 ) {
     match policy {
-        SavePolicy::Now => persist_profile(state).await,
+        SavePolicy::Now => persist_profile(state, open).await,
         SavePolicy::NowUnlessHeld => {
-            if !state.selected_session().profile().held() {
-                persist_profile(state).await;
+            if !open.held() {
+                persist_profile(state, open).await;
             }
         }
-        SavePolicy::SoonUnlessHeld => schedule_profile_persist(app),
+        SavePolicy::SoonUnlessHeld => schedule_profile_persist(app, open),
     }
     broadcast(app, event, payload);
 }
 
 /// The body of [`persist_profile`]. Call with [`PERSIST_LOCK`] held. A
 /// file Vosh could not read at launch is never written, see
-/// [`crate::disk::atomic::hold_unread`].
-pub(crate) async fn persist_state(state: &SharedState) {
+/// [`crate::disk::atomic::hold_unread`]. A profile that closed saved as
+/// it closed, and its file may have moved since, so it writes nothing.
+pub(crate) async fn persist_state(state: &SharedState, open: &Arc<OpenProfile>) {
+    if !state
+        .open_profiles()
+        .iter()
+        .any(|kept| Arc::ptr_eq(kept, open))
+    {
+        return;
+    }
+    let name = open.name();
     // Loadout mode branch. When `state.global_catalog` is `Some`, the user is
     // post-migration: authored items live in catalog.toml and the live
     // Profile is the cache. Write the live aliases / triggers / macros
     // back to the catalog plus the loadout set, and every other setting
-    // to the active profile file; the per-profile branch below is
+    // to the profile's own file; the per-profile branch below is
     // skipped entirely.
     if state.global_catalog.lock().await.is_some() {
         if let Some(dir) = state.app_data.get() {
-            persist_loadout_mode(state, dir).await;
+            persist_loadout_mode(state, open, name.as_deref(), dir).await;
         }
         return;
     }
@@ -203,7 +218,7 @@ pub(crate) async fn persist_state(state: &SharedState) {
         return;
     }
 
-    // Resolve the active profile's path and global.toml through the
+    // Resolve the profile's path and global.toml through the
     // ProfileSet. Without one, launch could not read profiles.toml (or
     // has not run yet), so nothing names the file to write and the save
     // writes nothing. A root profile.toml written here would replace
@@ -211,15 +226,15 @@ pub(crate) async fn persist_state(state: &SharedState) {
     // profiles.toml, see `ProfileSet::load_or_migrate`.
     let (per_profile_path, global_path, scope) = {
         let guard = state.profile_set.lock().await;
-        let Some(set) = guard.as_ref() else {
+        let (Some(set), Some(name)) = (guard.as_ref(), name) else {
             tracing::debug!("persist skipped: the profile set is not loaded");
             return;
         };
-        (set.active_path(), set.global_path(), *set.scope())
+        (set.profile_path(&name), set.global_path(), *set.scope())
     };
 
     let (per_profile_snapshot, global_snapshot) = {
-        let p = state.selected_session().lock_profile().await;
+        let p = open.lock().await;
         (
             active_profile_file(&p, Some(&scope)),
             GlobalConfig::from_profile(&p, &scope),
@@ -234,8 +249,8 @@ pub(crate) async fn persist_state(state: &SharedState) {
     }
 }
 
-/// What a save in per profile mode writes to the file of the active
-/// profile `p`. The fields `scope` keeps global go to global.toml, so
+/// What a save in per profile mode writes to the file of the profile
+/// `p`. The fields `scope` keeps global go to global.toml, so
 /// they are left out here and never saved twice. Honors the scope of each
 /// category, and a category kept per profile stays in the file.
 pub(crate) fn active_profile_file(
@@ -249,13 +264,18 @@ pub(crate) fn active_profile_file(
     snapshot
 }
 
-/// Saves in loadout mode. Snapshots the live `Profile`'s authored items
-/// into `catalog.toml` and the in-memory `LoadoutSet` into
+/// Saves in loadout mode. Snapshots the authored items of `open`, which
+/// `name` names once a profile set loaded, into `catalog.toml` and the in-memory `LoadoutSet` into
 /// `loadouts.toml`, both via the same atomic-write-with-backup
 /// pipeline the per-profile branch uses. Falls through to the legacy
 /// `global.toml` write so theme / font / `dock_layout` edits land on
 /// the same path in both modes.
-async fn persist_loadout_mode(state: &SharedState, dir: &std::path::Path) {
+async fn persist_loadout_mode(
+    state: &SharedState,
+    open: &Arc<OpenProfile>,
+    name: Option<&str>,
+    dir: &std::path::Path,
+) {
     // A catalog that has not taken the enabled presets yet waits for a
     // launch that reads a profile file (see
     // `loadouts::presets::adopt_catalog_presets`), so a save leaves the list
@@ -271,7 +291,7 @@ async fn persist_loadout_mode(state: &SharedState, dir: &std::path::Path) {
     // so an overwrite here is correct — anything the user typed via
     // #alias / Settings made it into Profile and now into the file.
     let (catalog, global_snapshot, scope) = {
-        let p = state.selected_session().lock_profile().await;
+        let p = open.lock().await;
         // The enabled presets ride along, since the preset triggers they
         // name live in the catalog too.
         let mut catalog = crate::loadouts::catalog::GlobalCatalog::from_profile(&p);
@@ -309,7 +329,10 @@ async fn persist_loadout_mode(state: &SharedState, dir: &std::path::Path) {
     let (global_path, per_profile_path) = {
         let guard = state.profile_set.lock().await;
         match guard.as_ref() {
-            Some(set) => (Some(set.global_path()), Some(set.active_path())),
+            Some(set) => (
+                Some(set.global_path()),
+                name.map(|name| set.profile_path(name)),
+            ),
             None => (None, None),
         }
     };
@@ -330,7 +353,7 @@ async fn persist_loadout_mode(state: &SharedState, dir: &std::path::Path) {
     // shared list, which the next load replaces with the catalog's.
     if let Some(p) = per_profile_path {
         let mut per_profile_snapshot = {
-            let live = state.selected_session().lock_profile().await;
+            let live = open.lock().await;
             ProfileConfig::from_profile(&live)
         };
         per_profile_snapshot.clear_catalog_items();
@@ -389,10 +412,11 @@ pub(crate) mod tests {
         state
     }
 
-    /// The save a Settings edit, a slash command debounce, or quit runs.
+    /// The save a Settings edit, a slash command debounce, or quit runs,
+    /// of the profile the selected session plays.
     pub(crate) async fn persist(state: &super::SharedState) {
         let _persist_guard = super::PERSIST_LOCK.lock().await;
-        super::persist_state(state).await;
+        super::persist_state(state, &state.selected_session().profile()).await;
     }
 
     async fn change_scope(state: &super::SharedState) -> Result<(), String> {

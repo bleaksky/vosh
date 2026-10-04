@@ -147,7 +147,7 @@ pub(crate) fn client_values(
     vosh_prompt::ClientValues {
         tick,
         target: c.target.name.clone(),
-        profile: p.display_name.clone(),
+        profile: p.name.as_deref().map(crate::profile::set::display_name),
         now: None,
         tracked: p
             .ui
@@ -172,7 +172,7 @@ pub(crate) fn report_game_prompt_seen<R: tauri::Runtime>(
         session.emit(app, events::GAME_PROMPT_SEEN, &payload);
     }
     if applied {
-        crate::disk::save::mark_profile_dirty(app);
+        crate::disk::save::mark_profile_dirty(app, &session.profile());
         broadcast_list_changes(app, ListChanges::PROMPT);
     }
 }

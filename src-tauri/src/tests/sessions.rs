@@ -562,3 +562,111 @@ async fn a_trigger_vosh_stops_in_one_session_fires_in_the_other_until_you_save_i
     h.disconnect_session(two).await;
     h.finish(grid).await;
 }
+
+/// How many backups sit beside `file`, one for each save that replaced
+/// it.
+fn backups(file: &std::path::Path) -> usize {
+    let name = file.file_name().expect("a file name").to_string_lossy();
+    let prefix = format!("{name}.bak.");
+    std::fs::read_dir(file.parent().expect("the profiles folder"))
+        .expect("the profiles folder reads")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+        .count()
+}
+
+/// How many aliases named `alias` the profile file at `file` holds.
+fn saved_aliases(file: &std::path::Path, alias: &str) -> usize {
+    crate::profile::file::ProfileConfig::load(file).map_or(0, |config| {
+        config.aliases.iter().filter(|a| a.name == alias).count()
+    })
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_alias_typed_in_one_session_expands_in_the_other_and_saves_once() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_on_two_games().await;
+    // The file as it stands, so the save the alias starts leaves a backup.
+    crate::disk::save::tests::persist(&h.state).await;
+    let file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    let before = backups(&file);
+
+    h.type_in(one, "#alias ww spam 3").await;
+    h.type_in(two, "ww").await;
+    h.until("the second game to answer the alias", |h| {
+        shows(h, two, "Line 3 of 3 of the spam.")
+    })
+    .await;
+    assert!(sent(&h.servers[1]).contains("spam 3"));
+    h.until("the save", |_| saved_aliases(&file, "ww") > 0)
+        .await;
+    // Past the debounce no second write follows.
+    tokio::time::sleep(std::time::Duration::from_millis(2_500)).await;
+    assert_eq!(saved_aliases(&file, "ww"), 1);
+    assert_eq!(backups(&file), before + 1);
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_switch_moves_one_session_and_each_profile_saves_to_its_own_file() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_on_two_games().await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    let second = h.state.session(Some(two)).expect("the second session");
+    crate::profile::switch::apply_profile_switch(h.app.handle(), &h.state, &second, "Healer")
+        .await
+        .expect("the second session switches");
+    let plays = |id| {
+        let session = h.state.session(Some(id)).expect("the session");
+        session.profile().name()
+    };
+    assert_eq!(plays(one).as_deref(), Some(DEFAULT_PROFILE_NAME));
+    assert_eq!(plays(two).as_deref(), Some("Healer"));
+    assert_eq!(h.state.open_profiles().len(), 2);
+    // The first session stays selected, and profiles.toml names its
+    // profile.
+    assert_eq!(
+        h.state.active_profile().as_deref(),
+        Some(DEFAULT_PROFILE_NAME)
+    );
+    let index = crate::profile::set::ProfileSet::load_or_migrate(h.dir.path().to_path_buf())
+        .expect("the index reads");
+    assert_eq!(index.active_name(), DEFAULT_PROFILE_NAME);
+
+    let (default_file, healer_file) = (
+        h.profile_file(DEFAULT_PROFILE_NAME).await,
+        h.profile_file("Healer").await,
+    );
+    crate::disk::save::tests::persist(&h.state).await;
+    let default_backups = backups(&default_file);
+    h.type_in(two, "#alias hh spam 2").await;
+    h.type_in(one, "hh").await;
+    h.until("the first game to answer the plain word", |h| {
+        shows(h, one, "Huh?")
+    })
+    .await;
+    h.until("the Healer save", |_| saved_aliases(&healer_file, "hh") > 0)
+        .await;
+    tokio::time::sleep(std::time::Duration::from_millis(2_500)).await;
+    assert_eq!(saved_aliases(&default_file, "hh"), 0);
+    assert_eq!(backups(&default_file), default_backups);
+
+    let healer_backups = backups(&healer_file);
+    h.type_in(two, "#profile save").await;
+    h.until("the save in the second session", |h| {
+        shows(h, two, "profile saved to")
+    })
+    .await;
+    assert_eq!(backups(&healer_file), healer_backups + 1);
+    assert_eq!(backups(&default_file), default_backups);
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}

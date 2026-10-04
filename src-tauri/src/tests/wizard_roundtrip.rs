@@ -186,7 +186,7 @@ async fn preset_launch_plan(state: &SharedState) {
 /// The save a Settings edit, a debounce, or a command runs.
 async fn save(state: &SharedState) {
     let _persist_guard = PERSIST_LOCK.lock().await;
-    crate::disk::save::persist_state(state).await;
+    crate::disk::save::persist_state(state, &state.selected_session().profile()).await;
 }
 
 /// Open Vosh as `name` over `dir` the way app/launch.rs launches it,

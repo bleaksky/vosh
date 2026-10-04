@@ -129,7 +129,7 @@ pub(crate) async fn profile_set_scope(
     let persist_guard = PERSIST_LOCK.lock().await;
     let shared: SharedState = state.inner().clone();
     let gained = change_scope_locked(&shared, scope).await?;
-    persist_state(&shared).await;
+    persist_state(&shared, &shared.selected_session().profile()).await;
     drop(persist_guard);
     if let Some(list) = gained {
         broadcast(&app, CUSTOM_THEMES_CHANGED, &list);

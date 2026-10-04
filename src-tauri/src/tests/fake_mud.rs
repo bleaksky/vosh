@@ -53,8 +53,8 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
     let h = Harness::new(Options::new(Build::New)).await;
     h.set_prompt(codes(PROMPT)).await;
     h.state
-        .selected_session()
-        .profile()
+        .selected_profile()
+        .await
         .set_name(DEFAULT_PROFILE_NAME);
     crate::ipc::prompt::prompt_watch(h.app.state(), true, None).expect("the card watches");
     h.connect().await;
@@ -257,8 +257,8 @@ async fn an_echo_the_session_hears_of_late_leaves_the_prompt_after_it_open() {
     let h = Harness::new(Options::new(Build::New)).await;
     h.set_prompt(codes(PROMPT)).await;
     h.state
-        .selected_session()
-        .profile()
+        .selected_profile()
+        .await
         .set_name(DEFAULT_PROFILE_NAME);
     h.connect().await;
     h.until_last_row("<1020>").await;

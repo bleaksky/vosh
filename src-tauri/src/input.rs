@@ -291,7 +291,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         request_prompt_repaint(session).await;
     }
 
-    settle_line_effects(app, effects).await;
+    settle_line_effects(app, &session.profile(), effects).await;
 
     if let Some(payload) = shown.target {
         session.emit(app, events::TARGET, &payload);
