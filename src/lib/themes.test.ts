@@ -22,6 +22,7 @@ import {
   WHITE,
   type Rgb,
 } from './color';
+import { checks, GAME_SLOTS } from './gameFit';
 import {
   BUILTIN_THEMES,
   customThemeLabel,
@@ -29,6 +30,7 @@ import {
   findTheme,
   migrateCustomChrome,
   themeTokens,
+  type AppTheme,
   type XtermPalette,
 } from './themes';
 import credits from '../../public/theme-credits.txt?raw';
@@ -584,6 +586,64 @@ describe('Solarized', () => {
         expect(contrast(hex(theme.xterm[slot]), bg), `${theme.id} ${slot}`).toBeGreaterThan(2);
       }
     }
+  });
+});
+
+// The fits are the Themes review's own (fit-survey.json), computed
+// ahead by lib/gameFit. These pin what the decisions say of them.
+describe('fitted game colors', () => {
+  const inPlay = (theme: AppTheme) => ({ ...theme.xterm, ...theme.fitted });
+  const misses = (id: string) => checks(inPlay(findTheme(id))).filter((c) => !c.ok);
+  const value = (id: string, check: string) =>
+    checks(inPlay(findTheme(id))).find((c) => c.id === check)?.value;
+
+  it('stores only the slots the fit moved, from body text and the 16 colors', () => {
+    for (const theme of BUILTIN_THEMES) {
+      for (const [slot, hex] of Object.entries(theme.fitted ?? {})) {
+        expect(GAME_SLOTS, `${theme.id} ${slot}`).toContain(slot);
+        expect(hex, `${theme.id} ${slot}`).toMatch(/^#[0-9a-f]{6}$/);
+        expect(hex, `${theme.id} ${slot}`).not.toBe(theme.xterm[slot as keyof XtermPalette]);
+      }
+    }
+  });
+
+  it('lifts Kanso Zen to 44 of 46 in play and keeps its palette (Q15)', () => {
+    const kanso = findTheme('kanso-zen');
+    expect(Object.keys(kanso.fitted ?? {})).toHaveLength(16);
+    expect(kanso.xterm.brightBlack).toBe('#5c6066');
+    expect(misses('kanso-zen')).toHaveLength(2);
+  });
+
+  it('accepts what Classic Vivid and Green Screen still miss (Q17)', () => {
+    expect(misses('classic-vivid')).toHaveLength(6);
+    expect(value('classic-vivid', 'T3 blue Lc')).toBe(39);
+    expect(value('classic-vivid', 'T3 red Lc')).toBe(40.7);
+    expect(value('green-screen', 'T3 blue Lc')).toBe(45.1);
+    expect(misses('green-screen').map((c) => `${c.id} ${c.value}`)).toEqual(
+      expect.arrayContaining(['T2 cyan Lc 53.8', 'T2 brightBlue Lc 58.8']),
+    );
+  });
+
+  it('lifts Tango Dark blue and magenta and leaves red at Lc 36.2 (Q18)', () => {
+    expect(misses('tango-dark')).toHaveLength(4);
+    expect(value('tango-dark', 'T3 blue Lc')).toBeGreaterThanOrEqual(45);
+    expect(value('tango-dark', 'T3 magenta Lc')).toBeGreaterThanOrEqual(45);
+    expect(value('tango-dark', 'T3 red Lc')).toBe(36.2);
+  });
+
+  it('sets bright white dL 8 above body text in the six of Q19', () => {
+    for (const id of [
+      'monokai',
+      'rose-pine',
+      'everforest-dark',
+      'tokyo-night',
+      'gruvbox',
+      'high-contrast',
+    ]) {
+      expect(value(id, 'T6 fg/brightWhite dL'), id).toBeGreaterThanOrEqual(8);
+    }
+    expect(findTheme('monokai').fitted?.foreground).toBe('#e4e4df');
+    expect(findTheme('high-contrast').fitted?.foreground).toBe('#e4e4e4');
   });
 });
 

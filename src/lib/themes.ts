@@ -47,6 +47,13 @@ export interface AppTheme {
   author?: string;
   license?: ThemeLicense;
   xterm: XtermPalette;
+  /// The colors Fit game colors draws in play, the slots the game color
+  /// fit (lib/gameFit) moves off the published palette, from body text
+  /// and the 16 ANSI colors. A built in theme stores them computed
+  /// ahead, since a fit takes about two seconds.
+  fitted?: Partial<XtermPalette>;
+  /// False keeps the published palette in play with Fit game colors on.
+  fitGameColors?: false;
   /// Chrome tokens this theme pins instead of deriving.
   chrome?: ChromeOverrides;
 }
@@ -84,6 +91,26 @@ const kansoZen: AppTheme = {
     brightMagenta: '#938aa9',
     brightCyan: '#7aa89f',
     brightWhite: '#c5c9c7',
+  },
+  // The palette stays as the Ghostty config has it, and in play the fit
+  // retunes 16 slots to pass 44 of 46 (Q15).
+  fitted: {
+    foreground: '#c9cdcb',
+    black: '#656565',
+    red: '#d17f79',
+    green: '#d4e5c4',
+    yellow: '#d0be95',
+    blue: '#879fab',
+    cyan: '#a0b6b4',
+    white: '#b7bab7',
+    brightBlack: '#92979d',
+    brightRed: '#ff919a',
+    brightGreen: '#e9ffe9',
+    brightYellow: '#ffe8bf',
+    brightBlue: '#8cc2d8',
+    brightMagenta: '#bab1d1',
+    brightCyan: '#acdbd1',
+    brightWhite: '#f0f5f2',
   },
   // Kanso's brand cool blue lives outside its terminal palette.
   chrome: { accent: '#b0c8d4' },
@@ -126,6 +153,22 @@ const obsidianEmber: AppTheme = {
     brightCyan: '#97dde8',
     brightWhite: '#ece7e1',
   },
+  fitted: {
+    foreground: '#cecbc9',
+    red: '#d07166',
+    green: '#95e4b0',
+    yellow: '#d2af64',
+    blue: '#799ed6',
+    magenta: '#b08ac5',
+    cyan: '#79c3cf',
+    brightBlack: '#99948f',
+    brightRed: '#f59989',
+    brightGreen: '#c7ffd8',
+    brightYellow: '#f2cf8a',
+    brightBlue: '#9bbef1',
+    brightMagenta: '#d0aae2',
+    brightCyan: '#9de3ee',
+  },
   // The ember accent, and the ember ink the approved canvas sets on
   // accent buttons.
   chrome: { accent: '#ef8f2f', onAccent: '#140b02' },
@@ -165,6 +208,22 @@ const tokyoNight: AppTheme = {
     brightCyan: '#7dcfff',
     brightWhite: '#c0caf5',
   },
+  fitted: {
+    foreground: '#bdc7f2',
+    black: '#2c2e36',
+    red: '#e86982',
+    green: '#bbed87',
+    cyan: '#70c2f2',
+    white: '#aab3d8',
+    brightBlack: '#8e97bb',
+    brightRed: '#ff94a5',
+    brightGreen: '#e0ffc4',
+    brightYellow: '#ffd08d',
+    brightBlue: '#a3c2ff',
+    brightMagenta: '#d4bfff',
+    brightCyan: '#a8deff',
+    brightWhite: '#dbe2ff',
+  },
   // The frost blue it has always drawn. The chrome rule alone would
   // take its magenta, the scheme's strongest hue.
   chrome: { accent: '#7aa2f7' },
@@ -202,6 +261,23 @@ const nord: AppTheme = {
     brightMagenta: '#b48ead',
     brightCyan: '#8fbcbb',
     brightWhite: '#eceff4',
+  },
+  fitted: {
+    black: '#3c4353',
+    red: '#c3656e',
+    green: '#96b07f',
+    yellow: '#e9c989',
+    blue: '#83a4c4',
+    magenta: '#bb95b4',
+    cyan: '#8cc5d5',
+    brightBlack: '#95a1b7',
+    brightRed: '#ff9ea5',
+    brightGreen: '#ceeab6',
+    brightYellow: '#ffeac1',
+    brightBlue: '#a3c4e5',
+    brightMagenta: '#dcb4d4',
+    brightCyan: '#b6e4e3',
+    brightWhite: '#feffff',
   },
   // otty's Nord, measured from otty's own theme file. The panel and
   // floating surfaces stay on the terminal ground, and the text tiers
@@ -253,6 +329,23 @@ const gruvbox: AppTheme = {
     brightCyan: '#8ec07c',
     brightWhite: '#ebdbb2',
   },
+  fitted: {
+    foreground: '#e4d4ac',
+    black: '#383838',
+    red: '#e03c30',
+    green: '#cdce5d',
+    blue: '#66a6a9',
+    magenta: '#d582a7',
+    cyan: '#8ec590',
+    white: '#c5b59f',
+    brightBlack: '#a8998a',
+    brightRed: '#ff9583',
+    brightGreen: '#ecf068',
+    brightBlue: '#9dc0b2',
+    brightMagenta: '#f4a4b9',
+    brightCyan: '#b2e6a0',
+    brightWhite: '#ffefc5',
+  },
   chrome: { accent: '#fabd2f' },
 };
 
@@ -288,6 +381,19 @@ const catppuccin: AppTheme = {
     brightMagenta: '#f5c2e7',
     brightCyan: '#94e2d5',
     brightWhite: '#a6adc8',
+  },
+  fitted: {
+    red: '#d5708d',
+    green: '#89c484',
+    yellow: '#f1dba8',
+    magenta: '#d4a2c7',
+    brightBlack: '#9498af',
+    brightRed: '#fe95b2',
+    brightGreen: '#adeba8',
+    brightYellow: '#fff1d2',
+    brightBlue: '#b5d2ff',
+    brightCyan: '#c4fff4',
+    brightWhite: '#edf1ff',
   },
   chrome: { accent: '#f5c2e7' },
 };
@@ -329,6 +435,22 @@ const classicVivid: AppTheme = {
     brightMagenta: '#ff00ff',
     brightCyan: '#00ffff',
     brightWhite: '#ffffff',
+  },
+  // The fit lifts blue from Lc 0 to 39 in play and leaves 6 checks
+  // short, red at Lc 40.7 among them (Q17).
+  fitted: {
+    black: '#232323',
+    red: '#ef5746',
+    green: '#4cd546',
+    yellow: '#ffc6a2',
+    blue: '#4b82ff',
+    magenta: '#e756e4',
+    cyan: '#0badac',
+    white: '#b2b2b2',
+    brightBlack: '#959595',
+    brightRed: '#ff8574',
+    brightBlue: '#8a9bff',
+    brightMagenta: '#ff84fc',
   },
   // Vivid amber accent, distinct from every ANSI status color and in
   // keeping with a CGA era highlight.
@@ -372,6 +494,23 @@ const dracula: AppTheme = {
     brightCyan: '#a4ffff',
     brightWhite: '#ffffff',
   },
+  fitted: {
+    foreground: '#e4e4df',
+    black: '#2c2e34',
+    red: '#f2494b',
+    green: '#07d558',
+    yellow: '#e2eb7d',
+    blue: '#b68cf2',
+    magenta: '#f671be',
+    cyan: '#81dff3',
+    white: '#deded9',
+    brightBlack: '#8597cb',
+    brightRed: '#ff9692',
+    brightYellow: '#feffc9',
+    brightBlue: '#d7aeff',
+    brightMagenta: '#ff9ee2',
+    brightCyan: '#aeffff',
+  },
   chrome: { accent: '#bd93f9' },
 };
 
@@ -409,6 +548,27 @@ const monokai: AppTheme = {
     brightMagenta: '#ae81ff',
     brightCyan: '#a1efe4',
     brightWhite: '#f9f8f5',
+  },
+  // Bright white has no room above body text, so the fit lowers body
+  // text to #e4e4df in play (Q19).
+  fitted: {
+    foreground: '#e4e4df',
+    black: '#363831',
+    red: '#ff648c',
+    green: '#bbf94d',
+    yellow: '#edb96f',
+    blue: '#52c7dd',
+    magenta: '#af84ff',
+    cyan: '#89d6cc',
+    white: '#deded9',
+    brightBlack: '#a09c87',
+    brightRed: '#ff99ad',
+    brightGreen: '#d8ffa4',
+    brightYellow: '#ffdbac',
+    brightBlue: '#76e8fe',
+    brightMagenta: '#c5aaff',
+    brightCyan: '#a9f8ec',
+    brightWhite: '#fffffd',
   },
   chrome: { accent: '#f92672' },
 };
@@ -488,6 +648,23 @@ const oneHalfDark: AppTheme = {
     brightCyan: '#56b6c2',
     brightWhite: '#ffffff',
   },
+  fitted: {
+    black: '#373c44',
+    red: '#e9747d',
+    green: '#c6f3a6',
+    yellow: '#e0bc77',
+    blue: '#5faded',
+    magenta: '#cd7ee4',
+    cyan: '#66c5d1',
+    white: '#dbdee3',
+    brightBlack: '#939eb2',
+    brightRed: '#ff9da1',
+    brightGreen: '#e3ffd1',
+    brightYellow: '#ffdd9e',
+    brightBlue: '#90cbff',
+    brightMagenta: '#e9a2ff',
+    brightCyan: '#87e6f2',
+  },
   // The blue it has always drawn. The chrome rule alone would take its
   // magenta, the scheme's strongest hue.
   chrome: { accent: '#61afef' },
@@ -527,6 +704,26 @@ const tangoDark: AppTheme = {
     brightMagenta: '#ad7fa8',
     brightCyan: '#34e2e2',
     brightWhite: '#eeeeec',
+  },
+  // The fit lifts blue and magenta past Lc 45 in play. Red stays at
+  // Lc 36.2, with 4 checks short in all (Q18).
+  fitted: {
+    foreground: '#d4d8d0',
+    black: '#3d4345',
+    red: '#fe4a3b',
+    green: '#a3f476',
+    yellow: '#dcb834',
+    blue: '#70a3e7',
+    magenta: '#bc94c2',
+    cyan: '#58ccce',
+    white: '#d6dad2',
+    brightBlack: '#adafab',
+    brightRed: '#ff8f82',
+    brightGreen: '#caffa6',
+    brightBlue: '#98c7f8',
+    brightMagenta: '#e4b4df',
+    brightCyan: '#4cf2f1',
+    brightWhite: '#fbfbf9',
   },
   // The bright blue it has always drawn. The chrome rule alone would
   // take its green, the scheme's strongest hue.
@@ -572,6 +769,22 @@ const highContrast: AppTheme = {
     brightMagenta: '#ff88ff',
     brightCyan: '#88ffff',
     brightWhite: '#ffffff',
+  },
+  // Bright white has no room above body text, so the fit lowers body
+  // text to #e4e4e4 in play (Q19).
+  fitted: {
+    foreground: '#e4e4e4',
+    black: '#242424',
+    red: '#fb5252',
+    green: '#1fdc29',
+    yellow: '#f4f447',
+    cyan: '#44f3f3',
+    brightBlack: '#969696',
+    brightRed: '#ff9291',
+    brightYellow: '#feffb5',
+    brightBlue: '#97c3ff',
+    brightMagenta: '#ff8dff',
+    brightCyan: '#b9fffe',
   },
   // The yellow cursor it has always drawn as its accent. It sits close
   // to the yellow warn tone, so the chrome rule alone would take the
@@ -652,6 +865,20 @@ const rosePine: AppTheme = {
     brightCyan: '#ebbcba',
     brightWhite: '#e0def4',
   },
+  fitted: {
+    black: '#2b2940',
+    green: '#79bcd9',
+    yellow: '#f1bd73',
+    white: '#dedcf2',
+    brightBlack: '#9894b1',
+    brightRed: '#ff98b2',
+    brightGreen: '#9addfb',
+    brightYellow: '#ffdfb4',
+    brightBlue: '#bcf0f9',
+    brightMagenta: '#e1caff',
+    brightCyan: '#ffe1e0',
+    brightWhite: '#ffffff',
+  },
   chrome: { accent: '#c4a7e7' },
 };
 
@@ -703,6 +930,21 @@ const everforestDark: AppTheme = {
     brightMagenta: '#d699b6',
     brightCyan: '#83c092',
     brightWhite: '#d3c6aa',
+  },
+  fitted: {
+    foreground: '#e1d4b8',
+    red: '#d06b6e',
+    green: '#c4de9d',
+    yellow: '#ccae71',
+    cyan: '#8cca9b',
+    brightBlack: '#96a3a9',
+    brightRed: '#ffa3a3',
+    brightGreen: '#e6ffc0',
+    brightYellow: '#edce90',
+    brightBlue: '#9fdcd3',
+    brightMagenta: '#f8b9d6',
+    brightCyan: '#acebbb',
+    brightWhite: '#fcefd2',
   },
   chrome: { accent: '#a7c080' },
 };
@@ -796,6 +1038,24 @@ const greenScreen: AppTheme = {
     brightMagenta: '#ff55ff',
     brightCyan: '#55ffff',
     brightWhite: '#ffffff',
+  },
+  // The fit lifts blue to Lc 45.1 in play. Cyan at Lc 53.8 and bright
+  // blue at 58.8 stay short (Q17).
+  fitted: {
+    foreground: '#8dde93',
+    black: '#242424',
+    red: '#fa6150',
+    green: '#57de50',
+    yellow: '#ffcaa9',
+    blue: '#6091ff',
+    magenta: '#e757e5',
+    cyan: '#25b7b6',
+    white: '#b2b2b2',
+    brightBlack: '#969696',
+    brightRed: '#ff938c',
+    brightGreen: '#7eff7a',
+    brightBlue: '#9aaaff',
+    brightMagenta: '#ff84fd',
   },
   // The phosphor cursor it has always drawn as its accent. It sits close
   // to the green success tone, so the chrome rule alone would take the
@@ -903,6 +1163,20 @@ const solarizedLight: AppTheme = {
     brightMagenta: '#6c71c4',
     brightCyan: '#00867e',
     brightWhite: '#002b36',
+  },
+  fitted: {
+    foreground: '#42575f',
+    red: '#ff766a',
+    green: '#4d5900',
+    yellow: '#946f00',
+    blue: '#278cd3',
+    magenta: '#db3e88',
+    cyan: '#0a9189',
+    brightGreen: '#343d00',
+    brightYellow: '#715400',
+    brightBlue: '#006eac',
+    brightMagenta: '#6a6ec1',
+    brightCyan: '#00706a',
   },
   chrome: { accent: '#268bd2' },
 };
