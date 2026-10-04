@@ -508,7 +508,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // fulls are written for the next login, then cleared.
     conn.session.last_affects.clear();
     let shared = conn.app.state::<crate::app::state::SharedState>();
-    crate::affects::full::disconnect(&conn.app, shared.inner());
+    crate::affects::full::disconnect(&conn.app, shared.inner(), &conn.session);
     // Reset password mode on disconnect so the next session starts with
     // a normal-text input even if the server bailed mid-password-prompt.
     emit_input_mode(&conn.app, &conn.session, false);

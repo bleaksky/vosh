@@ -292,7 +292,7 @@ pub(crate) async fn connect<R: tauri::Runtime>(
     // The old connection cleared the list as it ended. A new connection
     // starts with none until the MUD sends its own.
     session.last_affects.clear();
-    crate::affects::full::connect(app, state);
+    crate::affects::full::connect(app, session);
 
     let scrollback_path = state
         .app_data

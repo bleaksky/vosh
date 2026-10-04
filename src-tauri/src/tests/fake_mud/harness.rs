@@ -273,6 +273,12 @@ impl Harness {
         };
     }
 
+    /// The affect fulls of `session`, as its store keeps them.
+    pub(crate) fn fulls_of(&self, session: SessionId) -> crate::affects::full::FullMap {
+        let session = self.state.session(Some(session)).expect("the session");
+        session.affect_full.map()
+    }
+
     /// Type `line` in the first session and press Enter.
     pub(crate) async fn type_line(&self, line: &str) {
         self.type_in(self.first, line).await;

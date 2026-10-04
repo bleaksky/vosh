@@ -1372,11 +1372,11 @@ async fn affect_fulls_follow_a_cast_and_come_back_at_the_next_login() {
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     let file = crate::disk::paths::affect_full_path(h.dir.path());
-    h.state.affect_full.set_path(file.clone());
+    h.state.affect_file.set_path(file.clone());
     h.connect().await;
     // Tester logs in with bless at 6 and armor at 44, both first seen.
     h.until("the login fulls", |h| {
-        h.state.affect_full.map() == fulls(&[("armor", 44), ("bless", 6)])
+        h.fulls_of(h.first) == fulls(&[("armor", 44), ("bless", 6)])
     })
     .await;
     let passes = |h: &Harness| {
@@ -1389,14 +1389,11 @@ async fn affect_fulls_follow_a_cast_and_come_back_at_the_next_login() {
     h.type_line("tick").await;
     h.type_line("tick").await;
     h.until("two ticks", |h| passes(h) == 2).await;
-    assert_eq!(
-        h.state.affect_full.map(),
-        fulls(&[("armor", 44), ("bless", 6)])
-    );
+    assert_eq!(h.fulls_of(h.first), fulls(&[("armor", 44), ("bless", 6)]));
     // A recast of armor for more hours starts its full over.
     h.type_line("cast 48 armor").await;
     h.until("the recast", |h| {
-        h.state.affect_full.map() == fulls(&[("armor", 48), ("bless", 6)])
+        h.fulls_of(h.first) == fulls(&[("armor", 48), ("bless", 6)])
     })
     .await;
     h.type_line("tick").await;
@@ -1424,7 +1421,7 @@ async fn affect_fulls_follow_a_cast_and_come_back_at_the_next_login() {
         saved["characters"][key.as_str()]["bless"].as_integer(),
         Some(6)
     );
-    assert!(h.state.affect_full.map().is_empty());
+    assert!(h.fulls_of(h.first).is_empty());
 
     // Log back in with armor at 47 and bless at 3, as the game kept them.
     h.fake.lock().expect("the options").affects = vec![
@@ -1433,7 +1430,7 @@ async fn affect_fulls_follow_a_cast_and_come_back_at_the_next_login() {
     ];
     h.connect().await;
     h.until("the same fulls", |h| {
-        h.state.affect_full.map() == fulls(&[("armor", 48), ("bless", 6)])
+        h.fulls_of(h.first) == fulls(&[("armor", 48), ("bless", 6)])
     })
     .await;
     h.finish(grid).await;
@@ -1464,11 +1461,11 @@ async fn affect_fulls_outlast_quitting_to_the_menu_and_out_of_the_game() {
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
     h.state
-        .affect_full
+        .affect_file
         .set_path(crate::disk::paths::affect_full_path(h.dir.path()));
     h.connect().await;
     h.until("the login fulls", |h| {
-        h.state.affect_full.map() == fulls(&[("armor", 44), ("bless", 6)])
+        h.fulls_of(h.first) == fulls(&[("armor", 44), ("bless", 6)])
     })
     .await;
     h.type_line("cast 48 armor").await;
@@ -1484,18 +1481,18 @@ async fn affect_fulls_outlast_quitting_to_the_menu_and_out_of_the_game() {
     })
     .await;
     let want = fulls(&[("armor", 48), ("bless", 6)]);
-    assert_eq!(h.state.affect_full.map(), want);
+    assert_eq!(h.fulls_of(h.first), want);
 
     // quit menu: the game takes each affect off in turn, and the pane
     // empties with it, on the same link.
     h.type_line("quit menu").await;
     h.until_shown("return to your account menu").await;
-    h.until("the pane empties", |h| h.state.affect_full.map().is_empty())
+    h.until("the pane empties", |h| h.fulls_of(h.first).is_empty())
         .await;
     // Play Tester again: the game sends the affects the pfile kept, with
     // armor at 46 and bless at 4, and each keeps its full.
     h.type_line("").await;
-    h.until("the fulls come back", |h| h.state.affect_full.map() == want)
+    h.until("the fulls come back", |h| h.fulls_of(h.first) == want)
         .await;
 
     // quit: the same lists, then the game closes the link. Vosh writes
@@ -1508,7 +1505,7 @@ async fn affect_fulls_outlast_quitting_to_the_menu_and_out_of_the_game() {
     })
     .await;
     h.until("the fulls are saved", |h| {
-        h.state.affect_full.map().is_empty() && saved_fulls(h) == want
+        h.fulls_of(h.first).is_empty() && saved_fulls(h) == want
     })
     .await;
     h.disconnect().await;
@@ -1519,7 +1516,7 @@ async fn affect_fulls_outlast_quitting_to_the_menu_and_out_of_the_game() {
         vosh_prompt::testkit::Affect::spell("armor", 46),
     ];
     h.connect().await;
-    h.until("the same fulls", |h| h.state.affect_full.map() == want)
+    h.until("the same fulls", |h| h.fulls_of(h.first) == want)
         .await;
     h.finish(grid).await;
 }

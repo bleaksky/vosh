@@ -174,10 +174,14 @@ pub(crate) async fn affects_snapshot_get(
     Ok(state.session(session)?.last_affects.get())
 }
 
-/// The live map, hours at full by affect key.
+/// The live map of the session's connection, hours at full by affect
+/// key.
 #[tauri::command]
-pub(crate) async fn affect_full_get(state: State<'_, SharedState>) -> Result<FullMap, String> {
-    Ok(state.affect_full.map())
+pub(crate) async fn affect_full_get(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<FullMap, String> {
+    Ok(state.session(session)?.affect_full.map())
 }
 
 #[cfg(test)]

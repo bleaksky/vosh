@@ -288,7 +288,9 @@ fn flush_profile_on_exit(app_handle: &AppHandle) {
     let state: SharedState = app_handle.state::<SharedState>().inner().clone();
     // The affect fulls are a cache of their own, written whatever
     // becomes of the profiles.
-    state.affect_full.flush();
+    for session in state.all_sessions() {
+        session.affect_full.flush(&state.affect_file);
+    }
     // Honor a #profile reset/load: a profile it left deliberately
     // diverged from disk is not written back.
     let (held, saved): (Vec<_>, Vec<_>) = state

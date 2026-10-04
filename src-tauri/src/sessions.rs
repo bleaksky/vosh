@@ -26,6 +26,7 @@ use tokio::sync::Mutex;
 use tracing::warn;
 use vosh_automation::StopKey;
 
+use crate::affects::full::AffectFull;
 use crate::affects::snapshot::AffectsSnapshot;
 use crate::logs::SharedScrollback;
 use crate::profile::live::Profile;
@@ -85,8 +86,8 @@ impl SessionId {
 /// the commands, its Lua timers and scrollback, the count of what reached
 /// its terminal, and what the app keeps about its connection, where it
 /// last connected, the host and port, the character logged in, the
-/// terminal size and the last affects. It points at the profile it
-/// plays.
+/// terminal size, the last affects and their fulls. It points at the
+/// profile it plays.
 pub(crate) struct Session {
     pub(crate) id: SessionId,
     /// The name you gave the session, which its row and a line in another
@@ -137,6 +138,11 @@ pub(crate) struct Session {
     /// opens between ticks. Cleared on connect and when the connection
     /// ends.
     pub(crate) last_affects: AffectsSnapshot,
+    /// How full each affect on the connection's character was cast, for
+    /// the Affects pane's gauges. Forgotten on connect, and written to
+    /// the file every session shares as the connection ends. See
+    /// [`crate::affects::full`].
+    pub(crate) affect_full: AffectFull,
     /// The prompt card watches your prompt, so `session://prompt-state`
     /// follows each prompt the session reads.
     pub(crate) prompt_watch: AtomicBool,
@@ -179,6 +185,7 @@ impl Session {
             current_connection: std::sync::Mutex::new(None),
             current_character: std::sync::Mutex::new(None),
             last_affects: AffectsSnapshot::default(),
+            affect_full: AffectFull::default(),
             prompt_watch: AtomicBool::new(false),
             reader_busy: AtomicBool::new(false),
             launch_lua_lines: std::sync::Mutex::new(Vec::new()),

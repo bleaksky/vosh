@@ -41,7 +41,7 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
     if let Ok(path) = app.path().app_data_dir() {
         // How full each affect was cast, per character, for the
         // Affects pane's gauges. Read when the game names you.
-        state.affect_full.set_path(paths::affect_full_path(&path));
+        state.affect_file.set_path(paths::affect_full_path(&path));
 
         // The profile set and the active profile, then the
         // shared catalog and loadouts in loadout mode. See `load`.

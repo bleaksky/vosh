@@ -15,8 +15,8 @@ use crate::sessions::{Session, SessionId, SessionRow, Sessions, NO_SUCH_SESSION}
 
 /// What every command, window and session shares. The sessions with the
 /// profiles they play, the profile set, the log store, the plugins, the
-/// catalog and loadouts of loadout mode, the affect fulls and the app
-/// data folder. The generations that turn away a write read before the
+/// catalog and loadouts of loadout mode, the file of the affect fulls and
+/// the app data folder. The generations that turn away a write read before the
 /// profile was replaced live here too, with the flag that holds the
 /// saves back until a relaunch and the flag that says loadout mode is
 /// live.
@@ -35,9 +35,9 @@ pub(crate) struct AppState {
     /// single-file layout) once at startup; commands mutate it under
     /// this mutex.
     pub(crate) profile_set: Arc<Mutex<Option<crate::profile::set::ProfileSet>>>,
-    /// How full each affect was cast, per character, for the Affects
-    /// pane's gauges. See [`crate::affects::full`].
-    pub(crate) affect_full: crate::affects::full::AffectFull,
+    /// The file each session's affect fulls are kept in, per character,
+    /// for the Affects pane's gauges. See [`crate::affects::full`].
+    pub(crate) affect_file: crate::affects::full::FullFile,
     /// The shared catalog of loadout mode. `Some` when the app started
     /// up with `catalog.toml` present (loadout mode), `None` in per
     /// profile mode. Mutated alongside the live `Profile` so on-disk
@@ -114,6 +114,11 @@ impl AppState {
             None => Ok(sessions.selected()),
             Some(id) => sessions.get(id).ok_or_else(|| NO_SUCH_SESSION.to_string()),
         }
+    }
+
+    /// Every session, in order.
+    pub(crate) fn all_sessions(&self) -> Vec<Arc<Session>> {
+        self.sessions().in_order().0
     }
 
     /// Every session but `id`. A step that works on the sessions of one
@@ -293,7 +298,7 @@ impl Default for AppState {
             log_reader: SharedLogStore::default(),
             plugins: SharedPluginManager::default(),
             profile_set: Arc::new(Mutex::new(None)),
-            affect_full: crate::affects::full::AffectFull::default(),
+            affect_file: crate::affects::full::FullFile::default(),
             global_catalog: Arc::new(Mutex::new(None)),
             loadout_set: Arc::new(Mutex::new(None)),
             launch_notices: std::sync::Mutex::new(Vec::new()),
