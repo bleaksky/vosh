@@ -150,18 +150,13 @@ pub(super) fn observe_prompt_gmcp(
     keep_table(p, c, before);
 }
 
-/// Tell the webview which values the game hides, when that changed
-/// since the last report. The session calls it once per socket read and
-/// after a send that starts a pulse.
-pub(super) async fn emit_hidden_change<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    connection: &SharedConnection,
-) {
-    let change = connection.lock().prompt.vars.take_hidden_change();
+/// Tell the webview which values the game hides in `session`, when that
+/// changed since the last report. The session calls it once per socket
+/// read and after a send that starts a pulse.
+pub(super) async fn emit_hidden_change<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session) {
+    let change = session.connection.lock().prompt.vars.take_hidden_change();
     if let Some(hidden) = change {
-        if let Err(e) = app.emit(events::HIDDEN, hidden) {
-            warn!(error = %e, "failed to emit the hidden state");
-        }
+        session.emit(app, events::HIDDEN, &hidden);
     }
 }
 
@@ -202,15 +197,15 @@ pub(super) fn watched_state(
     watching_prompt(session).then(|| crate::prompt::prompt_state(p, c))
 }
 
-/// Send `state` on `session://prompt-state`, when there is one.
+/// Send `state` of `session` on `session://prompt-state`, when there is
+/// one.
 pub(super) fn emit_prompt_state<R: tauri::Runtime>(
     app: &AppHandle<R>,
+    session: &Session,
     state: Option<vosh_prompt::card::state::PromptState>,
 ) {
     if let Some(state) = state {
-        if let Err(e) = app.emit(events::PROMPT_STATE, state) {
-            warn!(error = %e, "failed to emit the prompt state");
-        }
+        session.emit(app, events::PROMPT_STATE, &state);
     }
 }
 

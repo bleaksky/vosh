@@ -7,7 +7,7 @@
 //! gathered, once. A partial that waited for the next read, and the lines
 //! held for the rest of a prompt, go out the same way.
 
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tokio::time::Instant;
 use tracing::warn;
 use vosh_automation::trigger::LineResult;
@@ -15,8 +15,8 @@ use vosh_prompt::stage::Output;
 use vosh_protocol::telnet::{codes as telnet_codes, option as telnet_option, Event as TelnetEvent};
 
 use crate::app::events;
-use crate::output::output_count;
 use crate::prompt::report_game_prompt_seen;
+use crate::sessions::Session;
 
 use super::batch::{emit_session_output, ReadBatch};
 use super::conn::Conn;
@@ -43,7 +43,7 @@ impl<R: tauri::Runtime> Conn<R> {
         self.perf.socket_reads += 1;
         self.perf.bytes_in += bytes.len() as u64;
         let events = self.parser.feed(bytes);
-        let mut batch = ReadBatch::new(self.seen_output);
+        let mut batch = ReadBatch::new(self.others_wrote());
         for event in events {
             if let Err(e) = handle_event(self, log_sink, event, &mut batch).await {
                 warn!(error = %e, "event handling failed");
@@ -75,7 +75,7 @@ async fn handle_event<R: tauri::Runtime>(
     // frontend to mask or unmask the input row. The negotiation reply
     // goes out through the catch all arm below.
     if let Some(held) = conn.server_echo.observe(&event) {
-        emit_input_mode(&conn.app, held);
+        emit_input_mode(&conn.app, &conn.session, held);
     }
     match event {
         TelnetEvent::Data(bytes) => {
@@ -206,12 +206,12 @@ async fn handle_event<R: tauri::Runtime>(
 pub(super) async fn flush_hold<R: tauri::Runtime>(conn: &mut Conn<R>) {
     let out = {
         let mut c = conn.session.connection.lock();
-        let mut out = Output::new(output_count() != conn.seen_output);
+        let mut out = Output::new(conn.others_wrote());
         hold_step(&mut c, &mut conn.accumulator, &mut out);
         out
     };
     if !out.is_empty() {
-        conn.seen_output = emit_session_output(&conn.app, &out, &mut conn.settle);
+        conn.seen_output = emit_session_output(&conn.app, &conn.session, &out, &mut conn.settle);
     }
 }
 
@@ -223,7 +223,7 @@ pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
     conn: &mut Conn<R>,
     log_sink: &mut LogSink,
 ) -> std::io::Result<()> {
-    let mut batch = ReadBatch::new(conn.seen_output);
+    let mut batch = ReadBatch::new(conn.others_wrote());
     let steps = {
         let mut p = conn.profile.lock().await;
         let mut c = conn.session.connection.lock();
@@ -258,7 +258,7 @@ async fn deliver_line_step<R: tauri::Runtime>(
     if !result.routes.is_empty() {
         conn.perf.routed_emits += result.routes.len() as u64;
     }
-    emit_line_routes(&conn.app, &result);
+    emit_line_routes(&conn.app, &conn.session, &result);
     for text in kept {
         let sb_t0 = std::time::Instant::now();
         // The ring keeps a run of repeated lines once, as the screen shows
@@ -364,11 +364,11 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         hold: _,
         gmcp: _,
     } = batch;
-    let app = &conn.app;
-    let watched = prompt && watching_prompt(&conn.session);
+    let (app, session) = (&conn.app, &conn.session);
+    let watched = prompt && watching_prompt(session);
     let (vars, hidden, prompt_seen, status, prompt_state, clock) = {
         let p = conn.profile.lock().await;
-        let mut c = conn.session.connection.lock();
+        let mut c = session.connection.lock();
         // Echoes the end of the read wrote close the open row.
         c.prompt.stage.finish(&mut out);
         (
@@ -385,53 +385,47 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         conn.perf.output_emit_bytes +=
             (out.bytes.len() + out.hold.len() + out.replace.as_ref().map_or(0, |r| r.bytes.len()))
                 as u64;
-        conn.seen_output = emit_session_output(app, &out, &mut conn.settle);
+        conn.seen_output = emit_session_output(app, session, &out, &mut conn.settle);
     }
     conn.settle.queue_rows(log);
     if let Some(character) = character {
         log_sink.name(&character).await;
     }
     for trigger in gag_without_reader {
-        if let Err(e) = app.emit(
+        session.emit(
+            app,
             events::PROMPT_GAG_WITHOUT_READER,
-            GagWithoutReaderPayload { trigger },
-        ) {
-            warn!(error = %e, "failed to emit a trigger that hides the prompt");
-        }
+            &GagWithoutReaderPayload { trigger },
+        );
     }
     if let Some(vars) = vars {
         send_prompt_vars(app, &vars);
     }
     if let Some(hidden) = hidden {
-        if let Err(e) = app.emit(events::HIDDEN, hidden) {
-            warn!(error = %e, "failed to emit the hidden state");
-        }
+        session.emit(app, events::HIDDEN, &hidden);
     }
-    report_game_prompt_seen(app, prompt_seen);
+    report_game_prompt_seen(app, session, prompt_seen);
     if let Some(status) = status {
-        if let Err(e) = app.emit(events::PROMPT_STATUS, status) {
-            warn!(error = %e, "failed to emit the prompt status");
-        }
+        session.emit(app, events::PROMPT_STATUS, &status);
     }
-    emit_prompt_state(app, prompt_state);
+    emit_prompt_state(app, session, prompt_state);
     clock
 }
 
 /// Route emissions stay per-line because consumers (chat panel etc.)
 /// expect one event per routed line. The volume here is tiny relative
 /// to the display stream so per-event cost does not show up as lag.
-fn emit_line_routes<R: tauri::Runtime>(app: &AppHandle<R>, result: &LineResult) {
+fn emit_line_routes<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, result: &LineResult) {
     if let Some(text) = &result.display {
         for pane in &result.routes {
-            if let Err(e) = app.emit(
+            session.emit(
+                app,
                 events::ROUTED,
-                RoutedPayload {
+                &RoutedPayload {
                     pane: pane.clone(),
                     text: text.clone(),
                 },
-            ) {
-                warn!(error = %e, "failed to emit routed line");
-            }
+            );
         }
     }
 }

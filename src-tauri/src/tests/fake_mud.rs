@@ -22,6 +22,7 @@ use vosh_prompt::testkit::{Build, Mud, Options};
 use crate::app::state::{AppState, SharedState};
 use crate::profile::login_match::AutoMatch;
 use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
+use crate::sessions::SessionId;
 
 /// The events the tests read, as the webview would hear them.
 const EVENTS: [&str; 11] = [
@@ -99,9 +100,22 @@ async fn play(
 /// Something the terminal or the webview heard, in order.
 #[derive(Debug, Clone)]
 enum Heard {
-    Event(&'static str, String),
+    /// An event, with the session its payload names, if any, and the
+    /// rest of the payload.
+    Event(&'static str, Option<SessionId>, String),
     /// Your typed line, which the webview echoes itself.
     Echo(String),
+}
+
+/// The session `payload` names, taken out of it, and the rest of the
+/// payload, so a test reads what a session sent apart from whose it is.
+fn named(payload: &str) -> (Option<SessionId>, String) {
+    let mut json: Json = serde_json::from_str(payload).expect("a JSON payload");
+    let session = json
+        .as_object_mut()
+        .and_then(|fields| fields.remove("session"))
+        .map(|id| serde_json::from_value(id).expect("a session id"));
+    (session, json.to_string())
 }
 
 /// The app with one profile folder, one log and one connection at a time.
@@ -154,10 +168,11 @@ impl Harness {
         for name in EVENTS {
             let heard = heard.clone();
             app.listen_any(name, move |event| {
+                let (session, payload) = named(event.payload());
                 heard
                     .lock()
                     .expect("the events")
-                    .push(Heard::Event(name, event.payload().to_string()));
+                    .push(Heard::Event(name, session, payload));
             });
         }
         Self {
@@ -240,15 +255,16 @@ impl Harness {
         .expect("the line goes out");
     }
 
-    /// The webview echoes `line` on the terminal. Returns the newest
-    /// output of the prompt stage the terminal took before it, which the
-    /// echo follows.
+    /// The webview echoes `line` on the terminal of the selected
+    /// session. Returns the newest output of the prompt stage that
+    /// terminal took before it, which the echo follows.
     fn echo(&self, line: &str) -> u64 {
+        let shown = Some(self.state.selected_session().id);
         let mut heard = self.heard.lock().expect("the events");
         let after = heard
             .iter()
             .filter_map(|h| match h {
-                Heard::Event("session://output", payload) => {
+                Heard::Event("session://output", session, payload) if *session == shown => {
                     serde_json::from_str::<Json>(payload).ok()?["id"].as_u64()
                 }
                 _ => None,
@@ -268,7 +284,7 @@ impl Harness {
         self.heard()
             .into_iter()
             .filter_map(|h| match h {
-                Heard::Event(n, payload) if n == name => {
+                Heard::Event(n, _, payload) if n == name => {
                     Some(serde_json::from_str(&payload).expect("a JSON payload"))
                 }
                 _ => None,
@@ -276,13 +292,15 @@ impl Harness {
             .collect()
     }
 
-    /// What the terminal shows, 100 wide, rows trimmed.
+    /// What the terminal of the selected session shows, 100 wide, rows
+    /// trimmed.
     fn screen(&self) -> Vec<String> {
+        let shown = Some(self.state.selected_session().id);
         let mut grid = crate::native::grid::TermGrid::new(100, 200);
         for heard in self.heard() {
             match heard {
                 Heard::Echo(text) => grid.local_write(text.as_bytes()),
-                Heard::Event("session://output", payload) => {
+                Heard::Event("session://output", session, payload) if session == shown => {
                     grid.session_output(&output(&payload));
                 }
                 Heard::Event(..) => {}

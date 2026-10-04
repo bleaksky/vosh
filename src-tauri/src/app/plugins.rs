@@ -373,7 +373,7 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
         echoes,
         walk,
     } = crate::session::effects::collect_script_result(app, &state.profile, session, apply).await;
-    crate::output::echo_lines(app, &echoes);
+    crate::output::echo_lines(app, session, &echoes);
     if bytes.is_empty() && walk.is_none() {
         return;
     }
@@ -438,7 +438,7 @@ pub(crate) fn show_launch_lines<R: tauri::Runtime>(app: &tauri::AppHandle<R>, se
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner),
     );
-    crate::output::echo_lines(app, &lines);
+    crate::output::echo_lines(app, session, &lines);
 }
 
 #[cfg(test)]

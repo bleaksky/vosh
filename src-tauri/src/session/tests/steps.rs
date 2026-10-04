@@ -46,7 +46,7 @@ fn capture_profile(template: &str) -> Live {
 /// target on `c`, and return the drawn prompt, the bytes after its region
 /// mark, when it drew.
 fn draw_line(p: &mut Profile, c: &mut super::Connection, line: &str) -> Option<String> {
-    let mut batch = super::ReadBatch::new(crate::output::output_count());
+    let mut batch = super::ReadBatch::new(false);
     let _ = super::line_step(
         p,
         c,
@@ -221,7 +221,7 @@ fn with_drawing_off_the_prompt_shows_as_sent_and_is_logged() {
     let vars = wire.c.prompt.vars.prompt_vars();
     assert_eq!(vars.get("hp").map(String::as_str), Some("1020"));
 
-    let mut batch = super::ReadBatch::new(crate::output::output_count());
+    let mut batch = super::ReadBatch::new(false);
     let step = super::line_step(
         &mut wire.p,
         &mut wire.c,
@@ -239,7 +239,7 @@ fn with_drawing_off_the_prompt_shows_as_sent_and_is_logged() {
     assert_eq!(step[0].scrollback, [PROMPT_LINE.as_bytes()]);
     // A drawn prompt is neither logged nor kept for scrollback.
     let (mut p, mut c) = capture_profile(HP);
-    let mut batch = super::ReadBatch::new(crate::output::output_count());
+    let mut batch = super::ReadBatch::new(false);
     let step = super::line_step(
         &mut p,
         &mut c,
@@ -1314,7 +1314,7 @@ fn a_held_line_your_send_lets_go_runs_the_line_pass_and_is_logged() {
     // You send before the next read. The line stays as it shows and
     // runs the Line pass, so its trigger answers and it is logged and
     // kept for scrollback.
-    let mut batch = super::ReadBatch::new(crate::output::output_count());
+    let mut batch = super::ReadBatch::new(false);
     let steps = super::let_go_held(
         &mut wire.p,
         &mut wire.c,
@@ -1360,7 +1360,7 @@ fn a_held_line_a_script_hides_still_shows_and_its_echo_follows() {
         .unwrap();
     let mut wire = Wire::new((p, c));
     let _ = wire.read(b"Bob says: \n\r");
-    let mut batch = super::ReadBatch::new(crate::output::output_count());
+    let mut batch = super::ReadBatch::new(false);
     let steps = super::let_go_held(
         &mut wire.p,
         &mut wire.c,
@@ -1458,7 +1458,7 @@ fn a_released_line_runs_the_line_pass_and_is_logged() {
             vosh_automation::trigger::TriggerAction::Gag,
         ))
         .unwrap();
-    let mut batch = super::ReadBatch::new(crate::output::output_count());
+    let mut batch = super::ReadBatch::new(false);
     let now = tokio::time::Instant::now();
     let mut acc = super::LineAccumulator::new();
     let mut steps = Vec::new();
@@ -1495,7 +1495,7 @@ fn drawing_off_shows_the_whole_block_as_sent_and_logs_it() {
         out.bytes,
         format!("{TANK_LINE}\r\n{FIGHT_LINE}\r\n").into_bytes()
     );
-    let mut batch = super::ReadBatch::new(crate::output::output_count());
+    let mut batch = super::ReadBatch::new(false);
     let now = tokio::time::Instant::now();
     let mut acc = super::LineAccumulator::new();
     for line in acc.feed(format!("{TANK_LINE}\n\r{FIGHT_LINE}\n\r").as_bytes()) {
@@ -1521,7 +1521,7 @@ fn logged_and_kept(
     c: &mut Connection,
     text: &str,
 ) -> (Vec<String>, Vec<Vec<u8>>, Vec<u8>) {
-    let mut batch = super::ReadBatch::new(crate::output::output_count());
+    let mut batch = super::ReadBatch::new(false);
     let now = tokio::time::Instant::now();
     let mut acc = super::LineAccumulator::new();
     let mut kept = Vec::new();

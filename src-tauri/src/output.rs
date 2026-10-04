@@ -1,7 +1,8 @@
 //! The one path that writes text to the terminal. Every write, from a
 //! read of the game, a slash command's echo or a timer, reaches the native
 //! grid and xterm here, under one lock, so both renderers take the same
-//! text in the same order.
+//! text in the same order. Each write names the session whose terminal
+//! takes it.
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
@@ -9,9 +10,16 @@ use tracing::warn;
 use vosh_prompt::stage::Output;
 
 use crate::app::events;
+use crate::sessions::{Session, SessionId};
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct OutputPayload {
+    /// The session whose terminal takes the output. Every payload
+    /// [`emit_counted`] sends names it, in the payload itself since this
+    /// is the hot path. A payload built from the stage alone, as the
+    /// session tests build them, names none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session: Option<SessionId>,
     /// Output bytes as standard base64. A raw `Vec<u8>` serializes to a
     /// JSON array of decimal numbers (~4x the wire size, one number per
     /// byte, plus an N-element JS array to walk on the other side);
@@ -114,6 +122,7 @@ impl OutputPayload {
     /// Build the wire payload for an output, its bytes as base64.
     pub(crate) fn from_output(out: &Output) -> Self {
         Self {
+            session: None,
             b64: base64_encode(&out.bytes),
             replace: out.replace.as_ref().map(|r| ReplacePayload {
                 gen: r.gen,
@@ -139,32 +148,30 @@ impl OutputPayload {
 /// xterm take the output of every caller in the same order.
 static OUTPUT_ORDER: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-/// How many outputs reached the terminal, repaints aside. The session
-/// notes it after each of its writes, and a count that moved since means
-/// output from elsewhere, such as a slash command's echo, landed after
-/// the open row and closed it.
-static OUTPUT_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-/// The output count now, see [`OUTPUT_COUNT`].
-pub(crate) fn output_count() -> u64 {
-    OUTPUT_COUNT.load(std::sync::atomic::Ordering::Acquire)
-}
-
-/// Print `bytes` in the terminal. Every write to the terminal pane goes
-/// through here or through the session's own batch: a slash command's
-/// echo, the `#logs` reply, a timer's echo, and the rest. Nothing else
-/// emits `session://output`. It moves the output count, so it closes
-/// the open row.
-pub(crate) fn emit_output<R: tauri::Runtime>(app: &AppHandle<R>, bytes: Vec<u8>) {
+/// Print `bytes` in the terminal of `session`. Every write to the
+/// terminal pane goes through here or through the session's own batch: a
+/// slash command's echo, the `#logs` reply, a timer's echo, and the rest.
+/// Nothing else emits `session://output`. It moves the session's output
+/// count, so it closes the session's open row.
+pub(crate) fn emit_output<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    session: &Session,
+    bytes: Vec<u8>,
+) {
     let mut out = Output::new(false);
     out.text(&bytes);
-    emit_counted(app, &out, true, false, true);
+    emit_counted(app, session, &out, true, false, true);
 }
 
 /// Print the lines a typed line echoes, such as a slash command's
-/// reply, one to a row. They go through [`emit_output`] like
-/// every other terminal write, so the native renderer shows them too.
-pub(crate) fn echo_lines<R: tauri::Runtime>(app: &AppHandle<R>, lines: &[String]) {
+/// reply, one to a row, in the terminal of `session`. They go through
+/// [`emit_output`] like every other terminal write, so the native
+/// renderer shows them too.
+pub(crate) fn echo_lines<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    session: &Session,
+    lines: &[String],
+) {
     if lines.is_empty() {
         return;
     }
@@ -173,25 +180,27 @@ pub(crate) fn echo_lines<R: tauri::Runtime>(app: &AppHandle<R>, lines: &[String]
         buf.extend_from_slice(line.as_bytes());
         buf.extend_from_slice(b"\r\n");
     }
-    emit_output(app, buf);
+    emit_output(app, session, buf);
 }
 
-/// Send a repaint of the open row. It leaves the output count alone,
-/// since the row it writes is still the last thing on screen.
-pub(crate) fn emit_repaint<R: tauri::Runtime>(app: &AppHandle<R>, out: &Output) {
-    let _ = emit_counted(app, out, false, true, true);
+/// Send a repaint of the open row of `session`. It leaves the output
+/// count alone, since the row it writes is still the last thing on
+/// screen.
+pub(crate) fn emit_repaint<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, out: &Output) {
+    let _ = emit_counted(app, session, out, false, true, true);
 }
 
-/// Send `out` to both renderers under [`OUTPUT_ORDER`]. `count` moves the
-/// output count, which a repaint of the open row never does. `staged`
-/// says the prompt stage made `out`, so it carries its id, which each
-/// renderer keeps as the newest it took. The session task makes and
-/// sends those in order. Output from elsewhere can take an id before an
-/// output of the session and still go out after it, so it carries none.
-/// `frame` asks the native renderer for a frame at once. Returns the
-/// count after it.
+/// Send `out` to both renderers of `session` under [`OUTPUT_ORDER`].
+/// `count` moves the session's output count, which a repaint of the open
+/// row never does. `staged` says the prompt stage made `out`, so it
+/// carries its id, which each renderer keeps as the newest it took. The
+/// session task makes and sends those in order. Output from elsewhere can
+/// take an id before an output of the session and still go out after it,
+/// so it carries none. `frame` asks the native renderer for a frame at
+/// once. Returns the count after it.
 pub(crate) fn emit_counted<R: tauri::Runtime>(
     app: &AppHandle<R>,
+    session: &Session,
     out: &Output,
     count: bool,
     staged: bool,
@@ -199,6 +208,7 @@ pub(crate) fn emit_counted<R: tauri::Runtime>(
 ) -> u64 {
     let id = staged.then(|| out.id());
     let payload = OutputPayload {
+        session: Some(session.id),
         id,
         ..OutputPayload::from_output(out)
     };
@@ -209,9 +219,9 @@ pub(crate) fn emit_counted<R: tauri::Runtime>(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let seen = if count {
-        OUTPUT_COUNT.fetch_add(1, std::sync::atomic::Ordering::AcqRel) + 1
+        session.count_output()
     } else {
-        output_count()
+        session.output_count()
     };
     // Feed the native terminal grid the same bytes xterm receives,
     // for every output path, then repaint. This is the single choke point

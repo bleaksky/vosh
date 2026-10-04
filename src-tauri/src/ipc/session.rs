@@ -52,7 +52,7 @@ pub(crate) async fn session_send_masked<R: tauri::Runtime>(
     let session = state.session(session)?;
     let current = session.slot.lock().await;
     let Some(handle) = current.as_ref() else {
-        output::emit_output(&app, input::NOT_CONNECTED.to_vec());
+        output::emit_output(&app, &session, input::NOT_CONNECTED.to_vec());
         return Ok(());
     };
     if !handle.send_masked(crate::session::echo::masked_line_bytes(&line)) {

@@ -12,6 +12,7 @@ use tracing::warn;
 
 use crate::logs::{SharedLogStore, SharedScrollback};
 use crate::output::emit_output;
+use crate::sessions::Session;
 
 use super::connection::SharedConnection;
 use super::lines::{LineAccumulator, Partial};
@@ -151,6 +152,7 @@ pub(super) async fn capture_held_lines(connection: &SharedConnection, log_sink: 
 /// ring that the dump persists.
 pub(super) async fn capture_pending_line<R: tauri::Runtime>(
     app: &AppHandle<R>,
+    session: &Session,
     log_sink: &LogSink,
     accumulator: &mut LineAccumulator,
 ) {
@@ -164,7 +166,7 @@ pub(super) async fn capture_pending_line<R: tauri::Runtime>(
     let mut out = Vec::with_capacity(bytes.len() - shown + 2);
     out.extend_from_slice(&bytes[shown..]);
     out.extend_from_slice(b"\r\n");
-    emit_output(app, out);
+    emit_output(app, session, out);
     log_sink.scrollback.lock().await.push(bytes.clone());
     if let Some(sid) = log_sink.id() {
         let mut guard = log_sink.logs.lock().await;

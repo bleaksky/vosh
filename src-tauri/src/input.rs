@@ -255,7 +255,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     // while on a large log, so it runs on its own task and echoes when
     // done.
     if let Some(command) = logs_command(line) {
-        crate::logs::forget_passwords::start(app, command);
+        crate::logs::forget_passwords::start(app, session, command);
         return Ok(());
     }
     // `#profile reset` and `#profile load` replace the live profile
@@ -294,7 +294,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     settle_line_effects(app, effects).await;
 
     if let Some(payload) = shown.target {
-        let _ = app.emit(events::TARGET, payload);
+        session.emit(app, events::TARGET, &payload);
     }
 
     deliver_script_result(app, state, session, apply).await
@@ -315,7 +315,7 @@ async fn deliver_script_result<R: tauri::Runtime>(
         echoes,
         walk,
     } = collect_script_result(app, &state.profile, session, apply).await;
-    output::echo_lines(app, &echoes);
+    output::echo_lines(app, session, &echoes);
 
     if bytes.is_empty() && walk.is_none() {
         return Ok(());
@@ -333,7 +333,7 @@ async fn deliver_script_result<R: tauri::Runtime>(
         // it. Take the handle out, so this line and every one after it
         // finds no connection, as after a disconnect.
         *current = None;
-        output::emit_output(app, NOT_CONNECTED.to_vec());
+        output::emit_output(app, session, NOT_CONNECTED.to_vec());
         return Ok(());
     }
     // With no connection no walk is under way, so `#walk` and `#walk stop`
@@ -347,10 +347,14 @@ async fn deliver_script_result<R: tauri::Runtime>(
         walk,
         Some(WalkCommand::Stop { key: false, .. } | WalkCommand::Status { .. })
     ) {
-        output::echo_lines(app, &[crate::session::walk::NOT_WALKING.to_string()]);
+        output::echo_lines(
+            app,
+            session,
+            &[crate::session::walk::NOT_WALKING.to_string()],
+        );
     }
     if !bytes.is_empty() || reaches_game {
-        output::emit_output(app, NOT_CONNECTED.to_vec());
+        output::emit_output(app, session, NOT_CONNECTED.to_vec());
     }
     Ok(())
 }
