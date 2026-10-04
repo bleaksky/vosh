@@ -23,8 +23,9 @@ const PROFILE_MIGRATION_PENDING: &str =
 pub(super) const PROFILE_SAVE_BUSY: &str = "Vosh is saving this profile. Try again.";
 
 /// `#profile save`, `load` and `reset` on the active profile's file in
-/// the app data folder `state` holds. A load or a reset hands the tick's
-/// count on `c` the new settings.
+/// the app data folder `state` holds. A load or a reset hands the
+/// connection `c` the new tick settings and `[prompt]` table, as a
+/// profile switch does, and leaves the rest of it as it was.
 pub(super) fn slash_profile(
     state: &AppState,
     profile: &mut Profile,
@@ -102,9 +103,10 @@ pub(super) fn slash_profile(
     }
 }
 
-/// `#profile load` from `path`. Replaces the live profile, and sets
+/// `#profile load` from `path`. Replaces the live profile, hands the
+/// connection `c` the file's tick settings and `[prompt]` table, and sets
 /// `replaced`, only when the file reads. A file that does not read leaves
-/// the live profile as it was.
+/// both as they were.
 pub(super) fn load_profile_file(
     profile: &mut Profile,
     c: &mut Connection,
