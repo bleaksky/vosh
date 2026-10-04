@@ -573,10 +573,11 @@ export const PRESETS: Preset[] = [
     // From highlights.tin lines 170 to 174.
     name: 'Gold, experience, and levels',
     description: 'Marks the gold, experience, levels, and skills you gain.',
-    // group_gain in fight.c, with the 250 of fixtures/gmcp/aabahran
-    // char-vitals.gmcp, then gain_exp in update.c.
+    // group_gain in fight.c, with the experience to the next level of
+    // fixtures/gmcp/aabahran group-info.gmcp, 1250, then gain_exp in
+    // update.c.
     sample: [
-      { text: 'You receive 250 experience points.', shows: 'loot.xp' },
+      { text: 'You receive 1250 experience points.', shows: 'loot.xp' },
       { text: 'You raise a level!!', shows: 'loot.level' },
     ],
     suggest: [FORSAKEN_LANDS],

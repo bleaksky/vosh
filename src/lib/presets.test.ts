@@ -494,7 +494,7 @@ const SAMPLES_DRAW: Record<string, Run[][]> = {
   loot_progression: [
     [
       ['You receive ', '248'],
-      ['250 ', '230'],
+      ['1250 ', '230'],
       ['experience points.', '248'],
     ],
     [['You raise a level!!', '120']],
