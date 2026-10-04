@@ -86,9 +86,13 @@ pub(super) fn slash_scripts_list(profile: &Profile) -> InputResult {
     if !triggers.is_empty() {
         lines.push(format!("{} lua trigger(s):", triggers.len()));
         // Every Lua trigger runs at priority 0. The column lines up with
-        // the #triggers listing.
+        // the #triggers listing. Two scripts may each have a trigger of
+        // one name, so each line names who registered it.
         for t in triggers {
-            lines.push(format!("    [  0] {} /{}/", t.name, t.pattern));
+            lines.push(format!(
+                "    [  0] {} /{}/ from {}",
+                t.name, t.pattern, t.owner
+            ));
         }
     }
     InputResult::echo_lines(lines)

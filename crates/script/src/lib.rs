@@ -30,8 +30,10 @@ use owner::Site;
 use state::{CallInfo, EngineState};
 
 /// One Lua-defined trigger: a regex matched against incoming MUD lines and
-/// the registry id of the Lua callback to invoke when it fires.
+/// the registry id of the Lua callback to invoke when it fires. Its name
+/// is its own among the triggers its owner shares names with.
 struct LuaTrigger {
+    owner: Owner,
     name: String,
     pattern: String,
     regex: Regex,
@@ -44,6 +46,9 @@ struct LuaTrigger {
 pub struct LuaTriggerInfo {
     pub name: String,
     pub pattern: String,
+    /// Who registered it, as `#scripts` names a loaded script, or
+    /// `#lua` for your own Lua.
+    pub owner: String,
 }
 
 #[derive(Debug, Error)]
@@ -227,9 +232,10 @@ impl ScriptEngine {
             .map(|t| LuaTriggerInfo {
                 name: t.name.clone(),
                 pattern: t.pattern.clone(),
+                owner: t.owner.listed_name(),
             })
             .collect();
-        out.sort_by(|a, b| a.name.cmp(&b.name));
+        out.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.owner.cmp(&b.owner)));
         out
     }
 
@@ -632,6 +638,23 @@ impl ScriptEngine {
         }
     }
 
+    /// Take out the Lua trigger `name` whose names `owner` shares, and
+    /// let go of its function.
+    fn remove_lua_trigger(&mut self, owner: &Owner, name: &str) {
+        let mut to_drop: Vec<i64> = Vec::new();
+        self.triggers.retain(|t| {
+            if t.name == name && t.owner.shares_names_with(owner) {
+                to_drop.push(t.callback_id);
+                false
+            } else {
+                true
+            }
+        });
+        for id in to_drop {
+            self.drop_callback(id);
+        }
+    }
+
     /// Drain queued actions, also installing any [`Action::SetLuaTrigger`]
     /// or [`Action::SubscribeGmcp`] into the engine's own bookkeeping
     /// before returning the rest to the caller.
@@ -644,6 +667,7 @@ impl ScriptEngine {
         for action in actions {
             match action {
                 Action::SetLuaTrigger {
+                    owner,
                     name,
                     pattern,
                     callback_id,
@@ -654,19 +678,9 @@ impl ScriptEngine {
                             .map(|n| n.map(str::to_string))
                             .skip(1)
                             .collect();
-                        let mut to_drop: Vec<i64> = Vec::new();
-                        self.triggers.retain(|t| {
-                            if t.name == name {
-                                to_drop.push(t.callback_id);
-                                false
-                            } else {
-                                true
-                            }
-                        });
-                        for id in to_drop {
-                            self.drop_callback(id);
-                        }
+                        self.remove_lua_trigger(&owner, &name);
                         self.triggers.push(LuaTrigger {
+                            owner,
                             name,
                             pattern,
                             regex,
@@ -681,19 +695,8 @@ impl ScriptEngine {
                         self.drop_callback(callback_id);
                     }
                 },
-                Action::RemoveLuaTrigger(name) => {
-                    let mut to_drop: Vec<i64> = Vec::new();
-                    self.triggers.retain(|t| {
-                        if t.name == name {
-                            to_drop.push(t.callback_id);
-                            false
-                        } else {
-                            true
-                        }
-                    });
-                    for id in to_drop {
-                        self.drop_callback(id);
-                    }
+                Action::RemoveLuaTrigger { owner, name } => {
+                    self.remove_lua_trigger(&owner, &name);
                 }
                 Action::SubscribeGmcp {
                     package,
@@ -824,6 +827,80 @@ mod tests {
         assert_eq!(e.match_line("boom").unwrap().actions.len(), 1);
         e.eval(r#"mud.untrigger("t")"#, "t").unwrap();
         assert_eq!(e.match_line("boom").unwrap().actions.len(), 0);
+    }
+
+    #[test]
+    fn two_plugins_can_share_a_trigger_name() {
+        let mut e = ScriptEngine::new().unwrap();
+        // Each plugin drops its trigger on a packet of its own.
+        for (name, package) in [("hunger", "Room.Info"), ("meals", "Char.Vitals")] {
+            e.load_script(
+                Owner::Plugin(name.into()),
+                &format!("@{name}/main.lua"),
+                format!(
+                    "mud.trigger('eat', 'You are hungry', function() mud.echo('{name}') end)\n\
+                     mud.on_gmcp('{package}', function() mud.untrigger('eat') end)"
+                ),
+            )
+            .unwrap();
+        }
+        let line = "You are hungry.";
+        assert_eq!(
+            e.match_line(line).unwrap().actions,
+            vec![Action::Echo("hunger".into()), Action::Echo("meals".into())]
+        );
+        let listed: Vec<(String, String)> = e
+            .lua_triggers()
+            .into_iter()
+            .map(|t| (t.name, t.owner))
+            .collect();
+        assert_eq!(
+            listed,
+            [
+                ("eat".to_string(), "plugin:hunger".to_string()),
+                ("eat".to_string(), "plugin:meals".to_string()),
+            ]
+        );
+        // Your own Lua has names of its own, so its untrigger takes
+        // neither, and its trigger of the same name joins them.
+        e.eval(
+            "mud.untrigger('eat') \
+             mud.trigger('eat', 'You are hungry', function() mud.echo('typed') end)",
+            "=#lua",
+        )
+        .unwrap();
+        assert_eq!(e.match_line(line).unwrap().actions.len(), 3);
+        // A plugin's untrigger takes its own alone.
+        e.dispatch_gmcp("Char.Vitals", &serde_json::json!({}))
+            .unwrap();
+        assert_eq!(
+            e.match_line(line).unwrap().actions,
+            vec![Action::Echo("hunger".into()), Action::Echo("typed".into())]
+        );
+    }
+
+    #[test]
+    fn your_lua_lines_and_bodies_share_trigger_names() {
+        let mut e = ScriptEngine::new().unwrap();
+        e.eval(
+            "mud.trigger('day', 'The day has begun', function() mud.echo('typed') end)",
+            "=#lua",
+        )
+        .unwrap();
+        e.run_body(
+            &Owner::Trigger("dawn".into()),
+            "mud.trigger('day', 'The day has begun', function() mud.echo('body') end)",
+            &[],
+        )
+        .unwrap();
+        let line = "The day has begun.";
+        assert_eq!(
+            e.match_line(line).unwrap().actions,
+            vec![Action::Echo("body".into())]
+        );
+        e.eval("mud.untrigger('day')", "=#lua").unwrap();
+        let leftover = &e.lua_triggers();
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]

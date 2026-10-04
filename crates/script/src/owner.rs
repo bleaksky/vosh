@@ -31,6 +31,21 @@ impl Owner {
         }
     }
 
+    /// True when a Lua trigger `self` registers shares its name with one
+    /// `other` registers, so it replaces it or `mud.untrigger` removes
+    /// it. Each plugin and loose script has names of its own, and your
+    /// `#lua` lines and the bodies of your triggers and aliases share
+    /// theirs.
+    pub(crate) fn shares_names_with(&self, other: &Owner) -> bool {
+        match (self, other) {
+            (Owner::Plugin(a), Owner::Plugin(b)) | (Owner::Script(a), Owner::Script(b)) => a == b,
+            (Owner::Plugin(_) | Owner::Script(_), _) | (_, Owner::Plugin(_) | Owner::Script(_)) => {
+                false
+            }
+            _ => true,
+        }
+    }
+
     /// The chunk name a body of this owner runs under, which Lua puts
     /// before the line number of an error in it.
     pub(crate) fn body_chunk(&self) -> String {
