@@ -525,6 +525,7 @@ Themes recolor the whole window, the terminal included. They live in Settings un
 
 - Open Settings and choose Appearance.
 - Click a theme in the gallery. Each one draws in its own colors with its name under it, and your own themes follow the built in ones. The theme applies at once and saves. The arrow keys move the pick too.
+- Read the line under the gallery. It describes the theme on screen and, for a built in theme, names where its colors come from, who made them, and the license they carry.
 - Turn on `Follow system appearance` to switch between the `Light theme` and the `Dark theme` you pick under it whenever your system does.
 - Click `Import…` to read a Ghostty, iTerm2, Kitty, or Alacritty theme file. Vosh adds it to your own themes and switches to it.
 - Or choose `Choose theme` in the View menu or the palette, which lists every theme.
