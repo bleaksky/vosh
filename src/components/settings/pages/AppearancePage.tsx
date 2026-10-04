@@ -3,8 +3,10 @@ import {
   BUNDLED_FONTS,
   fontChoices,
   pairChoices,
+  panelFontChoices,
   sizeChoices,
 } from '../../../lib/appearanceSettings';
+import { normalizePanelFont } from '../../../lib/panelFont';
 import {
   listSystemFonts,
   resolveThemeTerminalColors,
@@ -35,7 +37,8 @@ import { ThemeGallery } from './appearance/ThemeGallery';
 // Appearance, from the approved board (SettingsAppearance.dc.html).
 // Theme holds Import… and the gallery of every theme, then follow
 // system appearance and the light and dark pair it switches between.
-// Terminal text holds the font, size, line height, whether MUD text
+// Terminal text holds the font, the panel font that every pane and the
+// status line draw in, the size, the line height, whether MUD text
 // takes the theme's colors, whether Vosh keeps the colors your triggers
 // set readable on the theme, and whether a line the same as the one
 // before it shows once with a count. While that is on, two rows under it
@@ -108,8 +111,8 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navSeq]);
 
-  // The installed fonts fill the Font select. The backend reads them
-  // once per launch and keeps the list.
+  // The installed fonts fill the Font and Panel font selects. The
+  // backend reads them once per launch and keeps the list.
   useEffect(() => {
     let cancelled = false;
     void listSystemFonts().then((list) => {
@@ -257,6 +260,17 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
             value={fontValue}
             options={fontChoices(fontValue, installedFonts)}
             onChange={(family) => update({ font_family: family }, { now: true })}
+          />
+        </Row>
+        <Row
+          anchor="panel-font"
+          label="Panel font"
+          description="Every pane and the status line under the terminal draw in it."
+        >
+          <Select
+            value={normalizePanelFont(config.panel_font)}
+            options={panelFontChoices(config.panel_font, installedFonts)}
+            onChange={(pick) => update({ panel_font: pick }, { now: true })}
           />
         </Row>
         <Row anchor="size" label="Size">

@@ -40,6 +40,8 @@ describe('searchSettingsRows', () => {
   });
 
   it('matches descriptions and keywords', () => {
+    expect(labels('panel font')[0]).toBe('Panel font');
+    expect(labels('status line font')).toEqual(['Panel font']);
     expect(labels('ghostty')).toEqual(['Import a theme']);
     expect(labels('cursor')).toEqual(['Caret shape']);
     expect(labels('missing')).toContain('Tracked affects');

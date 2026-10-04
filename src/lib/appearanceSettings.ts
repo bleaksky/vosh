@@ -1,11 +1,12 @@
 // The Appearance page's choices and edits, kept pure so they can be
-// tested without a window: what the Font, Size, Light theme, and Dark
-// theme selects offer, and how custom themes and the base palette
-// change. The page (src/components/settings/pages/AppearancePage.tsx)
+// tested without a window: what the Font, Panel font, Size, Light theme,
+// and Dark theme selects offer, and how custom themes and the base
+// palette change. The page (src/components/settings/pages/AppearancePage.tsx)
 // applies and saves the results.
 
 import type { Appearance } from './chrome';
 import { ANSI_SLOTS, CANONICAL_ANSI_16, type AnsiSlot } from './baseAnsi';
+import { normalizePanelFont, PANEL_FONT_SYSTEM, PANEL_FONT_TERMINAL } from './panelFont';
 import { DEFAULT_LIGHT_THEME_ID, type CustomTheme, type SystemFontEntry } from './session';
 import type { ThemePrefs } from './theme';
 import { themeIdFromLabel, uniqueThemeId } from './themeImport';
@@ -89,6 +90,21 @@ export function fontChoices(current: string, installed: readonly SystemFontEntry
     return choices;
   }
   return [{ label: fontLabel(current), value: current }, ...choices];
+}
+
+// ── Panel font ───────────────────────────────────────────────────────
+
+/** What the Panel font select offers: the terminal font, the system
+ *  font, then the fonts the Font select offers. A font you picked keeps
+ *  your exact font list, as Font does. */
+export function panelFontChoices(current: string, installed: readonly SystemFontEntry[]): Choice[] {
+  const pick = normalizePanelFont(current);
+  const named = pick !== PANEL_FONT_TERMINAL && pick !== PANEL_FONT_SYSTEM;
+  return [
+    { value: PANEL_FONT_TERMINAL, label: 'Same as terminal' },
+    { value: PANEL_FONT_SYSTEM, label: 'System font' },
+    ...fontChoices(named ? pick : '', installed),
+  ];
 }
 
 // ── Size ─────────────────────────────────────────────────────────────

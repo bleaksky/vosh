@@ -114,6 +114,12 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('appearance', 'text', 'font'),
   },
   {
+    label: 'Panel font',
+    description: 'Every pane and the status line under the terminal draw in it.',
+    keywords: 'typeface family panes status line map affects group chat vitals system',
+    target: at('appearance', 'text', 'panel-font'),
+  },
+  {
     label: 'Size',
     keywords: 'font size points terminal text bigger smaller',
     target: at('appearance', 'text', 'size'),

@@ -410,6 +410,101 @@ describe('AppearancePage', () => {
     expect(whole.attacks?.pressed).toEqual(['Show every line']);
   });
 
+  it('draws Panel font under Font, the terminal font until you pick one, and saves your pick', async () => {
+    // The installed fonts are in, as the first test leaves them.
+    await act(async () => {
+      fonts.resolve([
+        { family: 'JetBrains Mono', monospace: true },
+        { family: 'Menlo', monospace: true },
+        { family: 'PT Mono', monospace: true },
+      ]);
+      await fonts.pending;
+    });
+    const panelFont = async (cfg: UiConfig, pick?: string) => {
+      const container = doc.createElement('div');
+      doc.body.appendChild(container);
+      const root = createRoot(container as unknown as HTMLElement);
+      let saved: UiConfig | null = null;
+      await act(async () => {
+        root.render(
+          createElement(AppearancePage, {
+            target: { group: 'appearance' },
+            navSeq: 0,
+            config: cfg,
+            setConfig: (next) => {
+              saved = next(cfg);
+            },
+            onError: () => undefined,
+            pathB: false,
+            navigate: () => undefined,
+            setLeaveGuard: () => undefined,
+          }),
+        );
+      });
+      const anchors = findAll(container, (el) => el.getAttribute('data-st-anchor') !== null).map(
+        (el) => el.getAttribute('data-st-anchor'),
+      );
+      const [row] = findAll(container, (el) => el.getAttribute('data-st-anchor') === 'panel-font');
+      const [select] = findAll(row, (el) => el.nodeName === 'SELECT');
+      const options = select.options.map((o) => ({ label: o.textContent, value: o.value }));
+      // React marks the shown option selected.
+      const value = select.options.find(
+        (o) => (o as unknown as { selected?: boolean }).selected,
+      )?.value;
+      const font = fontOptions(container);
+      if (pick !== undefined) {
+        // The fake DOM sends no events, so call the handler React keeps.
+        const key = Object.keys(select).find((k) => k.startsWith('__reactProps$'));
+        const props = key
+          ? (select as unknown as Record<string, { onChange?: (e: unknown) => void }>)[key]
+          : undefined;
+        await act(async () => {
+          props?.onChange?.({ target: { value: pick } });
+        });
+      }
+      await act(async () => {
+        root.unmount();
+      });
+      return {
+        anchors,
+        label: row.textContent,
+        options,
+        font,
+        value,
+        saved: saved as UiConfig | null,
+      };
+    };
+
+    const same = await panelFont(config(), 'system');
+    expect(same.anchors.indexOf('panel-font')).toBe(same.anchors.indexOf('font') + 1);
+    expect(same.anchors.indexOf('size')).toBe(same.anchors.indexOf('panel-font') + 1);
+    expect(same.label).toContain('Panel font');
+    expect(same.label).toContain('Every pane and the status line under the terminal draw in it.');
+    expect(same.value).toBe('');
+    // The terminal font, the system font, then the list Font offers.
+    expect(same.options.slice(0, 2)).toEqual([
+      { label: 'Same as terminal', value: '' },
+      { label: 'System font', value: 'system' },
+    ]);
+    expect(same.options.slice(2).map((o) => o.label)).toEqual(same.font.map((o) => o.label));
+    expect(same.options.slice(2).map((o) => o.label)).toEqual([
+      'JetBrains Mono',
+      'Menlo',
+      'PT Mono',
+    ]);
+    expect(same.saved?.panel_font).toBe('system');
+    expect(same.saved?.font_family).toBe(CURRENT);
+
+    const system = await panelFont({ ...config(), panel_font: 'system' });
+    expect(system.value).toBe('system');
+    const menlo = '"Menlo", Menlo, monospace';
+    const picked = await panelFont({ ...config(), panel_font: menlo });
+    expect(picked.value).toBe(menlo);
+    expect(picked.options.filter((o) => o.value === menlo)).toEqual([
+      { label: 'Menlo', value: menlo },
+    ]);
+  });
+
   it('saves the choice you press in each row', async () => {
     const on = { ...config(), collapse_repeats: true };
     const fights = await collapseRows(on, undefined, (rows) => rows.fights.segments[1]);
