@@ -3,6 +3,7 @@ import { createDebouncedWrite, pendingWrites } from '../../../lib/pendingWrites'
 import { affectsDisplayFields, subscribeAffectsDisplayChanged } from '../../../ipc/affects';
 import { subscribeUiConfigReplaced, type UiConfig } from '../../../ipc/uiConfig';
 import { isOwnAffectsDisplayEcho, setUiConfig } from '../../../ipc/uiConfigSave';
+import { useTauriEvent } from '../../../ipc/useTauriEvent';
 import {
   applyThemePrefs,
   isOwnThemeEcho,
@@ -94,86 +95,36 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
   // profile switch, #profile load, #profile reset, or an import. The
   // backend would turn it away anyway, as it does a save built on the
   // old copy in the moment before SettingsApp has read the new one.
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    void subscribeUiConfigReplaced(() => {
-      autoSave.drop();
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsub = fn;
-    });
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, []);
+  useTauriEvent(subscribeUiConfigReplaced, () => {
+    autoSave.drop();
+  });
   // A theme picked in another window while a save waits patches it, so
   // the save does not put the old theme back. The theme id another
   // window applied is the manual pick only while follow system
   // appearance is off. This window's own save comes back too, and is
   // skipped.
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    void subscribeThemeChanges((themeId) => {
-      if (isOwnThemeEcho(themeId)) return;
-      autoSave.patch((job) =>
-        job.cfg.follow_system_appearance ? job : { ...job, cfg: { ...job.cfg, theme: themeId } },
-      );
-    })
-      .then((fn) => {
-        if (cancelled) fn();
-        else unsub = fn;
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, []);
+  useTauriEvent(subscribeThemeChanges, (themeId) => {
+    if (isOwnThemeEcho(themeId)) return;
+    autoSave.patch((job) =>
+      job.cfg.follow_system_appearance ? job : { ...job, cfg: { ...job.cfg, theme: themeId } },
+    );
+  });
   // The four theme fields another window saved, like a palette pick
   // that filled the light or dark entry while follow is on.
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    void subscribeThemePrefs((prefs) => {
-      if (isOwnThemeEcho(prefs)) return;
-      autoSave.patch((job) => ({ ...job, cfg: { ...job.cfg, ...prefs } }));
-    })
-      .then((fn) => {
-        if (cancelled) fn();
-        else unsub = fn;
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, []);
+  useTauriEvent(subscribeThemePrefs, (prefs) => {
+    if (isOwnThemeEcho(prefs)) return;
+    autoSave.patch((job) => ({ ...job, cfg: { ...job.cfg, ...prefs } }));
+  });
   // An affects style or marker picked in the pane menu while a save
   // waits patches it the same way, so the save does not put the old
   // pick back.
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    void subscribeAffectsDisplayChanged((display) => {
-      if (isOwnAffectsDisplayEcho(display)) return;
-      autoSave.patch((job) => ({
-        ...job,
-        cfg: { ...job.cfg, ...affectsDisplayFields(display) },
-      }));
-    })
-      .then((fn) => {
-        if (cancelled) fn();
-        else unsub = fn;
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, []);
+  useTauriEvent(subscribeAffectsDisplayChanged, (display) => {
+    if (isOwnAffectsDisplayEcho(display)) return;
+    autoSave.patch((job) => ({
+      ...job,
+      cfg: { ...job.cfg, ...affectsDisplayFields(display) },
+    }));
+  });
   // Fade the "saved." indicator after 1.5s so it does not linger as
   // stale chrome long after the user actually saved.
   useEffect(() => {

@@ -23,6 +23,7 @@ import {
   type VitalsMeter,
   type VitalsValues,
 } from '../../../ipc/uiConfig';
+import { useTauriEvent } from '../../../ipc/useTauriEvent';
 import {
   panelWidthOf,
   setPanelOpen,
@@ -69,36 +70,14 @@ const SPLIT_KEYS = APP_SHORTCUTS.split;
  *  and a rename. */
 function useActiveProfile(): string | null {
   const [active, setActive] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    const unsubs: (() => void)[] = [];
-    const reload = () =>
-      profilesList()
-        .then((list) => {
-          if (!cancelled) setActive(list.active);
-        })
-        .catch(() => {});
-    void reload();
-    const keep = (pending: Promise<() => void>) =>
-      void pending.then((fn) => {
-        if (cancelled) fn();
-        else unsubs.push(fn);
-      });
-    keep(
-      subscribeProfileSwitched((name) => {
-        if (!cancelled) setActive(name);
-      }),
-    );
-    keep(
-      subscribeProfilesChanged(() => {
-        if (!cancelled) void reload();
-      }),
-    );
-    return () => {
-      cancelled = true;
-      for (const fn of unsubs) fn();
-    };
-  }, []);
+  const reload = () => {
+    profilesList()
+      .then((list) => setActive(list.active))
+      .catch(() => {});
+  };
+  useEffect(() => reload(), []);
+  useTauriEvent(subscribeProfileSwitched, setActive);
+  useTauriEvent(subscribeProfilesChanged, reload);
   return active;
 }
 

@@ -59,6 +59,7 @@ import {
 import { promptDescribe, promptRender, type PromptPreviewName } from '../../../ipc/promptDesign';
 import { onState } from '../../../ipc/session';
 import { subscribeUiConfigReplaced } from '../../../ipc/uiConfig';
+import { useTauriEvent } from '../../../ipc/useTauriEvent';
 import { shownColumns, type Cell } from '../../../lib/sgrCells';
 import { warnBoxes, warnedPieces } from '../../../lib/promptWarn';
 import { useGamePrompt } from '../../../lib/stores/gamePromptStore';
@@ -157,31 +158,17 @@ function usePromptData(): PromptData | null {
     };
   }, [capture, tick]);
 
+  useTauriEvent(subscribePromptConfigChanged, refresh);
+  useTauriEvent(subscribeProfileSwitched, refresh);
+  useTauriEvent(subscribeSessionIdentity, refresh);
+  useTauriEvent(onGamePromptSeen, refresh);
+  useTauriEvent(onPromptStatus, refresh);
+  useTauriEvent(onState, refresh);
+  useTauriEvent(subscribeUiConfigReplaced, refresh);
+  // Coming back to the window counts your newest prompts again.
   useEffect(() => {
-    const unlisteners: (() => void)[] = [];
-    let closed = false;
-    const keep = (p: Promise<() => void>) => {
-      void p
-        .then((un) => {
-          if (closed) un();
-          else unlisteners.push(un);
-        })
-        .catch(() => {});
-    };
-    keep(subscribePromptConfigChanged(refresh));
-    keep(subscribeProfileSwitched(refresh));
-    keep(subscribeSessionIdentity(refresh));
-    keep(onGamePromptSeen(refresh));
-    keep(onPromptStatus(refresh));
-    keep(onState(refresh));
-    keep(subscribeUiConfigReplaced(refresh));
-    // Coming back to the window counts your newest prompts again.
     window.addEventListener('focus', refresh);
-    return () => {
-      closed = true;
-      for (const un of unlisteners) un();
-      window.removeEventListener('focus', refresh);
-    };
+    return () => window.removeEventListener('focus', refresh);
   }, [refresh]);
 
   if (!config) return null;

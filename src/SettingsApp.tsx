@@ -16,6 +16,7 @@ import {
   primeUiConfigTheme,
   primeUiConfigThemePrefs,
 } from './ipc/uiConfigSave';
+import { useTauriEvent } from './ipc/useTauriEvent';
 import { subscribeSettingsGotoTab } from './ipc/windows';
 import {
   applyThemePrefs,
@@ -141,23 +142,12 @@ export function SettingsApp() {
   // A deep link for a window that is already open. The main window
   // also left the target in storage for a cold open, so clear it, or
   // the next cold open would land here again.
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    void subscribeSettingsGotoTab((target) => {
-      if (typeof target !== 'string') return;
-      clearPendingTarget();
-      go(resolveSettingsTarget(target));
-      void getCurrentWindow().setFocus();
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsub = fn;
-    });
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, [go]);
+  useTauriEvent(subscribeSettingsGotoTab, (target) => {
+    if (typeof target !== 'string') return;
+    clearPendingTarget();
+    go(resolveSettingsTarget(target));
+    void getCurrentWindow().setFocus();
+  });
 
   // Scroll to the anchor the target names once the page draws it, or
   // to the top for a bare group.
@@ -172,27 +162,13 @@ export function SettingsApp() {
     return revealSettingsAnchor(root, ids);
   }, [nav]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const refresh = () =>
-      loadoutsGetState()
-        .then((s) => {
-          if (!cancelled) setPathB(s.path_b_active);
-        })
-        .catch(() => {});
-    void refresh();
-    let unsub: (() => void) | undefined;
-    void subscribeLoadoutsChanged(() => {
-      if (!cancelled) void refresh();
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsub = fn;
-    });
-    return () => {
-      cancelled = true;
-      if (unsub) unsub();
-    };
-  }, []);
+  const readPathB = () => {
+    loadoutsGetState()
+      .then((s) => setPathB(s.path_b_active))
+      .catch(() => {});
+  };
+  useEffect(() => readPathB(), []);
+  useTauriEvent(subscribeLoadoutsChanged, readPathB);
 
   // Load current config and reveal the window once a frame with the
   // theme has gone out. The startup paint usually has it on screen
@@ -224,28 +200,14 @@ export function SettingsApp() {
   // window sends the full snapshot, so read it again here, or the next
   // edit writes the old profile's tick count, chip style, tracked
   // affects, custom themes, and the rest over the new one.
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    void followReplacedUiConfig(
-      (cfg) => {
-        if (cancelled) return;
-        setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
-        setConfig(cfg);
-        applyThemePrefs(cfg);
-      },
-      (e) => {
-        if (!cancelled) setError(String(e));
-      },
-    ).then((fn) => {
-      if (cancelled) fn();
-      else unsub = fn;
-    });
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, []);
+  useTauriEvent(
+    (cb) => followReplacedUiConfig(cb, (e) => setError(String(e))),
+    (cfg: UiConfig) => {
+      setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
+      setConfig(cfg);
+      applyThemePrefs(cfg);
+    },
+  );
 
   // Turning the theme scope global folds the custom themes of every
   // other profile into the shared list. Take the new list, or the next
@@ -279,52 +241,26 @@ export function SettingsApp() {
   // of writing the old theme back. While follow is on the id is only
   // the pair entry the OS shows, and the theme fields below carry the
   // pick. This window's own save comes back too, and is skipped.
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    void subscribeThemeChanges((themeId) => {
-      const current = configRef.current;
-      if (!current || current.follow_system_appearance || isOwnThemeEcho(themeId)) return;
-      primeUiConfigTheme(themeId);
-      setConfig((prev) =>
-        prev && !prev.follow_system_appearance && prev.theme !== themeId
-          ? { ...prev, theme: themeId }
-          : prev,
-      );
-    })
-      .then((fn) => {
-        if (cancelled) fn();
-        else unsub = fn;
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, []);
+  useTauriEvent(subscribeThemeChanges, (themeId) => {
+    const current = configRef.current;
+    if (!current || current.follow_system_appearance || isOwnThemeEcho(themeId)) return;
+    primeUiConfigTheme(themeId);
+    setConfig((prev) =>
+      prev && !prev.follow_system_appearance && prev.theme !== themeId
+        ? { ...prev, theme: themeId }
+        : prev,
+    );
+  });
 
   // The four theme fields another window saved. A palette pick while
   // follow is on fills the light or dark entry, and the config copy
   // takes it the same way.
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    void subscribeThemePrefs((prefs) => {
-      if (isOwnThemeEcho(prefs)) return;
-      primeUiConfigThemePrefs(prefs);
-      applyThemePrefs(prefs);
-      setConfig((prev) => (prev ? { ...prev, ...prefs } : prev));
-    })
-      .then((fn) => {
-        if (cancelled) fn();
-        else unsub = fn;
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, []);
+  useTauriEvent(subscribeThemePrefs, (prefs) => {
+    if (isOwnThemeEcho(prefs)) return;
+    primeUiConfigThemePrefs(prefs);
+    applyThemePrefs(prefs);
+    setConfig((prev) => (prev ? { ...prev, ...prefs } : prev));
+  });
 
   // The Affects pane menu picks a style or a marker in the main window,
   // and a profile switch brings the whole display, the tint and the
@@ -332,28 +268,15 @@ export function SettingsApp() {
   // theme pick, so the next full save from any page carries it instead
   // of writing the old one back. This window's own save comes back too,
   // and is skipped.
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    void subscribeAffectsDisplayChanged((display) => {
-      if (isOwnAffectsDisplayEcho(display)) return;
-      primeUiConfigAffectsDisplay(display);
-      setConfig((prev) =>
-        prev && !sameAffectsDisplay(affectsDisplayOf(prev), display)
-          ? { ...prev, ...affectsDisplayFields(display) }
-          : prev,
-      );
-    })
-      .then((fn) => {
-        if (cancelled) fn();
-        else unsub = fn;
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, []);
+  useTauriEvent(subscribeAffectsDisplayChanged, (display) => {
+    if (isOwnAffectsDisplayEcho(display)) return;
+    primeUiConfigAffectsDisplay(display);
+    setConfig((prev) =>
+      prev && !sameAffectsDisplay(affectsDisplayOf(prev), display)
+        ? { ...prev, ...affectsDisplayFields(display) }
+        : prev,
+    );
+  });
 
   // MUD text in Settings (patterns, commands, host and port) uses your
   // terminal font through --font-mud, the way the main window does.

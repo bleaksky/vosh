@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { CloseIcon, MaximizeIcon, MinimizeIcon } from './ui';
 
 /** Minimize, maximize, and close for the frameless Settings window on
@@ -8,31 +9,14 @@ import { CloseIcon, MaximizeIcon, MinimizeIcon } from './ui';
  *  maximized. macOS draws its own traffic lights instead. */
 export function WindowControls() {
   const [maximized, setMaximized] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    const win = getCurrentWindow();
-    const read = () => {
-      win
-        .isMaximized()
-        .then((m) => {
-          if (!cancelled) setMaximized(m);
-        })
-        .catch(() => {});
-    };
-    read();
-    win
-      .onResized(read)
-      .then((fn) => {
-        if (cancelled) fn();
-        else unlisten = fn;
-      })
+  const read = () => {
+    getCurrentWindow()
+      .isMaximized()
+      .then(setMaximized)
       .catch(() => {});
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  };
+  useEffect(() => read(), []);
+  useTauriEvent<unknown>((cb) => getCurrentWindow().onResized(cb), read);
   return (
     <div className="st-window-controls">
       <button
