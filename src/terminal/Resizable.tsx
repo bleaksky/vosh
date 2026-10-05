@@ -103,7 +103,7 @@ export function Resizable({
   // (keyboard nudge, mount with persisted value). Pointer-drag
   // already calls onSizeChange synchronously inside the move
   // handler, so callers get every drag frame. Don't dispatch
-  // vosh:resize-progress here — Terminal.tsx's ResizeObserver
+  // vosh:resize-progress here — the ResizeObserver in paneSizer.ts
   // handles non-drag size changes the next frame, and broadcasting
   // here in addition to from pointermove makes the event fire
   // twice per drag frame (once sync from the move handler, once
