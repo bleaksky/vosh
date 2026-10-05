@@ -527,6 +527,15 @@ describe('presets', () => {
     expect(presetToggles(stored).every((t) => !t.enabled)).toBe(true);
   });
 
+  it('keeps the ids the page has no preset for, as the alert presets', () => {
+    const stored = [PRESETS[0].id, 'alert_tells'];
+    const off = presetToggles(stored).map((t) => ({ ...t, enabled: false }));
+    expect(storedPresetIds(off, stored)).toEqual(['alert_tells']);
+    const on = presetToggles(stored);
+    expect(storedPresetIds(on, stored)).toEqual([PRESETS[0].id, 'alert_tells']);
+    expect(storedPresetIds(off, [PRESETS_OFF_MARKER])).toEqual([PRESETS_OFF_MARKER]);
+  });
+
   it('round trips a partial pick in library order', () => {
     const pick = [PRESETS[2].id, PRESETS[0].id];
     const toggles = presetToggles(pick);

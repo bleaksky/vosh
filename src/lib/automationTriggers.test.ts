@@ -477,6 +477,17 @@ describe('saving triggers', () => {
     expect(store.list()[0].enabled).toBe(false);
   });
 
+  it('keeps the alert table of every trigger through a save', async () => {
+    const alert = { banner: true, sound: 'chime', attention: 'once' };
+    const store = fakeStore([{ ...trigger('rest', 'sleep'), alert }, trigger('flee', 'flee')]);
+    let draft = createDraft(await loadTriggers(store.api));
+    expect(draft.items[0].value.alert).toEqual(alert);
+    draft = updateDraftItem(draft, draft.items[1].uid, (t) => ({ ...t, enabled: false }));
+    await saveTriggerDraft(draft, store.api);
+    expect(store.list()[0].alert).toEqual(alert);
+    expect(store.list()[1].alert).toBeUndefined();
+  });
+
   it('saves nothing when the store answer does not read', async () => {
     const store = fakeStore([trigger('rest', 'sleep')]);
     const draft = addDraftItem(createDraft(await loadTriggers(store.api)), trigger('wake', 'x'));
