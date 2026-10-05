@@ -1575,73 +1575,42 @@ export const BUILTIN_THEMES: AppTheme[] = [
 // anything past its Typical fit, worked out ahead like `fitted` (lib/
 // gameFit fit). A vision a theme leaves out plays the Typical fit, which
 // either parts every pair the vision keeps apart already or has no color
-// that can move without fading, as themes.test.ts names. Each string
+// that can part one further far enough to see without fading or running
+// into another color, as themes.test.ts names (GAME_SHORT). Each string
 // holds the colors of GAME_SLOTS in order, body text then the 16 ANSI
 // colors, with a dot for a slot the fit leaves as published.
 // gameFit.test.ts fits each again with VOSH_FIT_THEMES=1.
 type OtherVision = Exclude<ColorVision, 'typical'>;
 const VISION_FITS: Readonly<Record<string, Partial<Record<OtherVision, string>>>> = {
-  'obsidian-ember': {
-    deuteranopia:
-      '#cecbc9 . #d07166 #95e4b0 #d2af64 #799ed6 #b08ac5 #79c3cf . #99948f #f59989 #c7ffd8 #f3d08c #9bbef1 #d0aae2 #9de3ee .',
-    tritanopia:
-      '#cecbc9 . #d07166 #95e4b0 #d2af64 #7297ce #b08ac5 #79c3cf . #99948f #f59989 #c7ffd8 #f2cf8a #9bbef1 #d0aae2 #9de3ee .',
-  },
-  triad: {
-    deuteranopia: '. . #fa6346 . . . . . . . . . . . . . .',
-    protanopia: '. . #fa6346 . . . . . . . . . . . . . .',
-    tritanopia: '. . . #63e0c1 . #749bd0 . . . . . . . . . . .',
-  },
   rubric: {
     deuteranopia: '. . #ed601a . . . . . . . . . . . . . .',
     protanopia: '. . #ed601a . #573c00 . . . . . . . . . . . .',
-    tritanopia: '. . . #027974 . . . #265275 . . . . . . . #00394f .',
-  },
-  'kanso-zen': {
-    deuteranopia:
-      '#c9cdcb #656565 #d08072 #d4e5c4 #d0be95 #879fab . #a0b6b4 #b7bab7 #92979d #ff919a #e9ffe9 #ffe8bf #8cc2d8 #bab1d1 #acdbd1 #f0f5f2',
-    tritanopia:
-      '#c9cdcb #656565 #d17f79 #d4e5c4 #d0be95 #869eaa . #9fb6b5 #b7bab7 #92979d #ff919a #e9ffe9 #ffe8bf #8cc2d8 #bab1d1 #acdbd1 #f0f5f2',
   },
   'tokyo-night': {
     deuteranopia:
       '#bdc7f2 #2c2e36 #e86982 #bbed87 . . . #70c2f2 #aab3d8 #8e97bb #ff94a5 #e0ffc4 #ffe1b7 #a3c2ff #d4bfff #a8deff #dbe2ff',
-    protanopia:
-      '#bdc7f2 #2c2e36 #e86982 #94f8ae #e2b16a . . #70c2f2 #aab3d8 #8e97bb #ff94a5 #e0ffc4 #ffd396 #a3c2ff #d4bfff #a8deff #dbe2ff',
     tritanopia:
       '#bdc7f2 #2c2e36 #ea6b64 #bbed87 . #739bef . #70c2f2 #aab3d8 #8e97bb #ff94a5 #e0ffc4 #ffd08d #a3c2ff #d4bfff #a8deff #dbe2ff',
   },
   nord: {
-    deuteranopia:
-      '. #3c4353 #c3656e #9eb987 #e9c989 #83a4c4 #bb95b4 #8cc5d5 . #95a1b7 #ff9ea5 #ceeab6 #ffeac1 #a3c4e5 #dcb4d4 #b6e4e3 #feffff',
     tritanopia:
       '. #3c4353 #c46567 #96b07f #e9c989 #83a4c4 #bb95b4 #98d0e1 . #95a1b7 #ff9ea5 #ceeab6 #ffeac1 #a3c4e5 #dcb4d4 #c1f0ee #feffff',
   },
   'rose-pine': {
-    deuteranopia:
-      '. #2b2940 #ea6e91 #79bcd9 #f1bd73 . . . #dedcf2 #9894b1 #ff98b2 #9addfb #ffdfb4 #bcf0f9 #e1caff #ffe1e0 #ffffff',
-    protanopia:
-      '. #2b2940 #ec6e8a #79bcd9 #f1bd73 . . . #dedcf2 #9894b1 #ff98b2 #9addfb #ffdfb4 #bcf0f9 #e1caff #ffe1e0 #ffffff',
     tritanopia:
       '. #2b2940 #ed6f6d #79bcd9 #f1bd73 . . . #dedcf2 #9894b1 #ff98b2 #9addfb #ffdfb4 #bcf0f9 #e1caff #ffe1e0 #ffffff',
   },
   gruvbox: {
-    deuteranopia:
-      '#e4d4ac #383838 #e03c30 #cdce5d . #66a6a9 #d582a7 #8ec590 #c5b59f #a8998a #ff9583 #ecf068 #ffc33d #9dc0b2 #f4a4b9 #b2e6a0 #ffefc5',
     tritanopia:
       '#e4d4ac #383838 #e03c30 #c5d162 #d99b25 #66a6a9 #d582a7 #75d0b9 #c5b59f #a8998a #ff9583 #ecf068 . #9dc0b2 #f4a4b9 #b2e6a0 #ffefc5',
   },
   catppuccin: {
-    deuteranopia:
-      '. . #d5708d #8eca89 #f1dba8 . #d4a2c7 . . #9498af #fe95b2 #aeeca9 #fff1d2 #b5d2ff . #c4fff4 #edf1ff',
     tritanopia:
       '. . #d8707d #88c383 #f1dba8 #79a3e8 #d4a2c7 #94e1f1 . #9498af #fe95b2 #adeba8 #fff1d2 #b5d2ff . #c4fff4 #edf1ff',
   },
   dracula: {
     deuteranopia:
       '#e4e4df #2c2e34 #f24948 #1be166 #e2eb7d #b68cf2 #f671be #81dff3 #deded9 #8597cb #ff9692 . #feffc9 #d7aeff #ff9ee2 #aeffff .',
-    tritanopia:
-      '#e4e4df #2c2e34 #f2494b #00ce53 #e2eb7d #ae84e9 #f671be #82e0f5 #deded9 #8597cb #ff9692 . #feffc9 #d7aeff #ff9ee2 #b3ffff .',
   },
   monokai: {
     tritanopia:
@@ -1664,12 +1633,8 @@ const VISION_FITS: Readonly<Record<string, Partial<Record<OtherVision, string>>>
       '#d4d8d0 #3d4345 #fe4a3b #a3f476 #dcb834 #70a3e7 #bc94c2 #58ccce #d6dad2 #adafab #ff8f82 #caffa6 #fff49f #98c7f8 #e4b4df #4cf2f1 #fbfbf9',
     protanopia:
       '#d4d8d0 #3d4345 #fe4a3b #7bffa3 #e0bc3a #70a3e7 #bc94c2 #58ccce #d6dad2 #adafab #ff8f82 #caffa6 . #98c7f8 #e4b4df #4cf2f1 #fbfbf9',
-    tritanopia:
-      '#d4d8d0 #3d4345 #fe4a3b #a3f476 #ddb935 #70a3e7 #bc94c2 #58ccce #d6dad2 #adafab #ff8f82 #caffa6 . #98c7f8 #e4b4df #4cf2f1 #fbfbf9',
   },
   'classic-vivid': {
-    deuteranopia:
-      '. #232323 #ef5746 #52da4b #ffc6a2 #4b82ff #e756e4 #0badac #b2b2b2 #959595 #ff8574 . . #8a9bff #ff84fc . .',
     tritanopia:
       '. #232323 #ef5746 #00f1ae #ffc59f #4b82ff #e756e4 #0badac #b2b2b2 #959595 #ff8574 #6dff65 . #8a9bff #ff84fc . .',
   },
@@ -1681,10 +1646,6 @@ const VISION_FITS: Readonly<Record<string, Partial<Record<OtherVision, string>>>
     tritanopia:
       '#e4e4e4 #242424 #fc5253 #1fdc29 #f4f447 #489df1 . #43f2fe . #969696 #ff9291 . #feffb5 #97c3ff #ff8dff #b9fffe .',
   },
-  'everforest-dark': {
-    tritanopia:
-      '#e1d4b8 . #d16b67 #c4de9d #ccae71 #77b2aa . #8cca9b . #96a3a9 #ffa3a3 #e6ffc0 #edce90 #9fdcd3 #f8b9d6 #acebbb #fcefd2',
-  },
   'green-screen': {
     deuteranopia:
       '#8dde93 #242424 #fa6150 #57de50 #ffcaa9 #6091ff #e757e5 #25b7b6 #b2b2b2 #969696 #ff938c #7eff7a #fdffa4 #9aaaff #ff84fd . .',
@@ -1694,52 +1655,26 @@ const VISION_FITS: Readonly<Record<string, Partial<Record<OtherVision, string>>>
   srcery: {
     deuteranopia:
       '#e8d5b0 #282625 #fe4131 #67e9b6 #efac0d #4f9ae3 #ff5589 #36c3c7 . #a6937f #ff9483 #d1f878 #ffd16f #79baf7 #ff90ac #32e8d3 #fff0d3',
-    protanopia:
-      '#e8d5b0 #282625 #fe4131 #92e28f #edab06 #4f9ae3 #ff5589 #36c3c7 . #a6937f #ff9483 #d1f878 . #79baf7 #ff90ac #32e8d3 #fff0d3',
     tritanopia:
       '#e8d5b0 #282625 #fe4135 #7ff5b9 #ecaa04 #4f9ae3 #ff5589 #45cdd2 . #a6937f #ff9483 #d1f878 . #79baf7 #ff90ac #43f2de #fff0d3',
   },
   nightfly: {
-    deuteranopia:
-      '#c9cdd2 . #f14b2d #9dc859 #e9d68f #7aa1f6 #be89e1 #77d3c2 #aab4c2 #879b9b #ff939d #62f5d4 #ffe7c6 #a2c1ff #c9b1ff #98f5e3 #dfe8f5',
     tritanopia:
       '#c9cdd2 . #f24746 #95c051 #e9d68f #6e95e8 #be89e1 #7fd5f1 #aab4c2 #879b9b #ff939d #62f5d4 #ffe7c6 #a2c1ff #c9b1ff #98f5e3 #dfe8f5',
   },
-  'melange-dark': {
-    deuteranopia:
-      '. #393531 #c08485 #b7dab8 #eda365 #899cbd #bd8aba #a0bcba #ccb299 #aa9885 #fe9d8a #cbffdb #f9ce7a #b1b8dd #deaad1 #b3dfe2 #fffefc',
-    tritanopia:
-      '. #393531 #c08485 #afdcc3 #eda365 #899cbd #bd8aba #a0bcba #ccb299 #aa9885 #fe9d8a #cbffdb #f7cc79 #b1b8dd #deaad1 #b3dfe2 #fffefc',
-  },
   'melange-light': {
-    deuteranopia:
-      '. #dfd7d2 #d38594 #2c5631 #b85a00 . . #608383 . . #c00222 #003218 #835900 . . . #3e2e26',
-    protanopia:
-      '. #dfd7d2 #d28595 #2c5631 #b85a00 . . #608383 . . #c00222 #003218 #835900 . . . #3e2e26',
     tritanopia:
       '. #dfd7d2 #d28595 #28532e #b35700 #486089 . #608383 . . #c00222 #003218 #7e5500 #2f4087 . . #3e2e26',
   },
   'modus-vivendi': {
-    deuteranopia:
-      '#e4e4e4 #1e1e1e #f85954 #7df780 . #25a8f8 #e797bb #00cecb #b1b1b1 #959595 #ff9380 #aaffc8 #ffcd62 #90b7ff #c3b3ff #6fe9bd .',
-    protanopia:
-      '#e4e4e4 #1e1e1e #f85954 #82f77e . #25a8f8 #e797bb #00cecb #b1b1b1 #959595 #ff9380 #aaffc8 #ffcd62 #90b7ff #c3b3ff #6fe9bd .',
     tritanopia:
       '#e4e4e4 #1e1e1e #f85a48 #82f77e . #009be9 #e797bb #00cfcc #b1b1b1 #959595 #ff9380 #aaffc8 #ffcd62 #90b7ff #c3b3ff #70eabe .',
   },
   'harbor-dark': {
     deuteranopia:
       '#dee5eb . #e4635c #7af185 #e1a837 #56a4fd . . . #8e97a2 . #b9ffbc #ffe09e #82c4ff #d6b0ff #6ae6ef .',
-    protanopia:
-      '#dee5eb . #e4635c #59f59c #e1a837 #56a4fd . . . #8e97a2 . #b9ffbc #fccc5d #82c4ff #d6b0ff #6ae6ef .',
     tritanopia:
       '#dee5eb . #e4635c #22fbb8 #e6ac3c #4a98f0 . #47cedb . #8e97a2 . #b9ffbc #ffd068 #82c4ff #d6b0ff #74eff8 .',
-  },
-  'iceberg-dark': {
-    deuteranopia:
-      '#cbcdd6 #272b3c #d16869 #d3dda0 . #809bc1 . #8cbbc5 . #9196b0 #f99897 #f4ffc0 #ffc69d #9fbbe0 #c0b3e7 #acdce6 #e6e9f3',
-    tritanopia:
-      '#cbcdd6 #272b3c #d16869 #cfda9c #e0a276 #7e9abf . #8cbbc6 . #9196b0 #f99897 #f1fbbd #fdc49b #9fbbe0 #c0b3e7 #acdce6 #e6e9f3',
   },
 };
 

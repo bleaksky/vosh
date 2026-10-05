@@ -40,19 +40,21 @@ describe('the xterm theme', () => {
   });
 
   it('draws the fit for your color vision while Fit game colors is on', () => {
-    const triad = findTheme('triad');
-    // Triad passes every check Typical asks as published. For a
-    // deuteranope it turns red a little toward orange (themes.ts
-    // VISION_FITS), and leaves green and blue as published.
-    expect(xtermThemeFor(triad, true, true).green).toBe(triad.xterm.green);
-    const deutan = xtermThemeFor(triad, true, true, 'deuteranopia');
-    expect(deutan.red).toBe('#fa6346');
-    expect(deutan.green).toBe(triad.xterm.green);
-    expect(deutan.blue).toBe(triad.xterm.blue);
+    const tango = findTheme('tango-dark');
+    // For a protanope Tango Dark lightens green and turns it toward teal,
+    // and lightens yellow a touch (themes.ts VISION_FITS). Every other
+    // color plays its Typical fit.
+    const typical = xtermThemeFor(tango, true, true);
+    const protan = xtermThemeFor(tango, true, true, 'protanopia');
+    expect(protan.green).toBe('#7bffa3');
+    expect(protan.yellow).toBe('#e0bc3a');
+    expect(protan.red).toBe(typical.red);
+    expect(protan.blue).toBe(typical.blue);
+    expect(protan.foreground).toBe(typical.foreground);
     // Off, every vision draws the published palette.
-    expect(xtermThemeFor(triad, true, false, 'deuteranopia').green).toBe(triad.xterm.green);
-    const native = nativeThemeOf(triad, true, true, 'deuteranopia');
-    expect(native.ansi).toEqual(ansi16Of(deutan));
+    expect(xtermThemeFor(tango, true, false, 'protanopia').green).toBe(tango.xterm.green);
+    const native = nativeThemeOf(tango, true, true, 'protanopia');
+    expect(native.ansi).toEqual(ansi16Of(protan));
   });
 
   it('draws the selection the window paints for your color vision, fit or not', () => {

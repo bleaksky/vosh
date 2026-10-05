@@ -85,7 +85,9 @@ import {
   seenApart,
   seenLab,
   turnRoom,
+  VISIBLE_CHANGE,
   VISION_GUARD,
+  VISION_SLACK,
   type ColorVision,
   type TurnFamily,
 } from './gameFit';
@@ -446,6 +448,18 @@ const seenDistance = (p: StatusOption['seen'], q: StatusOption['seen']) =>
 const missCost = (value: number, need: number) =>
   value >= need ? 0 : 100 * ((need - value) / need + 0.05);
 
+// The accent a status color keeps clear of, as `vision` sees them: the
+// rule's pick by ACCENT_APART where the Typical color stands that far
+// from it, and a pinned accent by as far as the Typical color stands,
+// up to ACCENT_APART.
+function accentNeedOf(accent: StatusAccent, c: Rgb, vision: ColorVision): number {
+  return Math.min(
+    ACCENT_APART,
+    deltaEOk(accent.rgb, c),
+    accent.pinned ? seenApart(accent.rgb, c, vision) : Infinity,
+  );
+}
+
 // Every color a status color may take for `vision`: its own lightness
 // stepped either way and, for a family that turns, its hue turned up to
 // `bound` degrees. Each keeps the contrast the Typical color holds on
@@ -466,13 +480,7 @@ function statusOptions(
   // that far from it. A pinned accent is the theme's own pick, which the
   // rule never moves apart from the status colors, so a status color only
   // keeps from coming nearer to it than it stands now, up to ACCENT_APART.
-  const accentNeed = accent
-    ? Math.min(
-        ACCENT_APART,
-        deltaEOk(accent.rgb, c),
-        accent.pinned ? seenApart(accent.rgb, c, vision) : Infinity,
-      )
-    : 0;
+  const accentNeed = accent ? accentNeedOf(accent, c, vision) : 0;
   const option = (rgb: Rgb, turn: number): StatusOption => {
     const seen = seenLab(rgb, vision);
     let cost = deltaEOk(c, rgb) * MOVE_COST + turn * TURN_COST;
@@ -595,7 +603,9 @@ const STATUS_CACHE = new Map<string, { danger: Picked; warn: Picked; success: Pi
  *  rule picks for Typical, where the Typical color stands that far from
  *  it, and comes no nearer a pinned accent than the Typical color
  *  stands, up to ACCENT_APART. A color the theme pins in a form other
- *  than hex stays as pinned. */
+ *  than hex stays as pinned. Where the Typical colors already stand
+ *  apart, within VISION_SLACK (statusHolds), or the best tuning moves
+ *  no color VISIBLE_CHANGE, the Typical colors stay. */
 function statusSeenBy(
   vision: ColorVision,
   typical: { danger: Picked; warn: Picked; success: Picked },
@@ -613,6 +623,10 @@ function statusSeenBy(
   ].join(' ');
   const held = STATUS_CACHE.get(key);
   if (held) return held;
+  if (statusHolds(vision, typical, accent)) {
+    STATUS_CACHE.set(key, typical);
+    return typical;
+  }
   const needSuccess = deltaEOk(danger.rgb, success.rgb);
   const needWarn = deltaEOk(danger.rgb, warn.rgb);
   const needs = {
@@ -644,13 +658,63 @@ function statusSeenBy(
   }
   const keep = (from: Picked, to: StatusOption): Picked =>
     to.rgb === from.rgb ? from : { css: toHex(to.rgb), rgb: to.rgb };
-  const out = {
+  const tuned = {
     danger: keep(danger, best.danger),
     warn: keep(warn, best.warn),
     success: keep(success, best.success),
   };
+  const most = Math.max(
+    deltaEOk(danger.rgb, tuned.danger.rgb),
+    deltaEOk(warn.rgb, tuned.warn.rgb),
+    deltaEOk(success.rgb, tuned.success.rgb),
+  );
+  const out = most < VISIBLE_CHANGE ? typical : tuned;
   STATUS_CACHE.set(key, out);
   return out;
+}
+
+// Whether the Typical status colors already stand apart for `vision`:
+// danger from success and from warn as far, as the vision sees them, as
+// a typical eye sees them, within VISION_SLACK, and each from the accent
+// as far as it keeps clear of it, which the accent rule holds exactly.
+function statusHolds(
+  vision: ColorVision,
+  status: { danger: Picked; warn: Picked; success: Picked },
+  accent: StatusAccent | null,
+): boolean {
+  const { danger, warn, success } = status;
+  const pair = (a: Rgb, b: Rgb) => seenApart(a, b, vision) >= deltaEOk(a, b) - VISION_SLACK;
+  if (!pair(danger.rgb, success.rgb) || !pair(danger.rgb, warn.rgb)) return false;
+  if (!accent) return true;
+  return [danger, warn, success].every(
+    (s) => seenApart(accent.rgb, s.rgb, vision) >= accentNeedOf(accent, s.rgb, vision),
+  );
+}
+
+/** Whether the status colors of `tokens`, the tokens the rule derives
+ *  for Typical, already stand apart for `vision` (statusHolds), so a
+ *  color vision leaves them as they are. `accentPinned` says whether
+ *  the theme pins the accent. False where a status color is not hex,
+ *  which no vision tunes. */
+export function statusKeptApart(
+  tokens: ChromeTokens,
+  vision: ColorVision,
+  accentPinned: boolean,
+): boolean {
+  const picked = (css: string) => {
+    const rgb = parseHex(css);
+    return rgb && { css, rgb };
+  };
+  const danger = picked(tokens.danger);
+  const warn = picked(tokens.warn);
+  const success = picked(tokens.success);
+  if (!danger || !warn || !success) return false;
+  const accent = parseHex(tokens.accent);
+  return statusHolds(
+    vision,
+    { danger, warn, success },
+    accent && { rgb: accent, pinned: accentPinned },
+  );
 }
 
 /** Derive the chrome tokens for a terminal palette, for a player with
