@@ -20,7 +20,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -33,6 +33,7 @@ use crate::alert::presets::{self, Link};
 use crate::app::events;
 use crate::app::state::SharedState;
 use crate::output::emit_output;
+use crate::profile::live::Profile;
 use crate::sessions::{Address, Session};
 
 use super::effects::framed_echoes;
@@ -221,6 +222,28 @@ pub(crate) enum ReconnectPayload {
     Declined { why: Why },
 }
 
+/// Whether a redial opened the link that runs and the game's prompt, the
+/// first text on it, has yet to come. The session keeps it, and only this
+/// module reads or sets it, so the three turns of the link ring from here.
+#[derive(Debug, Default)]
+pub(crate) struct AwaitingPrompt(AtomicBool);
+
+impl AwaitingPrompt {
+    fn set(&self, awaiting: bool) {
+        self.0.store(awaiting, Ordering::Release);
+    }
+}
+
+/// The first text came on the link that runs. When a redial opened it,
+/// that text is the game's prompt, which waits for your login, and the
+/// Connection preset rings once while `p` has it on.
+pub(crate) fn reached_prompt(session: &Session, p: &Profile) -> Option<crate::alert::Alert> {
+    if !session.awaiting_game_prompt.0.swap(false, Ordering::AcqRel) {
+        return None;
+    }
+    presets::connection(p, Link::Ready)
+}
+
 /// A series that runs for a session: its task, and the wake that dials
 /// at once.
 pub(crate) struct Redial {
@@ -350,7 +373,7 @@ pub(crate) async fn took_character<R: tauri::Runtime>(
         other.connection.lock().link.taken = true;
         if let Some(redial) = other.take_redial().filter(|redial| !redial.ended()) {
             redial.end().await;
-            other.redialed.store(false, Ordering::Release);
+            other.awaiting_game_prompt.set(false);
             print(app, &other, &taken_line(&other));
             other.emit(
                 app,
@@ -371,7 +394,7 @@ pub(crate) async fn cancel<R: tauri::Runtime>(app: &AppHandle<R>, session: &Sess
         }
     }
     // A try the cancel cut short leaves no ring for the next link.
-    session.redialed.store(false, Ordering::Release);
+    session.awaiting_game_prompt.set(false);
 }
 
 /// The redials of one series, each after its wait, until one connects or
@@ -419,7 +442,7 @@ async fn run_series<R: tauri::Runtime>(
         );
         // The first text of the new link is the game's prompt, which the
         // Connection alert rings for.
-        session.redialed.store(true, Ordering::Release);
+        session.awaiting_game_prompt.set(true);
         let dialed = super::dial(
             &app,
             &state,
@@ -440,7 +463,7 @@ async fn run_series<R: tauri::Runtime>(
                 return;
             }
             Err(reason) => {
-                session.redialed.store(false, Ordering::Release);
+                session.awaiting_game_prompt.set(false);
                 let reason = plain_reason(&reason);
                 print(
                     &app,
