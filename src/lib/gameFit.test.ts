@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { apca, checks, fit, GAME_FIXED_COLORS, needsFit, xterm256 } from './gameFit';
-import { findTheme, type XtermPalette } from './themes';
+import { BUILTIN_THEMES, findTheme, type XtermPalette } from './themes';
 
 // Triad as the Themes review drew it, the one palette that passes every
 // check as it stands.
@@ -105,9 +105,9 @@ describe('fit', () => {
     expect(needsFit({ ...findTheme('tango-dark').xterm, red: 'crimson' })).toBe(false);
   });
 
-  // The lifts the Themes review's survey (fit-survey.json) gives Tango
-  // Dark. The search draws its steps from a fixed generator, so the same
-  // palette fits to the same colors every time.
+  // The lifts the Themes review's survey gave Tango Dark, the fit
+  // themes.ts ships for it. The search draws its steps from a fixed
+  // generator, so the same palette fits to the same colors every time.
   it('fits Tango Dark to the survey colors', { timeout: 30_000 }, () => {
     const tango = findTheme('tango-dark').xterm;
     const fitted = fit(tango);
@@ -139,4 +139,31 @@ describe('fit', () => {
       'T7 deutan yellow/green 9.5',
     ]);
   });
+});
+
+// Every built in theme ships its fit worked out ahead, in themes.ts.
+// After a change to a published palette or to the fit, fit each one
+// again, about two seconds a theme, with
+//
+//   VOSH_FIT_THEMES=1 npx vitest run src/lib/gameFit.test.ts
+//
+// A theme that now fits to other colors fails and prints the block to
+// paste in its place.
+describe.runIf(import.meta.env.VOSH_FIT_THEMES)('the fits themes.ts ships', () => {
+  const block = (fitted: Partial<XtermPalette>) =>
+    ['fitted: {', ...Object.entries(fitted).map(([k, v]) => `  ${k}: '${v}',`), '},'].join('\n');
+
+  for (const theme of BUILTIN_THEMES) {
+    it(theme.id, { timeout: 30_000 }, () => {
+      // Solarized Dark keeps out of the fit (Q20), so it ships none.
+      if (theme.fitGameColors === false) {
+        expect(theme.fitted).toBeUndefined();
+        return;
+      }
+      const fresh = fit(theme.xterm);
+      // A theme that passes every check fits to no change and ships none.
+      const want = Object.keys(fresh).length > 0 ? fresh : undefined;
+      expect(theme.fitted, `${theme.id} now fits to\n${block(fresh)}`).toEqual(want);
+    });
+  }
 });
