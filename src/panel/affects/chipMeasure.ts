@@ -7,7 +7,7 @@ import { PANE_TEXT_PX, paneTextSize, textPx } from '../paneTextSize';
 // the game face (--font-panel-game) for the names and hours, and the
 // panel face (--font-panel) for the group names and the count, both of
 // which follow your Panel font, at your panel size, the group names a
-// step smaller, as panel.css draws them. The pane and its minimum share
+// step smaller, as affects.css draws them. The pane and its minimum share
 // this one measure.
 //
 // A canvas measures a face that has not loaded in its fallback, so the

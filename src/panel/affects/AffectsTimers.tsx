@@ -36,7 +36,7 @@ import { usePaneText } from '../paneTextSize';
 // The mark beside each tracked affect is the one you pick in Settings,
 // Layout, Affects or the pane menu: the dot, a square, plus and minus,
 // or none. The body names any but the dot in data-affects-marker, and
-// panel.css draws the shape in the color of the state.
+// affects.css draws the shape in the color of the state.
 //
 // Tint what to recast, there too, washes a missing row red and one
 // about to drop yellow or red. The body carries data-affects-tint while
