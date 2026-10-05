@@ -7,7 +7,7 @@ import {
   LifebuoyIcon,
   PlugIcon,
   TerminalIcon,
-  TickRingIcon,
+  TickIcon,
   UserIcon,
 } from '../ui';
 
@@ -17,7 +17,7 @@ export const HELP_SECTION_ICONS: Record<string, () => ReactNode> = {
   Play: () => <TerminalIcon />,
   Automate: () => <BoltIcon />,
   'Shape the window': () => <LayoutIcon />,
-  'Tick and target': () => <TickRingIcon />,
+  'Tick and target': () => <TickIcon />,
   'Make it yours': () => <AppearanceIcon />,
   'Characters and data': () => <UserIcon />,
   'Fix it': () => <LifebuoyIcon />,
