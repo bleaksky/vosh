@@ -1,5 +1,5 @@
 // The UI config as every window reads it, the events that carry each
-// field, and the calls that save the theme or a chat color alone.
+// field, and the calls that save some of its fields alone.
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -409,11 +409,13 @@ export async function fetchUiConfig(): Promise<UiConfig> {
   // A custom theme moved off a built-in id is saved under its new id at
   // once. Later reads then find no collision, so a choice that names
   // the built-in keeps meaning the built-in. Every window moves it the
-  // same way, so the save sends no events. A save the backend turns
-  // away met a replace, and that replace reads the config again.
+  // same way, so the save sends no events.
   if (freed !== raw) {
+    // Picked by hand, since themePrefsOf in theme/theme.ts would close an import loop.
+    const { custom_themes, theme, follow_system_appearance, light_theme, dark_theme } = config;
+    const moved = { custom_themes, theme, follow_system_appearance, light_theme, dark_theme };
     try {
-      await invoke('ui_set_config', { config: uiConfigPayload(config) });
+      await setUiFields(moved);
     } catch (e) {
       console.error('[themes] saving the moved custom themes failed', e);
     }
@@ -536,6 +538,23 @@ export async function setUiTheme(
     theme,
     lightTheme: pair?.light_theme ?? null,
     darkTheme: pair?.dark_theme ?? null,
+  });
+}
+
+/** The fields setUiFields can save. The tracked affects save through
+ *  trackedAffectsSet. */
+export type UiFields = Partial<Omit<UiConfig, 'tracked_affects' | 'generation'>>;
+
+/** Save only the fields `fields` names, so two windows that each change
+ *  a field keep both changes. It writes the profile `profile` names while
+ *  a session plays it, or else the selected session's, and tells no
+ *  other window. */
+export async function setUiFields(fields: UiFields, profile?: string | null): Promise<void> {
+  await invoke('ui_set_fields', {
+    fields: Object.entries(fields)
+      .filter(([, value]) => value !== undefined)
+      .map(([field, value]) => ({ field, value })),
+    profile: profile ?? null,
   });
 }
 

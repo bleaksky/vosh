@@ -1,7 +1,8 @@
-//! The commands behind the Settings config. Settings reads and saves
-//! the whole UI config through them and lists the system fonts for the
-//! font picker. The main window's palette saves a theme pick, and the
-//! chat pane's menu its channel colors, without the rest of the config.
+//! The commands behind the Settings config. Settings reads the UI config
+//! through them, saves it whole or only the fields it names, and lists
+//! the system fonts for the font picker. The main window's palette saves
+//! a theme pick, and the chat pane's menu its channel colors, without the
+//! rest of the config.
 
 use std::sync::Arc;
 
@@ -294,6 +295,161 @@ fn apply_ui_config(
     true
 }
 
+/// One field of the UI config with its new value, as the page sends it,
+/// `{"field": <name>, "value": ...}`. Each variant is the setter for the
+/// field of [`UiConfigPayload`] it names, in the payload's order.
+/// `tracked_affects` saves through `tracked_affects_set` instead.
+#[derive(serde::Deserialize)]
+#[serde(tag = "field", content = "value", rename_all = "snake_case")]
+pub(crate) enum UiField {
+    Theme(String),
+    FollowSystemAppearance(bool),
+    LightTheme(String),
+    DarkTheme(String),
+    AutoUpdate(bool),
+    FontFamily(String),
+    FontSize(u32),
+    TerminalLineHeight(String),
+    PanelFont(String),
+    PanelFontSize(u32),
+    EnabledPresets(Vec<String>),
+    KeepLastCommand(bool),
+    ThemeTerminalColors(Option<bool>),
+    BrightBold(bool),
+    BlinkText(Option<bool>),
+    FitGameColors(bool),
+    ReadableHighlights(bool),
+    CollapseRepeats(bool),
+    CollapseFightLines(bool),
+    CollapseAttackLines(bool),
+    TerminalBaseAnsi(Option<Vec<String>>),
+    CustomThemes(Vec<crate::profile::ui::CustomTheme>),
+    SplitDividerColor(Option<String>),
+    InputEchoColor(Option<String>),
+    EchoMacros(bool),
+    InputEchoCaret(bool),
+    PasteLineDelayMs(u32),
+    SpellcheckPrompt(bool),
+    InputCursorStyle(String),
+    VitalsDensity(String),
+    VitalsValues(String),
+    VitalsMeter(String),
+    VitalsWarnThirds(bool),
+    VitalsHideWhenPinned(bool),
+    ChipStyle(String),
+    TickCount(String),
+    GameTime(String),
+    AffectsStyle(String),
+    AffectsMarker(String),
+    AffectsTint(bool),
+    #[serde(deserialize_with = "crate::profile::ui::deserialize_affects_running_out_hours")]
+    AffectsRunningOutHours(u32),
+    #[serde(deserialize_with = "crate::profile::ui::deserialize_affects_almost_gone_hours")]
+    AffectsAlmostGoneHours(u32),
+}
+
+/// Save the fields a page names and leave every other one as it is, so
+/// two windows that each change a field keep both changes. With no
+/// profile it writes the selected session's. It sends no event, since
+/// the page that saved tells the windows.
+#[tauri::command]
+pub(crate) async fn ui_set_fields(
+    state: State<'_, SharedState>,
+    fields: Vec<UiField>,
+    profile: Option<String>,
+) -> Result<(), String> {
+    set_fields(state.inner(), fields, profile).await
+}
+
+/// Write `fields` onto the profile named `profile`, which a session must
+/// play, or onto the selected session's when it names none, and save it.
+async fn set_fields(
+    state: &SharedState,
+    fields: Vec<UiField>,
+    profile: Option<String>,
+) -> Result<(), String> {
+    let open = {
+        let mut p = match profile {
+            None => state.selected_session().lock_profile().await,
+            Some(name) => {
+                state
+                    .open_profile(&name)
+                    .ok_or_else(|| format!("No session plays the profile {name}."))?
+                    .lock()
+                    .await
+            }
+        };
+        apply_fields(&mut p.ui, fields);
+        p.open().clone()
+    };
+    persist_profile(state, &open).await;
+    Ok(())
+}
+
+/// Write each field onto `ui` through the coercer
+/// [`UiConfigPayload::apply_to`] gives it. The affects thresholds are
+/// held in order once every field is in, as a whole save holds them, so
+/// the order of the fields never matters.
+fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
+    use crate::profile::ui as cfg;
+    for field in fields {
+        match field {
+            UiField::Theme(v) => ui.theme = v,
+            UiField::FollowSystemAppearance(v) => ui.follow_system_appearance = v,
+            UiField::LightTheme(v) => ui.light_theme = cfg::coerce_light_theme(v),
+            UiField::DarkTheme(v) => ui.dark_theme = cfg::normalize_dark_theme(v),
+            UiField::AutoUpdate(v) => ui.auto_update = v,
+            UiField::FontFamily(v) => ui.font_family = v,
+            UiField::FontSize(v) => ui.font_size = cfg::coerce_font_size(v),
+            UiField::TerminalLineHeight(v) => {
+                ui.terminal_line_height = cfg::coerce_terminal_line_height(v);
+            }
+            UiField::PanelFont(v) => ui.panel_font = cfg::normalize_panel_font(v),
+            UiField::PanelFontSize(v) => ui.panel_font_size = cfg::coerce_panel_font_size(v),
+            UiField::EnabledPresets(v) => ui.enabled_presets = cfg::normalize_enabled_presets(v),
+            UiField::KeepLastCommand(v) => ui.keep_last_command = v,
+            UiField::ThemeTerminalColors(v) => ui.theme_terminal_colors = v,
+            UiField::BrightBold(v) => ui.bright_bold = v,
+            UiField::BlinkText(v) => ui.blink_text = v,
+            UiField::FitGameColors(v) => ui.fit_game_colors = v,
+            UiField::ReadableHighlights(v) => ui.readable_highlights = v,
+            UiField::CollapseRepeats(v) => ui.collapse_repeats = v,
+            UiField::CollapseFightLines(v) => ui.collapse_fight_lines = v,
+            UiField::CollapseAttackLines(v) => ui.collapse_attack_lines = v,
+            UiField::TerminalBaseAnsi(v) => ui.terminal_base_ansi = v,
+            UiField::CustomThemes(v) => ui.custom_themes = v,
+            UiField::SplitDividerColor(v) => {
+                ui.split_divider_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputEchoColor(v) => ui.input_echo_color = cfg::normalize_optional_color(v),
+            UiField::EchoMacros(v) => ui.echo_macros = v,
+            UiField::InputEchoCaret(v) => ui.input_echo_caret = v,
+            UiField::PasteLineDelayMs(v) => {
+                ui.paste_line_delay_ms = cfg::coerce_paste_line_delay_ms(v);
+            }
+            UiField::SpellcheckPrompt(v) => ui.spellcheck_prompt = v,
+            UiField::InputCursorStyle(v) => {
+                ui.input_cursor_style = cfg::coerce_input_cursor_style(v);
+            }
+            UiField::VitalsDensity(v) => ui.vitals_density = cfg::coerce_vitals_density(v),
+            UiField::VitalsValues(v) => ui.vitals_values = cfg::coerce_vitals_values(v),
+            UiField::VitalsMeter(v) => ui.vitals_meter = cfg::coerce_vitals_meter(v),
+            UiField::VitalsWarnThirds(v) => ui.vitals_warn_thirds = v,
+            UiField::VitalsHideWhenPinned(v) => ui.vitals_hide_when_pinned = v,
+            UiField::ChipStyle(v) => ui.chip_style = cfg::coerce_chip_style(v),
+            UiField::TickCount(v) => ui.tick_count = cfg::coerce_tick_count(v),
+            UiField::GameTime(v) => ui.game_time = cfg::coerce_game_time(v),
+            UiField::AffectsStyle(v) => ui.affects_style = cfg::coerce_affects_style(v),
+            UiField::AffectsMarker(v) => ui.affects_marker = cfg::coerce_affects_marker(v),
+            UiField::AffectsTint(v) => ui.affects_tint = v,
+            UiField::AffectsRunningOutHours(v) => ui.affects_running_out_hours = v,
+            UiField::AffectsAlmostGoneHours(v) => ui.affects_almost_gone_hours = v,
+        }
+    }
+    (ui.affects_running_out_hours, ui.affects_almost_gone_hours) =
+        cfg::coerce_affects_thresholds(ui.affects_running_out_hours, ui.affects_almost_gone_hours);
+}
+
 /// Replace the active profile's theme choice without touching the rest
 /// of the UI config. The main window's palette picks a theme while the
 /// Settings window may hold its own full snapshot, so a whole config
@@ -480,15 +636,97 @@ mod tests {
     use crate::profile::ui::UiConfig;
     use crate::prompt::tests::prompt_profile;
 
-    /// Send `ui` the way Settings does: out through `ui_get_config`,
-    /// across the JSON bridge, and back through `ui_set_config` onto a
-    /// fresh config.
+    /// The setter for the field `key` with `value`, as the page sends it.
+    fn setter(key: &str, value: &serde_json::Value) -> super::UiField {
+        serde_json::from_value(serde_json::json!({ "field": key, "value": value })).unwrap()
+    }
+
+    /// Send `ui` out through `ui_get_config`, across the JSON bridge, and
+    /// back onto a fresh config with every field through its setter in
+    /// `ui_set_fields`. The tracked affects have a setter of their own.
     fn through_payload(ui: &UiConfig) -> UiConfig {
-        let json = serde_json::to_string(&UiConfigPayload::from_ui(ui)).unwrap();
-        let payload: UiConfigPayload = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_value(UiConfigPayload::from_ui(ui)).unwrap();
+        let fields = json
+            .as_object()
+            .unwrap()
+            .iter()
+            .filter(|(key, _)| *key != "tracked_affects")
+            .map(|(key, value)| setter(key, value))
+            .collect();
         let mut out = UiConfig::default();
-        payload.apply_to(&mut out);
+        super::apply_fields(&mut out, fields);
         out
+    }
+
+    #[test]
+    fn each_setter_writes_its_field_alone_and_two_windows_keep_both() {
+        // One value for each field ui_set_fields takes, none of them the
+        // default. src/ipc/uiConfig.test.ts reads the same file.
+        let text = include_str!("../../../fixtures/ui-config/fields.json");
+        let fixture: serde_json::Value = serde_json::from_str(text).unwrap();
+        let values = fixture["fields"].as_object().unwrap();
+        let sent = |ui: &UiConfig| serde_json::to_value(UiConfigPayload::from_ui(ui)).unwrap();
+        let defaults = sent(&UiConfig::default());
+        // A field the payload gains without a setter fails here.
+        let keys: Vec<&String> = defaults
+            .as_object()
+            .unwrap()
+            .keys()
+            .filter(|key| *key != "tracked_affects")
+            .collect();
+        let names: Vec<&String> = values.keys().collect();
+        assert_eq!(names, keys);
+        for (at, f) in names.iter().enumerate() {
+            let mut ui = UiConfig::default();
+            super::apply_fields(&mut ui, vec![setter(f, &values[*f])]);
+            let mut want = defaults.clone();
+            want[*f] = values[*f].clone();
+            assert_eq!(sent(&ui), want, "{f} alone");
+            // Another window writes the next field onto the same profile.
+            let g = names[(at + 1) % names.len()];
+            super::apply_fields(&mut ui, vec![setter(g, &values[g])]);
+            want[g] = values[g].clone();
+            assert_eq!(sent(&ui), want, "{f}, then {g}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_named_profile_takes_the_fields_and_the_selected_one_keeps_its_own() {
+        use std::sync::Arc;
+
+        use crate::app::state::{AppState, SharedState};
+        use crate::profile::live::Profile;
+        use crate::profile::set::ProfileSet;
+
+        // Every file a save writes lands in the profile set's folder.
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.create("Orla").unwrap();
+        let orla_file = set.profile_path("Orla");
+        let state: SharedState = Arc::new(AppState::default());
+        state.set_profiles(set).await;
+        let orla = state.add_open_profile("Orla", Profile::default());
+        state.open_session(orla.clone());
+        let game_time = || vec![setter("game_time", &"12h".into())];
+
+        super::set_fields(&state, game_time(), Some("Orla".into()))
+            .await
+            .unwrap();
+        assert_eq!(orla.lock().await.ui.game_time, "12h");
+        assert_eq!(state.selected_profile().await.ui.game_time, "24h");
+        let saved = ProfileConfig::from_toml(&std::fs::read_to_string(&orla_file).unwrap());
+        assert_eq!(saved.unwrap().ui.game_time, "12h");
+
+        // No profile named writes the selected session's.
+        let tick_count = vec![setter("tick_count", &"down".into())];
+        super::set_fields(&state, tick_count, None).await.unwrap();
+        assert_eq!(state.selected_profile().await.ui.tick_count, "down");
+        assert_eq!(orla.lock().await.ui.tick_count, "up");
+
+        assert_eq!(
+            super::set_fields(&state, game_time(), Some("Maren".into())).await,
+            Err("No session plays the profile Maren.".to_string())
+        );
     }
 
     #[test]
@@ -977,23 +1215,32 @@ mod tests {
         assert_eq!(saved.affects_almost_gone_hours, 99);
     }
 
+    /// The affects thresholds after `fields` land on the defaults.
+    fn thresholds_after(fields: Vec<super::UiField>) -> (u32, u32) {
+        let mut ui = UiConfig::default();
+        super::apply_fields(&mut ui, fields);
+        (ui.affects_running_out_hours, ui.affects_almost_gone_hours)
+    }
+
     #[test]
     fn a_page_that_sends_odd_affects_thresholds_still_saves() {
-        let read = |json: &str| {
-            let payload: UiConfigPayload = serde_json::from_str(json).unwrap();
-            let mut ui = UiConfig::default();
-            payload.apply_to(&mut ui);
-            (ui.affects_running_out_hours, ui.affects_almost_gone_hours)
+        let read = |running_out: serde_json::Value, almost_gone: serde_json::Value| {
+            thresholds_after(vec![
+                setter("affects_running_out_hours", &running_out),
+                setter("affects_almost_gone_hours", &almost_gone),
+            ])
         };
-        assert_eq!(read("{}"), (2, 1));
-        assert_eq!(
-            read(r#"{"affects_running_out_hours": 4.6, "affects_almost_gone_hours": -3}"#),
-            (5, 0)
-        );
-        assert_eq!(
-            read(r#"{"affects_running_out_hours": "6", "affects_almost_gone_hours": null}"#),
-            (6, 1)
-        );
+        assert_eq!(thresholds_after(Vec::new()), (2, 1));
+        assert_eq!(read(4.6.into(), (-3).into()), (5, 0));
+        assert_eq!(read("6".into(), serde_json::Value::Null), (6, 1));
+    }
+
+    #[test]
+    fn the_affects_thresholds_end_the_same_in_either_order() {
+        let running_out = || setter("affects_running_out_hours", &5.into());
+        let almost_gone = || setter("affects_almost_gone_hours", &4.into());
+        assert_eq!(thresholds_after(vec![running_out(), almost_gone()]), (5, 4));
+        assert_eq!(thresholds_after(vec![almost_gone(), running_out()]), (5, 4));
     }
 
     #[test]
