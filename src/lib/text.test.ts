@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { listJoin } from './text';
+import { listJoin, possessive } from './text';
 
 describe('listJoin', () => {
   it('reads nothing as an empty string and one item as itself', () => {
@@ -16,5 +16,12 @@ describe('listJoin', () => {
     expect(listJoin(['Tolliver', 'Maren', 'Orla', 'the tick'])).toBe(
       'Tolliver, Maren, Orla, and the tick',
     );
+  });
+});
+
+describe('possessive', () => {
+  it('adds an apostrophe s, after a final s as well', () => {
+    expect(possessive('Ilsabet')).toBe("Ilsabet's");
+    expect(possessive('Rhys')).toBe("Rhys's");
   });
 });
