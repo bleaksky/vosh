@@ -11,8 +11,8 @@ import type {
   PromptCaptureCheck,
   PromptCompileReport,
   PromptLastSeen,
-  PromptPreviewName,
-} from './session';
+} from '../ipc/prompt';
+import type { PromptPreviewName } from '../ipc/promptDesign';
 import type { GamePromptSeen } from './stores/gamePromptStore';
 
 /** How the game prompt block reads your prompt.

@@ -12,23 +12,27 @@ import {
 } from '../../../lib/characterProfiles';
 import { subscribePaneLayout } from '../../../lib/paneLayout';
 import {
+  subscribeTrackedAffectsChanged,
+  trackedAffectsSet,
+  type TrackedAffect,
+} from '../../../ipc/affects';
+import {
   paneLayoutReset,
   profileDetailGet,
   profileSetLogin,
   profileSetWorld,
-  profilesList,
   sessionIdentityGet,
   subscribeProfileChanged,
+  subscribeSessionIdentity,
+  type ProfileDetail,
+  type SessionIdentity,
+} from '../../../ipc/characters';
+import {
+  profilesList,
   subscribeProfilesChanged,
   subscribeProfileSwitched,
-  subscribeSessionIdentity,
-  subscribeTrackedAffectsChanged,
-  trackedAffectsSet,
-  type ProfileDetail,
   type ProfilesList,
-  type SessionIdentity,
-  type TrackedAffect,
-} from '../../../lib/session';
+} from '../../../ipc/profiles';
 import { loadTarget } from '../../../lib/useConnection';
 import type { SettingsPageProps } from '../pageTypes';
 import { Row, Section, Select, Toggle } from '../ui';

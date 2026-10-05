@@ -5,7 +5,8 @@
 // (section 7 steps 6 and 13, and P14's part your prompt no longer feeds).
 
 import { needsCode } from './promptPicker';
-import type { PromptFieldState, PromptPiece, PromptSpan, PromptToken } from './session';
+import type { PromptFieldState } from '../ipc/prompt';
+import type { PromptPiece, PromptSpan, PromptToken } from '../ipc/promptDesign';
 
 /** The pieces of a design to ring. */
 export function warnedPieces(

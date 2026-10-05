@@ -19,7 +19,7 @@ import {
 } from './promptBands';
 import { OutputShaper } from './outputShaper';
 import { RegionWriter } from './terminalRegion';
-import type { SessionOutput } from './session';
+import type { SessionOutput } from '../ipc/terminal';
 
 // The lift marks against a real xterm with no page around it, through the
 // same writer the terminal uses, so region marks and lift marks share the

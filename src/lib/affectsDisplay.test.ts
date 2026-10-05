@@ -7,7 +7,7 @@ import {
   markerApplies,
   openPaneSubmenu,
 } from './affectsDisplay';
-import { DEFAULT_AFFECTS_DISPLAY } from './session';
+import { DEFAULT_AFFECTS_DISPLAY } from '../ipc/affects';
 
 describe('the affects display choices', () => {
   it('names the styles and markers the way Settings and the pane menu show them', () => {

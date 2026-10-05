@@ -21,7 +21,8 @@ import {
   worldOptions,
   worldSources,
 } from './characterProfiles';
-import type { ProfileEntry, SessionIdentity } from './session';
+import type { SessionIdentity } from '../ipc/characters';
+import type { ProfileEntry } from '../ipc/profiles';
 
 const TFL = 'play.theforsakenlands.com';
 

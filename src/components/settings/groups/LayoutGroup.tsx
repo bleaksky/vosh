@@ -10,15 +10,19 @@ import {
   AFFECTS_STYLES,
   isChipsStyle,
   normalizeAffectsStyle,
+  type AffectsMarker,
+} from '../../../ipc/affects';
+import {
   profilesList,
   subscribeProfileSwitched,
   subscribeProfilesChanged,
-  type AffectsMarker,
+} from '../../../ipc/profiles';
+import {
   type UiConfig,
   type VitalsDensity,
   type VitalsMeter,
   type VitalsValues,
-} from '../../../lib/session';
+} from '../../../ipc/uiConfig';
 import {
   panelWidthOf,
   setPanelOpen,

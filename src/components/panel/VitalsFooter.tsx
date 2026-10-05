@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from 'react';
 import { readPanelFace, usePanelFaceVersion } from '../../lib/panelFace';
-import type { VitalsDensity, VitalsOptions } from '../../lib/session';
+import type { VitalsDensity, VitalsOptions } from '../../ipc/uiConfig';
 import { useCombat, type CombatOpponent } from '../../lib/stores/combatStore';
 import { useVitalsDensity } from '../../lib/stores/vitalsDensityStore';
 import { useVitalsOptions } from '../../lib/stores/vitalsOptionsStore';

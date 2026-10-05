@@ -1,5 +1,6 @@
 import type { UnlistenFn } from '@tauri-apps/api/event';
-import { subscribeTickConfigChanged, subscribeUiConfigReplaced, type TickConfig } from './session';
+import { subscribeTickConfigChanged, type TickConfig } from '../ipc/tick';
+import { subscribeUiConfigReplaced } from '../ipc/uiConfig';
 
 /** What the Settings Tick card does when the tick settings change
  *  outside it. */

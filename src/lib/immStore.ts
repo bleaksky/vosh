@@ -1,4 +1,4 @@
-import { onGmcpPackage, onState } from './session';
+import { onGmcpPackage, onState } from '../ipc/session';
 
 // Staff work-queue counters from the Imm.Queues GMCP package. The
 // server pushes a complete snapshot to immortals whenever any queue

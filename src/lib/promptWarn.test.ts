@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { warnBoxes, warnedPieces } from './promptWarn';
-import type { PromptFieldState, PromptPiece, PromptSpan, PromptToken } from './session';
+import type { PromptFieldState } from '../ipc/prompt';
+import type { PromptPiece, PromptSpan, PromptToken } from '../ipc/promptDesign';
 
 // The parts of your design no value fills, which the card and Settings
 // ring in --warn (section 7 steps 6 and 13, P14).

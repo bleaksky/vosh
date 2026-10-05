@@ -32,7 +32,7 @@ import {
   UNDERLINE_KINDS,
   type Grid,
 } from './promptPieces';
-import type { PromptPiece, PromptPieceKind } from './session';
+import type { PromptPiece, PromptPieceKind } from '../ipc/promptDesign';
 
 /** A design as pieces: `[`, the hp value, `]` with a trailing space,
  *  a condition, a line break, its end, and codes. */

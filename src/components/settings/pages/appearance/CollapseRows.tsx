@@ -1,4 +1,4 @@
-import type { UiConfig } from '../../../../lib/session';
+import type { UiConfig } from '../../../../ipc/uiConfig';
 import type { UpdateConfig } from '../../legacy/useSettingsAutoSave';
 import { Row, Segmented, type SegmentedOption } from '../../ui';
 

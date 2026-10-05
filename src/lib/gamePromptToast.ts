@@ -1,4 +1,4 @@
-import { onGamePromptSeen, type GamePromptSeenPayload } from './session';
+import { onGamePromptSeen, type GamePromptSeenPayload } from '../ipc/prompt';
 import { pushToast, type ToastInput } from './toasts';
 
 // When the game tells Vosh a new prompt setting and your profile's

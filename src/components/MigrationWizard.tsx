@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
+import { type TriggerPattern } from '../ipc/automation';
+import { appQuit } from '../ipc/windows';
 import {
-  appQuit,
   migrationAnalyze,
   migrationApply,
   type MigrationConflictResolution,
   type MigrationItemKind,
   type MigrationPlan,
-  type TriggerPattern,
-} from '../lib/session';
+} from '../ipc/wizard';
 import { patternSource } from '../lib/automationTriggers';
 import { PRESETS } from '../lib/presets';
 import { presetChanges } from '../lib/wizardPresets';

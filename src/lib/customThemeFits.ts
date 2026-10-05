@@ -1,6 +1,6 @@
 import { fitOffThread } from './fitOffThread';
 import { fitKey, needsFit } from './gameFit';
-import type { UiConfig } from './session';
+import type { UiConfig } from '../ipc/uiConfig';
 import { customThemes, holdFit } from './themes';
 
 // The main window fits a custom theme you play that keeps no fit and

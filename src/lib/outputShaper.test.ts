@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OutputShaper } from './outputShaper';
-import { decodeOutputPayload } from './session';
+import { decodeOutputPayload } from '../ipc/terminal';
 
 describe('OutputShaper', () => {
   it('writes nothing for a repaint of the pinned band alone', () => {

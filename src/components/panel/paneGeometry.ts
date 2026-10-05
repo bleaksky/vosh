@@ -1,5 +1,5 @@
 import { isTrackedRow, type AffectRow } from '../../lib/affectsView';
-import { isChipsStyle, type AffectsStyle } from '../../lib/session';
+import { isChipsStyle, type AffectsStyle } from '../../ipc/affects';
 import { affectsColumns, affectsRestMinRows, affectsRulePx } from './affectsGrid';
 import {
   chipGroups,

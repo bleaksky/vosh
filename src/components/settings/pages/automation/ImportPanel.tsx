@@ -5,7 +5,7 @@ import {
   detectImportFormat,
   type ImportFormat,
   type ImportSummary,
-} from '../../../../lib/session';
+} from '../../../../ipc/automation';
 import { MigrationWizard } from '../../../MigrationWizard';
 import { Button, Disclosure, Row, Section, Select } from '../../ui';
 

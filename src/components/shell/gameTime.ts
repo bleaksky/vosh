@@ -1,4 +1,4 @@
-import type { GameTime } from '../../lib/session';
+import type { GameTime } from '../../ipc/uiConfig';
 import type { WorldTime } from '../../lib/stores/worldStore';
 
 /** Game time from World.Time on the clock you pick in Settings under

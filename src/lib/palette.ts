@@ -1,6 +1,9 @@
 import { resetPanelLayout } from '../components/panel/panelReset';
 import APP_SHORTCUTS from './appShortcuts.json';
-import { exportAliases, sendInput, setUiTheme, type PromptShow } from './session';
+import { exportAliases } from '../ipc/automation';
+import { type PromptShow } from '../ipc/prompt';
+import { sendInput } from '../ipc/session';
+import { setUiTheme } from '../ipc/uiConfig';
 import type { PaneType } from './paneLayout';
 import {
   applyAndBroadcastTheme,

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { onGmcpPackage } from '../session';
+import { onGmcpPackage } from '../../ipc/session';
 import { asNumber, asText, createStore } from './store';
 
 // The room you stand in, for the rows under the Map pane. Room.Info

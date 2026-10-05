@@ -34,38 +34,35 @@ import {
   updatePanelLayout,
   usePanelLayout,
 } from './components/panel/panelLayoutStore';
+import { listTriggers, presetsInstall, presetsRemove } from './ipc/automation';
 import {
-  disconnectSession,
-  followReplacedUiConfig,
+  promptConfigGet,
+  promptConfigSet,
+  promptCodeReaderSet,
+  subscribePromptCardOpen,
+} from './ipc/prompt';
+import { promptPreviewSet } from './ipc/promptDesign';
+import { disconnectSession, setWindowSize, onState, type StatePayload } from './ipc/session';
+import { terminalLocalWrite } from './ipc/terminal';
+import {
   getUiConfig,
-  setWindowSize,
-  listTriggers,
   resolveThemeTerminalColors,
-  onState,
-  presetsInstall,
-  presetsRemove,
   subscribeBrightBoldChanged,
   subscribeBlinkTextChanged,
   subscribeReadableHighlightsChanged,
   subscribeFitGameColorsChanged,
   subscribeBaseAnsiChanged,
   subscribeCustomThemesChanged,
-  subscribeMigrationApplied,
   subscribeSplitDividerChanged,
   subscribeTerminalLineHeightChanged,
   normalizeTerminalLineHeight,
-  terminalLocalWrite,
-  promptConfigGet,
-  promptConfigSet,
-  promptCodeReaderSet,
-  promptPreviewSet,
-  subscribePromptCardOpen,
   TERMINAL_LINE_HEIGHTS,
   FONT_CHANGED_EVENT,
   type FontChange,
-  type StatePayload,
   type TerminalLineHeight,
-} from './lib/session';
+} from './ipc/uiConfig';
+import { followReplacedUiConfig } from './ipc/uiConfigSave';
+import { subscribeMigrationApplied } from './ipc/wizard';
 import {
   applyAndBroadcastTheme,
   applyThemePrefs,

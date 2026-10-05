@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveThemeTerminalColors } from './session';
+import { resolveThemeTerminalColors } from '../ipc/uiConfig';
 
 describe('resolveThemeTerminalColors', () => {
   it('tints output with the theme by default for every theme', () => {

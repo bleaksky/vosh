@@ -6,13 +6,9 @@ import { resolveHelpTarget } from '../../lib/helpNav';
 import { buildPaletteEntries, type PaletteDeps } from '../../lib/palette';
 import { defaultLayout, type PaneLeaf } from '../../lib/paneLayout';
 import type { GameBlock } from '../../lib/promptSettings';
-import {
-  normalizeUiConfig,
-  type PromptLastSeen,
-  type PromptState,
-  type SessionIdentity,
-  type UiConfig,
-} from '../../lib/session';
+import { type SessionIdentity } from '../../ipc/characters';
+import { type PromptLastSeen, type PromptState } from '../../ipc/prompt';
+import { normalizeUiConfig, type UiConfig } from '../../ipc/uiConfig';
 import { SETTINGS_GOTO_EVENT } from '../../lib/settingsLink';
 import {
   formatSettingsTarget,

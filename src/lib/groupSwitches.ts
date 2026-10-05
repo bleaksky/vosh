@@ -4,7 +4,7 @@
 // its switch shows the group as it is and waits, with a note that names
 // them and says when they turn back a group #group turned.
 
-import type { GroupSwitch, LoadoutHold } from './session';
+import type { GroupSwitch, LoadoutHold } from '../ipc/automation';
 
 /** The switches of a list by group name. A reply that is not a list
  *  holds none. */

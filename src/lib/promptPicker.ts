@@ -4,7 +4,7 @@
 // the game's codes, and the line that says where a field comes from.
 // Pure, so PromptPicker.tsx stays about layout.
 
-import type { PromptFieldGroup, PromptFieldState } from './session';
+import type { PromptFieldGroup, PromptFieldState } from '../ipc/prompt';
 
 /** A row of the picker: a field, or a layout item of Text and layout. */
 export type PickerRow =

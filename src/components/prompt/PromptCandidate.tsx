@@ -9,7 +9,7 @@ import {
   readMarks,
   readRows,
 } from '../../lib/promptCard';
-import type { PromptCaptureCheck, PromptCheckRead } from '../../lib/session';
+import type { PromptCaptureCheck, PromptCheckRead } from '../../ipc/prompt';
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon, IconButton } from '../settings/ui';
 import { CellLine } from './PromptCells';
 

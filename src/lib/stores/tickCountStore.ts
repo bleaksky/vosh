@@ -1,10 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import {
-  getUiConfig,
-  subscribeProfileSwitched,
-  subscribeTickCountChanged,
-  type TickCount,
-} from '../session';
+import { subscribeProfileSwitched } from '../../ipc/profiles';
+import { getUiConfig, subscribeTickCountChanged, type TickCount } from '../../ipc/uiConfig';
 import { createStore } from './store';
 
 // Which way the status line tick counts, from UiConfig tick_count. The

@@ -27,7 +27,7 @@ import type {
   PromptStyleChoice,
   PromptUnderlineStyle,
   PromptWhen,
-} from '../../lib/session';
+} from '../../ipc/promptDesign';
 import {
   Button,
   CheckIcon,

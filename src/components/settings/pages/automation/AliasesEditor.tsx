@@ -12,7 +12,7 @@ import {
   type AliasRecord,
 } from '../../../../lib/automationRecords';
 import { withGroup } from '../../../../lib/automationTriggers';
-import { subscribeAliasesChanged } from '../../../../lib/session';
+import { subscribeAliasesChanged } from '../../../../ipc/automation';
 import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
 import { CodeRow, GroupField } from './fields';
 import { DraftEditor } from './DraftEditor';

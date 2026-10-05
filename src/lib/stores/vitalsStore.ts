@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { onGmcpPackage, onPromptVars, onState, type PromptVarsPayload } from '../session';
+import { onPromptVars, type PromptVarsPayload } from '../../ipc/prompt';
+import { onGmcpPackage, onState } from '../../ipc/session';
 import { getHidden, subscribeHidden } from './hiddenStore';
 import { asNumber, createStore, isHiddenFlag } from './store';
 

@@ -1,4 +1,4 @@
-import { onGmcpPackage, onRouted, onState, type RoutedPayload } from './session';
+import { onGmcpPackage, onRouted, onState, type RoutedPayload } from '../ipc/session';
 
 /** Which way a tell went. Aabahran marks a tell you receive
  *  `received`. It sends nothing for a tell you send, so a `sent` line

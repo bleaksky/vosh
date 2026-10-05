@@ -9,7 +9,7 @@ import {
   type AffectThresholds,
   type TrackedInput,
 } from '../../lib/affectsView';
-import type { AffectsMarker } from '../../lib/session';
+import type { AffectsMarker } from '../../ipc/affects';
 import { useBoxSize, usePagedWindow, type Box } from './affectsHooks';
 import { AffectMark, AffectsEmpty, AffectsHeader, MoreButton } from './affectsParts';
 import { countdownGrid, type CountdownGrid } from './countdownGrid';

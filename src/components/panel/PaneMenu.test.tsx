@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CHAT_CHANNELS, chatChannelColor, type ChatColors } from '../../lib/chatColors';
 import type { PaneLayout, PaneLeaf, PaneType } from '../../lib/paneLayout';
-import { resetChatColors, setChatColor } from '../../lib/session';
+import { resetChatColors, setChatColor } from '../../ipc/uiConfig';
 import { findTheme } from '../../lib/themes';
 import { MenuItem, MenuSeparator } from './MenuSurface';
 import { ChannelColorItems, ChannelColorRows, PaneMenu } from './PaneMenu';
@@ -15,10 +15,13 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
-vi.mock('../../lib/session', async (actual) => ({
-  ...(await actual<typeof import('../../lib/session')>()),
+vi.mock('../../ipc/uiConfig', async (actual) => ({
+  ...(await actual<typeof import('../../ipc/uiConfig')>()),
   resetChatColors: vi.fn(() => Promise.resolve()),
   setChatColor: vi.fn(() => Promise.resolve()),
+}));
+vi.mock('../../ipc/profiles', async (actual) => ({
+  ...(await actual<typeof import('../../ipc/profiles')>()),
   profilesList: vi.fn(() => new Promise(() => undefined)),
 }));
 // The menu draws its rows in place, with no page to portal into, and
@@ -32,7 +35,7 @@ vi.mock('./MenuSurface', async (actual) => ({
 // The display the menu reads, the default unless a test picks a style.
 const shown = vi.hoisted(() => ({ style: null as string | null }));
 vi.mock('../../lib/stores/affectsDisplayStore', async () => {
-  const { DEFAULT_AFFECTS_DISPLAY } = await import('../../lib/session');
+  const { DEFAULT_AFFECTS_DISPLAY } = await import('../../ipc/affects');
   return {
     useAffectsDisplay: () =>
       shown.style ? { ...DEFAULT_AFFECTS_DISPLAY, style: shown.style } : DEFAULT_AFFECTS_DISPLAY,

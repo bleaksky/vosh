@@ -5,7 +5,7 @@
 // Terminal.tsx feeds every session://output through one, and the tests
 // replay the session's payloads through the same steps.
 
-import type { SessionOutput } from './session';
+import type { SessionOutput } from '../ipc/terminal';
 import type { RegionOutput, RegionReplace } from './terminalRegion';
 import { WordWrapper } from './wordWrap';
 

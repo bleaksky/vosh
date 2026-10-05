@@ -7,7 +7,7 @@ import {
   removeCustomTheme,
   THEME_SLOT_GROUPS,
 } from '../../../../lib/appearanceSettings';
-import type { CustomTheme, UiConfig } from '../../../../lib/session';
+import type { CustomTheme, UiConfig } from '../../../../ipc/uiConfig';
 import {
   activeThemeFor,
   applyTheme,

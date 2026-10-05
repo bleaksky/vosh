@@ -15,14 +15,14 @@ import { listen } from '@tauri-apps/api/event';
 
 import '@xterm/xterm/css/xterm.css';
 import { subscribeBaseAnsi } from '../lib/baseAnsi';
+import { setWindowSize } from '../ipc/session';
 import {
   loadScrollback,
   onOutput,
-  setWindowSize,
   terminalCursor,
   terminalScreenRows,
   terminalLocalWrite,
-} from '../lib/session';
+} from '../ipc/terminal';
 import { findTheme, onCustomThemesChanged } from '../lib/themes';
 import { getFitGameColors, subscribeFitGameColors } from '../lib/fitGameColors';
 import { setHighlightGround } from '../lib/highlightGround';

@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
-import {
-  connectSession,
-  disconnectSession,
-  onGmcpPackage,
-  onState,
-  profileResolveMatch,
-  profileSwitch,
-  profilesList,
-} from './session';
+import { profileResolveMatch, profileSwitch, profilesList } from '../ipc/profiles';
+import { connectSession, disconnectSession, onGmcpPackage, onState } from '../ipc/session';
 import { pushToast } from './toasts';
 
 // The session the title band shows and the session menu drives. Moved

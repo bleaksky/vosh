@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import panelCss from '../../styles/panel.css?raw';
 import type { AffectInput, TrackedInput } from '../../lib/affectsView';
 import type { PaneLeaf } from '../../lib/paneLayout';
-import type { AffectsMarker } from '../../lib/session';
+import type { AffectsMarker } from '../../ipc/affects';
 import { CountdownView } from './AffectsCountdown';
 import { PaneLeafContext } from './paneActions';
 import { PaneTextSizeContext } from './paneTextSize';

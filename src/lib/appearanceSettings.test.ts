@@ -22,7 +22,7 @@ import {
 } from './appearanceSettings';
 import { ANSI_SLOTS, CANONICAL_ANSI_16 } from './baseAnsi';
 import { CHROME_COLOR_KEYS } from './chrome';
-import type { CustomTheme } from './session';
+import type { CustomTheme } from '../ipc/uiConfig';
 import { pickTheme, resolveActiveTheme } from './theme';
 import { galleryThemes } from './themeThumb';
 import { BUILTIN_THEMES, customToAppTheme, findTheme } from './themes';

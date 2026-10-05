@@ -1,5 +1,5 @@
 import { acceptPaneLayout, flushPaneLayout } from '../../lib/paneLayout';
-import { paneLayoutReset } from '../../lib/session';
+import { paneLayoutReset } from '../../ipc/characters';
 import { pushToast } from '../../lib/toasts';
 import { getPanelLayout } from './panelLayoutStore';
 

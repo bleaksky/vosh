@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { UiConfig } from '../../../../lib/session';
+import type { UiConfig } from '../../../../ipc/uiConfig';
 import type { UpdateConfig } from '../../legacy/useSettingsAutoSave';
 import { Field, Row } from '../../ui';
 

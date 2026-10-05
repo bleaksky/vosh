@@ -9,14 +9,14 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { subscribeProfileSwitched } from '../ipc/profiles';
 import {
   normalizePromptShow,
   onGamePromptSeen,
-  onState,
-  subscribeProfileSwitched,
   subscribePromptConfigChanged,
   type PromptShow,
-} from './session';
+} from '../ipc/prompt';
+import { onState } from '../ipc/session';
 
 export interface PromptShowState {
   show: PromptShow;

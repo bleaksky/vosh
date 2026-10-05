@@ -17,7 +17,7 @@ import {
   type SystemFontEntry,
   type TerminalLineHeight,
   type UiConfig,
-} from '../../../lib/session';
+} from '../../../ipc/uiConfig';
 import type { Appearance } from '../../../lib/chrome';
 import type { SettingsTarget } from '../../../lib/settingsNav';
 import {

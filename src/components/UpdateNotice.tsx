@@ -1,10 +1,6 @@
 import { useEffect, useState, type MouseEvent } from 'react';
-import {
-  checkForUpdate,
-  getUiConfig,
-  installUpdateAndRelaunch,
-  type UpdateCheckResult,
-} from '../lib/session';
+import { getUiConfig } from '../ipc/uiConfig';
+import { checkForUpdate, installUpdateAndRelaunch, type UpdateCheckResult } from '../ipc/updater';
 
 // A press on the notice's buttons leaves the caret on the command line,
 // so a click never strands focus on a button that is about to unmount.

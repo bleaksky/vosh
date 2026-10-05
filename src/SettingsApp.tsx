@@ -4,19 +4,19 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   affectsDisplayFields,
   affectsDisplayOf,
+  sameAffectsDisplay,
+  subscribeAffectsDisplayChanged,
+} from './ipc/affects';
+import { loadoutsGetState, subscribeLoadoutsChanged } from './ipc/loadouts';
+import { subscribeProfilesChanged } from './ipc/profiles';
+import { getUiConfig, type UiConfig } from './ipc/uiConfig';
+import {
   followReplacedUiConfig,
-  getUiConfig,
   isOwnAffectsDisplayEcho,
-  loadoutsGetState,
   primeUiConfigAffectsDisplay,
   primeUiConfigTheme,
   primeUiConfigThemePrefs,
-  sameAffectsDisplay,
-  subscribeAffectsDisplayChanged,
-  subscribeLoadoutsChanged,
-  subscribeProfilesChanged,
-  type UiConfig,
-} from './lib/session';
+} from './ipc/uiConfigSave';
 import {
   applyThemePrefs,
   isOwnThemeEcho,

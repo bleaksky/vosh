@@ -25,7 +25,8 @@
 
 import { bandCut, bandRowsTop, type CellSize } from './promptBand';
 import { cellWidth, parseSgrCells, shownColumns } from './sgrCells';
-import type { PromptSpan, TerminalCursor } from './session';
+import type { PromptSpan } from '../ipc/promptDesign';
+import type { TerminalCursor } from '../ipc/terminal';
 import { wrapBreaks } from './wordWrap';
 
 /** The part of a span the mapping reads: the piece, the row from `%nl`,

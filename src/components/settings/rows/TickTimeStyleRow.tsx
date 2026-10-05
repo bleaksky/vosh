@@ -1,4 +1,4 @@
-import type { ChipStyle } from '../../../lib/session';
+import type { ChipStyle } from '../../../ipc/uiConfig';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
 import { Row, Segmented, type SegmentedOption } from '../ui';

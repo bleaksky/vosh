@@ -2,12 +2,12 @@ import { useSyncExternalStore } from 'react';
 import {
   affectsDisplayOf,
   DEFAULT_AFFECTS_DISPLAY,
-  getUiConfig,
   sameAffectsDisplay,
   subscribeAffectsDisplayChanged,
-  subscribeProfileSwitched,
   type AffectsDisplay,
-} from '../session';
+} from '../../ipc/affects';
+import { subscribeProfileSwitched } from '../../ipc/profiles';
+import { getUiConfig } from '../../ipc/uiConfig';
 import { createStore } from './store';
 
 // The active profile's affects display for the Affects pane: Style,

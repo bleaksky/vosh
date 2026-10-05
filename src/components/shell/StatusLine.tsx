@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { usePlayPalette } from '../../lib/fitGameColors';
-import type { VitalsOptions } from '../../lib/session';
+import type { VitalsOptions } from '../../ipc/uiConfig';
 import { useChipStyle } from '../../lib/stores/chipStyleStore';
 import { useCombat } from '../../lib/stores/combatStore';
 import { useGameTime } from '../../lib/stores/gameTimeStore';

@@ -17,7 +17,7 @@ import {
   type PromptCaptureCheck,
   type PromptCheckRead,
   type PromptCompileReport,
-} from '../../lib/session';
+} from '../../ipc/prompt';
 import { numberRuns } from '../../lib/promptScreen';
 import { parseSgrCells } from '../../lib/sgrCells';
 import { Button, CheckIcon, ChevronDownIcon, Field } from '../settings/ui';

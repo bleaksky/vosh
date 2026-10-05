@@ -18,7 +18,8 @@ import {
   type PieceSpan,
   type RegionOnScreen,
 } from './promptPointer';
-import { decodeOutputPayload, type OutputPayload, type PromptOpenRow } from './session';
+import { type PromptOpenRow } from '../ipc/prompt';
+import { decodeOutputPayload, type OutputPayload } from '../ipc/terminal';
 import { RegionWriter } from './terminalRegion';
 
 const span = (piece: number, row: number, col: number, width: number): PieceSpan => ({

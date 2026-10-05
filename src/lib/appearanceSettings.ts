@@ -13,7 +13,7 @@ import {
   PANEL_FONT_TERMINAL,
 } from './panelFont';
 import { normalizePanelSize, PANEL_SIZE_TERMINAL } from './panelSize';
-import { DEFAULT_LIGHT_THEME_ID, type CustomTheme, type SystemFontEntry } from './session';
+import { DEFAULT_LIGHT_THEME_ID, type CustomTheme, type SystemFontEntry } from '../ipc/uiConfig';
 import type { ThemePrefs } from './theme';
 import { themeIdFromLabel, uniqueThemeId } from './themeImport';
 import { fitKey } from './gameFit';
