@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { Terminal } from '@xterm/xterm';
-import { resolveCell, type BandEnv } from '../../terminal/bandCells';
-import { ECHO_CARET, planSubmit } from '../../input/maskedInput';
+import { resolveCell, type BandEnv } from '../terminal/bandCells';
+import { ECHO_CARET, planSubmit } from '../input/maskedInput';
 import {
   bandRows,
   DOCK_GAP,
@@ -11,12 +11,12 @@ import {
   dockRows,
   lentRows,
   type CellSize,
-} from '../../lib/promptBand';
-import type { PromptShowState } from '../../ipc/prompt';
-import { dockPieceAt, type PieceSpan } from '../../lib/promptPointer';
-import { parseSgrCells, PLAIN, shownColumns } from '../../terminal/sgrCells';
-import { RegionWriter } from '../../terminal/terminalRegion';
-import { keepTail, keptRows, spareAbove, type TailView } from '../../terminal/terminalRows';
+} from './pinnedDock';
+import type { PromptShowState } from '../ipc/prompt';
+import { dockPieceAt, type PieceSpan } from './promptPointer';
+import { parseSgrCells, PLAIN, shownColumns } from '../terminal/sgrCells';
+import { RegionWriter } from '../terminal/terminalRegion';
+import { keepTail, keptRows, spareAbove, type TailView } from '../terminal/terminalRows';
 import { PinnedBand } from './PromptDock';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));

@@ -10,7 +10,7 @@ import {
   tokenTone,
   unknownTitle,
   keptCaret,
-} from './promptText';
+} from './textEdit';
 import type { PromptToken } from '../ipc/promptDesign';
 
 // `[%c_hp%hp %nope` as prompt_describe reads it.

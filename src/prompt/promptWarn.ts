@@ -4,7 +4,7 @@
 // while your prompt leaves that code out and no package sends it
 // (section 7 steps 6 and 13, and P14's part your prompt no longer feeds).
 
-import { needsCode } from './promptPicker';
+import { needsCode } from './pickerRows';
 import type { PromptFieldState } from '../ipc/prompt';
 import type { PromptPiece, PromptSpan, PromptToken } from '../ipc/promptDesign';
 

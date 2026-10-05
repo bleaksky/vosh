@@ -104,7 +104,7 @@ import { setFitGameColors } from './theme/fitGameColors';
 import { startStores } from './stores';
 import { pushToast } from './stores/toasts';
 import { showLaunchNotices, showMigrationApplied } from './lib/launchNotices';
-import { startGamePromptToasts } from './lib/gamePromptToast';
+import { startGamePromptToasts } from './prompt/gamePromptToast';
 import { CommandPalette } from './components/CommandPalette';
 import {
   buildPaletteEntries,
@@ -144,13 +144,13 @@ import {
 import { offeredPaneTypes } from './panel/paneTypes';
 import { useConnection, type ConnectionStatus } from './stores/session/useConnection';
 import { useEscape } from './lib/escapeStack';
-import { usePromptShow } from './lib/promptShow';
-import { PromptDock } from './components/prompt/PromptDock';
-import { PromptCard, type PromptCardHost } from './components/prompt/PromptCard';
-import { nextCardRequest, type CardRequest, type CardRequestView } from './lib/promptCard';
+import { usePromptShow } from './prompt/showState';
+import { PromptDock } from './prompt/PromptDock';
+import { PromptCard, type PromptCardHost } from './prompt/PromptCard';
+import { nextCardRequest, type CardRequest, type CardRequestView } from './prompt/cardRules';
 import { notePageWrite, usePinnedDockRows } from './stores/session/pinnedPromptStore';
 import { usePromptReach } from './stores/session/promptReachStore';
-import { lentRows, type CellSize } from './lib/promptBand';
+import { lentRows, type CellSize } from './prompt/pinnedDock';
 import { noteReader } from './terminal/readerBusy';
 import { resolveBlinkText, useReduceMotion } from './lib/blink';
 import { listenSplitDrag, SplitDrag } from './terminal/splitDrag';

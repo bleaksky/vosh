@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { BandEnv } from '../../../terminal/bandCells';
-import { previewOptions, previewRows } from '../../../lib/promptSettings';
+import { previewOptions, previewRows } from '../../../prompt/promptSettings';
 import type { PromptCheckRead } from '../../../ipc/prompt';
 import { CodesMetaLine, CodesText, DrawRow, LineRow, PointRow, PreviewView } from './InputPrompt';
 

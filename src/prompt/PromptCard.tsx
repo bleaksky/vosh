@@ -8,8 +8,8 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
-import { moveTriggerToPrompts } from '../../automation/automationTriggers';
-import { BAND_OUTSET_Y, dockGap, type CellSize } from '../../lib/promptBand';
+import { moveTriggerToPrompts } from '../automation/automationTriggers';
+import { BAND_OUTSET_Y, dockGap, type CellSize } from './pinnedDock';
 import {
   cardAnchor,
   type CardRequest,
@@ -34,11 +34,11 @@ import {
   type CardStep,
   type MoreItemId,
   type UndoEntry,
-} from '../../lib/promptCard';
-import { followCardProfile } from '../../lib/promptCardSync';
-import { numberMarks, wholeMarks, type ScreenAsk } from '../../lib/promptScreen';
-import { warnedPieces } from '../../lib/promptWarn';
-import { LAYOUT_TOKENS, type LayoutId } from '../../lib/promptPicker';
+} from './cardRules';
+import { followCardProfile } from './promptCardSync';
+import { numberMarks, wholeMarks, type ScreenAsk } from './promptScreen';
+import { warnedPieces } from './promptWarn';
+import { LAYOUT_TOKENS, type LayoutId } from './pickerRows';
 import {
   caretAfter,
   deleteOp,
@@ -52,10 +52,10 @@ import {
   step as stepPick,
   type MoveMade,
   type Pointing,
-} from '../../lib/promptPieces';
-import { notMatchingLine, shownPreview } from '../../lib/promptSettings';
-import { sessionIdentityGet, type SessionIdentity } from '../../ipc/characters';
-import { profilesList } from '../../ipc/profiles';
+} from './promptPieces';
+import { notMatchingLine, shownPreview } from './promptSettings';
+import { sessionIdentityGet, type SessionIdentity } from '../ipc/characters';
+import { profilesList } from '../ipc/profiles';
 import {
   onPromptState,
   onPromptStatus,
@@ -79,7 +79,7 @@ import {
   type PromptPreset,
   type PromptState,
   type PromptShowState,
-} from '../../ipc/prompt';
+} from '../ipc/prompt';
 import {
   promptDescribe,
   promptEdit,
@@ -88,17 +88,17 @@ import {
   type PromptEditOp,
   type PromptFormatChoice,
   type PromptPreviewName,
-} from '../../ipc/promptDesign';
-import { useEscape } from '../../lib/escapeStack';
-import { keepFocus, type FocusKeeper } from '../../lib/focusKeeper';
-import { useGamePrompt } from '../../stores/gmcp/gamePromptStore';
-import { pushToast } from '../../stores/toasts';
-import { useBandEnv } from '../../lib/useBandEnv';
-import { useCellWidth, useLabelMeasure } from '../../lib/useCellWidth';
-import { knownWorld } from '../../stores/session/useConnection';
-import { ConfirmDialog } from '../../ui/ConfirmDialog';
-import type { TerminalHandle } from '../../terminal/Terminal';
-import { Button, CloseIcon, IconButton, MoreIcon } from '../../ui';
+} from '../ipc/promptDesign';
+import { useEscape } from '../lib/escapeStack';
+import { keepFocus, type FocusKeeper } from '../lib/focusKeeper';
+import { useGamePrompt } from '../stores/gmcp/gamePromptStore';
+import { pushToast } from '../stores/toasts';
+import { useBandEnv } from './useBandEnv';
+import { useCellWidth, useLabelMeasure } from '../lib/useCellWidth';
+import { knownWorld } from '../stores/session/useConnection';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import type { TerminalHandle } from '../terminal/Terminal';
+import { Button, CloseIcon, IconButton, MoreIcon } from '../ui';
 import { CardMenu, MenuSeparator } from './CardMenu';
 import { CodesEntry, CodesRead, LineTriggers, type CodesRequest } from './PromptCodes';
 import { PromptMarks } from './PromptMarks';

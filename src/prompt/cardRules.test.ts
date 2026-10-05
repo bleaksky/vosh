@@ -39,9 +39,9 @@ import {
   takeBackOnto,
   undoEntry,
   type CardStep,
-} from './promptCard';
+} from './cardRules';
 import { moveBack, type MoveMade } from './promptPieces';
-import { promptShowLock } from './promptShow';
+import { promptShowLock } from './showState';
 import type {
   PromptCapture,
   PromptCaptureCheck,

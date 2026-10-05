@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { useEscape } from '../../lib/escapeStack';
-import { menuPosition, type MenuPlace } from '../../lib/promptCard';
+import { useEscape } from '../lib/escapeStack';
+import { menuPosition, type MenuPlace } from './cardRules';
 
 // A menu the prompt card opens from one of its buttons: More, Presets,
 // From another profile, More styles, or the name menu of P15. The ov-menu recipe

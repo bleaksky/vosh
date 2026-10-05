@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { bandCut, bandRowsTop, type CellSize } from '../../lib/promptBand';
+import { bandCut, bandRowsTop, type CellSize } from './pinnedDock';
 import {
   dockMapper,
   endPlace,
@@ -10,21 +10,15 @@ import {
   type MarkLayout,
   type Pointing,
   type RawMark,
-} from '../../lib/promptPieces';
-import {
-  bandPlain,
-  dockCellAt,
-  dockPieceAt,
-  layoutPrompt,
-  pieceAtCell,
-} from '../../lib/promptPointer';
-import { findOnScreen, type ScreenAsk } from '../../lib/promptScreen';
-import type { PromptOpenRow, PromptShowState } from '../../ipc/prompt';
-import { type PromptPiece } from '../../ipc/promptDesign';
-import { onOutput } from '../../ipc/terminal';
-import { getPinnedBand } from '../../stores/session/pinnedPromptStore';
-import { setPromptReach } from '../../stores/session/promptReachStore';
-import { shownColumns } from '../../terminal/sgrCells';
+} from './promptPieces';
+import { bandPlain, dockCellAt, dockPieceAt, layoutPrompt, pieceAtCell } from './promptPointer';
+import { findOnScreen, type ScreenAsk } from './promptScreen';
+import type { PromptOpenRow, PromptShowState } from '../ipc/prompt';
+import { type PromptPiece } from '../ipc/promptDesign';
+import { onOutput } from '../ipc/terminal';
+import { getPinnedBand } from '../stores/session/pinnedPromptStore';
+import { setPromptReach } from '../stores/session/promptReachStore';
+import { shownColumns } from '../terminal/sgrCells';
 import type { PromptCardHost } from './PromptCard';
 
 // The prompt card's marks on your prompt (section 7, steps 6 and 10, and

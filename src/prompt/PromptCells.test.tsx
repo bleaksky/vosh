@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { BandEnv } from '../../terminal/bandCells';
-import { parseSgrCells } from '../../terminal/sgrCells';
+import type { BandEnv } from '../terminal/bandCells';
+import { parseSgrCells } from '../terminal/sgrCells';
 import { CellLine } from './PromptCells';
 
 const ENV: BandEnv = {

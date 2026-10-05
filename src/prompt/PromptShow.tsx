@@ -1,5 +1,5 @@
-import { PROMPT_SHOW_LABELS, promptShowLock } from '../../lib/promptShow';
-import { PROMPT_SHOWS, type PromptShow, type PromptShowState } from '../../ipc/prompt';
+import { PROMPT_SHOW_LABELS, promptShowLock } from './showState';
+import { PROMPT_SHOWS, type PromptShow, type PromptShowState } from '../ipc/prompt';
 import { MenuButton, type MenuChoice } from './MenuButton';
 
 // Where your prompt shows, at the foot of Customize prompt beside Draw

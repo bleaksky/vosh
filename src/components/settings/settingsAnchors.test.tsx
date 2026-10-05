@@ -4,7 +4,7 @@ import golden from '../../../fixtures/links/settings-anchors.json';
 import { resolveHelpTarget } from '../../help/helpNav';
 import { buildPaletteEntries, type PaletteDeps } from '../../lib/palette';
 import { defaultLayout, type PaneLeaf } from '../../panel/paneLayout';
-import type { GameBlock } from '../../lib/promptSettings';
+import type { GameBlock } from '../../prompt/promptSettings';
 import { type SessionIdentity } from '../../ipc/characters';
 import { HELP_GOTO, SETTINGS_GOTO_TAB } from '../../ipc/events';
 import { type PromptLastSeen, type PromptState } from '../../ipc/prompt';

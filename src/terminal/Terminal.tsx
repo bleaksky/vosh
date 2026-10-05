@@ -44,7 +44,7 @@ import {
   regionFromXterm,
   type RegionOnScreen,
   type ScreenCell,
-} from '../lib/promptPointer';
+} from '../prompt/promptPointer';
 import { BandLayer, LiftTracker, markLifted } from './xterm/liftBands';
 import {
   GameSizeReport,

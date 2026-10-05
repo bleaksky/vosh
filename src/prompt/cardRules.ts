@@ -5,7 +5,7 @@
 // another game's numbers take names, and where the card sits over your
 // prompt. Pure, so the components stay about layout.
 
-import { profileDisplayName, profilePossessive } from './profileLabel';
+import { profileDisplayName, profilePossessive } from '../lib/profileLabel';
 import type { MoveMade } from './promptPieces';
 import { cellWidth, parseSgrCells, type Cell } from '../terminal/sgrCells';
 import type { SessionIdentity } from '../ipc/characters';

@@ -7,9 +7,9 @@ import {
   pieceAtCaret,
   TEXT_HELP,
   TOKEN_ROWS,
-} from '../../lib/promptText';
-import type { PromptToken } from '../../ipc/promptDesign';
-import { Button, PlusIcon } from '../../ui';
+} from './textEdit';
+import type { PromptToken } from '../ipc/promptDesign';
+import { Button, PlusIcon } from '../ui';
 
 // Edit as text (P9): your design byte for byte in the terminal's face,
 // each token colored by what it is, wrapping only between tokens. The

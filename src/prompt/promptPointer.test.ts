@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Terminal } from '@xterm/xterm';
 import fixture from '../../fixtures/prompt/aabahran/pointer/cases.json';
 import { OutputShaper } from '../terminal/outputShaper';
-import { dockGap } from './promptBand';
+import { dockGap } from './pinnedDock';
 import {
   bandPlain,
   cellAtPoint,
