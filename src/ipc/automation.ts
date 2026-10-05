@@ -207,7 +207,7 @@ export interface Macro {
 
 /** One row in any groups-list response: name + current enabled state.
  *  Backend returns these sorted by name. */
-export interface GroupState {
+export interface GroupToggle {
   name: string;
   enabled: boolean;
 }
@@ -317,7 +317,7 @@ export async function subscribeGroupsChanged(cb: () => void): Promise<UnlistenFn
 
 // --- Macro groups, which the command line follows ---
 
-export async function listMacroGroups(): Promise<GroupState[]> {
+export async function listMacroGroups(): Promise<GroupToggle[]> {
   return invoke('macros_groups_list');
 }
 

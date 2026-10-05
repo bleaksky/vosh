@@ -7,7 +7,7 @@ import {
   listMacroGroups,
   subscribeMacroGroupsChanged,
   subscribeMacrosChanged,
-  type GroupState,
+  type GroupToggle,
   type Macro,
 } from '../ipc/automation';
 
@@ -43,7 +43,7 @@ export function useMacroKeys() {
       rebuild();
     };
 
-    const applyGroups = (groups: GroupState[]) => {
+    const applyGroups = (groups: GroupToggle[]) => {
       const disabled = new Set<string>();
       for (const g of groups) {
         if (!g.enabled) disabled.add(g.name);
