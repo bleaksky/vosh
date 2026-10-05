@@ -18,7 +18,12 @@ import {
   subscribeProfilesChanged,
   type UiConfig,
 } from './lib/session';
-import { applyThemePrefs, subscribeThemeChanges, subscribeThemePrefs } from './lib/theme';
+import {
+  applyThemePrefs,
+  setColorVision,
+  subscribeThemeChanges,
+  subscribeThemePrefs,
+} from './lib/theme';
 import { showAfterThemePaint } from './lib/reveal';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
 import { loadFontStack, renderFontStack } from './lib/fontLoader';
@@ -105,6 +110,12 @@ export function SettingsApp() {
   useEffect(() => {
     configRef.current = config;
   }, [config]);
+  // This window paints its status colors for your color vision, which a
+  // pick on Appearance changes here first.
+  const colorVision = config?.color_vision;
+  useEffect(() => {
+    if (colorVision !== undefined) setColorVision(colorVision);
+  }, [colorVision]);
   const [error, setError] = useState<string | null>(null);
   const [pathB, setPathB] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
