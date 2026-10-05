@@ -35,8 +35,12 @@ function fire(event: string, payload: unknown): void {
   for (const cb of handlers.get(event) ?? []) cb({ payload });
 }
 
-const gmcp = (pkg: string, payload: unknown) =>
-  fire(`session://gmcp/${pkg.replace(/\./g, '-')}`, payload);
+// A GMCP packet, the prompt values and the affect fulls come inside
+// {session, data}, here from session 1.
+const gmcp = (pkg: string, data: unknown) =>
+  fire(`session://gmcp/${pkg.replace(/\./g, '-')}`, { session: 1, data });
+const promptVars = (data: unknown) => fire('session://prompt-vars', { session: 1, data });
+const fulls = (data: unknown) => fire('vosh://affect-full-changed', { session: 1, data });
 /** Send one packet from fixtures/gmcp/aabahran, as the backend emits it. */
 const packet = (name: string) => {
   const p = aabahranPacket(name);
@@ -203,14 +207,14 @@ describe('stores on the event bus', () => {
   it('lay prompt vars over Char.Vitals', async () => {
     const s = await load();
     gmcp('Char.Vitals', { hp: 900, maxhp: 1000 });
-    fire('session://prompt-vars', { hp: '150' });
+    promptVars({ hp: '150' });
     expect(s.vitals.getVitals()).toMatchObject({ hp: 150, maxhp: 1000, low: { hp: true } });
   });
 
   it('hide your vitals under lamented tears and never fill them from prompt vars', async () => {
     const s = await load();
     packet('char-vitals.gmcp');
-    fire('session://prompt-vars', { hp: '150', maxhp: '900' });
+    promptVars({ hp: '150', maxhp: '900' });
     expect(s.vitals.getVitals()).toMatchObject({ hp: 150, hidden: false, low: { hp: true } });
 
     packet('char-vitals-hidden.gmcp');
@@ -225,7 +229,7 @@ describe('stores on the event bus', () => {
       hidden: true,
     });
     // A prompt capture that lands while hidden changes nothing.
-    fire('session://prompt-vars', { hp: '850', maxhp: '900' });
+    promptVars({ hp: '850', maxhp: '900' });
     expect(s.vitals.getVitals()?.hidden).toBe(true);
     expect(s.vitals.getVitals()?.hp).toBe(0);
 
@@ -243,7 +247,7 @@ describe('stores on the event bus', () => {
     const shown = { hp: 850, maxhp: 900, mana: 760, maxmana: 820, move: 250, maxmove: 250 };
     const notLow = { hp: false, mana: false, move: false };
     packet('char-vitals.gmcp');
-    fire('session://prompt-vars', {
+    promptVars({
       hp: '850',
       maxhp: '900',
       mana: '760',
@@ -255,7 +259,7 @@ describe('stores on the event bus', () => {
     // Under the song the capture reads the zeros the text prompt prints.
     packet('char-vitals-hidden.gmcp');
     const lament = { hp: '0', maxhp: '0', mana: '0', maxmana: '0', move: '0', maxmove: '0' };
-    fire('session://prompt-vars', lament);
+    promptVars(lament);
 
     // The song ends. Char.Vitals goes out before the text prompt, and
     // AFK or prompt off keeps the capture from firing at all.
@@ -265,11 +269,11 @@ describe('stores on the event bus', () => {
     expect(s.vitals.getVitals()).toEqual({ ...shown, low: notLow, hidden: false });
 
     // A prompt trigger that sends the same map again changes nothing.
-    fire('session://prompt-vars', lament);
+    promptVars(lament);
     expect(s.vitals.getVitals()).toEqual({ ...shown, low: notLow, hidden: false });
 
     // A capture with new numbers wins again, each var on its own.
-    fire('session://prompt-vars', { ...lament, hp: '150', maxhp: '900' });
+    promptVars({ ...lament, hp: '150', maxhp: '900' });
     expect(s.vitals.getVitals()).toEqual({
       ...shown,
       hp: 150,
@@ -282,9 +286,9 @@ describe('stores on the event bus', () => {
     // The default prompt `<%hhp %mm %vmv>` reads the current values only.
     const s = await load();
     packet('char-vitals.gmcp');
-    fire('session://prompt-vars', { hp: '850', mana: '760', move: '250' });
+    promptVars({ hp: '850', mana: '760', move: '250' });
     packet('char-vitals-hidden.gmcp');
-    fire('session://prompt-vars', { hp: '0', mana: '0', move: '0' });
+    promptVars({ hp: '0', mana: '0', move: '0' });
     packet('char-vitals.gmcp');
     expect(s.vitals.getVitals()).toMatchObject({
       hp: 850,
@@ -299,7 +303,7 @@ describe('stores on the event bus', () => {
     const s = await load();
     packet('char-vitals.gmcp');
     // Your last prompt before you went AFK.
-    fire('session://prompt-vars', { hp: '150', maxhp: '900' });
+    promptVars({ hp: '150', maxhp: '900' });
     packet('char-vitals-hidden.gmcp');
     packet('char-vitals.gmcp');
     expect(s.vitals.getVitals()).toMatchObject({ hp: 850, maxhp: 900, low: { hp: false } });
@@ -307,7 +311,7 @@ describe('stores on the event bus', () => {
     // A disconnect lets go of what the song held back.
     disconnect();
     packet('char-vitals.gmcp');
-    fire('session://prompt-vars', { hp: '150', maxhp: '900' });
+    promptVars({ hp: '150', maxhp: '900' });
     expect(s.vitals.getVitals()).toMatchObject({ hp: 150, low: { hp: true } });
   });
 
@@ -660,11 +664,11 @@ describe('stores on the event bus', () => {
     commands.set('affect_full_get', { armor: 48, sanctuary: 10 });
     const s = await load();
     expect(s.affectFull.getAffectFull()).toEqual({ armor: 48, sanctuary: 10 });
-    fire('vosh://affect-full-changed', { armor: 48, sanctuary: 10, fly: 53, bad: 'x' });
+    fulls({ armor: 48, sanctuary: 10, fly: 53, bad: 'x' });
     const heard = s.affectFull.getAffectFull();
     expect(heard).toEqual({ armor: 48, sanctuary: 10, fly: 53 });
     // The same map again keeps the snapshot, so nothing renders.
-    fire('vosh://affect-full-changed', { fly: 53, armor: 48, sanctuary: 10 });
+    fulls({ fly: 53, armor: 48, sanctuary: 10 });
     expect(s.affectFull.getAffectFull()).toBe(heard);
     disconnect();
     expect(s.affectFull.getAffectFull()).toEqual({});
@@ -674,7 +678,7 @@ describe('stores on the event bus', () => {
     let answer: (value: unknown) => void = () => undefined;
     commands.set('affect_full_get', new Promise((resolve) => (answer = resolve)));
     const s = await load();
-    fire('vosh://affect-full-changed', { armor: 40 });
+    fulls({ armor: 40 });
     answer({ armor: 48 });
     await settle();
     expect(s.affectFull.getAffectFull()).toEqual({ armor: 40 });

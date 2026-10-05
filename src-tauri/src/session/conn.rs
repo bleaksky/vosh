@@ -563,7 +563,7 @@ async fn send_typed<R: tauri::Runtime>(
     conn.accumulator.forget_partial();
     if pulse {
         emit_hidden_change(&conn.app, &conn.session).await;
-        emit_prompt_vars(&conn.app, &conn.session.connection, false).await;
+        emit_prompt_vars(&conn.app, &conn.session, false).await;
     }
     // The input line(s) go in the same log session as server output so
     // transcripts include both directions. While the server holds echo

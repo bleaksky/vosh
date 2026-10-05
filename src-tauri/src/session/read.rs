@@ -408,7 +408,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         );
     }
     if let Some(vars) = vars {
-        send_prompt_vars(app, &vars);
+        send_prompt_vars(app, session, &vars);
     }
     if let Some(hidden) = hidden {
         session.emit(app, events::HIDDEN, &hidden);

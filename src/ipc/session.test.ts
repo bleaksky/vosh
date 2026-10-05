@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import gmcpEvents from '../../fixtures/ipc/gmcp-events.json';
+import { aabahranPacket } from '../test/aabahranGmcp';
 import { onGmcpPackage, sendInput, sendMaskedInput, stopWalk } from './session';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -49,5 +50,15 @@ describe('onGmcpPackage', () => {
       await onGmcpPackage(name, () => {});
       expect(vi.mocked(listen)).toHaveBeenCalledWith(event, expect.any(Function));
     }
+  });
+
+  it('hands its listener the data the session sends beside its id', async () => {
+    const { package: name, data } = aabahranPacket('char-vitals.gmcp');
+    vi.mocked(listen).mockClear();
+    const heard = vi.fn();
+    await onGmcpPackage(name, heard);
+    const [event, handler] = vi.mocked(listen).mock.calls[0];
+    handler({ event, id: 1, payload: { session: 1, data } });
+    expect(heard).toHaveBeenCalledWith(data);
   });
 });
