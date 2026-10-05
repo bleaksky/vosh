@@ -10,6 +10,7 @@ import {
   themePrefsOf,
   type ThemePrefs,
 } from '../lib/theme';
+import { resolveThemeTerminalColors } from '../lib/themes';
 import {
   affectsDisplayFields,
   affectsDisplayOf,
@@ -44,7 +45,6 @@ import {
   VITALS_DENSITY_CHANGED,
   VITALS_OPTIONS_CHANGED,
 } from './events';
-import { resolveThemeTerminalColors } from './theme';
 import {
   fetchUiConfig,
   subscribeUiConfigReplaced,

@@ -22,6 +22,7 @@ import {
   WHITE,
   type Rgb,
 } from './color';
+import type { CustomTheme } from '../ipc/theme';
 import { checks, GAME_SLOTS } from './gameFit';
 import {
   BUILTIN_THEMES,
@@ -31,6 +32,7 @@ import {
   migrateCustomChrome,
   playPalette,
   RETIRED_THEMES,
+  seedDarkTheme,
   setCustomThemes,
   themeShownBy,
   themeTokens,
@@ -915,5 +917,43 @@ describe('public/theme-credits.txt', () => {
     expect(sectionFor('Modus Vivendi')?.body).toContain(
       'Copyright (C) 2019-2026 Free Software Foundation, Inc.',
     );
+  });
+});
+
+const custom = (id: string, background: string): CustomTheme => ({
+  id,
+  label: id,
+  description: '',
+  xterm: { background, foreground: background === '#000000' ? '#ffffff' : '#000000' },
+  chrome: {},
+});
+
+describe('seedDarkTheme', () => {
+  it('takes the current theme when it is dark', () => {
+    expect(seedDarkTheme('nord', [])).toBe('nord');
+    expect(seedDarkTheme('obsidian-ember', [])).toBe('obsidian-ember');
+  });
+
+  it('falls back to Obsidian Ember for a light or unknown theme', () => {
+    expect(seedDarkTheme('rubric', [])).toBe('obsidian-ember');
+    expect(seedDarkTheme('system', [])).toBe('obsidian-ember');
+    expect(seedDarkTheme('gone', [])).toBe('obsidian-ember');
+  });
+
+  it('reads custom themes by their own background', () => {
+    const themes = [custom('night-ink', '#000000'), custom('paper', '#ffffff')];
+    expect(seedDarkTheme('night-ink', themes)).toBe('night-ink');
+    expect(seedDarkTheme('paper', themes)).toBe('obsidian-ember');
+  });
+
+  it('reads a retired id by the theme that took its place', () => {
+    // A saved One Dark shows One Half Dark, so it seeds a dark theme of
+    // One Half Dark under the id you saved.
+    expect(seedDarkTheme('one-dark', [])).toBe('one-dark');
+    expect(findTheme(seedDarkTheme('one-dark', [])).id).toBe('one-half-dark');
+    expect(seedDarkTheme('vellum', [])).toBe('obsidian-ember');
+    expect(seedDarkTheme('everforest-light', [])).toBe('obsidian-ember');
+    // A custom theme with a retired id wins over the successor.
+    expect(seedDarkTheme('one-dark', [custom('one-dark', '#ffffff')])).toBe('obsidian-ember');
   });
 });

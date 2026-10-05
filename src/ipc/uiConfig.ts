@@ -5,7 +5,12 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { normalizePanelFont } from '../lib/panelFont';
 import { normalizePanelSize } from '../lib/panelSize';
-import { DEFAULT_THEME_ID } from '../lib/themes';
+import {
+  DEFAULT_LIGHT_THEME_ID,
+  DEFAULT_THEME_ID,
+  freeBuiltinThemeIds,
+  seedDarkTheme,
+} from '../lib/themes';
 import {
   normalizeAffectsMarker,
   normalizeAffectsStyle,
@@ -40,13 +45,7 @@ import {
   VITALS_DENSITY_CHANGED,
   VITALS_OPTIONS_CHANGED,
 } from './events';
-import {
-  DEFAULT_LIGHT_THEME_ID,
-  freeBuiltinThemeIds,
-  seedDarkTheme,
-  type CustomTheme,
-  type ThemeChoice,
-} from './theme';
+import type { CustomTheme, ThemeChoice } from './theme';
 
 export interface SystemFontEntry {
   family: string;
