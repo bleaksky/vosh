@@ -1,4 +1,4 @@
-import { PROMPT_SHOW_HELP, PROMPT_SHOW_LABELS, promptShowLock } from '../../../lib/promptShow';
+import { PROMPT_SHOW_HELP, PROMPT_SHOW_LABELS, promptShowLock } from '../../../prompt/showState';
 import { PROMPT_SHOWS, type PromptShow, type PromptShowState } from '../../../ipc/prompt';
 import { Row, Segmented, type SegmentedOption } from '../../../ui';
 

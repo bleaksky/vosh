@@ -9,7 +9,7 @@ import {
   type Ref,
 } from 'react';
 import type { BandEnv } from '../../../terminal/bandCells';
-import { localStamp, savedForName } from '../../../lib/promptCard';
+import { localStamp, savedForName } from '../../../prompt/cardRules';
 import {
   codesMeta,
   drawDescription,
@@ -26,8 +26,8 @@ import {
   promptWorld,
   shownPreview,
   type CodesMeta,
-} from '../../../lib/promptSettings';
-import { usePromptShow } from '../../../lib/promptShow';
+} from '../../../prompt/promptSettings';
+import { usePromptShow } from '../../../prompt/showState';
 import {
   sessionIdentityGet,
   subscribeSessionIdentity,
@@ -61,15 +61,15 @@ import { onState } from '../../../ipc/session';
 import { subscribeUiConfigReplaced } from '../../../ipc/uiConfig';
 import { useTauriEvent } from '../../../ipc/useTauriEvent';
 import { shownColumns, type Cell } from '../../../terminal/sgrCells';
-import { warnBoxes, warnedPieces } from '../../../lib/promptWarn';
+import { warnBoxes, warnedPieces } from '../../../prompt/promptWarn';
 import { useGamePrompt } from '../../../stores/gmcp/gamePromptStore';
-import { useBandEnv } from '../../../lib/useBandEnv';
+import { useBandEnv } from '../../../prompt/useBandEnv';
 import { CARD_ROW_PX, useCellWidth } from '../../../lib/useCellWidth';
 import { knownWorld } from '../../../stores/session/useConnection';
 import { ConfirmDialog } from '../../../ui/ConfirmDialog';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuPlacement } from '../../../ui/MenuSurface';
-import { CellLine } from '../../prompt/PromptCells';
-import { CommandBox } from '../../prompt/PromptCodes';
+import { CellLine } from '../../../prompt/PromptCells';
+import { CommandBox } from '../../../prompt/PromptCodes';
 import { nativeSurfaceEnabled } from '../../../terminal/Terminal';
 import { PromptShowField } from '../rows/PromptShowRow';
 import { Button, Field, IconButton, MoreIcon, Row, Section, Segmented, Toggle } from '../../../ui';

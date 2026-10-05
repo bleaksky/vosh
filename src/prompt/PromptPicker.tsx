@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import type { BandEnv } from '../../terminal/bandCells';
+import type { BandEnv } from '../terminal/bandCells';
 import {
   fieldName,
   flatRows,
@@ -10,17 +10,17 @@ import {
   sourceLine,
   type LayoutId,
   type PickerRow,
-} from '../../lib/promptPicker';
-import { type PromptState } from '../../ipc/prompt';
+} from './pickerRows';
+import { type PromptState } from '../ipc/prompt';
 import {
   promptForms,
   type PromptForm,
   type PromptFormatChoice,
   type PromptPreviewName,
-} from '../../ipc/promptDesign';
-import { scrollWithin } from '../../lib/scrollWithin';
-import { parseSgrCells } from '../../terminal/sgrCells';
-import { cx, Field, SearchIcon } from '../../ui';
+} from '../ipc/promptDesign';
+import { scrollWithin } from '../lib/scrollWithin';
+import { parseSgrCells } from '../terminal/sgrCells';
+import { cx, Field, SearchIcon } from '../ui';
 import { CellLine } from './PromptCells';
 
 // Insert value… (P6, P6b): every field Vosh can draw, grouped by topic,

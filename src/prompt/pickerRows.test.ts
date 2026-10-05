@@ -9,7 +9,7 @@ import {
   rowKey,
   rowStatus,
   sourceLine,
-} from './promptPicker';
+} from './pickerRows';
 import type { PromptFieldState } from '../ipc/prompt';
 
 /** A catalog field as prompt_state_get reports it. */

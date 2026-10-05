@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { PROMPT_SHOW_LABELS, promptShowLock } from '../../../lib/promptShow';
+import { PROMPT_SHOW_LABELS, promptShowLock } from '../../../prompt/showState';
 import {
   normalizePromptShowState,
   type PromptShow,

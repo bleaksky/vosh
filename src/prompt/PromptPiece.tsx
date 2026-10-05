@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import type { BandEnv } from '../../terminal/bandCells';
-import { indexedRgb } from '../../terminal/bandCells';
+import type { BandEnv } from '../terminal/bandCells';
+import { indexedRgb } from '../terminal/bandCells';
 import {
   breakHint,
   byValueName,
@@ -18,7 +18,7 @@ import {
   THEME_SWATCHES,
   UNDERLINE_KINDS,
   WHEN_FIXED_HINT,
-} from '../../lib/promptPieces';
+} from './promptPieces';
 import type {
   PromptColorChoice,
   PromptEditOp,
@@ -27,7 +27,7 @@ import type {
   PromptStyleChoice,
   PromptUnderlineStyle,
   PromptWhen,
-} from '../../ipc/promptDesign';
+} from '../ipc/promptDesign';
 import {
   Button,
   CheckIcon,
@@ -39,7 +39,7 @@ import {
   PlusIcon,
   Segmented,
   type SegmentedOption,
-} from '../../ui';
+} from '../ui';
 import { CardMenu, MenuSeparator } from './CardMenu';
 
 // The part you picked on your prompt (P5, P7, P8a, P8b, P10). The name line

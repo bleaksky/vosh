@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import { dockRows } from '../../lib/promptBand';
+import { dockRows } from '../../prompt/pinnedDock';
 import { type PromptSpan } from '../../ipc/promptDesign';
 import { onState } from '../../ipc/session';
 import { onOutput, type SessionOutput } from '../../ipc/terminal';

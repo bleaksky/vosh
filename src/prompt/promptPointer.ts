@@ -23,7 +23,7 @@
 // Spans count cells, as the band does: a wide character takes two and a
 // combining mark none (cellWidth in sgrCells.ts).
 
-import { bandCut, bandRowsTop, type CellSize } from './promptBand';
+import { bandCut, bandRowsTop, type CellSize } from './pinnedDock';
 import { cellWidth, parseSgrCells, shownColumns } from '../terminal/sgrCells';
 import type { PromptSpan } from '../ipc/promptDesign';
 import type { TerminalCursor } from '../ipc/terminal';

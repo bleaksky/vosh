@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { BandEnv } from '../../terminal/bandCells';
+import type { BandEnv } from '../terminal/bandCells';
 import {
   clockTime,
   entryCopy,
@@ -8,7 +8,7 @@ import {
   localStamp,
   migratedNote,
   prefixNote,
-} from '../../lib/promptCard';
+} from './cardRules';
 import {
   onGamePromptSeen,
   promptCaptureCheck,
@@ -21,10 +21,10 @@ import {
   type PromptCompileReport,
   type PromptLegendRow,
   type PromptLineTrigger,
-} from '../../ipc/prompt';
-import { useTauriEvent } from '../../ipc/useTauriEvent';
-import { pushToast } from '../../stores/toasts';
-import { Button, Field } from '../../ui';
+} from '../ipc/prompt';
+import { useTauriEvent } from '../ipc/useTauriEvent';
+import { pushToast } from '../stores/toasts';
+import { Button, Field } from '../ui';
 import { CandidateBox, MatchRow } from './PromptCandidate';
 
 // The capture steps on The Forsaken Lands: P2, where you tell Vosh your

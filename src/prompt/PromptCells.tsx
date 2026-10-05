@@ -1,8 +1,8 @@
 import type { CSSProperties } from 'react';
-import { bandRuns, decorationLine, type BandEnv } from '../../terminal/bandCells';
-import { contrast, parseHex } from '../../theme/color';
-import { sampleCut } from '../../lib/promptCard';
-import type { Cell } from '../../terminal/sgrCells';
+import { bandRuns, decorationLine, type BandEnv } from '../terminal/bandCells';
+import { contrast, parseHex } from '../theme/color';
+import { sampleCut } from './cardRules';
+import type { Cell } from '../terminal/sgrCells';
 
 // One row of terminal text inside the prompt card: a prompt line in the
 // candidate box, or a preset's sample in the start list. Every character

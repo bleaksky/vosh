@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import type { BandEnv } from '../../terminal/bandCells';
+import type { BandEnv } from '../terminal/bandCells';
 import {
   BOX_TEXT_X,
   boxHeight,
@@ -8,9 +8,9 @@ import {
   placeLabels,
   readMarks,
   readRows,
-} from '../../lib/promptCard';
-import type { PromptCaptureCheck, PromptCheckRead } from '../../ipc/prompt';
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon, IconButton } from '../../ui';
+} from './cardRules';
+import type { PromptCaptureCheck, PromptCheckRead } from '../ipc/prompt';
+import { CheckIcon, ChevronDownIcon, ChevronUpIcon, IconButton } from '../ui';
 import { CellLine } from './PromptCells';
 
 // The parts the capture steps share: the candidate box that shows a

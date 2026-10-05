@@ -4,7 +4,7 @@
 // it, the Draw your own prompt row's sentence, and the preview's height
 // and choices. Pure, so the section stays about layout.
 
-import { clockTime, lastSeenLine } from './promptCard';
+import { clockTime, lastSeenLine } from './cardRules';
 import { parseSgrCells, type Cell } from '../terminal/sgrCells';
 import type {
   PromptCapture,
