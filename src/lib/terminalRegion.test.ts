@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Terminal } from '@xterm/xterm';
-import { ECHO_CARET } from './maskedInput';
+import { ECHO_CARET } from '../input/maskedInput';
 import { LiftTracker } from './promptBands';
 import {
   closePinRow,

@@ -53,7 +53,7 @@
 // restore included. When the row it lands on already ends in `>` before
 // the cursor, as the game's own prompt does, the mark drops.
 
-import { ECHO_CARET } from './maskedInput';
+import { ECHO_CARET } from '../input/maskedInput';
 
 /** The private OSC a region mark uses. */
 export const REGION_OSC = 7717;

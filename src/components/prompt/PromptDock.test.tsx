@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { Terminal } from '@xterm/xterm';
 import { resolveCell, type BandEnv } from '../../lib/bandCells';
-import { ECHO_CARET, planSubmit } from '../../lib/maskedInput';
+import { ECHO_CARET, planSubmit } from '../../input/maskedInput';
 import {
   bandRows,
   DOCK_GAP,
