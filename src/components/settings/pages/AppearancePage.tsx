@@ -8,6 +8,7 @@ import {
   sizeChoices,
   themeCaption,
 } from '../../../lib/appearanceSettings';
+import { toColorVision } from '../../../lib/gameFit';
 import { normalizePanelFont } from '../../../lib/panelFont';
 import { normalizePanelSize } from '../../../lib/panelSize';
 import {
@@ -51,7 +52,8 @@ import { fitAndKeep } from './appearance/fitAndKeep';
 // system appearance and the light and dark pair it switches between.
 // Terminal text holds the font, the size, the line height, whether MUD
 // text takes the theme's colors, whether play fits the game's colors to
-// the theme, whether Vosh keeps the colors your triggers set readable
+// the theme and for which color vision, whether Vosh keeps the colors
+// your triggers set readable
 // on the theme, and whether a line the same as
 // the one before it shows once with a count. While that is on, two rows
 // under it choose whether the lines of a fight collapse, and whether
@@ -65,6 +67,13 @@ const LINE_HEIGHTS = [
   { value: 'compact', label: 'Compact' },
   { value: 'default', label: 'Default' },
   { value: 'loose', label: 'Loose' },
+] as const;
+
+const COLOR_VISIONS = [
+  { value: 'typical', label: 'Typical' },
+  { value: 'deuteranopia', label: 'Deuteranopia' },
+  { value: 'protanopia', label: 'Protanopia' },
+  { value: 'tritanopia', label: 'Tritanopia' },
 ] as const;
 
 // The four formats parseThemeFile reads. macOS lists every file anyway,
@@ -340,6 +349,17 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           <Toggle
             checked={config.fit_game_colors}
             onChange={(on) => update({ fit_game_colors: on }, { now: true })}
+          />
+        </Row>
+        <Row
+          anchor="color-vision"
+          label="Color vision"
+          description="With Fit game colors on, Vosh keeps hits, tells and says apart for the vision you pick."
+        >
+          <Select
+            value={config.color_vision}
+            options={COLOR_VISIONS}
+            onChange={(vision) => update({ color_vision: toColorVision(vision) }, { now: true })}
           />
         </Row>
         <Row
