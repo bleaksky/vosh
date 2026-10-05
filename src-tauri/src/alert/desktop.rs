@@ -1,16 +1,17 @@
 //! Banners on Windows and Linux, through tauri-plugin-notification, a
-//! toast on Windows and the freedesktop server on Linux (Alerts Q1). A
-//! click on a toast of an installed Vosh starts the app again, since the
-//! toast has no activator, and the single instance guard in lib.rs hands
-//! that start to the Vosh that runs, which selects the session of the
-//! newest banner.
+//! toast on Windows and the freedesktop server on Linux (Alerts Q1). The
+//! plugin says banners are always allowed on the desktop, so Windows
+//! reads its own setting from `ToastNotifier.Setting`. A click on a toast
+//! of an installed Vosh starts the app again, since the toast has no
+//! activator, and the single instance guard in lib.rs hands that start to
+//! the Vosh that runs, which selects the session of the newest banner.
 //! Linux shows the banner with no click until a listener of Vosh's own
 //! takes the plugin's place.
 
 use tauri::AppHandle;
 use tauri_plugin_notification::NotificationExt;
 
-use super::banner::Banner;
+use super::banner::{Banner, Permission};
 
 /// Post `banner`, with the system's sound when `sound` says so.
 pub(super) fn post<R: tauri::Runtime>(app: &AppHandle<R>, banner: &Banner, sound: bool) {
@@ -29,4 +30,46 @@ pub(super) fn post<R: tauri::Runtime>(app: &AppHandle<R>, banner: &Banner, sound
     if let Err(e) = builder.show() {
         tracing::warn!(error = %e, "the banner did not go out");
     }
+}
+
+/// Whether you allow Vosh's toasts, as Windows Settings says. Linux has
+/// no such switch for an app.
+pub(super) fn permission() -> Permission {
+    #[cfg(windows)]
+    {
+        windows_setting()
+    }
+    #[cfg(not(windows))]
+    {
+        Permission::Granted
+    }
+}
+
+#[cfg(windows)]
+fn windows_setting() -> Permission {
+    use windows::core::HSTRING;
+    use windows::UI::Notifications::{NotificationSetting, ToastNotificationManager};
+    let notifier =
+        ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from("com.aabahran.vosh"));
+    match notifier.and_then(|n| n.Setting()) {
+        Ok(NotificationSetting::Enabled) => Permission::Granted,
+        Ok(_) => Permission::Denied,
+        // A Vosh that is not installed has no toasts of its own yet.
+        Err(_) => Permission::Unavailable,
+    }
+}
+
+/// Open the system page for notifications.
+pub(super) fn open_settings() -> Result<(), String> {
+    #[cfg(windows)]
+    let opened = std::process::Command::new("explorer.exe")
+        .arg("ms-settings:notifications")
+        .spawn();
+    #[cfg(not(windows))]
+    let opened = std::process::Command::new("gnome-control-center")
+        .arg("notifications")
+        .spawn();
+    opened.map(|_| ()).map_err(|_| {
+        "Open the notification settings of your desktop to let Vosh show banners.".to_string()
+    })
 }
