@@ -3,7 +3,7 @@ import { FLOOR_CHOICES, isResetView, resetView, type Floors, type Map3dView } fr
 import { MAP_STYLE_CHOICES, type MapStyle } from './mapStyle';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from '../../ui/MenuSurface';
 import { returnToCommandLine } from '../paneActions';
-import { CheckIcon } from '../../ui/paneIcons';
+import { CheckIcon } from '../../ui/icons';
 
 // The map's own control in a panel pane: a small button in the drawing
 // box's bottom right corner that shows while you point at the map or

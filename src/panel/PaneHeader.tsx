@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { usePaneLeaf } from './paneActions';
-import { MoreIcon } from '../ui/paneIcons';
+import { MoreIcon } from '../ui/icons';
 import { PaneMenu } from './PaneMenu';
 import { PANE_LABELS } from './paneTypes';
 

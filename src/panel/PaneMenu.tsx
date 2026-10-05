@@ -36,7 +36,7 @@ import {
 import { submenuAt } from '../ui/menuPlacement';
 import { fitsPanel } from './paneGeometry';
 import { PaneTextSizeContext } from './paneTextSize';
-import { CheckIcon, ChevronRightIcon } from '../ui/paneIcons';
+import { CheckIcon, ChevronRightIcon } from '../ui/icons';
 import { getPanelLayout } from './panelLayoutStore';
 import { PANE_LABELS, offeredPaneTypes } from './paneTypes';
 

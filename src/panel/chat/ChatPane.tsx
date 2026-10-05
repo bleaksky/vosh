@@ -15,7 +15,7 @@ import { useActiveTheme } from '../../theme/useActiveTheme';
 import { MenuItem, MenuSurface } from '../../ui/MenuSurface';
 import { returnToCommandLine, updateLeafProps, usePaneLeaf } from '../paneActions';
 import { PaneHeader } from '../PaneHeader';
-import { CheckIcon, ChevronDownIcon } from '../../ui/paneIcons';
+import { CheckIcon, ChevronDownIcon } from '../../ui/icons';
 import { chatTime } from '../paneText';
 import { usePaneText } from '../paneTextSize';
 
