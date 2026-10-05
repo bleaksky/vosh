@@ -40,12 +40,14 @@ import {
   deltaEOk,
   linearToOklab,
   linearToRgb,
+  luminance,
   oklchToRgbInGamut,
   parseHex,
   rgbToLinear,
   rgbToOklab,
   rgbToOklch,
   toHex,
+  type Oklab,
   type Oklch,
   type Rgb,
 } from './color';
@@ -73,19 +75,22 @@ const rgb = (hex: string): Rgb => {
 
 // ── APCA 0.0.98G-4g, with the SAPC constants ───────────────────────
 
-const apcaY = (hex: string) => {
-  const c = rgb(hex);
-  return (
-    0.2126729 * (c.r / 255) ** 2.4 + 0.7151522 * (c.g / 255) ** 2.4 + 0.072175 * (c.b / 255) ** 2.4
-  );
-};
+const apcaYOf = (c: Rgb) =>
+  0.2126729 * (c.r / 255) ** 2.4 + 0.7151522 * (c.g / 255) ** 2.4 + 0.072175 * (c.b / 255) ** 2.4;
+
+const apcaY = (hex: string) => apcaYOf(rgb(hex));
 
 /** APCA lightness contrast of `text` on `ground`, positive for dark
  *  text on light, negative for light text on dark. */
 export function apca(text: string, ground: string): number {
+  return apcaOfY(apcaY(text), apcaY(ground));
+}
+
+// APCA from the screen luminance of the text and of the ground.
+function apcaOfY(textY: number, groundY: number): number {
   const clampY = (y: number) => (y < 0.022 ? y + (0.022 - y) ** 1.414 : y);
-  const yt = clampY(apcaY(text));
-  const yb = clampY(apcaY(ground));
+  const yt = clampY(textY);
+  const yb = clampY(groundY);
   if (Math.abs(yb - yt) < 0.0005) return 0;
   let out;
   if (yb > yt) {
@@ -331,46 +336,129 @@ const CVD_PAIRS: readonly (readonly [AnsiSlot, AnsiSlot, number])[] = [
 const isDark = (p: XtermPalette) => rgbToOklab(rgb(p.background)).L < 0.6;
 const away = (p: XtermPalette, hex: string) => Math.abs(lightness(hex) - lightness(p.background));
 
-/** Every check, in the order the review lists them. */
-export function checks(p: XtermPalette): GameCheck[] {
-  const bg = p.background;
-  const out: GameCheck[] = [];
-  const add = (id: string, value: number, need: string, ok: boolean) =>
-    out.push({ id, value: +value.toFixed(1), need, ok });
-  const fgLc = lc(p.foreground, bg);
-  add('T1 fg Lc', fgLc, '>=75', fgLc >= T.fgLc);
-  add('T1 fg WCAG', wcag(p.foreground, bg), '>=7', wcag(p.foreground, bg) >= T.fgWcag);
-  for (const k of SENTENCE) {
-    add(`T2 ${k} Lc`, lc(p[k], bg), '>=60', lc(p[k], bg) >= T.sentenceLc);
-  }
-  for (const k of CUE) add(`T3 ${k} Lc`, lc(p[k], bg), '>=45', lc(p[k], bg) >= T.cueLc);
-  const dim = lc(p.brightBlack, bg);
+// ── What the checks read of a color ────────────────────────────────
+
+/** What the checks read of one color, worked out once: its OKLab
+ *  coordinates, its APCA and WCAG luminance, and its OKLab as each
+ *  deficiency sees it, worked out when first asked. */
+interface Tone {
+  hex: string;
+  rgb: Rgb;
+  lab: Oklab;
+  y: number;
+  lum: number;
+  seen: Partial<Record<Cvd, Oklab>>;
+}
+
+function toneOf(hex: string): Tone {
+  const c = rgb(hex);
+  return { hex, rgb: c, lab: rgbToOklab(c), y: apcaYOf(c), lum: luminance(c), seen: {} };
+}
+
+const seenTone = (t: Tone, kind: Cvd): Oklab =>
+  (t.seen[kind] ??= linearToOklab(simulateRgb(t.rgb, kind)));
+
+// OKLab dE times 100 between two sets of coordinates.
+const labDE = (p: Oklab, q: Oklab) => 100 * Math.hypot(p.L - q.L, p.a - q.a, p.b - q.b);
+
+// The WCAG contrast of two relative luminances.
+const ratio = (la: number, lb: number) => (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+
+type ToneOf = (slot: 'background' | GameSlot) => Tone;
+
+/** The id and target of every check, in the order the review lists
+ *  them. T4 takes its range from body text (measure). */
+const CHECK_SPEC: readonly (readonly [string, string])[] = [
+  ['T1 fg Lc', '>=75'],
+  ['T1 fg WCAG', '>=7'],
+  ...SENTENCE.map((k) => [`T2 ${k} Lc`, '>=60'] as const),
+  ...CUE.map((k) => [`T3 ${k} Lc`, '>=45'] as const),
+  ['T4 brightBlack Lc', ''],
+  ['T5 black WCAG', '>=1.25'],
+  ...PAIRS.flatMap(([n]) => [
+    [`T6 ${n} pair dE`, '>=10'] as const,
+    [`T6 ${n} bright step dL`, '>=4'] as const,
+  ]),
+  ['T6 fg/brightWhite dL', '>=8'],
+  ...(['protan', 'deutan'] as const).flatMap((kind) =>
+    CVD_PAIRS.map(([a, b, need]) => [`T7 ${kind} ${a}/${b}`, `>=${need}`] as const),
+  ),
+  ['T7 red/yellow dL', '>=10'],
+  ['T7 red/brightRed dL', '>=8'],
+  ['T7 tritan cyan/green', '>=8'],
+];
+const T4_AT = CHECK_SPEC.findIndex(([id]) => id === 'T4 brightBlack Lc');
+
+interface Measured {
+  values: number[];
+  oks: boolean[];
+  // The top of the T4 range.
+  dimTop: number;
+}
+
+// Every check of the colors `t` gives, in CHECK_SPEC order, each value
+// unrounded and whether it passes.
+function measure(t: ToneOf): Measured {
+  const bg = t('background');
+  const values: number[] = [];
+  const oks: boolean[] = [];
+  const add = (value: number, ok: boolean) => {
+    values.push(value);
+    oks.push(ok);
+  };
+  const lcOf = (k: GameSlot) => Math.abs(apcaOfY(t(k).y, bg.y));
+  const wcagOf = (k: GameSlot) => ratio(t(k).lum, bg.lum);
+  const awayOf = (k: GameSlot) => Math.abs(t(k).lab.L * 100 - bg.lab.L * 100);
+  const dLOf = (a: GameSlot, b: GameSlot) => Math.abs(t(a).lab.L * 100 - t(b).lab.L * 100);
+  const cvdOf = (a: GameSlot, b: GameSlot, kind: Cvd) =>
+    labDE(seenTone(t(a), kind), seenTone(t(b), kind));
+  const fgLc = lcOf('foreground');
+  add(fgLc, fgLc >= T.fgLc);
+  add(wcagOf('foreground'), wcagOf('foreground') >= T.fgWcag);
+  for (const k of SENTENCE) add(lcOf(k), lcOf(k) >= T.sentenceLc);
+  for (const k of CUE) add(lcOf(k), lcOf(k) >= T.cueLc);
+  const dim = lcOf('brightBlack');
   const dimTop = Math.min(T.dimMax, fgLc - T.dimBelowFg);
-  add(
-    'T4 brightBlack Lc',
-    dim,
-    `45..${dimTop.toFixed(0)}`,
-    dim >= T.dimMin && dim <= dimTop + 0.05,
-  );
-  add('T5 black WCAG', wcag(p.black, bg), '>=1.25', wcag(p.black, bg) >= T.blackWcag - 1e-9);
+  add(dim, dim >= T.dimMin && dim <= dimTop + 0.05);
+  add(wcagOf('black'), wcagOf('black') >= T.blackWcag - 1e-9);
   for (const [n, b] of PAIRS) {
-    add(`T6 ${n} pair dE`, dE(p[n], p[b]), '>=10', dE(p[n], p[b]) >= T.pairDE);
-    const step = away(p, p[b]) - away(p, p[n]);
-    add(`T6 ${n} bright step dL`, step, '>=4', step >= T.pairDL);
+    const pair = labDE(t(n).lab, t(b).lab);
+    add(pair, pair >= T.pairDE);
+    const step = awayOf(b) - awayOf(n);
+    add(step, step >= T.pairDL);
   }
-  const fw = away(p, p.brightWhite) - away(p, p.foreground);
-  add('T6 fg/brightWhite dL', fw, '>=8', fw >= T.fgBrightWhiteDL);
+  const fw = awayOf('brightWhite') - awayOf('foreground');
+  add(fw, fw >= T.fgBrightWhiteDL);
   for (const kind of ['protan', 'deutan'] as const) {
     for (const [a, b, need] of CVD_PAIRS) {
-      const v = dECvd(p[a], p[b], kind);
-      add(`T7 ${kind} ${a}/${b}`, v, `>=${need}`, v >= need);
+      const v = cvdOf(a, b, kind);
+      add(v, v >= need);
     }
   }
-  add('T7 red/yellow dL', dL(p.red, p.yellow), '>=10', dL(p.red, p.yellow) >= T.rySep);
-  add('T7 red/brightRed dL', dL(p.red, p.brightRed), '>=8', dL(p.red, p.brightRed) >= T.rRbDL);
-  const tc = dECvd(p.cyan, p.green, 'tritan');
-  add('T7 tritan cyan/green', tc, '>=8', tc >= T.tritanCG);
-  return out;
+  add(dLOf('red', 'yellow'), dLOf('red', 'yellow') >= T.rySep);
+  add(dLOf('red', 'brightRed'), dLOf('red', 'brightRed') >= T.rRbDL);
+  const tc = cvdOf('cyan', 'green', 'tritan');
+  add(tc, tc >= T.tritanCG);
+  return { values, oks, dimTop };
+}
+
+/** Every check, in the order the review lists them. */
+export function checks(p: XtermPalette): GameCheck[] {
+  const tones = new Map<string, Tone>();
+  const { values, oks, dimTop } = measure((k) => {
+    let tone = tones.get(p[k]);
+    if (!tone) {
+      tone = toneOf(p[k]);
+      tones.set(p[k], tone);
+    }
+    return tone;
+  });
+  return CHECK_SPEC.map(([id, need], i) => ({
+    id,
+    value: +values[i].toFixed(1),
+    need: i === T4_AT ? `45..${dimTop.toFixed(0)}` : need,
+    ok: oks[i],
+  }));
 }
 
 // ── The greedy tuner ───────────────────────────────────────────────
