@@ -10,9 +10,10 @@ import { PANE_TEXT_BASE, PANE_TEXT_PX, paneText, paneTextSize, textPx } from './
 
 // Every pane and the status line draw at your panel size, and every
 // length that sits with the text scales from the 12 px the panes were
-// drawn at. These tests hold panel.css, frame.css and paneTextSize.ts
-// to the same numbers, and hold every scaled length at 12 px to the
-// number the sheets drew before the panel had a size of its own.
+// drawn at. These tests hold panel.css, map.css, frame.css and
+// paneTextSize.ts to the same numbers, and hold every scaled length at
+// 12 px to the number the sheets drew before the panel had a size of
+// its own.
 
 /** Every rule in a sheet, its selector on one line, comments out. */
 function rulesOf(css: string): { selector: string; body: string }[] {
@@ -100,14 +101,14 @@ function computedValue(value: string, size: number): string {
     .join(' ');
 }
 
-/** A panel.css declaration as the webview computes it at `size` px. */
+/** A pane declaration as the webview computes it at `size` px. */
 function computed(selector: string, prop: string, size: number): string {
   const value = declarations(selector).get(prop);
   expect(value, `${selector} ${prop}`).toBeDefined();
   return computedValue(value ?? '', size);
 }
 
-// Every declaration that follows your size, what panel.css drew for it
+// Every declaration that follows your size, what the sheets drew for it
 // at 12 px before, and what it draws at 16 px, four thirds of each,
 // rounded, with the marks still 8 px and centered and the side insets
 // as they were. --pane-header was 28px and --row 22px.
