@@ -498,6 +498,33 @@ describe('Fit game colors', () => {
   });
 });
 
+describe('Color vision', () => {
+  it('reads Typical for a config saved before it existed or with a vision it does not know', () => {
+    expect(normalizeUiConfig(raw()).color_vision).toBe('typical');
+    expect(normalizeUiConfig(raw({ color_vision: 'deutan' })).color_vision).toBe('typical');
+    expect(normalizeUiConfig(raw({ color_vision: 'tritanopia' })).color_vision).toBe('tritanopia');
+  });
+
+  it('saves with the rest of the config and tells every window when it changes', async () => {
+    const invoked = vi.mocked(invoke);
+    invoked.mockClear();
+    const picked = { ...normalizeUiConfig(raw()), color_vision: 'deuteranopia' as const };
+    await setUiConfig(picked);
+    const [command, args] = invoked.mock.calls[0] as [string, { config: Record<string, unknown> }];
+    expect(command).toBe('ui_set_config');
+    expect(args.config).toMatchObject({ color_vision: 'deuteranopia' });
+
+    const sent = vi.mocked(emit);
+    await broadcastUiConfigChanges(picked);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...picked, color_vision: 'protanopia' });
+    expect(sent).toHaveBeenCalledWith('vosh://color-vision-changed', 'protanopia');
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...picked, color_vision: 'protanopia' });
+    expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://color-vision-changed');
+  });
+});
+
 describe('Keep highlight colors readable', () => {
   it('reads on for a config saved before it existed, and keeps it off once off', () => {
     expect(normalizeUiConfig(raw()).readable_highlights).toBe(true);
