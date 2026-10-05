@@ -8,8 +8,8 @@ import {
   sizeChoices,
   themeCaption,
 } from '../../../theme/appearanceSettings';
-import { normalizePanelFont } from '../../../lib/panelFont';
-import { normalizePanelSize } from '../../../lib/panelSize';
+import { normalizePanelFont } from '../../../panel/panelFont';
+import { normalizePanelSize } from '../../../panel/panelSize';
 import type { CustomTheme } from '../../../ipc/theme';
 import {
   listSystemFonts,

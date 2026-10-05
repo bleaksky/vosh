@@ -1,7 +1,7 @@
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import { menuSetState, subscribeAppMenu } from '../ipc/windows';
 import SHORTCUTS from './appShortcuts.json';
-import { PANE_TYPES, type PaneType } from './paneLayout';
+import { PANE_TYPES, type PaneType } from '../panel/paneLayout';
 
 // The page side of the macOS menu bar (src-tauri/src/app/menu.rs). A
 // menu command reaches the main window as `vosh://app-menu` with the

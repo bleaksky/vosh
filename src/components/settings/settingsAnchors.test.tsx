@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import golden from '../../../fixtures/links/settings-anchors.json';
 import { resolveHelpTarget } from '../../help/helpNav';
 import { buildPaletteEntries, type PaletteDeps } from '../../lib/palette';
-import { defaultLayout, type PaneLeaf } from '../../lib/paneLayout';
+import { defaultLayout, type PaneLeaf } from '../../panel/paneLayout';
 import type { GameBlock } from '../../lib/promptSettings';
 import { type SessionIdentity } from '../../ipc/characters';
 import { HELP_GOTO, SETTINGS_GOTO_TAB } from '../../ipc/events';
@@ -20,7 +20,7 @@ import {
 } from '../../lib/settingsNav';
 import { SETTINGS_ROWS, settingsRowKey } from '../../lib/settingsSearch';
 import { FakeDocument, findAll, type FakeElement } from '../../test/fakeDom';
-import type { PaneMenu as PaneMenuType } from '../panel/PaneMenu';
+import type { PaneMenu as PaneMenuType } from '../../panel/PaneMenu';
 import type { SettingsPageProps } from './pageTypes';
 
 // Every way into Settings names a target as a string: a search hit, a
@@ -267,7 +267,7 @@ beforeAll(async () => {
     import('./groups/InputGroup'),
     import('./pages/AutomationPage'),
     import('./pages/CharactersPage'),
-    import('../panel/PaneMenu'),
+    import('../../panel/PaneMenu'),
   ]);
   PAGES = {
     general: general.GeneralGroup,

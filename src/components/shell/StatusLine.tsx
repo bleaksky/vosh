@@ -19,7 +19,7 @@ import {
   vitalTone,
   type CombatHealth,
   type VitalTone,
-} from '../../lib/vitalsView';
+} from '../../panel/vitalsView';
 import { daylightTint, isDaytime } from './daylight';
 import { formatGameTime } from './gameTime';
 import { StatusClock } from './StatusClock';

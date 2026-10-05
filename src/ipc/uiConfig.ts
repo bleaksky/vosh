@@ -3,8 +3,8 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { normalizePanelFont } from '../lib/panelFont';
-import { normalizePanelSize } from '../lib/panelSize';
+import { normalizePanelFont } from '../panel/panelFont';
+import { normalizePanelSize } from '../panel/panelSize';
 import {
   DEFAULT_LIGHT_THEME_ID,
   DEFAULT_THEME_ID,

@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { isMacPlatform } from '../../lib/shortcuts';
-import { PANEL_WIDTH_MAX, panelWidthFloor } from '../../lib/paneLayout';
+import { PANEL_WIDTH_MAX, panelWidthFloor } from '../../panel/paneLayout';
 
 // The One Window frame (SPEC 1). A CSS grid with the terminal column
 // and the panel column. Rows are the 32 px title band, the terminal,

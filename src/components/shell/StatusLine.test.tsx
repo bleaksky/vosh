@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { VitalsOptions } from '../../ipc/uiConfig';
 import type { Vitals } from '../../stores/gmcp/vitalsStore';
-import type { CombatHealth } from '../../lib/vitalsView';
+import type { CombatHealth } from '../../panel/vitalsView';
 import frameCss from '../../styles/frame.css?raw';
 import { StatusVitals, type StatusVitalsProps } from './StatusLine';
 

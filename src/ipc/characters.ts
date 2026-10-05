@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { sanitizeLayout, type PaneLayout } from '../lib/paneLayout';
+import { sanitizeLayout, type PaneLayout } from '../panel/paneLayout';
 import { normalizeTrackedAffects, type TrackedAffect } from './affects';
 import { PROFILE_CHANGED, SESSION_IDENTITY_CHANGED } from './events';
 import type { ProfileAutoMatch, ProfileEntry } from './profiles';

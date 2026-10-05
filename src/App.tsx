@@ -24,14 +24,14 @@ import { ScrollDepth } from './terminal/ScrollDepth';
 import { AppShell } from './components/shell/AppShell';
 import { TitleBand } from './components/shell/TitleBand';
 import { StatusLine } from './components/shell/StatusLine';
-import { PanelHost } from './components/panel/PanelHost';
+import { PanelHost } from './panel/PanelHost';
 import {
   panelWidthOf,
   setPanelWidth,
   togglePanelOpen,
   updatePanelLayout,
   usePanelLayout,
-} from './components/panel/panelLayoutStore';
+} from './panel/panelLayoutStore';
 import { listTriggers, presetsInstall, presetsRemove } from './ipc/automation';
 import {
   nativeSurfaceFind,
@@ -84,8 +84,8 @@ import {
   subscribeThemePrefs,
 } from './theme/theme';
 import { loadFontStack, renderFontStack } from './lib/fontLoader';
-import { normalizePanelFont, panelFontFamily, panelFontList } from './lib/panelFont';
-import { DEFAULT_PANEL_SIZE, normalizePanelSize, resolvePanelSize } from './lib/panelSize';
+import { normalizePanelFont, panelFontFamily, panelFontList } from './panel/panelFont';
+import { DEFAULT_PANEL_SIZE, normalizePanelSize, resolvePanelSize } from './panel/panelSize';
 import { PRESETS, presetTriggers } from './automation/presets';
 import { presetLaunchPlan } from './automation/automationRecords';
 import { listenForQuitFlush } from './lib/pendingWrites';
@@ -140,8 +140,8 @@ import {
   PANE_TYPES,
   type PaneNode,
   type PaneType,
-} from './lib/paneLayout';
-import { offeredPaneTypes } from './components/panel/paneTypes';
+} from './panel/paneLayout';
+import { offeredPaneTypes } from './panel/paneTypes';
 import { useConnection, type ConnectionStatus } from './stores/session/useConnection';
 import { useEscape } from './lib/escapeStack';
 import { usePromptShow } from './lib/promptShow';

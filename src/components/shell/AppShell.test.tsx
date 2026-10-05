@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { PANEL_WIDTH_MIN, PANEL_WIDTH_MIN_FRAMELESS } from '../../lib/paneLayout';
+import { PANEL_WIDTH_MIN, PANEL_WIDTH_MIN_FRAMELESS } from '../../panel/paneLayout';
 import { AppShell } from './AppShell';
 
 // The width the frame draws the panel at. On Windows and Linux the

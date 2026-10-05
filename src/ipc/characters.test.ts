@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { defaultLayout } from '../lib/paneLayout';
+import { defaultLayout } from '../panel/paneLayout';
 
 // The Characters wrappers in src/ipc. Tauri takes camelCase argument
 // keys from JS, and an optional profile must reach the backend as null
