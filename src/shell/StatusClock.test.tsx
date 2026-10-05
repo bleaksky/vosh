@@ -178,7 +178,8 @@ function glyph(html: string, index: number): string | null {
 
 const GLYPH_OPEN =
   '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" ' +
-  'stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+  'stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ' +
+  'focusable="false">';
 const TICK_TRACK = `<circle cx="8" cy="8" r="5.75" stroke-opacity="0.35"></circle>`;
 
 describe('StatusClock icon strokes', () => {

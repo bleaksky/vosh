@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
 
-// The SPEC 6 icon set that Settings, Help, the prompt card, the panes
-// and the terminal menu draw: 16 unit strokes at 1.25, round caps and
-// joins, drawn in currentColor so each control sets the tone. At 12 px
-// the stroke keeps its 1.25 px weight through vector-effect, the way the
-// boards draw the chevrons and the chip close icon.
+// The SPEC 6 icon set that Settings, Help, the prompt card, the panes,
+// the terminal menu and the title band draw: 16 unit strokes at 1.25,
+// round caps and joins, drawn in currentColor so each control sets the
+// tone. At 12 px the stroke keeps its 1.25 px weight through
+// vector-effect, the way the boards draw the chevrons and the chip close
+// icon. shell/icons.tsx draws the panel glyph and the status line
+// glyphs on the same Glyph.
 
 interface IconProps {
   /** Rendered size in px. 16 unless a recipe says 12. */
@@ -12,7 +14,7 @@ interface IconProps {
   className?: string;
 }
 
-function Glyph({ size = 16, className, children }: IconProps & { children: ReactNode }) {
+export function Glyph({ size = 16, className, children }: IconProps & { children: ReactNode }) {
   return (
     <svg
       width={size}
@@ -41,6 +43,19 @@ export function GearIcon(props: IconProps) {
     <Glyph {...props}>
       <circle cx="8" cy="8" r="2.25" />
       <path d="M8 1.75v1.75M8 12.5v1.75M1.75 8h1.75M12.5 8h1.75M3.6 3.6l1.2 1.2M11.2 11.2l1.2 1.2M3.6 12.4l1.2-1.2M11.2 4.8l1.2-1.2" />
+    </Glyph>
+  );
+}
+
+/** The Settings button. A six tooth gear around a hole, its teeth 6.25
+ *  out and its body 4.5, as wide as the panel glyph beside it. The
+ *  spoked gear Settings draws beside General reads as a sun at this
+ *  size, which here looks like a light theme toggle. */
+export function ToothedGearIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M7.02 1.83A6.25 6.25 0 0 1 8.98 1.83L9.32 3.7A4.5 4.5 0 0 1 11.07 4.71L12.86 4.07A6.25 6.25 0 0 1 13.83 5.76L12.38 6.99A4.5 4.5 0 0 1 12.38 9.01L13.83 10.24A6.25 6.25 0 0 1 12.86 11.93L11.07 11.29A4.5 4.5 0 0 1 9.32 12.3L8.98 14.17A6.25 6.25 0 0 1 7.02 14.17L6.68 12.3A4.5 4.5 0 0 1 4.93 11.29L3.14 11.93A6.25 6.25 0 0 1 2.17 10.24L3.62 9.01A4.5 4.5 0 0 1 3.62 6.99L2.17 5.76A6.25 6.25 0 0 1 3.14 4.07L4.93 4.71A4.5 4.5 0 0 1 6.68 3.7Z" />
+      <circle cx="8" cy="8" r="2" />
     </Glyph>
   );
 }
@@ -180,8 +195,8 @@ export function MoreIcon({ size = 16, className }: IconProps) {
   );
 }
 
-// Window controls for the frameless Settings window on Windows and
-// Linux, the same glyphs the main window's title band draws.
+// Window controls for the frameless windows on Windows and Linux, drawn
+// in the main window's title band and in the Settings and Help headers.
 
 export function MinimizeIcon(props: IconProps) {
   return (
