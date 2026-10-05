@@ -10,7 +10,10 @@
 //!   your own, so they stay quiet.
 //! - Being attacked: Char.Combat going from no target to one, quiet when
 //!   it names a groupmate other than you as the tank, or when a line of
-//!   yours left in the 2 seconds before, since you likely began it.
+//!   yours left in the 2 seconds before, since you likely began it. The
+//!   game names a tank only in your group, you among it, and as you see
+//!   them, so a form or a conceal names you by a short description. The
+//!   last Group.Info says who else is in it.
 //! - Low health: the low latch rising, under 20 percent and clear again
 //!   at 25, the twin of `nextLow` in src/lib/stores/vitalsStore.ts, held
 //!   to it by fixtures/alerts/low-latch.json. It never rings while the
@@ -57,6 +60,56 @@ pub(crate) struct PresetWatch {
     low: bool,
     /// Whom you fight, from the latest Char.Combat.
     target: Option<String>,
+    /// Your group, from the latest Group.Info.
+    group: Group,
+}
+
+/// Your group as the latest Group.Info gives it.
+#[derive(Debug, Default)]
+enum Group {
+    /// No Group.Info yet, or the game hides it under lamented tears.
+    #[default]
+    Unknown,
+    /// You fight alone, `Group.Info {}` (gmcp.c:796), so you are your own
+    /// tank whatever the game calls you.
+    Alone,
+    /// The members as you see them, you among them.
+    Members(Vec<String>),
+}
+
+impl Group {
+    fn of(data: &serde_json::Value) -> Self {
+        if data.get("hidden").and_then(serde_json::Value::as_bool) == Some(true) {
+            return Self::Unknown;
+        }
+        match data.get("members").and_then(serde_json::Value::as_array) {
+            Some(members) => Self::Members(
+                members
+                    .iter()
+                    .filter_map(|m| m.get("name").and_then(serde_json::Value::as_str))
+                    .map(str::to_string)
+                    .collect(),
+            ),
+            None if data.as_object().is_some_and(serde_json::Map::is_empty) => Self::Alone,
+            None => Self::Unknown,
+        }
+    }
+
+    /// Whether `tank`, whom the target hits, is a groupmate other than
+    /// you, `name`, as far as the group tells.
+    fn other_tanks(&self, tank: &str, name: Option<&str>) -> bool {
+        if name == Some(tank) {
+            return false;
+        }
+        match self {
+            // With no group known, a tank by another name is someone
+            // else, and with your name not known yet no tank can be told
+            // apart.
+            Self::Unknown => true,
+            Self::Alone => false,
+            Self::Members(members) => members.iter().any(|member| member == tank),
+        }
+    }
 }
 
 /// What the connection alert says.
@@ -96,6 +149,14 @@ impl PresetWatch {
                 None
             }
             "Comm.Channel" => tell(p, msg),
+            // The game sends it each prompt, so only while the preset
+            // that reads it is on.
+            "Group.Info" => {
+                if parts(p, ATTACKED).is_some() {
+                    self.group = Group::of(&msg.data);
+                }
+                None
+            }
             "Char.Combat" => {
                 let target = msg
                     .data
@@ -117,9 +178,8 @@ impl PresetWatch {
                 if !started {
                     return None;
                 }
-                // A groupmate tanks, as when autoassist pulls you in. With
-                // your name not known yet no tank can be told apart.
-                if tank.is_some() && tank != self.name.as_deref() {
+                // A groupmate tanks, as when autoassist pulls you in.
+                if tank.is_some_and(|tank| self.group.other_tanks(tank, self.name.as_deref())) {
                     return None;
                 }
                 if last_line.is_some_and(|at| now.duration_since(at) < YOUR_FIGHT) {
