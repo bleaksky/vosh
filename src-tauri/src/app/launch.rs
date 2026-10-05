@@ -86,6 +86,8 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
             let _ = crate::native::surface::install(&main);
         }
     }
+    // A click on an alert banner selects the session it names.
+    crate::alert::banner::install(app.handle());
 }
 
 /// Everything launch loads, in order, from `app_data`, which it keeps as
