@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { subscribeBaseAnsi } from './baseAnsi';
 import type { BandEnv } from './bandCells';
-import { useFitGameColors } from './fitGameColors';
+import { useColorVision, useFitGameColors } from './fitGameColors';
 import { ansi16Of, xtermThemeFor } from './terminalTheme';
 import { getCurrentThemeId } from './theme';
 import { findTheme, onCustomThemesChanged, themeTokens } from './themes';
@@ -10,18 +10,19 @@ import { findTheme, onCustomThemesChanged, themeTokens } from './themes';
 // band and the prompt card read them, so a prompt looks there as it does
 // in the text.
 
-/** The colors the terminal draws with now: the theme's, fitted while Fit
- *  game colors is on, or the base palette while "Use the theme's colors
- *  for MUD text" is off. It follows a theme change (every apply writes
- *  data-theme on the root), a new custom theme list, which brings a
- *  custom theme its fit, an edit to the base palette, and Fit game
- *  colors. */
+/** The colors the terminal draws with now: the theme's, fitted for your
+ *  color vision while Fit game colors is on, or the base palette while
+ *  "Use the theme's colors for MUD text" is off. It follows a theme
+ *  change (every apply writes data-theme on the root), a new custom
+ *  theme list, which brings a custom theme its fit, an edit to the base
+ *  palette, Fit game colors and the color vision. */
 export function useBandEnv(
   themeTerminalColors: boolean,
   brightBold: boolean,
   renderer: BandEnv['renderer'],
 ): BandEnv {
   const fit = useFitGameColors();
+  const vision = useColorVision();
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const bump = () => setTick((n) => n + 1);
@@ -39,7 +40,7 @@ export function useBandEnv(
   }, []);
   return useMemo(() => {
     const theme = findTheme(getCurrentThemeId());
-    const resolved = xtermThemeFor(theme, themeTerminalColors, fit);
+    const resolved = xtermThemeFor(theme, themeTerminalColors, fit, vision);
     const { selection, selectionText } = themeTokens(theme);
     return {
       palette: ansi16Of(resolved),
@@ -52,5 +53,5 @@ export function useBandEnv(
     };
     // tick marks a theme or palette change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tick, themeTerminalColors, fit, brightBold, renderer]);
+  }, [tick, themeTerminalColors, fit, vision, brightBold, renderer]);
 }
