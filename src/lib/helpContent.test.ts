@@ -1061,9 +1061,12 @@ describe('the help on auto reconnect and Lua alerts', () => {
     expect(text).toContain('add `reconnect = false` to its profile file');
   });
 
-  it('says a dev build posts no banners on macOS', () => {
-    expect(body('automate.lua-scripts')).toContain(
-      'macOS posts banners only for a signed Vosh, so a dev build you run from the source shows none there.',
+  it('says what a Mac waits for and that only macOS takes banners back', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain('on macOS turning a plugin off takes back the banners it posted');
+    expect(text).toContain('Vosh asks for that from the Alerts settings, which have yet to land');
+    expect(text).toContain(
+      'It also needs a signed Vosh, so a dev build you run from the source shows none there.',
     );
   });
 
