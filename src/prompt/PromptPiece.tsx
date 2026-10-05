@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { BandEnv } from '../terminal/bandCells';
 import { indexedRgb } from '../terminal/bandCells';
+import { toHex } from '../theme/color';
 import {
   breakHint,
   byValueName,
@@ -65,9 +66,6 @@ const WHEN_OPTIONS: SegmentedOption<PromptWhen>[] = [
   { value: 'not_fight', label: 'Out of a fight' },
 ];
 
-const rgbHex = ([r, g, b]: readonly number[]) =>
-  `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
-
 interface PromptPieceProps {
   piece: PromptPiece;
   env: BandEnv;
@@ -109,7 +107,7 @@ function PieceRow({
 export function PromptPieceBody({ piece, env, onEdit, onInsertValue }: PromptPieceProps) {
   const rows = rowsOf(piece);
   const at = piece.piece;
-  const palette = (index: number) => rgbHex(indexedRgb(index, env.palette));
+  const palette = (index: number) => toHex(indexedRgb(index, env.palette));
   const hint = colorHint(piece.color, piece.background);
   const paint = (layer: Layer) => (color: PromptColorChoice) =>
     onEdit({

@@ -358,27 +358,6 @@ export const THEME_SLOT_GROUPS: readonly ThemeSlotGroup[] = [
 
 // ── Colors ───────────────────────────────────────────────────────────
 
-/** A `#rrggbb` a native color input accepts, read from any hex or
- *  rgb() text. Anything else gives `fallback`. */
-export function colorInputValue(value: string, fallback = '#888888'): string {
-  const text = value.trim();
-  if (/^#[0-9a-f]{6}$/i.test(text)) return text.toLowerCase();
-  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(text);
-  if (short)
-    return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`.toLowerCase();
-  const long = /^#([0-9a-f]{6})[0-9a-f]{2}$/i.exec(text);
-  if (long) return `#${long[1]}`.toLowerCase();
-  const rgb = /^rgba?\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)/i.exec(text);
-  if (rgb) {
-    const hex = (n: string) =>
-      Math.max(0, Math.min(255, Math.round(Number(n))))
-        .toString(16)
-        .padStart(2, '0');
-    return `#${hex(rgb[1])}${hex(rgb[2])}${hex(rgb[3])}`;
-  }
-  return fallback;
-}
-
 /** The 16 base palette colors in ANSI order, the stock chart when you
  *  have not changed any. */
 export function basePalette(saved: readonly string[] | null): string[] {

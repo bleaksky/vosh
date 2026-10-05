@@ -5,22 +5,13 @@
 // hex only field, for a color the terminal reads as hex, marks any
 // other text as an error instead of saving it.
 
-const HEX = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
+import { parseHex, toHex } from '../theme/color';
 
 /** A hex color in 3 or 6 digits, with or without the #, as lowercase
  *  #rrggbb. Null for anything else. */
 export function normalizeHexColor(text: string): string | null {
-  const m = HEX.exec(text.trim());
-  if (!m) return null;
-  const digits = m[1].toLowerCase();
-  const full =
-    digits.length === 3
-      ? digits
-          .split('')
-          .map((c) => c + c)
-          .join('')
-      : digits;
-  return `#${full}`;
+  const rgb = parseHex(text);
+  return rgb ? toHex(rgb) : null;
 }
 
 /** What typing `text` into a color field means. `default` for an empty
@@ -80,6 +71,5 @@ export function colorInputValue(value: string | null): string | null {
 export function rgbStringToHex(value: string): string | null {
   const m = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i.exec(value.trim());
   if (!m) return normalizeHexColor(value);
-  const hex = (n: string) => Math.min(255, Number(n)).toString(16).padStart(2, '0');
-  return `#${hex(m[1])}${hex(m[2])}${hex(m[3])}`;
+  return toHex({ r: Number(m[1]), g: Number(m[2]), b: Number(m[3]) });
 }

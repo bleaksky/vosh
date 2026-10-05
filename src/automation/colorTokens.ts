@@ -4,6 +4,8 @@
 // to raw ANSI escapes; decolorize() does the inverse so already-
 // colorized templates round-trip as friendly tokens in the form.
 
+import { parseHex, toHex } from '../theme/color';
+
 const NAMED: Record<string, string> = {
   reset: '\x1b[0m',
   bold: '\x1b[1m',
@@ -39,25 +41,6 @@ const NAMED_INVERSE: Record<string, string> = Object.fromEntries(
   Object.entries(NAMED).map(([k, v]) => [v, k]),
 );
 
-function hexToRgb(hex: string): [number, number, number] | null {
-  let h = hex.startsWith('#') ? hex.slice(1) : hex;
-  if (h.length === 3) {
-    h = h
-      .split('')
-      .map((c) => c + c)
-      .join('');
-  }
-  if (h.length !== 6) return null;
-  const n = parseInt(h, 16);
-  if (Number.isNaN(n)) return null;
-  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
-}
-
-function rgbToHex(r: number, g: number, b: number): string {
-  const toHex = (n: number) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0');
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
-
 /// Expand friendly tokens into raw ANSI. Idempotent on already-
 /// expanded escapes (anything that doesn't match `{...}` passes
 /// through verbatim).
@@ -66,12 +49,12 @@ export function colorize(template: string): string {
   out = out.replace(/\{fg:(\d+)\}/g, (_, n) => `\x1b[38;5;${n}m`);
   out = out.replace(/\{bg:(\d+)\}/g, (_, n) => `\x1b[48;5;${n}m`);
   out = out.replace(/\{#([0-9a-fA-F]{3,6})\}/g, (m, hex) => {
-    const rgb = hexToRgb(hex);
-    return rgb ? `\x1b[38;2;${rgb[0]};${rgb[1]};${rgb[2]}m` : m;
+    const rgb = parseHex(hex);
+    return rgb ? `\x1b[38;2;${rgb.r};${rgb.g};${rgb.b}m` : m;
   });
   out = out.replace(/\{bg#([0-9a-fA-F]{3,6})\}/g, (m, hex) => {
-    const rgb = hexToRgb(hex);
-    return rgb ? `\x1b[48;2;${rgb[0]};${rgb[1]};${rgb[2]}m` : m;
+    const rgb = parseHex(hex);
+    return rgb ? `\x1b[48;2;${rgb.r};${rgb.g};${rgb.b}m` : m;
   });
   out = out.replace(/\{([a-z_]+)\}/g, (m, name) => NAMED[name] ?? m);
   return out;
@@ -95,12 +78,12 @@ export function decolorize(raw: string): string {
   out = out.replace(
     // eslint-disable-next-line no-control-regex
     /\x1b\[38;2;(\d+);(\d+);(\d+)m/g,
-    (_, r, g, b) => `{${rgbToHex(Number(r), Number(g), Number(b))}}`,
+    (_, r, g, b) => `{${toHex({ r: Number(r), g: Number(g), b: Number(b) })}}`,
   );
   out = out.replace(
     // eslint-disable-next-line no-control-regex
     /\x1b\[48;2;(\d+);(\d+);(\d+)m/g,
-    (_, r, g, b) => `{bg${rgbToHex(Number(r), Number(g), Number(b))}}`,
+    (_, r, g, b) => `{bg${toHex({ r: Number(r), g: Number(g), b: Number(b) })}}`,
   );
   return out;
 }
