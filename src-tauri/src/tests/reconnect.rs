@@ -159,6 +159,15 @@ async fn eight_failed_tries_stop_and_say_so() {
     );
     h.until("the alert", |h| rang(h).len() == 2).await;
     assert_eq!(rang(&h), ["Connection lost", "Vosh stopped trying"]);
+    // Each banner names the session as its row reads, by the character
+    // at the drop and by the world once the tries forgot it.
+    let labels: Vec<Json> = h
+        .events_of(h.first, "session://alert")
+        .iter()
+        .map(|a| a["label"].clone())
+        .collect();
+    let world = format!("127.0.0.1 {}", h.servers[0].port);
+    assert_eq!(labels, [json!("Orla"), json!(world)]);
     clock.stays_quiet().await;
     h.finish(grid).await;
 }
@@ -519,6 +528,71 @@ async fn a_login_elsewhere_as_the_character_you_stepped_away_from_takes_nothing(
     );
     h.until("the lost link", |h| !rang(h).is_empty()).await;
     assert_eq!(rang(&h), ["Connection lost"]);
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_login_as_your_character_after_a_failed_try_ends_the_series() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = logged_in(&[]).await;
+    let mut clock = Clock::hold(&h);
+    let one = h.first;
+    h.servers[0].down();
+    h.servers[0].cut();
+    let (_, _, done) = clock.next().await;
+    let _ = done.send(());
+    let failed = "[reconnect] Try 1 failed (the game refused the connection)";
+    h.until(failed, |h| shows(h, one, failed)).await;
+    // The try forgot the character and the address on the session, and
+    // the series still knows what it redials.
+    let (_, wait, done) = clock.next().await;
+    assert_eq!(wait, Duration::from_secs(6));
+    h.servers[0].up();
+    let two = h.open_session().await;
+    h.connect_to(two, &h.servers[0]).await;
+    h.until("the decline", |h| last_of(h, one, "declined").is_some())
+        .await;
+    assert_eq!(
+        kinds(&h, one),
+        ["waiting", "dialing", "failed", "waiting", "declined"]
+    );
+    let line = "[reconnect] Another session logged in as Orla, so Vosh does not reconnect here.";
+    assert!(shows(&h, one, line), "{:#?}", h.screen_of(one));
+    let _ = done.send(());
+    clock.stays_quiet().await;
+    assert_eq!(h.servers[0].connects.lock().expect("the connects").len(), 2);
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_yes_to_connect_anyway_during_the_wait_ends_the_series_before_its_try() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_links_on_one_game("Maren").await;
+    let mut clock = Clock::hold(&h);
+    // The link of the first session drops, and the game has yet to see
+    // it go, so it asks the second session (comm.c:6531).
+    h.servers[0].cut_link(0);
+    let (_, _, done) = clock.next().await;
+    h.servers[0].push_to(1, b"\n\rThat character is already playing.\n\r");
+    h.until("the question", |h| {
+        shows(h, two, "That character is already playing.")
+    })
+    .await;
+    h.type_in(two, "y").await;
+    h.until("the y", |h| {
+        String::from_utf8_lossy(&h.servers[0].received.lock().expect("the bytes")).contains("y\r\n")
+    })
+    .await;
+    let _ = done.send(());
+    h.until("the decline", |h| last_of(h, one, "declined").is_some())
+        .await;
+    assert_eq!(kinds(&h, one), ["waiting", "declined"]);
+    clock.stays_quiet().await;
+    assert_eq!(h.servers[0].connects.lock().expect("the connects").len(), 2);
     h.disconnect_session(two).await;
     h.finish(grid).await;
 }

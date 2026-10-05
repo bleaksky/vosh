@@ -295,20 +295,22 @@ impl Session {
         self.connection.lock().tick.in_session
     }
 
-    /// What a line in another session calls this one: the name you gave
-    /// it, or the character logged in, or else the world it runs with the
-    /// port, like `The Forsaken Lands 1825`. None while it has no name and
-    /// runs no connection.
+    /// What a line in another session or a banner calls this one, as its
+    /// row reads: the name you gave it, or the character logged in, or
+    /// else the world where it last connected with the port, like `The
+    /// Forsaken Lands 1825`, which a drop and each failed redial keep.
+    /// None while it has no name and never connected.
     pub(crate) fn label(&self) -> Option<String> {
         self.name().or_else(|| self.character()).or_else(|| {
-            let (host, port) = self
-                .current_connection
+            let address = self
+                .address
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .clone()?;
             Some(format!(
-                "{} {port}",
-                crate::profile::worlds::world_name(&host)
+                "{} {}",
+                crate::profile::worlds::world_name(&address.host),
+                address.port
             ))
         })
     }
@@ -369,6 +371,23 @@ impl Session {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take()
+    }
+
+    /// Take the series of redials the session runs when `matches` holds
+    /// for it, to end it.
+    pub(crate) fn take_redial_if(
+        &self,
+        matches: impl FnOnce(&crate::session::reconnect::Redial) -> bool,
+    ) -> Option<crate::session::reconnect::Redial> {
+        let mut redial = self
+            .redial
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if redial.as_ref().is_some_and(matches) {
+            redial.take()
+        } else {
+            None
+        }
     }
 
     /// Dial at once in the series the session runs. Returns false when it
@@ -759,8 +778,11 @@ mod tests {
     fn a_label_names_the_session_or_its_character_or_else_the_world_with_its_port() {
         let session = on_defaults(SessionId(2));
         assert_eq!(session.label(), None);
-        *session.current_connection.lock().unwrap() =
-            Some(("play.theforsakenlands.com".into(), 1825));
+        *session.address.lock().unwrap() = Some(super::Address {
+            host: "play.theforsakenlands.com".into(),
+            port: 1825,
+            tls: true,
+        });
         assert_eq!(session.label().as_deref(), Some("The Forsaken Lands 1825"));
         *session.current_character.lock().unwrap() = Some("Builder".into());
         assert_eq!(session.label().as_deref(), Some("Builder"));
