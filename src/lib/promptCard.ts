@@ -7,7 +7,7 @@
 
 import { profileDisplayName, profilePossessive } from './profileLabel';
 import type { MoveMade } from './promptPieces';
-import { cellWidth, parseSgrCells, type Cell } from './sgrCells';
+import { cellWidth, parseSgrCells, type Cell } from '../terminal/sgrCells';
 import type { SessionIdentity } from '../ipc/characters';
 import type {
   PromptCapture,

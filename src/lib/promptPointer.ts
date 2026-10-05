@@ -24,10 +24,10 @@
 // combining mark none (cellWidth in sgrCells.ts).
 
 import { bandCut, bandRowsTop, type CellSize } from './promptBand';
-import { cellWidth, parseSgrCells, shownColumns } from './sgrCells';
+import { cellWidth, parseSgrCells, shownColumns } from '../terminal/sgrCells';
 import type { PromptSpan } from '../ipc/promptDesign';
 import type { TerminalCursor } from '../ipc/terminal';
-import { wrapBreaks } from './wordWrap';
+import { wrapBreaks } from '../terminal/wordWrap';
 
 /** The part of a span the mapping reads: the piece, the row from `%nl`,
  *  and the cells it covers in that row before any wrap. */

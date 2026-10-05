@@ -1,7 +1,7 @@
 import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { BandEnv } from '../../lib/bandCells';
+import type { BandEnv } from '../../terminal/bandCells';
 import { BY_VALUE_HINT, THEME_HINT, WHEN_FIXED_HINT } from '../../lib/promptPieces';
 import { TEXT_HELP } from '../../lib/promptText';
 import type { PromptFieldState, PromptPreset, PromptState } from '../../ipc/prompt';

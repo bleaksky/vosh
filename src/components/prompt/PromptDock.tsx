@@ -1,5 +1,5 @@
 import { useMemo, type CSSProperties } from 'react';
-import { bandRuns, type BandEnv, type UnderlineLine } from '../../lib/bandCells';
+import { bandRuns, type BandEnv, type UnderlineLine } from '../../terminal/bandCells';
 import type { PromptShowState } from '../../ipc/prompt';
 import {
   BAND_LIFT,
@@ -11,12 +11,12 @@ import {
   lentRows,
   type CellSize,
 } from '../../lib/promptBand';
-import { shownColumns } from '../../lib/sgrCells';
+import { shownColumns } from '../../terminal/sgrCells';
 import { usePinnedPrompt } from '../../stores/session/pinnedPromptStore';
 import { usePromptReach } from '../../stores/session/promptReachStore';
 import { useBandEnv } from '../../lib/useBandEnv';
 import { useBlinkShown } from '../../lib/blink';
-import type { Cell } from '../../lib/sgrCells';
+import type { Cell } from '../../terminal/sgrCells';
 
 // Your prompt pinned above the command line (Where your prompt shows,
 // Pinned). The session takes each prompt out of the text and sends it on

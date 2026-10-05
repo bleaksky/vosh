@@ -19,9 +19,9 @@
 // under xterm's text, repositioned in xterm's own render frame so band and
 // text land in the same composite.
 
-import { getPromptReach, subscribePromptReach } from '../stores/session/promptReachStore';
+import { getPromptReach, subscribePromptReach } from '../../stores/session/promptReachStore';
 import type { IBufferCell, IDisposable, IMarker, Terminal } from '@xterm/xterm';
-import { REGION_OSC } from './terminalRegion';
+import { REGION_OSC } from '../terminalRegion';
 
 /** The most lifts one terminal keeps, so the newest this many prompts keep
  *  their band and older ones in the scrollback show plain. Every xterm

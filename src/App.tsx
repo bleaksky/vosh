@@ -13,14 +13,14 @@ import {
   Terminal,
   nativeSurfaceEnabled,
   type TerminalHandle,
-} from './components/Terminal';
+} from './terminal/Terminal';
 import { Input, type InputHandle } from './input/Input';
-import { Resizable } from './components/Resizable';
+import { Resizable } from './terminal/Resizable';
 import { UpdateNotice } from './components/UpdateNotice';
 import { Toasts } from './components/Toasts';
-import { FindToolbar, type FindToolbarHandle } from './components/FindToolbar';
-import { TerminalMenu } from './components/TerminalMenu';
-import { ScrollDepth } from './components/ScrollDepth';
+import { FindToolbar, type FindToolbarHandle } from './terminal/FindToolbar';
+import { TerminalMenu } from './terminal/TerminalMenu';
+import { ScrollDepth } from './terminal/ScrollDepth';
 import { AppShell } from './components/shell/AppShell';
 import { TitleBand } from './components/shell/TitleBand';
 import { StatusLine } from './components/shell/StatusLine';
@@ -98,7 +98,7 @@ import {
 } from './theme/themes';
 import { parseHex, toRgba } from './theme/color';
 import { setBaseAnsi } from './theme/baseAnsi';
-import { setReadableHighlights } from './lib/highlightGround';
+import { setReadableHighlights } from './terminal/highlightGround';
 import { fitThemesInPlay } from './theme/customThemeFits';
 import { setFitGameColors } from './theme/fitGameColors';
 import { startStores } from './stores';
@@ -127,7 +127,11 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import { openSettingsTab } from './lib/settingsLink';
 import { helpNoMatchNotice, helpOpensOn, openHelpTopic } from './lib/helpLink';
 import { showAfterThemePaint } from './lib/reveal';
-import { getNativeScroll, startNativeScroll, subscribeNativeScroll } from './lib/nativeScroll';
+import {
+  getNativeScroll,
+  startNativeScroll,
+  subscribeNativeScroll,
+} from './terminal/native/nativeScroll';
 import {
   addPane,
   allPanes,
@@ -147,9 +151,9 @@ import { nextCardRequest, type CardRequest, type CardRequestView } from './lib/p
 import { notePageWrite, usePinnedDockRows } from './stores/session/pinnedPromptStore';
 import { usePromptReach } from './stores/session/promptReachStore';
 import { lentRows, type CellSize } from './lib/promptBand';
-import { noteReader } from './lib/readerBusy';
+import { noteReader } from './terminal/readerBusy';
 import { resolveBlinkText, useReduceMotion } from './lib/blink';
-import { listenSplitDrag, SplitDrag } from './lib/splitDrag';
+import { listenSplitDrag, SplitDrag } from './terminal/splitDrag';
 
 // Hide or show the panel. When focus sat on the title band's toggle or
 // inside the panel, the caret goes back to the command line: a hidden

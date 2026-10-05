@@ -7,9 +7,9 @@
 // rows 16 and 38). Rows are the screen's rows from its top, with trailing
 // blanks gone. Marks count cells, as the renderers place them.
 
-import { cellWidth } from './sgrCells';
+import { cellWidth } from '../terminal/sgrCells';
 import type { RawMark } from './promptPieces';
-import { wrapBreaks } from './wordWrap';
+import { wrapBreaks } from '../terminal/wordWrap';
 
 /** What the card asks the marks to find on screen: the game's lines,
  *  as the last text on screen or every row of their shape, and the marks

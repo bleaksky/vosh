@@ -5,7 +5,7 @@
 // and choices. Pure, so the section stays about layout.
 
 import { clockTime, lastSeenLine } from './promptCard';
-import { parseSgrCells, type Cell } from './sgrCells';
+import { parseSgrCells, type Cell } from '../terminal/sgrCells';
 import type {
   PromptCapture,
   PromptCaptureCheck,

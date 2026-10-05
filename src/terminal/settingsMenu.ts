@@ -1,5 +1,5 @@
-import APP_SHORTCUTS from './appShortcuts.json';
-import { formatSettingsTarget, SETTINGS_GROUPS } from './settingsNav';
+import APP_SHORTCUTS from '../lib/appShortcuts.json';
+import { formatSettingsTarget, SETTINGS_GROUPS } from '../lib/settingsNav';
 
 // The Settings list in the terminal right-click menu. It goes straight
 // to the four Automation lists, then to each Settings page, then to

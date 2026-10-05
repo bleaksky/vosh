@@ -32,12 +32,12 @@ import {
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { findTheme, onCustomThemesChanged } from '../theme/themes';
 import { getFitGameColors, subscribeFitGameColors } from '../theme/fitGameColors';
-import { setHighlightGround } from '../lib/highlightGround';
-import { nativeThemeOf, xtermThemeFor } from '../lib/terminalTheme';
+import { setHighlightGround } from './highlightGround';
+import { nativeThemeOf, xtermThemeFor } from './terminalTheme';
 import { getCurrentThemeId, subscribeThemeChanges } from '../theme/theme';
-import { OutputShaper } from '../lib/outputShaper';
-import { RegionWriter } from '../lib/terminalRegion';
-import { remeasureWhenLoaded } from '../lib/terminalFont';
+import { OutputShaper } from './outputShaper';
+import { RegionWriter } from './terminalRegion';
+import { remeasureWhenLoaded } from './terminalFont';
 import {
   cellInGrid,
   regionFromCursor,
@@ -45,7 +45,7 @@ import {
   type RegionOnScreen,
   type ScreenCell,
 } from '../lib/promptPointer';
-import { BandLayer, LiftTracker, markLifted } from '../lib/promptBands';
+import { BandLayer, LiftTracker, markLifted } from './xterm/liftBands';
 import {
   GameSizeReport,
   gameSize,
@@ -53,12 +53,12 @@ import {
   keptRows,
   nativeBottomBounds,
   spareAbove,
-} from '../lib/terminalRows';
-import { noteReader } from '../lib/readerBusy';
+} from './terminalRows';
+import { noteReader } from './readerBusy';
 import { ingestRecentNames } from '../input/recentNames';
-import { underlayShows, XtermMirror } from '../lib/xtermMirror';
-import { XtermBlink } from '../lib/xtermBlink';
-import type { BufferView, LineMark } from '../lib/splitDrag';
+import { underlayShows, XtermMirror } from './xterm/xtermMirror';
+import { XtermBlink } from './xterm/xtermBlink';
+import type { BufferView, LineMark } from './splitDrag';
 
 /** Session flag set when the native surface never came up, so the page
  *  falls back to xterm instead of leaving a transparent hole. */

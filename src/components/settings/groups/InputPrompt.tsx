@@ -8,7 +8,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
-import type { BandEnv } from '../../../lib/bandCells';
+import type { BandEnv } from '../../../terminal/bandCells';
 import { localStamp, savedForName } from '../../../lib/promptCard';
 import {
   codesMeta,
@@ -60,7 +60,7 @@ import { promptDescribe, promptRender, type PromptPreviewName } from '../../../i
 import { onState } from '../../../ipc/session';
 import { subscribeUiConfigReplaced } from '../../../ipc/uiConfig';
 import { useTauriEvent } from '../../../ipc/useTauriEvent';
-import { shownColumns, type Cell } from '../../../lib/sgrCells';
+import { shownColumns, type Cell } from '../../../terminal/sgrCells';
 import { warnBoxes, warnedPieces } from '../../../lib/promptWarn';
 import { useGamePrompt } from '../../../stores/gmcp/gamePromptStore';
 import { useBandEnv } from '../../../lib/useBandEnv';
@@ -70,7 +70,7 @@ import { ConfirmDialog } from '../../ConfirmDialog';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuPlacement } from '../../panel/MenuSurface';
 import { CellLine } from '../../prompt/PromptCells';
 import { CommandBox } from '../../prompt/PromptCodes';
-import { nativeSurfaceEnabled } from '../../Terminal';
+import { nativeSurfaceEnabled } from '../../../terminal/Terminal';
 import { PromptShowField } from '../rows/PromptShowRow';
 import { Button, Field, IconButton, MoreIcon, Row, Section, Segmented, Toggle } from '../ui';
 

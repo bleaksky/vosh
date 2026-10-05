@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import type { BandEnv } from '../../lib/bandCells';
-import { indexedRgb } from '../../lib/bandCells';
+import type { BandEnv } from '../../terminal/bandCells';
+import { indexedRgb } from '../../terminal/bandCells';
 import {
   breakHint,
   byValueName,

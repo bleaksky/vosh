@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import golden from '../../fixtures/links/settings-anchors.json';
-import APP_SHORTCUTS from './appShortcuts.json';
+import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import { SETTINGS_MENU } from './settingsMenu';
 import {
   formatSettingsTarget,
   resolveSettingsTarget,
   SETTINGS_GROUPS,
   type SettingsTarget,
-} from './settingsNav';
-import { SETTINGS_ROWS, settingsRowKey } from './settingsSearch';
+} from '../lib/settingsNav';
+import { SETTINGS_ROWS, settingsRowKey } from '../lib/settingsSearch';
 
 // The Settings list in the terminal menu sends the same deep links the
 // palette and search send, so it opens Settings where they do. The

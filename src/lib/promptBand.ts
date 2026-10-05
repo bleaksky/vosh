@@ -7,7 +7,7 @@
 // row and that gap of room under the terminal and borrows the rows past
 // the first from the terminal's bottom (src/lib/terminalRows.ts).
 
-import { parseSgrCells, shownColumns, type Cell } from './sgrCells';
+import { parseSgrCells, shownColumns, type Cell } from '../terminal/sgrCells';
 
 /** The space the boards keep between the terminal's text and a band. */
 export const DOCK_GAP = 6;

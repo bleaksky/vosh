@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import type { BandEnv } from '../../lib/bandCells';
+import type { BandEnv } from '../../terminal/bandCells';
 import {
   fieldName,
   flatRows,
@@ -19,7 +19,7 @@ import {
   type PromptPreviewName,
 } from '../../ipc/promptDesign';
 import { scrollWithin } from '../../lib/scrollWithin';
-import { parseSgrCells } from '../../lib/sgrCells';
+import { parseSgrCells } from '../../terminal/sgrCells';
 import { cx, Field, SearchIcon } from '../settings/ui';
 import { CellLine } from './PromptCells';
 

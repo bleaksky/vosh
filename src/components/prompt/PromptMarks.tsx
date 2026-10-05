@@ -24,7 +24,7 @@ import { type PromptPiece } from '../../ipc/promptDesign';
 import { onOutput } from '../../ipc/terminal';
 import { getPinnedBand } from '../../stores/session/pinnedPromptStore';
 import { setPromptReach } from '../../stores/session/promptReachStore';
-import { shownColumns } from '../../lib/sgrCells';
+import { shownColumns } from '../../terminal/sgrCells';
 import type { PromptCardHost } from './PromptCard';
 
 // The prompt card's marks on your prompt (section 7, steps 6 and 10, and
