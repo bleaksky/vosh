@@ -9,13 +9,13 @@ import { PANE_LABELS, paneTypesToAdd } from '../panel/paneTypes';
 import type { Connection } from '../stores/session/useConnection';
 import {
   CloseIcon,
-  GearIcon,
   MaximizeIcon,
   MinimizeIcon,
-  PanelIcon,
   PlusIcon,
   SearchIcon,
-} from './icons';
+  ToothedGearIcon,
+} from '../ui/icons';
+import { PanelIcon } from './icons';
 import { SessionMenu } from './SessionMenu';
 import { ShellMenu, ShellMenuItem } from './ShellMenu';
 import { TitleButton } from './TitleButton';
@@ -155,7 +155,7 @@ export function TitleBand({
             if (document.activeElement === e.currentTarget) onMenuClosed();
           }}
         >
-          <GearIcon />
+          <ToothedGearIcon />
         </button>
         {!mac && <WindowControls />}
       </div>

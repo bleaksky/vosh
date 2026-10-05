@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 import type { Connection } from '../stores/session/useConnection';
-import { ChevronDownIcon } from './icons';
+import { ChevronDownIcon } from '../ui/icons';
 import { useWindowTitle, windowTitle } from './windowTitle';
 
 // The session control centered in the title band (SPEC 1 and G2): a
@@ -65,7 +65,7 @@ export const TitleButton = forwardRef<HTMLButtonElement, Props>(function TitleBu
       <span className="shell-title-name">{primary}</span>
       {secondary && <span className="shell-title-world">{secondary}</span>}
       <span className="shell-title-chevron">
-        <ChevronDownIcon />
+        <ChevronDownIcon size={12} />
       </span>
     </button>
   );

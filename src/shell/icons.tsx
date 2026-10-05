@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
 import type { TickCount } from '../ipc/uiConfig';
+import { Glyph } from '../ui/icons';
 import {
   SUN_ARC_PATH,
   SUN_DOWN,
@@ -16,43 +16,9 @@ import {
   tickArcLeft,
 } from './tickRing';
 
-// The One Window icon set (SPEC 6): 16 unit strokes at 1.25, round caps
-// and joins, drawn in currentColor so each button sets the tone.
-
-function Glyph({ size = 16, children }: { size?: number; children: ReactNode }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {children}
-    </svg>
-  );
-}
-
-export function PlusIcon() {
-  return (
-    <Glyph>
-      <path d="M8 3.5v9M3.5 8h9" />
-    </Glyph>
-  );
-}
-
-export function SearchIcon() {
-  return (
-    <Glyph>
-      <circle cx="7" cy="7" r="4.5" />
-      <path d="M10.5 10.5l3.5 3.5" />
-    </Glyph>
-  );
-}
+// The glyphs only the main window draws, the panel toggle in the title
+// band and the tick and the game time in the status line. They draw on
+// Glyph from ui/icons.tsx, where the title band finds its other icons.
 
 export function PanelIcon() {
   return (
@@ -63,60 +29,11 @@ export function PanelIcon() {
   );
 }
 
-/** The Settings button. A six tooth gear around a hole, its teeth 6.25
- *  out and its body 4.5, as wide as the panel glyph beside it. The
- *  spoked gear Settings draws beside General reads as a sun at this
- *  size, which here looks like a light theme toggle. */
-export function GearIcon() {
-  return (
-    <Glyph>
-      <path d="M7.02 1.83A6.25 6.25 0 0 1 8.98 1.83L9.32 3.7A4.5 4.5 0 0 1 11.07 4.71L12.86 4.07A6.25 6.25 0 0 1 13.83 5.76L12.38 6.99A4.5 4.5 0 0 1 12.38 9.01L13.83 10.24A6.25 6.25 0 0 1 12.86 11.93L11.07 11.29A4.5 4.5 0 0 1 9.32 12.3L8.98 14.17A6.25 6.25 0 0 1 7.02 14.17L6.68 12.3A4.5 4.5 0 0 1 4.93 11.29L3.14 11.93A6.25 6.25 0 0 1 2.17 10.24L3.62 9.01A4.5 4.5 0 0 1 3.62 6.99L2.17 5.76A6.25 6.25 0 0 1 3.14 4.07L4.93 4.71A4.5 4.5 0 0 1 6.68 3.7Z" />
-      <circle cx="8" cy="8" r="2" />
-    </Glyph>
-  );
-}
-
-/** The 12 px chevron after the session title. The stroke keeps its
- *  1.25 px weight at the smaller size. */
-export function ChevronDownIcon() {
-  return (
-    <Glyph size={12}>
-      <path d="M4.5 6.25L8 9.75l3.5-3.5" vectorEffect="non-scaling-stroke" />
-    </Glyph>
-  );
-}
-
-// Window controls for the frameless window on Windows and Linux.
-
-export function MinimizeIcon() {
-  return (
-    <Glyph>
-      <path d="M4 8h8" />
-    </Glyph>
-  );
-}
-
-export function MaximizeIcon() {
-  return (
-    <Glyph>
-      <rect x="4" y="4" width="8" height="8" rx="1" />
-    </Glyph>
-  );
-}
-
-export function CloseIcon() {
-  return (
-    <Glyph>
-      <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
-    </Glyph>
-  );
-}
-
 // Status line glyphs for the tick and the game time, drawn at 12 px.
-// Unlike the chevron, their strokes scale with the icon, 1.25 units on
-// the 16 unit grid or about 0.94 px at 12 px, as the approved drawing
-// has them. Held at 1.25 px, the open sun under the horizon fused with
-// the horizon and its hole shrank to one device pixel.
+// Unlike the title band chevron, their strokes scale with the icon, 1.25
+// units on the 16 unit grid or about 0.94 px at 12 px, as the approved
+// drawing has them. Held at 1.25 px, the open sun under the horizon
+// fused with the horizon and its hole shrank to one device pixel.
 
 interface SmallIconProps {
   /** Rendered size in px. The status line draws them at 12. */

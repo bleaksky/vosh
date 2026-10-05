@@ -117,7 +117,11 @@ A few classes in `settings.css` cover small shapes that are not worth a componen
 
 ## Icons
 
-`src/ui/icons.tsx` holds the SPEC 6 set. `GearIcon`, `AppearanceIcon`, `LayoutIcon`, `KeyboardIcon`, `BoltIcon`, `UserIcon`, `SearchIcon`, `ChevronRightIcon`, `ChevronDownIcon`, `ChevronUpIcon`, `CloseIcon`, `PlusIcon`, `CheckIcon`, `CopyIcon`, `MoreIcon`, `MinimizeIcon`, and `MaximizeIcon`. Each takes `size` (16 by default, or 12) and `className`. A 12 px icon keeps the 1.25 px stroke.
+`src/ui/icons.tsx` holds the SPEC 6 set, the icon set every window draws from. `GearIcon`, `ToothedGearIcon`, `AppearanceIcon`, `LayoutIcon`, `KeyboardIcon`, `BoltIcon`, `UserIcon`, `SearchIcon`, `ChevronRightIcon`, `ChevronDownIcon`, `ChevronUpIcon`, `CloseIcon`, `PlusIcon`, `CheckIcon`, `CopyIcon`, `MoreIcon`, `MinimizeIcon`, and `MaximizeIcon`, with `PlugIcon`, `TerminalIcon`, `TickRingIcon`, `LifebuoyIcon`, and `BookIcon` for the Help sections. Each takes `size` (16 by default, or 12) and `className`. A 12 px icon keeps the 1.25 px stroke.
+
+`GearIcon` is the spoked gear beside General in Settings. `ToothedGearIcon` is the six tooth gear on the title band's Settings button, since the spoked one reads as a sun at that spot.
+
+`Glyph` is the svg every stroked icon draws on. `src/shell/icons.tsx` draws the three glyphs only the main window needs on it, the panel toggle and the status line's tick ring and sun path, so they match the kit.
 
 ## Focus and motion
 
