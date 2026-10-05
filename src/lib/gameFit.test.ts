@@ -10,6 +10,7 @@ import {
   needsFit,
   seenBy,
   toColorVision,
+  visionSlots,
   xterm256,
   type ColorVision,
 } from './gameFit';
@@ -229,22 +230,54 @@ describe('color vision', () => {
     expect(needsFit(TRIAD, 'deuteranopia')).toBe(true);
   });
 
-  // The fit themes.ts ships for Triad under Deuteranopia. It moves green
-  // and yellow lighter at their own hues, keeps every floor Typical asks,
-  // and lifts red and green to dE 12.1 for a deuteranope, short of 12.5.
+  // The fit themes.ts ships for Triad under Deuteranopia. It moves red a
+  // touch darker and green, yellow and bright yellow lighter, each at its
+  // own hue, keeps every floor Typical asks, and parts every pair
+  // Deuteranopia raises.
   it('fits Triad for a deuteranope by lightness alone', { timeout: 30_000 }, () => {
     const fitted = fit(TRIAD, 'deuteranopia', {});
     expect(fitted).toEqual({
-      foreground: '#dcdcdb',
-      green: '#53d1b3',
-      yellow: '#f9d57c',
-      brightYellow: '#fff4ca',
-      brightBlue: '#98c6ff',
-      brightMagenta: '#e0b2e6',
+      red: '#fb6154',
+      green: '#52d1b3',
+      yellow: '#f8d47a',
+      brightYellow: '#fff3c7',
     });
     const play = { ...TRIAD, ...fitted };
     expect(short(play, 'typical')).toEqual([]);
-    expect(short(play, 'deuteranopia')).toEqual(['T7 deutan red/green 12.1']);
+    expect(short(play, 'deuteranopia')).toEqual([]);
+  });
+
+  it('moves only the colors of the pairs a vision raises and their twins', () => {
+    const both = ['red', 'green', 'yellow', 'brightRed', 'brightGreen', 'brightYellow'];
+    expect(visionSlots('deuteranopia')).toEqual(both);
+    expect(visionSlots('protanopia')).toEqual(both);
+    expect(visionSlots('tritanopia')).toEqual(['green', 'cyan', 'brightGreen', 'brightCyan']);
+    expect(visionSlots('typical')).toEqual([]);
+  });
+
+  // Iceberg Dark keeps yellow at Lc 58.1 and red at Lc 37.8 in its
+  // Typical fit. Its fit for a deuteranope parts red from green further
+  // and leaves both no fainter.
+  it('keeps every check the Typical fit passes and lets none it misses fall further', () => {
+    const iceberg = findTheme('iceberg-dark');
+    const typical = iceberg.fitted ?? {};
+    const fitted = fit(iceberg.xterm, 'deuteranopia', typical);
+    const play = { ...iceberg.xterm, ...fitted };
+    expect(short(play, 'typical')).toEqual(short({ ...iceberg.xterm, ...typical }, 'typical'));
+    expect(short(play, 'typical')).toEqual(['T2 yellow Lc 58.1', 'T3 red Lc 37.8']);
+    for (const slot of GAME_SLOTS.filter((k) => !visionSlots('deuteranopia').includes(k))) {
+      expect(play[slot], slot).toBe({ ...iceberg.xterm, ...typical }[slot]);
+    }
+  });
+
+  // Harbor Dark under Typical keeps red at Lc 40.8, short of 45. The
+  // search finds no step that parts its raised pairs further without
+  // darkening red or giving up a check the Typical fit passes, so a
+  // deuteranope plays the Typical fit.
+  it('keeps the Typical fit where every step parts a pair only by a trade', () => {
+    const harbor = findTheme('harbor-dark');
+    const typical = harbor.fitted ?? {};
+    expect(fit(harbor.xterm, 'deuteranopia', typical)).toBe(typical);
   });
 
   it('shows a color as the vision sees it, through the matrices the checks use', () => {
@@ -265,7 +298,7 @@ describe('color vision', () => {
 // Every built in theme ships its fit worked out ahead, in themes.ts,
 // for Typical and for each other color vision (VISION_FITS). After a
 // change to a published palette or to the fit, fit each one again,
-// about two seconds a theme for Typical and up to eight for another
+// about two seconds a theme for Typical and about one for each other
 // vision, with
 //
 //   VOSH_FIT_THEMES=1 npx vitest run src/lib/gameFit.test.ts

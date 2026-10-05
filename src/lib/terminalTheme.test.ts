@@ -41,13 +41,15 @@ describe('the xterm theme', () => {
 
   it('draws the fit for your color vision while Fit game colors is on', () => {
     const triad = findTheme('triad');
-    // Triad passes every check Typical asks as published, and lifts its
-    // greens and yellows for a deuteranope (themes.ts VISION_FITS).
+    // Triad passes every check Typical asks as published. For a
+    // deuteranope it lifts green and yellow and sets red a touch darker
+    // (themes.ts VISION_FITS), and leaves blue as published.
     expect(xtermThemeFor(triad, true, true).green).toBe(triad.xterm.green);
     const deutan = xtermThemeFor(triad, true, true, 'deuteranopia');
-    expect(deutan.green).toBe('#53d1b3');
-    expect(deutan.yellow).toBe('#f9d57c');
-    expect(deutan.red).toBe(triad.xterm.red);
+    expect(deutan.green).toBe('#52d1b3');
+    expect(deutan.yellow).toBe('#f8d47a');
+    expect(deutan.red).toBe('#fb6154');
+    expect(deutan.blue).toBe(triad.xterm.blue);
     // Off, every vision draws the published palette.
     expect(xtermThemeFor(triad, true, false, 'deuteranopia').green).toBe(triad.xterm.green);
     const native = nativeThemeOf(triad, true, true, 'deuteranopia');
