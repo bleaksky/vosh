@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import appSource from '../shell/MainWindow.tsx?raw';
+import mainSource from '../shell/useUiConfigFollow.ts?raw';
 import settingsSource from '../settings/SettingsWindow.tsx?raw';
 import { REPAINT_WAIT_MS, showAfterThemePaint, type RevealDeps } from './reveal';
 
@@ -73,7 +73,7 @@ describe('showAfterThemePaint', () => {
 
 describe('the windows', () => {
   it('show themselves only after a paint in the theme', () => {
-    for (const source of [appSource, settingsSource]) {
+    for (const source of [mainSource, settingsSource]) {
       expect(source).toContain('.finally(() => showAfterThemePaint(reveal))');
       expect(source).not.toMatch(/\.finally\(reveal\)/);
     }
