@@ -57,6 +57,19 @@ describe('the xterm theme', () => {
     expect(native.ansi).toEqual(ansi16Of(deutan));
   });
 
+  it('draws the selection the window paints for your color vision, fit or not', () => {
+    for (const theme of BUILTIN_THEMES) {
+      for (const fit of [true, false]) {
+        const x = xtermThemeFor(theme, true, fit, 'tritanopia');
+        const tokens = themeTokens(theme, 'tritanopia');
+        expect(x.selectionBackground, theme.id).toBe(tokens.selection);
+        expect(nativeThemeOf(theme, true, fit, 'tritanopia').selection, theme.id).toBe(
+          tokens.selection,
+        );
+      }
+    }
+  });
+
   it('hands the native grid the 16 colors and body text xterm draws', () => {
     for (const theme of BUILTIN_THEMES) {
       for (const tinted of [true, false]) {

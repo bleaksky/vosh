@@ -1,6 +1,6 @@
 // The xterm theme the terminal draws with, from the chrome theme, the
 // "Use the theme's colors for MUD text" setting, Fit game colors and the
-// color vision it fits for. The
+// color vision it fits for, which the selection follows too. The
 // pinned prompt band and the native renderer resolve their colors from
 // the same palette, so a prompt on the band looks as it would in the
 // text, on either renderer.
@@ -33,7 +33,7 @@ export function xtermThemeFor(
   // draws what the native renderer and the window draw.
   const play = playPalette(theme, fit, vision);
   const base: ITheme = themeTerminalColors ? { ...play } : { ...play, ...baseAnsiRecord() };
-  const tokens = themeTokens(theme);
+  const tokens = themeTokens(theme, vision);
   base.selectionBackground = tokens.selection;
   base.selectionForeground = tokens.selectionText;
   return base;
@@ -52,7 +52,7 @@ export function nativeThemeOf(
     background: resolved.background ?? '#101218',
     foreground: resolved.foreground ?? '#cccccc',
     // The selection token, the opaque fill xterm draws.
-    selection: themeTokens(theme).selection,
+    selection: themeTokens(theme, vision).selection,
     ansi: ansi16Of(resolved),
   };
 }

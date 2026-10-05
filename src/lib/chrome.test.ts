@@ -12,6 +12,7 @@ import {
   tokenVarName,
 } from './chrome';
 import { contrast, deltaEOk, parseHex, rgbToOklch, type Rgb } from './color';
+import { seenApart } from './gameFit';
 import { DEFAULT_THEME_ID, findTheme, themeTokens } from './themes';
 import tokensCss from '../styles/tokens.css?raw';
 
@@ -234,6 +235,41 @@ describe('derivation rules', () => {
     expect(vars['--on-accent']).toBe('#050403');
     // The input band steps 2.5 in OKLab L off the ground.
     expect(vars['--inputband']).toBe('#080807');
+  });
+});
+
+describe('status colors for a color vision', () => {
+  const kanso = findTheme('kanso-zen').xterm;
+
+  // Kanso Zen's danger and success look 2.9 apart to a deuteranope. The
+  // window darkens danger and lifts success at their hue until they stand
+  // as far apart as a typical eye sees them, and every token that only
+  // reads the ground stays as it is.
+  it('parts danger from success for a deuteranope and leaves the ground tokens', () => {
+    const typical = deriveChrome(kanso);
+    const deutan = deriveChrome(kanso, {}, 'deuteranopia');
+    expect(deriveChrome(kanso, {}, 'typical')).toEqual(typical);
+    const apart = (t: typeof typical) => seenApart(hex(t.danger), hex(t.success), 'deuteranopia');
+    expect(apart(typical)).toBeCloseTo(2.9, 1);
+    expect(apart(deutan)).toBeGreaterThanOrEqual(
+      deltaEOk(hex(typical.danger), hex(typical.success)),
+    );
+    for (const key of ['bg', 'panel', 'sep', 'text', 'secondary', 'tertiary', 'raised'] as const) {
+      expect(deutan[key], key).toBe(typical[key]);
+    }
+    expect(contrast(hex(deutan.danger), hex(deutan.panel))).toBeGreaterThanOrEqual(STATUS_CONTRAST);
+    expect(contrast(hex(deutan.dangerText), hex(deutan.panel))).toBeGreaterThanOrEqual(
+      STATUS_TEXT_CONTRAST,
+    );
+  });
+
+  it('keeps a status color pinned in a form other than hex as pinned', () => {
+    const pins = { danger: 'rgb(228, 104, 118)', success: 'var(--x)' };
+    for (const vision of ['deuteranopia', 'protanopia', 'tritanopia'] as const) {
+      const t = deriveChrome(kanso, pins, vision);
+      expect(t.danger, vision).toBe('rgb(228, 104, 118)');
+      expect(t.success, vision).toBe('var(--x)');
+    }
   });
 });
 
