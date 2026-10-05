@@ -21,6 +21,11 @@
 // Every fit runs in a worker (fitOffThread, gameFit.worker). Play draws
 // the fit while Fit game colors is on (playPalette in themes.ts,
 // fitGameColors).
+//
+// A color vision other than Typical gets fits of its own. A built in
+// theme ships them in themes.ts (VISION_FITS) where its Typical fit
+// misses the floors the vision raises, and gameFit.test.ts fits them
+// again with VOSH_FIT_THEMES=1.
 
 import { indexedRgb } from './bandCells';
 import { ANSI_SLOTS, type AnsiSlot } from './baseAnsi';
@@ -28,6 +33,7 @@ import {
   contrast,
   deltaEOk,
   linearToOklab,
+  linearToRgb,
   oklchToRgbInGamut,
   parseHex,
   rgbToLinear,
@@ -101,7 +107,9 @@ const dL = (a: string, b: string) => Math.abs(lightness(a) - lightness(b));
 type Cvd = 'protan' | 'deutan' | 'tritan';
 type Matrix = readonly [readonly number[], readonly number[], readonly number[]];
 
-const MACHADO: Record<Cvd, Matrix> = {
+/** The simulation matrices, by deficiency. The checks measure with
+ *  them, and so does the theme gallery's Vision preview (seenBy). */
+export const MACHADO: Readonly<Record<Cvd, Matrix>> = {
   protan: [
     [0.152286, 1.052583, -0.204868],
     [0.114503, 0.786281, 0.099216],
@@ -119,12 +127,17 @@ const MACHADO: Record<Cvd, Matrix> = {
   ],
 };
 
-function seenAs(hex: string, kind: Cvd) {
+// The linear sRGB channels a color takes for `kind`.
+function simulate(hex: string, kind: Cvd): [number, number, number] {
   const v = rgbToLinear(rgb(hex));
   const [r, g, b] = MACHADO[kind].map((row) =>
     Math.max(0, Math.min(1, row[0] * v[0] + row[1] * v[1] + row[2] * v[2])),
   );
-  return linearToOklab([r, g, b]);
+  return [r, g, b];
+}
+
+function seenAs(hex: string, kind: Cvd) {
+  return linearToOklab(simulate(hex, kind));
 }
 
 const dECvd = (a: string, b: string, kind: Cvd) => {
@@ -132,6 +145,43 @@ const dECvd = (a: string, b: string, kind: Cvd) => {
   const q = seenAs(b, kind);
   return 100 * Math.hypot(p.L - q.L, p.a - q.a, p.b - q.b);
 };
+
+// ── Color vision ───────────────────────────────────────────────────
+
+/** The color vision play fits the game colors for, from UiConfig
+ *  color_vision. Typical asks the 46 checks as they stand. Each other
+ *  vision raises the floors of the T7 pairs its own simulation
+ *  measures, red against yellow, bright yellow and green for a
+ *  deuteranope or a protanope, cyan against green for a tritanope. */
+export type ColorVision = 'typical' | 'deuteranopia' | 'protanopia' | 'tritanopia';
+
+export const COLOR_VISIONS: readonly ColorVision[] = [
+  'typical',
+  'deuteranopia',
+  'protanopia',
+  'tritanopia',
+];
+
+const CVD_OF: Record<ColorVision, Cvd | null> = {
+  typical: null,
+  deuteranopia: 'deutan',
+  protanopia: 'protan',
+  tritanopia: 'tritan',
+};
+
+/** The vision `value` names, Typical for anything else. */
+export function toColorVision(value: unknown): ColorVision {
+  return COLOR_VISIONS.find((v) => v === value) ?? 'typical';
+}
+
+/** The color `hex` shows a player with `vision`, through the matrices
+ *  the T7 checks measure with. A color that is not hex, and any color
+ *  under Typical, comes back as it is. */
+export function seenBy(hex: string, vision: ColorVision): string {
+  const kind = CVD_OF[vision];
+  if (!kind || !parseHex(hex)) return hex;
+  return toHex(linearToRgb(simulate(hex, kind)));
+}
 
 // ── The fixed colors the game sends ────────────────────────────────
 
@@ -171,7 +221,18 @@ const T = {
   rySep: 10,
   rRbDL: 8,
   tritanCG: 8,
+  // A color vision asks the T7 pairs its own simulation measures to
+  // stand a quarter farther apart. The review's floors already hold for
+  // a color blind player, and this gives the player who picks the
+  // vision a margin past them. Lightness alone reaches it on most
+  // themes without giving up another floor (gameFit.test.ts).
+  visionRaise: 1.25,
 };
+
+// The floor of a T7 pair measured through `kind`, raised for the vision
+// that sees through it.
+const cvdNeed = (need: number, kind: Cvd, vision: ColorVision) =>
+  CVD_OF[vision] === kind ? need * T.visionRaise : need;
 
 /** Colors the game writes whole sentences in, and colors it marks a
  *  cue with. */
@@ -214,8 +275,10 @@ const CVD_PAIRS: readonly (readonly [AnsiSlot, AnsiSlot, number])[] = [
 const isDark = (p: XtermPalette) => rgbToOklab(rgb(p.background)).L < 0.6;
 const away = (p: XtermPalette, hex: string) => Math.abs(lightness(hex) - lightness(p.background));
 
-/** Every check, in the order the review lists them. */
-export function checks(p: XtermPalette): GameCheck[] {
+/** Every check, in the order the review lists them. A color vision
+ *  other than Typical raises the floors of the T7 pairs its own
+ *  simulation measures. */
+export function checks(p: XtermPalette, vision: ColorVision = 'typical'): GameCheck[] {
   const bg = p.background;
   const out: GameCheck[] = [];
   const add = (id: string, value: number, need: string, ok: boolean) =>
@@ -244,7 +307,8 @@ export function checks(p: XtermPalette): GameCheck[] {
   const fw = away(p, p.brightWhite) - away(p, p.foreground);
   add('T6 fg/brightWhite dL', fw, '>=8', fw >= T.fgBrightWhiteDL);
   for (const kind of ['protan', 'deutan'] as const) {
-    for (const [a, b, need] of CVD_PAIRS) {
+    for (const [a, b, floor] of CVD_PAIRS) {
+      const need = cvdNeed(floor, kind, vision);
       const v = dECvd(p[a], p[b], kind);
       add(`T7 ${kind} ${a}/${b}`, v, `>=${need}`, v >= need);
     }
@@ -252,7 +316,8 @@ export function checks(p: XtermPalette): GameCheck[] {
   add('T7 red/yellow dL', dL(p.red, p.yellow), '>=10', dL(p.red, p.yellow) >= T.rySep);
   add('T7 red/brightRed dL', dL(p.red, p.brightRed), '>=8', dL(p.red, p.brightRed) >= T.rRbDL);
   const tc = dECvd(p.cyan, p.green, 'tritan');
-  add('T7 tritan cyan/green', tc, '>=8', tc >= T.tritanCG);
+  const tcNeed = cvdNeed(T.tritanCG, 'tritan', vision);
+  add('T7 tritan cyan/green', tc, `>=${tcNeed}`, tc >= tcNeed);
   return out;
 }
 
@@ -277,7 +342,7 @@ function stepAtHue(hex: string, dir: number, ok: (hex: string) => boolean): stri
  *  when it reads as loud as body text, and when one color of a pair
  *  runs out of room, the other steps toward the ground, never under its
  *  own floor. Half the fit's searches start from here. */
-export function tune(src: XtermPalette): XtermPalette {
+export function tune(src: XtermPalette, vision: ColorVision = 'typical'): XtermPalette {
   const p = { ...src };
   const bg = p.background;
   const gL = lightness(bg);
@@ -348,7 +413,8 @@ export function tune(src: XtermPalette): XtermPalette {
         (q) => stepOut(q, 'brightWhite') - stepOut(q, 'foreground') >= T.fgBrightWhiteDL,
       ) || changed;
     for (const kind of ['protan', 'deutan'] as const) {
-      for (const [a, b, need] of CVD_PAIRS) {
+      for (const [a, b, floor] of CVD_PAIRS) {
+        const need = cvdNeed(floor, kind, vision);
         const [near, far] = nearFirst(a, b);
         changed = separate(near, far, (q) => dECvd(q[a], q[b], kind) >= need) || changed;
       }
@@ -364,9 +430,9 @@ export function tune(src: XtermPalette): XtermPalette {
         (q) => dL(q.red, q.brightRed) >= T.rRbDL && stepOut(q, 'brightRed') > stepOut(q, 'red'),
       ) || changed;
     {
+      const need = cvdNeed(T.tritanCG, 'tritan', vision);
       const [near, far] = nearFirst('cyan', 'green');
-      changed =
-        separate(near, far, (q) => dECvd(q.cyan, q.green, 'tritan') >= T.tritanCG) || changed;
+      changed = separate(near, far, (q) => dECvd(q.cyan, q.green, 'tritan') >= need) || changed;
     }
     if (!changed) break;
   }
@@ -393,9 +459,29 @@ function shortfall(p: XtermPalette): number {
   return s;
 }
 
+// How far short of the floors a color vision raises its own pairs fall,
+// summed the same way. Typical raises none.
+function visionShortfall(p: XtermPalette, vision: ColorVision): number {
+  const kind = CVD_OF[vision];
+  if (!kind) return 0;
+  const pairs: readonly (readonly [AnsiSlot, AnsiSlot, number])[] =
+    kind === 'tritan' ? [['cyan', 'green', T.tritanCG]] : CVD_PAIRS;
+  let s = 0;
+  for (const [a, b, floor] of pairs) {
+    const need = cvdNeed(floor, kind, vision);
+    const v = dECvd(p[a], p[b], kind);
+    if (v < need) s += (need - +v.toFixed(1)) / need + 0.05;
+  }
+  return s;
+}
+
 const ITERS = 9000;
 const SEEDS = [11, 23, 37];
 const MOVE_WEIGHT = 0.35;
+// A miss on a floor a color vision raises counts half what a miss on a
+// floor Typical asks counts, so the fit for a vision rarely gives up a
+// floor to reach a raised one.
+const VISION_WEIGHT = 50;
 
 type Lightness = Record<GameSlot, number>;
 
@@ -406,10 +492,16 @@ interface Search {
 
 // One random search over the slots' lightness, from `start` or from
 // the published colors. It keeps a step only when the cost drops. The
-// cost is the shortfall first, then the total distance from the
-// published colors, and a heavy charge on any slot that loses more
-// than 40 percent of its chroma, so a yellow never turns cream.
-function search(src: XtermPalette, seed: number, start: XtermPalette | undefined): Search {
+// cost is the shortfall first, with the floors a color vision raises at
+// half weight, then the total distance from the published colors, and a
+// heavy charge on any slot that loses more than 40 percent of its
+// chroma, so a yellow never turns cream.
+function search(
+  src: XtermPalette,
+  seed: number,
+  start: XtermPalette | undefined,
+  vision: ColorVision,
+): Search {
   // A linear congruential generator in plain doubles. The products
   // pass 2^53 and lose low bits, and the fit depends on exactly those
   // values, so integer math would draw a different sequence.
@@ -439,7 +531,11 @@ function search(src: XtermPalette, seed: number, start: XtermPalette | undefined
     }
     let move = 0;
     for (const k of GAME_SLOTS) move += dE(src[k], p[k]);
-    return { cost: shortfall(p) * 100 + (move * MOVE_WEIGHT) / 10 + drained * 400, palette: p };
+    const missed =
+      vision === 'typical'
+        ? shortfall(p) * 100
+        : shortfall(p) * 100 + visionShortfall(p, vision) * VISION_WEIGHT;
+    return { cost: missed + (move * MOVE_WEIGHT) / 10 + drained * 400, palette: p };
   };
   let cur = Object.fromEntries(
     GAME_SLOTS.map((k) => [k, start ? rgbToOklch(rgb(start[k])).L : base[k].L]),
@@ -475,23 +571,45 @@ export function fitKey(p: XtermPalette): string {
  *  check fits to no change, which a config cannot keep, since it leaves
  *  an empty fit out, so Vosh never fits one. Neither does it fit a
  *  palette with a color that is not hex, which the fit cannot read. */
-export function needsFit(p: XtermPalette): boolean {
+export function needsFit(p: XtermPalette, vision: ColorVision = 'typical'): boolean {
   try {
-    return checks(p).some((c) => !c.ok);
+    return checks(p, vision).some((c) => !c.ok);
   } catch {
     return false;
   }
 }
 
-/** Fit a published palette to the checks. The best of six searches,
- *  three seeds each from the published colors and from tune(), and it
- *  returns only the slots it moved. What still misses stays missed, so
- *  checks() on the fitted palette says what is short. It takes about
- *  two seconds, so a built in theme stores its result. */
-export function fit(src: XtermPalette): Partial<XtermPalette> {
-  const runs = [undefined, tune(src)].flatMap((start) =>
-    SEEDS.map((seed) => search(src, seed, start)),
-  );
+/** Whether `p` holds every floor `vision` raises. Typical raises none. */
+export function holdsVision(p: XtermPalette, vision: ColorVision): boolean {
+  return visionShortfall(p, vision) === 0;
+}
+
+/** Fit a published palette to the checks, for `vision`. The best of six
+ *  searches, three seeds each from the published colors and from tune(),
+ *  and it returns only the slots it moved. What still misses stays
+ *  missed, so checks() on the fitted palette for the same vision says
+ *  what is short. It takes about two seconds, so a built in theme
+ *  stores its result. Typical fits exactly as before color vision.
+ *
+ *  Another vision first takes the Typical fit, `typical` when you have
+ *  it, and keeps it when it already holds the floors the vision raises,
+ *  so play changes only where the vision needs it. Else three more
+ *  searches start from the Typical fit, so the fit for the vision ends
+ *  no worse for it than the Typical fit. That takes up to eight
+ *  seconds. */
+export function fit(
+  src: XtermPalette,
+  vision: ColorVision = 'typical',
+  typical?: Partial<XtermPalette>,
+): Partial<XtermPalette> {
+  const starts: (XtermPalette | undefined)[] = [undefined, tune(src, vision)];
+  if (vision !== 'typical') {
+    const base = typical ?? fit(src);
+    const play = { ...src, ...base };
+    if (holdsVision(play, vision)) return base;
+    starts.push(play);
+  }
+  const runs = starts.flatMap((start) => SEEDS.map((seed) => search(src, seed, start, vision)));
   // The first of the cheapest wins.
   const p = runs.reduce((win, run) => (run.cost < win.cost ? run : win)).palette;
   const moved: Partial<XtermPalette> = {};
