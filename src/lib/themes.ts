@@ -321,8 +321,9 @@ const tokyoNight: AppTheme = {
     brightCyan: '#a8deff',
     brightWhite: '#dbe2ff',
   },
-  // The frost blue it has always drawn. The chrome rule alone would
-  // take its magenta, the scheme's strongest hue.
+  // The frost blue it has always drawn, 23.3 dE from danger, the
+  // nearest status color. The chrome rule alone would take its magenta,
+  // the scheme's strongest hue.
   chrome: { accent: '#7aa2f7' },
 };
 
@@ -723,8 +724,9 @@ const oneHalfDark: AppTheme = {
     brightMagenta: '#e9a2ff',
     brightCyan: '#87e6f2',
   },
-  // The blue it has always drawn. The chrome rule alone would take its
-  // magenta, the scheme's strongest hue.
+  // The blue it has always drawn, 19.6 dE from success, the nearest
+  // status color. The chrome rule alone would take its magenta, the
+  // scheme's strongest hue.
   chrome: { accent: '#61afef' },
 };
 
@@ -783,8 +785,9 @@ const tangoDark: AppTheme = {
     brightCyan: '#4cf2f1',
     brightWhite: '#fbfbf9',
   },
-  // The bright blue it has always drawn. The chrome rule alone would
-  // take its green, the scheme's strongest hue.
+  // The bright blue it has always drawn, 28.3 dE from danger, the
+  // nearest status color. The chrome rule alone would take its green,
+  // the scheme's strongest hue.
   chrome: { accent: '#729fcf' },
 };
 
@@ -844,9 +847,9 @@ const highContrast: AppTheme = {
     brightMagenta: '#ff8dff',
     brightCyan: '#b9fffe',
   },
-  // The yellow cursor it has always drawn as its accent. It sits close
-  // to the yellow warn tone, so the chrome rule alone would take the
-  // magenta.
+  // The yellow cursor it has always drawn as its accent. It sits 7.0 dE
+  // from the yellow warn tone, under the 12 the rule asks, so the chrome
+  // rule alone would take the magenta.
   chrome: { accent: '#ffff00' },
 };
 
@@ -1029,9 +1032,9 @@ const greenScreen: AppTheme = {
     brightBlue: '#9aaaff',
     brightMagenta: '#ff84fd',
   },
-  // The phosphor cursor it has always drawn as its accent. It sits close
-  // to the green success tone, so the chrome rule alone would take the
-  // magenta.
+  // The phosphor cursor it has always drawn as its accent. It sits 6.3
+  // dE from the green success tone, under the 12 the rule asks, so the
+  // chrome rule alone would take the magenta.
   chrome: { accent: '#79f887' },
 };
 
