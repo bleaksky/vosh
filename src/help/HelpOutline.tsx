@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { helpItemId, type OutlineEntry } from '../../lib/helpNav';
-import { scrollWithin } from '../../lib/scrollWithin';
+import { helpItemId, type OutlineEntry } from './helpNav';
+import { scrollWithin } from '../lib/scrollWithin';
 
 // On this page (the HelpLongTopic board): beside a long reference list,
 // a row per item in mono 11.5 on the 24 px pitch. The item you are

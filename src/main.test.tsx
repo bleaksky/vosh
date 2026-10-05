@@ -14,7 +14,7 @@ vi.mock('react-dom/client', () => {
 });
 vi.mock('./App', () => ({ default: () => null }));
 vi.mock('./SettingsApp', () => ({ SettingsApp: () => null }));
-vi.mock('./HelpApp', () => ({ HelpApp: () => null }));
+vi.mock('./help/HelpWindow', () => ({ HelpApp: () => null }));
 
 const paint: ThemePaint = {
   v: 1,

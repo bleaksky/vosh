@@ -342,8 +342,8 @@ describe('scroll into view', () => {
 
   it('reads the app sources', () => {
     // Vite names the files beside this one from here.
-    expect(app).toContain('../HelpApp.tsx');
-    expect(app).toContain('../components/help/HelpSidebar.tsx');
+    expect(app).toContain('../help/HelpWindow.tsx');
+    expect(app).toContain('../help/HelpSidebar.tsx');
     expect(app).toContain('./scrollWithin.ts');
     expect(app).not.toContain('./scrollWithin.test.ts');
     expect(app.length).toBeGreaterThan(100);

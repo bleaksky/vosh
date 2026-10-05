@@ -1,7 +1,7 @@
 import { act, createElement, type ComponentType, type ReactNode } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import golden from '../../../fixtures/links/settings-anchors.json';
-import { resolveHelpTarget } from '../../lib/helpNav';
+import { resolveHelpTarget } from '../../help/helpNav';
 import { buildPaletteEntries, type PaletteDeps } from '../../lib/palette';
 import { defaultLayout, type PaneLeaf } from '../../lib/paneLayout';
 import type { GameBlock } from '../../lib/promptSettings';

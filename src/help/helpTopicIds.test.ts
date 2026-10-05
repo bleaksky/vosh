@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import golden from '../../fixtures/links/help-topics.json';
 import { HELP_TOPICS } from './helpContent';
-import { helpOpensOn } from './helpLink';
+import { helpOpensOn } from '../lib/helpLink';
 import { landingOf, resolveHelpTarget } from './helpNav';
 
 // Every link into Help names a topic by its id or its number: the book
