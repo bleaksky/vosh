@@ -177,9 +177,7 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
   const shownTheme = themes.find((t) => t.id === shown) ?? findTheme(shown);
   const caption = themeCaption(shownTheme);
   const visionNote = colorVisionNote(
-    shownTheme,
     config.color_vision,
-    config.fit_game_colors,
     resolveThemeTerminalColors(config.theme, config.theme_terminal_colors),
   );
   // While follow is on the arrow keys stay among the themes the OS
@@ -370,8 +368,8 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           label="Color vision"
           description={
             <>
-              Vosh keeps hits, tells and says apart for the vision you pick, and the window's status
-              colors too.
+              Vosh swaps the colors your eyes confuse for colors they tell apart, the way color
+              blind modes in games do.
               {visionNote !== '' && (
                 <>
                   <br />

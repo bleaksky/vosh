@@ -403,10 +403,10 @@ describe('AppearancePage', () => {
     ]);
     expect(typical.label).toContain('Color vision');
     expect(typical.label).toContain(
-      "Vosh keeps hits, tells and says apart for the vision you pick, and the window's status colors too.",
+      'Vosh swaps the colors your eyes confuse for colors they tell apart, the way color blind modes in games do.',
     );
     // Typical changes nothing, so the row says nothing more.
-    expect(typical.label).not.toContain('Game text');
+    expect(typical.label).not.toContain('turn');
     expect(typical.options).toEqual([
       { label: 'Typical', value: 'typical' },
       { label: 'Deuteranopia', value: 'deuteranopia' },
@@ -416,36 +416,24 @@ describe('AppearancePage', () => {
     expect(typical.value).toBe('typical');
     // A pick saves with the rest of the config.
     expect(typical.saved?.color_vision).toBe('deuteranopia');
+    // The row says what the vision swaps, the same on every theme.
     const picked = await visionRow({ ...config(), color_vision: 'tritanopia' });
     expect(picked.value).toBe('tritanopia');
-    // Nord already keeps its window apart for a tritanope, so the row says
-    // only the game text changes.
     expect(picked.label).toContain(
-      "Nord already keeps the window's status colors apart for tritanopia, so only the game text changes.",
+      'Blues turn purple and magentas turn pink in the game text. The window keeps its status colors, which you already tell apart.',
     );
-    // Kanso Zen's game text cannot part visibly further for a deuteranope,
-    // so the row says only the window changes.
     const kanso = { ...config(), theme: 'kanso-zen', color_vision: 'deuteranopia' as const };
-    expect((await visionRow(kanso)).label).toContain(
-      'Only the window changes on Kanso Zen, since its game text cannot part visibly further for deuteranopia without fading or running into other colors.',
-    );
-    // While Fit game colors is off, the row says the game text keeps its
-    // published colors and the window still follows.
-    const off = await visionRow({ ...kanso, fit_game_colors: false });
-    expect(off.label).toContain(
-      'Game text keeps its published colors while Fit game colors is off. The window still follows Color vision.',
-    );
+    const swapped =
+      "Greens turn blue, reds turn orange and blues turn violet, in the game text and in the window's status colors.";
+    expect((await visionRow(kanso)).label).toContain(swapped);
+    // Fit game colors off swaps the published colors, so the row says
+    // the same.
+    expect((await visionRow({ ...kanso, fit_game_colors: false })).label).toContain(swapped);
     // While the theme's colors are off for MUD text, the game text keeps
     // your base palette.
     const base = await visionRow({ ...kanso, theme_terminal_colors: false });
     expect(base.label).toContain(
-      "Game text keeps your base palette while the theme's colors are off for MUD text. The window still follows Color vision.",
-    );
-    // Kanso Zen's Typical fit already keeps the game text apart for a
-    // protanope, so the row says only the window changes.
-    const protan = await visionRow({ ...kanso, color_vision: 'protanopia' });
-    expect(protan.label).toContain(
-      'Kanso Zen already keeps the game text apart for protanopia, so only the window changes.',
+      "Game text keeps your base palette while the theme's colors are off for MUD text. The window's greens still turn blue and its reds orange.",
     );
   });
 
