@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import affectsCss from '../styles/affects.css?raw';
-import baseCss from '../styles/base.css?raw';
 import frameCss from '../styles/frame.css?raw';
-import helpCss from '../styles/help.css?raw';
-import mapCss from '../styles/map.css?raw';
-import overlaysCss from '../styles/overlays.css?raw';
 import panelCss from '../styles/panel.css?raw';
-import promptCss from '../styles/prompt.css?raw';
-import settingsCss from '../styles/settings.css?raw';
 import tokensCss from '../styles/tokens.css?raw';
 import {
   normalizePanelFont,
@@ -81,18 +74,13 @@ function rules(css: string): { selector: string; body: string }[] {
   }));
 }
 
-const SHEETS: Readonly<Record<string, string>> = {
-  'styles/base.css': baseCss,
-  'styles/map.css': mapCss,
-  'styles/tokens.css': tokensCss,
-  'styles/frame.css': frameCss,
-  'styles/panel.css': panelCss,
-  'styles/affects.css': affectsCss,
-  'styles/overlays.css': overlaysCss,
-  'styles/settings.css': settingsCss,
-  'styles/prompt.css': promptCss,
-  'styles/help.css': helpCss,
-};
+/** Every sheet in src/styles by its path from src, in path order, so a
+ *  new sheet joins the checks below without an edit here. */
+const SHEETS: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(
+    import.meta.glob<string>('../styles/*.css', { query: '?raw', import: 'default', eager: true }),
+  ).map(([path, css]) => [path.replace(/^\.\.\//, ''), css]),
+);
 
 /** A rule that draws inside a pane or the status line: a pane, the
  *  panel, the vitals, the map's drawing, or the status line. The pane
@@ -159,14 +147,14 @@ describe('the panel faces in the stylesheets', () => {
     // system face from the panel, the terminal face for the game text,
     // and the bundled monospace face for the glyph map.
     expect(namedFaces()).toEqual([
-      '.map-glyph-grid: var(--font-panel-glyph)',
-      '.shell-statusline: var(--font-panel)',
-      '.panel-host: var(--font-panel)',
-      '.pane-chat-log: var(--font-panel-game)',
       '.pane-affect-hours: var(--font-panel-game)',
       '.pane-affect-name: var(--font-panel-game)',
       '.pane-countdown-line: var(--font-panel-game)',
       '.pane-chip: var(--font-panel-game)',
+      '.shell-statusline: var(--font-panel)',
+      '.map-glyph-grid: var(--font-panel-glyph)',
+      '.panel-host: var(--font-panel)',
+      '.pane-chat-log: var(--font-panel-game)',
     ]);
   });
 
