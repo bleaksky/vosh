@@ -192,6 +192,8 @@ async fn character_named<R: tauri::Runtime>(
     if !is_new {
         return;
     }
+    // A login on this link ends what the redial followed of the last play.
+    session.connection.lock().link.logged_in();
     // The affect gauges read this character's saved fulls.
     crate::affects::full::character_known(app, state, session, character);
     auto_switch_for_character(app, state, session, character).await;
