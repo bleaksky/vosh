@@ -13,7 +13,6 @@ import {
   GAME_TIMES,
   getUiConfig,
   isOwnAffectsDisplayEcho,
-  isOwnThemeEcho,
   migrationAnalyze,
   migrationApply,
   subscribeMigrationApplied,
@@ -46,6 +45,7 @@ import {
   type RawUiConfig,
   type UiConfig,
 } from './session';
+import { isOwnThemeEcho } from './theme';
 import { galleryThemes } from './themeThumb';
 import { BUILTIN_THEMES, customToAppTheme, findTheme, setCustomThemes } from './themes';
 import gmcpEvents from '../../fixtures/ipc/gmcp-events.json';

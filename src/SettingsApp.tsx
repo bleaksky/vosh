@@ -7,7 +7,6 @@ import {
   followReplacedUiConfig,
   getUiConfig,
   isOwnAffectsDisplayEcho,
-  isOwnThemeEcho,
   loadoutsGetState,
   primeUiConfigAffectsDisplay,
   primeUiConfigTheme,
@@ -18,7 +17,12 @@ import {
   subscribeProfilesChanged,
   type UiConfig,
 } from './lib/session';
-import { applyThemePrefs, subscribeThemeChanges, subscribeThemePrefs } from './lib/theme';
+import {
+  applyThemePrefs,
+  isOwnThemeEcho,
+  subscribeThemeChanges,
+  subscribeThemePrefs,
+} from './lib/theme';
 import { showAfterThemePaint } from './lib/reveal';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
 import { loadFontStack, renderFontStack } from './lib/fontLoader';

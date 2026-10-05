@@ -3,13 +3,17 @@ import { createDebouncedWrite, pendingWrites } from '../../../lib/pendingWrites'
 import {
   affectsDisplayFields,
   isOwnAffectsDisplayEcho,
-  isOwnThemeEcho,
   setUiConfig,
   subscribeAffectsDisplayChanged,
   subscribeUiConfigReplaced,
   type UiConfig,
 } from '../../../lib/session';
-import { applyThemePrefs, subscribeThemeChanges, subscribeThemePrefs } from '../../../lib/theme';
+import {
+  applyThemePrefs,
+  isOwnThemeEcho,
+  subscribeThemeChanges,
+  subscribeThemePrefs,
+} from '../../../lib/theme';
 import type { SetUiConfig } from '../pageTypes';
 
 export interface AutoSaveOptions {

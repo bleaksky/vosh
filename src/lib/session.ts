@@ -5,6 +5,7 @@ import { sanitizeLayout, type PaneLayout } from './paneLayout';
 import { normalizePanelFont } from './panelFont';
 import { normalizePanelSize } from './panelSize';
 import {
+  noteThemeEcho,
   resolveActiveTheme,
   systemPrefersDark,
   THEME_PREFS_EVENT,
@@ -2699,30 +2700,6 @@ export function isOwnAffectsDisplayEcho(display: AffectsDisplay): boolean {
   const now = Date.now();
   const key = JSON.stringify(normalizeAffectsDisplay(display));
   return affectsDisplayEchoes.some((e) => e.key === key && now - e.at < AFFECTS_DISPLAY_ECHO_MS);
-}
-
-// Every window hears its own broadcast. A theme id or theme fields
-// this window sent in the last second are its own echo, and adopting
-// one could undo a newer pick made while that save was in flight.
-const THEME_ECHO_MS = 1000;
-let themeEchoes: { key: string; at: number }[] = [];
-
-function themeEchoKey(value: string | ThemePrefs): string {
-  return typeof value === 'string' ? `id:${value}` : `prefs:${JSON.stringify(themePrefsOf(value))}`;
-}
-
-function noteThemeEcho(value: string | ThemePrefs): void {
-  const now = Date.now();
-  themeEchoes = themeEchoes.filter((e) => now - e.at < THEME_ECHO_MS);
-  themeEchoes.push({ key: themeEchoKey(value), at: now });
-}
-
-/** Whether a theme id or theme fields heard on the bus are this
- *  window's own broadcast coming back. */
-export function isOwnThemeEcho(value: string | ThemePrefs): boolean {
-  const now = Date.now();
-  const key = themeEchoKey(value);
-  return themeEchoes.some((e) => e.key === key && now - e.at < THEME_ECHO_MS);
 }
 
 /** Save the theme choice alone. A full setUiConfig from a window that
