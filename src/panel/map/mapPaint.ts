@@ -218,7 +218,7 @@ export function drawSquares(
 // apply here: a room two floors above shouldn't get *more* visible
 // just because it's near the player's projected coords on this
 // floor.
-export function drawOffFloorCells(
+function drawOffFloorCells(
   ctx: CanvasRenderingContext2D,
   entries: OffFloorEntry[] | undefined,
   ox: number,
