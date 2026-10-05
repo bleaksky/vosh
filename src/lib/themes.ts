@@ -1795,9 +1795,11 @@ export function visionFitOf(
   return fitted;
 }
 
-/** The chrome tokens a theme paints the window with. */
-export function themeTokens(theme: AppTheme): ChromeTokens {
-  return deriveChrome(theme.xterm, theme.chrome);
+/** The chrome tokens a theme paints the window with, for a player with
+ *  `vision`. A color vision other than Typical tunes the status colors
+ *  and what derives from them (chrome deriveChrome). */
+export function themeTokens(theme: AppTheme, vision: ColorVision = 'typical'): ChromeTokens {
+  return deriveChrome(theme.xterm, theme.chrome, vision);
 }
 
 /** The palette the game draws in while you play. With Fit game colors on

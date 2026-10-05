@@ -360,7 +360,7 @@ describe('control washes', () => {
   }
 
   it('fields a light theme on its raised paper, never on white', () => {
-    const light = BUILTIN_THEMES.map(themeTokens).filter((t) => t.appearance === 'light');
+    const light = BUILTIN_THEMES.map((t) => themeTokens(t)).filter((t) => t.appearance === 'light');
     expect(light.length).toBeGreaterThan(0);
     for (const t of light) {
       expect(t.field).toBe(t.raised);
@@ -878,10 +878,10 @@ describe('color vision fits', () => {
     }
   });
 
-  // The 26 themes one-window (a206426c) ships, their Typical fits and
-  // their play palettes with Fit game colors on, digested from that
-  // commit. Color vision changes none of them.
-  it('fits and plays Typical byte for byte as at a206426c', () => {
+  // The 26 themes one-window (a206426c) ships, their Typical fits, their
+  // play palettes with Fit game colors on and their window tokens,
+  // digested from that commit. Color vision changes none of them.
+  it('fits and paints Typical byte for byte as at a206426c', () => {
     expect(BUILTIN_THEMES).toHaveLength(26);
     expect(digest(JSON.stringify(BUILTIN_THEMES.map((t) => [t.id, t.fitted ?? null])))).toBe(
       '3d4595e1',
@@ -889,6 +889,12 @@ describe('color vision fits', () => {
     expect(digest(JSON.stringify(BUILTIN_THEMES.map((t) => [t.id, playPalette(t, true)])))).toBe(
       '9c975f41',
     );
+    expect(digest(JSON.stringify(BUILTIN_THEMES.map((t) => [t.id, themeTokens(t)])))).toBe(
+      '8b44151f',
+    );
+    for (const theme of BUILTIN_THEMES) {
+      expect(themeTokens(theme, 'typical'), theme.id).toEqual(themeTokens(theme));
+    }
   });
 
   it('stores only the slots each fit moved, in hex', () => {
@@ -1160,7 +1166,7 @@ describe('color vision fits', () => {
   // Where the Typical fit misses a target, the fit for the vision moves
   // something, except on three themes for a protanope, where GAME_SHORT
   // shows every step that would part red from green further giving up a
-  // floor the Typical fit holds.
+  // floor the Typical fit holds. Their window changes all the same.
   it('changes every theme for every vision its Typical fit misses, and none it holds', () => {
     const kept: string[] = [];
     for (const vision of OTHER) {
@@ -1177,7 +1183,222 @@ describe('color vision fits', () => {
       'protanopia classic-vivid',
       'protanopia nightfly',
     ]);
-    for (const at of kept) expect(GAME_SHORT[at], at).not.toContain('trade');
+    for (const at of kept) {
+      expect(GAME_SHORT[at], at).not.toContain('trade');
+      const theme = findTheme(at.split(' ')[1]);
+      const window = CHROME_COLOR_KEYS.some(
+        (key) => themeTokens(theme, 'protanopia')[key] !== themeTokens(theme)[key],
+      );
+      expect(window, at).toBe(true);
+    }
+  });
+
+  it('changes Kanso Zen under all three visions, in the game text or the window', () => {
+    const kanso = findTheme('kanso-zen');
+    for (const vision of OTHER) {
+      const text = playPalette(kanso, true, vision) !== playPalette(kanso, true);
+      const window = CHROME_COLOR_KEYS.some(
+        (key) => themeTokens(kanso, vision)[key] !== themeTokens(kanso)[key],
+      );
+      expect(text || window, vision).toBe(true);
+    }
+    // Deuteranopia parts danger from success in the window, which a
+    // deuteranope sees 2.9 apart under Typical.
+    const typical = themeTokens(kanso);
+    const deut = themeTokens(kanso, 'deuteranopia');
+    expect(seenApart(hex(typical.danger), hex(typical.success), 'deuteranopia')).toBeCloseTo(
+      2.9,
+      1,
+    );
+    expect(seenApart(hex(deut.danger), hex(deut.success), 'deuteranopia')).toBeGreaterThan(20.2);
+  });
+});
+
+describe('window status colors for a color vision', () => {
+  const OTHER: ColorVision[] = ['deuteranopia', 'protanopia', 'tritanopia'];
+  const sees = (a: string, b: string, vision: ColorVision) => seenApart(hex(a), hex(b), vision);
+  const FAMILY = { danger: 'red', success: 'green' } as const;
+
+  it('keeps every floor, turns danger and success no further than their bound, and warn not at all', () => {
+    for (const vision of OTHER) {
+      for (const theme of BUILTIN_THEMES) {
+        const t = themeTokens(theme);
+        const v = themeTokens(theme, vision);
+        for (const key of ['danger', 'warn', 'success'] as const) {
+          const at = `${vision} ${theme.id} ${key}`;
+          for (const ground of [v.panel, v.raised]) {
+            const floor = Math.min(STATUS_CONTRAST, contrast(hex(t[key]), hex(ground)));
+            expect(contrast(hex(v[key]), hex(ground)), at).toBeGreaterThanOrEqual(floor - 1e-9);
+          }
+          if (v[key] === t[key] || rgbToOklch(hex(t[key])).C < 0.05) continue;
+          const dh = turned(t[key], v[key]);
+          if (key === 'warn') {
+            expect(Math.abs(dh), at).toBeLessThan(3);
+            continue;
+          }
+          const room = turnRoom(FAMILY[key], rgbToOklch(hex(t[key])).h, HUE_TURN_FAR);
+          expect(dh, at).toBeGreaterThan(-3);
+          expect(dh, at).toBeLessThanOrEqual(room + 1.5);
+        }
+        for (const key of ['dangerText', 'warnText'] as const) {
+          for (const ground of [v.panel, v.raised]) {
+            const at = `${vision} ${theme.id} ${key}`;
+            expect(contrast(hex(v[key]), hex(ground)), at).toBeGreaterThanOrEqual(
+              STATUS_TEXT_CONTRAST,
+            );
+          }
+        }
+      }
+    }
+  });
+
+  // Danger and success, and danger and warn, never come nearer than the
+  // Typical colors stand, unless past their target, and warn and success
+  // never under VISION_GUARD, or nearer than they stood if less.
+  it('brings no pair of status colors nearer than its guard', () => {
+    for (const vision of OTHER) {
+      for (const theme of BUILTIN_THEMES) {
+        const t = themeTokens(theme);
+        const v = themeTokens(theme, vision);
+        const at = `${vision} ${theme.id}`;
+        for (const other of ['success', 'warn'] as const) {
+          const floor = Math.min(
+            sees(t.danger, t[other], vision),
+            deltaEOk(hex(t.danger), hex(t[other])),
+          );
+          expect(sees(v.danger, v[other], vision), `${at} danger/${other}`).toBeGreaterThanOrEqual(
+            floor - 1e-9,
+          );
+        }
+        const apart = Math.min(sees(t.warn, t.success, vision), VISION_GUARD);
+        expect(sees(v.warn, v.success, vision), `${at} warn/success`).toBeGreaterThanOrEqual(
+          apart - 1e-9,
+        );
+      }
+    }
+  });
+
+  // The accent the rule picks stands ACCENT_APART from every status color
+  // as the vision sees them. A pinned accent stays as the theme drew it,
+  // and no status color comes nearer to it than the Typical one stands,
+  // up to ACCENT_APART.
+  it('keeps the accent apart from every status color as the vision sees them', () => {
+    for (const vision of OTHER) {
+      for (const theme of BUILTIN_THEMES) {
+        const t = themeTokens(theme);
+        const v = themeTokens(theme, vision);
+        for (const key of ['danger', 'warn', 'success'] as const) {
+          const at = `${vision} ${theme.id} accent from ${key}`;
+          if (theme.chrome?.accent === undefined) {
+            expect(sees(v.accent, v[key], vision), at).toBeGreaterThanOrEqual(ACCENT_APART);
+          } else {
+            expect(v.accent, at).toBe(t.accent);
+            const floor = Math.min(
+              ACCENT_APART,
+              deltaEOk(hex(t.accent), hex(t[key])),
+              sees(t.accent, t[key], vision),
+            );
+            expect(sees(v.accent, v[key], vision), at).toBeGreaterThanOrEqual(floor - 1e-9);
+          }
+        }
+      }
+    }
+  });
+
+  // What stops each step that would part danger from `other` further:
+  // the 3:1 floor on the panel or raised, a guard on another pair, the
+  // accent, the hue limit, lost chroma, or trade where nothing stops it
+  // and the window spent the room on the other pair.
+  const windowBlockers = (theme: AppTheme, vision: ColorVision, other: 'success' | 'warn') => {
+    const t = themeTokens(theme);
+    const v = themeTokens(theme, vision);
+    // The status colors keep clear of a pinned accent, and of the one the
+    // rule picks for Typical.
+    const pinned = theme.chrome?.accent !== undefined;
+    const now = sees(v.danger, v[other], vision);
+    const rest = other === 'success' ? 'warn' : 'success';
+    const restFloor = Math.min(
+      sees(t.danger, t[rest], vision),
+      deltaEOk(hex(t.danger), hex(t[rest])),
+    );
+    const out = new Set<string>();
+    for (const key of ['danger', other] as const) {
+      const lch = rgbToOklch(hex(v[key]));
+      const family = key === 'warn' ? null : FAMILY[key];
+      const steps: [string, string][] = [-0.02, 0.02].map((d) => [
+        'L',
+        toHex(oklchToRgbInGamut({ ...lch, L: Math.max(0, Math.min(1, lch.L + d)) })),
+      ]);
+      if (family) steps.push(['turn', toHex(turnHue(hex(v[key]), 4))]);
+      for (const [step, color] of steps) {
+        const s = { danger: v.danger, warn: v.warn, success: v.success, [key]: color };
+        if (sees(s.danger, s[other], vision) <= now + 0.05) continue;
+        const why: string[] = [];
+        for (const ground of [v.panel, v.raised]) {
+          const floor = Math.min(STATUS_CONTRAST, contrast(hex(t[key]), hex(ground)));
+          if (contrast(hex(color), hex(ground)) < floor) why.push(`${key} 3:1 floor`);
+        }
+        if (key === 'danger' && sees(s.danger, s[rest], vision) < restFloor) {
+          why.push(`danger/${rest}`);
+        }
+        const apart = Math.min(sees(t.warn, t.success, vision), VISION_GUARD);
+        if (sees(s.warn, s.success, vision) < apart) why.push('warn/success');
+        const c0 = rgbToOklch(hex(t[key])).C;
+        if (c0 > 0.04 && rgbToOklch(hex(color)).C < 0.6 * c0) why.push(`${key} chroma`);
+        const accentFloor = Math.min(
+          ACCENT_APART,
+          deltaEOk(hex(t.accent), hex(t[key])),
+          pinned ? sees(t.accent, t[key], vision) : Infinity,
+        );
+        if (sees(t.accent, color, vision) < accentFloor) why.push('accent');
+        if (step === 'turn' && family) {
+          const room = turnRoom(family, rgbToOklch(hex(t[key])).h, HUE_TURN_FAR);
+          if (turned(t[key], v[key]) + 4 > room + 1) why.push(`${key} hue limit`);
+        }
+        if (why.length === 0) why.push('trade');
+        why.forEach((w) => out.add(w));
+      }
+    }
+    return [...out].sort();
+  };
+
+  // Each pair the window leaves short of its target for each vision, how
+  // far it gets of how far it needs, and what stops it going further.
+  const WINDOW_SHORT: Record<string, string> = {
+    'deuteranopia classic-vivid':
+      'danger/success 36.8 of 52.0, danger/warn 42.4 of 45.7. danger 3:1 floor, danger chroma, danger hue limit, success chroma, warn chroma, warn/success',
+    'deuteranopia dracula': 'danger/success 34.2 of 37.8. danger 3:1 floor, success chroma, trade',
+    'deuteranopia green-screen':
+      'danger/success 37.8 of 44.2. danger 3:1 floor, danger hue limit, success chroma',
+    'deuteranopia monokai':
+      'danger/success 30.4 of 43.4, danger/warn 29.1 of 29.5. danger 3:1 floor, success chroma, trade, warn chroma, warn/success',
+    'deuteranopia tango-dark':
+      'danger/success 24.4 of 37.5, danger/warn 24.3 of 34.2. accent, danger 3:1 floor, danger hue limit, success chroma, warn chroma, warn/success',
+    'protanopia rubric': 'danger/warn 24.3 of 26.9. danger chroma, warn/success',
+    'tritanopia classic-vivid': 'danger/success 51.8 of 52.0. danger 3:1 floor, trade',
+  };
+
+  it('parts danger from success and warn as far as a typical eye sees them, or names the pair it cannot reach and why', () => {
+    const report: Record<string, string> = {};
+    for (const vision of OTHER) {
+      for (const theme of BUILTIN_THEMES) {
+        const t = themeTokens(theme);
+        const v = themeTokens(theme, vision);
+        const missed: string[] = [];
+        const why = new Set<string>();
+        for (const other of ['success', 'warn'] as const) {
+          const need = deltaEOk(hex(t.danger), hex(t[other]));
+          const value = sees(v.danger, v[other], vision);
+          if (value >= need) continue;
+          missed.push(`danger/${other} ${value.toFixed(1)} of ${need.toFixed(1)}`);
+          windowBlockers(theme, vision, other).forEach((w) => why.add(w));
+        }
+        if (missed.length > 0) {
+          report[`${vision} ${theme.id}`] = `${missed.join(', ')}. ${[...why].sort().join(', ')}`;
+        }
+      }
+    }
+    expect(report).toEqual(WINDOW_SHORT);
   });
 });
 
