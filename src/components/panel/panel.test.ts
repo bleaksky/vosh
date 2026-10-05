@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defaultLayout, splitPane } from '../../lib/paneLayout';
-import type { ImmQueues } from '../../lib/immStore';
+import type { ImmQueues } from '../../stores/gmcp/immStore';
 import { immRows, immSummary } from './immRows';
 import { affectHours, affectWords, chatTime, exitsLabel } from './paneText';
 

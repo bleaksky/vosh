@@ -12,8 +12,8 @@ import {
   type CellSize,
 } from '../../lib/promptBand';
 import { shownColumns } from '../../lib/sgrCells';
-import { usePinnedPrompt } from '../../stores/pinnedPromptStore';
-import { usePromptReach } from '../../stores/promptReachStore';
+import { usePinnedPrompt } from '../../stores/session/pinnedPromptStore';
+import { usePromptReach } from '../../stores/session/promptReachStore';
 import { useBandEnv } from '../../lib/useBandEnv';
 import { useBlinkShown } from '../../lib/blink';
 import type { Cell } from '../../lib/sgrCells';

@@ -15,7 +15,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
-vi.mock('../../lib/toasts', () => ({ pushToast: tauri.pushToast }));
+vi.mock('../../stores/toasts', () => ({ pushToast: tauri.pushToast }));
 
 const { buildPaletteEntries, initialSelection, paletteSections } =
   await import('../../lib/palette');

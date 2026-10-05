@@ -6,7 +6,7 @@ import {
   type GroupInfo,
   type GroupMember,
   type GroupState,
-} from '../../lib/groupStore';
+} from '../../stores/gmcp/groupStore';
 import { thirdsTone } from '../../lib/vitalsView';
 import { PaneHeader, PaneMeta } from './PaneHeader';
 

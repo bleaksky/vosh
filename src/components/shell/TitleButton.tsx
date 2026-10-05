@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import type { Connection } from '../../lib/useConnection';
+import type { Connection } from '../../stores/session/useConnection';
 import { ChevronDownIcon } from './icons';
 import { useWindowTitle, windowTitle } from './windowTitle';
 

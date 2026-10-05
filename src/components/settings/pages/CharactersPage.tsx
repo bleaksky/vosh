@@ -33,7 +33,7 @@ import {
   type ProfilesList,
 } from '../../../ipc/profiles';
 import { useTauriEvent } from '../../../ipc/useTauriEvent';
-import { loadTarget } from '../../../lib/useConnection';
+import { loadTarget } from '../../../stores/session/useConnection';
 import type { SettingsPageProps } from '../pageTypes';
 import { Row, Section, Select, Toggle } from '../ui';
 import { PanelLayout } from './characters/PanelLayout';

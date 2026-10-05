@@ -51,7 +51,7 @@ import {
   Toggle,
   type SelectOption,
 } from '../../ui';
-import { usePromptGags } from '../../../../stores/promptGagStore';
+import { usePromptGags } from '../../../../stores/session/promptGagStore';
 import { CardNote, CodeRow, GroupField, NumberField } from './fields';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, EditorProps, KindSpec } from './types';

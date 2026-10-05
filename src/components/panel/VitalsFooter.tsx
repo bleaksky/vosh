@@ -9,10 +9,10 @@ import {
 } from 'react';
 import { readPanelFace, usePanelFaceVersion } from '../../lib/panelFace';
 import type { VitalsDensity, VitalsOptions } from '../../ipc/uiConfig';
-import { useCombat, type CombatOpponent } from '../../stores/combatStore';
-import { useVitalsDensity } from '../../stores/vitalsDensityStore';
-import { useVitalsOptions } from '../../stores/vitalsOptionsStore';
-import { useVitals, type Vitals, type VitalKey } from '../../stores/vitalsStore';
+import { useCombat, type CombatOpponent } from '../../stores/gmcp/combatStore';
+import { useVitalsDensity } from '../../stores/config/vitalsDensityStore';
+import { useVitalsOptions } from '../../stores/config/vitalsOptionsStore';
+import { useVitals, type Vitals, type VitalKey } from '../../stores/gmcp/vitalsStore';
 import {
   formatVital,
   hiddenVital,

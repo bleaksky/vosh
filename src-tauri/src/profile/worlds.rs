@@ -78,7 +78,7 @@ mod tests {
     fn known_worlds_match_the_list_the_page_shows() {
         // The page keeps its own copy in src/lib/useConnection.ts, with
         // the host it dials for each world.
-        let source = include_str!("../../../src/lib/useConnection.ts");
+        let source = include_str!("../../../src/stores/session/useConnection.ts");
         let start = source
             .find("export const KNOWN_WORLDS")
             .expect("useConnection.ts declares KNOWN_WORLDS");

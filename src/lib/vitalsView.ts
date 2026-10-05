@@ -1,6 +1,6 @@
 import type { PromptShowState } from '../ipc/prompt';
 import type { VitalsMeter, VitalsValues } from '../ipc/uiConfig';
-import { vitalPercent } from '../stores/vitalsStore';
+import { vitalPercent } from '../stores/gmcp/vitalsStore';
 
 // How your vitals read in the panel footer and in the status line, from
 // the rows under Layout, Vitals (VitalsOptions.dc.html). Values picks

@@ -12,7 +12,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 let options: VitalsOptions = DEFAULT_VITALS_OPTIONS;
-vi.mock('../../stores/vitalsOptionsStore', () => ({
+vi.mock('../../stores/config/vitalsOptionsStore', () => ({
   useVitalsOptions: () => options,
 }));
 

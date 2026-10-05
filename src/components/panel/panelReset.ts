@@ -1,5 +1,5 @@
 import { acceptPaneLayout, flushPaneLayout, resetPaneLayout } from '../../lib/paneLayout';
-import { pushToast } from '../../lib/toasts';
+import { pushToast } from '../../stores/toasts';
 import { getPanelLayout } from './panelLayoutStore';
 
 // Reset panel layout, from the command palette. The active profile's

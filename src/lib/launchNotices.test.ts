@@ -10,7 +10,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
-vi.mock('./toasts', () => ({ pushToast: fakes.pushToast }));
+vi.mock('../stores/toasts', () => ({ pushToast: fakes.pushToast }));
 
 const { launchNoticeLine, MIGRATION_APPLIED_NOTICE, showLaunchNotices, showMigrationApplied } =
   await import('./launchNotices');

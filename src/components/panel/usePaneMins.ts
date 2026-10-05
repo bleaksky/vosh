@@ -1,10 +1,10 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import { affectThresholdsOf } from '../../lib/affectsDisplay';
 import { affectsPaneRows } from '../../lib/affectsView';
-import { getGroupState, subscribeGroupState } from '../../lib/groupStore';
-import { useAffectsDisplay } from '../../stores/affectsDisplayStore';
-import { useAffects, useAffectsHidden } from '../../stores/affectsStore';
-import { useTrackedAffects } from '../../stores/trackedAffectsStore';
+import { getGroupState, subscribeGroupState } from '../../stores/gmcp/groupStore';
+import { useAffectsDisplay } from '../../stores/config/affectsDisplayStore';
+import { useAffects, useAffectsHidden } from '../../stores/gmcp/affectsStore';
+import { useTrackedAffects } from '../../stores/config/trackedAffectsStore';
 import type { PaneSplit } from '../../lib/paneLayout';
 import { affectsTwoColumnsW } from './affectsGrid';
 import { useChipMeasure } from './chipMeasure';

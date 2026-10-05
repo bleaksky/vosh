@@ -7,7 +7,7 @@ import {
   worldName,
   type Connection,
   type ConnectionTarget,
-} from '../../lib/useConnection';
+} from '../../stores/session/useConnection';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 
 // The session popover under the title button (Session.dc.html): Connect

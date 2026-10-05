@@ -4,7 +4,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { ConnectionTarget } from '../lib/useConnection';
+import type { ConnectionTarget } from '../stores/session/useConnection';
 import { CONNECTION_TARGET_CHANGED, INPUT_MODE, ROUTED, STATE, TARGET } from './events';
 
 export type StatePayload =

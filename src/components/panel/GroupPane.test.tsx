@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { parseGroupInfo, type GroupInfo } from '../../lib/groupStore';
+import { parseGroupInfo, type GroupInfo } from '../../stores/gmcp/groupStore';
 import type { PaneLeaf } from '../../lib/paneLayout';
 import { aabahranPacket } from '../../test/aabahranGmcp';
 import { GroupPaneView } from './GroupPane';

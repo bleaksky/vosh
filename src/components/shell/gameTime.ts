@@ -1,5 +1,5 @@
 import type { GameTime } from '../../ipc/uiConfig';
-import type { WorldTime } from '../../stores/worldStore';
+import type { WorldTime } from '../../stores/gmcp/worldStore';
 
 /** Game time from World.Time on the clock you pick in Settings under
  *  Layout, then Status line. The 24 hour clock, the default, reads like

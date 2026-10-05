@@ -23,7 +23,7 @@ import {
   type PromptLineTrigger,
 } from '../../ipc/prompt';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
-import { pushToast } from '../../lib/toasts';
+import { pushToast } from '../../stores/toasts';
 import { Button, Field } from '../settings/ui';
 import { CandidateBox, MatchRow } from './PromptCandidate';
 

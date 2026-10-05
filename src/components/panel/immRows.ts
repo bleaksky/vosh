@@ -1,4 +1,4 @@
-import type { ImmQueues } from '../../lib/immStore';
+import type { ImmQueues } from '../../stores/gmcp/immStore';
 
 // Rows for the Staff queues pane, a triage list. Only queues with work
 // show, worst first: anything past its deadline, then anything in the
