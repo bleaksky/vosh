@@ -1,4 +1,4 @@
-import { isLeaf, type PaneNode, type PaneSplit, type PaneType } from './paneLayout';
+import { isLeaf, type PaneNode, type PaneSplit, type PaneType } from '../panel/paneLayout';
 
 // The small drawing of a profile's panel in Settings > Characters
 // (SettingsCharacters.dc.html, Panel layout). A 180 by 110 box with a

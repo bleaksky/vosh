@@ -11,8 +11,8 @@ import {
   PANEL_FONT_DESIGNED,
   PANEL_FONT_SYSTEM,
   PANEL_FONT_TERMINAL,
-} from '../lib/panelFont';
-import { normalizePanelSize, PANEL_SIZE_TERMINAL } from '../lib/panelSize';
+} from '../panel/panelFont';
+import { normalizePanelSize, PANEL_SIZE_TERMINAL } from '../panel/panelSize';
 import type { CustomTheme } from '../ipc/theme';
 import type { SystemFontEntry } from '../ipc/uiConfig';
 import type { ThemePrefs } from './theme';

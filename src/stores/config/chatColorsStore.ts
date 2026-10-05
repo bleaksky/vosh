@@ -4,7 +4,7 @@ import {
   normalizeChatColors,
   sameChatColors,
   type ChatColors,
-} from '../../lib/chatColors';
+} from '../../panel/chat/chatColors';
 import { subscribeProfileSwitched } from '../../ipc/profiles';
 import { getChatColorsTable, subscribeChatColorsChanged } from '../../ipc/uiConfig';
 import { createStore } from '../store';

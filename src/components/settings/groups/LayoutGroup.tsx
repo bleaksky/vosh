@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { AFFECTS_MARKER_LABELS, AFFECTS_STYLE_LABELS } from '../../../lib/affectsDisplay';
+import { AFFECTS_MARKER_LABELS, AFFECTS_STYLE_LABELS } from '../../../panel/affects/affectsDisplay';
 import APP_SHORTCUTS from '../../../lib/appShortcuts.json';
-import { PANEL_WIDTH_MAX, panelWidthFloor } from '../../../lib/paneLayout';
+import { PANEL_WIDTH_MAX, panelWidthFloor } from '../../../panel/paneLayout';
 import { isMacPlatform, shortcutKeys, shortcutLabel } from '../../../lib/shortcuts';
 import { profilePossessive } from '../../../lib/profileLabel';
 import {
@@ -29,7 +29,7 @@ import {
   setPanelOpen,
   setPanelWidth,
   usePanelLayout,
-} from '../../panel/panelLayoutStore';
+} from '../../../panel/panelLayoutStore';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
 import { GameTimeRow } from '../rows/GameTimeRow';

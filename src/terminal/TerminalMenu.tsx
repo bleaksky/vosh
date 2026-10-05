@@ -15,7 +15,7 @@ import { ChevronRightIcon } from '../components/panel/paneIcons';
 import { nativeSurfaceCopy, nativeSurfaceSelectAll } from '../ipc/nativeSurface';
 import { scrollbackClear } from '../ipc/terminal';
 import { openHelpWindow } from '../ipc/windows';
-import { openPaneSubmenu, type PaneSubmenuState } from '../lib/affectsDisplay';
+import { openPaneSubmenu, type PaneSubmenuState } from '../panel/affects/affectsDisplay';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import { shortcutLabel } from '../lib/shortcuts';
 import { openSettingsTab } from '../lib/settingsLink';

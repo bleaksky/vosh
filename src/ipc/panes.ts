@@ -5,7 +5,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { PaneLayout } from '../lib/paneLayout';
+import type { PaneLayout } from '../panel/paneLayout';
 import { PANE_LAYOUT_CHANGED } from './events';
 
 /** The active profile's pane layout, as the backend sends it. Pages

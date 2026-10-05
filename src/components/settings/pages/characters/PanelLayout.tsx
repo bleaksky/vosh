@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
-import type { PaneLayout } from '../../../../lib/paneLayout';
+import type { PaneLayout } from '../../../../panel/paneLayout';
 import { paneSchematic } from '../../../../lib/paneSchematic';
-import { PANE_LABELS } from '../../../panel/paneTypes';
+import { PANE_LABELS } from '../../../../panel/paneTypes';
 import { Button, Card, Section } from '../../ui';
 
 // Panel layout on the Characters board: the schematic of the selected

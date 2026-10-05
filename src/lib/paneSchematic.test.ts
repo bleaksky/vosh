@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultLayout, sanitize, type PaneSplit, type PaneType } from './paneLayout';
+import { defaultLayout, sanitize, type PaneSplit, type PaneType } from '../panel/paneLayout';
 import { paneSchematic, possessive, schematicSentence } from './paneSchematic';
 
 const LABELS: Record<PaneType, string> = {

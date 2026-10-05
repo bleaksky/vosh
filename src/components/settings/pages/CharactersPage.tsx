@@ -10,7 +10,7 @@ import {
   worldOptions,
   worldSources,
 } from '../../../lib/characterProfiles';
-import { resetPaneLayout, subscribePaneLayout } from '../../../lib/paneLayout';
+import { resetPaneLayout, subscribePaneLayout } from '../../../panel/paneLayout';
 import {
   subscribeTrackedAffectsChanged,
   trackedAffectsSet,

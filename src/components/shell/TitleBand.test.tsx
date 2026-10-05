@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import tauriConf from '../../../src-tauri/tauri.conf.json';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { shortcutLabel } from '../../lib/shortcuts';
-import { PANEL_WIDTH_MIN, panelWidthFloor } from '../../lib/paneLayout';
+import { PANEL_WIDTH_MIN, panelWidthFloor } from '../../panel/paneLayout';
 import type { Connection } from '../../stores/session/useConnection';
 import frameCss from '../../styles/frame.css?raw';
 import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';

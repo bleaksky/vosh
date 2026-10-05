@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { CRITICAL_TICKS, EXPIRING_TICKS } from '../lib/affectsView';
+import { CRITICAL_TICKS, EXPIRING_TICKS } from '../panel/affects/affectsView';
 import { AFFECTS_DISPLAY_CHANGED, AFFECT_FULL_CHANGED, TRACKED_AFFECTS_CHANGED } from './events';
 import type { SessionData } from './session';
 import type { UiConfig } from './uiConfig';
