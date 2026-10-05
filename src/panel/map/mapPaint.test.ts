@@ -22,7 +22,7 @@ import {
   drawSquares,
   drawTileset,
 } from './mapPaint';
-import { GlyphsOverlay } from './MapView';
+import { GlyphsOverlay } from './GlyphsOverlay';
 
 // The packets come from fixtures/gmcp/aabahran/map, built by the game's
 // own generate_map and gmcp_send_map over its area files.
