@@ -142,7 +142,7 @@ const H = 349;
 function scene(payload: MapTilesPayload, zoom = 1) {
   const { rows, cols } = gridDims(payload);
   const { row: centerR, col: centerC } = playerCellOf(payload, rows, cols);
-  const anchor = computeAnchor(payload, rows, cols, centerR, centerC, W, H, zoom);
+  const anchor = computeAnchor(W, H, zoom);
   const { pitch, playerX, playerY } = anchor;
   return {
     rows,
@@ -160,19 +160,7 @@ function scene(payload: MapTilesPayload, zoom = 1) {
 function squares(payload: MapTilesPayload, zoom = 1) {
   const s = scene(payload, zoom);
   const { ctx, calls } = recorder();
-  drawSquares(
-    ctx,
-    W,
-    H,
-    payload,
-    s.rows,
-    s.cols,
-    s.centerR,
-    s.centerC,
-    s.anchor,
-    GROUND,
-    MARK_FACE,
-  );
+  drawSquares(ctx, payload, s.rows, s.cols, s.centerR, s.centerC, s.anchor, GROUND, MARK_FACE);
   return { ...s, calls };
 }
 
@@ -345,7 +333,7 @@ describe('the Tileset painter', () => {
     for (const [name, payload] of Object.entries(ALL)) {
       const s = scene(payload);
       const { ctx, calls } = recorder();
-      drawTileset(ctx, W, H, payload, s.rows, s.cols, s.centerR, s.centerC, null, s.anchor, GROUND);
+      drawTileset(ctx, payload, s.rows, s.cols, s.centerR, s.centerC, null, s.anchor, GROUND);
       expect(calls, name).toEqual(squares(payload).calls);
     }
   });
@@ -357,7 +345,7 @@ describe('the Tileset painter', () => {
     for (const tilesInImage of [13, 4]) {
       const image = { naturalWidth: tilesInImage * 16, naturalHeight: 16 } as HTMLImageElement;
       const { ctx, calls } = recorder();
-      drawTileset(ctx, W, H, VAL_MIRAN, rows, cols, centerR, centerC, image, anchor, GROUND);
+      drawTileset(ctx, VAL_MIRAN, rows, cols, centerR, centerC, image, anchor, GROUND);
       const expected = gridRooms(VAL_MIRAN, rows, cols).map(({ row, col, cell }) => {
         const idx = strip.indexOf(sectorCodeOf(cell.s));
         const tile = idx >= 0 && idx < tilesInImage ? idx : 0;

@@ -30,10 +30,6 @@ interface Anchor {
   /// Canvas pixel where the player cell (centerR, centerC) sits.
   playerX: number;
   playerY: number;
-  /// True when the anchor is locked to the player's known absolute world
-  /// coords (so cells stay put across walks). False means we fell back to
-  /// player-centered because the world coord is not known.
-  worldLocked: boolean;
 }
 
 /// Pick the pitch and the anchor point for the player cell. The camera
@@ -41,32 +37,19 @@ interface Anchor {
 /// floored to integer pixels so cells render on the same pixel grid every
 /// frame. The pitch is also integer; multiplying integer cell offsets by
 /// integer pitch lands every neighbor on a clean grid line.
-export function computeAnchor(
-  _payload: MapTilesPayload,
-  _rows: number,
-  _cols: number,
-  _centerR: number,
-  _centerC: number,
-  cssWidth: number,
-  cssHeight: number,
-  zoom: number = 1,
-): Anchor {
-  // Same base pitch as the mapping view so both modes render at the
-  // same scale; the user's zoom multiplier scales it up or down.
+export function computeAnchor(cssWidth: number, cssHeight: number, zoom: number = 1): Anchor {
+  // 20 pixels a cell at zoom 1, which your zoom scales up or down.
   // Floored to integer pixels so cells stay on a clean grid.
   const pitch = Math.max(4, Math.floor(20 * zoom));
   return {
     pitch,
     playerX: Math.floor(cssWidth / 2),
     playerY: Math.floor(cssHeight / 2),
-    worldLocked: false,
   };
 }
 
 export function drawSquares(
   ctx: CanvasRenderingContext2D,
-  _cssWidth: number,
-  _cssHeight: number,
   payload: MapTilesPayload,
   rows: number,
   cols: number,
@@ -303,8 +286,8 @@ export function drawOffFloorOverlay(
   // them is redundant and visually noisy.
 }
 
-// Same fade table as the mapping view's BFS distance, but keyed to a
-// ring index since the server payload doesn't ship full graph data.
+// How far a room fades by its ring around yours. The ring stands in for
+// the distance along exits, since the payload carries no room graph.
 export function depthAlphaForRing(d: number): number {
   if (d === 0) return 1;
   if (d <= 2) return 0.9;
@@ -316,8 +299,6 @@ export function depthAlphaForRing(d: number): number {
 
 export function drawTileset(
   ctx: CanvasRenderingContext2D,
-  cssWidth: number,
-  cssHeight: number,
   payload: MapTilesPayload,
   rows: number,
   cols: number,
@@ -330,19 +311,7 @@ export function drawTileset(
   if (!image) {
     // Fallback when no tileset is loaded — render with the standard
     // squares style and the line-based off-floor glyphs.
-    drawSquares(
-      ctx,
-      cssWidth,
-      cssHeight,
-      payload,
-      rows,
-      cols,
-      centerR,
-      centerC,
-      anchor,
-      ground,
-      readPanelMarkFace(),
-    );
+    drawSquares(ctx, payload, rows, cols, centerR, centerC, anchor, ground, readPanelMarkFace());
     return;
   }
   const tileSize = image.naturalHeight;
