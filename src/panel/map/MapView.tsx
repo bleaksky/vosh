@@ -470,7 +470,7 @@ interface Anchor {
 /// floored to integer pixels so cells render on the same pixel grid every
 /// frame. The pitch is also integer; multiplying integer cell offsets by
 /// integer pitch lands every neighbor on a clean grid line.
-function computeAnchor(
+export function computeAnchor(
   _payload: MapTilesPayload,
   _rows: number,
   _cols: number,
@@ -492,7 +492,7 @@ function computeAnchor(
   };
 }
 
-function drawSquares(
+export function drawSquares(
   ctx: CanvasRenderingContext2D,
   _cssWidth: number,
   _cssHeight: number,
@@ -647,7 +647,7 @@ function drawSquares(
 // apply here: a room two floors above shouldn't get *more* visible
 // just because it's near the player's projected coords on this
 // floor.
-function drawOffFloorCells(
+export function drawOffFloorCells(
   ctx: CanvasRenderingContext2D,
   entries: OffFloorEntry[] | undefined,
   ox: number,
@@ -676,7 +676,7 @@ function drawOffFloorCells(
 // off-floor data, half-pitch stubs otherwise). Drawn AFTER same-
 // floor cells so off-floor connectivity stays visible no matter
 // what's underneath.
-function drawOffFloorOverlay(
+export function drawOffFloorOverlay(
   ctx: CanvasRenderingContext2D,
   entries: OffFloorEntry[] | undefined,
   ox: number,
@@ -734,7 +734,7 @@ function drawOffFloorOverlay(
 
 // Same fade table as the mapping view's BFS distance, but keyed to a
 // ring index since the server payload doesn't ship full graph data.
-function depthAlphaForRing(d: number): number {
+export function depthAlphaForRing(d: number): number {
   if (d === 0) return 1;
   if (d <= 2) return 0.9;
   if (d <= 4) return 0.72;
@@ -759,7 +759,7 @@ function depthAlphaForRing(d: number): number {
 // or themeVersion shifts) does not re-run the 60×60 grid build +
 // ~3500-span DOM diff. Only real payload content changes or the zoom
 // value trigger a rebuild.
-const GlyphsOverlay = memo(
+export const GlyphsOverlay = memo(
   function GlyphsOverlay({
     payload,
     zoom,
@@ -826,7 +826,7 @@ const GlyphsOverlay = memo(
 //   even row + odd col  = horizontal bridge (BRIDGE_EM × 1em)
 //   odd row + even col  = vertical bridge (1em × BRIDGE_EM)
 //   odd row + odd col   = corner (BRIDGE_EM × BRIDGE_EM, always blank)
-function cellClass(cell: GlyphCell, r: number, c: number): string {
+export function cellClass(cell: GlyphCell, r: number, c: number): string {
   const isRoomRow = r % 2 === 0;
   const isRoomCol = c % 2 === 0;
   const parts = ['map-glyph-cell'];
@@ -841,7 +841,7 @@ function cellClass(cell: GlyphCell, r: number, c: number): string {
   return parts.join(' ');
 }
 
-function drawTileset(
+export function drawTileset(
   ctx: CanvasRenderingContext2D,
   cssWidth: number,
   cssHeight: number,
