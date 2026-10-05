@@ -1,7 +1,13 @@
-// The Settings primitives. Every Settings page builds from these, so
-// the geometry and the One Window tokens live in one place
-// (src/styles/settings.css). src/settings/README.md lists
-// each one and its props.
+// The kit every window shares. Settings, Help and the prompt card build
+// from these, so the geometry and the One Window tokens live in one
+// place (src/styles/settings.css). README.md beside this file lists each
+// one and its props.
+//
+// MenuSurface with menuPlacement, ConfirmDialog, CodeEditor,
+// WindowControls and paneIcons are imported by path. CodeEditor would
+// load CodeMirror into every file that imports this barrel,
+// WindowControls takes its icons from it, and paneIcons repeats four
+// names from icons.tsx.
 
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
 export { Card, type CardProps } from './Card';

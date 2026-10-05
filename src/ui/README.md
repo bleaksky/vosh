@@ -1,6 +1,6 @@
-# Primitives
+# The shared kit
 
-Import the primitives from `src/ui/index.ts`. A page in its folder does it like this.
+Every window builds from the primitives in `src/ui`. Settings, Help and the prompt card import them from `src/ui/index.ts`, and a Settings page in its folder does it like this.
 
 ```tsx
 import { Section, Row, Toggle, Select } from '../../ui';
