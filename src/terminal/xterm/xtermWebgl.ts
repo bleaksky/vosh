@@ -22,10 +22,9 @@ export function loadWebgl(term: Terminal, blink: XtermBlink, quiet: boolean): { 
   const enableWebgl = !quiet && lsVal !== '0';
   if (enableWebgl) {
     // Probe webgl2 in a throwaway canvas first. If the WebView
-    // can't allocate a context, the addon would load, immediately
-    // fire onContextLoss, and (per xterm 5.5.0 bug) leave the
-    // terminal renderer in an unrenderable state. Cheaper to
-    // detect now and stay on DOM.
+    // can't allocate a context, the addon would load and fire
+    // onContextLoss at once, a renderer swap that can leave the pane
+    // unable to draw. Finding out first keeps it on DOM.
     let probeOk = false;
     try {
       const probe = document.createElement('canvas');
@@ -46,24 +45,18 @@ export function loadWebgl(term: Terminal, blink: XtermBlink, quiet: boolean): { 
     }
     try {
       if (!probeOk) throw new Error('webgl2 probe failed');
-      // xterm 6.1.0-beta's WebglAddon takes an options object and
-      // also ships PR #5529 — synchronous redraw on resize — which
-      // is what fixes the 1px-canvas-width oscillation that made
-      // the divider drag wobble on the previous (5.5.0) line.
-      // No options needed; the defaults match what we want.
+      // The defaults suit the pane. This WebglAddon redraws in step
+      // with a resize, which keeps the canvas from wobbling a pixel
+      // wide as you drag the split's divider.
       const addon = new WebglAddon();
       // On context loss (GPU reset, sleep/wake, too many live GL
       // contexts) dispose the addon so xterm hands rendering back to
-      // its DOM renderer. Without this the pane keeps a dead GL
-      // canvas, which against Tauri's transparent window reads as a
-      // blank see-through hole until the user reloads — worse now
-      // that WebGL is the default. Disposing is xterm's documented
-      // context-loss fallback. The crash that blocked this on the
-      // 5.5.0 line was a fit() racing a half-disposed renderer
-      // (unguarded `_renderer.value.dimensions`); we sidestep that
-      // regardless of version by deferring the repaint to the next
-      // frame, so nothing touches the renderer in the same tick as
-      // the swap inside dispose().
+      // its DOM renderer, xterm's documented context-loss fallback.
+      // Without this the pane keeps a dead GL canvas, which against
+      // Tauri's transparent window reads as a blank see-through hole
+      // until you reload. The repaint waits for the next frame, since
+      // a fit() in the same tick as the swap inside dispose() reads a
+      // half-disposed renderer (`_renderer.value.dimensions`).
       addon.onContextLoss(() => {
         console.warn('[vosh] webgl context lost — falling back to DOM renderer');
         try {
