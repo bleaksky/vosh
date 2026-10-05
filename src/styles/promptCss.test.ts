@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import controlsCss from './controls.css?raw';
 import overlaysCss from './overlays.css?raw';
 import promptCss from './prompt.css?raw';
 import settingsCss from './settings.css?raw';
@@ -18,7 +19,7 @@ describe('prompt.css', () => {
   const prompt = bare(promptCss);
 
   it('reads the stylesheets whole', () => {
-    for (const text of [promptCss, tokensCss, settingsCss, overlaysCss]) {
+    for (const text of [promptCss, tokensCss, controlsCss, settingsCss, overlaysCss]) {
       expect(text.length).toBeGreaterThan(1000);
     }
   });
@@ -32,6 +33,7 @@ describe('prompt.css', () => {
     // overlay recipes the card reuses.
     const known = new Set([
       ...defined(bare(tokensCss)),
+      ...defined(bare(controlsCss)),
       ...defined(bare(settingsCss)),
       ...defined(bare(overlaysCss)),
     ]);

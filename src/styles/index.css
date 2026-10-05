@@ -14,6 +14,7 @@
 @import './overlays.css'; /* ov- */
 @import './panel.css'; /* pane-, panel- */
 @import './map.css'; /* server-view, map-, pane-map- */
+@import './controls.css'; /* the st- controls and their --st- fills */
 @import './settings.css'; /* st- */
 @import './prompt.css'; /* prompt-, pc-, and the st- rules of the Settings Prompt section */
 @import './help.css'; /* hp- */
