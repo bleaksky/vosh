@@ -97,7 +97,7 @@ import { useBandEnv } from './useBandEnv';
 import { useCellWidth, useLabelMeasure } from '../lib/useCellWidth';
 import { knownWorld } from '../stores/session/useConnection';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import type { TerminalHandle } from '../terminal/Terminal';
+import type { TerminalHandle } from '../terminal/terminalHandle';
 import { Button, CloseIcon, IconButton, MoreIcon } from '../ui';
 import { CardMenu, MenuSeparator } from './CardMenu';
 import { CodesEntry, CodesRead, LineTriggers, type CodesRequest } from './PromptCodes';
