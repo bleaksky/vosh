@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { CRITICAL_TICKS, EXPIRING_TICKS } from './affectsView';
+import { toColorVision, type ColorVision } from './gameFit';
 import { sanitizeLayout, type PaneLayout } from './paneLayout';
 import { normalizePanelFont } from './panelFont';
 import { normalizePanelSize } from './panelSize';
@@ -2098,6 +2099,11 @@ export interface UiConfig {
    *  slots the theme fits for them (themes.ts playPalette), and Settings
    *  keeps the theme as published. On unless you turn it off. */
   fit_game_colors: boolean;
+  /** The color vision Fit game colors fits the game colors for. Typical
+   *  plays the fit every theme ships, and another vision the fit that
+   *  keeps its cues apart (themes.ts visionFitOf). Typical unless you
+   *  pick another. */
+  color_vision: ColorVision;
   /** Keep highlight colors readable. While on, the session draws a true
    *  color a trigger paints text in at a lightness that reads on the
    *  theme's terminal background. On unless you turn it off. */
@@ -2252,6 +2258,7 @@ export interface RawUiConfig {
   bright_bold?: boolean;
   blink_text?: boolean | null;
   fit_game_colors?: boolean;
+  color_vision?: string;
   readable_highlights?: boolean;
   collapse_repeats?: boolean;
   collapse_fight_lines?: boolean;
@@ -2341,6 +2348,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     bright_bold: Boolean(cfg.bright_bold),
     blink_text: typeof cfg.blink_text === 'boolean' ? cfg.blink_text : null,
     fit_game_colors: cfg.fit_game_colors !== false,
+    color_vision: toColorVision(cfg.color_vision),
     readable_highlights: cfg.readable_highlights !== false,
     collapse_repeats: cfg.collapse_repeats === true,
     collapse_fight_lines: cfg.collapse_fight_lines !== false,
@@ -2423,6 +2431,7 @@ const VITALS_DENSITY_EVENT = 'vosh://vitals-density-changed';
 const VITALS_OPTIONS_EVENT = 'vosh://vitals-options-changed';
 const AFFECTS_DISPLAY_EVENT = 'vosh://affects-display-changed';
 const FIT_GAME_COLORS_EVENT = 'vosh://fit-game-colors-changed';
+const COLOR_VISION_EVENT = 'vosh://color-vision-changed';
 const READABLE_HIGHLIGHTS_EVENT = 'vosh://readable-highlights-changed';
 
 async function emitChanged<T>(
@@ -2504,6 +2513,7 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   // reduce motion setting to resolve none.
   await emitChanged(BLINK_TEXT_EVENT, config.blink_text, prev?.blink_text);
   await emitChanged(FIT_GAME_COLORS_EVENT, config.fit_game_colors, prev?.fit_game_colors);
+  await emitChanged(COLOR_VISION_EVENT, config.color_vision, prev?.color_vision);
   await emitChanged(
     READABLE_HIGHLIGHTS_EVENT,
     config.readable_highlights,
@@ -2772,6 +2782,7 @@ function uiConfigPayload(config: UiConfig): Record<string, unknown> {
     bright_bold: config.bright_bold,
     blink_text: config.blink_text,
     fit_game_colors: config.fit_game_colors,
+    color_vision: config.color_vision,
     readable_highlights: config.readable_highlights,
     collapse_repeats: config.collapse_repeats,
     collapse_fight_lines: config.collapse_fight_lines,
@@ -2957,6 +2968,16 @@ export async function subscribeFitGameColorsChanged(
 ): Promise<UnlistenFn> {
   return listen<boolean>(FIT_GAME_COLORS_EVENT, (event) => {
     cb(event.payload !== false);
+  });
+}
+
+/** Hear the color vision change, saved in Settings or brought by
+ *  another profile. */
+export async function subscribeColorVisionChanged(
+  cb: (value: ColorVision) => void,
+): Promise<UnlistenFn> {
+  return listen<string>(COLOR_VISION_EVENT, (event) => {
+    cb(toColorVision(event.payload));
   });
 }
 

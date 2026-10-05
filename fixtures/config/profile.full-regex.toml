@@ -143,6 +143,7 @@ keep_last_command = true
 theme_terminal_colors = false
 bright_bold = true
 blink_text = false
+color_vision = "deuteranopia"
 terminal_base_ansi = [
     "#000000",
     "#cd3131",
