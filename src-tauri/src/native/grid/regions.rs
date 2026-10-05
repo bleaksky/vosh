@@ -443,7 +443,7 @@ impl TermGrid {
 
     /// Word wrap `text` at the grid width. xterm receives the same
     /// stream word wrapped by the webview's `WordWrapper`
-    /// (src/lib/wordWrap.ts). Without it the grid would break mid word
+    /// (src/terminal/wordWrap.ts). Without it the grid would break mid word
     /// at its edge and the two renderers would disagree. Both run
     /// `vosh_prompt::wrap` against one fixture.
     fn wrap(&self, text: &str) -> String {

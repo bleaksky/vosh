@@ -151,7 +151,7 @@ pub(crate) struct FileGroups {
 /// names list profiles in this order, and when every variant agrees,
 /// the copy of the FIRST profile in it becomes the catalog entry.
 /// `library` holds the id of every preset in the library this build
-/// installs from, see src/lib/presets.ts.
+/// installs from, see src/automation/presets.ts.
 pub(crate) fn analyze_profiles(
     profiles: &[(String, ProfileConfig)],
     library: &[&str],

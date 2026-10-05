@@ -1,6 +1,6 @@
 //! The band under a lifted prompt. Where each lift's band sits, the quads
 //! and the pass that draw it, and the settings the page reports for it.
-//! Its twin is `layoutBands` in src/lib/promptBands.ts, and both run
+//! Its twin is `layoutBands` in src/terminal/xterm/liftBands.ts, and both run
 //! fixtures/prompt-bands/cases.json.
 
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -11,7 +11,7 @@ use crate::color::Paint;
 use crate::native::grid::regions::LiftSpan;
 
 // The band under a lifted prompt in CSS px, as the prompt boards measure it
-// and src/lib/promptBands.ts draws it on xterm. It reaches 4 past the text
+// and src/terminal/xterm/liftBands.ts draws it on xterm. It reaches 4 past the text
 // on each side and 2 above and below, at radius 4. Lifts on adjacent rows
 // stop 1 inside their shared row edge, so 2 of ground stays between them.
 // Both sides run fixtures/prompt-bands/cases.json, so keep them in step.
@@ -28,7 +28,7 @@ pub(super) const LIGHT_RING: Paint = Paint {
     a: 0.14,
 };
 // A prompt is never this tall, so a lift that starts this far past a
-// region never reaches into it. src/lib/promptBands.ts uses the same bound.
+// region never reaches into it. src/terminal/xterm/liftBands.ts uses the same bound.
 pub(super) const MAX_LIFT_ROWS: i32 = 64;
 
 /// A lift as one region shows it. Its rows count from the region's first

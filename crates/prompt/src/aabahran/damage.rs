@@ -29,7 +29,7 @@ const fn step(vs: &'static str, vp: &'static str, mark: char) -> Step {
 
 /// The damage ladder `dam_message` climbs, from a miss to the most
 /// damage. The damage presets color the same verbs from `scratch` on
-/// (`DAMAGE_VERBS` in `src/lib/presets.ts`), and the verb of the
+/// (`DAMAGE_VERBS` in `src/automation/presets.ts`), and the verb of the
 /// assassinate skill besides, and a test holds the two lists together.
 pub const LADDER: [Step; 21] = [
     step("miss", "misses", '.'),

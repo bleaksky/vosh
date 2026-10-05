@@ -66,7 +66,7 @@ pub fn run() {
                 // Persist only geometry. DECORATIONS would override the
                 // frameless setting in tauri.conf on every restart, and
                 // VISIBLE conflicts with our deliberate "open hidden, show
-                // after first paint" reveal in App.tsx.
+                // after first paint" reveal in shell/MainWindow.tsx.
                 .with_state_flags(
                     tauri_plugin_window_state::StateFlags::SIZE
                         | tauri_plugin_window_state::StateFlags::POSITION

@@ -687,7 +687,7 @@ fn split_first_word(input: &str) -> (&str, &str) {
 /// The echo of a command you send, as the command line draws it: a grey
 /// `›` and a space while Mark your commands is on, then the command in
 /// the Sent command color when one is set. Mirrors `planSubmit` and
-/// `colorizeEcho` in src/lib/maskedInput.ts, so a quick key echoes like a
+/// `colorizeEcho` in src/input/maskedInput.ts, so a quick key echoes like a
 /// typed command. An empty line echoes as itself.
 pub(crate) fn command_echo(line: &str, ui: &crate::profile::ui::UiConfig) -> String {
     if line.is_empty() {
@@ -702,7 +702,7 @@ pub(crate) fn command_echo(line: &str, ui: &crate::profile::ui::UiConfig) -> Str
 
 /// The grey `›` and space before each command you send, in the theme's
 /// bright black (SGR 90). The same bytes as `ECHO_CARET` in
-/// src/lib/maskedInput.ts. Each renderer leaves it out when the row your
+/// src/input/maskedInput.ts. Each renderer leaves it out when the row your
 /// echo lands on already ends in `>`, as a game's prompt such as
 /// `Account name> ` does (`TermGrid::local_write` and
 /// `TermGrid::session_output` in the native grid, and the page's

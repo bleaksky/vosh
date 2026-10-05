@@ -14,7 +14,7 @@ use crate::profile::file::ProfileConfig;
 use crate::profile::set::ProfileSet;
 use crate::profile::tests::james_like_set;
 
-/// Every preset in the library src/lib/presets.ts holds.
+/// Every preset in the library src/automation/presets.ts holds.
 const LIBRARY: &[&str] = &[
     "healing_basics",
     "defensive_combat",

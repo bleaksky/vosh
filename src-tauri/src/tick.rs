@@ -1355,7 +1355,7 @@ mod tests {
 
     /// The status line counts the time left in whole seconds rounded up
     /// and warns once that reaches Warn at (computeTick in
-    /// src/lib/stores/tickStore.ts, whose test checks the same cases).
+    /// src/stores/session/tickStore.ts, whose test checks the same cases).
     /// Each case is the time into a 30 second tick and whether the
     /// status line warns there with Warn at 5.
     const WARN_BOUNDARY: [(f64, bool); 6] = [

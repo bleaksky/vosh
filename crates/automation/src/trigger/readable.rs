@@ -45,7 +45,7 @@ pub const READABLE_CONTRAST: f64 = 4.5;
 pub const GAME_LC: f64 = 30.0;
 
 /// The Oklab lightness under which a ground counts as dark, the page's
-/// `APPEARANCE_THRESHOLD` in src/lib/chrome.ts.
+/// `APPEARANCE_THRESHOLD` in src/theme/chrome.ts.
 const DARK_GROUND_L: f64 = 0.6;
 
 /// Read a `#rrggbb` or `#rgb` color, the leading `#` optional.
