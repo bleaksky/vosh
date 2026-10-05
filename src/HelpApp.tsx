@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { HELP_FIND, HELP_GOTO } from './ipc/events';
 import { getUiConfig, type UiConfig } from './ipc/uiConfig';
 import { followReplacedUiConfig } from './ipc/uiConfigSave';
 import {
@@ -26,7 +27,7 @@ import {
   type HelpScroll,
   type HelpTarget,
 } from './lib/helpNav';
-import { HELP_FIND_EVENT, HELP_GOTO_EVENT, HELP_PENDING_KEY } from './lib/helpLink';
+import { HELP_PENDING_KEY } from './lib/helpLink';
 import { scrollWithin } from './lib/scrollWithin';
 import { HelpSidebar } from './components/help/HelpSidebar';
 import { HelpArticle } from './components/help/HelpArticle';
@@ -213,7 +214,7 @@ export function HelpApp() {
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
-    void listen<string>(HELP_GOTO_EVENT, (event) => {
+    void listen<string>(HELP_GOTO, (event) => {
       if (typeof event.payload !== 'string') return;
       clearPendingTarget();
       const target = resolveHelpTarget(event.payload);
@@ -246,7 +247,7 @@ export function HelpApp() {
     document.addEventListener('keydown', onKey);
     let cancelled = false;
     let unlisten: (() => void) | undefined;
-    listen(HELP_FIND_EVENT, focusSearch)
+    listen(HELP_FIND, focusSearch)
       .then((fn) => {
         if (cancelled) fn();
         else unlisten = fn;

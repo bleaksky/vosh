@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { PANE_LAYOUT_CHANGED, PROFILE_SWITCHED } from '../ipc/events';
 import { pendingWrites } from './pendingWrites';
 
 // The one-window panel's pane tree, saved per profile. Mirrors
@@ -503,8 +504,6 @@ function readingHeight(node: PaneNode): number {
 // Persistence.
 // ---------------------------------------------------------------
 
-const PANE_LAYOUT_EVENT = 'vosh://pane-layout-changed';
-const PROFILE_SWITCHED_EVENT = 'vosh://profile-switched';
 const SAVE_DEBOUNCE_MS = 250;
 
 // A write waiting on its debounce, and writes sent but not answered.
@@ -567,8 +566,8 @@ function onProfileSwitched(): void {
 
 function ensureListening(): Promise<void> {
   listening ??= Promise.all([
-    listen<unknown>(PANE_LAYOUT_EVENT, (event) => onRemoteLayout(event.payload)),
-    listen<string>(PROFILE_SWITCHED_EVENT, () => onProfileSwitched()),
+    listen<unknown>(PANE_LAYOUT_CHANGED, (event) => onRemoteLayout(event.payload)),
+    listen<string>(PROFILE_SWITCHED, () => onProfileSwitched()),
   ]).then(
     () => undefined,
     (e: unknown) => {

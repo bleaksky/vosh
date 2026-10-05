@@ -3,6 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { INPUT_MODE, ROUTED, STATE, TARGET } from './events';
 
 export type StatePayload =
   | { kind: 'connecting'; host: string; port: number; tls: boolean }
@@ -86,7 +87,7 @@ export interface RoutedPayload {
 }
 
 export async function onRouted(cb: (payload: RoutedPayload) => void): Promise<UnlistenFn> {
-  return listen<RoutedPayload>('session://routed', (event) => {
+  return listen<RoutedPayload>(ROUTED, (event) => {
     cb(event.payload);
   });
 }
@@ -112,13 +113,13 @@ export async function getTarget(): Promise<TargetPayload> {
 }
 
 export async function onTarget(cb: (payload: TargetPayload) => void): Promise<UnlistenFn> {
-  return listen<TargetPayload>('session://target', (event) => {
+  return listen<TargetPayload>(TARGET, (event) => {
     cb(event.payload);
   });
 }
 
 export async function onState(cb: (state: StatePayload) => void): Promise<UnlistenFn> {
-  return listen<StatePayload>('session://state', (event) => {
+  return listen<StatePayload>(STATE, (event) => {
     cb(event.payload);
   });
 }
@@ -128,7 +129,7 @@ export interface InputModePayload {
 }
 
 export async function onInputMode(cb: (payload: InputModePayload) => void): Promise<UnlistenFn> {
-  return listen<InputModePayload>('session://input-mode', (event) => {
+  return listen<InputModePayload>(INPUT_MODE, (event) => {
     cb(event.payload);
   });
 }

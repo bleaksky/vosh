@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { sanitizeLayout, type PaneLayout } from '../lib/paneLayout';
 import { normalizeTrackedAffects, type TrackedAffect } from './affects';
+import { PROFILE_CHANGED, SESSION_IDENTITY_CHANGED } from './events';
 import type { ProfileAutoMatch, ProfileEntry } from './profiles';
 
 // Characters. Settings > Characters edits any profile in place, active
@@ -126,14 +127,14 @@ export async function sessionIdentityGet(): Promise<SessionIdentity | null> {
 export async function subscribeSessionIdentity(
   cb: (identity: SessionIdentity | null) => void,
 ): Promise<UnlistenFn> {
-  return listen<SessionIdentity | null>('vosh://session-identity-changed', (event) => {
+  return listen<SessionIdentity | null>(SESSION_IDENTITY_CHANGED, (event) => {
     cb(event.payload ?? null);
   });
 }
 
 /** Hear an edit to any profile's detail, active or not, by name. */
 export async function subscribeProfileChanged(cb: (name: string) => void): Promise<UnlistenFn> {
-  return listen<unknown>('vosh://profile-changed', (event) => {
+  return listen<unknown>(PROFILE_CHANGED, (event) => {
     const payload = event.payload as { name?: unknown } | null;
     if (typeof payload?.name === 'string') cb(payload.name);
   });

@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { PROMPT_STATUS } from '../ipc/events';
 import { subscribeProfileSwitched } from '../ipc/profiles';
 import {
   normalizePromptShow,
@@ -75,7 +76,7 @@ export function subscribePromptShowChanges(cb: () => void): () => void {
   keep(subscribeProfileSwitched(() => cb()));
   keep(onGamePromptSeen(() => cb()));
   keep(onState(() => cb()));
-  keep(listen<unknown>('session://prompt-status', () => cb()));
+  keep(listen<unknown>(PROMPT_STATUS, () => cb()));
   return () => {
     closed = true;
     for (const un of unlisteners) un();

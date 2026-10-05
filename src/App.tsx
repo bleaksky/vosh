@@ -36,6 +36,13 @@ import {
 } from './components/panel/panelLayoutStore';
 import { listTriggers, presetsInstall, presetsRemove } from './ipc/automation';
 import {
+  FONT_CHANGED,
+  HELP_OPEN,
+  TERMINAL_CLICKED,
+  TERMINAL_CURSOR,
+  THEME_TERMINAL_COLORS_CHANGED,
+} from './ipc/events';
+import {
   promptConfigGet,
   promptConfigSet,
   promptCodeReaderSet,
@@ -57,7 +64,6 @@ import {
   subscribeTerminalLineHeightChanged,
   normalizeTerminalLineHeight,
   TERMINAL_LINE_HEIGHTS,
-  FONT_CHANGED_EVENT,
   type FontChange,
   type TerminalLineHeight,
 } from './ipc/uiConfig';
@@ -107,13 +113,7 @@ import {
 import { getImmState, subscribeImmState } from './lib/immStore';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { openSettingsTab, openSettingsWindow } from './lib/settingsLink';
-import {
-  HELP_OPEN_EVENT,
-  helpNoMatchNotice,
-  helpOpensOn,
-  openHelpTopic,
-  openHelpWindow,
-} from './lib/helpLink';
+import { helpNoMatchNotice, helpOpensOn, openHelpTopic, openHelpWindow } from './lib/helpLink';
 import { showAfterThemePaint } from './lib/reveal';
 import { getNativeScroll, startNativeScroll, subscribeNativeScroll } from './lib/nativeScroll';
 import {
@@ -884,7 +884,7 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
-    listen<string>(HELP_OPEN_EVENT, (event) => {
+    listen<string>(HELP_OPEN, (event) => {
       const words = typeof event.payload === 'string' ? event.payload.trim() : '';
       if (!helpOpensOn(words)) {
         if (words.length > 0) {
@@ -1145,7 +1145,7 @@ function App() {
     // do not cross webviews, so we listen via the Tauri event bus here.
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    listen<FontChange>(FONT_CHANGED_EVENT, (event) => {
+    listen<FontChange>(FONT_CHANGED, (event) => {
       const detail = event.payload;
       setFontFamily(detail.family || DEFAULT_FONT_FAMILY);
       setFontSize(detail.size || 14);
@@ -1303,7 +1303,7 @@ function App() {
     const root = document.documentElement;
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    void listen<string>('vosh://terminal-cursor', (event) => {
+    void listen<string>(TERMINAL_CURSOR, (event) => {
       const cursor = event.payload;
       if (cursor === 'row-resize' || cursor === 'pointer') {
         root.style.setProperty('--terminal-cursor', cursor);
@@ -1329,7 +1329,7 @@ function App() {
     if (!nativeSurfaceEnabled()) return;
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    void listen('vosh://terminal-clicked', () => {
+    void listen(TERMINAL_CLICKED, () => {
       inputRef.current?.focus();
     }).then((fn) => {
       if (cancelled) fn();
@@ -1347,7 +1347,7 @@ function App() {
     // prop change without recreating xterm.
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    listen<boolean>('vosh://theme-terminal-colors-changed', (event) => {
+    listen<boolean>(THEME_TERMINAL_COLORS_CHANGED, (event) => {
       setThemeTerminalColors(Boolean(event.payload));
     }).then((fn) => {
       if (cancelled) fn();

@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { FLUSH_PENDING_WRITES } from '../ipc/events';
 
 // Writes a window holds back for a moment, and the one place that sends
 // them all at once. Settings saves a change after a short pause, the
@@ -195,10 +196,8 @@ export async function runCloseRequest(steps: {
 
 // ── Quit ────────────────────────────────────────────────────────────
 
-/** The event the backend sends each window when you quit, with a round
- *  number, and the command a window answers with once it has sent what
- *  it held. */
-export const FLUSH_REQUEST_EVENT = 'vosh://flush-pending-writes';
+/** The command a window answers the backend's quit request with, once
+ *  it has sent what it held. */
 const FLUSH_DONE_COMMAND = 'pending_writes_flushed';
 
 /** Send what this window holds when the backend asks on quit, then tell
@@ -206,7 +205,7 @@ const FLUSH_DONE_COMMAND = 'pending_writes_flushed';
  *  writes the profile and exits. The backend asks each window once a
  *  round, so every request gets an answer. */
 export function listenForQuitFlush(options: { commitFocus?: boolean } = {}): Promise<UnlistenFn> {
-  return listen<unknown>(FLUSH_REQUEST_EVENT, () => {
+  return listen<unknown>(FLUSH_PENDING_WRITES, () => {
     void answerQuitFlush(options.commitFocus === true);
   });
 }

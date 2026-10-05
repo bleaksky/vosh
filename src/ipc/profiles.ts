@@ -3,6 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { PROFILES_CHANGED, PROFILE_SWITCHED } from './events';
 
 // Named profile catalog.
 export interface ProfileAutoMatch {
@@ -98,7 +99,7 @@ export async function profileSetScope(scope: ScopeConfig): Promise<void> {
 export async function subscribeProfilesChanged(
   cb: (changedName: string) => void,
 ): Promise<UnlistenFn> {
-  return listen<string>('vosh://profiles-changed', (event) => {
+  return listen<string>(PROFILES_CHANGED, (event) => {
     cb(event.payload);
   });
 }
@@ -106,7 +107,7 @@ export async function subscribeProfilesChanged(
 export async function subscribeProfileSwitched(
   cb: (newActive: string) => void,
 ): Promise<UnlistenFn> {
-  return listen<string>('vosh://profile-switched', (event) => {
+  return listen<string>(PROFILE_SWITCHED, (event) => {
     cb(event.payload);
   });
 }

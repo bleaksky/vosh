@@ -22,6 +22,23 @@ import {
   type AffectsStyle,
   type TrackedAffect,
 } from './affects';
+import {
+  BASE_ANSI_CHANGED,
+  BLINK_TEXT_CHANGED,
+  BRIGHT_BOLD_CHANGED,
+  CHAT_COLORS_CHANGED,
+  CHIP_STYLE_CHANGED,
+  CUSTOM_THEMES_CHANGED,
+  FIT_GAME_COLORS_CHANGED,
+  GAME_TIME_CHANGED,
+  READABLE_HIGHLIGHTS_CHANGED,
+  SPLIT_DIVIDER_CHANGED,
+  TERMINAL_LINE_HEIGHT_CHANGED,
+  TICK_COUNT_CHANGED,
+  UI_CONFIG_REPLACED,
+  VITALS_DENSITY_CHANGED,
+  VITALS_OPTIONS_CHANGED,
+} from './events';
 
 /** Resolve the tri-state tint setting: an explicit user choice wins;
  *  unset is on for every theme. The chrome derives its status colors
@@ -557,13 +574,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
   };
 }
 
-export const TERMINAL_LINE_HEIGHT_EVENT = 'vosh://terminal-line-height-changed';
-
-/** The terminal font, its size, and the panel font and size, which
- *  Settings sends every window together. */
-export const FONT_CHANGED_EVENT = 'vosh://font-changed';
-
-/** What FONT_CHANGED_EVENT carries. */
+/** What FONT_CHANGED carries. */
 export interface FontChange {
   family: string;
   size: number;
@@ -573,21 +584,12 @@ export interface FontChange {
   panelSize: number;
 }
 
-export const BLINK_TEXT_EVENT = 'vosh://blink-text-changed';
-export const VITALS_DENSITY_EVENT = 'vosh://vitals-density-changed';
-export const VITALS_OPTIONS_EVENT = 'vosh://vitals-options-changed';
-export const FIT_GAME_COLORS_EVENT = 'vosh://fit-game-colors-changed';
-export const READABLE_HIGHLIGHTS_EVENT = 'vosh://readable-highlights-changed';
-
-/** The backend replaced the live profile's whole UI config, on a
- *  profile switch, a #profile load or reset, or an import. It comes
- *  after the events that carry the panes, the tracked affects, the tick
- *  settings, and the chip style. */
-export const UI_CONFIG_REPLACED_EVENT = 'vosh://ui-config-replaced';
-
-/** Hear that the backend replaced the whole UI config. */
+/** Hear that the backend replaced the live profile's whole UI config,
+ *  on a profile switch, a #profile load or reset, or an import. It
+ *  comes after the events that carry the panes, the tracked affects,
+ *  the tick settings, and the chip style. */
 export async function subscribeUiConfigReplaced(cb: () => void): Promise<UnlistenFn> {
-  return listen<unknown>(UI_CONFIG_REPLACED_EVENT, () => cb());
+  return listen<unknown>(UI_CONFIG_REPLACED, () => cb());
 }
 
 /** Save the theme choice alone. A full setUiConfig from a window that
@@ -668,7 +670,7 @@ export function uiConfigPayload(config: UiConfig): Record<string, unknown> {
 export async function subscribeChipStyleChanged(
   cb: (value: ChipStyle) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>('vosh://chip-style-changed', (event) => {
+  return listen<unknown>(CHIP_STYLE_CHANGED, (event) => {
     cb(normalizeChipStyle(event.payload));
   });
 }
@@ -678,7 +680,7 @@ export async function subscribeChipStyleChanged(
 export async function subscribeTickCountChanged(
   cb: (value: TickCount) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>('vosh://tick-count-changed', (event) => {
+  return listen<unknown>(TICK_COUNT_CHANGED, (event) => {
     cb(normalizeTickCount(event.payload));
   });
 }
@@ -687,7 +689,7 @@ export async function subscribeTickCountChanged(
  *  profile switch brings. setUiConfig emits it to every window, so the
  *  main window's status line follows at once. */
 export async function subscribeGameTimeChanged(cb: (value: GameTime) => void): Promise<UnlistenFn> {
-  return listen<unknown>('vosh://game-time-changed', (event) => {
+  return listen<unknown>(GAME_TIME_CHANGED, (event) => {
     cb(normalizeGameTime(event.payload));
   });
 }
@@ -696,7 +698,7 @@ export async function subscribeGameTimeChanged(cb: (value: GameTime) => void): P
 export async function subscribeTerminalLineHeightChanged(
   cb: (value: TerminalLineHeight) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>(TERMINAL_LINE_HEIGHT_EVENT, (event) => {
+  return listen<unknown>(TERMINAL_LINE_HEIGHT_CHANGED, (event) => {
     cb(normalizeTerminalLineHeight(event.payload));
   });
 }
@@ -706,7 +708,7 @@ export async function subscribeTerminalLineHeightChanged(
 export async function subscribeVitalsDensityChanged(
   cb: (value: VitalsDensity) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>(VITALS_DENSITY_EVENT, (event) => {
+  return listen<unknown>(VITALS_DENSITY_CHANGED, (event) => {
     cb(normalizeVitalsDensity(event.payload));
   });
 }
@@ -733,7 +735,7 @@ export async function resetChatColors(): Promise<void> {
 export async function subscribeChatColorsChanged(
   cb: (table: unknown) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>('vosh://chat-colors-changed', (event) => {
+  return listen<unknown>(CHAT_COLORS_CHANGED, (event) => {
     cb(event.payload);
   });
 }
@@ -743,7 +745,7 @@ export async function subscribeChatColorsChanged(
 export async function subscribeVitalsOptionsChanged(
   cb: (value: VitalsOptions) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>(VITALS_OPTIONS_EVENT, (event) => {
+  return listen<unknown>(VITALS_OPTIONS_CHANGED, (event) => {
     cb(normalizeVitalsOptions(event.payload));
   });
 }
@@ -752,7 +754,7 @@ export async function subscribeVitalsOptionsChanged(
 export async function subscribeBlinkTextChanged(
   cb: (value: boolean | null) => void,
 ): Promise<UnlistenFn> {
-  return listen<boolean | null>(BLINK_TEXT_EVENT, (event) => {
+  return listen<boolean | null>(BLINK_TEXT_CHANGED, (event) => {
     cb(typeof event.payload === 'boolean' ? event.payload : null);
   });
 }
@@ -760,7 +762,7 @@ export async function subscribeBlinkTextChanged(
 export async function subscribeBrightBoldChanged(
   cb: (value: boolean) => void,
 ): Promise<UnlistenFn> {
-  return listen<boolean>('vosh://bright-bold-changed', (event) => {
+  return listen<boolean>(BRIGHT_BOLD_CHANGED, (event) => {
     cb(Boolean(event.payload));
   });
 }
@@ -770,7 +772,7 @@ export async function subscribeBrightBoldChanged(
 export async function subscribeFitGameColorsChanged(
   cb: (value: boolean) => void,
 ): Promise<UnlistenFn> {
-  return listen<boolean>(FIT_GAME_COLORS_EVENT, (event) => {
+  return listen<boolean>(FIT_GAME_COLORS_CHANGED, (event) => {
     cb(event.payload !== false);
   });
 }
@@ -780,7 +782,7 @@ export async function subscribeFitGameColorsChanged(
 export async function subscribeReadableHighlightsChanged(
   cb: (value: boolean) => void,
 ): Promise<UnlistenFn> {
-  return listen<boolean>(READABLE_HIGHLIGHTS_EVENT, (event) => {
+  return listen<boolean>(READABLE_HIGHLIGHTS_CHANGED, (event) => {
     cb(event.payload !== false);
   });
 }
@@ -788,7 +790,7 @@ export async function subscribeReadableHighlightsChanged(
 export async function subscribeSplitDividerChanged(
   cb: (color: string | null) => void,
 ): Promise<UnlistenFn> {
-  return listen<string | null>('vosh://split-divider-changed', (event) => {
+  return listen<string | null>(SPLIT_DIVIDER_CHANGED, (event) => {
     cb(typeof event.payload === 'string' && event.payload.length > 0 ? event.payload : null);
   });
 }
@@ -796,7 +798,7 @@ export async function subscribeSplitDividerChanged(
 export async function subscribeBaseAnsiChanged(
   cb: (colors: string[] | null) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>('vosh://base-ansi-changed', (event) => {
+  return listen<unknown>(BASE_ANSI_CHANGED, (event) => {
     const p = event.payload;
     cb(
       Array.isArray(p) && p.length === 16 && p.every((c) => typeof c === 'string')
@@ -809,7 +811,7 @@ export async function subscribeBaseAnsiChanged(
 export async function subscribeCustomThemesChanged(
   cb: (themes: CustomTheme[]) => void,
 ): Promise<UnlistenFn> {
-  return listen<CustomTheme[]>('vosh://custom-themes-changed', (event) => {
+  return listen<CustomTheme[]>(CUSTOM_THEMES_CHANGED, (event) => {
     cb(Array.isArray(event.payload) ? event.payload : []);
   });
 }

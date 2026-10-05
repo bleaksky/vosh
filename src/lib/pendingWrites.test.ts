@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type EventCallback } from '@tauri-apps/api/event';
+import { FLUSH_PENDING_WRITES } from '../ipc/events';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -11,7 +12,6 @@ import {
   commitFocusedField,
   createDebouncedWrite,
   createPendingWrites,
-  FLUSH_REQUEST_EVENT,
   listenForQuitFlush,
   pendingWrites,
   runCloseRequest,
@@ -229,7 +229,7 @@ describe('the quit request', () => {
     vi.mocked(invoke).mockClear();
     await listenForQuitFlush();
     const [event, handler] = vi.mocked(listen).mock.calls[0];
-    expect(event).toBe(FLUSH_REQUEST_EVENT);
+    expect(event).toBe(FLUSH_PENDING_WRITES);
     // The backend asks each window once a round, so a second quit round
     // gets a second answer.
     for (const round of [1, 2]) {

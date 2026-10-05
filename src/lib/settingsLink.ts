@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
+import { SETTINGS_GOTO_TAB } from '../ipc/events';
 
 // Opening Settings from the main window. The Settings window may not
 // exist yet, so a target travels twice: through localStorage for a
@@ -9,8 +10,6 @@ import { emit } from '@tauri-apps/api/event';
 
 /** Where a cold open finds its target. */
 export const SETTINGS_PENDING_KEY = 'vosh.settings.pendingTab';
-/** The event an open Settings window listens on. */
-export const SETTINGS_GOTO_EVENT = 'vosh://settings-goto-tab';
 
 /** Open Settings, or focus it, where it is. */
 export function openSettingsWindow(): void {
@@ -27,6 +26,6 @@ export function openSettingsTab(target: string): void {
   } catch {
     // Storage unavailable. The event still reaches an open window.
   }
-  void emit(SETTINGS_GOTO_EVENT, target);
+  void emit(SETTINGS_GOTO_TAB, target);
   openSettingsWindow();
 }

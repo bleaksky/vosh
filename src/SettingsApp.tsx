@@ -7,6 +7,7 @@ import {
   sameAffectsDisplay,
   subscribeAffectsDisplayChanged,
 } from './ipc/affects';
+import { SETTINGS_GOTO_TAB } from './ipc/events';
 import { loadoutsGetState, subscribeLoadoutsChanged } from './ipc/loadouts';
 import { subscribeProfilesChanged } from './ipc/profiles';
 import { getUiConfig, type UiConfig } from './ipc/uiConfig';
@@ -35,7 +36,7 @@ import {
   type SettingsGroup,
   type SettingsTarget,
 } from './lib/settingsNav';
-import { SETTINGS_GOTO_EVENT, SETTINGS_PENDING_KEY } from './lib/settingsLink';
+import { SETTINGS_PENDING_KEY } from './lib/settingsLink';
 import { revealSettingsAnchor } from './components/settings/revealAnchor';
 import { Sidebar } from './components/settings/Sidebar';
 import { useSettingsClose } from './components/settings/useSettingsClose';
@@ -144,7 +145,7 @@ export function SettingsApp() {
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
-    void listen<string>(SETTINGS_GOTO_EVENT, (event) => {
+    void listen<string>(SETTINGS_GOTO_TAB, (event) => {
       if (typeof event.payload !== 'string') return;
       clearPendingTarget();
       go(resolveSettingsTarget(event.payload));

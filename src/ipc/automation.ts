@@ -3,6 +3,14 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import {
+  ALIASES_CHANGED,
+  GROUPS_CHANGED,
+  MACROS_CHANGED,
+  MACRO_GROUPS_CHANGED,
+  TIMERS_CHANGED,
+  TRIGGERS_CHANGED,
+} from './events';
 
 export type TriggerAction =
   | { kind: 'highlight'; style: HighlightStyle }
@@ -304,7 +312,7 @@ export async function setGroupEnabled(
 /** A group of any list turned on or off: #group, Lua, or a switch in
  *  Settings. */
 export async function subscribeGroupsChanged(cb: () => void): Promise<UnlistenFn> {
-  return listen<string>('vosh://groups-changed', () => cb());
+  return listen<string>(GROUPS_CHANGED, () => cb());
 }
 
 // --- Macro groups, which the command line follows ---
@@ -316,31 +324,31 @@ export async function listMacroGroups(): Promise<GroupState[]> {
 /** The trigger list changed: Settings saved it, or #trigger, an import,
  *  a preset, or a script edited it. */
 export async function subscribeTriggersChanged(cb: () => void): Promise<UnlistenFn> {
-  return listen<string>('vosh://triggers-changed', () => cb());
+  return listen<string>(TRIGGERS_CHANGED, () => cb());
 }
 
 /** The alias list changed: Settings saved it, or #alias, an import, or a
  *  Lua mud.alias edited it. */
 export async function subscribeAliasesChanged(cb: () => void): Promise<UnlistenFn> {
-  return listen<string>('vosh://aliases-changed', () => cb());
+  return listen<string>(ALIASES_CHANGED, () => cb());
 }
 
 export async function subscribeMacroGroupsChanged(
   cb: (group: string) => void,
 ): Promise<UnlistenFn> {
-  return listen<string>('vosh://macro-groups-changed', (event) => {
+  return listen<string>(MACRO_GROUPS_CHANGED, (event) => {
     cb(event.payload);
   });
 }
 
 export async function subscribeMacrosChanged(cb: (macros: Macro[]) => void): Promise<UnlistenFn> {
-  return listen<Macro[]>('vosh://macros-changed', (event) => {
+  return listen<Macro[]>(MACROS_CHANGED, (event) => {
     cb(event.payload);
   });
 }
 
 export async function subscribeTimersChanged(cb: (timers: Timer[]) => void): Promise<UnlistenFn> {
-  return listen<Timer[]>('vosh://timers-changed', (event) => {
+  return listen<Timer[]>(TIMERS_CHANGED, (event) => {
     cb(event.payload);
   });
 }

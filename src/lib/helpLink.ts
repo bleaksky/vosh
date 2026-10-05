@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
+import { HELP_GOTO } from '../ipc/events';
 import { rankTopics, resolveHelpTarget } from './helpNav';
 
 // Opening Help from another window, the twin of settingsLink.ts. The
@@ -11,12 +12,6 @@ import { rankTopics, resolveHelpTarget } from './helpNav';
 
 /** Where a cold open finds its target. */
 export const HELP_PENDING_KEY = 'vosh.help.pending';
-/** The event an open Help window listens on. */
-export const HELP_GOTO_EVENT = 'vosh://help-goto';
-/** `#help <words>` reaches the main window here, with the words. */
-export const HELP_OPEN_EVENT = 'vosh://help-open';
-/** Find, chosen in the menu bar while Help is in front. */
-export const HELP_FIND_EVENT = 'vosh://help-find';
 
 /** Open Help, or bring it forward, where it is. */
 export function openHelpWindow(): void {
@@ -33,7 +28,7 @@ export function openHelpTopic(target: string): void {
   } catch {
     // Storage unavailable. The event still reaches an open window.
   }
-  void emit(HELP_GOTO_EVENT, target);
+  void emit(HELP_GOTO, target);
   openHelpWindow();
 }
 

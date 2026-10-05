@@ -16,6 +16,15 @@ import {
   type Macro,
 } from '../ipc/automation';
 import {
+  ECHO_MACROS_CHANGED,
+  INPUT_CURSOR_STYLE_CHANGED,
+  INPUT_ECHO_CARET_CHANGED,
+  INPUT_ECHO_COLOR_CHANGED,
+  KEEP_LAST_CHANGED,
+  PASTE_LINE_DELAY_CHANGED,
+  SPELLCHECK_PROMPT_CHANGED,
+} from '../ipc/events';
+import {
   getTarget,
   onGmcpPackage,
   onInputMode,
@@ -375,13 +384,13 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         setCursorStyle(cfg.input_cursor_style);
       })
       .catch(() => {});
-    listen<boolean>('vosh://keep-last-changed', (event) => {
+    listen<boolean>(KEEP_LAST_CHANGED, (event) => {
       keepLastRef.current = Boolean(event.payload);
     }).then((fn) => {
       if (cancelled) fn();
       else unlistenKeep = fn;
     });
-    listen<number>('vosh://paste-line-delay-changed', (event) => {
+    listen<number>(PASTE_LINE_DELAY_CHANGED, (event) => {
       const n = Number(event.payload);
       if (Number.isFinite(n) && n >= 0) {
         pasteDelayRef.current = Math.min(10_000, Math.floor(n));
@@ -390,32 +399,32 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       if (cancelled) fn();
       else unlistenPaste = fn;
     });
-    listen<boolean>('vosh://spellcheck-prompt-changed', (event) => {
+    listen<boolean>(SPELLCHECK_PROMPT_CHANGED, (event) => {
       setSpellcheckPrompt(Boolean(event.payload));
     }).then((fn) => {
       if (cancelled) fn();
       else unlistenSpell = fn;
     });
-    listen<string>('vosh://input-cursor-style-changed', (event) => {
+    listen<string>(INPUT_CURSOR_STYLE_CHANGED, (event) => {
       setCursorStyle(normalizeInputCursorStyle(event.payload));
     }).then((fn) => {
       if (cancelled) fn();
       else unlistenCursor = fn;
     });
-    listen<string | null>('vosh://input-echo-color-changed', (event) => {
+    listen<string | null>(INPUT_ECHO_COLOR_CHANGED, (event) => {
       const next = event.payload;
       echoColorRef.current = typeof next === 'string' && next.length > 0 ? next : null;
     }).then((fn) => {
       if (cancelled) fn();
       else unlistenEcho = fn;
     });
-    listen<boolean>('vosh://echo-macros-changed', (event) => {
+    listen<boolean>(ECHO_MACROS_CHANGED, (event) => {
       echoMacrosRef.current = Boolean(event.payload);
     }).then((fn) => {
       if (cancelled) fn();
       else unlistenEchoMacros = fn;
     });
-    listen<boolean>('vosh://input-echo-caret-changed', (event) => {
+    listen<boolean>(INPUT_ECHO_CARET_CHANGED, (event) => {
       echoCaretRef.current = Boolean(event.payload);
     }).then((fn) => {
       if (cancelled) fn();

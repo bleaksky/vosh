@@ -4,15 +4,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { CRITICAL_TICKS, EXPIRING_TICKS } from '../lib/affectsView';
+import { AFFECTS_DISPLAY_CHANGED, AFFECT_FULL_CHANGED, TRACKED_AFFECTS_CHANGED } from './events';
 import type { SessionData } from './session';
 import type { UiConfig } from './uiConfig';
-
-/// Cross-window broadcast for tracked-affect changes. The settings
-/// window is a separate Tauri webview, so `window.dispatchEvent`
-/// only reaches its own DOM; the main window's BottomHUD listens
-/// via this Tauri channel and via the legacy window event (still
-/// emitted for in-window consumers like AuxDrawer).
-export const TRACKED_AFFECTS_EVENT = 'vosh://tracked-affects-changed';
 
 /** One tracked-affect entry. `name` is what the server pushes in the
  *  Char.Affects feed (matched case-insensitively, whitespace
@@ -28,7 +22,7 @@ export interface TrackedAffect {
 export async function subscribeTrackedAffectsChanged(
   cb: (list: TrackedAffect[]) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>(TRACKED_AFFECTS_EVENT, (event) => {
+  return listen<unknown>(TRACKED_AFFECTS_CHANGED, (event) => {
     if (Array.isArray(event.payload)) cb(normalizeTrackedAffects(event.payload));
   });
 }
@@ -73,9 +67,7 @@ export async function affectFullGet(): Promise<unknown> {
 export async function subscribeAffectFullChanged(
   cb: (value: unknown) => void,
 ): Promise<UnlistenFn> {
-  return listen<SessionData<unknown>>('vosh://affect-full-changed', (event) =>
-    cb(event.payload.data),
-  );
+  return listen<SessionData<unknown>>(AFFECT_FULL_CHANGED, (event) => cb(event.payload.data));
 }
 
 /** The layouts the Affects pane draws. `timers` is Timers first, the
@@ -213,14 +205,12 @@ export function normalizeAffectsDisplay(raw: unknown): AffectsDisplay {
   };
 }
 
-export const AFFECTS_DISPLAY_EVENT = 'vosh://affects-display-changed';
-
 /** Hear a new affects display, saved from Settings or picked in the
  *  pane menu, or the one a profile switch brings. */
 export async function subscribeAffectsDisplayChanged(
   cb: (value: AffectsDisplay) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>(AFFECTS_DISPLAY_EVENT, (event) => {
+  return listen<unknown>(AFFECTS_DISPLAY_CHANGED, (event) => {
     cb(normalizeAffectsDisplay(event.payload));
   });
 }

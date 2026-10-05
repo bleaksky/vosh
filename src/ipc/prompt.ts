@@ -3,6 +3,16 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
+import {
+  GAME_PROMPT_SEEN,
+  HIDDEN,
+  PROMPT_CARD_OPEN,
+  PROMPT_CONFIG_CHANGED,
+  PROMPT_GAG_WITHOUT_READER,
+  PROMPT_STATE,
+  PROMPT_STATUS,
+  PROMPT_VARS,
+} from './events';
 import type { PromptSpan } from './promptDesign';
 import type { SessionData } from './session';
 
@@ -16,7 +26,7 @@ import type { SessionData } from './session';
 export type PromptVarsPayload = Record<string, string>;
 
 export async function onPromptVars(cb: (payload: PromptVarsPayload) => void): Promise<UnlistenFn> {
-  return listen<SessionData<PromptVarsPayload>>('session://prompt-vars', (event) => {
+  return listen<SessionData<PromptVarsPayload>>(PROMPT_VARS, (event) => {
     cb(event.payload.data);
   });
 }
@@ -36,7 +46,7 @@ export interface HiddenPayload {
 }
 
 export async function onHidden(cb: (payload: HiddenPayload) => void): Promise<UnlistenFn> {
-  return listen<HiddenPayload>('session://hidden', (event) => {
+  return listen<HiddenPayload>(HIDDEN, (event) => {
     cb(event.payload);
   });
 }
@@ -58,7 +68,7 @@ export interface GamePromptSeenPayload {
 export async function onGamePromptSeen(
   cb: (payload: GamePromptSeenPayload) => void,
 ): Promise<UnlistenFn> {
-  return listen<GamePromptSeenPayload>('session://game-prompt-seen', (event) => {
+  return listen<GamePromptSeenPayload>(GAME_PROMPT_SEEN, (event) => {
     const lost = (event.payload as { lost?: unknown }).lost;
     cb({
       ...event.payload,
@@ -190,19 +200,17 @@ export interface PromptCardRequest {
   view: PromptCardView;
 }
 
-export const PROMPT_CARD_OPEN_EVENT = 'vosh://prompt-card-open';
-
 /** Ask the main window to open the prompt card, from any window, such as
  *  Customize… in Settings. */
 export async function openPromptCard(view: PromptCardView = null): Promise<void> {
-  await emit(PROMPT_CARD_OPEN_EVENT, { view });
+  await emit(PROMPT_CARD_OPEN, { view });
 }
 
 /** Hear a window ask for the prompt card. */
 export async function subscribePromptCardOpen(
   cb: (request: PromptCardRequest) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>(PROMPT_CARD_OPEN_EVENT, (event) => {
+  return listen<unknown>(PROMPT_CARD_OPEN, (event) => {
     const raw = event.payload as { view?: unknown } | null;
     const view = raw?.view;
     cb({ view: view === 'text' || view === 'point' ? view : null });
@@ -561,7 +569,7 @@ export async function promptWatch(on: boolean): Promise<void> {
 
 /** The prompt state after each prompt, while the card watches. */
 export async function onPromptState(cb: (payload: PromptState) => void): Promise<UnlistenFn> {
-  return listen<PromptState>('session://prompt-state', (event) => {
+  return listen<PromptState>(PROMPT_STATE, (event) => {
     cb(event.payload);
   });
 }
@@ -570,7 +578,7 @@ export async function onPromptState(cb: (payload: PromptState) => void): Promise
 export async function onPromptStatus(
   cb: (payload: PromptStatusPayload) => void,
 ): Promise<UnlistenFn> {
-  return listen<PromptStatusPayload>('session://prompt-status', (event) => {
+  return listen<PromptStatusPayload>(PROMPT_STATUS, (event) => {
     cb(event.payload);
   });
 }
@@ -580,7 +588,7 @@ export async function onPromptStatus(
 export async function onPromptGagWithoutReader(
   cb: (payload: { trigger: string }) => void,
 ): Promise<UnlistenFn> {
-  return listen<{ trigger: string }>('session://prompt-gag-without-reader', (event) => {
+  return listen<{ trigger: string }>(PROMPT_GAG_WITHOUT_READER, (event) => {
     cb(event.payload);
   });
 }
@@ -605,21 +613,18 @@ export function normalizePromptShow(value: unknown): PromptShow {
     : 'text';
 }
 
-/** Sent to every window when the active profile's `[prompt]` table
- *  changed, by `#prompt`, `#unprompt`, the card or a Settings save. */
-export const PROMPT_CONFIG_CHANGED_EVENT = 'vosh://prompt-config-changed';
-
 /** The payload of vosh://prompt-config-changed: the active profile
  *  whose table changed, null before any profile loads. */
 export interface PromptConfigChangedPayload {
   profile: string | null;
 }
 
-/** Hear that the active profile's `[prompt]` table changed. */
+/** Hear that the active profile's `[prompt]` table changed, by
+ *  `#prompt`, `#unprompt`, the card or a Settings save. */
 export async function subscribePromptConfigChanged(
   cb: (payload: PromptConfigChangedPayload) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>(PROMPT_CONFIG_CHANGED_EVENT, (event) => {
+  return listen<unknown>(PROMPT_CONFIG_CHANGED, (event) => {
     const raw = event.payload as { profile?: unknown } | null;
     cb({ profile: typeof raw?.profile === 'string' ? raw.profile : null });
   });
