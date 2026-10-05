@@ -12,10 +12,10 @@ import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { pushToast } from '../toasts';
 
 // The session the title band shows and the session menu drives. Moved
-// out of the old top bar chip so the connect logic lives in App for
+// out of the old top bar chip so the connect logic lives in MainWindow for
 // the life of the window instead of in whichever control happens to
 // be mounted. The palette's connect entry and the Cmd+R shortcut call
-// it through App.
+// it through MainWindow.
 
 export type ConnectionStatus =
   | { kind: 'idle' }
@@ -223,7 +223,7 @@ export interface Connection {
 }
 
 /** Connection state and actions for the title band, the session menu,
- *  the palette, and Cmd+R. Mount it once, in App. */
+ *  the palette, and Cmd+R. Mount it once, in MainWindow. */
 export function useConnection(
   status: ConnectionStatus,
   onError: (message: string) => void,

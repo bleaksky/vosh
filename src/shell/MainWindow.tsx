@@ -220,7 +220,7 @@ function leafIdFor(node: PaneNode, pane: PaneType): string | null {
 
 const DEFAULT_FONT_FAMILY = '"JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace';
 
-function App() {
+function MainWindow() {
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'idle' });
   // Boot with the last-known font instead of the compiled default.
   // The real value arrives async from the Rust config; booting on the
@@ -1853,4 +1853,4 @@ function App() {
   );
 }
 
-export default App;
+export default MainWindow;

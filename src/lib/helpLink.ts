@@ -4,7 +4,7 @@ import { rankTopics, resolveHelpTarget } from '../help/helpNav';
 // Opening Help from another window, the twin of settingsLink.ts. The
 // Help window may not exist yet, so a target travels twice: through
 // localStorage for a cold open and through an event for a window that
-// is already up. HelpApp reads both and resolves the string with
+// is already up. HelpWindow reads both and resolves the string with
 // resolveHelpTarget (src/lib/helpNav.ts): a topic id, a topic number,
 // or words to search for.
 

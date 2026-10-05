@@ -319,7 +319,7 @@ body {
    the terminal background across the whole window, so every ancestor of
    the terminal pane goes transparent and the grid shows through. The
    list names each wrapper between the One Window shell root and the
-   sizer (AppShell, then App's terminal slot), and html, body, and #root
+   sizer (AppShell, then MainWindow's terminal slot), and html, body, and #root
    are transparent already. A wrapper added there with a background of
    its own turns the terminal into a flat colored hole. The title band
    and the status line carry no fill, so the same ground shows under
@@ -1064,8 +1064,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   display: flex;
 }
 
-/* ServerMapView internals, lifted from the pre-T0 styles so the
-   resurrected canvas renderer has the layout it expects. */
+/* MapView internals, the layout its canvas renderer expects. */
 
 .server-view {
   flex: 1 1 auto;

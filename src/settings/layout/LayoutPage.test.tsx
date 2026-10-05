@@ -4,7 +4,7 @@ import { normalizeUiConfig, type UiConfig } from '../../ipc/uiConfig';
 import { SETTINGS_ROWS } from '../settingsSearch';
 import { AffectsSection, VitalsSection } from './LayoutPage';
 
-// LayoutGroup's stores reach the Tauri bridge. VitalsSection, under
+// LayoutPage's stores reach the Tauri bridge. VitalsSection, under
 // test, draws from the config it is handed and never calls it.
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({

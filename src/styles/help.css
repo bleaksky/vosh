@@ -158,7 +158,7 @@
 
 /* A search match, ANSI yellow at 28% the way the find bar and the
    session logs page mark one, and a 1 px ring on the match you are on.
-   HelpApp sets both colors from the theme. */
+   HelpWindow sets both colors from the theme. */
 .hp-mark {
   padding: 0;
   background: var(--hp-mark, transparent);

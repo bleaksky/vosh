@@ -104,7 +104,7 @@ function startTilesCache(): void {
   });
 }
 
-interface ServerMapViewProps {
+interface MapViewProps {
   /** What the pane says until the first Map.Tiles arrives. */
   emptyText?: string;
 }
@@ -113,7 +113,7 @@ interface ServerMapViewProps {
  *  map's own control sits in the drawing's corner, the canvas takes
  *  the panel's color, and the empty state is `emptyText` in the page
  *  instead of canvas text. */
-export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
+export function MapView({ emptyText }: MapViewProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -755,7 +755,7 @@ function depthAlphaForRing(d: number): number {
 // via the payload's cached JSON string (plus zoom), not the payload
 // object reference, so a fresh-but-identical payload object cannot
 // defeat the memo. A Char.Vitals / Room.Info / Room.Chars burst
-// during a movement (which re-renders ServerMapView when its snapshot
+// during a movement (which re-renders MapView when its snapshot
 // or themeVersion shifts) does not re-run the 60×60 grid build +
 // ~3500-span DOM diff. Only real payload content changes or the zoom
 // value trigger a rebuild.

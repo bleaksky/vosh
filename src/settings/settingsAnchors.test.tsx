@@ -214,7 +214,7 @@ function answer(cmd: string, args: Record<string, unknown> | undefined): unknown
 // ── Mounting a page ─────────────────────────────────────────────────
 
 /** The page each group opens. Keep it in step with PAGES in
- *  SettingsApp.tsx. */
+ *  SettingsWindow.tsx. */
 let PAGES: Record<SettingsGroup, ComponentType<SettingsPageProps>>;
 let PaneMenu: typeof PaneMenuType;
 let createRoot: typeof import('react-dom/client').createRoot;
@@ -270,10 +270,10 @@ beforeAll(async () => {
     import('../panel/PaneMenu'),
   ]);
   PAGES = {
-    general: general.GeneralGroup,
+    general: general.GeneralPage,
     appearance: appearance.AppearancePage,
-    layout: layout.LayoutGroup,
-    input: input.InputGroup,
+    layout: layout.LayoutPage,
+    input: input.InputPage,
     automation: automation.AutomationPage,
     characters: characters.CharactersPage,
   };

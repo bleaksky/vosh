@@ -5,7 +5,7 @@ import { PANE_TYPES, type PaneType } from '../panel/paneLayout';
 
 // The page side of the macOS menu bar (src-tauri/src/app/menu.rs). A
 // menu command reaches the main window as `vosh://app-menu` with the
-// palette entry id, and App runs it through the same dispatcher as its
+// palette entry id, and MainWindow runs it through the same dispatcher as its
 // keyboard shortcuts, so a command behaves the same from the menu, the
 // keyboard, and the palette. The main window sends the menu a snapshot
 // of its state whenever the snapshot changes, and the menu mirrors it.

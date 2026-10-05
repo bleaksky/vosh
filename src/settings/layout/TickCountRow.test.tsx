@@ -7,7 +7,7 @@ import { StatusLineSection } from './LayoutPage';
 import type { SegmentedProps } from '../../ui';
 import { TickCountField } from './TickCountRow';
 
-// The rows' save hook and LayoutGroup's stores reach the Tauri bridge.
+// The rows' save hook and LayoutPage's stores reach the Tauri bridge.
 // The rows under test draw from the config they are handed.
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({

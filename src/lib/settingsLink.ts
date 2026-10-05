@@ -3,7 +3,7 @@ import { emitSettingsGotoTab, openSettingsWindow } from '../ipc/windows';
 // Opening Settings from the main window. The Settings window may not
 // exist yet, so a target travels twice: through localStorage for a
 // cold open and through an event for a window that is already up.
-// SettingsApp reads both and resolves the string with
+// SettingsWindow reads both and resolves the string with
 // resolveSettingsTarget (src/lib/settingsNav.ts).
 
 /** Where a cold open finds its target. */

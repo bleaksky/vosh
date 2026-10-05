@@ -94,7 +94,7 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
   // snapshot. Drop it when the backend replaces the whole config, on a
   // profile switch, #profile load, #profile reset, or an import. The
   // backend would turn it away anyway, as it does a save built on the
-  // old copy in the moment before SettingsApp has read the new one.
+  // old copy in the moment before SettingsWindow has read the new one.
   useTauriEvent(subscribeUiConfigReplaced, () => {
     autoSave.drop();
   });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Terminal } from '@xterm/xterm';
 import bandCases from '../../../fixtures/prompt-bands/cases.json';
 import promptCss from '../../styles/prompt.css?raw';
-import promptBandsSource from './liftBands.ts?raw';
+import liftBandsSource from './liftBands.ts?raw';
 import {
   BAND_RADIUS,
   BAND_X,
@@ -350,7 +350,7 @@ describe('layoutBands', () => {
 });
 
 describe('the clear ground under lifted bands', () => {
-  // App.tsx writes the terminal area's className whole whenever the
+  // MainWindow.tsx writes the terminal area's className whole whenever the
   // scrollback split opens or closes, so a class the pane added itself
   // would go and every band would sit under xterm's opaque ground. The
   // mark is an attribute React never writes on that element.
@@ -429,7 +429,7 @@ describe('the band cases the native grid draws too', () => {
     });
     // The tracker keeps this bound to itself, and the native grid uses
     // the same one to find the lifts that reach into a region.
-    expect(promptBandsSource).toMatch(
+    expect(liftBandsSource).toMatch(
       new RegExp(`\\nconst MAX_LIFT_ROWS = ${constants.max_lift_rows};\\n`),
     );
   });

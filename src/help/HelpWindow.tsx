@@ -106,7 +106,7 @@ function markColors(themeId: string): { fill: string; ring: string } | null {
   return yellow ? { fill: toRgba(yellow, 0.28), ring: toRgba(yellow, 1) } : null;
 }
 
-export function HelpApp() {
+export function HelpWindow() {
   const mac = isMacPlatform();
   const [landing] = useState(() => takePendingTarget());
   const [topicId, setTopicId] = useState<string>(
